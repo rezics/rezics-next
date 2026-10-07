@@ -305,6 +305,28 @@ describe('goalctl runtime policy', () => {
     expect(introducedUnitFailureFiles([file], branchNamed, mainNamed, branchError, [])).toEqual([file]);
   });
 
+  test('named scalar failures compare normalized error text when no finding diff exists', () => {
+    const file = 'tests/qa/unit/load-failure.test.ts';
+    const branchRoot = '/tmp/worktrees/worker';
+    const mainRoot = '/tmp/unit-gate-baseline';
+    const output = (root: string, message: string, line: number, column: number, duration: number) => [
+      `${file}:`, `error: ReferenceError: ${message} at ${root}/src/restore-lineage.ts:${line}:${column} after ${duration}ms`,
+      `(fail) load guard > resolves restore lineage [${duration}.1ms]`,
+    ].join('\n');
+    const branch = unitFailureDetails(output(branchRoot, 'existing problem', 394, 7, 12), [file], branchRoot);
+    const same = unitFailureDetails(output(mainRoot, 'existing problem', 398, 21, 31), [file], mainRoot);
+    const different = unitFailureDetails(output(mainRoot, 'new regression', 398, 21, 31), [file], mainRoot);
+    expect(introducedUnitFailureFiles([file], branch, same)).toEqual([]);
+    expect(introducedUnitFailureFiles([file], branch, different)).toEqual([file]);
+  });
+
+  test('a removed named failure does not block when the file-level error remains identical', () => {
+    const file = 'tests/qa/unit/load-failure.test.ts';
+    const loadError = [{ file, detail: 'Cannot find module "shared-module.js"' }];
+    const mainTestFailure = [{ file, test: 'fixed-on-branch', detail: 'error: assertion from main' }];
+    expect(introducedUnitFailureFiles([file], [], mainTestFailure, loadError, loadError)).toEqual([]);
+  });
+
   test('loads reset status by GET, caches it, and projects account runway from the later reset boundary', async () => {
     const directory = mkdtempSync(join(import.meta.dir, '../../.temp/codex-reset-status-test-'));
     const cacheFile = join(directory, 'status.json');

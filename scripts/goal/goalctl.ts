@@ -1967,7 +1967,7 @@ export function unitFailureDetails(output: string, candidates: readonly string[]
     if (failure) {
       if (current) {
         const detail = errorLines?.join('\n').trim();
-        found.push({ file: current, test: failure[1]!.trim(), ...(detail ? { detail } : {}) });
+        found.push({ file: current, test: failure[1]!.trim(), ...(detail ? { detail: normalizeUnitFileError(detail, root) } : {}) });
       }
       errorLines = undefined;
       collectingError = false;
@@ -1995,10 +1995,12 @@ function bunRunSummaryLine(line: string): boolean {
   return /^\s*(?:\d+\s+(?:pass|fail|skip|todo|error)\b|Ran\s+\d+\s+tests?\b|(?:Test Suites|Tests|Time|Duration):|Completed in\b)/i.test(line);
 }
 
-/** Load errors have no failing test name, so retain the file-scoped error block for baseline comparison. */
-export function unitFileErrorDetails(output: string, candidates: readonly string[], root?: string): UnitFileErrorDetail[] {
+/** Retain file-scoped unhandled errors, separate from named assertion failures. */
+export function unitFileErrorDetails(output: string, candidates: readonly string[], root?: string,
+  failingFiles: readonly string[] = []): UnitFileErrorDetail[] {
   const known = new Set(candidates);
   const errors = new Map<string, string[]>();
+  const sections = new Map<string, string[]>();
   const plain = output.replace(/\u001b\[[\d;]*m/g, '');
   const namedFailures = new Set(unitFailureDetails(output, candidates, root).map(failure => failure.file));
   let current: string | undefined;
@@ -2009,10 +2011,12 @@ export function unitFileErrorDetails(output: string, candidates: readonly string
       current = header[1]!.replace(/^\.\//, '');
       if (root && isAbsolute(current)) current = relative(root, current);
       if (!known.has(current)) current = undefined;
+      if (current) sections.set(current, []);
       collecting = false;
       continue;
     }
     if (!current) continue;
+    sections.get(current)!.push(line);
     if (/^# Unhandled error/i.test(line)) {
       const bucket = errors.get(current) ?? [];
       bucket.push(line.trim());
@@ -2033,6 +2037,12 @@ export function unitFileErrorDetails(output: string, candidates: readonly string
     } else if (collecting && /^\(fail\)/.test(line)) collecting = false;
     else if (collecting) errors.get(current)!.push(line.trimEnd());
   }
+  for (const file of failingFiles) {
+    if (errors.has(file) || namedFailures.has(file)) continue;
+    const diagnostic = (sections.get(file) ?? []).filter(line => !bunRunSummaryLine(line)
+      && !/^\((?:pass|fail|skip|todo)\)/.test(line)).join('\n').trim();
+    if (diagnostic) errors.set(file, [diagnostic]);
+  }
   return [...errors].map(([file, lines]) => ({ file, detail: normalizeUnitFileError(lines.join('\n'), root) }));
 }
 
@@ -2047,43 +2057,29 @@ function normalizedFindingLines(detail: string | undefined): string[] {
   });
 }
 
+function unitFailureSignatures(file: string, failures: readonly UnitFailureDetail[], errors: readonly UnitFileErrorDetail[]): Set<string> {
+  const signatures = new Set<string>();
+  for (const failure of failures.filter(item => item.file === file)) {
+    const findings = normalizedFindingLines(failure.detail);
+    if (findings.length) {
+      for (const finding of findings) signatures.add(JSON.stringify(['test-finding', failure.test, finding]));
+    } else {
+      signatures.add(JSON.stringify(['test-error', failure.test, normalizeUnitFileError(failure.detail ?? '')]));
+    }
+  }
+  for (const error of errors.filter(item => item.file === file)) {
+    signatures.add(JSON.stringify(['file-error', normalizeUnitFileError(error.detail)]));
+  }
+  return signatures;
+}
+
 export function introducedUnitFailureFiles(branchFiles: readonly string[], branch: readonly UnitFailureDetail[],
   main: readonly UnitFailureDetail[], branchErrors: readonly UnitFileErrorDetail[] = [],
   mainErrors: readonly UnitFileErrorDetail[] = []): string[] {
-  const introduced: string[] = [];
-  for (const file of branchFiles) {
-    const branchFailures = branch.filter(failure => failure.file === file);
-    const mainFailures = main.filter(failure => failure.file === file);
-    const branchFileErrors = branchErrors.filter(error => error.file === file);
-    const mainFileErrors = mainErrors.filter(error => error.file === file);
-    if (branchFileErrors.some(branchError => !mainFileErrors.some(error => error.detail === branchError.detail))) {
-      introduced.push(file);
-      continue;
-    }
-    if (!branchFailures.length && !mainFailures.length) {
-      if (!branchFileErrors.length || !mainFileErrors.some(error => branchFileErrors.some(branchError => branchError.detail === error.detail))) {
-        introduced.push(file);
-      }
-      continue;
-    }
-    if (!branchFailures.length || !mainFailures.length) {
-      introduced.push(file);
-      continue;
-    }
-    for (const branchFailure of branchFailures) {
-      const sameTest = mainFailures.filter(failure => failure.test === branchFailure.test);
-      if (!sameTest.length) {
-        introduced.push(file);
-        break;
-      }
-      const mainFindings = new Set(sameTest.flatMap(failure => normalizedFindingLines(failure.detail)));
-      if (normalizedFindingLines(branchFailure.detail).some(finding => !mainFindings.has(finding))) {
-        introduced.push(file);
-        break;
-      }
-    }
-  }
-  return [...new Set(introduced)].sort();
+  return [...new Set(branchFiles.filter(file => {
+    const mainSignatures = unitFailureSignatures(file, main, mainErrors);
+    return [...unitFailureSignatures(file, branch, branchErrors)].some(signature => !mainSignatures.has(signature));
+  }))].sort();
 }
 
 async function runUnitShard(cwd: string, files: readonly string[], deadline: number): Promise<UnitShardResult> {
@@ -2132,9 +2128,9 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     const text = output();
     const timedOut = timedOutTestFiles(text, files, cwd);
     const failures = unitFailureDetails(text, files, cwd);
-    const fileErrors = unitFileErrorDetails(text, files, cwd);
     const failing = [...new Set([...(outcome.code === 0 ? [] : failingTestFiles(text, files, cwd)), ...timedOut,
       ...failures.map(failure => failure.file)])];
+    const fileErrors = unitFileErrorDetails(text, files, cwd, failing);
     // A failure bun did not attribute to a file counts against that shard.
     return { done: true, failing: outcome.code !== 0 && !failing.length ? [...files] : failing, timedOut, failures, fileErrors,
       files: [...files], output: text,
