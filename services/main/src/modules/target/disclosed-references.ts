@@ -1,3 +1,5 @@
+import { discloseInventory } from '../disclosure/read.ts';
+import { disclosureViewer } from '../disclosure/viewer.ts';
 import { MAX_SUMMARY_BATCH } from '../media/summary.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { targetRead, targetSummaries } from './resolve.ts';
@@ -11,7 +13,9 @@ export type ReferenceDisclosure = (references: readonly string[]) => Promise<Rea
 export const DISCLOSED_REFERENCE_COST = { targetReads: 1, summaryBatch: MAX_SUMMARY_BATCH,
   /** Distinct references beyond one summary batch each add one page inside the same target read: a relation write
    * names at most 64 participants, 16 roles of 8 members and 8 applicability coordinates. */
-  maxPages: 4 } as const;
+  maxPages: 4,
+  /** Semantic fallback refs share one name inventory. Readability of the resource is not permission to copy its name. */
+  nameInventories: 1 } as const;
 
 /**
  * One rule for every reference a typed coordinate may name: Structure positions, releases, classification
@@ -45,13 +49,21 @@ export async function undisclosedReferences(env: WorkActivationEnvironment, auth
   return references.filter(ref => !disclosed.has(ref));
 }
 
-/** Reader side: the references readable through the target reader or, failing that, `canRead`. */
+/** Reader side: the references readable through the target reader or, failing that, `canRead`.
+ * Semantic readability does not restore a private name. A fallback ref is added only when the
+ * name inventory says that name is visible to this reader; a concept with no agent name owner stays. */
 export function referenceDisclosure(env: WorkActivationEnvironment, authority: ReferenceAuthority,
   canRead: (ref: string) => Promise<boolean>): ReferenceDisclosure {
   return async references => {
     const distinct = [...new Set(references)];
     const disclosed = new Set(await targetDisclosed(env, authority, distinct));
-    for (const ref of await semanticReaderOnly(canRead)(distinct.filter(ref => !disclosed.has(ref)))) disclosed.add(ref);
+    const admitted = [...await semanticReaderOnly(canRead)(distinct.filter(ref => !disclosed.has(ref)))];
+    if (!admitted.length) return disclosed;
+    const viewer = disclosureViewer(authority.principal ?? null, authority.actingSubject);
+    const names = await discloseInventory(env, admitted.map(resource => ({
+      owner: 'graph' as const, resource, component: 'name' as const,
+    })), viewer, 'read');
+    admitted.forEach((ref, index) => { if (names[index] === 'visible') disclosed.add(ref); });
     return disclosed;
   };
 }

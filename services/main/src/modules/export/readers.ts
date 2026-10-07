@@ -42,6 +42,12 @@ export class ExportSourceNotFound extends Error {}
 export class ExportSourceUnavailable extends Error {}
 
 const sha = (value: unknown) => createHash('sha256').update(canonicalExport(value)).digest('hex');
+const NATIVE_ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+const NAME_PREDICATES = new Set([
+  'https://schema.org/name', 'http://www.w3.org/2000/01/rdf-schema#label',
+  'http://www.w3.org/2004/02/skos/core#prefLabel', 'http://www.w3.org/2004/02/skos/core#altLabel',
+  `${RV}creditedName`,
+]);
 const unknownRights: LicenseScopeHook = async (members, useScope) => [{ basisKind: 'unprotected_fact',
   basisRef: null, licenseExpression: null, notice: null, obligations: [], useScope,
   result: 'undetermined', memberOrdinals: members.map((_, index) => index + 1) }];
@@ -451,6 +457,9 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
       throw new ExportSourceNotFound('semantic revision is unavailable');
     }
     pinned(exact.sourcePosition, selection.expectedPosition, deps.env.lineage.dataEpoch, 'semantic revision');
+    const nameDecision = await discloseInventory(deps.env, [{ owner: 'graph', resource: exact.component,
+      component: 'name' }], disclosureViewer(principal, actingSubject), 'export');
+    const serializeNames = nameDecision[0] === 'visible';
     const rootData = { resource: exact.component, revision: exact.revision,
       types: exact.state.types, lifecycle: exact.state.lifecycle, exportActor: actingSubject };
     const root: VerifiedExportMember = { sourceOwner: 'graph', sourceNamespace: 'product',
@@ -459,14 +468,19 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
       ownerSequence: exact.sourcePosition.sequence, sourcePosition: null,
       targetGrain: 'SemanticResource', mapping: 'exact', data: rootData };
     const members: VerifiedExportMember[] = [root, ...exact.state.properties.map((property, index) => {
-      const data = { predicate: property.predicate, semanticValue: property.value,
-        ...(property.node ? { node: property.node } : {}) };
+      const textual = property.value.kind === 'string' || property.value.kind === 'language-string';
+      const withheld = NAME_PREDICATES.has(property.predicate) && textual && !serializeNames;
+      const data = { predicate: property.predicate,
+        semanticValue: withheld ? { reference: exact.component, status: 'unavailable' as const } : property.value,
+        ...(property.node ? { node: property.node } : {}),
+        ...(withheld ? { nameOwner: exact.component } : {}) };
+      const carried = withheld ? undefined : portable(property.value);
       return { sourceOwner: 'graph' as const, sourceNamespace: 'product', sourceGrain: 'value' as const,
         exactRef: `${exact.revision}#property-${index + 1}`, contentRevisionId: null,
         refDigest: sha(data), ownerDataEpoch: exact.sourcePosition.dataEpoch,
         ownerSequence: exact.sourcePosition.sequence, sourcePosition: String(index + 1),
         targetGrain: 'SemanticProperty', mapping: 'exact' as const,
-        ...(portable(property.value) ? { value: portable(property.value) } : {}), data };
+        ...(carried ? { value: carried } : {}), data };
     })];
     const residuals: ExportLoss[] = exact.state.properties.flatMap((property, index) =>
       property.value.kind === 'unavailable-reference'
@@ -513,13 +527,78 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
     members: [claimMember, assessmentMember], residuals }, deps.rights);
 }
 
+function copiedNameOwner(row: Record<string, unknown>): string | null {
+  if (typeof row.nameOwner === 'string' && NATIVE_ID.test(row.nameOwner)) return row.nameOwner;
+  const participant = row.participant;
+  if (participant && typeof participant === 'object' && !Array.isArray(participant)) {
+    const ref = (participant as { kind?: unknown; ref?: unknown }).kind === 'resource'
+      ? (participant as { ref?: unknown }).ref : null;
+    if (typeof ref === 'string' && NATIVE_ID.test(ref) && row.creditedName) return ref;
+  }
+  if (typeof row.agent === 'string' && NATIVE_ID.test(row.agent)
+    && (typeof row.name === 'string' || typeof row.displayName === 'string' || row.creditedName)) return row.agent;
+  return null;
+}
+
+function collectCopiedNameOwners(value: unknown, owners: Set<string>): void {
+  if (!value || typeof value !== 'object') return;
+  if (Array.isArray(value)) {
+    for (const item of value) collectCopiedNameOwners(item, owners);
+    return;
+  }
+  const row = value as Record<string, unknown>;
+  const owner = copiedNameOwner(row);
+  if (owner) owners.add(owner);
+  for (const [key, child] of Object.entries(row)) {
+    if (key === 'rightsIdentity') continue;
+    collectCopiedNameOwners(child, owners);
+  }
+}
+
+function redactCopiedNames(value: unknown, hidden: ReadonlySet<string>, removed: Set<string>): unknown {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(item => redactCopiedNames(item, hidden, removed));
+  const row = value as Record<string, unknown>;
+  const next: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(row)) {
+    next[key] = key === 'rightsIdentity' ? child : redactCopiedNames(child, hidden, removed);
+  }
+  const owner = copiedNameOwner(next);
+  if (!owner || !hidden.has(owner)) return next;
+  for (const key of ['name', 'displayName'] as const) {
+    if (typeof next[key] === 'string') {
+      removed.add(next[key]);
+      next[key] = { reference: owner, status: 'unavailable' };
+    }
+  }
+  const credited = next.creditedName;
+  if (credited && typeof credited === 'object' && !Array.isArray(credited)
+    && typeof (credited as { lexical?: unknown }).lexical === 'string') {
+    removed.add((credited as { lexical: string }).lexical);
+    next.creditedName = { reference: owner, status: 'unavailable' };
+  }
+  const semantic = next.semanticValue;
+  if (semantic && typeof semantic === 'object' && !Array.isArray(semantic)) {
+    const kind = (semantic as { kind?: unknown }).kind;
+    const lexical = (semantic as { lexical?: unknown }).lexical;
+    if ((kind === 'language-string' || kind === 'string') && typeof lexical === 'string') {
+      removed.add(lexical);
+      next.semanticValue = { reference: owner, status: 'unavailable' };
+    }
+  }
+  return next;
+}
+
 /** Retain an explicit, payload-free omission at each denied member ordinal.
- * License notices covering a denied member cannot survive via the manifest. */
+ * License notices covering a denied member cannot survive via the manifest.
+ * A name copied from another Agent is withheld in place: the carrying resource stays.
+ * Those owners share this inventory with the member's own targets. */
 export async function discloseExportPlan(env: WorkActivationEnvironment, plan: ExportPlan, viewer: Viewer): Promise<ExportPlan> {
   const native = (value: unknown) => typeof value === 'string'
     ? /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}/.exec(value)?.[0] ?? null : null;
   const root = native(plan.members[0]?.data?.resource) ?? native(plan.members[0]?.data?.work);
   const targets: DisclosureTarget[] = [], ranges: number[][] = [];
+  const copied: { ordinal: number; owner: string; index: number }[] = [];
   for (const member of plan.members) {
     const identity = rightsIdentityFor(member);
     const resource = native(identity.target.resource) ?? root;
@@ -530,17 +609,46 @@ export async function discloseExportPlan(env: WorkActivationEnvironment, plan: E
     { owner: 'graph', resource: work ?? resource, component: 'name' }] : [];
     ranges.push(selected.map((_, index) => targets.length + index));
     targets.push(...selected);
+    const owners = new Set<string>();
+    collectCopiedNameOwners(member.data, owners);
+    const self = native(member.data?.resource) ?? native(member.data?.work);
+    if (self) owners.delete(self);
+    for (const owner of owners) {
+      copied.push({ ordinal: member.ordinal, owner, index: targets.length });
+      targets.push({ owner: 'graph', resource: owner, component: 'name', nameOwner: owner });
+    }
   }
   const decisions = await discloseInventory(env, targets, viewer, 'export');
   const denied = new Set(plan.members.filter((_, index) => !ranges[index]!.length
     || ranges[index]!.some(ordinal => decisions[ordinal] !== 'visible')).map(member => member.ordinal));
-  if (!denied.size) return plan;
+  const hiddenOwners = new Map<number, Set<string>>();
+  for (const item of copied) {
+    if (denied.has(item.ordinal) || decisions[item.index] === 'visible') continue;
+    const hidden = hiddenOwners.get(item.ordinal) ?? new Set<string>();
+    hidden.add(item.owner);
+    hiddenOwners.set(item.ordinal, hidden);
+  }
+  if (!denied.size && !hiddenOwners.size) return plan;
+  let changed = false;
   const members = plan.members.map(member => {
-    if (!denied.has(member.ordinal)) return member;
-    const { data: _data, value: _value, ...identity } = member;
-    return { ...identity, mapping: 'unmapped' as const, targetGrain: null,
-      refDigest: sha({ omitted: 'disclosure_restricted' }), data: { omitted: 'disclosure_restricted' } };
+    if (denied.has(member.ordinal)) {
+      changed = true;
+      const { data: _data, value: _value, ...identity } = member;
+      return { ...identity, mapping: 'unmapped' as const, targetGrain: null,
+        refDigest: sha({ omitted: 'disclosure_restricted' }), data: { omitted: 'disclosure_restricted' } };
+    }
+    const hidden = hiddenOwners.get(member.ordinal);
+    if (!hidden?.size) return member;
+    const removed = new Set<string>();
+    const data = redactCopiedNames(member.data, hidden, removed) as Record<string, unknown>;
+    if (!removed.size) return member;
+    changed = true;
+    const current = member.value;
+    const drop = current?.kind === 'text' && removed.has(current.lexical);
+    const { value: _value, data: _data, refDigest: _digest, ...identity } = member;
+    return { ...identity, ...(drop || !current ? {} : { value: current }), data, refDigest: sha(data) };
   });
+  if (!changed) return plan;
   const residuals: ExportLoss[] = [...plan.residuals.filter(loss => loss.memberOrdinal === null
     || !denied.has(loss.memberOrdinal)), ...[...denied].flatMap(memberOrdinal => [
       { memberOrdinal, kind: 'private_dependency' as const, path: null, detail: { reason: 'disclosure_restricted' } },

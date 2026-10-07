@@ -1,6 +1,8 @@
 import { t } from 'elysia';
 import { displayLanguageBasis } from '../display-language/schema.ts';
+import type { PersonPreferencesStore } from '../preferences/store.ts';
 import { authorNameProvenance } from '../source/author-name.ts';
+import type { Viewer } from '../suitability/policy.ts';
 import { recordedText, recordedRelevance } from './metadata-schema.ts';
 
 export const readId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -11,6 +13,23 @@ export const readPosition = t.Object({ dataEpoch: t.String(), sequence: t.String
 export const readName = t.Object({ value: t.String(), language: t.String(),
   direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]),
   basis: displayLanguageBasis });
+/** Same unavailable summary alternative. The participant's reference stays on the parent item. */
+export const withheldReadName = t.Object({ reference: readId, status: t.Literal('unavailable') },
+  { additionalProperties: false });
+/** A shown participant name, or the unavailable shape when only that name is withheld. */
+export const participantReadName = t.Union([readName, withheldReadName]);
+
+/** Work titles stay `readName`. A participant name uses the name policy: the identity remains,
+ * and a withheld name is the unavailable shape rather than the private text. One preference read.
+ * The policy module is loaded on call: this schema is imported while other schemas are still initializing. */
+export async function discloseParticipantName<T extends { value: string }>(
+  preferences: Pick<PersonPreferencesStore, 'visibleNameOwners'> | undefined,
+  participant: string, name: T, viewer: Viewer,
+): Promise<T | { reference: string; status: 'unavailable' }> {
+  const { visibleNames } = await import('../disclosure/name-policy.ts');
+  const visible = await visibleNames(preferences, [participant], viewer, 'read');
+  return visible.has(participant) ? name : { reference: participant, status: 'unavailable' };
+}
 export const readAvatar = t.Union([
   t.Object({ kind: t.Literal('fallback'), policy: t.String(), key: t.String(), resourceType: t.String() }),
   t.Object({ kind: t.Literal('image'), selection: t.String(), url: t.String(), mediaType: t.String(),

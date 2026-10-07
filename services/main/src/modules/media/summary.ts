@@ -10,7 +10,7 @@ import { currentProfile } from '../realm-profile/schema.ts';
 import { checkedCollectionName } from '../collection/names.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import type { SemanticDisclosure } from '../access/semantic-disclosure.ts';
-import { discloseInventory, hasDisclosure, type DisclosureChannel, type DisclosureTarget } from '../disclosure/read.ts';
+import { DISCLOSURE_COST, discloseInventory, hasDisclosure, type DisclosureChannel, type DisclosureTarget } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 import { direction, readerLanguages, selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import type { Base } from '../target/contract.ts';
@@ -466,16 +466,25 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   const unique = [...new Set(input.resources.filter(resource => nativeId.test(resource)))];
   const graph = await graphRows(env, unique, input.localBasis);
   const cost = { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 0 };
+  const noteNameProbe = (batch: readonly Pick<DisclosureTarget, 'owner' | 'component'>[]) => {
+    if (!hasDisclosure(env)) return;
+    const named = batch.filter(target => target.owner === 'graph'
+      && (target.component === 'name' || target.component === 'title')).length;
+    if (named) cost.graphQueries += Math.ceil(named / DISCLOSURE_COST.batch) * DISCLOSURE_COST.nameOwnerQueries;
+  };
   // Check the entire requested batch, including missing identities, before
   // Access/name/avatar hydration. Rated and absent rows then have the same
   // media generation and cost envelope as well as the same unavailable item.
-  const initialDecisions = await discloseInventory(env, unique.map(reference => {
+  const initialTargets = unique.map(reference => {
     const row = graph.rows.get(reference);
     return { owner: 'graph' as const, resource: reference, component: 'name' as const,
       revision: reference === row?.work ? row.head : null, work: row?.work,
       workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context };
-  }), reader.viewer ?? ANONYMOUS_VIEWER, input.channel ?? 'summary');
+  });
+  const initialDecisions = await discloseInventory(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
+    input.channel ?? 'summary');
   if (hasDisclosure(env)) cost.accessQueries += Math.ceil(unique.length / MAX_SUMMARY_BATCH);
+  noteNameProbe(initialTargets);
   for (const [index, reference] of unique.entries()) {
     if (initialDecisions[index] !== 'visible') graph.rows.delete(reference);
   }
@@ -694,11 +703,32 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   const decisions = await discloseInventory(env, targets, reader.viewer ?? ANONYMOUS_VIEWER,
     input.channel ?? 'summary');
   if (hasDisclosure(env)) cost.accessQueries += Math.ceil(targets.length / MAX_SUMMARY_BATCH);
+  noteNameProbe(targets);
   for (const [reference] of entries) {
     if (decisions[nameIndexes.get(reference)!] !== 'visible') readable.delete(reference);
     const assetIndex = assetIndexes.get(reference);
     if (assetIndex !== undefined && decisions[assetIndex] !== 'visible') avatars.delete(reference);
   }
+  // The graph marks every Agent public. A signed-in reader can see a private name;
+  // its disclosure is what an anonymous reader would get, not that graph flag.
+  // Preferences stay inside the disclosure statement. Anonymous reads skip this probe.
+  const publicToAnonymous = new Set<string>();
+  const shownNames = [...readable];
+  if (hasDisclosure(env) && reader.viewer?.signedIn && shownNames.length) {
+    const probeTargets = shownNames.map(([reference, row]) => ({
+      owner: 'graph' as const, resource: reference, component: 'name' as const,
+      revision: reference === row.work ? row.head : null, work: row.work, workRevision: row.head,
+      context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
+    }));
+    const probe = await discloseInventory(env, probeTargets, ANONYMOUS_VIEWER, input.channel ?? 'summary');
+    cost.accessQueries += Math.ceil(probeTargets.length / MAX_SUMMARY_BATCH);
+    noteNameProbe(probeTargets);
+    shownNames.forEach(([reference], index) => {
+      if (probe[index] === 'visible') publicToAnonymous.add(reference);
+    });
+  }
+  const nameIsPublic = (reference: string) => !hasDisclosure(env) || !reader.viewer?.signedIn
+    || publicToAnonymous.has(reference);
   const projectionSummaries = await readProjectionSummaries(env, reader, input, projections, graph.generation, cost);
   const summaries = input.resources.map((reference): ResourceSummary => {
     const projection = projectionSummaries.get(reference);
@@ -711,7 +741,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       address: identityCanonical(row.type,reference,selectDisplayName(row.localizedName ?? row.labels,
         input.languages ?? readerLanguages(input.language))!.value),
       base: summaryBases[row.type], work: row.work,
-      disclosure: row.public ? 'public' : 'restricted',
+      disclosure: row.public && nameIsPublic(reference) ? 'public' : 'restricted',
       name: { ...selectDisplayName(row.localizedName ?? row.labels,
         input.languages ?? readerLanguages(input.language))!,
         ...(selectedContext?.preferenceRevision

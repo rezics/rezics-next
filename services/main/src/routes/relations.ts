@@ -10,7 +10,13 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { semanticError } from './semantic.ts';
 import { admittedWorkRelationChange } from '../modules/relation/work-authority.ts';
-import { referenceDisclosure, systemDisclosure } from '../modules/target/disclosed-references.ts';
+import { visibleNames } from '../modules/disclosure/name-policy.ts';
+import { disclosureViewer } from '../modules/disclosure/viewer.ts';
+import type { PersonPreferencesStore } from '../modules/preferences/store.ts';
+import type { Participation } from '../modules/relation/schema.ts';
+import type { Viewer } from '../modules/suitability/policy.ts';
+import { referenceDisclosure, semanticReaderOnly, systemDisclosure, targetDisclosed } from '../modules/target/disclosed-references.ts';
+import { withheldReadName } from '../modules/work/read-contract.ts';
 import { groupUuid } from './shared.ts';
 import { readingPositionRead } from '../modules/reading-position/read.ts';
 import { readingPositionQuery } from './reading-positions.ts';
@@ -22,13 +28,39 @@ const relationWrite = t.Object({ profile: t.Literal('relation-change-v1'), occur
   replayed: t.Boolean() });
 const creditedName = t.Object({ lexical: t.String({ minLength: 1, maxLength: 200 }),
   language: t.String({ minLength: 2, maxLength: 35 }) }, { additionalProperties: false });
+const creditedNameRead = t.Union([creditedName, withheldReadName]);
 const relationRead = t.Object({ profile: t.Literal('relation-change-v1'), occurrence: t.String(),
   revision: t.String(), predecessor: t.Nullable(t.String()), lifecycle: t.String(),
   definition: t.Object({ revision: t.String(), definition: t.String(), lifecycle: t.String(),
     roles: t.Array(t.Unknown()), star: t.Nullable(relationStar) }),
   participations: t.Array(t.Object({ participation: t.String(), role: t.String(), participant: t.Unknown(),
-    position: t.Optional(t.Integer()), creditedName: t.Optional(creditedName), availability: t.String() })),
+    position: t.Optional(t.Integer()), creditedName: t.Optional(creditedNameRead), availability: t.String() })),
   applicability: t.Array(t.String()), sourcePosition: position });
+
+/** Participant readability and the credited name are separate. A readable resource participant
+ * keeps its identity when the name policy withholds the name; an external credit has no person owner.
+ * One preference read for the resource credits on the occurrence (at most 64). */
+export async function disclosedRelationParticipations(
+  preferences: Pick<PersonPreferencesStore, 'visibleNameOwners'> | undefined,
+  participations: readonly (Participation & { iri: string })[],
+  participants: ReadonlySet<string>, roleKeys: Readonly<Record<string, string>>, viewer: Viewer,
+) {
+  const owners = participations.flatMap(item =>
+    item.participant.kind === 'resource' && item.creditedName ? [item.participant.ref] : []);
+  const visible = await visibleNames(preferences, owners, viewer, 'read');
+  return participations.map(item => {
+    const availability = item.participant.kind === 'external' ? 'external' as const
+      : item.participant.kind === 'resource' && participants.has(item.participant.ref) ? 'available' as const
+      : 'unavailable' as const;
+    const credited = !item.creditedName || availability === 'unavailable' ? undefined
+      : item.participant.kind !== 'resource' || visible.has(item.participant.ref) ? item.creditedName
+        : { reference: item.participant.ref, status: 'unavailable' as const };
+    return { participation: item.iri, role: roleKeys[item.role] ?? item.role,
+      participant: availability === 'unavailable' ? { kind: 'unavailable-reference' as const } : item.participant,
+      ...(item.position === undefined ? {} : { position: item.position }),
+      ...(credited ? { creditedName: credited } : {}), availability };
+  });
+}
 
 export const openApiOperations = {
   '/v1/relations/changes': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
@@ -55,22 +87,21 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     if (!definition) return null;
     const disclosed = await boundary.visible([occurrence, definition.definition, ...read.state.applicability]);
     if (!disclosed.has(occurrence) || !disclosed.has(definition.definition)) return null;
-    const participants = await disclose(read.state.participations.flatMap(item =>
-      item.participant.kind === 'resource' ? [item.participant.ref] : []));
+    const resourceRefs = read.state.participations.flatMap(item =>
+      item.participant.kind === 'resource' ? [item.participant.ref] : []);
+    // Name policy must not turn a readable participant into an unavailable reference.
+    const disclosedByTarget = await targetDisclosed(work.environment,
+      { access: work.access, principal, actingSubject }, resourceRefs);
+    const admittedByReader = await semanticReaderOnly(canRead)(
+      resourceRefs.filter(ref => !disclosedByTarget.has(ref)));
+    const participants = new Set([...disclosedByTarget, ...admittedByReader]);
     return { profile: 'relation-change-v1' as const, occurrence, revision: read.revision,
       predecessor: read.predecessor, lifecycle: read.state.lifecycle,
       definition: { revision: definition.revision, definition: definition.definition, lifecycle: definition.lifecycle,
         roles: definition.roles.map(role => ({ ...role, key: definition.roleKeys[role.role] })),
         star: definition.star ?? null },
-      participations: read.state.participations.map(item => {
-        const availability = item.participant.kind === 'external' ? 'external'
-          : participants.has(item.participant.ref) ? 'available' : 'unavailable';
-        return { participation: item.iri, role: definition.roleKeys[item.role] ?? item.role,
-          participant: availability === 'unavailable' ? { kind: 'unavailable-reference' } : item.participant,
-          ...(item.position === undefined ? {} : { position: item.position }),
-          // The credited name belongs to its participant: hidden with it.
-          ...(item.creditedName && availability !== 'unavailable' ? { creditedName: item.creditedName } : {}), availability };
-      }),
+      participations: await disclosedRelationParticipations(work.personPreferences, read.state.participations,
+        participants, definition.roleKeys, disclosureViewer(principal, actingSubject)),
       applicability: read.state.applicability.filter(ref => disclosed.has(ref)), sourcePosition: read.sourcePosition };
     });
   };

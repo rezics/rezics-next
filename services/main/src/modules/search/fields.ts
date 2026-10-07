@@ -35,6 +35,8 @@ export interface FieldMatch { work: string; mainVersion: string; matchUnit: stri
   contribution: string; revision: string; selection: string; language: string;
   score: number; matchedField: SearchField; matchedText: string;
   matchedLanguage: string | null; reason?: string;
+  /** Agent who owns a native credited name. Absent for titles and source-reported names. */
+  nameOwner?: string;
   matchedChapter?: { post: string; book: string; title: string } }
 export const normalizedSearchText = (value: string) => value.normalize('NFC').toLowerCase().trim().replace(/\s+/gu, ' ');
 export function matchesSearchText(text: string, term: string, prefix: boolean) {
@@ -76,7 +78,7 @@ export async function querySearchFields(env: WorkActivationEnvironment,
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     SELECT DISTINCT ?epoch ?sequence ?work ?main ?unit ?contribution ?revision ?selection ?language
-      ?field ?text ?state ?key ?reason ?head ?resultWork ?resultMain ?chapterTitle WHERE {
+      ?field ?text ?state ?key ?reason ?head ?resultWork ?resultMain ?chapterTitle ?agent WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
       FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
     GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
@@ -155,6 +157,7 @@ export async function querySearchFields(env: WorkActivationEnvironment,
         contribution: row.contribution.value, revision: row.revision.value, selection: row.selection.value,
         language: row.language.value, score: 1, matchedField: value.field,
         matchedText: value.text, matchedLanguage: value.language,
+        ...(value.field === 'credit' && row.agent?.value ? { nameOwner: row.agent.value } : {}),
         ...(row.reason ? { reason: row.reason.value } : {}),
         ...(row.resultWork ? { matchedChapter: { post: row.work.value, book: row.resultWork.value,
           title: row.chapterTitle!.value } } : {}) };
