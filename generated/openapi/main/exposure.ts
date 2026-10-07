@@ -723,6 +723,7 @@ export const operationExposures = {
   "postV1ZonesByIdMounts": "public",
   "postV1ZonesByIdRecoveries": "public",
   "postV1ZonesByIdRetirements": "public",
+  "postV1ZonesByIdSite-publications": "public",
   "postV2WorksByIdSource-supports": "platform:catalogue-import",
   "postV2WorksByIdSource-supportsByBindingWithdrawal": "platform:catalogue-import",
   "putV1AgentsByIdLibrary-visibility": "public",
