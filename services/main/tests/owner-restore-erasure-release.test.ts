@@ -233,7 +233,7 @@ class HeldRestoreGraph extends FusekiClient {
       return { results: { bindings: this.cutMatches ? [{}] : [] } };
     }
     if (!sparql.includes('ASK')) throw new Error(`Unexpected restore graph query: ${sparql}`);
-    if (sparql.includes('FILTER NOT EXISTS') && sparql.includes('rv:restoreHold true')) {
+    if (sparql.includes(`FILTER NOT EXISTS { <${DATASET}> rv:restoreHold true }`)) {
       if (!this.held) this.trace.push('graph:verify-open');
       let receiptMatches = true;
       if (sparql.includes('a rv:OperationReceipt')) {
