@@ -43,7 +43,43 @@ export interface RegressionOptions {
   registry?: (checkout: string) => Promise<ExpectedFile[]>;
   prepare?: (checkout: string) => Promise<{ ok: boolean; artifactPaths: string[]; reason?: string }>;
   runner?: (checkout: string, batch: Batch, directory: string, shards: number) => Promise<Execution>;
+  waitForTurn?: typeof waitForRegressionTurn;
   route?: (entry: InboxEntry) => Promise<void>;
+}
+export interface RegressionTurnOptions {
+  status?: () => string;
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => number;
+  deadline?: number;
+  announce?: (message: string) => void;
+}
+
+/** Leave the heavy queue empty before joining it, so merge gates get the next turn between regression batches. */
+export async function waitForRegressionTurn(lockDir?: string, interrupted: () => boolean = () => false,
+  options: RegressionTurnOptions = {}): Promise<void> {
+  // goalctl imports this module; loading its status reader only at runtime avoids a static import cycle.
+  let status = options.status;
+  if (!status) {
+    const { heavyQaStatus } = await import('./goalctl.ts');
+    status = () => heavyQaStatus(lockDir);
+  }
+  const now = options.now ?? Date.now;
+  const deadline = options.deadline ?? now() + 6 * 3_600_000;
+  const sleep = options.sleep ?? ((ms: number) => Bun.sleep(ms));
+  let announced = false;
+  for (;;) {
+    if (interrupted()) throw new Error('Regression interrupted while yielding to heavy QA; use --resume');
+    const current = status();
+    // Wait through acquisition as well: a ticket disappears when its run takes the lock, before that run finishes.
+    if (current === 'free; 0 waiting') return;
+    const remaining = deadline - now();
+    if (remaining <= 0) throw new Error(`Regression timed out yielding to heavy QA: ${current}`);
+    if (!announced) {
+      (options.announce ?? console.error)(`Regression yielding to heavy QA: ${current}`);
+      announced = true;
+    }
+    await sleep(Math.min(10_000, remaining));
+  }
 }
 const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook'];
 const json = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T;
@@ -402,6 +438,9 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     manifest.preflight = prepared.get(pinned)!; save();
     const execute = async (commit: string, batch: Batch, label: string, probeTree?: string): Promise<Execution> => {
       const tree = probeTree ?? await checkoutAt(commit);
+      // Reports may use GOAL_REGRESS_STATE_DIR, but admission always observes goalctl's shared host lock.
+      await (options.waitForTurn ?? waitForRegressionTurn)(undefined, () => interrupted);
+      if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
       const result = await runner(tree, batch, join(directory, label), manifest.shards);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
       result.classification ??= result.code ? classify(result.evidence ?? '', result.code) : undefined;

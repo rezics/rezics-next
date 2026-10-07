@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { selectTestCommand } from '../qa/test.ts';
 import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, parseRegressArgs, regressionRegistry,
-  runRegression, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
+  runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 
 function repo(extraIntegration = 0) {
   const dir = mkdtempSync(join(tmpdir(), 'goal-regression-'));
@@ -42,7 +42,7 @@ function repo(extraIntegration = 0) {
       queueMs: 2, testMs: 3, totalMs: 5, artifactPaths: [directory] };
   };
   const options: RegressionOptions = { repo: dir, stateDir, registry: async () => files.map(file => ({ ...file })),
-    prepare: async () => ({ ok: true, artifactPaths: [] }), runner };
+    prepare: async () => ({ ok: true, artifactPaths: [] }), runner, waitForTurn: async () => {} };
   const event = (before: string, after: string, goal = 'owner') => {
     mkdirSync(stateDir, { recursive: true });
     const path = join(stateDir, 'merges.jsonl');
@@ -56,6 +56,89 @@ function repo(extraIntegration = 0) {
 }
 
 describe('pinned main-wide regression', () => {
+  test('each batch yields until a queued heavy run finishes without changing the pinned commit', async () => {
+    const r = repo();
+    const lock = join(r.options.stateDir, 'qa-slots', 'heavy');
+    const queue = join(r.options.stateDir, 'qa-slots', 'heavy-queue');
+    let turns = 0;
+    let polls = 0;
+    const messages: string[] = [];
+    try {
+      const result = await r.run({ runId: 'yield', waitForTurn: async (lockDir, interrupted) => {
+        expect(lockDir).toBeUndefined();
+        turns++;
+        await waitForRegressionTurn(lock, interrupted, { announce: message => messages.push(message), sleep: async () => {
+          polls++;
+          expect(r.calls).toHaveLength(1);
+          if (polls === 1) {
+            rmSync(join(queue, 'gate.json'));
+            mkdirSync(lock);
+            writeFileSync(join(lock, 'info.json'), JSON.stringify({ pid: process.pid, goal: 'owner',
+              command: 'merge gate', startedAt: new Date().toISOString() }));
+            r.commit({ [r.unit]: 'fail\n' });
+          } else rmSync(lock, { recursive: true });
+        } });
+      }, runner: async (...args) => {
+        expect(turns).toBe(r.calls.length + 1);
+        const result = await r.runner(...args);
+        if (r.calls.length === 1) {
+          mkdirSync(queue, { recursive: true });
+          writeFileSync(join(queue, 'gate.json'), JSON.stringify({ pid: process.pid, command: 'merge gate', arrivedAt: 1 }));
+        }
+        return result;
+      } });
+      expect(polls).toBe(2);
+      expect(turns).toBe(result.batches.length);
+      expect(messages).toEqual(['Regression yielding to heavy QA: free; 1 waiting']);
+      expect(result.atCommit).toBe(r.base);
+      expect(r.git('rev-parse', 'main')).not.toBe(r.base);
+      expect(new Set(r.calls.map(call => call.commit))).toEqual(new Set([r.base]));
+      expect(result.status).toBe('passed');
+    } finally { r.cleanup(); }
+  });
+
+  test('interrupting a yield resumes unfinished batches at the original pinned commit', async () => {
+    const r = repo();
+    try {
+      await expect(r.run({ runId: 'yield-resume', waitForTurn: async (_lockDir, interrupted) => {
+        if (r.calls.length === 1) {
+          await waitForRegressionTurn('', interrupted, { status: () => 'free; 1 waiting', announce: () => {},
+            sleep: async () => { throw new Error('interrupted while yielding'); } });
+        }
+      } })).rejects.toThrow('interrupted while yielding');
+      expect(r.manifest('yield-resume').batches[0]!.state).toBe('done');
+      expect(r.manifest('yield-resume').batches[1]!.attempts).toHaveLength(0);
+      r.commit({ [r.unit]: 'fail\n' });
+      r.calls.length = 0;
+      let turns = 0;
+      const resumed = await r.run({ resume: 'yield-resume', waitForTurn: async () => { turns++; } });
+      expect(resumed.status).toBe('passed');
+      expect(resumed.atCommit).toBe(r.base);
+      expect(turns).toBe(resumed.batches.length - 1);
+      expect(r.calls.some(call => call.batch.tier === 'unit')).toBe(false);
+      expect(new Set(r.calls.map(call => call.commit))).toEqual(new Set([r.base]));
+    } finally { r.cleanup(); }
+  });
+
+  test('diagnostic probes and infrastructure retries also yield before taking a heavy turn', async () => {
+    const r = repo();
+    try {
+      r.commit({ [r.unit]: 'fail\n' });
+      let turns = 0;
+      let unavailable = true;
+      const result = await r.run({ runId: 'yield-probes', waitForTurn: async () => { turns++; }, runner: async (...args) => {
+        expect(turns).toBe(r.calls.length + 1);
+        const result = await r.runner(...args);
+        if (unavailable) { unavailable = false; return { ...result, code: 1, classification: 'infrastructure' }; }
+        return result;
+      } });
+      expect(result.batches[0]!.attempts).toHaveLength(2);
+      expect(r.calls.some(call => call.directory.includes('/probes/'))).toBe(true);
+      expect(r.calls.some(call => call.directory.endsWith('/confirm'))).toBe(true);
+      expect(turns).toBe(r.calls.length);
+    } finally { r.cleanup(); }
+  });
+
   test('merges landing mid-run do not change the pinned SHA', async () => {
     const r = repo();
     try {
@@ -390,6 +473,20 @@ export function testArgs(tier) { return tier === 'owner' ? ['scripts/ops/tests/e
       expect(inboxEntries(r.options.stateDir, 'program')[0]!.artifactPaths).toEqual(['generated.log']);
     } finally { r.cleanup(); }
   });
+});
+
+test('regression yielding stops at its deadline or an interruption', async () => {
+  const messages: string[] = [];
+  const sleeps: number[] = [];
+  let time = 0;
+  await expect(waitForRegressionTurn('', () => false, { status: () => 'free; 2 waiting', now: () => time,
+    deadline: 1, announce: message => messages.push(message), sleep: async ms => { sleeps.push(ms); time += ms; } }))
+    .rejects.toThrow('Regression timed out yielding to heavy QA: free; 2 waiting');
+  expect(messages).toEqual(['Regression yielding to heavy QA: free; 2 waiting']);
+  expect(sleeps).toEqual([1]);
+  let stopped = false;
+  await expect(waitForRegressionTurn('', () => stopped, { status: () => 'free; 1 waiting', announce: () => {},
+    sleep: async () => { stopped = true; } })).rejects.toThrow('interrupted');
 });
 
 test('classification uses engine evidence without treating application ECONNREFUSED as Docker failure', () => {

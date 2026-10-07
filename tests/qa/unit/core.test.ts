@@ -6,7 +6,7 @@ import { acquireFullLock, acquireQaSlots, commandAsync, concurrencyGate, estimat
   isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
   mergeJUnit, parseArgs, planShards, planStackProjects,
   recordedFileDurations, selfManagedFaultFiles, shardCount, stackPlanBudgetWarning, shardResolved, splitTestArgs,
-  testLogEnvironment, writeSummary,
+  testLogEnvironment, writeSummary, withQaMemory,
   implementedTiers, tierArtifactName,
   xmlForCommand, sourceIdentity, type Tier } from '../../../scripts/qa/core.ts';
 import { parseJUnit } from '../../../scripts/qa/acceptance.ts';
@@ -15,6 +15,22 @@ import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructur
 
 const scratch = join(import.meta.dir, '../../../.temp');
 mkdirSync(scratch, { recursive: true });
+
+test('QA work starts only after memory admission and stays unstarted at the deadline', async () => {
+  const need = { vm: 10, host: 2, hostReserve: 8, vmReserve: 1 };
+  let now = 0, started = false;
+  const options = { deadline: 20, now: () => now, sleep: async (ms: number) => { now += ms; }, pollMs: 10,
+    announce: () => {}, read: async () => ({ vmTotal: 24, vmUsed: 14, hostAvailable: 10 }) };
+  await expect(withQaMemory(need, options, async () => { started = true; })).rejects.toThrow('deadline');
+  expect(started).toBe(false);
+  now = 0;
+  const result = await withQaMemory(need, { ...options, read: async () => {
+    expect(started).toBe(false);
+    return { vmTotal: 24, vmUsed: now === 0 ? 14 : 13, hostAvailable: 10 };
+  } }, async () => { started = true; return 'started'; });
+  expect(now).toBe(10);
+  expect(result).toBe('started');
+});
 
 test('storybook selection remains e2e-only alongside the owner tier', () => {
   expect(parseArgs(['--tier', 'e2e', '--storybook']).storybook).toBe(true);

@@ -3,6 +3,7 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, 
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 import { discoverJourneyPreparations, selectJourneyPreparations } from './e2e-preparation.ts';
 
 const claimRoot = join(tmpdir(), 'rezics-e2e-web-ports');
@@ -244,7 +245,10 @@ async function runE2e(): Promise<void> {
     const start = Date.now();
     const result: typeof steps[number] = { step, budgetMs, elapsedMs: 0, passed: false };
     console.log(`${step}: ${budgetMs / 1000}s budget`);
-    try { await run(); result.passed = true; }
+    try {
+      await waitForMemory(qaMemoryNeed(root, 'browser'), { deadline: start + budgetMs });
+      await run(); result.passed = true;
+    }
     catch (error) { result.error = error instanceof Error ? error.message : String(error); throw error; }
     finally {
       result.elapsedMs = Date.now() - start;

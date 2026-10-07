@@ -17,6 +17,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { hostname } from 'node:os';
 import { acceptanceStatuses, parseJUnit, titleIds, type Case, type TestResult } from './acceptance.ts';
 import { isolatedIntegrationFileList } from './isolated-integration-files.ts';
+import { waitForMemory, type MemoryNeed, type MemoryWaitOptions } from './memory-admission.ts';
 
 export type Tier = 'static' | 'unit' | 'owner' | 'integration' | 'model' | 'fault/recovery' | 'e2e' | 'load';
 export const implementedTiers: Tier[] = ['static', 'unit', 'owner', 'integration', 'model', 'fault/recovery', 'e2e', 'load'];
@@ -337,6 +338,12 @@ export function concurrencyGate(limit: number): <T>(work: () => Promise<T>) => P
       else active--;
     }
   };
+}
+
+export async function withQaMemory<T>(need: MemoryNeed, options: MemoryWaitOptions,
+  work: () => Promise<T>): Promise<T> {
+  await waitForMemory(need, options);
+  return work();
 }
 
 const bunTestFile = /(?:\.|_)(?:test|spec)\.[cm]?[jt]sx?$/;
