@@ -13,6 +13,12 @@ import org.apache.jena.vocabulary.RDF;
 final class PublicNameProjection {
     static final String PREFIX = "urn:rezics:search:name:";
     static final String DIRECTORY = "urn:rezics:search:directory:";
+    private static final String PRODUCT = "https://rezics.com/id/";
+    private static final String UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+    private static final java.util.regex.Pattern PRODUCT_IRI = java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(PRODUCT) + UUID);
+    static boolean productResource(Node resource) {
+        return resource != null && resource.isURI() && PRODUCT_IRI.matcher(resource.getURI()).matches();
+    }
     private static final String RV = "https://rezics.com/vocab/";
     private static final Node CURRENT = uri(CommandPolicy.CURRENT);
     private static final Node PUBLIC = uri(CommandPolicy.PUBLIC_SEARCH);
@@ -31,7 +37,7 @@ final class PublicNameProjection {
     private static Node p(String value) { return uri(RV + value); }
     static boolean nameMaintenanceQuad(Quad quad) {
         if (quad.getPredicate().equals(p("publicTitle"))) return true;
-        return (quad.getSubject().isURI() && quad.getSubject().getURI().matches(PREFIX + "visibility:[0-9a-f-]{36}")
+        return (quad.getSubject().isURI() && quad.getSubject().getURI().matches(PREFIX + "visibility:" + UUID)
             || quad.getSubject().isVariable() && quad.getSubject().getName().equals("marker"))
             && Set.of(p("nameVisibility"), p("nameVersion"), p("nameListing"), p("listingVersion")).contains(quad.getPredicate());
     }
@@ -52,8 +58,9 @@ final class PublicNameProjection {
             && (listing == null || listing.equals(NodeFactory.createLiteralString("listed")));
     }
     private static boolean publicRealm(DatasetGraph data, Node realm) {
+        if (!productResource(realm)) return false;
         Node space = one(data, realm, "space");
-        return has(data, realm, "realmState", p("Active")) && space != null
+        return productResource(space) && has(data, realm, "realmState", p("Active")) && space != null
             && listedPublic(data, space, true) && listedPublic(data, realm, false)
             && !withdrawn(data, realm) && !withdrawn(data, space);
     }
@@ -65,7 +72,7 @@ final class PublicNameProjection {
         return has(data, resource, "protectionHead", Node.ANY) || has(data, resource, "mergedInto", Node.ANY);
     }
     private static String kind(DatasetGraph data, Node resource) {
-        if (withdrawn(data, resource)) return null;
+        if (!productResource(resource) || withdrawn(data, resource)) return null;
         if (type(data, resource, "http://www.w3.org/2004/02/skos/core#Concept")) {
             Node realm = one(data, resource, "conceptRealm"), scheme = null;
             var rows = data.find(CURRENT, resource, uri("http://www.w3.org/2004/02/skos/core#inScheme"), Node.ANY);
@@ -153,20 +160,23 @@ final class PublicNameProjection {
             data.add(PUBLIC, POLICY, p("complete"), NodeFactory.createLiteralByValue(true,
                 org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean));
         Set<Node> resources = new LinkedHashSet<>();
-        for (String value : plan.current()) if (value.startsWith("https://rezics.com/id/")) resources.add(uri(value));
+        for (String value : plan.current()) if (productResource(uri(value))) resources.add(uri(value));
         for (var change : changes) {
-            if (change.work() != null) resources.add(change.work());
+            if (productResource(change.work())) resources.add(change.work());
             var units = data.find(PUBLIC, uri(change.unit()), p("work"), Node.ANY);
-            try { if (units.hasNext()) resources.add(units.next().getObject()); }
+            try { if (units.hasNext()) {
+                Node work = units.next().getObject();
+                if (productResource(work)) resources.add(work);
+            } }
             finally { org.apache.jena.atlas.iterator.Iter.close(units); }
         }
         for (var validation : validations) if (validation.graphs().contains(CommandPolicy.CURRENT))
-            for (String value : validation.focus()) if (value.startsWith("https://rezics.com/id/")) resources.add(uri(value));
+            for (String value : validation.focus()) if (productResource(uri(value))) resources.add(uri(value));
         if (receipt.startsWith("urn:rezics:receipt:catalogue-search-index:")) {
             var names = data.find(uri(CommandPolicy.RECEIPTS), uri(receipt), p("nameResource"), Node.ANY);
             try { while (names.hasNext()) {
                 Node resource = names.next().getObject();
-                if (!resource.isURI() || !resource.getURI().startsWith("https://rezics.com/id/"))
+                if (!productResource(resource))
                     throw new IllegalArgumentException("name backfill resource is invalid");
                 resources.add(resource);
                 if (resources.size()>64) throw new IllegalArgumentException("name backfill exceeds candidate bound");
@@ -178,7 +188,7 @@ final class PublicNameProjection {
         for (Node subject : Set.copyOf(resources)) {
             for (String predicate : Set.of("work", "space", "realmCapability", "zoneCapability")) {
                 Node neighbour = one(data, subject, predicate);
-                if (neighbour != null) resources.add(neighbour);
+                if (productResource(neighbour)) resources.add(neighbour);
             }
         }
         for (Node resource : changed) if (plan.current().contains(resource.getURI())
@@ -195,6 +205,7 @@ final class PublicNameProjection {
         }
     }
     static void refresh(DatasetGraph data, Node resource) {
+        if (!productResource(resource)) return;
         invalidate(data, resource, uri(PREFIX + "generation:" + java.util.UUID.randomUUID()));
         project(data, resource, true);
     }
@@ -277,8 +288,10 @@ final class PublicNameProjection {
                 if (resource == null) throw new IllegalStateException("name repair cursor has no dependent");
                 // Cascades (Space -> Realm -> Concept) are separate pending work,
                 // never a recursive dependent walk in either transaction.
-                invalidate(data, resource, replay);
-                project(data, resource, false);
+                if (productResource(resource)) {
+                    invalidate(data, resource, replay);
+                    project(data, resource, false);
+                }
                 state(data, parent, "repairCursor", next);
                 processed++;
             }
@@ -290,6 +303,7 @@ final class PublicNameProjection {
      * A fence does not require repair to run: Concept -> Realm -> Space is a
      * fixed path; retired Schemes and protected name sources also deny reads. */
     static boolean visible(DatasetGraph data, Node resource) {
+        if (!productResource(resource)) return false;
         // Work qualification now follows bounded owner heads as well, so a
         // live publication withdrawal is denied without waiting for label repair.
         String kind = kind(data, resource);
@@ -311,9 +325,11 @@ final class PublicNameProjection {
         Node resource;
         try { resource = rows.hasNext() ? rows.next().getObject() : null; }
         finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
-        return resource != null && resource.isURI() && visible(data, resource);
+        if (!productResource(resource)) return false;
+        String kind = kind(data, resource);
+        return kind != null && id.equals(nameUnit(resource, kind).getURI()) && visible(data, resource);
     }
-    private static Node nameUnit(Node resource, String kind) {
+    static Node nameUnit(Node resource, String kind) {
         return uri(PREFIX + kind + ":" + resource.getURI().substring("https://rezics.com/id/".length()));
     }
     private record NamePage(java.util.List<Node> values, boolean more) {}
@@ -491,10 +507,11 @@ final class PublicNameProjection {
      * probes and bounded owner payloads. Large recipes are hidden until bounded
      * clear/copy turns complete, so a 64-value turn never becomes a product cap. */
     private static void project(DatasetGraph data, Node resource, boolean changed) {
+        if (!productResource(resource)) return;
         dependencies(data, resource);
         String kind = kind(data, resource);
         Node source = kind != null && Set.of("realm", "site").contains(kind) ? one(data, resource, "space") : resource;
-        if (source == null || withdrawn(data, source)) kind = null;
+        if (!productResource(source) || withdrawn(data, source)) kind = null;
         Node generation = recipeGeneration(data, resource, source, kind);
         if (generation.equals(state(data, resource, "labelCopyGeneration"))
             || state(data, resource, "labelCopyPhase") == null
@@ -565,9 +582,13 @@ final class PublicNameProjection {
         finally { org.apache.jena.atlas.iterator.Iter.close(pending); }
         state(data, replay, "labelRepairApplied", replay);
         if (resource == null) return 0;
+        if (!productResource(resource)) {
+            for (String predicate : java.util.List.of("labelCopyPhase", "labelCopyAfter", "labelCopyGeneration", "labelCopyStore")) state(data, resource, predicate, null);
+            return 0;
+        }
         String kind = kind(data, resource);
         Node source = kind != null && Set.of("realm", "site").contains(kind) ? one(data, resource, "space") : resource;
-        if (source == null || withdrawn(data, source)) kind = null;
+        if (!productResource(source) || withdrawn(data, source)) kind = null;
         Node generation = recipeGeneration(data, resource, source, kind);
         if (!generation.equals(state(data, resource, "labelCopyGeneration"))) { project(data, resource, false); return 0; }
         Node store = storageGeneration(data);

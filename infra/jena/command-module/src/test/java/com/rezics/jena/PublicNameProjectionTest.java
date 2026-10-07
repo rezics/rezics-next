@@ -600,6 +600,135 @@ public class PublicNameProjectionTest {
             }
         } finally { data.abort(); data.end(); data.close(); }
     }
+    @Test public void completeWorkNamesBeyondTheBodyCacheRankWithExactSelectedBodyWitnesses() {
+        var definition=new EntityDefinition("uri","label","graph");definition.set("publicTitle",p("publicTitle"));definition.set("body",p("searchBody"));
+        definition.setLangField("lang");definition.setUidField("uid");
+        var config=new TextIndexConfig(definition);config.setValueStored(true);
+        var index=new FilteredGraphTextIndex(new TextIndexLucene(new ByteBuffersDirectory(),config));
+        var data=new DatasetGraphText(org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(),index,new TextDocProducerTriples(index));
+        Node body=uri("urn:unit:selected-catalogue-body");
+        data.begin(ReadWrite.WRITE);
+        try {
+            publishedOwner(data);
+            for(int i=0;i<1001;i++) data.add(CURRENT,WORK,uri("https://schema.org/alternateName"),NodeFactory.createLiteralLang("Distinct alias "+i,"fr"));
+            // Legacy legal selections may omit matchUnit; the one selected public unit is sufficient.
+            data.add(PUBLIC,body,RDF.type.asNode(),p("MatchUnit"));data.add(PUBLIC,body,p("work"),WORK);
+            data.add(PUBLIC,body,p("mainVersion"),MAIN);data.add(PUBLIC,body,p("context"),MAIN);
+            data.add(PUBLIC,body,p("selection"),SELECTION);data.add(PUBLIC,body,p("contribution"),CONTRIBUTION);
+            data.add(PUBLIC,body,p("revision"),DRAFT);data.add(PUBLIC,body,p("language"),NodeFactory.createLiteralString("en"));
+            data.add(PUBLIC,body,p("disclosure"),p("Public"));data.add(PUBLIC,body,p("searchBody"),NodeFactory.createLiteralLang("Matching body words","en"));
+            for(Node title:CatalogueNamePolicy.expected(data,WORK))data.add(PUBLIC,body,p("publicTitle"),title);
+            assertFalse(data.contains(PUBLIC,body,p("publicTitle"),NodeFactory.createLiteralLang("Distinct alias 1000","fr")));
+            refresh(data,WORK,"urn:receipt:catalogue-search-aliases");
+            for(int batch=0;batch<17;batch++)maintainedNameTurn(data,"urn:receipt:catalogue-alias-copy:"+batch);
+            data.commit();
+        } finally {data.end();}
+        data.begin(ReadWrite.READ);
+        try {
+            var page=index.ranked(p("searchBody"),"Distinct alias 1000",64,null,data,new FilteredGraphTextIndex.RankScope(null,null,null,true));
+            var named=page.hits().stream().filter(hit->hit.key()!=null).toList();assertEquals(1,named.size());
+            assertEquals(MAIN.getURI(),named.getFirst().key());assertEquals(body.getURI(),named.getFirst().unit());
+            assertEquals(unit(WORK,"work").getURI(),named.getFirst().id());
+            var last=page.hits().getLast();
+            var next=index.ranked(p("searchBody"),"Distinct alias 1000",64,new FilteredGraphTextIndex.RankAfter(last.id(),last.score(),page.commit(),last.document()),data,new FilteredGraphTextIndex.RankScope(null,null,null,true));
+            assertTrue(next.hits().stream().noneMatch(hit->hit.key()!=null));
+            var bodyPage=index.ranked(p("searchBody"),"Matching body words",64,null,data,new FilteredGraphTextIndex.RankScope(null,null,null,true));
+            assertTrue(bodyPage.hits().stream().anyMatch(hit->body.getURI().equals(hit.id())&&hit.key()!=null));
+        } finally {data.end();}
+        data.begin(ReadWrite.WRITE);
+        try {set(data,CONTRIBUTION,"publicationHead",id(899));data.commit();}finally{data.end();}
+        data.begin(ReadWrite.READ);
+        try {
+            var page=index.ranked(p("searchBody"),"Distinct alias 1000",64,null,data,new FilteredGraphTextIndex.RankScope(null,null,null,true));
+            assertTrue(page.hits().stream().allMatch(hit->hit.key()==null));
+        } finally {data.end();data.close();}
+    }
+    @Test public void catalogueCacheRecipeUsesBoundedOwnerSamplesAndExactAdmissionUnderGrowth() {
+        for (int population:List.of(64,1001)) {
+            var data=org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(); data.begin(ReadWrite.WRITE);
+            try {
+                publishedOwner(data);
+                for (int i=0;i<population;i++) data.add(CURRENT,WORK,uri("https://schema.org/alternateName"),NodeFactory.createLiteralLang("Catalogue alias "+i,"fr"));
+                for (int i=0;i<2000;i++) data.add(CURRENT,id(10000+i),uri("https://schema.org/alternateName"),NodeFactory.createLiteralString("Unrelated"));
+                Set<Node> recipe;
+                try (var work=new CommandWork()) {
+                    recipe=CatalogueNamePolicy.expected(data,WORK);
+                    assertEquals(65,counter(work,"catalogue_name_values_visited"));
+                    System.out.println("catalogue recipe aliases="+population+" unrelated=2000 visited="+counter(work,"catalogue_name_values_visited"));
+                }
+                assertEquals(64,recipe.size());
+                Node body=uri("urn:unit:catalogue-body"); data.add(PUBLIC,body,p("work"),WORK);
+                for (Node name:recipe) data.add(PUBLIC,body,p("publicTitle"),name);
+                var changes=List.of(new SearchDeltaJournal.Change(body.getURI(),true,true));
+                assertNull(CatalogueNamePolicy.check(data,"urn:receipt:catalogue",changes));
+                Node removed=recipe.iterator().next(); data.delete(PUBLIC,body,p("publicTitle"),removed);
+                assertNotNull(CatalogueNamePolicy.check(data,"urn:receipt:catalogue",changes));
+                data.add(PUBLIC,body,p("publicTitle"),NodeFactory.createLiteralLang("Invented copied name","en"));
+                assertNotNull(CatalogueNamePolicy.check(data,"urn:receipt:catalogue",changes));
+                data.deleteAny(PUBLIC,body,p("publicTitle"),Node.ANY);
+                for (Node name:recipe) data.add(PUBLIC,body,p("publicTitle"),name);
+                data.add(uri(CommandPolicy.RECEIPTS),uri("urn:receipt:other-work"),p("work"),id(900));
+                assertNotNull(CatalogueNamePolicy.check(data,"urn:receipt:other-work",changes));
+                assertNotNull(CatalogueNamePolicy.check(data,"urn:receipt:catalogue",List.of(new SearchDeltaJournal.Change(body.getURI(),false,true))));
+                for (int i=0;i<1001;i++) data.add(PUBLIC,body,p("publicTitle"),NodeFactory.createLiteralString("Over budget "+i));
+                try (var work=new CommandWork()) {
+                    assertNotNull(CatalogueNamePolicy.check(data,"urn:receipt:catalogue",changes));
+                    assertEquals(64,counter(work,"catalogue_name_copies_visited"));
+                }
+            } finally { data.abort(); data.end(); data.close(); }
+        }
+    }
+    @Test public void nativeCatalogueProposalAndPostWritePolicyShareOneRecipeIncludingHeaderAndTitleOverrides() {
+        var data=org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(); data.begin(ReadWrite.WRITE);
+        try {
+            publishedOwner(data);
+            data.add(CURRENT,WORK,uri("https://schema.org/alternateName"),NodeFactory.createLiteralLang("別名","zh-Hant"));
+            var header=org.apache.jena.atlas.json.JSON.parse("{\"kind\":\"header\",\"originalTitle\":null,\"localized\":[{\"title\":\"Titre\",\"language\":\"fr\"}]}");
+            var request=new org.apache.jena.atlas.json.JsonObject();request.put("work",WORK.getURI());
+            var override=new org.apache.jena.atlas.json.JsonObject();override.put("header",header);
+            var title=new org.apache.jena.atlas.json.JsonObject();title.put("value","Replacement title");title.put("language","en");
+            override.put("replacementTitle",title);request.put("override",override);
+            var proposed=CatalogueNamePolicy.recipe(data,request).get("names").getAsArray();
+            org.apache.jena.sparql.function.FunctionRegistry.get().put("https://rezics.com/vocab/rankedText",FilteredGraphTextIndex.RankedFunction.class);
+            var scope=new org.apache.jena.atlas.json.JsonObject();scope.put("catalogueNames",request);
+            String literal=org.apache.jena.riot.out.NodeFmtLib.strNT(NodeFactory.createLiteralString(scope.toString()));
+            String query="SELECT ?recipe WHERE { BIND(<https://rezics.com/vocab/rankedText>(<https://rezics.com/vocab/publicTitle>,\"\",64,\"\","+literal+") AS ?recipe) }";
+            try (var run=org.apache.jena.query.QueryExecutionFactory.create(query,org.apache.jena.query.DatasetFactory.wrap(data))) {
+                var returned=org.apache.jena.atlas.json.JSON.parse(run.execSelect().next().getLiteral("recipe").getString()).get("names").getAsArray();
+                assertEquals(proposed.toString(),returned.toString());
+            }
+            data.deleteAny(CURRENT,WORK,LABEL,Node.ANY);data.add(CURRENT,WORK,LABEL,NodeFactory.createLiteralLang("Replacement title","en"));
+            Node metadata=id(807);data.add(CURRENT,WORK,p("descriptiveMetadataHead"),metadata);
+            data.add(REVISION_GRAPH,metadata,p("metadataState"),NodeFactory.createLiteralString(header.toString()));
+            assertEquals(proposed.toString(),CatalogueNamePolicy.recipe(data,org.apache.jena.atlas.json.JSON.parse("{\"work\":\""+WORK.getURI()+"\"}")).get("names").toString());
+            data.add(REVISION_GRAPH,metadata,RDF.type.asNode(),p("ErasedRevision"));
+            assertFalse(CatalogueNamePolicy.expected(data,WORK).contains(NodeFactory.createLiteralLang("Titre","fr")));
+        } finally { data.abort();data.end();data.close(); }
+    }
+    @Test public void malformedAndExternalNeighboursNeverAbortAnotherTargetsNameWriteOrAdmission() {
+        var data=DatasetGraphFactory.createTxnMem();data.begin(ReadWrite.WRITE);
+        try {
+            space(data);
+            for (Node malformed:List.of(uri("urn:x"),uri("https://rezics.com/id/short"),uri("https://rezicsXcom/id/00000000-0000-4000-8000-000000000001"),
+                NodeFactory.createBlankNode(),NodeFactory.createLiteralString("foreign"))) {
+                for (String predicate:List.of("work","space","realmCapability","zoneCapability")) {
+                    set(data,SPACE,predicate,malformed);
+                    var changes=List.of(new SearchDeltaJournal.Change("urn:unit:foreign",true,false,malformed));
+                    PublicNameProjection.refresh(data,plan(SPACE),"urn:receipt:foreign-neighbour:"+predicate,List.of(),changes);
+                    set(data,SPACE,predicate,null);
+                    assertFalse(PublicNameProjection.visible(data,malformed));
+                    PublicNameProjection.refresh(data,malformed);
+                }
+            }
+            PublicNameProjection.refresh(data,SPACE);
+            assertTrue(PublicNameProjection.visible(data,SPACE));
+            assertFalse(PublicNameProjection.nameMaintenanceQuad(new Quad(PUBLIC,uri(PublicNameProjection.PREFIX+"visibility:"+"-".repeat(36)),p("nameVisibility"),NodeFactory.createLiteralString("private"))));
+            Node receipt=uri("urn:rezics:receipt:catalogue-search-index:malformed-request");
+            data.add(uri(CommandPolicy.RECEIPTS),receipt,p("nameResource"),uri("urn:x"));
+            assertThrows(IllegalArgumentException.class,()->PublicNameProjection.refresh(data,
+                new CommandPolicy.Plan(null,Set.of(),Set.of(),Set.of(),Set.of(),false,false,true),receipt.getURI(),List.of(),List.of()));
+        } finally { data.abort();data.end();data.close(); }
+    }
     @Test public void liveParentFenceRejectsProtectionErasureMergeAndRetirementBeforeRepair() {
         var data=DatasetGraphFactory.createTxnMem(); data.begin(ReadWrite.WRITE);
         try {

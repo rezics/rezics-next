@@ -52,26 +52,58 @@ test('G-911: document continuations consume rejected name/body documents without
   expect(calls.filter(query => query.includes('rv:rankedText'))).toHaveLength(3);
 });
 
-test('G-911: the name recipe retains individual authored values and only the current header titles', async () => {
-  const rows: Record<string, ReturnType<typeof b>>[] = [ { work: b(id(1)), name: b('Camp Lanterns', 'en') },
-    { work: b(id(1)), name: b('魔法禁書目錄', 'zh-Hant') },
-    { work: b(id(1)), state: b(JSON.stringify({ kind: 'header', originalTitle: null, localized: [
-      { language: 'fr', title: 'Lumières', description: 'Private-looking description', mainVersionLabel: null, tagline: 'Tagline' },
-    ] })) } ];
-  const env = { fuseki: { query: async () => ({ results: { bindings: rows } }) } } as unknown as WorkActivationEnvironment;
-  expect([...(await catalogueNameProjection(env, [id(1)])).get(id(1))!])
-    .toEqual(['"Camp Lanterns"@en', '"Lumières"@fr', '"魔法禁書目錄"@zh-Hant']);
-  expect([...(await catalogueNameProjection(env, [id(1)], { work: id(1), header: {
-    kind: 'header', originalTitle: null, localized: [{ language: 'fr', title: 'Lampes', description: null, mainVersionLabel: null }],
-  } })).get(id(1))!]).toEqual(['"Camp Lanterns"@en', '"Lampes"@fr', '"魔法禁書目錄"@zh-Hant']);
-  rows.push(...Array.from({ length: 64 }, (_, n) => ({ work: b(id(1)), name: b(`name ${n}`, 'en') })));
-  // The graph seek retains 64 names plus one header row. The authored
-  // inventory can grow beyond that request bound without failing writes.
-  env.fuseki.query = async () => ({ results: { bindings: [...rows.filter(row => 'name' in row)
-    .sort((a,b) => a.name!.value < b.name!.value ? -1 : 1).slice(0,64), ...rows.filter(row => 'state' in row)] } });
-  const names = (await catalogueNameProjection(env, [id(1)])).get(id(1))!;
-  expect(names.size).toBe(64);
-  expect(names.has('"Lumières"@fr')).toBe(true);
+test('G-911: the shared native body recipe retains authored values and proposed header titles', async () => {
+  const calls: string[] = [];
+  const env = {
+    fuseki: {
+      query: async (query: string) => {
+        calls.push(query);
+        const encoded = /rv:rankedText\(rv:publicTitle, "", 64, "", ("(?:[^"\\]|\\.)*")\)/u.exec(
+          query,
+        )![1]!;
+        const scope = JSON.parse(JSON.parse(encoded)) as {
+          catalogueNames: { override?: { header?: { localized: { title: string }[] } } };
+        };
+        const title = scope.catalogueNames.override?.header?.localized[0]?.title ?? 'Lumières';
+        return {
+          results: {
+            bindings: [
+              {
+                work: b(id(1)),
+                recipe: b(
+                  JSON.stringify({
+                    names: ['"Camp Lanterns"@en', `"${title}"@fr`, '"魔法禁書目錄"@zh-hant'],
+                  }),
+                ),
+              },
+            ],
+          },
+        };
+      },
+    },
+  } as unknown as WorkActivationEnvironment;
+  expect([...(await catalogueNameProjection(env, [id(1)])).get(id(1))!]).toEqual([
+    '"Camp Lanterns"@en',
+    '"Lumières"@fr',
+    '"魔法禁書目錄"@zh-hant',
+  ]);
+  expect([
+    ...(
+      await catalogueNameProjection(env, [id(1)], {
+        work: id(1),
+        header: {
+          kind: 'header',
+          originalTitle: null,
+          localized: [
+            { language: 'fr', title: 'Lampes', description: null, mainVersionLabel: null },
+          ],
+        },
+      })
+    ).get(id(1))!,
+  ]).toEqual(['"Camp Lanterns"@en', '"Lampes"@fr', '"魔法禁書目錄"@zh-hant']);
+  expect(calls.every((query) => !query.includes('ORDER BY') && !query.includes('DISTINCT'))).toBe(
+    true,
+  );
 });
 
 test('G-911: restricted names are removed on their exact graph heads before counting', async () => {

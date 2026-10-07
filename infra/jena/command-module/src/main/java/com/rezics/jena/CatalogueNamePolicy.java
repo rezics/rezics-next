@@ -29,42 +29,86 @@ final class CatalogueNamePolicy {
             return found.hasNext() ? null : value;
         } finally { org.apache.jena.atlas.iterator.Iter.close(found); }
     }
-    static Set<Node> expected(DatasetGraph data, Node work) {
-        Set<Node> names = new HashSet<>();
-        for (Node predicate : List.of(uri("http://www.w3.org/2000/01/rdf-schema#label"),
-            uri("https://schema.org/name"), uri("https://schema.org/alternateName"))) {
-            var rows = data.find(CURRENT, work, predicate, Node.ANY);
-            try { while (rows.hasNext()) names.add(rows.next().getObject()); }
-            finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
-        }
-        Node metadata = one(data, CURRENT, work, rv("descriptiveMetadataHead"));
-        if (metadata != null && !data.contains(REVISIONS, metadata,
-            org.apache.jena.vocabulary.RDF.type.asNode(), rv("ErasedRevision"))) {
-            Node payload = one(data, REVISIONS, metadata, rv("metadataState"));
-            if (payload == null || !payload.isLiteral()) throw new IllegalArgumentException("name metadata is incomplete");
-            var header = JSON.parse(payload.getLiteralLexicalForm());
-            if (!"header".equals(header.get("kind").getAsString().value()))
-                throw new IllegalArgumentException("name metadata is not a header");
-            if (!header.get("originalTitle").isNull()) {
-                var original = header.get("originalTitle").getAsObject();
-                names.add(NodeFactory.createLiteralLang(original.get("value").getAsString().value(),
-                    original.get("language").getAsString().value()));
+    static final int BODY_NAME_LIMIT = 64;
+    private static final List<Node> AUTHORED = List.of(uri("http://www.w3.org/2000/01/rdf-schema#label"),
+        uri("https://schema.org/name"), uri("https://schema.org/alternateName"));
+    /** A body MatchUnit carries a bounded cache, not the Work name inventory.
+     * Sample fixed owner/predicate prefixes, then sort only that bounded union.
+     * PublicNameProjection separately preserves every legal authored name. */
+    static Set<Node> expected(DatasetGraph data, Node work) { return expected(data, work, null); }
+    private static Set<Node> expected(DatasetGraph data, Node work, org.apache.jena.atlas.json.JsonObject override) {
+        if (work == null || !work.isURI()) throw new IllegalArgumentException("name Work owner is invalid");
+        Set<Node> names = new HashSet<>(), primary = new HashSet<>();
+        for (Node predicate : AUTHORED) {
+            if (predicate.equals(AUTHORED.getFirst()) && override != null && override.hasKey("replacementTitle")) {
+                var title = override.get("replacementTitle").getAsObject();
+                Node replacement = NodeFactory.createLiteralLang(title.get("value").getAsString().value(), title.get("language").getAsString().value());
+                names.add(replacement); primary.add(replacement);
+                continue;
             }
-            for (var entry : header.get("localized").getAsArray()) {
+            var rows = data.find(CURRENT, work, predicate, Node.ANY);
+            try { for (int count = 0; count < BODY_NAME_LIMIT && rows.hasNext(); count++) {
+                Node value = rows.next().getObject();
+                names.add(value);
+                if (predicate.equals(AUTHORED.getFirst())) primary.add(value);
+                CommandWork.count("catalogue_name_values_visited", 1);
+            } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+        }
+        org.apache.jena.atlas.json.JsonObject header = null;
+        if (override != null && override.hasKey("header")) {
+            if (!override.get("header").isNull()) header = override.get("header").getAsObject();
+        } else {
+            Node metadata = one(data, CURRENT, work, rv("descriptiveMetadataHead"));
+            if (metadata != null && !data.contains(REVISIONS, metadata,
+                org.apache.jena.vocabulary.RDF.type.asNode(), rv("ErasedRevision"))) {
+                Node payload = one(data, REVISIONS, metadata, rv("metadataState"));
+                if (payload == null || !payload.isLiteral() || payload.getLiteralLexicalForm().length() > 65536)
+                    throw new IllegalArgumentException("name metadata is incomplete or exceeds its owner bound");
+                CommandWork.count("catalogue_name_payload_characters", payload.getLiteralLexicalForm().length());
+                header = JSON.parse(payload.getLiteralLexicalForm());
+            }
+        }
+        if (header != null) {
+            String encoded = header.toString();
+            if (encoded.length() > 4 * 65536 || !header.hasKey("kind") || !"header".equals(header.get("kind").getAsString().value()))
+                throw new IllegalArgumentException("name metadata is not a bounded header");
+            if (header.hasKey("originalTitle") && !header.get("originalTitle").isNull()) {
+                var original = header.get("originalTitle").getAsObject();
+                names.add(NodeFactory.createLiteralLang(original.get("value").getAsString().value(), original.get("language").getAsString().value()));
+            }
+            if (header.hasKey("localized")) for (var entry : header.get("localized").getAsArray()) {
                 var locale = entry.getAsObject();
-                if (!locale.get("title").isNull()) names.add(NodeFactory.createLiteralLang(
+                if (locale.hasKey("title") && !locale.get("title").isNull()) names.add(NodeFactory.createLiteralLang(
                     locale.get("title").getAsString().value(), locale.get("language").getAsString().value()));
             }
         }
-        if (names.stream().anyMatch(name -> !name.isLiteral()
-            || name.getLiteralLexicalForm().isEmpty() || name.getLiteralLexicalForm().length() > 500))
-            throw new IllegalArgumentException("name recipe exceeds its bound");
-        return names.stream().sorted(java.util.Comparator.comparing(Node::getLiteralLexicalForm)
-            .thenComparing(Node::getLiteralLanguage)).limit(64)
+        if (names.stream().anyMatch(name -> !name.isLiteral() || name.getLiteralLexicalForm().isEmpty()
+            || name.getLiteralLexicalForm().length() > 500)) throw new IllegalArgumentException("name recipe exceeds its value bound");
+        var order = java.util.Comparator.comparing(Node::getLiteralLexicalForm)
+            .thenComparing(Node::getLiteralLanguage).thenComparing(org.apache.jena.riot.out.NodeFmtLib::strNT);
+        // Keep the current controlled title in the body cache. Selection adds
+        // that same title, so its required witness cannot create a 65th value.
+        Set<Node> result = primary.stream().sorted(order).limit(BODY_NAME_LIMIT)
             .collect(java.util.stream.Collectors.toCollection(java.util.LinkedHashSet::new));
+        names.stream().filter(name -> !result.contains(name)).sorted(order).limit(BODY_NAME_LIMIT - result.size()).forEach(result::add);
+        return result;
+    }
+    /** Shared read/proposal recipe: native validation recomputes this same
+     * bounded owner sample after the mutation. No client-side population sort. */
+    static org.apache.jena.atlas.json.JsonObject recipe(DatasetGraph data, org.apache.jena.atlas.json.JsonObject request) {
+        if (!request.hasKey("work")) throw new IllegalArgumentException("name recipe needs one Work owner");
+        var names = expected(data, uri(request.get("work").getAsString().value()),
+            request.hasKey("override") ? request.get("override").getAsObject() : null);
+        var values = new org.apache.jena.atlas.json.JsonArray();
+        for (Node name : names) values.add(org.apache.jena.riot.out.NodeFmtLib.strNT(name));
+        var result = new org.apache.jena.atlas.json.JsonObject(); result.put("names", values);
+        return result;
     }
     static String check(DatasetGraph data, String receipt, List<SearchDeltaJournal.Change> changes) {
+        if (changes.size() > SearchDeltaJournal.MAX_UNITS) return "name refresh exceeds its unit delta bound";
         Node receiptWork = one(data, RECEIPTS, uri(receipt), rv("work"));
+        if (receiptWork == null && data.contains(RECEIPTS, uri(receipt), rv("work"), Node.ANY))
+            return "name refresh receipt Work owner is ambiguous";
         for (var change : changes) {
             if (!change.before() || !change.after()) return "name refresh changed MatchUnit membership";
             Node unit = uri(change.unit()), work = one(data, PUBLIC, unit, rv("work"));
@@ -72,9 +116,14 @@ final class CatalogueNamePolicy {
                 return "name refresh differs from Work owner";
             Set<Node> actual = new HashSet<>();
             var titles = data.find(PUBLIC, unit, rv("publicTitle"), Node.ANY);
-            try { while (titles.hasNext()) actual.add(titles.next().getObject()); }
-            finally { org.apache.jena.atlas.iterator.Iter.close(titles); }
-            if (!actual.equals(expected(data, work))) return "catalogue names differ from exact current owner recipe";
+            try { for (int count = 0; titles.hasNext(); count++) {
+                if (count == BODY_NAME_LIMIT) return "catalogue body name cache exceeds its bound";
+                actual.add(titles.next().getObject());
+                CommandWork.count("catalogue_name_copies_visited", 1);
+            } } finally { org.apache.jena.atlas.iterator.Iter.close(titles); }
+            try {
+                if (!actual.equals(expected(data, work))) return "catalogue names differ from exact current owner recipe";
+            } catch (IllegalArgumentException malformed) { return "catalogue name owner recipe is invalid"; }
         }
         return null;
     }

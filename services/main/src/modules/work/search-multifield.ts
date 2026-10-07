@@ -1,3 +1,4 @@
+import { indexedNameMatch } from '../search/labels.ts';
 import { rankedSearchMatches } from '../search/fields.ts';
 import { discloseSearchMatches } from '../disclosure/search.ts';
 import { publicWork } from './public-patterns.ts';
@@ -27,11 +28,12 @@ function exactPhrase(value: string): string {
   return `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
 }
 
-/** Two field bindings on one admitted public MatchUnit. Each field contributes
- * one score; graph paths and unrelated rdfs:label resources contribute none. */
+/** A complete Work-name match and body match share one admitted Work. The
+ * body candidate budget bounds name probes; body title caches do not limit
+ * which current authored names can satisfy the title field. */
 export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
   input: PublicMainTitleBodyQuery) {
-  const title = exactPhrase(input.titleTerm);
+  exactPhrase(input.titleTerm);
   const body = exactPhrase(input.bodyTerm);
   if ((input.author !== undefined && !nativeId.test(input.author))
     || (input.language !== null
@@ -52,11 +54,7 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
-      { SELECT (COUNT(?rawTitle) AS ?titleCount) WHERE {
-        { SELECT ?rawTitle WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          (?rawTitle ?rawTitleScore) text:query (rv:publicTitle ${lit(title)} ${PHRASE_HIT_PROBE}) .
-        } } LIMIT ${PHRASE_HIT_PROBE} }
-      } }
+      BIND(0 AS ?titleCount)
       { SELECT (COUNT(?rawBody) AS ?bodyCount) WHERE {
         { SELECT ?rawBody WHERE { GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
           (?rawBody ?rawBodyScore) text:query (rv:searchBody ${lit(body)} ${PHRASE_HIT_PROBE}) .
@@ -64,7 +62,6 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
       } }
       OPTIONAL {
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
-          (?unit ?titleScore) text:query (rv:publicTitle ${lit(title)} ${PHRASE_HIT_PROBE}) .
           (?unit ?bodyScore) text:query (rv:searchBody ${lit(body)} ${PHRASE_HIT_PROBE}) .
           ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
             rv:work ?work ; rv:mainVersion ?main ; rv:context ?main ;
@@ -74,6 +71,8 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
           OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
             rv:searchChapterTitle ?chapterTitle . }
         }
+        ${indexedNameMatch('?work', input.titleTerm.normalize('NFC').trim().replace(/\s+/gu, ' '))}
+        BIND(1000000 AS ?titleScore)
         GRAPH ${iri(GRAPHS.current)} {
           ?main rv:selectionHead ?selection .
           ${input.author ? `?contribution a rv:TextContribution ; rv:author ${iri(input.author)} .` : ''}

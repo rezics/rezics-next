@@ -1,65 +1,43 @@
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
-import { parsedMetadataState } from '../work/metadata-read.ts';
 import type { MetadataState } from '../work/metadata-schema.ts';
-import { publicTitleProjection } from '../content-publication/projection-recipes.ts';
 import { PublicQueryUnavailable } from '../work/search-budget.ts';
 
-/** One read of current authored names, at most 64 Works and 64 names per Work.
- * Selection, metadata commands and stopped-writer rebuild use the same recipe.
- * No historical name, description, tagline or concatenated alias is indexed. */
+/** The bounded body-title cache shares its exact owner recipe with native
+ * admission. Complete Work name search uses the resumable public-name units;
+ * this cache bound never limits that searchable inventory. */
 export const CATALOGUE_NAME_COST = { works: 64, names: 64, responseBytes: 8 * 1_048_576 } as const;
 export async function catalogueNameProjection(env: WorkActivationEnvironment, works: readonly string[],
   override?: { work: string; header?: Extract<MetadataState, { kind: 'header' }> | null;
     title?: { value: string; language: string }; replacementTitle?: { value: string; language: string } }) {
-  if (works.length > CATALOGUE_NAME_COST.works || new Set(works).size !== works.length) {
+  if (works.length > CATALOGUE_NAME_COST.works || new Set(works).size !== works.length)
     throw new PublicQueryUnavailable('Catalogue name projection exceeds its Work bound');
-  }
   const names = new Map(works.map(work => [work, new Set<string>()]));
   if (!works.length) return names;
-  const bound = works.length * (CATALOGUE_NAME_COST.names + 1);
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    SELECT ?work ?name ?state WHERE {
-      ${works.map(work => `{ SELECT DISTINCT ?work ?name WHERE { BIND(${iri(work)} AS ?work)
-        GRAPH ${iri(GRAPHS.current)} { ?work ?namePredicate ?name .
-          VALUES ?namePredicate { rdfs:label schema:name schema:alternateName }
-          ${override?.title && override.work === work ? `FILTER(?namePredicate != rdfs:label || ?name != ${lit(override.title.value)}@${override.title.language})` : ''} }
-      } ORDER BY STR(?name) LANG(?name) LIMIT 64 }
-      UNION { SELECT ?work ?state WHERE { BIND(${iri(work)} AS ?work)
-        GRAPH ${iri(GRAPHS.current)} { ?work rv:descriptiveMetadataHead ?metadata }
-        GRAPH ${iri(GRAPHS.revisions)} { ?metadata a rv:WorkMetadataRevision ; rv:metadataState ?state .
-          FILTER NOT EXISTS { ?metadata a rv:ErasedRevision } }
-      } LIMIT 1 }`).join(' UNION ')}
-    } LIMIT ${bound + 1}`, CATALOGUE_NAME_COST.responseBytes)).results?.bindings ?? [];
-  if (rows.length > bound) throw new PublicQueryUnavailable('Catalogue names exceed their row bound');
-  const addHeader = (target: Set<string>, header: Extract<MetadataState, { kind: 'header' }>) => {
-    if (header.originalTitle) target.add(publicTitleProjection(header.originalTitle.value, header.originalTitle.language));
-    for (const locale of header.localized) if (locale.title) target.add(publicTitleProjection(locale.title, locale.language));
-  };
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?work ?recipe WHERE {
+    ${works.map(work => {
+      const proposal = override?.work === work ? {
+        ...(override.header !== undefined ? { header: override.header } : {}),
+        ...(override.replacementTitle ? { replacementTitle: override.replacementTitle } : {}),
+      } : undefined;
+      return `{ BIND(${iri(work)} AS ?work)
+        BIND(rv:rankedText(rv:publicTitle, "", 64, "", ${lit(JSON.stringify({ catalogueNames: { work,
+          ...(proposal ? { override: proposal } : {}) } }))}) AS ?recipe) }`;
+    }).join(' UNION ')}
+  } LIMIT ${works.length + 1}`, CATALOGUE_NAME_COST.responseBytes)).results?.bindings ?? [];
+  if (rows.length !== works.length || new Set(rows.map(row => row.work?.value)).size !== works.length)
+    throw new PublicQueryUnavailable('Catalogue name recipes are incomplete or ambiguous');
   for (const row of rows) {
     const target = names.get(row.work?.value ?? '');
-    if (!target || !row.name && !row.state) throw new PublicQueryUnavailable('Catalogue name source is incomplete');
-    if (row.name) {
-      target.add(publicTitleProjection(row.name.value, row.name['xml:lang'] ?? 'und'));
-    }
-    if (row.state && !(row.work!.value === override?.work && override.header !== undefined)) {
-      const header = parsedMetadataState(row.state.value);
-      if (header.kind !== 'header') throw new PublicQueryUnavailable('Catalogue name metadata is not a header');
-      addHeader(target, header);
-    }
+    let recipe: { names: unknown };
+    try { recipe = JSON.parse(row.recipe?.value ?? '') as { names: unknown }; }
+    catch { throw new PublicQueryUnavailable('Catalogue name recipe is unavailable'); }
+    if (!target || !Array.isArray(recipe.names) || recipe.names.length > CATALOGUE_NAME_COST.names
+      || recipe.names.some(name => typeof name !== 'string' || !/^"(?:[^"\\]|\\.)*"(?:@[A-Za-z0-9-]+|\^\^<[^<>\s]+>)?$/.test(name)))
+      throw new PublicQueryUnavailable('Catalogue name recipe exceeds its value bound');
+    for (const name of recipe.names as string[]) target.add(name);
+    if (target.size !== recipe.names.length) throw new PublicQueryUnavailable('Catalogue name recipe has duplicate values');
   }
-  if (override?.header) addHeader(names.get(override.work)!, override.header);
-  if (override?.replacementTitle) names.get(override.work)!.add(publicTitleProjection(override.replacementTitle.value, override.replacementTitle.language));
-  const key = (value: string) => {
-    const end = value.lastIndexOf('"') + 1;
-    return [JSON.parse(value.slice(0, end)) as string, value.slice(end)];
-  };
-  const compare = (a: string, b: string) => a < b ? -1 : a > b ? 1 : 0;
-  for (const [work, values] of names) names.set(work, new Set([...values].sort((a, b) => {
-    const left = key(a), right = key(b);
-    return compare(left[0]!, right[0]!) || compare(left[1]!, right[1]!);
-  }).slice(0, CATALOGUE_NAME_COST.names)));
   return names;
 }
 

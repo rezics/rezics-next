@@ -19,7 +19,7 @@ export const RANKED_CATALOGUE_COST = { pageSize: 64, candidates: MAX_PHRASE_CAND
 export interface RankedCatalogueRequest { phrase: string; language: string | null;
   author?: string; realm?: string; pageSize: number; continuation?: string }
 interface RankAfter { id: string; score: string; commit: string; document?: number }
-interface RankHit { id: string; key: string | null; score: string; document?: number }
+interface RankHit { id: string; key: string | null; score: string; document?: number; unit?: string }
 interface RankEnvelope { hits: RankHit[]; commit: string; more: boolean; restart?: boolean }
 export interface RankedCatalogueMatch { matchUnit: string; work: string; mainVersion: string;
   contribution: string; revision: string; selection: string; language: string; score: number; reason?: string }
@@ -58,7 +58,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     } LIMIT 2`, 8192)).results?.bindings ?? [];
     if (realm.length !== 1) throw new PublicRealmUnavailable('Realm is unavailable');
   }
-  const binding = ['ranked-catalogue-names-v2', phrase, input.language, input.author ?? null,
+  const binding = ['ranked-catalogue-names-v3', phrase, input.language, input.author ?? null,
     input.realm ?? null, input.pageSize];
   let prior: Cursor | undefined, expiresAt = Date.now() + SEARCH_PAGE_TTL_MS;
   try {
@@ -109,7 +109,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
       || typeof page.commit !== 'string' || !decimal.test(page.commit)
       || page.hits.some(hit => !hit || !unitId(hit.id)
         || hit.key !== null && !native.test(hit.key)
-        || typeof hit.score !== 'string' || !Number.isFinite(Number(hit.score)))
+        || typeof hit.score !== 'string' || !Number.isFinite(Number(hit.score)) || hit.unit !== undefined && !unitId(hit.unit))
       || page.hits.some(hit => hit.document !== undefined && (!Number.isSafeInteger(hit.document) || hit.document < 0))
       || new Set(page.hits.filter(hit => hit.key !== null).map(hit => hit.id)).size
         !== page.hits.filter(hit => hit.key !== null).length
@@ -121,7 +121,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     const candidates = page.hits.filter(hit => hit.key !== null);
     const matched = candidates.length ? (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       SELECT ?unit ?work ?main ?contribution ?revision ?selection ?language WHERE {
-        VALUES ?unit { ${candidates.map(hit => iri(hit.id)).join(' ')} }
+        VALUES ?unit { ${candidates.map(hit => iri(hit.unit ?? hit.id)).join(' ')} }
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
           rv:work ?sourceWork ; rv:mainVersion ?sourceMain ; rv:contribution ?contribution ;
           rv:revision ?revision ; rv:selection ?selection ; rv:language ?language .
@@ -144,21 +144,21 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
       if (!row.unit || !row.work || !row.main || !row.contribution || !row.revision || !row.selection || !row.language) {
         throw new PublicQueryUnavailable('ranked result is incomplete');
       }
-      const hit = candidates.find(hit => hit.id === row.unit!.value);
+      const hit = candidates.find(hit => (hit.unit ?? hit.id) === row.unit!.value);
       if (!hit || hit.key !== row.main.value) throw new PublicQueryUnavailable('ranked group identity differs');
-      return [row.unit.value, { matchUnit: row.unit.value, work: row.work.value, mainVersion: row.main.value,
+      return [hit.id, { matchUnit: row.unit.value, work: row.work.value, mainVersion: row.main.value,
         contribution: row.contribution.value, revision: row.revision.value, selection: row.selection.value,
         language: row.language.value, score: Number(hit.score),
         ...input.realm ? { reason: 'realm-adoption' } : {} }];
     }));
     const visible = await filter(candidates.flatMap(hit => byUnit.get(hit.id) ? [byUnit.get(hit.id)!] : []));
     const allowed = new Set(visible.map(row => row.matchUnit));
-    if (visible.some(row => !byUnit.has(row.matchUnit)) || allowed.size !== visible.length) {
+    if (visible.some(row => ![...byUnit.values()].some(candidate => candidate.matchUnit === row.matchUnit)) || allowed.size !== visible.length) {
       throw new PublicQueryUnavailable('ranked result filter changed identity');
     }
     for (const [offset, hit] of page.hits.entries()) {
       const row = hit.key !== null ? byUnit.get(hit.id) : undefined;
-      if (row && allowed.has(hit.id)) {
+      if (row && allowed.has(row.matchUnit)) {
         // Preserve the first visible probe. Trailing rejected candidates can
         // still be consumed after filling the page, avoiding an empty terminal
         // page merely because a second language loses its group witness.

@@ -41,7 +41,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
     public FilteredGraphTextIndex(TextIndexLucene lucene) { this.lucene = lucene; }
     public TextIndexLucene lucene() { return lucene; }
 
-    public record RankHit(String id, float score, String key, Integer document) {
+    public record RankHit(String id, float score, String key, Integer document, String unit) {
+        public RankHit(String id, float score, String key, Integer document) { this(id, score, key, document, null); }
         public RankHit(String id, float score) { this(id, score, id, null); }
         public RankHit(String id, float score, String key) { this(id, score, key, null); }
     }
@@ -101,6 +102,18 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     new org.apache.lucene.search.BoostQuery(new org.apache.lucene.search.ConstantScoreQuery(title), 1_000_000f),
                     body), 0f);
             }
+            if (catalogue) {
+                QueryParser complete = new QueryParser("publicTitle", lucene.getQueryAnalyzer());
+                complete.setDefaultOperator(QueryParser.Operator.AND);
+                String words = java.util.Arrays.stream(phrase.split("\\s+"))
+                    .map(word -> "\"" + word.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
+                    .collect(java.util.stream.Collectors.joining(" "));
+                Query completeNames = new BooleanQuery.Builder().add(complete.parse(words), BooleanClause.Occur.MUST)
+                    .add(new org.apache.lucene.search.PrefixQuery(new Term(lucene.getDocDef().getEntityField(),
+                        PublicNameProjection.PREFIX + "work:")), BooleanClause.Occur.FILTER).build();
+                text = new org.apache.lucene.search.DisjunctionMaxQuery(List.of(text,
+                    new org.apache.lucene.search.BoostQuery(new org.apache.lucene.search.ConstantScoreQuery(completeNames), 2_000_000f)), 0f);
+            }
             Query query = new BooleanQuery.Builder()
                 .add(text, BooleanClause.Occur.MUST)
                 .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.PUBLIC_SEARCH)),
@@ -117,7 +130,14 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 var members = data.find(PUBLIC_GRAPH, Node.ANY, property("context"), uri(scope.realm()));
                 try { while (members.hasNext()) {
                     Node unit = members.next().getSubject();
-                    if (unit.isURI()) ids.add(new org.apache.lucene.util.BytesRef(unit.getURI()));
+                    if (unit.isURI()) {
+                        ids.add(new org.apache.lucene.util.BytesRef(unit.getURI()));
+                        if (catalogue) {
+                            Node work = namedValue(data, PUBLIC_GRAPH, unit, "work");
+                            if (PublicNameProjection.productResource(work)) ids.add(new org.apache.lucene.util.BytesRef(
+                                PublicNameProjection.nameUnit(work, "work").getURI()));
+                        }
+                    }
                 } } finally { org.apache.jena.atlas.iterator.Iter.close(members); }
                 query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
                     .add(new org.apache.lucene.search.TermInSetQuery(entityField, ids), BooleanClause.Occur.FILTER).build();
@@ -126,19 +146,35 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField,
                     PublicNameProjection.PREFIX + (scope.names().equals("all") ? "" : scope.names() + ":"))),
                     BooleanClause.Occur.FILTER).build();
-            else query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
+            else if (!catalogue) query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
                 // Public resource names must not consume the Work candidate budget.
                 .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.PREFIX)),
                     BooleanClause.Occur.MUST_NOT)
                 .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.DIRECTORY)),
                     BooleanClause.Occur.MUST_NOT).build();
+            if (catalogue) {
+                Query bodyUnits = new BooleanQuery.Builder().add(new org.apache.lucene.search.MatchAllDocsQuery(), BooleanClause.Occur.MUST)
+                    .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.PREFIX)), BooleanClause.Occur.MUST_NOT)
+                    .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.DIRECTORY)), BooleanClause.Occur.MUST_NOT).build();
+                Query admittedKinds = new BooleanQuery.Builder().add(bodyUnits, BooleanClause.Occur.SHOULD)
+                    .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.PREFIX + "work:")), BooleanClause.Occur.SHOULD)
+                    .setMinimumNumberShouldMatch(1).build();
+                query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST).add(admittedKinds, BooleanClause.Occur.FILTER).build();
+            }
             if (names && scope.resources() != null) {
                 if (scope.resources().size() > 64) throw new TextIndexException("name candidate bound exceeded");
                 List<org.apache.lucene.util.BytesRef> units = new ArrayList<>();
                 for (String resource : scope.resources()) {
-                    var members = data.find(PUBLIC_GRAPH, Node.ANY, uri(RV + "resource"), uri(resource));
-                    try { while (members.hasNext()) units.add(new org.apache.lucene.util.BytesRef(members.next().getSubject().getURI())); }
-                    finally { org.apache.jena.atlas.iterator.Iter.close(members); }
+                    Node owner = uri(resource);
+                    if (!PublicNameProjection.productResource(owner)) continue;
+                    // Only seven maintained name identities can belong to this
+                    // resource. Content/other units with rv:resource must not
+                    // turn a name restriction into a population walk.
+                    for (String kind : List.of("concept", "realm", "site", "agent", "collection", "space", "work")) {
+                        Node unit = PublicNameProjection.nameUnit(owner, kind);
+                        if (data.contains(PUBLIC_GRAPH, unit, uri(RV + "resource"), owner))
+                            units.add(new org.apache.lucene.util.BytesRef(unit.getURI()));
+                    }
                 }
                 query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
                     .add(new org.apache.lucene.search.TermInSetQuery(entityField, units), BooleanClause.Occur.FILTER).build();
@@ -174,7 +210,9 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 var hit = top.scoreDocs[n];
                 String id = stored.document(hit.doc, java.util.Set.of(entityField)).get(entityField);
                 if (id == null || !Float.isFinite(hit.score)) throw new TextIndexException("ranked document is incomplete");
-                String key = names ? id : scope == null ? id : admittedMain(data, id, scope);
+                String witness = catalogue && id.startsWith(PublicNameProjection.PREFIX + "work:")
+                    ? nameWitness(data, id, scope) : null;
+                String key = names ? id : scope == null ? id : admittedMain(data, witness == null ? id : witness, scope);
                 if (names) {
                     Query entity = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
                         .add(new TermQuery(new Term(entityField, id)), BooleanClause.Occur.FILTER).build();
@@ -183,8 +221,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
                         || !PublicNameProjection.visibleUnit(data, id)) key = null;
                 }
                 if (!names && key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, key,
-                    id, hit.doc, entityField)) key = null;
-                ordered.add(new RankHit(id, hit.score, key, catalogue || names ? hit.doc : null));
+                    witness == null ? id : witness, hit.doc, entityField)) key = null;
+                ordered.add(new RankHit(id, hit.score, key, catalogue || names ? hit.doc : null, witness));
             }
             if (searcher.timedOut()) throw new TextIndexException("ranked query deadline exceeded");
             return new RankPage(List.copyOf(ordered), top.totalHits.value(),
@@ -451,6 +489,44 @@ public final class FilteredGraphTextIndex implements TextIndex {
         }
         return facts.key();
     }
+    private static Node namedValue(org.apache.jena.sparql.core.DatasetGraph data, Node graph, Node subject, String predicate) {
+        var rows = data.find(graph, subject, uri(RV + predicate), Node.ANY);
+        try { return rows.hasNext() ? rows.next().getObject() : null; }
+        finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
+    /** A complete Work-name document retains its cursor identity, while an
+     * exact selected body unit supplies the existing public result envelope. */
+    private static String nameWitness(org.apache.jena.sparql.core.DatasetGraph data, String id, RankScope scope) {
+        if (!PublicNameProjection.visibleUnit(data, id)) return null;
+        Node work = namedValue(data, PUBLIC_GRAPH, uri(id), "resource");
+        Node main = work == null ? null : namedValue(data, CURRENT_GRAPH, work, "mainVersion");
+        if (!PublicNameProjection.productResource(main)) return null;
+        Node owner = main;
+        if (scope.realm() != null) {
+            try {
+                String key = scope.realm() + "\0" + main.getURI();
+                owner = uri("urn:rezics:realm-selection:" + java.util.HexFormat.of().formatHex(
+                    java.security.MessageDigest.getInstance("SHA-256").digest(key.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+            } catch (java.security.NoSuchAlgorithmException unavailable) { throw new IllegalStateException(unavailable); }
+        }
+        var heads = data.find(CURRENT_GRAPH, owner, uri(RV + "selectionHead"), Node.ANY);
+        try { for (int count = 0; count < 64 && heads.hasNext(); count++) {
+            Node selection = heads.next().getObject();
+            // One current language selection has one public body unit. The
+            // selection object index gives the same bounded witness for old
+            // and new anchors; no optional revision link or dual reader.
+            var units = data.find(PUBLIC_GRAPH, Node.ANY, uri(RV + "selection"), selection);
+            Node unit = null;
+            try {
+                if (units.hasNext()) unit = units.next().getSubject();
+                if (units.hasNext()) continue; // Ambiguous current projection fails closed.
+            } finally { org.apache.jena.atlas.iterator.Iter.close(units); }
+            if (unit != null && unit.isURI() && work.equals(namedValue(data, PUBLIC_GRAPH, unit, "work"))
+                && main.equals(namedValue(data, PUBLIC_GRAPH, unit, "mainVersion"))
+                && admittedMain(data, unit.getURI(), scope) != null) return unit.getURI();
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(heads); }
+        return null;
+    }
     private static boolean canonicalGroupHit(org.apache.jena.sparql.core.DatasetGraph data, RankScope scope,
         IndexSearcher searcher, Query query, String key, String candidateId, int doc, String entityField) throws IOException {
         List<org.apache.lucene.util.BytesRef> ids = new ArrayList<>();
@@ -481,6 +557,13 @@ public final class FilteredGraphTextIndex implements TextIndex {
             if (selected.putIfAbsent(identity, id.utf8ToString()) != null)
                 throw new TextIndexException("ranked current language selection is ambiguous");
         }
+        if (scope.catalogue()) {
+            Node work = namedValue(data, CURRENT_GRAPH, uri(key), "work");
+            if (PublicNameProjection.productResource(work)) {
+                Node name = PublicNameProjection.nameUnit(work, "work");
+                if (nameWitness(data, name.getURI(), scope) != null) ids.add(new org.apache.lucene.util.BytesRef(name.getURI()));
+            }
+        }
         Query grouped = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
             .add(new org.apache.lucene.search.TermInSetQuery(entityField, ids), BooleanClause.Occur.FILTER).build();
         var best = searcher.search(grouped, 1);
@@ -508,6 +591,14 @@ public final class FilteredGraphTextIndex implements TextIndex {
         }
         @Override protected org.apache.jena.sparql.expr.NodeValue exec(
             List<org.apache.jena.sparql.expr.NodeValue> args, org.apache.jena.sparql.function.FunctionEnv env) {
+            JsonObject request = org.apache.jena.atlas.json.JSON.parse(args.get(4).asString());
+            if (request.hasKey("catalogueNames")) {
+                if (!args.get(0).asNode().equals(uri(RV + "publicTitle")) || !args.get(1).asString().isEmpty()
+                    || args.get(2).getInteger().intValueExact() != CatalogueNamePolicy.BODY_NAME_LIMIT || !args.get(3).asString().isEmpty())
+                    throw new org.apache.jena.sparql.expr.ExprEvalException("name recipe needs its fixed read envelope");
+                return org.apache.jena.sparql.expr.NodeValue.makeString(
+                    CatalogueNamePolicy.recipe(env.getDataset(), request.get("catalogueNames").getAsObject()).toString());
+            }
             FilteredGraphTextIndex index = functionIndex(env);
             String continuation = args.get(3).asString();
             RankAfter after = null;
@@ -543,6 +634,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     else row.put("key", hit.key());
                     row.put("score", Float.toString(hit.score())); hits.add(row);
                     if (hit.document() != null) row.put("document", hit.document());
+                    if (hit.unit() != null) row.put("unit", hit.unit());
                 }
                 response.put("hits", hits); response.put("commit", Long.toString(page.commit()));
                 response.put("more", page.more());
