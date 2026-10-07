@@ -228,6 +228,10 @@ class HeldRestoreGraph extends FusekiClient {
 
   override async query(sparql: string): Promise<SparqlResult> {
     this.queries.push(sparql);
+    if (sparql.includes('SELECT ?savedMainSequence ?reconciledMainSequence')) {
+      // Existing legacy marker has no independent Main fields.
+      return { results: { bindings: this.cutMatches ? [{}] : [] } };
+    }
     if (!sparql.includes('ASK')) throw new Error(`Unexpected restore graph query: ${sparql}`);
     if (sparql.includes('FILTER NOT EXISTS') && sparql.includes('rv:restoreHold true')) {
       if (!this.held) this.trace.push('graph:verify-open');
