@@ -53,7 +53,7 @@ export const profileRegistry = {
     ]
   },
   "assessment-v1": {
-    "sha256": "f4dceaac4879083028d3b97903a345b01e495f1b8b8a41fcf15a4b3d8e0a75ba",
+    "sha256": "73dc7001858dd89a49d82af2b51a52efb82c0aada17f643abfce0bf6a03a10f5",
     "file": "shapes/assessment-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/assessment-v1/reliability-scope-shape",
@@ -1243,7 +1243,7 @@ export const profileRegistry = {
     ]
   },
   "statement-v1": {
-    "sha256": "5a41da76ca5c3b7171c915ca1cebcab19c321562f640142e1148706c9e0c5f8b",
+    "sha256": "0456c753fb7f85c36a1c58664b1f763425b162382bc198f4e46c0656432fa953",
     "file": "shapes/statement-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/statement-v1/statement-shape",

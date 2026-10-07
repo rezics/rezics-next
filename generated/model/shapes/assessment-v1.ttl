@@ -1,5 +1,5 @@
 # Immutable assessment anchors: scoped source reliability and one claim assessment revision.
-# An assessment cites exact claim, evidence-set, source-assessment, method and policy revisions.
+# An assessment cites either an exact retained ClaimRevision or an exact StatementRevision, never both.
 # Activation into a quality summary is a separate Content-owned generation CAS.
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
@@ -46,9 +46,10 @@
 <https://rezics.com/definition/assessment-v1/assessment-shape>
     a sh:NodeShape ;
     sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ClaimAssessment rv:RevisionAnchor ) ] ;
-    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Claim ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:ClaimAssessment ] ;
-    sh:property [ sh:path rv:claimRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ClaimRevision ] ;
+    sh:property [ sh:path rv:claimRevision ; sh:maxCount 1 ; sh:class rv:ClaimRevision ] ;
+    sh:property [ sh:path rv:statementRevision ; sh:maxCount 1 ; sh:class rv:StatementRevision ] ;
     sh:property [ sh:path rv:evidenceSetRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:sourceAssessment ; sh:maxCount 32 ; sh:class rv:SourceReliabilityAssessment ] ;
     sh:property [ sh:path rv:policyRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
@@ -71,8 +72,24 @@
     sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
     sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
     sh:or (
-        [ sh:property [ sh:path rv:dependenceStatus ; sh:hasValue rv:DependenceEstablished ] ;
+        [ sh:property [ sh:path rv:component ; sh:class rv:Claim ] ;
+          sh:property [ sh:path rv:claimRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ClaimRevision ] ;
+          sh:property [ sh:path rv:statementRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:dependenceStatus ; sh:hasValue rv:DependenceEstablished ] ;
           sh:property [ sh:path rv:independentOriginCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 64 ] ]
-        [ sh:property [ sh:path rv:dependenceStatus ; sh:in ( rv:DependenceUnknown rv:DependenceCircular rv:DependenceOverBudget ) ] ;
+        [ sh:property [ sh:path rv:component ; sh:class rv:Claim ] ;
+          sh:property [ sh:path rv:claimRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ClaimRevision ] ;
+          sh:property [ sh:path rv:statementRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:dependenceStatus ; sh:in ( rv:DependenceUnknown rv:DependenceCircular rv:DependenceOverBudget ) ] ;
+          sh:property [ sh:path rv:independentOriginCount ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:component ; sh:class rdf:Statement ] ;
+          sh:property [ sh:path rv:statementRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StatementRevision ] ;
+          sh:property [ sh:path rv:claimRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:dependenceStatus ; sh:hasValue rv:DependenceEstablished ] ;
+          sh:property [ sh:path rv:independentOriginCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 64 ] ]
+        [ sh:property [ sh:path rv:component ; sh:class rdf:Statement ] ;
+          sh:property [ sh:path rv:statementRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StatementRevision ] ;
+          sh:property [ sh:path rv:claimRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:dependenceStatus ; sh:in ( rv:DependenceUnknown rv:DependenceCircular rv:DependenceOverBudget ) ] ;
           sh:property [ sh:path rv:independentOriginCount ; sh:maxCount 0 ] ]
     ) .

@@ -42,6 +42,10 @@
     "rv:dataEpoch": {
       "@id": "https://rezics.com/vocab/dataEpoch"
     },
+    "rv:derivation": {
+      "@id": "https://rezics.com/vocab/derivation",
+      "@type": "@id"
+    },
     "rv:editionScope": {
       "@id": "https://rezics.com/vocab/editionScope",
       "@type": "@id"
@@ -93,12 +97,28 @@
       "@id": "https://rezics.com/vocab/qualificationDefinition",
       "@type": "@id"
     },
+    "rv:recordedAt": {
+      "@id": "https://rezics.com/vocab/recordedAt",
+      "@type": "xsd:dateTime"
+    },
     "rv:recordedBy": {
       "@id": "https://rezics.com/vocab/recordedBy",
       "@type": "@id"
     },
     "rv:relationDefinition": {
       "@id": "https://rezics.com/vocab/relationDefinition",
+      "@type": "@id"
+    },
+    "rv:retainedClaimHead": {
+      "@id": "https://rezics.com/vocab/retainedClaimHead",
+      "@type": "@id"
+    },
+    "rv:retainedSourceReceipt": {
+      "@id": "https://rezics.com/vocab/retainedSourceReceipt",
+      "@type": "@id"
+    },
+    "rv:retainedSourceRevision": {
+      "@id": "https://rezics.com/vocab/retainedSourceRevision",
       "@type": "@id"
     },
     "rv:semanticContextRevision": {

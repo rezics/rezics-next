@@ -148,6 +148,10 @@
       "@id": "https://rezics.com/vocab/sourceAssessment",
       "@type": "@id"
     },
+    "rv:statementRevision": {
+      "@id": "https://rezics.com/vocab/statementRevision",
+      "@type": "@id"
+    },
     "rv:supportResult": {
       "@id": "https://rezics.com/vocab/supportResult",
       "@type": "@id"

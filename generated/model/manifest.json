@@ -23,7 +23,7 @@
     },
     {
       "id": "assessment-v1",
-      "sha256": "f4dceaac4879083028d3b97903a345b01e495f1b8b8a41fcf15a4b3d8e0a75ba",
+      "sha256": "73dc7001858dd89a49d82af2b51a52efb82c0aada17f643abfce0bf6a03a10f5",
       "file": "shapes/assessment-v1.ttl"
     },
     {
@@ -1013,7 +1013,7 @@
     },
     {
       "id": "statement-v1",
-      "sha256": "5a41da76ca5c3b7171c915ca1cebcab19c321562f640142e1148706c9e0c5f8b",
+      "sha256": "0456c753fb7f85c36a1c58664b1f763425b162382bc198f4e46c0656432fa953",
       "file": "shapes/statement-v1.ttl"
     },
     {
@@ -3895,7 +3895,7 @@
     "contexts/agent-profile-v1.jsonld": "835586193a661d61e69b42dfafd4fe9bf105d23d836afb9e785a7684c21c53ce",
     "contexts/agent-profile-v2.jsonld": "7df6a015f58224c2cd521bf032487a93cc9a88f3397c0c9d75727a43381bc2a5",
     "contexts/agent-provision-v1.jsonld": "62c2a4eda19710dab2b44d0742065e1248765ec65200654804cc16c052a21d22",
-    "contexts/assessment-v1.jsonld": "eca00938fd592b721eca7fe79358d9c58210fc9a5ce74a119ad50c046a57ac43",
+    "contexts/assessment-v1.jsonld": "446296c61f24dd86e873c7ddd88943e416fb905ec97158e362b917678de23122",
     "contexts/ballot-mandate-approval-v1.jsonld": "3891b117248ab7df885eee0c0fb757b99c851c8f1237cef8f2218f96804aa289",
     "contexts/ballot-proxy-v1.jsonld": "2efecc0ce28ae8be50d8fae3de69b544d34517d184c163c8c494a47f5065f048",
     "contexts/ballot-v1.jsonld": "d5075ede759df4a194d977991ede5f4becae5f791a8b1d2c023ffb3e815ff41e",
@@ -3986,7 +3986,7 @@
     "contexts/space-realm-v3.jsonld": "4f301264977fed2d0c289de7f6efe4fe006acf74f9106b1d14d38aa7d039b7c0",
     "contexts/space-zone-v1.jsonld": "1406d146fda1f35aff2b9d3a79c2de4cbcec4048413af39b4b7423167651cfd1",
     "contexts/statement-decision-v1.jsonld": "6fde37ebce49b673eca2752de6e7041553b3d2f2a7fdcbf26b6466b2c6af32fd",
-    "contexts/statement-v1.jsonld": "fd8207ad26258ef9e7d03553038d4eaa1efe320b3eaff8c109b9f299ca345484",
+    "contexts/statement-v1.jsonld": "57c727b2d9fd498be2920ceed104b251965b24472248beb55cd804b9418cc22b",
     "contexts/structure-book-v1.jsonld": "eb28283f3d1f5f9325581a641f211f124d284707479cc7ef68830263079c54b2",
     "contexts/structure-composition-v1.jsonld": "ced94ccfdc446be7bdd7e030ef7df74854098a17aa91248d9f6b2896e5b0c81d",
     "contexts/structure-work-composition-v1.jsonld": "0b3b04fe99292a554db7f13aba9e7139b9e531fd7865c36755cb15162c52866a",
@@ -4028,7 +4028,7 @@
     "shapes/agent-profile-v1.ttl": "d91dccf08288f5c516f4d02de93c9b722869432d75b6d4bdeb6409003fb47c56",
     "shapes/agent-profile-v2.ttl": "c4b8bb40f451f742d13887220ac6ed3288a192301f4295097ac85a1f94fb5e27",
     "shapes/agent-provision-v1.ttl": "39be9701579192f77c67c10996d9c66aa5daf0b1182fa0566c07064281038028",
-    "shapes/assessment-v1.ttl": "f4dceaac4879083028d3b97903a345b01e495f1b8b8a41fcf15a4b3d8e0a75ba",
+    "shapes/assessment-v1.ttl": "73dc7001858dd89a49d82af2b51a52efb82c0aada17f643abfce0bf6a03a10f5",
     "shapes/ballot-mandate-approval-v1.ttl": "0fecd52c8455390decae35d5641030372402236bdad2c5c96cb32c57fdea6647",
     "shapes/ballot-proxy-v1.ttl": "f0d2242d2d8026b9f6283c38c1e5db4efb28e2fec203428a49e225c9a40246c7",
     "shapes/ballot-v1.ttl": "8ef327fb788d4ab18785ca37f3f6ced829f54458a3bc0087681608d0849ffc05",
@@ -4119,7 +4119,7 @@
     "shapes/space-realm-v3.ttl": "ba178e0738b1c3f0a59c85dd85f044a3c00cadecb52874a66d838e75bbec510b",
     "shapes/space-zone-v1.ttl": "dfe09fb0e4f2bc850e1f561f8f32dfdc3bf6f7070166c0b04fe8cd54ab273803",
     "shapes/statement-decision-v1.ttl": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
-    "shapes/statement-v1.ttl": "5a41da76ca5c3b7171c915ca1cebcab19c321562f640142e1148706c9e0c5f8b",
+    "shapes/statement-v1.ttl": "0456c753fb7f85c36a1c58664b1f763425b162382bc198f4e46c0656432fa953",
     "shapes/structure-book-v1.ttl": "5598fd9d04b2729c3008a647c92c03c9f1580b5c103dbe2e1a84f10e226e6242",
     "shapes/structure-composition-v1.ttl": "d6bcd8a0f349a7d9926298317e24086ce038a4596c5fcb73f0a1d09a5c105bf0",
     "shapes/structure-work-composition-v1.ttl": "1361bcfab08143854e4a5cc6db132a79cb1adf737037d82433a839621903a11e",
@@ -4157,8 +4157,8 @@
     "shapes/zone-capability-v1.ttl": "1b5fa82ec8c40e4a6b6b25223a7ca7bebc573b517e900858895a5a12ff6424a5",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "5ff640867500bcf7a183f6656ebc276cefe4b6f3331f24815e964e3aef9740e1",
-    "packages/model/src/generated/schemas.ts": "d9d623410140348bb35f5e88ba085db178a3a9d455c53932ba05e68d13accaa3",
-    "packages/model/src/generated/vocabulary.ts": "32652541a3fa8dceb92db41115f8825234dc7908a2729957bb3270ad205c4474"
+    "packages/model/src/generated/profiles.ts": "f69b3a493ce974ee386566f4a51bae625d1590c4e11c0d7d082692a29bc73811",
+    "packages/model/src/generated/schemas.ts": "a960fad68eb510413ade7c091207a84d5afcff51c3640d159c3b9e1ed4bed8c0",
+    "packages/model/src/generated/vocabulary.ts": "4c4fc439d80563bfe248ca77ebb8e3fdd541fcea346b5ecd2343c92c4b927dfd"
   }
 }
