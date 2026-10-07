@@ -1,6 +1,7 @@
 import { emptyRow, FileImportInvalid, FILE_IMPORT_COST, type CanonicalRow } from './contract.ts';
 import { sourceDate, sourceShelves } from './csv.ts';
 import { parseUploadedXml, xmlChildren, xmlText, xmlAttributes, xmlContent, retainedXml } from './xml.ts';
+import { importRowBudget } from './bounds.ts';
 
 /** Reader's native anime/manga list XML: https://myanimelist.net/panel.php?go=export
  * checked 2026-10-01 (export requires account access). Field mapping is guarded
@@ -15,11 +16,12 @@ export function parseMal(file: string): CanonicalRow[] {
   const root = parseUploadedXml(file);
   if (root.tagName !== 'myanimelist') throw new FileImportInvalid('Choose a MyAnimeList anime or manga export');
   const rows: CanonicalRow[] = [];
+  const admit = importRowBudget();
   for (const element of xmlChildren(root)) {
-    if (rows.length >= FILE_IMPORT_COST.rows) throw new FileImportInvalid('Choose a file with at most 5,000 source rows');
+    if (rows.length >= FILE_IMPORT_COST.rows-1) throw new FileImportInvalid('Choose a file with at most 5,000 source rows');
     if (element.tagName !== 'anime' && element.tagName !== 'manga') {
       const row = emptyRow(`mal-metadata:${rows.length}`,'',{ xml: retainedXml(element) });
-      row.kind = 'retained'; rows.push(row); continue;
+      row.kind = 'retained'; rows.push(admit(row)); continue;
     }
     const anime = element.tagName === 'anime';
     const id = xmlText(element,anime ? 'series_animedb_id' : 'manga_mangadb_id');
@@ -39,10 +41,10 @@ export function parseMal(file: string): CanonicalRow[] {
     if (times && Number.isSafeInteger(count) && count >= 0) row.readCount = count;
     // Chapters, volumes and episodes are source evidence, never page locators.
     // Repeat counters lack attempt dates and cannot create additional sessions.
-    rows.push(row);
+    rows.push(admit(row));
   }
   if (!rows.some(row => row.kind === 'source')) throw new FileImportInvalid('MyAnimeList export has no list entries');
   const metadata = emptyRow('mal-export-metadata','',{ attributes: xmlAttributes(root),content: xmlContent(root) });
-  metadata.kind = 'retained'; rows.push(metadata);
+  metadata.kind = 'retained'; rows.push(admit(metadata));
   return rows;
 }

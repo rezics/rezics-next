@@ -26,8 +26,14 @@ export function csvRecords(file: string): { headers: string[]; records: Record<s
   if (rows.length < 2) throw new FileImportInvalid('File has no data rows');
   const headers = rows.shift()!.map(v => v.trim());
   if (headers.some(v => !v) || new Set(headers).size !== headers.length) throw new FileImportInvalid('CSV headers must be distinct and nonempty');
+  const headerBytes = 2 + headers.reduce((bytes,header) => bytes+Buffer.byteLength(JSON.stringify(header))+2,0);
+  let evidenceBytes = 0;
   return { headers, records: rows.map((values, index) => {
     if (values.length > headers.length) throw new FileImportInvalid(`CSV row ${index + 2} has extra cells`);
+    const bytes = headerBytes + headers.reduce((size,_header,i) => size+Buffer.byteLength(JSON.stringify(values[i] ?? '')),0);
+    if (bytes > FILE_IMPORT_COST.rowBytes) throw new FileImportInvalid('CSV row exceeds its evidence byte budget');
+    evidenceBytes += bytes;
+    if (evidenceBytes > FILE_IMPORT_COST.parsedBytes) throw new FileImportInvalid('Parsed CSV evidence exceeds its byte budget');
     return Object.fromEntries(headers.map((h, i) => [h, values[i] ?? '']));
   }) };
 }

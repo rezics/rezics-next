@@ -1,5 +1,6 @@
 import { emptyRow, FileImportInvalid, type CanonicalRow } from './contract.ts';
 import { csvRecords, sourceDate, sourceIsbn, sourceShelves } from './csv.ts';
+import { importRowBudget } from './bounds.ts';
 
 /** Reader's Export Library CSV: https://www.goodreads.com/review/import
  * and https://help.goodreads.com/s/question/0D51H00005hWFXaSAO
@@ -7,6 +8,7 @@ import { csvRecords, sourceDate, sourceIsbn, sourceShelves } from './csv.ts';
 export function parseGoodreads(file: string): CanonicalRow[] {
   const { records, headers } = csvRecords(file);
   if (!headers.includes('Title') || !headers.includes('Exclusive Shelf')) throw new FileImportInvalid('Choose a Goodreads library export');
+  const admit = importRowBudget();
   return records.map((raw, index) => {
     if (!raw.Title?.trim()) throw new FileImportInvalid(`CSV row ${index + 2} needs a title`);
     const row = emptyRow(raw['Book Id'] || String(index + 2), raw.Title.trim(), raw);
@@ -24,6 +26,6 @@ export function parseGoodreads(file: string): CanonicalRow[] {
     if (raw['My Review']?.trim()) row.review = { text: raw['My Review'].trim(), language: 'und', spoiler: false };
     const count = Number(raw['Read Count']);
     if (raw['Read Count']?.trim() && Number.isSafeInteger(count) && count >= 0) row.readCount = count;
-    return row;
+    return admit(row);
   });
 }

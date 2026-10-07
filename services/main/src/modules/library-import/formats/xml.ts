@@ -1,5 +1,6 @@
 import { DOMParser, type Element } from '@xmldom/xmldom';
 import { FileImportInvalid, FILE_IMPORT_COST } from './contract.ts';
+import { importJsonBytes } from './bounds.ts';
 
 export const xmlChildren = (element: Element, name?: string) => Array.from(element.childNodes)
   .filter((node): node is Element => node.nodeType === 1 && (!name || (node as Element).tagName === name));
@@ -11,9 +12,17 @@ export function xmlContent(element: Element) {
     : { type: node.nodeType,value: node.nodeValue });
 }
 export function retainedXml(element: Element): unknown {
-  return { name: element.tagName,attributes: xmlAttributes(element),
-    text: xmlChildren(element).length ? null : element.textContent,children: xmlChildren(element).map(retainedXml),
-    content: xmlContent(element) };
+  let bytes = 0;
+  const retain = (node: Element): unknown => {
+    const children = xmlChildren(node);
+    const value = { name: node.tagName,attributes: xmlAttributes(node),
+      text: children.length ? null : node.textContent,children: [] as unknown[],content: xmlContent(node) };
+    bytes += importJsonBytes(value,FILE_IMPORT_COST.bytes-16384)+Math.max(0,children.length-1);
+    if (bytes > FILE_IMPORT_COST.bytes-16384) throw new FileImportInvalid('XML row exceeds its evidence byte budget');
+    value.children = children.map(retain);
+    return value;
+  };
+  return retain(element);
 }
 
 /** Inert uploaded XML only: no DTDs, entities or network resolution. The pinned

@@ -1,5 +1,6 @@
 import { emptyRow, FileImportInvalid, type CanonicalRow } from './contract.ts';
 import { csvRecords, sourceDate, sourceIsbn, sourceShelves } from './csv.ts';
+import { importRowBudget } from './bounds.ts';
 
 /** Reader's Manage Account data export: https://app.thestorygraph.com/manage-account
  * https://thestorygraph.freshdesk.com/support/solutions/articles/79000142013
@@ -7,6 +8,7 @@ import { csvRecords, sourceDate, sourceIsbn, sourceShelves } from './csv.ts';
 export function parseStoryGraph(file: string): CanonicalRow[] {
   const { headers, records } = csvRecords(file);
   if (!headers.includes('Title') || !headers.includes('Read Status')) throw new FileImportInvalid('Choose a StoryGraph export');
+  const admit = importRowBudget();
   return records.map((raw, index) => {
     if (!raw.Title?.trim()) throw new FileImportInvalid(`CSV row ${index + 2} needs a title`);
     const row = emptyRow(raw['ISBN/UID'] || String(index + 2), raw.Title.trim(), raw);
@@ -26,6 +28,6 @@ export function parseStoryGraph(file: string): CanonicalRow[] {
     if (raw.Review?.trim()) row.review = { text: raw.Review.trim(), language: 'und', spoiler: false };
     const count = Number(raw['Read Count']);
     if (raw['Read Count']?.trim() && Number.isSafeInteger(count) && count >= 0) row.readCount = count;
-    return row;
+    return admit(row);
   });
 }

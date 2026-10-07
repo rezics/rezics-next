@@ -1,5 +1,6 @@
 import { emptyRow, FILE_IMPORT_COST, FileImportInvalid, type CanonicalRow, type CsvMapping } from './contract.ts';
 import { csvRecords, sourceDate } from './csv.ts';
+import { importRowBudget } from './bounds.ts';
 
 /** User-selected headers/statuses; RFC 4180 checked 2026-10-01.
  * No source-specific assumptions or guessed chapter-to-page conversion. */
@@ -14,6 +15,7 @@ export function parseGenericCsv(file: string, mapping?: CsvMapping): CanonicalRo
   for (const name of [mapping.title, mapping.author, mapping.status, mapping.progress, mapping.startedOn, mapping.finishedOn]) {
     if (name !== undefined && !headers.includes(name)) throw new FileImportInvalid(`CSV column ${name} is missing`);
   }
+  const admit = importRowBudget();
   return records.map((raw, index) => {
     const title = raw[mapping.title]!.trim();
     if (!title) throw new FileImportInvalid(`CSV row ${index + 2} needs a title`);
@@ -29,6 +31,6 @@ export function parseGenericCsv(file: string, mapping?: CsvMapping): CanonicalRo
       const value = Number(p), unit = mapping.progressUnit;
       if (unit === 'page' ? Number.isSafeInteger(value) : value <= 100) row.progress = { unit, value };
     }
-    return row;
+    return admit(row);
   });
 }

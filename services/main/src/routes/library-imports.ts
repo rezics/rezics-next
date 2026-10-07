@@ -1,4 +1,5 @@
-import { Elysia, t } from 'elysia';
+import { Elysia, t, ValidationError } from 'elysia';
+import type { VerifiedAccountAssertion } from '../modules/account/verify-assertion.ts';
 import { problemResult } from '../api-contract.ts';
 import { readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
 import { canonicalRow, csvMapping, FILE_IMPORT_COST, FileImportInvalid, FileImportUnsupported } from '../modules/library-import/formats/contract.ts';
@@ -20,6 +21,71 @@ const headers = { 'cache-control': 'private, no-store' };
 const closed = { additionalProperties: false };
 const errors = Object.fromEntries([400,401,403,404,409,422,503].map(status => [status,problemResult(status)]));
 const base = '/v1/me/library-imports';
+export const LIBRARY_IMPORT_BODY_BYTES = FILE_IMPORT_COST.bytes+16384;
+const IMPORT_TRANSFER_MS = 30_000;
+class LibraryImportTooLarge extends Error {}
+class LibraryImportTimedOut extends Error {}
+class LibraryImportIntakeRefused extends Error {
+  constructor(readonly response: Response) { super('Library import intake refused'); }
+}
+function cancelImportBody(request: Request) {
+  if (request.body && !request.body.locked) void request.body.cancel().catch(() => undefined);
+}
+function checkImportLength(request: Request) {
+  const declared = request.headers.get('content-length');
+  if (declared !== null && (!/^\d+$/.test(declared) || !Number.isSafeInteger(Number(declared)))) {
+    throw new FileImportInvalid('Invalid import content length');
+  }
+  if (declared !== null && Number(declared) > LIBRARY_IMPORT_BODY_BYTES) throw new LibraryImportTooLarge();
+}
+/** The envelope is bounded before JSON decoding, regardless of length claims.
+ * Cancellation never waits for an untrusted stream's cancellation hook. */
+export async function readLibraryImportBody(request: Request, transferMs = IMPORT_TRANSFER_MS,
+  beforeDecode: () => Promise<void> = async () => undefined): Promise<unknown> {
+  checkImportLength(request);
+  if (!request.body) throw new FileImportInvalid('Choose a library import body');
+  const reader = request.body.getReader();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stop: (error: Error) => void = () => undefined;
+  const interrupted = new Promise<never>((_resolve,reject) => {
+    stop = error => { reject(error); void reader.cancel(error).catch(() => undefined); };
+    timer = setTimeout(() => stop(new LibraryImportTimedOut()),transferMs);
+  });
+  const abort = () => stop(new FileImportInvalid('Import transfer aborted'));
+  request.signal.addEventListener('abort',abort,{ once: true });
+  const deadline = performance.now()+transferMs;
+  const transfer = async () => {
+    const bytes = new Uint8Array(LIBRARY_IMPORT_BODY_BYTES);
+    let length = 0;
+    for (;;) {
+      if (request.signal.aborted) throw new FileImportInvalid('Import transfer aborted');
+      if (performance.now() >= deadline) throw new LibraryImportTimedOut();
+      const { done,value } = await reader.read();
+      if (request.signal.aborted) throw new FileImportInvalid('Import transfer aborted');
+      if (performance.now() >= deadline) throw new LibraryImportTimedOut();
+      if (done) return bytes.subarray(0,length);
+      if (value.byteLength > LIBRARY_IMPORT_BODY_BYTES-length) throw new LibraryImportTooLarge();
+      bytes.set(value,length); length += value.byteLength;
+    }
+  };
+  try {
+    const bytes = await Promise.race([transfer(),interrupted]);
+    clearTimeout(timer);
+    // Verify at the end of a potentially slow transfer, so expiry or consent
+    // revocation during intake cannot survive into file admission.
+    await beforeDecode();
+    if (request.signal.aborted) throw new FileImportInvalid('Import transfer aborted');
+    try { return JSON.parse(new TextDecoder('utf-8',{ fatal: true }).decode(bytes)); }
+    catch { throw new FileImportInvalid('Malformed library import JSON'); }
+  } catch (error) {
+    void reader.cancel(error).catch(() => undefined);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    request.signal.removeEventListener('abort',abort);
+    reader.releaseLock();
+  }
+}
 export const openApiOperations = {
   '/v1/me/library-imports': { post: { exposure: 'public', rateLimitFamily: 'upload', bearer: true, idempotencyKey: true } },
   '/v1/me/library-imports/{id}': { delete: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
@@ -57,6 +123,8 @@ const resolution = t.Object({ choice: t.Union([t.Literal('apply'),t.Literal('pri
 const rowView = t.Object({ index: t.Integer(), source: canonicalRow, match: t.Nullable(match), resolution: t.Nullable(resolution),
   outcome: t.Nullable(t.Object({ applied: t.Array(t.String()),issues: t.Array(t.String()) })),version: t.Integer() });
 function failure(error: unknown): Response {
+  if (error instanceof LibraryImportTooLarge) return problem(413,'library_import_too_large','Import body exceeds 2 MiB plus the 16 KiB request envelope');
+  if (error instanceof LibraryImportTimedOut) return problem(408,'library_import_timeout','Import transfer timed out');
   if (error instanceof LibraryFileMissing) return problem(404,'library_import_missing',error.message);
   if (error instanceof FileImportInvalid || error instanceof ReaderImportInvalid || error instanceof TargetNotBound) return problem(400,'invalid_library_file',error.message);
   if (error instanceof FileImportUnsupported) return problem(422,'library_format_unavailable',error.message);
@@ -65,10 +133,11 @@ function failure(error: unknown): Response {
   return workReadError(error);
 }
 export function libraryImportsRoutes(deps: MainWorkDependencies) {
-  async function own(request: Request, agent: string, write = false) {
+  const intakePrincipals = new WeakMap<Request,VerifiedAccountAssertion>();
+  async function own(request: Request, agent: string, write = false, verified?: VerifiedAccountAssertion) {
     const key = request.headers.get('idempotency-key') ?? '';
     if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) throw new ReaderImportInvalid('A valid Idempotency-Key is required');
-    const principal = await deps.account.verify(request,write ? ['work:read','library:write'] : ['work:read']);
+    const principal = verified ?? await deps.account.verify(request,write ? ['work:read','library:write'] : ['work:read']);
     if (!await deps.access.canReadAsBaselineMember?.(principal,agent)) return problem(403,'library_import_denied','Import files are private to your own Person');
     if (!deps.libraryFiles || !deps.libraryImport) throw new ReaderImportUnavailable('Library import is unavailable');
     return { key, principal };
@@ -86,11 +155,30 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
     .post(base, { body: t.Object({ actingSubject: readId,
       format: t.Union([t.Literal('goodreads'),t.Literal('storygraph'),t.Literal('generic-csv'),t.Literal('vndb'),t.Literal('mal'),t.Literal('rezics')]),
       file: t.String({ maxLength: FILE_IMPORT_COST.bytes }),mapping: t.Optional(csvMapping) },closed),
+      parse: 'none',
+      // Preserve the authored request schema while supplying its body only
+      // after bounded intake. Global upload-budget admission then precedes the
+      // handler's actor check and every format adapter (including CSV preview).
+      transform: async context => {
+        try {
+          checkImportLength(context.request);
+          context.body = await readLibraryImportBody(context.request,IMPORT_TRANSFER_MS,async () => {
+            const principal = await deps.account.verify(context.request,['work:read','library:write']);
+            intakePrincipals.set(context.request,principal);
+          }) as typeof context.body;
+        } catch (error) { throw new LibraryImportIntakeRefused(failure(error)); }
+        finally { cancelImportBody(context.request); }
+      },
+      error: ({ error }) => {
+        if (error instanceof LibraryImportIntakeRefused) return error.response;
+        if (error instanceof ValidationError) return problem(400,'invalid_request','Request does not match the Work contract');
+      },
       response: { 201: t.Object({ id: readUuid,total: t.Integer({ minimum: 1,maximum: 5000 }) }),
-        200: t.Object({ headers: t.Array(t.String(),{ maxItems: 64 }),distinctValues: t.Record(t.String(),t.Array(t.String(),{ maxItems: 50 })) }),...errors },
+        200: t.Object({ headers: t.Array(t.String(),{ maxItems: 64 }),distinctValues: t.Record(t.String(),t.Array(t.String(),{ maxItems: 50 })) }),
+        ...errors,408: problemResult(408),413: problemResult(413),429: problemResult(429) },
     }, async ({ request,body }) => {
       try {
-        const admission = await own(request,body.actingSubject,true); if (admission instanceof Response) return admission;
+        const admission = await own(request,body.actingSubject,true,intakePrincipals.get(request)); if (admission instanceof Response) return admission;
         if (new TextEncoder().encode(body.file).length > FILE_IMPORT_COST.bytes) throw new FileImportInvalid('File exceeds 2 MiB');
         if (body.format === 'generic-csv' && !body.mapping) return Response.json(inspectGenericCsv(body.file),{ headers });
         const rows = parseLibraryFile(body.format,body.file,body.mapping);

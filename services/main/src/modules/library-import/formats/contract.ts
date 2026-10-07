@@ -4,6 +4,9 @@ import { readId } from '../../work/read-contract.ts';
 import { sessionDate, sessionStatus, selectionInput, sessionLocator } from '../../session/contract.ts';
 
 export const FILE_IMPORT_COST = { bytes: 2 * 1024 * 1024, rowBytes: 1024 * 1024, rows: 5_000, columns: 64,
+  // XML evidence expands into explicit node envelopes; repeated CSV headers
+  // must not multiply a small upload into gigabytes of owner writes.
+  parsedBytes: 64 * 1024 * 1024, nesting: 64,
   cellCharacters: 20_000, page: 8, statuses: 50, searchPages: 4, candidates: 80 } as const;
 const closed = { additionalProperties: false };
 export const sourceStatus = t.Union([t.Literal('want-to-read'), t.Literal('reading'), t.Literal('read'), t.Literal('paused'), t.Literal('dnf')]);
