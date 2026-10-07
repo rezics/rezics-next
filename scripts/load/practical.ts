@@ -1,4 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { runQaStartupChildAsync } from '../qa/stack-startup.ts';
 import { captureFusekiQueryPlan } from './fuseki-plan.ts';
 import type { CapturedFusekiQuery } from './fuseki-candidates.ts';
 import { randomUUID } from 'node:crypto';
@@ -396,12 +397,14 @@ function queryPlan(lane: string, captured: CapturedFusekiQuery[]) {
     directory: artifacts, image: fusekiImage, dockerEnv: loadDockerEnvironment() });
 }
 
-function stackCommand(action: 'stack:down' | 'stack:up', name: string) {
-  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa',
-    '--run-id', stackRunId(), '--persistent'],
-  { cwd: root, env: process.env, encoding: 'utf8', timeout: 180_000 });
+async function stackCommand(action: 'stack:down' | 'stack:up', name: string) {
+  const args = [action, '--profile', 'qa', '--run-id', stackRunId(), '--persistent'];
+  const result = action === 'stack:up' ? await runQaStartupChildAsync(root, args, 180_000)
+    : spawnSync('bun', ['scripts/dev/cli.ts', ...args],
+      { cwd: root, env: process.env, encoding: 'utf8', timeout: 180_000 });
   writeFileSync(join(artifacts, `${name}.log`), result.stdout + result.stderr);
   if (result.status !== 0) throw new Error(`${action} failed during storage cold restart: ${result.stderr}`);
+  return 'admissionWaitMs' in result ? result.admissionWaitMs : 0;
 }
 
 interface PreparedSelection { contribution: string; publicationDecision: string }
@@ -773,8 +776,8 @@ try {
     await Promise.all([contentPool.end(), accessPool.end(), relayPool.end()]);
     poolsOpen = false;
     const recoveryStarted = Date.now();
-    stackCommand('stack:down', 'phase-d-storage-down');
-    stackCommand('stack:up', 'phase-d-storage-up');
+    await stackCommand('stack:down', 'phase-d-storage-down');
+    const admissionWaitMs = await stackCommand('stack:up', 'phase-d-storage-up');
     contentPool = new Pool({ connectionString: needed('CONTENT_DATABASE_URL') });
     accessPool = new Pool({ connectionString: needed('ACCESS_DATABASE_URL') });
     relayPool = new Pool({ connectionString: needed('ACCOUNT_RELAY_DATABASE_URL') });
@@ -787,7 +790,7 @@ try {
     await ready();
     evidence.afterRecovery = await queryCases(corpus);
     evidence.relayAfterRecovery = await waitRelay();
-    evidence.storageRecoveryMs = Date.now() - recoveryStarted;
+    evidence.storageRecoveryMs = Date.now() - recoveryStarted - admissionWaitMs;
     if ((evidence.storageRecoveryMs as number) > 90_000) {
       throw new Error('Phase-D persistent storage recovery exceeded 90 seconds');
     }
@@ -955,9 +958,9 @@ try {
   await Promise.all([contentPool.end(), accessPool.end(), relayPool.end()]);
   const recoveryStarted = Date.now();
   poolsOpen = false;
-  stackCommand('stack:down', 'storage-cold-down');
-  stackCommand('stack:up', 'storage-cold-up');
-  const storageRecoveryMs = Date.now() - recoveryStarted;
+  await stackCommand('stack:down', 'storage-cold-down');
+  const admissionWaitMs = await stackCommand('stack:up', 'storage-cold-up');
+  const storageRecoveryMs = Date.now() - recoveryStarted - admissionWaitMs;
   evidence.storageRecoveryMs = storageRecoveryMs;
   contentPool = new Pool({ connectionString: needed('CONTENT_DATABASE_URL') });
   accessPool = new Pool({ connectionString: needed('ACCESS_DATABASE_URL') });

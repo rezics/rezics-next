@@ -3,10 +3,48 @@ import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, 
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { qaMemoryNeed, waitForMemory } from './memory-admission.ts';
+import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 import { discoverJourneyPreparations, selectJourneyPreparations } from './e2e-preparation.ts';
 
 const claimRoot = join(tmpdir(), 'rezics-e2e-web-ports');
+
+export interface BrowserStepResult {
+  step: string; budgetMs: number; elapsedMs: number; passed: boolean; admissionWaitMs?: number; error?: string; skipped?: string;
+}
+export interface BrowserStepOptions {
+  root: string;
+  env: NodeJS.ProcessEnv;
+  deadline: number;
+  now?: () => number;
+  admission?: typeof waitForMemory;
+  record?: (result: BrowserStepResult) => void;
+}
+
+/** Admission has the run deadline; the step keeps its full execution budget once admitted. */
+export async function measuredBrowserStep(step: string, budgetMs: number, run: (budgetMs: number) => Promise<void>,
+  options: BrowserStepOptions): Promise<BrowserStepResult> {
+  const now = options.now ?? Date.now;
+  const result: BrowserStepResult = { step, budgetMs, elapsedMs: 0, admissionWaitMs: 0, passed: false };
+  let started: number | undefined;
+  try {
+    if (await isLocalQaRun(options.root, options.env)) {
+      await (options.admission ?? waitForMemory)(qaMemoryNeed(options.root, 'browser', undefined, options.env), {
+        root: options.root, env: options.env, deadline: options.deadline, now,
+        onAdmissionWait: ms => { result.admissionWaitMs = (result.admissionWaitMs ?? 0) + ms; },
+      });
+    }
+    started = now();
+    await run(budgetMs);
+    result.passed = true;
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+    throw error;
+  } finally {
+    result.elapsedMs = started === undefined ? 0 : now() - started;
+    options.record?.(result);
+  }
+  return result;
+}
 
 export interface WebPortReservation { port: number; pid: number; release(): void }
 
@@ -238,23 +276,16 @@ async function runE2e(): Promise<void> {
     REZICS_WEB_E2E_PORT_HOLDER: String(web.holderPid) };
   const children: ChildProcess[] = [];
   const launchErrors = new WeakMap<ChildProcess, Error>();
-  const steps: { step: string; budgetMs: number; elapsedMs: number; passed: boolean; error?: string; skipped?: string }[] = [];
+  const runDeadline = qaMemoryDeadline(env);
+  const steps: BrowserStepResult[] = [];
   let ownedPort: number | undefined;
 
   async function measured(step: string, budgetMs: number, run: () => Promise<void>): Promise<void> {
-    const start = Date.now();
-    const result: typeof steps[number] = { step, budgetMs, elapsedMs: 0, passed: false };
     console.log(`${step}: ${budgetMs / 1000}s budget`);
-    try {
-      await waitForMemory(qaMemoryNeed(root, 'browser'), { root, env, deadline: start + budgetMs });
-      await run(); result.passed = true;
-    }
-    catch (error) { result.error = error instanceof Error ? error.message : String(error); throw error; }
-    finally {
-      result.elapsedMs = Date.now() - start;
+    await measuredBrowserStep(step, budgetMs, run, { root, env, deadline: runDeadline, record: result => {
       steps.push(result);
       writeFileSync(join(artifactDir, 'e2e-steps.json'), JSON.stringify(steps, null, 2));
-    }
+    } });
   }
 
   function launch(name: string, program: string, args: string[], extraEnv: NodeJS.ProcessEnv = {},

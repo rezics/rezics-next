@@ -3,7 +3,7 @@ import { expect, test } from 'bun:test';
 import { dispatchTest, selectTestCommand } from '../../../scripts/qa/test.ts';
 import { testArgs } from '../../../scripts/qa/acceptance.ts';
 import { parseArgs } from '../../../scripts/qa/core.ts';
-import { GiB } from '../../../scripts/qa/memory-admission.ts';
+import { GiB, waitForMemory } from '../../../scripts/qa/memory-admission.ts';
 
 test('explicit web, Accounts and shared UI stories wait for host admission before launching', async () => {
   const root = resolve(import.meta.dir, '../../..');
@@ -16,12 +16,13 @@ test('explicit web, Accounts and shared UI stories wait for host admission befor
     const waiting = new Promise<void>(done => { release = done; });
     let requested = false;
     const launches: [string, string[]][] = [];
-    const result = dispatchTest(args, { deadline: 1234, env: {}, admission: async (need, options) => {
+    const result = dispatchTest(args, { deadline: 1234, env: { REZICS_STACK_PROFILE: 'qa' }, admission: async (need, options) => {
       expect(need).toEqual({ vm: 0, host: 4 * GiB, hostReserve: 8 * GiB, vmReserve: 0 });
       expect(options.deadline).toBe(1234);
       requested = true;
       await waiting;
     }, runner: async command => { launches.push(command); return 7; } });
+    await Promise.resolve();
     expect(requested).toBe(true);
     expect(launches).toEqual([]);
     release();
@@ -34,9 +35,50 @@ test('a Storybook admission failure prevents launch', async () => {
   const root = resolve(import.meta.dir, '../../..');
   const file = [...new Bun.Glob('apps/web/**/*.stories.tsx').scanSync({ cwd: root })][0]!;
   let launched = false;
-  await expect(dispatchTest([file], { env: {}, admission: async () => { throw new Error('Memory admission deadline reached'); },
+  await expect(dispatchTest([file], { env: { REZICS_STACK_PROFILE: 'qa' }, admission: async () => { throw new Error('Memory admission deadline reached'); },
     runner: async () => { launched = true; return 0; } })).rejects.toThrow('Memory admission deadline reached');
   expect(launched).toBe(false);
+});
+
+test('standalone stories wait beyond a short execution duration and honor the inherited run deadline', async () => {
+  const root = resolve(import.meta.dir, '../../..');
+  const file = [...new Bun.Glob('apps/web/**/*.stories.tsx').scanSync({ cwd: root })][0]!;
+  const env = { REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '200' };
+  let now = 0, launched = false, admissionWaitMs = 0;
+  const admission: typeof waitForMemory = (need, options) => {
+    expect(options.deadline).toBe(200);
+    return waitForMemory(need, { ...options, now: () => now, pollMs: 60, announce: () => {},
+      onAdmissionWait: ms => { admissionWaitMs += ms; }, sleep: async ms => { now += ms; },
+      read: async () => ({ vmTotal: 0, vmUsed: 0, hostAvailable: (now < 120 ? 11 : 12) * GiB }),
+    });
+  };
+  expect(await dispatchTest([file], { env, deadline: 500, admission, runner: async () => {
+    expect(now).toBe(120);
+    launched = true;
+    now += 10;
+    return 0;
+  } })).toBe(0);
+  expect(launched).toBe(true);
+  expect(admissionWaitMs).toBe(120);
+  expect(now).toBe(130);
+  now = 0; launched = false;
+  await expect(dispatchTest([file], { env, deadline: 500,
+    admission: (need, options) => waitForMemory(need, { ...options, now: () => now, pollMs: 60, announce: () => {},
+      sleep: async ms => { now += ms; }, read: async () => ({ vmTotal: 0, vmUsed: 0, hostAvailable: 11 * GiB }),
+    }), runner: async () => { launched = true; return 0; },
+  })).rejects.toThrow('Memory admission deadline reached');
+  expect(now).toBe(200);
+  expect(launched).toBe(false);
+});
+
+test('saved non-QA standalone stories bypass reserve calculation despite Goal metadata', async () => {
+  const root = resolve(import.meta.dir, '../../..');
+  const file = [...new Bun.Glob('apps/web/**/*.stories.tsx').scanSync({ cwd: root })][0]!;
+  expect(await dispatchTest([file], {
+    env: { REZICS_STACK_PROFILE: 'prod', GOAL_TASK_ID: 'G-1234', REZICS_QA_HOST_RESERVE_GIB: 'invalid',
+      REZICS_QA_MEMORY_DEADLINE: 'invalid' }, admission: async () => { throw new Error('Unexpected QA admission'); },
+    runner: async () => 0,
+  })).toBe(0);
 });
 
 test('ordinary explicit tests keep their existing dispatch without Storybook admission', async () => {

@@ -97,6 +97,26 @@ export interface MemoryWaitOptions {
   sleep?: (ms: number) => Promise<void>;
   announce?: (message: string) => void;
   pollMs?: number;
+  onAdmissionWait?: (ms: number) => void;
+  /** Nested admission uses its parent's event and elapsed-time accounting. */
+  emitEvents?: boolean;
+}
+
+let admissionSequence = 0;
+function admissionAccounting(options: MemoryWaitOptions, now: () => number): () => void {
+  const started = now();
+  const env = options.env ?? process.env;
+  const token = options.emitEvents !== false && env.REZICS_QA_MEMORY_EVENTS === '1'
+    ? `${process.pid}-${++admissionSequence}` : undefined;
+  if (token) console.log(`QA_MEMORY_WAIT_BEGIN ${token}`);
+  let reported = false;
+  return () => {
+    if (reported) return;
+    reported = true;
+    const waited = Math.max(0, Math.round(now() - started));
+    if (token) console.log(`QA_MEMORY_WAIT_END ${token} ${waited}`);
+    options.onAdmissionWait?.(waited);
+  };
 }
 
 /** Saved non-QA profiles retain their restore policy even in a Goal checkout.
@@ -129,6 +149,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   const announce = options.announce ?? console.log;
   const pollMs = options.pollMs ?? threshold(process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
   if (pollMs <= 0) { mutex.close(); throw new Error('REZICS_QA_MEMORY_POLL_MS must be positive'); }
+  const reportWait = admissionAccounting(options, now);
   let held = false, announced = false;
   try {
     mutex.exec('PRAGMA busy_timeout=0');
@@ -148,24 +169,28 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
       }
       await sleep(Math.min(pollMs, Math.max(0, options.deadline - now())));
     }
-    await waitForMemory(need, options);
+    await waitForMemory(need, { ...options, emitEvents: false, onAdmissionWait: undefined });
+    reportWait();
     return await start();
   } finally {
-    try { if (held) mutex.exec('ROLLBACK'); }
-    finally { mutex.close(true); }
+    try { reportWait(); }
+    finally {
+      try { if (held) mutex.exec('ROLLBACK'); }
+      finally { mutex.close(true); }
+    }
   }
 }
 
 /** Child startups inherit their runner's deadline; standalone startup stays bounded. */
-export function qaMemoryDeadline(env: NodeJS.ProcessEnv, deadline: number): number {
+export function qaMemoryDeadline(env: NodeJS.ProcessEnv, deadline?: number): number {
   const inherited = env.REZICS_QA_MEMORY_DEADLINE;
-  if (inherited === undefined) return deadline;
+  if (inherited === undefined) return deadline ?? Date.now() + 6 * 3_600_000;
   const value = Number(inherited);
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error('Invalid REZICS_QA_MEMORY_DEADLINE');
-  return Math.min(value, deadline);
+  return deadline === undefined ? value : Math.min(value, deadline);
 }
 
-export async function withQaStackStartup<T>(root: string, env: NodeJS.ProcessEnv, deadline: number,
+export async function withQaStackStartup<T>(root: string, env: NodeJS.ProcessEnv, deadline: number | undefined,
   start: () => T | Promise<T>, options: Partial<StartupMemoryOptions> & { services?: readonly QaMemoryService[] } = {}): Promise<T> {
   if (!await isLocalQaRun(root, env)) return await start();
   return withMemoryStartup(qaMemoryNeed(root, env.REZICS_QA_MEMORY_KIND === 'browser' ? 'browser' : 'other',
@@ -187,6 +212,7 @@ function admissionMessage(need: MemoryNeed, reading?: MemoryReading): string {
 export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions): Promise<void> {
   if (!await isLocalQaRun(options.root, options.env)) return;
   const now = options.now ?? Date.now;
+  const reportWait = admissionAccounting(options, now);
   const sleep = options.sleep ?? (ms => Bun.sleep(ms));
   const announce = options.announce ?? console.log;
   const needsVm = need.vm + need.vmReserve > 0;
@@ -194,6 +220,7 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
   const pollMs = options.pollMs ?? threshold(process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
   if (pollMs <= 0) throw new Error('REZICS_QA_MEMORY_POLL_MS must be positive');
   let message = admissionMessage(need);
+  try {
   for (;;) {
     if (now() >= options.deadline) throw new Error(`Memory admission deadline reached; ${message}; no work started`);
     let reading: MemoryReading;
@@ -214,4 +241,5 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
     if (now() >= options.deadline) throw new Error(`Memory admission deadline reached; ${message}; no work started`);
     await sleep(Math.min(pollMs, options.deadline - now()));
   }
+  } finally { reportWait(); }
 }

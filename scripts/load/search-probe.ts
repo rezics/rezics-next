@@ -15,6 +15,7 @@ import { MAX_SEARCH_FUSEKI_BYTES, MAX_SEARCH_FUSEKI_CALLS,
   MAX_SEARCH_RESPONSE_BYTES } from '../../services/main/src/modules/work/search-readiness.ts';
 import { delta, searchProofDelta, startFusekiMeter } from './measurement.ts';
 import { LoadAuthority } from './corpus.ts';
+import { runQaStartupChildAsync } from '../qa/stack-startup.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const artifacts = process.argv[2];
@@ -84,19 +85,22 @@ async function ready(): Promise<void> {
   throw new Error('Main search readiness timed out');
 }
 
-function coldStorageRestart(): number {
+async function coldStorageRestart(): Promise<number> {
   const started = Date.now();
+  let admissionWaitMs = 0;
   for (const action of ['stack:down', 'stack:up'] as const) {
-    const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa',
-      '--run-id', fixtureRunId, '--persistent'], { cwd: root, env: process.env,
-      encoding: 'utf8', timeout: 180_000 });
+    const args = [action, '--profile', 'qa', '--run-id', fixtureRunId, '--persistent'];
+    const result = action === 'stack:up' ? await runQaStartupChildAsync(root, args, 180_000)
+      : spawnSync('bun', ['scripts/dev/cli.ts', ...args],
+        { cwd: root, env: process.env, encoding: 'utf8', timeout: 180_000 });
+    if ('admissionWaitMs' in result) admissionWaitMs += result.admissionWaitMs;
     writeFileSync(join(artifacts, `search-probe-${action.slice(6)}.log`),
       [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n'));
     if (result.error || result.status !== 0) {
       throw new Error(`${action} failed during Search cold-cache restart`);
     }
   }
-  return Date.now() - started;
+  return Date.now() - started - admissionWaitMs;
 }
 
 async function post(path: '/v1/queries' | '/v1/queries/page', body: Record<string, unknown>) {
@@ -139,7 +143,7 @@ async function accessWrite<T extends CommandReceipt>(scope: string, action: stri
 
 let failure: string | undefined;
 try {
-  evidence.storageColdRestartMs = coldStorageRestart();
+  evidence.storageColdRestartMs = await coldStorageRestart();
   await environment.workObjects.initialize();
   // The meter has a fresh loopback port on each diagnostic run. Rebind only
   // this isolated fixture copy's test endpoint before Main takes its route lease.

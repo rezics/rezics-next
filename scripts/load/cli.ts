@@ -1,5 +1,4 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { readEnv } from '../dev/config.ts';
@@ -10,25 +9,28 @@ import { fusekiImageFromCompose } from './image.ts';
 import { validateLoadBaseline } from './baseline.ts';
 import { loadDockerEnvironment } from './docker-env.ts';
 import { qaStackEnvironment } from '../qa/stack-environment.ts';
+import { runQaStartupChildAsync } from '../qa/stack-startup.ts';
+import { commandAsync } from '../qa/core.ts';
+import { qaMemoryDeadline } from '../qa/memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
 // Load always uses the scale allocation, including preparation and cloned runs.
 const stackEnvironment = qaStackEnvironment(process.env, 'scale');
-function command(cwd: string, name: string, args: string[], timeoutMs: number,
+async function command(cwd: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = stackEnvironment) {
-  const started = Date.now();
-  const result = spawnSync(name, args, { cwd, env, encoding: 'utf8', timeout: timeoutMs });
-  return { ok: result.status === 0 && !result.error,
-    output: [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n'),
-    elapsedMs: Date.now() - started };
+  const deadline = qaMemoryDeadline(env);
+  const result = await commandAsync(cwd, name, args, timeoutMs,
+    { ...env, REZICS_QA_MEMORY_DEADLINE: String(deadline), REZICS_QA_MEMORY_EVENTS: '1' },
+    undefined, { runDeadline: deadline });
+  return { ...result, elapsedMs: result.activeElapsedMs };
 }
 function newRunId() {
   return `${new Date().toISOString().replace(/[-:]/g, '').slice(0, 15).toLowerCase()}-${randomBytes(3).toString('hex')}`;
 }
-function sourceIdentity(cwd: string) {
-  const head = command(cwd, 'git', ['rev-parse', 'HEAD'], 5_000);
-  const status = command(cwd, 'git', ['status', '--porcelain=v1', '--untracked-files=all'], 5_000);
-  const diff = command(cwd, 'git', ['diff', '--binary', 'HEAD'], 10_000);
+async function sourceIdentity(cwd: string) {
+  const head = await command(cwd, 'git', ['rev-parse', 'HEAD'], 5_000);
+  const status = await command(cwd, 'git', ['status', '--porcelain=v1', '--untracked-files=all'], 5_000);
+  const diff = await command(cwd, 'git', ['diff', '--binary', 'HEAD'], 10_000);
   if (!head.ok || !status.ok || !diff.ok) throw new Error('Cannot identify load source tree');
   const hash = createHash('sha256').update(head.output).update(diff.output);
   for (const line of status.output.split('\n').filter(Boolean)) {
@@ -82,7 +84,7 @@ const stackRunId = fixtureRunId ?? runId;
 const artifacts = join(root, '.artifacts', 'load', runId);
 const stack = join(root, '.temp', 'stack', `rezics-qa-${stackRunId}`);
 mkdirSync(artifacts, { recursive: true });
-const sourceBefore = sourceIdentity(root);
+const sourceBefore = await sourceIdentity(root);
 const evidence: Record<string, unknown> = {
   stackMode: 'scale',
   runId, mode: prepare ? 'prepare' : from ? 'clone-profile'
@@ -96,7 +98,7 @@ const evidence: Record<string, unknown> = {
     ? 'practical-profile' : 'diagnostic-only',
   startedAt: new Date().toISOString(),
 };
-const record = (name: string, value: ReturnType<typeof command>) => {
+const record = (name: string, value: Pick<Awaited<ReturnType<typeof command>>, 'ok' | 'output' | 'elapsedMs'>) => {
   writeFileSync(join(artifacts, `${name}.log`), value.output);
   evidence[`${name}Ms`] = value.elapsedMs;
   if (!value.ok) throw new Error(`${name} failed; see ${name}.log`);
@@ -124,7 +126,7 @@ try {
     if (!searchProbe && duration === 180 && (manifest.entities.publicUnits ?? 0) + works >= 10_000) {
       evidence.qualification = 'practical-profile';
     }
-    record('fixture-stack-status', command(root, 'bun', ['scripts/dev/cli.ts', 'stack:status', '--profile', 'qa',
+    record('fixture-stack-status', await command(root, 'bun', ['scripts/dev/cli.ts', 'stack:status', '--profile', 'qa',
       '--run-id', fixtureRunId, '--persistent'], 10_000));
   } else if (from && cohort) {
     const sourceArtifacts = join(root, '.artifacts', 'load', from);
@@ -138,25 +140,27 @@ try {
       allowCompatibleSource);
     evidence.baselineSource = sourceRun.source;
     evidence.baselineDigest = digest;
-    record('stack-clone', command(root, 'bun', ['scripts/dev/cli.ts', 'stack:clone', '--profile', 'qa',
-      '--run-id', from, '--persistent', '--to-run-id', runId], 1_200_000));
+    const cloned = await runQaStartupChildAsync(root, ['stack:clone', '--profile', 'qa',
+      '--run-id', from, '--persistent', '--to-run-id', runId], 1_200_000, stackEnvironment);
+    record('stack-clone', { ...cloned, elapsedMs: cloned.activeElapsedMs });
   } else {
-    record('stack-up', command(root, 'bun',
-      ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000));
+    const up = await runQaStartupChildAsync(root,
+      ['stack:up', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000, stackEnvironment);
+    record('stack-up', { ...up, elapsedMs: up.activeElapsedMs });
   }
   started = !fixtureRunId;
   const image = fusekiImageFromCompose(readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8')).image;
-  const inspected = command(root, 'docker', ['image', 'inspect', image, '--format', '{{.Id}}'],
+  const inspected = await command(root, 'docker', ['image', 'inspect', image, '--format', '{{.Id}}'],
     10_000, loadDockerEnvironment());
   if (!inspected.ok || !/^sha256:[0-9a-f]{64}$/.test(inspected.output.trim())) {
     throw new Error('Cannot verify the running Fuseki image identity');
   }
   const docker = loadDockerEnvironment();
-  const container = command(root, 'docker', ['ps', '-q',
+  const container = await command(root, 'docker', ['ps', '-q',
     '--filter', `label=com.docker.compose.project=rezics-qa-${stackRunId}`,
     '--filter', 'label=com.docker.compose.service=fuseki'], 10_000, docker);
   const runningImage = container.ok && container.output.trim()
-    ? command(root, 'docker', ['inspect', container.output.trim(), '--format', '{{.Image}}'], 10_000, docker)
+    ? await command(root, 'docker', ['inspect', container.output.trim(), '--format', '{{.Image}}'], 10_000, docker)
     : undefined;
   if (!runningImage?.ok || runningImage.output.trim() !== inspected.output.trim()) {
     throw new Error('Running Fuseki container differs from the pinned image identity');
@@ -168,14 +172,14 @@ try {
   const composeFile = join(stack, 'load-compose.json');
   writeFileSync(appsFile, JSON.stringify(apps), { mode: 0o600 });
   writeFileSync(composeFile, JSON.stringify(compose), { mode: 0o600 });
-  if (searchProbe) record('search-probe', command(root, 'bun',
+  if (searchProbe) record('search-probe', await command(root, 'bun',
     ['scripts/load/search-probe.ts', artifacts, fixtureRunId!], 180_000,
     { ...process.env, ...apps, REZICS_LOAD_RUN_ID: runId,
       REZICS_LOAD_STACK_RUN_ID: fixtureRunId!,
       REZICS_LOAD_BACKGROUND_PUBLIC_UNITS: String((evidence.fixture as { publicUnits: number }).publicUnits) }));
-  else if (!from && !fixtureRunId) record('bootstrap', command(root, 'bun',
+  else if (!from && !fixtureRunId) record('bootstrap', await command(root, 'bun',
     ['scripts/qa/bootstrap.ts', appsFile, composeFile], 180_000));
-  if (!searchProbe) record('profile', command(root, 'bun', ['scripts/load/practical.ts', String(works),
+  if (!searchProbe) record('profile', await command(root, 'bun', ['scripts/load/practical.ts', String(works),
     String(duration), artifacts, String(seedWorkers)], PRACTICAL_PROFILE_TIMEOUT_MS, { ...process.env, ...apps,
     REZICS_LOAD_RUN_ID: runId, REZICS_LOAD_STACK_RUN_ID: stackRunId,
     REZICS_LOAD_ARTIFACT_DIR: artifacts,
@@ -194,14 +198,14 @@ try {
   failure = error instanceof Error ? error.message : String(error);
 } finally {
   if (started && !keep) {
-    const down = command(root, 'bun',
+    const down = await command(root, 'bun',
       ['scripts/dev/cli.ts', prepare && !failure ? 'stack:down' : 'stack:reset', '--profile', 'qa',
         '--run-id', runId, '--persistent'], 180_000);
     writeFileSync(join(artifacts, prepare && !failure ? 'stack-down.log' : 'stack-reset.log'), down.output);
     evidence[prepare && !failure ? 'stackDownMs' : 'stackResetMs'] = down.elapsedMs;
     if (!down.ok) failure = [failure, 'stack teardown failed'].filter(Boolean).join('; ');
   }
-  const sourceAfter = sourceIdentity(root);
+  const sourceAfter = await sourceIdentity(root);
   evidence.sourceStable = sourceAfter.fingerprint === sourceBefore.fingerprint;
   evidence.completedAt = new Date().toISOString();
   if (!evidence.sourceStable) failure = [failure, 'source changed during load run'].filter(Boolean).join('; ');

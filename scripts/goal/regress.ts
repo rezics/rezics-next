@@ -181,7 +181,7 @@ function batchesFor(files: ExpectedFile[], options: RegressionOptions): Batch[] 
 export function classify(evidence: string, code = 1): Classification {
   if (/cannot connect to the docker daemon|failed to connect to (?:the )?docker (?:daemon|API)|docker.*ECONNREFUSED|ECONNREFUSED.*(?:docker|237[56])|(?:docker\.sock|dockerDesktopLinuxEngine)[^\n]*(?:connection refused|no such file|cannot find)|is the docker daemon running|all predefined address pools|no available.*address pool|could not find an available, non-overlapping.*address pool|network pool exhausted|oom-kill|Out of memory: Killed process/i.test(evidence)) return 'infrastructure';
   if (code === 137 || /heap out of memory|SIGKILL|resource exhausted|ENOMEM/.test(evidence)) return 'resource';
-  if (/exceeded[^\n]*(?:budget|deadline)|timed out|ETIMEDOUT|deadline exceeded|heavy QA lock stayed held|No QA slot became free/i.test(evidence)) return 'deadline';
+  if (/exceeded[^\n]*(?:budget|deadline)|timed out|ETIMEDOUT|deadline exceeded|admission deadline reached|reached its run deadline|heavy QA lock stayed held|No QA slot became free/i.test(evidence)) return 'deadline';
   return 'deterministic';
 }
 

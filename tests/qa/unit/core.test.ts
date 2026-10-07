@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { acquireFullLock, acquireQaSlots, commandAsync, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
+import { acquireFullLock, acquireQaSlots, admissionIntervalMs, commandAsync, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
   isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
   mergeJUnit, parseArgs, planShards, planStackProjects,
   recordedFileDurations, selfManagedFaultFiles, shardCount, stackPlanBudgetWarning, shardResolved, splitTestArgs,
@@ -51,6 +51,56 @@ test('startup wait lines stream before the child exits, including fragmented std
     expect(lines).toEqual(['Waiting; QA memory: needs 5 GiB', 'Admitted; QA memory: available 6 GiB']);
     expect(result.output).toContain('Waiting; QA memory: needs 5 GiB');
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('QA CLI child admission can outlast its active budget, then execution keeps its remaining time', async () => {
+  const script = `
+    import { waitForMemory } from ${JSON.stringify(join(import.meta.dir, '../../../scripts/qa/memory-admission.ts'))};
+    let reads = 0;
+    await waitForMemory({ vm: 1, host: 0, vmReserve: 0, hostReserve: 0 }, {
+      env: { REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_EVENTS: '1' }, deadline: Date.now() + 2000,
+      pollMs: 200, announce: () => {},
+      read: async () => ({ vmTotal: 1, vmUsed: ++reads < 4 ? 1 : 0, hostAvailable: 1 }),
+    });
+    await Bun.sleep(20);
+  `;
+  const result = await commandAsync(scratch, 'bun', ['-e', script], 300, process.env, undefined,
+    { runDeadline: Date.now() + 2_000 });
+  expect(result.ok).toBe(true);
+  expect(result.elapsedMs).toBeGreaterThan(600);
+  expect(result.admissionWaitMs).toBeGreaterThanOrEqual(550);
+  expect(result.activeElapsedMs).toBeLessThan(300);
+});
+
+test('QA CLI admission stays bounded by the run deadline and active work still times out afterward', async () => {
+  const waiting = `
+    console.log('QA_MEMORY_WAIT_BEGIN 1-1');
+    await Bun.sleep(2000);
+  `;
+  const blocked = await commandAsync(scratch, 'bun', ['-e', waiting], 100, process.env, undefined,
+    { runDeadline: Date.now() + 250 });
+  expect(blocked.timedOut).toBe(true);
+  expect(blocked.output).toContain('reached its run deadline');
+  const execution = `
+    console.log('QA_MEMORY_WAIT_BEGIN 1-1');
+    await Bun.sleep(400);
+    console.log('QA_MEMORY_WAIT_END 1-1 400');
+    await Bun.sleep(2000);
+  `;
+  const expired = await commandAsync(scratch, 'bun', ['-e', execution], 150, process.env, undefined,
+    { runDeadline: Date.now() + 2_000 });
+  expect(expired.timedOut).toBe(true);
+  expect(expired.output).toContain('150 ms of active work');
+  expect(expired.admissionWaitMs).toBeGreaterThanOrEqual(350);
+  expect(expired.activeElapsedMs).toBeLessThan(300);
+});
+
+test('parallel QA preparation and tier budgets exclude overlapping admissions once', () => {
+  const waits = [{ start: 0, end: 300 }, { start: 200, end: 800 }, { start: 600, end: 900 }];
+  // A 1000 ms wall span contains 900 ms queueing, leaving 100 ms active work.
+  expect(1000 - admissionIntervalMs(waits, 0, 1000)).toBe(100);
+  expect(admissionIntervalMs(waits, 300, 700)).toBe(400);
+  expect(admissionIntervalMs(waits, 1000, 1100)).toBe(0);
 });
 
 test('storybook selection remains e2e-only alongside the owner tier', () => {

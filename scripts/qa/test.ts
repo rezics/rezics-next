@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from './acceptance.ts';
 import { affectedPlan, affectedTiers, formatPlan, type AffectedPlan } from './affected.ts';
 import { parseArgs } from './core.ts';
-import { qaMemoryNeed, waitForMemory } from './memory-admission.ts';
+import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const testFile = /\.(?:test|spec|e2e|stories)\.[cm]?[jt]sx?$/;
@@ -123,10 +123,12 @@ export interface TestDispatchOptions {
 /** Explicit stories bypass the stack harness, but their browser workers still need host memory. */
 export async function dispatchTest(args: string[], options: TestDispatchOptions = {}): Promise<number> {
   const command = selectTestCommand(args);
-  if (command[0] === 'task' && ['storybook:test', 'accounts:storybook:test'].includes(command[1][0]!)) {
-    await (options.admission ?? waitForMemory)(qaMemoryNeed(root, 'browser', undefined, options.env ?? process.env), {
-      root, env: options.env ?? process.env,
-      deadline: options.deadline ?? Date.now() + 6 * 3_600_000,
+  const env = options.env ?? process.env;
+  if (command[0] === 'task' && ['storybook:test', 'accounts:storybook:test'].includes(command[1][0]!)
+    && await isLocalQaRun(root, env)) {
+    await (options.admission ?? waitForMemory)(qaMemoryNeed(root, 'browser', undefined, env), {
+      root, env,
+      deadline: qaMemoryDeadline(env, options.deadline),
     });
   }
   return (options.runner ?? run)(command);

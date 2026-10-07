@@ -12,6 +12,7 @@ import { join, resolve } from 'node:path';
 import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
 import type { Pool } from 'pg';
+import { withQaStackStartup, type StartupMemoryOptions, type QaMemoryService } from '../qa/memory-admission.ts';
 import type { StatePins } from '../operations/search-state.ts';
 import {
   openRecoveryPayload,
@@ -167,17 +168,29 @@ export type RecoveryFrontier = Static<typeof recoveryFrontierSchema>;
 export const RECOVERY_BUDGET_MS = 600_000;
 
 export class RecoveryBudget {
-  readonly started = Date.now();
+  readonly started: number;
+  private admissionWaitMs = 0;
   readonly phases: Record<string, number> = {};
+  constructor(private readonly now = Date.now) { this.started = now(); }
+  readonly excludeAdmissionWait = (ms: number): void => {
+    this.admissionWaitMs += ms;
+    this.phases.memoryAdmission = this.admissionWaitMs;
+  };
+  elapsed(): number { return this.now() - this.started - this.admissionWaitMs; }
   remaining(): number {
-    const remaining = RECOVERY_BUDGET_MS - (Date.now() - this.started);
+    const remaining = RECOVERY_BUDGET_MS - this.elapsed();
     if (remaining <= 0)
       throw new Error('Recovery exceeded its 600-second budget; serving remains held');
     return remaining;
   }
+  startup<T>(environment: NodeJS.ProcessEnv, work: () => T | Promise<T>,
+    options: Partial<StartupMemoryOptions> & { services?: readonly QaMemoryService[] } = {}): Promise<T> {
+    return withQaStackStartup(root, environment, undefined, work, { ...options,
+      onAdmissionWait: ms => { this.excludeAdmissionWait(ms); options.onAdmissionWait?.(ms); } });
+  }
   async phase<T>(name: string, work: () => T | Promise<T>): Promise<T> {
     this.remaining();
-    const at = performance.now();
+    const at = this.now(), waiting = this.admissionWaitMs;
     try {
       const result = await work();
       this.remaining();
@@ -185,14 +198,14 @@ export class RecoveryBudget {
     } catch (error) {
       const failure = error instanceof Error ? error.message : 'unknown failure';
       const detail =
-        Date.now() - this.started >= RECOVERY_BUDGET_MS
+        this.elapsed() >= RECOVERY_BUDGET_MS
           ? `exceeded its 600-second budget (${failure})`
           : failure;
       throw new Error(`Recovery phase ${name} failed: ${detail}; serving remains held`, {
         cause: error,
       });
     } finally {
-      this.phases[name] = Math.round(performance.now() - at);
+      this.phases[name] = Math.round(this.now() - at - (this.admissionWaitMs - waiting));
     }
   }
 }
@@ -356,6 +369,9 @@ export function stackContext(options: StackOptions, budget: RecoveryBudget) {
     apps,
     project,
     environment,
+    startup: <T>(work: () => T | Promise<T>,
+      options?: Partial<StartupMemoryOptions> & { services?: readonly QaMemoryService[] }) =>
+      budget.startup(environment, work, options),
     compose: (args: string[]) =>
       command(
         'docker',

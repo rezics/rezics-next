@@ -23,13 +23,15 @@ export async function prepareFixture(
   },
 ): Promise<FixturePreparation> {
   const started = dependencies.now();
+  let admissionWaitMs = 0;
   const retained = dependencies.retained(profile, seed);
   const remaining = RESTORE_DEADLINE_MS - (dependencies.now() - started);
   if (remaining <= 0) throw new Error('Fixture preparation exceeded 600 seconds');
   const manifest: FixtureManifest =
-    retained ?? (await dependencies.build(profile, seed, remaining));
+    retained ?? (await dependencies.build(profile, seed, remaining,
+      ms => { admissionWaitMs += ms; }));
   const elapsedMs = dependencies.now() - started;
-  if (elapsedMs > RESTORE_DEADLINE_MS) throw new Error('Fixture preparation exceeded 600 seconds');
+  if (elapsedMs - admissionWaitMs > RESTORE_DEADLINE_MS) throw new Error('Fixture preparation exceeded 600 seconds');
   return {
     fixture: manifest.id,
     profile,

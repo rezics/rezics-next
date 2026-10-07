@@ -11,6 +11,7 @@ import {
   root,
 } from '../fixture/stack.ts';
 import { appEnvironment, readEnv, replacePrivate } from '../dev/config.ts';
+import { admissionWaitDuration, runQaStartupChildAsync } from '../qa/stack-startup.ts';
 import {
   loadCompatibility,
   compatibleLoadStorage,
@@ -32,7 +33,12 @@ function privateDirectory(path: string) {
     throw new Error('Catalogue backups must stay in this checkout .temp');
   return directory;
 }
-const task = (args: string[]) => stream('task', args, dockerEnvironment(), undefined, 120_000);
+const task = async (args: string[]) => {
+  if (args[0] !== 'stack:up') return await stream('task', args, dockerEnvironment(), undefined, 120_000);
+  const result = await runQaStartupChildAsync(root, args.filter(arg => arg !== '--'), 180_000, dockerEnvironment());
+  if (!result.ok) throw new Error(`Catalogue stack startup failed: ${result.output.slice(-2000)}`);
+  return result.output;
+};
 
 export function catalogueBackupProject(
   runId: string,
@@ -148,11 +154,13 @@ export async function restoreCatalogueBackup(path: string, runId: string,
     }
     cpSync(join(directory, 'objects'), apps.MAIN_OBJECT_DIRECTORY!, { recursive: true });
     stackAttempted = true;
-    await task(['stack:up', '--', '--profile', 'qa', '--run-id', runId, '--persistent']);
-    if (now() - startedAt > 600_000) throw new Error('Catalogue restore exceeded 600 seconds');
+    const startup = await task(['stack:up', '--', '--profile', 'qa', '--run-id', runId, '--persistent']);
+    const admissionWaitMs = admissionWaitDuration(startup);
+    if (now() - startedAt - admissionWaitMs > 600_000) throw new Error('Catalogue restore exceeded 600 seconds');
     return {
       apps,
-      elapsedMs: now() - startedAt,
+      elapsedMs: now() - startedAt - admissionWaitMs,
+      admissionWaitMs,
       stop: async () => {
         const errors = await cleanup();
         if (errors.length) throw new AggregateError(errors, 'Catalogue restore cleanup failed');

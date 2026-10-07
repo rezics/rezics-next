@@ -495,6 +495,8 @@ test('classification uses engine evidence without treating application ECONNREFU
     'failed to connect to the Docker API', 'network pool exhausted', 'Out of memory: Killed process 123 (qemu)']) expect(classify(log)).toBe('infrastructure');
   expect(classify('spawnSync bun ETIMEDOUT')).toBe('deadline');
   expect(classify('No QA slot became free within one hour')).toBe('deadline');
+  expect(classify('Memory admission deadline reached; no work started')).toBe('deadline');
+  expect(classify('bun reached its run deadline')).toBe('deadline');
   expect(classify('The heavy QA lock stayed held for six hours')).toBe('deadline');
   expect(classify('model failed or exceeded 180s')).toBe('deterministic');
   expect(classify('', 137)).toBe('resource');

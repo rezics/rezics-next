@@ -5,7 +5,7 @@ import { restoreCatalogueBackup } from '../../../scripts/load/catalogue-backup.t
 import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
 import { root, VOLUME_KINDS } from '../../../scripts/fixture/stack.ts';
 
-async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'existing-volume' | 'existing-directory' | 'startup-failure' | 'cleanup-failure') {
+async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'admission-wait' | 'existing-volume' | 'existing-directory' | 'startup-failure' | 'cleanup-failure') {
   const directory = mkdtempSync(join(root, '.temp/catalogue-restore-'));
   const runId = directory.split('/').at(-1)!.toLowerCase();
   const project = `rezics-qa-${runId}`;
@@ -52,6 +52,10 @@ async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'ex
           if (mode === 'startup-failure') throw new Error('injected startup failure');
           if (mode === 'cleanup-failure') throw failure;
           if (mode === 'budget') elapsed = 600_001;
+          if (mode === 'admission-wait') {
+            elapsed = 1_000_000;
+            return 'QA_MEMORY_WAIT_BEGIN 123-1\nQA_MEMORY_WAIT_END 123-1 700000\n';
+          }
         }
         if (args[0] === 'stack:reset') {
           running = false;
@@ -61,8 +65,12 @@ async function restoreScenario(mode: 'copy-failure' | 'budget' | 'success' | 'ex
         return '';
       },
     });
-    if (mode === 'success') {
+    if (mode === 'success' || mode === 'admission-wait') {
       const restored = await operation;
+      if (mode === 'admission-wait') {
+        expect(restored.elapsedMs).toBe(300_000);
+        expect(restored.admissionWaitMs).toBe(700_000);
+      }
       expect(running).toBe(true);
       expect(volumes.size).toBe(VOLUME_KINDS.length);
       expect(readFileSync(join(target, 'objects/retained'), 'utf8')).toBe('immutable object');
@@ -102,6 +110,9 @@ test('catalogue restore: a volume copy failure removes its partially copied volu
 });
 test('catalogue restore: exceeding the budget after startup removes the stack, volumes and target', async () => {
   await restoreScenario('budget');
+});
+test('catalogue restore: memory admission does not consume the preparation budget', async () => {
+  await restoreScenario('admission-wait');
 });
 test('catalogue restore: preexisting storage and directories survive rejection', async () => {
   await restoreScenario('existing-volume');

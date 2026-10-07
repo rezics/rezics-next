@@ -25,7 +25,6 @@ import { parseOptions, type StackOptions } from '../dev/config.ts';
 import { releaseDigest } from '../dev/release-manifest.ts';
 import { migrationInventory } from '../fixture/manifest.ts';
 import { currentEngines, root } from '../fixture/stack.ts';
-import { withQaStackStartup } from '../qa/memory-admission.ts';
 import {
   assertPinnedState,
   inspectFusekiState,
@@ -113,7 +112,7 @@ export function graphRunner(context: ReturnType<typeof stackContext>): FusekiSta
     stop: () => {
       context.compose(['stop', 'fuseki']);
     },
-    start: () => withQaStackStartup(root, context.environment, Date.now() + 600_000, () => {
+    start: () => context.startup(() => {
       context.compose(['up', '-d', '--wait', 'fuseki']);
     }, { services: ['fuseki'] }),
     container: () => context.compose(['ps', '-q', 'fuseki']),

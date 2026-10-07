@@ -15,6 +15,7 @@ import { assertPublicTextReady } from '../../services/main/src/modules/work/sear
 import { seedPracticalCorpus } from './corpus.ts';
 import { readEnv } from '../dev/config.ts';
 import type { LoadCase } from '../../tests/qa/load/corpus.ts';
+import { runQaStartupChildAsync } from '../qa/stack-startup.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const args = process.argv.slice(2);
@@ -101,9 +102,10 @@ async function drainContent() {
   throw new Error('Content projection exceeded 16 bounded events');
 }
 
-function stack(action: 'stack:down' | 'stack:up') {
-  const result = spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa',
-    '--run-id', targetId, '--persistent'], { cwd: root, encoding: 'utf8', timeout: 180_000 });
+async function stack(action: 'stack:down' | 'stack:up') {
+  const args = [action, '--profile', 'qa', '--run-id', targetId, '--persistent'];
+  const result = action === 'stack:up' ? await runQaStartupChildAsync(root, args, 180_000)
+    : spawnSync('bun', ['scripts/dev/cli.ts', ...args], { cwd: root, encoding: 'utf8', timeout: 180_000 });
   if (result.status !== 0) throw new Error(`${action} failed: ${result.stderr}`);
 }
 
@@ -161,8 +163,8 @@ try {
     oldWork: oldAfter.results[0]?.work, freshWork: freshAfter.results[0]?.work,
     admissions: admissions.rows[0] };
   await Promise.all([contentPool.end(), accessPool.end()]);
-  stack('stack:down');
-  stack('stack:up');
+  await stack('stack:down');
+  await stack('stack:up');
   contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
   accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
   content = new ContentCore(contentPool);

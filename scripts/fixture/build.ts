@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Pool } from 'pg';
-import { withQaStackStartup } from '../qa/memory-admission.ts';
 import { CommandRejected, FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
 import { appEnvironment, composeProcessEnvironment, createSecrets, readEnv, savePrivate } from '../dev/config.ts';
 import { type Corpus, type FixtureProfile, fixtureCorpus, stable } from './corpus.ts';
+import { FixtureWorkBudget } from './budget.ts';
 import { type FixtureManifest, type FixtureManifestCore, manifestCore, manifestIdentity } from './manifest.ts';
 import { migrateFixtureOwners } from './migrate.ts';
 import { fixtureOwners } from './owners/index.ts';
@@ -35,8 +35,9 @@ export async function buildFixture(
   profile: FixtureProfile,
   seed?: string,
   budgetMs = 600_000,
+  onAdmissionWait?: (ms: number) => void,
 ): Promise<FixtureManifest> {
-  return buildFixtureCorpus(fixtureCorpus(profile, seed), fixtureOwners, budgetMs);
+  return buildFixtureCorpus(fixtureCorpus(profile, seed), fixtureOwners, budgetMs, onAdmissionWait);
 }
 
 /** Acceptance fixtures can exceed a former product bound without changing the
@@ -45,7 +46,9 @@ export async function buildFixtureCorpus(
   corpus: Corpus,
   owners: readonly FixtureOwner[] = fixtureOwners,
   budgetMs = 600_000,
+  onAdmissionWait?: (ms: number) => void,
 ): Promise<FixtureManifest> {
+  const budget = new FixtureWorkBudget(budgetMs);
   const deadline = Date.now() + budgetMs;
   const docker = dockerEnvironment();
   const planned = performance.now();
@@ -58,7 +61,7 @@ export async function buildFixtureCorpus(
       console.log(`Fixture ${id} is already built; restore it with task fixture:restore -- --fixture ${id}`);
       return existing;
     }
-    return buildLocked(docker, corpus, core, planMs, owners, deadline);
+    return buildLocked(docker, corpus, core, planMs, owners, budget, onAdmissionWait);
   });
 }
 
@@ -92,13 +95,10 @@ async function buildLocked(
   core: FixtureManifestCore,
   planMs: number,
   owners: readonly FixtureOwner[],
-  deadline: number,
+  budget: FixtureWorkBudget,
+  onAdmissionWait?: (ms: number) => void,
 ): Promise<FixtureManifest> {
-  const remaining = () => {
-    const left = deadline - Date.now();
-    if (left <= 0) throw new Error('Fixture preparation exceeded 600 seconds');
-    return left;
-  };
+  const remaining = () => budget.remaining();
   // Planning summarizes every owner's records; lock waiting is excluded.
   const started = Date.now() - planMs;
   const { digest, id } = manifestIdentity(core);
@@ -121,19 +121,19 @@ async function buildLocked(
   const loads: Record<string, unknown> = {};
   const phase = async <T>(name: string, work: () => Promise<T>): Promise<T> => {
     remaining();
-    const at = performance.now();
+    const at = performance.now(), waiting = budget.admissionWaitMs();
     try {
       const result = await work();
       remaining();
       return result;
     } finally {
-      phases[name] = Math.round(performance.now() - at);
+      phases[name] = Math.round(performance.now() - at - (budget.admissionWaitMs() - waiting));
       console.log(`fixture ${id}: ${name} ${phases[name]} ms`);
     }
   };
   const saved = { ...createSecrets(), ...await freshPorts(),
     MAIN_DATA_EPOCH: corpus.lineage.dataEpoch, MAIN_ROUTING_EPOCH: corpus.lineage.routingEpoch,
-    REZICS_STACK_STORAGE: 'persistent', REZICS_STACK_RAW_UPDATE: '0' };
+    REZICS_STACK_PROFILE: 'qa', REZICS_STACK_STORAGE: 'persistent', REZICS_STACK_RAW_UPDATE: '0' };
   savePrivate(envFile, saved);
   const apps = appEnvironment(saved, dir);
   const env = composeProcessEnvironment(docker, readEnv(envFile));
@@ -158,8 +158,12 @@ async function buildLocked(
           remaining(),
         ),
     };
-    await phase('start', () => withQaStackStartup(root, env, deadline,
-      () => { compose(['up', '-d', '--wait', ...ONLINE_SERVICES]); }));
+    const admission = { onAdmissionWait: (ms: number) => {
+      phases.memoryAdmission = (phases.memoryAdmission ?? 0) + ms;
+      onAdmissionWait?.(ms);
+    } };
+    await phase('start', () => budget.startup(root, env,
+      () => { compose(['up', '-d', '--wait', ...ONLINE_SERVICES]); }, admission));
     await phase('migrate', async () => { await migrateFixtureOwners(apps); });
     // The command module bootstraps only an empty dataset, so the real bootstrap
     // commits first and the offline owners then load into the stopped TDB2.
@@ -175,8 +179,8 @@ async function buildLocked(
     for (const owner of owners.filter(item => item.phase === 'offline-graph')) {
       loads[owner.name] = await phase(`load:${owner.name}`, () => owner.load(corpus, target));
     }
-    await phase('restart-graph', () => withQaStackStartup(root, env, deadline,
-      () => { compose(['up', '-d', '--wait', 'fuseki']); }, { services: ['fuseki'] }));
+    await phase('restart-graph', () => budget.startup(root, env,
+      () => { compose(['up', '-d', '--wait', 'fuseki']); }, { ...admission, services: ['fuseki'] }));
     await phase('load:online', async () => {
       const online = owners.filter(item => item.phase === 'online');
       const results = await Promise.all(online.map(owner => owner.load(corpus, target)));

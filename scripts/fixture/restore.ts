@@ -2,20 +2,35 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
-import { appEnvironment, readEnv, replacePrivate, stackDirectory, type StackOptions } from '../dev/config.ts';
+import { appEnvironment, composeProcessEnvironment, ensureSecrets, readEnv, replacePrivate, stackDirectory, type StackOptions } from '../dev/config.ts';
+import { startDevCompose } from '../dev/cli.ts';
+import { type StartupMemoryOptions } from '../qa/memory-admission.ts';
+import { qaStartupServices, rememberQaStack, QA_STACK_TIER } from '../qa/stack-ownership.ts';
 import { ownerReady } from '../load/restore.ts';
 import { readManifest } from './build.ts';
 import { DEFAULT_SEED, type FixtureProfile } from './corpus.ts';
+import { FixtureWorkBudget } from './budget.ts';
 import { type FixtureManifest, type RestoreCompatibility, migrationInventory,
   restoreCompatibility } from './manifest.ts';
 import { migrateFixtureOwners } from './migrate.ts';
 import { fixtureOwners } from './owners/index.ts';
 import type { FixtureOwner } from './owners/types.ts';
 import { assertGraphReady, checkSamples } from './smoke.ts';
-import { VOLUME_KINDS, copyVolume, currentEngines, dockerEnvironment, fixtureDirectory, fixtureProject, fixtureRoot,
+import { VOLUME_KINDS, composeArgs, copyVolume, currentEngines, dockerEnvironment, fixtureDirectory, fixtureProject, fixtureRoot,
   freshPorts, projectRunning, root, volumeExists } from './stack.ts';
 
 export const RESTORE_DEADLINE_MS = 600_000;
+
+/** Queueing uses the run deadline; Compose readiness uses only active restore time. */
+export function startRestoredFixture<T>(budget: FixtureWorkBudget, env: NodeJS.ProcessEnv,
+  start: (timeout: number) => T | Promise<T>, admission: Partial<StartupMemoryOptions> = {}): Promise<T> {
+  return startDevCompose(root, env, 'qa', timeout => start(Math.min(timeout, budget.remaining())), {
+    ...admission, onAdmissionWait: ms => {
+      budget.excludeAdmissionWait(ms);
+      admission.onAdmissionWait?.(ms);
+    },
+  });
+}
 
 function currentInputs(docker: NodeJS.ProcessEnv,
   owners: readonly FixtureOwner[] = fixtureOwners): Parameters<typeof restoreCompatibility>[1] {
@@ -40,22 +55,20 @@ export interface FixtureRestoreEvidence {
   deadlineMs: number; compatibility?: RestoreCompatibility; phases: Record<string, number>;
   copyMs?: Record<string, number>;
   appliedMigrations?: string[]; ready?: string[]; samples?: number; graph?: { generation: string; sequence: string };
-  elapsedMs?: number; completedAt?: string; failure?: string; artifacts: string;
+  elapsedMs?: number; admissionWaitMs?: number;
+  completedAt?: string; failure?: string; artifacts: string;
 }
 
 /**
  * Restore an isolated writable QA stack from one stopped fixture backup under one
- * 600-second deadline: copy volumes, start services, apply only newer migrations,
+ * 600 seconds of active work: copy volumes, start services, apply only newer migrations,
  * check owner readiness and read the manifest's samples. No corpus rescan.
  */
 export async function restoreFixture(id: string, target: string,
   owners: readonly FixtureOwner[] = fixtureOwners): Promise<FixtureRestoreEvidence> {
   const started = Date.now();
-  const remaining = () => {
-    const left = RESTORE_DEADLINE_MS - (Date.now() - started);
-    if (left <= 0) throw new Error('Fixture preparation exceeded 600 seconds');
-    return left;
-  };
+  const budget = new FixtureWorkBudget(RESTORE_DEADLINE_MS);
+  const remaining = () => budget.remaining();
   const artifacts = join(root, '.artifacts', 'fixture-restore', target);
   if (existsSync(artifacts)) throw new Error(`Fixture restore evidence already exists: ${target}`);
   mkdirSync(artifacts, { recursive: true });
@@ -65,8 +78,10 @@ export async function restoreFixture(id: string, target: string,
     works: manifest.entities.works, startedAt: new Date(started).toISOString(),
     deadlineMs: RESTORE_DEADLINE_MS, phases: {}, artifacts };
   const phase = async <T>(name: string, work: () => Promise<T> | T): Promise<T> => {
-    const at = performance.now();
-    try { return await work(); } finally { evidence.phases[name] = Math.round(performance.now() - at); }
+    const at = performance.now(), waiting = budget.admissionWaitMs();
+    try { return await work(); } finally {
+      evidence.phases[name] = Math.round(performance.now() - at - (budget.admissionWaitMs() - waiting));
+    }
   };
   const docker = dockerEnvironment();
   const options: StackOptions = { profile: 'qa', runId: target, persistent: true };
@@ -96,7 +111,11 @@ export async function restoreFixture(id: string, target: string,
         REZICS_STACK_STORAGE: 'persistent', REZICS_STACK_RAW_UPDATE: '0' };
       // A port collision retries configuration in the same isolated directory.
       replacePrivate(join(targetDir, 'compose.env'), saved);
-      replacePrivate(join(targetDir, 'apps.env'), appEnvironment(saved, targetDir));
+      const configured = ensureSecrets(root, options, {});
+      const apps = appEnvironment(configured, targetDir);
+      replacePrivate(join(targetDir, 'apps.env'), apps);
+      mkdirSync(apps.MAIN_OBJECT_DIRECTORY!, { recursive: true, mode: 0o700 });
+      mkdirSync(apps.MAIN_CANDIDATE_DIRECTORY!, { recursive: true, mode: 0o700 });
     };
     await phase('configure', async () => {
       mkdirSync(targetDir, { recursive: true, mode: 0o700 });
@@ -112,8 +131,13 @@ export async function restoreFixture(id: string, target: string,
       // Concurrent restores choose free ports before Compose binds them, so another
       // stack can take one first; a bind collision gets fresh ports, not a new copy.
       for (let attempt = 1; ; attempt++) {
-        const up = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', target, '--persistent'],
-          { cwd: root, env: docker, encoding: 'utf8', timeout: remaining() });
+        rememberQaStack(options);
+        const envFile = join(targetDir, 'compose.env');
+        const env = composeProcessEnvironment(docker, readEnv(envFile));
+        const up = await startRestoredFixture(budget, env, timeout => spawnSync('docker',
+          composeArgs(`rezics-qa-${target}`, envFile,
+            ['up', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])]),
+          { cwd: root, env, encoding: 'utf8', timeout }));
         const log = [up.stdout, up.stderr, up.error?.message].filter(Boolean).join('\n');
         writeFileSync(join(artifacts, attempt === 1 ? 'stack-up.log' : `stack-up-${attempt}.log`), log);
         if (!up.error && up.status === 0) return;
@@ -145,6 +169,7 @@ export async function restoreFixture(id: string, target: string,
     if (pools) await Promise.all([pools.access.end(), pools.content.end()]);
   }
   evidence.elapsedMs = Date.now() - started;
+  evidence.admissionWaitMs = budget.admissionWaitMs();
   evidence.completedAt = new Date().toISOString();
   if (evidence.failure && created) {
     // A failed restore leaves no half-built writable copy behind; its logs stay as evidence.

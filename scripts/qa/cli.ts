@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import {
   acquireFullLock,
   acquireQaSlots,
+  admissionIntervalMs,
   artifactRoots,
   backendTiers,
   command,
@@ -56,6 +57,7 @@ import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
 import { readEnv } from '../dev/config.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan } from './browser-budget.ts';
 import { qaMemoryDeadline, qaMemoryNeed } from './memory-admission.ts';
+import { runQaStartupChildAsync } from './stack-startup.ts';
 import { allocateWebPort, webOrigin } from './e2e.ts';
 import { discoverJourneyPreparations, preparationBudgetMs, selectJourneyPreparations } from './e2e-preparation.ts';
 import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
@@ -91,17 +93,31 @@ const chosen = options.files || options.id ? options : undefined;
 const runDeadline = qaMemoryDeadline(process.env, Date.now() + 6 * 3_600_000);
 process.env.REZICS_QA_MEMORY_DEADLINE = String(runDeadline);
 process.env.REZICS_STACK_PROFILE = 'qa';
+process.env.REZICS_QA_MEMORY_EVENTS = '1';
+const admissionIntervals: { start: number; end: number }[] = [];
+const admissionStarts = new Map<string, number>();
 function noteMemory(message: string): void {
+  const event = /^QA_MEMORY_WAIT_(BEGIN|END) (\d+-\d+)(?: (\d+))?$/.exec(message);
+  if (event?.[1] === 'BEGIN') {
+    if (!admissionStarts.has(event[2]!)) admissionStarts.set(event[2]!, Date.now());
+  } else if (event?.[1] === 'END') {
+    const start = admissionStarts.get(event[2]!);
+    if (start !== undefined) {
+      admissionIntervals.push({ start, end: Date.now() });
+      admissionStarts.delete(event[2]!);
+    }
+  }
   if (!message.includes('QA memory:')) return;
   console.log(message);
   appendFileSync(join(logs, 'memory-admission.log'), `${message}\n`);
 }
 // Host work is admitted here; every Compose startup owns the shared VM guard.
-async function admit<T>(kind: 'other' | 'browser', deadline: number, work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
+async function admit<T>(kind: 'other' | 'browser', work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
   return withQaMemory(qaMemoryNeed(root, kind, undefined, env), {
     root, env,
-    deadline: Math.min(runDeadline, deadline),
+    deadline: runDeadline,
     announce: noteMemory,
+    onAdmissionWait: ms => { const end = Date.now(); admissionIntervals.push({ start: end - ms, end }); },
   }, work);
 }
 let runSlots: Awaited<ReturnType<typeof acquireQaSlots>> | undefined;
@@ -118,7 +134,7 @@ async function resetChildStacks(registry: string): Promise<string[]> {
 
 async function runTier(name: Tier, program: string, args: string[], budget: number,
   env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
-  const result = await admit('other', Date.now() + budget,
+  const result = await admit('other',
     async () => command(root, program, args, budget, env), env);
   const ok = result.ok && result.elapsedMs <= budget;
   tiers.push({ name, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
@@ -138,10 +154,10 @@ interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMat
 // Bun owner suites install signal handlers too; enforce the wall deadline on
 // their process group so a handled SIGTERM cannot keep QA capacity indefinitely.
 async function runBunTier(name: Tier, program: string, args: string[], budget: number) {
-  const result = await admit('other', Date.now() + budget,
-    () => commandAsync(root, program, args, budget));
-  const ok = result.ok && result.elapsedMs <= budget;
-  tiers.push({ name, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
+  const result = await admit('other',
+    () => commandAsync(root, program, args, budget, process.env, noteMemory, { runDeadline }));
+  const ok = result.ok && result.activeElapsedMs <= budget;
+  tiers.push({ name, status: ok ? 'passed' : 'failed', elapsedMs: result.activeElapsedMs });
   if (!ok) {
     writeFileSync(join(logs, `${name}.log`), result.output);
     errors.push(`${name} failed or exceeded ${budget / 1000}s (see logs/${name}.log)`);
@@ -207,9 +223,8 @@ async function runShard(
   let compose: Record<string, string> = {};
   if (needsStack) {
     started.push(projectRunId);
-    const upCommand = () => admit('other',
-      preparationStartedAt + LOAD_PREPARATION_BUDGET_MS + budget, () =>
-      commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', ...stackArgs], 180_000, {
+    const upCommand = () => admit('other', () =>
+      runQaStartupChildAsync(root, ['stack:up', ...stackArgs], 180_000, {
         ...environment,
         [QA_STACK_TIER]: tier,
       }, noteMemory), environment);
@@ -217,7 +232,7 @@ async function runShard(
       ok: false, timedOut: true, elapsedMs: Date.now() - preparationStartedAt,
       output: error instanceof Error ? error.message : String(error),
     }));
-    record.startupMs = up.elapsedMs;
+    record.startupMs = 'activeElapsedMs' in up ? up.activeElapsedMs : 0;
     if (!up.ok) {
       writeFileSync(join(logs, `${label}-startup.log`), up.output);
       errors.push(`${tier} stack startup failed: ${projectRunId} (see logs/${label}-startup.log)`);
@@ -267,7 +282,7 @@ async function runShard(
   }
   if (!needsStack) {
     try {
-      await admit('other', preparationStartedAt + LOAD_PREPARATION_BUDGET_MS + budget,
+      await admit('other',
         async () => {}, environment);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -285,8 +300,9 @@ async function runShard(
     ...environment,
     ...apps,
     REZICS_QA_RUN_ID: projectRunId,
-    REZICS_QA_MEMORY_DEADLINE: String(Math.min(runDeadline, testStart + budget)),
-    REZICS_QA_PREPARATION_STARTED_AT: String(preparationStartedAt),
+    REZICS_QA_MEMORY_DEADLINE: String(runDeadline),
+    REZICS_QA_PREPARATION_STARTED_AT: String(preparationStartedAt
+      + admissionIntervalMs(admissionIntervals, preparationStartedAt, testStart)),
     [QA_STACK_REGISTRY]: registry,
     REZICS_QA_ARTIFACT_DIR: directory,
     ...(needsStack ? { REZICS_S3_GATE_PROJECT: projectRunId } : {}),
@@ -294,6 +310,8 @@ async function runShard(
       TOXIPROXY_API_URL: `http://127.0.0.1:${compose.TOXIPROXY_API_PORT}`,
       TOXIPROXY_FUSEKI_URL: `http://127.0.0.1:${compose.TOXIPROXY_FUSEKI_PORT}/rezics/` } : {}),
   });
+  let childAdmissionMs = 0;
+  const activeTestMs = () => Date.now() - testStart - childAdmissionMs;
   const suites: string[] = [];
   const output: string[] = [];
   const fileDurations: Record<string, number> = {};
@@ -302,7 +320,7 @@ async function runShard(
     noMatch = true;
   for (let index = 0; index < batches.length; index++) {
     let resetMs = 0;
-    if (Date.now() - testStart >= budget) {
+    if (activeTestMs() >= budget) {
       timedOut = true;
       commandOk = false;
       break;
@@ -317,7 +335,7 @@ async function runShard(
           join(stackDir, 'apps.env'),
           join(stackDir, 'compose.env'),
         ],
-        Math.min(180_000, budget - (Date.now() - testStart)),
+        Math.min(180_000, budget - activeTestMs()),
         environment,
       );
       output.push(reset.output);
@@ -336,10 +354,11 @@ async function runShard(
       root,
       'bun',
       ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
-      Math.max(1, budget - (Date.now() - testStart)),
+      Math.max(1, budget - activeTestMs()),
       testEnvironment(),
-      noteMemory,
+      noteMemory, { runDeadline },
     );
+    childAdmissionMs += result.admissionWaitMs;
     output.push(result.output);
     const empty = !result.ok && !result.timedOut && matchedNoTests(result.output);
     noMatch &&= empty;
@@ -360,14 +379,14 @@ async function runShard(
     suites.push(...junitSuites(results.xml).map((suite) => suite.xml));
     // Single-file commands include hooks, database cloning and process startup.
     if (batch.length === 1 && result.ok && !results.missing.length) {
-      fileDurations[batch[0]!] = result.elapsedMs + resetMs;
+      fileDurations[batch[0]!] = result.activeElapsedMs + resetMs;
     }
     if (result.timedOut) break;
   }
   const testEnd = Date.now();
   const cleanupFailures = await resetChildStacks(registry);
   if (cleanupFailures.length) writeFileSync(join(logs, `${label}-cleanup.log`), cleanupFailures.join('\n'));
-  record.elapsedMs = testEnd - testStart;
+  record.elapsedMs = testEnd - testStart - childAdmissionMs;
   const results = completeFileResults(mergeJUnit(suites, record.elapsedMs), files, tier, {
     filtered: flags.includes('-t'),
     interrupted: timedOut || !commandOk,
@@ -396,7 +415,10 @@ function failedTests(run: ShardRun, tier: StackTier): Map<string, string[]> {
 
 function testWall(runs: ShardRun[]): number {
   const timed = runs.filter(run => run.testStart !== undefined && run.testEnd !== undefined);
-  return timed.length ? Math.max(...timed.map(run => run.testEnd!)) - Math.min(...timed.map(run => run.testStart!)) : 0;
+  if (!timed.length) return 0;
+  const start = Math.min(...timed.map(run => run.testStart!));
+  const end = Math.max(...timed.map(run => run.testEnd!));
+  return end - start - admissionIntervalMs(admissionIntervals, start, end);
 }
 
 // Integration and fault/recovery files run in parallel QA projects sized from
@@ -428,14 +450,13 @@ async function runStackTier(tier: StackTier): Promise<void> {
   ) {
     const fixtureRoot = process.env.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture');
     const preparationFile = join(directory, 'fault-recovery-fixture-preparation.json');
-    const prepared = await admit('other',
-      Date.now() + LOAD_PREPARATION_BUDGET_MS, () => commandAsync(
+    const prepared = await admit('other', () => commandAsync(
       root,
       'bun',
       ['scripts/fixture/cli.ts', 'build', '--prepare', '--profile', 'small', '--evidence', preparationFile],
       LOAD_PREPARATION_BUDGET_MS,
       { ...qaStackEnvironment(process.env), REZICS_FIXTURE_ROOT: fixtureRoot },
-      noteMemory), qaStackEnvironment(process.env));
+      noteMemory, { runDeadline }), qaStackEnvironment(process.env));
     writeFileSync(join(logs, 'fault-recovery-fixture-preparation.log'), prepared.output);
     if (!prepared.ok) {
       errors.push(
@@ -605,8 +626,8 @@ try {
     if (tier === 'model') {
       const projectRunId = `${runId}-m`;
       startedProjects.push(projectRunId);
-      const up = await admit('other', runDeadline, () =>
-        commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000, process.env, noteMemory));
+      const up = await admit('other', () =>
+        runQaStartupChildAsync(root, ['stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000, process.env, noteMemory));
       if (!up.ok) {
         errors.push('model stack startup failed');
         writeFileSync(join(logs, 'model-stack.log'), up.output);
@@ -616,16 +637,16 @@ try {
       }
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
       const compose = readEnv(join(stackDir, 'compose.env'));
-      const result = command(root, 'bun', ['test', ...testArgs('model', selection, chosen), '--reporter=junit',
+      const result = await commandAsync(root, 'bun', ['test', ...testArgs('model', selection, chosen), '--reporter=junit',
         `--reporter-outfile=${join(directory, 'model.xml')}`], 180_000,
       { ...process.env, FUSEKI_URL: `http://127.0.0.1:${compose.FUSEKI_PORT}/rezics/`,
         FUSEKI_MAINTENANCE_TOKEN: compose.FUSEKI_MAINTENANCE_TOKEN,
         FUSEKI_COMMAND_TOKEN: compose.FUSEKI_COMMAND_TOKEN,
         FUSEKI_TITLE_ADMISSION_KEY: compose.FUSEKI_TITLE_ADMISSION_KEY,
         MODEL_NATIVE_EQUIVALENCE: '1', MODEL_NATIVE_EQUIVALENCE_STRICT: '1',
-        REZICS_QA_ARTIFACT_DIR: directory });
-      const ok = result.ok && result.elapsedMs <= 180_000;
-      tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
+        REZICS_QA_ARTIFACT_DIR: directory }, noteMemory, { runDeadline });
+      const ok = result.ok && result.activeElapsedMs <= 180_000;
+      tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.activeElapsedMs });
       if (!ok) {
         errors.push('model failed or exceeded 180s');
         writeFileSync(join(logs, 'model.log'), result.output);
@@ -640,8 +661,8 @@ try {
       try {
         const projectRunId = `${runId}-e`;
         startedProjects.push(projectRunId);
-        const up = await admit('browser', runDeadline, () =>
-          commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId,
+        const up = await admit('browser', () =>
+          runQaStartupChildAsync(root, ['stack:up', '--profile', 'qa', '--run-id', projectRunId,
           '--accounts-app'], 180_000, { ...process.env, REZICS_QA_MEMORY_KIND: 'browser' }, noteMemory));
         if (!up.ok) {
           errors.push('e2e stack startup failed');
@@ -688,9 +709,9 @@ try {
           REZICS_WEB_E2E_PORT_HOLDER: String(reserved.pid) };
         if (options.storybook) e2eEnv.REZICS_E2E_STORYBOOK = '1';
         else delete e2eEnv.REZICS_E2E_STORYBOOK;
-        const result = command(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args],
+        const result = await commandAsync(root, 'bun', ['scripts/qa/e2e.ts', appsPath, directory, projectRunId, ...args],
           preparation + budgets.setup + budgets.playwright + budgets.accountsPlaywright + storyBudget + 30_000,
-          e2eEnv);
+          e2eEnv, noteMemory, { runDeadline });
         writeFileSync(join(logs, 'e2e.log'), result.output);
         const browserTests = junitResults(directory, ['e2e']);
         const ok = result.ok && browserTests.length > 0 && browserTests.every(test => !test.failed);
@@ -716,14 +737,15 @@ try {
       const artifact = tierArtifactName(tier);
       const preparationStarted = Date.now();
       const remainingPreparation = () => Math.max(1,
-        LOAD_PREPARATION_BUDGET_MS - (Date.now() - preparationStarted));
+        LOAD_PREPARATION_BUDGET_MS - (Date.now() - preparationStarted
+          - admissionIntervalMs(admissionIntervals, preparationStarted, Date.now())));
       const selectedFiles = expandTestPaths(root,
         splitTestArgs(testArgs(tier, selection, chosen)).paths);
       const fixturePlan = loadFixturePlan(runId, selectedFiles, chosen?.id);
       startedProjects.push(projectRunId);
-      const up = await admit('other', preparationStarted + LOAD_PREPARATION_BUDGET_MS, () =>
-        commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', projectRunId],
-        Math.min(180_000, remainingPreparation()), process.env, noteMemory));
+      const up = await admit('other', () =>
+        runQaStartupChildAsync(root, ['stack:up', '--profile', 'qa', '--run-id', projectRunId],
+        180_000, process.env, noteMemory));
       if (!up.ok) { errors.push(`${tier} stack startup failed`); writeFileSync(join(logs, `${artifact}-stack.log`), up.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, up.elapsedMs, up.output)); continue; }
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
       const apps = readEnv(join(stackDir, 'apps.env'));
@@ -737,19 +759,21 @@ try {
       if (!bootstrap.ok) { errors.push(`${tier} shared bootstrap failed`); writeFileSync(join(logs, `${artifact}-bootstrap.log`), bootstrap.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output)); continue; }
       const fixtureResults = await Promise.all(fixturePlan.map(async item => {
         startedFixtureProjects.push(item.runId);
-        const result = await admit('other',
-          preparationStarted + LOAD_PREPARATION_BUDGET_MS, () => commandAsync(root, 'bun', ['scripts/fixture/cli.ts', 'restore',
-          '--fixture', LOAD_FIXTURE_ID, '--run-id', item.runId], remainingPreparation(), process.env, noteMemory)).catch(error => ({
+        const result = await admit('other', () => commandAsync(root, 'bun', ['scripts/fixture/cli.ts', 'restore',
+          '--fixture', LOAD_FIXTURE_ID, '--run-id', item.runId], remainingPreparation(), process.env, noteMemory, { runDeadline })).catch(error => ({
             ok: false, timedOut: true, elapsedMs: Date.now() - preparationStarted,
             output: error instanceof Error ? error.message : String(error),
           }));
         writeFileSync(join(logs, `${artifact}-restore-${item.caseId}.log`), result.output);
         return { ...item, ok: result.ok, elapsedMs: result.elapsedMs, timedOut: result.timedOut };
       }));
-      const preparationMs = Date.now() - preparationStarted;
+      const preparationWallMs = Date.now() - preparationStarted;
+      const preparationAdmissionMs = admissionIntervalMs(admissionIntervals, preparationStarted, Date.now());
+      const preparationMs = preparationWallMs - preparationAdmissionMs;
       writeFileSync(join(directory, `${artifact}-preparation.json`), JSON.stringify({
         deadlineMs: LOAD_PREPARATION_BUDGET_MS, elapsedMs: preparationMs,
-        stackUpMs: up.elapsedMs, bootstrapMs: bootstrap.elapsedMs,
+        wallMs: preparationWallMs, admissionWaitMs: preparationAdmissionMs,
+        stackUpMs: up.activeElapsedMs, bootstrapMs: bootstrap.elapsedMs,
         fixture: LOAD_FIXTURE_ID, copies: fixtureResults,
       }, null, 2));
       if (preparationMs > LOAD_PREPARATION_BUDGET_MS || fixtureResults.some(item => !item.ok)) {
@@ -761,7 +785,7 @@ try {
       }
       // docs/testing/test-harness.md#tiers-and-budgets: 5 min since the phase D probes.
       const budget = 300_000;
-      const result = command(root, 'bun', ['test', ...testArgs(tier, selection, chosen), '--reporter=junit',
+      const result = await commandAsync(root, 'bun', ['test', ...testArgs(tier, selection, chosen), '--reporter=junit',
         `--reporter-outfile=${join(directory, `${artifact}.xml`)}`], budget,
       { ...process.env, ...apps, REZICS_QA_RUN_ID: projectRunId,
         REZICS_S3_GATE_PROJECT: projectRunId,
@@ -769,9 +793,9 @@ try {
         ...Object.fromEntries(fixturePlan.map(item =>
           [`REZICS_QA_FIXTURE_${item.caseId}_RUN_ID`, item.runId])),
         TOXIPROXY_API_URL: `http://127.0.0.1:${compose.TOXIPROXY_API_PORT}`,
-        TOXIPROXY_FUSEKI_URL: `http://127.0.0.1:${compose.TOXIPROXY_FUSEKI_PORT}/rezics/` });
-      const ok = result.ok && result.elapsedMs <= budget;
-      tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
+        TOXIPROXY_FUSEKI_URL: `http://127.0.0.1:${compose.TOXIPROXY_FUSEKI_PORT}/rezics/` }, noteMemory, { runDeadline });
+      const ok = result.ok && result.activeElapsedMs <= budget;
+      tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs: result.activeElapsedMs });
       if (!ok) {
         errors.push(`${tier} failed or exceeded ${budget / 1000}s`);
         writeFileSync(join(logs, `${artifact}.log`), result.output);

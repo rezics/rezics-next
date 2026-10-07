@@ -11,6 +11,7 @@ import { ownerReady } from '../load/restore.ts';
 import { projectName, readEnv, stackDirectory, type StackOptions } from './config.ts';
 import { assertReleasePins, releaseDigest, releaseManifest } from './release-manifest.ts';
 import { scriptCommand } from './commands.ts';
+import { runQaStartupChildAsync } from '../qa/stack-startup.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const markerName = 'release-format.json';
@@ -44,8 +45,11 @@ export function saveFormatMarker(options: StackOptions, marker: FormatMarker): v
   renameSync(next, path);
 }
 
-function command(args: string[], timeout: number): string {
-  const result = spawnSync(...scriptCommand(args), { cwd: root, encoding: 'utf8', timeout });
+async function command(args: string[], timeout: number): Promise<string> {
+  const result = ['stack:up', 'stack:clone'].includes(args[0]!)
+    ? await runQaStartupChildAsync(root, args, timeout,
+      args.includes('qa') ? process.env : { ...process.env, REZICS_STACK_PROFILE: 'dev' })
+    : spawnSync(...scriptCommand(args), { cwd: root, encoding: 'utf8', timeout });
   if (result.error || result.status !== 0) {
     throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-1500)}`);
   }
@@ -142,7 +146,7 @@ export async function installRelease(options: StackOptions,
     // An unmarked saved project can contain old or partly upgraded data.
     throw new Error('Saved stack has no release format marker; use a fresh project or a qualified restore');
   }
-  command(['stack:up', ...(options.profile === 'qa' ? ['--profile', 'qa', '--run-id', options.runId!, ...(options.persistent ? ['--persistent'] : [])] : [])], 180_000);
+  await command(['stack:up', ...(options.profile === 'qa' ? ['--profile', 'qa', '--run-id', options.runId!, ...(options.persistent ? ['--persistent'] : [])] : [])], 180_000);
   assertRunningFusekiImage(options, imageId);
   const apps = readEnv(join(dir, 'apps.env'));
   if (existing) await assertStoredFormat(apps);

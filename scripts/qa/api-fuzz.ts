@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { readEnv } from '../dev/config.ts';
 import { hostLoopbackAccess, loadDockerEnvironment } from '../load/docker-env.ts';
 import { command, newRunId } from './core.ts';
+import { runQaStartupChildAsync } from './stack-startup.ts';
 
 // Schema-driven API fuzzing of Main's generated public OpenAPI contract against an
 // isolated QA stack. Unauthenticated: it covers public operations fully and the
@@ -90,7 +91,7 @@ if (import.meta.main) {
   const children: ChildProcess[] = [];
   let exitCode = 1;
   try {
-    const up = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:up', '--profile', 'qa', '--run-id', runId], 180_000);
+    const up = await runQaStartupChildAsync(root, ['stack:up', '--profile', 'qa', '--run-id', runId], 180_000);
     writeFileSync(join(directory, 'stack.log'), up.output);
     if (!up.ok) throw new Error('QA stack startup failed; see stack.log');
     const stackDir = join(root, '.temp', 'stack', `rezics-qa-${runId}`);

@@ -31,6 +31,13 @@ test('memory admission budgets Compose caps, resource classes and overridden thr
     .toThrow('nonnegative');
 });
 
+test('admission inherits the run deadline without capping it to the fallback duration', () => {
+  const deadline = Date.now() + 7 * 3_600_000;
+  const env = { REZICS_QA_MEMORY_DEADLINE: String(deadline) };
+  expect(qaMemoryDeadline(env)).toBe(deadline);
+  expect(qaMemoryDeadline(env, deadline - 1)).toBe(deadline - 1);
+});
+
 const scratch = join(root, '.temp');
 mkdirSync(scratch, { recursive: true });
 async function untilFile(path: string): Promise<void> {

@@ -283,22 +283,42 @@ function stopAsyncCommands(): void {
 }
 
 export async function commandAsync(root: string, name: string, args: string[], timeoutMs: number,
-  env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void): Promise<{ ok: boolean; output: string; elapsedMs: number;
-  timedOut: boolean }> {
+  env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void,
+  options: { runDeadline?: number } = {}): Promise<{ ok: boolean; output: string; elapsedMs: number;
+  activeElapsedMs: number; admissionWaitMs: number; timedOut: boolean }> {
   const start = Date.now();
   const child = spawn(name, args, { cwd: root, detached: true,
     env: name === 'bun' && args[0] === 'test' ? testLogEnvironment(env) : env,
     stdio: ['ignore', 'pipe', 'pipe'] });
   if (child.pid) commandProcessGroups.add(child.pid);
   let stdout = '', stderr = '', timedOut = false;
+  const trackAdmission = options.runDeadline !== undefined || env.REZICS_QA_MEMORY_EVENTS === '1';
+  const waiting = new Set<string>();
+  let admissionStarted = 0, admissionWaitMs = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const observeAdmission = (line: string) => {
+    if (!trackAdmission) return;
+    const event = /^QA_MEMORY_WAIT_(BEGIN|END) (\d+-\d+)(?: (\d+))?$/.exec(line);
+    if (!event) return;
+    // A capped grandparent must see child admission before the wait completes.
+    if (env.REZICS_QA_MEMORY_EVENTS === '1') console.log(line);
+    if (event[1] === 'BEGIN') {
+      if (!waiting.size) admissionStarted = Date.now();
+      waiting.add(event[2]!);
+    } else {
+      if (!waiting.delete(event[2]!)) return;
+      if (!waiting.size) admissionWaitMs += Date.now() - admissionStarted;
+    }
+    if (options.runDeadline !== undefined) armTimer();
+  };
   const observe = () => {
     let pending = '';
     return (chunk: string) => {
-      if (!onOutputLine) return;
+      if (!onOutputLine && !trackAdmission) return;
       pending += chunk;
       const lines = pending.split('\n');
       pending = lines.pop()!;
-      for (const line of lines) onOutputLine(line);
+      for (const line of lines) { observeAdmission(line); onOutputLine?.(line); }
     };
   };
   const observeStdout = observe(), observeStderr = observe();
@@ -310,13 +330,24 @@ export async function commandAsync(root: string, name: string, args: string[], t
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
   };
   let force: ReturnType<typeof setTimeout> | undefined;
-  const timer = setTimeout(() => {
+  let timeoutReason = '';
+  const expire = () => {
     timedOut = true;
+    timeoutReason = options.runDeadline !== undefined && Date.now() >= options.runDeadline
+      ? `${name} reached its run deadline` : `${name} timed out after ${timeoutMs} ms of active work`;
     // Kill the process group, including an in-progress child stack:up. Otherwise
     // it could recreate containers while the runner resets the recorded stacks.
     terminate('SIGTERM');
     force = setTimeout(() => terminate('SIGKILL'), 1_000);
-  }, timeoutMs);
+  };
+  function armTimer(): void {
+    if (timer) clearTimeout(timer);
+    const activeElapsed = Date.now() - start - admissionWaitMs;
+    const remaining = waiting.size ? Infinity : timeoutMs - activeElapsed;
+    const runRemaining = options.runDeadline === undefined ? Infinity : options.runDeadline - Date.now();
+    timer = setTimeout(expire, Math.max(1, Math.min(remaining, runRemaining)));
+  }
+  armTimer();
   let code: number | null;
   try {
     code = await new Promise<number | null>((resolve, reject) => {
@@ -330,8 +361,9 @@ export async function commandAsync(root: string, name: string, args: string[], t
     if (child.pid) commandProcessGroups.delete(child.pid);
   }
   const elapsedMs = Date.now() - start;
-  return { ok: code === 0 && !timedOut, elapsedMs, timedOut,
-    output: [stdout, stderr, timedOut ? `${name} timed out after ${timeoutMs} ms` : ''].filter(Boolean).join('\n') };
+  if (waiting.size) admissionWaitMs += Date.now() - admissionStarted;
+  return { ok: code === 0 && !timedOut, elapsedMs, activeElapsedMs: elapsedMs - admissionWaitMs, admissionWaitMs, timedOut,
+    output: [stdout, stderr, timeoutReason].filter(Boolean).join('\n') };
 }
 
 /** Keep a burst of disposable stack starts below the Docker daemon's setup capacity. */
@@ -355,6 +387,19 @@ export async function withQaMemory<T>(need: MemoryNeed, options: MemoryWaitOptio
   work: () => Promise<T>): Promise<T> {
   await waitForMemory(need, options);
   return work();
+}
+
+/** Parallel queues overlap: charge their union once against the enclosing wall clock. */
+export function admissionIntervalMs(intervals: readonly { start: number; end: number }[],
+  start: number, end: number): number {
+  const spans = intervals.map(span => ({ start: Math.max(start, span.start), end: Math.min(end, span.end) }))
+    .filter(span => span.end > span.start).sort((a, b) => a.start - b.start);
+  let total = 0, covered = start;
+  for (const span of spans) {
+    total += Math.max(0, span.end - Math.max(covered, span.start));
+    covered = Math.max(covered, span.end);
+  }
+  return total;
 }
 
 const bunTestFile = /(?:\.|_)(?:test|spec)\.[cm]?[jt]sx?$/;

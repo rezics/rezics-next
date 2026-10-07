@@ -19,7 +19,7 @@ import { refreshSharedStack } from './refresh-stack.ts';
 import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
 import { forgetQaStack, rememberQaStack, qaStartupServices, QA_STACK_TIER } from '../qa/stack-ownership.ts';
 import { assertOwnerMigrationsComplete, migrateFixtureOwners, migrateOwnerData } from '../fixture/migrate.ts';
-import { withQaStackStartup } from '../qa/memory-admission.ts';
+import { withQaStackStartup, type StartupMemoryOptions } from '../qa/memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -261,6 +261,14 @@ function printEndpoints(options: StackOptions, env: Record<string, string>, dir:
   console.log(`  Private configuration: ${dir}`);
 }
 
+/** Admission uses the run deadline; Compose readiness gets its own full budget. */
+export async function startDevCompose<T>(root: string, env: NodeJS.ProcessEnv,
+  profile: StackOptions['profile'], start: (timeout: number) => T | Promise<T>,
+  admission: Partial<StartupMemoryOptions> = {}): Promise<T> {
+  const ready = () => start(180_000);
+  return profile === 'qa' ? await withQaStackStartup(root, env, undefined, ready, admission) : await ready();
+}
+
 async function stackUp(options: StackOptions): Promise<{ apps: Record<string, string>; dir: string }> {
   rememberQaStack(options);
   const releaseMarker = join(stackDirectory(root, options), 'release-format.json');
@@ -280,11 +288,9 @@ async function stackUp(options: StackOptions): Promise<{ apps: Record<string, st
   for (let attempt = 0; ; attempt++) {
     const config = await stackConfig(options);
     try {
-      const start = () => compose(options,
-        ['up', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])], env, 180_000);
-      if (options.profile === 'qa') await withQaStackStartup(root,
-        composeProcessEnvironment(env, config.composeEnv), Date.now() + 180_000, start);
-      else start();
+      await startDevCompose(root, composeProcessEnvironment(env, config.composeEnv), options.profile,
+        timeout => compose(options,
+          ['up', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])], env, timeout));
       printEndpoints(options, config.composeEnv, config.dir);
       return config;
     } catch (error) {
@@ -629,8 +635,10 @@ async function main(): Promise<void> {
   throw new Error(`Unknown root command: ${command ?? ''}`);
 }
 
-try { await main(); }
-catch (error) {
-  console.error(error instanceof Error ? error.message : error);
-  process.exitCode = 1;
+if (import.meta.main) {
+  try { await main(); }
+  catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    process.exitCode = 1;
+  }
 }

@@ -15,7 +15,7 @@ import { assertSavedStackRawUpdate, assertSavedStackStorage, composeProcessEnvir
 import { COMMAND_MODULE_VERSION } from '../../services/main/src/infrastructure/profile.ts';
 import { DEFAULT_RESERVE_BYTES, rebuildPublicContentSearch, repositoryPins,
   type FusekiStateRunner } from './search-state.ts';
-import { withQaStackStartup } from '../qa/memory-admission.ts';
+import { startSearchFuseki } from './search-startup.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -41,13 +41,13 @@ if (options.profile === 'qa' && (!options.runId || !options.persistent)) {
 const stack = stackDirectory(root, options);
 const jobFile = join(stack, 'content-rebuild.json');
 
-function compose(args: string[], env: NodeJS.ProcessEnv): string {
+function compose(args: string[], env: NodeJS.ProcessEnv, timeout = 300_000): string {
   const result = spawnSync('docker', ['compose', '--env-file', join(stack, 'compose.env'),
     '-f', join(root, 'infra/dev/compose.yaml'),
     ...(options.rawUpdate ? ['-f', join(root, 'infra/dev/compose.qa-raw-update.yaml')] : []),
     '--project-name', projectName(options), ...args],
   { cwd: root, env: composeProcessEnvironment(env, readEnv(join(stack, 'compose.env'))),
-    encoding: 'utf8', timeout: 300_000, maxBuffer: 10_000_000 });
+    encoding: 'utf8', timeout, maxBuffer: 10_000_000 });
   if (result.error || result.status !== 0) {
     throw new Error(`Docker Compose ${args[0]} failed: ${(result.stderr || result.stdout || result.error?.message || '').trim()}`);
   }
@@ -79,11 +79,8 @@ const runner: FusekiStateRunner = {
   offline: script => compose(['run', '--rm', '--no-deps', '-T', '--entrypoint', 'sh', 'fuseki', '-ec', script], docker),
   stop: () => { compose(['stop', 'fuseki'], docker); },
   start: async () => {
-    const start = () => { compose(['up', '-d', '--wait', 'fuseki'], docker); };
-    if (options.profile === 'qa') await withQaStackStartup(root,
-      composeProcessEnvironment(docker, readEnv(join(stack, 'compose.env'))), Date.now() + 300_000,
-      start, { services: ['fuseki'] });
-    else start();
+    await startSearchFuseki(root, composeProcessEnvironment(docker, readEnv(join(stack, 'compose.env'))),
+      options.profile, timeout => { compose(['up', '-d', '--wait', 'fuseki'], docker, timeout); });
   },
   container: () => compose(['ps', '-q', 'fuseki'], docker).trim(),
 };

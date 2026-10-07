@@ -1,8 +1,8 @@
-import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Client } from 'pg';
 import { readEnv } from '../dev/config.ts';
+import { runQaStartupChildAsync } from '../qa/stack-startup.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const deadlineMs = 600_000;
@@ -26,6 +26,7 @@ export async function restoreLoadBaseline(source: string, target: string): Promi
   const evidence: Record<string, unknown> = { source, target, startedAt: new Date(started).toISOString(),
     deadlineMs };
   let failure: string | undefined;
+  let admissionWaitMs = 0;
   try {
     const sourceRun = JSON.parse(readFileSync(join(root, '.artifacts', 'load', source, 'run.json'), 'utf8')) as {
       mode?: string; baselineDigest?: string; sourceStable?: boolean; failure?: string;
@@ -35,12 +36,13 @@ export async function restoreLoadBaseline(source: string, target: string): Promi
       throw new Error('Source is not a retained successful prepared fixture');
     }
     evidence.baselineDigest = sourceRun.baselineDigest;
-    const cloned = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:clone', '--profile', 'qa', '--run-id', source,
-      '--persistent', '--to-run-id', target], { cwd: root, encoding: 'utf8', timeout: 560_000 });
+    const cloned = await runQaStartupChildAsync(root, ['stack:clone', '--profile', 'qa', '--run-id', source,
+      '--persistent', '--to-run-id', target], 560_000);
+    admissionWaitMs = cloned.admissionWaitMs;
     writeFileSync(join(artifacts, 'clone.log'),
       [cloned.stdout, cloned.stderr, cloned.error?.message].filter(Boolean).join('\n'));
     if (cloned.error || cloned.status !== 0) throw new Error('Physical fixture clone failed; see clone.log');
-    evidence.cloneMs = Date.now() - started;
+    evidence.cloneMs = Date.now() - started - admissionWaitMs;
     const apps = readEnv(join(root, '.temp', 'stack', `rezics-qa-${target}`, 'apps.env'));
     for (const [key, database] of [
       ['ACCOUNT_DATABASE_URL', 'account'], ['ACCESS_DATABASE_URL', 'access'],
@@ -57,9 +59,10 @@ export async function restoreLoadBaseline(source: string, target: string): Promi
       throw new Error('Fixture graph readiness query differs');
     }
     evidence.ready = ['account', 'access', 'content', 'relay', 'fuseki'];
-    if (Date.now() - started > deadlineMs) throw new Error('Fixture preparation exceeded 600 seconds');
+    if (Date.now() - started - admissionWaitMs > deadlineMs) throw new Error('Fixture preparation exceeded 600 seconds');
   } catch (error) { failure = error instanceof Error ? error.message : String(error); }
-  evidence.elapsedMs = Date.now() - started;
+  evidence.elapsedMs = Date.now() - started - admissionWaitMs;
+  evidence.admissionWaitMs = admissionWaitMs;
   evidence.completedAt = new Date().toISOString();
   if (failure) evidence.failure = failure;
   writeFileSync(join(artifacts, 'run.json'), JSON.stringify(evidence, null, 2) + '\n');
