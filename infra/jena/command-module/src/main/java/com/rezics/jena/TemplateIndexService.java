@@ -73,8 +73,112 @@ final class TemplateIndexService {
     }
     private static String basis(DatasetGraph data, Key key) {
         var iter = data.find(uri(STATE),uri(identity(key)),uri(RV+"sequence"),Node.ANY);
-        try { return iter.hasNext() ? iter.next().getObject().getLiteralLexicalForm() : "0"; }
+        try {
+            Node value = iter.hasNext() ? iter.next().getObject() : null;
+            if (iter.hasNext() || value != null && (!value.isLiteral() || !value.getLiteralLexicalForm().matches("(0|[1-9][0-9]*)")))
+                throw new IllegalStateException("template owner basis is ambiguous");
+            return value == null ? "0" : value.getLiteralLexicalForm();
+        }
         finally { Iter.close(iter); }
+    }
+    /** The sequence remains the existing seek-directory contract. Actual native
+     * effects also carry a local generation: raw writes may not advance the
+     * caller's control sequence, and must still invalidate an owner pass. */
+    static String workAdoptionBasis(DatasetGraph data, Node work) {
+        Key key = new Key(CURRENT, RV + "work", work.getURI(), RV + "RealmPublicationSlot");
+        return basis(data, key) + "|" + effectGeneration(data, key);
+    }
+    private static Node effectGeneration(DatasetGraph data, Key key) {
+        var rows = data.find(uri(STATE), uri(identity(key)), uri(RV + "effectGeneration"), Node.ANY);
+        try {
+            Node generation = rows.hasNext() ? rows.next().getObject() : null;
+            CommandWork.count("work_name_basis_rows", generation == null ? 0 : 1);
+            if (rows.hasNext() || generation != null && !generation.isURI())
+                throw new IllegalStateException("Work adoption basis is ambiguous");
+            return generation;
+        } finally { Iter.close(rows); }
+    }
+    /** Uses the command owner's existing absolute nano deadline. Cancellation
+     * is not malformed RDF and must escape ordinary uncertainty catches. */
+    static void workScopeBudget(long deadline) {
+        if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
+            throw new java.util.concurrent.CancellationException("native Work name scope request cancelled or expired");
+    }
+    static void actualRealmEffects(DatasetGraph data, Map<Node,Entity> before, long deadline) {
+        workScopeBudget(deadline);
+        Set<Key> changed = new HashSet<>();
+        for (var entry : before.entrySet()) {
+            workScopeBudget(deadline);
+            Entity after = entity(data, CURRENT, entry.getKey().getURI());
+            if (!entry.getValue().equals(after)) {
+                for (Entity owner : List.of(entry.getValue(), after)) for (Key key : keys(owner))
+                    if (key.type().equals(RV + "RealmPublicationSlot")) changed.add(key);
+            }
+            if (after.terms().get("type").contains(RV + "RealmPublicationSlot"))
+                PublicNameProjection.workSlotLink(data, entry.getKey(), deadline);
+        }
+        for (Key key : changed) {
+            workScopeBudget(deadline);
+            Node owner = uri(identity(key)), predicate = uri(RV + "effectGeneration");
+            Node prior = effectGeneration(data, key);
+            if (prior != null) data.delete(uri(STATE), owner, predicate, prior);
+            data.add(uri(STATE), owner, predicate, uri("urn:rezics:template-effect:" + UUID.randomUUID()));
+            CommandWork.count("work_name_adoption_bases_changed", 1);
+        }
+        workScopeBudget(deadline);
+    }
+    static String workScopeStore(DatasetGraph data) { return membershipIncarnation(membershipStorage(data)); }
+    static boolean workScopeNativeStorage(DatasetGraph data) {
+        DatasetGraph base = data;
+        while (base instanceof DatasetGraphWrapper wrapper && TDBInternal.getDatasetGraphTDB(base) == null)
+            base = wrapper.getWrapped();
+        return TDBInternal.getDatasetGraphTDB(base) != null;
+    }
+    // An admission flag, never a commit counter or a source/head cache. Only
+    // the existing exclusive startup boundary can admit a physical store.
+    private static final Map<org.apache.jena.tdb2.store.DatasetGraphTDB,Boolean> WORK_SCOPE_WRITERS = new WeakHashMap<>();
+    static void admitWorkScopeWriter(DatasetGraph data) {
+        synchronized (WORK_SCOPE_WRITERS) { WORK_SCOPE_WRITERS.put(membershipStorage(data), true); }
+    }
+    static void withdrawWorkScopeWriter(DatasetGraph data) {
+        synchronized (WORK_SCOPE_WRITERS) { WORK_SCOPE_WRITERS.remove(membershipStorage(data)); }
+    }
+    static boolean workScopeWriterAdmitted(DatasetGraph data) {
+        synchronized (WORK_SCOPE_WRITERS) { return Boolean.TRUE.equals(WORK_SCOPE_WRITERS.get(membershipStorage(data))); }
+    }
+    record RealmOwnerPage(List<Node> owners, String after, boolean more) {}
+    /** Existing GPOS range machinery, used only by the closed cold preparer.
+     * The cursor advances over actual tuples, with no prefix replay/offset. */
+    static RealmOwnerPage realmOwnerPage(DatasetGraph data, String after, long deadline) {
+        workScopeBudget(deadline);
+        var tdb = membershipStorage(data);
+        var index = (TupleIndexRecord) TDBInternal.findIndex(tdb, "GPOS").baseTupleIndex();
+        var factory = new RecordFactory(32, 0); var start = factory.createKeyOnly(); var end = factory.createKeyOnly();
+        Node[] prefix = {uri(CURRENT), RDF.type.asNode(), uri(RV + "RealmPublicationSlot")};
+        for (int i = 0; i < 3; i++) {
+            var id = TDBInternal.getNodeId(tdb, prefix[i]);
+            if (org.apache.jena.tdb2.store.NodeId.isDoesNotExist(id)) return new RealmOwnerPage(List.of(), "", false);
+            NodeIdFactory.set(id, start.getKey(), i * 8); NodeIdFactory.set(id, end.getKey(), i * 8);
+        }
+        NodeIdFactory.setNext(TDBInternal.getNodeId(tdb, prefix[2]), end.getKey(), 16);
+        if (!after.isEmpty()) {
+            byte[] bytes = HexFormat.of().parseHex(after);
+            if (bytes.length != 32 || !Arrays.equals(Arrays.copyOf(bytes, 24), Arrays.copyOf(start.getKey(), 24)))
+                throw new IllegalStateException("Work scope cursor differs from its physical prefix");
+            System.arraycopy(bytes, 0, start.getKey(), 0, 32); incrementMembershipKey(start.getKey());
+        }
+        List<Node> owners = new ArrayList<>(); String last = after;
+        var rows = index.getRangeIndex().iterator(start, end);
+        try {
+            while (owners.size() < PublicNameProjection.REPAIR_BATCH_SIZE && rows.hasNext()) {
+                workScopeBudget(deadline);
+                var row = rows.next(); CommandWork.count("work_name_scope_cold_tuples", 1);
+                owners.add(tdb.getQuadTable().getNodeTupleTable().getNodeTable().getNodeForNodeId(NodeIdFactory.get(row.getKey(), 24)));
+                last = HexFormat.of().formatHex(row.getKey());
+            }
+            boolean more = rows.hasNext(); workScopeBudget(deadline);
+            return new RealmOwnerPage(List.copyOf(owners), last, more);
+        } finally { Iter.close(rows); }
     }
     static void retain(DatasetGraph data, String receipt, Map<String,Object> delta) {
         data.add(uri(STATE),uri(receipt),uri(RV+"templateIndexPayload"),
@@ -122,6 +226,7 @@ final class TemplateIndexService {
     }
     static Map<String,Object> read(DatasetGraph data, JsonObject request) {
         String operation=ProfileRegistry.required(request,"operation");
+        if ("statement-publication-page".equals(operation)) return StatementPublicationMembership.read(data,request);
         if ("membership-prepare".equals(operation)) return membershipPrepare(data,request,MembershipProfiles.VALUE);
         if ("membership-status".equals(operation)) return membershipStatus(data);
         data.begin(ReadWrite.READ);
@@ -584,30 +689,50 @@ final class TemplateIndexService {
                 if(bytes.length>2_000_000) throw new IllegalArgumentException("raw maintenance update exceeds byte bound");
                 var request=org.apache.jena.update.UpdateFactory.create(new String(bytes,StandardCharsets.UTF_8));
                 for(var operation:request.getOperations()) {
-                    List<org.apache.jena.sparql.core.Quad> insert;
+                    List<org.apache.jena.sparql.core.Quad> insert, delete = List.of();
                     if(operation instanceof org.apache.jena.sparql.modify.request.UpdateModify modify) {
                         if(modify.getWithIRI()!=null || !modify.getUsing().isEmpty() || !modify.getUsingNamed().isEmpty())
                             throw new IllegalArgumentException("raw WITH/USING cannot certify membership invalidation");
                         insert=modify.getInsertQuads();
+                        delete=modify.getDeleteQuads();
                     }
                     else if(operation instanceof org.apache.jena.sparql.modify.request.UpdateDataInsert data) insert=data.getQuads();
-                    else if(operation instanceof org.apache.jena.sparql.modify.request.UpdateDataDelete
-                        || operation instanceof org.apache.jena.sparql.modify.request.UpdateDeleteWhere
-                        || operation instanceof org.apache.jena.sparql.modify.request.UpdateClear
-                        || operation instanceof org.apache.jena.sparql.modify.request.UpdateDrop) continue;
+                    else if(operation instanceof org.apache.jena.sparql.modify.request.UpdateDataDelete data) { insert=List.of(); delete=data.getQuads(); }
+                    else if(operation instanceof org.apache.jena.sparql.modify.request.UpdateDeleteWhere where) { insert=List.of(); delete=where.getQuads(); }
+                    else if(operation instanceof org.apache.jena.sparql.modify.request.UpdateDropClear clear) {
+                        if(clear.isAll() || clear.isAllNamed() || clear.isOneGraph()
+                            && clear.getGraph().getURI().equals(PublicNameProjection.workScopeRepairGraph()))
+                            throw new IllegalArgumentException("raw maintenance cannot remove the server-owned Work scope proof graph");
+                        continue;
+                    }
                     else throw new IllegalArgumentException("raw maintenance operation cannot certify membership invalidation");
-                    if(insert.stream().anyMatch(quad->!quad.getGraph().isURI() || org.apache.jena.sparql.core.Quad.isDefaultGraph(quad.getGraph()) || quad.getGraph().getURI().equals(STATE)))
+                    if(insert.stream().anyMatch(quad->!quad.getGraph().isURI() || org.apache.jena.sparql.core.Quad.isDefaultGraph(quad.getGraph())
+                        || Set.of(STATE, PublicNameProjection.workScopeRepairGraph()).contains(quad.getGraph().getURI())))
                         throw new IllegalArgumentException("raw update requires an explicit named graph and cannot write the server-owned membership proof graph");
+                    // Immutable links and their Work heads are one derived proof;
+                    // a selective raw delete must never orphan retained links.
+                    if(delete.stream().anyMatch(quad->!quad.getGraph().isURI()
+                        || quad.getGraph().getURI().equals(PublicNameProjection.workScopeRepairGraph())))
+                        throw new IllegalArgumentException("raw maintenance cannot remove the server-owned Work scope proof graph");
                 }
                 // Appending through Jena's parser keeps trailing separators and
                 // comments valid; super executes all operations in one write txn.
-                request.add(org.apache.jena.update.UpdateFactory.create("DELETE WHERE { GRAPH <"+STATE+"> { <"+PREPARATION+"> <"+COMPLETED+"> ?membershipProof } }")
-                    .getOperations().getFirst());
+                appendRawInvalidations(request);
                 super.execute(action,new java.io.ByteArrayInputStream(request.toString().getBytes(StandardCharsets.UTF_8)));
             } catch(java.io.IOException | IllegalArgumentException | org.apache.jena.query.QueryException | org.apache.jena.update.UpdateException invalid) {
                 org.apache.jena.fuseki.servlets.ServletOps.errorBadRequest(invalid.getMessage());
             }
         }
+    }
+    static void appendRawInvalidations(org.apache.jena.update.UpdateRequest request) {
+        request.add(org.apache.jena.update.UpdateFactory.create("DELETE WHERE { GRAPH <"+STATE+"> { <"+PREPARATION+"> <"+COMPLETED+"> ?membershipProof } }")
+            .getOperations().getFirst());
+        request.add(org.apache.jena.update.UpdateFactory.create(SemanticSourceBasis.rawInvalidationUpdate())
+            .getOperations().getFirst());
+        request.add(org.apache.jena.update.UpdateFactory.create(SemanticSourceBasis.Catalogue.rawInvalidationUpdate())
+            .getOperations().getFirst());
+        org.apache.jena.update.UpdateFactory.create(PublicNameProjection.workScopeUncertaintyUpdate())
+            .getOperations().forEach(request::add);
     }
     /** Other bypass mutation protocols have no transactional membership fence. */
     static final class RefuseRawMembershipWrite extends org.apache.jena.fuseki.servlets.ActionService {

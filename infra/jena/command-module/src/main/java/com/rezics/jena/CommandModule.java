@@ -69,12 +69,31 @@ public final class CommandModule implements FusekiAutoModule {
     }
 
     @Override public void configDataAccessPoint(org.apache.jena.fuseki.server.DataAccessPoint point, Model configModel) {
+        // Reconfiguration revokes same-store admission before any startup work can fail.
+        var data = point.getDataService().getDataset();
+        if (TemplateIndexService.workScopeNativeStorage(data))
+            TemplateIndexService.withdrawWorkScopeWriter(data);
         CommandInvariant.initializeRelayStreamAtStartup(point.getDataService().getDataset());
         OccurrenceTextSchema.rebuildIfIncompatible(point.getDataService().getDataset());
         // Qualification precedes HTTP traffic, including after an offline rebuild.
-        // An empty/uninitialized dataset qualifies when bootstrap commits instead.
-        if (CommandService.deltaExclusive(point.getDataService()))
+        // Empty/uninitialized datasets stay closed until a qualified startup.
+        if (CommandService.deltaExclusive(point.getDataService())) {
             SearchDeltaJournal.qualifyAtStartup(point.getDataService().getDataset());
+            data.begin(org.apache.jena.query.ReadWrite.WRITE);
+            try {
+                var control = CommandInvariant.readControl(data);
+                if (control != null && !control.held()) {
+                    long deadline = System.nanoTime() + 10_000_000_000L;
+                    SemanticSourceBasis.qualifyAtStartup(data, deadline);
+                    SemanticSourceBasis.check(deadline);
+                    data.commit();
+                } else data.abort();
+            } finally { data.end(); }
+        } else {
+            data.begin(org.apache.jena.query.ReadWrite.WRITE);
+            try { SemanticSourceBasis.invalidate(data); data.commit(); }
+            finally { data.end(); }
+        }
     }
 
     @Override public void serverStopped(FusekiServer server) {

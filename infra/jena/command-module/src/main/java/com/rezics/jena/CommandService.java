@@ -120,6 +120,40 @@ final class CommandService extends ActionService {
             byte[] bytes = action.getRequestInputStream().readNBytes(MAX_REQUEST + 1);
             if (bytes.length > MAX_REQUEST) throw new IllegalArgumentException("request too large");
             JsonObject body = JSON.parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+            if (body.get("claimFoldMembers") != null) {
+                if (!authorized(action, maintenanceCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                var request = ClaimFoldInventory.parseMembers(bytes);
+                var result = ClaimFoldInventory.readMembers(action.getDataService().getDataset(), request);
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, 200, result); return;
+            }
+            if (body.get("claimFoldDisposition") != null) {
+                if (!authorized(action, maintenanceCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                var request = ClaimFoldInventory.parseDisposition(bytes);
+                var result = ClaimFoldInventory.readDisposition(action.getDataService().getDataset(), request);
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, 200, result); return;
+            }
+            if (body.get("claimFoldInventory") != null) {
+                // Inventory is an owned maintenance operation. Check its
+                // capability before the closed raw-wire decoder or size gate.
+                if (!authorized(action, maintenanceCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                if (bytes.length > 16 * 1024 || !body.keys().equals(Set.of("claimFoldInventory")))
+                    throw new IllegalArgumentException("invalid Claim inventory envelope");
+                var request = ClaimFoldInventory.parse(bytes);
+                var result = ClaimFoldInventory.turn(action.getDataService().getDataset(), request);
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, 200, ClaimFoldInventory.json(result)); return;
+            }
             if (body.get("templateIndex") != null) {
                 if (!authorized(action, admittedCapability)) { respond(action,403,Map.of("status","forbidden")); return; }
                 respond(action,200,TemplateIndexService.read(action.getDataService().getDataset(),body.get("templateIndex").getAsObject())); return;
@@ -361,15 +395,20 @@ final class CommandService extends ActionService {
                     publicSearchWriteEpoch.incrementAndGet();
                     SearchDeltaJournal.fenceBeforeWrite(dataset);
                 }
-                SearchDeltaJournal.Capture delta = tracksIndex ? new SearchDeltaJournal.Capture(dataset, false) : null;
+                SearchDeltaJournal.Capture delta = new SearchDeltaJournal.Capture(dataset, false);
                 CommandWork.enter("update");
-                CommandWork.observe(delta == null ? dataset : delta.observed()).deleteAny(NodeFactory.createURI(CommandPolicy.RECEIPTS),
+                CommandWork.observe(delta.observed()).deleteAny(NodeFactory.createURI(CommandPolicy.RECEIPTS),
                     NodeFactory.createURI(evidence.receipt()), Node.ANY, Node.ANY);
-                if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+                if (tracksIndex) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+                delta.finishSemanticSources(Long.MAX_VALUE);
                 CommandWork.enter("commit");
+                SemanticSourceBasis.check(Long.MAX_VALUE);
+                TemplateIndexService.workScopeBudget(Long.MAX_VALUE);
                 dataset.commit(); commit = true;
                 CommandWork.count("durable_commits", 1);
                 return Map.of("status", "retired");
+            } catch (java.util.concurrent.CancellationException | SemanticSourceBasis.Cancelled cancelled) {
+                return Map.of("status", "deadline");
             } finally {
                 finishNativeWrite(dataset, commit, tracksIndex, false, false, false, false);
             }
@@ -566,20 +605,24 @@ final class CommandService extends ActionService {
                 SearchDeltaJournal.fenceBeforeWrite(dataset);
             }
             List<Map<String, Object>> results = new ArrayList<>();
-            var batchDelta = tracksIndex ? new SearchDeltaJournal.Capture(dataset, false) : null;
+            var batchDelta = new SearchDeltaJournal.Capture(dataset, false, deadline);
             try {
+                batchDelta.sourceDeadline(deadline);
+                if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
+                    throw new java.util.concurrent.CancellationException("native command cancelled or expired");
                 for (BulkItem item : items) {
                     if (System.nanoTime() >= deadline) {
                         results.add(Map.of("status", "deadline")); continue;
                     }
-                    CommandOverlay staged = new CommandOverlay(new CurrentScope(batchDelta == null ? dataset : batchDelta.observed()));
+                    CommandOverlay staged = new CommandOverlay(new CurrentScope(batchDelta.observed()));
+                    var publicationMembership = new StatementPublicationMembership(staged, item.plan());
                     SearchDeltaJournal.Capture delta = null;
                     Map<String, Object> result = evaluate(staged, item.receipt(), item.digest(), item.update(),
                         null, item.plan(), item.validations(), deadline, delta);
                     if (Set.of("invalid", "guard-unmatched").contains(result.get("status"))) {
                         // No RDF or Lucene change from the failed candidate has
                         // escaped. Seal its admission at the next logical position.
-                        staged = new CommandOverlay(new CurrentScope(batchDelta == null ? dataset : batchDelta.observed()));
+                        staged = new CommandOverlay(new CurrentScope(batchDelta.observed()));
                         delta = null;
                         String cancellation = item.cancellation().replace("\"candidate-failed\"",
                             "\"" + ("invalid".equals(result.get("status")) ? "invalid" : "stale") + "\"");
@@ -589,6 +632,7 @@ final class CommandService extends ActionService {
                     }
                     if ("committed".equals(result.get("status")) || "invalid".equals(result.get("status"))
                         || "guard-unmatched".equals(result.get("status"))) {
+                        if ("committed".equals(result.get("status"))) publicationMembership.advance(item.receipt());
                         changed |= staged.changed();
                         staged.apply();
                     }
@@ -597,20 +641,31 @@ final class CommandService extends ActionService {
                 if (changed) {
                     // One journal entry per physical commit, so a large names-only
                     // import cannot evict the qualified baseline with item entries.
-                    if (batchDelta != null) SearchDeltaJournal.append(dataset, batchDelta, publicSearchWriteEpoch.get() + 1);
+                    if (tracksIndex) SearchDeltaJournal.append(dataset, batchDelta, publicSearchWriteEpoch.get() + 1, deadline);
+                    batchDelta.finishSemanticSources(deadline);
                     CommandWork.enter("commit");
+                    SemanticSourceBasis.check(deadline);
+                    TemplateIndexService.workScopeBudget(deadline);
                     dataset.commit(); commit = true;
                     CommandWork.count("durable_commits", 1);
                 }
                 return Map.of("items", results);
+            } catch (java.util.concurrent.CancellationException | SemanticSourceBasis.Cancelled cancelled) {
+                return Map.of("status", "deadline", "items",
+                    java.util.Collections.nCopies(items.size(), Map.of("status", "deadline")));
             } finally {
+                // Lucene rollback performs interruptible I/O; preserve cancellation after cleanup.
+                boolean interrupted = Thread.interrupted();
                 try { if (!commit) dataset.abort(); }
                 finally {
                     try {
                         dataset.end();
                         if (commit && tracksIndex && !Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(dataset,
                             -1, publicSearchWriteEpoch.get() + 1).get("available"))) SearchDeltaJournal.invalidate(dataset);
-                    } finally { if (tracksIndex) publicSearchWriteEpoch.incrementAndGet(); }
+                    } finally {
+                        if (tracksIndex) publicSearchWriteEpoch.incrementAndGet();
+                        if (interrupted) Thread.currentThread().interrupt();
+                    }
                 }
             }
         }
@@ -624,6 +679,8 @@ final class CommandService extends ActionService {
     private Map<String, Object> runSerialized(DatasetGraph dataset, String receipt, String digest, String update,
                                              JsonValue titleAdmission, CommandPolicy.Plan plan,
                                              List<Validation> validations, long deadline, Slim slim) {
+        if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
+            return Map.of("status", "deadline");
         dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
         CommandWork.enter("preflight");
         boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
@@ -636,24 +693,31 @@ final class CommandService extends ActionService {
             SearchDeltaJournal.fenceBeforeWrite(dataset);
         }
         if (touchesPrivateIndex) privateSearchWriteEpoch.incrementAndGet();
-        SearchDeltaJournal.Capture delta = tracksIndex
-            ? new SearchDeltaJournal.Capture(dataset, touchesPublicIndex && plan.rebuild()) : null;
+        SearchDeltaJournal.Capture delta = new SearchDeltaJournal.Capture(dataset, touchesPublicIndex && plan.rebuild(), deadline);
         boolean commit = false;
         try {
+            delta.sourceDeadline(deadline);
+            if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
+                throw new java.util.concurrent.CancellationException("native command cancelled or expired");
+            boolean replay = receiptValue(dataset, receipt, "requestDigest") != null;
+            // The fixed Claim fold validates a Claim prestate and a source-free,
+            // evidence-empty Statement; it cannot change publication potential.
+            var publicationMembership = ClaimStatementFoldPolicy.applies(receipt)
+                ? null : new StatementPublicationMembership(dataset, plan);
             Map<String, Object> result;
             if (MetadataRestorePolicy.applies(receipt)) {
                 if (slim != null) return invalid("metadata restore cannot carry a live slim envelope");
-                result = evaluateMetadataRestore(delta == null ? dataset : delta.observed(), receipt, digest, update,
-                    plan, validations, deadline, delta);
-            } else if (slim == null) result = evaluate(new CurrentScope(delta == null ? dataset : delta.observed()), receipt, digest, update,
-                titleAdmission, plan, validations, deadline, delta);
+                result = evaluateMetadataRestore(delta.observed(), receipt, digest, update,
+                    plan, validations, deadline, tracksIndex ? delta : null);
+            } else if (slim == null) result = evaluate(new CurrentScope(delta.observed()), receipt, digest, update,
+                titleAdmission, plan, validations, deadline, tracksIndex ? delta : null);
             else {
                 CommandInvariant.CommitProof existing = CommandInvariant.commitProof(dataset, receipt);
                 if (existing != null) return existing.digest().equals(digest)
                     && existing.payloadSha256().equals(slim.payloadSha256()) ? committed(dataset, receipt)
                     : Map.of("status", "conflict");
                 if (receiptValue(dataset, receipt, "requestDigest") != null) return Map.of("status", "conflict");
-                CurrentScope sink = new CurrentScope(delta == null ? dataset : delta.observed()) {
+                CurrentScope sink = new CurrentScope(delta.observed()) {
                     @Override public void add(Quad quad) { if (persist(quad)) super.add(quad); }
                     @Override public void delete(Quad quad) { if (persist(quad)) super.delete(quad); }
                     private boolean persist(Quad quad) {
@@ -733,13 +797,30 @@ final class CommandService extends ActionService {
                 CommandInvariant.writeCommitProof(dataset, receipt, new CommandInvariant.CommitProof(digest,
                     slim.payloadSha256(), after.epoch().getLiteralLexicalForm(), after.sequence().toString(),
                     streamSequence.getLiteralLexicalForm()));
-                if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+                if (tracksIndex) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1, deadline);
             }
             if (!"committed".equals(result.get("status"))) return result;
+            // Replay repair and journal refresh are writes too. Guard their
+            // final publication after all validation and mapping work.
+            if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
+                return Map.of("status", "deadline");
+            delta.finishSemanticSources(deadline);
+            // TDB advances its data version even for an empty writer commit.
+            // A validated durable replay must leave the native scope proof unchanged.
+            // Content replay repair touches its retained unit and must commit that bounded repair.
+            if (replay && delta.changes().isEmpty()) return result;
+            if (publicationMembership != null) publicationMembership.advance(receipt);
             CommandWork.enter("commit");
+            if (ClaimStatementFoldPolicy.applies(receipt)
+                && (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline))
+                return Map.of("status", "deadline");
+            SemanticSourceBasis.check(deadline);
+            TemplateIndexService.workScopeBudget(deadline);
             dataset.commit(); commit = true;
             CommandWork.count("durable_commits", 1);
             return result;
+        } catch (java.util.concurrent.CancellationException | SemanticSourceBasis.Cancelled cancelled) {
+            return Map.of("status", "deadline");
         } finally {
             finishNativeWrite(dataset, commit, tracksIndex, touchesPrivateIndex, touchesPublicIndex,
                 plan.rebuild(), plan.bootstrap() || receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:"));
@@ -748,6 +829,8 @@ final class CommandService extends ActionService {
     private void finishNativeWrite(DatasetGraph dataset, boolean commit, boolean tracksIndex,
                                    boolean touchesPrivateIndex, boolean touchesPublicIndex,
                                    boolean rebuild, boolean qualifyGeneration) {
+        // Lucene rollback performs interruptible I/O; preserve cancellation after cleanup.
+        boolean interrupted = Thread.interrupted();
         try { if (!commit) dataset.abort(); }
         finally {
             try {
@@ -766,6 +849,7 @@ final class CommandService extends ActionService {
             } finally {
                 if (tracksIndex) publicSearchWriteEpoch.incrementAndGet();
                 if (touchesPrivateIndex) privateSearchWriteEpoch.incrementAndGet();
+                if (interrupted) Thread.currentThread().interrupt();
             }
         }
     }
@@ -792,7 +876,7 @@ final class CommandService extends ActionService {
                 if (report != null) return invalid(report);
                 if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
                 staged.apply();
-                if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+                if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1, deadline);
                 return committed(dataset, receipt);
             }
             String existing = receiptValue(dataset, receipt, "requestDigest");
@@ -803,6 +887,7 @@ final class CommandService extends ActionService {
                     || (ClaimStatementFoldPolicy.applies(receipt) && !ClaimStatementFoldPolicy.templateDigest(update)
                         .equals(receiptValue(dataset, receipt, "claimFoldTemplateDigest"))))
                     return Map.of("status", "conflict");
+                if (delta != null) SearchDeltaJournal.repairContentReceipt(dataset, receipt, delta, publicSearchWriteEpoch.get() + 1);
                 Map<String,Object> replay = new LinkedHashMap<>(committed(dataset,receipt));
                 // Native maintenance does not retain a template-directory delta
                 // on its initial commit; replay returns that same receipt result.
@@ -814,8 +899,13 @@ final class CommandService extends ActionService {
             if (legacySlim != null) return invalid(legacySlim);
             String preflight = CommandInvariant.preflight(dataset, receipt, plan);
             if (preflight != null) return invalid(preflight);
-            if (ClaimStatementFoldPolicy.applies(receipt))
+            if (ClaimStatementFoldPolicy.applies(receipt)) {
+                if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline) return Map.of("status", "deadline");
+                String inventory = ClaimFoldInventory.conversionGate(dataset, plan, receipt, deadline);
+                if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline) return Map.of("status", "deadline");
+                if (inventory != null) return invalid(inventory);
                 return evaluateClaimStatementFold(dataset, receipt, digest, update, plan, validations, deadline, delta);
+            }
             if (StatementUpgradePolicy.applies(receipt))
                 return evaluateStatementUpgrade(dataset, receipt, digest, update, plan, validations, deadline, delta);
             String erasure = ErasurePolicy.preflight(dataset, plan, receipt);
@@ -931,7 +1021,10 @@ final class CommandService extends ActionService {
                     }
                 }
                 if (plan.bootstrap()) SearchDeltaJournal.initialize(dataset);
-                else SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+                else {
+                    SearchDeltaJournal.retainContentReceiptSource(dataset, receipt);
+                    SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1, deadline);
+                }
             }
         String streamInvariant = CommandInvariant.advanceRelayStream(dataset, receipt, plan, before);
         if (streamInvariant != null) return invalid(streamInvariant);
@@ -985,7 +1078,7 @@ final class CommandService extends ActionService {
         if (invariant != null) return invalid(invariant);
         physical.add(NodeFactory.createURI(CommandPolicy.RECEIPTS), NodeFactory.createURI(receipt),
             MetadataRestorePolicy.templateDigestPredicate(), NodeFactory.createLiteralString(MetadataRestorePolicy.templateDigest(update)));
-        if (delta != null) SearchDeltaJournal.append(physical, delta, publicSearchWriteEpoch.get() + 1);
+        if (delta != null) SearchDeltaJournal.append(physical, delta, publicSearchWriteEpoch.get() + 1, deadline);
         // The dataset remains held at zero; owner custody retains the old event and both source positions.
         MembershipNormalFormPolicy.applied(physical, membership);
         return committed(physical, receipt);
@@ -1062,7 +1155,11 @@ final class CommandService extends ActionService {
         dataset.add(NodeFactory.createURI(CommandPolicy.RECEIPTS), NodeFactory.createURI(receipt),
             NodeFactory.createURI(RV + "claimFoldTemplateDigest"),
             NodeFactory.createLiteralString(ClaimStatementFoldPolicy.templateDigest(update)));
-        if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+        if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline) return Map.of("status", "deadline");
+        String disposition = ClaimFoldInventory.stageConverted(CommandWork.observe(dataset), plan, receipt, update, deadline);
+        if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline) return Map.of("status", "deadline");
+        if (disposition != null) return invalid(disposition);
+        if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1, deadline);
         // Fixed template and control checks preserve both graph and relay cuts.
         return committed(dataset, receipt);
     }
@@ -1123,7 +1220,7 @@ final class CommandService extends ActionService {
         if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
         dataset.add(NodeFactory.createURI(CommandPolicy.RECEIPTS), NodeFactory.createURI(receipt),
             StatementUpgradePolicy.templateDigestPredicate(), NodeFactory.createLiteralString(StatementUpgradePolicy.templateDigest(update)));
-        if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+        if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1, deadline);
         if (restoring) {
             String stream = CommandInvariant.advanceRelayStream(dataset,
                 StatementRestorePolicy.originalReceipt(plan, receipt), plan, control);
@@ -1592,6 +1689,13 @@ final class CommandService extends ActionService {
             action.getResponse().setStatus(status);
             action.getResponse().setContentType("application/json; charset=utf-8");
             JSON.write(action.getResponse().getOutputStream(), jsonObject(payload));
+        } catch (IOException ex) { throw new IllegalStateException(ex); }
+    }
+    private static void respond(HttpAction action, int status, JsonObject payload) {
+        try {
+            action.getResponse().setStatus(status);
+            action.getResponse().setContentType("application/json; charset=utf-8");
+            JSON.write(action.getResponse().getOutputStream(), payload);
         } catch (IOException ex) { throw new IllegalStateException(ex); }
     }
 }

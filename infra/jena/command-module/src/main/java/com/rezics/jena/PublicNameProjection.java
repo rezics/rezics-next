@@ -227,6 +227,302 @@ final class PublicNameProjection {
         if (old != null) data.delete(REPAIR, subject, p(predicate), old);
         if (value != null) data.add(REPAIR, subject, p(predicate), value);
     }
+    // Native prerequisites only. These hooks do not publish candidates or
+    // change name queries. The command owner must admit their closed turns.
+    private static final Node WORK_SCOPE = uri(PREFIX + "work-scope-directory");
+    static String workScopeRepairGraph() { return REPAIR.getURI(); }
+    static String workScopeUncertaintyUpdate() {
+        return "DELETE WHERE { GRAPH <" + REPAIR.getURI() + "> { <" + WORK_SCOPE.getURI()
+            + "> <" + p("scopePhase").getURI() + "> ?scopePhase } }; DELETE WHERE { GRAPH <"
+            + REPAIR.getURI() + "> { <" + WORK_SCOPE.getURI() + "> <" + p("scopeQualification").getURI() + "> ?scopeProof } }";
+    }
+    /** Exclusive startup and controlled maintenance are the trust boundary;
+     * ordinary commits never stamp a dataset-wide correctness position. */
+    static void workScopeExclusiveStartup(DatasetGraph data) {
+        scopeWrite(data);
+        invalidateWorkScopeQualification(data);
+        TemplateIndexService.admitWorkScopeWriter(data);
+    }
+    static void invalidateWorkScopeQualification(DatasetGraph data) {
+        scopeWrite(data);
+        scopeState(data, WORK_SCOPE, "scopePhase", null);
+        scopeState(data, WORK_SCOPE, "scopeQualification", null);
+    }
+    private static Node scopeState(DatasetGraph data, Node subject, String predicate) {
+        var rows = data.find(REPAIR, subject, p(predicate), Node.ANY);
+        try {
+            Node value = rows.hasNext() ? rows.next().getObject() : null;
+            CommandWork.count("work_name_scope_point_rows", value == null ? 0 : 1);
+            if (rows.hasNext()) throw new IllegalStateException("Work name scope state is ambiguous");
+            return value;
+        } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
+    private static void scopeState(DatasetGraph data, Node subject, String predicate, Node value) {
+        Node old = scopeState(data, subject, predicate);
+        if (java.util.Objects.equals(old, value)) return;
+        if (old != null) data.delete(REPAIR, subject, p(predicate), old);
+        if (value != null) data.add(REPAIR, subject, p(predicate), value);
+    }
+    private static Node scopeOne(DatasetGraph data, Node graph, Node subject, String predicate) {
+        var rows = data.find(graph, subject, p(predicate), Node.ANY);
+        try {
+            Node value = rows.hasNext() ? rows.next().getObject() : null;
+            CommandWork.count("work_name_scope_point_rows", value == null ? 0 : 1);
+            if (rows.hasNext()) throw new IllegalStateException("Work name source owner is ambiguous");
+            return value;
+        } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
+    private static void scopeWrite(DatasetGraph data) {
+        if (!data.isInTransaction() || data.transactionMode() != org.apache.jena.query.ReadWrite.WRITE)
+            throw new IllegalStateException("Work name scope turn requires the native writer");
+    }
+    private static Node scopeEpoch(DatasetGraph data) {
+        Node epoch = scopeOne(data, uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), "dataEpoch");
+        if (epoch == null || !epoch.isLiteral()) throw new IllegalStateException("Work name scope epoch is unavailable");
+        return epoch;
+    }
+    private static Node scopeRouting(DatasetGraph data) {
+        Node routing = scopeOne(data, uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), "routingEpoch");
+        if (routing == null || !routing.isLiteral()) throw new IllegalStateException("Work name scope routing epoch is unavailable");
+        return routing;
+    }
+    private static boolean scopeCheckpointCurrent(DatasetGraph data) {
+        if (!TemplateIndexService.workScopeWriterAdmitted(data)) return false;
+        Node phase = scopeState(data, WORK_SCOPE, "scopePhase");
+        return (NodeFactory.createLiteralString("owners").equals(phase) || NodeFactory.createLiteralString("complete").equals(phase))
+            && scopeEpoch(data).equals(scopeState(data, WORK_SCOPE, "scopeEpoch"))
+            && scopeRouting(data).equals(scopeState(data, WORK_SCOPE, "scopeRouting"))
+            && NodeFactory.createLiteralString(TemplateIndexService.workScopeStore(data)).equals(scopeState(data, WORK_SCOPE, "scopeStore"));
+    }
+    private static Node scopeQualification(DatasetGraph data) {
+        if (data.contains(uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), p("restoreHold"),
+            NodeFactory.createLiteralByValue(true, org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)))
+            throw new IllegalStateException("Work name scope is held for restore");
+        if (!scopeCheckpointCurrent(data) || !NodeFactory.createLiteralString("complete").equals(scopeState(data, WORK_SCOPE, "scopePhase")))
+            throw new IllegalStateException("Work adoption directory is unqualified; bounded native preparation is required");
+        Node proof = scopeState(data, WORK_SCOPE, "scopeQualification");
+        if (proof == null || !proof.isURI()) throw new IllegalStateException("Work adoption directory qualification is missing");
+        return proof;
+    }
+    /** Only explicit maintenance scans a population, using the existing native
+     * GPOS seek. Controlled raw uncertainty or a new store restarts this proof. */
+    static int prepareWorkScopeDirectory(DatasetGraph data) {
+        return prepareWorkScopeDirectory(data, Long.MAX_VALUE);
+    }
+    static int prepareWorkScopeDirectory(DatasetGraph data, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        scopeWrite(data);
+        if (!TemplateIndexService.workScopeWriterAdmitted(data))
+            throw new IllegalStateException("Work name scope requires exclusive native writer admission");
+        if (!scopeCheckpointCurrent(data)) {
+            scopeState(data, WORK_SCOPE, "scopeEpoch", scopeEpoch(data));
+            scopeState(data, WORK_SCOPE, "scopeRouting", scopeRouting(data));
+            scopeState(data, WORK_SCOPE, "scopeStore", NodeFactory.createLiteralString(TemplateIndexService.workScopeStore(data)));
+            scopeState(data, WORK_SCOPE, "scopeQualification", uri(PREFIX + "scope-proof:" + java.util.UUID.randomUUID()));
+            scopeState(data, WORK_SCOPE, "scopePhase", NodeFactory.createLiteralString("owners"));
+            scopeState(data, WORK_SCOPE, "scopeAfter", null);
+        }
+        if (NodeFactory.createLiteralString("complete").equals(scopeState(data, WORK_SCOPE, "scopePhase"))) {
+            TemplateIndexService.workScopeBudget(deadline);
+            TemplateIndexService.workScopeBudget(deadline); return 0;
+        }
+        Node after = scopeState(data, WORK_SCOPE, "scopeAfter");
+        var page = TemplateIndexService.realmOwnerPage(data, after == null ? "" : after.getLiteralLexicalForm(), deadline);
+        for (Node slot : page.owners()) workSlotLink(data, slot, deadline);
+        TemplateIndexService.workScopeBudget(deadline);
+        scopeState(data, WORK_SCOPE, "scopeAfter", page.more() ? NodeFactory.createLiteralString(page.after()) : null);
+        if (!page.more()) scopeState(data, WORK_SCOPE, "scopePhase", NodeFactory.createLiteralString("complete"));
+        TemplateIndexService.workScopeBudget(deadline); return page.owners().size();
+    }
+    record ScopeOwner(Node slot, Node work, Node main, Node realm, Node head) {}
+    private static ScopeOwner scopeOwner(DatasetGraph data, Node slot) {
+        if (!data.contains(CURRENT, slot, RDF.type.asNode(), p("RealmPublicationSlot"))) return null;
+        if (CanonicalPolicy.realmSlotOwnerFailure(data, slot) != null) throw new IllegalStateException("Work scope contains an uncertain Realm owner");
+        return new ScopeOwner(slot, scopeOne(data, CURRENT, slot, "work"), scopeOne(data, CURRENT, slot, "mainVersion"),
+            scopeOne(data, CURRENT, slot, "realm"), scopeOne(data, CURRENT, slot, "selectionHead"));
+    }
+    /** Immutable, descending ordinals detect corrupt/cyclic links and count
+     * historical removals in the same physical 64-step budget. */
+    static void workSlotLink(DatasetGraph data, Node slot) {
+        workSlotLink(data, slot, Long.MAX_VALUE);
+    }
+    static void workSlotLink(DatasetGraph data, Node slot, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        ScopeOwner owner = scopeOwner(data, slot);
+        if (owner == null) { TemplateIndexService.workScopeBudget(deadline); return; }
+        Node work = owner.work();
+        if (!productResource(work)) throw new IllegalStateException("Work scope owner is not a product Work");
+        Node link = uri(PREFIX + "work-slot:" + java.util.UUID.nameUUIDFromBytes((work + "\n" + slot).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        Node prior = scopeState(data, link, "scopeWork");
+        if (prior != null) {
+            if (!work.equals(prior) || !slot.equals(scopeState(data, link, "scopeSlot"))) throw new IllegalStateException("Work scope link identity differs");
+            TemplateIndexService.workScopeBudget(deadline);
+            return;
+        }
+        Node count = scopeState(data, work, "scopeLinkCount");
+        java.math.BigInteger ordinal = count == null ? java.math.BigInteger.ONE : new java.math.BigInteger(count.getLiteralLexicalForm()).add(java.math.BigInteger.ONE);
+        scopeState(data, link, "scopeWork", work); scopeState(data, link, "scopeSlot", slot);
+        scopeState(data, link, "scopeOrdinal", NodeFactory.createLiteralString(ordinal.toString()));
+        scopeState(data, link, "scopeNext", scopeState(data, work, "scopeLinkHead"));
+        scopeState(data, work, "scopeLinkHead", link); scopeState(data, work, "scopeLinkCount", NodeFactory.createLiteralString(ordinal.toString()));
+        TemplateIndexService.workScopeBudget(deadline);
+    }
+    /** Fixed source-owner paths; raw headers without these backlinks cannot
+     * acquire a completion certificate by guessing who depends on them. */
+    static Node nameSourceToken(DatasetGraph data, Node work) {
+        return nameSourceToken(data, work, Long.MAX_VALUE);
+    }
+    static Node nameSourceToken(DatasetGraph data, Node work, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        Node qualification = scopeQualification(data);
+        if (!productResource(work) || !data.contains(CURRENT, work, RDF.type.asNode(), uri("https://schema.org/CreativeWork")))
+            throw new IllegalStateException("Work name source is unavailable");
+        Node header = scopeOne(data, CURRENT, work, "descriptiveMetadataHead");
+        if (header != null) {
+            Node component = scopeOne(data, REVISIONS, header, "component");
+            if (!header.isURI() || component == null || !component.isURI()
+                || !data.contains(REVISIONS, header, RDF.type.asNode(), p("WorkMetadataRevision"))
+                || !data.contains(CURRENT, component, RDF.type.asNode(), p("WorkMetadataComponent"))
+                || !work.equals(scopeOne(data, CURRENT, component, "work"))
+                || !header.equals(scopeOne(data, CURRENT, component, "metadataHead"))
+                || !NodeFactory.createLiteralString("header").equals(scopeOne(data, CURRENT, component, "metadataKind")))
+                throw new IllegalStateException("Work header source ownership is unqualified");
+            if (!data.contains(REVISIONS, header, RDF.type.asNode(), p("ErasedRevision"))) {
+                Node payload = scopeOne(data, REVISIONS, header, "metadataState");
+                if (payload == null || !payload.isLiteral() || payload.getLiteralLexicalForm().length() > 65536)
+                    throw new IllegalStateException("Work header source payload is unqualified");
+                CommandWork.count("work_name_scope_header_characters", payload.getLiteralLexicalForm().length());
+                try {
+                    var headerState = org.apache.jena.atlas.json.JSON.parse(payload.getLiteralLexicalForm());
+                    if (!headerState.hasKey("kind") || !"header".equals(headerState.get("kind").getAsString().value()))
+                        throw new IllegalStateException("Work header source kind differs");
+                } catch (java.util.concurrent.CancellationException cancelled) { throw cancelled;
+                } catch (RuntimeException malformed) { throw new IllegalStateException("Work header source payload is unqualified", malformed); }
+                TemplateIndexService.workScopeBudget(deadline);
+            }
+        }
+        Node token = scopeState(data, work, "scopeNameSource");
+        String key = work + "|" + qualification + "|" + token;
+        Node result = uri(PREFIX + "work-source:" + java.util.UUID.nameUUIDFromBytes(key.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        TemplateIndexService.workScopeBudget(deadline); return result;
+    }
+    static boolean nameSourceQuad(org.apache.jena.sparql.core.Quad quad) {
+        return CURRENT.equals(quad.getGraph()) && (NAME_PREDICATES.contains(quad.getPredicate())
+            || java.util.List.of(p("descriptiveMetadataHead"), p("metadataHead"), p("metadataKind"), p("work")).contains(quad.getPredicate())
+            || RDF.type.asNode().equals(quad.getPredicate()) && Set.of(uri("https://schema.org/CreativeWork"), p("WorkMetadataComponent")).contains(quad.getObject()))
+            || REVISIONS.equals(quad.getGraph()) && (java.util.List.of(p("metadataState"), p("component")).contains(quad.getPredicate())
+                || RDF.type.asNode().equals(quad.getPredicate()) && Set.of(p("ErasedRevision"), p("WorkMetadataRevision")).contains(quad.getObject()));
+    }
+    static Set<Node> nameSourceOwners(DatasetGraph data, org.apache.jena.sparql.core.Quad quad) {
+        Set<Node> owners = new LinkedHashSet<>(); Node subject = quad.getSubject();
+        if (CURRENT.equals(quad.getGraph())) {
+            if (NAME_PREDICATES.contains(quad.getPredicate()) || p("descriptiveMetadataHead").equals(quad.getPredicate())
+                || RDF.type.asNode().equals(quad.getPredicate()) && uri("https://schema.org/CreativeWork").equals(quad.getObject())) {
+                if (productResource(subject) && data.contains(CURRENT, subject, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))) owners.add(subject);
+            } else if (NodeFactory.createLiteralString("header").equals(scopeOne(data, CURRENT, subject, "metadataKind"))) {
+                Node work = scopeOne(data, CURRENT, subject, "work");
+                if (productResource(work)) {
+                    Node head = scopeOne(data, CURRENT, work, "descriptiveMetadataHead");
+                    if (head != null && subject.equals(scopeOne(data, REVISIONS, head, "component"))) owners.add(work);
+                }
+            }
+        } else {
+            Node component = scopeOne(data, REVISIONS, subject, "component");
+            if (component != null) {
+                if (data.contains(CURRENT, component, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))
+                    && subject.equals(scopeOne(data, CURRENT, component, "head"))) owners.add(component);
+                Node work = scopeOne(data, CURRENT, component, "work");
+                if (productResource(work) && subject.equals(scopeOne(data, CURRENT, work, "descriptiveMetadataHead"))) owners.add(work);
+            }
+        }
+        return owners;
+    }
+    static void actualWorkScopeEffects(DatasetGraph data, java.util.Map<Node,TemplateIndexService.Entity> before,
+        Set<Node> sources, boolean reset, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        TemplateIndexService.actualRealmEffects(data, before, deadline);
+        for (Node work : sources) {
+            TemplateIndexService.workScopeBudget(deadline);
+            scopeState(data, work, "scopeNameSource", uri(PREFIX + "source-effect:" + java.util.UUID.randomUUID()));
+            CommandWork.count("work_name_sources_changed", 1);
+        }
+        TemplateIndexService.workScopeBudget(deadline);
+        if (reset) invalidateWorkScopeQualification(data);
+        TemplateIndexService.workScopeBudget(deadline);
+    }
+    static void beginWorkScope(DatasetGraph data, Node work, Node pass) {
+        beginWorkScope(data, work, pass, Long.MAX_VALUE);
+    }
+    static void beginWorkScope(DatasetGraph data, Node work, Node pass, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        scopeWrite(data); Node source = nameSourceToken(data, work, deadline);
+        TemplateIndexService.workScopeBudget(deadline);
+        Node existing = scopeState(data, pass, "scopeWork");
+        if (existing != null) {
+            if (!existing.equals(work)) throw new IllegalStateException("Work scope pass identity differs");
+            TemplateIndexService.workScopeBudget(deadline); return;
+        }
+        scopeState(data, pass, "scopeWork", work); scopeState(data, pass, "scopeSource", source);
+        scopeState(data, pass, "scopeBasis", NodeFactory.createLiteralString(TemplateIndexService.workAdoptionBasis(data, work)));
+        scopeState(data, pass, "scopeProof", scopeQualification(data));
+        scopeState(data, pass, "scopeCursor", scopeState(data, work, "scopeLinkHead"));
+        Node count = scopeState(data, work, "scopeLinkCount");
+        scopeState(data, pass, "scopeRemaining", count == null ? NodeFactory.createLiteralString("0") : count);
+        TemplateIndexService.workScopeBudget(deadline);
+    }
+    private static void checkWorkScope(DatasetGraph data, Node pass, long deadline) {
+        Node work = scopeState(data, pass, "scopeWork");
+        if (work == null || !scopeQualification(data).equals(scopeState(data, pass, "scopeProof"))
+            || !nameSourceToken(data, work, deadline).equals(scopeState(data, pass, "scopeSource"))
+            || !NodeFactory.createLiteralString(TemplateIndexService.workAdoptionBasis(data, work)).equals(scopeState(data, pass, "scopeBasis")))
+            throw new IllegalStateException("Work name scope basis moved or is unqualified");
+    }
+    static boolean workScopeComplete(DatasetGraph data, Node pass) {
+        return workScopeComplete(data, pass, Long.MAX_VALUE);
+    }
+    static boolean workScopeComplete(DatasetGraph data, Node pass, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        try {
+            checkWorkScope(data, pass, deadline);
+            boolean complete = scopeState(data, pass, "scopeCursor") == null && NodeFactory.createLiteralString("0").equals(scopeState(data, pass, "scopeRemaining"));
+            TemplateIndexService.workScopeBudget(deadline); return complete;
+        } catch (java.util.concurrent.CancellationException cancelled) { throw cancelled;
+        } catch (IllegalStateException | IllegalArgumentException unavailable) { TemplateIndexService.workScopeBudget(deadline); return false; }
+    }
+    record ScopeTurn(java.util.List<ScopeOwner> owners, int visited, boolean complete, boolean replayed) {}
+    static ScopeTurn advanceWorkScope(DatasetGraph data, Node pass, Node receipt) {
+        return advanceWorkScope(data, pass, receipt, Long.MAX_VALUE);
+    }
+    static ScopeTurn advanceWorkScope(DatasetGraph data, Node pass, Node receipt, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        scopeWrite(data); checkWorkScope(data, pass, deadline);
+        TemplateIndexService.workScopeBudget(deadline);
+        Node replay = scopeState(data, receipt, "scopePass");
+        if (replay != null) {
+            if (!pass.equals(replay)) throw new IllegalStateException("Work scope step receipt differs");
+            return new ScopeTurn(java.util.List.of(), 0, workScopeComplete(data, pass, deadline), true);
+        }
+        Node work = scopeState(data, pass, "scopeWork"), cursor = scopeState(data, pass, "scopeCursor");
+        java.math.BigInteger remaining = new java.math.BigInteger(scopeState(data, pass, "scopeRemaining").getLiteralLexicalForm());
+        java.util.List<ScopeOwner> owners = new java.util.ArrayList<>(); int visited = 0;
+        while (cursor != null && visited < REPAIR_BATCH_SIZE) {
+            TemplateIndexService.workScopeBudget(deadline);
+            visited++; CommandWork.count("work_name_scope_links_visited", 1);
+            Node slot = scopeState(data, cursor, "scopeSlot"), next = scopeState(data, cursor, "scopeNext");
+            if (!work.equals(scopeState(data, cursor, "scopeWork")) || slot == null || !slot.isURI()
+                || !NodeFactory.createLiteralString(remaining.toString()).equals(scopeState(data, cursor, "scopeOrdinal"))
+                || remaining.signum() <= 0 || (next == null) != remaining.equals(java.math.BigInteger.ONE))
+                throw new IllegalStateException("Work scope link chain is unqualified");
+            ScopeOwner owner = scopeOwner(data, slot);
+            if (owner != null && work.equals(owner.work())) owners.add(owner);
+            remaining = remaining.subtract(java.math.BigInteger.ONE); cursor = next;
+        }
+        TemplateIndexService.workScopeBudget(deadline);
+        if (cursor == null && remaining.signum() != 0) throw new IllegalStateException("Work scope EOF is incomplete");
+        scopeState(data, pass, "scopeCursor", cursor); scopeState(data, pass, "scopeRemaining", NodeFactory.createLiteralString(remaining.toString()));
+        scopeState(data, receipt, "scopePass", pass);
+        return new ScopeTurn(java.util.List.copyOf(owners), visited, workScopeComplete(data, pass, deadline), false);
+    }
     /** Each projected dependent adds at most four constant-time adjacency
      * links. Links are immutable so a cursor survives moves, deletion and new
      * inserts without a sorted population scan or an offset replay. Historical

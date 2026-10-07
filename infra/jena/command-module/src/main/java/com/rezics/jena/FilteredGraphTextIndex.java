@@ -83,6 +83,9 @@ public final class FilteredGraphTextIndex implements TextIndex {
     void refreshRankSubject(org.apache.jena.sparql.core.DatasetGraph data, String id) {
         if (id.startsWith(PublicNameProjection.PREFIX) || id.startsWith(PublicNameProjection.DIRECTORY)) return;
         bindRankData(data);
+        // Resolve all source pins before deleting any physical document. RDF
+        // remains the authority and the body stays available to graph queries.
+        var source = contentBodySource(data, id);
         try {
             Query identity = new BooleanQuery.Builder()
                 .add(new TermQuery(new Term(lucene.getDocDef().getEntityField(), id)), BooleanClause.Occur.FILTER)
@@ -99,6 +102,13 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     Node value = rows.next().getObject();
                     if (!value.isLiteral()) throw new TextIndexException("rank metadata text is not literal");
                     CommandWork.count("rank_metadata_values_visited", 1);
+                    if (predicate.equals("searchBody") && source != null) {
+                        var rank = rankMetadata(data, id);
+                        TextEntityDocuments.replaceRankedBody(lucene, contentBodyScope(id),
+                            List.of(new TextEntityDocuments.Row(value, source)),
+                            rank == null ? null : rank.context(), rank == null ? null : rank.group());
+                        continue;
+                    }
                     Entity entity = new Entity(id, CommandPolicy.PUBLIC_SEARCH, value.getLiteralLanguage(), value.getLiteralDatatype());
                     entity.put(predicate.equals("searchBody") ? "body" : "publicTitle", value.getLiteralLexicalForm());
                     lucene.getIndexWriter().addDocument(rankDocument(entity, rankMetadata(data, id)));
@@ -121,18 +131,149 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
     private Document rankDocument(Entity entity, RankMetadata metadata) {
         var doc = org.apache.jena.query.text.RezicsLuceneDocument.build(lucene, entity);
-        if (metadata != null) {
-            doc.add(new org.apache.lucene.document.StringField(RANK_CONTEXT, metadata.context(), org.apache.lucene.document.Field.Store.YES));
-            doc.add(new org.apache.lucene.document.StringField(RANK_GROUP, metadata.group(), org.apache.lucene.document.Field.Store.YES));
+        decorateRankDocument(doc, metadata == null ? null : metadata.context(), metadata == null ? null : metadata.group());
+        return doc;
+    }
+    static void decorateRankDocument(Document doc, String context, String group) {
+        if ((context == null) != (group == null)) throw new IllegalArgumentException("incomplete rank metadata");
+        if (context != null) {
+            doc.add(new org.apache.lucene.document.StringField(RANK_CONTEXT, context, org.apache.lucene.document.Field.Store.YES));
+            doc.add(new org.apache.lucene.document.StringField(RANK_GROUP, group, org.apache.lucene.document.Field.Store.YES));
         }
         doc.add(new org.apache.lucene.document.StringField(RANK_SCHEMA, "1", org.apache.lucene.document.Field.Store.NO));
-        return doc;
     }
     static boolean rankMetadataMatches(org.apache.jena.sparql.core.DatasetGraph data, String id, Document doc) {
         var metadata = rankMetadata(data, id);
         if (!CanonicalPolicy.realmUnitOwnerValid(data, uri(id))) return false;
         return metadata == null ? doc.get(RANK_CONTEXT) == null && doc.get(RANK_GROUP) == null
             : metadata.context().equals(doc.get(RANK_CONTEXT)) && metadata.group().equals(doc.get(RANK_GROUP));
+    }
+
+    private static final String CONTENT_UNIT = "urn:rezics:content:match-unit:";
+    private static TextEntityDocuments.Scope contentBodyScope(String id) {
+        return new TextEntityDocuments.Scope(id, CommandPolicy.PUBLIC_SEARCH, "body");
+    }
+    /** Delivery pins from retained, natively admitted Content facts. This is an
+     * exact consistency check for replay/proof, not a new admission authority. */
+    static TextEntityDocuments.Source contentBodySource(org.apache.jena.sparql.core.DatasetGraph data, String id) {
+        var source = contentBodyMetadataSource(data, id);
+        if (source != null) contentBodyValue(data, id);
+        return source;
+    }
+    static Node contentBodyValue(org.apache.jena.sparql.core.DatasetGraph data, String id) {
+        Node body = requiredValue(data, PUBLIC_GRAPH, uri(id), "searchBody");
+        if (!CommandService.admittedContentBody(body, requiredValue(data, PUBLIC_GRAPH, uri(id), "language")))
+            throw new IllegalStateException("Content body language or bounds differ");
+        return body;
+    }
+    static String contentBodyIdentity(org.apache.jena.sparql.core.DatasetGraph data, String id) {
+        return TextEntityDocuments.bodyIdentity(contentBodyScope(id), contentBodyValue(data, id));
+    }
+    /** Current authority/source pins only; read proof does not reconstruct text from RDF. */
+    static TextEntityDocuments.Source contentBodyMetadataSource(org.apache.jena.sparql.core.DatasetGraph data, String id) {
+        if (!id.startsWith(CONTENT_UNIT)) return null;
+        Node unit = uri(id), revisions = uri(CommandPolicy.REVISIONS);
+        if (!data.contains(PUBLIC_GRAPH, unit, Node.ANY, Node.ANY)) return null;
+        requireType(data, PUBLIC_GRAPH, unit, "MatchUnit");
+        requireValue(data, PUBLIC_GRAPH, unit, "field", uri(RV + "Body"));
+        requireValue(data, PUBLIC_GRAPH, unit, "disclosure", uri(RV + "Public"));
+        Node language = requiredValue(data, PUBLIC_GRAPH, unit, "language");
+        if (!language.isLiteral() || language.getLiteralLexicalForm().length() > 100)
+            throw new IllegalStateException("Content language metadata differs");
+        Node variant = requiredIri(data, PUBLIC_GRAPH, unit, "variant");
+        Node resource = requiredIri(data, PUBLIC_GRAPH, unit, "resource");
+        Node revision = requiredIri(data, PUBLIC_GRAPH, unit, "revision");
+        Node decision = requiredIri(data, PUBLIC_GRAPH, unit, "publicationDecision");
+        Node eligibility = requiredIri(data, PUBLIC_GRAPH, unit, "eligibility");
+        Node projection = requiredIri(data, PUBLIC_GRAPH, unit, "projection");
+        requireType(data, CURRENT_GRAPH, variant, "ContentVariant");
+        requireValue(data, CURRENT_GRAPH, variant, "resource", resource);
+        requireValue(data, CURRENT_GRAPH, variant, "contentPublicationHead", decision);
+        requireValue(data, CURRENT_GRAPH, variant, "publicSearchEligibilityHead", eligibility);
+        requireType(data, revisions, decision, "ContentPublicationDecision");
+        requireValue(data, revisions, decision, "component", variant);
+        requireValue(data, revisions, decision, "resource", resource);
+        requireValue(data, revisions, decision, "contentRevision", revision);
+        requireType(data, revisions, eligibility, "ContentSearchEligibilityDecision");
+        requireValue(data, revisions, eligibility, "variant", variant);
+        requireValue(data, revisions, eligibility, "resource", resource);
+        requireValue(data, revisions, eligibility, "publicationDecision", decision);
+        requireValue(data, revisions, eligibility, "disclosure", uri(RV + "Public"));
+        requireType(data, revisions, projection, "ContentProjection");
+        requireValue(data, revisions, projection, "matchUnit", unit);
+        requireValue(data, revisions, projection, "component", variant);
+        requireValue(data, revisions, projection, "resource", resource);
+        requireValue(data, revisions, projection, "contentRevision", revision);
+        requireValue(data, revisions, projection, "publicationDecision", decision);
+        requireValue(data, revisions, projection, "eligibility", eligibility);
+        requireValue(data, revisions, projection, "modelRevision", uri("https://rezics.com/definition/content-match-unit-v1"));
+        if (data.contains(revisions, decision, uri(org.apache.jena.vocabulary.RDF.type.getURI()), uri(RV + "ErasedRevision"))
+            || data.contains(revisions, revision, uri(org.apache.jena.vocabulary.RDF.type.getURI()), uri(RV + "ErasedRevision")))
+            throw new IllegalStateException("Content publication source is erased");
+        Node digest = requiredValue(data, revisions, decision, "byteDigest");
+        Node epoch = requiredValue(data, revisions, decision, "ownerDataEpoch");
+        if (!digest.isLiteral() || !epoch.isLiteral()) throw new IllegalStateException("Content source pins are not literals");
+        try { return new TextEntityDocuments.Source(revision.getURI(), digest.getLiteralLexicalForm(),
+            decision.getURI(), epoch.getLiteralLexicalForm(), "content-match-unit-v1"); }
+        catch (IllegalArgumentException malformed) { throw new IllegalStateException("Content source pins are malformed", malformed); }
+    }
+    static long verifyContentBodyCommitted(org.apache.jena.sparql.core.DatasetGraph data, String id) {
+        return verifyContentBodyCommitted(data, id, null, false);
+    }
+    static long verifyContentBodyCommitted(org.apache.jena.sparql.core.DatasetGraph data, String id, String originalIdentity) {
+        return verifyContentBodyCommitted(data, id, originalIdentity, true);
+    }
+    private static long verifyContentBodyCommitted(org.apache.jena.sparql.core.DatasetGraph data, String id,
+                                                   String originalIdentity, boolean receiptBound) {
+        var base = data;
+        while (base instanceof org.apache.jena.sparql.core.DatasetGraphWrapper wrapper
+            && !(base instanceof org.apache.jena.query.text.DatasetGraphText)) base = wrapper.getWrapped();
+        if (!(base instanceof org.apache.jena.query.text.DatasetGraphText text)
+            || !(text.getTextIndex() instanceof FilteredGraphTextIndex index))
+            throw new TextIndexException("Content delivery requires its filtered native writer");
+        return index.verifyContentBody(data, id, originalIdentity, receiptBound);
+    }
+    private long verifyContentBody(org.apache.jena.sparql.core.DatasetGraph data, String id, String originalIdentity, boolean receiptBound) {
+        var source = receiptBound ? contentBodyMetadataSource(data, id) : contentBodySource(data, id);
+        if (!id.startsWith(CONTENT_UNIT)) throw new IllegalArgumentException("not a Content unit");
+        var rank = rankMetadata(data, id);
+        long generation = receiptBound && source != null
+            ? TextEntityDocuments.verifyCommittedRankedIdentity(lucene, contentBodyScope(id), originalIdentity, source,
+                requiredValue(data, PUBLIC_GRAPH, uri(id), "language").getLiteralLexicalForm(),
+                rank == null ? null : rank.context(), rank == null ? null : rank.group())
+            : TextEntityDocuments.verifyCommittedRankedBody(lucene, contentBodyScope(id), source == null ? List.of()
+            : List.of(new TextEntityDocuments.Row(requiredValue(data, PUBLIC_GRAPH, uri(id), "searchBody"), source)),
+            rank == null ? null : rank.context(), rank == null ? null : rank.group());
+        // Include legacy untagged body documents in membership: a tagged copy
+        // alongside a legacy row is not a successful replacement.
+        try (var reader = DirectoryReader.open(lucene.getDirectory())) {
+            var identity = new BooleanQuery.Builder()
+                .add(new TermQuery(new Term(lucene.getDocDef().getEntityField(), id)), BooleanClause.Occur.FILTER)
+                .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER)
+                .add(new org.apache.lucene.search.FieldExistsQuery("body"), BooleanClause.Occur.FILTER).build();
+            if (reader.getIndexCommit().getGeneration() != generation
+                || new IndexSearcher(reader).count(identity) != (source == null ? 0 : 1))
+                throw new TextIndexException("Content committed body membership differs");
+            return generation;
+        } catch (IOException error) { throw new TextIndexException("Content committed body inspection failed", error); }
+    }
+    private static Node requiredValue(org.apache.jena.sparql.core.DatasetGraph data, Node graph, Node subject, String predicate) {
+        Node value = namedValue(data, graph, subject, predicate);
+        if (value == null) throw new IllegalStateException("Content source field missing or ambiguous: " + predicate);
+        return value;
+    }
+    private static Node requiredIri(org.apache.jena.sparql.core.DatasetGraph data, Node graph, Node subject, String predicate) {
+        Node value = requiredValue(data, graph, subject, predicate);
+        if (!value.isURI()) throw new IllegalStateException("Content source reference is not an IRI: " + predicate);
+        return value;
+    }
+    private static void requireValue(org.apache.jena.sparql.core.DatasetGraph data, Node graph, Node subject, String predicate, Node expected) {
+        if (!expected.equals(requiredValue(data, graph, subject, predicate)))
+            throw new IllegalStateException("Content source field differs: " + predicate);
+    }
+    private static void requireType(org.apache.jena.sparql.core.DatasetGraph data, Node graph, Node subject, String type) {
+        if (!data.contains(graph, subject, uri(org.apache.jena.vocabulary.RDF.type.getURI()), uri(RV + type)))
+            throw new IllegalStateException("Content source type is missing: " + type);
     }
 
     public FilteredGraphTextIndex(TextIndexLucene lucene) { this.lucene = lucene; }
