@@ -6,24 +6,68 @@ The manager's checkpoint for [this Goal](GOAL.md); live tasks:
 `rezics-next-7b`. The prior handover's contracts and remaining inventory below
 remain authoritative except where this checkpoint records new evidence.
 
-## Open tasks: next action for each
+## Current checkpoint
 
-| Task | State | Next action |
-| --- | --- | --- |
-| G-1275 (rights counter-notices) | Reviewed; two merges refused a spurious unit attribution. `dev-seed-plan.test.ts` passes alone (18 tests, exit 0), but the parser marks its emitted header after the real list-convention failure as another failure. Program owns the parser fix; evidence in `.temp/trust-ops/merge-G-1275.log`. | Retry the complete gate after the fix, with `--allow-scope`. Web edits adapt the case collection to `items` and fixtures; launch was asked to verify its safety view. Migrations are 1442–1444. Refresh immediately after merge, verify rights unit/integration by exit code at the merge commit, then close. Receipt starts the 10–14 business-day window; unconfirmed claimant delivery holds restoration without resetting the clock. |
-| G-1294 (security review) | First attempt failed with an engine error, no handoff or commit. Resumed fresh on `codex-1` high. | Review ranked evidence, dispatch each verified High finding to its owner and resume uncovered surfaces if partial. No proof-test-only merge. |
-| G-1288 (Zone-page Content authority) | First handoff required `access.agent_provision` for administrator admissions, unlike ordinary `zone.edit`. Returned to Sol (`codex` xhigh) to finish the pinned administrator path; migrations 1650–1651 authorized. | Review and merge the complete register/replay/claim contract, refresh for a migration, verify then send kernel the exact accepted hooks. Preliminary hooks already sent: `withZonePageContentTarget` and `zonePageContentAllowed`. L4 remains the critical path. |
-| G-1301 | Sol: route-owned rate-limit families. | Review preservation of current budgets and resolve held-route declarations with their owners. No new registry. |
-| G-1302 | Sol: production Account/security/safety preflight. | Review role isolation, real configuration validation and exact missing operator inputs. |
-| G-1303 | Sol: offline TDB2 compaction procedure and refusal/recovery tests. | Review actual Jena semantics, disk assumptions, retained recovery generation and explicit retirement. Manager runs the populated timed drill. |
-| G-1307 | Sol: production PostgreSQL provisioning/preflight. | Review least privilege, existing owner roles, `pg_read_all_stats` and `max_prepared_transactions=0`. |
-| G-1308 | Sol: six-market zero-budget qualification. | Review official source evidence, implemented controls, accepted risk and external conditions; no invented readiness or geographic exclusions. |
-| Verification of G-1287 | Preparing `.temp/worktrees/trust-ops-verify`, pinned to `0658a345f`. | Run `platform-governance.integration` and `g-724-bootstrap` and judge exit codes; fix any remaining regression. |
+**Refresh hold (maintainer and program, 2026-10-07):** run no `dev:refresh`
+until kernel reports the shared stack healthy. The first rights refresh failed
+because Statement upgrade called the intentionally absent raw `/update` route.
+Kernel's native repair owns all shared lifecycle actions and will apply Access
+1650. The second trust-ops refresh had exited before queuing or lifecycle work;
+no trust-ops refresh remains queued/running.
 
-Next local checkpoint follows the next completed handoff or inbox event. Local
-implementation and verification need several further waves; deployment
-qualification has no defensible completion date until the existing external
-operator inputs are supplied. No production action is authorized.
+Closed and verified since takeover:
+
+- Rights counter-notice `03ad5168e714`: receipt clock, confirmed claimant
+  delivery gate, party privacy, bounded case records. Owner and integration
+  passed at that merge SHA after pinned OpenAPI regeneration.
+- Zone Content authority `0e5218da741d`: server-resolved Zone, no-provision
+  administrator path, immutable Zone/grant/controller proof at replay/claim.
+  Kernel has `withZonePageContentTarget` and `zonePageContentAllowed`; focused
+  real owner verification passed. Access migration 1650 awaits shared repair.
+- PostgreSQL preflight `cacbd6b2e`: diagnostic grants and zero prepared
+  transactions; focused owner/integration passed at the merge SHA.
+- Market decision record `57e4c55d74d8`: six conditional launch markets,
+  external facts and accepted risks explicit; focused registration/docs passed.
+- Offline compaction `8c01f7bbd`: retained recovery generation, bounded disk
+  preflight, rollback and explicit retirement; shell/operator tests passed.
+  Populated 100k timed/peak-space drill remains manager work after repair/C6.
+- Security H1 `96bf4db360df`: every recovery enrollment uses normal bounded
+  password+TOTP/passkey step-up; real first/spent/session/expiry tests and UI
+  evidence. Security H2 `1154b205ebc7`: checked public destinations/socket
+  pinning and edit authority before acquisition and storage. Medium media
+  intake `3957f02adb3a`: live bearer/reservation before bounded stream/deadline.
+- H4 Account contract `07ac9df29782`: `library:write` registry/resource/consent
+  support with complete eight-locale meaning and rendered consent evidence.
+  Launch G-1314 owns route/client enforcement; H4 remains open until it lands.
+- Inherited bootstrap/governance checks both passed at pinned `0658a345f`.
+
+The findings-only security review is archived; its report is preserved in
+`.temp/trust-ops/security-findings.md`. Closing that review did not qualify the
+open findings. Every completed code task passed its merge's unit/guard gate;
+focused worker checks are recorded in handoffs, with targeted merge-SHA checks
+above for the inherited verification gaps.
+
+| Task | State / next action |
+| --- | --- |
+| G-1301 | Resolver consolidation reviewed, blocked until held route declarations are all present. Manager's 109 kernel metadata declarations landed in `6b4504057` with kernel consent; worker has rights/reports and released routes. Launch still owns Zone/thread metadata. Resume on current main, prove complete coverage, then merge with reviewed route scope. No fallback inventory. |
+| G-1312 | H3 backchannel logout: reviewed complete five-boundary rejection and legacy dispatch suppression; merge gate running. Close on pass, notify program. Bulk multi-session revocation snapshot follow-up remains to brief. |
+| G-1316 | False Terms automatic-image-hold promise corrected at `a3001325ab0f`, new Terms digest requires current acceptance. Closing. Its About config failures are assigned below. |
+| G-1309 | Sol: private database/alias diagnostics via existing safe logger; Account app is now released by H1. |
+| G-1318 | Sol: production email TLS, signed delivery events and sender-domain evidence using local fakes; no external mail. |
+| G-1319 | Sol: portable production validation imports and default Accounts Storybook config. About failure was introduced/exposed by preflight's heavy Main import; retain actual validation. No temporary-config-only acceptance. |
+| G-1320 | Sol: second outbound destination-filter instance, MCP expanded/special IPv6 forms. No generic transport framework. |
+
+Launch's public `POST /v1/zones/{id}/site-publications` exposure/write family is
+approved within the first Zone scope. Launch's moderation preset notice review
+needs truthful release durations (author fixes/withdrawal do not alone restore),
+case-specific public facts and accurate automation indication; no new reason-code
+contract was requested. Program's local-QA-only recovery memory wrappers are
+accepted if production behavior is strictly unchanged.
+
+Next local checkpoint follows the next handoff/inbox event. Deployment
+qualification needs further implementation/drill waves and the already listed
+external operator facts/registrations; no defensible final date can be stated
+until those inputs are supplied. No production action is authorized.
 
 ## Contracts and promises to other Goals
 
