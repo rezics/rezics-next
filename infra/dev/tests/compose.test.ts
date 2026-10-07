@@ -18,6 +18,9 @@ function resolvedStack(qa = false) {
       REZICS_RELAY_PASSWORD: 'test-relay',
       RUSTFS_ACCESS_KEY: 'test-rustfs',
       RUSTFS_SECRET_KEY: 'test-rustfs-secret',
+      FUSEKI_COMMAND_TOKEN: 'test-fuseki-command',
+      FUSEKI_MAINTENANCE_TOKEN: 'test-fuseki-maintenance',
+      FUSEKI_TITLE_ADMISSION_KEY: 'test-fuseki-title-admission',
     },
   });
   expect(result.exitCode).toBe(0);
@@ -29,7 +32,7 @@ describe('P0.1 local stack contract', () => {
     const services = resolvedStack().services;
     expect(Object.keys(services).sort()).toEqual(['fuseki', 'mailpit', 'postgres', 'rustfs', 'toxiproxy']);
     for (const [name, service] of Object.entries<any>(services)) {
-      expect(service.image, name).toMatch(/:[^@]+@sha256:[a-f0-9]{64}$|^rezics\/fuseki:6\.2\.0-base1$/);
+      expect(service.image, name).toMatch(/:[^@]+@sha256:[a-f0-9]{64}$|^rezics\/fuseki:6\.2\.0-(?:base1|cmd[0-9.]+-[a-f0-9]{12})$/);
       for (const port of service.ports ?? []) {
         expect(port.host_ip, `${name}:${port.published}`).toBe('127.0.0.1');
       }
