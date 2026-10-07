@@ -77,8 +77,11 @@ test('G939: all new list reads serve the convention in generated OpenAPI', async
   const response = await fixture.handle(new Request('http://localhost/openapi/json'));
   expect(response.status).toBe(200);
   const expected = (await response.json() as ListOpenApi).paths['/resource-list']!.post!;
-  expect(input.anyOf[0]).toEqual(expected.requestBody!.content!['application/json']!.schema);
-  expect(result.anyOf[0]).toEqual(expected.responses!['200']!.content!['application/json']!.schema);
+  const expectedInput = expected.requestBody?.content?.['application/json']?.schema;
+  const expectedResult = expected.responses?.['200']?.content?.['application/json']?.schema;
+  if (!expectedInput || !expectedResult) throw new Error('Fixture OpenAPI input and result schemas are required');
+  expect(input.anyOf[0]).toEqual(expectedInput);
+  expect(result.anyOf[0]).toEqual(expectedResult);
   assertListConvention({ paths: { '/v1/query': query as never } });
 });
 
