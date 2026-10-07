@@ -7,7 +7,7 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtemp
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
-import { sweepOrphanContainers } from '../qa/container-reaper.ts';
+import { newReapScope, reapSettleMs, removeScopedContainers, sweepOrphanContainers } from '../qa/container-reaper.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { parseAffectedArgs, selectTestCommand } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
@@ -1921,7 +1921,11 @@ async function stopProcessGroup(child: ChildProcess): Promise<void> {
 /** The preload names the bun process that is about to die, so the sweep can remove only that shard's containers. */
 async function stopGateShard(child: ChildProcess): Promise<void> {
   try { await stopProcessGroup(child); }
-  finally { sweepOrphanContainers(); }
+  finally {
+    sweepOrphanContainers();
+    await Bun.sleep(reapSettleMs);
+    sweepOrphanContainers();
+  }
 }
 
 export interface UnitShardResult {
@@ -2155,9 +2159,12 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   // Inventory guards include owner files. Run the selected Bun files directly
   // through Task so the public selector's tier-mixing refusal cannot mask them.
   // The gate's cwd is the tree under test, which may not contain this checkout's reaper.
+  // Each shard has its own scope, so a timed-out shard cannot remove a sibling's containers.
+  const scope = newReapScope();
   const child = spawn('task', ['goal:unit-files', '--', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
     ...files.map(file => `./${file}`)], {
-    cwd, env: { ...process.env, AGENT: '1', REZICS_REAP_PRELOAD: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
+    cwd, env: { ...process.env, AGENT: '1', REZICS_REAP_PRELOAD: '1', REZICS_REAP_SCOPE: scope },
+    stdio: ['ignore', 'pipe', 'pipe'], detached: true,
   });
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -2218,6 +2225,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     return unfinished(output());
   } finally {
     if (timer) clearTimeout(timer);
+    try { removeScopedContainers(scope); } catch { /* the shard's status still stands */ }
   }
 }
 
@@ -3449,6 +3457,8 @@ async function runQaCommand(command: readonly string[], env: NodeJS.ProcessEnv, 
     process.off('SIGTERM', forward);
     restoreOwner?.();
     // The child's exit hook can run before dockerd finishes creating its container.
+    try { sweepOrphanContainers(); } catch { /* the command's exit status still stands */ }
+    await Bun.sleep(reapSettleMs);
     try { sweepOrphanContainers(); } catch { /* the command's exit status still stands */ }
   }
 }

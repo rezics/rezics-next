@@ -1,10 +1,19 @@
 import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { accessSync, constants, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 /** Containers started for QA carry this label. Compose stacks and the dev stack do not. */
 export const reapOwnerLabel = 'rezics.reap-owner';
+/** One id per spawned test child. Siblings do not share it, so one child's cleanup cannot see another's containers. */
+export const reapScopeLabel = 'rezics.reap-scope';
 const dockerTimeoutMs = 30_000;
+/** dockerd can commit a container after the client is gone and the first list has returned. */
+export const reapSettleMs = 1_000;
+
+export function settleReap(): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, reapSettleMs);
+}
 
 /** Repository path of the executable placed first on a test process PATH. */
 export const dockerShimExecutable = 'scripts/qa/docker-shim/docker';
@@ -61,6 +70,30 @@ export function reapOwnerEnvironment(env: NodeJS.ProcessEnv, pid = process.pid):
   return next;
 }
 
+export function newReapScope(): string {
+  return randomUUID();
+}
+
+/**
+ * Owner stays whatever the caller already had. The scope is always new, so this child
+ * cannot be cleaned up by a sibling's id.
+ */
+export function reapChildEnvironment(env: NodeJS.ProcessEnv, pid = process.pid): NodeJS.ProcessEnv {
+  const next = reapOwnerEnvironment(env, pid);
+  if (!next.REZICS_REAL_DOCKER) return next;
+  next.REZICS_REAP_SCOPE = newReapScope();
+  return next;
+}
+
+/** `createdOwner` is set only for the process that minted the owner value. */
+export function reapOwnerAssignment(env: NodeJS.ProcessEnv, pid = process.pid): {
+  environment: NodeJS.ProcessEnv; createdOwner?: string;
+} {
+  const inherited = Boolean(env.REZICS_REAP_OWNER);
+  const environment = reapOwnerEnvironment(env, pid);
+  return { environment, createdOwner: inherited ? undefined : environment.REZICS_REAP_OWNER };
+}
+
 function dockerOutput(args: string[]): string | undefined {
   const result = spawnSync('docker', args, { encoding: 'utf8', timeout: dockerTimeoutMs });
   if (result.error || result.status !== 0) return undefined;
@@ -71,12 +104,33 @@ function containerIds(stdout: string): string[] {
   return stdout.split('\n').map(id => id.trim()).filter(id => /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(id));
 }
 
-export function removeOwnedContainers(owner: string): void {
-  if (!owner) return;
-  const listed = dockerOutput(['ps', '-aq', '--filter', `label=${reapOwnerLabel}=${owner}`]);
+function removeLabelledContainers(filter: string): void {
+  const listed = dockerOutput(['ps', '-aq', '--filter', filter]);
   if (listed === undefined) return;
   const ids = containerIds(listed);
   if (ids.length) spawnSync('docker', ['rm', '-f', ...ids], { encoding: 'utf8', timeout: dockerTimeoutMs });
+}
+
+export function removeOwnedContainers(owner: string): void {
+  if (!owner) return;
+  removeLabelledContainers(`label=${reapOwnerLabel}=${owner}`);
+}
+
+export function removeScopedContainers(scope: string): void {
+  if (!scope) return;
+  removeLabelledContainers(`label=${reapScopeLabel}=${scope}`);
+}
+
+/** A finished or timed-out child. The owner label is not a filter: siblings share it. */
+export function reapChildScope(env: NodeJS.ProcessEnv): void {
+  if (!env.REZICS_REAP_SCOPE) return;
+  removeScopedContainers(env.REZICS_REAP_SCOPE);
+}
+
+/** Exit of the process that minted the owner. A nested runner passes no owner and removes nothing. */
+export function reapCreatedOwner(createdOwner: string | undefined): void {
+  if (!createdOwner) return;
+  removeOwnedContainers(createdOwner);
 }
 
 /** Remove containers whose labelled process is gone or has a different start time. Unlabelled containers are never listed. */
@@ -92,14 +146,26 @@ export function sweepOrphanContainers(): void {
   if (stale.length) spawnSync('docker', ['rm', '-f', ...stale], { encoding: 'utf8', timeout: dockerTimeoutMs });
 }
 
-// Bun's unit-gate preload. The test process records itself so a killed shard is a dead owner.
-if (process.env.REZICS_REAP_PRELOAD === '1') {
-  const environment = reapOwnerEnvironment(process.env);
+function adoptReapEnvironment(environment: NodeJS.ProcessEnv): void {
   if (environment.PATH) process.env.PATH = environment.PATH;
   if (environment.REZICS_REAL_DOCKER) process.env.REZICS_REAL_DOCKER = environment.REZICS_REAL_DOCKER;
   if (environment.REZICS_REAP_OWNER) process.env.REZICS_REAP_OWNER = environment.REZICS_REAP_OWNER;
-  const owner = process.env.REZICS_REAP_OWNER;
-  if (owner) process.on('exit', () => {
-    try { removeOwnedContainers(owner); } catch { /* the process is already leaving */ }
+}
+
+/** Records this process as owner only when it minted the value, and removes every scope it owns on exit. */
+export function bindReapOwnerExit(env: NodeJS.ProcessEnv = process.env): void {
+  const assigned = reapOwnerAssignment(env);
+  adoptReapEnvironment(assigned.environment);
+  const createdOwner = assigned.createdOwner;
+  if (!createdOwner) return;
+  process.on('exit', () => {
+    try {
+      reapCreatedOwner(createdOwner);
+      settleReap();
+      reapCreatedOwner(createdOwner);
+    } catch { /* the process is already leaving */ }
   });
 }
+
+// Bun's unit-gate preload. A shard that inherited its owner must not remove the ancestor's containers.
+if (process.env.REZICS_REAP_PRELOAD === '1') bindReapOwnerExit();
