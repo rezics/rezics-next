@@ -31,6 +31,7 @@ async function stack(action: 'stack:up' | 'stack:reset', runId: string) {
     : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
       { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(result.stderr || result.stdout).slice(-2000)}`);
+  return 'admissionWaitMs' in result ? result.admissionWaitMs : 0;
 }
 
 test('LIVE04: native subject child and human retirement survive held graph recovery', async () => {
@@ -40,7 +41,8 @@ test('LIVE04: native subject child and human retirement survive held graph recov
   let h: Awaited<ReturnType<typeof authorCreditFixture>> | undefined, relay: Pool | undefined;
   try {
     const start = Date.now();
-    for (const run of [liveId, restoredId]) { started.push(run); await stack('stack:up', run); }
+    let admissionWaitMs = 0;
+    for (const run of [liveId, restoredId]) { started.push(run); admissionWaitMs += await stack('stack:up', run); }
     const apps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: liveId }), 'apps.env'));
     const restoredApps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: restoredId }), 'apps.env'));
     const access = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
@@ -54,7 +56,7 @@ test('LIVE04: native subject child and human retirement survive held graph recov
     await access.end();
     h = await authorCreditFixture({ ...apps, MAIN_ROUTING_EPOCH: '1' }, directory);
     await initializeFreshGraph(h.env.fuseki, h.env.lineage);
-    expect(Date.now() - start).toBeLessThan(600_000);
+    expect(Date.now() - start - admissionWaitMs).toBeLessThan(600_000);
     const consumer = `child:${nonce}`;
     await initializeRelayCheckpoint(relay, consumer, h.env.lineage.dataEpoch);
     const proposal = await h.propose('OL991899W', [author('/authors/OL1A')],

@@ -276,10 +276,64 @@ export interface IsolationRecord { tier: Tier; file: string; afterProject: strin
 
 const commandProcessGroups = new Set<number>();
 function stopAsyncCommands(): void {
-  for (const pid of commandProcessGroups) {
+  stopAsyncCommandGroups(commandProcessGroups);
+}
+function stopAsyncCommandGroups(groups: ReadonlySet<number>): void {
+  if (!groups.size) return;
+  // Freeze before discovering further detached groups, so startup cannot fork
+  // another command between discovery and shutdown. Keep ancestry until done.
+  const frozen = new Set<number>();
+  const freeze = (group: number) => {
+    frozen.add(group);
+    try { process.kill(-group, 'SIGSTOP'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+  };
+  for (const pid of groups) freeze(pid);
+  const descendants = new Map<number, { pid: number; group: number; depth: number }>();
+  let discovered: boolean;
+  do {
+    discovered = false;
+    for (const entry of existsSync('/proc') ? readdirSync('/proc') : []) {
+      if (!/^\d+$/.test(entry)) continue;
+      try {
+        const pid = Number(entry), stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+        const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+        const depth = [...ancestors(pid)].findIndex(ancestor => groups.has(ancestor));
+        if (depth < 0) continue;
+        const group = Number(fields[2]);
+        descendants.set(pid, { pid, group, depth });
+        if (!frozen.has(group)) { freeze(group); discovered = true; }
+      } catch { /* the process already exited */ }
+    }
+  } while (discovered);
+  for (const { pid, group } of [...descendants.values()].sort((a, b) => b.depth - a.depth)) {
+    try { process.kill(pid === group ? -pid : pid, 'SIGKILL'); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+  }
+  for (const pid of groups) {
     try { process.kill(-pid, 'SIGKILL'); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
   }
+}
+
+let asyncCommandCleanupBound = false;
+function cancelAsyncCommands(signal: NodeJS.Signals): void {
+  stopAsyncCommands();
+  process.exit(signal === 'SIGINT' ? 130 : 143);
+}
+function bindAsyncCommandCleanup(): void {
+  if (asyncCommandCleanupBound) return;
+  asyncCommandCleanupBound = true;
+  process.on('exit', stopAsyncCommands);
+  process.on('SIGINT', cancelAsyncCommands);
+  process.on('SIGTERM', cancelAsyncCommands);
+}
+function releaseAsyncCommandCleanup(): void {
+  if (commandProcessGroups.size || !asyncCommandCleanupBound) return;
+  asyncCommandCleanupBound = false;
+  process.off('exit', stopAsyncCommands);
+  process.off('SIGINT', cancelAsyncCommands);
+  process.off('SIGTERM', cancelAsyncCommands);
 }
 
 export async function commandAsync(root: string, name: string, args: string[], timeoutMs: number,
@@ -290,7 +344,10 @@ export async function commandAsync(root: string, name: string, args: string[], t
   const child = spawn(name, args, { cwd: root, detached: true,
     env: name === 'bun' && args[0] === 'test' ? testLogEnvironment(env) : env,
     stdio: ['ignore', 'pipe', 'pipe'] });
-  if (child.pid) commandProcessGroups.add(child.pid);
+  if (child.pid) {
+    commandProcessGroups.add(child.pid);
+    bindAsyncCommandCleanup();
+  }
   let stdout = '', stderr = '', timedOut = false;
   const trackAdmission = options.runDeadline !== undefined || env.REZICS_QA_MEMORY_EVENTS === '1';
   const waiting = new Set<string>();
@@ -326,6 +383,9 @@ export async function commandAsync(root: string, name: string, args: string[], t
   child.stderr.on('data', chunk => { const value = String(chunk); stderr += value; observeStderr(value); });
   const terminate = (signal: NodeJS.Signals) => {
     if (!child.pid) return;
+    // Forced cancellation also covers parents that cannot run their signal
+    // handler (for example, a test blocked in a synchronous subprocess).
+    if (signal === 'SIGKILL') { stopAsyncCommandGroups(new Set([child.pid])); return; }
     try { process.kill(-child.pid, signal); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
   };
@@ -359,6 +419,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
     if (force) clearTimeout(force);
     if (timedOut) terminate('SIGKILL');
     if (child.pid) commandProcessGroups.delete(child.pid);
+    releaseAsyncCommandCleanup();
   }
   const elapsedMs = Date.now() - start;
   if (waiting.size) admissionWaitMs += Date.now() - admissionStarted;

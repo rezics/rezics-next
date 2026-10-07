@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import ts from 'typescript-6';
 import { admissionWaitDuration, qaStartupTestTimeout, runQaAdmissionChildAsync, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
@@ -137,6 +137,76 @@ test('a wrapped test startup streams a four-minute injected memory wait within i
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+test('test-side startup children stop before parent cancellation completes, without a QA slot', async () => {
+  const alive = (pid: number) => {
+    try { return !readFileSync(`/proc/${pid}/stat`, 'utf8').includes(') Z '); }
+    catch { return false; }
+  };
+  for (const boundary of ['direct', 'indirect']) {
+    for (const mode of ['SIGTERM', 'SIGINT', 'exit', 'timeout', 'forced-timeout']) {
+      const dir = mkdtempSync(join(scratch, 'qa-startup-cancellation-'));
+      const ready = join(dir, 'ready'), late = join(dir, 'late-compose');
+      mkdirSync(join(dir, 'scripts', 'dev'), { recursive: true });
+      writeFileSync(join(dir, 'worker.ts'), `
+        import { writeFileSync } from 'node:fs';
+        writeFileSync(${JSON.stringify(join(dir, 'worker.pid'))}, String(process.pid));
+        writeFileSync(${JSON.stringify(ready)}, 'working');
+        process.on('SIGTERM', () => {});
+        setTimeout(() => writeFileSync(${JSON.stringify(late)}, 'created after cancellation'), 10000);
+        setInterval(() => {}, 1000);
+      `);
+      writeFileSync(join(dir, 'scripts', 'dev', 'cli.ts'), `
+        import { writeFileSync } from 'node:fs';
+        import { runQaAdmissionChildAsync } from ${JSON.stringify(join(root, 'scripts/qa/stack-startup.ts'))};
+        writeFileSync(${JSON.stringify(join(dir, 'startup.pid'))}, String(process.pid));
+        await runQaAdmissionChildAsync(${JSON.stringify(dir)}, 'bun', ['worker.ts'], 30000);
+      `);
+      writeFileSync(join(dir, 'parent.ts'), `
+        import { existsSync } from 'node:fs';
+        import { runQaAdmissionChildAsync, runQaStartupChildAsync } from ${JSON.stringify(join(root, 'scripts/qa/stack-startup.ts'))};
+        const pending = ${boundary === 'direct'
+          ? `runQaStartupChildAsync(${JSON.stringify(dir)}, ['stack:up'], 30000)`
+          : `runQaAdmissionChildAsync(${JSON.stringify(dir)}, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 30000)`};
+        ${mode === 'exit' ? `while (!existsSync(${JSON.stringify(ready)})) await Bun.sleep(5); process.exit(0);`
+          : mode === 'forced-timeout' ? `while (!existsSync(${JSON.stringify(ready)})) await Bun.sleep(5);
+            process.removeAllListeners('SIGTERM'); process.on('SIGTERM', () => {}); await pending;` : 'await pending;'}
+      `);
+      let child: ReturnType<typeof Bun.spawn> | undefined;
+      try {
+        const env = { ...process.env, REZICS_STACK_PROFILE: 'qa',
+          REZICS_QA_MEMORY_DEADLINE: String(Date.now() + 30000), REZICS_QA_MEMORY_EVENTS: '0' };
+        if (mode === 'timeout' || mode === 'forced-timeout') {
+          const result = await commandAsync(dir, 'bun', ['parent.ts'], 2000, env);
+          expect(result.timedOut).toBe(true);
+        } else {
+          child = Bun.spawn(['bun', 'parent.ts'], { cwd: dir, env, stdout: 'pipe', stderr: 'pipe' });
+          const deadline = Date.now() + 5000;
+          while (!existsSync(ready) && Date.now() < deadline) await Bun.sleep(5);
+          expect(existsSync(ready)).toBe(true);
+          if (mode !== 'exit') child.kill(mode as 'SIGTERM' | 'SIGINT');
+          expect(await child.exited).toBe(mode === 'SIGTERM' ? 143 : mode === 'SIGINT' ? 130 : 0);
+        }
+        expect(existsSync(ready)).toBe(true);
+        const pids = ['startup.pid', 'worker.pid'].map(file => Number(readFileSync(join(dir, file), 'utf8')));
+        const stoppedBy = Date.now() + 1000;
+        while (pids.some(alive) && Date.now() < stoppedBy) await Bun.sleep(5);
+        expect(pids.some(alive)).toBe(false);
+        expect(existsSync(late)).toBe(false);
+      } finally {
+        child?.kill();
+        if (child) await child.exited;
+        for (const file of ['startup.pid', 'worker.pid']) {
+          if (existsSync(join(dir, file))) {
+            const pid = Number(readFileSync(join(dir, file), 'utf8'));
+            try { process.kill(-pid, 'SIGKILL'); } catch { /* already stopped */ }
+          }
+        }
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }
+  }
+}, 30000);
 
 function unsafeStartupWraps(path: string, text: string): string[] {
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
