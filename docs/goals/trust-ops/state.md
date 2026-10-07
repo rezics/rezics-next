@@ -525,3 +525,14 @@ replay semantics, with exact journal-bound terminalselectors; hiddenreads alone
 are not destruction. Commentcreated outbox currently carries IDs, not selectors;
 remaining copies/custody need explicit audit. No WAL/files/backups claim.
 Launch independently confirmed theG1394 consumer/browser closure; all mailacked.
+
+ProgramC6comment decision is accepted and G-1408 is briefed as one narrow repair
+with Cursor implementation and mandatory manager/Sonnet assertion/authority
+review. It covers exact atomic selector removal, irreversible erasedanchor,
+authoredbody/ID/digest preservation, current authority/read-write/hold fences and
+all read/list/replay/copy surfaces. Maincontent.ts was released fromG-1343's task
+claim for the new slice. Dispatch is pending KernelG-1352's Content1708 reserved
+migration handoff; no worker/schema/runtime changes have started and no competing
+number is chosen. Exact schema/route/locator loan is coordinated, not inferred
+from unavailable-source reads. No selector text or resolvedText may remain after
+erasure; independently-authored annotation erasure stays its author's family.
