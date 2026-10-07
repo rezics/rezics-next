@@ -552,3 +552,15 @@ g1401-lock-merge-2312.*. G-1351 actualsmalloperator caller passedQA225912-a430e1
 209s; itsrebasedpositive slice/typepass is in162unit/guard gate, tmux
 g1351-positive-gate/log+exitg1351-positive-merge-2310.*. No mediumlaunchdrill
 or outer-outcome retry is claimed. No owned refresh before terminal gates.
+
+G-1344 Cursor13 found actualE2BIG (179273-byte singleargument), no Compose
+process ever started. Private seed now travelsstdin with boundedspawnstatus,
+error and signal; original guards/assertions preserved. Manager's real oversized
+stdin integrity proof passed3/19. Reconstructed fixturemanifest is byte-identical
+to SHA0cd430c7...; original stoppedbackup was read-only. Fresh stoppedcopyA
+fixture-medium-605f-a passed376.006ACTIVE+1.654admission, Bpassed357.460ACTIVE
++37.832admission, each600 independently, 7owners/3samples/gena3f55/seq0.
+Olddirtycopies and oldrunJSONs are not treated as current. One actual100k retry
+is live at goalctl2914045/tmuxmedium-campaign-stdin, log/exit/resultunderG1344
+.temp/goal campaign-medium-stdin-2328*. Freeze that source; no campaignpass yet.
+Priorchildcleanup120s failure remains separate and retained.
