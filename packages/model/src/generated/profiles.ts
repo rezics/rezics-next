@@ -899,7 +899,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-context-v2": {
-    "sha256": "f772578c222dd5b628c9f933c5e94b54dcd7afd098639f68b97397f95aabaf22",
+    "sha256": "29a8fe741508eb591b0348ecb88f76f9693ea15256783298d78cb75d5ff8f936",
     "file": "shapes/realm-target-rating-context-v2.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-context-v2/realm-shape",
@@ -911,7 +911,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-context-v3": {
-    "sha256": "27f3fad26fee3ece32933f50432f6de7df89aa2ff63bc0278855b79d46178bf3",
+    "sha256": "a50948f15f468a27a6a68468c126d0a051cf703b1c4550ef7ff4f6e352c4c890",
     "file": "shapes/realm-target-rating-context-v3.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-context-v3/realm-shape",
@@ -923,7 +923,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-context-v4": {
-    "sha256": "68ffb3005c6f57794341630ccb9db0c38d9ddaaeb0705d989aac5618ed6b2cce",
+    "sha256": "86d150f2d1d56437e1843345d7dfa07ab2de6c134dff61e3314513296f73e32b",
     "file": "shapes/realm-target-rating-context-v4.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-context-v4/realm-shape",
@@ -951,7 +951,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-observation-v2": {
-    "sha256": "84c2c5890fefa3b205a924aa2a847c005fb343e5fd8120dc103f8ca8a63bc9bd",
+    "sha256": "dbfdb6259c310991d57b339854f8ac138f3b42c8acfba780d9d932bab411a341",
     "file": "shapes/realm-target-rating-observation-v2.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-observation-v2/realm-shape",
@@ -967,7 +967,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-observation-v3": {
-    "sha256": "91992a81764f366b64c2dce1aef37952329b09c9a56a33121669c0bdbf5f48ae",
+    "sha256": "4dc4a035b1dae7714d354e730617f1f649561e99a8a76eeb0afaed4a7b742c0e",
     "file": "shapes/realm-target-rating-observation-v3.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-observation-v3/realm-shape",
@@ -983,7 +983,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-observation-v4": {
-    "sha256": "6932dc8df4e44fcda7f741cbad9b8d4cb1d53efebbec90a6086b1f0f8ca63f22",
+    "sha256": "670763404c8cd86a0629e4e55f35fb5b560e95ca00c1f7aaac52749dd4ee7386",
     "file": "shapes/realm-target-rating-observation-v4.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-observation-v4/realm-shape",

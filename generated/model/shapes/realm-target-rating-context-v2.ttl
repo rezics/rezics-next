@@ -23,3 +23,5 @@
     sh:property [ sh:path rv:ratingPopulationPolicy ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-account-principal-population-v1> ] ;
     sh:property [ sh:path rv:ratingAggregationPolicy ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-latest-per-rater-mean-v1> ] ;
     sh:property [ sh:path rdf:type ; sh:hasValue rv:LanguageTaggedTargetRatingContext ] .
+
+# Authored SHACL constraints for versioned target rating evidence.

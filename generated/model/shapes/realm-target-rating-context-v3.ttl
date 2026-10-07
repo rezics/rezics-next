@@ -24,3 +24,5 @@
     sh:property [ sh:path rv:ratingAggregationPolicy ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-latest-per-rater-mean-v1> ] ;
     sh:property [ sh:path rdf:type ; sh:hasValue rv:ScopedTargetRatingContext ] ;
     sh:property [ sh:path rv:displayThreshold ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 1000 ] .
+
+# Authored SHACL constraints for versioned target rating evidence.

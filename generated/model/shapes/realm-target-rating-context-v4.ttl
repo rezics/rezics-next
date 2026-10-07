@@ -29,3 +29,5 @@
     sh:property [ sh:path rdf:type ; sh:hasValue rv:AcceptedTargetRatingContext ] ;
     sh:property [ sh:path rv:acceptedSubjectType ; sh:maxCount 32 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:acceptedFrameDimension ; sh:maxCount 8 ; sh:datatype xsd:string ; sh:in ( "work" "realization" "release" "position" "event" "continuity" ) ] .
+
+# Authored SHACL constraints for versioned target rating evidence.
