@@ -566,8 +566,13 @@ export class GovernanceStore {
         throw new GovernanceStale('resume or cancel the pending decision before reconsidering');
       }
       if (releasing.has(input.outcome)) {
-        const restriction = input.reversesDecisionId ?? (await client.query<{ decision_head: string }>(
-          'SELECT decision_head FROM access.governance_case WHERE id = $1', [caseRow.id])).rows[0]!.decision_head;
+        // A cancelled restoration may be the head. Eligibility still belongs
+        // to the original restriction, as it does during owner confirmation.
+        const restriction = input.reversesDecisionId ?? (await client.query<{ id: string }>(`
+          SELECT id FROM access.moderation_decision WHERE case_id = $1
+            AND outcome IN ('reject','restrict','interim_restrict','final_restrict')
+          ORDER BY case_sequence DESC LIMIT 1`, [caseRow.id])).rows[0]?.id;
+        if (!restriction) throw new GovernanceStale('Restoration has no original restriction');
         await assertCounterNoticeRestoration(client, caseRow.id, restriction, this.clock());
         for (const target of input.targets) await assertNoParallelRestriction(client, target, restriction);
       }
@@ -602,6 +607,19 @@ export class GovernanceStore {
       }
       if (caseRow.state !== 'open' || caseRow.generation !== input.expectedGeneration) {
         throw new GovernanceStale('case changed since review');
+      }
+      if (input.answersStepId !== null) {
+        const step = await client.query(`SELECT id FROM access.governance_process_step
+          WHERE id = $1 AND case_id = $2 FOR UPDATE`, [input.answersStepId, caseRow.id]);
+        if (!step.rowCount) throw new GovernanceInvalid('answer step is outside this case');
+        // Decisions and receipts are immutable. Only explicit cancellation
+        // frees a step for a new answer; failed effects remain resumable.
+        if ((await client.query(`SELECT 1 FROM access.moderation_decision d
+          WHERE d.answers_step_id = $1 AND NOT EXISTS (
+            SELECT 1 FROM access.safety_decision_operation o WHERE o.decision_id = d.id AND o.cancelled)
+          LIMIT 1`, [input.answersStepId])).rowCount) {
+          throw new GovernanceStale('step already has a live answer');
+        }
       }
       const identities = input.targets.map((target) =>
         canonical({ ...target, expectedHead: undefined, expiresAt: undefined }),
@@ -1225,7 +1243,7 @@ export class GovernanceStore {
       const decision = (
         await client.query<{ authority_scope_id: string; kind: string; case_id: string; urgent: boolean }>(
           `SELECT d.authority_scope_id,d.kind,d.case_id,c.urgent FROM access.moderation_decision d
-           JOIN access.governance_case c ON c.id = d.case_id WHERE d.id = $1`,
+           JOIN access.governance_case c ON c.id = d.case_id WHERE d.id = $1 FOR UPDATE OF c`,
           [decisionId],
         )
       ).rows[0];
@@ -1357,18 +1375,26 @@ export class GovernanceStore {
         JOIN access.moderation_decision d ON d.id = j.restriction_id
         JOIN access.principal p ON p.id = d.principal_id WHERE j.step_id = $1 FOR UPDATE OF c`, [stepId])).rows[0];
       if (!row || !row.not_before || this.clock() < row.not_before) throw new GovernanceStale('Restoration is not due');
-      const key = `rights-deadline:${stepId}`;
-      const prior = (await client.query<{ id: string }>(`SELECT id FROM access.moderation_decision
-        WHERE principal_id = $1 AND kind = 'rights_disposition' AND idempotency_key = $2`,
-      [row.principal_id, key])).rows[0];
+      const originalKey = `rights-deadline:${stepId}`;
+      const prior = (await client.query<{ id: string; cancelled: boolean }>(`
+        SELECT d.id,COALESCE(o.cancelled,false) AS cancelled FROM access.moderation_decision d
+        LEFT JOIN access.safety_decision_operation o ON o.decision_id = d.id
+        WHERE d.principal_id = $1 AND d.kind = 'rights_disposition' AND d.answers_step_id = $2
+          AND (d.idempotency_key = $3 OR d.idempotency_key LIKE $3 || ':%')
+        ORDER BY d.case_sequence DESC LIMIT 1`,
+      [row.principal_id, stepId, originalKey])).rows[0];
+      // Preserve the original retry identity. A cancelled attempt gets a new
+      // key bound to the generation reviewed under the same case lock.
+      const key = prior?.cancelled ? `${originalKey}:${row.generation}` : originalKey;
       const principal = { issuer: row.account_issuer, subject: row.account_subject };
-      if (prior) return { row, principal, key, prior: prior.id, input: null, stayed: false };
+      if (prior && !prior.cancelled) return { row, principal, key, prior: prior.id, input: null, stayed: false };
       if ((await client.query(`SELECT 1 FROM access.governance_process_step WHERE case_id = $1
         AND process = 'dmca_512' AND step = 'claimant_action'
         AND (decision_id = $2 OR decision_id IS NULL) LIMIT 1`, [row.case_id, row.restriction_id])).rowCount) {
         return { row, principal, key, prior: null, input: null, stayed: true };
       }
-      if (row.state !== 'open' || row.decision_head !== row.restriction_id) {
+      if (row.state !== 'open' || (row.decision_head !== row.restriction_id
+        && !(prior?.cancelled && row.decision_head === prior.id))) {
         throw new GovernanceStale('The restriction has been superseded; review its scheduled restoration');
       }
       const authority = await this.decider(client, principal, row.acting_subject, row.authority_scope_id,
@@ -1392,7 +1418,10 @@ export class GovernanceStore {
       const targets = (await client.query<DecisionTargetInput>(`SELECT t.owner,t.resource,t.component,t.locator,
         t.scope_kind AS "scopeKind",t.revision,t.expected_head AS "expectedHead",t.effect
         FROM access.moderation_decision_target t JOIN access.safety_decision_effect e USING (decision_id,ordinal)
-        WHERE t.decision_id = $1 AND e.state = 'confirmed' ORDER BY t.ordinal LIMIT 64`,
+        WHERE t.decision_id = $1 AND e.state = 'confirmed'
+          AND EXISTS (SELECT 1 FROM access.governance_enforcement f WHERE f.decision_id = t.decision_id
+            AND f.decision_ordinal = t.ordinal AND f.state = 'restricted')
+        ORDER BY t.ordinal LIMIT 64`,
       [row.restriction_id])).rows;
       if (!targets.length) throw new GovernanceStale('The restriction has no confirmed effects');
       for (const target of targets) {
