@@ -3,7 +3,7 @@ import { Pool, type PoolClient } from 'pg';
 import { loadVndbSlice, metadataTag, recordedTag, seededReleasePlan, ODBL, DBCL,
   type PlannedRelease, type VndbSlice } from '../../../tests/fixtures/vndb/load.ts';
 import { SeedApiError } from './api.ts';
-import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
+import { acceptClassifiedStatement, discloseClassificationConcept, expectedScopeDecisionHead, shareClassificationContext,
   type ClassificationResolution, type SharedClassificationContext } from './classified-statement.ts';
 import { grantImportedContributionSeedAuthority, type LocalOperatorInput } from './operator.ts';
 import { seedKey } from './plan.ts';
@@ -209,7 +209,7 @@ async function seedVisualNovel(port: SeedPort, slice: VndbSlice, vn: VndbSlice['
     await putRelease(port, created.work, vn.id, recordedTag(vn.olang), release, names, revisions);
   }
   await creditProducers(port, created.work, vn.id, recordedTag(vn.olang), releases, producers);
-  await classify(port, created, concept, interpretation, vn.id);
+  await classifyVnWork(port, created, concept, interpretation, vn.id);
   return { vndb: vn.id, iri: created.work, mainVersion: created.mainVersion,
     workRevision: created.workRevision, mainRevision: created.mainRevision, metadataRevision };
 }
@@ -402,15 +402,17 @@ async function listedCredits(port: SeedPort, work: string) {
   return items;
 }
 
-async function classify(port: SeedPort, work: { work: string; mainVersion: string },
+export async function classifyVnWork(port: SeedPort, work: { work: string; mainVersion: string },
   concept: { concept: string; sense: string }, interpretation: SharedClassificationContext, vn: string) {
+  const scope = { kind: 'global' as const };
   const current = await call<ClassificationResolution>(port, 'POST', '/v1/classification-resolutions', {
-    profile: 'classification-resolution-v1', context: { kind: 'global' }, work: work.work,
+    profile: 'classification-resolution-v1', context: scope, work: work.work,
     mainVersion: work.mainVersion, sense: concept.sense }, seedKey('vndb-class-resolution', vn));
-  const head = current.source === 'local' && current.decision ? current.decision.slice(-12) : 'first';
+  const decisionHead = expectedScopeDecisionHead(current, scope);
+  const head = decisionHead ? decisionHead.slice(-12) : 'first';
   await acceptClassifiedStatement(
     (path, body, _token, key) => call(port, 'POST', path, body, key), '', port.actingSubject, work, concept.concept,
-    interpretation, { kind: 'global' }, current, { statement: seedKey('vndb-class-statement', vn),
+    interpretation, scope, current, { statement: seedKey('vndb-class-statement', vn),
       decision: seedKey('vndb-class-decision', `${vn}:${head}`) });
 }
 

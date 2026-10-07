@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { SeedApiError } from './api.ts';
-import { acceptClassifiedStatement, discloseClassificationConcept, rejectClassifiedStatement,
+import { acceptClassifiedStatement, discloseClassificationConcept, expectedScopeDecisionHead, rejectClassifiedStatement,
   shareClassificationContext, type ClassificationPost, type ClassificationResolution,
   type ClassificationScope, type SharedClassificationContext } from './classified-statement.ts';
 import { bookConcepts, freeConcepts, genreConcepts, seededBookIds, type BookConcept } from './genres-plan.ts';
@@ -27,14 +27,15 @@ async function resolve(state: SeedState, work: { work: string; mainVersion: stri
     steward.token, key);
 }
 
-async function accept(state: SeedState, work: { work: string; mainVersion: string },
+export async function acceptBookConcept(state: SeedState, work: { work: string; mainVersion: string },
   proposition: Proposition, scope: ClassificationScope, interpretation: SharedClassificationContext,
   steward: SeedState['sessions'][number], key: string) {
   // Keys name the Sense: earlier English-only Senses used the same Book and Concept keys.
   const senseKey = `${key}:${digest(proposition.sense)}`;
   const current = await resolve(state, work, proposition.sense, scope, steward,
     seedKey('book-concept-resolution', senseKey));
-  const head = current.source === 'local' && current.decision ? digest(current.decision) : 'first';
+  const decisionHead = expectedScopeDecisionHead(current, scope);
+  const head = decisionHead ? digest(decisionHead) : 'first';
   await acceptClassifiedStatement(postOf(state), steward.token, steward.actingSubject, work, proposition.concept,
     interpretation, scope, current, { statement: seedKey('book-concept-statement', senseKey),
       decision: seedKey('book-concept-decision', `${senseKey}:${head}`) });
@@ -169,8 +170,8 @@ export async function seedBookConcepts(state: SeedState) {
         await rejectLegacy(state, target, old!, { kind: 'realm-classification', id: realm.receipt.realm },
           realm.steward, `${id}:${concept}:${realm.id}`);
       }
-      await accept(state, target, proposition, { kind: 'global' }, interpretation, owner, `${id}:${concept}:global`);
-      await accept(state, target, proposition, { kind: 'realm-classification', id: realm.receipt.realm },
+      await acceptBookConcept(state, target, proposition, { kind: 'global' }, interpretation, owner, `${id}:${concept}:global`);
+      await acceptBookConcept(state, target, proposition, { kind: 'realm-classification', id: realm.receipt.realm },
         interpretation, realm.steward, `${id}:${concept}:${realm.id}`);
     }
   }

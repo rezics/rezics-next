@@ -5,7 +5,7 @@ import { SeedApiError } from './api.ts';
 import { grantRealmProfileSeed, officialModClient, realmProfileClient } from './official-authority.ts';
 import { editorList, extraWorks, fabricApi, fictionQuotes, fictionWorks, laterModReleases, officialHubItems, officialMods, officialTheme,
   type OfficialRealmId, penNames, publicTexts, realmProfiles, zoneContent } from './official-plan.ts';
-import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
+import { acceptClassifiedStatement, discloseClassificationConcept, expectedScopeDecisionHead, shareClassificationContext,
   type ClassificationResolution } from './classified-statement.ts';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantImportedContributionSeedAuthority,
   grantImportedWorkSeedAuthority,
@@ -499,15 +499,17 @@ async function modClassifications(o: Official) {
     if (!target?.published) throw new Error(`Mod Work ${item.id} is not public`);
     for (const label of ['Minecraft', item.ecosystem === 'fabric' ? 'Fabric' : 'Forge']) {
       const sense = concepts.get(label)!.sense;
-      const selection = { context: { kind: 'realm-classification', id: realm },
+      const scope = { kind: 'realm-classification' as const, id: realm };
+      const selection = { context: scope,
         work: target.work.work, mainVersion: target.work.mainVersion, sense };
       const current = await o.api.post<ClassificationResolution>(
         '/v1/classification-resolutions', { profile: 'classification-resolution-v1', ...selection },
         steward.token, seedKey('official-mod-classification-read', `${item.id}:${label}`));
-      const head = current.source === 'local' && current.decision ? current.decision.slice(-12) : 'first';
+      const decisionHead = expectedScopeDecisionHead(current, scope);
+      const head = decisionHead ? decisionHead.slice(-12) : 'first';
       await acceptClassifiedStatement(post, steward.token, steward.actingSubject,
         { mainVersion: target.work.mainVersion }, concepts.get(label)!.concept, interpretation,
-        { kind: 'realm-classification', id: realm }, current, {
+        scope, current, {
           statement: seedKey('official-mod-statement', `${item.id}:${label}`),
           decision: seedKey('official-mod-classification', `${item.id}:${label}:${head}`),
         });
