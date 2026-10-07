@@ -397,9 +397,12 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
     );
     return [...new Uint8Array(await blob.arrayBuffer())];
   });
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from(png) });
+  // The visible control opens the chooser only once its client handler is ready.
+  const [coverFile] = await Promise.all([
+    page.waitForEvent('filechooser', { timeout: 15_000 }),
+    page.getByRole('button', { name: 'Choose an image', exact: true }).and(page.locator('button')).click(),
+  ]);
+  await coverFile.setFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from(png) });
   await expect(
     page.getByRole('dialog').getByRole('heading', { name: 'Frame the cover' }),
   ).toBeVisible();
