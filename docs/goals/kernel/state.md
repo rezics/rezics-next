@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 22:06 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 22:30 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
@@ -100,26 +100,36 @@ qualifier branch preserved as `goal/g-1352-before-curator-selection-1852`.
   129-member/65-turn corpus with5000same-job/default growth retains identical
   170tuples/83probes/42712bytes maximum. EOF certifies the read snapshot only,
   no durable disposition/completion/release. Not in baseline G1352 union.
-  Sonnet#22 implements the reviewed bounded authenticated classification seal.
+  Sonnet#23 corrects the bounded authenticated classification seal.
   Exact persisted marker/checkpoint version and cancellation must be atomic;
   actual process restart refuses a fresh seal on an old incarnation. Historical
-  ACK replay proves only the original fact. No owner completion or release.
-- G1290 default Codex#20 remains live on private human work.edit title
+  ACK replay proves only the original fact. Review BLOCK939a3c650: digest-only
+  replay omitted original token/marker field equality; coherent restamping could
+  rewrite history. Fresh terminal authority needs authenticated original EOF,
+  and EOF transcript/construction must match marker. Actual55 retained original45
+  but used stale ab6d profiles; corrected current-fa396 rerun required. No owner
+  completion or release.
+- G1290 default Codex#20 EXITEDdfa020a884a5 on private human work.edit title
   acceptance. Explicit-language/source:null original frame/actor/custody and
   captured native Work G/B; exact Trust title-admission loan146afad6 only.
   Historical expired lost-ACK replay differs from fresh expiry checks. No
   terminal receipt, Access seal, PUBLIC/name/head mutation, Source promotion
   or recipe association. Prior recipe/byte43 proof retained; baseline Work34
-  alone is in G1352. Preserve live worker and frozen original bytes.
+  alone is in G1352. Actual frozen union61native (original43 unchanged), SQL2/71
+  and transport22; all578 inputs/23runtime artifacts hash-verified. Frozen model
+  is stale ab6d, so current native/model qualification still required. Read-only
+  source/loan review underway; never replace current Core with old fed495 bytes.
 - G1300 credits test-only component LANDED1a4d64e4979d: actual134 assertions
   including real hydration/final-fence unrelated commits and all163affected/
   19guards. Original publication12 plus strict G920595/170.835s retained;
   old complete branch backed up before selection. Publication TS/Access1773
   source remains unlanded; native12 included in G1352. Read-only#24 found
   actual late WikiEvidenceStore claim binding escapes existing generation.
-  Reviewed prospective correctness repair accepted; Sonnet#26 implements
+  Reviewed migration1707/trigger source4b3793f28 ACCEPT; Sonnet#27 implements
   atomic existing ReadingPosition change notification and rollout invalidation,
-  with actual behind-frontier/low-XID/rollback/replay cases. This retains global
+  with actual newG84711 and originalG84675. G920 cursor assertions were NOT run;
+  #27 composes frozen authentic hooks and runs them, plus originalG847 stale
+  DefinitionRef preparation repair retaining all assertions. This retains global
   invalidation debt and does NOT fulfill nonempty subject-local cursor semantics.
 - G1345 original native receipt/Assessment reader LANDEDff332fd95559: original
   56owner/919 and4native/454 assertions, actual source stable;161affected/
@@ -132,7 +142,9 @@ qualifier branch preserved as `goal/g-1352-before-curator-selection-1852`.
   is not completeness or release. Candidate e47a814a9 passed actual owner
   50/938 and real Access integration21/704. Review found a deadline check
   missing after awaited Content lookup and before return; #17 fixes it and
-  proves cancellation for entirely unresolved rows. No evaluator/current
+  proved cancellation for entirely unresolved rows in2429fbd29; independent
+  ACCEPT, actual51/957 owner. Merge gate162 initial native-shard720s inconclusive
+  (other3shards pass); retry after Root225 finishes, no pass inference. No evaluator/current
   intent/effects; Content recovery permits still require operator quiescence.
 - G1330 erased-pin45181d8fd39d serving; actual OPS12/10143 assertions preserves
   original9192 and available16 exact-byte proof; all163affected/19guards. Null
@@ -162,14 +174,22 @@ qualifier branch preserved as `goal/g-1352-before-curator-selection-1852`.
   failed346tests:2failures/3errors/0skips,1090.4s. Four Work startup errors
   lack /build/fuseki-text.ttl; one retirement fault hook misses individual Quad
   deletes. G1352 Sonnet#17 repairs the additive fault harness and proves all
-  original Work8+retirement7 cases. Temporary retirement test loan must be
-  restored/frozen before manager extends the claim with --allow-area.
+  original Work8+retirement7 cases: actual15pass, independent source/evidence
+  ACCEPT. Both borrowed files restored; manager extended the claim with
+  --allow-area and selected frozen additive patches.
   G1397 owns the live Dockerfile; exact fixture COPY loan is staged there.
-  Root will derive gate build inputs from module-stage Docker COPY directives
-  to prevent fixture divergence, then coalesce accepted Zone source, regenerate
-  matching pins, run normal gate and refresh. Program G1404 alone repairs the
-  image-specific budget (at least45min) and timeout diagnostics; data preparation
-  and restore budgets stay unchanged. Later Work/Claim/Body additions excluded;
+  Root selected79323bf98 plus Zone commits9d89a4a1e/f35f1dc3d on G1352:
+  gate derives complete build inputs from module-stage Docker COPY directives;
+  Body four-file source add-on accepted, current model fa396 preserved. Native
+  pin78dc38c96966 pending225-case normal gate. Initial720s parent gate timed
+  out before the wrapper900s allowance; other three shards passed. Retry runs
+  alone with supported960s parent aggregate, native900s and every original
+  turn cap unchanged (.temp/kernel/native-build-repair-merge-2227.log).
+  Program G1404 LANDEDaca93adc6: image-specific45min budget and streamed0600
+  build diagnostics; preparation/restore budgets unchanged. G1406 repairs
+  unstarted-shard retry and G1407 runner container cleanup, sole Program owners.
+  Exact expired-build mount scans found no surviving root native container.
+  Later Work title/Claim classification additions remain excluded;
   no scalar adoption, owner closure, private destruction or release claim.
 - G1373 production9bf7789b8 ACCEPT: actual QA205840-1c2bc8 PASS1/201,
   226.9s/source stable on native d89d232b3d30, all292 restore hashes checked.
@@ -181,7 +201,12 @@ qualifier branch preserved as `goal/g-1352-before-curator-selection-1852`.
   Exact Program CLI848cc552 and runner086f949 loans frozen/restored; stale
   handoff corrected. Sonnet#11 composes accepted recovery/cancellation Body
   additions onto the208 baseline and runs the indispensable combined native
-  gate. Preserve all current hooks; no production201 rerun or RDF retirement.
+  gate. Actual210 passed but used stale ab6d model, so not current-model
+  qualification; only four accepted Java sources selected in Root225 gate.
+  Production TS4 LANDEDc55dbd5ac227, all103affected/19guards pass and current
+  Main site-publication custody preserved by additive relay hunk. No original201
+  rerun or RDF retirement. Default Codex#12 inventories remaining authentic Body
+  custody prerequisites read-only after Sonnet admission refused.
 - G1379 Structure owner component LANDEDb175d3b53f1c: exact descriptors on
   every original same-graph revision, bounded ObjectStore get/cancellation,
   full recursive/signed coverage and historical generation acceptance retained.
@@ -233,8 +258,10 @@ Coordinator handover COMPLETE: native session
 by finite coordinator resume PID1161938. Prior interactive3991503 exited; do not
 kill current owner, enroll duplicate or run foreground loop. Finish ready actions
 then end the turn; coordinator wakes on durable mail/task exits. Whole Goal active.
-Protect manager codex-1 reserve (91% observed; default codex84%). New/resumed
-complex or assertion-sensitive workers use Sonnet; existing live Codex workers
+Protect manager codex-1 reserve (92% observed; default codex84%). Sonnet
+admission now restricted by week projected100%; admitted workers finish, no
+--force-usage. Route narrow read-only work to default Codex while its reserve
+allows; complex/assertion-sensitive changes need independent review. Existing workers
 finish their frozen handoffs. No banked reset credits or dependence on a reset.
 Only a regular automatic reset or weekly window changes that reserve. Live native artifact
 boundaries in `.temp/kernel/native-manager-handoff.md` and exact per-worker manifests.
