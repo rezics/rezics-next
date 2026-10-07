@@ -1,14 +1,15 @@
 import { expect, test } from 'bun:test';
-import { renderProfile } from '../compiler/ir.ts';
+import { profileSource } from '../compiler/shacl.ts';
 import { buildCommandRegistry } from '../compiler/registry.ts';
 import { authoredProfiles } from '../compiler/generate.ts';
-import { realmTargetRatingContextV2Profile } from '../definitions/realm-target-rating-context-v2.ts';
-import { realmTargetRatingContextV3Profile } from '../definitions/realm-target-rating-context-v3.ts';
-import { realmTargetRatingObservationV3Profile } from '../definitions/realm-target-rating-observation-v3.ts';
+
+const realmTargetRatingContextV2Profile = authoredProfiles.find(profile => profile.id === 'realm-target-rating-context-v2')!;
+const realmTargetRatingContextV3Profile = authoredProfiles.find(profile => profile.id === 'realm-target-rating-context-v3')!;
+const realmTargetRatingObservationV3Profile = authoredProfiles.find(profile => profile.id === 'realm-target-rating-observation-v3')!;
 
 const realmTargetRatingContextProfile = authoredProfiles.find(profile => profile.id === 'realm-target-rating-context-v1')!;
 
-const contextShape = (profile: typeof realmTargetRatingContextV3Profile) => renderProfile(profile);
+const contextShape = (profile: typeof realmTargetRatingContextV3Profile) => profileSource(profile);
 
 test('the v3 Context adds the projection grain and an optional bounded display threshold and leaves v1 and v2 as accepted', () => {
   const v3 = contextShape(realmTargetRatingContextV3Profile);
@@ -16,7 +17,7 @@ test('the v3 Context adds the projection grain and an optional bounded display t
   expect(v3).toContain('sh:path rv:displayThreshold ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 1000');
   expect(v3).not.toMatch(/rv:displayThreshold ; sh:minCount/);
   for (const older of [realmTargetRatingContextProfile, realmTargetRatingContextV2Profile]) {
-    const rendered = renderProfile(older);
+    const rendered = profileSource(older);
     expect(rendered).not.toContain('rv:Projection');
     expect(rendered).not.toContain('rv:displayThreshold');
   }
@@ -43,8 +44,8 @@ test('Context and observation v3 route by their own scoped types, ahead of the t
 test('the v3 binding carries the threshold as an optional key only, and its observation shapes accept the projection grain', () => {
   expect(realmTargetRatingContextV3Profile.binding).toMatchObject({ optional: ['displayThreshold'],
     demandedBy: ['rv:ScopedTargetRatingContext'] });
-  expect(realmTargetRatingContextV3Profile.binding.required).not.toContain('displayThreshold');
+  expect(realmTargetRatingContextV3Profile.binding!.required).not.toContain('displayThreshold');
   expect(realmTargetRatingObservationV3Profile.binding).toMatchObject({
     demandedBy: ['rv:ScopedTargetRatingObservation', 'rv:ScopedTargetRatingObservationRevision'] });
-  expect(renderProfile(realmTargetRatingObservationV3Profile)).toContain('rv:Resource rv:Projection )');
+  expect(profileSource(realmTargetRatingObservationV3Profile)).toContain('rv:Resource rv:Projection )');
 });

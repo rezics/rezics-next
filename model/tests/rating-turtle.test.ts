@@ -15,11 +15,19 @@ import * as targetContextDeclaration from '../definitions/realm-target-rating-co
 import * as targetObservationDeclaration from '../definitions/realm-target-rating-observation-v1.ts';
 import * as releaseContextDeclaration from '../definitions/realm-release-rating-context-v1.ts';
 import * as releaseObservationDeclaration from '../definitions/realm-release-rating-observation-v1.ts';
+import * as targetContextV2Declaration from '../definitions/realm-target-rating-context-v2.ts';
+import * as targetObservationV2Declaration from '../definitions/realm-target-rating-observation-v2.ts';
+import * as targetContextV3Declaration from '../definitions/realm-target-rating-context-v3.ts';
+import * as targetObservationV3Declaration from '../definitions/realm-target-rating-observation-v3.ts';
+import * as targetContextV4Declaration from '../definitions/realm-target-rating-context-v4.ts';
+import * as targetObservationV4Declaration from '../definitions/realm-target-rating-observation-v4.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const rv = 'https://rezics.com/vocab/';
 const definition = 'https://rezics.com/definition/';
 const authorComment = '\n# Authored SHACL constraints for rating evidence.\n';
+const versionedAuthorComment =
+  '\n# Authored SHACL constraints for versioned target rating evidence.\n';
 const ids = [
   'global-rating-standing-context-v1',
   'global-rating-standing-observation-v1',
@@ -704,7 +712,9 @@ test('target rating v2-v4 descendants preserve accepted constraints, focus roles
     const profile = authoredProfiles.find((item) => item.id === id)!;
     expect(digest(constraints(profile))).toBe(constraintHash);
     expect(metadataDigest(profile)).toBe(metadataHash);
-    expect(digest(profileSource(profile))).toBe(
+    const source = profileSource(profile);
+    expect(source.endsWith(versionedAuthorComment)).toBe(true);
+    expect(digest(source.slice(0, -versionedAuthorComment.length))).toBe(
       targetDescendantPins[id as keyof typeof targetDescendantPins],
     );
     const expectedRoles = derivedRoles(id.replace(/-v[234]$/, '-v1'));
@@ -862,5 +872,389 @@ test('derived revisions admit Available integer 1-10 and require Withdrawn value
       expect(
         await acceptsDerived(id, 'revision', { ...valid, 'rv:ratingAvailability': value }),
       ).toBe(false);
+  }
+});
+
+const versionedIds = Object.keys(targetDescendants).sort();
+const versionedProfiles = authoredProfiles.filter((profile) => versionedIds.includes(profile.id));
+const versionedModules = [
+  ['realm-target-rating-context-v2.ts', targetContextV2Declaration],
+  ['realm-target-rating-observation-v2.ts', targetObservationV2Declaration],
+  ['realm-target-rating-context-v3.ts', targetContextV3Declaration],
+  ['realm-target-rating-observation-v3.ts', targetObservationV3Declaration],
+  ['realm-target-rating-context-v4.ts', targetContextV4Declaration],
+  ['realm-target-rating-observation-v4.ts', targetObservationV4Declaration],
+] as const;
+const versionedOptions = { established: {}, canonicalOrder: [], demandOrder: [] };
+const versionedOutputs = buildModelOutputs(versionedProfiles);
+let versionedSchemaPromise: Promise<Record<string, TSchema>> | undefined;
+async function acceptsVersioned(
+  id: string,
+  role: string,
+  node: Record<string, unknown>,
+): Promise<boolean> {
+  if (!versionedSchemaPromise) {
+    const path = join(directory(), 'versioned-schemas.ts');
+    writeFileSync(path, versionedOutputs.get('packages/model/src/generated/schemas.ts')!);
+    versionedSchemaPromise = import(path).then(
+      (module) => module.shapeSchemas as Record<string, TSchema>,
+    );
+  }
+  return Value.Check((await versionedSchemaPromise)[`${definition}${id}/${role}-shape`]!, node);
+}
+function versionedType(id: string): string {
+  return id.endsWith('v2') ? 'LanguageTagged' : id.endsWith('v3') ? 'Scoped' : 'Accepted';
+}
+function versionedContext(id: string): Record<string, unknown> {
+  return {
+    ...derivedContext('realm-target-rating-context-v1'),
+    'rdf:type': [`${rv}TargetRatingContext`, `${rv}${versionedType(id)}TargetRatingContext`],
+    'rv:question': [{ '@value': '這個版本如何？', '@language': 'zh-Hant' }],
+  };
+}
+function versionedRevision(id: string): Record<string, unknown> {
+  return {
+    ...derivedRevision('realm-target-rating-observation-v1'),
+    'rdf:type': [
+      `${rv}TargetRatingObservationRevision`,
+      `${rv}${versionedType(id)}TargetRatingObservationRevision`,
+    ],
+  };
+}
+
+test('versioned target discovery preserves authored bytes, focus roles, constraints and metadata', () => {
+  const path = directory();
+  for (const id of versionedIds)
+    writeFileSync(
+      join(path, `${id}.ttl`),
+      readFileSync(join(root, `model/definitions/${id}.ttl`), 'utf8'),
+    );
+  const discovered = discoverProfiles(path, versionedModules);
+  expect(discovered.map((profile) => profile.id)).toEqual(versionedIds);
+  expect(versionedProfiles.map((profile) => profile.id)).toEqual(versionedIds);
+  const published = commandProfiles(discovered, versionedOptions);
+  expect(published.manifest).toEqual(commandProfiles(versionedProfiles, versionedOptions).manifest);
+  for (const profile of discovered) {
+    const [constraintHash, metadataHash] =
+      targetDescendants[profile.id as keyof typeof targetDescendants];
+    expect(digest(constraints(profile))).toBe(constraintHash);
+    expect(metadataDigest(profile)).toBe(metadataHash);
+    const expectedRoles = derivedRoles(profile.id.replace(/-v[234]$/, '-v1'));
+    const entry = published.profiles.find((item) => item.id === profile.id)!;
+    expect(entry.focusRoles).toEqual(expectedRoles);
+    expect(entry.shapes).toEqual(
+      expectedRoles.map((role) => `${definition}${profile.id}/${role}-shape`),
+    );
+    expect(published.shapes.get(entry.file)).toBe(profileSource(profile));
+    expect(entry.sha256).toBe(digest(profileSource(profile)));
+    expect(entry.sha256).not.toBe(
+      targetDescendantPins[profile.id as keyof typeof targetDescendantPins],
+    );
+  }
+  for (const [, module] of versionedModules) {
+    expect(Object.keys(module)).toHaveLength(1);
+    for (const [name, declaration] of Object.entries(module)) {
+      expect(name.endsWith('Declaration')).toBe(true);
+      expect(Object.keys(declaration).sort()).toEqual(['binding', 'canonical', 'id']);
+    }
+  }
+});
+
+test('versioned author reload preserves historical bytes, manifests and pinned revision references', () => {
+  const path = directory();
+  const historicalProfiles = versionedProfiles.map((profile) => {
+    const source = profileSource(profile);
+    expect(source.endsWith(versionedAuthorComment)).toBe(true);
+    const pinnedBytes = source.slice(0, -versionedAuthorComment.length);
+    expect(digest(pinnedBytes)).toBe(
+      targetDescendantPins[profile.id as keyof typeof targetDescendantPins],
+    );
+    return parseTurtleProfile(profile.id, pinnedBytes, { id: profile.id, ...ownMetadata(profile) });
+  });
+  const historical = commandProfiles(historicalProfiles, versionedOptions);
+  const records = historical.profiles.map((profile) => ({
+    profile: profile.id,
+    shapeSha256: profile.sha256,
+    revision: 'urn:rating:retained-versioned-revision',
+  }));
+  const retained = structuredClone({
+    manifest: historical.manifest,
+    profiles: historical.profiles,
+    shapes: [...historical.shapes],
+    records,
+  });
+  const current = commandProfiles(versionedProfiles, versionedOptions);
+  for (const profile of versionedProfiles)
+    writeFileSync(
+      join(path, `${profile.id}.ttl`),
+      `${profileSource(profile)}\n# Author byte reload.\n`,
+    );
+  const reloaded = discoverProfiles(path, versionedModules);
+  const changed = commandProfiles(reloaded, versionedOptions);
+  for (const [index, profile] of versionedProfiles.entries()) {
+    expect(changed.profiles[index]!.sha256).not.toBe(current.profiles[index]!.sha256);
+    expect(changed.profiles[index]!.sha256).toBe(digest(profileSource(reloaded[index]!)));
+    expect(constraints(reloaded[index]!)).toBe(constraints(profile));
+    expect(metadataDigest(reloaded[index]!)).toBe(metadataDigest(profile));
+    expect(historical.profiles[index]!.sha256).toBe(
+      targetDescendantPins[profile.id as keyof typeof targetDescendantPins],
+    );
+    expect(digest(historical.shapes.get(historical.profiles[index]!.file)!)).toBe(
+      historical.profiles[index]!.sha256,
+    );
+  }
+  const preserved = commandProfiles(historicalProfiles, versionedOptions);
+  expect(preserved.manifest).toEqual(retained.manifest);
+  expect(preserved.profiles).toEqual(retained.profiles);
+  expect([...preserved.shapes]).toEqual(retained.shapes);
+  expect({
+    manifest: historical.manifest,
+    profiles: historical.profiles,
+    shapes: [...historical.shapes],
+    records,
+  }).toEqual(retained);
+});
+
+test('versioned target conversion leaves all previously authored v1 Turtle bytes immutable', () => {
+  const earlierAuthors = {
+    'global-rating-standing-context-v1':
+      'fffed312c16e43a3e6d8fdda5f3947cb2d1a97b36778b128b6ce4667a78db76a',
+    'global-rating-standing-observation-v1':
+      'dc2ad4e4ec21a66a78d1c416a4e8299e17a84e4530daccf330dbe3d3156ec9c9',
+    'post-v1': 'aaa6e353c76cd215f5d64dbfcc0ae57846bb74e52f64e93582ffa6a1f27ec776',
+    'realm-daily-rating-context-v1':
+      '061f3a2c304b6d372c582af28facc91895ab2bfa1ca96da723dce737b484ca46',
+    'realm-daily-rating-observation-v1':
+      '514dbf814fef5943ad37da569c6768d2d94e2f48bcd4d5594b9efa26d4e67faf',
+    'realm-experience-rating-context-v1':
+      'e74ba4e6db85146ab55978ad43240b66a3eaaee088e8f56c84373604e4330569',
+    'realm-experience-rating-observation-v1':
+      'fe22f7a2143be4317ed09912ec3e4e799e525a30452df76c21d3d9a033093e65',
+    'realm-release-rating-context-v1':
+      'a3edcb7334d29b923da433d5295aebf30d23d6dde295ebae32280e4fba275d49',
+    'realm-release-rating-observation-v1':
+      'e1926bc5e8371333a5d32adf9ec4f9f03bc3e1cdb89e458e22006fa60775fecb',
+    'realm-standing-rating-context-v1':
+      '7bec3a7793417ef4138e54a6220ceaec7aa76e446df3a9fdadc9d1ba5cc35fab',
+    'realm-standing-rating-observation-v1':
+      'd824ac73cde5f8a3a67f83339c4a3db9b982a8223b04f2277981d6adba33caa4',
+    'realm-target-rating-context-v1':
+      '30f3b40be8bee4466305813e8487ad5baee5a8e0caf4ed1753df6c42b7cc1cf2',
+    'realm-target-rating-observation-v1':
+      '0169769b3c1179209e7205833b57b2dfb62c91603fc4efc098c0350d667e5d0c',
+    'source-field-statement-v1': 'bc6c6397fb9ec6e4bf6bb44ffd933bf1abeaa7b83eb1939c57d32f438a2dcfb7',
+    'source-open-library-work-v1':
+      '460460ddffc2e3f6f8384402d54e521bef4f179b9ac6897fac98641acbc4390b',
+    'source-reification-v1': '70f30519cefdb502ee86281b6edcdf18b7ced37209a90058113727abc521884c',
+    'work-reference-block-v1': 'c72c3a6b828632aeddc1a3078dead4dd0dfd0f989fca550530ad850dbcb9b9a0',
+  };
+  for (const [id, hash] of Object.entries(earlierAuthors))
+    expect(digest(readFileSync(join(root, `model/definitions/${id}.ttl`), 'utf8'))).toBe(hash);
+});
+
+test('versioned target questions admit declared languages while v1 retains English and exact scales', async () => {
+  const question = [{ '@value': '這個版本如何？', '@language': 'zh-Hant' }];
+  for (const id of ['realm-target-rating-context-v1', 'realm-target-rating-observation-v1'])
+    expect(
+      await acceptsDerived(id, 'context', { ...derivedContext(id), 'rv:question': question }),
+    ).toBe(false);
+  for (const id of versionedIds) {
+    const valid = versionedContext(id);
+    expect(await acceptsVersioned(id, 'context', valid)).toBe(true);
+    for (const language of ['en', 'ja', 'ar', 'zh-Hant'])
+      expect(
+        await acceptsVersioned(id, 'context', {
+          ...valid,
+          'rv:question': [{ '@value': 'How was it?', '@language': language }],
+        }),
+      ).toBe(true);
+    for (const value of [
+      null,
+      'How was it?',
+      ['How was it?'],
+      [],
+      [{ '@value': 'How was it?' }],
+      [{ '@value': 10, '@language': 'en' }],
+      [{ '@value': 'How was it?', '@language': null }],
+      [{ '@value': 'How was it?', '@language': 'en_US' }],
+      [{ '@value': 'No', '@language': 'en' }],
+      [{ '@value': 'x'.repeat(121), '@language': 'en' }],
+    ])
+      expect(await acceptsVersioned(id, 'context', { ...valid, 'rv:question': value })).toBe(false);
+    for (const [path, value] of [
+      ['rv:ratingScaleMin', '1'],
+      ['rv:ratingScaleMin', 0],
+      ['rv:ratingScaleMax', '10'],
+      ['rv:ratingScaleMax', 5],
+      ['rv:ratingScaleMax', null],
+    ] as const)
+      expect(await acceptsVersioned(id, 'context', { ...valid, [path]: [value] })).toBe(false);
+  }
+});
+
+test('versioned target Projection and optional display threshold preserve their existing bounds', async () => {
+  for (const id of versionedIds) {
+    const valid = versionedContext(id);
+    expect(
+      await acceptsVersioned(id, 'context', { ...valid, 'rv:targetGrain': [`${rv}Projection`] }),
+    ).toBe(!id.endsWith('v2'));
+    if (id.endsWith('v2')) continue;
+    expect(await acceptsVersioned(id, 'context', valid)).toBe(true);
+    for (const value of [[], [1], [1000]])
+      expect(
+        await acceptsVersioned(id, 'context', { ...valid, 'rv:displayThreshold': value }),
+      ).toBe(true);
+    for (const value of [[0], [1001], [1.5], ['1'], [null], [1, 2], null, 1])
+      expect(
+        await acceptsVersioned(id, 'context', { ...valid, 'rv:displayThreshold': value }),
+      ).toBe(false);
+  }
+});
+
+test('target v4 optional subject types and frame dimensions preserve cardinalities and literal term kinds', async () => {
+  const dimensions = ['work', 'realization', 'release', 'position', 'event', 'continuity'];
+  for (const id of versionedIds.filter((value) => value.endsWith('v4'))) {
+    const valid = versionedContext(id);
+    expect(await acceptsVersioned(id, 'context', valid)).toBe(true);
+    const types = Array.from({ length: 32 }, (_, index) => `urn:subject:type:${index}`);
+    for (const value of [[], types])
+      expect(
+        await acceptsVersioned(id, 'context', { ...valid, 'rv:acceptedSubjectType': value }),
+      ).toBe(true);
+    for (const value of [
+      [...types, 'urn:subject:type:33'],
+      [null],
+      [1],
+      [{ '@id': 'urn:subject:type:1' }],
+      null,
+      'urn:subject:type:1',
+    ])
+      expect(
+        await acceptsVersioned(id, 'context', { ...valid, 'rv:acceptedSubjectType': value }),
+      ).toBe(false);
+    // The node-local adapter keeps string envelopes; Jena validates RDF IRIs.
+    expect(
+      await acceptsVersioned(id, 'context', {
+        ...valid,
+        'rv:acceptedSubjectType': ['source lexical string'],
+      }),
+    ).toBe(true);
+    for (const value of [[], dimensions, ...dimensions.map((dimension) => [dimension])])
+      expect(
+        await acceptsVersioned(id, 'context', { ...valid, 'rv:acceptedFrameDimension': value }),
+      ).toBe(true);
+    for (const value of [
+      [`${rv}work`],
+      ['Work'],
+      ['unknown'],
+      ['work', 'work'],
+      [null],
+      [1],
+      [{ '@value': 'work' }],
+      null,
+      'work',
+      Array.from({ length: 9 }, () => 'work'),
+    ])
+      expect(
+        await acceptsVersioned(id, 'context', { ...valid, 'rv:acceptedFrameDimension': value }),
+      ).toBe(false);
+    const shape = versionedProfiles
+      .find((profile) => profile.id === id)!
+      .shapes.find((item) => item.iri.endsWith('/context-shape'))!;
+    expect(
+      shape.properties.find((property) => property.path === 'rv:acceptedSubjectType')?.maxCount,
+    ).toBe(32);
+    expect(
+      shape.properties.find((property) => property.path === 'rv:acceptedFrameDimension')?.maxCount,
+    ).toBe(8);
+    const context = JSON.parse(versionedOutputs.get(`generated/model/contexts/${id}.jsonld`)!)[
+      '@context'
+    ];
+    expect(context['rv:acceptedSubjectType']).toEqual({
+      '@id': `${rv}acceptedSubjectType`,
+      '@type': '@id',
+    });
+    expect(context['rv:acceptedFrameDimension']).toEqual({ '@id': `${rv}acceptedFrameDimension` });
+  }
+});
+
+test('target v4 population disjunction preserves active Realm and open Global alternatives', async () => {
+  for (const id of versionedIds.filter((value) => value.endsWith('v4'))) {
+    const realm = {
+      '@id': 'urn:rating:population',
+      'rdf:type': [`${rv}Realm`],
+      'rv:realmState': [`${rv}Active`],
+      'rv:ratingContext': ['urn:rating:context'],
+    };
+    const global = {
+      '@id': 'urn:rating:population',
+      'rdf:type': [`${rv}GlobalRatingPopulation`],
+      'rv:ratingContext': ['urn:rating:context'],
+    };
+    expect(await acceptsVersioned(id, 'realm', realm)).toBe(true);
+    expect(await acceptsVersioned(id, 'realm', global)).toBe(true);
+    expect(
+      await acceptsVersioned(id, 'realm', { ...global, 'rv:realmState': [`${rv}Inactive`] }),
+    ).toBe(true);
+    expect(
+      await acceptsVersioned(id, 'realm', {
+        ...global,
+        'rdf:type': [`${rv}Realm`, `${rv}GlobalRatingPopulation`],
+      }),
+    ).toBe(true);
+    for (const value of [[], [`${rv}Inactive`], [`${rv}Active`, `${rv}Inactive`], [null], null])
+      expect(await acceptsVersioned(id, 'realm', { ...realm, 'rv:realmState': value })).toBe(false);
+    for (const value of [[], [`${rv}OtherPopulation`], [null], null, `${rv}Realm`])
+      expect(await acceptsVersioned(id, 'realm', { ...realm, 'rdf:type': value })).toBe(false);
+    const { 'rv:ratingContext': omitted, ...withoutContext } = global;
+    expect(omitted).toEqual(['urn:rating:context']);
+    expect(await acceptsVersioned(id, 'realm', withoutContext)).toBe(false);
+  }
+});
+
+test('target v2-v4 Available revisions retain integer 1-10 and Withdrawn requires absent values', async () => {
+  for (const id of versionedIds.filter((value) => value.includes('-observation-'))) {
+    const valid = versionedRevision(id);
+    for (const value of [1, 10])
+      expect(await acceptsVersioned(id, 'revision', { ...valid, 'rv:ratingValue': [value] })).toBe(
+        true,
+      );
+    const { 'rv:ratingValue': omitted, ...withoutValue } = valid;
+    expect(omitted).toEqual([10]);
+    expect(await acceptsVersioned(id, 'revision', withoutValue)).toBe(false);
+    for (const value of [[], [0], [11], [1.5], ['10'], [null], [1, 2], null, 10])
+      expect(await acceptsVersioned(id, 'revision', { ...valid, 'rv:ratingValue': value })).toBe(
+        false,
+      );
+    const withdrawn = { ...withoutValue, 'rv:ratingAvailability': [`${rv}Withdrawn`] };
+    expect(await acceptsVersioned(id, 'revision', withdrawn)).toBe(true);
+    expect(await acceptsVersioned(id, 'revision', { ...withdrawn, 'rv:ratingValue': [] })).toBe(
+      true,
+    );
+    for (const value of [[1], [null], null, 1])
+      expect(
+        await acceptsVersioned(id, 'revision', { ...withdrawn, 'rv:ratingValue': value }),
+      ).toBe(false);
+    for (const value of [
+      [],
+      ['Available'],
+      [`${rv}Unknown`],
+      [`${rv}Available`, `${rv}Withdrawn`],
+      [null],
+      null,
+      `${rv}Available`,
+    ])
+      expect(
+        await acceptsVersioned(id, 'revision', { ...valid, 'rv:ratingAvailability': value }),
+      ).toBe(false);
+    expect(await acceptsVersioned(id, 'revision', { ...valid, 'rv:submittedAt': ['today'] })).toBe(
+      false,
+    );
+    expect(
+      await acceptsVersioned(id, 'revision', {
+        ...valid,
+        'rv:predecessor': ['urn:revision:1', 'urn:revision:2'],
+      }),
+    ).toBe(false);
   }
 });
