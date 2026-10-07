@@ -25,7 +25,7 @@ import { commandError, problem } from './problems.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
 import { discloseInventory, type DisclosureTarget } from '../modules/disclosure/read.ts';
-import { currentZoneCampaignUses } from '../modules/zone/showcase-disclosure.ts';
+import { bindZoneCampaignReader, currentZoneCampaignUses } from '../modules/zone/showcase-disclosure.ts';
 import { mediaVisibility } from '../modules/media/visibility.ts';
 
 declare module './dependencies.ts' {
@@ -218,9 +218,9 @@ async function publicFirst(request: Request, actingSubject: string | undefined,
 
 export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const readerFor = async (request: Request, actingSubject: string | undefined) => {
-    const publicReader = { viewer: ANONYMOUS_VIEWER, canReadSemantics: work.mediaAccess
+    const publicReader = bindZoneCampaignReader({ viewer: ANONYMOUS_VIEWER, canReadSemantics: work.mediaAccess
       ? (resources: readonly string[]) => work.mediaAccess!.canReadSemantics(null, null, resources, fuseki)
-      : undefined };
+      : undefined }, request);
     if (!request.headers.get('authorization')) return publicReader;
     let verifiedWork: ReturnType<typeof work.account.verify> | undefined;
     const workPrincipal = () => verifiedWork ??= work.account.verify(request, ['work:read']);
@@ -228,7 +228,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     // Public image URLs do not choose an Agent. Keep the reader's live preferences
     // while leaving private Work/context authority absent until an Agent is supplied.
     if (!actingSubject) return { ...publicReader, viewer };
-    return { viewer, realmReadProof: async (realm: string) =>
+    return { ...publicReader, viewer, realmReadProof: async (realm: string) =>
       await work.access.realmReadProof?.(await workPrincipal(), actingSubject, realm) ?? null,
     canReadWorks: work.mediaAccess
       ? async (resources: readonly string[]) => work.mediaAccess!.canReadWorks(await workPrincipal(), actingSubject, resources)

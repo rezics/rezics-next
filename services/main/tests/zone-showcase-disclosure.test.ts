@@ -18,7 +18,8 @@ test('public slide schedules include their start and exclude their end', () => {
   expect(slideIsCurrent({ ...slide, startsAt: new Date(now).toISOString() }, now)).toBe(true);
   expect(slideIsCurrent({ ...slide, endsAt: new Date(now).toISOString() }, now)).toBe(false);
   expect(slideIsCurrent({ ...slide, startsAt: new Date(now + 1).toISOString() }, now)).toBe(false);
-  expect(ZONE_SHOWCASE_DISCLOSURE_COST).toMatchObject({ configurationReads: 1, targetBatches: 1, maxTargets: 7 });
+  expect(ZONE_SHOWCASE_DISCLOSURE_COST).toMatchObject({ configurationReads: 5,
+    maxHomeContentReads: 1, targetBatches: 1, maxTargets: 7 });
 });
 
 test('campaign disclosure hides a held Asset or Use before advertising source URLs or renditions', async () => {

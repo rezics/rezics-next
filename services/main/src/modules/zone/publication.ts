@@ -126,15 +126,13 @@ export { readZoneCampaignArt } from './campaign-art.ts';
 
 /** One exact body per home read. Languages are the Content owner's immutable
  * publication metadata, so selecting one never enumerates or loads draft bodies. */
-export async function readZoneHomeDocument(work: MainWorkDependencies, request: Request,
-  state: Awaited<ReturnType<typeof readZonePublication>>,
-  moduleData?: Awaited<ReturnType<typeof readZoneModuleData>>,
-  slideMedia?: Awaited<ReturnType<typeof readZoneCampaignArt>>,
-  visibleSlides?: (slides: typeof state.presentation.slides) => Promise<typeof state.presentation.slides>): Promise<ZonePublicPage | null> {
+export async function readZonePublishedHomeContent(
+  work: Pick<MainWorkDependencies, 'environment' | 'content' | 'contentAuthoring'>,
+  state: Awaited<ReturnType<typeof readZonePublication>>, languages: readonly string[] = []) {
   if (!state.bundle || state.disclosure !== 'public') return null;
   const pages = state.bundle.pages.filter(page => page.page === state.zone);
   const selected = selectDisplayName(new Map(pages.map(page => [page.language ?? 'und', page.revisionId])),
-    readerLanguages(request.headers.get('x-rezics-display-languages'), request.headers.get('accept-language')));
+    languages);
   const page = pages.find(page => page.revisionId === selected?.value) ?? pages[0];
   if (!page) throw new ZoneUnavailable('Published Zone home is unavailable');
   if (!work.content) throw new ZonePublicationUnavailable('Content owner is unavailable');
@@ -151,6 +149,32 @@ export async function readZoneHomeDocument(work: MainWorkDependencies, request: 
   }
   const document = parseDocument(exact.body.document);
   if (document.profile !== 'blocks') throw new ZoneUnavailable('Published Zone home is not a Blocks document');
+  await assertZoneHomeContentCurrent(work, state, page, exact.reference.byteDigest);
+  return { page, document, reference: exact.reference };
+}
+
+export async function assertZoneHomeContentCurrent(
+  work: Pick<MainWorkDependencies, 'environment' | 'contentAuthoring'>,
+  state: Awaited<ReturnType<typeof readZonePublication>>,
+  page: { page: string; revisionId: string }, byteDigest: string) {
+  const metadata = work.contentAuthoring && await work.contentAuthoring.readExactMetadataBatch([page.revisionId],
+    async ids => new Set(ids));
+  if (metadata && (metadata.get(page.revisionId)?.availability !== 'available'
+    || metadata.get(page.revisionId)?.byteDigest !== byteDigest)
+    || !await isZonePublishedPageRevision(work.environment, state.zone, page.page, page.revisionId)) {
+    throw new ZoneUnavailable('Published Zone home changed during the read');
+  }
+}
+
+export async function readZoneHomeDocument(work: MainWorkDependencies, request: Request,
+  state: Awaited<ReturnType<typeof readZonePublication>>,
+  moduleData?: Awaited<ReturnType<typeof readZoneModuleData>>,
+  slideMedia?: Awaited<ReturnType<typeof readZoneCampaignArt>>,
+  visibleSlides?: (slides: typeof state.presentation.slides) => Promise<typeof state.presentation.slides>): Promise<ZonePublicPage | null> {
+  const home = await readZonePublishedHomeContent(work, state,
+    readerLanguages(request.headers.get('x-rezics-display-languages'), request.headers.get('accept-language')));
+  if (!home) return null;
+  const { document, page, reference } = home;
   const local = zoneDocumentShowcase(document);
   let localData: Parameters<typeof resolveZonePageDocument>[4];
   if (local) {
@@ -171,14 +195,8 @@ export async function readZoneHomeDocument(work: MainWorkDependencies, request: 
     moduleData ?? await readZoneModuleData(work.environment, state.configuration),
     slideMedia ?? await readZoneCampaignArt(work.media?.store, state.realm, state.presentation.slides,
       { environment: work.environment, zone: state.zone }), localData);
-  const metadata = work.contentAuthoring && await work.contentAuthoring.readExactMetadataBatch([page.revisionId],
-    async ids => new Set(ids));
-  if (metadata && (metadata.get(page.revisionId)?.availability !== 'available'
-    || metadata.get(page.revisionId)?.byteDigest !== exact.reference.byteDigest)
-    || !await isZonePublishedPageRevision(work.environment, state.zone, page.page, page.revisionId)) {
-    throw new ZoneUnavailable('Published Zone home changed during the read');
-  }
-  return { ...resolved, reference: exact.reference };
+  await assertZoneHomeContentCurrent(work, state, page, reference.byteDigest);
+  return { ...resolved, reference };
 }
 
 /** Public module data resolves only disclosed query definitions, within the Zone's shared budget. */

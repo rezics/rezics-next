@@ -1,7 +1,20 @@
 import { describe, expect, test } from 'bun:test';
+import { randomUUID } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { documentVersion, parseDocument } from '@rezics/document';
+import type { ContentCore, ExactReadResult } from '../../content/src/core.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { hash, prepareComponent, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { compositionReceiptIri } from '../src/modules/structure/change.ts';
+import { readZonePublication, readZonePublishedHomeContent } from '../src/modules/zone/publication.ts';
+import { ZoneUnavailable, ZonePublicationUnavailable } from '../src/modules/zone/configuration.ts';
+import { zonePublishedPageBinding } from '../src/modules/zone/config-format.ts';
+import { ZONE_LOCAL_SHOWCASE_BLOCK, zoneDocumentShowcase } from '../src/modules/presentation/zone-document.ts';
+import { bindZoneCampaignReader, configureZoneShowcaseDisclosure, currentZoneCampaignUses }
+  from '../src/modules/zone/showcase-disclosure.ts';
 import { checkZoneConfiguration, InvalidZoneConfiguration, ZONE_CONFIG_FORMAT,
   ZONE_PROFILE } from '../src/modules/zone/config-format.ts';
-import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESETS, zoneRenderTokens, type ZonePresentation }
+import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESETS, ZONE_PRESENTATION_PROFILE, zoneRenderTokens, type ZonePresentation }
   from '../src/modules/zone/presentation-format.ts';
 
 const id = (value: string) => `https://rezics.com/id/${value}`;
@@ -122,3 +135,149 @@ test('campaign art across slides fits one 64-Use rendition batch', () => {
   expect(checkZoneConfiguration(configuration({ ...DEFAULT_ZONE_PRESENTATION, slides })).presentation)
     .toEqual({ ...DEFAULT_ZONE_PRESENTATION, slides });
 });
+
+/** Actual immutable Zone readers with only the graph/Content owner replaced.
+ * No module mocking: the other owner suites keep their ordinary route bindings. */
+function publishedHomeFixture() {
+  const directory = mkdtempSync('.temp/zone-campaign-home-');
+  const zone = one, realm = id(randomUUID()), revision = id(randomUUID());
+  const presentation = { ...DEFAULT_ZONE_PRESENTATION,
+    slides: [{ id: 'configuration', href: '/configuration', art: { landscape: { use: two } } }] };
+  const config = { ...JSON.parse(configuration(presentation).toString()), defaultRealm: realm };
+  const manifest = `urn:rezics:sha256:${prepareComponent(directory, zone,
+    { configuration: config, name: 'Selected home', language: 'en' }, ZONE_PROFILE)}`;
+  const admissionId = randomUUID(), receipt = compositionReceiptIri(admissionId, 'zone.edit');
+  const pages = ['en', 'ja'].map(language => ({ page: zone,
+    variantId: `urn:rezics:variant:${randomUUID()}`, revisionId: randomUUID(), language }));
+  const document = parseDocument({ version: documentVersion, profile: 'blocks', doc: { type: 'doc',
+    content: [{ type: 'extensionBlock', attrs: { id: 'curated',
+      definition: ZONE_LOCAL_SHOWCASE_BLOCK.definition, version: ZONE_LOCAL_SHOWCASE_BLOCK.version,
+      fallback: 'Retained fallback', payload: {
+        'rv:module': [{ id: 'hero', type: 'hero-carousel', title: 'Exact Content',
+          source: { kind: 'query-block', block: 'new-adoptions' } }],
+        'rv:slides': [{ id: 'content', href: '/content', art: { landscape: { use: three } } }],
+        'rv:titleEffect': ['outline'],
+      } } }] } });
+  const body = { document }, serializedJson = JSON.stringify(body), byteDigest = hash(serializedJson);
+  const mutable = { membership: true, erased: false, metadataAvailable: true,
+    metadataDigest: byteDigest, returnedVariant: '', returnedResource: '', contentStatus: 'available' };
+  const reads: string[][] = [], membershipQueries: string[] = [];
+  const term = (value: string) => ({ type: 'uri' as const, value });
+  const row = (values: Record<string, string>) => Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [key, term(value)]));
+  const environment = { objectDirectory: directory,
+    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
+    addresses: { currents: async () => new Map() }, fuseki: { query: async (query: string) => {
+      if (query.includes('SELECT ?space ?navigation ?head')) return { results: { bindings: [row({
+        space: two, navigation: three, head: revision, manifest, state: `${RV}Active`,
+        disclosure: `${RV}Public`, spaceDisclosure: `${RV}Public`, realm,
+        presentation: ZONE_PRESENTATION_PROFILE, publication: revision,
+      })] } };
+      if (query.includes('SELECT ?receipt')) return { results: { bindings: [{ receipt: term(receipt) }] } };
+      if (query.includes('SELECT ?zone ?revision ?routesRevision')) return { results: { bindings:
+        pages.map(page => row({ zone, revision, routesRevision: revision, navigationRevision: revision,
+          themeRevision: revision, count: String(pages.length), admissionId, digest: 'a'.repeat(64),
+          authorityEpoch: 'authority', scope: `zone:edit:${zone}`, dataEpoch: 'epoch', sequence: '1',
+          binding: zonePublishedPageBinding(revision, zone, page.revisionId), page: zone,
+          variant: page.variantId, contentRevision: `urn:rezics:content:revision:${page.revisionId}`,
+          language: page.language })) } };
+      if (query.includes('SELECT ?manifest')) return { results: { bindings: [{ manifest: term(manifest) }] } };
+      if (query.includes('SELECT ?target')) return { results: { bindings: mutable.erased
+        ? [{ target: term(`urn:rezics:content:revision:${reads.at(-1)![0]}`) }] : [] } };
+      if (query.includes('rv:admittedScope') && query.includes('ASK')) {
+        membershipQueries.push(query);
+        return { boolean: mutable.membership };
+      }
+      if (query.includes('ASK')) return { boolean: true };
+      throw new Error(`Unexpected home owner query: ${query}`);
+    } } } as unknown as WorkActivationEnvironment;
+  const content = { readExactBatch: async (ids: string[], authorize: Parameters<ContentCore['readExactBatch']>[1]) => {
+    reads.push([...ids]);
+    expect(await authorize(ids)).toEqual(new Set(ids));
+    const page = pages.find(candidate => candidate.revisionId === ids[0])!;
+    if (mutable.contentStatus !== 'available') return [{ revisionId: page.revisionId, status: 'erased' }];
+    return [{ status: 'available', revisionId: page.revisionId, body, serializedJson,
+      reference: { owner: 'content', resourceId: mutable.returnedResource || zone,
+        variantId: mutable.returnedVariant || page.variantId, revisionId: page.revisionId,
+        format: 'rezics-content-json-v1', model: 'content-shape-v1', byteDigest,
+        byteLength: Buffer.byteLength(serializedJson), direction: 'ltr',
+        language: { kind: 'tag', tag: page.language, originalTag: page.language },
+        sourceRevision: null, predecessor: null, provenance: {} } }] satisfies ExactReadResult[];
+  } };
+  const work = { environment, content, contentAuthoring: { readExactMetadataBatch: async (ids: string[]) =>
+    new Map(ids.map(revisionId => [revisionId, { availability: mutable.metadataAvailable ? 'available' : 'erased',
+      byteDigest: mutable.metadataDigest }])) } } as unknown as MainWorkDependencies;
+  return { work, pages, mutable, reads, membershipQueries, serializedJson, zone, realm,
+    close: () => rmSync(directory, { recursive: true, force: true }) };
+}
+
+test('published home selects one exact language revision and preserves Content-local choices', async () => {
+  const f = publishedHomeFixture();
+  try {
+    const state = await readZonePublication(f.work.environment, f.zone);
+    const home = await readZonePublishedHomeContent(f.work, state, ['ja']);
+    expect(f.reads).toEqual([[f.pages[1]!.revisionId]]);
+    expect(home!.page).toEqual(f.pages[1]!);
+    expect(home!.reference.variantId).toBe(f.pages[1]!.variantId);
+    expect(zoneDocumentShowcase(home!.document)!.payload['rv:slides'])
+      .toEqual([{ id: 'content', href: '/content', art: { landscape: { use: three } } }]);
+    expect(state.presentation.slides[0]!.art!.landscape!.use).toBe(two);
+    expect(JSON.stringify({ document: home!.document })).toBe(f.serializedJson);
+    expect(f.membershipQueries).toHaveLength(2);
+    for (const query of f.membershipQueries) expect(query)
+      .toContain(`rv:contentRevision <urn:rezics:content:revision:${f.pages[1]!.revisionId}>`);
+  } finally { f.close(); }
+});
+
+test('published bundle without Content owner denies exact home and campaign config fallback', async () => {
+  const f = publishedHomeFixture();
+  try {
+    const state = await readZonePublication(f.work.environment, f.zone);
+    await expect(readZonePublishedHomeContent({ environment: f.work.environment }, state))
+      .rejects.toBeInstanceOf(ZonePublicationUnavailable);
+    expect(await currentZoneCampaignUses(f.work.environment, f.zone, {}, f.realm)).toEqual(new Set());
+    expect(f.reads).toEqual([]);
+  } finally { f.close(); }
+});
+
+test('campaign exact Content selection keeps the renderer language preference through reader composition', async () => {
+  const f = publishedHomeFixture();
+  try {
+    configureZoneShowcaseDisclosure(f.work);
+    // readerFor composes by object spread; the request binding must survive it.
+    const reader = { ...bindZoneCampaignReader({}, new Request('https://main.test/media', {
+      headers: { 'x-rezics-display-languages': 'ja,en', 'accept-language': 'en' },
+    })) };
+    f.mutable.contentStatus = 'erased';
+    expect(await currentZoneCampaignUses(f.work.environment, f.zone, reader, f.realm)).toEqual(new Set());
+    expect(f.reads).toEqual([[f.pages[1]!.revisionId]]);
+    expect(f.membershipQueries).toHaveLength(1);
+  } finally { f.close(); }
+});
+
+for (const failure of ['wrong-variant', 'wrong-resource', 'content-erased', 'graph-erased',
+  'metadata-erased', 'metadata-digest', 'publication-moved'] as const) {
+  test(`published home fails closed after ${failure}`, async () => {
+    const f = publishedHomeFixture();
+    try {
+      const state = await readZonePublication(f.work.environment, f.zone);
+      if (failure === 'wrong-variant') f.mutable.returnedVariant = `urn:rezics:variant:${randomUUID()}`;
+      if (failure === 'wrong-resource') f.mutable.returnedResource = id(randomUUID());
+      if (failure === 'content-erased') f.mutable.contentStatus = 'erased';
+      if (failure === 'graph-erased') f.mutable.erased = true;
+      if (failure === 'metadata-erased') f.mutable.metadataAvailable = false;
+      if (failure === 'metadata-digest') f.mutable.metadataDigest = 'b'.repeat(64);
+      if (failure === 'publication-moved') {
+        const original = f.work.content!.readExactBatch.bind(f.work.content);
+        f.work.content!.readExactBatch = async (...args) => {
+          const result = await original(...args);
+          f.mutable.membership = false;
+          return result;
+        };
+      }
+      await expect(readZonePublishedHomeContent(f.work, state)).rejects.toBeInstanceOf(ZoneUnavailable);
+      expect(f.reads).toHaveLength(1);
+      expect(f.reads[0]).toHaveLength(1);
+    } finally { f.close(); }
+  });
+}

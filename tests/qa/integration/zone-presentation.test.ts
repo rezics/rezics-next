@@ -1,6 +1,7 @@
 import { afterAll, expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import sharp from 'sharp';
+import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
 import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESETS, type ZonePresentation }
@@ -10,6 +11,7 @@ import { GRAPHS, iri, prepareComponent } from '../../../services/main/src/module
 import { MediaRenditionWorker } from '../../../services/main/src/modules/media-rendition/worker.ts';
 import { LocalImageTransformer } from '../../../services/main/src/modules/media-rendition/transform.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
 let started: Promise<MediaStack> | undefined;
 const stack = () => started ??= startMediaStack('zone-presentation');
@@ -35,7 +37,7 @@ async function fixture(label: string) {
   }), 201);
   const zone = ref();
   await moderator.grant(`zone:edit:${zone}`, 'zone.edit');
-  await json(await moderator.send('POST', '/v1/zones', {
+  const navigation = await json<{ revision: string }>(await moderator.send('POST', '/v1/zones', {
     zone, space: space.space, disclosure: 'public', actingSubject: moderator.actor,
   }), 201);
   const path = `/v1/zones/${zone.slice(-36)}`;
@@ -55,8 +57,150 @@ async function fixture(label: string) {
     await s.store.createPublicationUses(randomUUID(), moderator.actor, target, [{ ...basis[0]!, use }]);
     return { ...image, use: `https://rezics.com/id/${use}` };
   };
-  return { ...s, moderator, ...space, zone, path, write, read, campaign };
+  return { ...s, moderator, ...space, zone, path, navigationRevision: navigation.revision, write, read, campaign };
 }
+
+test('campaign bytes follow the exact published local Showcase instead of config or newer drafts', async () => {
+  const f = await fixture('published-campaign');
+  // Realm Zones use the existing administrator Content bridge, with a live
+  // controller and the same resource proof used by the metadata integration.
+  await f.moderator.grant(`agent:${f.moderator.actor}`, 'agent.control');
+  await grantRecordedPlatformUse(f.accessPool, f.moderator.principalId, ['platform-admin'], f.moderator.actor);
+  const resourceGrant = randomUUID();
+  await f.accessPool.query(`INSERT INTO access.principal_permission_grant
+    (id, issuer_subject, principal_id, scope_id, action, valid_until)
+    VALUES ($1,$2,$3,$4,'platform:resource:zone.edit','infinity'::timestamptz)`,
+  [resourceGrant, f.moderator.actor, f.moderator.principalId, `zone:edit:${f.zone}`]);
+  await f.accessPool.query(`INSERT INTO access.platform_grant_episode
+    (id, principal_grant_id, issuer_subject, permission, scope_id, assigned_by_principal, receipt)
+    VALUES ($1,$1,$2,'platform:resource:zone.edit',$3,$4,$5)`,
+  [resourceGrant, f.moderator.actor, `zone:edit:${f.zone}`, f.moderator.principalId,
+    `urn:rezics:access-receipt:${createHash('sha256').update(resourceGrant).digest('hex')}`]);
+
+  const campaign = async (red: number) => {
+    const source = await f.moderator.upload(await sharp({ create: { width: 32, height: 32, channels: 4,
+      background: { r: red, g: 40, b: 60, alpha: 0.5 } } }).png().toBuffer());
+    const created = await json<{ id: string }>(await f.moderator.send('POST', `${f.path}/campaign-art`, {
+      profile: 'zone-campaign-art-v1', realm: f.realm, asset: source.asset, role: 'cutout',
+      actingSubject: f.moderator.actor,
+    }), 201);
+    expect(await f.store.itemDelivery(created.id)).toMatchObject({ role: 'campaign-cutout', campaignZone: f.zone });
+    const worker = new MediaRenditionWorker(f.store.renditions, new LocalImageTransformer(), f.objects);
+    for (let i = 0; i < 32; i++) {
+      const candidates = (await f.store.renditions.candidatesBatch([created.id])).get(created.id) ?? [];
+      if (candidates.length === 2) return { ...source, use: created.id, candidates,
+        art: { cutout: { use: `https://rezics.com/id/${created.id}` } } };
+      await worker.tick();
+    }
+    throw new Error('Campaign cutout renditions did not finish');
+  };
+  const configArt = await campaign(10);
+  const firstArt = await campaign(20);
+  const nextArt = await campaign(30);
+  const configSlide: ZonePresentation['slides'][number] = { id: 'config', href: '/config', art: configArt.art };
+  const firstSlide: ZonePresentation['slides'][number] = { id: 'first', href: '/first', art: firstArt.art };
+  const nextSlide: ZonePresentation['slides'][number] = { id: 'next', href: '/next', art: nextArt.art };
+  const publicRead = (path: string, headers: Record<string, string> = {}) =>
+    f.main.handle(new Request(`http://main.local${path}`, { headers }));
+  const delivery = async (art: Awaited<ReturnType<typeof campaign>>, expected: number,
+    headers: Record<string, string> = {}) => {
+    for (const path of [`/v1/media/uses/${art.use}`,
+      `/v1/media/representations/${art.representation}/bytes?use=${art.use}`,
+      ...art.candidates.map(candidate => candidate.url)]) {
+      const response = await publicRead(path, headers);
+      expect(response.status, path).toBe(expected);
+      if (response.ok) expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
+    }
+  };
+  const rendered = async (slides: ZonePresentation['slides'], headers: Record<string, string> = {}) => {
+    const body = await json<{ presentation: ZonePresentation; slideMedia: Array<{ id: string; art: {
+      cutout: { url: string; srcset: Array<{ url: string }> } | null } }> }>(await publicRead(`${f.path}/presentation`, headers));
+    expect(body.presentation.slides).toEqual(slides);
+    expect(body.slideMedia.map(slide => slide.id)).toEqual(slides.map(slide => slide.id));
+    for (const slide of body.slideMedia) {
+      expect(slide.art.cutout).not.toBeNull();
+      for (const path of [slide.art.cutout!.url, ...slide.art.cutout!.srcset.map(candidate => candidate.url)]) {
+        const response = await publicRead(path, headers);
+        expect(response.status, path).toBe(200);
+        expect((await response.arrayBuffer()).byteLength).toBeGreaterThan(0);
+      }
+    }
+  };
+  const document = (slides: ZonePresentation['slides']) => {
+    const body = structuredClone(fromPlainText('Published campaign', 'blocks'));
+    body.doc.content!.push({ type: 'extensionBlock', attrs: { id: 'campaign', dir: null, lang: null,
+      definition: 'https://rezics.com/definition/showcase-block-v1', version: '2',
+      payload: { 'rv:module': [{ id: 'hero', type: 'hero-carousel', title: 'Published campaign',
+        source: { kind: 'query-block', block: 'new-adoptions' }, options: { limit: 4, shuffle: false } }],
+      'rv:slides': slides, 'rv:titleEffect': ['plain'] }, fallback: 'Campaign' } });
+    return body;
+  };
+  const variantId = `urn:rezics:variant:${randomUUID()}`;
+  const save = async (body: DocumentSnapshot, expectedHead: string | null,
+    targetVariantId = variantId, language = 'en') => {
+    const saved = await json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
+      await f.moderator.send('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: f.zone,
+        variantId: targetVariantId, expectedHead, document: body, language: { kind: 'tag', tag: language, originalTag: language },
+        direction: 'ltr', actingSubject: f.moderator.actor }), 201);
+    return { page: f.zone, variantId: targetVariantId, revisionId: saved.revisionId,
+      byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch };
+  };
+  const publish = async (page: Awaited<ReturnType<typeof save>> | Array<Awaited<ReturnType<typeof save>>>) => json(await f.moderator.send('POST',
+    `${f.path}/site-publications`, { expectedHead: (await readZoneConfiguration(f.env, f.zone)).revision,
+      routesRevision: f.navigationRevision, navigationRevision: f.navigationRevision, pages: Array.isArray(page) ? page : [page],
+      actingSubject: f.moderator.actor }), 201);
+
+  await json(await f.write({ ...DEFAULT_ZONE_PRESENTATION, slides: [configSlide] }));
+  await rendered([configSlide]);
+  await delivery(configArt, 200);
+  await delivery(firstArt, 404);
+  let selected = await save(document([firstSlide]), null);
+  await rendered([configSlide]);
+  await delivery(firstArt, 404);
+  await publish(selected);
+  await rendered([firstSlide]);
+  await delivery(firstArt, 200);
+  await delivery(configArt, 404);
+
+  selected = await save(document([nextSlide]), selected.revisionId);
+  await rendered([firstSlide]);
+  await delivery(firstArt, 200);
+  await delivery(nextArt, 404);
+  await publish(selected);
+  await rendered([nextSlide]);
+  await delivery(firstArt, 404);
+  await delivery(nextArt, 200);
+  await delivery(configArt, 404);
+
+  selected = await save(document([{ ...nextSlide, endsAt: new Date(Date.now() - 60_000).toISOString() }]), selected.revisionId);
+  await delivery(nextArt, 200);
+  await publish(selected);
+  await rendered([]);
+  await delivery(nextArt, 404);
+  await delivery(configArt, 404);
+  selected = await save(document([]), selected.revisionId);
+  await publish(selected);
+  await rendered([]);
+  await delivery(configArt, 404);
+
+  selected = await save(fromPlainText('Unconverted home', 'blocks'), selected.revisionId);
+  await publish(selected);
+  await rendered([configSlide]);
+  await delivery(configArt, 200);
+  await delivery(nextArt, 404);
+
+  const french = await save(document([nextSlide]), null, `urn:rezics:variant:${randomUUID()}`, 'fr');
+  await publish([selected, french]);
+  const languageHeaders: Record<string, string>[] = [{ 'accept-language': 'en' }, { 'accept-language': 'fr' },
+    { 'accept-language': 'en', 'x-rezics-display-languages': 'fr' }];
+  for (const headers of languageHeaders) {
+    const local = headers['accept-language'] === 'fr' || headers['x-rezics-display-languages'] === 'fr';
+    await rendered(local ? [nextSlide] : [configSlide], headers);
+    await delivery(configArt, local ? 404 : 200, headers);
+    await delivery(nextArt, local ? 200 : 404, headers);
+    await delivery(firstArt, 404, headers);
+  }
+}, 120_000);
 
 test('v2 campaign writes request only new art, replay once, and read srcset for every art role in bounded batches', async () => {
   const f = await fixture('layered');

@@ -55,6 +55,7 @@ import { EmptyContentPublicationBody } from '../modules/content-publication/publ
 import { readZoneThemeExecution } from '../modules/presentation/zone-theme.ts';
 import { zoneDocumentShowcase, zonePagePresentation, ZONE_SHOWCASE_BLOCK_DEFINITION } from '../modules/presentation/zone-document.ts';
 import { withZoneContentAuthority } from '../modules/content-publication/draft.ts';
+import { configureZoneShowcaseDisclosure } from '../modules/zone/showcase-disclosure.ts';
 import { documentSnapshotSchema } from '../api-document.ts';
 import { parseDocument } from '@rezics/document';
 import { discloseContent } from '../modules/disclosure/assembly.ts';
@@ -284,6 +285,7 @@ async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, reques
 }
 
 export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
+  configureZoneShowcaseDisclosure(work);
   if (work.structureObjects) (work.environment as typeof work.environment
     & { structureObjects?: typeof work.structureObjects }).structureObjects = work.structureObjects;
   return new Elysia()
