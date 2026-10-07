@@ -11,13 +11,34 @@ interface Slot { head: Row | null; selection: Row | null }
 interface Snapshot { source: Slot; survivor: Slot }
 interface Exact { policy: 'exact-rating-grain'; context: string }
 const owner = 'rating';
+export const RATING_MERGE_NATIVE_INVENTORY_SQL = `
+  SELECT principal_id::text AS principal,context FROM access.rating_aggregate_head
+  WHERE work=$1 AND target_release IS NULL
+    AND (principal_id,context COLLATE "C") > ($2::uuid,$3::text COLLATE "C")
+  ORDER BY principal_id,context COLLATE "C" LIMIT $4`;
+export const RATING_MERGE_SELECTION_INVENTORY_SQL = `
+  SELECT principal_id::text AS principal,context FROM access.rating_merge_selection
+  WHERE work=$1
+    AND (principal_id,context COLLATE "C") > ($2::uuid,$3::text COLLATE "C")
+  ORDER BY principal_id,context COLLATE "C" LIMIT $4`;
 export function ratingMergeHandler({ accessPool,graph }: MergeDependencies): MergeHandler<MergeDependencies> {
-  const inventory = async (task: { plan: MergeTask['plan'] },after: string | null,limit: number) => (await accessPool.query<{ key: string }>(`
-    SELECT principal_id::text || '|' || context AS key FROM (
-      SELECT principal_id,context FROM access.rating_aggregate_head WHERE work=$1 AND target_release IS NULL
-      UNION SELECT principal_id,context FROM access.rating_merge_selection WHERE work=$1
-    ) h WHERE $2::text IS NULL OR (principal_id::text || '|' || context) COLLATE "C" > $2 COLLATE "C"
-    ORDER BY (principal_id::text || '|' || context) COLLATE "C" LIMIT $3`,[task.plan.source.resource,after,limit])).rows;
+  const inventory = async (task: { plan: MergeTask['plan'] },after: string | null,limit: number) => {
+    // UUID text order matches UUID index order. Empty context precedes every
+    // admitted Context, including when its principal is the all-zero UUID.
+    const [principal,context] = after?.split('|') ?? ['00000000-0000-0000-0000-000000000000',''];
+    const windows = await Promise.all([RATING_MERGE_NATIVE_INVENTORY_SQL,RATING_MERGE_SELECTION_INVENTORY_SQL]
+      .map(async sql => (await accessPool.query<{ principal: string; context: string }>(sql,
+        [task.plan.source.resource,principal,context,limit+1])).rows.map(row => `${row.principal}|${row.context}`)));
+    const compare = (left: string,right: string) => Buffer.compare(Buffer.from(left),Buffer.from(right));
+    const frontiers = windows.filter(rows => rows.length === limit+1).map(rows => rows.at(-1)!).sort(compare);
+    // A saturated raw window proves coverage only through its last grain.
+    // Histories can fill the window with one grain: emit that grain once and
+    // seek strictly beyond it, without reading all its retained duplicates.
+    const frontier = frontiers[0];
+    const keys = [...new Set(windows.flat().filter(key => frontier === undefined || compare(key,frontier) <= 0))].sort(compare);
+    const kept = keys.slice(0,limit);
+    return { keys: kept,next: frontiers.length > 0 || keys.length > limit ? kept.at(-1)! : null };
+  };
   const main = async (work: string) => {
     const rows = (await graph.query(`PREFIX rv: <${RV}> SELECT ?main WHERE { GRAPH ${iri(GRAPHS.current)} {
       ${iri(work)} rv:mainVersion ?main } } LIMIT 2`,4096)).results?.bindings ?? [];
@@ -75,14 +96,14 @@ export function ratingMergeHandler({ accessPool,graph }: MergeDependencies): Mer
     },original);
   return { owner,version: 'effective-person-vote-v3',references: ['table:access.rating_aggregate_head.work','table:access.rating_merge_selection.work'],
     cost: { page: MERGE_COST.page,callsPerItem: 24,bytesPerItem: MERGE_COST.itemBytes },
-    async preview(plan) { const rows = await inventory({ plan },null,33); return { owner,count: Math.min(rows.length,32),complete: rows.length <= 32 }; },
+    async preview(plan) { const page = await inventory({ plan },null,32); return { owner,count: page.keys.length,complete: page.next === null }; },
     async plan(task,after,limit) {
-      const rows = await inventory(task,after,limit+1), kept = rows.slice(0,limit), client = await accessPool.connect();
+      const page = await inventory(task,after,limit), client = await accessPool.connect();
       try {
         const items = [];
-        for (const row of kept) { const context = row.key.split('|')[1]!;
-          const before = await standing(context) ? await pair(client,task,row.key) : { policy: 'exact-rating-grain',context }; items.push({ key: row.key,expectedHead: mergeDigest(before),before: before as unknown as Json }); }
-        return { items,next: rows.length > limit ? kept.at(-1)!.key : null };
+        for (const key of page.keys) { const context = key.split('|')[1]!;
+          const before = await standing(context) ? await pair(client,task,key) : { policy: 'exact-rating-grain',context }; items.push({ key,expectedHead: mergeDigest(before),before: before as unknown as Json }); }
+        return { items,next: page.next };
       } finally { client.release(); }
     },apply: (task,item,key) => deliver(task,item,key),compensate: (task,item,key) => deliver(task,item,key,item) };
 }
