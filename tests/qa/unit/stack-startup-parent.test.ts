@@ -197,11 +197,11 @@ function unsafeStartupWraps(path: string, text: string): string[] {
       const name = node.expression.getText(source);
       if (!['runQaStartupChildAsync', 'runQaAdmissionChildAsync', 'commandAsync'].includes(name)) {
         const values = node.arguments.flatMap(argument => strings(argument));
-        const indirectStartup = values.some(value => [
+        const indirectStartup = path.startsWith('tests/qa/') && (values.some(value => [
           'scripts/load/search-probe.ts', 'scripts/load/practical.ts', 'scripts/load/restore.ts',
           'scripts/load/clone-probe.ts', 'scripts/load/catalogue-backup.ts', 'scripts/fixture/cli.ts',
-          'scripts/dev/release-artifact.ts', 'scripts/operations/rebuild-content-search.ts',
-        ].includes(value));
+          'scripts/operations/rebuild-content-search.ts',
+        ].includes(value)) || values.includes('scripts/dev/release-artifact.ts') && values.includes('install'));
         const dynamic = node.arguments.some(argument => containsCall(argument, 'scriptCommand'));
         const inline = values.some(value => /\bbun\s+\S*scripts\/dev\/cli\.ts\s+stack:(up|clone)\b/.test(value));
         const actions = dynamic || inline ? ['stack:up', 'stack:clone'] : startup(values);
@@ -224,12 +224,14 @@ test('the startup guard resolves direct arguments, local arrays, typed actions a
     `function start(args:string[]) { spawnSync(...scriptCommand(args),{timeout:180000}); }`,
     `spawnSync('sh',['-c','bun scripts/dev/cli.ts stack:up'],{timeout:180000})`,
     `spawnSync('bun',['scripts/load/search-probe.ts'],{timeout:145000})`,
-  ]) expect(unsafeStartupWraps('unsafe.ts', text).length).toBeGreaterThan(0);
+  ]) expect(unsafeStartupWraps('tests/qa/unsafe.ts', text).length).toBeGreaterThan(0);
   expect(unsafeStartupWraps('safe.ts', `function start(action:'stack:up'|'stack:down') {
     const args=['scripts/dev/cli.ts',action];
     return action==='stack:up' ? runQaStartupChildAsync(root,args,180000) : spawnSync('bun',args);
   }`)).toEqual([]);
   expect(unsafeStartupWraps('safe.ts', `runQaAdmissionChildAsync(root,...scriptCommand(args),180000)`)).toEqual([]);
+  expect(unsafeStartupWraps('tests/qa/safe.ts',
+    `spawnSync('bun',['scripts/dev/release-artifact.ts','build'])`)).toEqual([]);
 });
 
 test('indirect startup entry points use a streaming parent in QA tests', () => {
