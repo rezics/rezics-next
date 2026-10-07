@@ -312,7 +312,7 @@ export async function releaseAccessRecoveryFence(pool: Pool | PoolClient, genera
 
 export class AccessAdmissionRegistry {
   withRealmPolicy<T>(principal: VerifiedPrincipal, actor: string, realm: string,
-    purpose: 'read' | 'reply' | 'submission', operation: (permit: RealmPermit) => Promise<T>) {
+    purpose: 'read' | 'reply' | 'submission', operation: (permit: RealmPermit, client?: PoolClient) => Promise<T>) {
     return withRealmPermit(this.pool, principal, actor, realm, purpose, operation);
   }
 
@@ -1520,11 +1520,24 @@ export class AccessAdmissionRegistry {
   /** Gate-first claim linearizes dispatch against a strong scope closure. */
   async claim(admissionId: string, requestDigest: string,
     accountPrincipal?: VerifiedPrincipal): Promise<ClaimedAdmission> {
-    const client = await admissionClient(this.pool);
+    return this.claimOnClient(await admissionClient(this.pool), admissionId, requestDigest, accountPrincipal);
+  }
+
+  /** A Realm callback may lock and revalidate an independently committed claim,
+   * but cannot create a claim that native effects could outlive on rollback. */
+  fenceClaim(client: PoolClient, admissionId: string, requestDigest: string,
+    accountPrincipal?: VerifiedPrincipal): Promise<ClaimedAdmission> {
+    return this.claimOnClient(client, admissionId, requestDigest, accountPrincipal, true);
+  }
+
+  private async claimOnClient(client: PoolClient, admissionId: string, requestDigest: string,
+    accountPrincipal?: VerifiedPrincipal, fence = false): Promise<ClaimedAdmission> {
     try {
-      await client.query('BEGIN');
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '5s'");
+      if (!fence) {
+        await client.query('BEGIN');
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '5s'");
+      }
       await requireRecoveryOpen(client);
       const locator = await client.query<{ scope_id: string; action: string }>(
         'SELECT scope_id, action FROM access.admission WHERE id = $1', [admissionId]);
@@ -1568,6 +1581,9 @@ export class AccessAdmissionRegistry {
       const row = result.rows[0];
       if (!row || row.scope_id !== scope || !row.eligible || !['registered', 'claimed'].includes(row.state)) {
         throw new AdmissionExpired('admission is not dispatchable');
+      }
+      if (fence && row.state !== 'claimed') {
+        throw new AdmissionDenied('native dispatch requires an independently committed claim');
       }
       if (row.action === 'publication.reject.organization') {
         throw new AdmissionDenied('organization moderation cannot use generic claim');
@@ -1685,7 +1701,7 @@ export class AccessAdmissionRegistry {
            VALUES ($1, 'admission.claimed', $2, $3, $4)`,
           [Bun.randomUUIDv7(), admissionId, scope, row.authority_epoch]);
       }
-      await client.query('COMMIT');
+      if (!fence) await client.query('COMMIT');
       return { id: row.id, principalId: row.principal_id, actingSubject: row.acting_subject,
         authorityPath: row.authority_path,
         scope, action: row.action, idempotencyKey: row.idempotency_key,
@@ -1694,10 +1710,10 @@ export class AccessAdmissionRegistry {
         replayed: row.state === 'claimed',
         claimedAt: claimedAt!.toISOString() };
     } catch (error) {
-      await rollback(client);
+      if (!fence) await rollback(client);
       throw admissionError(error);
     } finally {
-      client.release();
+      if (!fence) client.release();
     }
   }
 

@@ -78,6 +78,11 @@ function fixture(options: { contentSequence?: string; moved?: boolean } = {}) {
   } as unknown as Pool;
   const relay = { query: async () => ({ rows: [] }) } as unknown as Pool;
   const deps = {
+    access: {
+      assertRecoveryOpen: async () => {
+        if (held) throw new NestedPoolCheckoutError();
+      },
+    },
     environment: {
       lineage: { dataEpoch: epoch, routingEpoch: ownerEpoch },
       fuseki: {

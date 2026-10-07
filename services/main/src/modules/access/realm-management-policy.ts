@@ -69,7 +69,7 @@ export async function realmPermit(client: PoolClient, principal: VerifiedPrincip
 }
 
 export async function withRealmPermit<T>(pool: Pool, principal: VerifiedPrincipal, actor: string, realm: string,
-  purpose: 'read' | 'reply' | 'submission', operation: (permit: RealmPermit) => Promise<T>): Promise<T> {
+  purpose: 'read' | 'reply' | 'submission', operation: (permit: RealmPermit, client?: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -78,7 +78,7 @@ export async function withRealmPermit<T>(pool: Pool, principal: VerifiedPrincipa
     const recovery = await client.query('SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE');
     if (!recovery.rowCount) throw new AdmissionUnavailable('Access recovery is in progress');
     const permit = await realmPermit(client, principal, actor, realm, purpose);
-    const result = await operation(permit);
+    const result = await operation(permit, client);
     await client.query('COMMIT');
     return result;
   } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }

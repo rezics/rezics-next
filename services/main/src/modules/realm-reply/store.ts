@@ -1,7 +1,8 @@
 import { readCurrentProfile } from '../realm-profile/commands.ts';
 import { createHash } from 'node:crypto';
+import type { PoolClient } from 'pg';
 import type { ContentCore } from '../../../../content/src/core.ts';
-import type { AccessAdmissionRegistry, RegisteredAdmission, VerifiedPrincipal } from '../access/admission.ts';
+import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { RealmReplyDenied, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavailable, type PlacementInput,
@@ -84,7 +85,7 @@ export class RealmReplyStore {
   constructor(private readonly content: RealmReplyContentStore,
     private readonly contentCore: Pick<ContentCore, 'settlePublication'>,
     private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
-      & Partial<Pick<AccessAdmissionRegistry, 'hasRealmMemberAdmission' | 'withRealmPolicy' | 'realmReadProof'
+      & Partial<Pick<AccessAdmissionRegistry, 'fenceClaim' | 'hasRealmMemberAdmission' | 'withRealmPolicy' | 'realmReadProof'
         | 'canReadWork' | 'canReadSemanticResource' | 'realmHistoryFloor'>>,
     private readonly env: WorkActivationEnvironment) {}
 
@@ -104,8 +105,37 @@ export class RealmReplyStore {
     const prior = await readReplyGraphReceipt(this.env, registered);
     if (prior) return registered;
     if (saved && registered.state === 'claimed') return registered;
-    if (!registered.dispatchEligible) throw new RealmReplyUnavailable('admission dispatch is fenced');
-    return this.access.claim(registered.id, requestDigest, principal);
+    try {
+      if (!registered.dispatchEligible) throw new AdmissionDenied('admission dispatch is fenced');
+      return await this.access.claim(registered.id, requestDigest, principal);
+    }
+    catch (error) {
+      if (error instanceof AdmissionDenied || error instanceof AdmissionExpired) {
+        // A concurrent winner can seal while claim waits. Recover its exact
+        // receipt; a prepared-only placement still has no authority to publish.
+        if (await readReplyGraphReceipt(this.env, registered)
+          || action !== 'reply.place' && await this.content.hasReceipt(registered.id, contentAction, requestDigest)) return registered;
+        if (action === 'reply.place') {
+          const terminal = await cancelPlacement(this.env, registered);
+          if (terminal.outcome === 'succeeded') return registered;
+          const prepared = await this.content.readPlacement(registered.id);
+          if (prepared) await this.contentCore.settlePublication(`${registered.id}:settle`, registered.id, {
+            outcome: 'rejected', revisionId: prepared.revisionId, receipt: terminal.receipt,
+            dataEpoch: terminal.dataEpoch, sequence: terminal.sequence,
+          });
+          await this.access.recordGraphOutcome(registered.id, terminal);
+        } else if (action === 'reply.create') {
+          const succeeded = await this.content.cancelCreate(registered);
+          const terminal = succeeded ? await acknowledgeContentDecision(this.env, registered)
+            : await cancelPlacement(this.env, registered);
+          await this.access.recordGraphOutcome(registered.id, terminal);
+          if (succeeded) return registered;
+        }
+        if (error instanceof AdmissionExpired && (action === 'reply.place' || action === 'reply.create'))
+          throw new RealmReplyStale('admission expired during claim verification');
+      }
+      throw error;
+    }
   }
 
   private async seal(admission: RegisteredAdmission): Promise<void> {
@@ -114,48 +144,68 @@ export class RealmReplyStore {
     await this.access.recordGraphOutcome(admission.id, terminal);
   }
 
+  private async fence(admission: RegisteredAdmission, principal: VerifiedPrincipal, client?: PoolClient) {
+    try {
+      if (!client) return await this.access.claim(admission.id, admission.requestDigest, principal);
+      if (!this.access.fenceClaim) throw new RealmReplyUnavailable('Realm dispatch authority is unavailable');
+      return await this.access.fenceClaim(client, admission.id, admission.requestDigest, principal);
+    } catch (error) {
+      if (error instanceof AdmissionExpired) throw new RealmReplyStale('admission expired during claim verification');
+      throw error;
+    }
+  }
+
+  /** Unknown graph outcomes remain pending; only an exact terminal receipt may
+   * be sealed, after the Realm callback has released its Access connection. */
+  private async sealTerminal(admission: RegisteredAdmission) {
+    const terminal = await readReplyGraphReceipt(this.env, admission);
+    if (terminal) await this.access.recordGraphOutcome(admission.id, terminal);
+  }
+
   async create(principal: VerifiedPrincipal, input: ReplyIdentityInput,
     key: string, digest: string) {
     const origin = await this.content.origin(input.reply);
-    if (origin?.realm) {
-      if (!this.access.withRealmPolicy) throw new RealmReplyUnavailable('Realm policy owner is unavailable');
-      return this.access.withRealmPolicy(principal, input.author, origin.realm, 'reply', async permit => {
-        const policy = await readRealmPolicy(this.env, origin.realm!);
-        if (!policy || policy.visibility !== 'public' && !permit.member) throw new RealmReplyDenied('Realm membership is required');
-        return this.createAdmitted(principal, input, key, digest);
-      });
-    }
-    return this.createAdmitted(principal, input, key, digest);
-  }
-
-  private async createAdmitted(principal: VerifiedPrincipal, input: ReplyIdentityInput, key: string, digest: string) {
+    if (origin?.realm && !this.access.withRealmPolicy) throw new RealmReplyUnavailable('Realm policy owner is unavailable');
+    // These transactions must commit before either native owner has an effect.
     const admission = await this.admission(principal, input.author, 'reply.create',
       `reply:create:${input.rootTarget}`, key, digest, input.rootRevision);
-    let result;
     try {
+      const saved = await this.content.hasReceipt(admission.id, 'reply.create', digest);
       // A lost-response retry retains its successful identity after a target edit.
       // Only a new Content identity must bind to the target's current root.
-      if (!await this.content.hasReceipt(admission.id, 'reply.create', digest)) {
+      if (!saved) {
         const currentRoot = await targetRead(this.env, { access: this.access, principal, actingSubject: input.author },
           session => replyRoot(session, input.rootTarget, input.rootRevision, input.contextRevision));
         if (!currentRoot) throw new RealmReplyDenied('Reply root is unavailable');
       }
-      result = await this.content.createReply(admission, input);
+      const create = async (client?: PoolClient) => {
+        if (!saved) await this.fence(admission, principal, client);
+        return this.content.createReply(admission, input);
+      };
+      const result = origin?.realm && !saved
+        ? await this.access.withRealmPolicy!(principal, input.author, origin.realm, 'reply', async (permit, client) => {
+          const policy = await readRealmPolicy(this.env, origin.realm!);
+          if (!policy || policy.visibility !== 'public' && !permit.member) throw new RealmReplyDenied('Realm membership is required');
+          return create(client);
+        }) : await create();
+      await acknowledgeContentDecision(this.env, admission);
+      return result;
     }
     catch (error) {
       if (error instanceof WorkReadMissing) error = new RealmReplyDenied('Reply root is unavailable');
       if (error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale
-        || error instanceof RatingTargetNotAccepted || error instanceof RatingTargetGrainMismatch) {
+        || error instanceof RatingTargetNotAccepted || error instanceof RatingTargetGrainMismatch
+        || error instanceof AdmissionDenied || error instanceof AdmissionExpired) {
         const succeeded = await this.content.cancelCreate(admission);
         if (succeeded) await acknowledgeContentDecision(this.env, admission);
         else await cancelPlacement(this.env, admission);
-        await this.seal(admission);
+        if (succeeded)
+          return await this.content.createReply(admission, input);
       }
       throw error;
+    } finally {
+      await this.sealTerminal(admission);
     }
-    await acknowledgeContentDecision(this.env, admission);
-    await this.seal(admission);
-    return result;
   }
 
   async review(principal: VerifiedPrincipal, actingSubject: string, input: ReviewInput,
@@ -170,68 +220,83 @@ export class RealmReplyStore {
 
   async place(principal: VerifiedPrincipal, actingSubject: string, input: PlacementInput,
     key: string, digest: string) {
-    if (this.access.withRealmPolicy) return this.access.withRealmPolicy(principal, actingSubject, input.realm, 'reply',
-      permit => this.placeAdmitted(principal, actingSubject, input, key, digest, permit));
-    return this.placeAdmitted(principal, actingSubject, input, key, digest);
+    const admission = await this.admission(principal, actingSubject, 'reply.place',
+      `reply:place:${input.realm}`, key, digest);
+    const terminal = await readReplyGraphReceipt(this.env, admission);
+    // This flag describes the immutable admission proof, not current authority;
+    // fenceClaim rechecks its membership generation inside the Realm callback.
+    const memberAdmission = input.reviewDecisionId === null
+      && await this.access.hasRealmMemberAdmission?.(admission.id) === true;
+    try {
+      if (terminal || !this.access.withRealmPolicy)
+        return await this.placeAdmitted(principal, input, admission, memberAdmission);
+      return await this.access.withRealmPolicy(principal, actingSubject, input.realm, 'reply',
+        (permit, client) => this.placeAdmitted(principal, input, admission, memberAdmission, permit, client));
+    } catch (error) {
+      if (error instanceof AdmissionDenied || error instanceof AdmissionExpired
+        || error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale) {
+        // The native receipt lock chooses cancellation or the concurrent
+        // winner. Transport failures do not imply either terminal outcome.
+        const terminal = await cancelPlacement(this.env, admission);
+        if (terminal.outcome === 'succeeded')
+          return await this.placeAdmitted(principal, input, admission, memberAdmission);
+        const prepared = await this.content.readPlacement(admission.id);
+        if (prepared) await this.contentCore.settlePublication(`${admission.id}:settle`, admission.id, {
+          outcome: 'rejected', revisionId: input.revisionId, receipt: terminal.receipt,
+          dataEpoch: terminal.dataEpoch, sequence: terminal.sequence,
+        });
+      }
+      throw error;
+    } finally {
+      await this.sealTerminal(admission);
+    }
   }
 
-  private async placeAdmitted(principal: VerifiedPrincipal, actingSubject: string, input: PlacementInput,
-    key: string, digest: string, permit?: RealmPermit) {
+  private async placeAdmitted(principal: VerifiedPrincipal, input: PlacementInput,
+    admission: RegisteredAdmission, memberAdmission: boolean, permit?: RealmPermit, client?: PoolClient) {
     const unified = await readRealmPolicy(this.env, input.realm);
     if (permit && (!unified || unified.visibility !== 'public' && !permit.member)) {
       throw new RealmReplyDenied('Realm membership is required');
     }
-    const admission = await this.admission(principal, actingSubject, 'reply.place',
-      `reply:place:${input.realm}`, key, digest);
     const existing = await readReplyGraphReceipt(this.env, admission);
-    if (existing?.outcome === 'cancelled') throw new RealmReplyStale('Realm reply placement was cancelled');
     let prepared = await this.content.readPlacement(admission.id);
-    if (!prepared) {
-      try {
-        let directPolicyRevision: string | undefined;
-        let directPolicy: string | undefined;
-        if (input.reviewDecisionId === null) {
-          if (unified?.revision) {
-            if (unified.revision !== permit?.revision || unified.reviewMode === 'mandatory'
-              || unified.reviewMode === 'trusted-members' && !permit.member) {
-              throw new RealmReplyDenied('Realm policy requires moderator approval');
-            }
-            directPolicyRevision = unified.revision;
-            directPolicy = reviewPolicy(unified.reviewMode);
-          } else {
-            const policy = await readCurrentProfile(this.env, input.realm);
-            if (policy?.profile.replyPolicy !== 'members-direct'
-              || !await this.access.hasRealmMemberAdmission?.(admission.id)) {
-              throw new RealmReplyDenied('Realm policy requires moderator approval');
-            }
-            directPolicyRevision = policy.revision;
+    if (existing?.outcome === 'cancelled' && !prepared) throw new RealmReplyStale('Realm reply placement was cancelled');
+    if (!prepared && !existing) {
+      await this.fence(admission, principal, client);
+      let directPolicyRevision: string | undefined;
+      let directPolicy: string | undefined;
+      if (input.reviewDecisionId === null) {
+        if (unified?.revision) {
+          if (unified.revision !== permit?.revision || unified.reviewMode === 'mandatory'
+            || unified.reviewMode === 'trusted-members' && !permit.member) {
+            throw new RealmReplyDenied('Realm policy requires moderator approval');
           }
+          directPolicyRevision = unified.revision;
+          directPolicy = reviewPolicy(unified.reviewMode);
+        } else {
+          const policy = await readCurrentProfile(this.env, input.realm);
+          if (policy?.profile.replyPolicy !== 'members-direct'
+            || !memberAdmission) {
+            throw new RealmReplyDenied('Realm policy requires moderator approval');
+          }
+          directPolicyRevision = policy.revision;
         }
-        prepared = await this.content.preparePlacement(admission, input, directPolicyRevision, directPolicy);
-      } catch (error) {
-        if (error instanceof RealmReplyDenied || error instanceof RealmReplyInvalid || error instanceof RealmReplyStale) {
-          await cancelPlacement(this.env, admission);
-          await this.seal(admission);
-        }
-        throw error;
       }
+      prepared = await this.content.preparePlacement(admission, input, directPolicyRevision, directPolicy);
     }
+    if (!prepared) throw new RealmReplyUnavailable('Realm placement lost its Content preparation');
     let terminal = await readReplyGraphReceipt(this.env, admission);
     if (!terminal) {
+      await this.fence(admission, principal, client);
       // A previous attempt can leave the pin while its graph result is unknown.
       // The immutable receipt resolves that ambiguity before another dispatch.
-      try { terminal = await placeReply(this.env, admission, prepared, input.expectedHead); }
-      catch (error) {
-        if (!(error instanceof RealmReplyStale)) throw error;
-        terminal = await cancelPlacement(this.env, admission);
-      }
+      terminal = await placeReply(this.env, admission, prepared, input.expectedHead);
     }
     if (terminal.outcome === 'cancelled') {
       await this.contentCore.settlePublication(`${admission.id}:settle`, admission.id, {
         outcome: 'rejected', revisionId: input.revisionId, receipt: terminal.receipt,
         dataEpoch: terminal.dataEpoch, sequence: terminal.sequence,
       });
-      await this.seal(admission);
       throw new RealmReplyStale('Realm reply placement was cancelled');
     }
     if (!terminal.placement
@@ -243,7 +308,6 @@ export class RealmReplyStore {
       outcome: 'active', revisionId: input.revisionId, receipt: terminal.receipt,
       dataEpoch: terminal.dataEpoch, sequence: terminal.sequence,
     });
-    await this.seal(admission);
     return { placement: terminal.placement, reply: input.reply, realm: input.realm,
       revisionId: input.revisionId, reviewDecisionId: prepared.reviewDecisionId, reviewGeneration: prepared.reviewGeneration,
       replayed: admission.replayed || prepared.replayed };

@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
+import type { PoolClient } from 'pg';
 import { ContentConflict, contentDraftIntentDigest, type ContentCore,
   type SaveDraftCommand } from '../../../../content/src/core.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { AdmissionDenied, type AccessAdmissionRegistry } from '../access/admission.ts';
+import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { readReplyRoot, replyRoot } from '../realm-reply/root.ts';
@@ -31,8 +32,8 @@ export interface MemberReplyDraft {
 export async function saveMemberReplyDraft(env: WorkActivationEnvironment, content: ContentCore,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
-    & Partial<Pick<AccessAdmissionRegistry, 'withRealmPolicy' | 'canReadWork' | 'canReadSemanticResource'>>,
-  request: Request, input: MemberReplyDraft, key: string, admittedOrigin = false): Promise<{
+    & Partial<Pick<AccessAdmissionRegistry, 'fenceClaim' | 'withRealmPolicy' | 'canReadWork' | 'canReadSemanticResource'>>,
+  request: Request, input: MemberReplyDraft, key: string): Promise<{
     reply: string; variantId: string; revisionId: string; revisionDigest: string; predecessor: string | null; deleted: boolean;
     sourcePosition: { dataEpoch: string; sequence: string }; replayed: boolean }> {
   const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -53,13 +54,8 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
   }
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['comment:create']);
-  if (input.originRealm && !admittedOrigin) {
+  if (input.originRealm) {
     if (!access.withRealmPolicy) throw new AdmissionDenied('Realm policy owner is unavailable');
-    return access.withRealmPolicy(principal, input.actingSubject, input.originRealm, 'reply', async permit => {
-      const policy = await readRealmPolicy(env, input.originRealm!);
-      if (!policy || policy.visibility !== 'public' && !permit.member) throw new AdmissionDenied('Realm is unavailable');
-      return saveMemberReplyDraft(env, content, account, access, request, input, key, true);
-    });
   }
   const proveRoot = async (creating: boolean) => {
     try {
@@ -97,7 +93,8 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
     baselineRelatedWork: input.rootTarget, baselineSourceRevision: input.rootRevision,
     idempotencyKey: key, requestDigest: digest });
   command.operationId = `content-draft:${admission.id}`;
-  const creating = input.expectedHead === null && !await content.readDraftReceipt(command.operationId);
+  let priorReceipt = await content.readDraftReceipt(command.operationId);
+  const creating = input.expectedHead === null && !priorReceipt;
   command.provenance = { kind: 'admitted-original-contribution-v1', author: input.actingSubject,
     admissionId: admission.id, authorityEpoch: admission.authorityEpoch, scope, requestDigest: digest,
     expectedHead: input.expectedHead, rightsBasis: 'original-contribution' };
@@ -106,24 +103,50 @@ export async function saveMemberReplyDraft(env: WorkActivationEnvironment, conte
       if (!admission.dispatchEligible) throw new AdmissionDenied('reply draft dispatch is fenced');
       await access.claim(admission.id, digest, principal);
     } catch (error) {
-      if (!await content.readDraftReceipt(command.operationId)) {
+      priorReceipt = await content.readDraftReceipt(command.operationId);
+      if (!priorReceipt) {
         await access.recordGraphOutcome(admission.id, await sealContentDraftAdmission(content, admission));
         throw error;
       }
     }
   }
-  try { await proveRoot(creating); }
+  try { if (!priorReceipt) await proveRoot(creating); }
   catch (error) {
     await access.recordGraphOutcome(admission.id, await sealContentDraftAdmission(content, admission));
     throw error;
   }
   let saved;
-  try { saved = await content.saveDraft(command); }
+  try {
+    const save = async (client?: PoolClient) => {
+      if (!priorReceipt) {
+        if (client) {
+          if (!access.fenceClaim) throw new AdmissionDenied('Realm dispatch authority is unavailable');
+          await access.fenceClaim(client, admission.id, digest, principal);
+        } else await access.claim(admission.id, digest, principal);
+      }
+      return content.saveDraft(command);
+    };
+    // Registration/claim and root probes are complete before this callback.
+    // Its held connection only revalidates the durable claim; native bytes
+    // cannot escape an uncommitted Access admission on callback rollback.
+    saved = input.originRealm && !priorReceipt
+      ? await access.withRealmPolicy!(principal, input.actingSubject, input.originRealm, 'reply', async (permit, client) => {
+        const policy = await readRealmPolicy(env, input.originRealm!);
+        if (!policy || policy.visibility !== 'public' && !permit.member) throw new AdmissionDenied('Realm is unavailable');
+        return save(client);
+      }) : await save();
+  }
   catch (error) {
-    if (error instanceof ContentConflict) {
-      await access.recordGraphOutcome(admission.id, await sealContentDraftAdmission(content, admission));
+    if (error instanceof ContentConflict || error instanceof AdmissionDenied || error instanceof AdmissionExpired) {
+      const terminal = await sealContentDraftAdmission(content, admission);
+      await access.recordGraphOutcome(admission.id, terminal);
+      if (terminal.outcome === 'succeeded') saved = await content.saveDraft(command);
+      else {
+        if (error instanceof AdmissionExpired) throw new ContentDraftStale('admission expired during claim verification');
+        throw error;
+      }
     }
-    throw error;
+    else throw error;
   }
   await access.recordGraphOutcome(admission.id, { admissionId: admission.id, requestDigest: digest,
     authorityEpoch: admission.authorityEpoch, scope, receipt: contentDraftReceiptIri(admission.id),
