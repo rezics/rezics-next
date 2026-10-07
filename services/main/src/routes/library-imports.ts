@@ -260,9 +260,9 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
       try {
         const admission = await own(request,body.actingSubject,true); if (admission instanceof Response) return admission;
         const intent={ context: body.context,language: body.language };
-        await deps.libraryFiles!.seal(body.actingSubject,params.id,intent);
         await deps.libraryFiles!.jobs.status(body.actingSubject,params.id);
-        const accepted=await deps.libraryFiles!.jobs.accept(body.actingSubject,params.id,admission.key,intent,body.resume ?? false);
+        const accepted=await deps.libraryFiles!.jobs.accept(body.actingSubject,params.id,admission.key,intent,body.resume ?? false,
+          client => deps.libraryFiles!.sealOn(client,body.actingSubject,params.id,intent));
         if (accepted.token) worker!.schedule(request,body.actingSubject,params.id,intent,accepted.token);
         return Response.json(accepted.result,{ status: accepted.result.pending ? 202 : 200,headers });
       } catch (error) { return failure(error); }

@@ -1,6 +1,6 @@
 import { Value } from 'typebox/value';
 import { createHash } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { FILE_IMPORT_COST, canonicalRow, type CanonicalRow, type LibraryFileFormat } from './formats/contract.ts';
 import { ReaderImportConflict } from './reader-import.ts';
 import { deleteLibraryUploads } from './privacy.ts';
@@ -139,19 +139,23 @@ export class LibraryFileStore {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
-      const held = await client.query<{ apply_intent: ApplyIntent | null }>(`SELECT apply_intent FROM reader.library_import_file
-        WHERE agent=$1 AND id=$2 AND expires_at>clock_timestamp() FOR UPDATE`, [agent,id]);
-      if (!held.rows[0]) throw new LibraryFileMissing('Import file was deleted, expired or is unavailable');
-      if (held.rows[0].apply_intent && importDigest(held.rows[0].apply_intent) !== importDigest(intent)) {
-        throw new ReaderImportConflict('Apply context or language changed');
-      }
-      const unresolved = await client.query(`SELECT row_number FROM reader.library_import_source_row
-        WHERE agent=$1 AND file_id=$2 AND resolution IS NULL
-          AND (match IS NULL OR match->>'kind' != 'matched') LIMIT 1`, [agent,id]);
-      if (unresolved.rowCount) throw new ReaderImportConflict('Review all rows and resolve or keep ambiguous and missing rows private');
-      await client.query(`UPDATE reader.library_import_file SET apply_intent=$3 WHERE agent=$1 AND id=$2`, [agent,id,JSON.stringify(intent)]);
+      await this.sealOn(client,agent,id,intent);
       await client.query('COMMIT');
     } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+  }
+  /** Seals inside the caller's transaction, so a command refused later leaves the upload editable. */
+  async sealOn(client: PoolClient, agent: string, id: string, intent: ApplyIntent) {
+    const held = await client.query<{ apply_intent: ApplyIntent | null }>(`SELECT apply_intent FROM reader.library_import_file
+      WHERE agent=$1 AND id=$2 AND expires_at>clock_timestamp() FOR UPDATE`, [agent,id]);
+    if (!held.rows[0]) throw new LibraryFileMissing('Import file was deleted, expired or is unavailable');
+    if (held.rows[0].apply_intent && importDigest(held.rows[0].apply_intent) !== importDigest(intent)) {
+      throw new ReaderImportConflict('Apply context or language changed');
+    }
+    const unresolved = await client.query(`SELECT row_number FROM reader.library_import_source_row
+      WHERE agent=$1 AND file_id=$2 AND resolution IS NULL
+        AND (match IS NULL OR match->>'kind' != 'matched') LIMIT 1`, [agent,id]);
+    if (unresolved.rowCount) throw new ReaderImportConflict('Review all rows and resolve or keep ambiguous and missing rows private');
+    await client.query(`UPDATE reader.library_import_file SET apply_intent=$3 WHERE agent=$1 AND id=$2`, [agent,id,JSON.stringify(intent)]);
   }
   async pending(agent: string, id: string) {
     const rows = await this.pool.query<SourceRecord>(`SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text

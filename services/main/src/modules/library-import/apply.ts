@@ -181,6 +181,6 @@ export async function applyLibraryFile(files: LibraryFileStore, store: ReaderLib
         await files.complete(agent,id,item.index,{ applied: ['private-source'],issues: ['session-failed'] },token);
       }
     }
-  });
+  },request.signal);
   return files.progress(agent,id);
 }

@@ -45,12 +45,19 @@ test('G428: reviewed import jobs finish, report real stalls and replay committed
     let ownerPending = false;
     let ownerPendingCalls = 0;
     let pendingOwnerGate: Promise<void> | undefined;
+    let ownerHung = false;
+    let ownerHungCalls = 0;
     imports.setDispatch(async request => {
       const path = new URL(request.url).pathname;
       const childRequest = request.method === 'POST' && path === '/v1/me/sessions' ? request.clone() : null;
       let response: Response;
       if (refuseShelfReads && request.method === 'GET' && path.startsWith('/v1/collections/')) {
         response = Response.json({ code: 'collection_unavailable' }, { status: 404 });
+      } else if (ownerHung && request.method === 'GET' && path.endsWith('/reader-state')) {
+        ownerHungCalls++;
+        // The owner never answers and ignores cancellation, as a wedged transport would.
+        await new Promise<never>(() => {});
+        throw new Error('unreachable');
       } else if (ownerPending && request.method === 'GET' && path.endsWith('/reader-state')) {
         ownerPendingCalls++;
         await pendingOwnerGate;
@@ -105,6 +112,20 @@ test('G428: reviewed import jobs finish, report real stalls and replay committed
     const start = (id: string, resume = false, key = randomUUID()) => call('POST', `/v1/me/library-imports/${id}/apply`, {
       actingSubject: agent, context: null, language: 'en', ...(resume ? { resume } : {}) }, key);
     const upload = await prepare(file, [first.work, second.work, first.work]);
+
+    // A command refused by its idempotency receipt must not seal the upload it named.
+    const other = await prepare(file.replace('favorites, reread', 'other-shelf'), [first.work, second.work, first.work]);
+    const keyed = await prepare(file.replace('favorites, reread', 'keyed-shelf'), [first.work, second.work, first.work]);
+    const otherKey = randomUUID();
+    await checked(await start(keyed, false, otherKey), 202);
+    expect((await start(other, false, otherKey)).status).toBe(409);
+    expect((await stack.contentPool.query<{ apply_intent: unknown }>(
+      'SELECT apply_intent FROM reader.library_import_file WHERE agent=$1 AND id=$2', [agent, other])).rows[0]!.apply_intent).toBeNull();
+    const otherVersion = (await stack.contentPool.query<{ version: string }>(
+      'SELECT version::text FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2 AND row_number=0', [agent, other])).rows[0]!.version;
+    await checked(await call('PUT', `/v1/me/library-imports/${other}/rows/0`, {
+      actingSubject: agent, expectedVersion: Number(otherVersion), choice: 'apply', work: second.work }));
+    expect(await terminal(keyed)).toMatchObject({ state: 'completed' });
 
     // Drop the accepted response after the start command has committed, then
     // replay exactly that command after all its ordinary writes have finished.
@@ -221,5 +242,32 @@ test('G428: reviewed import jobs finish, report real stalls and replay committed
     releasePendingOwner!();
     pendingOwnerGate = undefined;
     ownerPending = false;
+
+    // Expiry must unwind an apply stuck on an owner that never answers: the
+    // reader's lock is freed and a resumed job can take it and finish.
+    const hung = await prepare(singleRow.replace('\n104,', '\n107,'), [first.work]);
+    ownerHung = true;
+    await checked(await start(hung), 202);
+    const hungDeadline = Date.now() + 10_000;
+    while (!ownerHungCalls && Date.now() < hungDeadline) await Bun.sleep(20);
+    expect(ownerHungCalls).toBeGreaterThan(0);
+    await stack.contentPool.query(`UPDATE reader.library_import_job SET lease_token=$3,
+      lease_expires_at=clock_timestamp()-interval '1 second' WHERE agent=$1 AND file_id=$2`, [agent, hung, randomUUID()]);
+    expect(await checked<Progress>(await status(hung))).toMatchObject({ state: 'stalled', reason: 'lease-expired' });
+    const lockFree = async () => {
+      const client = await stack.contentPool.connect();
+      try {
+        const lock = `reader-library-import:${agent}:library-file-agent-apply`;
+        const { locked } = (await client.query<{ locked: boolean }>('SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS locked', [lock])).rows[0]!;
+        if (locked) await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lock]);
+        return locked;
+      } finally { client.release(); }
+    };
+    const freeDeadline = Date.now() + 10_000;
+    while (!await lockFree() && Date.now() < freeDeadline) await Bun.sleep(100);
+    expect(await lockFree()).toBe(true);
+    ownerHung = false;
+    await checked(await start(hung, true), 202);
+    expect(await terminal(hung)).toMatchObject({ completed: 1, pending: false, state: 'completed' });
   } finally { releasePendingOwner?.(); await worker.stop(); await home.stop(); }
 }, 180_000);

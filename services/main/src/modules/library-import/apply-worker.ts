@@ -4,16 +4,7 @@ import { applyLibraryFile } from './apply.ts';
 import type { LibraryFileStore, ApplyIntent } from './file-store.ts';
 import { ImportJobLeaseLost } from './job-store.ts';
 import { withImportJobProgress } from './job-context.ts';
-import { ReaderImportUnavailable, type ReaderLibraryImportStore } from './reader-import.ts';
-
-function abortable<T>(pending: Promise<T>,signal: AbortSignal): Promise<T> {
-  return new Promise((resolve,reject) => {
-    const abort=() => reject(signal.reason);
-    signal.addEventListener('abort',abort,{ once: true });
-    void pending.then(resolve,reject).finally(() => signal.removeEventListener('abort',abort));
-    if (signal.aborted) { signal.removeEventListener('abort',abort);abort(); }
-  });
-}
+import { ReaderImportUnavailable, abortable, type ReaderLibraryImportStore } from './reader-import.ts';
 
 /** Credentials stay in memory for this run; process loss needs an explicit fresh-authority resume. */
 export class LibraryImportApplyWorker {

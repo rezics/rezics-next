@@ -39,7 +39,9 @@ export class LibraryImportJobStore {
     return (await this.pool.query<ImportJob>(`SELECT state,reason,lease_token FROM reader.library_import_job
       WHERE agent=$1 AND file_id=$2`,[agent,id])).rows[0] ?? null;
   }
-  async accept(agent: string,id: string,key: string,intent: ApplyIntent,resume: boolean) {
+  /** `seal` runs in the receipt's transaction: a refused command seals nothing. */
+  async accept(agent: string,id: string,key: string,intent: ApplyIntent,resume: boolean,
+    seal?: (client: PoolClient) => Promise<void>) {
     const client = await this.pool.connect();
     const digest = importDigest([id,intent,resume]);
     try {
@@ -54,6 +56,7 @@ export class LibraryImportJobStore {
       const file = await client.query(`SELECT id FROM reader.library_import_file WHERE agent=$1 AND id=$2
         AND expires_at>clock_timestamp() FOR UPDATE`,[agent,id]);
       if (!file.rowCount) throw new LibraryFileMissing('Import file was deleted, expired or is unavailable');
+      await seal?.(client);
       let job = (await client.query<ImportJob>(`SELECT state,reason,lease_token FROM reader.library_import_job
         WHERE agent=$1 AND file_id=$2 FOR UPDATE`,[agent,id])).rows[0];
       const counts=(await client.query<{ total: number; completed: number; issues: number }>(`SELECT count(*)::integer AS total,

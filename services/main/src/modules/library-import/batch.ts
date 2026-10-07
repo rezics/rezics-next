@@ -261,7 +261,7 @@ export async function importReviewedBatch(store: ReaderLibraryImportStore, reque
       outcomes.set(index, outcome);
     }
     return outcomes;
-  });
+  },request.signal);
   const outcomes = progress ?? await store.outcomes(agent, importKey);
   return { items: [...outcomes.entries()].map(([index, result]) => ({ index, result: result as ReviewedImportResult }))
     .sort((a, b) => a.index - b.index), total: batch.rows.length, pending: outcomes.size < batch.rows.length };

@@ -33,3 +33,39 @@ test('an owner 202 remains accepted pending work', async () => {
 test.each([[403, 'failed'], [409, 'stale']] as const)('owner command %i retains its row outcome %s', async (status, outcome) => {
   expect(await commands(status).commands.step(0, 'status', 'PUT', '/v1/works/work/reader-status', {})).toBe(outcome);
 });
+
+test('a hung owner request is refused after its bounded timeout', async () => {
+  const store = new ReaderLibraryImportStore({} as Pool, undefined, 20);
+  store.setDispatch(() => new Promise<Response>(() => {}));
+  await expect(store.call(request)).rejects.toBeInstanceOf(ReaderImportUnavailable);
+});
+
+test('an aborted lease cancels the owner request and releases the batch lock', async () => {
+  const queries: string[] = [];
+  let released = false;
+  const pool = { connect: async () => ({
+    query: async (sql: string) => { queries.push(sql);return { rows: [{ locked: true }] }; },
+    release: () => { released = true; } }) } as unknown as Pool;
+  const store = new ReaderLibraryImportStore(pool);
+  store.setDispatch(() => new Promise<Response>(() => {}));
+  const lease = new AbortController();
+  const owned = new Request('http://main.local/import', { signal: lease.signal });
+  const reason = new Error('lease expired');
+  const applying = store.withBatch('reader', 'key', () => store.call(owned), lease.signal);
+  setTimeout(() => lease.abort(reason), 10);
+  await expect(applying).rejects.toBe(reason);
+  expect(queries.some(sql => sql.includes('pg_advisory_unlock'))).toBe(true);
+  expect(released).toBe(true);
+  await expect(store.call(owned)).rejects.toBe(reason);
+});
+
+test('an aborted lease releases the batch lock even when the action ignores cancellation', async () => {
+  const queries: string[] = [];
+  const pool = { connect: async () => ({
+    query: async (sql: string) => { queries.push(sql);return { rows: [{ locked: true }] }; },
+    release: () => {} }) } as unknown as Pool;
+  const lease = new AbortController();
+  setTimeout(() => lease.abort(new Error('lease expired')), 10);
+  await expect(new ReaderLibraryImportStore(pool).withBatch('reader', 'key', () => new Promise<never>(() => {}), lease.signal)).rejects.toThrow('lease expired');
+  expect(queries.some(sql => sql.includes('pg_advisory_unlock'))).toBe(true);
+});

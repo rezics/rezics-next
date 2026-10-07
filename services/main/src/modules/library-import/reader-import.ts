@@ -10,6 +10,17 @@ export class ReaderImportBudgetExceeded extends Error {
   constructor(readonly kind: 'search' | 'acquisition') { super(`reader import ${kind} budget exceeded`); }
 }
 export class ReaderImportUnavailable extends Error {}
+/** An owner request that outlives this is refused; the apply lease is 60s, so a hung owner cannot hold a reader's lock past it. */
+export const OWNER_REQUEST_TIMEOUT_MS = 30_000;
+/** Settles with `pending` or rejects with the signal's reason; the abandoned promise is left to finish on its own. */
+export function abortable<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    if (signal.aborted) { void pending.catch(() => {}); return abort(); }
+    signal.addEventListener('abort', abort, { once: true });
+    void pending.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+  });
+}
 /** An owner refusal must reach the caller; it is not accepted import work. */
 export function requireImportOwnerAvailable(response: Response): void {
   if (response.status === 429 || response.status >= 500) {
@@ -27,7 +38,7 @@ export class ReaderLibraryImportStore {
   constructor(readonly pool: Pool, private readonly budgets = {
     sourceSearchesPerDay: READER_IMPORT_COST.sourceSearchesPerDay as number,
     acquisitionsPerDay: READER_IMPORT_COST.acquisitionsPerDay as number,
-  }) {
+  }, private readonly ownerTimeoutMs = OWNER_REQUEST_TIMEOUT_MS) {
     if (Object.values(budgets).some(value => !Number.isSafeInteger(value) || value < 1 || value > 1_000_000)) {
       throw new Error('Invalid Library import daily budgets');
     }
@@ -40,7 +51,12 @@ export class ReaderLibraryImportStore {
 
   async call(request: Request): Promise<Response> {
     if (!this.dispatch) throw new ReaderImportUnavailable('Main import dispatcher is unavailable');
-    return this.dispatch(request);
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(this.ownerTimeoutMs)]);
+    try { return await abortable(this.dispatch(request), signal); } catch (error) {
+      if (request.signal.aborted) throw request.signal.reason;
+      if (signal.aborted) throw new ReaderImportUnavailable('Library import owner timed out');
+      throw error;
+    }
   }
 
   /** The batch key binds one complete reviewed intent. A retry resumes its
@@ -128,14 +144,16 @@ export class ReaderLibraryImportStore {
     [agent, shelf, work, structure, expectedHead, current.attempt, current.expectedHead]);
   }
 
-  async withBatch<T>(agent: string, key: string, action: () => Promise<T>): Promise<T | null> {
+  /** An aborted signal unwinds this call and releases the lock; `action` is abandoned and its owner requests refuse from then on. */
+  async withBatch<T>(agent: string, key: string, action: () => Promise<T>, signal?: AbortSignal): Promise<T | null> {
     const client = await this.pool.connect();
     const lock = `reader-library-import:${agent}:${key}`;
     let held = false;
     try {
       held = (await client.query<{ locked: boolean }>(
         'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS locked', [lock])).rows[0]?.locked ?? false;
-      return held ? await action() : null;
+      if (!held) return null;
+      return await (signal ? abortable(action(), signal) : action());
     } finally {
       if (held) await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lock]);
       client.release();
