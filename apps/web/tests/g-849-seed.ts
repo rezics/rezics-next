@@ -1,7 +1,8 @@
 // Seeds the G-849 records (`g-849-records.ts`) into the isolated QA stack the e2e harness started and prints their IDs
 // as JSON. The browser signs in as the stack's web member, so the member's Agent and principal come from the private
 // web-auth fixture.
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { seedWiki } from './g-849-records.ts';
 
@@ -19,6 +20,18 @@ const stack = await startMediaStack('g849-e2e', { agents: true, rights: true, li
 const workObjects = stack.objects('semantic/work/');
 await workObjects.initialize();
 Object.assign(stack.env, { objectDirectory, workObjects });
+// The HTTP problem deliberately omits kernel internals. Retain the first
+// rejection: replaying its terminal receipt no longer carries the native report.
+let invalidNativeCommand: unknown;
+const nativeCommand = stack.fuseki.commandWithReceipt.bind(stack.fuseki);
+stack.fuseki.commandWithReceipt = async envelope => {
+  const result = await nativeCommand(envelope);
+  if (result.status === 'invalid' && !invalidNativeCommand) {
+    invalidNativeCommand = { envelope, report: result.report,
+      membership: await stack.fuseki.membershipPreparationStatus() };
+  }
+  return result;
+};
 try {
   const seeded = await seedWiki(stack, reader);
   const again = await seedWiki(stack, reader);
@@ -27,6 +40,15 @@ try {
   }
   const { read: _read, tokens: _tokens, holderToken: _holder, holderActor: _actor, ...seed } = seeded;
   console.log(JSON.stringify(seed));
+} catch (error) {
+  if (invalidNativeCommand) {
+    const directory = resolve('.temp', 'qa', process.env.REZICS_QA_RUN_ID!);
+    mkdirSync(directory, { recursive: true });
+    const path = resolve(directory, 'wiki-native-rejection.json');
+    writeFileSync(path, JSON.stringify(invalidNativeCommand, null, 2));
+    console.error(`Wiki native rejection: ${path}`);
+  }
+  throw error;
 } finally {
   await stack.stop();
 }
