@@ -7,13 +7,6 @@
     ]
   },
   {
-    "operation": "GET /v1/access/grants response[platform-grants-v1]",
-    "fields": [
-      "response.complete",
-      "response.items"
-    ]
-  },
-  {
     "operation": "GET /v1/access/grants response[work-create-agent-grants-v1]",
     "fields": [
       "response.complete",
@@ -281,12 +274,6 @@
     ]
   },
   {
-    "operation": "GET /v1/me/library-loans response[0]",
-    "fields": [
-      "response.complete"
-    ]
-  },
-  {
     "operation": "GET /v1/me/managed-realms",
     "fields": [
       "request.cursor"
@@ -453,18 +440,6 @@
     "fields": [
       "response.complete",
       "response.nextCursor"
-    ]
-  },
-  {
-    "operation": "GET /v1/posts/{id}/identifications response[post-identifications-v1]",
-    "fields": [
-      "response.complete"
-    ]
-  },
-  {
-    "operation": "GET /v1/projections response[0]",
-    "fields": [
-      "response.complete"
     ]
   },
   {
@@ -682,12 +657,6 @@
     ]
   },
   {
-    "operation": "GET /v1/resources/{resource}/continuities response[work-continuities-v1]",
-    "fields": [
-      "response.complete"
-    ]
-  },
-  {
     "operation": "GET /v1/resources/{resource}/discussion response[0]",
     "fields": [
       "response.complete"
@@ -841,12 +810,6 @@
   },
   {
     "operation": "GET /v1/works/{id}/contents response[work-contents-v1]",
-    "fields": [
-      "response.complete"
-    ]
-  },
-  {
-    "operation": "GET /v1/works/{id}/copies response[0]",
     "fields": [
       "response.complete"
     ]
