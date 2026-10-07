@@ -111,8 +111,9 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
   managers that die. It runs no product work and reviews no other Goal's diffs.
   Its [QA tiers](program/GOAL.md#qa-tiers) replace the rotating duty below: Goal
   managers run worker and wave checks only. The program runs `task goal -- regress`
-  on one pinned SHA, resumes its recorded batches after interruption, and uses
-  at most eight probes per failing file to verify a merge boundary. Results go
+  on one pinned SHA for routine unit, owner, model, integration and fault/recovery
+  coverage; the nightly full run adds browser journeys and Storybook. It resumes
+  recorded batches after interruption and uses at most eight probes per failing file to verify a merge boundary. Results go
   to `goalctl inbox`; `status` shows unacknowledged counts. Unavailable builds,
   non-monotonic evidence and unrecorded manager or maintainer commits leave an
   explicit suspect range rather than a guessed task. The rotating duty below
@@ -163,7 +164,7 @@ runs the integration tiers, Storybook and browser journeys once.
   concurrent QA stacks (default 3 slots, `GOAL_QA_SLOTS`; four exhausted a 62 GB host beside a dozen workers).
 - Heavy runs take a host-wide lock as well as a slot, so the host carries at
   most one heavy run, from whichever Goal, beside two light ones. `--affected`
-  and whole `--tier` runs are heavy by themselves; bounded `--tier ... --file ...` batches use ordinary slots. pass `--heavy` to `test` or `slot`
+  and whole `--tier` runs are heavy by themselves; bounded `--tier ... --file ...` batches use ordinary slots. Pass `--heavy` to `test` or `slot`
   for wave batches, Storybook and browser suites. The lock belongs to the
   process and frees itself when it exits; `status` shows its holder, and a
   heavy run waits for it.

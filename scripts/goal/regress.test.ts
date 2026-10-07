@@ -75,6 +75,18 @@ describe('pinned main-wide regression', () => {
     } finally { r.cleanup(); }
   });
 
+  test('routine resume preserves registry-owned browser exclusions', async () => {
+    const r = repo();
+    try {
+      r.files.find(file => file.file === 'apps/web/tests/example.e2e.ts')!.outcome = 'excluded';
+      r.files.find(file => file.file === 'apps/web/tests/example.e2e.ts')!.reason = 'Provider evidence requires separate credentials';
+      const result = await r.run({ runId: 'browser-exclusion' });
+      expect(result.files.find(file => file.file === 'apps/web/tests/example.e2e.ts')!.reason)
+        .toBe('Provider evidence requires separate credentials');
+      expect((await r.run({ resume: 'browser-exclusion' })).status).toBe('passed');
+    } finally { r.cleanup(); }
+  });
+
   test('owner and stack batches fit bounded groups and run concurrently only up to available slots', async () => {
     const r = repo(60);
     for (const tier of ['owner', 'fault/recovery'] as const) for (let index = 0; index < 32; index++) {
@@ -575,7 +587,9 @@ test('regression yielding stops at its deadline or an interruption', async () =>
 test('classification uses engine evidence without treating application ECONNREFUSED as Docker failure', () => {
   expect(classify('connect ECONNREFUSED 127.0.0.1:3001')).toBe('deterministic');
   for (const log of ['docker engine ECONNREFUSED', 'dial unix /var/run/docker.sock: connect: no such file or directory',
-    'failed to connect to the Docker API', 'network pool exhausted', 'Out of memory: Killed process 123 (qemu)']) expect(classify(log)).toBe('infrastructure');
+    'failed to connect to the Docker API', 'Error response from daemon: mounts denied',
+    'The path /tmp/qa/init.sh is not shared from the host and is not known to Docker.',
+    'network pool exhausted', 'Out of memory: Killed process 123 (qemu)']) expect(classify(log)).toBe('infrastructure');
   expect(classify('spawnSync bun ETIMEDOUT')).toBe('deadline');
   expect(classify('No QA slot became free within one hour')).toBe('deadline');
   expect(classify('Memory admission deadline reached; no work started')).toBe('deadline');

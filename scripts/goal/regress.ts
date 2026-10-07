@@ -189,7 +189,7 @@ function batchesFor(files: ExpectedFile[], options: RegressionOptions): Batch[] 
 }
 
 export function classify(evidence: string, code = 1): Classification {
-  if (/cannot connect to the docker daemon|failed to connect to (?:the )?docker (?:daemon|API)|docker.*ECONNREFUSED|ECONNREFUSED.*(?:docker|237[56])|(?:docker\.sock|dockerDesktopLinuxEngine)[^\n]*(?:connection refused|no such file|cannot find)|is the docker daemon running|all predefined address pools|no available.*address pool|could not find an available, non-overlapping.*address pool|network pool exhausted|oom-kill|Out of memory: Killed process/i.test(evidence)) return 'infrastructure';
+  if (/cannot connect to the docker daemon|failed to connect to (?:the )?docker (?:daemon|API)|docker.*ECONNREFUSED|ECONNREFUSED.*(?:docker|237[56])|(?:docker\.sock|dockerDesktopLinuxEngine)[^\n]*(?:connection refused|no such file|cannot find)|is the docker daemon running|mounts denied|is not shared from the host and is not known to Docker|all predefined address pools|no available.*address pool|could not find an available, non-overlapping.*address pool|network pool exhausted|oom-kill|Out of memory: Killed process/i.test(evidence)) return 'infrastructure';
   if (code === 137 || /heap out of memory|SIGKILL|resource exhausted|ENOMEM/.test(evidence)) return 'resource';
   if (/exceeded[^\n]*(?:budget|deadline)|timed out|ETIMEDOUT|deadline exceeded|admission deadline reached|reached its run deadline|heavy QA lock stayed held|No QA slot became free/i.test(evidence)) return 'deadline';
   return 'deterministic';
@@ -423,7 +423,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       if (identities(expected) !== identities(manifest.files)) throw new Error('Incomplete or changed regression manifest');
       const exclusions = new Map(expected.filter(file => file.outcome === 'excluded').map(file => [`${file.tier}:${file.file}`, file.reason]));
       if (manifest.selection === 'routine') for (const file of expected) {
-        if (tiers.includes(file.tier as RegressionTier) && browserTier(file.tier as RegressionTier)) {
+        if (file.outcome !== 'excluded' && tiers.includes(file.tier as RegressionTier) && browserTier(file.tier as RegressionTier)) {
           exclusions.set(`${file.tier}:${file.file}`, routineBrowserReason);
         }
       }
