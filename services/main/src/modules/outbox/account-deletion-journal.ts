@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+
+type Sql = Pick<Pool, 'query'>;
 
 export class AccountDeletionJournalConflict extends Error {}
 
@@ -40,7 +42,7 @@ export async function mirrorAccountDeletionIntent(
   await retain(relay, row);
 }
 
-async function page(pool: Pool, owner: 'access' | 'relay', after: string | null): Promise<Intent[]> {
+async function page(db: Sql, owner: 'access' | 'relay', after: string | null): Promise<Intent[]> {
   const query = owner === 'access'
     ? `SELECT id AS outbox_id, principal_id, authority_epoch::text AS authority_epoch
        FROM access.outbox WHERE kind = 'account.deletion_fenced'
@@ -48,7 +50,7 @@ async function page(pool: Pool, owner: 'access' | 'relay', after: string | null)
     : `SELECT outbox_id, principal_id, authority_epoch::text AS authority_epoch
        FROM relay.account_deletion_intent
        WHERE ($1::uuid IS NULL OR outbox_id > $1::uuid) ORDER BY outbox_id LIMIT 1000`;
-  return (await pool.query<Intent>(query, [after])).rows;
+  return (await db.query<Intent>(query, [after])).rows;
 }
 
 /** Idempotent full scan avoids skipping transactions that commit out of UUID order. */
@@ -66,12 +68,12 @@ export async function mirrorAccountDeletionIntents(access: Pool, relay: Pool): P
   return inserted;
 }
 
-async function digest(pool: Pool, owner: 'access' | 'relay') {
+async function digest(db: Sql, owner: 'access' | 'relay') {
   const hash = createHash('sha256');
   let after: string | null = null;
   let count = 0n;
   while (true) {
-    const rows = await page(pool, owner, after);
+    const rows = await page(db, owner, after);
     for (const row of rows) {
       hash.update(JSON.stringify([row.outbox_id, row.principal_id, row.authority_epoch]));
       hash.update('\n');
@@ -83,12 +85,16 @@ async function digest(pool: Pool, owner: 'access' | 'relay') {
   return { count: count.toString(), digest: hash.digest('hex') };
 }
 
-/** Run under external writer quiescence or with Access's recovery fence held. */
+/**
+ * Run under external writer quiescence or with Access's recovery fence held.
+ * A passed Access client joins the caller's snapshot. A passed relay client
+ * that is idle keeps one autocommit read per page, the same as a pool query.
+ */
 export async function assertAccountDeletionJournalCoverage(
-  access: Pool, relay: Pool,
+  access: Pool, relay: Pool, accessClient?: PoolClient, relayClient?: PoolClient,
 ): Promise<void> {
-  const source = await digest(access, 'access');
-  const retained = await digest(relay, 'relay');
+  const source = await digest(accessClient ?? access, 'access');
+  const retained = await digest(relayClient ?? relay, 'relay');
   if (source.count !== retained.count || source.digest !== retained.digest) {
     throw new AccountDeletionJournalConflict('retained Account deletion journal differs from Access');
   }

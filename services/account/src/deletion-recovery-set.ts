@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { capturePgRecoveryFrontier, assertPgRecoveryFrontier,
   type PgRecoveryFrontier } from '../../main/src/modules/work/pg-recovery-frontier.ts';
 import { accessOutboxCoverage, accessStateCoverage } from
@@ -24,34 +24,36 @@ export interface DeletionRecoverySet {
   };
 }
 
-async function deletedBinding(account: Pool, access: Pool, issuer: string, subject: string) {
+async function deletedBinding(account: Pool, access: Pool, issuer: string, subject: string,
+  accessClient?: PoolClient) {
   if (!issuer || !subject) throw new DeletionRecoveryConflict('invalid deleted Account binding');
+  const accessDb = accessClient ?? access;
   const accountUser = await account.query('SELECT id FROM public."user" WHERE id = $1', [subject]);
   if (accountUser.rowCount !== 0) {
     throw new DeletionRecoveryConflict('Account subject remains present');
   }
-  const principal = await access.query<{ id: string; active: boolean; enforcement_epoch: string }>(
+  const principal = await accessDb.query<{ id: string; active: boolean; enforcement_epoch: string }>(
     `SELECT id, active, enforcement_epoch FROM access.principal
      WHERE account_issuer = $1 AND account_subject = $2`, [issuer, subject]);
   const row = principal.rows[0];
   if (principal.rowCount !== 1 || !row || row.active || BigInt(row.enforcement_epoch) < 1n) {
     throw new DeletionRecoveryConflict('Access principal fence is absent');
   }
-  const fact = await access.query<{ count: string }>(
+  const fact = await accessDb.query<{ count: string }>(
     `SELECT count(*) AS count FROM access.outbox
      WHERE kind = 'principal.deactivated' AND principal_id = $1 AND authority_epoch = $2`,
     [row.id, row.enforcement_epoch]);
   if (fact.rows[0]?.count !== '1') {
     throw new DeletionRecoveryConflict('Access principal outbox fact is absent');
   }
-  const deletionFact = await access.query<{ count: string }>(
+  const deletionFact = await accessDb.query<{ count: string }>(
     `SELECT count(*) AS count FROM access.outbox
      WHERE kind = 'account.deletion_fenced' AND principal_id = $1 AND authority_epoch = $2`,
     [row.id, row.enforcement_epoch]);
   if (deletionFact.rows[0]?.count !== '1') {
     throw new DeletionRecoveryConflict('Access Account deletion intent is absent');
   }
-  const pending = await access.query<{ count: string }>(
+  const pending = await accessDb.query<{ count: string }>(
     "SELECT count(*) AS count FROM access.admission WHERE principal_id = $1 AND state <> 'sealed'",
     [row.id]);
   if (pending.rows[0]?.count !== '0') {
@@ -73,9 +75,13 @@ export async function captureDeletionRecoverySet(
       outbox: await accessOutboxCoverage(access), state: await accessStateCoverage(access) } };
 }
 
-/** Check both isolated completed restores before routing either owner. */
+/**
+ * Check both isolated completed restores before routing either owner.
+ * A passed Access client joins the caller's snapshot for the Access reads.
+ * Account stays on its own pool.
+ */
 export async function assertDeletionRecoverySet(
-  account: Pool, access: Pool, expected: DeletionRecoverySet,
+  account: Pool, access: Pool, expected: DeletionRecoverySet, accessClient?: PoolClient,
 ): Promise<void> {
   if (expected?.version !== 1 || !expected.account || !expected.access
     || !expected.deletion || !expected.deletion.issuer || !expected.deletion.accountSubject
@@ -84,10 +90,10 @@ export async function assertDeletionRecoverySet(
     throw new DeletionRecoveryConflict('invalid deletion recovery set');
   }
   await assertPgRecoveryFrontier(account, expected.account.pg);
-  await assertPgRecoveryFrontier(access, expected.access.pg);
+  await assertPgRecoveryFrontier(access, expected.access.pg, accessClient);
   await assertAccountRecoveryCoverage(account, expected.account.rows);
-  const outbox = await accessOutboxCoverage(access);
-  const state = await accessStateCoverage(access);
+  const outbox = await accessOutboxCoverage(access, accessClient);
+  const state = await accessStateCoverage(access, accessClient);
   if (outbox.count !== expected.access.outbox?.count
     || outbox.digest !== expected.access.outbox?.digest
     || state.count !== expected.access.state?.count
@@ -95,7 +101,7 @@ export async function assertDeletionRecoverySet(
     throw new DeletionRecoveryConflict('Access rows differ from retained recovery set');
   }
   const actual = await deletedBinding(account, access,
-    expected.deletion.issuer, expected.deletion.accountSubject);
+    expected.deletion.issuer, expected.deletion.accountSubject, accessClient);
   if (actual.accessPrincipalId !== expected.deletion.accessPrincipalId
     || actual.enforcementEpoch !== expected.deletion.enforcementEpoch) {
     throw new DeletionRecoveryConflict('deleted Account binding differs from retained fence');

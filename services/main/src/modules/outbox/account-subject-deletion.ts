@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 
 export class AccountSubjectDeletionConflict extends Error {}
 
@@ -55,13 +55,17 @@ export async function backfillAccountSubjectDeletions(
   return inserted;
 }
 
-/** Compare all separately retained tombstones with the promoted Account owner. */
+/**
+ * Compare all separately retained tombstones with the promoted Account owner.
+ * A passed relay client must be idle: each page stays an autocommit read.
+ */
 export async function assertAccountSubjectDeletionsAbsent(
-  account: Pool, relay: Pool,
+  account: Pool, relay: Pool, relayClient?: PoolClient,
 ): Promise<void> {
+  const relayDb = relayClient ?? relay;
   let after: { issuer: string; account_subject: string } | undefined;
   while (true) {
-    const rows = (await relay.query<{ issuer: string; account_subject: string }>(
+    const rows = (await relayDb.query<{ issuer: string; account_subject: string }>(
       `SELECT issuer, account_subject FROM relay.account_subject_deletion
        WHERE ($1::text IS NULL OR (issuer, account_subject) > ($1, $2))
        ORDER BY issuer, account_subject LIMIT 1000`,

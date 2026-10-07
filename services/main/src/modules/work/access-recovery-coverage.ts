@@ -64,39 +64,50 @@ export async function scanAccessState(client: PoolClient): Promise<RowCoverage> 
   return (await scanAccessTables(client)).state;
 }
 
-/** Stable offline digest of the complete Access outbox at one PostgreSQL snapshot. */
-export async function accessOutboxCoverage(pool: Pool): Promise<{ count: string; digest: string }> {
-  const client = await pool.connect();
+/**
+ * Stable offline digest of the complete Access outbox at one PostgreSQL snapshot.
+ * A passed client keeps the caller's snapshot and locks; this does not open,
+ * commit or release that transaction.
+ */
+export async function accessOutboxCoverage(pool: Pool,
+  client?: PoolClient): Promise<{ count: string; digest: string }> {
+  if (client) return scanAccessOutbox(client);
+  const owned = await pool.connect();
   try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const coverage = await scanAccessOutbox(client);
-    await client.query('COMMIT');
+    await owned.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const coverage = await scanAccessOutbox(owned);
+    await owned.query('COMMIT');
     return coverage;
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    try { await owned.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
   } finally {
-    client.release();
+    owned.release();
   }
 }
 
 /** Stable offline digest of the authority and admission rows at one snapshot. */
-export async function accessStateCoverage(pool: Pool): Promise<RowCoverage> {
-  return (await accessStateTables(pool)).state;
+export async function accessStateCoverage(pool: Pool, client?: PoolClient): Promise<RowCoverage> {
+  return (await accessStateTables(pool, client)).state;
 }
 
-/** Per-table Access coverage and its folded state digest at one snapshot. */
-export async function accessStateTables(pool: Pool): Promise<AccessStateTables> {
-  const client = await pool.connect();
+/**
+ * Per-table Access coverage and its folded state digest at one snapshot.
+ * A passed client keeps the caller's snapshot. Canonical row settings apply
+ * for the rest of that transaction and clear when the caller commits.
+ */
+export async function accessStateTables(pool: Pool, client?: PoolClient): Promise<AccessStateTables> {
+  if (client) return scanAccessTables(client);
+  const owned = await pool.connect();
   try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const coverage = await scanAccessTables(client);
-    await client.query('COMMIT');
+    await owned.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const coverage = await scanAccessTables(owned);
+    await owned.query('COMMIT');
     return coverage;
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    try { await owned.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
   } finally {
-    client.release();
+    owned.release();
   }
 }

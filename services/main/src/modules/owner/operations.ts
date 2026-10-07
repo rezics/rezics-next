@@ -204,7 +204,7 @@ export class OwnerOperations {
               hmacKey: resources.hmacKey, accountPool: resources.accountPool,
               contentPool: resources.contentPool, objectStore: resources.objectStore,
               deletions: { accountPool: resources.accountPool, hmacKey: resources.hmacKey,
-                sealedSets: input.sealedDeletionSets } });
+                sealedSets: input.sealedDeletionSets } }, client);
         } catch (error) {
           if (!(error instanceof RestoreLineageConflict)) throw error;
           conflict = error;

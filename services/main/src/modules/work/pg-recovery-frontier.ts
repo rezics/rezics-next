@@ -45,14 +45,19 @@ export async function capturePgRecoveryFrontier(pool: Pool): Promise<PgRecoveryF
     flushedLsn: row.flushed_lsn, walFile: row.wal_file };
 }
 
-/** A promoted isolated restore must have replayed through the recorded source LSN. */
-export async function assertPgRecoveryFrontier(pool: Pool, frontier: PgRecoveryFrontier): Promise<void> {
+/**
+ * A promoted isolated restore must have replayed through the recorded source LSN.
+ * A passed client runs the same control-file read inside the caller's transaction.
+ * Replay position is current server state, not a snapshot of table rows.
+ */
+export async function assertPgRecoveryFrontier(pool: Pool, frontier: PgRecoveryFrontier,
+  client?: PoolClient): Promise<void> {
   if (!/^[0-9]+$/.test(frontier?.systemIdentifier ?? '')
     || !/^[0-9A-F]+\/[0-9A-F]+$/i.test(frontier?.flushedLsn ?? '')
     || !/^[0-9A-F]{24}$/i.test(frontier?.walFile ?? '')) {
     throw new PgRecoveryFrontierConflict('invalid PostgreSQL recovery frontier');
   }
-  const result = await pool.query<{ system_identifier: string; recovering: boolean;
+  const result = await (client ?? pool).query<{ system_identifier: string; recovering: boolean;
     replay_lsn: string | null; covered: boolean | null }>(
     `SELECT (pg_control_system()).system_identifier::text AS system_identifier,
        pg_is_in_recovery() AS recovering,

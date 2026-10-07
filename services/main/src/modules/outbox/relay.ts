@@ -135,19 +135,23 @@ async function scanRelayCoverage(client: PoolClient, consumer: string,
     batch: selectedBatch, events: selectedEvents };
 }
 
-/** Offline coverage of the durable handoff through one acknowledged checkpoint. */
-export async function relayCoverage(pool: Pool, consumer: string): Promise<RelayCoverage> {
-  const client = await pool.connect();
+/**
+ * Offline coverage of the durable handoff through one acknowledged checkpoint.
+ * A passed client must be idle. This opens and commits its own snapshot and
+ * leaves that checkout held; a session advisory lock survives the commit.
+ */
+export async function relayCoverage(pool: Pool, consumer: string, client?: PoolClient): Promise<RelayCoverage> {
+  const held = client ?? await pool.connect();
   try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const { coverage } = await scanRelayCoverage(client, consumer);
-    await client.query('COMMIT');
+    await held.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const { coverage } = await scanRelayCoverage(held, consumer);
+    await held.query('COMMIT');
     return coverage;
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    try { await held.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
   } finally {
-    client.release();
+    if (!client) held.release();
   }
 }
 
@@ -204,22 +208,26 @@ function retainedEnvelopePosition(event: MainCloudEvent, streamScope: string, da
   return { ...event, data: { ...event.data, relayPosition: position } };
 }
 
-/** One complete, verified page from the product-owned handoff after a broker gap. */
+/**
+ * One complete, verified page from the product-owned handoff after a broker gap.
+ * A passed client must be idle. This opens and commits its own snapshot and
+ * leaves that checkout held; a session advisory lock survives the commit.
+ */
 export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
-  afterSequence: string, limit = 100): Promise<{ coverage: RelayCoverage;
+  afterSequence: string, limit = 100, client?: PoolClient): Promise<{ coverage: RelayCoverage;
     batches: RetainedRelayBatch[] }> {
   if (!/^(0|[1-9][0-9]*)$/.test(afterSequence)
     || !Number.isSafeInteger(limit) || limit < 1 || limit > 100) {
     throw new RelayCheckpointConflict('invalid retained relay range');
   }
-  const client = await pool.connect();
+  const held = client ?? await pool.connect();
   try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const { coverage } = await scanRelayCoverage(client, consumer);
+    await held.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const { coverage } = await scanRelayCoverage(held, consumer);
     if (BigInt(coverage.sequence) < BigInt(afterSequence)) {
       throw new RelayCheckpointConflict('consumer checkpoint exceeds retained relay');
     }
-    const rows = await client.query<{ sequence: string; batch_id: string;
+    const rows = await held.query<{ sequence: string; batch_id: string;
       routing_epoch: string; event_count: number }>(
       `SELECT batch.sequence::text, batch_id, routing_epoch, event_count
        FROM relay.delivered_batch AS batch WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND batch.sequence > $2
@@ -230,7 +238,7 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
       if (BigInt(row.sequence) !== next++) {
         throw new RelayCheckpointConflict('retained relay batch range is not contiguous');
       }
-      const events = await client.query<{ envelope: MainCloudEvent }>(
+      const events = await held.query<{ envelope: MainCloudEvent }>(
         `SELECT envelope FROM relay.delivered_event
          WHERE stream_scope = '${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch = $1 AND sequence = $2 ORDER BY event_id`,
         [coverage.dataEpoch, row.sequence]);
@@ -251,12 +259,12 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
     if (BigInt(coverage.sequence) > BigInt(afterSequence) && batches.length === 0) {
       throw new RelayCheckpointConflict('retained relay batch range is missing');
     }
-    await client.query('COMMIT');
+    await held.query('COMMIT');
     return { coverage, batches };
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    try { await held.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
-  } finally { client.release(); }
+  } finally { if (!client) held.release(); }
 }
 
 export interface MainOutboxBatch {

@@ -137,7 +137,8 @@ export async function reconcileRelayGap(relay: Pool, access: Pool,
     let batches: RetainedRelayBatch[];
     try {
       const retained = await verifiedRetainedRelayRange(relay, input.relayConsumer,
-        input.afterSequence, Number(BigInt(input.throughSequence) - BigInt(input.afterSequence)));
+        input.afterSequence, Number(BigInt(input.throughSequence) - BigInt(input.afterSequence)),
+        client);
       if (retained.coverage.dataEpoch !== input.dataEpoch
         || BigInt(retained.coverage.sequence) < BigInt(input.throughSequence)) {
         throw new RelayCheckpointConflict('retained handoff is behind requested recovery cut');

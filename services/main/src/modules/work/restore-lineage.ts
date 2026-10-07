@@ -99,9 +99,11 @@ export async function captureGraphRecoveryCoverage(
     || relay.sequence !== before.sequence || relay.batchCount !== before.sequence) {
     throw new RestoreLineageConflict('source graph or relay moved during recovery capture');
   }
-  const [outboxAfter, stateAfter, accountPgAfter, accountAfter, relayAfter] = await Promise.all([
-    accessOutboxCoverage(accessPool), accessStateCoverage(accessPool),
-    capturePgRecoveryFrontier(accountPool), accountRecoveryCoverage(accountPool),
+  // A second checkout of a pool that this capture already holds deadlocks a
+  // one-connection pool, so each pool's reads run one after another.
+  const [[outboxAfter, stateAfter], [accountPgAfter, accountAfter], relayAfter] = await Promise.all([
+    (async () => [await accessOutboxCoverage(accessPool), await accessStateCoverage(accessPool)] as const)(),
+    (async () => [await capturePgRecoveryFrontier(accountPool), await accountRecoveryCoverage(accountPool)] as const)(),
     relayCoverage(relayPool, consumer),
   ]);
   const final = await control(fuseki);
@@ -144,19 +146,24 @@ export async function captureGraphRecoveryCoverage(
     content, commerce, ...(objects ? { objects } : {}) };
 }
 
-/** Every retained Account deletion intent needs a current two-owner proof. */
+/**
+ * Every retained Account deletion intent needs a current two-owner proof.
+ * A passed client stays in the caller's transaction: this does not begin,
+ * commit, roll back or release it.
+ */
 export async function assertGraphDeletionEvidence(
-  accessPool: Pool, evidence?: DeletionReleaseEvidence,
+  accessPool: Pool, evidence?: DeletionReleaseEvidence, client?: PoolClient,
 ): Promise<void> {
-  const client = await accessPool.connect();
+  const owned = !client;
+  const held = client ?? await accessPool.connect();
   try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-    const fence = await client.query<{ open: boolean }>(
+    if (owned) await held.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    const fence = await held.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (fence.rows[0]?.open !== false) {
       throw new RestoreLineageConflict('Access recovery fence is not held');
     }
-    const result = await client.query<{ principal_id: string; authority_epoch: string }>(
+    const result = await held.query<{ principal_id: string; authority_epoch: string }>(
       `SELECT principal_id, authority_epoch FROM access.outbox
        WHERE kind = 'account.deletion_fenced' ORDER BY principal_id`);
     const markers = result.rows;
@@ -178,19 +185,19 @@ export async function assertGraphDeletionEvidence(
           throw new RestoreLineageConflict('Account deletion intent differs from retained evidence');
         }
         byPrincipal.delete(set.deletion.accessPrincipalId);
-        try { await assertDeletionRecoverySet(evidence.accountPool, accessPool, set); }
+        try { await assertDeletionRecoverySet(evidence.accountPool, accessPool, set, held); }
         catch { throw new RestoreLineageConflict('deleted Account/Access state differs from retained evidence'); }
       }
       if (byPrincipal.size !== 0) {
         throw new RestoreLineageConflict('Account deletion recovery evidence is incomplete');
       }
     }
-    await client.query('COMMIT');
+    if (owned) await held.query('COMMIT');
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    if (owned) { try { await held.query('ROLLBACK'); } catch { /* retain original error */ } }
     throw error;
   } finally {
-    client.release();
+    if (owned) held.release();
   }
 }
 
@@ -285,6 +292,7 @@ export async function cutoverRestoredGraphLineage(
 export async function releaseRestoredGraphHold(
   fuseki: FusekiClient, accessPool: Pool, relayPool: Pool,
   lineage: GraphLineage, evidence: AuthenticatedRecoveryCoverage,
+  relayClient?: PoolClient,
 ): Promise<void> {
   let coverage: RecoveryCoverage;
   try { coverage = openRecoveryPayload<RecoveryCoverage>(
@@ -311,6 +319,7 @@ export async function releaseRestoredGraphHold(
   }
   const client = await accessPool.connect();
   let relayHeadClient: PoolClient | undefined;
+  const borrowedRelay = relayClient !== undefined;
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     await client.query("SET LOCAL TIME ZONE 'UTC'");
@@ -333,12 +342,12 @@ export async function releaseRestoredGraphHold(
     catch { throw new RestoreLineageConflict('Account WAL differs from recovery coverage'); }
     try { await assertAccountRecoveryCoverage(evidence.accountPool, coverage.account); }
     catch { throw new RestoreLineageConflict('Account rows differ from recovery coverage'); }
-    try { await assertAccountSubjectDeletionsAbsent(evidence.accountPool, relayPool); }
+    try { await assertAccountSubjectDeletionsAbsent(evidence.accountPool, relayPool, relayClient); }
     catch { throw new RestoreLineageConflict('retained Account deletion subject exists in restored Account'); }
-    await assertAccountDeletionJournalCoverage(accessPool, relayPool);
-    await assertGraphDeletionEvidence(accessPool, evidence.deletions);
+    await assertAccountDeletionJournalCoverage(accessPool, relayPool, client, relayClient);
+    await assertGraphDeletionEvidence(accessPool, evidence.deletions, client);
     let retainedRelay: RelayCoverage;
-    try { retainedRelay = await relayCoverage(relayPool, coverage.relay.consumer); }
+    try { retainedRelay = await relayCoverage(relayPool, coverage.relay.consumer, relayClient); }
     catch { throw new RestoreLineageConflict('relay checkpoint or delivered events are unavailable'); }
     if (retainedRelay.dataEpoch !== coverage.priorDataEpoch
       || retainedRelay.sequence !== coverage.priorSequence
@@ -348,7 +357,7 @@ export async function releaseRestoredGraphHold(
       || retainedRelay.eventDigest !== coverage.relay.eventDigest) {
       throw new RestoreLineageConflict('relay handoff differs from recovery coverage');
     }
-    relayHeadClient = await relayPool.connect();
+    relayHeadClient = relayClient ?? await relayPool.connect();
     await relayHeadClient.query('BEGIN');
     await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");
     try { await assertCurrentRecoveryCoverageHead(relayHeadClient, coverage); }
@@ -423,7 +432,7 @@ export async function releaseRestoredGraphHold(
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
   } finally {
-    relayHeadClient?.release();
+    if (!borrowedRelay) relayHeadClient?.release();
     client.release();
   }
 }
