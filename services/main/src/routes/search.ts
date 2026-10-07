@@ -24,7 +24,7 @@ import type { ActivePresentationMute } from '../modules/presentation/realm-mutes
 import { ContentProjectionUnavailable } from '../modules/content-publication/relay.ts';
 import { queryPublicContentPhrase } from '../modules/content-publication/search.ts';
 import { pageCompleteContentRelation } from '../modules/content-publication/search-continuation.ts';
-import { checkJudgmentProtection } from '../modules/judgment/protection.ts';
+import type { JudgmentProtectionCheck } from '../modules/judgment/badge.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../modules/work/search-budget.ts';
 import { decoratePhraseRelation, phraseWorkTypes } from '../modules/work/search-facets.ts';
 import { enrichSerialSearch } from '../modules/work/summary-serial.ts';
@@ -128,23 +128,25 @@ export async function protectClassifiedResults<T extends { total: number; result
   if (targets.size && !work.judgments) {
     throw new PublicQueryUnavailable('Access judgment protection owner is unavailable');
   }
-  const checked = new Map<string, Awaited<ReturnType<typeof checkJudgmentProtection>>>();
+  const checked = new Map<string, JudgmentProtectionCheck>();
   const entries = [...targets];
-  for (let offset = 0; offset < entries.length; offset += 16) {
-    await Promise.all(entries.slice(offset, offset + 16).map(async ([key, target]) => {
-      try {
-        const badge = await checkJudgmentProtection(work.judgments!, target.support,
-          target.context, target.concept);
+  if (entries.length) {
+    try {
+      const badges = await work.judgments!.protectionChecks(entries.map(([, target]) => ({
+        statement: target.support, context: target.context, concept: target.concept })));
+      if (badges.length !== entries.length) throw new Error('judgment protection page is incomplete');
+      entries.forEach(([key, target], index) => {
+        const badge = badges[index]!;
         if (badge.statement !== target.support || badge.context.kind !== target.context.kind
           || (badge.context.kind === 'realm' && target.context.kind === 'realm'
             && badge.context.realm !== target.context.realm)) {
           throw new Error('judgment protection target differs');
         }
         checked.set(key, badge);
-      } catch {
-        throw new PublicQueryUnavailable('Access judgment protection check is unavailable');
-      }
-    }));
+      });
+    } catch {
+      throw new PublicQueryUnavailable('Access judgment protection check is unavailable');
+    }
   }
   const visible = relation.results.flatMap(match => {
     const classification = match.classification;

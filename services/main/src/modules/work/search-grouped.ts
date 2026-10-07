@@ -267,7 +267,7 @@ async function assertGroupedPosition(env: WorkActivationEnvironment,
  * its ordinary grant path needs 20. Both retain the route's 72-call budget.
  * Discovered IDs are admitted before they enter any grouped count or facet. */
 export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvironment,
-  judgments: Pick<AccessJudgments, 'protectionCheck'>,
+  judgments: Pick<AccessJudgments, 'protectionChecks'>,
   canReadResources: (resources: readonly string[]) => Promise<ReadonlySet<string>>,
   input: PublicGroupedStatementPhraseQuery,
   admitPhrase?: (relation: Awaited<ReturnType<typeof queryPublicRealmPhrase>>) =>
@@ -420,6 +420,9 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
     throw error;
   }
   const visible = new Map<string, { acceptanceContext: string; generation: string }>();
+  const badgeTargets: Array<{ statement: string;
+    context: { kind: 'global' } | { kind: 'realm'; realm: string }; concept: null;
+    acceptanceContext: string; generationBasis: string[] }> = [];
   for (const statement of statementIds) {
     const read = statements.get(statement);
     if (!read) throw new PublicQueryUnavailable('grouped Statement owner read is missing');
@@ -434,12 +437,26 @@ export async function queryPublicGroupedStatementPhrase(env: WorkActivationEnvir
     }
     if (acceptance.result.state !== 'accepted') continue;
     const inherited = acceptance.result.source !== 'local';
-    const badge = await judgments.protectionCheck(statement,
-      inherited ? { kind: 'global' } : { kind: 'realm', realm: input.context.id }, null);
+    badgeTargets.push({ statement,
+      context: inherited ? { kind: 'global' } : { kind: 'realm', realm: input.context.id }, concept: null,
+      acceptanceContext: inherited ? GLOBAL_CLASSIFICATION_CONTEXT : acceptance.acceptanceContext,
+      generationBasis: [read.revision, acceptance.result.decision, acceptance.policy] });
+  }
+  const badges = badgeTargets.length ? await judgments.protectionChecks(
+    badgeTargets.map(({ statement, context, concept }) => ({ statement, context, concept }))) : [];
+  if (badges.length !== badgeTargets.length) {
+    throw new PublicQueryUnavailable('grouped judgment protection page is incomplete');
+  }
+  for (const [index, target] of badgeTargets.entries()) {
+    const badge = badges[index]!;
+    const { statement, context } = target;
+    if (badge.statement !== statement || badge.context.kind !== context.kind
+      || (badge.context.kind === 'realm' && context.kind === 'realm' && badge.context.realm !== context.realm)) {
+      throw new PublicQueryUnavailable('grouped judgment protection target differs');
+    }
     if (badge.protection !== 'show-all') continue;
-    visible.set(statement, { acceptanceContext: inherited
-      ? GLOBAL_CLASSIFICATION_CONTEXT : acceptance.acceptanceContext,
-      generation: JSON.stringify([read.revision, acceptance.result.decision, acceptance.policy,
+    visible.set(statement, { acceptanceContext: target.acceptanceContext,
+      generation: JSON.stringify([...target.generationBasis,
         badge.generation, badge.conceptHintGeneration]) });
   }
   const textByMain = new Map(phrase.results.map(row => [row.mainVersion, row]));

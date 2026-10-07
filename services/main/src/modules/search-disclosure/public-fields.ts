@@ -107,7 +107,7 @@ function publicSummary(summary: ResourceSummary): summary is
  * score, snippet, facet or private selection is never accepted as disclosure
  * evidence. Unknown/hidden IDs produce the same absence in the returned set. */
 async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironment,
-  media: MediaStore | undefined, judgments: Pick<AccessJudgments, 'protectionCheck'> | undefined,
+  media: MediaStore | undefined, judgments: Pick<AccessJudgments, 'protectionChecks'> | undefined,
   input: PublicDisclosureInput,
   restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) =>
     Promise<ReadonlySet<string>>, reader: SummaryReader = {}): Promise<PublicFieldDecision> {
@@ -138,6 +138,7 @@ async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironmen
   const statementReads: Array<{ statement: string; subject: string; text: string;
     language: string | null; object: string | null; generation: string; hintGeneration: string;
     acceptance: Acceptance; concept: string | null }> = [];
+  const candidates: Array<Omit<typeof statementReads[number], 'generation' | 'hintGeneration'>> = [];
   let badgeChecks = 0;
   for (const candidate of input.statements) {
     let read;
@@ -154,15 +155,28 @@ async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironmen
       throw new PublicDisclosureUnavailable('Statement acceptance moved or is unavailable');
     }
     if (acceptance.result.state !== 'accepted' || !judgments) continue;
-    const badge = await judgments.protectionCheck(candidate.statement, candidate.acceptance, null);
-    badgeChecks++;
-    if (badge.protection !== 'show-all') continue;
-    statementReads.push({ statement: candidate.statement, subject: read.subject,
+    candidates.push({ statement: candidate.statement, subject: read.subject,
       text: read.value.kind === 'literal' ? read.value.lexical : '',
       language: read.value.kind === 'literal' ? read.value.language : null,
       object: read.value.kind === 'resource' ? read.value.iri : null,
-      generation: badge.generation, hintGeneration: badge.conceptHintGeneration,
       acceptance: candidate.acceptance, concept: null });
+  }
+  const badges = candidates.length ? await judgments!.protectionChecks(candidates.map(candidate => ({
+    statement: candidate.statement, context: candidate.acceptance, concept: candidate.concept }))) : [];
+  if (badges.length !== candidates.length) {
+    throw new PublicDisclosureUnavailable('Statement protection page is incomplete');
+  }
+  badgeChecks += candidates.length;
+  for (const [index, candidate] of candidates.entries()) {
+    const badge = badges[index]!;
+    if (badge.statement !== candidate.statement || badge.context.kind !== candidate.acceptance.kind
+      || (badge.context.kind === 'realm' && candidate.acceptance.kind === 'realm'
+        && badge.context.realm !== candidate.acceptance.realm)) {
+      throw new PublicDisclosureUnavailable('Statement protection target differs');
+    }
+    if (badge.protection !== 'show-all') continue;
+    statementReads.push({ ...candidate, generation: badge.generation,
+      hintGeneration: badge.conceptHintGeneration });
   }
 
   const targets = [...new Set([...input.resources, ...statementReads.map(item => item.subject),
@@ -185,18 +199,31 @@ async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironmen
     mediaGeneration = batch.generation.media;
     summaries = new Map(batch.summaries.map(summary => [summary.reference, summary]));
   }
-  for (const statement of statementReads) {
+  const readableStatements = statementReads.filter(statement => {
     const subject = summaries.get(statement.subject);
-    if (!subject || !publicSummary(subject)) continue;
+    if (!subject || !publicSummary(subject)) return false;
     const object = statement.object ? summaries.get(statement.object) : null;
-    if (statement.object && (!object || !publicSummary(object))) continue;
-    const badge = await judgments!.protectionCheck(statement.statement, statement.acceptance,
-      statement.concept);
-    badgeChecks++;
-    if (badge.protection !== 'show-all' || badge.generation !== statement.generation
+    return !statement.object || (!!object && publicSummary(object));
+  });
+  // This is a fresh owner page after summary hydration, preserving the final
+  // generation fence even when a judgment changes during that read.
+  const currentBadges = readableStatements.length ? await judgments!.protectionChecks(
+    readableStatements.map(statement => ({ statement: statement.statement,
+      context: statement.acceptance, concept: statement.concept }))) : [];
+  if (currentBadges.length !== readableStatements.length) {
+    throw new PublicDisclosureUnavailable('Statement protection page is incomplete');
+  }
+  badgeChecks += readableStatements.length;
+  for (const [index, statement] of readableStatements.entries()) {
+    const badge = currentBadges[index]!;
+    if (badge.statement !== statement.statement || badge.context.kind !== statement.acceptance.kind
+      || (badge.context.kind === 'realm' && statement.acceptance.kind === 'realm'
+        && badge.context.realm !== statement.acceptance.realm)
+      || badge.protection !== 'show-all' || badge.generation !== statement.generation
       || badge.conceptHintGeneration !== statement.hintGeneration) {
       throw new PublicDisclosureUnavailable('Statement spoiler protection moved');
     }
+    const object = statement.object ? summaries.get(statement.object) : null;
     fields.push({ kind: 'statement-value', owner: statement.statement, subject: statement.subject,
       text: object && object.status === 'available' ? object.name.value : statement.text,
       language: object && object.status === 'available' ? object.name.language : statement.language });
@@ -234,7 +261,7 @@ async function disclosePublicSearchFieldsUnchecked(env: WorkActivationEnvironmen
 }
 
 export async function disclosePublicSearchFields(env: WorkActivationEnvironment,
-  media: MediaStore | undefined, judgments: Pick<AccessJudgments, 'protectionCheck'> | undefined,
+  media: MediaStore | undefined, judgments: Pick<AccessJudgments, 'protectionChecks'> | undefined,
   input: PublicDisclosureInput,
   restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) =>
     Promise<ReadonlySet<string>>, reader: SummaryReader = {}): Promise<PublicFieldDecision> {

@@ -146,10 +146,10 @@ test('SEARCH03/SEARCH11: public owner values exclude private Context selections 
         .rejects.toBeInstanceOf(PublicDisclosureUnavailable);
     } finally { f.env.lineage.dataEpoch = oldEpoch; }
     let badgeReads = 0;
-    const moving = { protectionCheck: async (...args: Parameters<AccessJudgments['protectionCheck']>) => {
+    const moving = { protectionChecks: async (...args: Parameters<AccessJudgments['protectionChecks']>) => {
       badgeReads++;
       if (badgeReads === 2) await f.work('Concurrent search disclosure change');
-      return judgments.protectionCheck(...args);
+      return judgments.protectionChecks(...args);
     } };
     await expect(disclosePublicSearchFields(f.env, undefined, moving, baselineInput))
       .rejects.toBeInstanceOf(PublicDisclosureUnavailable);

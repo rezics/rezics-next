@@ -16,7 +16,7 @@ export interface PublicDisclosedFieldPhraseQuery extends PublicDisclosureInput {
  * matching, score, count, facet or returned metadata. Cost is the owner's
  * bounded decision plus one in-memory scan of its one-MiB output. */
 export async function queryPublicDisclosedFields(env: WorkActivationEnvironment,
-  media: MediaStore | undefined, judgments: Pick<AccessJudgments, 'protectionCheck'> | undefined,
+  media: MediaStore | undefined, judgments: Pick<AccessJudgments, 'protectionChecks'> | undefined,
   input: PublicDisclosedFieldPhraseQuery,
   restrictedTitles?: (heads: readonly { work: string; revision: string }[], context: string) =>
     Promise<ReadonlySet<string>>, reader: SummaryReader = {}) {

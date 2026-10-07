@@ -9,15 +9,16 @@ const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-1
 
 test('SEARCH01/SEARCH10: exact supports check separate Realm and Global judgment populations', async () => {
   const calls: Array<{ statement: string; context: JudgmentContext; concept: string | null }> = [];
-  const work = { judgments: { protectionCheck: async (statement: string,
-    context: JudgmentContext, concept: string | null) => {
+  const work = { judgments: { protectionChecks: async (targets: readonly {
+    statement: string; context: JudgmentContext; concept: string | null }[]) => targets.map(({ statement,
+    context, concept }) => {
     calls.push({ statement, context, concept });
     return { statement, context, generation: '3', policyGeneration: 'wilson-v1' as const,
       conceptHint: 'unknown' as const, conceptHintGeneration: '5', sourceEvent: id(9),
       protection: (statement === id(1) ? 'show-all' : 'hide-major') as 'show-all' | 'hide-major',
       status: 'unknown' as const,
       distribution: { notSpoiler: 0, minorSpoiler: 0, majorSpoiler: 0 }, sampleSize: 0 };
-  } } } as unknown as SearchRouteDependencies;
+  }) } } as unknown as SearchRouteDependencies;
   const relation = { total: 2, results: [
     { classification: { meaningKey: 'urn:rezics:meaning:a', concept: id(3),
       supportingStatements: [id(1)], source: 'local' } },
@@ -44,7 +45,7 @@ test('SEARCH10: classified search fails closed when exact protection is unavaila
     concept: id(3), supportingStatements: [id(1)], source: 'global' } }] };
   await expect(protectClassifiedResults({} as SearchRouteDependencies, relation))
     .rejects.toBeInstanceOf(PublicQueryUnavailable);
-  const work = { judgments: { protectionCheck: async () => { throw new Error('Access unavailable'); } } } as
+  const work = { judgments: { protectionChecks: async () => { throw new Error('Access unavailable'); } } } as
     unknown as SearchRouteDependencies;
   await expect(protectClassifiedResults(work, relation))
     .rejects.toBeInstanceOf(PublicQueryUnavailable);

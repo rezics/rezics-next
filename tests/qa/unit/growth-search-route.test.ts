@@ -41,7 +41,7 @@ function request(fuseki: FusekiClient) {
         resources: readonly string[],
       ) => new Set(resources),
     },
-    judgments: { protectionCheck: async () => ({ protection: 'show-all' }) },
+    judgments: { protectionChecks: async () => [] },
   };
   const app = searchRoutes(fuseki, work as unknown as Parameters<typeof searchRoutes>[1]);
   return app.handle(
