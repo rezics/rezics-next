@@ -958,10 +958,6 @@ export const SpaceZoneV1SpaceShapeSchema = Type.Object({ "@id": Type.String({ mi
 
 export type SpaceZoneV1SpaceShape = Static<typeof SpaceZoneV1SpaceShapeSchema>;
 
-export const StatementCutoverV1CutoverShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.Union([Type.Literal("https://rezics.com/vocab/StatementCutover"), Type.Literal("https://rezics.com/vocab/RevisionAnchor")]), { uniqueItems: true, minItems: 2, maxItems: 2 }), "rv:component": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:recordedBy": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:operation": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:modelRevision": Type.Array(Type.Literal("https://rezics.com/definition/statement-cutover-v1"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:shapeRevision": Type.Array(Type.Literal("https://rezics.com/definition/statement-cutover-v1"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:manifest": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:dataEpoch": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:sequence": Type.Array(Type.Integer({"minimum":1}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
-
-export type StatementCutoverV1CutoverShape = Static<typeof StatementCutoverV1CutoverShapeSchema>;
-
 export const StatementDecisionV1SlotShapeSchema = Type.Intersect([Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, contains: Type.Literal("https://rezics.com/vocab/DecisionSlot") }), "rv:acceptanceContext": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:decisionHead": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true }), Type.Union([Type.Object({ "@id": Type.String({ minLength: 1 }), "rv:targetKind": Type.Array(Type.Literal("https://rezics.com/vocab/StatementTarget"), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:decisionTarget": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true }), Type.Object({ "@id": Type.String({ minLength: 1 }), "rv:targetKind": Type.Array(Type.Literal("https://rezics.com/vocab/QualifiedFactTarget"), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:decisionTarget": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true })])]);
 
 export type StatementDecisionV1SlotShape = Static<typeof StatementDecisionV1SlotShapeSchema>;
@@ -1534,7 +1530,6 @@ export const shapeSchemas = {
   "https://rezics.com/definition/space-realm-v3/space-shape": SpaceRealmV3SpaceShapeSchema,
   "https://rezics.com/definition/space-realm-v3/realm-shape": SpaceRealmV3RealmShapeSchema,
   "https://rezics.com/definition/space-zone-v1/space-shape": SpaceZoneV1SpaceShapeSchema,
-  "https://rezics.com/definition/statement-cutover-v1/cutover-shape": StatementCutoverV1CutoverShapeSchema,
   "https://rezics.com/definition/statement-decision-v1/slot-shape": StatementDecisionV1SlotShapeSchema,
   "https://rezics.com/definition/statement-decision-v1/decision-shape": StatementDecisionV1DecisionShapeSchema,
   "https://rezics.com/definition/statement-v1/statement-shape": StatementV1StatementShapeSchema,

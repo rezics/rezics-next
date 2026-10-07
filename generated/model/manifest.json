@@ -1007,11 +1007,6 @@
       "file": "shapes/space-zone-v1.ttl"
     },
     {
-      "id": "statement-cutover-v1",
-      "sha256": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
-      "file": "shapes/statement-cutover-v1.ttl"
-    },
-    {
       "id": "statement-decision-v1",
       "sha256": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
       "file": "shapes/statement-decision-v1.ttl"
@@ -3443,16 +3438,6 @@
       ]
     },
     {
-      "type": "https://rezics.com/vocab/StatementCutover",
-      "routes": [
-        {
-          "profile": "statement-cutover-v1",
-          "shape": "https://rezics.com/definition/statement-cutover-v1/cutover-shape",
-          "when": []
-        }
-      ]
-    },
-    {
       "type": "https://rezics.com/vocab/StatementDecision",
       "routes": [
         {
@@ -3990,7 +3975,6 @@
     "contexts/space-realm-v2.jsonld": "befaa65f131019f467c98ef89dc549a12b46106fb63ff022646af3ba1fbc287a",
     "contexts/space-realm-v3.jsonld": "4f301264977fed2d0c289de7f6efe4fe006acf74f9106b1d14d38aa7d039b7c0",
     "contexts/space-zone-v1.jsonld": "1406d146fda1f35aff2b9d3a79c2de4cbcec4048413af39b4b7423167651cfd1",
-    "contexts/statement-cutover-v1.jsonld": "6bafd791bb47c90b3411bd1592324dd9b16417df27fea0fa34f51ac9c2ed5e9a",
     "contexts/statement-decision-v1.jsonld": "6fde37ebce49b673eca2752de6e7041553b3d2f2a7fdcbf26b6466b2c6af32fd",
     "contexts/statement-v1.jsonld": "cfa9f2493ab50152388e2158a1771d418bbfba84e42ddd46a6aeb069c25f87de",
     "contexts/structure-book-v1.jsonld": "eb28283f3d1f5f9325581a641f211f124d284707479cc7ef68830263079c54b2",
@@ -4124,7 +4108,6 @@
     "shapes/space-realm-v2.ttl": "6bcaa955e1c473f450b97d2d50afad3205d0136447b7dd11e30650a888045185",
     "shapes/space-realm-v3.ttl": "6009918e574419975be06974d6e02987158ae58c7f8c539140c20f171ce3f26d",
     "shapes/space-zone-v1.ttl": "dfe09fb0e4f2bc850e1f561f8f32dfdc3bf6f7070166c0b04fe8cd54ab273803",
-    "shapes/statement-cutover-v1.ttl": "e2ae65228aa4e311c183d230f96530358c88e7bd4e09928f482f394f1fda8daa",
     "shapes/statement-decision-v1.ttl": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
     "shapes/statement-v1.ttl": "da4cf542d30ca2d0af244fa86efd53e4a8780a7b8feae260abc05168c358aa2a",
     "shapes/structure-book-v1.ttl": "5598fd9d04b2729c3008a647c92c03c9f1580b5c103dbe2e1a84f10e226e6242",
@@ -4164,9 +4147,9 @@
     "shapes/zone-capability-v1.ttl": "c518389e8a7777b2358a5ed98f6016e77a803aa8c9336fefc40201fb38df4f65",
     "shapes/zone-presentation-v1.ttl": "3d63c448965591516514a0323e77500e3a8b0d95da0a2c0abdd2af4110e063e2",
     "shapes/zone-presentation-v2.ttl": "c10111526ef6933baceda2e8a598b5df59d1c834800550df201dfe1172b6ede8",
-    "packages/model/src/generated/arbitraries.ts": "2c35ed8cc9b483d878354f7de6ac57544e821aa4258cf3deb068f0165a79d255",
-    "packages/model/src/generated/profiles.ts": "e8e9dbb752222dff8f8a457281bafbe05e0b8c2bfe828a988bf0b078e817f5c0",
-    "packages/model/src/generated/schemas.ts": "1828820ade3bd7ec4802274cd1d7ab180765e43ccc811b7e42b112f7b8dd110d",
-    "packages/model/src/generated/vocabulary.ts": "a2fc77eda7969090414047b954202c28c10180edc6c068cdddbf302e41c87f27"
+    "packages/model/src/generated/arbitraries.ts": "cfd8476425209ef3bc03f223fa4c0cd622ee65e41e7c13057448107161066d27",
+    "packages/model/src/generated/profiles.ts": "41406cc30b18103a704ffe759b0887cfbae83d0dac3636de4714dac55113c48f",
+    "packages/model/src/generated/schemas.ts": "2ba36a42530766976798b8cbdd9eef2c8fddf783a0c041a09ec9d40b8c40e2e9",
+    "packages/model/src/generated/vocabulary.ts": "25349f279d8c165dc120c078200744177d46a8686ddc7511a226977a1b39231d"
   }
 }
