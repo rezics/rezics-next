@@ -8,7 +8,8 @@ import { repositoryGuards } from '../qa/repository-guards.ts';
 import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
-  failingTestFiles, memoryFloorRefusal, streamUnitBaseline, type Ledger, type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
+  codexHoursUntil100, failingTestFiles, loadCodexResetStatus, memoryFloorRefusal, streamUnitBaseline, timedOutTestFiles,
+  type AccountUsage, type Ledger, type Task, treeMentions, usageLevel, usageReport, validateBrief } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -214,6 +215,55 @@ describe('goalctl runtime policy', () => {
     expect(parseCodexUsage(line(100, 1_791_053_423), now).reached).toBe(true);
     expect(parseCodexUsage(line(80, 1_790_000_000), now)).toMatchObject({ used: 0, reached: false });
     expect(parseCodexUsage('', now)).toEqual({});
+  });
+
+  test('attributes a test timeout to the file that needs an isolated retry', () => {
+    const output = [
+      'tests/qa/unit/slow.test.ts:', '(fail) delayed check', 'Timeout: test delayed check timed out after 30000ms',
+      'scripts/goal/other.test.ts:', '(fail) explicit timeout probe', 'Test timed out (37 s against 30 s)',
+    ].join('\n');
+    expect(timedOutTestFiles(output, ['tests/qa/unit/slow.test.ts', 'scripts/goal/other.test.ts']))
+      .toEqual(['scripts/goal/other.test.ts', 'tests/qa/unit/slow.test.ts']);
+  });
+
+  test('loads reset status by GET, caches it, and projects account runway from the later reset boundary', async () => {
+    const directory = mkdtempSync(join(import.meta.dir, '../../.temp/codex-reset-status-test-'));
+    const cacheFile = join(directory, 'status.json');
+    const nowMs = 1_800_000_000_000;
+    const now = nowMs / 1000;
+    const announcedAt = new Date((now - 12 * 3600) * 1000).toISOString();
+    const stub = { data: { latest_reset: { announced_at: announcedAt }, stats: { avg_interval_days: 6.8 } } };
+    let calls = 0;
+    try {
+      const loaded = await loadCodexResetStatus({ cacheFile, nowMs, fetcher: async (url, init) => {
+        calls++;
+        expect(url).toBe('https://codex-resets.com/api/v1/status');
+        expect(init?.method).toBe('GET');
+        expect(init?.headers).toEqual({ accept: 'application/json' });
+        return new Response(JSON.stringify(stub), { status: 200 });
+      } });
+      expect(loaded).toMatchObject({ available: true, fetchedAt: nowMs, status: stub });
+      const cached = await loadCodexResetStatus({ cacheFile, nowMs: nowMs + 60_000,
+        fetcher: async () => { throw new Error('fresh cache should avoid fetch'); } });
+      expect(cached.available).toBe(true);
+      expect(calls).toBe(1);
+      const account: AccountUsage = { account: 'codex', home: '', engines: ['codex'], used: 40,
+        windowMinutes: 7 * 24 * 60, windowResetsAt: now + 2 * 24 * 3600, sampledAt: now };
+      expect(codexHoursUntil100(account, loaded.status?.data?.latest_reset?.announced_at, nowMs)).toBe(18);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+
+  test('a failed reset fetch reports unavailable and still returns ordinary usage data', async () => {
+    const directory = mkdtempSync(join(import.meta.dir, '../../.temp/codex-reset-failure-test-'));
+    try {
+      const report = await usageReport({ cacheFile: join(directory, 'status.json'), fetcher: async () => {
+        throw new Error('offline');
+      } });
+      expect(report.codex_resets).toEqual({ source: 'Data from codex-resets.com', status: 'unavailable' });
+      expect(report.claude).toBeDefined();
+      expect(report.codex).toHaveLength(2);
+      expect(report.codex.every(account => account.hours_until_100_percent === 'unavailable')).toBe(true);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
   test('pins the Opus model, effort and bypass permission mode without inbound session messages', () => {
@@ -1319,9 +1369,10 @@ ${edit}
       expect(r.git('rev-parse', 'main')).not.toBe(before);
       expect(r.ledger().tasks[task.id]!.state).toBe('merged');
       const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] });
-      expect(runs).toHaveLength(2);
+      expect(runs).toHaveLength(3);
       expect(runs.map(run => run.args.filter(arg => arg.endsWith('.test.ts')).join(' ')).sort())
-        .toEqual([`./${fast}`, `./${slow}`]);
+        .toEqual([`./${fast}`, `./${slow}`, `./${slow}`]);
+      expect(runs[2]!.args.filter(arg => arg.endsWith('.test.ts'))).toEqual([`./${slow}`]);
       const hanging = readdirSync('/proc').some(entry => {
         if (!/^\d+$/.test(entry)) return false;
         try { return readFileSync(`/proc/${entry}/cmdline`, 'utf8').includes(slow); }

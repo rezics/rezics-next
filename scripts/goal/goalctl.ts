@@ -9,7 +9,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
-import { land } from './land.ts';
+import { land, type LandScope } from './land.ts';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
 export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
@@ -64,8 +64,15 @@ export interface UsageReport {
 }
 export interface AccountUsage {
   account: string; home: string; engines: Engine[]; used?: number; windowMinutes?: number;
-  resetInHours?: number; plan?: string; reached?: boolean; ageSeconds?: number;
+  resetInHours?: number; windowResetsAt?: number; sampledAt?: number; plan?: string; reached?: boolean; ageSeconds?: number;
 }
+export interface CodexResetStatus {
+  data?: {
+    latest_reset?: { announced_at?: string } | null;
+    stats?: { avg_interval_days?: number } | null;
+  };
+}
+export interface CodexResetLoad { status?: CodexResetStatus; fetchedAt?: number; available: boolean }
 
 // Worker engines and the efforts each CLI and model accepts. Which engine and effort a task gets is
 // the manager's decision from the need and the remaining usage (docs/goals/manager.md), not a rule here.
@@ -498,13 +505,15 @@ export function parseCodexUsage(text: string, nowMs: number): Partial<AccountUsa
       const limits = event.payload?.rate_limits;
       const windows = [limits?.primary, limits?.secondary].filter((w): w is Window => typeof w?.used_percent === 'number');
       if (!limits || !windows.length) continue;
-      const at = event.timestamp ? Date.parse(event.timestamp) / 1000 : undefined;
+      const parsedAt = event.timestamp ? Date.parse(event.timestamp) / 1000 : undefined;
+      const at = parsedAt !== undefined && Number.isFinite(parsedAt) ? parsedAt : undefined;
       const ageSeconds = at === undefined ? undefined : Math.round(now - at);
       // A window whose reset has passed starts empty again.
       const live = windows.filter(w => (w.resets_at ?? Infinity) > now);
       if (!live.length) return { used: 0, reached: false, plan: limits.plan_type, ageSeconds };
       const fullest = live.reduce((a, b) => (b.used_percent! > a.used_percent! ? b : a));
       return { used: fullest.used_percent, windowMinutes: fullest.window_minutes, plan: limits.plan_type, ageSeconds,
+        sampledAt: at, windowResetsAt: fullest.resets_at,
         resetInHours: fullest.resets_at === undefined ? undefined : Math.round((fullest.resets_at - now) / 360) / 10,
         reached: fullest.used_percent! >= 100 || !!limits.rate_limit_reached_type };
     } catch { /* partial line */ }
@@ -655,6 +664,9 @@ const stateDir = join(root, '.temp', 'goal-orchestration');
 const ledgerPath = join(stateDir, 'ledger.json');
 const usagePath = process.env.GOAL_USAGE_FILE ?? join(homedir(), '.claude', 'usage', 'latest.json');
 const usageHistoryPath = join(stateDir, 'usage-history.json');
+const CODEX_RESET_URL = 'https://codex-resets.com/api/v1/status';
+const CODEX_RESET_CACHE_MS = 30 * 60 * 1000;
+const codexResetCachePath = join(stateDir, 'codex-resets-status.json');
 
 function readLedger(): Ledger {
   return existsSync(ledgerPath) ? JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger : { tasks: {} };
@@ -717,6 +729,53 @@ function handoffText(task: Task): string {
   return [`# ${task.id} handoffs: ${task.title}`, '',
     ...task.attempts.flatMap(attempt => [`## Attempt ${attempt.n} (${modelOf(engineOf(attempt))}/${attempt.effort}, `
       + `${attempt.startedAt})`, '', readResult(attempt).text.trim(), ''])].join('\n');
+}
+
+function outOfClaimFiles(committed: string[], sharers: Task[]): string[] {
+  const migrationOrigins = Object.assign({}, ...sharers.map(sharer => sharer.migrationOrigins ?? {})) as Record<string, string>;
+  return outOfScope(committed.map(file => migrationOrigins[file] ?? file), sharers.flatMap(sharer => sharer.paths));
+}
+
+function scopeViolations(committed: string[], task: Task, sharers: Task[]): string[] {
+  const union = new Set(committed.filter(file =>
+    git(root, ['check-attr', 'merge', '--', file], true).endsWith(': merge: union')));
+  const sharedTree = !!task.worktreeName || sharers.length > 1;
+  return outOfClaimFiles(committed.filter(file => sharedTree || !union.has(file)), sharers);
+}
+
+function claimingTasks(ledger: Ledger, files: readonly string[], excludedIds: ReadonlySet<string>): { file: string; id: string }[] {
+  return files.flatMap(file => Object.values(ledger.tasks)
+    .filter(task => !excludedIds.has(task.id) && HOLDING.includes(task.state)
+      && task.paths.some(pattern => new Bun.Glob(pattern).match(file) || pathsOverlap(pattern, file)))
+    .map(task => ({ file, id: task.id })));
+}
+
+async function landScope(id: string): Promise<LandScope> {
+  return withLedger(ledger => {
+    const task = taskOf(ledger, id);
+    assertOwner(task);
+    const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree && HOLDING.includes(other.state));
+    const outOfClaim = outOfClaimFiles(changedFiles(task).committed, sharers);
+    const claimedByOthers = [...new Set(claimingTasks(ledger, outOfClaim, new Set([task.id])).map(item => item.file))];
+    return { outOfClaim, claimedByOthers };
+  });
+}
+
+function landScopeRefusal(ledger: Ledger, task: Task, sharers: Task[], committed: string[], permittedFiles: readonly string[]): string | undefined {
+  const violations = outOfClaimFiles(committed, sharers);
+  const permitted = new Set(permittedFiles);
+  const noLongerUnclaimed = permittedFiles.filter(file => !violations.includes(file));
+  const unreviewed = violations.filter(file => !permitted.has(file));
+  const claimed = claimingTasks(ledger, violations, new Set([task.id]));
+  if (claimed.length) {
+    return `${task.id} out-of-claim files are claimed by another task:\n  `
+      + claimed.map(item => `${item.file} (${item.id})`).join('\n  ');
+  }
+  if (noLongerUnclaimed.length || unreviewed.length) {
+    return `${task.id} scope changed during landing review; review again:\n  `
+      + [...new Set([...noLongerUnclaimed, ...unreviewed])].sort().join('\n  ');
+  }
+  return undefined;
 }
 
 /** Moves the briefs and handoffs of closed tasks to archive/goals and removes the briefs from the tree in one commit.
@@ -862,6 +921,104 @@ function codexAccounts(): AccountUsage[] {
     }
     return account;
   });
+}
+
+function resetStatusFrom(value: unknown): CodexResetStatus | undefined {
+  if (!value || typeof value !== 'object' || !('data' in value) || !value.data || typeof value.data !== 'object') return undefined;
+  return value as CodexResetStatus;
+}
+
+/** Read a public GET-only status snapshot, with a local 30-minute cache and no credentials. */
+export async function loadCodexResetStatus(options: {
+  fetcher?: typeof fetch; cacheFile?: string; nowMs?: number;
+} = {}): Promise<CodexResetLoad> {
+  const nowMs = options.nowMs ?? Date.now();
+  const cacheFile = options.cacheFile ?? codexResetCachePath;
+  try {
+    const cached = JSON.parse(readFileSync(cacheFile, 'utf8')) as { fetchedAt?: number; status?: unknown };
+    const status = resetStatusFrom(cached.status);
+    if (status && typeof cached.fetchedAt === 'number' && nowMs >= cached.fetchedAt
+      && nowMs - cached.fetchedAt < CODEX_RESET_CACHE_MS) {
+      return { status, fetchedAt: cached.fetchedAt, available: true };
+    }
+  } catch { /* no usable cache */ }
+  try {
+    const response = await (options.fetcher ?? fetch)(CODEX_RESET_URL, {
+      method: 'GET', headers: { accept: 'application/json' }, signal: AbortSignal.timeout(5_000),
+    });
+    if (!response.ok) return { available: false };
+    const status = resetStatusFrom(await response.json());
+    if (!status) return { available: false };
+    try {
+      mkdirSync(dirname(cacheFile), { recursive: true });
+      writeFileSync(cacheFile, JSON.stringify({ fetchedAt: nowMs, status }));
+    } catch { /* a cache write is best effort */ }
+    return { status, fetchedAt: nowMs, available: true };
+  } catch { return { available: false }; }
+}
+
+export function codexHoursUntil100(account: AccountUsage, announcedAt: string | undefined, nowMs: number): number | undefined {
+  if (typeof account.used !== 'number') return undefined;
+  if (account.used >= 100) return 0;
+  const paceStart = codexPaceStartSeconds(account, announcedAt);
+  if (account.windowMinutes === undefined || paceStart === undefined || account.used <= 0) return undefined;
+  const now = nowMs / 1000;
+  const sampleAt = account.sampledAt ?? (account.ageSeconds === undefined ? now : now - account.ageSeconds);
+  const elapsedAtSample = (sampleAt - paceStart) / 3600;
+  if (elapsedAtSample <= 0) return undefined;
+  const percentPerHour = account.used / elapsedAtSample;
+  if (percentPerHour <= 0) return undefined;
+  const remaining = (100 - account.used) / percentPerHour - (now - sampleAt) / 3600;
+  return Math.round(Math.max(0, remaining) * 10) / 10;
+}
+
+function codexPaceStartSeconds(account: AccountUsage, announcedAt: string | undefined): number | undefined {
+  if (account.windowMinutes === undefined || account.windowResetsAt === undefined) return undefined;
+  const windowStart = account.windowResetsAt - account.windowMinutes * 60;
+  const latestReset = announcedAt ? Date.parse(announcedAt) / 1000 : Number.NaN;
+  return Number.isFinite(latestReset) ? Math.max(windowStart, latestReset) : windowStart;
+}
+
+export interface GoalUsageReport {
+  claude: UsageReport & { file: string };
+  codex: (Omit<AccountUsage, 'windowResetsAt' | 'sampledAt'> & {
+    pace_since: string | 'unavailable'; hours_until_100_percent: number | 'unavailable';
+  })[];
+  codex_resets: {
+    source: 'Data from codex-resets.com'; status?: 'unavailable';
+    latest_reset?: { announced_at: string | 'unavailable'; age_hours: number | 'unavailable' };
+    stats?: { avg_interval_days: number | 'unavailable' };
+  };
+}
+
+export async function usageReport(options: {
+  fetcher?: typeof fetch; cacheFile?: string; nowMs?: number;
+} = {}): Promise<GoalUsageReport> {
+  const nowMs = options.nowMs ?? Date.now();
+  const reset = await loadCodexResetStatus({ ...options, nowMs });
+  const announcedAt = reset.status?.data?.latest_reset?.announced_at;
+  const announcedMs = announcedAt ? Date.parse(announcedAt) : Number.NaN;
+  const ageHours = Number.isFinite(announcedMs) ? Math.round(Math.max(0, nowMs - announcedMs) / 360_000) / 10 : 'unavailable';
+  const interval = reset.status?.data?.stats?.avg_interval_days;
+  const accounts = codexAccounts();
+  return {
+    claude: { ...currentUsage(), file: usagePath },
+    codex: accounts.map(account => {
+      const paceStart = reset.available ? codexPaceStartSeconds(account, announcedAt) : undefined;
+      const publicAccount = Object.fromEntries(Object.entries(account)
+        .filter(([key]) => key !== 'windowResetsAt' && key !== 'sampledAt')) as Omit<AccountUsage, 'windowResetsAt' | 'sampledAt'>;
+      return { ...publicAccount,
+        pace_since: paceStart === undefined ? 'unavailable' : new Date(paceStart * 1000).toISOString(),
+        hours_until_100_percent: account.used !== undefined && account.used >= 100 ? 0
+          : paceStart === undefined ? 'unavailable'
+          : codexHoursUntil100(account, announcedAt, nowMs) ?? 'unavailable' };
+    }),
+    codex_resets: reset.available ? {
+      source: 'Data from codex-resets.com',
+      latest_reset: { announced_at: announcedAt ?? 'unavailable', age_hours: ageHours },
+      stats: { avg_interval_days: typeof interval === 'number' ? interval : 'unavailable' },
+    } : { source: 'Data from codex-resets.com', status: 'unavailable' },
+  };
 }
 
 function describeAccount(account: AccountUsage): string {
@@ -1136,14 +1293,15 @@ async function landTask(id: string): Promise<void> {
     });
     await land({ id: snapshot.task.id, worktree: snapshot.task.worktree, runDir,
       brief: snapshot.brief, handoff: snapshot.handoff, base: snapshot.base, head: snapshot.head,
-      merge: () => mergeTask(id, new Set(), snapshot.head, current => {
+      scope: () => landScope(id),
+      merge: permittedFiles => mergeTask(id, new Set(), snapshot.head, current => {
         if (current.state !== 'exited' || lastAttempt(current).n !== snapshot.attempt
           || current.branch !== snapshot.task.branch || current.worktree !== snapshot.task.worktree
           || readResult(lastAttempt(current)).text !== snapshot.handoff
           || readFileSync(briefPathOf(current) ?? '', 'utf8') !== snapshot.brief) {
           throw new Error(`${current.id}: task or brief changed during review; review again`);
         }
-      }), close: () => closeTasks([id], 'verified') });
+      }, permittedFiles), close: () => closeTasks([id], 'verified') });
   } finally {
     rmSync(lock, { recursive: true, force: true });
   }
@@ -1745,12 +1903,41 @@ async function stopProcessGroup(child: ChildProcess): Promise<void> {
   await within(5_000, closed);
 }
 
-interface UnitShardResult { done: boolean; failing: string[]; files: string[]; output: string; ms: number }
+interface UnitShardResult { done: boolean; failing: string[]; timedOut: string[]; files: string[]; output: string; ms: number }
+
+function unitFileFromHeader(output: string, files: readonly string[], cwd: string): string | undefined {
+  const known = new Set(files);
+  const headers = [...output.matchAll(/^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/gm)];
+  for (let index = headers.length - 1; index >= 0; index--) {
+    let file = headers[index]![1]!.replace(/^\.\//, '');
+    if (isAbsolute(file)) file = relative(cwd, file);
+    if (known.has(file)) return file;
+  }
+  return files.length === 1 ? files[0] : undefined;
+}
+
+/** Bun prints its test timeout as a failed test, so it needs a retry before it can decide a side. */
+export function timedOutTestFiles(output: string, candidates: readonly string[], root?: string): string[] {
+  const known = new Set(candidates);
+  const found = new Set<string>();
+  let current: string | undefined;
+  for (const line of output.split('\n')) {
+    const header = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/.exec(line);
+    if (header) {
+      current = header[1]!.replace(/^\.\//, '');
+      if (root && isAbsolute(current)) current = relative(root, current);
+      if (!known.has(current)) current = undefined;
+    } else if (current && /(?:timed out after\s+\d+(?:\.\d+)?\s*(?:ms|s)\b|timed out\s*\([^)]*\bagainst\b[^)]*\)|timeout of\s+\d+(?:\.\d+)?\s*(?:ms|s)\s+(?:was\s+)?exceeded)/i.test(line)) {
+      found.add(current);
+    }
+  }
+  return [...found].sort();
+}
 
 async function runUnitShard(cwd: string, files: readonly string[], deadline: number): Promise<UnitShardResult> {
   const startedAt = Date.now();
-  const unfinished = (output: string): UnitShardResult =>
-    ({ done: false, failing: [], files: [...files], output, ms: Date.now() - startedAt });
+  const unfinished = (output: string, timedOut: string[] = []): UnitShardResult =>
+    ({ done: false, failing: [], timedOut, files: [...files], output, ms: Date.now() - startedAt });
   // Inventory guards include owner files. Run the selected Bun files directly
   // through Task so the public selector's tier-mixing refusal cannot mask them.
   const child = spawn('task', ['goal:unit-files', '--', ...files.map(file => `./${file}`)], {
@@ -1782,12 +1969,18 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     const outcome = await Promise.race([closed.then(result => ({ kind: 'close' as const, ...result })), timeout]);
     if (outcome === 'timeout' || truncated || outcome.code === null) {
       await stopProcessGroup(child);
-      return unfinished(output());
+      const text = output();
+      const timedOut = outcome === 'timeout'
+        ? [unitFileFromHeader(text, files, cwd)].filter((file): file is string => file !== undefined)
+        : timedOutTestFiles(text, files, cwd);
+      return unfinished(text, timedOut);
     }
     const text = output();
-    const failing = outcome.code === 0 ? [] : failingTestFiles(text, files, cwd);
+    const timedOut = timedOutTestFiles(text, files, cwd);
+    const failing = [...new Set([...(outcome.code === 0 ? [] : failingTestFiles(text, files, cwd)), ...timedOut])];
     // A failure bun did not attribute to a file counts against that shard.
-    return { done: true, failing: outcome.code !== 0 && !failing.length ? [...files] : failing, files: [...files], output: text,
+    return { done: true, failing: outcome.code !== 0 && !failing.length ? [...files] : failing, timedOut,
+      files: [...files], output: text,
       ms: Date.now() - startedAt };
   } catch {
     // A shard that cannot be reaped is unfinished, not a merge-blocking failure.
@@ -1801,9 +1994,9 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
 /** Parallel `task test` shards under one wall-clock budget. An unfinished shard makes the side inconclusive:
  * failures from shards that did finish are not a verdict, because the set was not fully run. */
 export async function runUnitGate(cwd: string, files: readonly string[], shards?: number): Promise<{
-  done: boolean; failing: string[]; unfinished: string[]; output: string;
+  done: boolean; failing: string[]; timedOut: string[]; unfinished: string[]; output: string;
 }> {
-  if (!files.length) return { done: true, failing: [], unfinished: [], output: '' };
+  if (!files.length) return { done: true, failing: [], timedOut: [], unfinished: [], output: '' };
   const groups = balanceUnitShards(files, shards ?? unitGateShards());
   const budget = unitGateBudgetMs();
   console.log(`Unit gate: ${files.length} file(s) in ${groups.length} shard(s), budget ${budget}ms`);
@@ -1814,8 +2007,9 @@ export async function runUnitGate(cwd: string, files: readonly string[], shards?
   }
   const output = results.map(result => result.output).join('\n');
   const unfinished = results.filter(result => !result.done).flatMap(result => result.files).sort();
-  if (unfinished.length) return { done: false, failing: [], unfinished, output };
-  return { done: true, failing: [...new Set(results.flatMap(result => result.failing))].sort(), unfinished: [], output };
+  const timedOut = [...new Set(results.flatMap(result => result.timedOut))].sort();
+  if (unfinished.length) return { done: false, failing: [], timedOut, unfinished, output };
+  return { done: true, failing: [...new Set(results.flatMap(result => result.failing))].sort(), timedOut, unfinished: [], output };
 }
 
 function reportUnfinished(side: 'affected' | 'main', unfinished: readonly string[]): void {
@@ -1824,6 +2018,22 @@ function reportUnfinished(side: 'affected' | 'main', unfinished: readonly string
     ? `Unit gate inconclusive: main's run of ${count} did not finish; reported, not blocking`
     : `Unit gate inconclusive: the affected run did not finish (${count}); reported, not blocking`;
   console.log(`${lead}\n  ${unfinished.join('\n  ')}`);
+}
+
+interface TimeoutRetryResult { failing: string[]; passing: string[]; unfinished: string[] }
+
+async function retryTimedOutFiles(cwd: string, files: readonly string[], side: 'affected' | 'main'): Promise<TimeoutRetryResult> {
+  const result: TimeoutRetryResult = { failing: [], passing: [], unfinished: [] };
+  for (const file of [...new Set(files)].sort()) {
+    console.log(`Unit gate: ${file} timed out on ${side}; rerunning alone`);
+    const retry = await runUnitGate(cwd, [file], 1);
+    if (!retry.done) {
+      result.unfinished.push(...retry.unfinished);
+      reportUnfinished(side, retry.unfinished);
+    } else if (retry.failing.includes(file)) result.failing.push(file);
+    else result.passing.push(file);
+  }
+  return result;
 }
 
 /** Streams retain responsibility for failures from earlier merges, including shared-branch merges. */
@@ -1851,30 +2061,52 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
   // A side that does not finish is inconclusive and reported, never a refusal: the wave and the regression tier
   // still run those files (a per-file timeout once aborted every launch merge).
   const branch = await runUnitGate(worktree, files);
+  let branchFailureFiles = branch.failing;
+  let branchTimedOut = branch.timedOut;
+  let branchTimeoutRetry: TimeoutRetryResult = { failing: [], passing: [], unfinished: [] };
   if (!branch.done) {
-    reportUnfinished('affected', branch.unfinished);
-    return;
+    branchTimeoutRetry = await retryTimedOutFiles(worktree, branch.timedOut, 'affected');
+    branchFailureFiles = branchTimeoutRetry.failing;
+    const unresolved = [...new Set([
+      ...branch.unfinished.filter(file => !branch.timedOut.includes(file)),
+      ...branchTimeoutRetry.unfinished,
+    ])].sort();
+    if (unresolved.length) reportUnfinished('affected', unresolved);
+    // The isolated result decides each timed-out file; other unfinished files remain inconclusive.
+    branchTimedOut = branch.timedOut;
   }
-  if (!branch.failing.length) {
+  if (!branchFailureFiles.length) {
+    if (!branch.done) return;
     console.log('Pre-merge unit gate: every affected unit file and repository guard passes');
     return;
   }
-  console.log(`Unit gate: ${branch.failing.length} file(s) fail on the branch:\n${branch.output.slice(-20_000)}`);
-  // A file can fail beside its shard-mates and pass when those failures run together. One call, same budget:
-  // an unfinished confirmation is inconclusive, and only a failure that recurs can be introduced.
-  const confirmed = await runUnitGate(worktree, branch.failing, 1);
+  console.log(`Unit gate: ${branchFailureFiles.length} file(s) fail on the branch:\n${branch.output.slice(-20_000)}`);
+  // A file can fail beside its shard-mates and pass when those failures run together. Confirm those together,
+  // then retry every timeout alone so the side's decision comes from its isolated run.
+  const together = branchFailureFiles.filter(file => !branchTimedOut.includes(file));
+  const confirmed = together.length ? await runUnitGate(worktree, together, 1)
+    : { done: true, failing: [], timedOut: [], unfinished: [], output: '' };
+  const alreadyRetried = new Set(branch.done ? [] : branch.timedOut);
+  const retryNewTimeouts = (files: readonly string[]) => files.filter(file => !alreadyRetried.has(file));
+  let retry: TimeoutRetryResult;
   if (!confirmed.done) {
+    retry = await retryTimedOutFiles(worktree, retryNewTimeouts([...branchTimedOut, ...confirmed.timedOut]), 'affected');
     reportUnfinished('affected', confirmed.unfinished);
-    return;
-  }
-  const orderDependent = branch.failing.filter(file => !confirmed.failing.includes(file));
+  } else retry = await retryTimedOutFiles(worktree, retryNewTimeouts([...branchTimedOut, ...confirmed.timedOut]), 'affected');
+  const confirmedFailures = [...new Set([
+    ...(!branch.done ? branchTimeoutRetry.failing : []),
+    ...(confirmed.done ? confirmed.failing.filter(file => !confirmed.timedOut.includes(file)) : []),
+    ...retry.failing,
+  ])].sort();
+  if (!confirmed.done && !confirmedFailures.length) return;
+  const orderDependent = branch.done ? together.filter(file => !confirmed.failing.includes(file)) : [];
   if (orderDependent.length) {
     console.log(`Unit gate: ${orderDependent.length} file(s) failed only across shards; order-dependent, reported, not blocking\n  ${orderDependent.join('\n  ')}`);
   }
-  if (!confirmed.failing.length) return;
-  const introduced = confirmed.failing.filter(file =>
+  if (!confirmedFailures.length) return;
+  const introduced = confirmedFailures.filter(file =>
     spawnSync('git', ['cat-file', '-e', `${before}:${file}`], { cwd: mainRoot }).status !== 0);
-  const existing = confirmed.failing.filter(file => !introduced.includes(file));
+  const existing = confirmedFailures.filter(file => !introduced.includes(file));
   let directory: string | undefined;
   try {
     if (existing.length) {
@@ -1886,12 +2118,14 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
       const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
       if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
       const main = await runUnitGate(directory, existing);
+      const mainRetry = await retryTimedOutFiles(directory, main.timedOut, 'main');
       if (!main.done) reportUnfinished('main', main.unfinished);
-      else {
-        for (const file of existing) {
-          if (main.failing.includes(file)) console.log(`Unit gate: ${file} also fails on main ${before.slice(0, 12)}; reported, not blocking`);
-          else introduced.push(file);
-        }
+      for (const file of existing) {
+        if (mainRetry.unfinished.includes(file)) continue;
+        const failsOnMain = mainRetry.failing.includes(file)
+          || (main.done && !main.timedOut.includes(file) && main.failing.includes(file));
+        if (failsOnMain) console.log(`Unit gate: ${file} also fails on main ${before.slice(0, 12)}; reported, not blocking`);
+        else if (main.done || mainRetry.passing.includes(file)) introduced.push(file);
       }
     }
   } finally {
@@ -1904,7 +2138,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
 }
 
 async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
-  reviewGuard?: (task: Task) => void): Promise<void> {
+  reviewGuard?: (task: Task) => void, landPermittedFiles?: readonly string[]): Promise<void> {
   type PreparedMerge = { before: string; baseline: string; after: string; worktree: string; branch: string; sharers: string[]; committed: string[] };
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
@@ -1956,13 +2190,12 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
       throw new Error(`${task.id} has no commits to merge`);
     }
     // Single-task branches may append to union registries without a claim; shared branches use their full claim union.
-    const union = new Set(committed.filter(file =>
-      git(root, ['check-attr', 'merge', '--', file], true).endsWith(': merge: union')));
-    const sharedTree = !!task.worktreeName || sharers.length > 1;
     const migrationOrigins = Object.assign({}, ...sharers.map(sharer => sharer.migrationOrigins ?? {})) as Record<string, string>;
-    const violations = outOfScope(committed.filter(file => sharedTree || !union.has(file))
-      .map(file => migrationOrigins[file] ?? file), sharers.flatMap(sharer => sharer.paths));
-    if (violations.length && !flags.has('--allow-scope')) {
+    const violations = scopeViolations(committed, task, sharers);
+    if (landPermittedFiles !== undefined) {
+      const refusal = landScopeRefusal(ledger, task, sharers, committed, landPermittedFiles);
+      if (refusal) throw new Error(refusal);
+    } else if (violations.length && !flags.has('--allow-scope')) {
       throw new Error(`${task.id} changed files outside its claim:\n  ${violations.join('\n  ')}`);
     }
     const history = sharers.some(sharer => sharer.historyGate) && !flags.has('--allow-ids') ? historyIntroductions(branchChanges(task)) : [];
@@ -2070,6 +2303,13 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
         || !['exited', 'conflict', 'stopped', 'merged'].includes(task.state)) {
         task.state = 'conflict';
         return `${task.id} main, task branch or sharers changed during the unit gate; retry merge to rebase, normalize and test again`;
+      }
+      if (landPermittedFiles !== undefined) {
+        const refusal = landScopeRefusal(ledger, task, sharers, changedFiles(task).committed, landPermittedFiles);
+        if (refusal) {
+          task.state = 'conflict';
+          return refusal;
+        }
       }
       const mainHead = git(root, ['rev-parse', 'HEAD']);
       let prepared = current;
@@ -2664,7 +2904,7 @@ async function main(argv: string[]): Promise<number> {
       return 0;
     }
     case 'usage':
-      console.log(JSON.stringify({ claude: { ...currentUsage(), file: usagePath }, codex: codexAccounts() }, null, 2));
+      console.log(JSON.stringify(await usageReport(), null, 2));
       return 0;
     case 'test': {
       const at = rest.indexOf('--result-file');
