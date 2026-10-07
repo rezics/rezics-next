@@ -17,7 +17,7 @@ test('SUB06: reply placement has one generated canonical route and bound exact r
   expect(shape).toContain('rv:Revoked');
   expect(shape).toContain('rv:RealmReplySlot');
   const registry = buildCommandRegistry([realmReplyPlacementProfile],
-    { established: {}, canonicalOrder: [], demandOrder: [] });
+    { canonicalOrder: [], demandOrder: [] });
   expect(registry.canonical.find(entry => entry.type === 'https://rezics.com/vocab/RealmReplyPlacement')?.routes)
     .toEqual([{ profile: 'realm-reply-placement-v1',
       shape: 'https://rezics.com/definition/realm-reply-placement-v1/placement-shape', when: [] }]);

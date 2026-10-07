@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { commandProfiles, discoverProfiles } from '../compiler/generate.ts';
+import type { PropertyDefinition } from '../compiler/ir.ts';
 import { buildModelOutputs } from '../compiler/outputs.ts';
 import { parseTurtleProfile, profileSource } from '../compiler/shacl.ts';
 import { statementDeclaration } from '../definitions/statement-v1.ts';
@@ -64,7 +65,7 @@ const optional = () => ({
 
 // These are the complete constraints before converting the authoring language.
 // New qualification constraints must not change historical unqualified admission.
-const originalStatement = [
+const originalStatement: PropertyDefinition[] = [
   { path: 'rdf:type', hasValue: 'rdf:Statement' },
   { path: 'rdf:subject', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
   { path: 'rdf:predicate', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
@@ -81,7 +82,7 @@ const originalStatement = [
   { path: 'rv:migratedFrom', maxCount: 1, class: 'rv:ClassificationApplication' },
   { path: 'rv:principal', maxCount: 0 },
 ];
-const originalRevision = [
+const originalRevision: PropertyDefinition[] = [
   { path: 'rdf:type', in: ['rv:StatementRevision', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
   { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rdf:Statement' },
   { path: 'rv:predecessor', maxCount: 1, class: 'rv:StatementRevision' },
@@ -111,7 +112,6 @@ test('authored Statement Turtle retains old constraints and canonical routes exa
     ]).find((item) => item.id === 'statement-v1'),
   ).toEqual(profile);
   const command = commandProfiles([profile], {
-    established: {},
     canonicalOrder: [],
     demandOrder: [],
   });

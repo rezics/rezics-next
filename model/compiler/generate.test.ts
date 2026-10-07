@@ -270,7 +270,7 @@ test('P0.3: invalid or changed authored constraints cannot silently reuse the pr
   const changed = parse('sh:minCount 1 ; sh:nodeKind sh:IRI');
   expect(profileSource(changed)).not.toBe(source);
   const digest = (bytes: string) => createHash('sha256').update(bytes).digest('hex');
-  expect(commandProfiles([changed], { established: {}, canonicalOrder: [], demandOrder: [] })
+  expect(commandProfiles([changed], { canonicalOrder: [], demandOrder: [] })
     .profiles[0]!.sha256).toBe(digest(profileSource(changed)));
   expect(digest(profileSource(changed))).not.toBe(digest(source));
 });
@@ -281,7 +281,7 @@ test('exact Turtle custody refuses plain objects and clones but accepts reload a
   for (const copy of [{ ...author }, structuredClone(author), profileSnapshot(author)]) {
     expect(isTurtleProfile(copy)).toBe(false);
     expect(() => profileSource(copy)).toThrow('has no captured Turtle source');
-    expect(() => commandProfiles([copy], { established: {}, canonicalOrder: [], demandOrder: [] }))
+    expect(() => commandProfiles([copy], { canonicalOrder: [], demandOrder: [] }))
       .toThrow('has no captured Turtle source');
   }
   mkdirSync(join(repo, '.temp'), { recursive: true });
@@ -294,7 +294,7 @@ test('exact Turtle custody refuses plain objects and clones but accepts reload a
   expect(isTurtleProfile(reloaded)).toBe(true);
   expect(profileSource(reloaded)).toBe(source);
   expect(profileSource(discovered[0]!)).toBe(source);
-  expect(commandProfiles(discovered, { established: {}, canonicalOrder: [], demandOrder: [] }).shapes
+  expect(commandProfiles(discovered, { canonicalOrder: [], demandOrder: [] }).shapes
     .get(`shapes/${author.id}.ttl`)).toBe(source);
   expect(() => discoverProfiles(directory, [[`${author.id}.ts`, {
     authorDeclaration: declaration, authorProfile: structuredClone(reloaded),
@@ -389,7 +389,7 @@ test('G-071: a profile declared in its definition joins the registry after the e
 
 test('G-071: ambiguous, duplicate or stale registry declarations fail generation', () => {
   const probe = registryProbeProfile;
-  const alone = { established: {}, canonicalOrder: [], demandOrder: [] };
+  const alone = { canonicalOrder: [], demandOrder: [] };
   const [item, sealed, record] = probe.shapes;
   const build = (profile: ProfileDefinition, options: RegistryOptions = alone) => () =>
     buildCommandRegistry([profile], options);
@@ -402,17 +402,43 @@ test('G-071: ambiguous, duplicate or stale registry declarations fail generation
     .toThrow('binding names unknown role missing');
   expect(build({ ...probe, binding: { ...probe.binding, optional: ['item'] } }))
     .toThrow('invalid binding keys or roles');
+  // @ts-expect-error Alternate canonical metadata is no longer a registry option.
   expect(build(probe, { ...alone, established: { [probe.id]: { canonical: { item: { types: ['<urn:x:T>'] } } } } }))
-    .toThrow('declares canonical routing twice');
+    .toThrow('RegistryOptions.established is retired');
+  // @ts-expect-error Alternate binding metadata is no longer a registry option.
   expect(build(probe, { ...alone, established: { [probe.id]: { binding: probe.binding } } }))
-    .toThrow('declares its binding twice');
+    .toThrow('RegistryOptions.established is retired');
   expect(build(probe, { ...alone, canonicalOrder: ['<https://rezics.com/vocab/Retired>'] }))
     .toThrow('Canonical precedence names undeclared type');
   expect(() => buildCommandRegistry([probe, { ...probe, id: 'zz-test-twin-v1', shapes: probe.shapes.map(shape =>
     ({ ...shape, iri: shape.iri.replace(probe.id, 'zz-test-twin-v1'), canonical: undefined })) }], alone))
     .toThrow('demands bindings of both');
+  // @ts-expect-error Stale declarations cannot enter through the retired option.
   expect(() => buildCommandRegistry(authoredProfiles, { established: { 'zz-test-retired-v1': {} } }))
-    .toThrow('unknown profile zz-test-retired-v1');
+    .toThrow('RegistryOptions.established is retired');
+});
+
+test('registry and command compilation refuse the retired override without reading its value', () => {
+  const alone = { canonicalOrder: [], demandOrder: [] };
+  // @ts-expect-error The retired option must remain absent from the public type.
+  const stale: RegistryOptions = { ...alone, established: {} };
+  const inherited = Object.create({ established: {} }) as RegistryOptions;
+  Object.assign(inherited, alone);
+  const hidden = Object.defineProperty({ ...alone }, 'established', { value: undefined });
+  let reads = 0;
+  const getter = Object.defineProperty({ ...alone }, 'established', {
+    get() { reads++; throw new Error('retired override was read'); },
+  });
+  for (const options of [stale, { ...alone, established: undefined },
+    { ...alone, established: null }, inherited, hidden, getter]) {
+    expect(() => buildCommandRegistry([registryProbeProfile], options))
+      .toThrow('RegistryOptions.established is retired');
+    expect(() => commandProfiles([registryProbeProfile], options))
+      .toThrow('RegistryOptions.established is retired');
+  }
+  expect(reads).toBe(0);
+  expect(() => buildCommandRegistry(authoredProfiles)).not.toThrow();
+  expect(() => commandProfiles([registryProbeProfile], alone)).not.toThrow();
 });
 
 /** A temp project with this compiler, so a mutation cannot touch the worktree. */

@@ -48,7 +48,6 @@ test('Turtle discovery preserves authored bytes and refuses duplicate IDs across
   const profiles = discoverProfiles(path, [['probe-v1.ts', { probeDeclaration: declaration }]]);
   expect(profileSource(profiles[0]!)).toBe(source);
   const command = commandProfiles(profiles, {
-    established: {},
     canonicalOrder: [],
     demandOrder: [],
   });

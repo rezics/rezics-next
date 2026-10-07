@@ -7,7 +7,6 @@ import { ratingQuestionPresentationProfile } from '../definitions/rating-questio
 
 test('Rating question presentations have their own head, revision chain and unrestricted language bindings', () => {
   const registry = buildCommandRegistry([ratingQuestionPresentationProfile], {
-    established: {},
     canonicalOrder: [],
     demandOrder: [],
   });
@@ -25,7 +24,6 @@ test('Rating question presentations have their own head, revision chain and unre
 });
 test('Rating question presentation registry pins the profile digest and command binding', () => {
   const { manifest } = commandProfiles([ratingQuestionPresentationProfile], {
-    established: {},
     canonicalOrder: [],
     demandOrder: [],
   });

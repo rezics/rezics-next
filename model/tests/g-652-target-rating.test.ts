@@ -19,7 +19,7 @@ test('G-652: one registry-only pair covers four owner grains without a target cl
   expect(observation.properties.find(property => property.path === 'rv:targetMainVersion')).toMatchObject({ maxCount: 0 });
   expect(observation.properties.find(property => property.path === 'rv:targetRelease')).toMatchObject({ maxCount: 0 });
   const registry = buildCommandRegistry([realmTargetRatingContextProfile, realmTargetRatingObservationProfile],
-    { established: {}, canonicalOrder: [], demandOrder: [] });
+    { canonicalOrder: [], demandOrder: [] });
   expect(JSON.stringify(registry)).toContain('realm-target-rating-observation-v1');
   expect(registry.canonical.find(entry => entry.type === 'https://rezics.com/vocab/TargetRatingContext'))
     .toMatchObject({ routes: [{ profile: 'realm-target-rating-context-v1' }] });

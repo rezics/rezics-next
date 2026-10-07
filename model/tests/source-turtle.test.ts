@@ -14,7 +14,7 @@ const rv = 'https://rezics.com/vocab/';
 const definition = 'https://rezics.com/definition/';
 const ids = ['source-field-statement-v1', 'source-open-library-work-v1', 'source-reification-v1'];
 const profiles = authoredProfiles.filter((profile) => ids.includes(profile.id));
-const options = { established: {}, canonicalOrder: [], demandOrder: [] };
+const options = { canonicalOrder: [], demandOrder: [] };
 const temporary: string[] = [];
 afterAll(() => {
   for (const directory of temporary) rmSync(directory, { recursive: true, force: true });

@@ -7,7 +7,6 @@ import { profileRegistry } from '../../packages/model/src/generated/profiles.ts'
 
 test('G-832: presentation bindings are registry-only and meaning has a separate head', () => {
   const registry = buildCommandRegistry([definitionPresentationProfile], {
-    established: {},
     canonicalOrder: [],
     demandOrder: [],
   });
@@ -30,7 +29,6 @@ test('G-832: presentation bindings are registry-only and meaning has a separate 
 
 test('G-832: current profile registry pins the generated digest and registry binding', () => {
   const command = commandProfiles([definitionPresentationProfile], {
-    established: {},
     canonicalOrder: [],
     demandOrder: [],
   });

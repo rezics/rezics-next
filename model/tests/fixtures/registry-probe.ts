@@ -31,7 +31,7 @@ export const registryProbeProfile = parseTurtleProfile(registryProbeDeclaration.
 /** The probe's command-module profile directory, relative to that directory. */
 export function registryProbeFiles(): Map<string, string> {
   const command = commandProfiles([registryProbeProfile],
-    { established: {}, canonicalOrder: [], demandOrder: [] });
+    { canonicalOrder: [], demandOrder: [] });
   return new Map([...command.shapes, ['manifest.json', `${JSON.stringify(command.manifest, null, 2)}\n`]]);
 }
 

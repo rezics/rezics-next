@@ -8,7 +8,6 @@ import { authoredProfiles, commandProfiles, discoverProfiles } from '../compiler
 import type { ProfileDefinition, PropertyDefinition } from '../compiler/ir.ts';
 import { buildModelOutputs } from '../compiler/outputs.ts';
 import type { RegistryBinding, RegistryRoute } from '../compiler/registry.ts';
-import { establishedDeclarations } from '../compiler/registry.ts';
 import { parseTurtleProfile, profileSource } from '../compiler/shacl.ts';
 import * as claimDeclaration from '../definitions/work-address-claim-v1.ts';
 import * as dispositionDeclaration from '../definitions/work-address-disposition-v1.ts';
@@ -32,7 +31,7 @@ const modules = [
   ['work-address-lifecycle-v1.ts', lifecycleDeclaration],
   ['work-author-credit-v1.ts', creditDeclaration],
 ] as const;
-const options = { established: {}, canonicalOrder: [], demandOrder: [] };
+const options = { canonicalOrder: [], demandOrder: [] };
 const temporary: string[] = [];
 afterAll(() => {
   for (const path of temporary) rmSync(path, { recursive: true, force: true });
@@ -218,7 +217,11 @@ test('Work address and credit discovery preserves 98 constraints, ten roles and 
     expect(entry.sha256).toBe(digest(profileSource(profile)));
     expect(entry.sha256).not.toBe(baseline.source);
     expect(published.shapes.get(entry.file)).toBe(profileSource(profile));
-    expect(establishedDeclarations[profile.id]).toBeUndefined();
+    // Exact constraints without a companion declaration cannot acquire fallback metadata.
+    expect(commandProfiles([parseTurtleProfile(profile.id, profileSource(profile))], options).manifest).toEqual({
+      profiles: [{ id: profile.id, sha256: digest(profileSource(profile)), file: `shapes/${profile.id}.ttl` }],
+      canonical: [], bindingDemands: [],
+    });
   }
   const registry = selectedRegistry(commandProfiles(authoredProfiles).manifest);
   expect(digest(JSON.stringify(registry))).toBe(

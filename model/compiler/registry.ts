@@ -1,4 +1,4 @@
-import type { BindingRequirement, CanonicalFocus, ProfileDefinition, Term } from './ir.ts';
+import type { BindingRequirement, ProfileDefinition, Term } from './ir.ts';
 import { expand } from './outputs.ts';
 
 // The command registry travels in the generated manifest that the Fuseki command
@@ -41,19 +41,6 @@ export const bindingDemandOrder: readonly Term[] = [
   rv('ConceptPath'), rv('ClassificationExpression'), skos('Concept'), skos('ConceptScheme'),
 ];
 
-export interface EstablishedDeclaration {
-  /** Canonical routing keyed by shape role. */
-  canonical?: Readonly<Record<string, CanonicalFocus>>;
-  binding?: BindingRequirement;
-}
-
-/**
- * Registry declarations of the profiles admitted before definitions carried them.
- * Each belongs in its definition's `canonical` and `binding` fields: move it there
- * and delete it here, because declaring both is an error.
- */
-export const establishedDeclarations: Readonly<Record<string, EstablishedDeclaration>> = {};
-
 export interface RegistryCondition { path: string; value: string }
 export interface RegistryRoute { profile: string; shape: string; when: RegistryCondition[] }
 export interface RegistryBinding { required: string[]; optional: string[]; roles: string[] }
@@ -63,7 +50,6 @@ export interface CommandRegistry {
   bindings: ReadonlyMap<string, RegistryBinding>;
 }
 export interface RegistryOptions {
-  established?: Readonly<Record<string, EstablishedDeclaration>>;
   canonicalOrder?: readonly Term[];
   demandOrder?: readonly Term[];
 }
@@ -116,53 +102,40 @@ function bindingOf(profile: ProfileDefinition, requirement: BindingRequirement,
 /** Resolve the registry for the command module; ambiguous or stale declarations fail generation. */
 export function buildCommandRegistry(profiles: readonly ProfileDefinition[],
   options: RegistryOptions = {}): CommandRegistry {
-  const established = options.established ?? establishedDeclarations;
+  // Stale JavaScript callers must not silently lose alternate command metadata.
+  if ('established' in options) throw new Error('RegistryOptions.established is retired; use Turtle companion declarations');
   const noPrefixes = new Map<string, string>();
   const canonicalOrder = (options.canonicalOrder ?? canonicalTypeOrder).map(term => expand(term, noPrefixes));
   const demandOrder = (options.demandOrder ?? bindingDemandOrder).map(term => expand(term, noPrefixes));
   const ids = new Set(profiles.map(profile => profile.id));
   if (ids.size !== profiles.length) throw new Error('Duplicate profile ID in command registry');
-  for (const id of Object.keys(established)) {
-    if (!ids.has(id)) throw new Error(`Established registry declaration names unknown profile ${id}`);
-  }
   const routes = new Map<string, RegistryRoute[]>();
   const demands = new Map<string, string>();
   const bindings = new Map<string, RegistryBinding>();
   for (const profile of profiles) {
     const prefixes = new Map(profile.prefixes);
-    const table = established[profile.id];
     const roles = profile.shapes.map(shape => shapeRole(profile.id, shape.iri));
-    for (const role of Object.keys(table?.canonical ?? {})) {
-      if (!roles.includes(role)) throw new Error(`${profile.id} registry declaration names unknown role ${role}`);
-    }
     for (const shape of profile.shapes) {
-      const role = shapeRole(profile.id, shape.iri);
-      const listed = table?.canonical?.[role];
-      if (shape.canonical && listed) throw new Error(`${shape.iri} declares canonical routing twice`);
-      const focus = shape.canonical ?? listed;
+      const focus = shape.canonical;
       if (!focus) continue;
-      // Established entries use full IRIs; a definition's terms use its own prefixes.
-      const terms = shape.canonical ? prefixes : noPrefixes;
       const when = (focus.when ?? []).map(condition => ({
-        path: absolute(expand(condition.path, terms), `${shape.iri} discriminator`),
-        value: expand(condition.value, terms),
+        path: absolute(expand(condition.path, prefixes), `${shape.iri} discriminator`),
+        value: expand(condition.value, prefixes),
       }));
       if (!focus.types.length || when.some(condition => !condition.value)
         || new Set(when.map(condition => condition.path)).size !== when.length) {
         throw new Error(`${shape.iri} declares invalid canonical routing`);
       }
       for (const type of focus.types) {
-        const iri = absolute(expand(type, terms), `${shape.iri} canonical type`);
+        const iri = absolute(expand(type, prefixes), `${shape.iri} canonical type`);
         routes.set(iri, [...routes.get(iri) ?? [], { profile: profile.id, shape: shape.iri, when }]);
       }
     }
-    if (profile.binding && table?.binding) throw new Error(`${profile.id} declares its binding twice`);
-    const requirement = profile.binding ?? table?.binding;
+    const requirement = profile.binding;
     if (!requirement) continue;
     bindings.set(profile.id, bindingOf(profile, requirement, roles));
-    const terms = profile.binding ? prefixes : noPrefixes;
     for (const type of requirement.demandedBy) {
-      const iri = absolute(expand(type, terms), `${profile.id} binding demand`);
+      const iri = absolute(expand(type, prefixes), `${profile.id} binding demand`);
       const other = demands.get(iri);
       if (other) throw new Error(`${iri} demands bindings of both ${other} and ${profile.id}`);
       demands.set(iri, profile.id);

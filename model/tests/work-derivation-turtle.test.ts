@@ -26,7 +26,7 @@ const modules = [
   ['work-title-control-v1.ts', workTitleControl],
 ] as const;
 const profiles = authoredProfiles.filter((profile) => ids.includes(profile.id));
-const options = { established: {}, canonicalOrder: [], demandOrder: [] };
+const options = { canonicalOrder: [], demandOrder: [] };
 const temporary: string[] = [];
 afterAll(() => {
   for (const directory of temporary) rmSync(directory, { recursive: true, force: true });

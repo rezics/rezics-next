@@ -8,7 +8,6 @@ import { authoredProfiles, commandProfiles, discoverProfiles } from '../compiler
 import type { ProfileDefinition, PropertyDefinition } from '../compiler/ir.ts';
 import { buildModelOutputs } from '../compiler/outputs.ts';
 import {
-  establishedDeclarations,
   type RegistryBinding,
   type RegistryRoute,
 } from '../compiler/registry.ts';
@@ -48,7 +47,7 @@ const declarations = modules.map(
       Object.fromEntries(Object.entries(module).filter(([name]) => name.endsWith('Declaration'))),
     ] as const,
 );
-const options = { established: {}, canonicalOrder: [], demandOrder: [] };
+const options = { canonicalOrder: [], demandOrder: [] };
 const temporary: string[] = [];
 afterAll(() => {
   for (const path of temporary) rmSync(path, { recursive: true, force: true });
@@ -232,7 +231,12 @@ test('Space Realm and Zone discovery emits six profiles once, preserving 81 prop
     expect(digest(constraints(profile))).toBe(original[profile.id as keyof typeof original][1]);
     expect(Object.entries(module).filter(([name]) => name.endsWith('Declaration'))).toHaveLength(1);
   }
-  expect(establishedDeclarations['space-realm-v1']).toBeUndefined();
+  const realm = discovered.find(profile => profile.id === 'space-realm-v1')!;
+  // Exact constraints without a companion declaration cannot acquire fallback metadata.
+  expect(commandProfiles([parseTurtleProfile(realm.id, profileSource(realm))], options).manifest).toEqual({
+    profiles: [{ id: realm.id, sha256: digest(profileSource(realm)), file: `shapes/${realm.id}.ttl` }],
+    canonical: [], bindingDemands: [],
+  });
   const registry = selectedRegistry(commandProfiles(authoredProfiles).manifest);
   expect(digest(JSON.stringify(registry))).toBe(
     '975c03f2144abb28e3145c6eab3c9a2ac99b8925c2013228d5bbc046a2552990',

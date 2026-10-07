@@ -10,7 +10,6 @@ import { buildModelOutputs } from '../compiler/outputs.ts';
 import {
   bindingDemandOrder,
   canonicalTypeOrder,
-  establishedDeclarations,
 } from '../compiler/registry.ts';
 import { profileSource } from '../compiler/shacl.ts';
 import * as classificationContext from '../definitions/classification-context-v1.ts';
@@ -71,9 +70,6 @@ const selectedBindingTerms = [
   `<${skos}ConceptScheme>`,
 ];
 const options = {
-  established: Object.fromEntries(
-    Object.entries(establishedDeclarations).filter(([id]) => ids.includes(id)),
-  ),
   canonicalOrder: canonicalTypeOrder.filter((term) => selectedCanonicalTerms.includes(term)),
   demandOrder: bindingDemandOrder.filter((term) => selectedBindingTerms.includes(term)),
 };

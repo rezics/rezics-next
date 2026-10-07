@@ -7,7 +7,7 @@ import { releaseV2Profile } from '../definitions/release-v2.ts';
 
 test('G833: registry-only realizations and discriminated release-v2 coexist with release-v1', () => {
   const registry = buildCommandRegistry([realizationProfile, releaseProfile, releaseV2Profile],
-    { established: {}, canonicalOrder: [], demandOrder: [] });
+    { canonicalOrder: [], demandOrder: [] });
   const release = registry.canonical.find(entry => entry.type.endsWith('/Release'))!;
   expect(release.routes.map(route => route.profile)).toContain('release-v1');
   expect(release.routes.map(route => route.profile)).toContain('release-v2');

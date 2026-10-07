@@ -16,7 +16,7 @@ test('Posts have a native publication shape without a Work or Main Version', () 
   expect(shape).toContain('sh:path rv:mainVersion ; sh:maxCount 0');
   expect(shape).toContain('sh:path schema:isPartOf ; sh:maxCount 0');
   expect(shape).toContain('sh:path rv:spoiler ; sh:maxCount 1 ; sh:datatype');
-  const registry = buildCommandRegistry([postProfile], { established: {}, canonicalOrder: [], demandOrder: [] });
+  const registry = buildCommandRegistry([postProfile], { canonicalOrder: [], demandOrder: [] });
   expect(registry.canonical.find(route => route.type === 'https://rezics.com/vocab/Post')?.routes)
     .toEqual([{ profile: 'post-v1', shape: 'https://rezics.com/definition/post-v1/post-shape', when: [] }]);
 });

@@ -7,8 +7,7 @@ import { Value } from 'typebox/value';
 import { authoredProfiles, commandProfiles, discoverProfiles } from '../compiler/generate.ts';
 import type { ProfileDefinition, PropertyDefinition } from '../compiler/ir.ts';
 import { buildModelOutputs } from '../compiler/outputs.ts';
-import { establishedDeclarations } from '../compiler/registry.ts';
-import { parseTurtleProfile, profileSource } from '../compiler/shacl.ts';
+import { parseTurtleProfile, profileSource, type TurtleDeclaration } from '../compiler/shacl.ts';
 import * as globalContext from '../definitions/global-rating-standing-context-v1.ts';
 import * as globalObservation from '../definitions/global-rating-standing-observation-v1.ts';
 import * as dailyContextDeclaration from '../definitions/realm-daily-rating-context-v1.ts';
@@ -52,9 +51,6 @@ const modules = [
   ['realm-standing-rating-observation-v1.ts', standingObservationDeclaration],
 ] as const;
 const options = {
-  established: Object.fromEntries(
-    Object.entries(establishedDeclarations).filter(([id]) => ids.includes(id)),
-  ),
   canonicalOrder: [],
   demandOrder: [],
 };
@@ -256,7 +252,8 @@ function assertRatingCommandMetadata(
   const selected = authored.filter((profile) => idsToCheck.includes(profile.id));
   const selectedIds = new Set(selected.map((profile) => profile.id));
   for (const profile of selected) {
-    const expected = expectedRatingMetadata[profile.id as keyof typeof expectedRatingMetadata];
+    const expected: Required<Pick<TurtleDeclaration, 'canonical' | 'binding'>> =
+      expectedRatingMetadata[profile.id as keyof typeof expectedRatingMetadata];
     expect(ownMetadata(profile)).toEqual(expected);
     expect(manifest.profiles.find((entry) => entry.id === profile.id)?.binding).toEqual({
       required: [...expected.binding.required],
@@ -270,7 +267,8 @@ function assertRatingCommandMetadata(
       .map(({ profile, shape, when }) => ({ type, profile, shape, when })),
   );
   const expectedRoutes = selected.flatMap((profile) => {
-    const expected = expectedRatingMetadata[profile.id as keyof typeof expectedRatingMetadata];
+    const expected: Required<Pick<TurtleDeclaration, 'canonical' | 'binding'>> =
+      expectedRatingMetadata[profile.id as keyof typeof expectedRatingMetadata];
     return Object.entries(expected.canonical).flatMap(([role, focus]) =>
       focus.types.map((type) => ({
         type: `${rv}${type.slice('rv:'.length)}`,
@@ -597,9 +595,6 @@ const derivedModules = [
   ['realm-experience-rating-observation-v1.ts', experienceObservationDeclaration],
 ] as const;
 const derivedOptions = {
-  established: Object.fromEntries(
-    Object.entries(establishedDeclarations).filter(([id]) => derivedIds.includes(id)),
-  ),
   canonicalOrder: [],
   demandOrder: [],
 };
@@ -687,7 +682,8 @@ function metadataDigest(profile: ProfileDefinition): string {
   return digest(
     JSON.stringify({
       commandMetadata: ownMetadata(profile),
-      establishedCommandMetadata: establishedDeclarations[profile.id] ?? {},
+      // Retained metadata pins include this historical empty field; no runtime override remains.
+      establishedCommandMetadata: {},
     }),
   );
 }
@@ -1032,7 +1028,7 @@ const versionedModules = [
   ['realm-target-rating-context-v4.ts', targetContextV4Declaration],
   ['realm-target-rating-observation-v4.ts', targetObservationV4Declaration],
 ] as const;
-const versionedOptions = { established: {}, canonicalOrder: [], demandOrder: [] };
+const versionedOptions = { canonicalOrder: [], demandOrder: [] };
 const versionedOutputs = buildModelOutputs(versionedProfiles);
 let versionedSchemaPromise: Promise<Record<string, TSchema>> | undefined;
 async function acceptsVersioned(

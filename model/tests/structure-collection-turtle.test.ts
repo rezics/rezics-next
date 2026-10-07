@@ -42,7 +42,7 @@ const declarations = modules.map(
       Object.fromEntries(Object.entries(module).filter(([name]) => name.endsWith('Declaration'))),
     ] as const,
 );
-const options = { established: {}, canonicalOrder: [], demandOrder: [] };
+const options = { canonicalOrder: [], demandOrder: [] };
 const temporary: string[] = [];
 afterAll(() => {
   for (const path of temporary) rmSync(path, { recursive: true, force: true });

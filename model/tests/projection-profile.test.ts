@@ -78,7 +78,6 @@ test('a projection is never an owl:sameAs and keeps exactly one head', () => {
 
 test('writes to a projection must bind its focus roles, so no other command can mint one', () => {
   const registry = buildCommandRegistry([projectionProfile], {
-    established: {},
     canonicalOrder: [],
     demandOrder: [],
   });

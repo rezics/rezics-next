@@ -7,7 +7,6 @@ import { Value } from 'typebox/value';
 import { authoredProfiles, commandProfiles, discoverProfiles } from '../compiler/generate.ts';
 import type { PropertyDefinition } from '../compiler/ir.ts';
 import { buildModelOutputs } from '../compiler/outputs.ts';
-import { establishedDeclarations } from '../compiler/registry.ts';
 import { parseTurtleProfile, profileSource } from '../compiler/shacl.ts';
 import * as fixedRelease from '../definitions/fixed-native-text-release-v1.ts';
 import * as rightsOffering from '../definitions/rights-offering-v1.ts';
@@ -24,9 +23,6 @@ const modules = [
 ] as const;
 const profiles = authoredProfiles.filter((profile) => ids.includes(profile.id));
 const options = {
-  established: Object.fromEntries(
-    Object.entries(establishedDeclarations).filter(([id]) => ids.includes(id)),
-  ),
   canonicalOrder: [],
   demandOrder: [],
 };

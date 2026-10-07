@@ -2,11 +2,13 @@ import { Parser, Store, type Quad_Object, type Quad_Subject } from 'n3';
 import {
   profileSnapshot,
   reservedNamespaces,
+  type BindingRequirement,
+  type CanonicalFocus,
   type ProfileDefinition,
   type PropertyDefinition,
   type Term,
 } from './ir.ts';
-import { shapeRole, type EstablishedDeclaration } from './registry.ts';
+import { shapeRole } from './registry.ts';
 
 const { sh, rdf, xsd } = reservedNamespaces;
 const sources = new WeakMap<ProfileDefinition, string>();
@@ -15,8 +17,11 @@ const sources = new WeakMap<ProfileDefinition, string>();
 export const isTurtleProfile = (profile: ProfileDefinition): boolean => sources.has(profile);
 
 /** Command metadata belongs beside Turtle, never in its constraint graph. */
-export interface TurtleDeclaration extends EstablishedDeclaration {
+export interface TurtleDeclaration {
   id: string;
+  /** Canonical routing keyed by shape role. */
+  canonical?: Readonly<Record<string, CanonicalFocus>>;
+  binding?: BindingRequirement;
 }
 
 /** Preserve the author's exact Turtle bytes in the admitted manifest. */
