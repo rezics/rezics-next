@@ -55,6 +55,7 @@ function frontendChecks(workspace: FrontendWorkspace): FrontendChecks {
 export interface AffectedPlan {
   base: string;
   changed: string[];
+  tasks: { task: string; because: string }[];
   frontend: FrontendChecks[];
   tests: Record<AffectedTier, string[]>;
   widened: { tier: AffectedTier; because: string }[];
@@ -65,6 +66,8 @@ export interface AffectedPlan {
 const codeFile = /\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/;
 const testFile = /\.(?:test|spec)\.[cm]?[jt]sx?$/;
 const stackTiers: AffectedTier[] = ['model', 'integration', 'fault/recovery'];
+// Inputs staged or read by jena-cli.ts, including the pinned image definition.
+const jenaCheckInput = /^infra\/jena\/|^(?:model\/definitions|generated\/model\/shapes)\/.*\.ttl$|^tests\/fixtures\/jena-cli\/scratch\.trig$|^services\/main\/src\/modules\/query\/templates\/work-versions\.(?:rq|fixture\.json)$|^scripts\/qa\/jena-cli\.ts$|^infra\/dev\/compose\.yaml$/;
 const sharedStackSmoke = 'tests/qa/integration/shared-stack.test.ts';
 // The registered unit tier: `tests/qa/unit` plus its gate files.
 const registeredUnit = [...testArgs('unit'), ...unitHarnessFiles];
@@ -215,6 +218,7 @@ export function planAffected(input: {
   const plan: AffectedPlan = {
     base: input.base,
     changed: [...input.changed].sort(),
+    tasks: [],
     frontend: [],
     tests: { unit: [], owner: [], integration: [], model: [], 'fault/recovery': [] },
     widened: [],
@@ -232,6 +236,8 @@ export function planAffected(input: {
   };
   const seeds = new Set<string>();
   for (const path of plan.changed) {
+    if (jenaCheckInput.test(path) && !plan.tasks.some(check => check.task === 'jena:check'))
+      plan.tasks.push({ task: 'jena:check', because: `${path}: pinned Jena CLI input` });
     // A root script edit changes command wiring, not installed dependencies.
     const rule = input.scriptOnlyManifests?.has(path)
       ? { match: /$^/, effect: 'smoke' as const, reason: 'root command wiring' }
@@ -476,6 +482,7 @@ export function affectedPlan(root: string, ref?: string): AffectedPlan {
 
 export function formatPlan(plan: AffectedPlan): string {
   const lines = [`Affected since ${plan.base.slice(0, 12)}: ${plan.changed.length} changed paths`];
+  for (const { task, because } of plan.tasks) lines.push(`  task ${task} (${because})`);
   for (const { tier, because } of plan.widened) lines.push(`  ${tier}: whole tier (${because})`);
   for (const tier of affectedTiers) {
     for (const file of plan.tests[tier]) lines.push(`  ${tier}: ${file}`);
@@ -491,7 +498,7 @@ export function formatPlan(plan: AffectedPlan): string {
   const reasons = [...new Set(plan.ignored.map((item) => item.reason))];
   if (reasons.length)
     lines.push(`  no tests for ${plan.ignored.length} paths: ${reasons.join('; ')}`);
-  if (!plan.frontend.length && !plan.widened.length && affectedTiers.every((tier) => !plan.tests[tier].length)) {
+  if (!plan.tasks.length && !plan.frontend.length && !plan.widened.length && affectedTiers.every((tier) => !plan.tests[tier].length)) {
     lines.push('  no affected backend tests');
   }
   return lines.join('\n');

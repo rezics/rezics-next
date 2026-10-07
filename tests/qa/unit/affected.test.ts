@@ -54,6 +54,41 @@ test('inputs outside the import graph widen to the tiers that load them', () => 
   expect(classify('infra/dev/tests/compose.test.ts')).toBeUndefined();
 });
 
+test('Jena image and authored Turtle changes select the pinned CLI check once', () => {
+  for (const path of ['infra/jena/command-module/src/Command.java', 'infra/jena/fuseki-text.ttl',
+    'model/definitions/core/entity.ttl', 'model/definitions/profiles/book.ttl']) {
+    const result = plan([path]);
+    expect(result.tasks).toEqual([{ task: 'jena:check', because: `${path}: pinned Jena CLI input` }]);
+    expect(affectedCommands(result)[0]!.command).toEqual(['task', ['jena:check']]);
+    expect(formatPlan(result)).toContain('task jena:check');
+  }
+  const result = plan(['infra/jena/fuseki-text.ttl', 'model/definitions/core/entity.ttl']);
+  expect(affectedCommands(result).filter(item => item.label === 'jena:check')).toHaveLength(1);
+});
+
+test('Jena CLI staged query, shapes, fixture and image pin inputs select the same check', () => {
+  for (const path of ['generated/model/shapes/entity.ttl', 'tests/fixtures/jena-cli/scratch.trig',
+    'services/main/src/modules/query/templates/work-versions.rq',
+    'services/main/src/modules/query/templates/work-versions.fixture.json',
+    'scripts/qa/jena-cli.ts', 'infra/dev/compose.yaml']) {
+    expect(affectedCommands(plan([path]))[0]!.command).toEqual(['task', ['jena:check']]);
+  }
+  expect(plan(['tests/fixtures/unrelated.ttl']).tasks).toEqual([]);
+  expect(plan(['model/definitions/package.json']).tasks).toEqual([]);
+});
+
+test('affected execution runs Jena once and preserves its refusal alongside other failures', async () => {
+  const result = plan(['infra/jena/fuseki-text.ttl', 'model/definitions/core/entity.ttl']);
+  const calls: [string, string[]][] = [];
+  const outcome = await runAffected(result, async command => {
+    calls.push(command);
+    return command[0] === 'task' ? 1 : 0;
+  });
+  expect(calls).toEqual(affectedCommands(result).map(item => item.command));
+  expect(outcome.failed).toBe(true);
+  expect(outcome.results[0]).toBe('  jena:check: failed (exit 1)');
+});
+
 test('only graph-selected changes build the import graph', () => {
   expect(needsGraph(['docs/testing/test-harness.md', '.oxfmtrc.json', 'yarn.lock', 'infra/dev/compose.yaml'])).toBe(false);
   expect(needsGraph(['package.json'], new Set(['package.json']))).toBe(true);

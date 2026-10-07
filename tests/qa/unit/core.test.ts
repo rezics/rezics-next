@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { processRunning } from '../support/process-liveness.ts';
 import { execFileSync } from 'node:child_process';
 import { acquireFullLock, acquireQaSlots, admissionIntervalMs, commandAsync, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
   isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
@@ -603,6 +604,21 @@ test('QA slots: a waiter takes a newly released lease before it starts a stack',
 });
 
 
+test('cancellation liveness stays false when Linux reaps a zombie into the dead state', () => {
+  // Consecutive Z -> X reads captured while a shell reaped its sleep child.
+  const dead = '1999608 (sleep) X 1999607 1990921 1990921 0 -1 4227084 135 0 0 0 0 0 0 0 20 0 1 0 11938672 0 0 18446744073709551615 0 0 0 0 0 0 0 6 0 1 0 0 17 28 0 0 0 0 0 0 0 0 0 0 0 0 0\n';
+  const snapshots = [dead.replace(') X ', ') Z '), dead];
+  const read = () => snapshots.shift()!;
+  expect(processRunning(1999608, read)).toBe(false);
+  expect(processRunning(1999608, read)).toBe(false);
+  for (const state of ['R', 'S', 'D', 'T', 't', 'I', 'P'])
+    expect(processRunning(1999608, () => dead.replace(') X ', `) ${state} `))).toBe(true);
+  expect(processRunning(1999608, () => dead.replace('(sleep)', '(worker (nested))'))).toBe(false);
+  for (const code of ['ENOENT', 'ESRCH'])
+    expect(processRunning(1999608, () => { throw Object.assign(new Error('gone'), { code }); })).toBe(false);
+  expect(() => processRunning(1999608, () => { throw Object.assign(new Error('denied'), { code: 'EACCES' }); })).toThrow('denied');
+});
+
 test('QA slots: SIGTERM, SIGINT, process exit, errors and the run deadline release leases', async () => {
   for (const mode of ['SIGTERM', 'SIGINT', 'exit', 'error', 'deadline'] as const) {
     const dir = mkdtempSync(join(scratch, 'qa-slot-exit-'));
@@ -631,10 +647,7 @@ test('QA slots: SIGTERM, SIGINT, process exit, errors and the run deadline relea
       expect(existsSync(join(dir, '0'))).toBe(false);
       if (mode === 'SIGTERM' || mode === 'SIGINT') {
         const subprocess = Number(readFileSync(ready, 'utf8'));
-        const alive = () => {
-          try { return !readFileSync(`/proc/${subprocess}/stat`, 'utf8').includes(') Z '); }
-          catch { return false; }
-        };
+        const alive = () => processRunning(subprocess);
         // The harness escalates to SIGKILL after a 1 s grace; a loaded merge gate needs headroom past it.
         const stoppedBy = Date.now() + 10_000;
         while (alive() && Date.now() < stoppedBy) await Bun.sleep(5);

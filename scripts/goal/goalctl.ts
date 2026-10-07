@@ -2076,10 +2076,11 @@ function normalizedFindingLines(detail: string | undefined): UnitFinding[] {
   const normalizeText = (value: string) => value.replace(
     /((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:tsx?|jsx?|sql|json)):\d+(?::\d+)?/g, '$1:<line>');
   for (const line of detail.split('\n')) {
-    const diff = /^(\s*)([+-])\s?(.*)$/.exec(line);
+    const diff = /^(\s*)([+-])(\s*)(.*)$/.exec(line);
     if (diff) {
-      const indent = diff[1]!.length;
-      const text = diff[3]!.trim();
+      // Bun replaces a leading space with the diff marker; the subject indentation follows it.
+      const indent = diff[1]!.length + 1 + diff[3]!.length;
+      const text = diff[4]!.trim();
       if (diff[2] === '+' && text && !/^(?:Received|Expected)(?:\s|$)/i.test(text)) {
         findings.push({ path: contexts.filter(frame => frame.indent < indent).map(frame => frame.key),
           text: normalizeText(text) });

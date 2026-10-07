@@ -1,8 +1,8 @@
 import { existsSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from './acceptance.ts';
 import { affectedPlan, affectedTiers, formatPlan, type AffectedPlan } from './affected.ts';
-import { parseArgs } from './core.ts';
+import { goalSlotDirectory, parseArgs } from './core.ts';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -79,6 +79,7 @@ export function parseAffectedArgs(args: string[]): { ref?: string; list: boolean
 
 export function affectedCommands(plan: AffectedPlan): { label: string; command: [string, string[]] }[] {
   const commands: { label: string; command: [string, string[]] }[] = [];
+  for (const { task } of plan.tasks) commands.push({ label: task, command: ['task', [task]] });
   for (const tier of affectedTiers) {
     const files = plan.tests[tier];
     const widened = plan.widened.some(item => item.tier === tier);
@@ -126,8 +127,13 @@ export async function dispatchTest(args: string[], options: TestDispatchOptions 
   const env = options.env ?? process.env;
   if (command[0] === 'task' && ['storybook:test', 'accounts:storybook:test'].includes(command[1][0]!)
     && await isLocalQaRun(root, env)) {
+    const slotDirectory = env.GOAL_QA_SLOT_DIRECTORY ?? goalSlotDirectory(root);
+    const admissionEnv: NodeJS.ProcessEnv = { ...env,
+      ...(slotDirectory && !env.GOAL_QA_WAIT_DIR ? { GOAL_QA_WAIT_DIR: join(slotDirectory, 'waiters') } : {}),
+      GOAL_QA_COMMAND: env.GOAL_QA_COMMAND ?? [command[0], ...command[1]].join(' '),
+    };
     await (options.admission ?? waitForMemory)(qaMemoryNeed(root, 'browser', undefined, env), {
-      root, env,
+      root, env: admissionEnv,
       deadline: qaMemoryDeadline(env, options.deadline),
     });
   }

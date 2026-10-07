@@ -1,4 +1,5 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   acquireFullLock,
@@ -122,9 +123,36 @@ async function admit<T>(kind: 'other' | 'browser', work: () => Promise<T>, env: 
 }
 let runSlots: Awaited<ReturnType<typeof acquireQaSlots>> | undefined;
 const qaSlotDirectory = process.env.GOAL_QA_SLOT_DIRECTORY ?? goalSlotDirectory(root);
+// Direct task runs and their startup children publish into the same status directory as goalctl.
+if (qaSlotDirectory) process.env.GOAL_QA_WAIT_DIR ??= join(qaSlotDirectory, 'waiters');
+process.env.GOAL_QA_COMMAND ??= ['bun', ...process.argv.slice(1)].join(' ');
 const heavyQaRun = process.env.GOAL_QA_HEAVY_RUN === '1';
-const acquireRunSlots = (wanted: number, slotOptions: Parameters<typeof acquireQaSlots>[4] = {}) =>
-  acquireQaSlots(heavyQaRun ? undefined : qaSlotDirectory, wanted, process.env, process.pid, slotOptions);
+async function acquireRunSlots(wanted: number, slotOptions: Parameters<typeof acquireQaSlots>[4] = {}) {
+  let waitPath: string | undefined;
+  const removeWait = () => { if (waitPath) rmSync(waitPath, { force: true }); };
+  process.on('exit', removeWait);
+  try {
+    return await acquireQaSlots(heavyQaRun ? undefined : qaSlotDirectory, wanted, process.env, process.pid, {
+      ...slotOptions,
+      announce: message => {
+        const waiterDirectory = process.env.GOAL_QA_WAIT_DIR;
+        if (waiterDirectory) {
+          mkdirSync(waiterDirectory, { recursive: true });
+          waitPath ??= join(waiterDirectory, `slot-${process.pid}-${randomUUID()}.json`);
+          const temporary = `${waitPath}.${randomUUID()}.tmp`;
+          writeFileSync(temporary, JSON.stringify({ pid: process.pid, goal: process.env.GOAL_ID,
+            command: process.env.GOAL_QA_COMMAND, waitingFor: 'slot', message,
+            since: new Date((slotOptions.now ?? Date.now)()).toISOString() }));
+          renameSync(temporary, waitPath);
+        }
+        (slotOptions.announce ?? console.error)(message);
+      },
+    });
+  } finally {
+    removeWait();
+    process.off('exit', removeWait);
+  }
+}
 const release = options.tier || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 
 async function resetChildStacks(registry: string): Promise<string[]> {

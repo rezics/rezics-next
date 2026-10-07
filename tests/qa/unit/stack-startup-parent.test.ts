@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import ts from 'typescript-6';
 import { admissionWaitDuration, qaStartupTestTimeout, runQaAdmissionChildAsync, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { commandAsync } from '../../../scripts/qa/core.ts';
+import { processRunning } from '../support/process-liveness.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scratch = join(root, '.temp');
@@ -139,10 +140,7 @@ test('a wrapped test startup streams a four-minute injected memory wait within i
 });
 
 test('test-side startup children stop before parent cancellation completes, without a QA slot', async () => {
-  const alive = (pid: number) => {
-    try { return !readFileSync(`/proc/${pid}/stat`, 'utf8').includes(') Z '); }
-    catch { return false; }
-  };
+  const alive = (pid: number) => processRunning(pid);
   for (const boundary of ['direct', 'indirect']) {
     for (const mode of ['SIGTERM', 'SIGINT', 'exit', 'timeout', 'forced-timeout']) {
       const dir = mkdtempSync(join(scratch, 'qa-startup-cancellation-'));

@@ -2,6 +2,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { processRunning } from '../../tests/qa/support/process-liveness.ts';
 import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
@@ -282,6 +283,41 @@ describe('goalctl runtime policy', () => {
     expect(introducedUnitFailureFiles([file], differentSubject, main)).toEqual([file]);
     expect(introducedUnitFailureFiles([file], branch, main)).toEqual([file]);
     expect(introducedUnitFailureFiles([file], repeatedMain, repeatedMain)).toEqual([]);
+  });
+
+  test('real Bun permission diffs distinguish changed subjects and inherit identical or removed findings', () => {
+    const file = '.temp/goal-gate-subject/permissions.test.ts';
+    const root = process.cwd();
+    // Assertion blocks captured from Bun runs with alice, bob, or both denied; only the fixture path is unified.
+    const aliceDiff = [
+      '@@ -2,3 +2,3 @@', '    "alice": {', '-     "permission": true,', '+     "permission": false,', '    },',
+    ];
+    const bobDiff = [
+      '@@ -5,3 +5,3 @@', '    "bob": {', '-     "permission": true,', '+     "permission": false,', '    },',
+    ];
+    const bothDiff = [
+      '@@ -2,6 +2,6 @@', '    "alice": {', '-     "permission": true,', '+     "permission": false,', '    },',
+      '    "bob": {', '-     "permission": true,', '+     "permission": false,', '    },',
+    ];
+    const captured = (diff: string[], count: number) => unitFailureDetails([
+      'bun test v1.4.2 (744846f84)', `${file}:`, 'error: expect(received).toEqual(expected)', '', ...diff, '',
+      `- Expected  - ${count}`, `+ Received  + ${count}`, '',
+      `      at <anonymous> (${root}/${file}:5:6)`, '(fail) permission results preserve each subject path [0.39ms]',
+    ].join('\n'), [file], root);
+    const alice = captured(aliceDiff, 1);
+    const bob = captured(bobDiff, 1);
+    const both = captured(bothDiff, 2);
+
+    expect(alice).toHaveLength(1);
+    expect(bob).toHaveLength(1);
+    expect(both).toHaveLength(1);
+    expect(introducedUnitFailureFiles([file], bob, alice)).toEqual([file]);
+    expect(introducedUnitFailureFiles([file], both, alice)).toEqual([file]);
+    expect(introducedUnitFailureFiles([file], alice, alice)).toEqual([]);
+    expect(introducedUnitFailureFiles([file], both, both)).toEqual([]);
+    expect(introducedUnitFailureFiles([file], alice, both)).toEqual([]);
+    expect(introducedUnitFailureFiles([file], bob, both)).toEqual([]);
+    expect(introducedUnitFailureFiles([], [], alice)).toEqual([]);
   });
 
   test('file-level load errors inherit only when normalized error text matches', () => {
@@ -1017,10 +1053,7 @@ process.exit(await child.exited);
       workers.set(id, pids);
       return ledger().tasks[id]!;
     };
-    const alive = (pid: number) => {
-      try { return readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]?.[0] !== 'Z'; }
-      catch { return false; }
-    };
+    const alive = (pid: number) => processRunning(pid);
     const stopFixture = async (id: string) => {
       const pids = workers.get(id)!;
       for (const pid of [pids.worker, pids.child]) { try { process.kill(pid, 'SIGTERM'); } catch { /* exited */ } }

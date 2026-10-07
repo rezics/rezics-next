@@ -1,15 +1,152 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { Script } from 'node:vm';
+import ts from 'typescript-6';
 import { devStackStopArgs, rememberDevStack, startedDevStacks, stopDevSession }
   from '../../../scripts/dev/stack-session.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount } from '../../../scripts/qa/browser-budget.ts';
-import { selectTestCommand } from '../../../scripts/qa/test.ts';
-import { commandAsync } from '../../../scripts/qa/core.ts';
+import { dispatchTest, selectTestCommand } from '../../../scripts/qa/test.ts';
+import { acquireQaSlots, commandAsync } from '../../../scripts/qa/core.ts';
+import { waitForMemory } from '../../../scripts/qa/memory-admission.ts';
+import { qaWaitStatusLines } from '../../../scripts/goal/goalctl.ts';
 import { cleanupQaStacks, forgetQaStack, QA_STACK_REGISTRY, rememberQaStack }
   from '../../../scripts/qa/stack-ownership.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+
+/** Exercise direct-run admission without starting the harness's unrelated tiers. */
+function harnessAdmission(env: NodeJS.ProcessEnv, slotDirectory: string) {
+  const source = ts.createSourceFile('cli.ts', readFileSync(join(root, 'scripts/qa/cli.ts'), 'utf8'),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const names = new Set(['qaSlotDirectory', 'heavyQaRun']);
+  const statements = source.statements.filter(node =>
+    ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration =>
+      ts.isIdentifier(declaration.name) && names.has(declaration.name.text))
+    || ts.isFunctionDeclaration(node) && node.name?.text === 'acquireRunSlots'
+    || ts.isIfStatement(node) && node.getText(source).startsWith('if (qaSlotDirectory)')
+    || ts.isExpressionStatement(node) && node.getText(source).startsWith('process.env.GOAL_QA_COMMAND ??='));
+  if (statements.length !== 5) throw new Error('Missing QA CLI admission boundary');
+  const boundary = ts.transpileModule(statements.map(node => node.getText(source)).join('\n')
+    + '\nacquireRunSlots;', { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
+  return new Script(boundary).runInNewContext({
+    process: { env, pid: process.pid, argv: ['bun', 'scripts/qa/cli.ts', '--tier', 'model'],
+      on: process.on.bind(process), off: process.off.bind(process) },
+    goalSlotDirectory: () => slotDirectory, root, join, randomUUID, mkdirSync, renameSync, rmSync, writeFileSync,
+    acquireQaSlots, Date, console,
+  }) as (wanted: number, options?: Parameters<typeof acquireQaSlots>[4]) => ReturnType<typeof acquireQaSlots>;
+}
+
+for (const inherited of [false, true]) {
+  test(`QA harness ${inherited ? 'inherited' : 'direct'} slot waits appear in Goal status until admitted`, async () => {
+    const directory = mkdtempSync(join(root, '.temp', 'qa-harness-status-'));
+    const holder = Bun.spawn(['bun', '-e', 'setInterval(() => {}, 1000)']);
+    const statusDirectory = inherited ? join(directory, 'inherited') : directory;
+    const env: NodeJS.ProcessEnv = { REZICS_STACK_PROFILE: 'qa', GOAL_ID: 'program', GOAL_QA_SLOTS: '1',
+      ...(inherited ? { GOAL_QA_WAIT_DIR: join(statusDirectory, 'waiters'), GOAL_QA_COMMAND: 'task qa -- --tier model' } : {}) };
+    try {
+      mkdirSync(join(directory, '0'));
+      writeFileSync(join(directory, '0', 'pid'), String(holder.pid));
+      const acquire = harnessAdmission(env, directory);
+      const waiterDirectory = env.GOAL_QA_WAIT_DIR!;
+      const command = inherited ? 'task qa -- --tier model' : 'bun scripts/qa/cli.ts --tier model';
+      let polls = 0;
+      const slots = await acquire(1, { announce: () => {}, sleep: async () => {
+        polls++;
+        const files = readdirSync(waiterDirectory);
+        expect(files).toHaveLength(1);
+        expect(JSON.parse(readFileSync(join(waiterDirectory, files[0]!), 'utf8'))).toMatchObject({
+          pid: process.pid, goal: 'program', command, waitingFor: 'slot',
+        });
+        expect(qaWaitStatusLines(statusDirectory)).toEqual([
+          `QA waiting for slot: Goal program (pid ${process.pid}): ${command}; Waiting for a QA slot; all 1 slots are held`,
+        ]);
+        rmSync(join(directory, '0'), { recursive: true });
+      } });
+      try {
+        expect(polls).toBe(1);
+        expect(slots.count).toBe(1);
+        expect(readdirSync(waiterDirectory)).toEqual([]);
+      } finally { slots.release(); }
+    } finally {
+      holder.kill();
+      await holder.exited;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+test('QA harness slot failure removes its waiter record and exit hook', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-harness-status-deadline-'));
+  const holder = Bun.spawn(['bun', '-e', 'setInterval(() => {}, 1000)']);
+  const env: NodeJS.ProcessEnv = { REZICS_STACK_PROFILE: 'qa', GOAL_QA_SLOTS: '1' };
+  let now = 0;
+  const exitHooks = process.listenerCount('exit');
+  try {
+    mkdirSync(join(directory, '0'));
+    writeFileSync(join(directory, '0', 'pid'), String(holder.pid));
+    const acquire = harnessAdmission(env, directory);
+    await expect(acquire(1, { now: () => now, deadline: 1, announce: () => {}, sleep: async () => {
+      expect(qaWaitStatusLines(directory)).toHaveLength(1);
+      now = 1;
+    } })).rejects.toThrow('No QA slot became free before the deadline');
+    expect(qaWaitStatusLines(directory)).toEqual([]);
+    expect(process.listenerCount('exit')).toBe(exitHooks);
+  } finally {
+    holder.kill();
+    await holder.exited;
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test('direct QA harness publishes memory waits through its inherited startup environment', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-harness-memory-status-'));
+  const env: NodeJS.ProcessEnv = { REZICS_STACK_PROFILE: 'qa', GOAL_ID: 'program' };
+  let now = 0;
+  try {
+    harnessAdmission(env, directory);
+    await waitForMemory({ vm: 0, vmReserve: 0, host: 1, hostReserve: 0 }, {
+      env: { ...env }, deadline: 2, now: () => now, announce: () => {}, pollMs: 1,
+      read: async () => ({ vmTotal: 0, vmUsed: 0, hostAvailable: now }),
+      sleep: async ms => {
+        const lines = qaWaitStatusLines(directory);
+        expect(lines).toHaveLength(1);
+        expect(lines[0]).toStartWith(`QA waiting for memory: Goal program (pid ${process.pid}): bun scripts/qa/cli.ts --tier model; Waiting; QA memory:`);
+        now += ms;
+      },
+    });
+    expect(qaWaitStatusLines(directory)).toEqual([]);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('direct Storybook test dispatch publishes memory waits before launching browser workers', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-stories-memory-status-'));
+  const story = 'packages/ui/src/components/badge.stories.tsx';
+  const env: NodeJS.ProcessEnv = { REZICS_STACK_PROFILE: 'qa', GOAL_ID: 'program', GOAL_QA_SLOT_DIRECTORY: directory };
+  let now = 0, started = false;
+  try {
+    const command = selectTestCommand([story]);
+    const result = await dispatchTest([story], {
+      env, deadline: 2,
+      admission: (need, options) => waitForMemory(need, { ...options,
+        now: () => now, pollMs: 1, announce: () => {},
+        read: async () => ({ vmTotal: 0, vmUsed: 0, hostAvailable: now ? need.host + need.hostReserve : 0 }),
+        sleep: async ms => {
+          expect(started).toBe(false);
+          const lines = qaWaitStatusLines(directory);
+          expect(lines).toHaveLength(1);
+          expect(lines[0]).toStartWith(`QA waiting for memory: Goal program (pid ${process.pid}): ${[command[0], ...command[1]].join(' ')}; Waiting; QA memory:`);
+          now += ms;
+        },
+      }),
+      runner: async selected => { expect(selected).toEqual(command); started = true; return 0; },
+    });
+    expect(result).toBe(0);
+    expect(started).toBe(true);
+    expect(qaWaitStatusLines(directory)).toEqual([]);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 test('QA resets every child stack after failure and retains failed resets for retry', async () => {
   const directory = mkdtempSync(join(root, '.temp', 'qa-ownership-'));

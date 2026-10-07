@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
 import { newRunId, type Tier } from '../qa/core.ts';
 
-export type RegressionTier = 'unit' | 'owner' | 'model' | 'integration' | 'fault/recovery' | 'e2e' | 'accounts:storybook';
+export type RegressionTier = 'unit' | 'owner' | 'model' | 'integration' | 'fault/recovery' | 'e2e' | 'accounts:storybook' | 'jena:check';
 export type Classification = 'infrastructure' | 'resource' | 'deadline' | 'order-dependent' | 'flaky' | 'deterministic';
 type Outcome = 'pending' | 'passed' | 'failed' | 'missing' | 'void' | 'excluded' | 'deferred';
 export interface MergeEvent { before: string; after: string; goal: string; taskIds: string[]; at: string }
@@ -85,7 +85,7 @@ export async function waitForRegressionTurn(lockDir?: string, interrupted: () =>
     await sleep(Math.min(10_000, remaining));
   }
 }
-const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook'];
+const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook', 'jena:check'];
 const browserTier = (tier: RegressionTier): boolean => tier === 'e2e' || tier === 'accounts:storybook';
 const routineBrowserReason = 'Browser journeys and Storybook run in the nightly full regression';
 const batchSize = (tier: RegressionTier, files: number): number =>
@@ -170,6 +170,7 @@ export async function regressionRegistry(checkout: string): Promise<ExpectedFile
   const registry = await import(pathToFileURL(join(checkout, 'scripts/qa/acceptance.ts')).href) as typeof import('../qa/acceptance.ts');
   const core = await import(pathToFileURL(join(checkout, 'scripts/qa/core.ts')).href) as typeof import('../qa/core.ts');
   const files: ExpectedFile[] = [];
+  files.push({ file: 'scripts/qa/jena-cli.ts', tier: 'jena:check', outcome: 'pending' });
   for (const tier of ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'load'] as const) {
     const paths = core.splitTestArgs(registry.testArgs(tier)).paths;
     if (tier === 'unit') paths.push(...registry.unitHarnessFiles);
@@ -212,7 +213,8 @@ function batchesFor(files: ExpectedFile[], options: RegressionOptions): Batch[] 
     }
     const selected = options.only?.includes(tier) ?? true;
     // An integration batch cap adds that many batches even when --only selects cheap tiers.
-    const run = selected || (tier === 'integration' && options.integrationBatches !== undefined);
+    // The pinned-artifact check belongs to every cycle, including a restricted test selection.
+    const run = tier === 'jena:check' || selected || (tier === 'integration' && options.integrationBatches !== undefined);
     const size = batchSize(tier, expected.length);
     for (let index = 0; index < expected.length; index += size) {
       const group = expected.slice(index, index + size);
@@ -278,7 +280,9 @@ function normalizedFile(checkout: string, workspace: string, file: string): stri
 }
 
 /** Missing/skipped files and zero-test suites are evidence gaps, even when the process exits successfully. */
-export function executionOutcomes(checkout: string, batch: Batch, tests: TestResult[], storyXml = '', storyLog = ''): Execution['outcomes'] {
+export function executionOutcomes(checkout: string, batch: Batch, tests: TestResult[], storyXml = '', storyLog = '', commandCode?: number): Execution['outcomes'] {
+  if (batch.tier === 'jena:check') return Object.fromEntries(batch.files.map(file =>
+    [file, commandCode === undefined ? 'missing' : commandCode === 0 ? 'passed' : 'failed']));
   const outcomes: Execution['outcomes'] = {};
   const workspace = batch.tier === 'accounts:storybook' ? 'apps/accounts' : 'apps/web';
   const stories = new Map<string, 'passed' | 'failed' | 'missing'>();
@@ -306,6 +310,7 @@ export function executionOutcomes(checkout: string, batch: Batch, tests: TestRes
 }
 
 export function regressionBatchCommand(batch: Batch, report: string, storyXmlPath: string): string[] {
+  if (batch.tier === 'jena:check') return ['task', 'jena:check'];
   const standaloneStories = batch.files.every(file => file.includes('.stories.'));
   const args = standaloneStories ? [...batch.files, '--reporter=junit', `--outputFile=${storyXmlPath}`]
     : ['--tier', batch.tier, ...batch.files.filter(file => !file.includes('.stories.')).flatMap(file => ['--file', file]),
@@ -324,7 +329,7 @@ async function runBatch(checkout: string, batch: Batch, directory: string, shard
   const storyXmlPath = join(directory, 'storybook.xml');
   const started = Date.now();
   const code = await command(checkout, regressionBatchCommand(batch, report, storyXmlPath), join(directory, 'runner.log'),
-    undefined, regressionBatchEnvironment(process.env, shards, slotLimit));
+    batch.tier === 'jena:check' ? 75_000 : undefined, regressionBatchEnvironment(process.env, shards, slotLimit));
   const metadata = existsSync(report) ? json<Execution>(report) : { queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
   const tests: TestResult[] = [];
   let evidence = readFileSync(join(directory, 'runner.log'), 'utf8');
@@ -345,7 +350,7 @@ async function runBatch(checkout: string, batch: Batch, directory: string, shard
   const kernel = spawnSync('journalctl', ['-k', '--since', new Date(started).toISOString(), '--no-pager', '-q'], { encoding: 'utf8', timeout: 5000 });
   if (kernel.status === 0) evidence += `\n${kernel.stdout}`;
   const storyXml = existsSync(storyXmlPath) ? readFileSync(storyXmlPath, 'utf8') : '';
-  const outcomes = executionOutcomes(checkout, batch, tests, storyXml, storyLog);
+  const outcomes = executionOutcomes(checkout, batch, tests, storyXml, storyLog, code);
   for (const entry of isolated.filter(entry => entry.status === 'order-dependent')) outcomes[entry.file] = 'failed';
   return { ...metadata, code, outcomes, evidence,
     classification: isolated.some(entry => entry.status === 'infrastructure-dependent') ? 'infrastructure' : code ? classify(evidence, code) : undefined,
@@ -557,12 +562,12 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         if (!voided) break;
       }
     };
-    // Large unit and model runs keep their own turn; stack and owner batches use measured memory admission.
-    for (const batch of manifest.batches.filter(batch => batch.tier === 'unit' || batch.tier === 'model')) {
+    // Large unit/model runs and the bounded Jena container keep their own turn; stack and owner batches use measured memory admission.
+    for (const batch of manifest.batches.filter(batch => batch.tier === 'unit' || batch.tier === 'model' || batch.tier === 'jena:check')) {
       await runInitialBatch(batch);
     }
     const pending = manifest.batches.filter(batch => batch.state !== 'done' && !browserTier(batch.tier)
-      && batch.tier !== 'unit' && batch.tier !== 'model');
+      && batch.tier !== 'unit' && batch.tier !== 'model' && batch.tier !== 'jena:check');
     let next = 0;
     let failure: unknown;
     const workers = Array.from({ length: Math.min(slotLimit, pending.length) }, async (_, index) => {

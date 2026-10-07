@@ -32,6 +32,7 @@ function repo(extraIntegration = 0) {
     ['e2e', 'apps/web/tests/example.e2e.ts'], ['e2e', 'apps/web/features/example.stories.tsx'],
     ['accounts:storybook', 'apps/accounts/features/example.stories.tsx'],
     ['owner', 'scripts/ops/tests/example.test.ts'],
+    ['jena:check', 'scripts/qa/jena-cli.ts'],
     ...Array.from({ length: extraIntegration }, (_, index) => ['integration', `tests/qa/integration/subdir/extra-${index}.test.ts`]),
   ].map(([tier, file]) => ({ tier, file, outcome: 'pending' })) as ExpectedFile[];
   const write = (file: string, text: string) => { mkdirSync(dirname(join(dir, file)), { recursive: true }); writeFileSync(join(dir, file), text); };
@@ -71,14 +72,30 @@ function repo(extraIntegration = 0) {
 }
 
 describe('pinned main-wide regression', () => {
+  test('each routine regression schedules the pinned Jena check as its own entry', async () => {
+    const r = repo();
+    try {
+      for (const runId of ['jena-first', 'jena-next', 'jena-restricted']) {
+        r.calls.length = 0;
+        const result = await r.run({ runId, ...(runId === 'jena-restricted' ? { only: ['unit'] as RegressionOptions['only'] } : {}) });
+        expect(result.status).toBe(runId === 'jena-restricted' ? 'incomplete' : 'passed');
+        expect(result.batches.filter(batch => batch.tier === 'jena:check')).toEqual([
+          expect.objectContaining({ id: 'jena-check-1', files: ['scripts/qa/jena-cli.ts'], state: 'done' }),
+        ]);
+        expect(r.calls.filter(call => call.batch.tier === 'jena:check')).toHaveLength(1);
+        expect(result.files).toContainEqual({ file: 'scripts/qa/jena-cli.ts', tier: 'jena:check', outcome: 'passed' });
+      }
+    } finally { r.cleanup(); }
+  });
+
   test('browser execution joins the fair heavy queue directly by default', async () => {
     const r = repo();
     const status = spyOn(goalctl, 'heavyQaStatus').mockImplementation(() => { throw new Error('Unexpected heavy queue drain'); });
     try {
       const result = await r.run({ runId: 'fair-browser', only: ['e2e'], waitForTurn: undefined });
       expect(status).not.toHaveBeenCalled();
-      expect(r.calls).toHaveLength(1);
-      expect(result.batches.every(batch => batch.tier === 'e2e' && batch.state === 'done')).toBe(true);
+      expect(r.calls.filter(call => call.batch.tier === 'e2e')).toHaveLength(1);
+      expect(result.batches.filter(batch => batch.tier === 'e2e').every(batch => batch.state === 'done')).toBe(true);
     } finally { status.mockRestore(); r.cleanup(); }
   });
 
@@ -93,7 +110,7 @@ describe('pinned main-wide regression', () => {
       expect(r.calls.some(call => call.batch.tier === 'e2e' || call.batch.tier === 'accounts:storybook')).toBe(false);
       expect((await r.run({ resume: 'routine' })).status).toBe('passed');
       r.calls.length = 0;
-      const full = await r.run({ runId: 'nightly', only: ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook'] });
+      const full = await r.run({ runId: 'nightly', only: ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook', 'jena:check'] });
       expect(full.status).toBe('passed');
       expect(full.partial).toBe(false);
       expect(full.files.every(file => file.outcome === 'passed')).toBe(true);
@@ -185,7 +202,7 @@ describe('pinned main-wide regression', () => {
         children.push(child);
         const code = await child.exited;
         if (code !== 0) throw new Error(`slot probe ${id} exited with ${code}`);
-        return r.runner(checkout, batch, directory, shards);
+        return r.runner(checkout, batch, directory, shards, slotLimit);
       } }).then(value => { result = value; complete = true; }, error => { failure = error; complete = true; });
       const deadline = Date.now() + 30_000;
       while (!complete || readdirSync(probes).some(name => name.endsWith('.held') && !released.has(name))) {
@@ -235,7 +252,7 @@ describe('pinned main-wide regression', () => {
     let heldBatch = '';
     try {
       const run = r.run({ runId: 'lane-stop', slots: 2, runner: async (...args) => {
-        if (args[1].tier === 'unit' || args[1].tier === 'model') return r.runner(...args);
+        if (args[1].tier === 'unit' || args[1].tier === 'model' || args[1].tier === 'jena:check') return r.runner(...args);
         started++;
         if (started === 1) { await Bun.sleep(1); throw new Error('lane interrupted'); }
         heldBatch = args[1].id; await held;
@@ -329,7 +346,8 @@ describe('pinned main-wide regression', () => {
       let turns = 0;
       let unavailable = true;
       const result = await r.run({ runId: 'yield-probes', only: ['e2e'], waitForTurn: async () => { turns++; }, runner: async (...args) => {
-        expect(turns).toBe(r.calls.length + 1);
+        if (args[1].tier === 'jena:check') return r.runner(...args);
+        expect(turns).toBe(r.calls.filter(call => call.batch.tier === 'e2e').length + 1);
         const result = await r.runner(...args);
         if (unavailable) { unavailable = false; return { ...result, code: 1, classification: 'infrastructure' }; }
         return result;
@@ -337,7 +355,7 @@ describe('pinned main-wide regression', () => {
       expect(result.batches[0]!.attempts).toHaveLength(2);
       expect(r.calls.some(call => call.directory.includes('/probes/'))).toBe(true);
       expect(r.calls.some(call => call.directory.endsWith('/confirm'))).toBe(true);
-      expect(turns).toBe(r.calls.length);
+      expect(turns).toBe(r.calls.filter(call => call.batch.tier === 'e2e').length);
     } finally { r.cleanup(); }
   });
 
@@ -398,6 +416,7 @@ export function testArgs(tier) { return tier === 'owner' ? ['scripts/ops/tests/e
       r.write('apps/web/.storybook/main.ts', "const config = { stories: ['../features/**/*.stories.@(ts|tsx)', '../../../packages/ui/src/**/*.stories.@(ts|tsx)'] };\n");
       r.write('apps/accounts/.storybook/main.ts', "const config = { stories: ['../features/**/*.stories.@(ts|tsx)'] };\n");
       const files = await regressionRegistry(r.dir);
+      expect(files).toContainEqual({ file: 'scripts/qa/jena-cli.ts', tier: 'jena:check', outcome: 'pending' });
       expect(files).toContainEqual({ file: 'scripts/ops/tests/example.test.ts', tier: 'owner', outcome: 'pending' });
       expect(files).toContainEqual({ file: 'services/main/tests/gate.integration.test.ts', tier: 'integration', outcome: 'pending' });
       expect(files).toContainEqual({ file: 'tests/qa/integration/subdir/extra-0.test.ts', tier: 'integration', outcome: 'pending' });
@@ -753,6 +772,15 @@ test('only browser and Storybook commands acquire the heavy lock', () => {
     if (tier === 'accounts:storybook') expect(command).toContain('--reporter=junit');
     else expect(command).toContain('--tier');
   }
+});
+
+test('Jena regression invokes its no-argument task and records command success or refusal without JUnit', () => {
+  const batch: Batch = { id: 'jena-check-1', tier: 'jena:check', files: ['scripts/qa/jena-cli.ts'], state: 'pending', attempts: [] };
+  expect(regressionBatchCommand(batch, '/disk/report.json', '/disk/stories.xml')).toEqual(['task', 'jena:check']);
+  expect(executionOutcomes('/repo', batch, [], '', '', 0)).toEqual({ 'scripts/qa/jena-cli.ts': 'passed' });
+  expect(executionOutcomes('/repo', batch, [], '', '', 1)).toEqual({ 'scripts/qa/jena-cli.ts': 'failed' });
+  expect(executionOutcomes('/repo', batch, [], '', '', 124)).toEqual({ 'scripts/qa/jena-cli.ts': 'failed' });
+  expect(executionOutcomes('/repo', batch, [])).toEqual({ 'scripts/qa/jena-cli.ts': 'missing' });
 });
 
 test('mixed nightly browser batches request stories through the actual QA parser and retain complete evidence', () => {
