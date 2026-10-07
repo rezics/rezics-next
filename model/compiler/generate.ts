@@ -33,7 +33,7 @@ const authored = <T>(suffix: string) => definitionModules.flatMap(([file, module
     name.endsWith(suffix) && value && typeof value === 'object' ? [[file, value as T] as const] : []));
 
 /**
- * Discover `*.ttl` constraints and TS `*Profile` definitions in one namespace.
+ * Discover exact `*.ttl` constraints; TS `*Profile` exports may only re-export them.
  * Turtle's optional companion `*Declaration` exports carry only command metadata.
  */
 export function discoverProfiles(directory: string,
@@ -55,7 +55,7 @@ export function discoverProfiles(directory: string,
     .map(([, value]) => value as ProfileDefinition)
     .filter(profile => {
       const source = turtleSources.get(profile.id);
-      if (source === undefined) return true;
+      if (source === undefined) throw new Error(`Turtle source is missing for ${profile.id}`);
       if (file !== `${profile.id}.ts` || !declarations.has(profile.id)
         || !isTurtleProfile(profile) || profileSource(profile) !== source)
         throw new Error(`Duplicate profile ID ${profile.id}`);

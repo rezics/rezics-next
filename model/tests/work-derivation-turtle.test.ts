@@ -5,9 +5,9 @@ import { join, resolve } from 'node:path';
 import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { authoredProfiles, commandProfiles, discoverProfiles } from '../compiler/generate.ts';
-import { renderProfile, type PropertyDefinition } from '../compiler/ir.ts';
+import type { PropertyDefinition } from '../compiler/ir.ts';
 import { buildModelOutputs } from '../compiler/outputs.ts';
-import { profileSource } from '../compiler/shacl.ts';
+import { parseTurtleProfile, profileSource } from '../compiler/shacl.ts';
 import * as workDerivation from '../definitions/work-derivation-v1.ts';
 import * as unresolvedWorkDerivation from '../definitions/work-derivation-unresolved-v1.ts';
 import * as workTitleControl from '../definitions/work-title-control-v1.ts';
@@ -93,6 +93,90 @@ const original = {
     comments: ['One native Work English title control epoch. No generic protection or source rights claim.'],
     canonical: { types: ['rv:EditorialControlRevision'] },
   },
+} as const;
+
+// Exact generated/model/shapes bytes retained from 192c86e1ed5c75f4c0409fca81fc39030115eeb8.
+const historicalSources = {
+  'work-derivation-unresolved-v1': `# One explicitly declared derivation of a target Work revision whose source version is not yet known.
+# The source names a Work, optionally its Main Version, without an exact revision; it is never an exact declaration.
+# A later exact declaration resolves it through rv:corrects; this relation stays unchanged and readable.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <https://schema.org/> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/work-derivation-unresolved-v1/derivation-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:UnresolvedWorkDerivation ] ;
+    sh:property [ sh:path rv:targetWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:targetMainVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:MainVersion ] ;
+    sh:property [ sh:path rv:targetMainRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:sourceWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:sourceMainVersion ; sh:maxCount 1 ; sh:class rv:MainVersion ] ;
+    sh:property [ sh:path rv:sourceMainRevision ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:sourceVersionStatus ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:Unresolved ] ;
+    sh:property [ sh:path rv:derivationKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Adaptation rv:NewRecording rv:SoftwareFork ) ] ;
+    sh:property [ sh:path rv:evidence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^https://[^\\\\s<>\\"{}|\\\\^\`]{1,2040}$" ] ;
+    sh:property [ sh:path rv:linkedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:corrects ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/work-derivation-unresolved-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/work-derivation-unresolved-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:maxCount 1 ; sh:hasValue <urn:rezics:dataset:product> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .
+`,
+  'work-derivation-v1': `# One explicitly declared derivation of a separately maintained target Work revision.
+# The source is an exact retained Main Version revision; names and bodies do not establish continuity.
+# The relation does not transfer rights, authority, ratings, or future revisions.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <https://schema.org/> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/work-derivation-v1/derivation-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:WorkDerivation ] ;
+    sh:property [ sh:path rv:targetWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:targetMainVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:MainVersion ] ;
+    sh:property [ sh:path rv:targetMainRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:sourceWork ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:sourceMainVersion ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:MainVersion ] ;
+    sh:property [ sh:path rv:sourceMainRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:derivationKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Adaptation rv:NewRecording rv:SoftwareFork ) ] ;
+    sh:property [ sh:path rv:evidence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^https://[^\\\\s<>\\"{}|\\\\^\`]{1,2040}$" ] ;
+    sh:property [ sh:path rv:linkedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/work-derivation-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/work-derivation-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:maxCount 1 ; sh:hasValue <urn:rezics:dataset:product> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .
+`,
+  'work-title-control-v1': `# One native Work English title control epoch. No generic protection or source rights claim.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix schema: <https://schema.org/> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/work-title-control-v1/control-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:EditorialControlRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:controlField ; sh:maxCount 1 ; sh:hasValue "title:en" ] ;
+    sh:property [ sh:path rv:controlMode ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:SourceManaged rv:HumanControlled ) ] ;
+    sh:property [ sh:path rv:controlEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:property [ sh:path rv:workRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:EditorialControlRevision ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:controlIntent ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 8000 ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/work-title-control-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/work-title-control-v1> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .
+`,
 } as const;
 
 const outputs = buildModelOutputs(profiles);
@@ -194,8 +278,12 @@ test('Turtle profiles preserve every constraint, focus role, command declaration
     expect(profileSource(profile)).toBe(publishedSource);
     expect(published.sha256).toBe(digest(publishedSource));
     expect(published.sha256).not.toBe(baseline.source);
-    const historical = { ...profile, comments: [...baseline.comments] };
-    expect(digest(renderProfile(historical))).toBe(baseline.source);
+    const historicalSource = historicalSources[profile.id as keyof typeof historicalSources];
+    expect(digest(historicalSource)).toBe(baseline.source);
+    for (const comment of baseline.comments)
+      expect(historicalSource).toContain(`# ${comment}\n`);
+    const historical = parseTurtleProfile(profile.id, historicalSource);
+    expect(digest(profileSource(historical))).toBe(baseline.source);
   }
 
   expect(command.profiles.map((item) => [item.id, item.focusRoles])).toEqual([

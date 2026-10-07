@@ -5,9 +5,9 @@ import { join, resolve } from 'node:path';
 import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { authoredProfiles, commandProfiles, discoverProfiles } from '../compiler/generate.ts';
-import { renderProfile, type PropertyDefinition } from '../compiler/ir.ts';
+import type { PropertyDefinition } from '../compiler/ir.ts';
 import { buildModelOutputs } from '../compiler/outputs.ts';
-import { profileSource } from '../compiler/shacl.ts';
+import { parseTurtleProfile, profileSource } from '../compiler/shacl.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const rv = 'https://rezics.com/vocab/';
@@ -51,6 +51,415 @@ const original = {
     source: '57e5a667cb62b1b72357b77aa2c7ac6133ed4f729732e681817ad1c537839100',
     shapes: { statement: [11, '56490a67dc926f55ccddb28e89596d036231669108fa40d841d3efb317862cb8'] },
   },
+} as const;
+
+// Exact generated/model/shapes bytes retained from 660a6b1fd5521a2dc11c9b69c8584000660640c1.
+const historicalSources = {
+  'source-field-statement-v1': `# Private source claim for one field occurrence of a verified general conversion.
+# It keeps exact lexical form, datatype, language, precision, unit, rank and
+# somevalue/novalue/unknown distinctions; it asserts no native fact or reuse right.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/source-field-statement-v1/statement-shape>
+    a sh:NodeShape ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue rv:SourceStatement ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceConversion ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:class rv:SourceConversion ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceMappingRevision ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ;
+        sh:maxLength 100 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceGrain ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ;
+        sh:maxLength 64 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceField ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:minLength 1 ;
+        sh:maxLength 200 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceOccurrence ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceOrdinal ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 65535 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceStatementRole ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "main" "qualifier" "reference" ) ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceQualifies ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:class rv:SourceStatement ;
+    ] ;
+    sh:property [
+        sh:path rv:fieldDisposition ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "native" "structured-source-only" "lossy" "excluded" "unsupported" ) ;
+    ] ;
+    sh:property [
+        sh:path rv:dispositionReason ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:minLength 1 ;
+        sh:maxLength 500 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceValueKind ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "value" "somevalue" "novalue" "null" "unknown" ) ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceLexical ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 65536 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceDatatype ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceLanguage ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceRank ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "preferred" "normal" "deprecated" ) ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceTimePrecision ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:integer ;
+        sh:minInclusive 0 ;
+        sh:maxInclusive 14 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceCalendar ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceQuantityUnit ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceQuantityLower ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 200 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceQuantityUpper ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 200 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceStatisticKind ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "score-average" "score-count" "score-distribution" "user-count" "popularity" "rank" ) ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceByteDigest ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[0-9a-f]{64}$" ;
+    ] .
+`,
+  'source-open-library-work-v1': `# Private source projection only. It does not adopt a native Work or authorize public use.
+# The command owner supplies exact record, observation and conversion focus nodes.
+# The native command gate binds those nodes and the digest to its receipt.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/source-open-library-work-v1/record-shape>
+    a sh:NodeShape ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue rv:SourceRecord ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceProvider ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:hasValue "open-library" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceNamespace ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:hasValue "work" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceExternalId ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^OL[1-9][0-9]{0,11}W$" ;
+        sh:minLength 4 ;
+        sh:maxLength 16 ;
+    ] .
+
+<https://rezics.com/definition/source-open-library-work-v1/observation-shape>
+    a sh:NodeShape ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue rv:SourceObservation ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceRecord ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:class rv:SourceRecord ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceByteDigest ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[0-9a-f]{64}$" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceRevision ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 200 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceCoverage ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:hasValue rv:CompleteWorkResponse ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceRightsBasis ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "unknown" "facts" "original" "license" "permission" "exception" ) ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceRightsNote ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 1024 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceSubmittedAt ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceFetchedAt ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+    ] .
+
+<https://rezics.com/definition/source-open-library-work-v1/conversion-shape>
+    a sh:NodeShape ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue rv:SourceConversion ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceObservation ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:class rv:SourceObservation ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceKey ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^/works/OL[1-9][0-9]{0,11}W$" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceTitle ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:minLength 1 ;
+        sh:maxLength 500 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceDescription ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 65536 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceAuthorRefsJson ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 65536 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceSubjectsJson ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 65536 ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceByteDigest ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[0-9a-f]{64}$" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceMappingRevision ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:hasValue "open-library-work-map-v1" ;
+    ] .
+`,
+  'source-reification-v1': `# Private RDF reification of source conversion fields as claims with exact observation provenance.
+# The statement subject is the source conversion, never an adopted native Work.
+# Reification records a source claim; it does not assert or accept the base edge.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/source-reification-v1/statement-shape>
+    a sh:NodeShape ;
+    sh:property [
+        sh:path rdf:type ;
+        sh:hasValue rdf:Statement ;
+    ] ;
+    sh:property [
+        sh:path rdf:subject ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:class rv:SourceConversion ;
+    ] ;
+    sh:property [
+        sh:path rdf:predicate ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:in ( rv:sourceTitle rv:sourceDescription ) ;
+    ] ;
+    sh:property [
+        sh:path rdf:object ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:maxLength 65536 ;
+    ] ;
+    sh:property [
+        sh:path prov:wasDerivedFrom ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:class rv:SourceObservation ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceObservation ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ;
+        sh:class rv:SourceObservation ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceByteDigest ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:pattern "^[0-9a-f]{64}$" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceMappingRevision ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:hasValue "open-library-work-map-v1" ;
+    ] ;
+    sh:property [
+        sh:path rv:sourceField ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:in ( "title" "description" ) ;
+    ] ;
+    sh:property [
+        sh:path rv:fieldDisposition ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:hasValue "structured-source-only" ;
+    ] ;
+    sh:property [
+        sh:path rv:dispositionReason ;
+        sh:minCount 1 ;
+        sh:maxCount 1 ;
+        sh:datatype xsd:string ;
+        sh:hasValue "Source evidence requires separate explicit acceptance before native use." ;
+    ] .
+`,
 } as const;
 
 const outputs = buildModelOutputs(profiles);
@@ -167,17 +576,15 @@ test('source author reload changes current byte digests without rewriting retain
     writeFileSync(join(path, `${profile.id}.ttl`), profileSource(profile));
   const beforeProfiles = discoverProfiles(path, []);
   const before = commandProfiles(beforeProfiles, options);
-  const historicalProfiles = beforeProfiles.map((profile) => ({
-    ...profile,
-    layout: 'expanded' as const,
-    comments: profileSource(profile)
-      .split('\n')
-      .filter((line) => line.startsWith('# '))
-      .map((line) => line.slice(2)),
-  }));
+  const historicalProfiles = beforeProfiles.map((profile) => {
+    const id = profile.id as keyof typeof historicalSources;
+    const source = historicalSources[id];
+    expect(digest(source)).toBe(original[id].source);
+    return parseTurtleProfile(profile.id, source);
+  });
   const historical = commandProfiles(historicalProfiles, options);
   for (const profile of historicalProfiles) {
-    expect(digest(renderProfile(profile))).toBe(
+    expect(digest(profileSource(profile))).toBe(
       original[profile.id as keyof typeof original].source,
     );
   }

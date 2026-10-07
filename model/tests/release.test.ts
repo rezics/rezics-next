@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { renderProfile } from '../compiler/ir.ts';
+import { profileSource } from '../compiler/shacl.ts';
 import { releaseProfile } from '../definitions/release-v1.ts';
 import { webPublicationProfile } from '../definitions/web-publication-v1.ts';
 import { webSnapshotProfile } from '../definitions/web-snapshot-v1.ts';
@@ -9,10 +9,10 @@ import { workMetadataDetailsProfile } from '../definitions/work-metadata-details
 import { workMetadataDetailsV2Profile } from '../definitions/work-metadata-details-v2.ts';
 
 test('v1 work and edition profiles stay free of release kinds and language lists; v2 admits them', () => {
-  const workV1 = renderProfile(workMetadataProfile);
-  const workV2 = renderProfile(workMetadataV2Profile);
-  const detailsV1 = renderProfile(workMetadataDetailsProfile);
-  const detailsV2 = renderProfile(workMetadataDetailsV2Profile);
+  const workV1 = profileSource(workMetadataProfile);
+  const workV2 = profileSource(workMetadataV2Profile);
+  const detailsV1 = profileSource(workMetadataDetailsProfile);
+  const detailsV2 = profileSource(workMetadataDetailsV2Profile);
   expect(workV1).not.toContain('rv:release');
   expect(workV2).toContain('rv:release');
   expect(workV2).toContain('sh:class rv:Release');
@@ -26,9 +26,9 @@ test('v1 work and edition profiles stay free of release kinds and language lists
 });
 
 test('a release profile names kind and status, and a web snapshot names bytes, time and coverage', () => {
-  const release = renderProfile(releaseProfile);
-  const publication = renderProfile(webPublicationProfile);
-  const snapshot = renderProfile(webSnapshotProfile);
+  const release = profileSource(releaseProfile);
+  const publication = profileSource(webPublicationProfile);
+  const snapshot = profileSource(webSnapshotProfile);
   for (const kind of ['formal', 'web', 'fixed', 'virtual']) expect(release).toContain(`"${kind}"`);
   for (const status of ['official', 'unofficial', 'virtual', 'withdrawn', 'cancelled']) {
     expect(release).toContain(`"${status}"`);

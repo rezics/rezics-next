@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { profileRegistry } from '../../packages/model/src/generated/profiles.ts';
 import { buildCommandRegistry } from '../compiler/registry.ts';
 import { commandProfiles } from '../compiler/generate.ts';
-import { renderProfile } from '../compiler/ir.ts';
+import { profileSource } from '../compiler/shacl.ts';
 import { ratingQuestionPresentationProfile } from '../definitions/rating-question-presentation-v1.ts';
 
 test('Rating question presentations have their own head, revision chain and unrestricted language bindings', () => {
@@ -15,7 +15,7 @@ test('Rating question presentations have their own head, revision chain and unre
     'presentation',
     'revision',
   ]);
-  const shape = renderProfile(ratingQuestionPresentationProfile);
+  const shape = profileSource(ratingQuestionPresentationProfile);
   expect(shape).toContain('sh:path rv:questionPresentationHead');
   expect(shape).toContain('sh:path rv:predecessor');
   expect(shape).toContain('sh:datatype rdf:langString');
@@ -30,6 +30,7 @@ test('Rating question presentation registry pins the profile digest and command 
     demandOrder: [],
   });
   const profile = (manifest.profiles as { sha256: string; binding: object }[])[0]!;
-  expect(profileRegistry['rating-question-presentation-v1'].sha256).toBe(profile.sha256);
-  expect(profile.binding).toEqual({ optional: [], required: [...ratingQuestionPresentationProfile.binding.required], roles: [...ratingQuestionPresentationProfile.binding.roles] });
+  expect<string>(profileRegistry['rating-question-presentation-v1'].sha256).toBe(profile.sha256);
+  expect(ratingQuestionPresentationProfile.binding).toBeDefined();
+  expect(profile.binding).toEqual({ optional: [], required: [...ratingQuestionPresentationProfile.binding!.required], roles: [...ratingQuestionPresentationProfile.binding!.roles] });
 });

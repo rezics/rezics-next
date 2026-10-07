@@ -22,14 +22,14 @@ interface AuthoredProfile { id: string; shapes: readonly { iri: string; properti
 // The model compiler is checked by its own tooling; Main's project loads it only at runtime.
 const model = join(import.meta.dir, '../../../model');
 const load = async <T>(file: string): Promise<T> => await import(join(model, file)) as T;
-const { renderProfile } = await load<{ renderProfile: (profile: AuthoredProfile) => string }>('compiler/ir.ts');
+const { profileSource } = await load<{ profileSource: (profile: AuthoredProfile) => string }>('compiler/shacl.ts');
 const { buildModelOutputs } = await load<{ buildModelOutputs: (profiles: readonly AuthoredProfile[]) => Map<string, string> }>(
   'compiler/outputs.ts');
 const profileFiles = ['semantic-resource-v1', 'semantic-definition-v1', 'semantic-model-generation-v1',
   'semantic-annotation-v1', 'value-exact-v1', 'relation-occurrence-v1'];
 const profiles = await Promise.all(profileFiles.map(async id => {
   const module = await load<Record<string, AuthoredProfile>>(`definitions/${id}.ts`);
-  const profile = Object.values(module)[0]!;
+  const profile = Object.entries(module).find(([name]) => name.endsWith('Profile'))![1];
   expect(profile.id).toBe(id);
   return profile;
 }));
@@ -43,7 +43,7 @@ test('MODEL14 schema: owner profiles compile, stay open on the resource and pin 
     .toEqual(Object.values<string>(PROFILES).sort());
   const outputs = buildModelOutputs(profiles);
   for (const profile of profiles) {
-    const shapes = renderProfile(profile);
+    const shapes = profileSource(profile);
     expect(outputs.get(`generated/model/contexts/${profile.id}.jsonld`)).toBeDefined();
     for (const shape of profile.shapes) {
       expect(shapes).toContain(`<${shape.iri}>`);
@@ -51,7 +51,7 @@ test('MODEL14 schema: owner profiles compile, stay open on the resource and pin 
       if (revision) expect(revision.hasValue).toBe(`<https://rezics.com/definition/${profile.id}>`);
     }
   }
-  const resource = renderProfile(byId('semantic-resource-v1'));
+  const resource = profileSource(byId('semantic-resource-v1'));
   // Open resource: no closure and no fixed type; only the component head and forbidden merge axiom.
   expect(resource.split('<https://rezics.com/definition/semantic-resource-v1/revision-shape>')[0])
     .not.toContain('sh:closed');
@@ -60,19 +60,19 @@ test('MODEL14 schema: owner profiles compile, stay open on the resource and pin 
   expect(resource).toContain('sh:path rdf:type ; sh:maxCount 33 ; sh:nodeKind sh:IRI ; sh:hasValue rdfs:Resource');
   expect(resource).toContain('sh:path owl:sameAs ; sh:maxCount 0');
   expect(resource).toContain('sh:path rv:semanticHead ; sh:maxCount 0');
-  expect(renderProfile(byId('semantic-model-generation-v1'))).toContain('sh:hasValue rv:RejectOnViolation');
-  expect(renderProfile(byId('semantic-model-generation-v1'))).toContain('sh:hasValue rv:Excluded');
-  expect(renderProfile(byId('value-exact-v1'))).toContain('sh:in ( "ltr" "rtl" )');
-  expect(renderProfile(byId('relation-occurrence-v1'))).toContain('sh:path rv:occurrence ; sh:minCount 1 ; sh:maxCount 1');
+  expect(profileSource(byId('semantic-model-generation-v1'))).toContain('sh:hasValue rv:RejectOnViolation');
+  expect(profileSource(byId('semantic-model-generation-v1'))).toContain('sh:hasValue rv:Excluded');
+  expect(profileSource(byId('value-exact-v1'))).toContain('sh:in ( "ltr" "rtl" )');
+  expect(profileSource(byId('relation-occurrence-v1'))).toContain('sh:path rv:occurrence ; sh:minCount 1 ; sh:maxCount 1');
   for (const id of ['semantic-definition-v1', 'relation-occurrence-v1', 'value-exact-v1',
     'semantic-model-generation-v1']) {
     const profile = byId(id);
-    expect(profile.shapes.every(shape => renderProfile(profile).includes(
+    expect(profile.shapes.every(shape => profileSource(profile).includes(
       `<${shape.iri}>\n    a sh:NodeShape ;\n    sh:closed true`))).toBe(true);
   }
   expect(definitionKindIri('relation')).toBe('https://rezics.com/vocab/RelationDefinition');
   expect(DEFINITION_KINDS.map(definitionKindIri).every(kind =>
-    renderProfile(byId('semantic-definition-v1')).includes(kind.replace('https://rezics.com/vocab/', 'rv:')))).toBe(true);
+    profileSource(byId('semantic-definition-v1')).includes(kind.replace('https://rezics.com/vocab/', 'rv:')))).toBe(true);
   expect(GRAPHS.current).toBe('urn:rezics:graph:current');
   expect(DATASET).toBe('urn:rezics:dataset:product');
   expect(MODEL_COMPONENT).toBe('urn:rezics:model:product');

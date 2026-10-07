@@ -1,50 +1,32 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { commandProfiles } from '../../compiler/generate.ts';
 import type { ProfileDefinition } from '../../compiler/ir.ts';
+import { parseTurtleProfile, type TurtleDeclaration } from '../../compiler/shacl.ts';
 
-/**
- * A synthetic profile that reaches the command module through the generated
- * registry alone: canonical types, a discriminated shape and a binding demand,
- * with no module code naming it. It is never shipped in the image.
- */
-export const registryProbeProfile = {
+export const registryProbeDirectory = resolve(import.meta.dir,
+  '../../../infra/jena/command-module/src/test/resources/registry-probe');
+
+const registryProbeDeclaration = {
   id: 'registry-probe-v1',
-  comments: ['Synthetic profile proving registry-only command routing; test fixture only.'],
-  prefixes: [
-    ['sh', 'http://www.w3.org/ns/shacl#'],
-    ['xsd', 'http://www.w3.org/2001/XMLSchema#'],
-    ['rv', 'https://rezics.com/vocab/'],
-  ],
-  layout: 'compact',
-  shapes: [
-    {
-      iri: 'https://rezics.com/definition/registry-probe-v1/item-shape',
-      canonical: { types: ['rv:RegistryProbe'] },
-      properties: [{ path: 'rv:probeLabel', minCount: 1, maxCount: 1, datatype: 'xsd:string' }],
-    },
-    {
-      iri: 'https://rezics.com/definition/registry-probe-v1/sealed-item-shape',
-      canonical: { types: ['rv:RegistryProbe'], when: [{ path: 'rv:probeState', value: 'rv:Sealed' }] },
-      properties: [
-        { path: 'rv:probeLabel', minCount: 1, maxCount: 1, datatype: 'xsd:string' },
-        { path: 'rv:sealedBy', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
-      ],
-    },
-    {
-      iri: 'https://rezics.com/definition/registry-probe-v1/record-shape',
-      canonical: { types: ['rv:RegistryProbeRecord'] },
-      properties: [{ path: 'rv:item', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' }],
-    },
-  ],
+  canonical: {
+    item: { types: ['rv:RegistryProbe'] },
+    'sealed-item': { types: ['rv:RegistryProbe'], when: [{ path: 'rv:probeState', value: 'rv:Sealed' }] },
+    record: { types: ['rv:RegistryProbeRecord'] },
+  },
   binding: {
     required: ['item', 'record', 'label'], optional: ['note'], roles: ['item', 'record'],
     demandedBy: ['rv:RegistryProbeRecord'],
   },
-} satisfies ProfileDefinition;
+} satisfies TurtleDeclaration;
 
-export const registryProbeDirectory = resolve(import.meta.dir,
-  '../../../infra/jena/command-module/src/test/resources/registry-probe');
+/**
+ * The command module's retained exact Turtle fixture is the author. Only its
+ * registry metadata lives here; no module code names this synthetic profile.
+ */
+export const registryProbeProfile = parseTurtleProfile(registryProbeDeclaration.id,
+  readFileSync(join(registryProbeDirectory, 'shapes/registry-probe-v1.ttl'), 'utf8'),
+  registryProbeDeclaration) as ProfileDefinition & { binding: typeof registryProbeDeclaration.binding };
 
 /** The probe's command-module profile directory, relative to that directory. */
 export function registryProbeFiles(): Map<string, string> {

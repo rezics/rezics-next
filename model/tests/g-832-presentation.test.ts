@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { buildCommandRegistry } from '../compiler/registry.ts';
-import { renderProfile } from '../compiler/ir.ts';
+import { profileSource } from '../compiler/shacl.ts';
 import { definitionPresentationProfile } from '../definitions/definition-presentation-v1.ts';
 import { commandProfiles } from '../compiler/generate.ts';
 import { profileRegistry } from '../../packages/model/src/generated/profiles.ts';
@@ -19,7 +19,7 @@ test('G-832: presentation bindings are registry-only and meaning has a separate 
     'presentation',
     'revision',
   ]);
-  const shape = renderProfile(definitionPresentationProfile);
+  const shape = profileSource(definitionPresentationProfile);
   expect(shape).toContain(
     'sh:path rv:meaningRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DefinitionRevision',
   );
@@ -35,6 +35,7 @@ test('G-832: current profile registry pins the generated digest and registry bin
     demandOrder: [],
   });
   const profile = (command.manifest.profiles as { sha256: string; binding: object }[])[0]!;
-  expect(profileRegistry['definition-presentation-v1'].sha256).toBe(profile.sha256);
-  expect(profile.binding).toEqual({ optional: [], required: [...definitionPresentationProfile.binding.required], roles: [...definitionPresentationProfile.binding.roles] });
+  expect<string>(profileRegistry['definition-presentation-v1'].sha256).toBe(profile.sha256);
+  expect(definitionPresentationProfile.binding).toBeDefined();
+  expect(profile.binding).toEqual({ optional: [], required: [...definitionPresentationProfile.binding!.required], roles: [...definitionPresentationProfile.binding!.roles] });
 });

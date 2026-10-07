@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Client, Pool } from 'pg';
 import { Value } from 'typebox/value';
-import { renderProfile } from '../../../model/compiler/ir.ts';
+import { profileSource } from '../../../model/compiler/shacl.ts';
 import { eventTimeProfile } from '../../../model/definitions/event-time-v1.ts';
 import { valueExactProfile } from '../../../model/definitions/value-exact-v1.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
@@ -409,14 +409,14 @@ test('GRAPH06 partial: saved layout binds a non-linguistic Content variant, neve
 });
 
 test('RATE08 partial: known Event time uses one exact temporal value', () => {
-  const time = renderProfile(eventTimeProfile);
+  const time = profileSource(eventTimeProfile);
   for (const shape of ['event', 'slot', 'revision', 'point']) {
     expect(time).toContain(`<https://rezics.com/definition/event-time-v1/${shape}-shape>`);
   }
   expect(time).toContain('sh:in ( rv:ActualTime rv:PlannedTime )');
   expect(time).toContain('sh:path rv:temporalValue ; sh:minCount 1 ; sh:maxCount 1');
   expect(time).not.toContain('rv:sourceLexical');
-  const exactValues = renderProfile(valueExactProfile);
+  const exactValues = profileSource(valueExactProfile);
   expect(exactValues).toContain('<https://rezics.com/definition/value-exact-v1/temporal-shape>');
   expect(exactValues).toContain('sh:path rv:lexicalForm ; sh:minCount 1 ; sh:maxCount 1');
 });

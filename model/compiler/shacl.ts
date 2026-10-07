@@ -1,6 +1,6 @@
 import { Parser, Store, type Quad_Object, type Quad_Subject } from 'n3';
 import {
-  renderProfile,
+  profileSnapshot,
   reservedNamespaces,
   type ProfileDefinition,
   type PropertyDefinition,
@@ -11,7 +11,7 @@ import { shapeRole, type EstablishedDeclaration } from './registry.ts';
 const { sh, rdf, xsd } = reservedNamespaces;
 const sources = new WeakMap<ProfileDefinition, string>();
 
-/** A parsed author source may be re-exported; a TS definition is still independent. */
+/** Only the loaded Turtle author has custody of its exact source bytes. */
 export const isTurtleProfile = (profile: ProfileDefinition): boolean => sources.has(profile);
 
 /** Command metadata belongs beside Turtle, never in its constraint graph. */
@@ -21,7 +21,9 @@ export interface TurtleDeclaration extends EstablishedDeclaration {
 
 /** Preserve the author's exact Turtle bytes in the admitted manifest. */
 export function profileSource(profile: ProfileDefinition): string {
-  return sources.get(profile) ?? renderProfile(profile);
+  const source = sources.get(profile);
+  if (source === undefined) throw new Error(`${profile.id} has no captured Turtle source`);
+  return source;
 }
 
 /**
@@ -39,6 +41,7 @@ export function parseTurtleProfile(
   const prefixes: Record<string, string> = {};
   const parser = new Parser({ format: 'text/turtle' });
   const quads = parser.parse(source, undefined, (prefix, term) => {
+    if (Object.hasOwn(prefixes, prefix)) throw new Error(`${id} has duplicate prefixes`);
     prefixes[prefix] = term.value;
   });
   const store = new Store(quads);
@@ -325,14 +328,77 @@ export function parseTurtleProfile(
   }
   const profile: ProfileDefinition = {
     id,
-    comments: [],
     prefixes: Object.entries(prefixes),
-    layout: 'compact',
     shapes,
     ...(declaration?.binding ? { binding: declaration.binding } : {}),
   };
-  // Reuse the DSL's namespace, identity and cardinality invariants for both sources.
-  renderProfile(profile);
+  validateProfile(profile);
+  // Consumer inspection cannot change the lowering basis tied to these bytes.
+  profileSnapshot(profile);
   sources.set(profile, source);
   return profile;
+}
+
+function knownFields(value: object, allowed: readonly string[], location: string): void {
+  const unexpected = Object.keys(value).find(key => !allowed.includes(key));
+  if (unexpected) throw new Error(`Unsupported profile field ${unexpected} on ${location}`);
+}
+
+function validateProperty(property: PropertyDefinition): void {
+  knownFields(property, ['path', 'minCount', 'maxCount', 'nodeKind', 'class', 'datatype', 'pattern',
+    'in', 'languageIn', 'uniqueLang', 'minLength', 'maxLength', 'minInclusive', 'maxInclusive',
+    'hasValue'], `${property.path}`);
+  if (property.minCount !== undefined && (!Number.isInteger(property.minCount) || property.minCount < 0)) {
+    throw new Error(`Invalid minCount on ${property.path}`);
+  }
+  if (property.maxCount !== undefined && (!Number.isInteger(property.maxCount) || property.maxCount < 0)) {
+    throw new Error(`Invalid maxCount on ${property.path}`);
+  }
+  if (property.minCount !== undefined && property.maxCount !== undefined && property.minCount > property.maxCount) {
+    throw new Error(`minCount exceeds maxCount on ${property.path}`);
+  }
+  if (property.minLength !== undefined && property.maxLength !== undefined && property.minLength > property.maxLength) {
+    throw new Error(`minLength exceeds maxLength on ${property.path}`);
+  }
+  if (property.minInclusive !== undefined && property.maxInclusive !== undefined && property.minInclusive > property.maxInclusive) {
+    throw new Error(`minInclusive exceeds maxInclusive on ${property.path}`);
+  }
+  if (property.in !== undefined && !property.in.length) throw new Error(`Empty sh:in on ${property.path}`);
+  if (property.languageIn !== undefined && !property.languageIn.length) {
+    throw new Error(`Empty sh:languageIn on ${property.path}`);
+  }
+}
+
+function validateProfile(profile: ProfileDefinition): void {
+  knownFields(profile, ['id', 'prefixes', 'shapes', 'binding'], profile.id);
+  if (profile.binding) knownFields(profile.binding, ['required', 'optional', 'roles', 'demandedBy'], `${profile.id} binding`);
+  if (!/^[a-z0-9-]+-v\d+$/.test(profile.id)) throw new Error(`Invalid profile ID: ${profile.id}`);
+  if (!profile.shapes.length || new Set(profile.shapes.map(shape => shape.iri)).size !== profile.shapes.length) {
+    throw new Error(`${profile.id} must declare distinct named NodeShapes`);
+  }
+  const prefixNames = new Set(profile.prefixes.map(([name]) => name));
+  if (prefixNames.size !== profile.prefixes.length) throw new Error(`${profile.id} has duplicate prefixes`);
+  if (!prefixNames.has('sh')) throw new Error(`${profile.id} must declare the sh prefix`);
+  for (const [name, iri] of profile.prefixes) {
+    const reserved = reservedNamespaces[name as keyof typeof reservedNamespaces];
+    if (reserved && iri !== reserved) throw new Error(`${profile.id} binds ${name} to ${iri}, expected ${reserved}`);
+  }
+  for (const shape of profile.shapes) {
+    knownFields(shape, ['iri', 'properties', 'closed', 'or', 'canonical'], shape.iri);
+    if (shape.canonical) {
+      knownFields(shape.canonical, ['types', 'when'], `${shape.iri} canonical focus`);
+      for (const condition of shape.canonical.when ?? []) {
+        knownFields(condition, ['path', 'value'], `${shape.iri} discriminator`);
+      }
+    }
+    if (!shape.iri.startsWith(`https://rezics.com/definition/${profile.id}/`)) {
+      throw new Error(`${profile.id} has a shape outside its definition namespace`);
+    }
+    if (!shape.properties.length) throw new Error(`${shape.iri} must have properties`);
+    if (shape.or && (shape.or.length < 2 || shape.or.some(branch => !branch.length))) {
+      throw new Error('sh:or requires at least two nonempty property groups');
+    }
+    for (const property of shape.properties) validateProperty(property);
+    for (const branch of shape.or ?? []) for (const property of branch) validateProperty(property);
+  }
 }

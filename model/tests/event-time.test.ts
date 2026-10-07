@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { renderProfile } from '../compiler/ir.ts';
+import { profileSource } from '../compiler/shacl.ts';
 import { eventTimeProfile } from '../definitions/event-time-v1.ts';
 import { valueExactProfile } from '../definitions/value-exact-v1.ts';
 
@@ -15,12 +15,12 @@ test('RATE07/RATE08: Event time points reuse exact temporal values and keep even
   expect(valueExactProfile.shapes.some(candidate => candidate.iri.endsWith('/temporal-shape'))).toBe(true);
   expect(shape('event')?.properties.find(property => property.path === 'rv:eventTime'))
     .toMatchObject({ maxCount: 2, class: 'rv:EventTime' });
-  const rendered = renderProfile(eventTimeProfile);
+  const rendered = profileSource(eventTimeProfile);
   expect(rendered).toContain('sh:in ( rv:ActualTime rv:PlannedTime )');
   expect(rendered).toContain('sh:path rv:temporalValue ; sh:minCount 1 ; sh:maxCount 1 ; sh:class time:GeneralDateTimeDescription');
   expect(rendered).not.toContain('rv:timePrecision');
   expect(rendered).not.toContain('rv:yearValue');
-  const exact = renderProfile(valueExactProfile);
+  const exact = profileSource(valueExactProfile);
   expect(exact).toContain('<https://rezics.com/definition/value-exact-v1/temporal-shape>');
   expect(exact).toContain('sh:path rdf:type ; sh:hasValue time:GeneralDateTimeDescription');
 });

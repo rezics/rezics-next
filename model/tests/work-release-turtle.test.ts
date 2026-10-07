@@ -5,10 +5,10 @@ import { join, resolve } from 'node:path';
 import type { TSchema } from 'typebox';
 import { Value } from 'typebox/value';
 import { authoredProfiles, commandProfiles, discoverProfiles } from '../compiler/generate.ts';
-import { renderProfile, type PropertyDefinition } from '../compiler/ir.ts';
+import type { PropertyDefinition } from '../compiler/ir.ts';
 import { buildModelOutputs } from '../compiler/outputs.ts';
 import { establishedDeclarations } from '../compiler/registry.ts';
-import { profileSource } from '../compiler/shacl.ts';
+import { parseTurtleProfile, profileSource } from '../compiler/shacl.ts';
 import * as fixedRelease from '../definitions/fixed-native-text-release-v1.ts';
 import * as rightsOffering from '../definitions/rights-offering-v1.ts';
 import * as translationLink from '../definitions/translation-link-v1.ts';
@@ -291,7 +291,8 @@ test('Turtle author sources preserve constraints, historical bytes, focus roles,
     expect(command.shapes.get(published.file)).toBe(source);
     expect(digest(source)).toBe(baseline.source);
     expect(published.sha256).toBe(baseline.source);
-    expect(digest(renderProfile({ ...profile, comments: [...baseline.comments] }))).toBe(
+    for (const comment of baseline.comments) expect(source).toContain(`# ${comment}\n`);
+    expect(digest(profileSource(parseTurtleProfile(profile.id, source)))).toBe(
       baseline.source,
     );
   }

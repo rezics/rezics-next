@@ -5,31 +5,35 @@ import { join, resolve } from 'node:path';
 import { registryProbeDirectory, registryProbeFiles, registryProbeProfile }
   from '../tests/fixtures/registry-probe.ts';
 import { facetId } from './facet.ts';
-import { authoredFacets, authoredProfiles, buildArtifacts, commandModuleVersion, generate } from './generate.ts';
-import { profileSnapshot, renderProfile, type ProfileDefinition } from './ir.ts';
+import { authoredFacets, authoredProfiles, buildArtifacts, commandModuleVersion, commandProfiles, discoverProfiles, generate } from './generate.ts';
+import { profileSnapshot, type ProfileDefinition } from './ir.ts';
 import { buildModelOutputs } from './outputs.ts';
 import { buildCommandRegistry, canonicalTypeOrder, shapeRole, type RegistryOptions } from './registry.ts';
-import { profileSource } from './shacl.ts';
+import { isTurtleProfile, parseTurtleProfile, profileSource } from './shacl.ts';
 
 const repo = resolve(import.meta.dir, '../..');
 const temporary: string[] = [];
 afterEach(() => { for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 test('consumer inspection cannot replace the loaded authored constraint basis', () => {
-  const profile = structuredClone(profileSnapshot(authoredProfiles
-    .find(item => item.id === 'semantic-annotation-v1')!));
-  const before = buildModelOutputs([profile]);
-  const shape = renderProfile(profile);
+  const author = authoredProfiles.find(item => item.id === 'semantic-annotation-v1')!;
+  const profile = parseTurtleProfile(author.id, profileSource(author));
+  const before = buildModelOutputs([author]);
+  const shape = profileSource(profile);
   const motivation = profile.shapes.flatMap(item => item.properties)
     .find(property => property.path === 'oa:motivatedBy')!;
   expect(motivation).toMatchObject({ in: expect.arrayContaining(['oa:commenting']) });
-  expect(renderProfile(profile)).toBe(shape);
+  expect(profileSnapshot(profile)).not.toBe(profile);
+  motivation.in = ['oa:other'];
+  expect(profileSource(profile)).toBe(shape);
   expect(buildModelOutputs([profile])).toEqual(before);
+  expect(profileSnapshot(profile).shapes.flatMap(item => item.properties)
+    .find(property => property.path === 'oa:motivatedBy')!.in).toContain('oa:commenting');
 });
 
 test('MODEL14: compiler closes owner shapes and keeps the shared Resource shape open', () => {
   const profile = authoredProfiles.find(item => item.id === 'semantic-resource-v1')!;
-  const rendered = renderProfile(profile);
+  const rendered = profileSource(profile);
   const [resource, revision] = rendered.split('<https://rezics.com/definition/semantic-resource-v1/revision-shape>');
   expect(resource).not.toContain('sh:closed');
   expect(revision).toContain('sh:closed true');
@@ -42,6 +46,15 @@ test('P0.3: reviewed profiles publish matching shape bytes and digests', () => {
     profiles: { id: string; sha256: string; file: string }[];
   };
   expect(manifest.profiles).toHaveLength(authoredProfiles.length);
+  for (const profile of authoredProfiles) {
+    const source = readFileSync(join(repo, `model/definitions/${profile.id}.ttl`), 'utf8');
+    expect(isTurtleProfile(profile)).toBe(true);
+    expect(profileSource(profile)).toBe(source);
+    const entry = manifest.profiles.find(item => item.id === profile.id)!;
+    expect(entry).toBeDefined();
+    expect(entry.sha256).toBe(createHash('sha256').update(source).digest('hex'));
+    expect(artifacts.get(`generated/model/${entry.file}`)).toBe(source);
+  }
   const work = manifest.profiles.find(profile => profile.id === 'work-metadata-v1');
   expect(work).toBeDefined();
   const shape = artifacts.get(`generated/model/${work!.file}`)!;
@@ -235,25 +248,61 @@ test('P0.8: Content search profiles emit projection, unit and eligibility roles'
 
 test('P0.3: invalid or changed authored constraints cannot silently reuse the profile digest', () => {
   const profile = authoredProfiles.find(item => item.id === 'work-metadata-v1')!;
-  expect(() => renderProfile({ ...profile, shapes: [profile.shapes[0]!, profile.shapes[0]!] })).toThrow('distinct named NodeShapes');
-  expect(() => renderProfile({
-    ...profile,
-    shapes: [{ ...profile.shapes[0]!, properties: [{ path: 'rv:mainVersion', minCount: 2, maxCount: 1 }] }],
-  })).toThrow('minCount exceeds maxCount');
+  const source = profileSource(profile);
+  const parse = (clauses: string) => parseTurtleProfile(profile.id,
+    `@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rv: <https://rezics.com/vocab/> .
+<${profile.shapes[0]!.iri}> a sh:NodeShape ;
+  sh:property [ sh:path rv:mainVersion ; ${clauses} ] .\n`);
+  expect(() => parseTurtleProfile(profile.id, '@prefix sh: <http://www.w3.org/ns/shacl#> .'))
+    .toThrow('distinct named NodeShapes');
+  expect(() => parse('sh:minCount 2 ; sh:maxCount 1')).toThrow('minCount exceeds maxCount');
   const observation = authoredProfiles.find(item => item.id === 'realm-standing-rating-observation-v1')!;
-  expect(() => renderProfile({
-    ...observation,
-    shapes: [{ ...observation.shapes[5]!, or: [[{ path: 'rv:ratingValue', minCount: 2, maxCount: 1 }],
-      [{ path: 'rv:ratingValue', maxCount: 0 }]] }],
-  })).toThrow('minCount exceeds maxCount');
-  const changed = renderProfile({
-    ...profile,
-    shapes: [{ ...profile.shapes[0]!, properties: [
-      ...profile.shapes[0]!.properties,
-      { path: 'rv:unexpected', minCount: 1 },
-    ] }, ...profile.shapes.slice(1)],
-  });
-  expect(changed).not.toBe(renderProfile(profile));
+  expect(() => parseTurtleProfile(observation.id,
+    `@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rv: <https://rezics.com/vocab/> .
+<${observation.shapes[5]!.iri}> a sh:NodeShape ;
+  sh:property [ sh:path rv:ratingValue ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+  sh:or (
+    [ sh:property [ sh:path rv:ratingValue ; sh:minCount 2 ; sh:maxCount 1 ] ]
+    [ sh:property [ sh:path rv:ratingValue ; sh:maxCount 0 ] ]
+  ) .\n`)).toThrow('minCount exceeds maxCount');
+  const changed = parse('sh:minCount 1 ; sh:nodeKind sh:IRI');
+  expect(profileSource(changed)).not.toBe(source);
+  const digest = (bytes: string) => createHash('sha256').update(bytes).digest('hex');
+  expect(commandProfiles([changed], { established: {}, canonicalOrder: [], demandOrder: [] })
+    .profiles[0]!.sha256).toBe(digest(profileSource(changed)));
+  expect(digest(profileSource(changed))).not.toBe(digest(source));
+});
+
+test('exact Turtle custody refuses plain objects and clones but accepts reload and re-export', () => {
+  const author = authoredProfiles.find(item => item.id === 'semantic-annotation-v1')!;
+  const source = profileSource(author);
+  for (const copy of [{ ...author }, structuredClone(author), profileSnapshot(author)]) {
+    expect(isTurtleProfile(copy)).toBe(false);
+    expect(() => profileSource(copy)).toThrow('has no captured Turtle source');
+    expect(() => commandProfiles([copy], { established: {}, canonicalOrder: [], demandOrder: [] }))
+      .toThrow('has no captured Turtle source');
+  }
+  mkdirSync(join(repo, '.temp'), { recursive: true });
+  const directory = mkdtempSync(join(repo, '.temp/turtle-custody-')); temporary.push(directory);
+  writeFileSync(join(directory, `${author.id}.ttl`), source);
+  const declaration = { id: author.id };
+  const reloaded = parseTurtleProfile(author.id, source, declaration);
+  const modules = [[`${author.id}.ts`, { authorDeclaration: declaration, authorProfile: reloaded }]] as const;
+  const discovered = discoverProfiles(directory, modules);
+  expect(isTurtleProfile(reloaded)).toBe(true);
+  expect(profileSource(reloaded)).toBe(source);
+  expect(profileSource(discovered[0]!)).toBe(source);
+  expect(commandProfiles(discovered, { established: {}, canonicalOrder: [], demandOrder: [] }).shapes
+    .get(`shapes/${author.id}.ttl`)).toBe(source);
+  expect(() => discoverProfiles(directory, [[`${author.id}.ts`, {
+    authorDeclaration: declaration, authorProfile: structuredClone(reloaded),
+  }]])).toThrow(`Duplicate profile ID ${author.id}`);
+  writeFileSync(join(directory, `${author.id}.ttl`), `${source}# Exact byte revision.\n`);
+  expect(() => discoverProfiles(directory, modules)).toThrow(`Duplicate profile ID ${author.id}`);
+  rmSync(join(directory, `${author.id}.ttl`));
+  expect(() => discoverProfiles(directory, modules)).toThrow(`Turtle source is missing for ${author.id}`);
 });
 
 interface ManifestProfile { sha256: string; binding?: { required: string[]; optional?: string[]; roles: string[] } }
@@ -319,6 +368,8 @@ test('G-071: the manifest pins the command-module version defined once in pom.xm
 });
 
 test('G-071: a profile declared in its definition joins the registry after the established types', () => {
+  expect(createHash('sha256').update(profileSource(registryProbeProfile)).digest('hex'))
+    .toBe('875da629669d7ba1bbae5905bdc4161e59c56b49d1c413d63ea98b7fdd8add11');
   const registry = buildCommandRegistry([...authoredProfiles, registryProbeProfile]);
   const types = registry.canonical.map(entry => entry.type);
   const probe = types.indexOf('https://rezics.com/vocab/RegistryProbe');
@@ -431,11 +482,21 @@ test('an in-place profile relaxation regenerates its bytes and digest and detect
   expect(() => copied(root, true)).not.toThrow();
 });
 
-test('a compiler rendering change regenerates the current basis', async () => {
+test('a compiler lowering change regenerates derived artifacts and preserves exact Turtle', async () => {
   const { root, generate: copied } = await copiedProject(copy => replaceIn(copy,
-    'model/compiler/ir.ts', 'a sh:NodeShape ;', 'a sh:NodeShape  ;'));
+    'model/compiler/outputs.ts', '// Generated by task gen from authored profiles.',
+    '// Generated by task gen from exact Turtle profiles.'));
   expect(() => copied(root, false)).not.toThrow();
   expect(() => copied(root, true)).not.toThrow();
+  const current = buildArtifacts(repo);
+  const manifest = JSON.parse(readFileSync(join(root, 'generated/model/manifest.json'), 'utf8')) as Manifest;
+  expect(manifest.profiles).toEqual(manifestOf(current).profiles);
+  for (const profile of manifest.profiles) {
+    expect(readFileSync(join(root, `generated/model/${profile.file}`), 'utf8'))
+      .toBe(current.get(`generated/model/${profile.file}`)!);
+  }
+  expect(readFileSync(join(root, 'packages/model/src/generated/schemas.ts'), 'utf8'))
+    .not.toBe(current.get('packages/model/src/generated/schemas.ts')!);
 });
 
 test('an authored profile can be removed without a digest lock', async () => {
@@ -467,19 +528,32 @@ test('an in-place Facet refinement regenerates its registry', async () => {
 });
 
 
-test('a new authored profile joins generation without a separate digest file', async () => {
+test('a new exact Turtle author joins generation without a separate digest file', async () => {
   const id = 'reviewed-example-v1';
-  const { root, generate: copied } = await copiedProject(copy => writeFileSync(join(copy, `model/definitions/${id}.ts`),
-    `export const reviewedExampleProfile = {
-      id: '${id}', comments: ['A reviewed current basis.'],
-      prefixes: [['sh', 'http://www.w3.org/ns/shacl#'], ['rv', 'https://rezics.com/vocab/']],
-      shapes: [{ iri: 'https://rezics.com/definition/${id}/example-shape',
-        properties: [{ path: 'rv:example', maxCount: 1, nodeKind: 'sh:IRI' }] }],
-    };`));
+  const source = `# A reviewed current basis.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rv: <https://rezics.com/vocab/> .
+<https://rezics.com/definition/${id}/example-shape> a sh:NodeShape ;
+  sh:property [ sh:path rv:example ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .\n`;
+  const { root, generate: copied } = await copiedProject(copy =>
+    writeFileSync(join(copy, `model/definitions/${id}.ttl`), source));
   expect(() => copied(root, false)).not.toThrow();
   expect(() => copied(root, true)).not.toThrow();
   const manifest = JSON.parse(readFileSync(join(root, 'generated/model/manifest.json'), 'utf8')) as Manifest;
-  expect(manifest.profiles.some(profile => profile.id === id)).toBe(true);
+  const entry = manifest.profiles.find(profile => profile.id === id)!;
+  expect(entry).toBeDefined();
+  expect(entry.sha256).toBe(createHash('sha256').update(source).digest('hex'));
+  expect(readFileSync(join(root, `generated/model/${entry.file}`), 'utf8')).toBe(source);
+});
+
+test('a TS-only Profile export refuses generation without captured Turtle', async () => {
+  await expect(copiedProject(copy => writeFileSync(join(copy, 'model/definitions/reviewed-example-v1.ts'),
+    `export const reviewedExampleProfile = {
+      id: 'reviewed-example-v1',
+      prefixes: [['sh', 'http://www.w3.org/ns/shacl#'], ['rv', 'https://rezics.com/vocab/']],
+      shapes: [{ iri: 'https://rezics.com/definition/reviewed-example-v1/example-shape',
+        properties: [{ path: 'rv:example', maxCount: 1, nodeKind: 'sh:IRI' }] }],
+    };`))).rejects.toThrow('Turtle source is missing for reviewed-example-v1');
 });
 
 test('an authored Facet can be removed from the current registry', async () => {

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { renderProfile } from '../compiler/ir.ts';
+import { profileSource } from '../compiler/shacl.ts';
 import { buildCommandRegistry } from '../compiler/registry.ts';
 import { authoredProfiles } from '../compiler/generate.ts';
 import { workTitleControlProfile } from '../definitions/work-title-control-v1.ts';
@@ -9,8 +9,8 @@ import { spaceRealmV2Profile } from '../definitions/space-realm-v2.ts';
 import { spaceRealmV3Profile } from '../definitions/space-realm-v3.ts';
 
 test('G-512 one native title epoch carries its language and leaves the English v1 readable', () => {
-  expect(renderProfile(workTitleControlProfile)).toContain('sh:hasValue "title:en"');
-  const current = renderProfile(workTitleControlV2Profile);
+  expect(profileSource(workTitleControlProfile)).toContain('sh:hasValue "title:en"');
+  const current = profileSource(workTitleControlV2Profile);
   expect(current).toContain('sh:hasValue "title"');
   expect(current).toContain('sh:path rv:controlLanguage ; sh:minCount 1 ; sh:maxCount 1');
   expect(current).not.toContain('title:en');
@@ -35,6 +35,6 @@ test('G-512 Space payload language is versioned without losing legacy community 
   for (const entry of registry.canonical) {
     expect(entry.routes.map(route => route.profile)).toEqual(['space-realm-v2', 'space-realm-v3', 'space-realm-v1']);
   }
-  expect(renderProfile(spaceRealmV3Profile)).toContain('sh:path rv:communityHandle');
-  expect(renderProfile(spaceRealmV3Profile)).not.toContain('"en"');
+  expect(profileSource(spaceRealmV3Profile)).toContain('sh:path rv:communityHandle');
+  expect(profileSource(spaceRealmV3Profile)).not.toContain('"en"');
 });
