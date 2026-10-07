@@ -52,12 +52,17 @@ function AddLine({ section, label, store, language, t }: Common & { section: str
   const [parts, setParts] = useState<IngredientParts>(emptyParts);
   const id = useId();
   const field = useRef<HTMLDivElement>(null);
+  // What is typed right now, kept outside render so an Enter pressed before React has drawn the last
+  // keystroke still adds that keystroke's line, and a late clear never wipes the next line.
+  const typed = useRef(emptyParts);
   const problem = partsProblem(parts);
   const add = async () => {
-    if (problem) return;
+    const submitted = typed.current;
+    if (partsProblem(submitted)) return;
     await store.whenIdle();
-    const outcome = await store.submit({ kind: 'addLine', section, qualifier: qualifierOf(parts, language) });
-    if (outcome.kind === 'saved' || outcome.kind === 'unchanged') {
+    const outcome = await store.submit({ kind: 'addLine', section, qualifier: qualifierOf(submitted, language) });
+    if ((outcome.kind === 'saved' || outcome.kind === 'unchanged') && typed.current === submitted) {
+      typed.current = emptyParts;
       setLine(''); setParts(emptyParts);
       field.current?.querySelector<HTMLInputElement>('input')?.focus();
     }
@@ -67,8 +72,8 @@ function AddLine({ section, label, store, language, t }: Common & { section: str
     <div ref={field} className="grid gap-3">
       <LineFields line={line} parts={parts} idPrefix={id} t={t} language={language} onSubmit={() => void add()}
         showParts={Boolean(line.trim())}
-        onLine={value => { setLine(value); setParts(parseLine(value)); }}
-        onParts={value => { setParts(value); setLine(composeLine(value)); }} />
+        onLine={value => { const read = parseLine(value); typed.current = read; setLine(value); setParts(read); }}
+        onParts={value => { typed.current = value; setParts(value); setLine(composeLine(value)); }} />
     </div>
     <p className="text-muted-foreground text-xs">{t.ingredientHelp}</p>
     <div><Button type="submit" size="md" disabled={Boolean(problem)} className="pointer-coarse:h-11">
@@ -167,15 +172,17 @@ function Lines({ lines, ...common }: Common & { lines: IngredientNode[] }) {
 
 function AddSection({ store, language, t }: Common) {
   const [name, setName] = useState('');
+  const typed = useRef('');
   const add = async () => {
-    if (!name.trim()) return;
+    const submitted = typed.current.trim();
+    if (!submitted) return;
     await store.whenIdle();
-    const outcome = await store.submit({ kind: 'addSection', label: name.trim(), language });
-    if (outcome.kind === 'saved') setName('');
+    const outcome = await store.submit({ kind: 'addSection', label: submitted, language });
+    if (outcome.kind === 'saved' && typed.current.trim() === submitted) { typed.current = ''; setName(''); }
   };
   return <form onSubmit={event => { event.preventDefault(); void add(); }} aria-label={t.addSection} className="grid gap-2 rounded-2xl border border-border/70 border-dashed p-3">
     <label className={fieldClass}><span className="font-medium">{t.addSection}</span>
-      <Input value={name} onChange={event => setName(event.target.value)} placeholder={t.sectionPlaceholder} maxLength={500}
+      <Input value={name} onChange={event => { typed.current = event.target.value; setName(event.target.value); }} placeholder={t.sectionPlaceholder} maxLength={500}
         autoComplete="off" lang={language} dir={directionOf(language)} aria-label={t.sectionName} /></label>
     <p className="text-muted-foreground text-xs">{t.addSectionHelp}</p>
     <div><Button type="submit" variant="outline" disabled={!name.trim()} className="pointer-coarse:h-11">

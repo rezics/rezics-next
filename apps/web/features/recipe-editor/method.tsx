@@ -84,18 +84,23 @@ function AddStep({ store, state, language, t }: Common) {
   const [text, setText] = useState('');
   const [uses, setUses] = useState<string[]>([]);
   const [linking, setLinking] = useState(false);
+  const typed = useRef({ text: '', uses: [] as string[] });
   const add = async () => {
-    if (!text.trim()) return;
+    const submitted = typed.current;
+    if (!submitted.text.trim()) return;
     await store.whenIdle();
-    const outcome = await store.submit({ kind: 'addStep', text, language, uses });
-    if (outcome.kind === 'saved') { setText(''); setUses([]); setLinking(false); }
+    const outcome = await store.submit({ kind: 'addStep', text: submitted.text, language, uses: submitted.uses });
+    if (outcome.kind === 'saved' && typed.current === submitted) {
+      typed.current = { text: '', uses: [] };
+      setText(''); setUses([]); setLinking(false);
+    }
   };
   const keys = (event: KeyboardEvent) => {
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); void add(); }
   };
   return <form onSubmit={event => { event.preventDefault(); void add(); }} aria-label={t.addStep} className="grid gap-2">
     <label className="grid gap-1 text-sm"><span className="font-medium">{t.addStep}</span>
-      <Textarea value={text} onChange={event => setText(event.target.value)} onKeyDown={keys} placeholder={t.stepPlaceholder}
+      <Textarea value={text} onChange={event => { typed.current = { ...typed.current, text: event.target.value }; setText(event.target.value); }} onKeyDown={keys} placeholder={t.stepPlaceholder}
         maxLength={4000} lang={language} dir={directionOf(language)} className="min-h-20" /></label>
     <p className="text-muted-foreground text-xs">{t.stepHelp}</p>
     <div className="flex flex-wrap items-center gap-2">
@@ -105,7 +110,7 @@ function AddStep({ store, state, language, t }: Common) {
         {uses.length ? t.usesCount(uses.length) : t.usesChoose}</Button>
     </div>
     {linking ? <div className="rounded-xl border border-border/60 bg-background p-3">
-      <UsesPicker state={state} value={uses} onChange={setUses} idPrefix="uses-new" t={t} /></div> : null}
+      <UsesPicker state={state} value={uses} onChange={next => { typed.current = { ...typed.current, uses: next }; setUses(next); }} idPrefix="uses-new" t={t} /></div> : null}
   </form>;
 }
 
