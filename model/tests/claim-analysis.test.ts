@@ -33,7 +33,6 @@ test('Claim and Assessment Turtle retain the committed artifacts and exact canon
     authoredProfiles.find((profile) => profile.id === id)!,
   );
   const native = commandProfiles(profiles, {
-    established: {},
     canonicalOrder: [],
     demandOrder: [],
   });

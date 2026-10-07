@@ -102,10 +102,27 @@ test('authored Statement Turtle retains old constraints and canonical routes exa
   expect(statement.properties.filter((property) => oldPaths.has(property.path))).toEqual(
     originalStatement,
   );
-  expect(revision.properties).toEqual(originalRevision);
+  const oldRevisionPaths = new Set(originalRevision.map((property) => property.path));
+  expect(revision.properties.filter((property) => oldRevisionPaths.has(property.path))).toEqual(originalRevision);
+  expect(revision.properties.filter((property) => !oldRevisionPaths.has(property.path))).toEqual([
+    { path: 'rv:retainedSourceRevision', maxCount: 1, nodeKind: 'sh:IRI', class: 'rv:ClaimRevision' },
+    { path: 'rv:retainedSourceReceipt', maxCount: 1, nodeKind: 'sh:IRI' },
+    { path: 'rv:recordedAt', maxCount: 1, datatype: 'xsd:dateTime' },
+    { path: 'rv:derivation', maxCount: 1, nodeKind: 'sh:IRI' },
+  ]);
   expect(statement.canonical).toEqual({ types: ['rdf:Statement'] });
   expect(revision.canonical).toEqual({ types: ['rv:StatementRevision'] });
-  expect(revision.or).toBeUndefined();
+  expect(revision.or).toEqual([
+    [
+      { path: 'rv:retainedSourceRevision', maxCount: 0 },
+      { path: 'rv:retainedSourceReceipt', maxCount: 0 },
+    ],
+    [
+      { path: 'rv:retainedSourceRevision', minCount: 1, nodeKind: 'sh:IRI' },
+      { path: 'rv:retainedSourceReceipt', minCount: 1, nodeKind: 'sh:IRI' },
+      { path: 'rv:recordedAt', minCount: 1, datatype: 'xsd:dateTime' },
+    ],
+  ]);
   expect(
     discoverProfiles(join(root, 'model/definitions'), [
       ['statement-v1.ts', { statementDeclaration }],
