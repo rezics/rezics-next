@@ -21,7 +21,11 @@ import {
   STRUCTURE_MANIFEST_FORMAT,
   STRUCTURE_INDEXED_MANIFEST_FORMAT,
   STRUCTURE_SEAL_FORMAT,
+  type OccurrenceRecord,
+  type StructureManifest,
+  type StructurePage,
 } from '../structure/format.ts';
+import { placementIri, structureIri } from '../structure/graph.ts';
 import { StructureObjectCorrupt } from '../structure/tree.ts';
 import type { StructureGroupRootStore } from '../structure/group-root.ts';
 import {
@@ -46,6 +50,16 @@ export interface ObjectRecoveryStore {
   structureQualifierRoots?: Pick<StructureQualifierRootStore, 'retainedRoots'>;
   /** Maintenance commands may overlap a bounded window of immutable reads. */
   readConcurrency?: number;
+  /** Opt-in qualification under held, quiesced owner custody. Failure means
+   * association unavailable; it is never evidence of an absent Episode key. */
+  originalStructureAssociations?: {
+    signal: AbortSignal;
+    deadline: number;
+    /** Physical placement predicate probes; Fuseki calls share this bound too. */
+    maxProbes: number;
+    /** Structure immutable bytes and Fuseki responses, including the original cut. */
+    maxBytes: number;
+  };
 }
 
 /** A graph reference, including retained anchors and mutable context dependencies. */
@@ -190,9 +204,17 @@ async function exactBytes(
       throw error;
     }
   }
+  const signal = store.originalStructureAssociations
+    ? fusekiReadBudget.getStore()?.signal
+    : undefined;
+  signal?.throwIfAborted();
   if (store.workObjects) {
     try {
-      return Buffer.from(await store.workObjects.get(digest));
+      const bytes = signal
+        ? await store.workObjects.get(digest, undefined, signal)
+        : await store.workObjects.get(digest);
+      signal?.throwIfAborted();
+      return Buffer.from(bytes);
     } catch (error) {
       if (error instanceof ObjectIntegrityError)
         throw new ObjectRecoveryConflict('immutable object is corrupt', 'corrupt');
@@ -201,10 +223,14 @@ async function exactBytes(
   }
   let bytes: Buffer;
   try {
-    bytes = await readFile(join(store.directory, digest));
+    bytes = signal
+      ? await readFile(join(store.directory, digest), { signal })
+      : await readFile(join(store.directory, digest));
   } catch {
+    signal?.throwIfAborted();
     throw new ObjectRecoveryConflict('committed immutable object is unavailable', 'unavailable');
   }
+  signal?.throwIfAborted();
   if (sha(bytes) !== digest)
     throw new ObjectRecoveryConflict('committed immutable object is corrupt', 'corrupt');
   return bytes;
@@ -216,6 +242,63 @@ async function exactBytes(
  * pages. Total work scales with all references, closure pages and their bytes;
  * the per-object byte cap does not bound the full capture to a prefix. */
 export async function captureObjectRecoveryCoverage(
+  fuseki: FusekiClient,
+  store: ObjectRecoveryStore,
+  retainedDigests?: Set<string>,
+): Promise<ObjectRecoveryCoverage> {
+  const qualification = store?.originalStructureAssociations;
+  if (!qualification) return captureCoverage(fuseki, store, retainedDigests);
+  const remaining = qualification.deadline - Date.now();
+  if (
+    !Number.isSafeInteger(qualification.deadline) ||
+    !Number.isSafeInteger(qualification.maxProbes) ||
+    qualification.maxProbes < 1 ||
+    !Number.isSafeInteger(qualification.maxBytes) ||
+    qualification.maxBytes < 1 ||
+    !qualification.signal
+  )
+    throw new ObjectRecoveryConflict('Structure association budget is invalid');
+  qualification.signal.throwIfAborted();
+  if (remaining <= 0)
+    throw new ObjectRecoveryConflict('Structure association deadline expired', 'unavailable');
+  const outer = fusekiReadBudget.getStore();
+  const signal = AbortSignal.any([
+    qualification.signal,
+    AbortSignal.timeout(Math.min(remaining, 2_147_483_647)),
+    ...(outer ? [outer.signal] : []),
+  ]);
+  let calls = qualification.maxProbes,
+    bytes = qualification.maxBytes;
+  // Share upstream consumption without replacing its signal for other readers.
+  const budget = {
+    signal,
+    get callsLeft() {
+      return Math.min(calls, outer?.callsLeft ?? Infinity);
+    },
+    set callsLeft(value: number) {
+      const used = this.callsLeft - value;
+      calls -= used;
+      if (outer) outer.callsLeft -= used;
+    },
+    get bytesLeft() {
+      return Math.min(bytes, outer?.bytesLeft ?? Infinity);
+    },
+    set bytesLeft(value: number) {
+      const used = this.bytesLeft - value;
+      bytes -= used;
+      if (outer) outer.bytesLeft -= used;
+    },
+  };
+  const coverage = await fusekiReadBudget.run(budget, () =>
+    captureCoverage(fuseki, store, retainedDigests),
+  );
+  signal.throwIfAborted();
+  if (Date.now() >= qualification.deadline)
+    throw new ObjectRecoveryConflict('Structure association deadline expired', 'unavailable');
+  return coverage;
+}
+
+async function captureCoverage(
   fuseki: FusekiClient,
   store: ObjectRecoveryStore,
   retainedDigests?: Set<string>,
@@ -283,11 +366,129 @@ export async function captureObjectRecoveryCoverage(
   };
   const structureObject = async (digest: string): Promise<Uint8Array> => {
     const bytes = await exactBytes(store, digest, 'structure');
+    if (qualification) {
+      if (Date.now() >= qualification.deadline)
+        throw new ObjectRecoveryConflict('Structure association deadline expired', 'unavailable');
+      const budget = fusekiReadBudget.getStore()!;
+      if (bytes.length > budget.bytesLeft)
+        throw new ObjectRecoveryConflict(
+          'Structure association byte budget exceeded',
+          'unavailable',
+        );
+      budget.bytesLeft -= bytes.length;
+    }
     objects.set(digest, bytes.length);
     retainedDigests?.add(digest);
     return bytes;
   };
   const checkedPages = new Set<string>();
+  const decodedPages = new Map<string, StructurePage>();
+  const qualification = store.originalStructureAssociations;
+  let probesLeft = qualification?.maxProbes ?? 0;
+  const associations = async (manifest: StructureManifest, entries: OccurrenceRecord[]) => {
+    for (let start = 0; start < entries.length; start += 256) {
+      const budget = fusekiReadBudget.getStore()!;
+      const signal = budget.signal;
+      signal.throwIfAborted();
+      const batch = entries.slice(start, start + 256);
+      // Each fixed subject has three independent predicate probes. Do not bind
+      // expected objects: doing so would hide a second, conflicting value.
+      if (batch.length * 3 > probesLeft)
+        throw new ObjectRecoveryConflict(
+          'Structure association probe budget exceeded',
+          'unavailable',
+        );
+      probesLeft -= batch.length * 3;
+      if (budget.bytesLeft < 1)
+        throw new ObjectRecoveryConflict(
+          'Structure association byte budget exceeded',
+          'unavailable',
+        );
+      const expected = new Map(
+        batch.map((entry) => [placementIri(manifest.generation, entry.occurrence), entry]),
+      );
+      if (expected.size !== batch.length)
+        throw new ObjectRecoveryConflict(
+          'Structure original association repeats a placement',
+          'unavailable',
+        );
+      const bytesBefore = budget.bytesLeft;
+      // Constant subjects in every branch keep these physical point reads;
+      // qualification does not depend on VALUES being pushed through a UNION.
+      const points = [...expected.keys()].map((placement) => {
+        const subject = structureIri(placement);
+        return `{ BIND(${subject} AS ?placement)
+          { ${subject} rv:generation ?value . BIND("generation" AS ?field) }
+          UNION { ${subject} rv:occurrence ?value . BIND("occurrence" AS ?field) }
+          UNION { ${subject} schema:item ?value . BIND("target" AS ?field) }
+        }`;
+      });
+      const query = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+        SELECT ?placement ?field ?value WHERE {
+          GRAPH ${structureIri(GRAPHS.current)} {
+            ${points.join('\n UNION ')}
+          }
+        } LIMIT ${batch.length * 3 + 1}`;
+      if (Buffer.byteLength(query) > 256 * 1024)
+        throw new ObjectRecoveryConflict(
+          'Structure association request exceeds its byte bound',
+          'unavailable',
+        );
+      const response = await fuseki.query(query, Math.min(bytesBefore, 256 * 1024));
+      signal.throwIfAborted();
+      // Fuseki charges actual streamed bytes. In-process adapters also have to
+      // account for their response, without charging the HTTP client twice.
+      if (budget.bytesLeft === bytesBefore) {
+        const responseBytes = Buffer.byteLength(JSON.stringify(response));
+        if (responseBytes > Math.min(bytesBefore, 256 * 1024))
+          throw new ObjectRecoveryConflict(
+            'Structure association byte budget exceeded',
+            'unavailable',
+          );
+        budget.bytesLeft -= responseBytes;
+      }
+      const rows = response.results?.bindings;
+      if (!rows || rows.length > batch.length * 3)
+        throw new ObjectRecoveryConflict(
+          'Structure association response is incomplete or ambiguous',
+          'unavailable',
+        );
+      const found = new Map<string, Map<string, string[]>>();
+      for (const row of rows) {
+        if (
+          row.placement?.type !== 'uri' ||
+          !expected.has(row.placement.value) ||
+          row.field?.type !== 'literal' ||
+          !['generation', 'occurrence', 'target'].includes(row.field.value) ||
+          row.value?.type !== 'uri'
+        )
+          throw new ObjectRecoveryConflict(
+            'Structure association identity is malformed',
+            'unavailable',
+          );
+        const fields = found.get(row.placement.value) ?? new Map<string, string[]>();
+        const values = fields.get(row.field.value) ?? [];
+        values.push(row.value.value);
+        fields.set(row.field.value, values);
+        found.set(row.placement.value, fields);
+      }
+      for (const [placement, entry] of expected) {
+        for (const [field, value] of [
+          ['generation', manifest.generation],
+          ['occurrence', entry.occurrence],
+          ['target', entry.target],
+        ] as const) {
+          if (value === undefined) continue;
+          const values = found.get(placement)?.get(field);
+          if (values?.length !== 1 || values[0] !== value)
+            throw new ObjectRecoveryConflict(
+              'Structure original association is unavailable or differs from its record',
+              'unavailable',
+            );
+        }
+      }
+    }
+  };
   const checkedStructureRoots = new Set<string>();
   const checkedModelGenerations = new Set<string>();
   const objectDigest = (reference: string): string => {
@@ -301,12 +502,17 @@ export async function captureObjectRecoveryCoverage(
     expectedTree: 'record' | 'order' | 'pin' | 'qualifier-key',
     level: number,
     expectedCount: number,
+    association?: StructureManifest,
   ): Promise<void> => {
-    const key = `${reference}\0${expectedTree}\0${level}\0${expectedCount}`;
+    const key = `${reference}\0${expectedTree}\0${level}\0${expectedCount}\0${association ? `${association.structure}\0${association.generation}` : ''}`;
     if (checkedPages.has(key)) return;
     let page;
     try {
-      page = checkStructurePage(await structureObject(objectDigest(reference)));
+      page = decodedPages.get(reference);
+      if (!page) {
+        page = checkStructurePage(await structureObject(objectDigest(reference)));
+        if (qualification) decodedPages.set(reference, page);
+      }
     } catch (error) {
       if (error instanceof InvalidStructureObject) {
         throw new ObjectRecoveryConflict('Structure page is corrupt', 'corrupt');
@@ -320,6 +526,7 @@ export async function captureObjectRecoveryCoverage(
       if (page.entries.length !== expectedCount) {
         throw new ObjectRecoveryConflict('Structure leaf count differs from root', 'corrupt');
       }
+      if (association) await associations(association, page.entries as OccurrenceRecord[]);
       checkedPages.add(key);
       return;
     }
@@ -327,7 +534,8 @@ export async function captureObjectRecoveryCoverage(
     if (children.reduce((sum, child) => sum + child.count, 0) !== expectedCount) {
       throw new ObjectRecoveryConflict('Structure branch count differs from root', 'corrupt');
     }
-    for (const child of children) await tree(child.page, expectedTree, level - 1, child.count);
+    for (const child of children)
+      await tree(child.page, expectedTree, level - 1, child.count, association);
     checkedPages.add(key);
   };
   const structureManifest = async (
@@ -396,6 +604,14 @@ export async function captureObjectRecoveryCoverage(
         );
       }
     }
+    if (original && qualification)
+      await tree(
+        manifest.records.page,
+        'record',
+        manifest.records.level,
+        manifest.records.count,
+        manifest,
+      );
     if (checkedStructureRoots.has(key)) return;
     await tree(manifest.records.page, 'record', manifest.records.level, manifest.records.count);
     await tree(manifest.order.page, 'order', manifest.order.level, manifest.order.count);
