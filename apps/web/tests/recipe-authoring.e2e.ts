@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { resourceHref } from '../features/address/path.ts';
 import { studioHref } from '../features/studio/agent.ts';
@@ -71,11 +71,7 @@ async function linkStep(scope: Locator, section: string | null, ingredient: stri
 
 const started = Date.now();
 /** Where the journey's time goes, printed as it runs. */
-const mark = (label: string) => {
-  const line = `[recipe-journey] ${Math.round((Date.now() - started) / 1000)}s ${label}`;
-  console.log(line);
-  appendFileSync('/tmp/recipe-journey-marks.log', `${line}\n`);
-};
+const mark = (label: string) => console.log(`[recipe-journey] ${Math.round((Date.now() - started) / 1000)}s ${label}`);
 
 // A control that never appears fails in seconds, not at the end of the journey's budget.
 test.use({ actionTimeout: 15_000 });
