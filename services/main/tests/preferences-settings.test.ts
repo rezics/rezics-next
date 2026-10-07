@@ -65,6 +65,7 @@ test('a stale person settings write cannot change disclosure', async () => {
 
 test('a saved privacy choice replays its receipt without a second write', async () => {
   const statements: string[] = [];
+  const projections: Array<[string, string, number]> = [];
   let receipt: { request_digest: string; result: unknown } | null = null;
   const saved = { profile_visibility: 'private', follow_policy: 'nobody', hide_reading_activity: true,
     content_languages: ['en'], spoiler_policy: 'show', version: 1 };
@@ -75,7 +76,9 @@ test('a saved privacy choice replays its receipt without a second write', async 
       receipt = { request_digest: String(args?.[2]), result: args?.[3] };
     }
     return {};
-  }, statements));
+  }, statements), async (subject, visibility, version) => {
+    projections.push([subject, visibility, version]);
+  });
   const value = { ...DEFAULT_PERSON_CHOICES, profileVisibility: 'private' as const,
     followPolicy: 'nobody' as const, hideReadingActivity: true, contentLanguages: ['en'],
     spoilerPolicy: 'show' as const };
@@ -84,6 +87,7 @@ test('a saved privacy choice replays its receipt without a second write', async 
   expect(await store.write(principal, agent, value, 0, 'privacy:1')).toMatchObject({
     profileVisibility: 'private', followPolicy: 'nobody', version: 1, replayed: true });
   expect(statements.filter(sql => sql.includes('INSERT INTO access.person_preferences ('))).toHaveLength(1);
+  expect(projections).toEqual([[agent, 'private', 1]]);
 });
 
 test('a person who accepts nobody cannot acquire a new follower', async () => {
