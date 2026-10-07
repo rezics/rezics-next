@@ -451,7 +451,7 @@ export const profileRegistry = {
     ]
   },
   "global-rating-standing-context-v1": {
-    "sha256": "305e68af3c289f9cd3560a814bc34f9ab7d79b7733a2682f08c944073664191b",
+    "sha256": "fffed312c16e43a3e6d8fdda5f3947cb2d1a97b36778b128b6ce4667a78db76a",
     "file": "shapes/global-rating-standing-context-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/global-rating-standing-context-v1/context-shape"
@@ -461,7 +461,7 @@ export const profileRegistry = {
     ]
   },
   "global-rating-standing-observation-v1": {
-    "sha256": "88ebf1f8b846fdbb5fbd44835c7f547280d6a4533e68a665d6804e7d77e193b9",
+    "sha256": "dc2ad4e4ec21a66a78d1c416a4e8299e17a84e4530daccf330dbe3d3156ec9c9",
     "file": "shapes/global-rating-standing-observation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/global-rating-standing-observation-v1/context-shape",
@@ -679,7 +679,7 @@ export const profileRegistry = {
     ]
   },
   "realm-daily-rating-context-v1": {
-    "sha256": "a1819809844d44a1766a4dd20713e8c639eed5b71d158c4458f861de0842e149",
+    "sha256": "061f3a2c304b6d372c582af28facc91895ab2bfa1ca96da723dce737b484ca46",
     "file": "shapes/realm-daily-rating-context-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-daily-rating-context-v1/realm-shape",
@@ -691,7 +691,7 @@ export const profileRegistry = {
     ]
   },
   "realm-daily-rating-observation-v1": {
-    "sha256": "6f5ddc3f11cc7a0c31a859e7352d65ef7c9983161ae8d5ffde93eaa922a8e658",
+    "sha256": "514dbf814fef5943ad37da569c6768d2d94e2f48bcd4d5594b9efa26d4e67faf",
     "file": "shapes/realm-daily-rating-observation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-daily-rating-observation-v1/realm-shape",
@@ -711,7 +711,7 @@ export const profileRegistry = {
     ]
   },
   "realm-experience-rating-context-v1": {
-    "sha256": "161452da6d838da538d753061cda75b09fa0a97bccfbb1cc79f8f4bb847a2c8f",
+    "sha256": "61fdb372946dbf322cae0df072e56cfed72826e89746f4856fe4f33c4035dc48",
     "file": "shapes/realm-experience-rating-context-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-experience-rating-context-v1/realm-shape",
@@ -723,7 +723,7 @@ export const profileRegistry = {
     ]
   },
   "realm-experience-rating-observation-v1": {
-    "sha256": "c3ce902cafe8b737aac34080fb1caf4b3953f5c737e500129d16e1d630654afe",
+    "sha256": "bc1075b4e362349ffeeb01138015284f02226995ea3b210436497f86f5685bc8",
     "file": "shapes/realm-experience-rating-observation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-experience-rating-observation-v1/realm-shape",
@@ -797,7 +797,7 @@ export const profileRegistry = {
     ]
   },
   "realm-release-rating-context-v1": {
-    "sha256": "7520c99bb9669d866e67b4929ee624b1dafb3f2c6d616e67fca32bbd4a679c17",
+    "sha256": "93e0ec9620304d11ec112f7edbf2f4b73f81325a3fe0205b37728ced114840f1",
     "file": "shapes/realm-release-rating-context-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-release-rating-context-v1/realm-shape",
@@ -809,7 +809,7 @@ export const profileRegistry = {
     ]
   },
   "realm-release-rating-observation-v1": {
-    "sha256": "451a60e884d8c09b3f3e0c91742be3044f2067054479ad4f662b9abe9ba02f2f",
+    "sha256": "833450c3651be8850f268b122e3ce016c0458961dfdf1377c75f4233927a1086",
     "file": "shapes/realm-release-rating-observation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-release-rating-observation-v1/realm-shape",
@@ -843,7 +843,7 @@ export const profileRegistry = {
     ]
   },
   "realm-standing-rating-context-v1": {
-    "sha256": "be1cfde2f3f0c6207e684829b7a5a9c66383f52a640908051cd245ebf0454cd9",
+    "sha256": "7bec3a7793417ef4138e54a6220ceaec7aa76e446df3a9fdadc9d1ba5cc35fab",
     "file": "shapes/realm-standing-rating-context-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-standing-rating-context-v1/realm-shape",
@@ -855,7 +855,7 @@ export const profileRegistry = {
     ]
   },
   "realm-standing-rating-observation-v1": {
-    "sha256": "a0206416dfc9d591e187dc22400ac802810a01245adb20e4ff48bdd4360960da",
+    "sha256": "d824ac73cde5f8a3a67f83339c4a3db9b982a8223b04f2277981d6adba33caa4",
     "file": "shapes/realm-standing-rating-observation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-standing-rating-observation-v1/realm-shape",
@@ -887,7 +887,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-context-v1": {
-    "sha256": "509a798eb50e46e6f6a7cb91b4716717189f167bd24cca05c8e2e4769cc737c8",
+    "sha256": "8ac2f366d615a08d072e4bca245ced3fa445ee88e38a946029649e32937e175f",
     "file": "shapes/realm-target-rating-context-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-context-v1/realm-shape",
@@ -899,7 +899,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-context-v2": {
-    "sha256": "c599aaf7d0f236a2b1f6fa1e4f02f38b928e979a31605a15f482f6808c0937e7",
+    "sha256": "f772578c222dd5b628c9f933c5e94b54dcd7afd098639f68b97397f95aabaf22",
     "file": "shapes/realm-target-rating-context-v2.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-context-v2/realm-shape",
@@ -911,7 +911,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-context-v3": {
-    "sha256": "a4e4b5abebed81c9f29dae026a5c30be053f3cefe2be8429b188b03ac33a0668",
+    "sha256": "27f3fad26fee3ece32933f50432f6de7df89aa2ff63bc0278855b79d46178bf3",
     "file": "shapes/realm-target-rating-context-v3.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-context-v3/realm-shape",
@@ -923,7 +923,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-context-v4": {
-    "sha256": "58db69f0afc389673f9ba6f9c5900125dcad8243ae3fa8f60be07eb5122a8927",
+    "sha256": "68ffb3005c6f57794341630ccb9db0c38d9ddaaeb0705d989aac5618ed6b2cce",
     "file": "shapes/realm-target-rating-context-v4.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-context-v4/realm-shape",
@@ -935,7 +935,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-observation-v1": {
-    "sha256": "b7dfb94604e5346b92318a25a17225a063a45156a4517ba8c16269345a066809",
+    "sha256": "e8b4e47013cd5429e0aba55192e0587e918a3f6c136d7eb363cff6fb1df69b3a",
     "file": "shapes/realm-target-rating-observation-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-observation-v1/realm-shape",
@@ -951,7 +951,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-observation-v2": {
-    "sha256": "184e1f90ec69b630b535f247359218e80b7f27fa004884277ed68f58bfae2543",
+    "sha256": "84c2c5890fefa3b205a924aa2a847c005fb343e5fd8120dc103f8ca8a63bc9bd",
     "file": "shapes/realm-target-rating-observation-v2.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-observation-v2/realm-shape",
@@ -967,7 +967,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-observation-v3": {
-    "sha256": "a7c66a9ccb59e5ea127a5b50f5b6213794a348e5bb716f70705ac11ece9c6273",
+    "sha256": "91992a81764f366b64c2dce1aef37952329b09c9a56a33121669c0bdbf5f48ae",
     "file": "shapes/realm-target-rating-observation-v3.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-observation-v3/realm-shape",
@@ -983,7 +983,7 @@ export const profileRegistry = {
     ]
   },
   "realm-target-rating-observation-v4": {
-    "sha256": "a97714c83b03995697b778638296ace15c05a3be91448e0fa9c5b18d4e4221ea",
+    "sha256": "6932dc8df4e44fcda7f741cbad9b8d4cb1d53efebbec90a6086b1f0f8ca63f22",
     "file": "shapes/realm-target-rating-observation-v4.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-target-rating-observation-v4/realm-shape",

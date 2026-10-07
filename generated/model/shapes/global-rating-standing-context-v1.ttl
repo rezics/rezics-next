@@ -19,3 +19,5 @@
     sh:property [ sh:path rv:ratingAggregationPolicy ; sh:hasValue <https://rezics.com/definition/rating-latest-per-rater-mean-v1> ; sh:maxCount 1 ] ;
     sh:property [ sh:path rv:question ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype rdf:langString ; sh:languageIn ( "en" ) ; sh:minLength 3 ; sh:maxLength 120 ] ;
     sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+# Authored SHACL constraints for rating evidence.

@@ -92,3 +92,5 @@
         [ sh:property [ sh:path rv:ratingAvailability ; sh:hasValue rv:Withdrawn ] ;
           sh:property [ sh:path rv:ratingValue ; sh:maxCount 0 ] ]
     ) .
+
+# Authored SHACL constraints for rating evidence.

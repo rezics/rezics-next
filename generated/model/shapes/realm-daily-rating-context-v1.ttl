@@ -35,3 +35,5 @@
     sh:property [ sh:path rv:ratingAggregationPolicy ;
                   sh:hasValue <https://rezics.com/definition/rating-latest-per-rater-mean-v1> ;
                   sh:maxCount 1 ] .
+
+# Authored SHACL constraints for rating evidence.

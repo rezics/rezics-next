@@ -17,25 +17,15 @@
 <https://rezics.com/definition/realm-target-rating-observation-v4/context-shape>
     a sh:NodeShape ;
     sh:property [ sh:path rdf:type ; sh:hasValue rv:TargetRatingContext ] ;
-    sh:property [ sh:path rv:contextState ; sh:hasValue rv:Active ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:contextState ; sh:maxCount 1 ; sh:hasValue rv:Active ] ;
     sh:property [ sh:path rv:realm ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
-    sh:property [ sh:path rv:question ; sh:minCount 1 ; sh:maxCount 1 ;
-                  sh:datatype rdf:langString ; sh:minLength 3 ;
-                  sh:maxLength 120 ] ;
+    sh:property [ sh:path rv:question ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype rdf:langString ; sh:minLength 3 ; sh:maxLength 120 ] ;
     sh:property [ sh:path rv:targetGrain ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Release rv:Realization rv:Occurrence rv:Resource rv:Projection ) ] ;
-    sh:property [ sh:path rv:ratingScaleMin ; sh:hasValue 1 ; sh:maxCount 1 ;
-                  sh:datatype xsd:integer ] ;
-    sh:property [ sh:path rv:ratingScaleMax ; sh:hasValue 10 ; sh:maxCount 1 ;
-                  sh:datatype xsd:integer ] ;
-    sh:property [ sh:path rv:ratingCadence ;
-                  sh:hasValue <https://rezics.com/definition/rating-standing-v1> ;
-                  sh:maxCount 1 ] ;
-    sh:property [ sh:path rv:ratingPopulationPolicy ;
-                  sh:hasValue <https://rezics.com/definition/rating-account-principal-population-v1> ;
-                  sh:maxCount 1 ] ;
-    sh:property [ sh:path rv:ratingAggregationPolicy ;
-                  sh:hasValue <https://rezics.com/definition/rating-latest-per-rater-mean-v1> ;
-                  sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:ratingScaleMin ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:hasValue 1 ] ;
+    sh:property [ sh:path rv:ratingScaleMax ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:hasValue 10 ] ;
+    sh:property [ sh:path rv:ratingCadence ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-standing-v1> ] ;
+    sh:property [ sh:path rv:ratingPopulationPolicy ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-account-principal-population-v1> ] ;
+    sh:property [ sh:path rv:ratingAggregationPolicy ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-latest-per-rater-mean-v1> ] ;
     sh:property [ sh:path rv:displayThreshold ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 1000 ] ;
     sh:property [ sh:path rdf:type ; sh:hasValue rv:AcceptedTargetRatingContext ] ;
     sh:property [ sh:path rv:acceptedSubjectType ; sh:maxCount 32 ; sh:nodeKind sh:IRI ] ;
@@ -56,23 +46,16 @@
     a sh:NodeShape ;
     sh:property [ sh:path rdf:type ; sh:hasValue rv:TargetRatingObservationRevision ] ;
     sh:property [ sh:path rv:observation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:TargetRatingObservation ] ;
-    sh:property [ sh:path rv:ratingAvailability ; sh:minCount 1 ; sh:maxCount 1 ;
-        sh:in ( rv:Available rv:Withdrawn ) ] ;
-    sh:property [ sh:path rv:evaluatedAt ; sh:minCount 1 ; sh:maxCount 1 ;
-        sh:datatype xsd:dateTime ] ;
-    sh:property [ sh:path rv:submittedAt ; sh:minCount 1 ; sh:maxCount 1 ;
-        sh:datatype xsd:dateTime ] ;
-    sh:property [ sh:path rv:originalSubmissionAt ; sh:minCount 1 ; sh:maxCount 1 ;
-        sh:datatype xsd:dateTime ] ;
-    sh:property [ sh:path rv:revisedAt ; sh:minCount 1 ; sh:maxCount 1 ;
-        sh:datatype xsd:dateTime ] ;
-    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ;
-        sh:class rv:TargetRatingObservationRevision ] ;
+    sh:property [ sh:path rv:ratingAvailability ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Available rv:Withdrawn ) ] ;
+    sh:property [ sh:path rv:evaluatedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:submittedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:originalSubmissionAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:revisedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:TargetRatingObservationRevision ] ;
     sh:property [ sh:path rdf:type ; sh:hasValue rv:AcceptedTargetRatingObservationRevision ] ;
     sh:or (
         [ sh:property [ sh:path rv:ratingAvailability ; sh:hasValue rv:Available ] ;
-          sh:property [ sh:path rv:ratingValue ; sh:minCount 1 ; sh:maxCount 1 ;
-            sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 10 ] ]
+          sh:property [ sh:path rv:ratingValue ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 10 ] ]
         [ sh:property [ sh:path rv:ratingAvailability ; sh:hasValue rv:Withdrawn ] ;
           sh:property [ sh:path rv:ratingValue ; sh:maxCount 0 ] ]
     ) .
