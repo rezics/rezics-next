@@ -13,6 +13,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.HexFormat;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import org.apache.jena.atlas.iterator.Iter;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.jena.graph.Graph;
 import org.apache.jena.graph.Node;
@@ -28,6 +32,10 @@ import org.apache.jena.rdf.model.ResourceFactory;
 import org.apache.jena.shacl.Shapes;
 import org.apache.jena.shacl.ValidationReport;
 import org.apache.jena.sparql.core.DatasetGraph;
+import org.apache.jena.sparql.core.DatasetGraphWrapper;
+import org.apache.jena.sparql.core.DatasetGraphWrapperView;
+import org.apache.jena.sparql.core.GraphView;
+import org.apache.jena.sparql.core.Quad;
 import org.apache.jena.update.UpdateAction;
 
 final class CommandService extends ActionService {
@@ -129,6 +137,20 @@ final class CommandService extends ActionService {
                 JSON.write(action.getResponse().getOutputStream(), result);
                 return;
             }
+            if (body.get("retireProof") != null) {
+                if (bytes.length > 2_000_000 || body.size() != 1)
+                    throw new IllegalArgumentException("invalid retirement envelope");
+                if (!authorized(action, admittedCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                JsonObject evidence = body.get("retireProof").getAsObject();
+                if (evidence.size() != 6) throw new IllegalArgumentException("invalid retirement evidence");
+                Map<String, Object> result = retireProof(action.getDataService().getDataset(), new Retirement(
+                    iri(ProfileRegistry.required(evidence, "receipt")), ProfileRegistry.required(evidence, "digest"),
+                    ProfileRegistry.required(evidence, "payloadSha256"), ProfileRegistry.required(evidence, "dataEpoch"),
+                    ProfileRegistry.required(evidence, "sequence"), ProfileRegistry.required(evidence, "signature")));
+                respond(action, 200, result); return;
+            }
             if (body.get("items") != null) {
                 if (!authorized(action, admittedCapability)) {
                     respond(action, 403, Map.of("status", "forbidden")); return;
@@ -178,7 +200,13 @@ final class CommandService extends ActionService {
             List<Validation> validations = parseValidations(body.get("validations"));
             long deadline = System.nanoTime() + deadlineMs * 1_000_000L;
             CommandWork.enter("queue");
-            Map<String, Object> result = run(action.getDataService().getDataset(), receipt, digest, update, body.get("titleAdmission"), plan, validations, deadline);
+            JsonValue thin = body.get("slim");
+            Map<String, Object> result = thin == null
+                ? run(action.getDataService().getDataset(), receipt, digest, update, body.get("titleAdmission"), plan, validations, deadline)
+                : runSlim(action.getDataService().getDataset(), receipt, digest, update,
+                    new Slim(ProfileRegistry.required(thin.getAsObject(), "payloadSha256"),
+                        iri(ProfileRegistry.required(thin.getAsObject(), "component")),
+                        iri(ProfileRegistry.required(thin.getAsObject(), "revision"))), validations, deadline);
             action.getResponse().setHeader("Server-Timing", work.serverTiming());
             action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
             respond(action, 200, result);
@@ -276,6 +304,216 @@ final class CommandService extends ActionService {
     }
     private static final class UnknownProfile extends IllegalArgumentException {}
 
+    record Slim(String payloadSha256, String component, String revision) {}
+    record Retirement(String receipt, String digest, String payloadSha256, String dataEpoch,
+                      String sequence, String signature) {}
+
+    Map<String, Object> runCommand(DatasetGraph dataset, String receipt, String digest, String update,
+                                  List<Validation> validations, long deadline) {
+        return run(dataset, receipt, digest, update, null, CommandPolicy.parse(update, receipt), validations, deadline);
+    }
+
+    Map<String, Object> runSlim(DatasetGraph dataset, String receipt, String digest, String update,
+                               Slim slim, List<Validation> validations, long deadline) {
+        if (!digest.matches("[0-9a-f]{64}") || !slim.payloadSha256().matches("[0-9a-f]{64}"))
+            throw new IllegalArgumentException("invalid slim command digest");
+        CommandPolicy.Plan plan = CommandPolicy.parse(update, receipt);
+        String footprint = CommandPolicy.slimFootprint(plan, receipt, slim.component(), slim.revision());
+        if (footprint != null) return invalid(footprint);
+        if (validations.isEmpty() || validations.stream().anyMatch(validation ->
+            !Set.of("work-metadata-details-v1", "work-metadata-details-v2").contains(validation.profileId())))
+            return invalid("slim command requires metadata profiles");
+        synchronized (dataset) {
+            return runSerialized(dataset, receipt, digest, update, null, plan, validations, deadline, slim);
+        }
+    }
+
+    Map<String, Object> retireProof(DatasetGraph dataset, Retirement evidence) {
+        // Main signs only after matching the durable owner receipt and exact object.
+        // This is a domain-separated custody assertion, never a caller SPARQL delete.
+        if (!evidence.digest().matches("[0-9a-f]{64}") || !evidence.payloadSha256().matches("[0-9a-f]{64}")
+            || evidence.dataEpoch().isEmpty() || !evidence.sequence().matches("[1-9][0-9]*"))
+            return invalid("owner custody reconciliation evidence is malformed");
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(titleAdmissionKey, "HmacSHA256"));
+            String payload = retirementPayload(evidence);
+            if (!evidence.signature().matches("[0-9a-f]{64}") || !MessageDigest.isEqual(
+                mac.doFinal(payload.getBytes(StandardCharsets.UTF_8)), HexFormat.of().parseHex(evidence.signature())))
+                return invalid("owner custody reconciliation signature differs");
+        } catch (java.security.GeneralSecurityException ex) { throw new IllegalStateException(ex); }
+        synchronized (dataset) {
+            dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
+            boolean commit = false, tracksIndex = false;
+            try {
+                CommandInvariant.Control control = CommandInvariant.readControl(dataset);
+                if (control == null) return invalid("proof retirement requires valid product control");
+                if (control.held()) return invalid("proof retirement cannot run during a graph restore hold");
+                CommandInvariant.CommitProof proof = CommandInvariant.commitProof(dataset, evidence.receipt());
+                if (proof == null) return Map.of("status", dataset.contains(NodeFactory.createURI(CommandPolicy.RECEIPTS),
+                    NodeFactory.createURI(evidence.receipt()), Node.ANY, Node.ANY) ? "conflict" : "retired");
+                if (!proof.equals(new CommandInvariant.CommitProof(evidence.digest(), evidence.payloadSha256(),
+                    evidence.dataEpoch(), evidence.sequence()))) return Map.of("status", "conflict");
+                tracksIndex = SearchDeltaJournal.canTrackCommit(dataset);
+                if (tracksIndex) {
+                    publicSearchWriteEpoch.incrementAndGet();
+                    SearchDeltaJournal.fenceBeforeWrite(dataset);
+                }
+                SearchDeltaJournal.Capture delta = tracksIndex ? new SearchDeltaJournal.Capture(dataset, false) : null;
+                CommandWork.enter("update");
+                CommandWork.observe(delta == null ? dataset : delta.observed()).deleteAny(NodeFactory.createURI(CommandPolicy.RECEIPTS),
+                    NodeFactory.createURI(evidence.receipt()), Node.ANY, Node.ANY);
+                if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+                CommandWork.enter("commit");
+                dataset.commit(); commit = true;
+                CommandWork.count("durable_commits", 1);
+                return Map.of("status", "retired");
+            } finally {
+                finishNativeWrite(dataset, commit, tracksIndex, false, false, false, false);
+            }
+        }
+    }
+
+    static String retirementPayload(Retirement evidence) {
+        // Canonical compact JSON matches the owner signer; JSON quoting handles all IRI/epoch characters.
+        return "[" + java.util.stream.Stream.of("rezics-commit-proof-retirement-v1", evidence.receipt(), evidence.digest(), evidence.payloadSha256(),
+            evidence.dataEpoch(), evidence.sequence()).map(CommandService::jsonString)
+            .collect(java.util.stream.Collectors.joining(",")) + "]";
+    }
+    private static String jsonString(String value) {
+        return JSON.toStringFlat(new org.apache.jena.atlas.json.JsonString(value));
+    }
+
+    private static final Set<Node> EDITION_PUBLIC_FIELDS = java.util.stream.Stream.of("name", "bookEdition",
+        "publisher", "datePublished", "isbn").map(name -> NodeFactory.createURI("https://schema.org/" + name))
+        .collect(java.util.stream.Collectors.toUnmodifiableSet());
+
+    private static List<Quad> editionPublicFacts(DatasetGraph data, Node component, Node revision) {
+        Node stored = exactlyOne(data, NodeFactory.createURI(CommandPolicy.REVISIONS), revision, "metadataState");
+        if (stored == null || !stored.isLiteral()) throw new IllegalArgumentException("slim edition state is missing");
+        JsonObject state = JSON.parse(stored.getLiteralLexicalForm());
+        String status = ProfileRegistry.required(state, "status");
+        if (!ProfileRegistry.required(state, "kind").equals("edition")
+            || !ProfileRegistry.required(state, "id").equals(component.getURI())
+            || !Set.of("active", "withdrawn").contains(status)
+            || !NodeFactory.createURI(RV + (status.equals("active") ? "Active" : "Withdrawn")).equals(
+                exactlyOne(data, NodeFactory.createURI(CommandPolicy.CURRENT), component, "editionState")))
+            throw new IllegalArgumentException("slim edition state differs from component");
+        List<Quad> facts = new ArrayList<>();
+        if (status.equals("withdrawn")) return facts;
+        JsonObject title = state.get("title").getAsObject();
+        facts.add(new Quad(Quad.defaultGraphNodeGenerated, component, NodeFactory.createURI("https://schema.org/name"),
+            NodeFactory.createLiteralLang(ProfileRegistry.required(title, "value"), ProfileRegistry.required(title, "language"))));
+        for (String[] field : List.of(new String[]{"editionStatement", "bookEdition"}, new String[]{"publisher", "publisher"},
+            new String[]{"isbn13", "isbn"})) {
+            JsonValue value = state.get(field[0]);
+            if (value != null && !value.isNull()) facts.add(new Quad(Quad.defaultGraphNodeGenerated, component,
+                NodeFactory.createURI("https://schema.org/" + field[1]), NodeFactory.createLiteralString(value.getAsString().value())));
+        }
+        JsonValue year = state.get("publicationYear");
+        if (year != null && !year.isNull()) {
+            int value = new java.math.BigDecimal(year.getAsNumber().value().toString()).intValueExact();
+            if (value < 1 || value > 9999) throw new IllegalArgumentException("slim edition publication year differs");
+            facts.add(new Quad(Quad.defaultGraphNodeGenerated, component, NodeFactory.createURI("https://schema.org/datePublished"),
+                NodeFactory.createLiteralDT(String.format(java.util.Locale.ROOT, "%04d", value),
+                    org.apache.jena.datatypes.xsd.XSDDatatype.XSDgYear)));
+        }
+        return facts;
+    }
+
+    /** One logical current scope for policy, focused SHACL and text projections.
+     * The bounded slim component is physically default-graph data; legacy subjects
+     * retain their named storage. Historical envelope types come from its pinned model. */
+    static class CurrentScope extends DatasetGraphWrapper implements DatasetGraphWrapperView {
+        private static final Node CURRENT = NodeFactory.createURI(CommandPolicy.CURRENT);
+        private static final Node REVISIONS = NodeFactory.createURI(CommandPolicy.REVISIONS);
+        CurrentScope(DatasetGraph dataset) { super(dataset); }
+        private static boolean matches(Node pattern, Node value) {
+            return pattern == null || Node.ANY.equals(pattern) || pattern.isVariable() || pattern.equals(value);
+        }
+        @Override public java.util.Iterator<Quad> find(Node graph, Node subject, Node predicate, Node object) {
+            if (CURRENT.equals(graph)) return Iter.distinct(Iter.concat(super.find(graph, subject, predicate, object),
+                Iter.map(super.find(Quad.defaultGraphNodeGenerated, subject, predicate, object),
+                    quad -> new Quad(CURRENT, quad.asTriple()))));
+            if (REVISIONS.equals(graph)) return Iter.distinct(Iter.concat(super.find(graph, subject, predicate, object),
+                priorRevision(subject, predicate, object).iterator()));
+            if (Quad.isUnionGraph(graph)) return Iter.distinct(Iter.map(findNG(Node.ANY, subject, predicate, object),
+                quad -> new Quad(Quad.unionGraph, quad.asTriple())));
+            return super.find(graph, subject, predicate, object);
+        }
+        private List<Quad> priorRevision(Node subject, Node predicate, Node object) {
+            List<Quad> result = new ArrayList<>();
+            if (subject == null || !subject.isURI()) return result;
+            var heads = super.find(Quad.defaultGraphNodeGenerated, Node.ANY, NodeFactory.createURI(RV + "metadataHead"), subject);
+            try {
+                while (heads.hasNext()) {
+                    Quad head = heads.next();
+                    if (super.contains(REVISIONS, head.getObject(), Node.ANY, Node.ANY)) continue;
+                    Node model = exactlyOne(getWrapped(), Quad.defaultGraphNodeGenerated, head.getSubject(), "modelRevision");
+                    Node manifest = exactlyOne(getWrapped(), Quad.defaultGraphNodeGenerated, head.getSubject(), "manifest");
+                    if (model == null || manifest == null) continue;
+                    String type = model.equals(NodeFactory.createURI("https://rezics.com/definition/work-metadata-details-v2"))
+                        ? "WorkMetadataDetailsV2Revision" : "WorkMetadataRevision";
+                    for (Quad quad : List.of(
+                        new Quad(REVISIONS, head.getObject(), org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI(RV + type)),
+                        new Quad(REVISIONS, head.getObject(), org.apache.jena.vocabulary.RDF.type.asNode(), NodeFactory.createURI(RV + "RevisionAnchor")),
+                        new Quad(REVISIONS, head.getObject(), NodeFactory.createURI(RV + "component"), head.getSubject()),
+                        new Quad(REVISIONS, head.getObject(), NodeFactory.createURI(RV + "modelRevision"), model),
+                        new Quad(REVISIONS, head.getObject(), NodeFactory.createURI(RV + "shapeRevision"), model),
+                        new Quad(REVISIONS, head.getObject(), NodeFactory.createURI(RV + "manifest"), manifest)))
+                        if (matches(subject, quad.getSubject()) && matches(predicate, quad.getPredicate())
+                            && matches(object, quad.getObject())) result.add(quad);
+                    if (result.size() > 600) throw new IllegalArgumentException("slim predecessor scope exceeds bound");
+                }
+            } finally { Iter.close(heads); }
+            return result;
+        }
+        @Override public java.util.Iterator<Quad> find() { return find(Node.ANY, Node.ANY, Node.ANY, Node.ANY); }
+        @Override public java.util.Iterator<Quad> find(Quad quad) {
+            return find(quad.getGraph(), quad.getSubject(), quad.getPredicate(), quad.getObject());
+        }
+        @Override public java.util.Iterator<Quad> findNG(Node graph, Node subject, Node predicate, Node object) {
+            if (Node.ANY.equals(graph)) return Iter.concat(super.findNG(graph, subject, predicate, object),
+                Iter.map(super.find(Quad.defaultGraphNodeGenerated, subject, predicate, object),
+                    quad -> new Quad(CURRENT, quad.asTriple())));
+            return Iter.filter(find(graph, subject, predicate, object), quad -> !quad.isDefaultGraph());
+        }
+        @Override public boolean contains(Quad quad) {
+            return contains(quad.getGraph(), quad.getSubject(), quad.getPredicate(), quad.getObject());
+        }
+        @Override public boolean contains(Node graph, Node subject, Node predicate, Node object) {
+            var rows = find(graph, subject, predicate, object);
+            try { return rows.hasNext(); } finally { Iter.close(rows); }
+        }
+        @Override public void add(Quad quad) {
+            Node graph = CURRENT.equals(quad.getGraph()) && getWrapped().contains(
+                Quad.defaultGraphNodeGenerated, quad.getSubject(), Node.ANY, Node.ANY)
+                ? Quad.defaultGraphNodeGenerated : quad.getGraph();
+            getWrapped().add(graph, quad.getSubject(), quad.getPredicate(), quad.getObject());
+        }
+        @Override public void add(Node graph, Node subject, Node predicate, Node object) { add(new Quad(graph, subject, predicate, object)); }
+        @Override public void delete(Quad quad) {
+            getWrapped().delete(quad);
+            if (CURRENT.equals(quad.getGraph())) getWrapped().delete(Quad.defaultGraphNodeGenerated,
+                quad.getSubject(), quad.getPredicate(), quad.getObject());
+        }
+        @Override public void delete(Node graph, Node subject, Node predicate, Node object) { delete(new Quad(graph, subject, predicate, object)); }
+        @Override public void deleteAny(Node graph, Node subject, Node predicate, Node object) {
+            Iter.toList(find(graph, subject, predicate, object)).forEach(this::delete);
+        }
+        @Override public Graph getGraph(Node graph) { return GraphView.createNamedGraph(this, graph); }
+        @Override public Graph getDefaultGraph() { return GraphView.createDefaultGraph(this); }
+        @Override public Graph getUnionGraph() { return GraphView.createUnionGraph(this); }
+        @Override public boolean containsGraph(Node graph) {
+            return Quad.isDefaultGraph(graph) || Quad.isUnionGraph(graph) || contains(graph, Node.ANY, Node.ANY, Node.ANY);
+        }
+        @Override public java.util.Iterator<Node> listGraphNodes() {
+            return Iter.distinct(Iter.concat(super.listGraphNodes(),
+                super.contains(Quad.defaultGraphNodeGenerated, Node.ANY, Node.ANY, Node.ANY)
+                    ? List.of(CURRENT).iterator() : List.<Node>of().iterator()));
+        }
+    }
+
     private Map<String, Object> run(DatasetGraph dataset, String receipt, String digest, String update, JsonValue titleAdmission, CommandPolicy.Plan plan,
                                     List<Validation> validations, long deadline) {
         // Jena may release its writer transaction at commit, before end(). Keep
@@ -317,14 +555,14 @@ final class CommandService extends ActionService {
                     if (System.nanoTime() >= deadline) {
                         results.add(Map.of("status", "deadline")); continue;
                     }
-                    CommandOverlay staged = new CommandOverlay(batchDelta == null ? dataset : batchDelta.observed());
+                    CommandOverlay staged = new CommandOverlay(new CurrentScope(batchDelta == null ? dataset : batchDelta.observed()));
                     SearchDeltaJournal.Capture delta = null;
                     Map<String, Object> result = evaluate(staged, item.receipt(), item.digest(), item.update(),
                         null, item.plan(), item.validations(), deadline, delta);
                     if (Set.of("invalid", "guard-unmatched").contains(result.get("status"))) {
                         // No RDF or Lucene change from the failed candidate has
                         // escaped. Seal its admission at the next logical position.
-                        staged = new CommandOverlay(batchDelta == null ? dataset : batchDelta.observed());
+                        staged = new CommandOverlay(new CurrentScope(batchDelta == null ? dataset : batchDelta.observed()));
                         delta = null;
                         String cancellation = item.cancellation().replace("\"candidate-failed\"",
                             "\"" + ("invalid".equals(result.get("status")) ? "invalid" : "stale") + "\"");
@@ -364,6 +602,11 @@ final class CommandService extends ActionService {
     private Map<String, Object> runSerialized(DatasetGraph dataset, String receipt, String digest, String update,
                                              JsonValue titleAdmission, CommandPolicy.Plan plan,
                                              List<Validation> validations, long deadline) {
+        return runSerialized(dataset, receipt, digest, update, titleAdmission, plan, validations, deadline, null);
+    }
+    private Map<String, Object> runSerialized(DatasetGraph dataset, String receipt, String digest, String update,
+                                             JsonValue titleAdmission, CommandPolicy.Plan plan,
+                                             List<Validation> validations, long deadline, Slim slim) {
         dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
         CommandWork.enter("preflight");
         boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
@@ -380,43 +623,137 @@ final class CommandService extends ActionService {
             ? new SearchDeltaJournal.Capture(dataset, touchesPublicIndex && plan.rebuild()) : null;
         boolean commit = false;
         try {
-            Map<String, Object> result = evaluate(dataset, receipt, digest, update, titleAdmission, plan, validations, deadline, delta);
+            Map<String, Object> result;
+            if (slim == null) result = evaluate(new CurrentScope(delta == null ? dataset : delta.observed()), receipt, digest, update,
+                titleAdmission, plan, validations, deadline, delta);
+            else {
+                CommandInvariant.CommitProof existing = CommandInvariant.commitProof(dataset, receipt);
+                if (existing != null) return existing.digest().equals(digest)
+                    && existing.payloadSha256().equals(slim.payloadSha256()) ? committed(dataset, receipt)
+                    : Map.of("status", "conflict");
+                if (receiptValue(dataset, receipt, "requestDigest") != null) return Map.of("status", "conflict");
+                CurrentScope sink = new CurrentScope(delta == null ? dataset : delta.observed()) {
+                    @Override public void add(Quad quad) { if (persist(quad)) super.add(quad); }
+                    @Override public void delete(Quad quad) { if (persist(quad)) super.delete(quad); }
+                    private boolean persist(Quad quad) {
+                        return !Set.of(NodeFactory.createURI(CommandPolicy.RECEIPTS),
+                            NodeFactory.createURI(CommandPolicy.REVISIONS), NodeFactory.createURI(CommandPolicy.OUTBOX))
+                            .contains(quad.getGraph())
+                            && !(quad.getGraph().equals(NodeFactory.createURI(CommandPolicy.CURRENT))
+                                && quad.getSubject().equals(NodeFactory.createURI(slim.component())));
+                    }
+                };
+                Node component = NodeFactory.createURI(slim.component()), revision = NodeFactory.createURI(slim.revision());
+                Node current = NodeFactory.createURI(CommandPolicy.CURRENT), revisions = NodeFactory.createURI(CommandPolicy.REVISIONS);
+                if (sink.contains(revisions, revision, Node.ANY, Node.ANY)) return invalid("slim revision is not fresh");
+                Node priorHead = exactlyOne(sink, current, component, "metadataHead");
+                Node priorWork = exactlyOne(sink, current, component, "work");
+                if (priorHead == null && sink.contains(current, component, NodeFactory.createURI(RV + "metadataHead"), Node.ANY)
+                    || priorWork == null && sink.contains(current, component, NodeFactory.createURI(RV + "work"), Node.ANY))
+                    return invalid("slim metadata CAS prestate is ambiguous");
+                CommandOverlay staged = new CommandOverlay(sink);
+                result = evaluate(staged, receipt, digest, update, null, plan, validations, deadline, null, true);
+                if (!"committed".equals(result.get("status"))) return result;
+                Node manifest = exactlyOne(staged, revisions, revision, "manifest");
+                Node model = exactlyOne(staged, revisions, revision, "modelRevision");
+                if (manifest == null || !manifest.isURI() || !manifest.getURI().matches("urn:rezics:sha256:[0-9a-f]{64}")
+                    || model == null || !Set.of(NodeFactory.createURI("https://rezics.com/definition/work-metadata-details-v1"),
+                        NodeFactory.createURI("https://rezics.com/definition/work-metadata-details-v2")).contains(model))
+                    return invalid("slim metadata manifest or model is incomplete");
+                Node receipts = NodeFactory.createURI(CommandPolicy.RECEIPTS), own = NodeFactory.createURI(receipt);
+                Node work = exactlyOne(staged, receipts, own, "work");
+                Node scope = exactlyOne(staged, receipts, own, "admittedScope");
+                Node admission = exactlyOne(staged, receipts, own, "admissionId");
+                Node authority = exactlyOne(staged, receipts, own, "authorityEpoch");
+                if (work == null || !work.isURI() || !work.equals(exactlyOne(staged, current, component, "work"))
+                    || priorWork != null && !priorWork.equals(work)
+                    || scope == null || !scope.equals(NodeFactory.createLiteralString("work:edit:" + work.getURI()))
+                    || admission == null || !admission.isLiteral()
+                    || !admission.getLiteralLexicalForm().matches("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+                    || authority == null || !authority.isLiteral() || !authority.getLiteralLexicalForm().matches("[0-9]+")
+                    || !component.equals(exactlyOne(staged, revisions, revision, "component"))
+                    || !component.equals(exactlyOne(staged, receipts, own, "metadataComponent"))
+                    || !revision.equals(exactlyOne(staged, receipts, own, "metadataRevision"))
+                    || !revision.equals(exactlyOne(staged, receipts, own, "workRevision"))
+                    || !NodeFactory.createLiteralString("work.edit").equals(exactlyOne(staged, receipts, own, "action"))
+                    || !NodeFactory.createLiteralString(model.getURI().substring("https://rezics.com/definition/".length()))
+                        .equals(exactlyOne(staged, receipts, own, "commandFamily"))
+                    || !(priorHead == null ? component : priorHead).equals(exactlyOne(staged, receipts, own, "expectedHead")))
+                    return invalid("slim metadata owner, scope or CAS basis differs");
+                Node predecessor = exactlyOne(staged, revisions, revision, "predecessor");
+                if (!NodeFactory.createURI(RV + "Succeeded").equals(exactlyOne(staged, receipts, own, "outcome"))
+                    || !(priorHead == null ? predecessor == null
+                        && !staged.contains(revisions, revision, NodeFactory.createURI(RV + "predecessor"), Node.ANY)
+                        : priorHead.equals(predecessor))
+                    || !revision.equals(exactlyOne(staged, current, component, "metadataHead"))
+                    || !NodeFactory.createURI("urn:rezics:dataset:product").equals(exactlyOne(staged, revisions, revision, "datasetId"))
+                    || !java.util.Objects.equals(exactlyOne(staged, receipts, own, "dataEpoch"),
+                        exactlyOne(staged, revisions, revision, "dataEpoch"))
+                    || !java.util.Objects.equals(exactlyOne(staged, receipts, own, "sequence"),
+                        exactlyOne(staged, revisions, revision, "sequence")))
+                    return invalid("slim success revision differs from exact CAS position");
+                List<Quad> facts = Iter.toList(staged.find(current, component, Node.ANY, Node.ANY));
+                if (facts.size() > 64) return invalid("slim current component exceeds quad bound");
+                List<Quad> publicFacts;
+                try { publicFacts = editionPublicFacts(staged, component, revision); }
+                catch (RuntimeException malformed) { return invalid("slim edition public state is invalid"); }
+                staged.apply();
+                dataset.deleteAny(current, component, Node.ANY, Node.ANY);
+                dataset.deleteAny(Quad.defaultGraphNodeGenerated, component, Node.ANY, Node.ANY);
+                for (Quad quad : facts) if (!Set.of(NodeFactory.createURI(RV + "manifest"),
+                    NodeFactory.createURI(RV + "modelRevision")).contains(quad.getPredicate())
+                    && !EDITION_PUBLIC_FIELDS.contains(quad.getPredicate()))
+                    dataset.add(Quad.defaultGraphNodeGenerated, component, quad.getPredicate(), quad.getObject());
+                publicFacts.forEach(dataset::add);
+                dataset.add(Quad.defaultGraphNodeGenerated, component, NodeFactory.createURI(RV + "manifest"), manifest);
+                dataset.add(Quad.defaultGraphNodeGenerated, component, NodeFactory.createURI(RV + "modelRevision"), model);
+                CommandInvariant.Control after = CommandInvariant.readControl(dataset);
+                CommandInvariant.writeCommitProof(dataset, receipt, new CommandInvariant.CommitProof(digest,
+                    slim.payloadSha256(), after.epoch().getLiteralLexicalForm(), after.sequence().toString()));
+                if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+            }
             if (!"committed".equals(result.get("status"))) return result;
             CommandWork.enter("commit");
             dataset.commit(); commit = true;
             CommandWork.count("durable_commits", 1);
             return result;
         } finally {
+            finishNativeWrite(dataset, commit, tracksIndex, touchesPrivateIndex, touchesPublicIndex,
+                plan.rebuild(), plan.bootstrap() || receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:"));
+        }
+    }
+    private void finishNativeWrite(DatasetGraph dataset, boolean commit, boolean tracksIndex,
+                                   boolean touchesPrivateIndex, boolean touchesPublicIndex,
+                                   boolean rebuild, boolean qualifyGeneration) {
+        try { if (!commit) dataset.abort(); }
+        finally {
             try {
-                if (!commit) dataset.abort();
-            } finally {
-                try {
-                    dataset.end();
-                    CommandWork.enter("qualification");
-                    if (commit && tracksIndex) {
-                        // Keep the odd process epoch and native writer monitor until
-                        // qualification completes, so no later native write races it.
-                        try {
-                            if (plan.bootstrap() || receipt.startsWith("urn:rezics:receipt:content-rebuild:activate:"))
-                                SearchDeltaJournal.qualify(dataset);
-                            else if (touchesPublicIndex && plan.rebuild()) SearchDeltaJournal.invalidate(dataset);
-                            else if (!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(dataset, -1,
-                                publicSearchWriteEpoch.get() + 1).get("available"))) SearchDeltaJournal.invalidate(dataset);
-                        } catch (RuntimeException unavailable) {
-                            // Close reads without changing an already committed result.
-                            SearchDeltaJournal.invalidate(dataset);
-                        }
-                    }
-                } finally {
-                    if (tracksIndex) publicSearchWriteEpoch.incrementAndGet();
-                    if (touchesPrivateIndex) privateSearchWriteEpoch.incrementAndGet();
+                dataset.end();
+                CommandWork.enter("qualification");
+                if (commit && tracksIndex) {
+                    // Keep the odd process epoch and native writer monitor until
+                    // qualification completes, including receipt-only commits.
+                    try {
+                        if (qualifyGeneration) SearchDeltaJournal.qualify(dataset);
+                        else if (touchesPublicIndex && rebuild) SearchDeltaJournal.invalidate(dataset);
+                        else if (!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(dataset, -1,
+                            publicSearchWriteEpoch.get() + 1).get("available"))) SearchDeltaJournal.invalidate(dataset);
+                    } catch (RuntimeException unavailable) { SearchDeltaJournal.invalidate(dataset); }
                 }
+            } finally {
+                if (tracksIndex) publicSearchWriteEpoch.incrementAndGet();
+                if (touchesPrivateIndex) privateSearchWriteEpoch.incrementAndGet();
             }
         }
     }
     private Map<String, Object> evaluate(DatasetGraph dataset, String receipt, String digest, String update,
                                         JsonValue titleAdmission, CommandPolicy.Plan plan, List<Validation> validations,
                                         long deadline, SearchDeltaJournal.Capture delta) {
+        return evaluate(dataset, receipt, digest, update, titleAdmission, plan, validations, deadline, delta, false);
+    }
+    private Map<String, Object> evaluate(DatasetGraph dataset, String receipt, String digest, String update,
+                                        JsonValue titleAdmission, CommandPolicy.Plan plan, List<Validation> validations,
+                                        long deadline, SearchDeltaJournal.Capture delta, boolean slim) {
         boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
             String existing = receiptValue(dataset, receipt, "requestDigest");
             if (existing != null) {
@@ -427,6 +764,8 @@ final class CommandService extends ActionService {
                 Map<String,Object> replay = new LinkedHashMap<>(committed(dataset,receipt));
                 replay.put("templateIndex",TemplateIndexService.replay(dataset,receipt,plan)); return replay;
             }
+            String legacySlim = slim ? null : CommandInvariant.legacySlimMutation(dataset, plan);
+            if (legacySlim != null) return invalid(legacySlim);
             String preflight = CommandInvariant.preflight(dataset, receipt, plan);
             if (preflight != null) return invalid(preflight);
             if (StatementUpgradePolicy.applies(receipt))
@@ -454,7 +793,7 @@ final class CommandService extends ActionService {
             OccurrenceLabelIndex.Capture occurrenceLabels = new OccurrenceLabelIndex.Capture(dataset);
             var templateBefore = TemplateIndexService.capture(dataset,plan);
             CommandWork.enter("update");
-            UpdateAction.execute(plan.request(), DatasetFactory.wrap(CommandWork.observe(occurrenceLabels.observed(delta == null ? dataset : delta.observed()))));
+            UpdateAction.execute(plan.request(), DatasetFactory.wrap(CommandWork.observe(occurrenceLabels.observed(dataset))));
             CommandWork.enter("invariants");
             String stored = receiptValue(dataset, receipt, "requestDigest");
             if (stored == null) return Map.of("status", "guard-unmatched");
@@ -517,7 +856,7 @@ final class CommandService extends ActionService {
             TemplateIndexService.retain(dataset,receipt,templateDelta);
             result.put("templateIndex",templateDelta);
             CommandWork.enter("projections");
-            PublicNameProjection.refresh(CommandWork.observe(delta == null ? dataset : delta.observed()), plan, receipt, validations, delta == null ? List.of() : delta.changes());
+            PublicNameProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations, delta == null ? List.of() : delta.changes());
             RatingPopulationProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations);
             CommandWork.enter("journal");
             if (delta != null) {
@@ -535,7 +874,7 @@ final class CommandService extends ActionService {
                 if (plan.bootstrap()) SearchDeltaJournal.initialize(dataset);
                 else SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
             }
-        String streamInvariant = CommandInvariant.advanceRelayStream(dataset, receipt, plan, before);
+        String streamInvariant = slim ? null : CommandInvariant.advanceRelayStream(dataset, receipt, plan, before);
         if (streamInvariant != null) return invalid(streamInvariant);
         return result;
     }
@@ -985,6 +1324,8 @@ final class CommandService extends ActionService {
     }
     private static Map<String, Object> committed(DatasetGraph dataset, String receipt) {
         String datasetId = receiptValue(dataset, receipt, "datasetId");
+        if (datasetId == null && CommandInvariant.commitProof(dataset, receipt) != null)
+            datasetId = "urn:rezics:dataset:product";
         String epoch = receiptValue(dataset, receipt, "dataEpoch");
         String sequence = receiptValue(dataset, receipt, "sequence");
         if (datasetId == null || epoch == null || sequence == null) return Map.of("status", "committed");

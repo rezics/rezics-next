@@ -57,6 +57,8 @@ export interface GraphLineage {
 }
 
 export interface WorkActivationEnvironment {
+  /** The owner stages exact slim commands before dispatch and reconciles their commit proofs. */
+  receiptCustody?: import('../outbox/receipt-custody.ts').ReceiptCustody;
   addresses?: import('../address/registry.ts').AliasRegistry;
   fuseki: FusekiClient;
   lineage: GraphLineage;

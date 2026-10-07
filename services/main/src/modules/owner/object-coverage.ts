@@ -5,6 +5,9 @@ import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
 import { GRAPHS, RV } from '../work/activate.ts';
+import { RevisionCorrupt } from '../work/history.ts';
+import { visitModelGenerationArtifacts } from '../semantic/model-custody.ts';
+import { MODEL_COMPONENT, PROFILES } from '../semantic/schema.ts';
 import { checkStructureManifest, checkStructurePage, checkStructureSealManifest,
   InvalidStructureObject, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_SEAL_FORMAT }
   from '../structure/format.ts';
@@ -61,7 +64,8 @@ const record = (value: unknown): string => `${JSON.stringify(value)}\n`;
 export async function graphObjectReferences(fuseki: FusekiClient): Promise<GraphObjectReference[]> {
   const result = await fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?graph ?subject ?manifest WHERE {
-      GRAPH ?graph { ?subject rv:manifest ?manifest }
+      { GRAPH ?graph { ?subject rv:manifest ?manifest } }
+      UNION { ?subject rv:manifest ?manifest . BIND(<urn:x-arq:DefaultGraphNode> AS ?graph) }
     }`);
   if (!result.results?.bindings) throw new ObjectRecoveryConflict('graph object reference scan is incomplete');
   const references = result.results.bindings.map(row => {
@@ -78,7 +82,10 @@ export async function graphObjectReferences(fuseki: FusekiClient): Promise<Graph
   for (const [field, predicate] of [['component', 'component'], ['model', 'modelRevision'],
     ['shape', 'shapeRevision']] as const) {
     const scanned = await fuseki.query(`PREFIX rv: <${RV}>
-      SELECT ?graph ?subject ?value WHERE { GRAPH ?graph { ?subject rv:${predicate} ?value } }`);
+      SELECT ?graph ?subject ?value WHERE {
+        { GRAPH ?graph { ?subject rv:${predicate} ?value } }
+        UNION { ?subject rv:${predicate} ?value . BIND(<urn:x-arq:DefaultGraphNode> AS ?graph) }
+      }`);
     if (!scanned.results?.bindings) throw new ObjectRecoveryConflict('graph object reference scan is incomplete');
     const values = new Map<string, string[]>();
     for (const row of scanned.results.bindings) {
@@ -203,6 +210,7 @@ export async function captureObjectRecoveryCoverage(
   };
   const checkedPages = new Set<string>();
   const checkedStructureRoots = new Set<string>();
+  const checkedModelGenerations = new Set<string>();
   const objectDigest = (reference: string): string => {
     const digest = OBJECT.exec(reference)?.[1];
     if (!digest) throw new ObjectRecoveryConflict('Structure object reference is malformed', 'corrupt');
@@ -311,9 +319,13 @@ export async function captureObjectRecoveryCoverage(
       continue;
     }
     const manifest = await manifestObject(digest);
+    // Model anchors name the logical owner; their immutable state belongs to
+    // the exact generation, so both identities must match this retained anchor.
+    const generationComponent = manifest.model === PROFILES.generation
+      && ref.component === MODEL_COMPONENT && manifest.component === ref.subject;
     if (manifest.format !== 'rezics-manifest-v1' || manifest.mediaType !== 'application/json'
       || typeof manifest.component !== 'string' || !manifest.component
-      || (ref.component !== null && manifest.component !== ref.component)
+      || (ref.component !== null && manifest.component !== ref.component && !generationComponent)
       || (ref.model !== null && manifest.model !== ref.model)
       || (ref.shape !== null && manifest.shape !== ref.shape)
       || typeof manifest.model !== 'string' || typeof manifest.shape !== 'string'
@@ -327,6 +339,24 @@ export async function captureObjectRecoveryCoverage(
     if (payload.format !== 'rezics-component-v1' || payload.component !== manifest.component
       || !payload.state || typeof payload.state !== 'object' || Array.isArray(payload.state)) {
       throw new ObjectRecoveryConflict('committed payload differs from manifest', 'corrupt');
+    }
+    if (manifest.model === PROFILES.generation && !checkedModelGenerations.has(manifest.component)) {
+      const state = payload.state as Record<string, unknown>;
+      if (state.modelManifestSha256 !== manifest.component.slice(-64)
+        || state.entailment !== 'none') {
+        throw new ObjectRecoveryConflict('model generation payload differs from its anchor', 'corrupt');
+      }
+      try {
+        const model = await visitModelGenerationArtifacts(manifest.component, key => exactBytes(store, key),
+          (key, bytes) => { objects.set(key, bytes.length); retainedDigests?.add(key); });
+        if (model.commandModule !== state.commandModule) {
+          throw new ObjectRecoveryConflict('model generation command module differs', 'corrupt');
+        }
+      } catch (error) {
+        if (error instanceof RevisionCorrupt) throw new ObjectRecoveryConflict(error.message, 'corrupt');
+        throw error;
+      }
+      checkedModelGenerations.add(manifest.component);
     }
   }
   for (const digest of [...objects.keys()].sort()) {

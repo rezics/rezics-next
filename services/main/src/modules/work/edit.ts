@@ -83,6 +83,13 @@ export function workEditReceiptIri(admissionId: string): string {
 
 export async function readWorkEditTerminalReceipt(env: WorkActivationEnvironment, admissionId: string): Promise<TerminalWorkEdit | null> {
   const receipt = workEditReceiptIri(admissionId);
+  const owned = await env.receiptCustody?.resolve(receipt);
+  if (owned) {
+    if (!owned.predecessor) throw new WorkEditUnavailable('Custodied edit receipt has no predecessor');
+    return { outcome: owned.outcome, work: owned.work, revision: owned.revision, predecessor: owned.predecessor,
+      receipt: owned.receipt, admissionId: owned.admissionId, requestDigest: owned.requestDigest,
+      authorityEpoch: owned.authorityEpoch, scope: owned.scope, dataEpoch: owned.dataEpoch, sequence: owned.sequence };
+  }
   const result = await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?outcome ?reason ?digest ?admissionId ?authorityEpoch ?scope ?work ?revision ?predecessor ?sequence ?epoch WHERE {
       GRAPH <${GRAPHS.receipts}> {
@@ -166,7 +173,11 @@ async function sealStaleHead(env: WorkActivationEnvironment,
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;
-  try { await env.fuseki.commandWithReceipt({ receipt, digest, update, validations: [], deadlineMs: 10_000 }); }
+  const dispatch = async () => { await env.fuseki.commandWithReceipt({ receipt, digest, update, validations: [], deadlineMs: 10_000 }); };
+  try {
+    if (env.receiptCustody) await env.receiptCustody.guardCancellation(receipt, dispatch);
+    else await dispatch();
+  }
   catch { /* resolve the same receipt after an ambiguous response */ }
   return readWorkEditTerminalReceipt(env, intent.admission.id);
 }
@@ -209,8 +220,12 @@ export async function sealMetadataWorkEditAdmission(
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;
-  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
-    update, validations: [], deadlineMs: 10_000 }); }
+  const dispatch = async () => { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest,
+    update, validations: [], deadlineMs: 10_000 }); };
+  try {
+    if (env.receiptCustody) await env.receiptCustody.guardCancellation(receipt, dispatch);
+    else await dispatch();
+  }
   catch { /* resolve the same receipt after a lost response */ }
   const terminal = await readWorkEditTerminalReceipt(env, admission.id);
   if (!terminal) throw new PendingActivation('Work edit cancellation outcome is unknown');

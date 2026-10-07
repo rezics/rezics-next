@@ -1,4 +1,6 @@
 import { AccessExposure } from './modules/access/exposure.ts';
+import { PostgresReceiptCustodyStore, ReceiptCustody } from './modules/outbox/receipt-custody.ts';
+import { proofRetirementSender } from './modules/graph/slim-command.ts';
 import { MediaScreenStore } from './modules/media-screen/store.ts';
 import { RequiredMediaMatchWorker } from './modules/media-screen/required-match-worker.ts';
 import { requiredMatcherMode, requiredSafetyMatcher } from './modules/media-screen/required-matcher.ts';
@@ -263,6 +265,9 @@ const environment = {
   lineage: { dataEpoch: config.MAIN_DATA_EPOCH, routingEpoch: config.MAIN_ROUTING_EPOCH },
   objectDirectory: config.MAIN_OBJECT_DIRECTORY,
   ...(workObjects ? { workObjects } : {}),
+  ...(workObjects ? { receiptCustody: new ReceiptCustody(new PostgresReceiptCustodyStore(pool),
+    workObjects, fuseki, config.FUSEKI_TITLE_ADMISSION_KEY,
+    proofRetirementSender(fusekiUrl, config.FUSEKI_COMMAND_TOKEN)) } : {}),
 };
 const serialStats = recommendationRelayPool
   ? new SerialStatisticsProjection(pool, recommendationRelayPool, contentPool, environment) : undefined;

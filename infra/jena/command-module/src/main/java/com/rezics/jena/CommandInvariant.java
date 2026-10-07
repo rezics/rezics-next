@@ -106,6 +106,34 @@ final class CommandInvariant {
         return NodeFactory.createLiteralByValue(value, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger);
     }
 
+    record CommitProof(String digest, String payloadSha256, String dataEpoch, String sequence) {}
+
+    static CommitProof commitProof(DatasetGraph data, String receipt) {
+        Node own = uri(receipt);
+        if (!data.contains(RECEIPTS, own, RDF.type.asNode(), rv("CommitProof"))) return null;
+        Node digest = one(data, RECEIPTS, own, rv("requestDigest"));
+        Node payload = one(data, RECEIPTS, own, rv("payloadDigest"));
+        Node epoch = one(data, RECEIPTS, own, rv("dataEpoch"));
+        BigInteger sequence = number(one(data, RECEIPTS, own, rv("sequence")));
+        if (count(data, RECEIPTS, own, Node.ANY) != 5 || digest == null || !digest.isLiteral()
+            || !digest.getLiteralLexicalForm().matches("[0-9a-f]{64}")
+            || payload == null || !payload.isLiteral() || !payload.getLiteralLexicalForm().matches("[0-9a-f]{64}")
+            || epoch == null || !epoch.isLiteral() || epoch.getLiteralLexicalForm().isEmpty()
+            || sequence == null || sequence.signum() <= 0)
+            throw new IllegalArgumentException("compact commit proof is incomplete");
+        return new CommitProof(digest.getLiteralLexicalForm(), payload.getLiteralLexicalForm(),
+            epoch.getLiteralLexicalForm(), sequence.toString());
+    }
+
+    static void writeCommitProof(DatasetGraph data, String receipt, CommitProof proof) {
+        Node own = uri(receipt);
+        data.add(RECEIPTS, own, RDF.type.asNode(), rv("CommitProof"));
+        data.add(RECEIPTS, own, rv("requestDigest"), NodeFactory.createLiteralString(proof.digest()));
+        data.add(RECEIPTS, own, rv("payloadDigest"), NodeFactory.createLiteralString(proof.payloadSha256()));
+        data.add(RECEIPTS, own, rv("dataEpoch"), NodeFactory.createLiteralString(proof.dataEpoch()));
+        data.add(RECEIPTS, own, rv("sequence"), integer(new BigInteger(proof.sequence())));
+    }
+
     static String preflight(DatasetGraph data, String receipt, CommandPolicy.Plan plan) {
         if (data.contains(RECEIPTS, uri(receipt), Node.ANY, Node.ANY)) return "receipt already has triples";
         if (plan.bootstrap()) {
@@ -120,6 +148,14 @@ final class CommandInvariant {
             if (receipt.startsWith("urn:rezics:receipt:content-rebuild:quarantine:") != open)
                 return "rebuild quarantine state differs";
         }
+        return null;
+    }
+
+    static String legacySlimMutation(DatasetGraph data, CommandPolicy.Plan plan) {
+        for (String subject : plan.current()) if (data.contains(Quad.defaultGraphNodeGenerated,
+            uri(subject), rv("metadataKind"), NodeFactory.createLiteralString("edition"))
+            && data.contains(Quad.defaultGraphNodeGenerated, uri(subject), rv("manifest"), Node.ANY))
+            return "default edition mutations require the slim custody envelope";
         return null;
     }
 

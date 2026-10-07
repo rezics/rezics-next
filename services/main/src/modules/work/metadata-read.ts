@@ -1,6 +1,7 @@
 import type { Static } from 'typebox';
 import { direction } from '../media/summary.ts';
 import { GRAPHS, iri, lit } from './activate.ts';
+import { readWorkComponentState } from './history.ts';
 import { fenceWorkBasis, readWorkBasis } from './read-header.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, readDependencyToken, readRowsToken, WorkReadMissing, WorkReadUnavailable,
   type WorkReadSession } from './read-session.ts';
@@ -54,6 +55,32 @@ export async function readWorkMetadata(session: WorkReadSession, work: string) {
   await fenceWorkBasis(session, basis);
   return { work, ...header, sourcePosition: session.position };
 }
+async function readEditionPayload(session: WorkReadSession, work: string, edition: string, revision: string,
+  row: { state?: { value: string }; manifest?: { value: string }; model?: { value: string } }) {
+  if (!row.manifest) {
+    if (!row.state) throw new WorkReadUnavailable('Edition payload is missing');
+    return parsedMetadataState(row.state.value);
+  }
+  const model = row.model?.value;
+  if (model !== METADATA_PROFILE && model !== METADATA_DETAILS_V2) {
+    throw new WorkReadUnavailable('Edition model is unavailable');
+  }
+  try {
+    const retained = await readWorkComponentState(session.deps.environment, row.manifest.value, edition, model);
+    const intent = retained.intent as { work?: unknown; state?: unknown } | undefined;
+    if (retained.revision !== revision || !intent || intent.work !== work) {
+      throw new WorkReadUnavailable('Edition payload differs from its head');
+    }
+    const state = parsedMetadataState(JSON.stringify(intent.state));
+    if (state.kind !== 'edition' || (model === METADATA_DETAILS_V2) !== ('contentLanguages' in state)) {
+      throw new WorkReadUnavailable('Edition payload differs from its model');
+    }
+    return state;
+  } catch (error) {
+    if (error instanceof WorkReadUnavailable) throw error;
+    throw new WorkReadUnavailable('Edition payload is unavailable', { cause: error });
+  }
+}
 /** Candidates precede hydration. Logical O(P), ≤2 queries beyond Work admission;
  * native Jena may scan/sort D edition identities, conservatively O(D log D). */
 export async function readWorkEditions(session: WorkReadSession, work: string, contentLanguage?: string) {
@@ -68,31 +95,34 @@ export async function readWorkEditions(session: WorkReadSession, work: string, c
   const position = { ...session.position, ...(session.options.localBasis
     ? { dependencyToken: readDependencyToken([basis.dependencyToken, readRowsToken(collection)]) } : {}) };
   const cursor = decodeReadCursor(session.options.cursor, binding, position);
-  const rows = await session.query(`SELECT ?edition ?revision WHERE {
-    GRAPH ${iri(GRAPHS.current)} { { ?edition a rv:WorkMetadataComponent } UNION { ?edition a rv:EditionRecord } .
+  const editionPattern = `{ ?edition a rv:WorkMetadataComponent } UNION { ?edition a rv:EditionRecord } .
       ?edition rv:metadataKind "edition" ; rv:work ${iri(work)} ; rv:editionState rv:Active ; rv:metadataHead ?revision .
       ${language ? `FILTER(EXISTS { ?edition rv:editionLanguage ${lit(language)} } || EXISTS { ?edition rv:contentLanguages ?langs .
-        FILTER(CONTAINS(CONCAT(" ", STR(?langs), " "), ${lit(` ${listed} `)})) })` : ''}
-    } ${cursor ? `FILTER(STR(?edition) > ${lit(cursor.after)})` : ''}
+        FILTER(CONTAINS(CONCAT(" ", STR(?langs), " "), ${lit(` ${listed} `)})) })` : ''}`;
+  const rows = await session.query(`SELECT ?edition ?revision WHERE {
+    { ${editionPattern} } UNION { GRAPH ${iri(GRAPHS.current)} { ${editionPattern} } }
+    ${cursor ? `FILTER(STR(?edition) > ${lit(cursor.after)})` : ''}
   } ORDER BY STR(?edition) LIMIT ${limit + 1}`, limit + 1);
   if (rows.some(row => !row.edition || !row.revision)
     || new Set(rows.map(row => row.edition!.value)).size !== rows.length) {
     throw new WorkReadUnavailable('Edition identities are ambiguous');
   }
   const page = rows.slice(0, limit);
-  const hydrated = page.length ? await session.query(`SELECT ?edition ?revision ?state WHERE {
+  const hydrated = page.length ? await session.query(`SELECT ?edition ?revision ?state ?manifest ?model WHERE {
     VALUES (?edition ?revision) { ${page.map(row => `(${iri(row.edition!.value)} ${iri(row.revision!.value)})`).join(' ')} }
-    GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ?edition ; rv:metadataState ?state ; rv:modelRevision ?model .
+    { ?edition rv:metadataHead ?revision ; rv:manifest ?manifest ; rv:modelRevision ?model .
       FILTER(?model IN (${iri(METADATA_PROFILE)}, ${iri(METADATA_DETAILS_V2)})) }
+    UNION { GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ?edition ; rv:metadataState ?state ; rv:modelRevision ?model .
+      FILTER(?model IN (${iri(METADATA_PROFILE)}, ${iri(METADATA_DETAILS_V2)})) } }
   } LIMIT ${limit + 1}`, limit + 1) : [];
   if (hydrated.length !== page.length || new Set(hydrated.map(row => row.edition?.value)).size !== page.length) {
     throw new WorkReadUnavailable('Edition revisions are incomplete');
   }
   const byEdition = new Map(hydrated.map(row => [row.edition?.value, row]));
-  const items = page.map(row => {
+  const items = await Promise.all(page.map(async row => {
     const record = byEdition.get(row.edition!.value);
-    if (!record?.state) throw new WorkReadUnavailable('Edition payload is missing');
-    const state = parsedMetadataState(record.state.value);
+    if (!record) throw new WorkReadUnavailable('Edition payload is missing');
+    const state = await readEditionPayload(session, work, row.edition!.value, row.revision!.value, record);
     const matches = !language || state.kind === 'edition' && ('contentLanguages' in state
       ? state.contentLanguages.includes(listed ?? language)
       : state.contentLanguage === language);
@@ -100,7 +130,7 @@ export async function readWorkEditions(session: WorkReadSession, work: string, c
       throw new WorkReadUnavailable('Edition projection differs');
     }
     return { ...state, revision: row.revision!.value };
-  });
+  }));
   await fenceWorkBasis(session, basis);
   return { ...pageResult(session, items, rows.length > limit
     ? encodeReadCursor(binding, position, page.at(-1)!.edition!.value) : null), sourcePosition: position };
@@ -110,17 +140,19 @@ export async function readWorkEditions(session: WorkReadSession, work: string, c
  * without redisclosing the withdrawn bibliographic text. */
 export async function readWorkEdition(session: WorkReadSession, work: string, edition: string) {
   const basis = await readWorkBasis(session, work);
-  const rows = await session.query(`SELECT ?revision ?status ?state WHERE {
-    GRAPH ${iri(GRAPHS.current)} { { ${iri(edition)} a rv:WorkMetadataComponent } UNION { ${iri(edition)} a rv:EditionRecord } .
+  const editionPattern = `{ ${iri(edition)} a rv:WorkMetadataComponent } UNION { ${iri(edition)} a rv:EditionRecord } .
       ${iri(edition)} rv:metadataKind "edition" ;
-      rv:work ${iri(work)} ; rv:editionState ?status ; rv:metadataHead ?revision }
-    OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ${iri(edition)} ; rv:metadataState ?state ;
-      rv:modelRevision ?model . FILTER(?model IN (${iri(METADATA_PROFILE)}, ${iri(METADATA_DETAILS_V2)})) } }
+      rv:work ${iri(work)} ; rv:editionState ?status ; rv:metadataHead ?revision`;
+  const rows = await session.query(`SELECT ?revision ?status ?state ?manifest ?model WHERE {
+    { ${editionPattern} . OPTIONAL { ${iri(edition)} rv:manifest ?manifest ; rv:modelRevision ?model } }
+    UNION { GRAPH ${iri(GRAPHS.current)} { ${editionPattern} }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?revision rv:component ${iri(edition)} ; rv:metadataState ?state ;
+        rv:modelRevision ?model . FILTER(?model IN (${iri(METADATA_PROFILE)}, ${iri(METADATA_DETAILS_V2)})) } } }
   } LIMIT 2`, 2);
   if (!rows.length) throw new WorkReadMissing('Edition is unavailable');
   const row = rows[0];
-  if (rows.length !== 1 || !row?.revision || !row.state) throw new WorkReadUnavailable('Edition revision is incomplete');
-  const state = parsedMetadataState(row.state.value);
+  if (rows.length !== 1 || !row?.revision) throw new WorkReadUnavailable('Edition revision is incomplete');
+  const state = await readEditionPayload(session, work, edition, row.revision.value, row);
   if (state.kind !== 'edition' || state.id !== edition
     || row.status?.value !== `https://rezics.com/vocab/${state.status === 'active' ? 'Active' : 'Withdrawn'}`) {
     throw new WorkReadUnavailable('Edition projection differs');

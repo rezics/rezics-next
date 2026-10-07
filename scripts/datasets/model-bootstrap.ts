@@ -21,6 +21,7 @@ import {
   type ActiveModelGeneration,
 } from '../../services/main/src/modules/semantic/generation-guard.ts';
 import { MODEL_COMPONENT, PROFILES } from '../../services/main/src/modules/semantic/schema.ts';
+import { custodyModelGenerationArtifacts } from '../../services/main/src/modules/semantic/model-custody.ts';
 import {
   DATASET,
   GRAPHS,
@@ -262,7 +263,27 @@ export async function ensureLocalDatasetModelGeneration(
   const context = sha256(JSON.stringify([env.FUSEKI_URL, env.MAIN_DATA_EPOCH, generation]));
   const directory = join(repository, '.temp/datasets/model-bootstrap', context);
   const intentPath = join(directory, 'intent.json');
+  const workObjects = env.MAIN_S3_ENDPOINT
+    ? new S3ImmutableObjects({
+        endpoint: checkedLocalModelEndpoint(env.MAIN_S3_ENDPOINT),
+        bucket: env.MAIN_S3_BUCKET!,
+        region: env.MAIN_S3_REGION,
+        accessKeyId: env.MAIN_S3_ACCESS_KEY!,
+        secretAccessKey: env.MAIN_S3_SECRET_KEY!,
+        prefix: 'semantic/work/',
+      })
+    : undefined;
+  const environment = {
+    fuseki,
+    lineage: { dataEpoch: env.MAIN_DATA_EPOCH!, routingEpoch: env.MAIN_ROUTING_EPOCH! },
+    objectDirectory: env.MAIN_OBJECT_DIRECTORY!,
+    ...(workObjects ? { workObjects } : {}),
+  };
   if (predecessor.generation === generation) {
+    // An existing head, including a lost maintenance response, needs the same
+    // exact artifact custody as a newly activated generation.
+    await custodyModelGenerationArtifacts(environment, generation, bytes,
+      file => readFileSync(join(repository, 'generated/model', file)));
     if (existsSync(intentPath) && !existsSync(join(directory, 'completed.json')))
       return finalizeModelBootstrap(
         env,
@@ -344,22 +365,6 @@ export async function ensureLocalDatasetModelGeneration(
     )
   )
     throw new Error('Fuseki container differs from the configured local graph owner');
-  const workObjects = env.MAIN_S3_ENDPOINT
-    ? new S3ImmutableObjects({
-        endpoint: checkedLocalModelEndpoint(env.MAIN_S3_ENDPOINT),
-        bucket: env.MAIN_S3_BUCKET!,
-        region: env.MAIN_S3_REGION,
-        accessKeyId: env.MAIN_S3_ACCESS_KEY!,
-        secretAccessKey: env.MAIN_S3_SECRET_KEY!,
-        prefix: 'semantic/work/',
-      })
-    : undefined;
-  const environment = {
-    fuseki,
-    lineage: { dataEpoch: env.MAIN_DATA_EPOCH!, routingEpoch: env.MAIN_ROUTING_EPOCH! },
-    objectDirectory: env.MAIN_OBJECT_DIRECTORY!,
-    ...(workObjects ? { workObjects } : {}),
-  };
   await readWorkComponentState(
     environment,
     predecessor.manifest,
@@ -374,6 +379,8 @@ export async function ensureLocalDatasetModelGeneration(
     throw new Error(`Model fixture maintenance already active; inspect ${lock} before retrying`);
   }
   try {
+    await custodyModelGenerationArtifacts(environment, generation, bytes,
+      file => readFileSync(join(repository, 'generated/model', file)));
     let intent: ModelBootstrapIntent;
     if (existsSync(intentPath))
       intent = JSON.parse(readFileSync(intentPath, 'utf8')) as ModelBootstrapIntent;

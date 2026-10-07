@@ -1,12 +1,10 @@
-import { createHash } from 'node:crypto';
-import { lstat, readFile, unlink } from 'node:fs/promises';
+import { lstat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
-import { graphObjectReferences, type ObjectRecoveryStore } from '../owner/object-coverage.ts';
+import { captureObjectRecoveryCoverage, ObjectRecoveryConflict, type ObjectRecoveryStore } from '../owner/object-coverage.ts';
 
 const OBJECT = /^sha256:([0-9a-f]{64})$/;
-const MANIFEST = /^urn:rezics:sha256:([0-9a-f]{64})$/;
 
 export class ObjectErasureConflict extends Error {}
 
@@ -41,33 +39,14 @@ export async function objectErasureAbsent(store: ObjectRecoveryStore, ref: strin
   return !(await localPresent(store, key)) && !(await remotePresent(store, key));
 }
 
-/** Resolve manifest and payload pins once per offline restore, O(M + manifest bytes). */
+/** Use the recovery closure, including exact model artifacts, once per offline restore. */
 export async function protectedObjectDigests(fuseki: FusekiClient,
   store: ObjectRecoveryStore): Promise<Set<string>> {
   const protectedDigests = new Set<string>();
-  for (const reference of await graphObjectReferences(fuseki)) {
-    const key = MANIFEST.exec(reference.manifest)?.[1];
-    if (!key) throw new ObjectErasureConflict('graph manifest reference is invalid');
-    protectedDigests.add(key);
-    let bytes: Uint8Array;
-    try { bytes = store.workObjects ? await store.workObjects.get(key)
-      : await readFile(join(store.directory, key)); }
-    catch (error) {
-      if (!(error instanceof ObjectUnavailable)) {
-        throw new ObjectErasureConflict('graph manifest object is unavailable');
-      }
-      try { bytes = await readFile(join(store.directory, key)); }
-      catch { throw new ObjectErasureConflict('graph manifest object is unavailable'); }
-    }
-    if (createHash('sha256').update(bytes).digest('hex') !== key) {
-      throw new ObjectErasureConflict('graph manifest object is corrupt');
-    }
-    let manifest: { payload?: unknown };
-    try { manifest = JSON.parse(Buffer.from(bytes).toString('utf8')) as { payload?: unknown }; }
-    catch { throw new ObjectErasureConflict('graph manifest object is invalid'); }
-    const payload = typeof manifest.payload === 'string' ? OBJECT.exec(manifest.payload)?.[1] : null;
-    if (!payload) throw new ObjectErasureConflict('graph manifest payload is invalid');
-    protectedDigests.add(payload);
+  try { await captureObjectRecoveryCoverage(fuseki, store, protectedDigests); }
+  catch (error) {
+    if (error instanceof ObjectRecoveryConflict) throw new ObjectErasureConflict(error.message);
+    throw error;
   }
   return protectedDigests;
 }

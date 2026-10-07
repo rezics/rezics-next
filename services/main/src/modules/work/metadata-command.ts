@@ -1,4 +1,4 @@
-import { CommandRejected, fusekiReadBudget } from '../../infrastructure/fuseki.ts';
+import { CommandRejected, fusekiReadBudget, type CommandEnvelope } from '../../infrastructure/fuseki.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { catalogueTitleKey } from '../catalogue-intake/title-keys.ts';
@@ -23,9 +23,11 @@ export interface MetadataReceipt {
   requestDigest: string; authorityEpoch: string; scope: string; dataEpoch: string; sequence: string;
   work?: string; component?: string; revision?: string;
 }
-export async function readMetadataReceipt(env: Pick<WorkActivationEnvironment, 'fuseki'>,
+export async function readMetadataReceipt(env: Pick<WorkActivationEnvironment, 'fuseki' | 'receiptCustody'>,
   admissionId: string): Promise<MetadataReceipt | null> {
   const receipt = workEditReceiptIri(admissionId);
+  const owned = await env.receiptCustody?.resolve(receipt);
+  if (owned) return owned;
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
     SELECT ?outcome ?digest ?authority ?scope ?epoch ?sequence ?work ?component ?revision WHERE {
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:admissionId ${lit(admissionId)} ;
@@ -45,6 +47,24 @@ export async function readMetadataReceipt(env: Pick<WorkActivationEnvironment, '
     scope: row.scope.value, dataEpoch: row.epoch.value, sequence: row.sequence.value,
     ...(outcome === 'succeeded' ? { work: row.work!.value, component: row.component!.value,
       revision: row.revision!.value } : {}) };
+}
+async function commitMetadataEnvelope(env: WorkActivationEnvironment, admission: RegisteredAdmission,
+  envelope: CommandEnvelope, metadata: {
+    work: string; component: string; revision: string; manifest: string; predecessor: string;
+  },
+  edition: boolean) {
+  const dispatch = (command: CommandEnvelope) => validatedCommand(env, command, admission);
+  if (!edition || !env.receiptCustody) return dispatch(envelope);
+  return env.receiptCustody.commit({ envelope, component: metadata.component,
+    revision: metadata.revision, manifest: metadata.manifest,
+    receipt: { outcome: 'succeeded', receipt: envelope.receipt, admissionId: admission.id,
+      requestDigest: envelope.digest, authorityEpoch: admission.authorityEpoch, scope: admission.scope,
+      dataEpoch: env.lineage.dataEpoch, work: metadata.work, component: metadata.component,
+      revision: metadata.revision, predecessor: metadata.predecessor }, dispatch });
+}
+async function retireMetadataProof(env: WorkActivationEnvironment, receipt: string) {
+  try { await env.receiptCustody?.retire(receipt); }
+  catch { /* The reconciled owner result is final; a retry can finish proof retirement. */ }
 }
 function checkedReceipt(receipt: MetadataReceipt, admission: RegisteredAdmission, intent: MetadataIntent) {
   if (receipt.requestDigest !== admission.requestDigest || receipt.authorityEpoch !== admission.authorityEpoch
@@ -76,9 +96,11 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?sequence .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
       GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a <https://schema.org/CreativeWork> ;
-        rv:head ?head ; rv:mainVersion ?main .
-        OPTIONAL { ${iri(component)} rv:metadataHead ?componentHead ; rv:work ?owner ; rv:metadataKind ?kind }
-      } ${unerased(iri(work))}
+        rv:head ?head ; rv:mainVersion ?main . }
+      OPTIONAL { { ${iri(component)} rv:metadataHead ?componentHead ; rv:work ?owner ; rv:metadataKind ?kind }
+        UNION { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(component)} rv:metadataHead ?componentHead ; rv:work ?owner ; rv:metadataKind ?kind } } }
+      ${unerased(iri(work))}
     } LIMIT 2`, 8192)).results?.bindings ?? [];
   const row = rows[0];
   if (rows.length !== 1 || !row?.head || !row.main || !row.sequence) {
@@ -179,8 +201,9 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;
-  const result = await validatedCommand(env, { receipt, digest, update, validations,
-    deadlineMs: WORK_METADATA_COST.deadlineMs }, admission);
+  const result = await commitMetadataEnvelope(env, admission, { receipt, digest, update, validations,
+    deadlineMs: WORK_METADATA_COST.deadlineMs }, { work, component, revision, manifest,
+      predecessor: expectedHead ?? component }, state.kind === 'edition');
   if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
   if (!await readMetadataReceipt(env, admission.id)) {
     await sealMetadataWorkEditAdmission(env, admission);
@@ -229,7 +252,9 @@ export async function setWorkMetadata(deps: MainWorkDependencies, request: Reque
       await deps.access.recordGraphOutcome(admission.id, terminal);
       await assertNotInvalidProfileReceipt(env.fuseki, terminal.receipt);
       if (failure instanceof CommandRejected) throw failure;
-      return { ...checkedReceipt(terminal, admission, intent), replayed: !committed };
+      const result = { ...checkedReceipt(terminal, admission, intent), replayed: !committed };
+      if (intent.state.kind === 'edition') await retireMetadataProof(env, terminal.receipt);
+      return result;
     } catch (error) {
       if (error instanceof WorkMetadataUnavailable || error instanceof IdempotencyConflict
         || error instanceof CommandRejected || error instanceof StaleWorkMetadata) throw error;
@@ -255,9 +280,11 @@ async function commitEditionV2(env: WorkActivationEnvironment, admission: Regist
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?sequence .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} a <https://schema.org/CreativeWork> ; rv:head ?head .
-        OPTIONAL { ${iri(component)} rv:metadataHead ?componentHead ; rv:work ?owner ; rv:metadataKind ?kind }
-      } } LIMIT 2`, 8192)).results?.bindings ?? [];
+      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} a <https://schema.org/CreativeWork> ; rv:head ?head . }
+      OPTIONAL { { ${iri(component)} rv:metadataHead ?componentHead ; rv:work ?owner ; rv:metadataKind ?kind }
+        UNION { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(component)} rv:metadataHead ?componentHead ; rv:work ?owner ; rv:metadataKind ?kind } } }
+    } LIMIT 2`, 8192)).results?.bindings ?? [];
   const row = rows[0];
   if (rows.length !== 1 || !row?.head || !row.sequence) throw new WorkMetadataUnavailable('Work metadata is unavailable');
   if ((row.componentHead?.value ?? null) !== intent.expectedHead
@@ -339,8 +366,9 @@ async function commitEditionV2(env: WorkActivationEnvironment, admission: Regist
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
       BIND(?n + 1 AS ?next)
     }`;
-  const result = await validatedCommand(env, { receipt, digest, update, validations,
-    deadlineMs: WORK_METADATA_COST.deadlineMs }, admission);
+  const result = await commitMetadataEnvelope(env, admission, { receipt, digest, update, validations,
+    deadlineMs: WORK_METADATA_COST.deadlineMs }, { work: intent.work, component, revision, manifest,
+      predecessor: prior ?? component }, true);
   if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
   if (!await readMetadataReceipt(env, admission.id)) {
     await sealMetadataWorkEditAdmission(env, admission);
@@ -384,10 +412,15 @@ async function setEditionV2(deps: MainWorkDependencies, request: Request,
       await deps.access.recordGraphOutcome(admission.id, terminal);
       await assertNotInvalidProfileReceipt(env.fuseki, terminal.receipt);
       if (failure instanceof CommandRejected) throw failure;
+      if (terminal.requestDigest !== admission.requestDigest || terminal.authorityEpoch !== admission.authorityEpoch
+        || terminal.scope !== admission.scope || terminal.admissionId !== admission.id) {
+        throw new IdempotencyConflict('Metadata receipt differs from admission');
+      }
       if (terminal.outcome === 'cancelled') throw new StaleWorkMetadata('Edition command was cancelled; refresh its basis');
       if (terminal.work !== intent.work || terminal.component !== state.id) {
         throw new IdempotencyConflict('Metadata receipt targets another component');
       }
+      await retireMetadataProof(env, terminal.receipt);
       return { work: terminal.work, component: terminal.component, revision: terminal.revision!,
         receipt: terminal.receipt, sourcePosition: { dataEpoch: terminal.dataEpoch, sequence: terminal.sequence },
         replayed: !committed };

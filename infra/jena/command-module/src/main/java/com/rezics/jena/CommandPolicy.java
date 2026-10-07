@@ -214,6 +214,49 @@ final class CommandPolicy {
         return plan;
     }
 
+    /** The first slim slice uses the admitted metadata template, without widening its authority. */
+    static String slimFootprint(Plan plan, String receipt, String component, String revision) {
+        if (!(plan.request().getOperations().getFirst() instanceof UpdateModify modify)
+            || maintenanceReceipt(receipt) || plan.bootstrap() || plan.rebuild()
+            || !plan.graphs().equals(Set.of(CONTROL, CURRENT, REVISIONS, RECEIPTS, OUTBOX))
+            || !plan.revisions().equals(Set.of(revision))) return "slim metadata footprint differs";
+        Node own = NodeFactory.createURI(receipt), edition = NodeFactory.createURI(component);
+        Node work = null;
+        boolean action = false, family = false, kind = false, head = false, receiptComponent = false, receiptRevision = false;
+        for (Quad quad : modify.getInsertQuads()) {
+            if (RECEIPTS.equals(quad.getGraph().getURI()) && own.equals(quad.getSubject())) {
+                String predicate = quad.getPredicate().isURI() ? quad.getPredicate().getURI() : "";
+                if ((RV + "work").equals(predicate)) work = quad.getObject();
+                if ((RV + "action").equals(predicate)) action = quad.getObject().equals(NodeFactory.createLiteralString("work.edit"));
+                if ((RV + "commandFamily").equals(predicate)) family = quad.getObject().isLiteral()
+                    && Set.of("work-metadata-details-v1", "work-metadata-details-v2")
+                        .contains(quad.getObject().getLiteralLexicalForm());
+                if ((RV + "metadataComponent").equals(predicate)) receiptComponent = edition.equals(quad.getObject());
+                if ((RV + "metadataRevision").equals(predicate)) receiptRevision = NodeFactory.createURI(revision).equals(quad.getObject());
+            }
+            if (CURRENT.equals(quad.getGraph().getURI()) && edition.equals(quad.getSubject())) {
+                if (quad.getPredicate().equals(NodeFactory.createURI(RV + "metadataKind")))
+                    kind = quad.getObject().equals(NodeFactory.createLiteralString("edition"));
+                if (quad.getPredicate().equals(NodeFactory.createURI(RV + "metadataHead")))
+                    head = quad.getObject().equals(NodeFactory.createURI(revision));
+            }
+        }
+        if (!action || !family || !kind || !head || !receiptComponent || !receiptRevision || work == null || !work.isURI()
+            || edition.equals(work) || !plan.current().equals(Set.of(component, work.getURI())))
+            return "slim command requires one Work edition";
+        Set<String> editionFields = Set.of(RDF.type.getURI(), RV + "work", RV + "metadataKind",
+            RV + "metadataHead", RV + "editionState", RV + "editionLanguage", RV + "contentLanguages",
+            RV + "titleLanguage", RV + "tracklistLanguage", RV + "originalLanguages", RV + "isTranslation");
+        for (Quad quad : java.util.stream.Stream.concat(modify.getInsertQuads().stream(),
+            modify.getDeleteQuads().stream()).toList()) if (CURRENT.equals(quad.getGraph().getURI())) {
+            if (!quad.getPredicate().isURI() || !(edition.equals(quad.getSubject())
+                ? editionFields.contains(quad.getPredicate().getURI())
+                : work.equals(quad.getSubject()) && quad.getPredicate().getURI().equals(RV + "editionsRevision")))
+                return "slim command changes unrelated current facts";
+        }
+        return null;
+    }
+
     private static boolean isAnalyzerProbe(Quad quad) {
         return quad.getSubject().isURI()
             && "urn:rezics:search:probe:cjk-bigram-v1".equals(quad.getSubject().getURI())

@@ -9,6 +9,7 @@ import { CancelledActivation, DATASET, GRAPHS, IdempotencyConflict, PendingActiv
 import { readWorkComponentState } from '../work/history.ts';
 import { MODEL_COMPONENT, PROFILES } from './schema.ts';
 import { ModelGenerationChanged, modelGenerationBootstrapGuard } from './generation-guard.ts';
+import { custodyGeneratedModelGeneration } from './model-custody.ts';
 
 /**
  * Shared graph command path of the semantic families. It reuses the Work family
@@ -283,7 +284,8 @@ export async function readComponent(env: WorkActivationEnvironment, manifest: st
 
 /* ---------------------------------------------------------------- model generation */
 
-const manifestBytes = readFileSync(join(import.meta.dir, '../../../../../generated/model/manifest.json'));
+const modelDirectory = join(import.meta.dir, '../../../../../generated/model');
+const manifestBytes = readFileSync(join(modelDirectory, 'manifest.json'));
 export const MODEL_MANIFEST_SHA256 = hash(manifestBytes);
 /** The generation that validated this Main build's profiles; revisions pin it exactly. */
 export const ACTIVE_GENERATION = `urn:rezics:model-generation:${MODEL_MANIFEST_SHA256}`;
@@ -296,7 +298,10 @@ export async function ensureModelGeneration(env: WorkActivationEnvironment): Pro
   const present = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.revisions)} {
     ${iri(ACTIVE_GENERATION)} a rv:ModelGeneration }
     GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ${iri(ACTIVE_GENERATION)} } }`);
-  if (present.boolean === true) return ACTIVE_GENERATION;
+  if (present.boolean === true) {
+    await custodyGeneratedModelGeneration(env, ACTIVE_GENERATION, manifestBytes, modelDirectory);
+    return ACTIVE_GENERATION;
+  }
   const receipt = `urn:rezics:receipt:${hash(`${ACTIVE_GENERATION}\0model-generation`)}`;
   const bootstrapGuard = modelGenerationBootstrapGuard(ACTIVE_GENERATION);
   const assertBootstrapAvailable = async () => {
@@ -309,6 +314,7 @@ export async function ensureModelGeneration(env: WorkActivationEnvironment): Pro
     }
   };
   await assertBootstrapAvailable();
+  await custodyGeneratedModelGeneration(env, ACTIVE_GENERATION, manifestBytes, modelDirectory);
   const manifest = await sealComponentState(env, ACTIVE_GENERATION, PROFILES.generation, {
     modelManifestSha256: MODEL_MANIFEST_SHA256, commandModule: COMMAND_MODULE_VERSION, entailment: 'none' });
   const event = `urn:rezics:event:${hash(`${receipt}\0model-generation`)}`;
