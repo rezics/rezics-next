@@ -90,6 +90,9 @@ export async function checkPostgresOwners(env: Record<string, string | undefined
       if (error instanceof PostgresPreflightError) throw error;
       refused(owner as PostgresOwner, 'connection or diagnostic query failed');
     } finally {
+      // No transaction or writes need a graceful shutdown. Destroy locally so
+      // an unreachable server cannot leave the read-only probe waiting to close.
+      client?.connection.stream.destroy();
       await client?.end().catch(() => {});
     }
   }
