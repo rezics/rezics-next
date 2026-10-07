@@ -1,6 +1,6 @@
 # Source graphs and portable semantic exchange
 
-The [Source reification profile](../../model/definitions/source-reification-v1.ts)
+The [Source reification profile](../../model/definitions/source-reification-v1.ttl)
 and [export residual schema](../../services/main/src/modules/export/schema.ts)
 carry the selected first-stage mapping. Full-source indexing and portable
 exchange still need separate profiles and qualification; the present Open Library
