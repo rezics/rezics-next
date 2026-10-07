@@ -34,17 +34,20 @@ test.beforeAll(async () => {
   }
   // Search delivery is asynchronous; all title and author matches must be ready before the upload.
   await expect.poll(async () => {
-    const ready = await Promise.all(records.map(async ([title, author]) => {
+    return Promise.all(records.map(async ([title, author]) => {
       const response = await fetch(`${mainOrigin}/v1/search/typeahead?prefix=${encodeURIComponent(title!)}`);
-      if (!response.ok) return false;
+      if (!response.ok) return { title, status: response.status, ready: false };
       const body = await response.json() as { hasMore: boolean; items: {
         matchedText: string; authors: { displayName: string | null }[];
       }[] };
-      return !body.hasMore && body.items.some(item => item.matchedText === title
-        && item.authors.some(creator => creator.displayName === author));
+      return { title, status: response.status,
+        ready: !body.hasMore && body.items.some(item => item.matchedText === title
+          && item.authors.some(creator => creator.displayName === author)),
+        matches: body.items.map(item => ({ title: item.matchedText,
+          authors: item.authors.map(creator => creator.displayName) })),
+      };
     }));
-    return ready.every(Boolean);
-  }, { timeout: 120_000 }).toBe(true);
+  }, { timeout: 120_000 }).toMatchObject(records.map(([title]) => ({ title, ready: true })));
 });
 
 test('G428: a reader imports a Goodreads file, then a 200-row export, and Main reports every row', async ({ page }, info) => {
