@@ -9,6 +9,8 @@ import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkRea
   workRead } from '../modules/work/read-session.ts';
 import { readWorkHeader } from '../modules/work/read-header.ts';
 import { readWorkClassifications } from '../modules/work/read-classifications.ts';
+import { executeTemplate } from '../modules/query/template-read.ts';
+import { template as workCredits } from '../modules/query/templates/work-credits.schema.ts';
 import { readResourceRating, readResourceRatingContexts, resourceRatingRead } from '../modules/rating/target-read.ts';
 import { RatingTargetNotAccepted } from '../modules/rating/acceptance.ts';
 import { RatingTargetGrainMismatch } from '../modules/rating/release.ts';
@@ -45,6 +47,7 @@ const detail: { security: Record<string, string[]>[] } = { security: [{}, { bear
 export const openApiOperations = {
   '/v1/works/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/works/{id}/classifications': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/works/{id}/credits': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/resources/{resource}/ratings': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
   '/v1/resources/{resource}/rating-contexts': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
 } as const;
@@ -57,6 +60,22 @@ export function workReadRoutes(work: MainWorkDependencies) {
       try { return Response.json(await workRead(work, request, { ...options, localBasis: true },
         session => readWorkHeader(session, `https://rezics.com/id/${path.id}`)), { headers }); }
       catch (error) { return workReadError(error); }
+    })
+    .get('/v1/works/:id/credits', { params, detail,
+      query: t.Object(pageQuery, { additionalProperties: false }),
+      response: { 200: workCredits.response, 304: t.Null(), ...workReadProblems },
+    }, async ({ request, params: path, query: options }) => {
+      try {
+        const response = await executeTemplate(work, request, {
+          profile: 'template-query-v1', query: workCredits.query, revision: workCredits.revision,
+          parameters: { roots: [`https://rezics.com/id/${path.id}`] },
+          presentation: { language: options.language, actingSubject: options.actingSubject },
+          limit: options.limit, cursor: options.cursor,
+        });
+        if (response.status !== 200) return response;
+        const body = await response.json() as { result: unknown };
+        return Response.json(body.result, { status: response.status, headers: response.headers });
+      } catch (error) { return workReadError(error); }
     })
     .get('/v1/works/:id/classifications', { params, detail,
       query: t.Object({ ...pageQuery, ...scopeQuery }, { additionalProperties: false }),
