@@ -59,6 +59,7 @@ test('Private creation never exposes a public shell through failures, concurrent
     return result;
   };
   const graphCommand = s.fuseki.commandWithReceipt.bind(s.fuseki);
+  let graphWrites = 0;
   const realms = async (name: string) => (await s.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     SELECT ?space ?realm ?disclosure ?revision WHERE { GRAPH ${iri(GRAPHS.current)} {
@@ -78,6 +79,7 @@ test('Private creation never exposes a public shell through failures, concurrent
   let graphFailure = '';
   s.fuseki.commandWithReceipt = async envelope => {
     if (!envelope.update.includes('rv:SpaceCreatedEvent')) return graphCommand(envelope);
+    graphWrites++;
     fail('graph-before');
     const result = await graphCommand(envelope).catch((error: unknown) => {
       graphFailure = error instanceof Error ? error.message : String(error);
@@ -111,8 +113,10 @@ test('Private creation never exposes a public shell through failures, concurrent
       const retries = await Promise.all([call('POST', '/v1/spaces', body, key), call('POST', '/v1/spaces', body, key)]);
       const observed = (await realms(currentName))[0];
       const graphPolicy = observed ? await readRealmPolicy(s.env, observed.realm!.value) : null;
-      const permitRevision = observed ? await withRealmPermit(s.accessPool, creator.principal, creator.actor,
-        observed.realm!.value, 'submission', async permit => permit.revision) : null;
+      const permitRevision = observed && retries.some(response => response.status !== 200)
+        ? await withRealmPermit(s.accessPool, creator.principal, creator.actor,
+          observed.realm!.value, 'submission', async permit => permit.revision)
+          .catch((error: unknown) => ({ unavailable: error instanceof Error ? error.message : String(error) })) : null;
       const revisions = JSON.stringify({ fault, realm: observed?.realm?.value,
         graphPolicyRevision: graphPolicy?.revision, permitRevision });
       for (const response of retries) expect(response.status, `${await response.clone().text()} ${graphFailure} ${revisions}`).toBe(200);
@@ -138,6 +142,41 @@ test('Private creation never exposes a public shell through failures, concurrent
       const manifest = JSON.parse(readFileSync(join(s.env.objectDirectory, anchors[0]!.manifest!.value.slice('urn:rezics:sha256:'.length)), 'utf8')) as { payload: string };
       const payload = JSON.parse(readFileSync(join(s.env.objectDirectory, manifest.payload.slice(7)), 'utf8')) as { state: unknown };
       expect(payload.state).toMatchObject({ initialSettings: settings, initialPolicyRevision });
+      const snapshot = async () => (await s.accessPool.query(`SELECT jsonb_build_object(
+        'admission', (SELECT to_jsonb(a) || jsonb_build_object('xmin',a.xmin::text)
+          FROM access.admission a WHERE a.id=$1),
+        'initialization', (SELECT to_jsonb(i) || jsonb_build_object('xmin',i.xmin::text)
+          FROM access.realm_creation_initialization i WHERE i.admission_id=$1),
+        'bootstrap', (SELECT to_jsonb(b) || jsonb_build_object('xmin',b.xmin::text)
+          FROM access.realm_admin_owner_bootstrap b WHERE b.realm=$2),
+        'revision', (SELECT to_jsonb(r) || jsonb_build_object('xmin',r.xmin::text)
+          FROM access.realm_admin_revision r WHERE r.realm=$2),
+        'settings', (SELECT to_jsonb(s) || jsonb_build_object('xmin',s.xmin::text)
+          FROM access.realm_admin_settings s WHERE s.realm=$2),
+        'delivery', (SELECT to_jsonb(d) || jsonb_build_object('xmin',d.xmin::text)
+          FROM access.realm_policy_delivery d WHERE d.realm=$2),
+        'membershipPolicy', (SELECT to_jsonb(p) || jsonb_build_object('xmin',p.xmin::text)
+          FROM access.membership_policy p WHERE p.kind='realm' AND p.owner_subject=$2),
+        'institution', (SELECT to_jsonb(s) || jsonb_build_object('xmin',s.xmin::text)
+          FROM access.authority_subject s WHERE s.id=$2),
+        'receipts', (SELECT jsonb_agg(to_jsonb(r) || jsonb_build_object('xmin',r.xmin::text) ORDER BY r.id)
+          FROM access.realm_admin_receipt r WHERE r.realm=$2),
+        'grants', (SELECT jsonb_agg(to_jsonb(g) || jsonb_build_object('xmin',g.xmin::text) ORDER BY g.id)
+          FROM access.permission_grant g WHERE g.recipient_subject=$3),
+        'representations', (SELECT jsonb_agg(to_jsonb(r) || jsonb_build_object('xmin',r.xmin::text) ORDER BY r.id)
+          FROM access.representation r WHERE r.subject_id=$3),
+        'ruleHeads', (SELECT jsonb_agg(to_jsonb(h) || jsonb_build_object('xmin',h.xmin::text) ORDER BY h.ref)
+          FROM access.governance_rule_head h WHERE h.scope_id=$4),
+        'rules', (SELECT jsonb_agg(to_jsonb(r) || jsonb_build_object('xmin',r.xmin::text) ORDER BY r.revision)
+          FROM access.governance_rule_revision r JOIN access.governance_rule_head h ON h.ref=r.ref
+          WHERE h.scope_id=$4)
+      ) AS state`, [created.space.slice(-36), created.realm, creator.actor,
+        `governance:realm:${created.realm}`])).rows[0]!.state;
+      const beforeReplay = await snapshot();
+      const beforeGraphWrites = graphWrites;
+      expect((await call('POST', '/v1/spaces', body, key)).status).toBe(200);
+      expect(graphWrites).toBe(beforeGraphWrites);
+      expect(await snapshot()).toEqual(beforeReplay);
       expect((await call('POST', '/v1/spaces', { ...body, initialSettings: { ...settings, selfJoin: true } }, key)).status).toBe(409);
       const grants = (await s.accessPool.query(`SELECT count(*)::int AS count FROM access.permission_grant
         WHERE scope_id = $1 AND recipient_subject = $2 AND action = 'realm.owner'`,
@@ -169,16 +208,17 @@ test('Initial review policy accepts trusted member submissions in open mode and 
     const creator = await s.member('founder');
     await creator.grant('space:create:root', 'space.create');
     await creator.grant(`agent:control:${creator.actor}`, 'agent.control');
+    const admin = new AccessRealmManagement(s.accessPool);
     const app = createMainApp(s.fuseki, { environment: s.env, access: s.access,
-      realmAdmin: new AccessRealmManagement(s.accessPool),
+      realmAdmin: admin,
       realmSubmissions: new RealmSubmissionStore(s.accessPool, s.access, s.env),
       account: { verify: async request => {
         if (request.headers.get('authorization') !== `Bearer ${creator.token}`) throw new AccountAssertionDenied('Bearer required');
         return creator.principal;
       } } });
-    const post = (path: string, body: unknown) => app.handle(new Request(`http://main.test${path}`, {
+    const post = (path: string, body: unknown, key = randomUUID()) => app.handle(new Request(`http://main.test${path}`, {
       method: 'POST', headers: { authorization: `Bearer ${creator.token}`,
-        'content-type': 'application/json', 'idempotency-key': randomUUID() }, body: JSON.stringify(body) }));
+        'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify(body) }));
     await creator.grant('work:create:root', 'work.create');
     await provisionFixtureAuthor(s.env, creator.actor);
     const createdWork = await post('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work',
@@ -186,10 +226,12 @@ test('Initial review policy accepts trusted member submissions in open mode and 
     expect(createdWork.status, await createdWork.clone().text()).toBe(201);
     const work = await createdWork.json() as { work: string; mainVersion: string; workRevision: string };
     for (const reviewMode of ['open', 'trusted-members', 'mandatory'] as const) {
-      const response = await post('/v1/spaces', { profile: 'space-realm-v2', name: `${reviewMode} review from creation`,
+      const creationKey = randomUUID();
+      const creation = { profile: 'space-realm-v2', name: `${reviewMode} review from creation`,
         capabilities: ['realm'], actingSubject: creator.actor,
         initialSettings: { visibility: 'public', reviewRequired: reviewMode === 'mandatory', reviewMode,
-          whoMaySubmit: 'members', selfJoin: true, rules: [] } });
+          whoMaySubmit: 'members', selfJoin: true, rules: [] } };
+      const response = await post('/v1/spaces', creation, creationKey);
       expect(response.status, await response.clone().text()).toBe(201);
       const { realm } = await response.json() as { realm: string };
       const policy = await readRealmPolicy(s.env, realm);
@@ -201,11 +243,39 @@ test('Initial review policy accepts trusted member submissions in open mode and 
       expect(permit.member, revisions).toBe(true);
       expect(permit.revision, revisions).toBe(policy!.revision);
       expect(permit.revision, revisions).not.toBeNull();
+      expect(policy!.revision, revisions).toMatch(/^urn:rezics:receipt:[0-9a-f]{64}$/);
       await creator.grant(`submission:submit:${realm}`, 'submission.submit');
       const submitted = await post(`/v1/realms/${realm.slice(-36)}/submissions`, { kind: 'work', actingSubject: creator.actor,
         work: work.work, mainVersion: work.mainVersion, workRevision: work.workRevision });
       expect(submitted.status, await submitted.clone().text()).toBe(201);
       expect(await submitted.json(), revisions).toMatchObject({ submission: { state: reviewMode === 'mandatory' ? 'pending' : 'accepted' } });
+      const current = await admin.settings(creator.principal, realm, creator.actor, s.env);
+      const published = await app.handle(new Request(`http://main.test/v1/realms/${realm.slice(-36)}/settings`, {
+        method: 'PUT', headers: { authorization: `Bearer ${creator.token}`, 'content-type': 'application/json',
+          'idempotency-key': randomUUID() }, body: JSON.stringify({ actingSubject: creator.actor,
+          expectedGeneration: current.generation, expectedRulesRevision: current.ruleBasis.revision,
+          reason: 'Publish the current Realm policy', settings: current.settings }) }));
+      expect(published.status, await published.clone().text()).toBe(201);
+      const laterPolicy = await readRealmPolicy(s.env, realm);
+      const laterPermit = await withRealmPermit(s.accessPool, creator.principal, creator.actor, realm, 'submission',
+        async value => value);
+      const laterRevisions = JSON.stringify({ realm, reviewMode, permitRevision: laterPermit.revision,
+        graphPolicyRevision: laterPolicy?.revision });
+      expect(laterPolicy!.revision, laterRevisions).toMatch(/^urn:rezics:realm-policy:[0-9a-f-]{36}$/);
+      expect(laterPermit.revision, laterRevisions).toBe(laterPolicy!.revision);
+      const laterWorkResponse = await post('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work',
+        title: `A later ${reviewMode} submission`, language: 'en', actingSubject: creator.actor });
+      expect(laterWorkResponse.status, await laterWorkResponse.clone().text()).toBe(201);
+      const laterWork = await laterWorkResponse.json() as { work: string; mainVersion: string; workRevision: string };
+      const laterSubmission = await post(`/v1/realms/${realm.slice(-36)}/submissions`, {
+        work: laterWork.work, mainVersion: laterWork.mainVersion, workRevision: laterWork.workRevision,
+        kind: 'work', actingSubject: creator.actor });
+      expect(laterSubmission.status, await laterSubmission.clone().text()).toBe(201);
+      expect(await laterSubmission.json(), laterRevisions).toMatchObject({
+        submission: { state: reviewMode === 'mandatory' ? 'pending' : 'accepted' } });
+      expect((await post('/v1/spaces', creation, creationKey)).status).toBe(200);
+      expect((await readRealmPolicy(s.env, realm))!.revision).toBe(laterPolicy!.revision);
+      expect((await admin.settings(creator.principal, realm, creator.actor, s.env)).generation).toBe('2');
     }
   } finally { await s.stop(); }
 }, 120_000);

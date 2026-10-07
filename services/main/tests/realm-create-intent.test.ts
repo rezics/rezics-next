@@ -6,6 +6,10 @@ import { RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminStal
   RealmAdminUnavailable, type RealmSettings } from '../src/modules/realm-admin/contract.ts';
 import { spaceCreationError } from '../src/routes/spaces.ts';
 import type { RegisteredAdmission } from '../src/modules/access/admission.ts';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import { realmSelectionDigest, InvalidRealmSelectionInput } from '../src/modules/work/select-realm.ts';
+import { placeReply } from '../src/modules/realm-reply/graph.ts';
+import { RealmReplyStale, type PlacementPreparation } from '../src/modules/realm-reply/content-store.ts';
 
 const actor = 'https://rezics.com/id/00000000-0000-8000-8000-000000000412';
 const realm = 'https://rezics.com/id/00000000-0000-8000-8000-000000000413';
@@ -14,6 +18,53 @@ const settings: RealmSettings = { visibility: 'private', reviewRequired: true, r
     title: { original: 'en', labels: { en: 'Respect', ja: '尊重' } },
     body: { original: 'en', labels: { en: 'Respect readers.\nDiscuss books.', ja: '読者を尊重する。' } } }] };
 const input = { name: 'Readers', actingSubject: actor, initialSettings: settings };
+const policyRevisions = [spaceCreationReceiptIri('00000000-0000-8000-8000-000000000414'),
+  'urn:rezics:realm-policy:00000000-0000-8000-8000-000000000415'];
+
+test('Realm selection accepts creation and later policy receipt forms while binding each exact revision', () => {
+  const selection = { context: { kind: 'realm-local' as const, id: realm }, work: actor,
+    mainVersion: actor, contribution: actor, publicationDecision: actor, actingSubject: actor,
+    selectionBasis: 'realm-policy' as const, expectedSelectionHead: null };
+  const digests = policyRevisions.map(revision => realmSelectionDigest({ ...selection,
+    policy: { revision, mode: 'open' } }));
+  expect(digests[0]).toMatch(/^[0-9a-f]{64}$/);
+  expect(digests[1]).toMatch(/^[0-9a-f]{64}$/);
+  expect(digests[0]).not.toBe(digests[1]);
+  for (const revision of [actor, 'urn:rezics:receipt:short', 'urn:rezics:realm-policy:short']) {
+    expect(() => realmSelectionDigest({ ...selection, policy: { revision, mode: 'open' } }))
+      .toThrow(InvalidRealmSelectionInput);
+  }
+});
+
+test.each(policyRevisions)('Reply placement and stale recovery use the Realm policy head for %s', async revision => {
+  const admission: RegisteredAdmission = { id: '00000000-0000-8000-8000-000000000416',
+    principalId: 'principal', actingSubject: actor, action: 'reply.place', scope: `reply:place:${realm}`,
+    idempotencyKey: 'placement', requestDigest: 'a'.repeat(64), authorityEpoch: '0',
+    expiresAt: new Date(Date.now() + 60_000).toISOString(), state: 'claimed', dispatchEligible: true, replayed: false };
+  const preparation: PlacementPreparation = { operationId: admission.id, realm, reply: actor,
+    revisionId: admission.id, revisionDigest: 'b'.repeat(64), reviewDecisionId: admission.id,
+    reviewGeneration: '1', reviewDigest: 'c'.repeat(64), author: actor,
+    ownerDataEpoch: 'content', ownerSequence: '1', rootTarget: actor, rootRevision: actor,
+    parentReply: null, parentRevision: null, contextRevision: null, replayed: false,
+    directPolicyRevision: revision };
+  const graph = new FusekiClient('http://unused.test');
+  const updates: string[] = [], queries: string[] = [];
+  graph.commandHealth = async () => ({ moduleVersion: '', instanceId: '', publicSearchWriteEpoch: '',
+    publicSearchWriteActive: false,
+    profiles: Object.fromEntries(Object.entries(profileRegistry).map(([id, profile]) => [id, profile.sha256])) });
+  graph.query = async query => { queries.push(query); return { boolean: false, results: { bindings: [] } }; };
+  graph.commandWithReceipt = async command => { updates.push(command.update); return { status: 'guard-unmatched' }; };
+  await expect(placeReply({ fuseki: graph, objectDirectory: '.temp/unused',
+    lineage: { dataEpoch: 'test', routingEpoch: 'test' } }, admission, preparation, null))
+    .rejects.toBeInstanceOf(RealmReplyStale);
+  const guard = `<${realm}> rv:realmPolicyHead <${revision}>`;
+  expect(updates).toHaveLength(1);
+  expect(updates[0]).toContain(guard);
+  expect(updates[0]).not.toContain('rv:publicProfileHead');
+  const recoveryQuery = queries.find(query => query.includes('ASK'))!.replace(/\s+/g, ' ');
+  expect(recoveryQuery).toContain(guard);
+  expect(recoveryQuery).not.toContain('rv:publicProfileHead');
+});
 
 test('Creation binds disclosure, admission, review mode and ordered initial rules to its key', () => {
   const digest = spaceCreationDigest(input);

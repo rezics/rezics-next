@@ -5,7 +5,8 @@ import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastr
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
 import { checkedInitialRealmSettings, type RealmSettings } from '../realm-admin/contract.ts';
-import { realmPolicyCurrentFacts, reviewPolicy } from './policy.ts';
+import { reviewPolicy } from './policy.ts';
+import { initialRealmPolicyFacts } from '../access/realm-initialization.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
@@ -196,8 +197,10 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   const realmRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
   const receipt = spaceCreationReceiptIri(admission.id);
-  const policyFacts = realmPolicyCurrentFacts(realm, space, receipt, { visibility: settings.visibility,
-    reviewMode: settings.reviewMode!, admission: settings.selfJoin ? 'open' : 'invitation' });
+  const { rules, ...accessSettings } = settings;
+  const policyFacts = initialRealmPolicyFacts({ realm, actingSubject: input.actingSubject,
+    creationKey: admission.idempotencyKey, creationDigest: digest, policyReceipt: admission.id,
+    settings: accessSettings, rules }, space, receipt);
   const validations = await validateCandidate(env, space, realm, input);
   const spaceManifest = prepareComponent(env.objectDirectory, space,
     { name: input.name, language, owner: input.actingSubject, realmCapability: realm,
@@ -206,7 +209,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
     { space, state: 'active', selectionPolicy: SELECTION_POLICY,
       membershipPolicy: MEMBERSHIP_POLICY, reviewPolicy: policy,
       initialSettings: settings,
-      initialPolicyRevision: receipt,
+      initialPolicyRevision: policyFacts.revision,
       ...input.handle ? { handle: normalizeAddressAlias(input.handle,'ascii-handle').key } : {},
       ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }, SPACE_REALM_PROFILE);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Space admission expired');
@@ -230,7 +233,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
           ${input.topics?.length ? `rv:topic ${[...input.topics].sort().map(iri).join(', ')} ;` : ''}
           rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
           rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ; rv:head ${iri(realmRevision)} .
-        ${policyFacts}
+        ${policyFacts.current}
       }
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(spaceRevision)} a rv:RevisionAnchor ; rv:component ${iri(space)} ;
