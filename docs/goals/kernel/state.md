@@ -144,7 +144,8 @@ qualifier branch preserved as `goal/g-1352-before-curator-selection-1852`.
   Formally owned wrapper semantic-source-readiness-union.test.ts;208 static test
   count was initially static; first actual208 failed, artifacts retained. Revised
   run queued with two documented Core hook fixes (Source cancellation adapter
-  and fixed-family publication guard), read-only audit pending. No assertions or
+  and fixed-family publication guard), independent source review ACCEPTS only
+  those corrections (Core205a67d1), full14classes208cases still pending. No assertions or
   original bounds relaxed; no complete-union acceptance yet. Frozen hooks/hash/XML,
   restore borrowed/generated then commit wrapper only. Preserve serving G1392
   on final rebase. No dirty new recipe/retention/catalogue transport selection.
@@ -200,6 +201,6 @@ Coordinator handover COMPLETE: native session
 by finite coordinator resume PID972554. Prior interactive3991503 exited; do not
 kill current owner, enroll duplicate or run foreground loop. Finish ready actions
 then end the turn; coordinator wakes on durable mail/task exits. Whole Goal active.
-Protect manager codex-1 reserve (85% observed) by resuming workers on default
+Protect manager codex-1 reserve (87% observed) by resuming workers on default
 codex; existing live workers keep their actual QA handles. Live native artifact
 boundaries in `.temp/kernel/native-manager-handoff.md` and exact per-worker manifests.
