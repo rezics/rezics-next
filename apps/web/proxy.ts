@@ -220,7 +220,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       // A cached public address cannot admit a Work that has since become private.
       const query = new URLSearchParams(resourceViewer ? { actingSubject: resourceViewer.actingSubject } : {});
       // Former chapter addresses resolve to a Post's reader place, not a Work header.
-      const owner = workAddress.canonical.prefix.startsWith('/w/') && workAddress.canonical.prefix !== '/w/' ? 'posts' : 'works';
+      const owner = addressPath(workAddress.canonical.prefix)?.tail[0] === 'read' ? 'posts' : 'works';
       const url = `${serviceOrigin('MAIN_ORIGIN')}/v1/${owner}/${workAddress.holder.slice(-36)}?${query}`;
       try {
         const read = async () => serverRead(url, {

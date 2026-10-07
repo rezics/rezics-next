@@ -75,6 +75,8 @@ export async function beforePathNormalization(
       mainOrigin,
       request.headers,
       lookup.scope === 'work' ? viewer : undefined,
+      // A cached public Work must not disclose its canonical name after becoming private.
+      lookup.scope === 'work',
     );
     if (lookup.scope === 'space' && read.kind === 'resolved') spaceAddress = read.data;
     return read;

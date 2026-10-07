@@ -88,12 +88,20 @@ test('signed-out private and missing Works have the same 404 across Work, read a
         expect(response.status()).toBe(404);
         expect(await response.text()).not.toContain(title);
       }
+      const slash = await Promise.all([privateAddress, missingAddress].map(address =>
+        anonymous.request.get(localizedPath(`${address}/`, 'en'), { maxRedirects: 0 })));
+      expect(slash.map(response => response.status())).toEqual([404, 404]);
+      expect(await slash[0]!.text()).toBe(await slash[1]!.text());
       const page = await anonymous.newPage();
       for (const tail of tails) {
         await test.step(`${width}px ${tail || 'overview'}`, async () => {
           const privatePage = await missingPage(page, privateAddress, tail);
           const missing = await missingPage(page, missingAddress, tail);
           expect(privatePage.text).not.toContain(title);
+          if (missing.body !== privatePage.body) {
+            await info.attach('private-work-response', { body: privatePage.body, contentType: 'text/html' });
+            await info.attach('missing-work-response', { body: missing.body, contentType: 'text/html' });
+          }
           expect(missing).toEqual(privatePage);
           expect(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)).toBe(false);
           if (!tail || tail === '/read' || tail === '/edit/parts') {
