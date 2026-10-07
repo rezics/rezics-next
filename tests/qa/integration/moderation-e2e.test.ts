@@ -351,7 +351,7 @@ test('G314 managed Realms: acting identity, scoped permissions/counts and OAuth 
     expect(await json(await s.read(s.owner,'/v1/me/managed-realms'))).toMatchObject({ items: [{ permissions: ['publication.adopt','review.decide'],openCount: { value: 0 } }] });
     s.deniedScopes.clear();
     await s.role({ kind: 'assignment',roleId,member: reviewer.actor,assigned: false,validUntil: new Date(Date.now() + 300_000).toISOString() });
-    expect(await json(await s.read(reviewer,'/v1/me/managed-realms'))).toEqual({ items: [],nextCursor: null });
+    expect(await json(await s.read(reviewer,'/v1/me/managed-realms'))).toEqual({ items: [],nextCursor: null,complete: true });
   } finally { await s.stack.stop(); }
 },120_000);
 

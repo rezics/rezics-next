@@ -7,13 +7,6 @@
     ]
   },
   {
-    "operation": "GET /v1/access/grants response[work-create-agent-grants-v1]",
-    "fields": [
-      "response.complete",
-      "response.items"
-    ]
-  },
-  {
     "operation": "GET /v1/access/role-bindings",
     "fields": [
       "request.cursor",
@@ -277,12 +270,6 @@
     "operation": "GET /v1/me/managed-realms",
     "fields": [
       "request.cursor"
-    ]
-  },
-  {
-    "operation": "GET /v1/me/managed-realms response[0]",
-    "fields": [
-      "response.complete"
     ]
   },
   {

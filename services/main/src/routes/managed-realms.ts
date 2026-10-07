@@ -27,7 +27,8 @@ const actor = t.Object({ actingSubject: readId },{ additionalProperties: false }
 const page = { after: t.Optional(readId),limit: t.Optional(t.Integer({ minimum: 1,maximum: 50 })) };
 const count = t.Object({ value: t.Integer(),kind: t.Union([t.Literal('exact'),t.Literal('lower-bound')]) });
 const managedPage = t.Object({ items: t.Array(t.Object({ realm: readId,permissions: t.Array(t.String()),
-  openCount: count,escalatedCount: count,latestActivity: t.Nullable(t.String()) }),{ maxItems: 20 }),nextCursor: t.Nullable(readId) });
+  openCount: count,escalatedCount: count,latestActivity: t.Nullable(t.String()) }),{ maxItems: 20 }),
+  nextCursor: t.Nullable(readId),complete: t.Boolean() });
 const rosterPage = t.Object({ items: t.Array(t.Object({ agent: readId,displayName: t.Nullable(t.String()),featured: t.Boolean() }),{ maxItems: 50 }),
   nextCursor: t.Nullable(readId) });
 const headers = { 'cache-control': 'private, no-store' };
@@ -65,7 +66,8 @@ export function managedRealmRoutes(work: MainWorkDependencies) {
         } catch (error) { if (!(error instanceof AccountAssertionDenied)) throw error; }
         if (!principal) throw new AccountAssertionDenied('Management consent is required');
         if (!work.managedRealms) throw new RealmAdminUnavailable('Managed Realm owner is unavailable');
-        return Response.json(await work.managedRealms.read(principal,query.actingSubject,query,{ governance,review }),{ headers });
+        const page = await work.managedRealms.read(principal,query.actingSubject,query,{ governance,review });
+        return Response.json({ ...page,complete: page.nextCursor === null },{ headers });
       } catch (error) { return realmOperationError(error); }
     })
     .get('/v1/me/realm-invitations',{ query: t.Object({ actingSubject: readId,after: t.Optional(readUuid),

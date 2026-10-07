@@ -221,9 +221,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     const graphEnabled = Boolean(Bun.env.REZICS_FUSEKI_HOME);
     const relay = await init('relay');
     const priorLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
-    for (const file of ['001_delivery.sql', '002_coverage_scan.sql',
-      '003_retained_batches.sql', '004_account_deletion_journal.sql',
-      '005_recovery_coverage_head.sql', '006_account_subject_deletion.sql']) {
+    for (const file of schemaFiles(root, 'relay')) {
       await relay.pool.query(readFileSync(join(root, 'services/main/migrations/relay', file), 'utf8'));
     }
     await initializeRelayCheckpoint(relay.pool, 'deleted-member-release', priorLineage.dataEpoch);
@@ -315,8 +313,17 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
       [unboundSubject])).rowCount).toBe(0);
     expect((await relay.pool.query('SELECT account_subject FROM relay.account_subject_deletion'))
       .rows.map(row => row.account_subject).sort()).toEqual([subject, unboundSubject].sort());
-    await relay.pool.query('DELETE FROM relay.account_subject_deletion WHERE account_subject = $1',
-      [subject]);
+    // The erasure journal retains every tombstone, so this damaged cut removes one
+    // with replication triggers off. Backfill puts the tombstone back.
+    const relayClient = await relay.pool.connect();
+    try {
+      await relayClient.query('SET session_replication_role = replica');
+      await relayClient.query('DELETE FROM relay.account_subject_deletion WHERE account_subject = $1',
+        [subject]);
+    } finally {
+      await relayClient.query('SET session_replication_role = DEFAULT');
+      relayClient.release();
+    }
     expect((await relay.pool.query('SELECT account_subject FROM relay.account_subject_deletion'))
       .rows.map(row => row.account_subject)).toEqual([unboundSubject]);
     await expect(assertAccountSubjectDeletionsAbsent(account.pool, relay.pool))
@@ -338,10 +345,6 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     expect(await backfillAccountSubjectDeletions(account.pool, access.pool, relay.pool)).toBe(0);
     await expect(assertAccountSubjectDeletionsAbsent(account.pool, relay.pool))
       .resolves.toBeUndefined();
-    for (const file of ['010_erasure_journal.sql', '011_erasure_retention.sql',
-      '012_owner_relocation.sql', '013_owner_reconciliation.sql']) {
-      await relay.pool.query(readFileSync(join(root, 'services/main/migrations/relay', file), 'utf8'));
-    }
     // Fence before capturing: closing/reopening Access also advances discovery's
     // covered source revision. Keep the restored owner fenced until verification.
     const recoveryGeneration = await engageAccessRecoveryFence(access.pool);

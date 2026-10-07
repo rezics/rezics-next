@@ -82,8 +82,8 @@ const agentGrant = t.Object({ id: groupUuid, issuerSubject: groupAgent,
   active: t.Boolean(), generation: groupGeneration });
 
 const grantPageResult = t.Object({ profile: t.Literal('work-create-agent-grants-v1'),
-  authorityEpoch: groupGeneration, grants: t.Array(agentGrant, { maxItems: 50 }),
-  nextCursor: t.Nullable(groupUuid) });
+  authorityEpoch: groupGeneration, items: t.Array(agentGrant, { maxItems: 50 }),
+  nextCursor: t.Nullable(groupUuid), complete: t.Boolean() });
 
 const grantReadResult = t.Object({ profile: t.Literal('work-create-agent-grant-v1'),
   authorityEpoch: groupGeneration, grant: agentGrant });
@@ -127,9 +127,14 @@ const platformGrantChangeBody = t.Union([
 const grantChangeBody = t.Union([workGrantChangeBody, platformGrantChangeBody]);
 const platformGrantResult = t.Object({ profile: t.Literal('platform-grant-v1'), authorityEpoch: groupGeneration, grant: platformGrant });
 const platformGrantPage = t.Object({ profile: t.Literal('platform-grants-v1'), authorityEpoch: groupGeneration,
-  grants: t.Array(platformGrant, { maxItems: 50 }), nextCursor: t.Nullable(groupUuid) });
+  items: t.Array(platformGrant, { maxItems: 50 }), nextCursor: t.Nullable(groupUuid), complete: t.Boolean() });
 const platformGrantChangeResult = t.Object({ profile: t.Literal('platform-grant-change-v1'),
   authorityEpoch: groupGeneration, grant: platformGrant });
+function grantList<Grant>(profile: 'work-create-agent-grants-v1' | 'platform-grants-v1',
+  page: { authorityEpoch: string; grants: Grant[]; nextCursor: string | null }) {
+  return { profile, authorityEpoch: page.authorityEpoch, items: page.grants,
+    nextCursor: page.nextCursor, complete: page.nextCursor === null };
+}
 const grantError = (error: unknown) => {
   if (error instanceof PlatformGrantDenied) return problem(403, 'grant_denied', error.message);
   if (error instanceof PlatformGrantStale) return problem(409, 'grant_stale', error.message);
@@ -344,11 +349,11 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
       try {
         const principal = await work.account.verify(request, ['access:grant']);
         if (!work.grants) return problem(503, 'grant_unavailable', 'Grant owner is unavailable');
-        if (query.profile === 'platform-grants-v1') return Response.json({ profile: query.profile,
-          ...await work.grants.platform.readPage(principal,query.issuerSubject,query.after) },
+        if (query.profile === 'platform-grants-v1') return Response.json(grantList(query.profile,
+          await work.grants.platform.readPage(principal, query.issuerSubject, query.after)),
           { headers: { 'cache-control': 'private, no-store' } });
-        const page = await work.grants.readPage(principal, query.issuerSubject, query.after);
-        return Response.json({ profile: 'work-create-agent-grants-v1', ...page },
+        return Response.json(grantList('work-create-agent-grants-v1',
+          await work.grants.readPage(principal, query.issuerSubject, query.after)),
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return grantError(error); }
     })

@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import type { PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import {
   readDisplayRatingQuestion,
@@ -16,10 +18,39 @@ import {
   type QuestionPresentationState,
 } from '../src/modules/rating/question-presentation-schema.ts';
 import { ratingConfigurationAction } from '../src/modules/access/realm-roles-rating.ts';
-import { platformAdministratorAction } from '../src/modules/access/platform-administrator.ts';
+import { platformAdministratorTargetAllowed } from '../src/modules/access/platform-administrator.ts';
+import type { PlatformPermission } from '../src/modules/access/platform-permissions.ts';
 import { receiptFamilyFor } from '../src/modules/access/receipt-families.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
+
+function seededPlatformGrants(): PlatformPermission[] {
+  const sql = readFileSync(
+    new URL('../migrations/access/1290_platform_grants.sql', import.meta.url),
+    'utf8',
+  );
+  const values = sql.slice(
+    sql.indexOf('SELECT * FROM (VALUES'),
+    sql.indexOf(') AS permissions(action,scope)'),
+  );
+  return [...values.matchAll(/\('([^']+)','([^']+)'\)/g)].map((match, index) => ({
+    id: `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
+    action: match[1]!,
+    scope_id: match[2]!,
+    generation: '1',
+    valid_until: null,
+    witness: 'seed',
+  }));
+}
+
+function seededGrantClient(grants: readonly PlatformPermission[]): PoolClient {
+  return {
+    query: async (sql: string) => {
+      if (sql.includes('access.read_platform_permissions')) return { rows: grants };
+      throw new Error(`unexpected admission query: ${sql}`);
+    },
+  } as unknown as PoolClient;
+}
 const authored = { context: native(), question: 'How much did you enjoy it?', language: 'en' };
 const state = (
   language: string,
@@ -118,7 +149,7 @@ test('Rating question script fallback is explicit and a later same-script prefer
     'ambiguous',
   );
 });
-test('Rating question write validation separates review authority and immutable identity', () => {
+test('Rating question write validation separates review authority and immutable identity', async () => {
   for (const language of ['fr', 'zh-Hant', 'sr-Latn', 'eo', 'x-question', 'i-klingon']) {
     expect(Value.Check(questionPresentationStateSchema, state(language))).toBe(true);
     expect(checkedQuestionPresentation(state(language)).language).toBeTruthy();
@@ -157,14 +188,54 @@ test('Rating question write validation separates review authority and immutable 
     expect(ratingConfigurationAction(action)).toBe(true);
   }
   expect(ratingConfigurationAction('rating.observation.set')).toBe(false);
+  const grants = seededPlatformGrants();
   for (const action of [
     'rating.question-presentation.change',
     'rating.question-presentation.review',
-  ]) {
-    expect(platformAdministratorAction(action, `rating:presentation:${authored.context}`)).toBe(
-      true,
-    );
-    expect(platformAdministratorAction(action, `semantic:edit:${authored.context}`)).toBe(false);
+  ] as const) {
+    expect(
+      grants.filter((grant) => grant.action === `platform:resource:${action}`).map((grant) => grant.scope_id),
+    ).toEqual(['rating:presentation:*']);
+  }
+  const client = seededGrantClient(grants);
+  const actor = native();
+  const principal = randomUUID();
+  let asks = 0;
+  const graph = {
+    query: async () => {
+      asks += 1;
+      return { boolean: true };
+    },
+  };
+  for (const action of [
+    'rating.question-presentation.change',
+    'rating.question-presentation.review',
+  ] as const) {
+    const before = asks;
+    expect(
+      await platformAdministratorTargetAllowed(
+        client,
+        graph,
+        principal,
+        actor,
+        action,
+        `rating:presentation:${authored.context}`,
+      ),
+    ).toBe(true);
+    expect(asks).toBe(before + 1);
+    expect(
+      await platformAdministratorTargetAllowed(
+        client,
+        graph,
+        principal,
+        actor,
+        action,
+        `semantic:edit:${authored.context}`,
+      ),
+    ).toBe(false);
+    // The seeded presentation grant does not cover a semantic scope, so admission
+    // refuses before the question-target lookup.
+    expect(asks).toBe(before + 1);
     expect(receiptFamilyFor(action)).toBe('rating-question-presentation-change');
   }
 });

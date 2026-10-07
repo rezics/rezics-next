@@ -153,8 +153,8 @@ test('IAM13/IAM14: institutional Agent grant survives operator and representativ
     const readPage = async (bearer = managerToken1, after?: string) => {
       const response = await request('GET', `${pagePath}${after ? `&after=${after}` : ''}`, bearer);
       expect(response.status).toBe(200);
-      return await response.json() as { authorityEpoch: string; nextCursor: string | null;
-        grants: { id: string; recipientSubject: string; generation: string; active: boolean }[] };
+      return await response.json() as { authorityEpoch: string; nextCursor: string | null; complete: boolean;
+        items: { id: string; recipientSubject: string; generation: string; active: boolean }[] };
     };
     let epoch = (await readPage()).authorityEpoch;
     const grantId = randomUUID();
@@ -262,13 +262,15 @@ test('IAM13/IAM14: institutional Agent grant survives operator and representativ
         now() + interval '30 minutes' FROM generate_series(1, 51)`,
     [issuer, otherRecipient]);
     const firstPage = await readPage(managerToken2);
-    expect(firstPage.grants.length).toBe(50);
+    expect(firstPage.items.length).toBe(50);
     expect(firstPage.nextCursor).not.toBeNull();
+    expect(firstPage.complete).toBe(false);
     const secondPage = await readPage(managerToken2, firstPage.nextCursor!);
-    expect(secondPage.grants.length).toBeGreaterThan(0);
-    expect(secondPage.grants.length).toBeLessThanOrEqual(50);
-    expect(new Set([...firstPage.grants, ...secondPage.grants].map(grant => grant.id)).size)
-      .toBe(firstPage.grants.length + secondPage.grants.length);
+    expect(secondPage.items.length).toBeGreaterThan(0);
+    expect(secondPage.items.length).toBeLessThanOrEqual(50);
+    expect(secondPage.complete).toBe(secondPage.nextCursor === null);
+    expect(new Set([...firstPage.items, ...secondPage.items].map(grant => grant.id)).size)
+      .toBe(firstPage.items.length + secondPage.items.length);
   } finally {
     await account.stop();
     await Promise.all([accountPool.end(), accessPool.end()]);
