@@ -53,6 +53,8 @@ function fixture() {
       : undefined;
     calls.push({ method, path, body, key });
     if (method === 'GET') {
+      // Official wiki seeding proves this read before a Zone 404 can mean the Zone is absent.
+      if (path === '/v1/themes/execution-control') return Response.json({ disabled: false });
       if (path.endsWith('/configuration'))
         return Response.json({ revision: zoneHead, configuration });
       if (path.includes('/zones/')) return Response.json({ revision: zoneHead, mounts });
