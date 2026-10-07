@@ -18,7 +18,7 @@ import { healthRoutes } from '../../../services/main/src/routes/health.ts';
 import { accessAuthorityRoutes } from '../../../services/main/src/routes/access-authority.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import type { PlatformGrantResult } from '../../../services/main/src/modules/access/platform-grants.ts';
-import { mainSchemaReady } from '../../../services/main/src/schema-ready.ts';
+import { endMainSchemaReady, mainSchemaReady } from '../../../services/main/src/schema-ready.ts';
 import { checkPlatformGovernance } from '../platform-governance.ts';
 import { schemaFiles } from '../../qa/schema-files.ts';
 import {
@@ -37,6 +37,7 @@ test('first governance designation is atomic, ordinary grants add backups and op
   mkdirSync(state, { recursive: true, mode: 0o700 });
   let started = false;
   let pool: Pool | undefined;
+  let readiness: string[] = [];
   const envNames = [
     'NODE_ENV',
     'ACCESS_DATABASE_URL',
@@ -117,13 +118,17 @@ test('first governance designation is atomic, ordinary grants add backups and op
       );
       expect((await owner.query('SELECT id FROM access.platform_grant_episode')).rows).toEqual([]);
     }
+    const accessUrl = url('postgres');
+    const contentUrl = url('content');
+    const relayUrl = url('relay');
+    readiness = [accessUrl, contentUrl, relayUrl];
     Object.assign(process.env, {
       NODE_ENV: 'production',
-      ACCESS_DATABASE_URL: url('postgres'),
-      CONTENT_DATABASE_URL: url('content'),
-      MAIN_RELAY_DATABASE_URL: url('relay'),
+      ACCESS_DATABASE_URL: accessUrl,
+      CONTENT_DATABASE_URL: contentUrl,
+      MAIN_RELAY_DATABASE_URL: relayUrl,
     });
-    await expect(checkPlatformGovernance(url('postgres'))).rejects.toThrow(
+    await expect(checkPlatformGovernance(accessUrl)).rejects.toThrow(
       'permanent platform:grant',
     );
     await expect(mainSchemaReady()).resolves.toBeUndefined();
@@ -184,14 +189,14 @@ test('first governance designation is atomic, ordinary grants add backups and op
     expect(logs.some((message) => message.includes('ignored'))).toBe(true);
     const warnings: string[] = [];
     expect(
-      await checkPlatformGovernance(url('postgres'), (message) => warnings.push(message)),
+      await checkPlatformGovernance(accessUrl, (message) => warnings.push(message)),
     ).toBe(1);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]).toContain('second holder');
     await mainSchemaReady();
     expect((await app.handle(new Request('http://main.test/health/ready'))).status).toBe(200);
     const envFile = join(state, 'production.env');
-    writeFileSync(envFile, `ACCESS_DATABASE_URL=${url('postgres')}\n`);
+    writeFileSync(envFile, `ACCESS_DATABASE_URL=${accessUrl}\n`);
     const command = Bun.spawnSync(['task', 'ops:platform-governance', '--', envFile], {
       cwd: repositoryRoot,
       env: process.env,
@@ -322,7 +327,7 @@ test('first governance designation is atomic, ordinary grants add backups and op
     const permanent = (await issued.json()) as PlatformGrantResult;
     warnings.length = 0;
     expect(
-      await checkPlatformGovernance(url('postgres'), (message) => warnings.push(message)),
+      await checkPlatformGovernance(accessUrl, (message) => warnings.push(message)),
     ).toBe(2);
     expect(warnings).toEqual([]);
     const delegated = await change('backup', {
@@ -428,6 +433,7 @@ test('first governance designation is atomic, ordinary grants add backups and op
       if (previous[name] === undefined) delete process.env[name];
       else process.env[name] = previous[name];
     }
+    await endMainSchemaReady(readiness);
     await pool?.end();
     if (started)
       execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], {

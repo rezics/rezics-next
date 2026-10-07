@@ -40,9 +40,27 @@ function storage(url: string) {
       connectionTimeoutMillis: 1_500,
       statement_timeout: 1_500,
     });
+    // pg-pool emits an idle client's disconnect here. Without a listener, that
+    // disconnect is an unhandled exception.
+    pool.on('error', (error: Error) => {
+      console.error('Schema readiness connection failed:', error.message);
+    });
     pools.set(url, pool);
   }
   return pool;
+}
+
+/** Close readiness connections for these URLs. A caller that stops the server
+ * it probed must do this first, while the server can still close the session. */
+export async function endMainSchemaReady(urls: readonly string[]): Promise<void> {
+  await Promise.all(
+    urls.map(async (url) => {
+      const pool = pools.get(url);
+      if (!pool) return;
+      pools.delete(url);
+      await pool.end();
+    }),
+  );
 }
 
 export async function mainSchemaReady(
