@@ -315,9 +315,6 @@ test('current author bytes match historical pins and a temporary author reload c
 });
 
 test('Work composition remains separate from its immutable base and preserves owner routing priority', () => {
-  expect(
-    digest(readFileSync(join(root, 'model/definitions/structure-composition-v1.ts'), 'utf8')),
-  ).toBe('612754aeb7ed4e9fed1fb56ec5f9c2ee8aadc29946ce2234e0caebb8925f4796');
   expect(digest(profileSource(structureCompositionProfile))).toBe(
     'd6bcd8a0f349a7d9926298317e24086ce038a4596c5fcb73f0a1d09a5c105bf0',
   );

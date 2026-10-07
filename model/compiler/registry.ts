@@ -58,7 +58,6 @@ const ratingObservationKeys = ['realm', 'context', 'work', 'main', 'slot', 'obse
  * and delete it here, because declaring both is an error.
  */
 export const establishedDeclarations: Readonly<Record<string, EstablishedDeclaration>> = {
-  'work-metadata-v1': { canonical: { work: only(creativeWork), 'main-version': only(rv('MainVersion')) } },
   'content-publication-v1': {
     canonical: { variant: only(rv('ContentVariant')), decision: only(rv('ContentPublicationDecision')) },
   },
