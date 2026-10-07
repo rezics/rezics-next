@@ -5,20 +5,29 @@ import { join } from 'node:path';
 import { startMediaStack } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { adoptAuthorCredit } from '../../../services/main/src/modules/work/author-credit.ts';
-import { GRAPHS,RV,iri } from '../../../services/main/src/modules/work/activate.ts';
-import type { TemplateIndexDelta } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { DATASET,GRAPHS,RV,iri } from '../../../services/main/src/modules/work/activate.ts';
+import { fusekiReadBudget,type TemplateIndexDelta } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { mainSelectionDigest,selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
+import { publishTextContribution,textPublicationDigest } from '../../../services/main/src/modules/contribution/publish.ts';
+import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
 
 const native=()=>`https://rezics.com/id/${randomUUID()}`;
 interface Page {items:Array<{id:string;key?:string;ordinal?:number;language?:string}>;nextCursor:string|null;complete:boolean;sourcePosition:{dependencyToken:string};}
-async function page(response:Response):Promise<Page> {
-  const value=await response.json() as {result:Page};
+async function page(response:Response,facade=false):Promise<Page> {
+  const value=await response.json() as {result:Page}&Page;
   if(response.status!==200) throw new Error(`${response.status}: ${JSON.stringify(value)}`);
-  return value.result;
+  return facade?value:value.result;
 }
 
 test('Reviewed templates: complete credit traversal, local bases, fresh authority and bounded physical work',async()=> {
   const stack=await startMediaStack('query-templates');
   try {
+    // Use the same SQL-backed disclosure owner Main composes in production.
+    // These requests never capture evidence or issue moderation decisions.
+    const governance=new GovernanceStore(stack.accessPool,
+      {capture:async()=>{throw new Error('Evidence capture is outside this read fixture');}},
+      {current:async()=>{throw new Error('Moderation head admission is outside this read fixture');}},
+      {current:async()=>{throw new Error('Moderation rule admission is outside this read fixture');}});
     const a=await stack.member('template-author');
     const work=await stack.publicWork(a.actor,['en','ja'],'Template qualification');
     const other=await stack.publicWork(a.actor,['en'],'Unrelated population');
@@ -48,9 +57,53 @@ test('Reviewed templates: complete credit traversal, local bases, fresh authorit
     const shadow=native(),reported=native();
     let references=[{id:shadow,key:'/authors/OL1000A',ordinal:0},{id:reported,key:'/authors/OL900000A',ordinal:1}];
     let race=false;
-    const deps={environment:stack.env,access:stack.access,templateSeek:stack.templateSeek,
+    type Phase='hydration'|'final-membership'|'final-names';
+    type Probe={phase:Phase;change:()=>Promise<void>;changed:boolean;controls:number;fields:number;bases:number;names:number;
+      budget?:NonNullable<ReturnType<typeof fusekiReadBudget.getStore>>};
+    let active:Probe|undefined;
+    const observations:Array<{surface:string;phase:Phase;status:number;controls:number;fields:number;bases:number;
+      committed?:{before:string;after:string;decision:string}}> = [];
+    let committed:{before:string;after:string;decision:string}|undefined;
+    const trigger=async(phase:Phase)=> {
+      if(active?.phase===phase && !active.changed) {
+        active.changed=true;
+        // The writer has its own transaction/budget, as a concurrent caller
+        // would. Await its real native commit before resuming the paused read.
+        await fusekiReadBudget.exit(active.change);
+      }
+    };
+    const nativeQuery=stack.fuseki.query.bind(stack.fuseki);
+    stack.fuseki.query=async(...args:Parameters<typeof nativeQuery>)=> {
+      const budget=fusekiReadBudget.getStore();
+      if(active && budget && /SELECT \?epoch \?sequence WHERE/.test(args[0])) {
+        active.budget ??= budget;
+        if(budget===active.budget) active.controls++;
+      }
+      return nativeQuery(...args);
+    };
+    const nativeFields=stack.fuseki.templateQuery.bind(stack.fuseki);
+    stack.fuseki.templateQuery=async(...args:Parameters<typeof nativeFields>)=> {
+      if(active?.budget && fusekiReadBudget.getStore()===active.budget) {
+        active.fields++;
+        const rows=await nativeFields(...args);
+        if(active.fields===1) await trigger('hydration');
+        return rows;
+      }
+      return nativeFields(...args);
+    };
+    const nativeBasis=stack.fuseki.templateIndex.bind(stack.fuseki);
+    stack.fuseki.templateIndex=(async(...args:Parameters<typeof nativeBasis>)=> {
+      if(active?.budget && fusekiReadBudget.getStore()===active.budget && args[0].operation==='basis') {
+        active.bases++;
+        // Initial selection, leaf final check, then WorkRead's owner recheck.
+        if(active.bases===3) await trigger('final-membership');
+      }
+      return nativeBasis(...args);
+    }) as typeof stack.fuseki.templateIndex;
+    const deps={environment:stack.env,access:stack.access,templateSeek:stack.templateSeek,governance:{store:governance},
       sourceAdoptions:{authorReferences:async()=>new Map([[work.work,references]])} as never,
       sourceAuthorNames:{batch:async(keys:string[])=> {
+        if(active?.budget && fusekiReadBudget.getStore()===active.budget && ++active.names===2) await trigger('final-names');
         if(race) {race=false;references=references.filter(ref=>ref.id!==reported);}
         return new Map(keys.map(key=>[key,{displayName:`Author ${key}`} ]));
       }} as never,account:{verify:async()=>a.principal}};
@@ -61,7 +114,14 @@ test('Reviewed templates: complete credit traversal, local bases, fresh authorit
         body:JSON.stringify({profile:'template-query-v1',query:`https://rezics.com/query/work-${kind}`,revision:1,
           parameters:{roots:[root],...(options.language?{contentLanguage:options.language}:{})},
           presentation:options.authenticated?{actingSubject:a.actor}:undefined,limit:options.size ?? 64,cursor})}));
-    expect((await stack.call('GET',`/v1/works/${work.work.slice(-36)}/credits`)).status).toBe(404);
+    const facade=(root=work.work,cursor?:string,options:{size?:number;etag?:string}={})=>
+      app.handle(new Request(`http://main.local/v1/works/${root.slice(-36)}/credits?${new URLSearchParams({
+        limit:String(options.size ?? 20),...(cursor?{cursor}:{})})}`,{headers:options.etag?{'if-none-match':options.etag}:{}}));
+    const facadeBaseline=await page(await facade(),true);
+    const postBaseline=await page(await query('credits',work.work,undefined,{size:20}));
+    expect(facadeBaseline.items).toHaveLength(20);
+    expect(facadeBaseline.items).toEqual(postBaseline.items);
+    expect(facadeBaseline.sourcePosition.dependencyToken).toBe(postBaseline.sourcePosition.dependencyToken);
     const firstResponse=await query('credits');
     const etag=firstResponse.headers.get('etag')!;
     const first=await page(firstResponse);
@@ -88,6 +148,113 @@ test('Reviewed templates: complete credit traversal, local bases, fresh authorit
     // Unrelated native writes keep the cursor's local basis.
     await stack.contribution(other.work,a.actor,'ja','Unrelated insertion');
     expect((await query('credits',work.work,first.nextCursor!)).status).toBe(200);
+    const sequence=async()=> (await nativeQuery(`PREFIX rv:<${RV}> SELECT ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.control)} {${iri(DATASET)} rv:sequence ?sequence} } LIMIT 2`)).results!.bindings[0]!.sequence!.value;
+    const unrelated=async()=> {
+      const before=await sequence();
+      const result=await stack.contribution(other.work,a.actor,'ja',`Concurrent unrelated ${randomUUID()}`);
+      const after=await sequence();
+      expect(BigInt(after)).toBeGreaterThan(BigInt(before));
+      expect((await nativeQuery(`PREFIX rv:<${RV}> ASK {GRAPH ${iri(GRAPHS.current)} {
+        ${iri(result.contribution)} rv:publicationHead ${iri(result.decision)}}}`)).boolean).toBe(true);
+      committed={before,after,decision:result.decision};
+    };
+    const observe=async(surface:string,phase:Phase,request:()=>Promise<Response>,change=unrelated)=> {
+      active={phase,change,changed:false,controls:0,fields:0,bases:0,names:0};committed=undefined;
+      try {
+        const response=await request();
+        expect(active.changed).toBe(true);
+        observations.push({surface,phase,status:response.status,controls:active.controls,fields:active.fields,bases:active.bases,
+          ...(committed?{committed}:{})});
+        const artifact=Bun.env.REZICS_QA_ARTIFACT_DIR;
+        if(artifact) writeFileSync(join(artifact,'credits-concurrency-observations.json'),JSON.stringify(observations,null,2));
+        return {response,probe:{...active}};
+      } finally {active=undefined;}
+    };
+    // Real commits cross both the initial/final global position and the final
+    // local owner fences. Neither route may restart or truncate its result.
+    for(const surface of ['POST','GET'] as const) {
+      const request=(cursor?:string,etag?:string)=>surface==='POST'
+        ? query('credits',work.work,cursor,{size:20,...(etag?{etag}:{})}) : facade(work.work,cursor,{etag});
+      const baselineResponse=await request();const tag=baselineResponse.headers.get('etag')!;
+      const baseline=await page(baselineResponse,surface==='GET');
+      expect(baseline.items).toHaveLength(20);expect(baseline.nextCursor).toBeString();
+      for(const phase of ['hydration','final-membership'] as const) {
+        const {response,probe}=await observe(surface,phase,()=>request());
+        const result=await page(response,surface==='GET');
+        expect(result.items).toEqual(baseline.items);
+        expect(result.complete).toBe(baseline.complete);
+        expect(result.sourcePosition.dependencyToken).toBe(baseline.sourcePosition.dependencyToken);
+        expect(probe.controls).toBe(2);expect(probe.fields).toBe(2);expect(probe.bases).toBe(3);
+      }
+      const continuation=await page(await request(baseline.nextCursor!),surface==='GET');
+      expect(continuation.items).toHaveLength(20);
+      const {response:continued,probe:continuationProbe}=await observe(surface,'final-membership',()=>request(baseline.nextCursor!));
+      expect((await page(continued,surface==='GET')).items).toEqual(continuation.items);
+      expect(continuationProbe.controls).toBe(2);expect(continuationProbe.fields).toBe(2);
+      const {response:notModified,probe:conditionalProbe}=await observe(surface,'hydration',()=>request(undefined,tag));
+      expect(notModified.status).toBe(304);expect(await notModified.text()).toBe('');
+      expect(notModified.headers.get('etag')).toBe(tag);expect(notModified.headers.get('cache-control')).toBe('private, no-store');
+      expect(conditionalProbe.controls).toBe(2);expect(conditionalProbe.fields).toBe(2);
+    }
+    // Relevant membership still invalidates a continuation during the last
+    // owner fence; no retry is permitted to silently advance that cursor.
+    const localCursor=(await page(await query('credits',work.work,undefined,{size:20}))).nextCursor!;
+    const moved=await observe('POST','final-membership',()=>query('credits',work.work,localCursor,{size:20}),()=>add(population+100));
+    expect(moved.response.status).toBe(409);expect(moved.probe.controls).toBe(2);
+    expect((await facade(work.work,localCursor)).status).toBe(409);
+    expect((await page(await query('credits',work.work,undefined,{size:20}))).items).toHaveLength(20);
+    // Current read rights are an actual Access gate, independent of RDF basis.
+    await a.grant(`work:read:${work.work}`,'work.read');
+    const rightsTag=(await query('credits',work.work,undefined,{size:20})).headers.get('etag')!;
+    try {
+      const denied=await observe('GET','final-names',()=>facade(work.work,undefined,{etag:rightsTag}),async()=> {
+        const changed=await stack.accessPool.query('UPDATE access.scope_gate SET open=false WHERE id=$1 RETURNING open',[`work:read:${work.work}`]);
+        expect(changed.rows).toEqual([{open:false}]);
+      });
+      expect(denied.response.status).toBe(404);
+      expect((await query('credits',work.work,undefined,{size:20,etag:rightsTag})).status).toBe(404);
+    } finally {await stack.accessPool.query('UPDATE access.scope_gate SET open=true WHERE id=$1',[`work:read:${work.work}`]);}
+    // Restoration admission cannot be converted to a local empty/304 result.
+    try {
+      const held=await observe('POST','hydration',()=>query('credits',work.work,undefined,{size:20,etag:rightsTag}),async()=> {
+        await stack.accessPool.query('UPDATE access.recovery_fence SET open=false WHERE id=true');
+      });
+      expect(held.response.status).toBe(503);expect((await facade(work.work,undefined,{etag:rightsTag})).status).toBe(503);
+    } finally {await stack.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id=true');}
+    const epoch=stack.env.lineage.dataEpoch;
+    try {
+      const movedEpoch=await observe('GET','hydration',()=>facade(),async()=>{stack.env.lineage.dataEpoch=randomUUID();});
+      expect(movedEpoch.response.status).toBe(503);expect((await query('credits')).status).toBe(503);
+    } finally {stack.env.lineage.dataEpoch=epoch;}
+    // A private-root publication is the real public admission basis, unlike
+    // catalogue visibility. Replace its selected decision during hydration.
+    const published=await stack.contribution(restricted.work,a.actor,'en','Publication fence qualification');
+    const selection={context:{kind:'main-version-default' as const,id:restricted.mainVersion},work:restricted.work,
+      contribution:published.contribution,publicationDecision:published.decision,expectedSelectionHead:null,
+      selectionBasis:'main-maintainer' as const,actingSubject:a.actor};
+    expect((await selectMainDefault(stack.env,stack.admission(a.actor,`publication:select:${restricted.mainVersion}`,
+      'publication.select',mainSelectionDigest(selection)),selection)).outcome).toBe('succeeded');
+    const privateHead=(await nativeQuery(`PREFIX rv:<${RV}> SELECT ?head WHERE {GRAPH ${iri(GRAPHS.current)} {
+      ${iri(restricted.work)} rv:head ?head}} LIMIT 2`)).results!.bindings[0]!.head!.value;
+    const privateCredit=native();
+    await a.grant(`work:edit:${restricted.work}`,'work.edit');
+    await adoptAuthorCredit(stack.env,{verify:async()=>a.principal},stack.access,
+      new Request('http://main.local/v1/source-author-credit-adoptions'),{work:restricted.work,credit:privateCredit,
+        revision:native(),expectedHead:privateHead,sourceKey:'/authors/OL990001A',sourceRoleKey:null,nativeOrdinal:0,
+        actingSubject:a.actor},native(),'publication-credit');
+    const publicResponse=await facade(restricted.work);const publicationTag=publicResponse.headers.get('etag')!;
+    expect((await page(publicResponse,true)).items.map(item=>item.id)).toEqual([privateCredit]);
+    const draft=(await nativeQuery(`PREFIX rv:<${RV}> SELECT ?head WHERE {GRAPH ${iri(GRAPHS.current)} {
+      ${iri(published.contribution)} rv:draftHead ?head}} LIMIT 2`)).results!.bindings[0]!.head!.value;
+    const hidden=await observe('POST','hydration',()=>query('credits',restricted.work,undefined,{size:20,etag:publicationTag}),async()=> {
+      const input={contribution:published.contribution,expectedDraftHead:draft,expectedPublicationHead:published.decision,
+        rightsBasis:'original-contribution' as const,disclosure:'public' as const,actingSubject:a.actor};
+      expect((await publishTextContribution(stack.env,stack.admission(a.actor,`contribution:publish:${published.contribution}`,
+        'contribution.publish',textPublicationDigest(input)),input)).outcome).toBe('succeeded');
+    });
+    expect(hidden.response.status).toBe(404);
+    expect((await facade(restricted.work,undefined,{etag:publicationTag})).status).toBe(404);
     const before=await page(await query('credits'));
     await add(population);
     expect((await query('credits',work.work,before.nextCursor!)).status).toBe(409);
@@ -127,7 +294,7 @@ test('Reviewed templates: complete credit traversal, local bases, fresh authorit
     expect((await query('credits')).status).toBe(200);
     stack.fuseki.attachTemplateIndexWriter(delta=>stack.templateSeek.apply(delta));
     const artifact=Bun.env.REZICS_QA_ARTIFACT_DIR;
-    if(artifact) writeFileSync(join(artifact,'template-seek-plans.json'),JSON.stringify({degree:population+1,unrelated:20000,small,large,rebuild},null,2));
+    if(artifact) writeFileSync(join(artifact,'template-seek-plans.json'),JSON.stringify({degree:ids.length+1,unrelated:20000,small,large,rebuild,observations},null,2));
     await stack.fuseki.update(`INSERT DATA {GRAPH ${iri(GRAPHS.revisions)} {${iri(head)} a <${RV}ErasedRevision>}}`);
     expect((await query('credits',work.work,undefined,{etag})).status).toBe(404);
   } finally {await stack.stop();}
