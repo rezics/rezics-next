@@ -538,6 +538,28 @@ the [manager charter](../goals/manager.md#resources) owns engine selection and
 usage limits. CLI versions are host installations, not product pins. Workers use
 the checked-in `scripts/goal/goalctl.ts` and its tests.
 
+### Goal mail and manager coordinator
+
+`task goal -- mail` uses Bun's existing SQLite runtime with `synchronous=FULL`;
+no mail daemon or additional package is required. `task goal -- coordinator`
+uses the host's tmux and systemd user manager for the Codex pilot. tmux launches
+finite native resumes through an existing server outside the coordinator unit's
+cgroup; killing the coordinator therefore leaves manager-dispatched workers
+running. Launch descriptors retain goalctl's model, effort, tier and account home.
+The pilot verified tmux 3.7c and systemd 259.9 (259.9-1.fc44); these are host
+installations rather than repository pins.
+
+The user-unit template and handover commands are in
+[`goal-coordinator.service`](../../scripts/goal/goal-coordinator.service). Before
+activation, the maintainer supplies the unit's environment file with the PATH for
+Bun, Task, tmux and Codex, verifies the previous interactive native owner has
+exited, and enrolls one manager. `task goal -- coordinator status` shows pending
+wake deadlines and refused/uncertain attempts. Uncertain claimed attempts require
+manual reconciliation; missing completion is never permission for a second
+resume. On the pilot host `Linger=no`; logout survival requires the maintainer to
+enable lingering or choose a system service. The unit preserves
+`KillMode=control-group` and does not change host login policy.
+
 ### Agent browser
 
 Agents drive a real browser through [BrowserOS](https://github.com/browseros-ai/BrowserOS),
