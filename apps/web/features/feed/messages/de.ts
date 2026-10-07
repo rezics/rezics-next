@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { FeedMessages } from '../messages.ts';
 
 export default {
+  moreReplies: 'Weitere Antworten', loadingReplies: 'Weitere Antworten werden geladen…',
+  moreRepliesFailed: 'Weitere Antworten konnten nicht geladen werden. Versuche es erneut oder öffne diesen Zweig neu.',
   // Views, sort and filters
   views: 'Feed', following: 'Abonniert', all: 'Alle',
   sortLabel: 'Sortieren', sortBy: insert('Sortierung: {{sort}}', { sort: String }),

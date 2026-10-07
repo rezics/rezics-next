@@ -1,6 +1,6 @@
 import type { Static } from 'typebox';
 import { readEpochOrder } from '../discovery/lineage.ts';
-import { activityTime, bestKey } from '../feed/ranking.ts';
+import { activityTime } from '../feed/ranking.ts';
 import { readAgent, readAgentCards } from '../profiles/read.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, hash, iri, lit } from '../work/activate.ts';
@@ -8,9 +8,9 @@ import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkRe
   WorkReadMoved, WorkReadUnavailable, WorkReadLimit, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
 import { clip, discussionParts } from './discussion-text.ts';
 import { replySlotIri } from './graph.ts';
-import { REALM_THREAD_COST, type realmThread, type realmThreadReply, type realmThreadSummary,
+import { REALM_THREAD_COST, type realmThread, type realmThreadContinuation, type realmThreadReply, type realmThreadSummary,
   type threadSort, type threadWindow } from './thread-contract.ts';
-import type { PlacedHead, RealmReplyThreadStore, ThreadVote } from './thread-store.ts';
+import type { PlacedHead, RealmReplyThreadStore, ThreadSiblingKey, ThreadVote } from './thread-store.ts';
 import { resolveTargets, targetSummaries, TARGET_RESOLVE_COST } from '../target/resolve.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
@@ -155,14 +155,6 @@ async function blockedAuthors(session: WorkReadSession, authors: readonly string
       unique.slice(start, start + 128))) blocked.add(actor);
   }
   return blocked;
-}
-
-/** Best is Home's vote and age signal; Top is net score; New is newest first. Ties go newest first. */
-function ranked<T extends { time: Date; placement: string }>(rows: readonly T[], sort: Sort,
-  score: (row: T) => number): T[] {
-  const key = (row: T) => sort === 'top' ? score(row) : sort === 'best' ? bestKey(score(row), row.time.getTime()) : 0;
-  return [...rows].sort((a, b) => key(b) - key(a) || b.time.getTime() - a.time.getTime()
-    || a.placement.localeCompare(b.placement));
 }
 
 /**
@@ -317,16 +309,59 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
  * context. A reply shows only while its current placement, exact revision and
  * Realm review hold; one that does not hides the replies beneath it too.
  */
-export async function readRealmThread(session: WorkReadSession, realm: string, focus: string, sort: Sort = 'best'):
+export async function readRealmThread(session: WorkReadSession, realm: string, focus: string, sort: Sort = 'best', encoded?: string):
   Promise<Static<typeof realmThread>> {
   await readRealmBasis(session, realm);
   const threads = store(session);
   const history = await realmHistoryOriginFilter(session, realm, 'placement', '?slot');
-  const [subtree, parents] = await Promise.all([threads.subtree(focus), threads.ancestors(focus)]);
-  if (!subtree.length || subtree[0]!.reply !== focus) throw new WorkReadMissing('Reply is unavailable');
-  const complete = subtree.length <= REALM_THREAD_COST.replies + 1
-    && !subtree.some(node => node.truncated)
-    && !(parents.length === REALM_THREAD_COST.ancestors && parents.at(-1)?.parent);
+  const binding = ['realm-thread-siblings-v1', realm, focus, sort, hash(history), session.displayLanguages,
+    session.principal ? { issuer: session.principal.issuer, subject: session.principal.subject,
+      actingSubject: session.options.actingSubject } : null];
+  const cursor = decodeReadCursor(encoded, binding, session.position);
+  let after: ThreadSiblingKey | undefined;
+  if (cursor) {
+    try {
+      const key = JSON.parse(cursor.order) as { rank: number; time: string };
+      if (!Number.isFinite(key.rank) || !/^-?\d+$/.test(key.time)) throw new Error('cursor');
+      after = { ...key, placement: cursor.after };
+    } catch { throw new WorkReadInvalid('Thread sibling cursor is invalid'); }
+  }
+  await threads.assertThreadProjection(session);
+  // Breadth-first selection budgets candidates, not only visible replies. Each
+  // parent uses a matching index seek; children outside this window keep a route
+  // to their own bounded focus read instead of disappearing behind the budget.
+  const selected = [focus];
+  const pending = [{ reply: focus, depth: 0, after }];
+  const continuations: Static<typeof realmThreadContinuation>[] = [];
+  for (let index = 0; index < pending.length; index++) {
+    session.checkDeadline();
+    const parent = pending[index]!;
+    const remaining = REALM_THREAD_COST.replies + 1 - selected.length;
+    if (!remaining || parent.depth === REALM_THREAD_COST.depth) {
+      continuations.push({ kind: 'depth', reply: parent.reply });
+      continue;
+    }
+    const page = await threads.siblingPage(session.position.dataEpoch, realm, parent.reply, sort, remaining, parent.after);
+    const children = page.slice(0, remaining);
+    selected.push(...children.map(child => child.reply));
+    for (const child of children) {
+      if (child.hasChildren) pending.push({ reply: child.reply, depth: parent.depth + 1, after: undefined });
+    }
+    const last = children.at(-1);
+    if (page.length > remaining && last) {
+      const childBinding = ['realm-thread-siblings-v1', realm, parent.reply, sort, hash(history), session.displayLanguages,
+        session.principal ? { issuer: session.principal.issuer, subject: session.principal.subject,
+          actingSubject: session.options.actingSubject } : null];
+      continuations.push({ kind: 'siblings', reply: parent.reply,
+        cursor: encodeReadCursor(childBinding, session.position, last.placement,
+          JSON.stringify({ rank: last.rank, time: last.time })) });
+    }
+  }
+  const [identities, parents, thread] = await Promise.all([threads.identities(selected), threads.ancestors(focus),
+    threads.threadRoot(session.position.dataEpoch, realm, focus)]);
+  const identityMap = new Map(identities.map(node => [node.reply, node]));
+  const subtree = selected.flatMap(reply => identityMap.has(reply) ? [identityMap.get(reply)!] : []);
+  if (!thread || !subtree.length || subtree[0]!.reply !== focus) throw new WorkReadMissing('Reply is unavailable');
   const nodes = [...parents, ...subtree.slice(0, REALM_THREAD_COST.replies + 1)];
   const byReply = new Map(nodes.map((item) => [item.reply, item]));
   const rows = (await session.query(`SELECT ?id ?reply ?work ?author ?revision ?review ?preparation ?rootRevision
@@ -394,8 +429,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     const shownReply = reply(row);
     if (!shownReply.length) return;
     items.push(...shownReply);
-    for (const child of ranked(children.get(row.reply) ?? [], sort,
-      (item) => votes.get(item.placement)?.score ?? 0)) {
+    for (const child of children.get(row.reply) ?? []) {
       visit(child);
     }
   };
@@ -406,14 +440,22 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     if (!shownReply.length) break;
     ancestors.unshift(...shownReply);
   }
+  const oldest = ancestors[0];
+  if (oldest?.parent && ancestors.length === REALM_THREAD_COST.ancestors) {
+    continuations.push({ kind: 'ancestors', reply: oldest.reply });
+  }
+  const reachable = new Set(items.map(item => item.reply));
+  const visibleContinuations = continuations.filter(item => item.kind === 'ancestors' || reachable.has(item.reply));
   const blockedNow = await blockedAuthors(session, all.map((row) => row.author));
   if (blockedNow.size !== blocked.size || [...blocked].some((author) => !blockedNow.has(author))) {
     throw new WorkReadMoved('Reader blocks changed during the thread read');
   }
   await readRealmBasis(session, realm);
+  await threads.assertThreadProjection(session);
   if (!(await works(session, [focused])).has(focused.work)) throw new WorkReadMissing('Thread target is unavailable');
-  const response = { profile: 'realm-thread-v1' as const, realm, thread: ancestors[0]?.reply ?? focus, focus, sort, work: about,
-    rootRevision: focused.rootRevision, ancestors, items, complete, sourcePosition: session.position };
+  const response = { profile: 'realm-thread-v1' as const, realm, thread, focus, sort, work: about,
+    rootRevision: focused.rootRevision, ancestors, items, continuations: visibleContinuations,
+    complete: visibleContinuations.length === 0, sourcePosition: session.position };
   if (Buffer.byteLength(JSON.stringify(response), 'utf8') > REALM_THREAD_COST.responseBytes) {
     throw new WorkReadLimit('Thread content exceeds the complete response budget');
   }

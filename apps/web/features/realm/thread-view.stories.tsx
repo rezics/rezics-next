@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { threadHref } from '../address/path.ts';
@@ -11,7 +12,7 @@ import zhHans from '../feed/messages/zh-Hans.ts';
 import type { ReplyMode } from '../feed/reply-composer.tsx';
 import { memoryThreads, type MemoryThreads, storyBranch, storyJapaneseSpoiler, storyQuietThread, storyRealm,
   storyReply, storySpoilerThread, storyThread, storyUnmarkedTitle, THREAD_NOW } from '../feed/thread-fixtures.ts';
-import type { ThreadRead } from '../feed/thread.ts';
+import type { ThreadRead, ThreadSort } from '../feed/thread.ts';
 import { communityZone } from '../zones/fixtures.ts';
 import { RealmPageStory } from './story-page.tsx';
 import { DiscussionColumns, ThreadRail } from './thread-rail.tsx';
@@ -23,7 +24,8 @@ import { ThreadView } from './thread-view.tsx';
 // starts folded, a deep branch continues on its own page, and replying is
 // offered only where the Realm would place the reply.
 
-interface Args { read: ThreadRead; mode: ReplyMode; signedIn: boolean; locale: UiLocale; api?: MemoryThreads }
+interface Args { read: ThreadRead; mode: ReplyMode; signedIn: boolean; locale: UiLocale; api?: MemoryThreads;
+  sort?: ThreadSort; language?: string; readPage?: (reply: string, cursor: string) => Promise<ThreadRead> }
 
 const rules = [
   { id: 'schedule', title: 'Stay within the week’s chapters', lang: 'en',
@@ -31,7 +33,7 @@ const rules = [
   { id: 'edition', title: 'Name your edition', lang: 'en', body: 'Say which edition or translation you read when you quote.' },
 ];
 
-function ThreadPage({ read, mode, signedIn, locale, api = memoryThreads() }: Args) {
+function ThreadPage({ read, mode, signedIn, locale, api = memoryThreads(), sort = 'best', language, readPage }: Args) {
   const zone = communityZone(locale);
   const here = localizedPath(threadHref(storyRealm.path, read.focus), locale);
   const feedMessages = locale === 'zh-Hans' ? { ...messages, ...zhHans }
@@ -47,8 +49,13 @@ function ThreadPage({ read, mode, signedIn, locale, api = memoryThreads() }: Arg
         labels={{ about: locale === 'zh-Hans' ? zhHans.aboutCommunity : messages.aboutCommunity,
           rules: locale === 'zh-Hans' ? zhHans.communityRules : messages.communityRules,
           more: locale === 'zh-Hans' ? zhHans.moreAboutCommunity : messages.moreAboutCommunity }} />}>
-        <ThreadView read={read} sort="best" replyMode={mode} threadApi={api}
-          realm={storyRealm} sortHrefs={{ best: here, top: `${here}?sort=top`, new: `${here}?sort=new` }} />
+        <ThreadView read={read} sort={sort} replyMode={mode} threadApi={api} readPage={readPage}
+          realm={storyRealm} sortHrefs={Object.fromEntries((['best', 'top', 'new'] as const).map(value => {
+            const query = new URLSearchParams();
+            if (value !== 'best') query.set('sort', value);
+            if (language) query.set('language', language);
+            return [value, `${here}${query.size ? `?${query}` : ''}`];
+          })) as Record<ThreadSort, string>} />
       </DiscussionColumns>
     </FeedProvider>
   </RealmPageStory>;
@@ -277,5 +284,121 @@ export const Phone: Story = {
   globals: { viewport: { value: 'phone' } },
   async play() {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+const pagedThread: ThreadRead = {
+  ...storyThread, items: storyThread.items.slice(0, 2), complete: false,
+  continuations: [{ kind: 'siblings', reply: storyReply(2), cursor: 'nested-page' }],
+};
+
+const pageReply = (n: number, body: string) => ({ ...storyThread.items[2]!, reply: storyReply(n),
+  placement: storyReply(n + 700), parent: storyReply(2), body });
+
+function siblingPage(cursor: string): ThreadRead {
+  return { ...storyThread, focus: storyReply(2), ancestors: [storyThread.items[0]!],
+    items: [storyThread.items[1]!, ...(cursor === 'nested-page'
+      ? [pageReply(13, 'The next reply is still part of this branch.')]
+      : [pageReply(14, 'The final reply is reachable too.')])],
+    complete: cursor !== 'nested-page', continuations: cursor === 'nested-page'
+      ? [{ kind: 'siblings', reply: storyReply(2), cursor: 'last-page' }] : [] };
+}
+
+/** Each bounded page stays under its parent, with no duplicate focused reply. */
+export const MoreReplies: Story = {
+  args: { read: pagedThread, readPage: async (_reply, cursor) => siblingPage(cursor) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const branch = within(reply(canvas, /Daniel Chen 陈丹尼/));
+    await expect(branch.getByRole('button', { name: 'More replies' })).toBeVisible();
+    await userEvent.click(branch.getByRole('button', { name: 'More replies' }));
+    await expect(await branch.findByText('The next reply is still part of this branch.')).toBeVisible();
+    await expect(canvas.getAllByRole('article', { name: /Daniel Chen 陈丹尼/ })).toHaveLength(1);
+    await userEvent.click(branch.getByRole('button', { name: 'More replies' }));
+    await expect(await branch.findByText('The final reply is reachable too.')).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'More replies' })).toBeNull();
+    await expect(canvas.getByRole('link', { name: '3 comments' })).toBeVisible();
+  },
+};
+
+/** A failed read keeps the branch and offers both retry and a fresh focused read. */
+export const ContinuationRetry: Story = {
+  args: { read: pagedThread, sort: 'new', language: 'ja',
+    readPage: fn(async (_reply: string, cursor: string) => siblingPage(cursor))
+      .mockRejectedValueOnce(new Error('Cursor expired')) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const branch = within(reply(canvas, /Daniel Chen 陈丹尼/));
+    await userEvent.click(branch.getByRole('button', { name: 'More replies' }));
+    await expect(await branch.findByRole('alert')).toHaveTextContent('Couldn’t load more replies.');
+    await expect(branch.getByRole('link', { name: 'Continue this thread' })).toHaveAttribute('href',
+      `${localizedPath(threadHref(storyRealm.path, storyReply(2)), 'en')}?sort=new&language=ja`);
+    await expect(branch.getByText(/I’d forgotten how funny/)).toBeVisible();
+    // Retry uses the unchanged cursor; a recovered page appends without replacing the branch.
+    await userEvent.click(branch.getByRole('button', { name: 'Try again' }));
+    await expect(await branch.findByText('The next reply is still part of this branch.')).toBeVisible();
+  },
+};
+
+/** Server depth and ancestor limits both provide a focused route preserving reader choices. */
+export const BranchContinuations: Story = {
+  args: { read: { ...storyBranch, items: [storyBranch.items[0]!],
+    ancestors: storyBranch.ancestors.slice(1), complete: false,
+    continuations: [{ kind: 'ancestors', reply: storyReply(2) }, { kind: 'depth', reply: storyReply(4) }] },
+    sort: 'new', language: 'ja' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const links = canvas.getAllByRole('link', { name: 'Continue this thread' });
+    await expect(links).toHaveLength(2);
+    await expect(links[0]).toHaveAttribute('href',
+      `${localizedPath(threadHref(storyRealm.path, storyReply(2)), 'en')}?sort=new&language=ja`);
+    await expect(links[1]).toHaveAttribute('href',
+      `${localizedPath(threadHref(storyRealm.path, storyReply(4)), 'en')}?sort=new&language=ja`);
+  },
+};
+
+export const MoreRepliesPhone: Story = {
+  args: { read: pagedThread, readPage: async (_reply, cursor) => siblingPage(cursor) },
+  globals: { viewport: { value: 'phone' } },
+  async play() {
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+/** Repeated clicks cannot start another page while the bounded read is pending. */
+export const ContinuationLoading: Story = {
+  args: { read: pagedThread, readPage: fn(() => new Promise<ThreadRead>(() => {})) },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'More replies' }));
+    const loading = canvas.getByRole('button', { name: 'Loading more replies…' });
+    await expect(loading).toBeDisabled();
+    await expect(canvas.getByRole('status')).toHaveTextContent('Loading more replies…');
+    await userEvent.click(loading);
+    await expect(args.readPage).toHaveBeenCalledTimes(1);
+  },
+};
+
+/** Simulates the route receiving a fresh server read after refresh or a reply. */
+function RefreshedThread(args: Args) {
+  const [read, setRead] = useState(args.read);
+  return <>
+    <button type="button" onClick={() => setRead({ ...storyThread,
+      items: storyThread.items.slice(0, 1), continuations: [] })}>Refresh thread</button>
+    <ThreadPage {...args} read={read} />
+  </>;
+}
+
+export const ContinuationRefresh: Story = {
+  args: { read: pagedThread, readPage: async (_reply, cursor) => siblingPage(cursor) },
+  render: args => <RefreshedThread {...args} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'More replies' }));
+    await expect(await canvas.findByText('The next reply is still part of this branch.')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Refresh thread' }));
+    await expect(await canvas.findByRole('heading', { name: 'No comments yet' })).toBeVisible();
+    await expect(canvas.queryByText('The next reply is still part of this branch.')).toBeNull();
+    await expect(canvas.queryByRole('button', { name: 'More replies' })).toBeNull();
   },
 };

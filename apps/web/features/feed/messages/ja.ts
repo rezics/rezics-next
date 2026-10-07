@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { FeedMessages } from '../messages.ts';
 
 export default {
+  moreReplies: '返信をさらに表示', loadingReplies: '返信を読み込み中…',
+  moreRepliesFailed: '返信を読み込めませんでした。もう一度試すか、このスレッドを開き直してください。',
   views: 'フィード', following: 'フォロー中', all: 'すべて',
   sortLabel: '並べ替え', sortBy: insert('並べ替え：{{sort}}', { sort: String }),
   best: 'おすすめ', new: '新着', top: '人気',

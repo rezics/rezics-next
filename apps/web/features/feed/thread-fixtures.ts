@@ -73,7 +73,7 @@ const items: ThreadReply[] = [
 ];
 
 export const storyThread: ThreadRead = { profile: 'realm-thread-v1', realm: storyRealm.id, thread: id(1), focus: id(1),
-  sort: 'best', work, rootRevision: id(970, 'dddd'), ancestors: [], items, complete: true,
+  sort: 'best', work, rootRevision: id(970, 'dddd'), ancestors: [], items, complete: true, continuations: [],
   sourcePosition: { dataEpoch: 'story', sequence: '40' } };
 
 /** One reply's own page: the branch under reply 4, with the discussion and its parents for context. */

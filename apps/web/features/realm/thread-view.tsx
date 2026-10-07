@@ -4,13 +4,15 @@ import { cn } from '@rezics/ui/utils';
 import {
   ArrowLeftIcon,
   ArrowUpRightIcon,
+  ArrowRightIcon,
   ClockIcon,
   FlameIcon,
   MessageCircleIcon,
   MessagesSquareIcon,
   TrophyIcon,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { browserMainApi } from '../api/browser.ts';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import { ShareButton, VoteControl } from '../feed/actions.tsx';
@@ -21,7 +23,7 @@ import { useFeed } from '../feed/feed-context.tsx';
 import { ReplyComposer, type ReplyMode, type ReplyTarget } from '../feed/reply-composer.tsx';
 import { ReplyBody, ReplyByline, ReplyList, type ThreadContext } from '../feed/reply-tree.tsx';
 import { mainThreadApi, type ThreadApi } from '../feed/thread-api.ts';
-import { replyTree, type ThreadRead, type ThreadReply, type ThreadSort } from '../feed/thread.ts';
+import { replyTree, THREAD_DEPTH, type ThreadRead, type ThreadReply, type ThreadSort } from '../feed/thread.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -42,6 +44,52 @@ export interface ThreadViewProps {
   replyMode: ReplyMode;
   /** Stories: an in-memory Main. */
   threadApi?: ThreadApi;
+  /** Stories can supply the same bounded continuation read from memory. */
+  readPage?: (reply: string, cursor: string) => Promise<ThreadRead>;
+}
+
+type Continuation = NonNullable<ThreadRead['continuations']>[number];
+const continuationKey = (value: Continuation) => `${value.kind}:${value.reply}`;
+
+/** Keep loaded branches in Main's sibling order and replace only the consumed control. */
+function mergeThreadPage(current: ThreadRead, page: ThreadRead, consumed: Continuation): ThreadRead {
+  const items = new Map(current.items.map((item) => [item.reply, item]));
+  for (const item of page.items) items.set(item.reply, item);
+  const controls = new Map((current.continuations ?? []).map((value) => [continuationKey(value), value]));
+  controls.delete(continuationKey(consumed));
+  for (const value of page.continuations ?? []) {
+    if (value.kind !== 'ancestors') controls.set(continuationKey(value), value);
+  }
+  const continuations = [...controls.values()];
+  return { ...current, items: [...items.values()], continuations, complete: continuations.length === 0 };
+}
+
+function MoreReplies({ continuation, load, href }: {
+  continuation: Continuation & { kind: 'siblings' };
+  load: (continuation: Continuation & { kind: 'siblings' }) => Promise<void>;
+  href: string;
+}) {
+  const { t } = useFeed();
+  const [state, setState] = useState<'idle' | 'loading' | 'failed'>('idle');
+  return <div className="grid justify-items-start gap-2 py-1">
+    <button type="button" disabled={state === 'loading'} aria-busy={state === 'loading'}
+      className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 font-medium text-primary text-sm
+        outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+      onClick={() => {
+        setState('loading');
+        void load(continuation).then(() => setState('idle'), () => setState('failed'));
+      }}>
+      {state === 'loading' ? t.loadingReplies : state === 'failed' ? t.retry : t.moreReplies}
+    </button>
+    {state === 'loading' ? <span role="status" className="sr-only">{t.loadingReplies}</span> : null}
+    {state === 'failed' ? <div className="grid gap-1 text-sm">
+      <p role="alert" className="text-destructive">{t.moreRepliesFailed}</p>
+      <LocalizedLink href={href} documentNavigation
+        className="w-fit font-medium text-primary underline underline-offset-4">
+        {t.continueThread}
+      </LocalizedLink>
+    </div> : null}
+  </div>;
 }
 
 /** Opens the composer when the page is reached through a card's Reply (`#reply`). */
@@ -233,17 +281,56 @@ function ReplyContext({ read, realm }: { read: ThreadRead; realm: ThreadViewProp
  * reply. A reply's own page shows its place in the discussion first.
  */
 export function ThreadView({
-  read,
+  read: initialRead,
   realm,
   sort,
   sortHrefs,
   replyMode,
   threadApi,
+  readPage,
 }: ThreadViewProps) {
-  const { t } = useFeed();
+  const { t, actingSubject } = useFeed();
+  const [loaded, setLoaded] = useState({ source: initialRead, read: initialRead });
+  if (loaded.source !== initialRead) setLoaded({ source: initialRead, read: initialRead });
+  const read = loaded.source === initialRead ? loaded.read : initialRead;
   useReplyAnchor();
   const tree = useMemo(() => replyTree(read.items), [read.items]);
   const api = useRef<ThreadApi | null>(threadApi ?? null);
+  const controls = useMemo(() => {
+    const byReply = new Map<string, Continuation[]>();
+    for (const value of read.continuations ?? []) {
+      const values = byReply.get(value.reply) ?? [];
+      values.push(value);
+      byReply.set(value.reply, values);
+    }
+    return byReply;
+  }, [read.continuations]);
+  const query = sortHrefs[sort].split('?')[1]?.split('#')[0] ?? '';
+  const replyHref = (reply: string) => `${threadPath(realm.path, reply)}${query ? `?${query}` : ''}`;
+  const load = async (continuation: Continuation & { kind: 'siblings' }) => {
+    let page: ThreadRead;
+    if (readPage) page = await readPage(continuation.reply, continuation.cursor);
+    else {
+      const language = new URLSearchParams(query).get('language');
+      const { data } = await browserMainApi(undefined, { anonymous: !actingSubject }).v1
+        .realms({ realm: read.realm.slice(-36) }).threads({ reply: continuation.reply.slice(-36) })
+        .get({ query: { sort, cursor: continuation.cursor,
+          ...(language ? { language } : {}), ...(actingSubject ? { actingSubject } : {}) } });
+      if (!data) throw new Error('Thread continuation unavailable');
+      page = data;
+    }
+    setLoaded(current => current.source === initialRead
+      ? { ...current, read: mergeThreadPage(current.read, page, continuation) } : current);
+  };
+  const continuation = (reply: string, depth = 0) => controls.get(reply)?.filter(value => value.kind !== 'ancestors')
+    .map(value => value.kind === 'siblings' && depth < THREAD_DEPTH
+      ? <MoreReplies key={`${continuationKey(value)}:${value.cursor}`} continuation={value} load={load}
+          href={replyHref(value.reply)} />
+      : <LocalizedLink key={continuationKey(value)} href={replyHref(value.reply)}
+          className="inline-flex min-h-9 w-fit items-center gap-1.5 py-1 font-medium text-primary text-sm
+            underline-offset-4 hover:underline">
+          {t.continueThread}<ArrowRightIcon aria-hidden="true" className="size-4" />
+        </LocalizedLink>);
   if (!tree) return null;
   const focus = tree.reply;
   const opening = read.focus === read.thread;
@@ -258,7 +345,8 @@ export function ThreadView({
   const context: ThreadContext = {
     target,
     opener,
-    replyHref: (reply) => threadPath(realm.path, reply),
+    replyHref,
+    continuation,
   };
   const replies = opening ? tree.children : [tree];
   const SortIcon = sortIcons[sort];
@@ -276,7 +364,15 @@ export function ThreadView({
       {opening ? (
         <OpeningPost post={focus} read={read} realm={realm} count={count} />
       ) : (
-        <ReplyContext read={read} realm={realm} />
+        <div className="grid gap-3">
+          {(read.continuations ?? []).filter(value => value.kind === 'ancestors').map(value =>
+            <LocalizedLink key={continuationKey(value)} href={replyHref(value.reply)}
+              className="inline-flex min-h-9 w-fit items-center gap-1.5 font-medium text-primary text-sm
+                underline-offset-4 hover:underline">
+              <ArrowLeftIcon aria-hidden="true" className="size-4" />{t.continueThread}
+            </LocalizedLink>)}
+          <ReplyContext read={read} realm={realm} />
+        </div>
       )}
       <section
         id="comments"
@@ -318,15 +414,7 @@ export function ThreadView({
             className={cn('py-8')}
           />
         )}
-        {read.complete ? null : (
-          <p
-            role="note"
-            className="rounded-xl bg-muted/60 px-3 py-2 text-muted-foreground
-        text-sm"
-          >
-            {t.threadIncomplete}
-          </p>
-        )}
+        {opening ? continuation(focus.reply) : null}
       </section>
     </div>
   );

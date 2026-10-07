@@ -40,6 +40,7 @@ function readThread(
   view: RealmView,
   thread: string,
   sort: ThreadSort,
+  language?: string,
 ): Promise<Loaded<ThreadRead>> {
   return settle(() =>
     main.v1
@@ -48,6 +49,7 @@ function readThread(
       .get({
         query: {
           sort,
+          ...(language ? { language } : {}),
           ...(view.reader.actingSubject ? { actingSubject: view.reader.actingSubject } : {}),
         },
       }),
@@ -118,22 +120,26 @@ async function ThreadContent({
   sort,
   here,
   feed,
+  language,
 }: {
   view: RealmView;
   thread: string;
   sort: ThreadSort;
   here: string;
   feed: FeedMessages;
+  language?: string;
 }) {
-  const read = await readThread(await readerMain(view), view, thread, sort);
+  const read = await readThread(await readerMain(view), view, thread, sort, language);
   if (!read.ok && read.failure === 'missing') notFound();
   const { locale } = view.context;
   const t = materializeData(feed, { locale });
   const sortHrefs = Object.fromEntries(
-    (['best', 'top', 'new'] as const).map((option) => [
-      option,
-      option === 'best' ? here : `${here}?sort=${option}`,
-    ]),
+    (['best', 'top', 'new'] as const).map((option) => {
+      const query = new URLSearchParams();
+      if (option !== 'best') query.set('sort', option);
+      if (language) query.set('language', language);
+      return [option, `${here}${query.size ? `?${query}` : ''}`];
+    }),
   ) as Record<ThreadSort, string>;
   if (!read.ok) {
     return (
@@ -171,6 +177,7 @@ export async function RealmThreadRoute({ params, searchParams }: ThreadRouteProp
   if ('page' in resolved) return resolved.page;
   const { view, feed } = resolved;
   const sort = parseThreadSort(search);
+  const language = Array.isArray(search.language) ? search.language[0] : search.language;
   const here = threadPath(realmPathOf(view), parsed.id);
   return (
     <DiscussionFrame
@@ -181,7 +188,7 @@ export async function RealmThreadRoute({ params, searchParams }: ThreadRouteProp
       here={sort === 'best' ? here : `${here}?sort=${sort}`}
     >
       <Suspense fallback={<ThreadSkeleton />}>
-        <ThreadContent view={view} thread={parsed.id} sort={sort} here={here} feed={feed} />
+        <ThreadContent view={view} thread={parsed.id} sort={sort} here={here} feed={feed} language={language} />
       </Suspense>
     </DiscussionFrame>
   );

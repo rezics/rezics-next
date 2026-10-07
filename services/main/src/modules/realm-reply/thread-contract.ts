@@ -64,8 +64,14 @@ export const realmThreadReply = t.Object({ reply: readId, placement: readId, par
   /** The reader blocked this author; the body and author are withheld from this read. */
   blocked: t.Optional(t.Boolean()), vote: threadVote });
 export const realmThreadQuery = t.Object({ sort: t.Optional(threadSort),
+  cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
   language: t.Optional(realmThreadsQuery.properties.language),
   actingSubject: t.Optional(readId) }, { additionalProperties: false });
+/** Sibling cursors seek under `reply`; branch/ancestor reads use `reply` as their new focus. */
+export const realmThreadContinuation = t.Union([
+  t.Object({ kind: t.Literal('siblings'), reply: readId, cursor: t.String({ maxLength: 2048 }) }),
+  t.Object({ kind: t.Union([t.Literal('depth'), t.Literal('ancestors')]), reply: readId }),
+]);
 /**
  * A reply and everything under it, as one Realm shows it. `items` start with
  * the focus and follow each reply with its replies in `sort` order, the order
@@ -77,4 +83,5 @@ export const realmThread = t.Object({ profile: t.Literal('realm-thread-v1'), rea
   focus: readId, sort: threadSort, work: threadWork, rootRevision: readId,
   ancestors: t.Array(realmThreadReply, { maxItems: REALM_THREAD_COST.ancestors }),
   items: t.Array(realmThreadReply, { maxItems: REALM_THREAD_COST.replies + 1 }),
+  continuations: t.Array(realmThreadContinuation, { maxItems: REALM_THREAD_COST.replies + 2 }),
   complete: t.Boolean(), sourcePosition: readPosition });

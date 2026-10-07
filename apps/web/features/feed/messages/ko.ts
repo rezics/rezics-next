@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { FeedMessages } from '../messages.ts';
 
 export default {
+  moreReplies: '답글 더 보기', loadingReplies: '답글을 더 불러오는 중…',
+  moreRepliesFailed: '답글을 더 불러오지 못했어요. 다시 시도하거나 이 토론을 다시 열어 주세요.',
   // Views, sort and filters
   views: '피드', following: '팔로잉', all: '전체',
   sortLabel: '정렬', sortBy: insert('정렬: {{sort}}', { sort: String }),

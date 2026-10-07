@@ -60,7 +60,7 @@ export function realmReplyThreadRoutes(work: MainWorkDependencies) {
     }, async ({ request, params, query }) => {
       try {
         return Response.json(await workRead(work, request, query, session => readRealmThread(session,
-          id(params.realm), id(params.reply), query.sort)), { headers });
+          id(params.realm), id(params.reply), query.sort, query.cursor)), { headers });
       } catch (error) { return threadError(error); }
     });
 }

@@ -4,7 +4,7 @@ import { profileHref } from '../profile/route.ts';
 import { cn } from '@rezics/ui/utils';
 import { DocumentBody } from '@rezics/ui/document-body';
 import { ArrowRightIcon, CheckIcon, LinkIcon, MinusIcon, PlusIcon, ReplyIcon } from 'lucide-react';
-import { useId, useState } from 'react';
+import { type ReactNode, useId, useState } from 'react';
 import { ReportAction } from '../safety/report-action.tsx';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -33,6 +33,8 @@ export interface ThreadContext {
   replyHref: (reply: string) => string;
   /** Who opened the discussion, marked OP beside their replies. */
   opener: string | null;
+  /** Bounded thread reads expose more siblings or a branch to continue here. */
+  continuation?: (reply: string, depth: number) => ReactNode;
 }
 
 /** Copies a reply's own address. */
@@ -287,6 +289,7 @@ function Reply({ node, context }: { node: ReplyNode; context: ThreadContext }) {
           ) : node.children.length ? (
             <ReplyList nodes={node.children} context={context} />
           ) : null}
+          {deep ? null : context.continuation?.(reply.reply, node.depth)}
         </div>
       </article>
     </li>

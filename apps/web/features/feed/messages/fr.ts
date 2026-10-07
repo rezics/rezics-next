@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { FeedMessages } from '../messages.ts';
 
 export default {
+  moreReplies: 'Plus de réponses', loadingReplies: 'Chargement des réponses…',
+  moreRepliesFailed: 'Impossible de charger les réponses. Réessayez ou rouvrez cette branche.',
   // Views, sort and filters
   views: 'Fil', following: 'Suivi', all: 'Tout',
   sortLabel: 'Trier', sortBy: insert('Trier : {{sort}}', { sort: String }),

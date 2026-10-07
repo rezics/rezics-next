@@ -37,6 +37,8 @@ interface Placed { id: number; parent?: number; author: number; minutes?: number
 export function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Record<number, Partial<ThreadVote>>;
   truncated?: boolean; countsComplete?: boolean; blocked?: number[];
   } = {}) {
+  if (options.truncated) placed = [...placed, ...Array.from({ length: REALM_THREAD_COST.replies + 2 },
+    (_, index) => ({ id: 1000 + index, parent: placed[0]!.id, author: 1 }))];
   const calls = { graph: 0, admitted: 0, votes: 0, bodies: 0, counts: 0, store: 0 };
   const byId = new Map(placed.map((item) => [item.id, item]));
   const node = (item: Placed): ThreadNode => ({ reply: reply(item.id), parent: item.parent ? reply(item.parent) : null,
@@ -66,7 +68,7 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
     },
     query: async (query: string) => {
       if (query.includes('SELECT ?epoch ?sequence ?r ?revision')) {
-        return [{ epoch: bind('epoch'), sequence: bind('9'), r: bind(work), revision: bind(reply(900)),
+        return [{ epoch: bind(session.position.dataEpoch), sequence: bind(session.position.sequence), r: bind(work), revision: bind(reply(900)),
           type: bind('https://schema.org/CreativeWork') }];
       }
       if (query.includes('SELECT ?decision WHERE')) return [];
@@ -94,7 +96,7 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
       access: {},
       environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
         objectDirectory: '.temp/thread-unit', fuseki: { query: async () => ({ results: { bindings: [{
-          epoch: bind('epoch'), sequence: bind('9'), r: bind(work), type: bind('work'), work: bind(work),
+          epoch: bind(session.position.dataEpoch), sequence: bind(session.position.sequence), r: bind(work), type: bind('work'), work: bind(work),
           head: bind(reply(900)), public: bind('true'), erased: bind('false'),
           label: { value: 'Rainy Night Bookshop', 'xml:lang': 'en' },
         }] } }) } },
@@ -115,6 +117,29 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
         });
       } },
       realmReplyThreads: {
+        assertThreadProjection: async () => {},
+        identities: async (ids: readonly string[]) => placed.filter(item => ids.includes(reply(item.id))).map(node),
+        threadRoot: async (_epoch: string, _realm: string, focus: string) => {
+          let current = placed.find(item => reply(item.id) === focus);
+          while (current?.parent) current = byId.get(current.parent);
+          return current ? reply(current.id) : null;
+        },
+        siblingPage: async (_epoch: string, _realm: string, parent: string, sort: 'best' | 'new' | 'top',
+          limit: number, after?: { rank: number; time: string; placement: string }) => {
+          calls.store++;
+          const key = (item: Placed) => {
+            const time = start + (item.minutes ?? item.id) * 60_000;
+            const score = options.votes?.[item.id]?.score ?? 0;
+            return { rank: sort === 'new' ? 0 : sort === 'top' ? -score : -bestKey(score, time),
+              time: String(-time), placement: placement(item.id, item.minutes) };
+          };
+          const compare = (a: ReturnType<typeof key>, b: ReturnType<typeof key>) =>
+            a.rank - b.rank || Number(a.time) - Number(b.time) || a.placement.localeCompare(b.placement);
+          return placed.filter(item => item.parent && reply(item.parent) === parent)
+            .map(item => ({ ...key(item), reply: reply(item.id),
+              hasChildren: placed.some(child => child.parent === item.id) }))
+            .sort(compare).filter(item => !after || compare(item, after) > 0).slice(0, limit + 1);
+        },
         rankingRevision: async () =>
           String(
             1 +
@@ -183,7 +208,9 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
           calls.store++;
           const out: ThreadNode[] = [];
           let current = placed.find((item) => reply(item.id) === focus);
-          while (current?.parent) { current = byId.get(current.parent); if (current) out.push(node(current)); }
+          while (current?.parent && out.length < REALM_THREAD_COST.ancestors) {
+            current = byId.get(current.parent); if (current) out.push(node(current));
+          }
           return out;
         },
         admitted: async (_realm: string, heads: readonly PlacedHead[]) => {

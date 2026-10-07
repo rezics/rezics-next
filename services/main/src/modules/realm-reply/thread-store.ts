@@ -13,6 +13,7 @@ import {
 } from '../rankings/realm-threads.ts';
 import type { RealmHistoryFloor } from '../realm-admin/history.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
+import { WorkReadUnavailable } from '../work/read-session.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -28,6 +29,9 @@ export interface ThreadNode {
 export interface PlacedHead { reply: string; revisionId: string; reviewDecisionId: string; preparationId: string }
 /** A placement's standing in Home's vote projection; closed where the projection has no votable activity. */
 export interface ThreadVote { score: number; value: -1 | 0 | 1; revision: string | null; open: boolean }
+/** Ascending seek tuple; the saved key survives removal of its anchor. */
+export interface ThreadSiblingKey { rank: number; time: string; placement: string }
+export interface ThreadSibling extends ThreadSiblingKey { reply: string; hasChildren: boolean }
 
 // The same approval, supersession, pin and live-draft rules as
 // `RealmReplyContentStore.currentReview`, over a batch in one statement.
@@ -51,10 +55,10 @@ const approved = (realm: string, reply: string, revision: string, review: string
       AND NOT EXISTS (SELECT 1 FROM content.realm_review_decision later WHERE later.supersedes = d.id))`;
 
 /**
- * The Content and Home-projection reads behind Realm threads. Every method is
- * one Content statement with a fixed bound, whatever the thread's size: a subtree
- * walks the parent index breadth first and stops at its limit, ancestors stop
- * at a fixed height, and admission, counts and votes take whole batches.
+ * The Content and Home-projection reads behind Realm threads. Sibling pages
+ * seek the existing projection; Content identities and admission take bounded
+ * batches. Ancestors stop at a fixed height and the legacy subtree walk at its
+ * candidate limit, whatever the thread's size.
  * Counts add at most 21 Access disclosure batches for 20 × 64 + 1 candidates.
  */
 export class RealmReplyThreadStore {
@@ -63,6 +67,70 @@ export class RealmReplyThreadStore {
   /** Content source inventory for the existing bounded background projector. */
   get rankingContent() {
     return this.content;
+  }
+  /** Source readiness is checked before and after a window; an incomplete projection is never an empty branch. */
+  async assertThreadProjection(session: WorkReadSession): Promise<void> {
+    const source = (await this.content.query<{ data_epoch: string; sequence: string }>(
+      'SELECT data_epoch::text,sequence::text FROM content.owner_control WHERE singleton')).rows[0];
+    if (!source) throw new WorkReadUnavailable('Thread source is unavailable');
+    const ready = (await this.access.query<{ ready: boolean }>(`SELECT f.open AND
+      c.content_epoch=$2::uuid AND c.content_sequence=$3::bigint AND c.sequence=$4::numeric
+      AND c.after_event='￿'
+      AND NOT EXISTS(SELECT 1 FROM access.feed_item WHERE data_epoch=$1
+        AND kind IN ('reply','discussion') AND NOT realm_thread_indexed LIMIT 1)
+      AND COALESCE((SELECT false FROM access.realm_thread_dirty WHERE data_epoch=$1 AND kind<>'population'
+        ORDER BY kind,resource LIMIT 1),true)
+      AS ready FROM access.recovery_fence f
+      LEFT JOIN access.realm_thread_checkpoint c ON c.data_epoch=$1 WHERE f.id`,
+    [session.position.dataEpoch, source.data_epoch, source.sequence, session.position.sequence])).rows[0];
+    if (!ready?.ready) throw new WorkReadUnavailable('Realm replies are projecting');
+  }
+
+  /** One parent index range, at most limit+1 candidates and one exact child probe per candidate. */
+  async siblingPage(epoch: string, realm: string, parent: string, sort: 'best' | 'new' | 'top',
+    limit: number, after?: ThreadSiblingKey): Promise<ThreadSibling[]> {
+    if (!native.test(realm) || !native.test(parent) || !Number.isInteger(limit)
+      || limit < 1 || limit > REALM_THREAD_COST.replies
+      || after && (!Number.isFinite(after.rank) || !/^-?\d+$/.test(after.time) || !native.test(after.placement))) {
+      throw new RealmReplyInvalid('Invalid sibling page');
+    }
+    const rank = sort === 'best' ? 'access.realm_reply_best(r.score,r.occurred_at)'
+      : sort === 'top' ? '-r.score::double precision' : '0::double precision';
+    const time = '-access.realm_reply_time(r.occurred_at)';
+    const key = sort === 'new' ? `${time},r.placement COLLATE "C"` : `${rank},${time},r.placement COLLATE "C"`;
+    const seek = sort === 'new' ? '$5::bigint,$6::text COLLATE "C"'
+      : '$4::double precision,$5::bigint,$6::text COLLATE "C"';
+    const rows = await this.access.query<{ reply: string; rank: number; time: string;
+      placement: string; has_children: boolean }>(`WITH parameters AS
+      (SELECT $4::double precision AS rank,$5::bigint AS time,$6::text AS placement)
+      SELECT r.reply,r.placement,${rank} AS rank,(${time})::text AS time,
+      COALESCE((SELECT true FROM access.realm_thread_reference c WHERE c.data_epoch=$1 AND c.realm=$2
+        AND c.parent=r.reply AND c.active
+        ORDER BY -access.realm_reply_time(c.occurred_at),c.placement COLLATE "C" LIMIT 1),false) AS has_children
+      FROM access.realm_thread_reference r WHERE r.data_epoch=$1 AND r.realm=$2 AND r.parent=$3 AND r.active
+      ${after ? `AND (${key}) > (${seek})` : ''}
+      ORDER BY ${key} LIMIT $7`, [epoch, realm, parent, after?.rank ?? null,
+        after?.time ?? null, after?.placement ?? '', limit + 1]);
+    return rows.rows.map(row => ({ reply: row.reply, placement: row.placement, rank: row.rank,
+      time: row.time, hasChildren: row.has_children }));
+  }
+
+  /** Immutable Content identities for only the chosen window, including its focus. */
+  async identities(replies: readonly string[]): Promise<ThreadNode[]> {
+    if (replies.length > REALM_THREAD_COST.replies + 1 || replies.some(reply => !native.test(reply))) {
+      throw new RealmReplyInvalid('Invalid thread identity batch');
+    }
+    const rows = await this.content.query<{ reply: string; parent: string | null; author: string;
+      origin: string | null; root_target: string; root_revision: string; created_at: Date }>(`
+      SELECT id AS reply,parent_reply AS parent,author,origin_realm AS origin,root_target,root_revision,created_at
+      FROM content.reply WHERE id=ANY($1::text[])`, [[...replies]]);
+    return rows.rows.map(node);
+  }
+  /** The projector resolves the opening discussion beyond the request's ancestor bound. */
+  async threadRoot(epoch: string, realm: string, focus: string): Promise<string | null> {
+    if (!native.test(realm) || !native.test(focus)) throw new RealmReplyInvalid('Invalid thread focus');
+    return (await this.access.query<{ thread: string }>(`SELECT thread FROM access.realm_thread_reference
+      WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, focus])).rows[0]?.thread ?? null;
   }
   rankedPage(
     session: WorkReadSession,

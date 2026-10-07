@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { FeedMessages } from '../messages.ts';
 
 export default {
+  moreReplies: '更多回覆', loadingReplies: '正在載入更多回覆…',
+  moreRepliesFailed: '無法載入更多回覆。請重試，或重新開啟此討論串。',
   views: '動態', following: '追蹤中', all: '全部',
   sortLabel: '排序', sortBy: insert('排序：{{sort}}', { sort: String }),
   best: '最佳', new: '最新', top: '熱門',

@@ -68,6 +68,8 @@ export const messages = {
   inReplyTo: 'In reply to', openingPost: 'Opening post', discussedWork: 'The work discussed',
   noComments: 'No comments yet', noCommentsBody: 'Start the conversation with the first reply.',
   threadIncomplete: 'This thread is long, so some replies aren’t shown here. Open a reply to read everything under it.',
+  moreReplies: 'More replies', loadingReplies: 'Loading more replies…',
+  moreRepliesFailed: 'Couldn’t load more replies. Try again, or reopen this branch.',
   threadFailed: 'Couldn’t load this discussion', threadFailedBody: 'Check your connection, then try again.',
   joinConversation: 'Join the conversation', addComment: 'Add a comment',
   write: 'Write', preview: 'Preview',
