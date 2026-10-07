@@ -151,6 +151,20 @@ and the QA artifact for the operation in question.
 
 ## Incident workflow
 
+For PostgreSQL deadlock evidence from Main and Account request pools, select
+`event=worker_fault`, `rezics.worker.name=main.database.deadlock` and
+`error.code=40P01` (OTLP log body `worker_fault`). Count matching log records in
+the incident time window, grouped by service resource if needed. Each failed
+query emits once at the shared bounded-pool connection boundary, including
+borrowed clients and failures caught or translated by an owner. The signal
+contains only the fixed selector, bounded error class and SQLSTATE, plus normal
+trace correlation; it never includes SQL, parameters, connection strings or
+error messages. Counts describe observed deadlock victims, not every participant
+or successful retries, and depend on delivery and retention. The caller still
+owns rollback and recovery; this observation does not retry the query.
+Configured production rule evaluation and notification remain external and
+unqualified by this signal's tests.
+
 Identify the owner, epoch and index generation. Fence unsafe admission, retain
 bounded traces and receipts, then reconcile unknown outcomes before retrying.
 Reproduce storage faults on an isolated copy; never start another JVM against

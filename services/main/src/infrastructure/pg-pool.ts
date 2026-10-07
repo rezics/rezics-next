@@ -173,6 +173,16 @@ export function boundedPool(
   pool.on('error', failed);
   pool.on('connect', (client) => {
     client.on('error', failed);
+    // pg delivers server query errors through this protocol event, not the
+    // client's connection-error event. Observe before the driver's handler so
+    // even a caught/translated query failure is recorded. One listener per
+    // connection covers pool.query, borrowed clients and every query form
+    // without wrapping callbacks, promises or query objects.
+    client.connection.prependListener('errorMessage', (error: unknown) => {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '40P01') {
+        logWorkerFault('main.database.deadlock', error);
+      }
+    });
   });
   trackNestedCheckout(pool);
   return pool;
