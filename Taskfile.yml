@@ -550,6 +550,11 @@ tasks:
     cmds:
       - bun services/main/src/rating-reconstruction.ts {{.CLI_ARGS}}
 
+  structure:prepare-groups:
+    desc: Prepare exact retained Structure group roots from a held owner cut.
+    cmds:
+      - bun scripts/operations/prepare-structure-groups.ts {{.CLI_ARGS}}
+
   research:architecture:
     desc: Run the storage architecture research lab.
     cmds:

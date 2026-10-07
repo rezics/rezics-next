@@ -489,6 +489,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task search:names:backfill` | Resume public names, browse directories and rating counters online. |
 | `task access:pending-search` | List unresolved private search deliveries (needs ACCESS_DATABASE_URL). |
 | `task rating:reconstruct` | Resume bounded legacy target-rating reconstruction with a local checkpoint. |
+| `task structure:prepare-groups` | Prepare exact retained Structure group roots from a held owner cut. |
 | `task research:architecture` | Run the storage architecture research lab. |
 | `task package:go-oracle` | Compare Go module resolution with the pinned native Go. |
 | `task package:go-probe` | Run the Go provider probe. |
