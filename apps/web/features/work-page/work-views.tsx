@@ -53,6 +53,10 @@ import { type WorkExperience, workExperience } from '../entity-page/experience.t
 import { shelfWords } from './shelf-words.ts';
 import { WorkKindActions } from './types/actions.tsx';
 import { RecipeExperience } from './types/recipe.tsx';
+import { copyOf as recipeEditorCopy } from '../recipe-editor/messages.ts';
+import { recipeEditHref } from '../recipe-editor/route.ts';
+import { mayEdit } from '../work-levels-edit/allowed.ts';
+import { readAllowedActions } from '../work-levels-edit/authority.ts';
 import { HubExperience } from './types/hub.tsx';
 import { GuideExperience } from './types/guide.tsx';
 
@@ -317,10 +321,11 @@ async function TypeExperience({ id, work, experience, locale, messages }: Common
   experience: WorkExperience }) {
   const section = experience.typeSection;
   if (experience.kind === 'recipe' && section) {
-    const [recipe, text, agent] = await Promise.all([readRecipeWorkPage(section.href),
-      readText(work.mainVersion, work.selectedLanguage ?? undefined), readingAgent()]);
+    const [recipe, text, agent, allowed] = await Promise.all([readRecipeWorkPage(section.href),
+      readText(work.mainVersion, work.selectedLanguage ?? undefined), readingAgent(), readAllowedActions(id)]);
     if (!recipe.ok) return <RegionFailure title={messages.recipeMethod} failure={recipe.failure} messages={messages} />;
     return <RecipeExperience initial={recipe.data} href={section.href} actingSubject={agent.actingSubject}
+      edit={mayEdit(allowed) ? { href: recipeEditHref(id), label: recipeEditorCopy(locale).editRecipe } : null}
       text={text.ok ? text.data.body : null} locale={locale} messages={messages} />;
   }
   if ((experience.kind === 'prompt' || experience.kind === 'skill') && section) {

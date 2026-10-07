@@ -48,9 +48,9 @@ test('a write goes out at the head held and the answer updates the editor withou
   expect(outcome).toEqual({ kind: 'saved' });
   expect(fake.calls).toHaveLength(1);
   expect(fake.calls[0]!.expectedHead).toBe(id(900));
-  expect(store.state().nodes.filter(node => node.role === 'ingredient')).toHaveLength(1);
-  expect(store.state().head).not.toBe(id(900));
-  expect(store.busy()).toBe(false);
+  expect(store.snapshot().state.nodes.filter(node => node.role === 'ingredient')).toHaveLength(1);
+  expect(store.snapshot().state.head).not.toBe(id(900));
+  expect(store.snapshot().busy).toBe(false);
 });
 
 test('a refused head reads Main again and writes only the newest intent over what is there now', async () => {
@@ -60,8 +60,8 @@ test('a refused head reads Main again and writes only the newest intent over wha
   // The first attempt was refused, the second used the head Main now holds.
   expect(fake.calls.map(call => call.expectedHead === id(900))).toEqual([true, false]);
   expect(new Set(fake.calls.map(call => call.key)).size).toBe(2);
-  expect(store.state().nodes.filter(node => node.role === 'ingredient').map(node => node.occurrence).includes(id(50))).toBe(true);
-  expect(store.state().nodes.filter(node => node.role === 'ingredient')).toHaveLength(2);
+  expect(store.snapshot().state.nodes.filter(node => node.role === 'ingredient').map(node => node.occurrence).includes(id(50))).toBe(true);
+  expect(store.snapshot().state.nodes.filter(node => node.role === 'ingredient')).toHaveLength(2);
 });
 
 test('an intent about something another tab removed is refused as gone, not written', async () => {
@@ -71,7 +71,7 @@ test('an intent about something another tab removed is refused as gone, not writ
   const outcome = await store.submit({ kind: 'editLine', occurrence: id(60), qualifier: line('2 cups milk') });
   expect(outcome).toEqual({ kind: 'refused', refusal: { kind: 'gone' } });
   expect(fake.calls).toHaveLength(1);
-  expect(store.failure()?.refusal).toEqual({ kind: 'gone' });
+  expect(store.snapshot().failure?.refusal).toEqual({ kind: 'gone' });
 });
 
 test('one write at a time: an add waits for the person, an edit of the record being written replaces the waiting one', async () => {
@@ -85,7 +85,7 @@ test('one write at a time: an add waits for the person, an edit of the record be
   const initial: RecipeState = { ...start, nodes: [...start.nodes, { occurrence: id(60), parent: id(1), role: 'ingredient', qualifier: line('1 cup milk') }] };
   const store = createRecipeStore({ work: id(5), mainVersion: id(6), actingSubject: id(7), initial, main: () => slow });
   const first = store.submit({ kind: 'editLine', occurrence: id(60), qualifier: line('2 cups milk') });
-  expect(store.busy()).toBe(true);
+  expect(store.snapshot().busy).toBe(true);
   expect(await store.submit({ kind: 'addStep', text: 'Stir', language: 'en', uses: [] })).toEqual({ kind: 'busy' });
   const second = store.submit({ kind: 'editLine', occurrence: id(60), qualifier: line('3 cups milk') });
   const third = store.submit({ kind: 'editLine', occurrence: id(60), qualifier: line('4 cups milk') });

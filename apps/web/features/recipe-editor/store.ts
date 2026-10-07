@@ -17,12 +17,17 @@ export type Refusal =
   | { kind: Reason };
 export type Outcome = { kind: 'saved' } | { kind: 'unchanged' } | { kind: 'refused'; refusal: Refusal } | { kind: 'busy' };
 
-export interface RecipeStore {
-  state(): RecipeState;
+export interface Snapshot {
+  state: RecipeState;
   /** True while a write is on its way to Main. */
-  busy(): boolean;
+  busy: boolean;
   /** What the last write ran into, until the next one starts. */
-  failure(): { intent: Intent; refusal: Refusal } | null;
+  failure: { intent: Intent; refusal: Refusal } | null;
+}
+
+export interface RecipeStore {
+  /** The same object until something changes, so a component can subscribe to it. */
+  snapshot(): Snapshot;
   subscribe(listener: () => void): () => void;
   submit(intent: Intent): Promise<Outcome>;
   /** Repeats the intent the last refusal belongs to; the same write at the same head replays. */
@@ -57,11 +62,15 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   let state = initial;
   let writing = false;
   let failure: { intent: Intent; refusal: Refusal; id: string } | null = null;
+  let snapshot: Snapshot = { state, busy: false, failure: null };
   let disposed = false;
   let waiting: { intent: Intent; id: string; key: string; resolvers: ((outcome: Outcome) => void)[] } | null = null;
   let running: string | null = null;
   const listeners = new Set<() => void>();
-  const notify = () => { for (const listener of listeners) listener(); };
+  const notify = () => {
+    snapshot = { state, busy: writing, failure: failure ? { intent: failure.intent, refusal: failure.refusal } : null };
+    for (const listener of listeners) listener();
+  };
 
   async function refresh(): Promise<boolean> {
     const read = await readRecipe(main(), work, actingSubject);
@@ -134,8 +143,7 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   }
 
   return {
-    state: () => state, busy: () => writing,
-    failure: () => failure ? { intent: failure.intent, refusal: failure.refusal } : null,
+    snapshot: () => snapshot,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     submit: intent => submit(intent),
     retry() {

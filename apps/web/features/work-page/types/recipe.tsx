@@ -1,13 +1,14 @@
 'use client';
 
-import { Button } from '@rezics/ui/button';
+import { Button, buttonVariants } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
 import { cn } from '@rezics/ui/utils';
-import { Clock3Icon, CookingPotIcon, XIcon } from 'lucide-react';
+import { Clock3Icon, CookingPotIcon, PencilIcon, XIcon } from 'lucide-react';
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
 import { browserMainApi } from '../../api/browser.ts';
 import { followHref } from '../../entity-page/href.ts';
+import Link from '../../shell/localized-link.tsx';
 import type { WorkPageMessages } from '../messages.ts';
 import { Region } from '../region.tsx';
 import type { RecipeWorkPage } from '../types.ts';
@@ -50,21 +51,39 @@ function shownLine(item: Ingredient, system: 'us' | 'metric'): string {
   return item.line ?? item.originalText;
 }
 
-function IngredientList({ items, system, written, messages: t }: {
-  items: Ingredient[]; system: 'us' | 'metric'; written: 'us' | 'metric'; messages: WorkPageMessages;
+/** Ingredients under their section headings; lines outside any section come first, unheaded. */
+function sectioned(page: RecipeWorkPage): { key: string; heading: string | null; items: Ingredient[] }[] {
+  const labels = new Map(page.occurrences.filter(item => item.role === 'group').map(item => [item.occurrence, item.labels[0]?.value ?? '']));
+  const parents = new Map(page.occurrences.map(item => [item.occurrence, item.parent]));
+  const blocks: { key: string; heading: string | null; items: Ingredient[] }[] = [];
+  for (const item of page.ingredients) {
+    const parent = parents.get(item.occurrence);
+    const heading = parent !== undefined && labels.has(parent) ? labels.get(parent)! : null;
+    const key = heading === null ? '' : parent!;
+    const block = blocks.find(candidate => candidate.key === key) ?? (blocks.push({ key, heading, items: [] }), blocks.at(-1)!);
+    block.items.push(item);
+  }
+  return blocks.sort((a, b) => Number(a.key !== '') - Number(b.key !== ''));
+}
+
+function IngredientList({ page, system, written, messages: t }: {
+  page: RecipeWorkPage; system: 'us' | 'metric'; written: 'us' | 'metric'; messages: WorkPageMessages;
 }) {
-  return <ul className="grid gap-2">{items.map(item => {
-    const text = shownLine(item, system);
-    const quiet = text !== item.originalText && (system !== written || item.hint) ? item.originalText : null;
-    const note = item.judgment ? t.scaleByTaste
-      : item.reason === 'unparsed' ? t.scaleUnparsed
-        : item.reason ? t.scaleHeld : null;
-    return <li key={item.occurrence} className="border-border/60 flex flex-col gap-0.5 border-b py-2 last:border-0">
-      <span className="font-medium text-pretty">{text}</span>
-      {quiet ? <span className="text-muted-foreground text-sm">{quiet}</span> : null}
-      {note ? <span className="text-muted-foreground text-xs">{note}</span> : null}
-    </li>;
-  })}</ul>;
+  return <div className="grid gap-4">{sectioned(page).map(block => <div key={block.key} className="grid gap-1">
+    {block.heading ? <h4 className="font-medium text-muted-foreground text-sm">{block.heading}</h4> : null}
+    <ul className="grid gap-2">{block.items.map(item => {
+      const text = shownLine(item, system);
+      const quiet = text !== item.originalText && (system !== written || item.hint) ? item.originalText : null;
+      const note = item.judgment ? t.scaleByTaste
+        : item.reason === 'unparsed' ? t.scaleUnparsed
+          : item.reason ? t.scaleHeld : null;
+      return <li key={item.occurrence} className="border-border/60 flex flex-col gap-0.5 border-b py-2 last:border-0">
+        <span className="font-medium text-pretty">{text}</span>
+        {quiet ? <span className="text-muted-foreground text-sm">{quiet}</span> : null}
+        {note ? <span className="text-muted-foreground text-xs">{note}</span> : null}
+      </li>;
+    })}</ul>
+  </div>)}</div>;
 }
 
 function UnitToggle({ value, onChange, messages: t }: {
@@ -147,7 +166,7 @@ function CookMode({ page, messages: t, system, written, onClose }: {
       </div>
       <div className="grid gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.ingredients}</h3>
-          <IngredientList items={page.ingredients} system={system} written={written} messages={t} /></section>
+          <IngredientList page={page} system={system} written={written} messages={t} /></section>
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.method}</h3>
           <Steps items={page.occurrences} messages={t} /></section>
       </div>
@@ -155,9 +174,9 @@ function CookMode({ page, messages: t, system, written, onClose }: {
   </div>;
 }
 
-export function RecipeExperience({ initial, href, actingSubject, text, messages: t }: {
+export function RecipeExperience({ initial, href, actingSubject, text, edit, messages: t }: {
   initial: RecipeWorkPage | null; /** The recipe section's link in the Work's page projection. */ href: string;
-  actingSubject: string | null;
+  actingSubject: string | null; /** The way into the recipe editor, for a viewer who may edit it. */ edit?: { href: string; label: string } | null;
   text: string | null; locale: UiLocale; messages: WorkPageMessages;
 }) {
   const [page, setPage] = useState(initial);
@@ -215,13 +234,17 @@ export function RecipeExperience({ initial, href, actingSubject, text, messages:
           </form> : null}
           {convertible ? <UnitToggle value={system} onChange={setSystem} messages={t} /> : null}
         </div>
-        <Button type="button" onClick={() => setCooking(true)}><CookingPotIcon aria-hidden="true" />
-          {t.cookThis}</Button>
+        <div className="flex flex-wrap gap-2">
+          {edit ? <Link href={edit.href} className={buttonVariants({ variant: 'outline' })}>
+            <PencilIcon aria-hidden="true" />{edit.label}</Link> : null}
+          <Button type="button" onClick={() => setCooking(true)}><CookingPotIcon aria-hidden="true" />
+            {t.cookThis}</Button>
+        </div>
       </div>
       {error ? <p role="alert" className="text-destructive text-sm">{t.scaleFailed}</p> : null}
       <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
         <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.ingredients}</h3>
-          <IngredientList items={page.ingredients} system={system} written={written} messages={t} /></section>
+          <IngredientList page={page} system={system} written={written} messages={t} /></section>
         <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.method}</h3>
           <Steps items={page.occurrences} messages={t} /></section>
       </div>
