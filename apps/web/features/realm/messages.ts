@@ -18,6 +18,7 @@ export const messages = {
   budgetBody: 'This is too much to load at once. Try again in a moment.',
   deniedTitle: 'Sign in to see this',
   deniedBody: 'Your session may have ended. Sign in, then try again.',
+  signIn: 'Sign in',
   retry: 'Try again',
   emptyHomeTitle: 'Nothing here yet',
   emptyHomeBody: 'When this community adds works, its picks, new chapters and decisions appear here.',

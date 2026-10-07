@@ -18,6 +18,7 @@ export default {
   budgetBody: 'Das ist auf einmal zu viel. Versuch es gleich noch einmal.',
   deniedTitle: 'Melde dich an, um das zu sehen',
   deniedBody: 'Deine Anmeldung ist vielleicht abgelaufen. Melde dich an und versuch es noch einmal.',
+  signIn: 'Anmelden',
   retry: 'Noch einmal versuchen',
   emptyHomeTitle: 'Noch nichts hier',
   emptyHomeBody: 'Wenn diese Community Werke hinzufügt, erscheinen hier ihre Empfehlungen, neue Kapitel und Entscheidungen.',

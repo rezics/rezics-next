@@ -16,6 +16,7 @@ export default {
   budgetBody: '一次要加载的内容太多了。请稍后再试。',
   deniedTitle: '登录后即可查看',
   deniedBody: '你的登录可能已经结束。请登录后再试。',
+  signIn: '登录',
   retry: '重试',
   emptyHomeTitle: '这里还没有内容',
   emptyHomeBody: '社区收录作品后，精选、最新章节和社区决定都会显示在这里。',

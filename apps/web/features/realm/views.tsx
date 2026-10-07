@@ -8,6 +8,7 @@ import { materializeData } from 'native-i18n';
 import { direction } from '@rezics/main/language';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { signInPath } from '../auth/paths.ts';
 import { browseMessages } from '../discover/browse-messages.ts';
 import { isolate } from '../language/untagged.ts';
 import { ProfileAvatar } from '../profile/profile-avatar.tsx';
@@ -47,8 +48,10 @@ export function ListFailure({ failure, reference, firstPage, messages }: {
   return <EmptyState icon={moved ? RotateCwIcon : quiet ? SearchXIcon : TriangleAlertIcon}
     role={quiet || moved ? 'status' : 'alert'} tone={quiet || moved ? 'default' : 'destructive'}
     title={text.title} description={failureDetail(text.description, reference, messages.errorReference, text.reference)}>
-    {text.action === 'none' ? null : <LocalizedLink href={firstPage} className={buttonVariants({ variant: moved ? 'default' : 'outline' })}>
-      {moved ? messages.startOver : messages.retry}</LocalizedLink>}
+    {text.action === 'none' ? null : text.action === 'sign-in'
+      ? <LocalizedLink href={signInPath(firstPage)} className={buttonVariants()}>{messages.signIn}</LocalizedLink>
+      : <LocalizedLink href={firstPage} className={buttonVariants({ variant: moved ? 'default' : 'outline' })}>
+        {moved ? messages.startOver : messages.retry}</LocalizedLink>}
   </EmptyState>;
 }
 

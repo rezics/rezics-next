@@ -20,6 +20,7 @@ import { RealmBrowseRoute, SiteHomeRoute } from '../realm/routes.tsx';
 import { RealmUnavailable } from '../realm/states.tsx';
 import type { ReadFailure, ZoneRouteRead } from '../realm/types.ts';
 import { ListFailure, Pager } from '../realm/views.tsx';
+import { shownZoneFailure, zoneFailureView } from './failure.ts';
 import { PageContainer } from '../shell/page.tsx';
 import { pageUrl, representationPath } from '../seo/address.ts';
 import { anonymousWorkTitle, workPageMetadata } from '../seo/work.ts';
@@ -157,12 +158,13 @@ function failure(
   reason: ReadFailure | 'identity' | 'sign-in',
   firstPage: string,
   messages: RealmMessages,
+  reference?: string,
 ) {
-  const failure = reason === 'identity' ? 'unavailable' : reason;
-  if (failure === 'closed') return null;
+  const shown = zoneFailureView(reason, reference);
+  if (!shown) return null;
   return (
     <PageContainer>
-      <ListFailure failure={failure} messages={messages} firstPage={firstPage} />
+      <ListFailure failure={shown.failure} reference={shown.reference} messages={messages} firstPage={firstPage} />
     </PageContainer>
   );
 }
@@ -230,7 +232,8 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
       {children}
     </RealmFrame>
   );
-  if (!read.ok) return frame(failure(read.failure, siteHref(locale, ref, path), view.messages));
+  if (!read.ok) return frame(failure(read.failure, siteHref(locale, ref, path), view.messages,
+    'reference' in read ? read.reference : undefined));
   const route: ZoneRouteRead = read.data;
   const mountName = (segment: string) => {
     const mount = view.mounts.find((item) => item.segment === segment);
@@ -404,12 +407,12 @@ async function standaloneSite(
     headers(),
   ]);
   if (!route.ok && route.failure === 'missing') notFound();
-  if (!route.ok || !presentation.ok)
-    return failure(
-      'unavailable',
-      siteHref(locale, addressKey(resolved.address.canonical), path),
-      messages,
-    );
+  if (!route.ok || !presentation.ok) {
+    const shown = shownZoneFailure(route, presentation);
+    return shown
+      ? failure(shown.failure, siteHref(locale, addressKey(resolved.address.canonical), path), messages, shown.reference)
+      : null;
+  }
   const ref = addressKey(resolved.address.canonical);
   const zone: ZoneContext = {
     slug: presentation.data.official,

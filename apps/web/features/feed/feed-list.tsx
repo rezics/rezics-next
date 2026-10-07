@@ -83,6 +83,20 @@ export function FeedSkeleton({ count = 3 }: { count?: number }) {
   );
 }
 
+/**
+ * What follows the posts. A closed next page is absent: no error, and no control
+ * that would call the closed operation again.
+ */
+export function feedContinuation(
+  failure: ReadFailure | null,
+  cursor: string | null,
+  loading: boolean,
+): 'error' | 'more' | 'none' {
+  if (failure === 'closed') return 'none';
+  if (failure) return 'error';
+  return cursor && !loading ? 'more' : 'none';
+}
+
 /** The first page failed: say what failed, and offer the one next step. */
 function FeedFailure({ failure, reference }: { failure: ReadFailure; reference?: string }) {
   const { t, signInHref } = useFeed();
@@ -328,7 +342,7 @@ function FeedPages({
 
   const loadMore = useCallback(async () => {
     const cursor = state.cursor;
-    if (!cursor || reading.current) return;
+    if (!cursor || reading.current || state.failure === 'closed') return;
     reading.current = true;
     setState((current) => ({ ...current, loading: true, failure: null, reference: undefined }));
     const next = await api().page({ ...query, cursor });
@@ -351,7 +365,7 @@ function FeedPages({
         sparse: items.length > current.items.length ? 0 : current.sparse + 1,
       };
     });
-  }, [api, query, state.cursor, state.loading]);
+  }, [api, query, state.cursor, state.failure, state.loading]);
 
   // Near the end, the next page loads by itself; the button below stays for keyboards and screen readers.
   useEffect(() => {
@@ -416,7 +430,7 @@ function FeedPages({
         </>
       ) : null}
       <div ref={sentinel} aria-hidden="true" />
-      {state.failure && state.failure !== 'closed' ? (
+      {feedContinuation(state.failure, state.cursor, state.loading) === 'error' ? (
         <div
           role="alert"
           className="flex flex-wrap items-center justify-center gap-3 px-4 py-6 text-sm"
@@ -448,7 +462,7 @@ function FeedPages({
             </Button>
           )}
         </div>
-      ) : state.cursor && !state.loading ? (
+      ) : feedContinuation(state.failure, state.cursor, state.loading) === 'more' ? (
         <div className="flex justify-center px-4 py-6">
           <Button variant="outline" onClick={() => void loadMore()}>
             {t.loadMore}

@@ -18,6 +18,7 @@ export default {
   budgetBody: '한 번에 불러오기에는 너무 많아요. 잠시 후 다시 시도해 보세요.',
   deniedTitle: '로그인하면 볼 수 있어요',
   deniedBody: '로그인이 끝났을 수 있어요. 로그인한 뒤 다시 시도해 보세요.',
+  signIn: '로그인',
   retry: '다시 시도',
   emptyHomeTitle: '아직 내용이 없어요',
   emptyHomeBody: '이 커뮤니티에 작품이 추가되면 추천 작품, 새 챕터, 결정 내역이 여기에 표시됩니다.',

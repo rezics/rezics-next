@@ -17,7 +17,11 @@ import realmJa from '../features/realm/messages/ja.ts';
 import realmKo from '../features/realm/messages/ko.ts';
 import realmHans from '../features/realm/messages/zh-Hans.ts';
 import realmHant from '../features/realm/messages/zh-Hant.ts';
+import { feedContinuation } from '../features/feed/feed-list.tsx';
+import { siteHref } from '../features/realm/route.ts';
+import { ListFailure } from '../features/realm/views.tsx';
 import { failureDetail } from '../features/shell/empty-state.tsx';
+import { shownZoneFailure, zoneFailureView } from '../features/zones/failure.ts';
 import { messages as shell } from '../features/shell/messages.ts';
 import shellDe from '../features/shell/messages/de.ts';
 import shellEs from '../features/shell/messages/es.ts';
@@ -153,6 +157,7 @@ describe('failure copy', () => {
     expect(feed.threadFailedBody).toBe(feed.failedBody);
     expect(shell.notificationsServerBody).toBe('Something went wrong on our side.');
     expect(shell.notificationsFailedBody).toBe('Check your connection, then try again.');
+    expect(realm.signIn).toBe('Sign in');
   });
 
   test('every locale has its own server sentence and its own connection sentence', () => {
@@ -170,6 +175,51 @@ describe('failure copy', () => {
       expect(feedLocale.serverBody.length).toBeGreaterThan(0);
       expect(realmLocale.unavailableBody).not.toBe(realmLocale.offlineBody);
       expect(shellLocale.notificationsServerBody).not.toBe(shellLocale.notificationsFailedBody);
+      expect(realmLocale.signIn).not.toBe(realmLocale.retry);
     }
+  });
+
+  test('a denied list starts sign-in instead of repeating the read', () => {
+    const firstPage = siteHref('en', 'fiction', []);
+    const html = renderToStaticMarkup(createElement(ListFailure, {
+      failure: 'sign-in', firstPage, messages: realm,
+    }));
+    expect(html).toContain('Sign in to see this');
+    expect(html).toContain('/auth/start?next=');
+    expect(html).toContain('Sign in');
+    expect(html).not.toContain('Try again');
+  });
+
+  test('a Zone list keeps a server reference and does not call a lost connection a server error', () => {
+    const html = renderToStaticMarkup(createElement(ListFailure, {
+      failure: 'unavailable', reference: 'ab12cd34', firstPage: siteHref('en', 'fiction', []), messages: realm,
+    }));
+    expect(html).toContain('Something went wrong on our side.');
+    expect(html).toContain('ab12cd34');
+    expect(html).not.toContain('connection');
+    expect(zoneFailureView('unavailable', 'ab12cd34')).toEqual({ failure: 'unavailable', reference: 'ab12cd34' });
+    expect(zoneFailureView('offline')).toEqual({ failure: 'offline' });
+    expect(zoneFailureView('closed', 'ab12cd34')).toBeNull();
+    expect(shownZoneFailure(
+      { ok: false, failure: 'unavailable', reference: 'ab12cd34' },
+      { ok: true },
+    )).toEqual({ failure: 'unavailable', reference: 'ab12cd34' });
+    expect(shownZoneFailure(
+      { ok: false, failure: 'offline' },
+      { ok: false, failure: 'unavailable', reference: 'ab12cd34' },
+    )).toEqual({ failure: 'offline' });
+    expect(shownZoneFailure(
+      { ok: true },
+      { ok: false, failure: 'offline', reference: 'edge.12' },
+    )).toEqual({ failure: 'offline', reference: 'edge.12' });
+    expect(shownZoneFailure({ ok: false, failure: 'closed' }, { ok: true })).toBeNull();
+    expect(shownZoneFailure({ ok: true }, { ok: false, failure: 'closed' })).toBeNull();
+  });
+
+  test('a closed next page of the feed offers no further control', () => {
+    expect(feedContinuation('closed', 'cursor', false)).toBe('none');
+    expect(feedContinuation(null, 'cursor', false)).toBe('more');
+    expect(feedContinuation('unavailable', 'cursor', false)).toBe('error');
+    expect(feedContinuation(null, null, false)).toBe('none');
   });
 });

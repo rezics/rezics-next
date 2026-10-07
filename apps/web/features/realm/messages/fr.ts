@@ -18,6 +18,7 @@ export default {
   budgetBody: 'C’est trop à charger d’un coup. Réessayez dans un instant.',
   deniedTitle: 'Connectez-vous pour voir ceci',
   deniedBody: 'Votre session a peut-être expiré. Connectez-vous, puis réessayez.',
+  signIn: 'Se connecter',
   retry: 'Réessayer',
   emptyHomeTitle: 'Rien pour le moment',
   emptyHomeBody: 'Quand cette communauté ajoutera des œuvres, ses sélections, ses nouveaux chapitres et ses décisions apparaîtront ici.',

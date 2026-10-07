@@ -18,6 +18,7 @@ export default {
   budgetBody: '一次載入的內容太多了。請稍後再試一次。',
   deniedTitle: '登入後即可查看',
   deniedBody: '你的登入可能已結束。請登入後再試一次。',
+  signIn: '登入',
   retry: '再試一次',
   emptyHomeTitle: '目前還沒有內容',
   emptyHomeBody: '社群加入作品後，精選內容、新章節和決策就會顯示在這裡。',

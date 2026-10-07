@@ -18,6 +18,7 @@ export default {
   budgetBody: 'Es demasiado para cargarlo de una vez. Inténtalo de nuevo dentro de un momento.',
   deniedTitle: 'Inicia sesión para ver esto',
   deniedBody: 'Puede que tu sesión haya terminado. Inicia sesión e inténtalo de nuevo.',
+  signIn: 'Iniciar sesión',
   retry: 'Intentar de nuevo',
   emptyHomeTitle: 'Aún no hay nada',
   emptyHomeBody: 'Cuando esta comunidad añada obras, aquí aparecerán sus selecciones, los capítulos nuevos y sus decisiones.',
