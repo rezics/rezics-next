@@ -12,6 +12,8 @@ export class GroupStale extends Error {}
 export class GroupUnavailable extends Error {}
 
 export const GROUP_SCOPE = 'work:create:root';
+/** Group effects and protection decisions share this existing inventory fence. */
+export const GROUP_INVENTORY_SCOPE = 'access:group-inventory';
 /** Bounds come from the active Access operational profile (IAM35). */
 export function groupBounds(client: PoolClient, lock = false): Promise<OperationalBoundsProfile> {
   return readAccessBounds(client, message => new GroupUnavailable(message), lock);
@@ -41,7 +43,7 @@ export async function groupWorkCreateProof(client: PoolClient, subject: string,
   }
   if (members.rows.length === 0) return null;
   const gate = await client.query<{ group_generation: string }>(
-    'SELECT group_generation FROM access.scope_gate WHERE id = $1', ['access:group-inventory']);
+    'SELECT group_generation FROM access.scope_gate WHERE id = $1', [GROUP_INVENTORY_SCOPE]);
   if (!gate.rows[0]) throw new GroupUnavailable('group scope is unavailable');
   const result = await client.query<{
     member_id: string; grant_id: string | null; depth: number;
@@ -255,7 +257,7 @@ export class AccessGroups {
       }
       const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
         'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
-        ['access:group-inventory']);
+        [GROUP_INVENTORY_SCOPE]);
       if (!gate.rows[0] || !gate.rows[0].open || !gate.rows[0].dispatch_open) {
         throw new GroupDenied('group scope is closed');
       }
@@ -328,7 +330,7 @@ export class AccessGroups {
       }
       const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
         'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE',
-        ['access:group-inventory']);
+        [GROUP_INVENTORY_SCOPE]);
       if (!gate.rows[0] || !gate.rows[0].open || !gate.rows[0].dispatch_open) {
         throw new GroupDenied('group scope is closed');
       }
@@ -671,7 +673,7 @@ export class AccessGroups {
       }
       const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
         'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
-        ['access:group-inventory']);
+        [GROUP_INVENTORY_SCOPE]);
       if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) throw new GroupDenied('group scope is closed');
       const principalId = await this.authorize(client, context.principal, context.issuerSubject, false);
       await lockAccessKey(client, `group-impact-proposal:${principalId}:${idempotencyKey}`);
@@ -741,7 +743,7 @@ export class AccessGroups {
       }
       const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
         'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
-        ['access:group-inventory']);
+        [GROUP_INVENTORY_SCOPE]);
       if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) throw new GroupDenied('group scope is closed');
       await this.authorize(client, principal, approverSubject, false, 'access.group.approve');
       const row = await this.proposal(client, proposalId);
@@ -778,7 +780,7 @@ export class AccessGroups {
       }
       const gate = await client.query<{ group_generation: string; open: boolean; dispatch_open: boolean }>(
         'SELECT group_generation, open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR UPDATE',
-        ['access:group-inventory']);
+        [GROUP_INVENTORY_SCOPE]);
       if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) throw new GroupDenied('group scope is closed');
       const approverId = await this.authorize(client, principal, approverSubject,
         false, 'access.group.approve');
@@ -876,7 +878,7 @@ export class AccessGroups {
 
   private async generation(client: PoolClient): Promise<string> {
     const row = await client.query<{ group_generation: string }>(
-      'SELECT group_generation FROM access.scope_gate WHERE id = $1', ['access:group-inventory']);
+      'SELECT group_generation FROM access.scope_gate WHERE id = $1', [GROUP_INVENTORY_SCOPE]);
     return row.rows[0]!.group_generation;
   }
 }

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { groupChangeIntentDigest } from './group-intent.ts';
+import { GROUP_INVENTORY_SCOPE } from './groups.ts';
 import { applyAgentController, applyAgentRecovery } from './agent-control.ts';
 import { type ProtectedChangeKind, MAX_PROTECTED_APPROVALS } from './protected-set-schema.ts';
 import { ControlConflict, ControlDenied, ControlInvalid, ControlStale, type ControlReceipt,
@@ -20,6 +21,10 @@ const GRANT_ASSIGN = 'access.grant.assign.work.create';
 const REPRESENTATION_MANAGE = 'access.representation.manage';
 const PROPOSAL_LIFETIME_MS = 24 * 60 * 60_000;
 const MAX_REBINDS = 256;
+
+function isGroupChange(kind: ProtectedChangeKind): boolean {
+  return kind === 'group-member' || kind === 'group-parent' || kind === 'group-grant';
+}
 
 export type ProposalInput =
   | { kind: 'agent-controller'; recipientSubject: string; representationId: string }
@@ -109,6 +114,7 @@ export class AccessProtectedChanges {
     }
     return controlTransaction(this.pool, async client => {
       const scopeEpoch = await lockGate(client, WORK_SCOPE, false);
+      if (input.objectKind === 'group') await lockGate(client, GROUP_INVENTORY_SCOPE, true);
       const actor = await requirePrincipal(client, principal);
       const manage = input.objectKind === 'group' ? GROUP_MANAGE : ROLE_MANAGE;
       await requireMandate(client, actor.id, input.issuerSubject, manage);
@@ -303,7 +309,7 @@ export class AccessProtectedChanges {
 
   private async groupGeneration(client: PoolClient): Promise<string> {
     const gate = await client.query<{ group_generation: string }>(
-      'SELECT group_generation FROM access.scope_gate WHERE id = $1', ['access:group-inventory']);
+      'SELECT group_generation FROM access.scope_gate WHERE id = $1', [GROUP_INVENTORY_SCOPE]);
     return gate.rows[0]!.group_generation;
   }
 
@@ -317,6 +323,7 @@ export class AccessProtectedChanges {
     }
     return controlTransaction(this.pool, async client => {
       const epoch = await lockGate(client, WORK_SCOPE, false);
+      if (isGroupChange(input.change.kind)) await lockGate(client, GROUP_INVENTORY_SCOPE, false);
       const actor = await requirePrincipal(client, principal);
       return receipted<ProposalView>(client, actor.id, receipt, 'protected-change', 'propose',
         input.issuerSubject, input.proposalId, async () => {
@@ -346,6 +353,20 @@ export class AccessProtectedChanges {
           return { epoch, result: await this.view(client, input.proposalId) };
         });
     });
+  }
+
+  private async lockProposalInventory(client: PoolClient, id: string,
+    write: boolean): Promise<void> {
+    // Kind is immutable. Select only the fence here, before authority/receipt
+    // locks; the receipted effect still reads and validates the complete proposal.
+    const row = await client.query<{ kind: ProtectedChangeKind }>(
+      'SELECT kind FROM access.protected_change_proposal WHERE id = $1', [id]);
+    // Under READ COMMITTED a later read could see a newly committed proposal;
+    // absence here must not let its effect bypass the selected inventory fence.
+    if (!row.rows[0]) throw new ControlDenied('proposal is unavailable');
+    if (isGroupChange(row.rows[0].kind)) {
+      await lockGate(client, GROUP_INVENTORY_SCOPE, write);
+    }
   }
 
   private async proposal(client: PoolClient, id: string, lock = false): Promise<ProposalRow> {
@@ -438,6 +459,7 @@ export class AccessProtectedChanges {
     }
     return controlTransaction(this.pool, async (client) => {
       await lockGate(client, WORK_SCOPE, false);
+      await this.lockProposalInventory(client, input.proposalId, false);
       const actor = await requirePrincipal(client, principal);
       return receipted<ProposalView>(
         client,
@@ -488,6 +510,7 @@ export class AccessProtectedChanges {
     return controlTransaction(this.pool, async client => {
       const epoch = await lockGate(client, WORK_SCOPE, false);
       await lockGate(client, TOPOLOGY_SCOPE, true);
+      await this.lockProposalInventory(client, proposalId, true);
       const actor = await requirePrincipal(client, principal);
       return receipted<ProposalView & { authorityEpoch: string }>(client, actor.id, receipt,
         'protected-change', 'activate', null, proposalId, async () => {
