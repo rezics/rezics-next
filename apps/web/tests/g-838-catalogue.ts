@@ -48,6 +48,38 @@ interface Work { work: string; mainVersion: string; mainRevision: string; title:
 interface Written { revision: string }
 interface Composition { structure: string; revision: string }
 
+/** A cancelled basis is a new edit: read the current head and reapply the
+ * ordered append intent with a new command key, rather than replay cancellation. */
+export async function appendCatalogueParts(
+  editor: Pick<Awaited<ReturnType<MediaStack['member']>>, 'actor' | 'send' | 'read'>,
+  structure: string,
+  parts: { work: string; label: string }[],
+): Promise<void> {
+  const path = `/v1/compositions/${short(structure)}`;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const current = await editor.read(path);
+    if (await retryBasisChanged(current, attempt)) continue;
+    const composition = await json<Composition>(current);
+    const changed = await editor.send('POST', `${path}/changes`, {
+      profile: 'work-composition', expectedHead: composition.revision, actingSubject: editor.actor,
+      operations: parts.map(part => ({ op: 'insert', parent: structure, position: 'last', role: 'part',
+        target: part.work, displayLabel: part.label, inclusion: 'required' })),
+    }, randomUUID());
+    if (await retryBasisChanged(changed, attempt)) continue;
+    await json(changed);
+    return;
+  }
+}
+
+async function retryBasisChanged(response: Response, attempt: number): Promise<boolean> {
+  if (response.status !== 409 || attempt === 3) return false;
+  const problem = await response.clone().json() as { code?: string };
+  if (problem.code !== 'read_basis_changed') return false;
+  // Allow the publication relay that cancelled this basis to finish its batch.
+  await new Promise(done => setTimeout(done, 1_000));
+  return true;
+}
+
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
   if (response.status !== status) throw new Error(`Expected ${status}, got ${response.status}: ${body}`);
@@ -94,10 +126,8 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   const compose = async (whole: Work, parts: { work: Work; label: string }[]) => {
     const composition = await json<Composition>(await editor.send('POST', '/v1/compositions', { profile: 'work-composition',
       work: whole.work, mainVersion: whole.mainVersion, actingSubject: editor.actor }), 201);
-    await json(await editor.send('POST', `/v1/compositions/${short(composition.structure)}/changes`, {
-      profile: 'work-composition', expectedHead: composition.revision, actingSubject: editor.actor,
-      operations: parts.map(part => ({ op: 'insert', parent: composition.structure, position: 'last', role: 'part',
-        target: part.work.work, displayLabel: part.label, inclusion: 'required' })) }));
+    await appendCatalogueParts(editor, composition.structure,
+      parts.map(part => ({ work: part.work.work, label: part.label })));
   };
 
   const text = async (target: Work, language: string, publisher: string) => {
