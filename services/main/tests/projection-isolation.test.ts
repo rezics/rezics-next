@@ -163,7 +163,11 @@ test('Content retains failed A while B projects, survives restart, supersedes in
 
 test('Read ranking upgrades populated coverage and retains each failed Structure independently', async () => {
   await postgres(async pool => {
-    for (const file of schemaFiles(root, 'access').filter(file => !file.startsWith('1310_'))) {
+    const files = schemaFiles(root, 'access');
+    const upgrade = files.indexOf('1399_read_rankings.sql');
+    expect(upgrade).toBeGreaterThanOrEqual(0);
+    // Seed the retained row before the upgrade; later migrations also stay in file order.
+    for (const file of files.slice(0, upgrade)) {
       await pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
     const content = new ContentCore(pool), graph = new ProjectionGraph();
@@ -171,7 +175,9 @@ test('Read ranking upgrades populated coverage and retains each failed Structure
     await pool.query(`INSERT INTO access.read_ranking_checkpoint
       (generation,content_epoch,content_sequence,graph_epoch,review_position) VALUES ($1,$2,7,$3,5)`,
     [crypto.randomUUID(), owner.dataEpoch, graphEpoch]);
-    await pool.query(readFileSync(join(root, 'services/main/migrations/access/1399_read_rankings.sql'), 'utf8'));
+    for (const file of files.slice(upgrade)) {
+      await pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+    }
     expect((await pool.query('SELECT content_scan_sequence::text,review_scan_position::text FROM access.read_ranking_checkpoint')).rows[0])
       .toEqual({ content_scan_sequence: '7', review_scan_position: '5' });
     await pool.query('DELETE FROM access.read_ranking_checkpoint');
@@ -269,5 +275,27 @@ test('Content retries seek at most eight target heads even with a long same-targ
     await pool.query('DELETE FROM content.projection_pending WHERE consumer=$1', [consumer]);
     await expect(cursor.readScan(consumer)).rejects.toThrow('coverage differs');
     await expect(cursor.acknowledge(consumer, position, { ...position, sequence: '101' })).rejects.toThrow('coverage differs');
+  });
+}, 60_000);
+
+
+test('Fresh Access install applies every migration in file order and enforces ranking coverage', async () => {
+  await postgres(async pool => {
+    for (const file of schemaFiles(root, 'access')) {
+      await pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+    }
+    const owner = await new ContentCore(pool).ownerPosition();
+    await pool.query(`INSERT INTO access.read_ranking_checkpoint
+      (generation,content_epoch,graph_epoch) VALUES ($1,$2,$3)`,
+    [crypto.randomUUID(), owner.dataEpoch, graphEpoch]);
+    expect((await pool.query(`SELECT content_sequence::text,content_scan_sequence::text,
+      review_position::text,review_scan_position::text FROM access.read_ranking_checkpoint`)).rows[0])
+      .toEqual({ content_sequence: '0', content_scan_sequence: '0', review_position: '0', review_scan_position: '0' });
+    await expect(pool.query('UPDATE access.read_ranking_checkpoint SET content_sequence=1 WHERE singleton'))
+      .rejects.toMatchObject({ code: '23514' });
+    await expect(pool.query('UPDATE access.read_ranking_checkpoint SET review_position=1 WHERE singleton'))
+      .rejects.toMatchObject({ code: '23514' });
+    await pool.query(`UPDATE access.read_ranking_checkpoint SET content_sequence=1,content_scan_sequence=1,
+      review_position=1,review_scan_position=1 WHERE singleton`);
   });
 }, 60_000);
