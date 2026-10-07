@@ -20,7 +20,7 @@ const inputs = ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml', 'package.
   '.yarnrc.yml', 'yarn.lock',
   // Main imports this adapter even when local fixture fetching is disabled.
   'scripts/dev/seed/open-library-fixtures.ts', 'scripts/ops/migrate.ts',
-  'scripts/ops/production-env.ts', 'scripts/lib/migration-order.ts', 'apps/web/features/config/env.ts',
+  'scripts/ops/production-env.ts', 'scripts/lib/migration-order.ts', 'scripts/lib/concurrent-index.ts', 'apps/web/features/config/env.ts',
   'apps/accounts/features/config/env.ts'] as const;
 
 interface ArtifactManifest {

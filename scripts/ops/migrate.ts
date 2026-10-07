@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { compareMigrationPaths, migrationVersion } from '../lib/migration-order.ts';
+import { applySqlMigration, sqlMigration } from '../lib/concurrent-index.ts';
 import { Pool, type PoolClient } from 'pg';
 import { checkPostgresOwners } from './postgres-preflight.ts';
 import { migrateContent } from '../../services/content/src/migrate.ts';
@@ -33,7 +34,7 @@ export function migrationRecords(root: string, owner: SchemaOwner) {
 function migrationFiles(root: string, owner: SchemaOwner) {
   return migrationRecords(root, owner).map((file) => ({
     ...file,
-    sql: readFileSync(join(root, file.name), 'utf8'),
+    ...sqlMigration(readFileSync(join(root, file.name), 'utf8'), file.name),
   }));
 }
 
@@ -79,15 +80,17 @@ async function trackedIn(
   ).rows;
   const applied: string[] = [];
   for (const file of files) {
+    if (history.some((row) => row.name === file.name)) continue;
+    // The session lock remains held across the standalone online build and
+    // its receipt. Retry repairs a cancelled build or accepts a valid one.
+    if (file.concurrentIndex) await applySqlMigration(client, file);
     await client.query('BEGIN');
     try {
-      if (!history.some((row) => row.name === file.name)) {
-        await client.query(file.sql);
-        await client.query('INSERT INTO public.rezics_local_migration(name) VALUES ($1)', [
-          file.name,
-        ]);
-        applied.push(file.name);
-      }
+      if (!file.concurrentIndex) await applySqlMigration(client, file);
+      await client.query('INSERT INTO public.rezics_local_migration(name) VALUES ($1)', [
+        file.name,
+      ]);
+      applied.push(file.name);
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');

@@ -10,6 +10,7 @@ import { parseEnv } from 'node:util';
 import { Client, Pool } from 'pg';
 import { acquireHeavy, markHeavyCommandStarted } from '../goal/goalctl.ts';
 import { migrationDirectories, migrationRecords, type SchemaOwner } from '../ops/migrate.ts';
+import { sqlMigration } from '../lib/concurrent-index.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { readActiveModelGeneration } from '../../services/main/src/modules/semantic/generation-guard.ts';
@@ -227,7 +228,13 @@ export async function rehearseRefreshMigrations(root: string, env: Record<string
         await client.query(isolateRehearsalSequences);
         for (const file of files) {
           migration = file.name;
-          await client.query(readFileSync(join(root, file.name), 'utf8'));
+          // A rolled-back ordinary build validates the same columns and
+          // predicate while preserving the online form for the real apply.
+          const sql = sqlMigration(readFileSync(join(root, file.name), 'utf8'), file.name);
+          // An interrupted build or a lost receipt may already have this name.
+          // Rollback restores that entry; apply repairs it outside a transaction.
+          if (sql.concurrentIndex) await client.query(`DROP INDEX IF EXISTS ${sql.concurrentIndex}`);
+          await client.query(sql.rehearsalSql);
         }
       } catch (error) {
         // A transaction timeout closes the connection and rolls back on the

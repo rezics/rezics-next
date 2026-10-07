@@ -133,6 +133,10 @@ test('G-722 actual owner migrations serialize, rerun empty, check migration reco
       join(repositoryRoot, 'scripts/lib/migration-order.ts'),
       join(artifact, 'scripts/lib/migration-order.ts'),
     );
+    cpSync(
+      join(repositoryRoot, 'scripts/lib/concurrent-index.ts'),
+      join(artifact, 'scripts/lib/concurrent-index.ts'),
+    );
     // The copied fence resolves SQL relative to the artifact, and its supporting imports use this checkout.
     const fence = readFileSync(
       join(repositoryRoot, 'services/account/src/consent-fence.ts'),

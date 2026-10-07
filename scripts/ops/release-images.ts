@@ -51,6 +51,7 @@ const runtimeArtifacts = [
   'scripts/ops/postgres-preflight.ts',
   'scripts/ops/production-env.ts',
   'scripts/lib/migration-order.ts',
+  'scripts/lib/concurrent-index.ts',
   'scripts/dev/release-manifest.ts',
   'scripts/dev/seed/open-library-fixtures.ts',
   'apps/web/features/config/env.ts',

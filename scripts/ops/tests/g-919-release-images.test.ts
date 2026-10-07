@@ -90,6 +90,7 @@ function fixture() {
     'scripts/ops/postgres-preflight.ts',
     'scripts/ops/production-env.ts',
     'scripts/lib/migration-order.ts',
+    'scripts/lib/concurrent-index.ts',
     'scripts/dev/seed/open-library-fixtures.ts',
     'apps/web/features/config/env.ts',
     'apps/accounts/features/config/env.ts',
@@ -179,6 +180,7 @@ test('G-919 production context follows transitive, optional, peer and cyclic wor
   expect(existsSync(join(options.context, 'apps/frontend/package.json'))).toBe(true);
   expect(existsSync(join(options.context, 'generated/openapi/main/public.json'))).toBe(true);
   expect(existsSync(join(options.context, 'scripts/lib/migration-order.ts'))).toBe(true);
+  expect(existsSync(join(options.context, 'scripts/lib/concurrent-index.ts'))).toBe(true);
   expect(existsSync(join(options.context, 'scripts/ops/postgres-preflight.ts'))).toBe(true);
   expect(existsSync(join(options.context, 'infra/release/postgres-provision.sql'))).toBe(true);
   expect(readFileSync(join(options.context, '.yarn/patches/runtime.patch'), 'utf8')).toBe(

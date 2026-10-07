@@ -1,9 +1,10 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { compareMigrationPaths, migrationVersion } from '../../../scripts/lib/migration-order.ts';
+import { applySqlMigration, sqlMigration, type SqlMigration } from '../../../scripts/lib/concurrent-index.ts';
 import type { Pool } from 'pg';
 
-function migrations(directory: string): Array<{ version: number; sql: string; concurrentIndex?: string }> {
+function migrations(directory: string): Array<SqlMigration & { version: number }> {
   const files = readdirSync(directory).filter(name => name.endsWith('.sql')).sort(compareMigrationPaths);
   if (!files.length) throw new Error('Content migrations are missing');
   // Versions strictly increase; gaps are allowed because parallel owner work reserves number ranges.
@@ -13,20 +14,7 @@ function migrations(directory: string): Array<{ version: number; sql: string; co
     if (version <= previous) throw new Error(`Content migration sequence repeats a version at ${name}`);
     previous = version;
     const sql = readFileSync(join(directory, name), 'utf8');
-    // An online index is one standalone statement. Its catalog entry survives
-    // cancellation, so the runner must repair invalid builds before retrying.
-    const concurrentIndex = /^-- migrate: concurrent-index ([a-z_]+\.[a-z_]+)$/m.exec(sql)?.[1];
-    if (concurrentIndex) {
-      // Multiple statements in one query form an implicit transaction in Postgres,
-      // which cannot run CREATE INDEX CONCURRENTLY. Ignore comments and quoted
-      // values/identifiers when checking statement boundaries.
-      const statement = sql.replace(/--[^\n]*|\/\*[\s\S]*?\*\/|'(?:''|[^'])*'|"(?:""|[^"])*"/g,
-        token => token.startsWith('--') || token.startsWith('/*') ? ' ' : '?').trim();
-      if (!/^CREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\b[^;]*;?$/i.test(statement)) {
-        throw new Error(`Content concurrent-index migration ${name} must hold exactly one CREATE INDEX CONCURRENTLY statement`);
-      }
-    }
-    return { version, sql, concurrentIndex };
+    return { version, ...sqlMigration(sql, name) };
   });
 }
 
@@ -61,11 +49,7 @@ export async function migrateContent(pool: Pool, directory = join(import.meta.di
         // before waiting for any inventory-sized progress index build.
         await client.query('COMMIT');
         inTransaction = false;
-        const index = (await client.query<{ indisvalid: boolean }>(
-          'SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)', [migration.concurrentIndex])).rows[0];
-        if (index && !index.indisvalid) await client.query(`DROP INDEX CONCURRENTLY ${migration.concurrentIndex}`);
-        // A crash after a successful build but before its receipt is harmless.
-        if (!index?.indisvalid) await client.query(migration.sql);
+        await applySqlMigration(client, migration);
         await client.query('BEGIN');
         inTransaction = true;
       } else await client.query(migration.sql);

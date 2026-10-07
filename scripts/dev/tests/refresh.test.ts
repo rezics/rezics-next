@@ -25,6 +25,7 @@ import { officialPackageSlugs, officialSourceDigest } from '../seed/official-the
 import { officialTheme } from '../seed/official-plan.ts';
 import { parseOptions } from '../seed/cli.ts';
 import { stableId } from '../seed/state.ts';
+import { sqlMigration } from '../../lib/concurrent-index.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const current: RefreshInputs = { revision: 'committed-main', previousRevision: 'committed-main',
@@ -941,6 +942,43 @@ describe('pending SQL migration rehearsal', () => {
     writeFileSync(join(dir, content), 'ALTER TABLE content.event ADD COLUMN epoch bigint;');
     return { dir, first, second, content };
   }
+
+  for (const fails of [false, true]) {
+    test(`marked online indexes rehearse transactionally and ${fails ? 'reject a wrong column before stopping writers' : 'preserve predicates and comments'}`, async () => {
+      const { dir, first } = fixture();
+      const sql = `-- migrate: concurrent-index access.online_probe
+-- CONCURRENTLY in comments stays intact.
+CREATE UNIQUE INDEX /* build */ CONCURRENTLY online_probe ON access.event (${fails ? 'missing_column' : 'epoch'})
+WHERE note <> 'CONCURRENTLY;';`;
+      writeFileSync(join(dir, first), sql);
+      const events: string[] = [];
+      const operations = actions(events);
+      operations.rehearseMigrations = () => rehearseRefreshMigrations(dir, env, [first], () => ({
+        connect: async () => {},
+        query: async query => {
+          events.push(query.startsWith('DO $$') ? 'isolate-sequences' : query);
+          if (query.includes('missing_column')) throw new Error('column missing_column does not exist');
+        },
+        end: async () => { events.push('end'); },
+      }));
+      try {
+        const run = executeRefresh(refreshPlan({ ...current, pendingMigrations: [first] }), operations);
+        if (fails) {
+          await expect(run).rejects.toThrow(`Migration rehearsal failed: ${first}: column missing_column does not exist`);
+          expect(events).not.toContain('stopWriters');
+        } else await run;
+        expect(events.slice(0, 6)).toEqual(['BEGIN', 'isolate-sequences', 'DROP INDEX IF EXISTS access.online_probe',
+          sql.replace('/* build */ CONCURRENTLY', '/* build */ '), 'ROLLBACK', 'end']);
+        expect(readFileSync(join(dir, first), 'utf8')).toBe(sql);
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
+
+  test.each(['SELECT 1;', 'CREATE INDEX CONCURRENTLY probe ON source(id); SELECT 1;',
+    'CREATE INDEX probe ON source(id);'])('marker files must contain exactly one online index: %s', sql => {
+    expect(() => sqlMigration(`-- migrate: concurrent-index access.probe\n${sql}`, 'probe.sql'))
+      .toThrow('exactly one CREATE INDEX CONCURRENTLY');
+  });
 
   test('only pending files run in migration order with one rollback per owner database', async () => {
     const { dir, first, second, content } = fixture();

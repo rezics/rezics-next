@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { compareMigrationPaths } from '../../../scripts/lib/migration-order.ts';
+import { applySqlMigration, sqlMigration } from '../../../scripts/lib/concurrent-index.ts';
 import type { Pool, PoolClient } from 'pg';
 import { currentInstallationIn } from './installations.ts';
 
@@ -75,14 +76,18 @@ const MIGRATION_DIRECTORY = new URL('../migrations/', import.meta.url);
 
 /** Installed after Better Auth's pinned schema migration, before Account serves.
  * Every idempotent Account migration is reapplied in file-name order in one
- * transaction; numbered files may leave gaps. */
-export async function installConsentRefreshFence(pool: Pool): Promise<void> {
-  const sql = readdirSync(MIGRATION_DIRECTORY).filter(file => /^\d{3,}_[a-z0-9_]+\.sql$/.test(file))
-    .sort(compareMigrationPaths).map(file => readFileSync(new URL(file, MIGRATION_DIRECTORY), 'utf8'));
+ * transaction, except standalone online index builds; numbered files may leave gaps. */
+export async function installConsentRefreshFence(pool: Pool, directory = MIGRATION_DIRECTORY): Promise<void> {
+  const sql = readdirSync(directory).filter(file => /^\d{3,}_[a-z0-9_]+\.sql$/.test(file))
+    .sort(compareMigrationPaths).map(file => sqlMigration(readFileSync(new URL(file, directory), 'utf8'), file));
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    for (const migration of sql) await client.query(migration);
+    for (const migration of sql) {
+      if (migration.concurrentIndex) await client.query('COMMIT');
+      await applySqlMigration(client, migration);
+      if (migration.concurrentIndex) await client.query('BEGIN');
+    }
     await client.query('COMMIT');
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve migration failure */ }
