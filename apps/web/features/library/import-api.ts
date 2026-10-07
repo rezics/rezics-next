@@ -42,15 +42,17 @@ export interface ImportApi {
 export const UPLOAD_LIMIT_BYTES = 2 * 1024 * 1024;
 
 const key = () => `library-import:${crypto.randomUUID()}`;
+type Wait = (milliseconds: number) => Promise<void>;
+const wait: Wait = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 
 /** Retry-After accepts seconds or an HTTP date; an absent value waits one second. */
-async function waitForAdmission(response: Response | undefined): Promise<void> {
+async function waitForAdmission(response: Response | undefined, pause: Wait): Promise<void> {
   const value = response?.headers.get('retry-after');
   const seconds = value && /^\d+$/.test(value) ? Number(value) : undefined;
   const date = value && seconds === undefined ? Date.parse(value) : NaN;
   const delay = seconds !== undefined ? seconds * 1000
     : Number.isFinite(date) ? Math.max(0, date - Date.now()) : 1000;
-  await new Promise(resolve => setTimeout(resolve, delay));
+  await pause(delay);
 }
 
 function failure(status: number): ImportError {
@@ -62,59 +64,63 @@ interface Reply<Data> { status: number; data: Data | null; error?: { value?: unk
 
 /** One command or read with its own `Idempotency-Key`; Main's short-window admission is waited out, never surfaced. */
 async function call<Data>(send: (headers: { 'idempotency-key': string }) => Promise<Reply<Data>>,
-  accepted: readonly number[] = [200], idempotencyKey = key()): Promise<{ status: number; data: Data }> {
+  accepted: readonly number[] = [200], idempotencyKey = key(), pause: Wait = wait): Promise<Reply<Data> & { data: Data }> {
   const headers = { 'idempotency-key': idempotencyKey };
-  for (let attempt = 0; attempt < 8; attempt++) {
+  while (true) {
     const reply = await send(headers);
     // A daily search or adoption budget is a refusal, not a short-window admission to wait out.
     if (reply.status === 429 && problemCode(reply.error?.value)?.endsWith('_budget')) throw new ImportError('budget');
-    if (reply.status === 429) { await waitForAdmission(reply.response); continue; }
-    if (accepted.includes(reply.status) && reply.data !== null) return { status: reply.status, data: reply.data };
+    if (reply.status === 429) { await waitForAdmission(reply.response, pause); continue; }
+    if (accepted.includes(reply.status)) {
+      if (reply.data === null) throw new ImportError('invalid');
+      return { ...reply, data: reply.data };
+    }
     throw failure(reply.status);
   }
-  throw new ImportError('unavailable');
 }
 
-export function mainImportApi(agent: string, main: () => MainClient = browserMainApi): ImportApi {
+export function mainImportApi(agent: string, main: () => MainClient = browserMainApi, pause: Wait = wait): ImportApi {
   const imports = () => main().v1.me['library-imports'];
+  const request = <Data>(send: (headers: { 'idempotency-key': string }) => Promise<Reply<Data>>,
+    accepted: readonly number[] = [200], idempotencyKey = key()) => call(send, accepted, idempotencyKey, pause);
   return {
     async inspect(file) {
-      const { data } = await call(headers => imports().post({ actingSubject: agent, format: 'generic-csv', file },
+      const { data } = await request(headers => imports().post({ actingSubject: agent, format: 'generic-csv', file },
         { headers }) as Promise<Reply<CsvInspection>>);
       return data;
     },
     async create({ format, file, mapping }) {
-      const { data } = await call(headers => imports().post({ actingSubject: agent, format, file,
+      const { data } = await request(headers => imports().post({ actingSubject: agent, format, file,
         ...(mapping ? { mapping } : {}) }, { headers }) as Promise<Reply<{ id: string; total: number }>>, [201]);
       return data;
     },
     async rows(id, cursor) {
-      const { data } = await call(headers => imports()({ id }).rows.get({ query: { actingSubject: agent,
+      const { data } = await request(headers => imports()({ id }).rows.get({ query: { actingSubject: agent,
         ...(cursor >= 0 ? { cursor } : {}) }, headers }) as Promise<Reply<Rows>>);
       return data;
     },
     async resolve(id, row, choice) {
-      await call(headers => imports()({ id }).rows({ row: row.index }).put({ actingSubject: agent,
+      await request(headers => imports()({ id }).rows({ row: row.index }).put({ actingSubject: agent,
         expectedVersion: row.version, ...choice }, { headers }));
     },
     async apply(id, intent) {
-      const { data } = await call(headers => imports()({ id }).apply.post({ actingSubject: agent, ...intent },
+      const { data } = await request(headers => imports()({ id }).apply.post({ actingSubject: agent, ...intent },
         { headers }) as Promise<Reply<ApplyProgress>>, [200, 202]);
       return data;
     },
     async discard(id) {
-      await call(headers => imports()({ id }).delete(undefined, { query: { actingSubject: agent }, headers }));
+      await request(headers => imports()({ id }).delete(undefined, { query: { actingSubject: agent }, headers }));
     },
     async adopt(id, row, workId, locale) {
-      for (let attempt = 0; attempt < 8; attempt++) {
-        const answer = await call(headers => imports()({ id }).rows({ row }).adoptions.post({
+      while (true) {
+        const answer = await request(headers => imports()({ id }).rows({ row }).adoptions.post({
           actingSubject: agent, workId, titleLanguage: locale }, { headers }), [200, 202],
         `library-import:adopt:${id}:${row}:${workId}`);
         const data = answer.data as { work?: string };
         if (data.work) return data.work;
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (answer.status !== 202) throw new ImportError('invalid');
+        await waitForAdmission(answer.response, pause);
       }
-      throw new ImportError('unavailable');
     },
   };
 }
