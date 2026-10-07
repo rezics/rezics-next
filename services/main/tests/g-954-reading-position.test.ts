@@ -5,6 +5,7 @@ import { readingPositionsRoutes } from '../src/routes/reading-positions.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { ObjectUnavailable, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
+import { AdmissionUnavailable } from '../src/modules/access/admission.ts';
 import { type ReadingOccurrence, READING_POSITION_COST } from '../src/modules/reading-position/boundary.ts';
 import { normalizePositionQuery } from '../src/modules/reading-position/store.ts';
 import { WorkReadInvalid } from '../src/modules/work/read-session.ts';
@@ -153,6 +154,7 @@ function separateSharedRevisions(metas: Map<string, ReadRow>,
 function fixture(inventory = chapters, leaves: string[] = []) {
   let sequence = '1', generation = '1', available = true, active = true, historyReads = 0, queryCalls = 0, maxRows = 0;
   let own = false;
+  const recovery = { open: true as boolean | undefined };
   const hidden = new Set<string>(), completed = new Set<string>(), finished = new Set<string>();
   const attempts: Array<{ state: 'finished'; selections: Array<{ target: {
     base: 'occurrence' | 'work' | 'realization'; resource: string; revision?: string; work?: string } }> }> = [];
@@ -322,7 +324,9 @@ function fixture(inventory = chapters, leaves: string[] = []) {
       return { results: { bindings } };
     } } },
     structureObjects: objects,
-    access: { assertRecoveryOpen: async (): Promise<void> => {},
+    access: { assertRecoveryOpen: async (): Promise<void> => {
+      if (recovery.open !== true) throw new AdmissionUnavailable('Access is held for recovery');
+    },
       activePrincipalId: async () => active ? 'reader' : null, canReadAsBaselineMember: async () => own },
     account: { verify: async (request: Request) => {
       if (request.headers.get('authorization') !== 'Bearer reader') throw new AccountAssertionDenied('Unknown bearer');
@@ -343,7 +347,7 @@ function fixture(inventory = chapters, leaves: string[] = []) {
   const call = (query: Record<string, string> = {}, token?: string) => app.handle(new Request(
     `http://main.local/v1/reading-positions/${work.slice(-36)}?${new URLSearchParams(query)}`,
     { headers: token ? { authorization: `Bearer ${token}` } : {} }));
-  return { call, rows, queries, completed, finished, attempts, historyReads: () => historyReads, queryCalls: () => queryCalls,
+  return { call, recovery, rows, queries, completed, finished, attempts, historyReads: () => historyReads, queryCalls: () => queryCalls,
     maxRows: () => maxRows, own: () => { own = true; }, hideResource: (resource: string) => hidden.add(resource),
     denyReader: () => { own = false; },
     reveal: () => { generation = '2'; },
@@ -403,6 +407,21 @@ test('G954: hidden Works, inactive and anonymous acting identities, invalid quer
   expect((await f.call({ q: 'x'.repeat(201) })).status).toBe(422);
   expect((await f.call({ limit: '1.5' })).status).toBe(422);
   expect(f.historyReads()).toBe(0);
+});
+
+test('closed or missing Access recovery refuses the reading-position read without chooser data', async () => {
+  const f = fixture();
+  for (const open of [false, undefined]) {
+    f.recovery.open = open;
+    const response = await f.call({ q: '重逢' });
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      type: 'https://rezics.com/problems/dependency_unavailable',
+      title: 'A required authority service is unavailable',
+      status: 503,
+      code: 'dependency_unavailable',
+    });
+  }
 });
 
 test('G954: unreadable native chapter targets withhold labels before search without changing anonymous position semantics', async () => {

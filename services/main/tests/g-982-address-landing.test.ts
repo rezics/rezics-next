@@ -10,6 +10,7 @@ import { resolveAddresses } from '../src/modules/address/resolution.ts';
 import { readResourceSummaries } from '../src/modules/media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/store.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
+import { AdmissionUnavailable } from '../src/modules/access/admission.ts';
 
 const space = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
@@ -24,6 +25,7 @@ const rows = (bindings: NonNullable<SparqlResult['results']>['bindings']) => ({
 function fixture() {
   const queries: string[] = [];
   const state = {
+    recoveryOpen: true as boolean | undefined,
     admission: 'request',
     policyReads: 0,
     revokeAt: Infinity,
@@ -133,11 +135,30 @@ function fixture() {
         return { issuer: 'account', subject: 'reader' };
       },
     },
-    access: { assertRecoveryOpen: async (): Promise<void> => {},
+    access: { assertRecoveryOpen: async (): Promise<void> => {
+      if (state.recoveryOpen !== true) throw new AdmissionUnavailable('Access is held for recovery');
+    },
       canReadSemanticResource: async () => false, canReadWork: async () => false },
   } as unknown as MainWorkDependencies;
   return { work, env, state, current, queries, app: new Elysia().use(addressRoutes(work)) };
 }
+
+test('closed or missing Access recovery refuses the address read without landing data', async () => {
+  const f = fixture();
+  for (const open of [false, undefined]) {
+    f.state.recoveryOpen = open;
+    const response = await f.app.handle(
+      new Request('http://main.local/v1/addresses/resolve?scope=space&key=private-books'),
+    );
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      type: 'https://rezics.com/problems/alias_unavailable',
+      title: 'Space request address is unavailable',
+      status: 503,
+      code: 'alias_unavailable',
+    });
+  }
+});
 
 test('G982: signed-in legacy UUID resolutions require the selected Agent, not a different key grammar', async () => {
   const f = fixture();
