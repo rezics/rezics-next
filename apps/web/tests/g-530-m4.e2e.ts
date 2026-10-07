@@ -225,16 +225,13 @@ for (const [name, viewport, index] of [
 
       // A card's status menu: Read → Currently reading. The dates were never in the request, so Main keeps them.
       await choose(page, /^Read — Shelve/, 'Currently reading');
-      const reading = page.getByRole('button', { name: /^Currently reading — Shelve/ });
-      await expect(reading).toBeVisible();
-      await expect(reading).not.toHaveAttribute('aria-busy', 'true', { timeout: 30_000 });
-      // The read shelf is its own read. Reload it until the card that just left is gone.
-      await expect(async () => {
-        await page.goto('/en/library?shelf=read');
-        await expect(page.getByRole('heading', { level: 3, name: book.title })).toHaveCount(0, {
-          timeout: 5_000,
-        });
-      }).toPass({ timeout: 60_000 });
+      // The move settles when Library says where the Work went, then the open Read shelf drops the card.
+      await expect(page.getByRole('status').filter({
+        hasText: `“${book.title}” is now on Currently reading.`,
+      })).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole('heading', { level: 3, name: book.title })).toHaveCount(0, {
+        timeout: 15_000,
+      });
       await recorded(page, book.work, { status: 'reading', ...dates });
 
       // The Work page's status button: Currently reading → Want to read → Read.
@@ -485,17 +482,9 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
       const robots = await view.locator('meta[name="robots"]').first().getAttribute('content');
       return { status: response?.status(), text: last, robots };
     };
-    const draftPath = localizedPath(resourceHref('/w/', work), 'en');
-    const missingPath = localizedPath(resourceHref('/w/', crypto.randomUUID()), 'en');
-    let draftPage = await settled(draftPath);
+    const draftPage = await settled(localizedPath(resourceHref('/w/', work), 'en'));
     await shot(view, info, 'draft-work-signed-out-phone');
-    let missingPage = await settled(missingPath);
-    // A cold streamed response can commit 200 before a private Work's lookup finishes.
-    // Reload both pages; they still have to share one status, one text and noindex.
-    for (let attempt = 0; attempt < 2 && draftPage.status !== missingPage.status; attempt += 1) {
-      draftPage = await settled(draftPath);
-      missingPage = await settled(missingPath);
-    }
+    const missingPage = await settled(localizedPath(resourceHref('/w/', crypto.randomUUID()), 'en'));
     expect(draftPage).toEqual(missingPage);
     expect(draftPage.robots).toMatch(/noindex/);
     expect(draftPage.text).not.toContain(title);
