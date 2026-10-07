@@ -12,7 +12,7 @@ import { readAllowedActions } from '../work-levels-edit/authority.ts';
 import { NoAuthority } from '../work-levels-edit/edit-frame.tsx';
 import { copyOf as editCopy } from '../work-levels-edit/messages.ts';
 import { globalWorkHref } from '../work-page/route.ts';
-import { readWorkHeader, reader, settle } from '../work-page/read.ts';
+import { readWorkHeader, reader, settleNullable } from '../work-page/read.ts';
 import { RecipeEditor } from './editor.tsx';
 import { copyOf, messages } from './messages.ts';
 import { type RecipePageLike, stateOf } from './model.ts';
@@ -42,7 +42,7 @@ export async function RecipeEditPage({ workRef, id, locale }: { workRef: string;
       signInHref={signInPath(localizedPath(recipeEditHref(workRef), locale))} />;
   }
   if (!header.ok || !actingSubject) {
-    return <EmptyState icon={ChefHatIcon} role="status" tone="destructive" title={t.unavailableTitle} description={`${t.unavailableBody} DEBUG header=${header.ok ? 'ok' : header.failure} agent=${Boolean(actingSubject)}`} />;
+    return <EmptyState icon={ChefHatIcon} role="status" tone="destructive" title={t.unavailableTitle} description={t.unavailableBody} />;
   }
   const work = header.data;
   if (workKind(work.types) !== 'recipe') {
@@ -50,11 +50,11 @@ export async function RecipeEditPage({ workRef, id, locale }: { workRef: string;
   }
   const language = canonicalLanguage(work.title.language);
   const [recipe, metadata, notes] = await Promise.all([
-    settle(async () => main.v1.recipes.works({ id }).get({ query: { actingSubject } })),
+    settleNullable(async () => main.v1.recipes.works({ id }).get({ query: { actingSubject } })),
     main.v1.works({ id }).metadata.get({ query: { actingSubject } }),
     readNotes(actingSubject, work.id, language),
   ]);
-  if (!recipe.ok) return <EmptyState icon={ChefHatIcon} role="status" tone="destructive" title={t.unavailableTitle} description={`${t.unavailableBody} DEBUG recipe=${recipe.failure}`} />;
+  if (!recipe.ok) return <EmptyState icon={ChefHatIcon} role="status" tone="destructive" title={t.unavailableTitle} description={t.unavailableBody} />;
   return <RecipeEditor work={work.id} mainVersion={work.mainVersion} language={language} actingSubject={actingSubject}
     workHref={globalWorkHref(workRef)} locale={locale} messages={messages[locale]}
     initial={{ recipe: stateOf(recipe.data as RecipePageLike | null), notes,
