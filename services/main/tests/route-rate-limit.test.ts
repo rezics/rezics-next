@@ -1,9 +1,12 @@
 import { expect, test } from 'bun:test';
 import { Elysia } from 'elysia';
+import { createMainApp } from '../src/app.ts';
+import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { exposureDeclarations } from '../src/modules/access/exposure-declarations.ts';
 import { families, rateLimitBudgets, rateLimitFamily } from '../src/modules/rate-limit/budgets.ts';
 import { rateLimitHook } from '../src/modules/rate-limit/hook.ts';
 import { createRateLimitResolver } from '../src/modules/rate-limit/routes.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 test('route admission refuses missing and invalid declaration families', () => {
   for (const family of [undefined, null, '', 'wriet', 'READ', false, 0, {}, []]) {
@@ -35,6 +38,42 @@ test('every route owner declares a valid admission family beside exposure', () =
     ),
   );
   expect(missing).toEqual([]);
+});
+
+test('admission resolves every declared family from the route owner metadata', () => {
+  const mismatches = exposureDeclarations.flatMap((owner) =>
+    Object.entries(owner).flatMap(([path, methods]) =>
+      Object.entries(methods).flatMap(([method, entry]) => {
+        // Missing metadata is refused by the separate complete-inventory guard.
+        if (entry.rateLimitFamily === undefined) return [];
+        const verb = method === 'all' ? '*' : method.toUpperCase();
+        const expected = entry.rateLimitFamily === 'read' ? null : entry.rateLimitFamily;
+        const actual = rateLimitFamily(verb, path);
+        return actual === expected ? [] : [{ method: verb, path, expected, actual }];
+      }),
+    ),
+  );
+  expect(mismatches).toEqual([]);
+});
+
+test('retired classification decisions and Statement migration operations stay absent', () => {
+  const retired = [
+    ['POST', '/v1/classification-decisions'],
+    ['GET', '/v1/statement-migrations/v1/pending'],
+    ['POST', '/v1/statement-migrations/v1/{id}'],
+    ['POST', '/v1/statement-migrations/v1/cutover'],
+  ] as const;
+  const app = createMainApp(new FusekiClient('http://127.0.0.1:1/rezics'), {
+    mcp: { issuer: 'https://account.test', resource: 'https://main.test/mcp' },
+  } as MainWorkDependencies);
+  const installed = new Set(
+    app.routes.map((route) => `${route.method} ${route.path.replace(/:([A-Za-z0-9_]+)/g, '{$1}')}`),
+  );
+  expect(retired.filter(([method, path]) => installed.has(`${method} ${path}`))).toEqual([]);
+  for (const [method, path] of retired) {
+    expect(exposureDeclarations.some((owner) => owner[path]?.[method.toLowerCase()])).toBe(false);
+    expect(rateLimitFamily(method, path)).toBeUndefined();
+  }
 });
 
 test('route declaration matching preserves HEAD, ALL, WS and whole parameter segments', () => {
