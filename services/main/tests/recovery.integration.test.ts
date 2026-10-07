@@ -1,13 +1,18 @@
+import { qaStartupTestTimeout, runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
+import { withQaStackStartup } from '../../../scripts/qa/memory-admission.ts';
+import { composeProcessEnvironment, projectName, readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
+import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { test, expect } from 'bun:test';
 import { createHash, randomBytes } from 'node:crypto';
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { appendFileSync, closeSync, copyFileSync, cpSync, existsSync,
-  mkdirSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { appendFileSync, cpSync, existsSync,
+  mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { decodeJwt } from 'jose';
 import { getMigrations } from 'better-auth/db/migration';
 import { accountAuthOptions, createAccountAuth } from '../../account/src/auth.ts';
 import { createAccountApp } from '../../account/src/app.ts';
@@ -84,16 +89,18 @@ import { CancelledActivation, initializeFreshGraph, metadataWorkRequestDigest,
   PendingActivation, type GraphLineage, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { accessOutboxCoverage, accessStateCoverage, captureGraphRecoveryCoverage,
   cutoverRestoredGraphLineage,
-  RecoveryHold, releaseRestoredGraphHold, type RecoveryCoverage,
+  RecoveryHold, releaseRestoredGraphHold, type AuthenticatedRecoveryCoverage, type RecoveryCoverage,
   type DeletionReleaseEvidence,
   RestoreLineageConflict } from '../src/modules/work/restore-lineage.ts';
 import { initializeRelayCheckpoint, relayCoverage, relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import { retainRecoveryCoverageHead } from '../src/modules/outbox/recovery-coverage-head.ts';
+import { captureObjectRecoveryCoverage } from '../src/modules/owner/object-coverage.ts';
+import { reconcileRestoredErasures, releaseErasureRestoreHold } from '../src/modules/erasure/reconcile.ts';
+import { heldErasureMaintenanceClient } from '../src/modules/erasure/graph.ts';
 import { openRecoveryPayload, sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-process.env.FUSEKI_MAINTENANCE_TOKEN ??= '0'.repeat(64);
-process.env.FUSEKI_COMMAND_TOKEN ??= '1'.repeat(64);
 const recoveryKey = 'ab'.repeat(32);
 
 async function freePort(): Promise<number> {
@@ -108,16 +115,28 @@ async function freePort(): Promise<number> {
   });
 }
 
-async function stopFuseki(process: ChildProcess): Promise<void> {
-  process.kill('SIGTERM');
-  if (process.exitCode === null) await new Promise<void>(resolveExit => process.once('exit', () => resolveExit()));
-}
-
 test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Access, Content and graph restore', async () => {
-  const fusekiHome = Bun.env.REZICS_FUSEKI_HOME;
-  const jenaHome = Bun.env.REZICS_JENA_HOME;
-  const javaHome = Bun.env.REZICS_JAVA_HOME;
-  if (!fusekiHome || !jenaHome || !javaHome) throw new Error('Set Jena/Fuseki/Java integration env');
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the fault/recovery QA tier');
+  const runId = `recovery-${Bun.randomUUIDv7().slice(0, 18)}`;
+  const options = { profile: 'qa' as const, runId, persistent: true, rawUpdate: true };
+  const stackArgs = ['--profile', 'qa', '--run-id', runId, '--persistent', '--raw-update'];
+  const project = projectName(options);
+  const directory = stackDirectory(root, options);
+  const dockerEnv = loadDockerEnvironment();
+  const docker = (args: string[], timeout = 120_000) => execFileSync('docker', args,
+    { cwd: root, env: dockerEnv, encoding: 'utf8', timeout, maxBuffer: 10_000_000 });
+  const dockerLogs = (name: string) => {
+    const result = spawnSync('docker', ['logs', name],
+      { cwd: root, env: dockerEnv, encoding: 'utf8', timeout: 10_000, maxBuffer: 10_000_000 });
+    return `${result.stdout ?? ''}${result.stderr ?? ''}${result.error?.message ?? ''}`;
+  };
+  const compose = (args: string[], timeout = 120_000) => execFileSync('docker', [
+    'compose', '--env-file', join(directory, 'compose.env'),
+    '-f', join(root, 'infra/dev/compose.yaml'),
+    '-f', join(root, 'infra/dev/compose.qa-raw-update.yaml'),
+    '--project-name', project, ...args], { cwd: root,
+      env: composeProcessEnvironment(dockerEnv, readEnv(join(directory, 'compose.env'))),
+      encoding: 'utf8', timeout, maxBuffer: 10_000_000 });
   const state = join(root, '.temp', `work-recovery-${Bun.randomUUIDv7()}`);
   const liveBase = join(state, 'live', 'run');
   const savedBase = join(state, 'saved-cut', 'run');
@@ -128,42 +147,112 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
   const restoreObjects = join(state, 'restore', 'objects');
   const livePg = join(state, 'live', 'pgdata');
   const restorePg = join(state, 'restore', 'pgdata');
-  const journalPg = join(state, 'journal', 'pgdata');
   const accountPg = join(state, 'account', 'pgdata');
   const accountBackup = join(state, 'account', 'base-backup');
   const accountArchive = join(state, 'account', 'wal-archive');
   const accountRestoredPg = join(state, 'account', 'restored');
   const contentPg = join(state, 'content', 'pgdata');
   const contentRestoredPg = join(state, 'content', 'restored');
-  mkdirSync(join(liveBase, 'databases/rezics/tdb2'), { recursive: true });
-  mkdirSync(join(liveBase, 'databases/rezics/lucene'), { recursive: true });
-  copyFileSync(join(root, 'infra/jena/fuseki-text-quickstart.ttl'), join(liveBase, 'fuseki-text.ttl'));
-  mkdirSync(join(state, 'restore'), { recursive: true });
-  mkdirSync(join(state, 'saved-cut'), { recursive: true });
-  const socketDirectory = join(root, '.temp', 'pg-sock');
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
+  mkdirSync(state, { recursive: true, mode: 0o700 });
+  const restoredContainers = new Set<string>();
+  const restoredPorts = new Map<string, number>();
+  const pools: Pool[] = [];
+  let saved: Record<string, string>;
+  let sourcePostgres: string;
+  let sourceFuseki: string;
+  let postgresImage: string;
+  let graphUrl: string;
+  let started = false;
+  const sourceUrl = (owner: string) => `postgres://postgres:${encodeURIComponent(saved.POSTGRES_PASSWORD!)}@127.0.0.1:${saved.POSTGRES_PORT}/${owner}`;
+  const poolAt = (owner: string, port = saved.POSTGRES_PORT!) => {
+    const url = new URL(sourceUrl(owner));
+    url.port = String(port);
+    const pool = new Pool({ connectionString: url.toString() });
+    pools.push(pool);
+    return { pool, url: url.toString() };
+  };
+  const admissionEnv = () => ({ ...dockerEnv, ...saved, REZICS_QA_MEMORY_EVENTS: '1',
+    REZICS_POSTGRES_MEMORY_LIMIT: '512m' });
+  const stopFuseki = async () => { compose(['stop', 'fuseki'], 65_000); };
+  const saveGraph = (destination: string) => {
+    mkdirSync(destination, { recursive: true });
+    // The stopped owner has flushed both TDB2 and its Lucene commit.
+    docker(['cp', `${sourceFuseki}:/fuseki/databases/rezics`, destination]);
+  };
   const startFuseki = async (base: string, label: string) => {
-    const port = await freePort();
-    const log = openSync(join(state, `${label}-fuseki.log`), 'w');
-    const serverProcess = spawn(join(fusekiHome, 'fuseki-server'), [
-      '--localhost', `--port=${port}`, '--no-cors', '--timeout=10000', `--config=${join(base, 'fuseki-text.ttl')}`,
-    ], { cwd: base, env: { ...process.env, JAVA_HOME: javaHome, FUSEKI_HOME: fusekiHome,
-      FUSEKI_BASE: base, MAIN: 'main', JVM_ARGS: '-Xms128m -Xmx1g' }, stdio: ['ignore', log, log] });
-    closeSync(log);
-    const fuseki = new FusekiClient(`http://127.0.0.1:${port}/rezics`);
-    for (let i = 0; i < 120; i++) {
-      try { if ((await fuseki.query('ASK {}')).boolean === true) return { process: serverProcess, fuseki, port }; }
-      catch { /* starting */ }
-      if (i === 119) throw new Error(`${label} Fuseki did not start`);
-      await Bun.sleep(250);
+    if (label !== 'live') {
+      docker(['run', '--rm', '--network', 'none', '--user', '0:0',
+        '--volume', `${base}:/from:ro`, '--volume', `${project}_fuseki_data:/to`,
+        '--entrypoint', 'sh', postgresImage, '-ec',
+        'find /to -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +; cp -a /from/. /to/; chown -R 10001:10001 /to/rezics']);
+      await withQaStackStartup(root, admissionEnv(), undefined,
+        () => compose(['up', '-d', '--wait', 'fuseki'], 90_000), { services: ['fuseki'] });
     }
-    throw new Error(`${label} Fuseki did not start`);
+    const fuseki = new FusekiClient(graphUrl, saved.FUSEKI_MAINTENANCE_TOKEN,
+      saved.FUSEKI_COMMAND_TOKEN);
+    expect((await fuseki.query('ASK {}')).boolean).toBe(true);
+    return { fuseki, url: graphUrl };
+  };
+  const backupPg = (destination: string) => {
+    const remote = `/var/lib/postgresql/.temp/recovery-${Bun.randomUUIDv7()}`;
+    try {
+      docker(['exec', '-u', 'postgres', sourcePostgres, 'sh', '-ec',
+        `mkdir -p /var/lib/postgresql/.temp
+PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast
+pg_verifybackup --no-parse-wal ${remote}`], 100_000);
+      mkdirSync(resolve(destination, '..'), { recursive: true });
+      docker(['cp', `${sourcePostgres}:${remote}`, destination]);
+    } finally {
+      docker(['exec', '-u', 'postgres', sourcePostgres, 'rm', '-rf', remote], 10_000);
+    }
   };
   const startPg = async (data: string, label: string) => {
-    const port = await freePort();
-    execFileSync('pg_ctl', ['-D', data, '-l', join(state, `${label}-postgres.log`),
-      '-o', `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
-    return { pool: new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres' }), data };
+    const owner = label.startsWith('account') ? 'account'
+      : label.startsWith('content') ? 'content' : label === 'journal' ? 'relay' : 'access';
+    if (data === livePg || data === accountPg || data === contentPg || label === 'journal') {
+      return { ...poolAt(owner), data };
+    }
+    // Access and Content share the saved physical owner cut. Closing one pool
+    // never stops the other owner's retained restored timeline.
+    const restoredData = data === contentRestoredPg ? restorePg : data;
+    let port = restoredPorts.get(restoredData);
+    if (!port) {
+      port = await freePort();
+      const name = `${project}-${label}`;
+      const archivedAccount = data === accountRestoredPg;
+      const mounts = ['--volume', `${restoredData}:/recovery/data`,
+        ...(archivedAccount ? ['--volume', `${accountArchive}:/recovery/archive:ro`] : [])];
+      restoredContainers.add(name);
+      await withQaStackStartup(root, admissionEnv(), undefined, async () => {
+        // PostgreSQL in the pinned image owns its writable copy; no host server
+        // or separately installed PostgreSQL/Jena runtime participates.
+        docker(['run', '--rm', '--network', 'none', '--user', '0:0',
+          '--volume', `${restoredData}:/recovery/data`,
+          ...(archivedAccount ? ['--volume', `${accountArchive}:/recovery/archive`] : []),
+          '--entrypoint', 'sh', postgresImage, '-ec',
+          `chown -R postgres:postgres /recovery/data${archivedAccount ? ' /recovery/archive' : ''}; chmod 700 /recovery/data`]);
+        docker(['run', '-d', '--name', name, '--memory', '512m',
+          '--label', `com.docker.compose.project=${project}`,
+          '--label', `com.docker.compose.service=${label}`,
+          '--label', 'com.docker.compose.oneoff=False',
+          '--publish', `127.0.0.1:${port}:5432`, '--user', 'postgres', ...mounts,
+          '--entrypoint', 'postgres', postgresImage, '-D', '/recovery/data',
+          '-c', 'listen_addresses=*', '-c', 'port=5432',
+          '-c', 'unix_socket_directories=/tmp', '-c', 'archive_mode=off']);
+        const probe = poolAt(owner, String(port));
+        try {
+          for (let attempt = 0; attempt < 120; attempt++) {
+            try { await probe.pool.query('SELECT 1'); break; }
+            catch (error) {
+              if (attempt === 119) throw new Error(`Restored PostgreSQL did not start: ${dockerLogs(name)}`, { cause: error });
+              await Bun.sleep(250);
+            }
+          }
+        } finally { await probe.pool.end(); }
+      }, { services: ['postgres'] });
+      restoredPorts.set(restoredData, port);
+    }
+    return { ...poolAt(owner, String(port)), data };
   };
   let graph: Awaited<ReturnType<typeof startFuseki>> | undefined;
   let database: Awaited<ReturnType<typeof startPg>> | undefined;
@@ -174,17 +263,19 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
   let accountApp: ReturnType<typeof createAccountApp> | undefined;
   let latestAccess: Awaited<ReturnType<typeof startPg>> | undefined;
   try {
+    started = true;
+    const startup = await runQaStartupChildAsync(root, ['stack:up', ...stackArgs], 180_000);
+    if (!startup.ok) throw new Error(`Recovery QA stack did not start: ${startup.output.slice(-4000)}`);
+    saved = readEnv(join(directory, 'compose.env'));
+    sourcePostgres = compose(['ps', '-q', 'postgres']).trim();
+    sourceFuseki = compose(['ps', '-q', 'fuseki']).trim();
+    postgresImage = docker(['inspect', '--format', '{{.Config.Image}}', sourcePostgres]).trim();
+    graphUrl = readEnv(join(directory, 'apps.env')).FUSEKI_URL!;
+    process.env.FUSEKI_MAINTENANCE_TOKEN = saved.FUSEKI_MAINTENANCE_TOKEN;
+    process.env.FUSEKI_COMMAND_TOKEN = saved.FUSEKI_COMMAND_TOKEN;
     graph = await startFuseki(liveBase, 'live');
-    execFileSync('initdb', ['-D', livePg, '-A', 'trust', '--no-instructions'], { cwd: state });
     database = await startPg(livePg, 'live');
-    mkdirSync(join(state, 'journal'), { recursive: true });
-    execFileSync('initdb', ['-D', journalPg, '-A', 'trust', '--no-instructions'], { cwd: state });
-    journal = await startPg(journalPg, 'journal');
-    mkdirSync(join(state, 'account'), { recursive: true });
-    mkdirSync(accountArchive, { recursive: true });
-    execFileSync('initdb', ['-D', accountPg, '-A', 'trust', '--no-instructions'], { cwd: state });
-    appendFileSync(join(accountPg, 'postgresql.conf'), `\nwal_level = replica\narchive_mode = on\n` +
-      `archive_command = 'test ! -e ${accountArchive}/%f && cp %p ${accountArchive}/%f'\n`);
+    journal = await startPg('', 'journal');
     accountDatabase = await startPg(accountPg, 'account');
     const accountPool = accountDatabase.pool;
     const accountPort = await freePort();
@@ -200,27 +291,22 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     const accountAuth = createAccountAuth(accountConfig(accountPool));
     accountApp = createAccountApp(accountAuth, accountPool)
       .listen({ hostname: '127.0.0.1', port: accountPort });
-    const accountSourcePort = (await accountPool.query<{ port: string }>('SHOW port')).rows[0]!.port;
-    execFileSync('pg_basebackup', ['-D', accountBackup, '-Fp', '-Xs', '--checkpoint=fast',
-      '-h', '127.0.0.1', '-p', accountSourcePort, '-U', process.env.USER ?? 'edge'], { cwd: state });
-    execFileSync('pg_verifybackup', ['--no-parse-wal', accountBackup], { cwd: state });
-    mkdirSync(join(state, 'content'), { recursive: true });
-    execFileSync('initdb', ['-D', contentPg, '-A', 'trust', '--no-instructions'], { cwd: state });
     contentDatabase = await startPg(contentPg, 'content');
     const contentPool = contentDatabase.pool;
     let fuseki = graph.fuseki;
     let pool = database.pool;
-    await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/001_delivery.sql'), 'utf8'));
-    await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/002_coverage_scan.sql'), 'utf8'));
-    await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/003_retained_batches.sql'), 'utf8'));
-    await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/004_account_deletion_journal.sql'), 'utf8'));
-    await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/005_recovery_coverage_head.sql'), 'utf8'));
-    await journal.pool.query(readFileSync(join(root, 'services/main/migrations/relay/006_account_subject_deletion.sql'), 'utf8'));
+    const relayMigrations = join(root, 'services/main/migrations/relay');
+    for (const file of schemaFiles(root, 'relay')) {
+      await journal.pool.query(readFileSync(join(relayMigrations, file), 'utf8'));
+    }
     const accessMigrations = join(root, 'services/main/migrations/access');
     for (const file of schemaFiles(root, 'access')) {
       await pool.query(readFileSync(join(accessMigrations, file), 'utf8'));
     }
     await migrateContent(contentPool);
+    // Build each owner's schema once; the older Account cut still precedes
+    // every signup and OAuth fixture recovered from the retained WAL archive.
+    backupPg(accountBackup);
     const principalId = Bun.randomUUIDv7();
     const actor = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     const signUp = async (name: string) => {
@@ -275,14 +361,27 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
         code_verifier: pkceVerifier, resource: accountConfig(accountPool).resource }),
     });
     expect(exchange.status).toBe(200);
-    const bearer = `Bearer ${(await exchange.json() as { access_token: string }).access_token}`;
+    const accessToken = (await exchange.json() as { access_token: string }).access_token;
+    let bearer = `Bearer ${accessToken}`;
     const metadataResponse = await fetch(`${accountBase}/api/auth/.well-known/openid-configuration`);
     expect(metadataResponse.status).toBe(200);
     const metadata = await metadataResponse.json() as { issuer: string; jwks_uri: string };
     const principal = { issuer: metadata.issuer, subject: member.id };
+    const expectedAccountAssertion = {
+      ...principal,
+      accountExpiresAt: decodeJwt(accessToken).exp,
+      accountAuthMode: 'trusted',
+      accountClientId: browserClient.client_id,
+      accountConsentId: undefined,
+      accountConsentGeneration: undefined,
+      accountAudiences: [accountConfig(accountPool).resource, `${accountBase}/api/auth/oauth2/userinfo`],
+      accountScopes: oauthScope.split(' '),
+      contentEvidence: undefined,
+      currentAssertion: expect.any(Function),
+    };
     await pool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1, $2, $3)',
       [principalId, principal.issuer, principal.subject]);
-    await pool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root')");
+    await pool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT (id) DO NOTHING");
     await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
     for (const action of ['work.create', 'work.edit', 'work.read']) {
       await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
@@ -297,21 +396,30 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     const request = new Request('https://main.rezics.test/v1/works', {
       method: 'POST', headers: { authorization: bearer },
     });
-    expect(await account.verify(request, ['work:create'])).toEqual(principal);
+    expect(await account.verify(request, ['work:create'])).toEqual(expectedAccountAssertion);
     const oldLineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
     const liveEnv: WorkActivationEnvironment = { fuseki, lineage: oldLineage,
       objectDirectory: liveObjects, candidateDirectory: join(state, 'live', 'candidates'),
-      repositoryRoot: root, jenaHome, javaHome, python: 'python3' };
+      repositoryRoot: root };
     await initializeFreshGraph(fuseki, oldLineage);
+    // The replay goes through own-work authoring. Seed its native author without
+    // advancing the exact Work/outbox positions this recovery cut qualifies.
+    const authorRevision = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:graph:current> { <${actor}> a rv:Agent ; rv:head <${authorRevision}> . }
+      GRAPH <urn:rezics:graph:revisions> { <${authorRevision}> a rv:RevisionAnchor ; rv:component <${actor}> . }
+    }`);
     await initializeRelayCheckpoint(journal.pool, 'recovery-handoff', oldLineage.dataEpoch);
     let access = new AccessAdmissionRegistry(pool);
-    const createInput = { actingSubject: actor, idempotencyKey: 'before-backup-create', title: 'Backup Work', language: 'en' };
+    const createInput = { actingSubject: actor, authorAgent: actor,
+      idempotencyKey: 'before-backup-create', title: 'Backup Work', language: 'en' };
     const created = await createAdmittedMetadataWork(liveEnv, account, access, request, createInput);
     expect(created.sequence).toBe('1');
     const workApiRequest = () => new Request('http://localhost/v1/works', {
       method: 'POST', headers: { authorization: bearer,
         'content-type': 'application/json', 'idempotency-key': createInput.idempotencyKey },
-      body: JSON.stringify({ profile: 'metadata-only-v1', title: createInput.title, language: createInput.language,
+      body: JSON.stringify({ profile: 'metadata-only-v1', authoring: 'own-work',
+        title: createInput.title, language: createInput.language,
         actingSubject: actor }),
     });
     const liveWorkReplay = await createMainApp(fuseki, { environment: liveEnv,
@@ -443,37 +551,44 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     }`);
     const contentCut = await content.ownerPosition();
     const externalAccessOutbox = await accessOutboxCoverage(pool);
-    const externalAccessState = await accessStateCoverage(pool);
     const externalAccount = await accountRecoveryCoverage(accountPool);
     await expect(captureGraphRecoveryCoverage(fuseki, accountPool, pool, journal.pool,
       'recovery-handoff', contentPool)).rejects.toThrow('Access recovery fence must be held for capture');
-    const accessPort = (await pool.query<{ port: string }>('SHOW port')).rows[0]!.port;
-    const relayPort = (await journal.pool.query<{ port: string }>('SHOW port')).rows[0]!.port;
-    const accessUrl = `postgres://127.0.0.1:${accessPort}/postgres?user=${process.env.USER}`;
+    const accessUrl = database.url;
     const fenceCli = join(root, 'services/main/src/access-capture-fence.ts');
     const captureFence = JSON.parse(execFileSync(process.execPath, [fenceCli, 'hold'], {
       cwd: root, env: { ...process.env, ACCESS_RECOVERY_DATABASE_URL: accessUrl },
       encoding: 'utf8',
     })) as { generation: string };
+    // Holding Access appends discovery authority history. Capture the held cut
+    // before the reversible mutation probe so its signed state stays exact.
+    const externalAccessState = await accessStateCoverage(pool);
     await expect(captureGraphRecoveryCoverage(fuseki, accountPool, pool, journal.pool,
       'recovery-handoff', contentPool)).rejects.toThrow('source graph or relay moved during recovery capture');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('1');
     expect((await relayMainOutboxOnce(fuseki, journal.pool, 'recovery-handoff'))?.sequence).toBe('2');
+    // Principal updates advance immutable authority history. An unrelated
+    // scope row changes the complete owner scan and can be removed exactly;
+    // it never enters the work:read scope triggers' ranking populations.
+    const racingScope = `fixture:capture:${Bun.randomUUIDv7()}`;
     class AccessMutationDuringCapture extends FusekiClient {
       private controlReads = 0;
       override async query(sparql: string) {
         const result = await super.query(sparql);
         if (sparql.includes('SELECT ?epoch ?routing ?sequence') && ++this.controlReads === 2) {
-          await pool.query('UPDATE access.principal SET active = false WHERE id = $1', [principalId]);
+          await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [racingScope]);
         }
         return result;
       }
     }
-    await expect(captureGraphRecoveryCoverage(
-      new AccessMutationDuringCapture(`http://127.0.0.1:${graph.port}/rezics`),
-      accountPool, pool, journal.pool, 'recovery-handoff', contentPool))
-      .rejects.toThrow('owner or graph moved during recovery capture');
-    await pool.query('UPDATE access.principal SET active = true WHERE id = $1', [principalId]);
+    try {
+      await expect(captureGraphRecoveryCoverage(
+        new AccessMutationDuringCapture(graph.url),
+        accountPool, pool, journal.pool, 'recovery-handoff', contentPool))
+        .rejects.toThrow('owner or graph moved during recovery capture');
+    } finally {
+      await pool.query('DELETE FROM access.scope_gate WHERE id = $1', [racingScope]);
+    }
     const externalRelay = await relayCoverage(journal.pool, 'recovery-handoff');
     let capturedCoverage = '';
     for (let attempt = 0; attempt < 5; attempt++) {
@@ -481,11 +596,12 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
         capturedCoverage = execFileSync(process.execPath,
           [join(root, 'services/main/src/graph-recovery-coverage.ts'), 'capture'], {
             cwd: root, env: { ...process.env,
-              FUSEKI_URL: `http://127.0.0.1:${graph.port}/rezics`,
-              ACCOUNT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${accountSourcePort}/postgres?user=${process.env.USER}`,
+              FUSEKI_URL: graph.url,
+              ACCOUNT_RECOVERY_DATABASE_URL: accountDatabase.url,
               ACCESS_RECOVERY_DATABASE_URL: accessUrl,
-              RELAY_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${relayPort}/postgres?user=${process.env.USER}`,
-              CONTENT_RECOVERY_DATABASE_URL: `postgres://127.0.0.1:${(await contentPool.query<{ port: string }>('SHOW port')).rows[0]!.port}/postgres?user=${process.env.USER}`,
+              RELAY_RECOVERY_DATABASE_URL: journal.url,
+              CONTENT_RECOVERY_DATABASE_URL: contentDatabase.url,
+              MAIN_OBJECT_DIRECTORY: liveObjects,
               RELAY_CONSUMER: 'recovery-handoff', RECOVERY_MANIFEST_HMAC_KEY: recoveryKey },
             encoding: 'utf8',
           });
@@ -499,11 +615,6 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
         await Bun.sleep(200);
       }
     }
-    expect(JSON.parse(execFileSync(process.execPath,
-      [fenceCli, 'release', captureFence.generation], {
-        cwd: root, env: { ...process.env, ACCESS_RECOVERY_DATABASE_URL: accessUrl },
-        encoding: 'utf8',
-      })).released).toBe(true);
     const currentCoverage = openRecoveryPayload<RecoveryCoverage>(capturedCoverage,
       recoveryKey, 'graph-recovery-coverage');
     expect((await journal.pool.query<{ generation: string }>(
@@ -524,38 +635,90 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       relay: externalRelay,
     });
     let releaseAccountPool = accountPool;
+    let laterObjects: RecoveryCoverage['objects'];
+    const releaseEvidence = (
+      graphClient: FusekiClient, accessPool: Pool, relayPool: Pool, lineage: GraphLineage,
+      sealedCoverage: string, objectDirectory: string, contentOwner = contentDatabase?.pool,
+    ): AuthenticatedRecoveryCoverage => {
+      const authority = { sealedCoverage, hmacKey: recoveryKey };
+      const objects = { directory: objectDirectory };
+      return { ...authority, accountPool: releaseAccountPool, contentPool: contentOwner,
+        objectStore: objects,
+        releaseErasures: async (clients, releaseGraph) => {
+          const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
+          const savedCut = (await graphClient.query(`PREFIX rv: <https://rezics.com/vocab/>
+            SELECT ?priorDataEpoch ?priorSequence WHERE { GRAPH <urn:rezics:graph:control> {
+              <${marker}> rv:priorDataEpoch ?priorDataEpoch ; rv:priorSequence ?priorSequence .
+            } }`)).results?.bindings;
+          if (savedCut?.length !== 1) throw new Error('Saved erasure restore cut is unavailable');
+          const owners = { access: accessPool, account: releaseAccountPool, content: contentOwner!, objects,
+            graph: { fuseki: graphClient, lineage,
+              heldErasure: { originalSource: 'retained-native-event' as const,
+                cut: { ...lineage, restoreCutover: marker,
+                  priorDataEpoch: savedCut[0]!.priorDataEpoch!.value,
+                  priorSequence: savedCut[0]!.priorSequence!.value },
+                accessHoldGeneration: clients.fenceGeneration,
+                signingKey: saved.FUSEKI_TITLE_ADMISSION_KEY!,
+                maintenance: heldErasureMaintenanceClient(graphUrl, saved.FUSEKI_MAINTENANCE_TOKEN!),
+              },
+            },
+          };
+          const reconciled = await reconcileRestoredErasures(relayPool, owners, {
+            operationId: `recovery-release:${Bun.randomUUIDv7()}`, consumer: 'recovery-handoff',
+            replay: true, authority,
+          }, clients);
+          if (reconciled.state !== 'reconciled') {
+            throw new Error(`Retained erasure restore is held: ${reconciled.holdReason}`);
+          }
+          await releaseErasureRestoreHold(relayPool, owners, reconciled.reconciliationId,
+            clients.fenceGeneration, authority, { clients, beforeAccessRelease: releaseGraph });
+        },
+      };
+    };
     const releaseGraphHold = async (
       graphClient: FusekiClient, accessPool: Pool, relayPool: Pool, lineage: GraphLineage,
       coverage: Omit<RecoveryCoverage, 'account' | 'accountPg' | 'commerce'>,
       deletions?: DeletionReleaseEvidence,
     ): Promise<void> => {
-      await releaseRestoredGraphHold(graphClient, accessPool, relayPool, lineage, {
-        sealedCoverage: JSON.stringify(sealRecoveryPayload(
+      const sealedCoverage = JSON.stringify(sealRecoveryPayload(
           { ...coverage, accountPg: currentCoverage.accountPg,
             account: externalAccount,
             commerce: currentCoverage.commerce,
+            objects: coverage.priorSequence === '40' ? laterObjects : currentCoverage.objects,
             ...(currentCoverage.content ? { content: currentCoverage.content } : {}) },
-          recoveryKey, 'graph-recovery-coverage')),
-        hmacKey: recoveryKey, accountPool: releaseAccountPool,
-        contentPool: contentDatabase?.pool, deletions,
+          recoveryKey, 'graph-recovery-coverage'));
+      await releaseRestoredGraphHold(graphClient, accessPool, relayPool, lineage, {
+        ...releaseEvidence(graphClient, accessPool, relayPool, lineage, sealedCoverage,
+          coverage.priorSequence === '40' ? liveObjects : restoreObjects), deletions,
       });
     };
     await accountPool.query('SELECT pg_switch_wal()');
-    for (let attempt = 0; attempt < 120
-      && !existsSync(join(accountArchive, currentCoverage.accountPg.walFile)); attempt++) {
+    const accountWalArchived = () => {
+      try { docker(['exec', sourcePostgres, 'test', '-f', `/var/lib/postgresql/archive/${currentCoverage.accountPg.walFile}`], 10_000); return true; }
+      catch { return false; }
+    };
+    for (let attempt = 0; attempt < 120 && !accountWalArchived(); attempt++) {
       await Bun.sleep(100);
     }
+    docker(['cp', `${sourcePostgres}:/var/lib/postgresql/archive`, accountArchive]);
     expect(existsSync(join(accountArchive, currentCoverage.accountPg.walFile))).toBe(true);
     await accountApp.stop();
     accountApp = undefined;
     await accountPool.end();
-    execFileSync('pg_ctl', ['-D', accountPg, '-m', 'fast', '-w', 'stop'], { cwd: state });
     accountDatabase = undefined;
     cpSync(accountBackup, accountRestoredPg, { recursive: true });
     rmSync(join(accountRestoredPg, 'pg_wal'), { recursive: true });
     mkdirSync(join(accountRestoredPg, 'pg_wal'));
+    // Replay the archived source timeline through its signed capture frontier,
+    // then promote without waiting for archive exhaustion or a paused target.
     appendFileSync(join(accountRestoredPg, 'postgresql.auto.conf'),
-      `\narchive_mode = off\nrestore_command = 'cp ${accountArchive}/%f %p'\n`);
+      `\narchive_mode = off
+restore_command = 'cp /recovery/archive/%f %p'
+recovery_target_lsn = '${currentCoverage.accountPg.flushedLsn}'
+recovery_target_timeline = '0x${currentCoverage.accountPg.walFile.slice(0, 8)}'
+recovery_target_inclusive = on
+recovery_target_action = 'promote'
+`);
     writeFileSync(join(accountRestoredPg, 'recovery.signal'), '');
     accountRestoredDatabase = await startPg(accountRestoredPg, 'account-restored');
     releaseAccountPool = accountRestoredDatabase.pool;
@@ -563,27 +726,36 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       const recovering = (await releaseAccountPool.query<{ recovering: boolean }>(
         'SELECT pg_is_in_recovery() AS recovering')).rows[0]?.recovering;
       if (recovering === false) break;
-      if (attempt === 119) throw new Error('Account WAL restore did not complete');
-      await Bun.sleep(100);
+      if (attempt === 119) throw new Error(
+        `Account WAL restore did not complete: ${dockerLogs(`${project}-account-restored`)}`);
+      await Bun.sleep(250);
     }
     accountApp = createAccountApp(createAccountAuth(accountConfig(releaseAccountPool)),
       releaseAccountPool).listen({ hostname: '127.0.0.1', port: accountPort });
-    expect(await account.verify(request, ['work:create'])).toEqual(principal);
     await contentPool.end();
-    execFileSync('pg_ctl', ['-D', contentPg, '-m', 'fast', '-w', 'stop'], { cwd: state });
     contentDatabase = undefined;
-    execFileSync('cp', ['-a', contentPg, contentRestoredPg], { cwd: state });
-    await stopFuseki(graph.process);
+    await stopFuseki();
     graph = undefined;
     await pool.end();
-    execFileSync('pg_ctl', ['-D', livePg, '-m', 'fast', '-w', 'stop'], { cwd: state });
     database = undefined;
+    saveGraph(liveBase);
     cpSync(liveBase, savedBase, { recursive: true });
     cpSync(liveObjects, savedObjects, { recursive: true });
-    execFileSync('cp', ['-a', livePg, savedPg], { cwd: state });
+    // One physical cut captures Access and Content while the independently
+    // retained relay database stays in the source stack for later effects.
+    backupPg(savedPg);
+    // Keep the signed Access cut held through its physical backup; releasing
+    // the source fence records new discovery authority history afterward.
+    expect(JSON.parse(execFileSync(process.execPath,
+      [fenceCli, 'release', captureFence.generation], {
+        cwd: root, env: { ...process.env, ACCESS_RECOVERY_DATABASE_URL: accessUrl },
+        encoding: 'utf8',
+      })).released).toBe(true);
     cpSync(savedBase, restoreBase, { recursive: true });
     cpSync(savedObjects, restoreObjects, { recursive: true });
-    execFileSync('cp', ['-a', savedPg, restorePg], { cwd: state });
+    cpSync(savedPg, restorePg, { recursive: true });
+    appendFileSync(join(restorePg, 'postgresql.auto.conf'), "\narchive_mode = off\nrestore_command = 'false'\n");
+    writeFileSync(join(restorePg, 'recovery.signal'), '');
     graph = await startFuseki(restoreBase, 'restore');
     database = await startPg(restorePg, 'restore');
     contentDatabase = await startPg(contentRestoredPg, 'content-restored');
@@ -610,7 +782,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       }
     }
     expect(await cutoverRestoredGraphLineage(
-      new LostCutoverResponseClient(`http://127.0.0.1:${graph.port}/rezics`), cutover)).toEqual({
+      new LostCutoverResponseClient(graph.url), cutover)).toEqual({
       lineage: nextLineage, sequence: '0', replayed: false,
     });
     expect((await cutoverRestoredGraphLineage(fuseki, cutover)).replayed).toBe(true);
@@ -623,13 +795,19 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     expect((await createMainApp(fuseki, { environment: restoredEnv,
       account, access }).handle(new Request('http://localhost/health/search-ready'))).status)
       .toBe(503);
-    await releaseAccessRecoveryFence(pool, accessFenceGeneration);
-    await expect(releaseGraphHold(fuseki, pool, journal.pool, nextLineage, {
-      priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
-      accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
-      accessStateCount: externalAccessState.count, accessStateDigest: externalAccessState.digest,
-      relay: externalRelay,
-    })).rejects.toThrow('Access recovery fence is not held');
+    // Probe the independent source owner: real fence transitions append
+    // authority history, while the restored owner's signed cut stays held.
+    const unheldAccessProbe = new Pool({ connectionString: accessUrl });
+    try {
+      const probeFenceGeneration = await engageAccessRecoveryFence(unheldAccessProbe);
+      await releaseAccessRecoveryFence(unheldAccessProbe, probeFenceGeneration);
+      await expect(releaseGraphHold(fuseki, unheldAccessProbe, journal.pool, nextLineage, {
+        priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
+        accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
+        accessStateCount: externalAccessState.count, accessStateDigest: externalAccessState.digest,
+        relay: externalRelay,
+      })).rejects.toThrow('Access recovery fence is not held');
+    } finally { await unheldAccessProbe.end(); }
     accessFenceGeneration = await engageAccessRecoveryFence(pool);
     await expect(createAdmittedMetadataWork(restoredEnv, account, access, request, createInput))
       .rejects.toBeInstanceOf(RecoveryHold);
@@ -638,7 +816,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     const heldResponse = await heldApp.handle(new Request('http://localhost/v1/works', {
       method: 'POST', headers: { authorization: bearer,
         'content-type': 'application/json', 'idempotency-key': createInput.idempotencyKey },
-      body: JSON.stringify({ profile: 'metadata-only-v1', title: createInput.title,
+      body: JSON.stringify({ profile: 'metadata-only-v1', authoring: 'own-work', title: createInput.title,
         language: createInput.language, actingSubject: actor }),
     }));
     expect(heldResponse.status).toBe(503);
@@ -681,17 +859,47 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       relay: externalRelay,
     })).rejects.toThrow('Access state differs from recovery coverage');
     await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
-      sealedCoverage: capturedCoverage, hmacKey: 'cd'.repeat(32),
-      accountPool: releaseAccountPool,
+      ...releaseEvidence(fuseki, pool, journal.pool, nextLineage, capturedCoverage, restoreObjects),
+      hmacKey: 'cd'.repeat(32),
     })).rejects.toThrow('recovery coverage envelope is invalid');
     await expect(releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
-      sealedCoverage: capturedCoverage, hmacKey: recoveryKey,
-      accountPool: releaseAccountPool,
+      ...releaseEvidence(fuseki, pool, journal.pool, nextLineage, capturedCoverage, restoreObjects),
+      contentPool: undefined,
     })).rejects.toThrow('restored Content owner is unavailable');
+    expect(await accountRecoveryCoverage(releaseAccountPool)).toEqual(externalAccount);
     await releaseRestoredGraphHold(fuseki, pool, journal.pool, nextLineage, {
-      sealedCoverage: capturedCoverage, hmacKey: recoveryKey,
-      accountPool: releaseAccountPool, contentPool: contentDatabase.pool,
+      ...releaseEvidence(fuseki, pool, journal.pool, nextLineage, capturedCoverage, restoreObjects),
     });
+    // Native introspection records grant.last_used_at. Verify after releasing
+    // the signed cut; renew on the independent source when QA admission outlives
+    // the original 300-second credential, retaining the restored session/key proof.
+    const renewalOwner = poolAt('account');
+    try {
+      const renewalApp = createAccountApp(createAccountAuth(accountConfig(renewalOwner.pool)),
+        renewalOwner.pool);
+      const renewedPkce = randomBytes(32).toString('base64url');
+      const renewedAuthorize = new URL(authorize);
+      renewedAuthorize.searchParams.set('state', Bun.randomUUIDv7());
+      renewedAuthorize.searchParams.set('code_challenge',
+        createHash('sha256').update(renewedPkce).digest('base64url'));
+      const renewedAuthorization = await renewalApp.handle(new Request(renewedAuthorize, {
+        headers: { cookie: signIn.headers.get('set-cookie')! },
+      }));
+      expect(renewedAuthorization.status).toBe(302);
+      const renewedCode = new URL(renewedAuthorization.headers.get('location')!).searchParams.get('code')!;
+      const renewedExchange = await renewalApp.handle(new Request(`${accountBase}/api/auth/oauth2/token`, {
+        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ grant_type: 'authorization_code',
+          client_id: browserClient.client_id, code: renewedCode, redirect_uri: redirectUri,
+          code_verifier: renewedPkce, resource: accountConfig(renewalOwner.pool).resource }),
+      }));
+      expect(renewedExchange.status).toBe(200);
+      const renewedToken = (await renewedExchange.json() as { access_token: string }).access_token;
+      bearer = `Bearer ${renewedToken}`;
+      request.headers.set('authorization', bearer);
+      expectedAccountAssertion.accountExpiresAt = decodeJwt(renewedToken).exp;
+    } finally { await renewalOwner.pool.end(); }
+    expect(await account.verify(request, ['work:create'])).toEqual(expectedAccountAssertion);
     await expect(releaseGraphHold(fuseki, pool, journal.pool, nextLineage, {
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '2',
       accessOutboxCount: externalAccessOutbox.count, accessOutboxDigest: externalAccessOutbox.digest,
@@ -787,10 +995,9 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
 
     // A separate timeline commits after the saved cut. Restoring that older cut
     // cannot safely replay the later key without the authoritative journal.
-    await stopFuseki(graph.process);
+    await stopFuseki();
     graph = undefined;
     await pool.end();
-    execFileSync('pg_ctl', ['-D', restorePg, '-m', 'fast', '-w', 'stop'], { cwd: state });
     database = undefined;
     graph = await startFuseki(liveBase, 'later-live');
     database = await startPg(livePg, 'later-live');
@@ -811,7 +1018,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     const cancelledAdmission = await access.register({ principal,
       actingSubject: actor, scope: 'work:create:root', action: 'work.create',
       idempotencyKey: cancelledInput.idempotencyKey,
-      requestDigest: metadataWorkRequestDigest(cancelledInput.title) });
+      requestDigest: metadataWorkRequestDigest(cancelledInput.title, undefined, cancelledInput.language) });
     const cancelledReceipt = await sealMetadataWorkAdmission({ ...liveEnv, fuseki }, cancelledAdmission);
     await access.recordGraphOutcome(cancelledAdmission.id, cancelledReceipt);
     expect(cancelledReceipt.sequence).toBe('5');
@@ -821,11 +1028,15 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       .rejects.toBeInstanceOf(StaleWorkHead);
     const emptyBatch = `urn:rezics:outbox:${Bun.randomUUIDv7()}`;
     await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
-      DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 6 } }
-      INSERT { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 7 }
+      DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 6 .
+        <${MAIN_RELAY_STREAM_SCOPE}> rv:streamSequence 6 } }
+      INSERT { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 7 .
+        <${MAIN_RELAY_STREAM_SCOPE}> rv:streamSequence 7 }
         GRAPH <urn:rezics:graph:outbox> { <${emptyBatch}> a rv:OutboxBatch ;
-          rv:dataEpoch "${oldLineage.dataEpoch}" ; rv:sequence 7 ; rv:eventCount 0 . } }
-      WHERE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 6 } }`);
+          rv:dataEpoch "${oldLineage.dataEpoch}" ; rv:sequence 7 ; rv:eventCount 0 ;
+          rv:streamScope "${MAIN_RELAY_STREAM_SCOPE}" ; rv:streamSequence 7 . } }
+      WHERE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 6 .
+        <${MAIN_RELAY_STREAM_SCOPE}> rv:streamSequence 6 } }`);
     const contributionScope = `contribution:create:${created.work}`;
     await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [contributionScope]);
     await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
@@ -939,7 +1150,7 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
       { ...liveEnv, fuseki }, cancelledSelectionAdmission);
     await access.recordGraphOutcome(cancelledSelectionAdmission.id, cancelledSelectionReceipt);
     expect(cancelledSelectionReceipt.sequence).toBe('18');
-    await pool.query("INSERT INTO access.scope_gate (id) VALUES ('space:create:root')");
+    await pool.query("INSERT INTO access.scope_gate (id) VALUES ('space:create:root') ON CONFLICT (id) DO NOTHING");
     await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
       VALUES ($1, $2, $3, 'space.create', now() + interval '1 hour')`,
     [Bun.randomUUIDv7(), principalId, actor]);
@@ -1222,9 +1433,11 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     const laterRelay = await relayCoverage(journal.pool, 'recovery-handoff');
     expect(laterRelay.batchCount).toBe('40');
     expect(laterRelay.eventCount).toBe('39');
+    laterObjects = await captureObjectRecoveryCoverage(fuseki, { directory: liveObjects });
     await retainRecoveryCoverageHead(journal.pool, JSON.stringify(sealRecoveryPayload({
       priorDataEpoch: oldLineage.dataEpoch, priorSequence: '40',
       accountPg: currentCoverage.accountPg, account: externalAccount,
+      commerce: currentCoverage.commerce, objects: laterObjects,
       accessOutboxCount: laterAccessOutbox.count,
       accessOutboxDigest: laterAccessOutbox.digest,
       accessStateCount: laterAccessState.count,
@@ -1234,16 +1447,17 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
     expect((await journal.pool.query<{ generation: string }>(
       'SELECT generation FROM relay.recovery_coverage_head WHERE consumer = $1',
       ['recovery-handoff'])).rows[0]?.generation).toBe('2');
-    await stopFuseki(graph.process);
+    await stopFuseki();
     graph = undefined;
     await pool.end();
-    execFileSync('pg_ctl', ['-D', livePg, '-m', 'fast', '-w', 'stop'], { cwd: state });
     database = undefined;
     const olderBase = join(state, 'older-restore', 'run');
     const olderPg = join(state, 'older-restore', 'pgdata');
     mkdirSync(join(state, 'older-restore'), { recursive: true });
     cpSync(savedBase, olderBase, { recursive: true });
-    execFileSync('cp', ['-a', savedPg, olderPg], { cwd: state });
+    cpSync(savedPg, olderPg, { recursive: true });
+    appendFileSync(join(olderPg, 'postgresql.auto.conf'), "\narchive_mode = off\nrestore_command = 'false'\n");
+    writeFileSync(join(olderPg, 'recovery.signal'), '');
     graph = await startFuseki(olderBase, 'older-restore');
     database = await startPg(olderPg, 'older-restore');
     fuseki = graph.fuseki;
@@ -1900,20 +2114,22 @@ test('OPS03/SYS13/BOOK04/IAM21 partial: real OAuth across isolated Account, Acce
         rating: { count: 1, sum: 8, mean: 8 } }] });
   } finally {
     await accountApp?.stop();
-    await contentDatabase?.pool.end();
-    if (contentDatabase) execFileSync('pg_ctl', [
-      '-D', contentDatabase.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    await latestAccess?.pool.end();
-    if (latestAccess) execFileSync('pg_ctl', ['-D', latestAccess.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    await database?.pool.end();
-    if (database) execFileSync('pg_ctl', ['-D', database.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    await journal?.pool.end();
-    if (journal) execFileSync('pg_ctl', ['-D', journal.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    await accountDatabase?.pool.end();
-    if (accountDatabase) execFileSync('pg_ctl', ['-D', accountDatabase.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    await accountRestoredDatabase?.pool.end();
-    if (accountRestoredDatabase) execFileSync('pg_ctl', [
-      '-D', accountRestoredDatabase.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    if (graph) await stopFuseki(graph.process);
+    await Promise.allSettled(pools.map(pool => pool.end()));
+    const removed = await Promise.allSettled([...restoredContainers].map(async container =>
+      docker(['rm', '-f', container], 65_000)));
+    for (const result of removed) if (result.status === 'rejected') console.error(result.reason);
+    if (started) {
+      const reset = execFileSync('bun', ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs],
+        { cwd: root, env: dockerEnv, encoding: 'utf8', timeout: 90_000 });
+      if (reset.trim()) console.log(reset.trim());
+    }
+    if (restoredContainers.size > 0) {
+      // Restore containers own these scratch bytes; give the worktree user its
+      // directory back only after every server has been stopped.
+      docker(['run', '--rm', '--network', 'none', '--user', '0:0',
+        '--volume', `${state}:/recovery`, '--entrypoint', 'sh', postgresImage!, '-ec',
+        `chown -R ${process.getuid!()}:${process.getgid!()} /recovery`]);
+    }
+    rmSync(state, { recursive: true, force: true });
   }
-}, 180_000);
+}, qaStartupTestTimeout(180_000));

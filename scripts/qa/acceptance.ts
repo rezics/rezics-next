@@ -114,11 +114,7 @@ export interface FailedSelection { sourceRunId: string; tiers: Tier[]; tests: Te
 // These owner tests still require a separately installed host JVM/Jena runtime.
 // Preserve their prior failures in diagnostics while they are migrated to QA.
 export const legacyHostJenaGateFiles = [
-  'services/main/tests/activate.integration.test.ts',
-  'services/main/tests/edit.integration.test.ts',
   'services/main/tests/full-work.integration.test.ts',
-  'services/main/tests/outbox.integration.test.ts',
-  'services/main/tests/recovery.integration.test.ts',
 ] as const;
 
 function isRetiredQaTest(test: TestResult): boolean {
@@ -232,6 +228,7 @@ export const faultGateFiles = [
   'services/account/tests/account-access-recovery.integration.test.ts',
   'services/main/tests/access-pitr.integration.test.ts',
   'services/main/tests/content-recovery.integration.test.ts',
+  'services/main/tests/recovery.integration.test.ts',
 ] as const;
 export function isQaFaultPath(path: string): boolean {
   return path.startsWith('tests/qa/fault-recovery/') || faultGateFiles.some(file => file === path);
@@ -255,7 +252,14 @@ export function failedSelection(artifactRoot: string, runId: string): FailedSele
     throw new Error(`Prior QA run ${runId} names an unsupported failed tier`);
   }
   const failed = junitResults(directory, tiers).filter(test => test.failed);
-  return { sourceRunId: runId, tiers, tests: failed.filter(test => !isRetiredQaTest(test)),
+  // Diagnostics follow current registrations when an owner file moves tiers.
+  // Keep prior failed tiers too: a missing JUnit file still needs a full rerun.
+  const tests = failed.filter(test => !isRetiredQaTest(test)).map(test => {
+    if (isQaFaultPath(test.file)) return { ...test, tier: 'fault/recovery' as const };
+    if (isQaIntegrationPath(test.file)) return { ...test, tier: 'integration' as const };
+    return test;
+  });
+  return { sourceRunId: runId, tiers: [...new Set([...tiers, ...tests.map(test => test.tier)])], tests,
     retiredTests: failed.filter(isRetiredQaTest) };
 }
 

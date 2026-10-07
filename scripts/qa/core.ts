@@ -681,6 +681,7 @@ export const isolatedFaultFiles = new Set([
 // bootstrapped project held open by the shard harness.
 // Native resources have no admission event; protocol workers defer their lease to startup.
 export const selfManagedFaultAdmission = new Map<string, 'host' | 'startup'>([
+  ['services/main/tests/recovery.integration.test.ts', 'startup'],
   ['services/account/tests/account-pitr.integration.test.ts', 'host'],
   ['services/account/tests/account-access-recovery.integration.test.ts', 'host'],
   ['services/main/tests/access-pitr.integration.test.ts', 'host'],

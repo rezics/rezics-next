@@ -1,7 +1,5 @@
 import { test, expect } from 'bun:test';
-import { spawn } from 'node:child_process';
-import { closeSync, copyFileSync, cpSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { FusekiClient, type CommandEnvelope, type CommandResult } from '../src/infrastructure/fuseki.ts';
 import { activateMetadataWork, IdempotencyConflict, initializeFreshGraph,
@@ -10,48 +8,20 @@ import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead } from '../src/
 import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound, RevisionUnavailable } from '../src/modules/work/history.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-process.env.FUSEKI_MAINTENANCE_TOKEN ??= '0'.repeat(64);
-process.env.FUSEKI_COMMAND_TOKEN ??= '1'.repeat(64);
-
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
 
 test('SYS02/SYS09/SYS10/SYS14 partial: guarded Work edit and exact retained history', async () => {
-  const fusekiHome = Bun.env.REZICS_FUSEKI_HOME;
-  const jenaHome = Bun.env.REZICS_JENA_HOME;
-  const javaHome = Bun.env.REZICS_JAVA_HOME;
-  if (!fusekiHome || !jenaHome || !javaHome) throw new Error('Set Jena/Fuseki/Java integration env');
+  const fusekiUrl = Bun.env.FUSEKI_URL;
+  const dataEpoch = Bun.env.MAIN_DATA_EPOCH;
+  const routingEpoch = Bun.env.MAIN_ROUTING_EPOCH;
+  if (!Bun.env.REZICS_QA_RUN_ID || !fusekiUrl || !dataEpoch || !routingEpoch) {
+    throw new Error('Run through the isolated QA integration tier');
+  }
   const state = join(root, '.temp', `work-edit-${Bun.randomUUIDv7()}`);
-  const base = join(state, 'fuseki');
-  mkdirSync(join(base, 'databases/rezics/tdb2'), { recursive: true });
-  mkdirSync(join(base, 'databases/rezics/lucene'), { recursive: true });
-  copyFileSync(join(root, 'infra/jena/fuseki-text-quickstart.ttl'), join(base, 'fuseki-text.ttl'));
-  const port = await freePort();
-  const log = openSync(join(state, 'fuseki.log'), 'w');
-  const server = spawn(join(fusekiHome, 'fuseki-server'), [
-    '--localhost', `--port=${port}`, '--no-cors', '--timeout=10000', `--config=${join(base, 'fuseki-text.ttl')}`,
-  ], { cwd: base, env: { ...process.env, JAVA_HOME: javaHome, FUSEKI_HOME: fusekiHome,
-    FUSEKI_BASE: base, MAIN: 'main', JVM_ARGS: '-Xms128m -Xmx1g' }, stdio: ['ignore', log, log] });
-  closeSync(log);
-  const fuseki = new FusekiClient(`http://127.0.0.1:${port}/rezics`);
-  const lineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
+  const fuseki = new FusekiClient(fusekiUrl);
+  const lineage = { dataEpoch, routingEpoch };
   const env: WorkActivationEnvironment = { fuseki, lineage, objectDirectory: join(state, 'objects'),
-    candidateDirectory: join(state, 'candidates'), repositoryRoot: root, jenaHome, javaHome, python: 'python3' };
+    candidateDirectory: join(state, 'candidates') };
   try {
-    for (let i = 0; i < 120; i++) {
-      try { if ((await fuseki.query('ASK {}')).boolean === true) break; } catch { /* starting */ }
-      if (i === 119) throw new Error('Fuseki did not start');
-      await Bun.sleep(250);
-    }
     await initializeFreshGraph(fuseki, lineage);
     const createAdmission = { id: Bun.randomUUIDv7(), scope: 'work:create:root', action: 'work.create',
       idempotencyKey: 'edit-base', requestDigest: metadataWorkRequestDigest('Original title'),
@@ -70,7 +40,7 @@ test('SYS02/SYS09/SYS10/SYS14 partial: guarded Work edit and exact retained hist
     await expect(readExactWorkRevision(env, `https://rezics.com/id/${Bun.randomUUIDv7()}`, async () => true))
       .rejects.toBeInstanceOf(RevisionNotFound);
     const editAdmission = (key: string, head: string, title: string) => ({
-      id: Bun.randomUUIDv7(), scope: 'work:edit:root', action: 'work.edit',
+      id: Bun.randomUUIDv7(), scope: `work:edit:${created.work}`, action: 'work.edit',
       requestDigest: metadataWorkEditDigest(created.work, head, title), authorityEpoch: '0',
       expiresAt: new Date(Date.now() + 60_000).toISOString(), key,
     });
@@ -118,7 +88,7 @@ test('SYS02/SYS09/SYS10/SYS14 partial: guarded Work edit and exact retained hist
     const lostIntent = { admission: editAdmission('lost', latest, 'After lost response'),
       work: created.work, expectedHead: latest, title: 'After lost response' };
     const recovered = await editMetadataWork({ ...env,
-      fuseki: new LostResponseClient(`http://127.0.0.1:${port}/rezics`) }, lostIntent);
+      fuseki: new LostResponseClient(fusekiUrl) }, lostIntent);
     expect(recovered.sequence).toBe('5');
     expect(recovered.replayed).toBe(false);
     expect((await readExactWorkRevision(env, latest, async () => true)).title)
@@ -148,7 +118,6 @@ test('SYS02/SYS09/SYS10/SYS14 partial: guarded Work edit and exact retained hist
     await expect(readExactWorkRevision({ ...env, objectDirectory: corruptDirectory }, firstHead, async () => true))
       .rejects.toBeInstanceOf(RevisionCorrupt);
   } finally {
-    server.kill('SIGTERM');
-    if (server.exitCode === null) await new Promise<void>(resolveExit => server.once('exit', () => resolveExit()));
+    rmSync(state, { recursive: true, force: true });
   }
 }, 120_000);

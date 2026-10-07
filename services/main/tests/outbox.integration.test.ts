@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { closeSync, mkdirSync, openSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
@@ -240,5 +240,6 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     }
     await pool.end();
     await stack.stop();
+    rmSync(state, { recursive: true, force: true });
   }
 }, 120_000);

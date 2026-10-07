@@ -1,11 +1,9 @@
 import { test, expect } from 'bun:test';
-import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { closeSync, copyFileSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { FusekiClient, type CommandEnvelope, type CommandResult } from '../src/infrastructure/fuseki.ts';
 import { createMainApp } from '../src/app.ts';
 import { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied } from '../src/modules/access/admission.ts';
@@ -19,11 +17,6 @@ import {
 import { strongRevokeMetadataWorkScope } from '../src/modules/work/strong-revoke.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-process.env.FUSEKI_MAINTENANCE_TOKEN ??= '0'.repeat(64);
-process.env.FUSEKI_COMMAND_TOKEN ??= '1'.repeat(64);
-const fusekiHome = Bun.env.REZICS_FUSEKI_HOME;
-const javaHome = Bun.env.REZICS_JAVA_HOME;
-const jenaHome = Bun.env.REZICS_JENA_HOME;
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -38,57 +31,23 @@ async function freePort(): Promise<number> {
   });
 }
 
-async function ready(fuseki: FusekiClient): Promise<void> {
-  for (let i = 0; i < 120; i++) {
-    try {
-      if ((await fuseki.query('ASK {}')).boolean === true) return;
-    } catch { /* process may still be starting */ }
-    await Bun.sleep(250);
-  }
-  throw new Error('Fuseki did not start within 30 seconds');
-}
-
 test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', async () => {
-  if (!fusekiHome || !javaHome || !jenaHome) throw new Error('Set REZICS_FUSEKI_HOME, REZICS_JAVA_HOME and REZICS_JENA_HOME');
+  const fusekiUrl = Bun.env.FUSEKI_URL;
+  const accessUrl = Bun.env.ACCESS_DATABASE_URL;
+  const dataEpoch = Bun.env.MAIN_DATA_EPOCH;
+  const routingEpoch = Bun.env.MAIN_ROUTING_EPOCH;
+  if (!Bun.env.REZICS_QA_RUN_ID || !fusekiUrl || !accessUrl || !dataEpoch || !routingEpoch) {
+    throw new Error('Run through the isolated QA integration tier');
+  }
   const state = join(root, '.temp', `main-integration-${Bun.randomUUIDv7()}`);
-  const base = join(state, 'run');
-  mkdirSync(join(base, 'databases/rezics/tdb2'), { recursive: true });
-  mkdirSync(join(base, 'databases/rezics/lucene'), { recursive: true });
-  copyFileSync(join(root, 'infra/jena/fuseki-text-quickstart.ttl'), join(base, 'fuseki-text.ttl'));
-  const port = await freePort();
-  const log = openSync(join(state, 'fuseki.log'), 'w');
-  const serverProcess = spawn(join(fusekiHome, 'fuseki-server'), [
-    '--localhost', `--port=${port}`, '--no-cors', '--timeout=10000', `--config=${join(base, 'fuseki-text.ttl')}`,
-  ], {
-    cwd: base,
-    env: { ...process.env, JAVA_HOME: javaHome, FUSEKI_HOME: fusekiHome, FUSEKI_BASE: base, MAIN: 'main', JVM_ARGS: '-Xms128m -Xmx1g' },
-    stdio: ['ignore', log, log],
-  });
-  closeSync(log);
-  const fuseki = new FusekiClient(`http://127.0.0.1:${port}/rezics`);
-  const lineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
+  const fuseki = new FusekiClient(fusekiUrl);
+  const lineage = { dataEpoch, routingEpoch };
   const env: WorkActivationEnvironment = {
     fuseki, lineage,
     objectDirectory: join(state, 'objects'), candidateDirectory: join(state, 'candidates'),
-    repositoryRoot: root, jenaHome, javaHome, python: 'python3',
   };
-  let accessPool: Pool | undefined;
-  let accessData: string | undefined;
+  const accessPool = new Pool({ connectionString: accessUrl });
   try {
-    await ready(fuseki);
-    const pgData = join(state, 'access-pgdata');
-    const socketDirectory = join(root, '.temp', 'pg-sock');
-    mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
-    execFileSync('initdb', ['-D', pgData, '-A', 'trust', '--no-instructions'], { cwd: state });
-    const pgPort = await freePort();
-    execFileSync('pg_ctl', ['-D', pgData, '-l', join(state, 'access-postgres.log'),
-      '-o', `-h 127.0.0.1 -p ${pgPort} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
-    accessData = pgData;
-    accessPool = new Pool({ host: '127.0.0.1', port: pgPort, user: process.env.USER, database: 'postgres' });
-    const accessMigrations = join(root, 'services/main/migrations/access');
-    for (const file of schemaFiles(root, 'access')) {
-      await accessPool.query(readFileSync(join(accessMigrations, file), 'utf8'));
-    }
     const app = createMainApp(fuseki);
     const mainPort = await freePort();
     app.listen({ hostname: '127.0.0.1', port: mainPort });
@@ -168,7 +127,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
         throw new Error('simulated lost response');
       }
     }
-    const lost = await activateMetadataWork({ ...env, fuseki: new LostResponseClient(`http://127.0.0.1:${port}/rezics`) },
+    const lost = await activateMetadataWork({ ...env, fuseki: new LostResponseClient(fusekiUrl) },
       { admission: admit('lost-response', 'Recovered Work'), title: 'Recovered Work' });
     expect(lost.sequence).toBe('2');
 
@@ -195,12 +154,12 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     }`);
     expect(outbox.results?.bindings[0]?.count?.value).toBe('3');
 
-    const pool = accessPool!;
+    const pool = accessPool;
     const principalId = Bun.randomUUIDv7();
     const actingSubject = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
     await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1, 'https://account.fixture', 'fixture-account')`, [principalId]);
-    await pool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root')");
+    await pool.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT (id) DO NOTHING");
     await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actingSubject]);
     await pool.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
       VALUES ($1, $2, $3, 'work.create', now() + interval '1 hour')`,
@@ -228,7 +187,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
       "SELECT id, request_digest, authority_epoch, state, graph_outcome FROM access.admission WHERE idempotency_key = 'bridged-create'");
     expect(admission.rows).toHaveLength(1);
     expect(bridged.admissionId).toBe(admission.rows[0]!.id);
-    expect(admission.rows[0]!.request_digest).toBe(metadataWorkRequestDigest(input.title));
+    expect(admission.rows[0]!.request_digest).toBe(metadataWorkRequestDigest(input.title, undefined, input.language));
     expect(admission.rows[0]!.state).toBe('sealed');
     expect(admission.rows[0]!.graph_outcome).toBe('succeeded');
     const bound = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?id ?epoch ?scope WHERE {
@@ -241,12 +200,19 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     expect(bound.results?.bindings[0]?.scope?.value).toBe('work:create:root');
     expect(await createAdmittedMetadataWork(env, account, access, request, input))
       .toEqual({ ...bridged, replayed: true });
+    // These probes bind exact Work receipt positions. Seed the author through
+    // the isolated stack's maintenance surface without adding a product command.
+    const authorRevision = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
+    await fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH <urn:rezics:graph:current> { <${actingSubject}> a rv:Agent ; rv:head <${authorRevision}> . }
+      GRAPH <urn:rezics:graph:revisions> { <${authorRevision}> a rv:RevisionAnchor ; rv:component <${actingSubject}> . }
+    }`);
     const workApp = createMainApp(fuseki, { environment: env, account, access });
     const workPort = await freePort();
     workApp.listen({ hostname: '127.0.0.1', port: workPort });
     try {
       const url = `http://127.0.0.1:${workPort}/v1/works`;
-      const body = { profile: 'metadata-only-v1', title: 'HTTP metadata Work', language: 'en', actingSubject };
+      const body = { profile: 'metadata-only-v1', authoring: 'own-work', title: 'HTTP metadata Work', language: 'en', actingSubject };
       const post = (key: string, value: unknown = body, authorization = 'Bearer verified-fixture') => fetch(url, {
         method: 'POST', headers: { authorization, 'idempotency-key': key, 'content-type': 'application/json' },
         body: JSON.stringify(value),
@@ -286,7 +252,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
         }
       }
       const uncertain = createMainApp(fuseki, { environment: { ...env,
-        fuseki: new UnavailableOnceClient(`http://127.0.0.1:${port}/rezics`) }, account, access });
+        fuseki: new UnavailableOnceClient(fusekiUrl) }, account, access });
       const uncertainPort = await freePort();
       uncertain.listen({ hostname: '127.0.0.1', port: uncertainPort });
       try {
@@ -351,7 +317,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     const expiredTitle = 'Expired before Work dispatch';
     const expired = await access.register({ principal: { issuer: 'https://account.fixture',
       subject: 'fixture-account' }, actingSubject, scope: 'work:create:root', action: 'work.create',
-      idempotencyKey: 'expired-before-dispatch', requestDigest: metadataWorkRequestDigest(expiredTitle) });
+      idempotencyKey: 'expired-before-dispatch', requestDigest: metadataWorkRequestDigest(expiredTitle, undefined, 'en') });
     await pool.query("UPDATE access.admission SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1", [expired.id]);
     await expect(createAdmittedMetadataWork(env, account, access, request,
       { actingSubject, idempotencyKey: 'expired-before-dispatch', title: expiredTitle, language: 'en' }))
@@ -394,7 +360,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
       }
     }
     const delayed = activateMetadataWork({ ...env,
-      fuseki: new DelayedUpdateClient(`http://127.0.0.1:${port}/rezics`) },
+      fuseki: new DelayedUpdateClient(fusekiUrl) },
     { admission: claimedPending, title: delayedTitle }).then(() => null, error => error);
     await Promise.race([updateStarted, Bun.sleep(10_000).then(() => {
       throw new Error('delayed graph update never reached dispatch');
@@ -433,11 +399,7 @@ test('IAM07/SYS02/SYS10/SYS14 partial: Work receipt and strong seal races', asyn
     }`);
     expect(finalPosition.results?.bindings[0]?.sequence?.value).toBe('10');
   } finally {
-    await accessPool?.end();
-    if (accessData) execFileSync('pg_ctl', ['-D', accessData, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    serverProcess.kill('SIGTERM');
-    if (serverProcess.exitCode === null) {
-      await new Promise<void>((resolveExit) => serverProcess.once('exit', () => resolveExit()));
-    }
+    await accessPool.end();
+    rmSync(state, { recursive: true, force: true });
   }
 }, 120_000);
