@@ -2,7 +2,12 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { sequenceContentEvents } from '../../../../content/src/event-sequencer.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import { RV } from './activate.ts';
+import { GRAPHS, RV, iri, lit } from './activate.ts';
+import { probeContentErasure } from '../erasure/content.ts';
+import { readErasure } from '../erasure/journal.ts';
+import { readRetainedNativeGraphSuppressionProof } from '../erasure/custody.ts';
+import { publicationSupersessionsMatch } from '../erasure/replay-supersessions.ts';
+import { graphErasureSuppressed } from '../erasure/graph.ts';
 import { canonicalRowText, ownerCatalog, scanOwnerTable,
   type OwnerCatalog, type OwnerTable, type RowCoverage } from './pg-recovery-frontier.ts';
 
@@ -34,6 +39,14 @@ export interface ContentRecoveryCoverage {
   catalogDigest: string;
   tables: Record<string, RowCoverage>;
   excluded: Record<string, string>;
+}
+
+/** Caller owns the allocator-held READ COMMITTED relay transaction and, when
+ * supplied, the same Content REPEATABLE READ snapshot used for every pin read. */
+export interface ContentRecoveryProofContext {
+  fuseki: FusekiClient;
+  relayClient: PoolClient;
+  contentClient?: PoolClient;
 }
 
 const CONTENT_REVISION = `${RV}contentRevision`;
@@ -185,20 +198,142 @@ export function ownedReferences(catalog: Pick<OwnerCatalog, 'tables' | 'excluded
   return owned;
 }
 
+async function transactionIdentity(client: PoolClient, isolation: string): Promise<string> {
+  if ((await client.query('SHOW transaction_isolation')).rows[0]?.transaction_isolation !== isolation) {
+    throw new ContentRecoveryConflict(`Content recovery requires an active ${isolation} transaction`);
+  }
+  const first = (await client.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]?.id;
+  const second = (await client.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]?.id;
+  if (!first || !DECIMAL.test(first) || first !== second) {
+    throw new ContentRecoveryConflict(`Content recovery requires an active ${isolation} transaction`);
+  }
+  return first;
+}
+
+/** Native events keep the immutable pin on their receipt; private projection
+ * receipts keep it on their revision anchor. Signed reference tuples stay unchanged. */
+async function linkedHistoricalPin(ref: GraphContentReference,
+  proof: ContentRecoveryProofContext | undefined): Promise<GraphContentReference> {
+  if (!proof?.fuseki) throw new ContentRecoveryConflict('erased Content pin requires retained graph digest');
+  const rows = (await proof.fuseki.query(`PREFIX rv: <${RV}>
+    SELECT DISTINCT ?digest ?preparation ?epoch ?sequence WHERE {
+      GRAPH ${iri(ref.graph)} { ${iri(ref.subject)} rv:contentRevision ${iri(ref.object)} .
+        FILTER NOT EXISTS { ${iri(ref.subject)} rv:byteDigest ?directDigest } }
+      { GRAPH ${iri(ref.graph)} { ${iri(ref.subject)} rv:receipt ?anchor }
+        GRAPH ${iri(GRAPHS.receipts)} { ?anchor a rv:OperationReceipt ; rv:contentRevision ${iri(ref.object)} ; rv:byteDigest ?digest .
+          OPTIONAL { ?anchor rv:contentPreparation ?preparation }
+          OPTIONAL { ?anchor rv:ownerDataEpoch ?epoch ; rv:ownerSequence ?sequence } } }
+      UNION
+      { GRAPH ${iri(ref.graph)} { ${iri(ref.subject)} rv:projection ?anchor }
+        GRAPH ${iri(GRAPHS.revisions)} { ?anchor a rv:ContentPrivateProjection ; rv:contentRevision ${iri(ref.object)} ; rv:byteDigest ?digest .
+          OPTIONAL { ?anchor rv:ownerDataEpoch ?epoch ; rv:ownerSequence ?sequence } } }
+    } LIMIT 2`, 16_384)).results?.bindings ?? [];
+  const row = rows[0];
+  const pin = { ...ref, byteDigest: row?.digest?.value ?? null,
+    preparationId: row?.preparation?.value ?? ref.preparationId,
+    ownerEpoch: row?.epoch?.value ?? ref.ownerEpoch, ownerSequence: row?.sequence?.value ?? ref.ownerSequence };
+  if (rows.length !== 1 || !wellFormed(pin) || !pin.byteDigest) {
+    throw new ContentRecoveryConflict(`retained graph Content digest is unavailable or ambiguous: ${ref.object}`);
+  }
+  return pin;
+}
+
+async function assertErasedRevision(client: PoolClient, ref: GraphContentReference,
+  revisionId: string, proof: ContentRecoveryProofContext | undefined): Promise<void> {
+  if (!proof?.relayClient) throw new ContentRecoveryConflict('erased Content pin requires retained erasure proof context');
+  const relay = proof.relayClient;
+  const transaction = await transactionIdentity(relay, 'read committed');
+  const allocator = (await relay.query<{ held: boolean }>(`SELECT EXISTS (
+    SELECT 1 FROM pg_locks WHERE locktype='advisory' AND pid=pg_backend_pid()
+      AND database=(SELECT oid FROM pg_database WHERE datname=current_database())
+      AND classid=((hashtextextended('rezics-relay-erasure-epoch',0) >> 32) & 4294967295)::oid
+      AND objid=(hashtextextended('rezics-relay-erasure-epoch',0) & 4294967295)::oid
+      AND objsubid=1 AND mode='ExclusiveLock' AND granted
+  ) AS held`)).rows[0];
+  if (allocator?.held !== true) throw new ContentRecoveryConflict('erased Content pin requires the retained journal allocator');
+  const tombstone = (await client.query<{ erasure_id: string; erasure_epoch: string }>(
+    'SELECT erasure_id::text, erasure_epoch::text FROM content.revision_erasure WHERE revision_id=$1',
+    [revisionId])).rows;
+  const erased = tombstone[0];
+  if (tombstone.length !== 1 || !erased || !UUID.test(erased.erasure_id)
+    || !/^[1-9][0-9]{0,18}$/.test(erased.erasure_epoch)) {
+    throw new ContentRecoveryConflict(`Content erasure tombstone is unavailable: ${revisionId}`);
+  }
+  const report = await readErasure(relay, erased.erasure_id);
+  const targets = report.targets.map(target => target.ref);
+  if (!['revision', 'resource'].includes(report.kind) || report.suppression !== 'suppressed'
+    || report.erasureId !== erased.erasure_id || report.erasureEpoch !== erased.erasure_epoch
+    || !targets.length || targets.length > 64 || new Set(targets).size !== targets.length
+    || !targets.includes(revisionId) || targets.some(target => !UUID.test(target))
+    || report.targets.some(target => target.owner !== 'content' || target.kind !== 'content_revision')) {
+    throw new ContentRecoveryConflict(`retained Content erasure journal differs: ${revisionId}`);
+  }
+  const probes = await probeContentErasure(client, erased.erasure_id, targets);
+  if (targets.some(target => probes.get(target) !== 'erased')) {
+    throw new ContentRecoveryConflict(`Content erasure targets are absent or foreign: ${revisionId}`);
+  }
+  const tombstones = (await client.query<{ mismatch: boolean }>(`SELECT EXISTS (
+    SELECT 1 FROM unnest($1::uuid[]) AS wanted(id)
+    LEFT JOIN content.revision r ON r.id=wanted.id
+    LEFT JOIN content.revision_erasure e ON e.revision_id=wanted.id
+    WHERE r.id IS NULL OR r.availability IS DISTINCT FROM 'erased'
+      OR r.serialized_bytes IS NOT NULL OR r.body IS NOT NULL
+      OR e.erasure_id IS DISTINCT FROM $2::uuid OR e.erasure_epoch IS DISTINCT FROM $3::bigint
+  ) AS mismatch`, [targets, erased.erasure_id, erased.erasure_epoch])).rows[0];
+  if (tombstones?.mismatch !== false) {
+    throw new ContentRecoveryConflict(`Content erasure tombstones differ from the full retained target set: ${revisionId}`);
+  }
+  const retained = await readRetainedNativeGraphSuppressionProof(relay,
+    erased.erasure_id, erased.erasure_epoch, targets);
+  if (!proof.fuseki || !await graphErasureSuppressed(proof.fuseki,
+    erased.erasure_id, erased.erasure_epoch, targets)
+    || (await proof.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.receipts)} {
+      ${iri(retained.original.receipt)} rv:dataEpoch ${lit(retained.original.dataEpoch)} ;
+        rv:sequence ${retained.original.sequence} . } }`)).boolean !== true) {
+    throw new ContentRecoveryConflict(`actual graph Content suppression differs from its retained proof: ${revisionId}`);
+  }
+  const operation = (await client.query<{ operation_id: string }>(`SELECT s.operation_id
+    FROM content.publication_erasure_supersession s JOIN content.revision_erasure e
+      ON e.revision_id=s.revision_id AND e.erasure_id=s.erasure_id AND e.erasure_epoch=s.erasure_epoch
+    WHERE s.revision_id=$1 AND s.erasure_id=$2::uuid AND s.erasure_epoch=$3::bigint
+      AND ($4::text IS NULL OR s.operation_id=$4)
+      AND s.graph_receipt=$5 AND s.graph_data_epoch=$6 AND s.graph_sequence=$7::bigint
+    LIMIT 1`, [revisionId, erased.erasure_id, erased.erasure_epoch, ref.preparationId,
+    retained.original.receipt, retained.original.dataEpoch, retained.original.sequence])).rows;
+  if (operation.length !== 1 || !await publicationSupersessionsMatch(client,
+    targets, erased.erasure_id, erased.erasure_epoch, retained.original)) {
+    throw new ContentRecoveryConflict(`Content publication erasure supersession differs: ${revisionId}`);
+  }
+  if (await transactionIdentity(relay, 'read committed') !== transaction) {
+    throw new ContentRecoveryConflict('retained erasure transaction changed');
+  }
+}
+
 async function assertRevisionPins(client: PoolClient, references: readonly GraphContentReference[],
-  ownerEpoch: string, sequence: string): Promise<void> {
-  for (const ref of references) {
+  ownerEpoch: string, sequence: string, proof?: ContentRecoveryProofContext): Promise<void> {
+  for (const original of references) {
+    let ref = original;
     const revisionId = ref.object.slice(REVISION.length);
     const revision = await client.query<{ byte_digest: string; availability: string;
-      serialized_bytes: Buffer | null; byte_length: number }>(
-      'SELECT byte_digest, availability, serialized_bytes, byte_length FROM content.revision WHERE id = $1',
+      serialized_bytes: Buffer | null; byte_length: number; body: unknown }>(
+      'SELECT byte_digest, availability, serialized_bytes, byte_length, body FROM content.revision WHERE id = $1',
       [revisionId]);
     const row = revision.rows[0];
-    if (revision.rowCount !== 1 || row?.availability !== 'available'
-      || !row.serialized_bytes || digestBytes(row.serialized_bytes) !== row.byte_digest
-      || row.serialized_bytes.length !== row.byte_length
+    if (row?.availability === 'erased' && ref.byteDigest === null) ref = await linkedHistoricalPin(ref, proof);
+    if (revision.rowCount !== 1 || !row || !['available','erased'].includes(row.availability)
+      || (row.availability === 'available' && (!row.serialized_bytes
+        || digestBytes(row.serialized_bytes) !== row.byte_digest || row.serialized_bytes.length !== row.byte_length))
+      || (row.availability === 'erased' && (row.serialized_bytes !== null || row.body !== null
+        || !SHA.test(row.byte_digest) || ref.byteDigest === null))
       || (ref.byteDigest !== null && ref.byteDigest !== row.byte_digest)) {
       throw new ContentRecoveryConflict(`exact Content revision is unavailable: ${revisionId}`);
+    }
+    if (row.availability === 'erased') {
+      try { await assertErasedRevision(client, ref, revisionId, proof); }
+      catch (error) {
+        if (error instanceof ContentRecoveryConflict) throw error;
+        throw new ContentRecoveryConflict(`retained Content erasure proof is unavailable: ${revisionId}`, { cause: error });
+      }
     }
     if (ref.preparationId !== null) {
       const proof = await client.query<{ revision_id: string; data_epoch: string;
@@ -243,7 +378,16 @@ function assertExactRevision(body: string): void {
   }
 }
 
-async function readOnly<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+async function readOnly<T>(pool: Pool, work: (client: PoolClient) => Promise<T>, borrowed?: PoolClient): Promise<T> {
+  if (borrowed) {
+    const transaction = await transactionIdentity(borrowed, 'repeatable read');
+    await canonicalRowText(borrowed);
+    const value = await work(borrowed);
+    if (await transactionIdentity(borrowed, 'repeatable read') !== transaction) {
+      throw new ContentRecoveryConflict('Content recovery transaction changed');
+    }
+    return value;
+  }
   const client = await pool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -263,8 +407,8 @@ const unnumbered = 'SELECT 1 FROM content.receipt WHERE sequence IS NULL LIMIT 1
  * first, so the owner cut covers every receipt the scan binds. A repeatable-read
  * scan binds owner rows and exact bytes. */
 export async function captureContentRecoveryCoverage(pool: Pool,
-  references: readonly GraphContentReference[]): Promise<ContentRecoveryCoverage> {
-  for (let attempt = 0; ; attempt++) {
+  references: readonly GraphContentReference[], proof?: ContentRecoveryProofContext): Promise<ContentRecoveryCoverage> {
+  for (let attempt = 0; !proof?.contentClient; attempt++) {
     await sequenceContentEvents(pool);
     if (!(await pool.query(unnumbered)).rowCount) break;
     if (attempt === 50) throw new ContentRecoveryConflict('Content events are not numbered');
@@ -281,7 +425,7 @@ export async function captureContentRecoveryCoverage(pool: Pool,
     }
     const catalog = await ownerCatalog(client);
     const owned = ownedReferences(catalog, references);
-    await assertRevisionPins(client, owned.pinned, owner.data_epoch, owner.sequence);
+    await assertRevisionPins(client, owned.pinned, owner.data_epoch, owner.sequence, proof);
     const tables: Record<string, RowCoverage> = {};
     for (const table of catalog.tables) {
       const wanted = owned.keys.get(table.name);
@@ -299,11 +443,11 @@ export async function captureContentRecoveryCoverage(pool: Pool,
       graphReferencesCount: String(owned.references.length),
       graphReferencesDigest: digest(owned.references), catalogDigest: catalog.digest,
       tables, excluded: { ...catalog.excluded } };
-  });
+  }, proof?.contentClient);
 }
 
 export async function assertContentRecoveryCoverage(pool: Pool, fuseki: FusekiClient,
-  expected: ContentRecoveryCoverage): Promise<void> {
+  expected: ContentRecoveryCoverage, proof?: ContentRecoveryProofContext): Promise<void> {
   if (expected?.version !== 5) {
     throw new ContentRecoveryConflict(`Content recovery coverage version ${String(expected?.version)
     } is not version 5; capture a fresh fenced cut`);
@@ -316,12 +460,12 @@ export async function assertContentRecoveryCoverage(pool: Pool, fuseki: FusekiCl
     throw new ContentRecoveryConflict('Content recovery coverage is invalid');
   }
   const candidates = await graphContentReferences(fuseki);
-  const owned = await readOnly(pool, async client => ownedReferences(await ownerCatalog(client), candidates));
+  const owned = await readOnly(pool, async client => ownedReferences(await ownerCatalog(client), candidates), proof?.contentClient);
   if (String(owned.references.length) !== expected.graphReferencesCount
     || digest(owned.references) !== expected.graphReferencesDigest) {
     throw new ContentRecoveryConflict('restored graph Content references differ from captured cut');
   }
-  const actual = await captureContentRecoveryCoverage(pool, candidates);
+  const actual = await captureContentRecoveryCoverage(pool, candidates, proof ? { ...proof, fuseki } : undefined);
   if (JSON.stringify(actual) !== JSON.stringify(expected)) {
     throw new ContentRecoveryConflict('restored Content owner differs from captured cut');
   }

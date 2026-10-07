@@ -152,7 +152,7 @@ async function eraseContent(content: Pool, command: ContentErasureCommand): Prom
 export type ContentErasureProbe = 'erased' | 'absent' | 'available' | 'foreign';
 
 /** Per-revision state of a journaled erasure in one Content copy, in one bounded read. */
-export async function probeContentErasure(content: Pool, erasureId: string,
+export async function probeContentErasure(content: Pool | PoolClient, erasureId: string,
   revisionIds: readonly string[]): Promise<Map<string, ContentErasureProbe>> {
   if (revisionIds.length > 256) throw new ContentErasureInvalid('Content erasure probe is too large');
   const rows = (await content.query<{ id: string; availability: string | null;

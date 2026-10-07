@@ -8,6 +8,7 @@ import { Pool, type PoolClient } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { migrateAccount } from '../../../scripts/ops/migrate.ts';
 import { docker } from '../../../scripts/operations/search-state.ts';
+import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { accountRecoveryCoverage } from '../../../services/account/src/recovery-coverage.ts';
@@ -25,6 +26,13 @@ import { readMainOutboxEnvelope, readNextMainOutboxBatch, relayCoverage, type Cu
 import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
 import { reconcileRestoredErasures, releaseErasureRestoreHold, retainErasureCoverage,
   type RestoredOwners } from '../../../services/main/src/modules/erasure/reconcile.ts';
+import { applyContentErasure } from '../../../services/main/src/modules/erasure/content.ts';
+import { journalErasure, markErasureSuppressed } from '../../../services/main/src/modules/erasure/journal.ts';
+import { suppressGraphContentRevisions, readGraphErasureProof } from '../../../services/main/src/modules/erasure/graph.ts';
+import { contentPublicationDigest, publishPinnedContent } from '../../../services/main/src/modules/content-publication/publish.ts';
+import { assertContentRecoveryCoverage, captureContentRecoveryCoverage, ContentRecoveryConflict, graphContentReferences }
+  from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { heldErasureMaintenanceClient } from '../../../services/main/src/modules/erasure/graph.ts';
 import { restoredCustodyDigests } from '../../../services/main/src/modules/erasure/custody.ts';
 import { ACTIVE_GENERATION, ensureModelGeneration }
@@ -965,3 +973,271 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     await rootCommand(['stack:reset',...stack.args],120_000);
   }
 },600_000);
+
+test('OPS12: post-erasure Content pins capture and restore exact historical owner evidence without body recovery', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through selected QA integration');
+  const stack = qaStack(`erased-pin-${randomUUID().slice(0, 12)}`);
+  let accessPool: Pool | undefined, accountPool: Pool | undefined, contentPool: Pool | undefined, relayPool: Pool | undefined;
+  let postgres: Awaited<ReturnType<typeof promotedPostgres>> | undefined;
+  let originalGraph: StandaloneFuseki | undefined;
+  const originalVolume = `rezics-erased-pin-original-${randomUUID().slice(0, 12)}`;
+  const recoveryDirectory = resolve(root, `.temp/pg-erased-pin-${randomUUID().slice(0, 8)}`);
+  try {
+    await rootCommand(['stack:up', ...stack.args], 180_000);
+    const apps = stack.apps, fuseki = stack.fuseki;
+    await migrateAccess(apps.ACCESS_DATABASE_URL!);
+    await migrateAccount(apps, root);
+    accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL, max: 1 });
+    accountPool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
+    contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL, max: 1, connectionTimeoutMillis: 1500 });
+    relayPool = new Pool({ connectionString: apps.MAIN_RELAY_DATABASE_URL, max: 1, connectionTimeoutMillis: 1500 });
+    await migrateContent(contentPool);
+    await accountRecoveryCoverage(accountPool);
+    for (const file of schemaFiles(root, 'relay'))
+      await relayPool.query(readFileSync(resolve(root, 'services/main/migrations/relay', file), 'utf8'));
+    const objects = new S3ImmutableObjects({ endpoint: apps.MAIN_S3_ENDPOINT!, bucket: apps.MAIN_S3_BUCKET!,
+      region: apps.MAIN_S3_REGION, accessKeyId: apps.MAIN_S3_ACCESS_KEY!, secretAccessKey: apps.MAIN_S3_SECRET_KEY!,
+      prefix: 'semantic/work/' });
+    await objects.initialize();
+    const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
+    access.configureBaseline(fuseki);
+    const custody = new ReceiptCustody(new PostgresReceiptCustodyStore(accessPool), objects, fuseki,
+      apps.FUSEKI_TITLE_ADMISSION_KEY!, proofRetirementSender(apps.FUSEKI_URL!, apps.FUSEKI_COMMAND_TOKEN!));
+    const env: WorkActivationEnvironment = { fuseki, receiptCustody: custody, workObjects: objects,
+      objectDirectory: apps.MAIN_OBJECT_DIRECTORY!,
+      lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! } };
+    await initializeFreshGraph(fuseki, env.lineage);
+    await ensureModelGeneration(env);
+    const actor = nativeId(), principalId = randomUUID(), title = 'Historical erased publication pin';
+    const createAdmission: RegisteredAdmission = { id: randomUUID(), principalId, actingSubject: actor,
+      scope: 'work:create:root', action: 'work.create', idempotencyKey: randomUUID(),
+      requestDigest: metadataWorkRequestDigest(title), authorityEpoch: '0',
+      expiresAt: new Date(Date.now() + 600_000).toISOString(), state: 'claimed',
+      dispatchEligible: true, replayed: false };
+    const created = await activateMetadataWork(env, { title, admission: createAdmission });
+    const content = new ContentCore(contentPool), variantId = `urn:rezics:variant:${randomUUID()}`;
+    const saved = await content.saveDraft({ operationId: `erased-pin-draft:${randomUUID()}`,
+      variant: { id: variantId, resourceId: created.work!,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+      expectedHead: null, model: 'content-shape-v1', sourceRevision: null, provenance: {},
+      serializedJson: JSON.stringify({ body: 'Original body erased before capture' }) });
+    if (!saved.revisionId) throw new Error('Original draft has no revision');
+    const revisionId = saved.revisionId;
+    const exact = (await content.readExactBatch([revisionId], async ids => new Set(ids)))[0];
+    if (exact?.status !== 'available') throw new Error('Original publication bytes are unavailable');
+    const input = { preparationId: `erased-pin-publish:${randomUUID()}`, revisionId,
+      expectedDigest: exact.reference.byteDigest, expectedContentEpoch: saved.position.dataEpoch,
+      resourceId: created.work!, variantId, expectedPublicationHead: null };
+    const publicationAdmission: RegisteredAdmission = { ...createAdmission, id: randomUUID(),
+      scope: `content:publish:${variantId}`, action: 'content.publish', idempotencyKey: randomUUID(),
+      requestDigest: contentPublicationDigest(input) };
+    const publication = await publishPinnedContent(env, content, publicationAdmission, input);
+    expect(publication.status).toBe('active');
+    expect(publication.graphSequence).not.toBeNull();
+    // A second retained active pin uses the same actual terminal publication
+    // proof. Erasure must supersede every pin, including one absent from graph refs.
+    const secondPreparation = `erased-pin-second:${randomUUID()}`;
+    await content.preparePublication(secondPreparation, revisionId, input.expectedDigest);
+    await content.settlePublication(`erased-pin-second-settle:${randomUUID()}`, secondPreparation,
+      { outcome: 'active', revisionId, receipt: publication.receipt,
+        dataEpoch: publication.graphDataEpoch!, sequence: publication.graphSequence! });
+    const consumer = `erased-pin-recovery:${randomUUID()}`;
+    await initializeRelayCheckpoint(relayPool, consumer, env.lineage.dataEpoch);
+    while (await relayMainOutboxOnce(fuseki, relayPool, consumer)) { /* retain all actual native batches */ }
+    const entry = await journalErasure(relayPool, { operationId: `erased-pin-erase:${randomUUID()}`,
+      requestDigest: hash(randomUUID()), kind: 'revision', principalId, admissionId: randomUUID(), authorityEpoch: '0',
+      targets: [{ kind: 'content_revision', ref: revisionId }] });
+    await suppressGraphContentRevisions(fuseki, env.lineage, entry.erasureId, entry.erasureEpoch, [revisionId]);
+    const originalProof = await readGraphErasureProof(fuseki, env.lineage,
+      entry.erasureId, entry.erasureEpoch, [revisionId]);
+    const nativeBatch = await relayMainOutboxOnce(fuseki, relayPool, consumer);
+    expect(nativeBatch?.eventIds).toHaveLength(1);
+    expect(await relayMainOutboxOnce(fuseki, relayPool, consumer)).toBeNull();
+    // The owner operation is part of original setup, never a capture/restore repair.
+    expect(await applyContentErasure(contentPool, { preservationAccess: accessPool,
+      erasureId: entry.erasureId, erasureEpoch: entry.erasureEpoch, resourceId: created.work!,
+      revisionIds: [revisionId], graphProof: originalProof })).toEqual({ applied: 1 });
+    await markErasureSuppressed(relayPool, entry.erasureId);
+    expect((await content.readExactBatch([revisionId], async ids => new Set(ids)))[0]?.status).toBe('erased');
+    expect((await contentPool.query('SELECT availability,serialized_bytes,body FROM content.revision WHERE id=$1',
+      [revisionId])).rows).toEqual([{ availability: 'erased', serialized_bytes: null, body: null }]);
+    const references = await graphContentReferences(fuseki);
+    const pins = references.filter(ref => ref.object === `urn:rezics:content:revision:${revisionId}`
+      && ref.predicate === `${RV}contentRevision`);
+    expect(pins.length).toBeGreaterThanOrEqual(2);
+    expect(pins.filter(ref => ref.byteDigest !== null && ref.byteDigest !== input.expectedDigest)).toEqual([]);
+    expect(pins.filter(ref => ref.byteDigest === null).every(ref => ref.graph === GRAPHS.outbox)).toBe(true);
+    const sourceFacts = await facts(fuseki);
+    const erasureEventId = nativeBatch!.eventIds[0]!;
+    const sourceEvent = (await relayPool.query('SELECT envelope FROM relay.delivered_event WHERE event_id=$1',
+      [erasureEventId])).rows;
+    const sourceRows = (await contentPool.query(`SELECT id,availability,byte_digest,byte_length,
+      serialized_bytes,body FROM content.revision ORDER BY id`)).rows;
+    const sourceLineage = { ...env.lineage }, recoveryKey = hash(randomUUID());
+    const fenceGeneration = await engageAccessRecoveryFence(accessPool);
+
+    const borrowed = async <T>(work: (clients: { fuseki: FusekiClient; relayClient: PoolClient; contentClient: PoolClient }) => Promise<T>) => {
+      const relayClient = await relayPool!.connect();
+      let contentClient: PoolClient | undefined;
+      try {
+        await relayClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+        await relayClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch',0))");
+        contentClient = await contentPool!.connect();
+        await contentClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        const identity = 'SELECT pg_backend_pid()::text AS pid,txid_current()::text AS txid';
+        const relayIdentity = (await relayClient.query(identity)).rows;
+        const contentIdentity = (await contentClient.query(identity)).rows;
+        const forbidden = () => { throw new Error('Erased pin proof must retain supplied Content and relay clients'); };
+        const queries = [spyOn(relayClient, 'query'), spyOn(contentClient, 'query')];
+        const guards = [spyOn(relayPool!, 'connect').mockImplementation(forbidden),
+          spyOn(relayPool!, 'query').mockImplementation(forbidden),
+          spyOn(contentPool!, 'connect').mockImplementation(forbidden),
+          spyOn(contentPool!, 'query').mockImplementation(forbidden),
+          spyOn(relayClient, 'release').mockImplementation(forbidden),
+          spyOn(contentClient, 'release').mockImplementation(forbidden),
+          spyOn(fuseki, 'command').mockImplementation(forbidden),
+          spyOn(fuseki, 'commandWithReceipt').mockImplementation(forbidden)];
+        try { return await work({ fuseki, relayClient, contentClient }); }
+        finally {
+          try {
+            for (const guard of guards) expect(guard).not.toHaveBeenCalled();
+            for (const query of queries) for (const call of query.mock.calls)
+              expect(String(call[0])).not.toMatch(/(?:^|;)\s*(?:BEGIN|COMMIT|ROLLBACK(?!\s+TO\s+SAVEPOINT))\b/i);
+          } finally {
+            for (const guard of guards.reverse()) guard.mockRestore();
+            for (const query of queries) query.mockRestore();
+          }
+          expect((await relayClient.query(identity)).rows).toEqual(relayIdentity);
+          expect((await contentClient.query(identity)).rows).toEqual(contentIdentity);
+          expect(relayPool!.totalCount).toBe(1); expect(contentPool!.totalCount).toBe(1);
+        }
+      } finally {
+        if (contentClient) { try { await contentClient.query('ROLLBACK'); } finally { contentClient.release(); } }
+        try { await relayClient.query('ROLLBACK'); } finally { relayClient.release(); }
+      }
+    };
+    const signedCut = await borrowed(async context => {
+      const captured = await captureContentRecoveryCoverage(contentPool!, references, context);
+      expect(captured.tables['content.revision_erasure']?.count).toBe('1');
+      expect(captured.tables['content.publication_erasure_supersession']?.count).toBe('2');
+      await expect(assertContentRecoveryCoverage(contentPool!, fuseki, captured, context)).resolves.toBeUndefined();
+      const cut = await captureGraphRecoveryCoverage(fuseki, accountPool!, accessPool!, relayPool!,
+        consumer, contentPool!, { directory: env.objectDirectory, workObjects: objects }, context);
+      expect(cut.content).toEqual(captured);
+      return cut;
+    });
+    const sealedCoverage = JSON.stringify(sealRecoveryPayload(signedCut, recoveryKey, 'graph-recovery-coverage'));
+    await retainRecoveryCoverageHead(relayPool, sealedCoverage, recoveryKey);
+    await retainErasureCoverage(relayPool, consumer);
+
+    // Every negative mutates only this isolated original's caller savepoint; it
+    // never creates successful authority or substitutes a new signed cut.
+    const accountKindConstraints = (await relayPool.query<{ conname: string }>(`SELECT conname FROM pg_constraint
+      WHERE conrelid='relay.erasure'::regclass AND contype='c'
+        AND pg_get_constraintdef(oid) LIKE '%account_issuer%'
+        AND pg_get_constraintdef(oid) LIKE '%account_subject%'`)).rows;
+    expect(accountKindConstraints).toHaveLength(1);
+    const accountKindConstraint = `"${accountKindConstraints[0]!.conname.replaceAll('"','""')}"`;
+    const corruptions: { name: string; owner: 'content' | 'relay'; sql: string; values: unknown[] }[] = [
+      { name: 'unavailable revision', owner: 'content', sql: `ALTER TABLE content.revision DISABLE TRIGGER revision_immutable;
+          UPDATE content.revision SET availability='unavailable' WHERE id='${revisionId}'`, values: [] },
+      { name: 'wrong revision digest', owner: 'content', sql: `ALTER TABLE content.revision DISABLE TRIGGER revision_immutable;
+          UPDATE content.revision SET byte_digest='${'0'.repeat(64)}' WHERE id='${revisionId}'`, values: [] },
+      { name: 'missing revision tombstone', owner: 'content', sql: `ALTER TABLE content.publication_erasure_supersession DISABLE TRIGGER publication_erasure_supersession_immutable;
+          ALTER TABLE content.revision_erasure DISABLE TRIGGER revision_erasure_immutable;
+          DELETE FROM content.publication_erasure_supersession WHERE revision_id='${revisionId}';
+          DELETE FROM content.revision_erasure WHERE revision_id='${revisionId}'`, values: [] },
+      { name: 'foreign revision tombstone', owner: 'content', sql: `ALTER TABLE content.revision_erasure DISABLE TRIGGER revision_erasure_immutable;
+          UPDATE content.revision_erasure SET erasure_id='${randomUUID()}' WHERE revision_id='${revisionId}'`, values: [] },
+      { name: 'wrong revision tombstone epoch', owner: 'content', sql: `ALTER TABLE content.revision_erasure DISABLE TRIGGER revision_erasure_immutable;
+          UPDATE content.revision_erasure SET erasure_epoch=erasure_epoch+1 WHERE revision_id='${revisionId}'`, values: [] },
+      { name: 'active unsuperseded pin', owner: 'content', sql: `ALTER TABLE content.publication_erasure_supersession DISABLE TRIGGER publication_erasure_supersession_immutable;
+          DELETE FROM content.publication_erasure_supersession WHERE operation_id='${secondPreparation}'`, values: [] },
+      ...(['graph_receipt', 'graph_data_epoch', 'graph_sequence', 'erasure_id', 'erasure_epoch'] as const).map(field => ({
+        name: `wrong supersession ${field}`, owner: 'content' as const,
+        sql: `ALTER TABLE content.publication_erasure_supersession DISABLE TRIGGER publication_erasure_supersession_immutable;
+          UPDATE content.publication_erasure_supersession SET ${field}=${field === 'graph_sequence' || field === 'erasure_epoch'
+            ? `${field}+1` : `'${field === 'graph_receipt' ? `urn:rezics:receipt:erasure-graph:${'0'.repeat(64)}` : randomUUID()}'`}
+          WHERE revision_id='${revisionId}'`, values: [] })),
+      { name: 'missing successful original preparation receipt', owner: 'content', sql: `ALTER TABLE content.receipt DISABLE TRIGGER receipt_immutable;
+          UPDATE content.receipt SET outcome='rejected' WHERE operation_id='${input.preparationId}'`, values: [] },
+      { name: 'missing original preparation outbox', owner: 'content', sql: `ALTER TABLE content.outbox DISABLE TRIGGER outbox_immutable;
+          DELETE FROM content.outbox WHERE operation_id='${input.preparationId}'`, values: [] },
+      { name: 'wrong journal epoch', owner: 'relay', sql: `ALTER TABLE relay.erasure DISABLE TRIGGER erasure_guard;
+          ALTER TABLE relay.recovery_coverage_head DROP CONSTRAINT recovery_coverage_head_erasure_epoch_fkey;
+          UPDATE relay.erasure SET erasure_epoch=erasure_epoch+1 WHERE id='${entry.erasureId}'`, values: [] },
+      { name: 'wrong journal kind', owner: 'relay', sql: `ALTER TABLE relay.erasure DISABLE TRIGGER erasure_guard;
+          ALTER TABLE relay.erasure DROP CONSTRAINT ${accountKindConstraint};
+          UPDATE relay.erasure SET kind='account' WHERE id='${entry.erasureId}'`, values: [] },
+      { name: 'journal not suppressed', owner: 'relay', sql: `ALTER TABLE relay.erasure DISABLE TRIGGER erasure_guard;
+          UPDATE relay.erasure SET suppression_status='pending',suppressed_at=NULL,stage='requested' WHERE id='${entry.erasureId}'`, values: [] },
+      { name: 'missing full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_immutable;
+          DELETE FROM relay.erasure_target WHERE erasure_id='${entry.erasureId}'`, values: [] },
+      { name: 'foreign full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_immutable;
+          UPDATE relay.erasure_target SET target_ref='${randomUUID()}' WHERE erasure_id='${entry.erasureId}'`, values: [] },
+      { name: 'extra full journal target', owner: 'relay', sql: `INSERT INTO relay.erasure_target
+          (erasure_id,ordinal,owner,target_kind,target_ref) VALUES ('${entry.erasureId}',2,'content','content_revision','${randomUUID()}')`, values: [] },
+      { name: 'full journal target bound exceeds64', owner: 'relay', sql: `INSERT INTO relay.erasure_target
+          (erasure_id,ordinal,owner,target_kind,target_ref) SELECT '${entry.erasureId}',n+1,'content','content_revision',gen_random_uuid()::text
+          FROM generate_series(1,64) AS n`, values: [] },
+      { name: 'foreign target owner', owner: 'relay', sql: `INSERT INTO relay.erasure_target
+          (erasure_id,ordinal,owner,target_kind,target_ref) VALUES ('${entry.erasureId}',2,'graph','resource','urn:rezics:resource:foreign')`, values: [] },
+      { name: 'missing retained native event', owner: 'relay', sql: 'UPDATE relay.delivered_event SET event_id=event_id||\':missing\' WHERE event_id=$1', values: [erasureEventId] },
+      { name: 'wrong retained native receipt', owner: 'relay', sql: `UPDATE relay.delivered_event SET envelope=jsonb_set(envelope,
+          '{data,receipt,id}','"urn:rezics:receipt:wrong"'::jsonb) WHERE event_id=$1`, values: [erasureEventId] },
+    ];
+    for (const corruption of corruptions) await borrowed(async context => {
+      const client = corruption.owner === 'content' ? context.contentClient : context.relayClient;
+      await client.query('SAVEPOINT original_pin');
+      try {
+        await client.query(corruption.sql, corruption.values);
+        await expect(captureContentRecoveryCoverage(contentPool!, references, context), corruption.name)
+          .rejects.toBeInstanceOf(ContentRecoveryConflict);
+      } finally { await client.query('ROLLBACK TO SAVEPOINT original_pin'); }
+      expect(await captureContentRecoveryCoverage(contentPool!, references, context)).toEqual(signedCut.content);
+    });
+    await borrowed(async context => {
+      await expect(captureContentRecoveryCoverage(contentPool!, pins.map(pin => ({ ...pin, byteDigest: null })), context))
+        .rejects.toBeInstanceOf(ContentRecoveryConflict);
+      await expect(captureContentRecoveryCoverage(contentPool!, pins.map(pin => ({ ...pin, byteDigest: '0'.repeat(64) })), context))
+        .rejects.toBeInstanceOf(ContentRecoveryConflict);
+      await expect(captureContentRecoveryCoverage(contentPool!, [{ ...pins[0]!, object: `urn:rezics:content:revision:${randomUUID()}` }], context))
+        .rejects.toBeInstanceOf(ContentRecoveryConflict);
+      await expect(captureContentRecoveryCoverage(contentPool!, references, { contentClient: context.contentClient } as never))
+        .rejects.toBeInstanceOf(ContentRecoveryConflict);
+    });
+    expect(await facts(fuseki)).toEqual(sourceFacts);
+    expect((await relayPool.query('SELECT envelope FROM relay.delivered_event WHERE event_id=$1', [erasureEventId])).rows).toEqual(sourceEvent);
+    originalGraph = await originalGraphCopy(stack, originalVolume);
+    const originalFuseki = new FusekiClient(originalGraph.url, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
+    postgres = await promotedPostgres(stack, recoveryDirectory);
+    await Promise.all([accessPool.end(), accountPool.end(), contentPool.end()]);
+    accessPool = new Pool({ connectionString: postgres.connection(apps.ACCESS_DATABASE_URL!), max: 1 });
+    accountPool = new Pool({ connectionString: postgres.connection(apps.ACCOUNT_DATABASE_URL!) });
+    contentPool = new Pool({ connectionString: postgres.connection(apps.CONTENT_DATABASE_URL!), max: 1, connectionTimeoutMillis: 1500 });
+    const next = { dataEpoch: randomUUID(), routingEpoch: randomUUID() };
+    await cutoverRestoredGraphLineage(fuseki, { prior: { ...sourceLineage, sequence: signedCut.priorSequence }, next });
+    env.lineage = next;
+    await borrowed(async context => {
+      await expect(assertContentRecoveryCoverage(contentPool!, fuseki, signedCut.content!, context)).resolves.toBeUndefined();
+      expect(await captureContentRecoveryCoverage(contentPool!, await graphContentReferences(fuseki), context))
+        .toEqual(signedCut.content);
+    });
+    expect(await facts(originalFuseki)).toEqual(sourceFacts);
+    expect((await contentPool.query(`SELECT id,availability,byte_digest,byte_length,
+      serialized_bytes,body FROM content.revision ORDER BY id`)).rows).toEqual(sourceRows);
+    expect((await accessPool.query('SELECT open,generation::text FROM access.recovery_fence WHERE id')).rows)
+      .toEqual([{ open: false, generation: fenceGeneration }]);
+    expect((await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
+      ${iri(DATASET)} rv:restoreHold true } }`)).boolean).toBe(true);
+  } finally {
+    mock.restore();
+    await Promise.allSettled([accessPool?.end(), accountPool?.end(), contentPool?.end(), relayPool?.end()]);
+    postgres?.stop();
+    if (originalGraph) originalGraph.runner.stop();
+    docker(['rm', '-f', `${originalVolume}-server`], stack.dockerEnv);
+    docker(['volume', 'rm', '-f', originalVolume], stack.dockerEnv);
+    try { await rootCommand(['stack:down', ...stack.args], 90_000); } catch { /* retain product failure */ }
+    rmSync(recoveryDirectory, { recursive: true, force: true });
+  }
+}, 600_000);

@@ -1,10 +1,10 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { GraphSuppressionProof } from './graph.ts';
 
 /** Every restored active pin and supersession must name this retained journal
  * erasure and its exact graph receipt. Indexed probes cover at most 64 target
  * revisions; no body bytes are read. */
-export async function publicationSupersessionsMatch(content: Pool,
+export async function publicationSupersessionsMatch(content: Pool | PoolClient,
   revisionIds: readonly string[], erasureId: string, erasureEpoch: string,
   proof: GraphSuppressionProof | null): Promise<boolean> {
   if (!revisionIds.length || revisionIds.length > 64) return false;

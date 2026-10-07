@@ -22,7 +22,7 @@ import { accountRecoveryCoverage, assertAccountRecoveryCoverage,
 import { advancePgRecoveryFrontier, assertPgRecoveryFrontier, capturePgRecoveryFrontier,
   type PgRecoveryFrontier } from './pg-recovery-frontier.ts';
 import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
-  graphContentReferences, type ContentRecoveryCoverage } from './content-recovery-coverage.ts';
+  graphContentReferences, type ContentRecoveryCoverage, type ContentRecoveryProofContext } from './content-recovery-coverage.ts';
 import { assertCommerceRecoveryCoverageOnClient, captureCommerceRecoveryCoverage,
   type CommerceRecoveryCoverage } from '../commerce/recovery-coverage.ts';
 import { assertObjectRecoveryCoverage, captureObjectRecoveryCoverage,
@@ -65,6 +65,8 @@ export interface AuthenticatedRecoveryCoverage {
   deletions?: DeletionReleaseEvidence;
   contentPool?: Pool;
   objectStore?: ObjectRecoveryStore;
+  /** Borrowed Content snapshot used by exact recovery pin verification. */
+  contentClient?: PoolClient;
   /**
    * Reconcile retained erasures after verifying the captured cut, then release
    * graph and Access under the same journal lock and borrowed owner clients.
@@ -124,7 +126,7 @@ export function assertGraphRecoveryRelayCut(source: GraphRecoverySource, relay: 
 export async function captureGraphRecoveryCoverage(
   fuseki: FusekiClient, accountPool: Pool, accessPool: Pool,
   relayPool: Pool, consumer: string, contentPool: Pool,
-  objectStore?: ObjectRecoveryStore,
+  objectStore?: ObjectRecoveryStore, contentProof?: ContentRecoveryProofContext,
 ): Promise<RecoveryCoverage> {
   if (!contentPool) throw new RestoreLineageConflict('Content owner is required for recovery coverage');
   if (objectStore?.structureObjects) objectStore = { ...objectStore,
@@ -140,16 +142,17 @@ export async function captureGraphRecoveryCoverage(
     dataEpoch: before.dataEpoch, routingEpoch: before.routingEpoch,
   });
   const graphReferences = await graphContentReferences(fuseki);
-  const content = await captureContentRecoveryCoverage(contentPool, graphReferences);
+  const content = await captureContentRecoveryCoverage(contentPool, graphReferences, contentProof ? { ...contentProof, fuseki } : undefined);
   const commerce = await captureCommerceRecoveryCoverage(accessPool);
   const objects = objectStore ? await captureObjectRecoveryCoverage(fuseki, objectStore) : undefined;
   const outbox = await accessOutboxCoverage(accessPool);
   const state = await accessStateCoverage(accessPool);
   const accountPg = await capturePgRecoveryFrontier(accountPool);
   const account = await accountRecoveryCoverage(accountPool);
-  const relay = await relayCoverage(relayPool, consumer);
-  await assertAccountSubjectDeletionsAbsent(accountPool, relayPool);
-  await assertAccountDeletionJournalCoverage(accessPool, relayPool);
+  const relay = contentProof ? await relayCoverageOnClient(contentProof.relayClient, consumer)
+    : await relayCoverage(relayPool, consumer);
+  await assertAccountSubjectDeletionsAbsent(accountPool, relayPool, contentProof?.relayClient);
+  await assertAccountDeletionJournalCoverage(accessPool, relayPool, undefined, contentProof?.relayClient);
   const after = await readGraphRecoverySource(fuseki);
   assertGraphRecoveryRelayCut(before, relay);
   if (before.dataEpoch !== after.dataEpoch || before.routingEpoch !== after.routingEpoch
@@ -161,11 +164,11 @@ export async function captureGraphRecoveryCoverage(
   const [[outboxAfter, stateAfter], [accountPgAfter, accountAfter], relayAfter] = await Promise.all([
     (async () => [await accessOutboxCoverage(accessPool), await accessStateCoverage(accessPool)] as const)(),
     (async () => [await capturePgRecoveryFrontier(accountPool), await accountRecoveryCoverage(accountPool)] as const)(),
-    relayCoverage(relayPool, consumer),
+    contentProof ? relayCoverageOnClient(contentProof.relayClient, consumer) : relayCoverage(relayPool, consumer),
   ]);
   const final = await readGraphRecoverySource(fuseki);
   const graphReferencesAfter = await graphContentReferences(fuseki);
-  const contentAfter = await captureContentRecoveryCoverage(contentPool, graphReferencesAfter);
+  const contentAfter = await captureContentRecoveryCoverage(contentPool, graphReferencesAfter, contentProof ? { ...contentProof, fuseki } : undefined);
   const commerceAfter = await captureCommerceRecoveryCoverage(accessPool);
   const objectsAfter = objectStore ? await captureObjectRecoveryCoverage(fuseki, objectStore) : undefined;
   // The cluster can emit checkpoint/hint-bit WAL while every owner row stays
@@ -488,7 +491,8 @@ export async function releaseRestoredGraphHold(
     catch { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture'); }
     if (!coverage.content) throw new RestoreLineageConflict('Content recovery coverage is missing');
     if (!evidence.contentPool) throw new RestoreLineageConflict('restored Content owner is unavailable');
-    try { await assertContentRecoveryCoverage(evidence.contentPool, fuseki, coverage.content); }
+    try { await assertContentRecoveryCoverage(evidence.contentPool, fuseki, coverage.content,
+      { fuseki, relayClient: relayHeadClient, contentClient: evidence.contentClient }); }
     catch { throw new RestoreLineageConflict('Content owner or graph references differ from recovery coverage'); }
     if (!coverage.objects) throw new RestoreLineageConflict('immutable object recovery coverage is missing');
     if (!evidence.objectStore) throw new RestoreLineageConflict('restored immutable object owner is unavailable');
