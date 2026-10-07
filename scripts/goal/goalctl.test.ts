@@ -8,7 +8,7 @@ import { repositoryGuards } from '../qa/repository-guards.ts';
 import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, SONNET_MODEL,
-  failingTestFiles, type Ledger, type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
+  failingTestFiles, memoryFloorRefusal, type Ledger, type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -129,6 +129,17 @@ describe('goalctl claims', () => {
 });
 
 describe('goalctl runtime policy', () => {
+  test('host available memory must meet the configured floor, defaulting to 12 GiB', () => {
+    const meminfo = (giB: number) => `MemFree: 1 kB\nMemAvailable: ${giB * 1024 * 1024} kB\n`;
+    expect(memoryFloorRefusal(meminfo(11))).toContain('GOAL_MEMORY_FLOOR_GIB=12');
+    expect(memoryFloorRefusal(meminfo(12))).toBeUndefined();
+    expect(memoryFloorRefusal(meminfo(13))).toBeUndefined();
+    expect(memoryFloorRefusal(meminfo(7.5), 8)).toContain('MemAvailable 7.50 GiB');
+    expect(memoryFloorRefusal(meminfo(0), 0)).toBeUndefined();
+    expect(() => memoryFloorRefusal('MemFree: 999 kB')).toThrow('Cannot determine host MemAvailable');
+    for (const floor of [-1, NaN, Infinity]) expect(() => memoryFloorRefusal(meminfo(16), floor)).toThrow('GOAL_MEMORY_FLOOR_GIB');
+  });
+
   test('classifies 5h usage and treats stale snapshots as unknown', () => {
     const now = 1_800_000_000_000;
     const at = now / 1000 - 60;
@@ -633,7 +644,7 @@ process.exit(await child.exited);
     chmodSync(join(dir, '.temp/bin/task'), 0o755);
     const ready = join(dir, '.temp/ready');
     mkdirSync(ready);
-    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha', GOAL_MAX_WORKERS: '25',
+    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha', GOAL_MAX_WORKERS: '25', GOAL_MEMORY_FLOOR_GIB: '0',
       GOAL_CODEX_HOME: join(dir, '.temp/codex'), GOAL_CODEX_1_HOME: join(dir, '.temp/codex-1'),
       GOAL_USAGE_FILE: join(dir, '.temp/usage.json'), GOAL_SLEEP_READY_DIR: ready,
       PATH: `${join(dir, '.temp/bin')}:${process.env.PATH}` };
@@ -809,7 +820,7 @@ process.exit(await child.exited);
     } finally { r.cleanup(); }
   }, 30_000);
 
-  for (const scenario of ['references', 'ordered', 'outside-reference', 'outside-symlink', 'unsafe-self-reference', 'unsafe-named-reference', 'unsafe-fraction-reference', 'above-head', 'padded', 'multiple-directories', 'ambiguous-directories', 'foreign-directory'] as const) {
+  for (const scenario of ['references', 'ordered', 'unrelated-data', 'outside-comment', 'outside-filename', 'outside-reference', 'outside-symlink', 'unsafe-self-reference', 'unsafe-named-reference', 'unsafe-fraction-reference', 'above-head', 'padded', 'multiple-directories', 'ambiguous-directories', 'foreign-directory'] as const) {
     test(`migration normalization handles ${scenario} before the unit gate and fast-forward`, async () => {
       const r = repo();
       try {
@@ -821,6 +832,12 @@ process.exit(await child.exited);
         // Main advances after dispatch, reproducing reservations merged in another order.
         mkdirSync(join(r.dir, directory), { recursive: true });
         writeFileSync(join(r.dir, directory, '1004_main.sql'), 'SELECT 1;\n');
+        if (scenario === 'unrelated-data') {
+          mkdirSync(join(r.dir, 'packages/model/src/address'), { recursive: true });
+          writeFileSync(join(r.dir, 'packages/model/src/address/unicode-data.ts'), 'export const unicode = [990, 9900, 12];\n');
+        }
+        if (scenario === 'outside-comment') writeFileSync(join(r.dir, 'other-owner.ts'), '// migration 990\n');
+        if (scenario === 'outside-filename') writeFileSync(join(r.dir, 'other-owner.ts'), `export const filename = '${directory}/990_first.sql';\n`);
         if (scenario === 'outside-reference') writeFileSync(join(r.dir, 'other-owner.ts'), 'export const migrationVersion = 990;\n');
         if (scenario === 'outside-symlink') symlinkSync(`${directory}/990_first.sql`, join(r.dir, 'other-owner.ts'));
         r.git('add', '.'); r.git('commit', '-qm', 'Advance main migration head');
@@ -886,6 +903,9 @@ process.exit(await child.exited);
           const references = readFileSync(join(r.dir, 'migration-references.test.ts'), 'utf8');
           expect(references).toContain(`${next}_first.sql`);
           expect(references).toContain(`const unrelated = ${first};`);
+          if (scenario === 'unrelated-data') {
+            expect(readFileSync(join(r.dir, 'packages/model/src/address/unicode-data.ts'), 'utf8')).toBe('export const unicode = [990, 9900, 12];\n');
+          }
           if (scenario === 'padded') expect(references).toContain("const QUOTED_VERSION = '1005';");
           expect(result.stdout.includes('Migration normalization:')).toBe(scenario !== 'above-head');
           if (scenario === 'ordered') {
@@ -936,32 +956,84 @@ process.exit(await child.exited);
     } finally { r.cleanup(); }
   }, 30_000);
 
-  for (const boundary of ['main', 'task'] as const) {
-    test(`merge refuses when ${boundary} changes while the normalized branch is tested`, async () => {
+  for (const boundary of ['main-unrelated', 'main-changed-file', 'main-gated-file', 'main-renamed-gated-file', 'main-overlap-twice', 'task', 'sharer'] as const) {
+    test(`merge handles ${boundary} moving while the normalized branch is tested`, async () => {
       const r = repo();
       try {
+        const sharedFile = 'shared.ts';
+        const gatedFile = 'baseline.test.ts';
+        writeFileSync(join(r.dir, sharedFile), 'export const main = 0;\n\n\nexport const task = 0;\n');
+        writeFileSync(join(r.dir, gatedFile), "import { test } from 'bun:test';\ntest('baseline passes', () => {});\n");
+        r.git('add', '.'); r.git('commit', '-qm', 'Baseline moving boundaries');
         const task = await r.start('G-001');
         const file = 'moving-boundary.test.ts';
-        const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(file, 'advance.ts'); r.save(ledger);
-        const directory = boundary === 'main' ? r.dir : task.worktree;
+        const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(file, 'advance.ts', sharedFile); r.save(ledger);
+        if (boundary === 'main-changed-file' || boundary === 'main-overlap-twice') {
+          writeFileSync(join(task.worktree, sharedFile), 'export const main = 0;\n\n\nexport const task = 1;\n');
+        }
+        const directory = boundary === 'task' ? task.worktree : r.dir;
+        const advancing = boundary === 'main-changed-file' || boundary === 'main-overlap-twice' ? sharedFile
+          : boundary === 'main-gated-file' ? gatedFile : 'advance.ts';
+        const marker = join(r.dir, '.temp/boundary-moved');
+        const ledgerPath = join(r.dir, '.temp/goal-orchestration/ledger.json');
+        const edit = boundary === 'sharer'
+          ? `const ledger = JSON.parse(readFileSync(${JSON.stringify(ledgerPath)}, 'utf8')); const first = Object.values(ledger.tasks)[0]; const id = 'G-' + '002'; ledger.tasks[id] = { ...first, id }; writeFileSync(${JSON.stringify(ledgerPath)}, JSON.stringify(ledger));`
+          : boundary === 'main-renamed-gated-file'
+            ? `expect(spawnSync('git', ['-C', ${JSON.stringify(r.dir)}, 'mv', ${JSON.stringify(gatedFile)}, 'renamed-baseline.test.ts']).status).toBe(0);
+expect(spawnSync('git', ['-C', ${JSON.stringify(r.dir)}, 'commit', '-qm', 'Rename gated file']).status).toBe(0);`
+          : `writeFileSync(${JSON.stringify(join(directory, advancing))}, ${JSON.stringify(advancing === sharedFile
+            ? 'export const main = 1;\n\n\nexport const task = 0;\n'
+            : advancing === gatedFile ? "import { test } from 'bun:test';\ntest('advanced baseline passes', () => {});\n" : 'export {};\n')});
+`
+            + `expect(spawnSync('git', ['-C', ${JSON.stringify(directory)}, 'add', ${JSON.stringify(advancing)}]).status).toBe(0);
+`
+            + `expect(spawnSync('git', ['-C', ${JSON.stringify(directory)}, 'commit', '-qm', 'Advance boundary']).status).toBe(0);`;
         writeFileSync(join(task.worktree, file), `import { test, expect } from 'bun:test';\n`
-          + `import { writeFileSync } from 'node:fs';\nimport { spawnSync } from 'node:child_process';\n`
-          + `test('advance a merge boundary', () => {\n`
-          + `writeFileSync(${JSON.stringify(join(directory, 'advance.ts'))}, 'export {};\\n');\n`
-          + `expect(spawnSync('git', ['-C', ${JSON.stringify(directory)}, 'add', 'advance.ts']).status).toBe(0);\n`
-          + `expect(spawnSync('git', ['-C', ${JSON.stringify(directory)}, 'commit', '-qm', 'Advance boundary']).status).toBe(0);\n});\n`);
+          + `import { existsSync, readFileSync, writeFileSync } from 'node:fs';\nimport { spawnSync } from 'node:child_process';\n`
+          + `test('advance a merge boundary once', () => {\n`
+          + `if (existsSync(${JSON.stringify(marker)})) {
+`
+          + (boundary === 'main-overlap-twice'
+            ? `const path = ${JSON.stringify(join(r.dir, sharedFile))}; writeFileSync(path, readFileSync(path, 'utf8').replace('main = 1', 'main = 2'));
+expect(spawnSync('git', ['-C', ${JSON.stringify(r.dir)}, 'commit', '-qam', 'Advance boundary again']).status).toBe(0);
+`
+            : '')
+          + `return; }
+writeFileSync(${JSON.stringify(marker)}, 'moved');
+${edit}
+});
+`);
         r.commit(task);
-        expect(spawnSync('git', ['-C', task.worktree, 'add', file]).status).toBe(0);
+        expect(spawnSync('git', ['-C', task.worktree, 'add', '.']).status).toBe(0);
         expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add moving boundary probe']).status).toBe(0);
         await r.stopFixture(task.id);
         const before = r.git('rev-parse', 'main');
-        const plan = join(r.dir, '.temp/unit-plan'); writeFileSync(plan, `  unit: ${file}\n`);
-        const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan });
-        expect(result.status).toBe(1);
-        expect(result.stderr).toContain('changed during the unit gate; retry merge');
-        expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
-        expect(existsSync(join(r.dir, file))).toBe(false);
-        if (boundary === 'task') expect(r.git('rev-parse', 'main')).toBe(before);
+        const plan = join(r.dir, '.temp/unit-plan');
+        writeFileSync(plan, `  unit: ${file}\n${boundary === 'main-gated-file' || boundary === 'main-renamed-gated-file' ? `  unit: ${gatedFile}\n` : ''}`);
+        const log = join(r.dir, '.temp/unit-log');
+        const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '1' });
+        const refusal = boundary === 'task' || boundary === 'sharer' || boundary === 'main-overlap-twice';
+        expect(result.status).toBe(refusal ? 1 : 0);
+        if (refusal) {
+          expect(result.stderr).toContain(boundary === 'main-overlap-twice' ? 'main touched task or gated files again' : 'changed during the unit gate; retry merge');
+          expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+          expect(existsSync(join(r.dir, file))).toBe(false);
+          if (boundary === 'task' || boundary === 'sharer') expect(r.git('rev-parse', 'main')).toBe(before);
+        } else {
+          expect(result.stderr).toBe('');
+          expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+          expect(existsSync(join(r.dir, file))).toBe(true);
+          expect(result.stdout).toContain(boundary === 'main-unrelated' ? 'existing gate remains valid' : 're-running the gate once');
+          if (boundary === 'main-changed-file') expect(readFileSync(join(r.dir, sharedFile), 'utf8')).toContain('export const task = 1;');
+        }
+        const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+        expect(runs).toHaveLength(boundary.startsWith('main-') && boundary !== 'main-unrelated' ? 2 : 1);
+        const eventsPath = join(r.dir, '.temp/goal-orchestration/merges.jsonl');
+        if (!refusal) {
+          const event = JSON.parse(readFileSync(eventsPath, 'utf8').trim());
+          expect(event.before).not.toBe(before);
+          expect(event.after).toBe(r.git('rev-parse', 'main'));
+        }
       } finally { r.cleanup(); }
     }, 30_000);
   }
@@ -1390,6 +1462,28 @@ process.exit(await child.exited);
         const result = r.run(['resume', 'G-001', '-m', 'continue', ...flags], { GOAL_MAX_WORKERS: '1' });
         expect(result.status).toBe(1);
         expect(result.stderr).toContain('Concurrency limit reached: 1/1 live workers');
+        expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(1);
+      }
+    } finally { r.cleanup(); }
+  });
+
+  test('dispatch and resume refuse below the memory floor even with --force-usage', async () => {
+    const r = repo();
+    try {
+      const brief = r.brief('G-001');
+      for (const flags of [[], ['--force-usage']]) {
+        const result = r.run(['dispatch', brief, ...flags], { GOAL_MEMORY_FLOOR_GIB: '1000000000' });
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('Memory floor reached: host MemAvailable');
+        expect(r.ledger().tasks['G-001']).toBeUndefined();
+        expect(existsSync(join(r.dir, '.temp/worktrees/g-001'))).toBe(false);
+      }
+      await r.start('G-001');
+      await r.stopFixture('G-001');
+      for (const flags of [[], ['--force-usage']]) {
+        const result = r.run(['resume', 'G-001', '-m', 'continue', ...flags], { GOAL_MEMORY_FLOOR_GIB: '1000000000' });
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('Memory floor reached: host MemAvailable');
         expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(1);
       }
     } finally { r.cleanup(); }

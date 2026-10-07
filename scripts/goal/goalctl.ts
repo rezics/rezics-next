@@ -9,6 +9,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:pat
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
+import { land } from './land.ts';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
 export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
@@ -17,6 +18,8 @@ export interface Brief {
   migrations: string[]; shared: string[]; depends: string[];
   /** A shared worktree name within a Goal: its tasks work concurrently in one tree and branch. */
   worktree?: string;
+  /** Opt in to review, merge and close when the worker's waiter sees a done handoff. */
+  land?: 'auto';
 }
 export interface Attempt {
   n: number; effort: string; engine?: Engine; pid: number; session: string; output: string; lastMessage?: string;
@@ -151,6 +154,7 @@ export function parseBrief(text: string): Brief {
     engine: (fields.engine as Engine | undefined) ?? DEFAULT_ENGINE,
     cases: list('cases'), paths: list('paths'), migrations: list('migrations'), shared: list('shared'),
     depends: list('depends'), ...fields.worktree ? { worktree: fields.worktree } : {},
+    ...fields.land !== undefined ? { land: fields.land as Brief['land'] } : {},
   };
 }
 
@@ -158,6 +162,7 @@ export function validateBrief(brief: Brief): string[] {
   const errors: string[] = [];
   if (!/^G-\d{3,}$/.test(brief.id)) errors.push(`id must look like G-038: ${brief.id || '(missing)'}`);
   if (!brief.title) errors.push('title is required');
+  if (brief.land !== undefined && brief.land !== 'auto') errors.push(`land must be auto: ${brief.land}`);
   const engine = brief.engine ?? DEFAULT_ENGINE;
   if (!ENGINES.includes(engine)) errors.push(`engine must be one of ${ENGINES.join(', ')}: ${engine}`);
   else if (!effortsOf(engine).includes(brief.effort)) {
@@ -864,11 +869,23 @@ function running(task: Task): boolean {
   return task.state === 'running' && pidAlive(lastAttempt(task).pid, programOf(engineOf(lastAttempt(task))));
 }
 
+export function memoryFloorRefusal(meminfo: string, floorGiB = 12): string | undefined {
+  if (!Number.isFinite(floorGiB) || floorGiB < 0) throw new Error('GOAL_MEMORY_FLOOR_GIB must be a finite non-negative number');
+  const availableKiB = /^MemAvailable:\s+(\d+)\s+kB\s*$/m.exec(meminfo)?.[1];
+  if (availableKiB === undefined) throw new Error('Cannot determine host MemAvailable from /proc/meminfo; refusing to launch');
+  const availableGiB = Number(availableKiB) / (1024 * 1024);
+  return availableGiB < floorGiB
+    ? `Memory floor reached: host MemAvailable ${availableGiB.toFixed(2)} GiB is below GOAL_MEMORY_FLOOR_GIB=${floorGiB}; let running workers finish`
+    : undefined;
+}
+
 /** Dispatch and resume consume the same host capacity and the selected engine's account. */
 function launchGates(tasks: Task[], engine: Engine, forceUsage: boolean) {
   const live = tasks.filter(running).length;
   const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
   if (live >= limit) throw new Error(`Concurrency limit reached: ${live}/${limit} live workers`);
+  const memory = memoryFloorRefusal(readFileSync('/proc/meminfo', 'utf8'), Number(process.env.GOAL_MEMORY_FLOOR_GIB ?? 12));
+  if (memory) throw new Error(memory);
   const usage = currentUsage();
   const account = codexAccounts().find(candidate => candidate.engines.includes(engine));
   if (!forceUsage) {
@@ -1065,6 +1082,51 @@ async function waitFor(id: string): Promise<void> {
     + `${result.tokens ? `; ${modelOf(engineOf(attempt))} tokens ${result.tokens}` : ''}`);
   console.log(describe(task));
   console.log(`--- handoff ---\n${result.text.length > 8000 ? `${result.text.slice(0, 8000)}\n[truncated]` : result.text}`);
+  if (task.land === 'auto' && lastAttempt(task).n === attempt.n) await landTask(task.id);
+}
+
+async function landTask(id: string): Promise<void> {
+  const initial = taskOf(readLedger(), id);
+  assertOwner(initial);
+  const runDir = join(stateDir, 'runs', initial.id);
+  mkdirSync(runDir, { recursive: true });
+  const lock = join(runDir, 'land.lock');
+  await acquireDir(lock, 120_000, `${initial.id} landing lock`);
+  try {
+    const snapshot = await withLedger(ledger => {
+      const task = taskOf(ledger, id);
+      assertOwner(task);
+      if (running(task) || task.state !== 'exited') throw new Error(`${task.id}: land requires an exited task (${task.state})`);
+      const sharers = Object.values(ledger.tasks).filter(other => other.id !== task.id
+        && other.worktree === task.worktree && HOLDING.includes(other.state));
+      if (sharers.length) throw new Error(`${task.id}: land requires a task with its own branch; open sharers: ${sharers.map(other => other.id).join(', ')}`);
+      if (changedFiles(task).dirty.length) throw new Error(`${task.id}: land requires a clean worktree`);
+      const attempt = lastAttempt(task);
+      const result = readResult(attempt);
+      if (result.error) throw new Error(`${task.id}: land stopped: worker handoff is missing or reports an error`);
+      const brief = briefPathOf(task);
+      if (!brief) throw new Error(`${task.id}: land stopped: assigned brief is missing`);
+      const head = git(root, ['rev-parse', task.branch]);
+      if (git(task.worktree, ['rev-parse', 'HEAD']) !== head
+        || git(task.worktree, ['symbolic-ref', '--short', 'HEAD']) !== task.branch) {
+        throw new Error(`${task.id}: land stopped: worktree is not on the task branch`);
+      }
+      return { task, attempt: attempt.n, handoff: result.text, brief: readFileSync(brief, 'utf8'),
+        head, base: git(root, ['merge-base', 'main', task.branch]) };
+    });
+    await land({ id: snapshot.task.id, worktree: snapshot.task.worktree, runDir,
+      brief: snapshot.brief, handoff: snapshot.handoff, base: snapshot.base, head: snapshot.head,
+      merge: () => mergeTask(id, new Set(), snapshot.head, current => {
+        if (current.state !== 'exited' || lastAttempt(current).n !== snapshot.attempt
+          || current.branch !== snapshot.task.branch || current.worktree !== snapshot.task.worktree
+          || readResult(lastAttempt(current)).text !== snapshot.handoff
+          || readFileSync(briefPathOf(current) ?? '', 'utf8') !== snapshot.brief) {
+          throw new Error(`${current.id}: task or brief changed during review; review again`);
+        }
+      }), close: () => closeTasks([id], 'verified') });
+  } finally {
+    rmSync(lock, { recursive: true, force: true });
+  }
 }
 
 async function resumeTask(id: string, args: string[]): Promise<void> {
@@ -1421,6 +1483,13 @@ const migrationPath = /^(.*\/migrations\/[^/]+)\/(\d+)_[^/]+\.sql$/;
 const escapePattern = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const numberToken = (number: number) => `(?<![\\w$])0*${number}(?![\\w$]|\\.\\d)`;
 
+/** Numeric data alone cannot prove a reference: only named migration/version declarations qualify. */
+function migrationNumberContexts(number: number): RegExp[] {
+  const token = numberToken(number);
+  return [new RegExp(`\\bmigration\\s+(${token})`, 'gi'),
+    new RegExp(`\\b(?:const|let|var)\\s+(?:[\\w$]*(?:migration|version)[\\w$]*)(?:\\s*:\\s*number)?\\s*=\\s*(['"]?)(${token})\\1(?![\\d.])`, 'gi')];
+}
+
 /** Plan every rewrite before mutating: uncertainty leaves a clean branch for manual renumbering. */
 function normalizeMigrations(worktree: string, branch: string): string | MigrationRename[] {
   // https://git-scm.com/docs/git-diff documents the A filter; existing main migrations may not move.
@@ -1462,8 +1531,9 @@ function normalizeMigrations(worktree: string, branch: string): string | Migrati
     const source = kind.isSymbolicLink() ? readlinkSync(path) : readFileSync(path, 'utf8');
     const self = renames.find(rename => rename.from === file);
     const selfToken = self ? new RegExp(`(?<!\\d)0*${self.number}(?!\\d)`, 'g') : undefined;
-    const mentions = [...numbers].filter(number => new RegExp(numberToken(number)).test(source)
-      || renames.some(rename => rename.number === number && source.includes(basename(rename.from)))
+    const mentions = [...numbers].filter(number => migrationNumberContexts(number).some(pattern => pattern.test(source))
+      || renames.some(rename => rename.number === number
+        && new RegExp(`(?<![\\w.-])${escapePattern(basename(rename.from))}(?![\\w.-])`).test(source))
       || (self?.number === number && selfToken?.test(source)));
     if (!mentions.length) continue;
     if (!changed.has(file)) return `${file} references old migration number ${mentions.join(', ')} outside the task's changed files; renumber by hand`;
@@ -1495,10 +1565,7 @@ function normalizeMigrations(worktree: string, branch: string): string | Migrati
     }
     for (const number of mentions) {
       // These contexts identify a migration reference without guessing what other numeric data means.
-      const token = numberToken(number);
-      const patterns = [new RegExp(`\\bmigration\\s+(${token})`, 'gi'),
-        new RegExp(`\\b(?:const|let|var)\\s+(?:[\\w$]*(?:migration|version)[\\w$]*)(?:\\s*:\\s*number)?\\s*=\\s*(['\"]?)(${token})\\1(?![\\d.])`, 'gi')];
-      for (const pattern of patterns) {
+      for (const pattern of migrationNumberContexts(number)) {
         for (const match of source.matchAll(pattern)) {
           const old = match[match.length - 1]!;
           const start = match.index + match[0].lastIndexOf(old);
@@ -1732,7 +1799,7 @@ function reportUnfinished(side: 'affected' | 'main', unfinished: readonly string
 }
 
 /** A branch failure is blocking only when that file passes at main's committed boundary. */
-async function preMergeUnitGate(worktree: string, mainRoot: string, before: string, skip: boolean): Promise<string | undefined> {
+async function preMergeUnitGate(worktree: string, mainRoot: string, before: string, skip: boolean, gatedFiles: Set<string>): Promise<string | undefined> {
   if (skip) {
     console.log('Unit gate skipped: --skip-unit-gate explicitly requested by the manager');
     return;
@@ -1744,6 +1811,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
     { cwd: worktree, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   if (plan.status !== 0) throw new Error(`Affected unit selection failed:\n${plan.stderr || plan.error?.message}`);
   const files = mergeUnitFiles(worktree, plan.stdout);
+  for (const file of files) gatedFiles.add(file);
   console.log(`Pre-merge unit gate: ${files.length} affected/guard file(s) against main ${before.slice(0, 12)}`);
   if (!files.length) return;
   // One budget per side: the branch's affected files and guards, then only its failing files at main's committed boundary.
@@ -1802,15 +1870,23 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
   return introduced.length ? `introduced unit failures; not merging:\n  ${introduced.sort().join('\n  ')}` : undefined;
 }
 
-async function mergeTask(id: string, flags: Set<string>): Promise<void> {
+async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
+  reviewGuard?: (task: Task) => void): Promise<void> {
   type PreparedMerge = { before: string; after: string; worktree: string; branch: string; sharers: string[]; committed: string[] };
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
-  const preparedMerge = await withLedger((ledger): string | PreparedMerge | undefined => {
+  const prepareMerge = (ledger: Ledger): string | PreparedMerge | undefined => {
     const task = taskOf(ledger, id);
     assertOwner(task);
+    reviewGuard?.(task);
+    if (expectedHead && git(root, ['rev-parse', task.branch]) !== expectedHead) {
+      throw new Error(`${task.id} review is stale: task branch changed after review; not merging`);
+    }
     const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree
       && HOLDING.includes(other.state));
+    if (expectedHead && sharers.length !== 1) {
+      throw new Error(`${task.id} review is stale: worktree gained an unreviewed sharer; not merging`);
+    }
     for (const sharer of sharers) {
       if (sharer.goal !== task.goal) throw new Error(`${sharer.id} belongs to another Goal; cannot merge a shared branch`);
       if (sharer.branch !== task.branch) throw new Error(`${sharer.id} uses another branch in ${task.worktree}`);
@@ -1921,44 +1997,77 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     const after = git(root, ['rev-parse', task.branch]);
     return { before, after, worktree: task.worktree, branch: task.branch,
       sharers: sharers.map(sharer => sharer.id).sort(), committed: changedFiles(task).committed };
-  });
+  };
+  let preparedMerge = await withLedger(prepareMerge);
+  // The reviewed head may be rewritten by our own rebase/normalization on a busy main.
+  expectedHead = undefined;
   if (typeof preparedMerge === 'string') throw new Error(preparedMerge);
   if (!preparedMerge) return;
-  // Test the normalized branch outside the ledger lock. Other Goals may merge while it runs, so
-  // both commit boundaries and the open sharers must still match before the fast-forward.
-  const unitFailure = await preMergeUnitGate(preparedMerge.worktree, root, preparedMerge.before, flags.has('--skip-unit-gate'));
-  const failure = await withLedger((ledger): string | undefined => {
-    const task = taskOf(ledger, id);
-    assertOwner(task);
-    const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree && HOLDING.includes(other.state));
-    if (unitFailure) {
-      task.state = 'conflict';
-      return `${task.id} ${unitFailure}`;
-    }
-    if (task.worktree !== preparedMerge.worktree || task.branch !== preparedMerge.branch
-      || git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main'
-      || git(root, ['rev-parse', 'HEAD']) !== preparedMerge.before
-      || git(root, ['rev-parse', task.branch]) !== preparedMerge.after
-      || git(task.worktree, ['rev-parse', 'HEAD']) !== preparedMerge.after
-      || changedFiles(task).dirty.length
-      || sharers.map(sharer => sharer.id).sort().join(',') !== preparedMerge.sharers.join(',')
-      || sharers.some(sharer => sharer.goal !== task.goal || sharer.branch !== task.branch || running(sharer))
-      || !['exited', 'conflict', 'stopped', 'merged'].includes(task.state)) {
-      task.state = 'conflict';
-      return `${task.id} main, task branch or sharers changed during the unit gate; retry merge to rebase, normalize and test again`;
-    }
-    const merge = spawnSync('git', ['merge', '--ff-only', preparedMerge.after], { cwd: root, encoding: 'utf8' });
-    if (merge.status !== 0) throw new Error(`Fast-forward failed in the main checkout:\n${merge.stderr}`);
-    const event: MergeEvent = { before: preparedMerge.before, after: preparedMerge.after, goal: task.goal ?? 'program',
-      taskIds: preparedMerge.sharers, at: new Date().toISOString() };
-    appendFileSync(join(stateDir, 'merges.jsonl'), `${JSON.stringify(event)}\n`);
-    for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = preparedMerge.after; }
-    const committed = preparedMerge.committed;
-    console.log(`${sharers.map(sharer => sharer.id).join(', ')} merged at ${task.mergedCommit!.slice(0, 12)}; ${committed.length} file(s):`);
-    console.log(`  ${committed.join('\n  ')}`);
-    return undefined;
-  });
-  if (failure) throw new Error(failure);
+  // The gate runs without the ledger lock. A busy main can advance safely when its new commits
+  // do not touch the task's changes or selected tests; only an overlap consumes the one re-gate.
+  const gatedFiles = new Set<string>();
+  let regated = false;
+  let unitFailure = await preMergeUnitGate(preparedMerge.worktree, root, preparedMerge.before, flags.has('--skip-unit-gate'), gatedFiles);
+  for (;;) {
+    const current: PreparedMerge = preparedMerge;
+    const outcome = await withLedger((ledger): string | PreparedMerge | undefined => {
+      const task = taskOf(ledger, id);
+      assertOwner(task);
+      reviewGuard?.(task);
+      const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree && HOLDING.includes(other.state));
+      if (unitFailure) {
+        task.state = 'conflict';
+        return `${task.id} ${unitFailure}`;
+      }
+      if (task.worktree !== current.worktree || task.branch !== current.branch
+        || git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main'
+        || git(root, ['rev-parse', task.branch]) !== current.after
+        || git(task.worktree, ['rev-parse', 'HEAD']) !== current.after
+        || changedFiles(task).dirty.length
+        || sharers.map(sharer => sharer.id).sort().join(',') !== current.sharers.join(',')
+        || sharers.some(sharer => sharer.goal !== task.goal || sharer.branch !== task.branch || running(sharer))
+        || !['exited', 'conflict', 'stopped', 'merged'].includes(task.state)) {
+        task.state = 'conflict';
+        return `${task.id} main, task branch or sharers changed during the unit gate; retry merge to rebase, normalize and test again`;
+      }
+      const mainHead = git(root, ['rev-parse', 'HEAD']);
+      let prepared = current;
+      if (mainHead !== current.before) {
+        if (spawnSync('git', ['merge-base', '--is-ancestor', current.before, mainHead], { cwd: root }).status !== 0) {
+          task.state = 'conflict';
+          return `${task.id} main history changed during the unit gate; retry merge to rebase, normalize and test again`;
+        }
+        // Inspect every intervening commit: a change reverted later still touched the gated set.
+        const touched = git(root, ['log', '--format=', '--name-only', '--no-renames', '-m', `${current.before}..${mainHead}`]).split('\n').filter(Boolean);
+        const changed = git(root, ['diff', '--name-only', '--no-renames', `${current.before}..${current.after}`]).split('\n').filter(Boolean);
+        const protectedFiles = new Set([...changed, ...gatedFiles]);
+        const overlap = touched.filter(file => protectedFiles.has(file));
+        if (overlap.length && regated) {
+          task.state = 'conflict';
+          return `${task.id} main touched task or gated files again after the retry unit gate; retry merge:\n  ${[...new Set(overlap)].join('\n  ')}`;
+        }
+        const refreshed = prepareMerge(ledger);
+        if (typeof refreshed === 'string' || !refreshed) return refreshed;
+        prepared = refreshed;
+        console.log(`Main advanced during the unit gate; rebased ${task.id}${overlap.length ? ', re-running the gate once' : ', existing gate remains valid'}`);
+        if (overlap.length) return prepared;
+      }
+      const merge = spawnSync('git', ['merge', '--ff-only', prepared.after], { cwd: root, encoding: 'utf8' });
+      if (merge.status !== 0) throw new Error(`Fast-forward failed in the main checkout:\n${merge.stderr}`);
+      const event: MergeEvent = { before: prepared.before, after: prepared.after, goal: task.goal ?? 'program',
+        taskIds: prepared.sharers, at: new Date().toISOString() };
+      appendFileSync(join(stateDir, 'merges.jsonl'), `${JSON.stringify(event)}\n`);
+      for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = prepared.after; }
+      console.log(`${sharers.map(sharer => sharer.id).join(', ')} merged at ${task.mergedCommit!.slice(0, 12)}; ${prepared.committed.length} file(s):`);
+      console.log(`  ${prepared.committed.join('\n  ')}`);
+      return undefined;
+    });
+    if (typeof outcome === 'string') throw new Error(outcome);
+    if (!outcome) return;
+    preparedMerge = outcome;
+    regated = true;
+    unitFailure = await preMergeUnitGate(outcome.worktree, root, outcome.before, flags.has('--skip-unit-gate'), gatedFiles);
+  }
 }
 
 // Re-read an updated brief for an open task (for example a schema task continuing to its template) and
@@ -1979,7 +2088,7 @@ async function reclaimTask(id: string, briefPath: string, flags: Set<string>): P
     if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, task.goal, areasOf(activeGoals(ledger))));
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     Object.assign(task, { title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
-      migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute });
+      migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute, land: brief.land });
     if (existsSync(task.worktree)) copyFileSync(absolute, join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })));
     console.log(`${task.id} claims replaced from ${briefPath}`);
   });
@@ -2442,6 +2551,7 @@ async function main(argv: string[]): Promise<number> {
     case 'stop': await stopTask(positional[0] ?? ''); return 0;
     case 'scope': console.log(describe(taskOf(readLedger(), positional[0] ?? ''))); return 0;
     case 'merge': await mergeTask(positional[0] ?? '', flags); return 0;
+    case 'land': await landTask(positional[0] ?? ''); return 0;
     case 'close': await closeTasks(positional.slice(0, -1), positional.at(-1) ?? ''); return 0;
     case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? '', flags); return 0;
     case 'owner': {
@@ -2500,7 +2610,7 @@ async function main(argv: string[]): Promise<number> {
         + ' | new [--goal <slug>] <title> | dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]'
         + ' | wait <id> | owner <path> | reclaim <id> <brief> [--allow-area] | resume <id> (-m <text> | --file <path>) [--effort e]'
         + ` [--engine ${ENGINES.join('|')}] [--fresh] [--force-usage]`
-        + ' | stop <id> | scope <id> | merge <id> [--allow-scope] [--allow-ids] [--landed] [--skip-unit-gate]'
+        + ' | stop <id> | scope <id> | land <id> | merge <id> [--allow-scope] [--allow-ids] [--landed] [--skip-unit-gate]'
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
         + ' | status | usage | regress [--at <rev>] [--resume <run-id>] [--only <tiers>] [--integration-batches <n>]'
         + ' | inbox [--ack <n>] | test [--heavy] <task test args> | slot [--heavy] -- <command>');
