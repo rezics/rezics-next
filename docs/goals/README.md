@@ -93,7 +93,7 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
 - **Shared host.** Claims, QA slots, the heavy QA lock, the live-worker limit,
   usage gates and host memory are one pool for all Goals. Writing code in
   parallel is cheap; heavy QA is not, and the lock keeps it to one run at a time.
-  After merges, bring the shared stack to committed main with `task dev:refresh` in the main checkout (`-- --dry-run` previews it); it preserves data and refuses a held heavy QA lock unless `-- --wait` queues it ahead of ordinary heavy waiters, after the current holder. The manager whose merge needs it (model artifacts, migrations, official Zone packages) runs it right after that merge; exit 201 only means `main` moved meanwhile.
+  After merges, bring the shared stack to committed main with `task dev:refresh` in the main checkout (`-- --dry-run` previews it); it preserves data and refuses a held heavy QA lock unless `-- --wait` queues it ahead of ordinary heavy waiters, after the current holder. The manager whose merge needs it (model artifacts, migrations, official Zone packages) runs it right after that merge; exit 201 only means `main` moved meanwhile. Restoring a down shared stack outranks QA: if the refresh waits behind a long heavy run, the manager restoring the stack may stop that run, whose result is then void, and tells its owner to rerun it.
 - **One main branch.** Each manager merges its own tasks and runs its wave QA
   from a worktree pinned at its wave commit, so another Goal's merges cannot
   change a run under way. A failure in another Goal's area goes to its manager.
