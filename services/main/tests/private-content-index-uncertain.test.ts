@@ -46,14 +46,21 @@ class PrivateContentIndex extends FusekiClient {
   uncertain = false;
   uncertainAt = 0;
   hits = true;
+  instance = '00000000-0000-4000-8000-000000000019';
+  privateEpoch = '0';
+  indexGeneration = generation;
+  graphSequence = '7';
+  dataEpoch = graphEpoch;
+  restoreHold = false;
+  onTextQuery: (() => void) | undefined;
   constructor() { super('http://localhost:1/rezics'); }
 
   override async commandHealth() {
     this.healthReads++;
     return { moduleVersion: COMMAND_MODULE_VERSION,
-      instanceId: '00000000-0000-4000-8000-000000000019',
+      instanceId: this.instance,
       publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
-      privateSearchWriteEpoch: '0', privateSearchWriteActive: false,
+      privateSearchWriteEpoch: this.privateEpoch, privateSearchWriteActive: false,
       textIndexUncertain: this.uncertain || this.healthReads === this.uncertainAt,
       profiles: { 'content-private-match-unit-v1': profileRegistry['content-private-match-unit-v1'].sha256 } };
   }
@@ -70,11 +77,18 @@ class PrivateContentIndex extends FusekiClient {
     if (sparql.includes('SELECT ?body ?digest ?revision')) return bindings({
       body: literal(body, 'en'), digest: literal(reference.byteDigest),
       revision: uri(`urn:rezics:content:revision:${revision}`) });
-    if (sparql.includes('SELECT ?sequence ?generation')) return bindings({
-      sequence: literal('7'), generation: uri(generation) });
-    if (sparql.includes('text:query')) return bindings(sparql.includes('privateBody:*') || this.hits
-      ? { literal: literal(body, 'en'), graph: uri(PRIVATE_SEARCH_GRAPH),
-        predicate: uri(`${RV}privateSearchBody`) } : undefined);
+    if (sparql.includes('SELECT ?sequence ?generation')) {
+      expect(sparql).toContain(`rv:dataEpoch "${graphEpoch}"`);
+      expect(sparql).toContain('rv:restoreHold true');
+      return bindings(this.dataEpoch === graphEpoch && !this.restoreHold
+        ? { sequence: literal(this.graphSequence), generation: uri(this.indexGeneration) } : undefined);
+    }
+    if (sparql.includes('text:query')) {
+      this.onTextQuery?.();
+      return bindings(sparql.includes('privateBody:*') || this.hits
+        ? { literal: literal(body, 'en'), graph: uri(PRIVATE_SEARCH_GRAPH),
+          predicate: uri(`${RV}privateSearchBody`) } : undefined);
+    }
     throw new Error(`Unexpected private Content query: ${sparql}`);
   }
 
@@ -86,16 +100,18 @@ function fixture() {
   const operations: string[] = [];
   let contentReads = 0;
   let exactReads = 0;
-  let currentRevision = revision;
+  let currentRevision: string | null = revision;
+  let currentOwnerEpoch = ownerEpoch;
   let deny = false;
+  let closedAt: 'begin' | 'arm' | undefined;
   let receiptToken: string | undefined;
   let onArm: (() => void) | undefined;
   const source = {
     async readDraftHead(readResource, readVariant) {
       contentReads++;
       expect([readResource, readVariant]).toEqual([resource, variant]);
-      return { revisionId: currentRevision,
-        position: { owner: 'content' as const, dataEpoch: ownerEpoch, sequence: '6' } };
+      return currentRevision ? { revisionId: currentRevision,
+        position: { owner: 'content' as const, dataEpoch: currentOwnerEpoch, sequence: '6' } } : null;
     },
     async readExactBatch(ids, authorize) {
       contentReads++;
@@ -120,11 +136,13 @@ function fixture() {
     async begin(id) {
       expect(id).toBe(leaseId);
       operations.push('begin');
+      if (deny || closedAt === 'begin') throw new AdmissionDenied('Content read scope closed');
       return { ...lease, state: 'delivering' as const };
     },
     async arm(id, token) {
       expect(id).toBe(leaseId);
       operations.push('arm');
+      if (deny || closedAt === 'arm') throw new AdmissionDenied('Content read scope closed');
       receiptToken = token;
       onArm?.();
     },
@@ -147,8 +165,11 @@ function fixture() {
   return { fuseki, operations, get contentReads() { return contentReads; },
     get exactReads() { return exactReads; },
     deny() { deny = true; },
+    closeAt(phase: 'begin' | 'arm') { closedAt = phase; },
     onArm(action: () => void) { onArm = action; },
     moveSource() { currentRevision = '00000000-0000-4000-8000-000000000020'; },
+    withdrawSource() { currentRevision = null; },
+    moveOwnerEpoch() { currentOwnerEpoch = '00000000-0000-4000-8000-000000000021'; },
     prepare: () => prepareAdmittedPrivateContentPhrase(env, source as unknown as ContentCore,
       owner as unknown as ContentSearchReadAccess, settlement, principal, actor,
       { resource, variant, phrase: 'nebula phrase' }) };
@@ -218,10 +239,13 @@ test('SEARCH12: uncertainty after the durable Content send arm withholds deliver
 });
 
 for (const hits of [true, false]) {
-  test(`SEARCH11/SEARCH12: healthy private Content ${hits ? 'hit' : 'miss'} preserves receipt delivery and work ceilings`, async () => {
+  test(`SEARCH11/SEARCH12: healthy private Content ${hits ? 'hit' : 'miss'} ignores unrelated Main sequences and preserves delivery budgets`, async () => {
     const run = fixture();
     run.fuseki.hits = hits;
+    run.fuseki.onTextQuery = () => { run.fuseki.graphSequence = String(BigInt(run.fuseki.graphSequence) + 1n); };
     const session = await run.prepare();
+    expect(run.fuseki.graphSequence).toBe('9');
+    run.onArm(() => { run.fuseki.graphSequence = '10'; });
     let frame = '';
     expect(await session.send(message => { frame = message; return message.length; }))
       .toBeGreaterThan(0);
@@ -230,7 +254,8 @@ for (const hits of [true, false]) {
     expect(offered).toMatchObject({ type: 'private-content-result-v1', leaseId,
       result: { profile: 'private-content-phrase-v1', complete: true, total: hits ? 1 : 0,
         results: hits ? [{ matchUnit: contentPrivateUnit(revision), resource, variant,
-          revision, field: 'body', language: 'en' }] : [] } });
+          revision, field: 'body', language: 'en' }] : [],
+        sourcePosition: { owner: 'content', dataEpoch: ownerEpoch, sequence: '6' } } });
     expect(frame).not.toContain(body);
     expect(frame).not.toMatch(/score|snippet|facet|population/);
     expect(await session.receipt({ type: 'private-content-receipt-v1', leaseId,
@@ -258,3 +283,65 @@ test('SEARCH12: healthy index still withholds a Content source replaced after se
   expect(run.fuseki.healthReads).toBe(4);
   expect(run.exactReads).toBe(1);
 });
+
+for (const [fault, change] of [
+  ['native instance', (run: ReturnType<typeof fixture>) => { run.fuseki.instance = '22222222-2222-4222-8222-222222222222'; }],
+  ['private writer epoch', (run: ReturnType<typeof fixture>) => { run.fuseki.privateEpoch = '2'; }],
+  ['index generation', (run: ReturnType<typeof fixture>) => { run.fuseki.indexGeneration = 'urn:rezics:text-index-generation:00000000-0000-4000-8000-000000000022'; }],
+  ['graph data epoch', (run: ReturnType<typeof fixture>) => { run.fuseki.dataEpoch = '00000000-0000-4000-8000-000000000023'; }],
+  ['restore hold', (run: ReturnType<typeof fixture>) => { run.fuseki.restoreHold = true; }],
+] as const) {
+  for (const phase of ['preparation', 'delivery'] as const) {
+    test(`SEARCH11/SEARCH12: Content ${fault} still fences ${phase} without global sequence equality`, async () => {
+      const run = fixture();
+      if (phase === 'preparation') {
+        run.fuseki.onTextQuery = () => change(run);
+        await expect(run.prepare()).rejects.toBeInstanceOf(PrivateContentSearchUnavailable);
+        expect(run.operations).toEqual(['admit', 'aborted']);
+      } else {
+        const session = await run.prepare();
+        run.onArm(() => change(run));
+        const frames: string[] = [];
+        await expect(session.send(frame => { frames.push(frame); return 1; }))
+          .rejects.toBeInstanceOf(PrivateContentSearchUnavailable);
+        expect(frames).toEqual([]);
+        expect(session.offered).toBe(false);
+        expect(run.operations).toEqual(['admit', 'begin', 'arm', 'withheld']);
+      }
+      expect(run.fuseki.healthReads + run.fuseki.queries.length)
+        .toBeLessThanOrEqual(CONTENT_PRIVATE_SEARCH_COST.fusekiReads);
+      expect(run.exactReads).toBe(1);
+    });
+  }
+}
+
+for (const [fault, change] of [
+  ['source withdrawal', (run: ReturnType<typeof fixture>) => run.withdrawSource()],
+  ['owner data epoch', (run: ReturnType<typeof fixture>) => run.moveOwnerEpoch()],
+] as const) {
+  test(`SEARCH12: Content ${fault} after arm still withholds the exact-source result`, async () => {
+    const run = fixture();
+    const session = await run.prepare();
+    run.onArm(() => change(run));
+    const frames: string[] = [];
+    await expect(session.send(frame => { frames.push(frame); return 1; }))
+      .rejects.toThrow('Content private source moved before delivery');
+    expect(frames).toEqual([]);
+    expect(run.operations).toEqual(['admit', 'begin', 'arm', 'withheld']);
+  });
+}
+
+for (const closedAt of ['begin', 'arm'] as const) {
+  test(`SEARCH12: Content authority closure before ${closedAt} still prevents every result frame`, async () => {
+    const run = fixture();
+    const session = await run.prepare();
+    run.closeAt(closedAt);
+    const frames: string[] = [];
+    await expect(session.send(frame => { frames.push(frame); return 1; }))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    expect(frames).toEqual([]);
+    expect(run.operations).toEqual(closedAt === 'begin'
+      ? ['admit', 'begin', 'aborted'] : ['admit', 'begin', 'arm', 'aborted']);
+    expect(run.fuseki.healthReads).toBe(3);
+  });
+}

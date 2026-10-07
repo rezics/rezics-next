@@ -41,15 +41,31 @@ import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { scriptCommand } from '../../../scripts/dev/commands.ts';
 
 import { ObservedFuseki } from './support/observed-fuseki.ts';
+import { runBackgroundOperation } from './support/operation-cost.ts';
+import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
 class PrivateIndexFuseki extends ObservedFuseki {
   uncertain = false;
+  afterPosition: (() => Promise<void>) | undefined;
+  sequenceBeforeWrite: string | undefined;
 
   override async commandHealth() {
     const health = await super.commandHealth();
     return this.uncertain ? { ...health, textIndexUncertain: true } : health;
+  }
+
+  override async query(...args: Parameters<ObservedFuseki['query']>) {
+    const result = await super.query(...args);
+    const write = this.afterPosition;
+    if (write && args[0].includes('SELECT ?head ?sequence ?generation')) {
+      this.afterPosition = undefined;
+      this.sequenceBeforeWrite = result.results?.bindings[0]?.sequence?.value;
+      // A separate Main actor has its own budget and cost attribution.
+      await fusekiReadBudget.exit(() => runBackgroundOperation(write));
+    }
+    return result;
   }
 }
 
@@ -387,7 +403,18 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
     expect((await lease()).state).toBe('aborted');
   } finally { fuseki.uncertain = false; }
 
-  const session = await prepareAdmittedPrivateContributionPhrase(env, access, settlement,
+  const unrelatedMainWrite = async () => { await createWork(`Unrelated Main ${randomUUID()}`); };
+  const provenanceAccess: PrivateSearchAccess = {
+    admitContributionSearchRead: access.admitContributionSearchRead.bind(access),
+    beginContributionSearchDelivery: access.beginContributionSearchDelivery.bind(access),
+    finishContributionSearchRead: access.finishContributionSearchRead.bind(access),
+    armContributionSearchSend: async (...args) => {
+      await access.armContributionSearchSend(...args);
+      await runBackgroundOperation(unrelatedMainWrite);
+    },
+  };
+  fuseki.afterPosition = unrelatedMainWrite;
+  const session = await prepareAdmittedPrivateContributionPhrase(env, provenanceAccess, settlement,
     principal, actor, { contribution: privateContribution, phrase: hiddenTerm });
   const textQueries = fuseki.queries.filter(query => query.includes('text:query'));
   expect(textQueries).toHaveLength(2);
@@ -411,7 +438,9 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
       <${DATASET}> rv:sequence ?sequence ; rv:textIndexGeneration ?generation .
     } }`);
   expect(delivered.result.sourcePosition.sequence)
-    .toBe(nativePosition.results?.bindings[0]?.sequence?.value);
+    .toBe(fuseki.sequenceBeforeWrite);
+  expect(nativePosition.results?.bindings[0]?.sequence?.value)
+    .not.toBe(delivered.result.sourcePosition.sequence);
   expect(delivered.result.indexGeneration)
     .toBe(nativePosition.results?.bindings[0]?.generation?.value);
   expect(JSON.stringify(delivered.result)).not.toMatch(/score|snippet|facet|population/);
@@ -424,7 +453,8 @@ test('SEARCH11/SEARCH12: native private field, exact source and durable read rec
   expect(await session.receipt(acknowledge(delivered))).toBe(false);
   expect((await lease()).state).toBe('delivered');
 
-  const miss = await prepareAdmittedPrivateContributionPhrase(env, access, settlement,
+  fuseki.afterPosition = unrelatedMainWrite;
+  const miss = await prepareAdmittedPrivateContributionPhrase(env, provenanceAccess, settlement,
     principal, actor, { contribution: privateContribution,
       phrase: `absent${randomUUID().replaceAll('-', '')}` });
   let missFrame = '';

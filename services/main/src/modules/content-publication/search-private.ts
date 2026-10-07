@@ -103,8 +103,9 @@ async function candidate(env: WorkActivationEnvironment, content: ContentCore,
     throw new PrivateContentSearchUnavailable('Content private phrase is ambiguous');
   }
   const final = await position(env);
+  // The global graph sequence is diagnostic; source/index fences own freshness.
   if (initial.instance !== final.instance || initial.writeEpoch !== final.writeEpoch
-    || initial.generation !== final.generation || initial.graphSequence !== final.graphSequence) {
+    || initial.generation !== final.generation) {
     throw new PrivateContentSearchUnavailable('Content private index moved during query');
   }
   const response = { profile: 'private-content-phrase-v1' as const,
@@ -160,8 +161,7 @@ export async function prepareAdmittedPrivateContentPhrase(env: WorkActivationEnv
         || current.position.dataEpoch !== prepared.ownerEpoch
         || graph.instance !== prepared.position.instance
         || graph.writeEpoch !== prepared.position.writeEpoch
-        || graph.generation !== prepared.position.generation
-        || graph.graphSequence !== prepared.position.graphSequence) {
+        || graph.generation !== prepared.position.generation) {
         throw new PrivateContentSearchUnavailable('Content private source moved before delivery');
       }
     } });

@@ -22,6 +22,8 @@ import { PrivateSearchSettlement }
   from '../../../services/main/src/modules/contribution/private-search-settlement.ts';
 import { ContentSearchReadAccess }
   from '../../../services/main/src/modules/search-disclosure/content-read-lease.ts';
+import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { runBackgroundOperation } from './support/operation-cost.ts';
 import { activateMetadataWork, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 
@@ -29,10 +31,31 @@ const root = resolve(import.meta.dir, '../../..');
 
 class PrivateIndexFuseki extends ObservedFuseki {
   uncertain = false;
+  afterPosition: (() => Promise<void>) | undefined;
 
   override async commandHealth() {
     const health = await super.commandHealth();
     return this.uncertain ? { ...health, textIndexUncertain: true } : health;
+  }
+
+  override async query(...args: Parameters<ObservedFuseki['query']>) {
+    const result = await super.query(...args);
+    const write = this.afterPosition;
+    if (write && args[0].includes('SELECT ?sequence ?generation')) {
+      this.afterPosition = undefined;
+      // A separate Main actor has its own budget and cost attribution.
+      await fusekiReadBudget.exit(() => runBackgroundOperation(write));
+    }
+    return result;
+  }
+}
+
+class PrivateContentAccess extends ContentSearchReadAccess {
+  afterArm: (() => Promise<void>) | undefined;
+
+  override async arm(...args: Parameters<ContentSearchReadAccess['arm']>) {
+    await super.arm(...args);
+    if (this.afterArm) await runBackgroundOperation(this.afterArm);
   }
 }
 
@@ -113,7 +136,7 @@ test('SEARCH11: private Content draft uses an Access lease, exact unit and recei
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
       expectedHead: null, body, actingSubject: actor, idempotencyKey: `draft-${randomUUID()}` });
     expect(saved.outcome).toBe('succeeded');
-    const searchAccess = new ContentSearchReadAccess(accessPool);
+    const searchAccess = new PrivateContentAccess(accessPool);
     const readScope = `work:read:${created.work}`;
     await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [readScope]);
     await expect(searchAccess.admit(principal, actor, created.work, variant))
@@ -145,6 +168,18 @@ test('SEARCH11: private Content draft uses an Access lease, exact unit and recei
     expect(await latestLeaseState()).toBe('aborted');
     fuseki.uncertain = false;
 
+    const unrelatedMainWrite = async () => {
+      const unrelatedTitle = `Unrelated Main ${randomUUID()}`;
+      await activateMetadataWork(env, { title: unrelatedTitle, admission: {
+        id: randomUUID(), scope: 'work:create:root', action: 'work.create',
+        idempotencyKey: `unrelated-${randomUUID()}`,
+        requestDigest: metadataWorkRequestDigest(unrelatedTitle), authorityEpoch: '0',
+        expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      } });
+    };
+    // Both writes advance Main's diagnostic sequence without changing this Content source/index.
+    fuseki.afterPosition = unrelatedMainWrite;
+    searchAccess.afterArm = unrelatedMainWrite;
     const readStart = fuseki.queries.length + fuseki.healthReads;
     const commandStart = fuseki.commands;
     const queryStart = fuseki.queries.length;
@@ -173,6 +208,7 @@ test('SEARCH11: private Content draft uses an Access lease, exact unit and recei
       'SELECT state FROM access.search_read_lease WHERE id = $1', [offered.leaseId])).rows[0];
     expect(lease?.state).toBe('delivered');
 
+    fuseki.afterPosition = unrelatedMainWrite;
     const miss = await prepareAdmittedPrivateContentPhrase(env, content, searchAccess,
       settlement, principal, actor, { resource: created.work, variant,
         phrase: `absent${randomUUID().replaceAll('-', '')}` });
@@ -182,6 +218,7 @@ test('SEARCH11: private Content draft uses an Access lease, exact unit and recei
     expect(missOffer.result).toMatchObject({ total: 0, results: [] });
     expect(await miss.receipt({ type: 'private-content-receipt-v1',
       leaseId: missOffer.leaseId, receiptChallenge: missOffer.receiptChallenge })).toBe(true);
+    searchAccess.afterArm = undefined;
 
     const uncertainDelivery = await prepareAdmittedPrivateContentPhrase(env, content, searchAccess,
       settlement, principal, actor, { resource: created.work, variant, phrase: bodyTerm });

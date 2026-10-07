@@ -43,8 +43,9 @@ interface PrivatePosition {
 }
 
 function samePosition(left: PrivatePosition, right: PrivatePosition): boolean {
+  // The dataset sequence is response provenance; unrelated Main writes do not change this source.
   return left.instanceId === right.instanceId && left.writeEpoch === right.writeEpoch
-    && left.head === right.head && left.sequence === right.sequence
+    && left.head === right.head
     && left.generation === right.generation;
 }
 
