@@ -152,7 +152,8 @@ export function RelationRows({ rows, locale, t, hrefFor, people }: { rows: reado
     {chips.length ? <ul aria-label={t.rolesList} className="flex flex-wrap gap-2">
       {chips.flatMap(row => row.items.map((item, index) => <li key={`${row.key}-${item.relation}-${index}`} data-role-chip
         className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-xl border border-border/70 px-3 py-1 text-sm">
-        {row.projection.toRole === 'character' && ['work', 'occurrence'].includes(row.projection.fromRole) ? null
+        {row.projection.toRole === 'character' && ['work', 'occurrence'].includes(row.projection.fromRole)
+          && !(item.creditedName && 'status' in item.creditedName) ? null
           : <span className="text-muted-foreground"><RowLabel label={labelFor(row.projection, 1)} locale={locale} t={t} /></span>}
         <Target item={item} t={t} hrefFor={hrefFor} people={people} locale={locale} />
       </li>))}

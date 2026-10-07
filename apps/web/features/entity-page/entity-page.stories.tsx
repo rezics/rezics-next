@@ -5,7 +5,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { servedTypes } from '../catalogue/type-fixtures.ts';
+import { RelationRows } from '../work-levels/connections.tsx';
 import { relations as relationsPage, summary } from '../work-levels/fixtures.ts';
+import { copyOf as levelsCopy } from '../work-levels/messages.ts';
+import { relationRows } from '../work-levels/relation-rows.ts';
 import * as fixture from '../work-page/fixtures.ts';
 import { messages as workMessages } from '../work-page/messages.ts';
 import { TargetRatingsRegion } from '../work-page/ratings.tsx';
@@ -14,6 +17,7 @@ import { drawnSections } from './views.tsx';
 import { copyOf } from './messages.ts';
 import { DiscussionView, RelationsView, StatementsView } from './views.tsx';
 import { appearances, baseSections, componentStatements, noStatements, predicateLabels, projectionFor, statements, withheldCreditAppearance } from './fixtures.ts';
+import { alter, identityEntry } from './identity-fixtures.ts';
 import { standaloneHrefFor } from './route.ts';
 import type { TargetBase } from './types.ts';
 
@@ -149,6 +153,25 @@ export const WithheldCredit: Story = {
     const credit = within(row).getByRole('link', { name: 'Name not shown' });
     await expect(credit).toBeVisible();
     await expect(credit.getAttribute('href') ?? '').not.toContain('https://rezics.com/id/');
+    await expect(canvasElement.textContent ?? '').not.toContain('Hidden Alias');
+  },
+};
+
+/** A work's character chip whose credited name is withheld still names the role. */
+export const WithheldCharacterChip: Story = {
+  render: () => {
+    const appearance = identityEntry('work', 'character', alter);
+    const argument = appearance.rendering!.projections[0]!.arguments[0]!;
+    argument.creditedName = {
+      lexical: 'Hidden Alias', language: 'en', reference: alter.reference, status: 'unavailable',
+    } as typeof argument.creditedName;
+    return <Page><RelationRows rows={relationRows([appearance])} locale="en" t={levelsCopy('en')} /></Page>;
+  },
+  async play({ canvasElement }) {
+    const chip = canvasElement.querySelector('[data-role-chip]');
+    await expect(chip).toHaveTextContent('character');
+    await expect(chip).toHaveTextContent('Saber Alter');
+    await expect(within(chip as HTMLElement).getByRole('link', { name: 'Name not shown' })).toBeVisible();
     await expect(canvasElement.textContent ?? '').not.toContain('Hidden Alias');
   },
 };

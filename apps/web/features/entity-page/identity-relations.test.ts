@@ -3,6 +3,8 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { RatingInline, ratingsUntilMean } from '../catalogue/rating.tsx';
 import { figuresOfRating } from '../scoped-rating/score.ts';
+import { RelationRows } from '../work-levels/connections.tsx';
+import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { relationRows } from '../work-levels/relation-rows.ts';
 import { Distribution, Mean } from '../work-page/ratings.tsx';
 import { messages as workMessages } from '../work-page/messages.ts';
@@ -58,6 +60,18 @@ describe('Identity relations', () => {
       status: 'unavailable',
     });
     expect(JSON.stringify(withheld)).not.toContain('Hidden Alias');
+    const html = renderToStaticMarkup(createElement(RelationRows, {
+      rows: relationRows([appearance]), locale: 'en', t: levelsCopy('en'),
+    }));
+    expect(html).toContain('data-role-chip');
+    expect(html).toContain('Name not shown');
+    expect(html).toContain('character');
+    expect(html).not.toContain('Hidden Alias');
+    expect(html).not.toContain(alter.reference);
+    const recorded = renderToStaticMarkup(createElement(RelationRows, {
+      rows: relationRows([identityEntry('work', 'character', alter)]), locale: 'en', t: levelsCopy('en'),
+    }));
+    expect(recorded).not.toContain('character');
   });
   test('family continuation retains the Realm and spoiler position and is a single bounded cursor', () => {
     const path = resourceHref('/e/', saber.reference);
