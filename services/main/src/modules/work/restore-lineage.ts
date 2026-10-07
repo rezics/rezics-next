@@ -382,10 +382,18 @@ export async function releaseRestoredGraphHold(
   if (!evidence.releaseErasures) {
     throw new RestoreLineageConflict('retained erasure restore release is unavailable');
   }
-  const client = await accessPool.connect();
+  let accessClient: PoolClient | undefined;
   let relayHeadClient: PoolClient | undefined;
   const borrowedRelay = relayClient !== undefined;
   try {
+    relayHeadClient = relayClient ?? await relayPool.connect();
+    await relayHeadClient.query('BEGIN');
+    await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");
+    // Every release takes the journal allocator before the Access fence. Keep
+    // that order across owners and retain both locks through both releases.
+    await relayHeadClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
+    const client = await accessPool.connect();
+    accessClient = client;
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     await client.query("SET LOCAL TIME ZONE 'UTC'");
     const fence = await client.query<{ open: boolean; generation: string }>(
@@ -395,12 +403,6 @@ export async function releaseRestoredGraphHold(
       || !/^[0-9]+$/.test(fenceGeneration)) {
       throw new RestoreLineageConflict('Access recovery fence is not held');
     }
-    relayHeadClient = relayClient ?? await relayPool.connect();
-    await relayHeadClient.query('BEGIN');
-    await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");
-    // Match the journal allocator's lock order and retain its frontier through
-    // captured-cut validation, replay, graph release and the Access commit.
-    await relayHeadClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
     const outbox = await scanAccessOutbox(client);
     if (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest) {
       throw new RestoreLineageConflict('Access outbox differs from recovery coverage');
@@ -525,10 +527,12 @@ export async function releaseRestoredGraphHold(
     if (relayHeadClient) {
       try { await relayHeadClient.query('ROLLBACK'); } catch { /* retain original error */ }
     }
-    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    if (accessClient) {
+      try { await accessClient.query('ROLLBACK'); } catch { /* retain original error */ }
+    }
     throw error;
   } finally {
     if (!borrowedRelay) relayHeadClient?.release();
-    client.release();
+    accessClient?.release();
   }
 }

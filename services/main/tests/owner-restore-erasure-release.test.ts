@@ -44,6 +44,8 @@ class SingleConnectionOwner {
   readonly queries: { sql: string; values?: unknown[] }[] = [];
   readonly client: PoolClient;
   readonly pool: Pool;
+  queryGate?: (sql: string) => Promise<void>;
+  connectFailure?: Error;
 
   constructor(readonly name: string, private readonly trace: string[]) {
     this.client = { query: (sql: string, values?: unknown[]) => this.query(sql, values),
@@ -53,6 +55,7 @@ class SingleConnectionOwner {
         this.releaseCount++;
       } } as unknown as PoolClient;
     this.pool = { connect: async () => {
+      if (this.connectFailure) throw this.connectFailure;
       if (this.active) throw new Error(`${this.name} max=1 pool cannot lend a second client`);
       this.active = true;
       this.borrowCount++;
@@ -68,6 +71,7 @@ class SingleConnectionOwner {
   private async query(sql: string, values?: unknown[]) {
     if (!this.active) throw new Error(`${this.name} query needs its borrowed client`);
     this.queries.push({ sql, values });
+    await this.queryGate?.(sql);
     if (sql.startsWith('BEGIN')) {
       if (this.transaction) throw new Error(`${this.name} transaction was begun twice`);
       this.transaction = true;
@@ -101,6 +105,101 @@ class SingleConnectionOwner {
       throw new Error(`Unexpected ${this.name} SQL: ${sql}`);
     }
     return { rows: [], rowCount: 0 };
+  }
+}
+
+type MaintenanceAttempt = 'restore' | 'erasure';
+type MaintenanceLock = 'access-fence' | 'relay-allocator';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((accept, deny) => { resolve = accept; reject = deny; });
+  return { promise, resolve, reject };
+}
+
+class MaintenanceWaitCycle extends Error {
+  constructor(readonly attempts: MaintenanceAttempt[]) {
+    super(`synthetic maintenance waits-for cycle: ${attempts.join(' -> ')}`);
+  }
+}
+
+/** Application-level waits span separate owner sessions; this is not PostgreSQL's detector. */
+class MaintenanceLocks {
+  readonly held = new Map<MaintenanceLock, MaintenanceAttempt>();
+  readonly waiting = new Map<MaintenanceAttempt, {
+    lock: MaintenanceLock; completion: ReturnType<typeof deferred<void>>;
+  }>();
+  readonly cycles: MaintenanceAttempt[][] = [];
+  readonly events: string[] = [];
+  private readonly observers = new Map<string, ReturnType<typeof deferred<void>>>();
+
+  async acquire(attempt: MaintenanceAttempt, lock: MaintenanceLock): Promise<void> {
+    const holder = this.held.get(lock);
+    if (!holder || holder === attempt) {
+      this.held.set(lock, attempt);
+      this.events.push(`${attempt}:acquired:${lock}`);
+      return;
+    }
+    const completion = deferred<void>();
+    this.waiting.set(attempt, { lock, completion });
+    this.events.push(`${attempt}:waiting:${lock}`);
+    this.observers.get(`${attempt}:${lock}`)?.resolve();
+    const path: MaintenanceAttempt[] = [attempt];
+    let next: MaintenanceAttempt | undefined = holder;
+    while (next) {
+      path.push(next);
+      if (next === attempt) {
+        this.cycles.push(path);
+        this.waiting.delete(attempt);
+        completion.reject(new MaintenanceWaitCycle(path));
+        break;
+      }
+      const request = this.waiting.get(next);
+      next = request ? this.held.get(request.lock) : undefined;
+    }
+    await completion.promise;
+  }
+
+  whenWaiting(attempt: MaintenanceAttempt, lock: MaintenanceLock): Promise<void> {
+    if (this.waiting.get(attempt)?.lock === lock) return Promise.resolve();
+    const observer = deferred<void>();
+    this.observers.set(`${attempt}:${lock}`, observer);
+    return observer.promise;
+  }
+
+  release(attempt: MaintenanceAttempt, lock: MaintenanceLock): void {
+    if (this.held.get(lock) !== attempt) return;
+    this.held.delete(lock);
+    this.events.push(`${attempt}:released:${lock}`);
+    for (const [waitingAttempt, request] of this.waiting) {
+      if (request.lock !== lock) continue;
+      this.waiting.delete(waitingAttempt);
+      this.held.set(lock, waitingAttempt);
+      this.events.push(`${waitingAttempt}:acquired:${lock}`);
+      request.completion.resolve();
+      break;
+    }
+  }
+
+  interrupt(attempt: MaintenanceAttempt): void {
+    const request = this.waiting.get(attempt);
+    if (!request) return;
+    this.waiting.delete(attempt);
+    request.completion.reject(new RestoreLineageConflict('interrupted maintenance lock wait'));
+  }
+
+  bind(owner: SingleConnectionOwner, attempt: MaintenanceAttempt, lock: MaintenanceLock): void {
+    owner.queryGate = async sql => {
+      if (lock === 'relay-allocator' && sql.includes('pg_advisory_xact_lock')) {
+        await this.acquire(attempt, lock);
+      } else if (lock === 'access-fence' && sql.includes('FROM access.recovery_fence')
+        && sql.includes('FOR UPDATE')) {
+        await this.acquire(attempt, lock);
+      } else if (sql === 'COMMIT' || sql === 'ROLLBACK') {
+        this.release(attempt, lock);
+      }
+    };
   }
 }
 
@@ -295,6 +394,127 @@ function expectBothHeld(run: ReturnType<typeof fixture>) {
   expect(run.trace).not.toContain('graph:release');
   expect(run.trace).not.toContain('access:open');
 }
+
+function contentionFixture(run: ReturnType<typeof fixture>) {
+  const locks = new MaintenanceLocks();
+  const erasureAccess = new SingleConnectionOwner('erasure-access', run.trace);
+  const erasureRelay = new SingleConnectionOwner('erasure-relay', run.trace);
+  locks.bind(run.access, 'restore', 'access-fence');
+  locks.bind(run.relay, 'restore', 'relay-allocator');
+  locks.bind(erasureAccess, 'erasure', 'access-fence');
+  locks.bind(erasureRelay, 'erasure', 'relay-allocator');
+  return { locks, erasureAccess, erasureRelay };
+}
+
+test('restore allocator contention leaves Access available to the competing erasure maintenance transaction', async () => {
+  const run = fixture();
+  const { locks, erasureAccess, erasureRelay } = contentionFixture(run);
+  const erasureRelayClient = await erasureRelay.pool.connect();
+  await erasureRelayClient.query('BEGIN');
+  await erasureRelayClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
+  const restoring = run.release().then(() => ({ status: 'fulfilled' as const }),
+    reason => ({ status: 'rejected' as const, reason }));
+  try {
+    await locks.whenWaiting('restore', 'relay-allocator');
+    const erasureAccessClient = await erasureAccess.pool.connect();
+    let accessCommitted = false;
+    try {
+      await erasureAccessClient.query('BEGIN');
+      // If restore holds Access while waiting for this attempt's allocator,
+      // this acquisition closes the actual waits-for cycle and throws.
+      await erasureAccessClient.query('SELECT open FROM access.recovery_fence WHERE id = true FOR UPDATE');
+      expect(locks.held.get('access-fence')).toBe('erasure');
+      expect(locks.held.get('relay-allocator')).toBe('erasure');
+      expect(run.access.active).toBe(false);
+      await erasureAccessClient.query('COMMIT');
+      accessCommitted = true;
+    } finally {
+      if (!accessCommitted) await erasureAccessClient.query('ROLLBACK');
+      erasureAccessClient.release();
+    }
+    await erasureRelayClient.query('COMMIT');
+    erasureRelayClient.release();
+    expect(await restoring).toEqual({ status: 'fulfilled' });
+    expect(locks.cycles).toEqual([]);
+    expect(locks.events.indexOf('erasure:released:access-fence')).toBeLessThan(
+      locks.events.indexOf('restore:acquired:relay-allocator'));
+    expect(locks.events.indexOf('restore:acquired:relay-allocator')).toBeLessThan(
+      locks.events.indexOf('restore:acquired:access-fence'));
+    expect(locks.held.size).toBe(0);
+    expect(locks.waiting.size).toBe(0);
+    expect(run.access.open).toBe(true);
+    expect(run.fuseki.held).toBe(false);
+    for (const owner of [run.access, run.relay, erasureAccess, erasureRelay]) {
+      expect(owner.borrowCount).toBe(1);
+      expect(owner.maximumBorrowed).toBe(1);
+      expect(owner.releaseCount).toBe(1);
+    }
+  } finally {
+    locks.interrupt('restore');
+    if (erasureRelay.active) {
+      await erasureRelayClient.query('ROLLBACK');
+      erasureRelayClient.release();
+    }
+    await restoring;
+    run.stop();
+  }
+});
+
+test('restore interrupted during allocator contention releases its relay client without borrowing Access', async () => {
+  const run = fixture();
+  const { locks, erasureRelay } = contentionFixture(run);
+  const erasureRelayClient = await erasureRelay.pool.connect();
+  await erasureRelayClient.query('BEGIN');
+  await erasureRelayClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
+  const restoring = run.release().then(() => ({ status: 'fulfilled' as const }),
+    reason => ({ status: 'rejected' as const, reason }));
+  try {
+    await locks.whenWaiting('restore', 'relay-allocator');
+    locks.interrupt('restore');
+    const outcome = await restoring;
+    expect(outcome.status).toBe('rejected');
+    if (outcome.status !== 'rejected') throw new Error('interrupted restore unexpectedly completed');
+    expect(outcome.reason).toBeInstanceOf(RestoreLineageConflict);
+    expectBothHeld(run);
+    expect(run.state.callbackCalls).toBe(0);
+    expect(run.fuseki.commands).toHaveLength(0);
+    expect(run.access.borrowCount).toBe(0);
+    expect(run.relay.borrowCount).toBe(1);
+    expect(run.relay.releaseCount).toBe(1);
+    expect(run.relay.queries.at(-1)?.sql).toBe('ROLLBACK');
+    expect(locks.held.get('relay-allocator')).toBe('erasure');
+    expect(locks.waiting.size).toBe(0);
+    expect(locks.cycles).toEqual([]);
+  } finally {
+    locks.interrupt('restore');
+    await erasureRelayClient.query('ROLLBACK');
+    erasureRelayClient.release();
+    await restoring;
+    run.stop();
+  }
+  expect(locks.held.size).toBe(0);
+});
+
+test('restore Access connection failure releases the already-held relay allocator and client', async () => {
+  const run = fixture();
+  const { locks } = contentionFixture(run);
+  const failure = new Error('restored Access owner is unavailable');
+  run.access.connectFailure = failure;
+  try {
+    await expect(run.release()).rejects.toBe(failure);
+    expectBothHeld(run);
+    expect(run.state.callbackCalls).toBe(0);
+    expect(run.fuseki.commands).toHaveLength(0);
+    expect(run.access.borrowCount).toBe(0);
+    expect(run.access.releaseCount).toBe(0);
+    expect(run.relay.borrowCount).toBe(1);
+    expect(run.relay.releaseCount).toBe(1);
+    expect(run.relay.queries.at(-1)?.sql).toBe('ROLLBACK');
+    expect(locks.events).toEqual(['restore:acquired:relay-allocator', 'restore:released:relay-allocator']);
+    expect(locks.held.size).toBe(0);
+    expect(locks.waiting.size).toBe(0);
+  } finally { run.stop(); }
+});
 
 test('restore release requires explicit erasure/custody composition before either hold can open', async () => {
   const run = fixture();
