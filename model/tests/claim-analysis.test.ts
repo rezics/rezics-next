@@ -1,4 +1,10 @@
-import { expect, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { Value } from 'typebox/value';
+import type { TSchema } from 'typebox';
+import { assessmentProfile } from '../definitions/assessment-v1.ts';
+import { buildModelOutputs } from '../compiler/outputs.ts';
 import { analyzeClaimSupport, currentVerificationHead, LINEAGE_BUDGET, type AnalysisInput,
   type EvidenceItem, type LineageLink } from '../../services/main/src/modules/verification/analysis.ts';
 
@@ -86,4 +92,60 @@ test('FACT04: an older policy revision or acceptance head never reads as current
     'https://rezics.com/id/old-decision', heads,
     'https://rezics.com/definition/verification-summary-policy-v1'))
     .toBe('https://rezics.com/id/new-decision');
+});
+
+test('a folded current Statement head never certifies the retained Claim revision as current', () => {
+  const identity = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const retained = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
+  const statement = 'https://rezics.com/id/00000000-0000-4000-8000-000000000003';
+  const current = currentVerificationHead('claim', identity, retained, new Map([[identity, statement]]),
+    'https://rezics.com/definition/verification-summary-policy-v1');
+  expect(current).toBe(statement);
+  expect(current).not.toBe(retained);
+});
+
+test('independent Statement identities remain evidence anchors rather than independent source origins', () => {
+  const supporting = ['retained-claim-revision', 'statement-revision'].map((reference, ordinal) => ({
+    ...item('unused'), ordinal, observation: null, graphReference: reference,
+  }));
+  const result = analyzeClaimSupport(input(supporting, [], { referencedClaims: new Map([
+    ['retained-claim-revision', { ...claim }], ['statement-revision', { ...claim }],
+  ]) }));
+  expect(result).toMatchObject({ dependence: 'unknown', independentOrigins: null,
+    support: 'insufficient', coverage: 'complete' });
+  expect(result.reasons).toContain('dependence-unknown');
+});
+
+let temporary: string | undefined;
+afterAll(() => { if (temporary) rmSync(temporary, { recursive: true, force: true }); });
+test('the existing assessment profile admits one exact Claim or Statement pin while keeping origin constraints', async () => {
+  const root = resolve(import.meta.dir, '../..');
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  temporary = mkdtempSync(join(root, '.temp/assessment-pins-'));
+  const path = join(temporary, 'schemas.ts');
+  writeFileSync(path, buildModelOutputs([assessmentProfile]).get('packages/model/src/generated/schemas.ts')!);
+  const schemas = (await import(path)).shapeSchemas as Record<string, TSchema>;
+  const accepts = (candidate: Record<string, unknown>) =>
+    Value.Check(schemas['https://rezics.com/definition/assessment-v1/assessment-shape']!, candidate);
+  const rv = 'https://rezics.com/vocab/';
+  const ref = (name: string) => `https://example.test/${name}`;
+  const base = { '@id': ref('assessment'), 'rdf:type': [`${rv}ClaimAssessment`, `${rv}RevisionAnchor`],
+    'rv:component': [ref('identity')], 'rv:evidenceSetRevision': [ref('evidence')],
+    'rv:policyRevision': [ref('policy')], 'rv:evaluationContext': [ref('context')],
+    'rv:coverage': [`${rv}CompleteCoverage`], 'rv:supportResult': [`${rv}InsufficientSupport`],
+    'rv:dependenceStatus': [`${rv}DependenceUnknown`], 'rv:method': [ref('method')],
+    'rv:methodRevision': [ref('method-revision')], 'rv:limitations': ['Origin independence is unknown'],
+    'rv:assessor': [ref('assessor')], 'rv:assessorKind': [`${rv}HumanAssessor`],
+    'rv:assessedAt': ['2026-10-07T00:00:00.000Z'],
+    'rv:modelRevision': ['https://rezics.com/definition/assessment-v1'],
+    'rv:shapeRevision': ['https://rezics.com/definition/assessment-v1'], 'rv:dataEpoch': ['epoch'], 'rv:sequence': [1] };
+  for (const pin of [{ 'rv:claimRevision': [ref('retained')] }, { 'rv:statementRevision': [ref('statement')] }]) {
+    expect(accepts({ ...base, ...pin })).toBe(true);
+    expect(accepts({ ...base, ...pin, 'rv:dependenceStatus': [`${rv}DependenceEstablished`],
+      'rv:independentOriginCount': [2] })).toBe(true);
+    expect(accepts({ ...base, ...pin, 'rv:dependenceStatus': [`${rv}DependenceEstablished`] })).toBe(false);
+    expect(accepts({ ...base, ...pin, 'rv:independentOriginCount': [2] })).toBe(false);
+  }
+  expect(accepts(base)).toBe(false);
+  expect(accepts({ ...base, 'rv:claimRevision': [ref('retained')], 'rv:statementRevision': [ref('statement')] })).toBe(false);
 });

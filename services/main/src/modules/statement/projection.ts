@@ -4,6 +4,7 @@ import { coordinateOf, dimensionOfTypes, frameWork, slotOf, type Coordinate, typ
 import type { ResolvedTarget } from '../target/contract.ts';
 import { MAX_FRAMES } from '../projection/schema.ts';
 import { STATEMENT_LIMITS } from './schema.ts';
+import { retainedClaimStatementReference } from './qualification.ts';
 
 type StatementApplicabilityRefusal = 'statement_applicability_too_large' | 'statement_applicability_unknown'
   | 'statement_applicability_projection' | 'statement_applicability_not_coordinate'
@@ -111,6 +112,11 @@ const projectionCoordinate = () => new StatementApplicabilityRefused('statement_
   'A projection is not applicability; name its frame coordinates');
 const notCoordinate = () => new StatementApplicabilityRefused('statement_applicability_not_coordinate',
   'Statement applicability must be a Work, position, release, realization, continuity or event');
+
+/** A reviewed retained Claim keeps its original referent; no projection/default can retarget it. */
+export function normalizeRetainedClaimStatementSubject(subject: string): { subject: string; applicability: string[] } {
+  return { subject: retainedClaimStatementReference(subject), applicability: [] };
+}
 
 /** The request digest retains the supplied subject; only the stored meaning is normalized.
  * Projection parts are immutable, so admission retries always resolve to the same meaning. */

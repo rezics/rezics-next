@@ -10,11 +10,17 @@ import { activeDirectDefinitionsGuard } from '../context/definition-state.ts';
 import { GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { STATEMENT_FAMILIES } from './receipt-family.ts';
-import { normalizeStatementSubject, type StatementTargetReader } from './projection.ts';
+import { normalizeRetainedClaimStatementSubject, normalizeStatementSubject, type StatementTargetReader } from './projection.ts';
 import {
   normalizeStatementQualification,
+  normalizeRetainedClaimStatementQualification,
+  checkedRetainedClaimDateValue,
+  DATE_PUBLISHED_PREDICATE,
+  normalizeStatementRetainedClaimProvenance,
+  retainedClaimStatementReference,
   statementQualificationKeyTuple,
   statementQualificationTriples,
+  statementRetainedClaimProvenanceTriples,
   validateStatementDefinitions,
   validateStatementInterpretationDefinition,
   type StatementQualification,
@@ -115,6 +121,45 @@ export function objectTerm(value: StatementValue): string {
   if (value.kind === 'no-value') return `<${RV}NoValue>`;
   return value.language ? `${lit(value.lexical)}@${value.language}`
     : `${lit(value.lexical)}^^${term(value.datatype || XSD_STRING)}`;
+}
+
+/** The fold renders exact legacy terms, including HTTP RDF/XSD metadata; referent admission stays separate. */
+export function retainedClaimStatementTerm(reference: string): string {
+  if (reference.startsWith('http://')) {
+    if (/[\s\u0000-\u001f\u007f<>"{}|\\^`]/u.test(reference)) throw new InvalidContextCommand('invalid retained RDF IRI');
+    return term(reference);
+  }
+  return `<${retainedClaimStatementReference(reference)}>`;
+}
+
+export function retainedClaimStatementObjectTerm(value: StatementValue): string {
+  if (value.kind === 'resource') return `<${retainedClaimStatementReference(value.iri)}>`;
+  return objectTerm(checkedRetainedClaimDateValue(value));
+}
+
+/** Syntax/meaning preparation only; the converter separately proves the sealed D/Q and exact source root. */
+export function prepareRetainedClaimStatementMeaning(input: {
+  subject: string;
+  predicate: string;
+  relationDefinition: string;
+  value: StatementValue;
+  qualification: StatementQualification;
+}): StatementMeaning {
+  if (input.predicate !== DATE_PUBLISHED_PREDICATE) {
+    throw new InvalidContextCommand('retained Claim predicate has no reviewed Statement binding');
+  }
+  const qualification = normalizeRetainedClaimStatementQualification(input.qualification);
+  const meaning: StatementMeaning = {
+    ...normalizeRetainedClaimStatementSubject(input.subject),
+    predicate: DATE_PUBLISHED_PREDICATE,
+    relationDefinition: input.relationDefinition,
+    interpretationDefinitions: [qualification.definition],
+    value: checkedRetainedClaimDateValue(input.value),
+    qualification,
+    referenceDomain: 'retained-claim',
+  };
+  statementMeaningKey(meaning);
+  return meaning;
 }
 
 /** Resolve the Statement's interpretation slot; a write never proceeds on an incomplete result. */
@@ -236,7 +281,7 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
         ${meaning.interpretationDefinitions.map(value => `rv:interpretationDefinition ${term(value)} ;`).join(' ')}
         ${interpretation.semanticRevision ? `rv:semanticContextRevision ${iri(interpretation.semanticRevision)} ;` : ''}
         ${meaning.applicability.map((value) => `rv:applicability ${term(value)} ;`).join(' ')}
-        ${meaning.qualification ? statementQualificationTriples(meaning.qualification) : ''}
+        ${meaning.qualification ? statementQualificationTriples(meaning.qualification, meaning.referenceDomain === 'retained-claim') : ''}
         ${input.wikiPublicationWork ? `rv:source ${iri(input.wikiPublicationWork)} ;` : ''}
         rv:speaker ${iri(speakerId)} ; rv:meaningKey ${iri(meaningKey)} ; rv:statementState rv:Active ;
         rv:head ${iri(revision)} . }
@@ -319,12 +364,18 @@ export async function withdrawStatement(env: WorkActivationEnvironment, admissio
     applicability: retained.applicability,
     ...(retained.qualification ? { qualification: retained.qualification } : {}),
   };
+  const retainedProvenance = snapshot.retainedProvenance === undefined ? undefined
+    : normalizeStatementRetainedClaimProvenance(snapshot.retainedProvenance);
+  if (meaning.referenceDomain === 'retained-claim' && retainedProvenance === undefined) {
+    throw new ContextCommandUnavailable('retained Claim source provenance is unavailable');
+  }
   const manifest = prepareComponent(env.objectDirectory, input.statement, {
     revision, predecessor: input.expectedHead, state: 'withdrawn', evidence: [],
     recordedBy: input.actingSubject,
       meaning,
       meaningKey: retained.meaningKey,
       speaker: retained.speaker,
+      ...(retainedProvenance ?? {}),
       semanticContextRevision:
         snapshot.semanticContextRevision ??
         (retained.meaningBasis.state === 'readable'
@@ -347,12 +398,17 @@ export async function withdrawStatement(env: WorkActivationEnvironment, admissio
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:StatementRevision, rv:RevisionAnchor ;
         rv:component ${iri(input.statement)} ; rv:predecessor ${iri(input.expectedHead)} ;
         rv:statementState rv:Withdrawn ; rv:recordedBy ${iri(input.actingSubject)} ;
+        ${retainedProvenance ? statementRetainedClaimProvenanceTriples(retainedProvenance) : ''}
         rv:operation ${iri(operation)} ; rv:modelRevision ${iri(STATEMENT_PROFILE)} ;
         rv:shapeRevision ${iri(STATEMENT_PROFILE)} ; rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }`,
     where: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.statement)} a rdf:Statement ;
         rv:speaker ${iri(speaker)} ; rv:head ${iri(input.expectedHead)} ;
         rv:statementState rv:Active . }
+      ${retainedProvenance ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.statement)}
+        rv:retainedClaimHead ${iri(retainedProvenance.retainedSourceRevision)} . }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.expectedHead)}
+          ${statementRetainedClaimProvenanceTriples(retainedProvenance)} a rv:StatementRevision . }` : ''}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }` });
   if (committed) return checkedCommandReceipt(committed, admission, request.digest);
   const sealed = await sealCommandTerminal(env, admission, family, 'stale-head', stale);

@@ -18,6 +18,7 @@ import {
   statementQualificationFromBindings,
   statementQualificationExport,
   statementQualificationKeyTuple,
+  normalizeStatementRetainedClaimProvenance,
   type StatementQualification,
 } from './qualification.ts';
 
@@ -99,8 +100,22 @@ async function statementRevisionSnapshot(
   }
   const meaning = stored.meaning as StatementMeaning | undefined;
   if (meaning !== undefined) assertStoredMeaning(meaning, stored.meaningKey);
+  let retainedProvenance;
+  if (stored.retainedSourceRevision !== undefined) {
+    try {
+      retainedProvenance = normalizeStatementRetainedClaimProvenance({
+        retainedSourceRevision: stored.retainedSourceRevision,
+        retainedSourceReceipt: stored.retainedSourceReceipt,
+        recordedAt: stored.recordedAt,
+        ...(stored.derivation !== undefined ? { derivation: stored.derivation } : {}),
+      });
+    } catch { throw new ContextCommandUnavailable('Retained Claim provenance is unavailable'); }
+  } else if (meaning?.referenceDomain === 'retained-claim') {
+    throw new ContextCommandUnavailable('Retained Claim source revision is unavailable');
+  }
   return {
     meaning,
+    ...(retainedProvenance ? { retainedProvenance } : {}),
     meaningKey: stored.meaningKey as string | undefined,
     speaker: stored.speaker as string | undefined,
     semanticContextRevision: stored.semanticContextRevision as string | null | undefined,
@@ -123,7 +138,7 @@ function assertStoredMeaning(meaning: StatementMeaning, expected: unknown) {
   }
 }
 
-function assertStoredValue(stored: StatementValue, graph: StatementValue) {
+function assertStoredValue(stored: StatementValue, graph: StatementValue, retained = false) {
   const reference = (value: StatementValue) =>
     value.kind === 'resource'
       ? value.iri
@@ -137,7 +152,7 @@ function assertStoredValue(stored: StatementValue, graph: StatementValue) {
       ? graph.kind !== 'literal' ||
         (stored.language ? `${RDF}langString` : stored.datatype) !== graph.datatype ||
         (stored.language?.toLowerCase() ?? null) !== (graph.language?.toLowerCase() ?? null) ||
-        ((!stored.datatype.startsWith('http://www.w3.org/2001/XMLSchema#') ||
+        ((retained || !stored.datatype.startsWith('http://www.w3.org/2001/XMLSchema#') ||
           stored.datatype === 'http://www.w3.org/2001/XMLSchema#string') &&
           stored.lexical !== graph.lexical)
       : reference(stored) !== reference(graph);
@@ -148,10 +163,12 @@ function assertStoredValue(stored: StatementValue, graph: StatementValue) {
 function assertStoredQualification(
   stored: StatementQualification | undefined,
   graph: StatementQualification | undefined,
+  retained = false,
 ) {
   if (
     JSON.stringify(stored === undefined ? null : statementQualificationKeyTuple(stored)) !==
     JSON.stringify(graph === undefined ? null : statementQualificationKeyTuple(graph))
+    || retained && (stored?.validFrom !== graph?.validFrom || stored?.validUntil !== graph?.validUntil)
   ) {
     throw new ContextCommandUnavailable(
       'Statement qualification differs from its retained meaning',
@@ -194,8 +211,8 @@ export async function statementValueFromManifest(
   assertStoredMeaning(meaning, meaningKey);
   if (stored.meaningKey !== meaningKey)
     throw new ContextCommandUnavailable('Statement meaning differs from its key');
-  assertStoredValue(meaning.value, fallback);
-  assertStoredQualification(meaning.qualification, qualification);
+  assertStoredValue(meaning.value, fallback, meaning.referenceDomain === 'retained-claim');
+  assertStoredQualification(meaning.qualification, qualification, meaning.referenceDomain === 'retained-claim');
   return meaning.value.kind === 'literal' && meaning.value.language
     ? { ...meaning.value, datatype: `${RDF}langString` }
     : meaning.value;
@@ -295,7 +312,7 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
     [...new Set(rows.map((item) => item.applicability?.value).filter(Boolean) as string[])].sort();
   const authored = exact?.meaning?.value;
   const graphValue = valueOf(row.object!);
-  if (authored) assertStoredValue(authored, graphValue);
+  if (authored) assertStoredValue(authored, graphValue, exact?.meaning?.referenceDomain === 'retained-claim');
   const value = authored
     ? authored.kind === 'literal' && authored.language
       ? { ...authored, datatype: `${RDF}langString` }
@@ -304,6 +321,9 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
   const graphQualification = statementQualificationFromBindings(rows);
   if (graphQualification && !exact?.meaning)
     throw new ContextCommandUnavailable('Statement qualification manifest is unavailable');
+  if (exact?.meaning?.referenceDomain === 'retained-claim') {
+    assertStoredQualification(exact.meaning.qualification, graphQualification, true);
+  }
   if (
     exact?.meaning &&
     JSON.stringify(

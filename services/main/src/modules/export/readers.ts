@@ -505,7 +505,7 @@ async function readExportPlanUnchecked(deps: ExportReaderDependencies, principal
   const claimMember: VerifiedExportMember = { sourceOwner: 'graph', sourceNamespace: 'product',
     sourceGrain: 'claim', exactRef: assessment.claimRevision, contentRevisionId: null,
     refDigest: sha(claim), ownerDataEpoch: claim.dataEpoch, ownerSequence: claim.sequence,
-    sourcePosition: null, targetGrain: 'Claim', mapping: 'exact', data: { ...claim } };
+    sourcePosition: null, targetGrain: claim.representation === 'statement' ? 'Statement' : 'Claim', mapping: 'exact', data: { ...claim } };
   const assessmentData = { ...assessment, exportActor: actingSubject,
     scoreKind: assessment.scorePerMillion === null
     ? null : 'method-output', evidence: evidence ? {

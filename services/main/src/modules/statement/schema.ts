@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT,
 } from '../classification/context.ts';
-import { statementQualificationKeyTuple, type StatementQualification } from './qualification.ts';
+import { checkedRetainedClaimDateValue, DATE_PUBLISHED_PREDICATE, retainedClaimStatementReference,
+  statementQualificationKeyTuple, type StatementQualification } from './qualification.ts';
 
 // Owner schema for Statements and their acceptance decisions
 // (docs/contracts/classification.md, model/definitions/statement-v1.ttl and
@@ -67,6 +68,8 @@ export interface StatementMeaning {
   value: StatementValue;
   applicability: string[];
   qualification?: StatementQualification;
+  /** Sealed internal adapter metadata, excluded from meaning; ordinary transport never admits it. */
+  referenceDomain?: 'retained-claim';
 }
 
 export interface StatementRecord extends StatementMeaning {
@@ -79,6 +82,8 @@ export interface StatementRecord extends StatementMeaning {
   head: string;
   source: string | null;
   migratedFrom: string | null;
+  /** Original immutable Claim root, retained beside the current Statement lifecycle. */
+  retainedClaimHead?: string;
 }
 
 export interface StatementRevisionRecord {
@@ -92,6 +97,18 @@ export interface StatementRevisionRecord {
   manifest: string;
   dataEpoch: string;
   sequence: string;
+  retainedSourceRevision?: string;
+  retainedSourceReceipt?: string;
+  recordedAt?: string;
+  derivation?: string;
+}
+
+/** Complete, finite provenance of a representation derived from an immutable Claim root. */
+export interface StatementRetainedClaimProvenance {
+  retainedSourceRevision: string;
+  retainedSourceReceipt: string;
+  recordedAt: string;
+  derivation?: string;
 }
 
 export type DecisionTarget =
@@ -138,8 +155,13 @@ function checkReferences(values: readonly string[], label: string, limit: number
   return unique;
 }
 
-function canonicalValue(value: StatementValue): unknown[] {
-  if (value.kind === 'resource' && reference.test(value.iri)) return ['resource', value.iri];
+function retainedReference(value: string): boolean {
+  try { retainedClaimStatementReference(value); return true; }
+  catch { return false; }
+}
+
+function canonicalValue(value: StatementValue, retained: boolean): unknown[] {
+  if (value.kind === 'resource' && (reference.test(value.iri) || retained && retainedReference(value.iri))) return ['resource', value.iri];
   if (value.kind === 'literal' && value.lexical.length <= 4096 && reference.test(value.datatype)
     && (value.language === null || /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/.test(value.language))) {
     // Value-profile normalization (units, numeric lexical forms) happens before this key.
@@ -156,7 +178,18 @@ function canonicalValue(value: StatementValue): unknown[] {
  * count are deliberately excluded.
  */
 export function statementMeaningKey(meaning: StatementMeaning): string {
-  if (!reference.test(meaning.subject) || !reference.test(meaning.predicate)
+  const retained = meaning.referenceDomain === 'retained-claim';
+  if (meaning.referenceDomain !== undefined) {
+    if (!retained || !meaning.qualification || meaning.predicate !== DATE_PUBLISHED_PREDICATE
+      || !nativeId.test(meaning.relationDefinition) || meaning.applicability.length !== 0
+      || meaning.interpretationDefinitions.length !== 1
+      || meaning.interpretationDefinitions[0] !== meaning.qualification.definition) {
+      throw new InvalidStatementSchemaInput('invalid retained Claim meaning domain');
+    }
+    try { checkedRetainedClaimDateValue(meaning.value); }
+    catch { throw new InvalidStatementSchemaInput('invalid retained Claim publication value'); }
+  }
+  if (!(retained ? retainedReference(meaning.subject) : reference.test(meaning.subject)) || !reference.test(meaning.predicate)
     || !reference.test(meaning.relationDefinition)) {
     throw new InvalidStatementSchemaInput('invalid Statement meaning');
   }
@@ -165,7 +198,7 @@ export function statementMeaningKey(meaning: StatementMeaning): string {
     checkReferences(meaning.interpretationDefinitions, 'interpretation definitions',
       STATEMENT_LIMITS.interpretationDefinitions,
     ),
-    canonicalValue(meaning.value),
+    canonicalValue(meaning.value, retained),
     checkReferences(meaning.applicability, 'Statement applicability', STATEMENT_LIMITS.applicability,
     ),
   ];

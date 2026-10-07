@@ -88,11 +88,14 @@ const keyOf = (request: Request) => {
   return key && /^[A-Za-z0-9:_./-]{1,128}$/.test(key) ? key : null;
 };
 
-export function claimRoutes(work: MainWorkDependencies) {
+export interface ClaimRouteOptions { legacyClaimDispatch?: 'terminal-replay-only' }
+
+export function claimRoutes(work: MainWorkDependencies, options: ClaimRouteOptions = {}) {
   const store = work.verification;
   const deps = (): VerificationDependencies => {
     if (!store) throw new VerificationUnavailable('verification owner is not configured');
-    return { env: work.environment, account: work.account, access: work.access, store };
+    return { env: work.environment, account: work.account, access: work.access, store,
+      ...(options.legacyClaimDispatch ? { legacyClaimDispatch: options.legacyClaimDispatch } : {}) };
   };
   const principal = async (request: Request, scope: string) => {
     const id = await work.access.activePrincipalId(await work.account.verify(request, [scope]));

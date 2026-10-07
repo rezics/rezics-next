@@ -4,7 +4,9 @@ import { activeDirectDefinitionsGuard } from '../context/definition-state.ts';
 import { checkedStoredState, type DefinitionState } from '../semantic/change.ts';
 import { readComponent } from '../semantic/command.ts';
 import { checkedNativeIri, definitionKindIri, PROFILES } from '../semantic/schema.ts';
+import { InvalidSemanticValue, temporalParts } from '../semantic/value.ts';
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import type { StatementRetainedClaimProvenance, StatementValue } from './schema.ts';
 
 /**
  * The supported interpretation Definition declares this complete qualification:
@@ -20,6 +22,21 @@ import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/ac
  * DefinitionRevision pins that contract; a different notation is unsupported.
  */
 export const QUALIFICATION_DEFINITION_NOTATION = 'statement-proposition-qualification-v1';
+
+/**
+ * The one reviewed legacy predicate binding: first publication or broadcast of
+ * the referent, expressed as its exact Date/DateTime, within the independently
+ * retained edition and validity scope. This does not assert a publication event,
+ * transfer source authority, or replace the predicate with a native alias.
+ * https://schema.org/datePublished (Schema.org V30.1, 2026-09-16).
+ * The supported sealed property Definition has this fixed notation and no roles;
+ * labels are presentation and cannot establish or alter the binding.
+ * The existing Gregorian value codec admits four-digit Date/full DateTime,
+ * optional DateTime offset and up to nine fractional-second digits; broader XML
+ * date forms are outside this reviewed slice and remain retained.
+ */
+export const DATE_PUBLISHED_PREDICATE = 'https://schema.org/datePublished';
+export const DATE_PUBLISHED_DEFINITION_NOTATION = 'statement-first-publication-date-v1';
 
 export const STATEMENT_VALUE_PRECISIONS = ['exact', 'approximate', 'uncertain'] as const;
 export const STATEMENT_VALUE_QUALIFIERS = ['disputed-attribution', 'inferred'] as const;
@@ -78,6 +95,25 @@ function scopeReference(value: unknown): string {
     throw new InvalidContextCommand('invalid Statement qualification scope');
   }
   return value;
+}
+
+/** Used only by the qualified retained-Claim adapter, never the ordinary Statement writer. */
+export function retainedClaimStatementReference(value: unknown): string {
+  return scopeReference(value);
+}
+
+/** Validate the reviewed publication value without normalizing its RDF lexical. */
+export function checkedRetainedClaimDateValue(value: StatementValue): Extract<StatementValue, { kind: 'literal' }> {
+  if (!value || value.kind !== 'literal' || value.language !== null || typeof value.lexical !== 'string'
+    || ![`${XSD}date`, `${XSD}dateTime`].includes(value.datatype)) {
+    throw new InvalidContextCommand('retained publication claim requires a Date or DateTime literal');
+  }
+  try { temporalParts(value.lexical, value.datatype === `${XSD}date` ? 'day' : 'second'); }
+  catch (error) {
+    if (error instanceof InvalidSemanticValue) throw new InvalidContextCommand('retained publication claim has an invalid Date or DateTime literal');
+    throw error;
+  }
+  return { ...value };
 }
 
 function instant(value: unknown): string | null {
@@ -144,6 +180,14 @@ export function normalizeStatementQualification(input: unknown): StatementQualif
   };
 }
 
+/** Retained RDF bounds keep their validated lexicals; canonical key construction remains separate. */
+export function normalizeRetainedClaimStatementQualification(input: unknown): StatementQualification {
+  const source = input && typeof input === 'object' && !Array.isArray(input) ? { ...input } : input;
+  const value = normalizeStatementQualification(source);
+  const original = source as StatementQualification;
+  return { ...value, validFrom: original.validFrom, validUntil: original.validUntil };
+}
+
 /** The qualified key adds this tuple; the unqualified v1 key never calls it. */
 export function statementQualificationKeyTuple(input: StatementQualification) {
   const value = normalizeStatementQualification(input);
@@ -159,8 +203,9 @@ export function statementQualificationKeyTuple(input: StatementQualification) {
 }
 
 /** Fixed predicate fragment for the Statement current node; the caller supplies its subject. */
-export function statementQualificationTriples(input: StatementQualification): string {
-  const value = normalizeStatementQualification(input);
+export function statementQualificationTriples(input: StatementQualification, retainLexical = false): string {
+  const value = retainLexical ? normalizeRetainedClaimStatementQualification(input)
+    : normalizeStatementQualification(input);
   return `rv:qualificationDefinition ${iri(value.definition)} ;
     rv:interpretationContext <${value.interpretationContext}> ;
     rv:valuePrecision <${PRECISION_TERMS[value.valuePrecision]}> ;
@@ -276,7 +321,7 @@ export function statementQualificationFromBindings(
   );
   if (!valuePrecision || valueQualifiers.some((value) => value === undefined)) return unavailable();
   try {
-    return normalizeStatementQualification({
+    return normalizeRetainedClaimStatementQualification({
       definition: definition.value,
       interpretationContext: context.value,
       valuePrecision,
@@ -295,7 +340,7 @@ export function statementQualificationFromBindings(
 export function statementQualificationExport(
   input: StatementQualification,
 ): Record<string, unknown> {
-  const value = normalizeStatementQualification(input);
+  const value = normalizeRetainedClaimStatementQualification(input);
   return {
     [`${RV}qualificationDefinition`]: [{ '@id': value.definition }],
     [`${RV}interpretationContext`]: [{ '@id': value.interpretationContext }],
@@ -321,6 +366,35 @@ export function statementQualificationExport(
       ? {}
       : { [`${RV}editionScope`]: [{ '@id': value.editionScope }] }),
   };
+}
+
+/** A lifecycle keeps the original Claim root and source receipt directly, without walking history. */
+export function normalizeStatementRetainedClaimProvenance(input: unknown): StatementRetainedClaimProvenance {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new InvalidContextCommand('invalid retained Claim provenance');
+  }
+  const row = input as Record<string, unknown>;
+  if (Object.keys(row).some(key => !['retainedSourceRevision', 'retainedSourceReceipt', 'recordedAt', 'derivation'].includes(key))
+    || !['retainedSourceRevision', 'retainedSourceReceipt', 'recordedAt'].every(key => Object.hasOwn(row, key))) {
+    throw new InvalidContextCommand('retained Claim provenance has unsupported or missing fields');
+  }
+  if (typeof row.retainedSourceReceipt !== 'string' || !/^urn:rezics:receipt:[0-9a-f]{64}$/u.test(row.retainedSourceReceipt)
+    || typeof row.recordedAt !== 'string') {
+    throw new InvalidContextCommand('invalid retained Claim source receipt or recorded time');
+  }
+  instant(row.recordedAt);
+  return { retainedSourceRevision: nativeDefinition(row.retainedSourceRevision),
+    retainedSourceReceipt: row.retainedSourceReceipt, recordedAt: row.recordedAt,
+    ...(Object.hasOwn(row, 'derivation') ? { derivation: retainedClaimStatementReference(row.derivation) } : {}) };
+}
+
+/** Fixed provenance predicates for a fresh Statement root or its later lifecycle revision. */
+export function statementRetainedClaimProvenanceTriples(input: StatementRetainedClaimProvenance): string {
+  const value = normalizeStatementRetainedClaimProvenance(input);
+  return `rv:retainedSourceRevision ${iri(value.retainedSourceRevision)} ;
+    rv:retainedSourceReceipt <${value.retainedSourceReceipt}> ;
+    rv:recordedAt ${lit(value.recordedAt)}^^<${XSD}dateTime> ;
+    ${value.derivation === undefined ? '' : `rv:derivation <${value.derivation}> ;`}`;
 }
 
 interface ExactStatementDefinition {
@@ -448,6 +522,24 @@ export async function validateStatementDefinitions(
       [...definitions.values()].map(definitionGuard).join('\n') +
       `\n${activeDirectDefinitionsGuard(references)}`,
   };
+}
+
+/** The reviewed fold binds the original external predicate through fixed sealed D/Q contracts. */
+export async function validateRetainedClaimStatementDefinitions(env: WorkActivationEnvironment,
+  input: { relationDefinition: string; qualificationDefinition: string },
+  canReadDefinition?: (definition: string) => Promise<boolean>): Promise<{ guard: string }> {
+  const references = [input.relationDefinition, input.qualificationDefinition];
+  const definitions = await exactDefinitions(env, references, canReadDefinition);
+  const relation = definitions.get(input.relationDefinition)!;
+  const qualification = definitions.get(input.qualificationDefinition)!;
+  if (relation.state.kind !== 'property' || relation.state.notation !== DATE_PUBLISHED_DEFINITION_NOTATION
+    || relation.state.roles.length !== 0 || relation.state.successor !== null
+    || qualification.state.kind !== 'interpretation' || qualification.state.notation !== QUALIFICATION_DEFINITION_NOTATION
+    || qualification.state.roles.length !== 0 || qualification.state.successor !== null) {
+    throw new InvalidContextCommand('retained Claim definitions do not declare the reviewed publication proposition');
+  }
+  return { guard: [...definitions.values()].map(definitionGuard).join('\n')
+    + `\n${activeDirectDefinitionsGuard(references)}` };
 }
 
 /** Literal interpretation is an explicit exact DefinitionRef, never a resource-object default. */

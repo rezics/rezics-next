@@ -9,6 +9,32 @@ const reliabilityScope: readonly PropertyDefinition[] = [
   requiredIri('rv:evaluationContext'),
 ];
 
+// Old Claim pins remain a separate exact branch; a newly assessed Statement pins its own revision.
+const targetPins: readonly (readonly PropertyDefinition[])[] = [
+  [
+    { path: 'rv:component', class: 'rv:Claim' },
+    { path: 'rv:claimRevision', minCount: 1, maxCount: 1, class: 'rv:ClaimRevision' },
+    { path: 'rv:statementRevision', maxCount: 0 },
+  ],
+  [
+    { path: 'rv:component', class: 'rdf:Statement' },
+    { path: 'rv:statementRevision', minCount: 1, maxCount: 1, class: 'rv:StatementRevision' },
+    { path: 'rv:claimRevision', maxCount: 0 },
+  ],
+];
+
+const independence: readonly (readonly PropertyDefinition[])[] = [
+  [
+    { path: 'rv:dependenceStatus', hasValue: 'rv:DependenceEstablished' },
+    { path: 'rv:independentOriginCount', minCount: 1, maxCount: 1, datatype: 'xsd:integer',
+      minInclusive: 0, maxInclusive: 64 },
+  ],
+  [
+    { path: 'rv:dependenceStatus', in: ['rv:DependenceUnknown', 'rv:DependenceCircular', 'rv:DependenceOverBudget'] },
+    { path: 'rv:independentOriginCount', maxCount: 0 },
+  ],
+];
+
 // Method output with its limits. A score is never a calibrated fact probability
 // unless the assessment names its calibration evidence.
 const method: readonly PropertyDefinition[] = [
@@ -32,7 +58,7 @@ export const assessmentProfile = {
   id: 'assessment-v1',
   comments: [
     'Immutable assessment anchors: scoped source reliability and one claim assessment revision.',
-    'An assessment cites exact claim, evidence-set, source-assessment, method and policy revisions.',
+    'An assessment cites either an exact retained ClaimRevision or an exact StatementRevision, never both.',
     'Activation into a quality summary is a separate Content-owned generation CAS.',
   ],
   prefixes: [
@@ -75,9 +101,10 @@ export const assessmentProfile = {
       canonical: { types: ['rv:ClaimAssessment'] },
       properties: [
         { path: 'rdf:type', in: ['rv:ClaimAssessment', 'rv:RevisionAnchor'], minCount: 2, maxCount: 2 },
-        { path: 'rv:component', minCount: 1, maxCount: 1, class: 'rv:Claim' },
+        { path: 'rv:component', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
         { path: 'rv:predecessor', maxCount: 1, class: 'rv:ClaimAssessment' },
-        { path: 'rv:claimRevision', minCount: 1, maxCount: 1, class: 'rv:ClaimRevision' },
+        { path: 'rv:claimRevision', maxCount: 1, class: 'rv:ClaimRevision' },
+        { path: 'rv:statementRevision', maxCount: 1, class: 'rv:StatementRevision' },
         // Content-owned verification.evidence_set_revision, by exact identity.
         requiredIri('rv:evidenceSetRevision'),
         { path: 'rv:sourceAssessment', maxCount: 32, class: 'rv:SourceReliabilityAssessment' },
@@ -92,17 +119,7 @@ export const assessmentProfile = {
         ...method,
       ],
       // Independent origins are counted only when the dependence closure is established.
-      or: [
-        [
-          { path: 'rv:dependenceStatus', hasValue: 'rv:DependenceEstablished' },
-          { path: 'rv:independentOriginCount', minCount: 1, maxCount: 1, datatype: 'xsd:integer',
-            minInclusive: 0, maxInclusive: 64 },
-        ],
-        [
-          { path: 'rv:dependenceStatus', in: ['rv:DependenceUnknown', 'rv:DependenceCircular', 'rv:DependenceOverBudget'] },
-          { path: 'rv:independentOriginCount', maxCount: 0 },
-        ],
-      ],
+      or: targetPins.flatMap(target => independence.map(origin => [...target, ...origin])),
     },
   ],
 } as const satisfies ProfileDefinition;

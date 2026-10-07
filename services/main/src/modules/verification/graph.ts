@@ -5,6 +5,7 @@ import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
+import type { StatementValue } from '../statement/schema.ts';
 import { DATASET, GRAPHS, ID, RV, hash, lit, IdempotencyConflict, PendingActivation,
   CancelledActivation, type WorkActivationEnvironment } from '../work/activate.ts';
 
@@ -310,11 +311,14 @@ export async function createClaim(env: WorkActivationEnvironment, admission: Reg
 }
 
 export interface ClaimRecord {
+  representation: 'claim' | 'statement'; revision: string;
   claim: string; head: string; referent: string; interpretationContext: string;
-  propositionPredicate: string; value: PropositionValue; valuePrecision: string;
+  propositionPredicate: string; value: { kind: 'iri'; iri: string } | { kind: 'literal'; lexical: string; datatype: string; language?: string | null };
+  rdfValue: StatementValue; valuePrecision: string;
   valueQualifiers: string[]; validFrom: string | null; validUntil: string | null;
   editionScope: string | null; claimStatus: string; statedBy: string; recordedAt: string;
   dataEpoch: string; sequence: string;
+  retainedSourceRevision?: string;
 }
 
 const local = (value: string) => value.startsWith(RV) ? value.slice(RV.length) : value;
@@ -328,7 +332,8 @@ export async function readClaimRevisions(env: WorkActivationEnvironment,
   const found = new Map<string, ClaimRecord>();
   if (!revisions.length) return found;
   if (revisions.length > 64) throw new InvalidVerificationInput('too many claim revisions');
-  const response = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?revision ?claim ?head ?referent ?context
+  const response = await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?revision ?claim ?head ?referent ?context
     ?predicate ?value ?precision ?qualifier ?from ?until ?edition ?status ?statedBy ?recordedAt ?epoch ?sequence WHERE {
     VALUES ?revision { ${revisions.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ClaimRevision ; rv:component ?claim ; rv:referent ?referent ;
@@ -337,35 +342,122 @@ export async function readClaimRevisions(env: WorkActivationEnvironment,
       rv:recordedAt ?recordedAt ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
       OPTIONAL { ?revision rv:valueQualifier ?qualifier } OPTIONAL { ?revision rv:validFrom ?from }
       OPTIONAL { ?revision rv:validUntil ?until } OPTIONAL { ?revision rv:editionScope ?edition } }
-    GRAPH ${iri(GRAPHS.current)} { ?claim a rv:Claim ; rv:claimHead ?head }
+    { GRAPH ${iri(GRAPHS.current)} { ?claim a rdf:Statement ; rv:head ?head } }
+    UNION { GRAPH ${iri(GRAPHS.current)} { ?claim a rv:Claim ; rv:claimHead ?head }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?claim a rdf:Statement } } }
   }`);
-  for (const row of response.results?.bindings ?? []) {
+  const legacyRows = response.results?.bindings ?? [];
+  if (legacyRows.length > 64 * 3) throw new PendingActivation('retained claim revision read exceeds its bound');
+  const legacyBasis = new Map<string, string>();
+  for (const row of legacyRows) {
+    if (['revision', 'claim', 'head', 'referent', 'context', 'predicate', 'value', 'precision', 'status',
+      'statedBy', 'recordedAt', 'epoch', 'sequence'].some(field => !row[field])) {
+      throw new PendingActivation('retained claim revision is incomplete');
+    }
     const revision = row.revision!.value;
+    if (!revisions.includes(revision)) throw new PendingActivation('retained claim revision was not requested');
+    const signature = JSON.stringify(['claim', 'head', 'referent', 'context', 'predicate', 'value', 'precision',
+      'from', 'until', 'edition', 'status', 'statedBy', 'recordedAt', 'epoch', 'sequence'].map(field => {
+        const value = row[field];
+        return value ? [value.type, value.value, value.datatype ?? null, value['xml:lang'] ?? null] : null;
+      }));
+    if (legacyBasis.has(revision) && legacyBasis.get(revision) !== signature) {
+      throw new PendingActivation('retained claim revision is ambiguous');
+    }
+    legacyBasis.set(revision, signature);
     const value = row.value!;
     const previous = found.get(revision);
     const qualifier = row.qualifier ? QUALIFIER_NAME[local(row.qualifier.value)] : undefined;
+    if ((row.qualifier && !qualifier) || !PRECISION_NAME[local(row.precision!.value)]
+      || !['Asserted', 'Withdrawn'].includes(local(row.status!.value))) {
+      throw new PendingActivation('retained claim qualification is unavailable');
+    }
     if (previous) {
       if (qualifier && !previous.valueQualifiers.includes(qualifier)) previous.valueQualifiers.push(qualifier);
       continue;
     }
-    found.set(revision, { claim: row.claim!.value, head: row.head!.value, referent: row.referent!.value,
+    const rdfValue: StatementValue = value.type === 'uri' ? { kind: 'resource', iri: value.value }
+      : { kind: 'literal', lexical: value.value, datatype: value.datatype ?? `${XSD}string`,
+        language: value['xml:lang'] ?? null };
+    found.set(revision, { representation: 'claim', revision,
+      claim: row.claim!.value, head: row.head!.value, referent: row.referent!.value,
       interpretationContext: row.context!.value, propositionPredicate: row.predicate!.value,
       value: value.type === 'uri' ? { kind: 'iri', iri: value.value } : { kind: 'literal', lexical: value.value,
-        datatype: (value.datatype?.slice(XSD.length) ?? 'string') as 'string' },
-      valuePrecision: PRECISION_NAME[local(row.precision!.value)] ?? 'uncertain',
+        datatype: value.datatype?.startsWith(XSD) ? value.datatype.slice(XSD.length) : value.datatype ?? 'string',
+        ...(value['xml:lang'] ? { language: value['xml:lang'] } : {}) }, rdfValue,
+      valuePrecision: PRECISION_NAME[local(row.precision!.value)]!,
       valueQualifiers: qualifier ? [qualifier] : [], validFrom: row.from?.value ?? null,
       validUntil: row.until?.value ?? null, editionScope: row.edition?.value ?? null,
       claimStatus: local(row.status!.value) === 'Withdrawn' ? 'withdrawn' : 'asserted',
       statedBy: row.statedBy!.value, recordedAt: row.recordedAt!.value,
       dataEpoch: row.epoch!.value, sequence: row.sequence!.value });
   }
+  const statements = await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+    SELECT ?revision ?claim ?head ?source ?root ?sourceReceipt ?recordedAt ?flatRecordedAt ?statedBy ?derivation ?rootDerivation WHERE {
+      VALUES ?revision { ${revisions.map(iri).join(' ')} }
+      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:StatementRevision ; rv:component ?claim ;
+        rv:retainedSourceRevision ?source ; rv:retainedSourceReceipt ?sourceReceipt ; rv:recordedAt ?flatRecordedAt .
+        OPTIONAL { ?revision rv:derivation ?derivation }
+        ?root a rv:ClaimRevision ; rv:component ?claim ; rv:recordedAt ?recordedAt ; rv:statedBy ?statedBy ;
+          rv:dataEpoch ?sourceEpoch ; rv:sequence ?sourceSequence .
+        OPTIONAL { ?root rv:derivation ?rootDerivation } }
+      GRAPH ${iri(GRAPHS.current)} { ?claim a rdf:Statement ; rv:head ?head ; rv:retainedClaimHead ?root }
+      GRAPH ${iri(GRAPHS.receipts)} { ?sourceReceipt a rv:OperationReceipt ; rv:claim ?claim ; rv:claimRevision ?root ;
+        rv:outcome rv:Succeeded ; rv:admittedScope ${lit(ADMISSIONS['claim-create'].scope)} ;
+        rv:operation ?sourceOperation ; rv:requestDigest ?sourceDigest ;
+        rv:dataEpoch ?sourceEpoch ; rv:sequence ?sourceSequence }
+    } LIMIT 65`);
+  const statementRows = statements.results?.bindings ?? [];
+  if (statementRows.length > 64) throw new PendingActivation('verification Statement revision read is ambiguous');
+  for (const row of statementRows) {
+    const revision = row.revision?.value, claim = row.claim?.value, root = row.root?.value;
+    if (!revision || !revisions.includes(revision) || !claim || !root || !row.head || !row.recordedAt || !row.statedBy
+      || row.source?.type !== 'uri' || row.source.value !== root || row.sourceReceipt?.type !== 'uri'
+      || row.flatRecordedAt?.value !== row.recordedAt.value
+      || row.derivation?.value !== row.rootDerivation?.value || found.has(revision)) {
+      throw new PendingActivation('verification Statement provenance is unavailable');
+    }
+    // Outbox discovery loads this legacy owner; defer the reader's relay imports until an exact B is requested.
+    const { readStatementRevisionSnapshot } = await import('../statement/read.ts');
+    const { normalizeRetainedClaimStatementQualification } = await import('../statement/qualification.ts');
+    const snapshot = await readStatementRevisionSnapshot(env, claim, revision);
+    const meaning = snapshot.meaning;
+    const provenance = snapshot.retainedProvenance;
+    if (!provenance || provenance.retainedSourceRevision !== root
+      || provenance.retainedSourceReceipt !== row.sourceReceipt.value
+      || provenance.recordedAt !== row.recordedAt.value || provenance.derivation !== row.derivation?.value) {
+      throw new PendingActivation('verification Statement sealed provenance differs from its retained source');
+    }
+    if (meaning?.referenceDomain !== 'retained-claim' || !meaning.qualification || snapshot.speaker !== row.statedBy.value) {
+      throw new PendingActivation('verification Statement meaning is unavailable');
+    }
+    const qualification = normalizeRetainedClaimStatementQualification(meaning.qualification);
+    const value = meaning.value;
+    if (value.kind !== 'literal' && value.kind !== 'resource') {
+      throw new PendingActivation('verification Statement value is unavailable');
+    }
+    found.set(revision, { representation: 'statement', revision, claim, head: row.head.value,
+      referent: meaning.subject, interpretationContext: qualification.interpretationContext,
+      propositionPredicate: meaning.predicate, rdfValue: value,
+      value: value.kind === 'resource' ? { kind: 'iri', iri: value.iri }
+        : { kind: 'literal', lexical: value.lexical, datatype: value.datatype, language: value.language },
+      valuePrecision: qualification.valuePrecision, valueQualifiers: qualification.valueQualifiers,
+      validFrom: qualification.validFrom, validUntil: qualification.validUntil, editionScope: qualification.editionScope,
+      claimStatus: snapshot.state === 'withdrawn' ? 'withdrawn' : 'asserted', statedBy: row.statedBy.value,
+      recordedAt: row.recordedAt.value, dataEpoch: snapshot.sourcePosition.dataEpoch,
+      sequence: snapshot.sourcePosition.sequence, retainedSourceRevision: root });
+  }
   for (const record of found.values()) record.valueQualifiers.sort();
   return found;
 }
 
 export async function readClaimHead(env: WorkActivationEnvironment, claim: string): Promise<ClaimRecord | null> {
-  const head = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rv:Claim ; rv:claimHead ?head } }`);
+  const head = await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?head WHERE {
+    { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rdf:Statement ; rv:head ?head ; rv:retainedClaimHead ?root } }
+    UNION { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rv:Claim ; rv:claimHead ?head }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a rdf:Statement } } }`);
   const rows = head.results?.bindings ?? [];
   if (rows.length !== 1) return null;
   return (await readClaimRevisions(env, [rows[0]!.head!.value])).get(rows[0]!.head!.value) ?? null;
@@ -478,6 +570,7 @@ export async function readReliability(env: WorkActivationEnvironment,
 
 export interface AssessmentRecordInput {
   claim: string; claimRevision: string; evidenceSetRevision: string; sourceAssessments: readonly string[];
+  representation?: 'claim' | 'statement';
   method: string; methodRevision: string; policyRevision: string; evaluationContext: string;
   coverage: 'complete' | 'partial' | 'incomplete';
   support: 'supported' | 'contradicted' | 'material-conflict' | 'insufficient' | 'abstained';
@@ -502,11 +595,13 @@ export async function recordAssessment(env: WorkActivationEnvironment, admission
     throw new IdempotencyConflict('assessment admission differs from intent');
   }
   const assessment = ID + Bun.randomUUIDv7();
+  const statement = input.representation === 'statement';
   return run(env, { family: 'claim-assess', admission, digest, results: ['assessment'],
     profile: 'assessment-v1', event: 'rv:ClaimAssessedEvent',
     validations: [{ shape: 'assessment', focus: assessment }],
     revisions: `${iri(assessment)} a rv:ClaimAssessment, rv:RevisionAnchor ; rv:component ${iri(input.claim)} ;
-      rv:claimRevision ${iri(input.claimRevision)} ; rv:evidenceSetRevision ${iri(input.evidenceSetRevision)} ;
+      rv:${statement ? 'statementRevision' : 'claimRevision'} ${iri(input.claimRevision)} ;
+      rv:evidenceSetRevision ${iri(input.evidenceSetRevision)} ;
       ${input.sourceAssessments.map(item => `rv:sourceAssessment ${iri(item)} ;`).join(' ')}
       rv:policyRevision ${iri(input.policyRevision)} ; rv:evaluationContext ${iri(input.evaluationContext)} ;
       rv:coverage rv:${COVERAGE[input.coverage]} ; rv:supportResult rv:${SUPPORT[input.support]} ;
@@ -522,7 +617,9 @@ export async function recordAssessment(env: WorkActivationEnvironment, admission
       rv:assessedAt ${dateTime(new Date().toISOString())} ;
       rv:modelRevision ${iri(ASSESSMENT_PROFILE)} ; rv:shapeRevision ${iri(ASSESSMENT_PROFILE)} ;`,
     receiptFields: `rv:assessment ${iri(assessment)} ;`,
-    where: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.claim)} a rv:Claim ; rv:claimHead ${iri(input.claimRevision)} }
+    where: `GRAPH ${iri(GRAPHS.current)} { ${iri(input.claim)}
+      ${statement ? 'a <http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement> ; rv:head' : 'a rv:Claim ; rv:claimHead'}
+      ${iri(input.claimRevision)} }
       ${input.sourceAssessments.map((item, index) => `GRAPH ${iri(GRAPHS.current)} {
         ?reliability${index} rv:reliabilityHead ${iri(item)} }`).join('\n')}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(assessment)} ?ap ?ao } }` });
@@ -536,15 +633,17 @@ const inverse = <T extends Record<string, string>>(map: T) =>
   Object.fromEntries(Object.entries(map).map(([key, value]) => [value, key])) as Record<string, keyof T>;
 
 export async function readAssessment(env: WorkActivationEnvironment, assessment: string): Promise<AssessmentRecord | null> {
-  const response = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?claim ?claimRevision ?evidence ?source
+  const response = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?claim ?claimRevision ?statementRevision ?evidence ?source
     ?method ?methodRevision ?policy ?context ?coverage ?support ?dependence ?origins ?score ?calibration ?evaluation
     ?limitations ?assessor ?kind ?assessedAt ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(assessment)} a rv:ClaimAssessment ; rv:component ?claim ;
-      rv:claimRevision ?claimRevision ; rv:evidenceSetRevision ?evidence ; rv:method ?method ;
+      rv:evidenceSetRevision ?evidence ; rv:method ?method ;
       rv:methodRevision ?methodRevision ; rv:policyRevision ?policy ; rv:evaluationContext ?context ;
       rv:coverage ?coverage ; rv:supportResult ?support ; rv:dependenceStatus ?dependence ;
       rv:limitations ?limitations ; rv:assessor ?assessor ; rv:assessorKind ?kind ;
       rv:assessedAt ?assessedAt ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      OPTIONAL { ${iri(assessment)} rv:claimRevision ?claimRevision }
+      OPTIONAL { ${iri(assessment)} rv:statementRevision ?statementRevision }
       OPTIONAL { ${iri(assessment)} rv:sourceAssessment ?source }
       OPTIONAL { ${iri(assessment)} rv:independentOriginCount ?origins }
       OPTIONAL { ${iri(assessment)} rv:scorePerMillion ?score }
@@ -554,7 +653,14 @@ export async function readAssessment(env: WorkActivationEnvironment, assessment:
   const rows = response.results?.bindings ?? [];
   if (!rows.length) return null;
   const row = rows[0]!;
-  return { assessment, claim: row.claim!.value, claimRevision: row.claimRevision!.value,
+  const targetRevision = row.statementRevision ?? row.claimRevision;
+  if (!targetRevision || row.statementRevision && row.claimRevision
+    || rows.some(value => value.statementRevision?.value !== row.statementRevision?.value
+      || value.claimRevision?.value !== row.claimRevision?.value)) {
+    throw new PendingActivation('assessment revision pin is ambiguous');
+  }
+  return { assessment, claim: row.claim!.value, claimRevision: targetRevision.value,
+    ...(row.statementRevision ? { representation: 'statement' as const } : {}),
     evidenceSetRevision: row.evidence!.value,
     sourceAssessments: [...new Set(rows.flatMap(item => item.source ? [item.source.value] : []))].sort(),
     method: row.method!.value, methodRevision: row.methodRevision!.value, policyRevision: row.policy!.value,
@@ -569,14 +675,19 @@ export async function readAssessment(env: WorkActivationEnvironment, assessment:
 }
 
 /** Bind an adopted result to the existing Statement decision slot and its live head. */
-export async function readAcceptance(env: WorkActivationEnvironment, decision: string, claim: string): Promise<{
+export async function readAcceptance(env: WorkActivationEnvironment, decision: string, claim: string,
+  representation: 'claim' | 'statement' = 'claim', targetRevision?: string): Promise<{
   slot: string; head: string } | null> {
+  if (representation === 'statement' && !targetRevision) return null;
   const response = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?slot ?head WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} a rv:StatementDecision ;
-      rv:component ?slot ; rv:outcome rv:Accepted }
-    GRAPH ${iri(GRAPHS.current)} { ?slot rv:decisionHead ?head ; rv:decisionTarget ?statement .
-      ?statement a rdf:Statement ; rdf:subject ${iri(claim)} }
+      rv:component ?slot ; rv:outcome rv:Accepted ${representation === 'statement'
+        ? `; rv:targetRevision ${iri(targetRevision!)} ` : ''} }
+    GRAPH ${iri(GRAPHS.current)} { ?slot rv:decisionHead ?head ;
+      ${representation === 'statement' ? `rv:targetKind rv:StatementTarget ; rv:decisionTarget ${iri(claim)} .
+        ${iri(claim)} a rdf:Statement .` : `rv:decisionTarget ?statement .
+        ?statement a rdf:Statement ; rdf:subject ${iri(claim)} .`} }
   }`);
   const rows = response.results?.bindings ?? [];
   if (rows.length !== 1) return null;
@@ -587,14 +698,23 @@ export async function readAcceptance(env: WorkActivationEnvironment, decision: s
 export async function graphHeads(env: WorkActivationEnvironment, dependencies: readonly {
   kind: string; reference: string }[]): Promise<{ heads: Map<string, string | null>;
     position: { datasetId: 'product'; dataEpoch: string; sequence: string } }> {
-  const predicate = (kind: string) => kind === 'claim' ? 'rv:claimHead'
-    : kind === 'acceptance' ? 'rv:decisionHead' : 'rv:reliabilityHead';
-  const values = dependencies.filter(item => ['claim', 'source-assessment', 'acceptance'].includes(item.kind))
-    .map(item => `(${iri(item.reference)} ${predicate(item.kind)})`);
-  const response = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?reference ?head ?epoch ?sequence WHERE {
+  const claims = [...new Set(dependencies.filter(item => item.kind === 'claim').map(item => item.reference))]
+    .map(iri).join(' ');
+  const values = dependencies.filter(item => ['source-assessment', 'acceptance'].includes(item.kind))
+    .map(item => `(${iri(item.reference)} ${item.kind === 'acceptance' ? 'rv:decisionHead' : 'rv:reliabilityHead'})`);
+  const reads = [
+    ...(claims ? [`{ VALUES ?reference { ${claims} }
+      GRAPH ${iri(GRAPHS.current)} { ?reference a rdf:Statement ; rv:head ?head } }`,
+    `{ VALUES ?reference { ${claims} }
+      GRAPH ${iri(GRAPHS.current)} { ?reference a rv:Claim ; rv:claimHead ?head }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?reference a rdf:Statement } } }`] : []),
+    ...(values.length ? [`{ VALUES (?reference ?predicate) { ${values.join(' ')} }
+      GRAPH ${iri(GRAPHS.current)} { ?reference ?predicate ?head } }`] : []),
+  ].join(' UNION ');
+  const response = await env.fuseki.query(`PREFIX rv: <${RV}>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> SELECT ?reference ?head ?epoch ?sequence WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence }
-    ${values.length ? `OPTIONAL { VALUES (?reference ?predicate) { ${values.join(' ')} }
-      GRAPH ${iri(GRAPHS.current)} { ?reference ?predicate ?head } }` : ''}
+    ${reads ? `OPTIONAL { ${reads} }` : ''}
   }`);
   const rows = response.results?.bindings ?? [];
   if (!rows.length) throw new PendingActivation('graph position is unavailable');
@@ -602,7 +722,11 @@ export async function graphHeads(env: WorkActivationEnvironment, dependencies: r
   for (const item of dependencies) if (['claim', 'source-assessment', 'acceptance'].includes(item.kind)) {
     heads.set(item.reference, null);
   }
-  for (const row of rows) if (row.reference && row.head) heads.set(row.reference.value, row.head.value);
+  for (const row of rows) if (row.reference && row.head) {
+    const prior = heads.get(row.reference.value);
+    if (prior && prior !== row.head.value) throw new PendingActivation('verification graph head is ambiguous');
+    heads.set(row.reference.value, row.head.value);
+  }
   return { heads, position: { datasetId: 'product', dataEpoch: rows[0]!.epoch!.value,
     sequence: rows[0]!.sequence!.value } };
 }

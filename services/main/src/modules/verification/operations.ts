@@ -34,6 +34,8 @@ export interface VerificationDependencies {
   account: Pick<AccountAssertionVerifier, 'verify'>;
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'activePrincipalId'>;
   store: VerificationStore;
+  /** Installed only after the stopped-writer fold cutover; existing terminal identities can still replay. */
+  legacyClaimDispatch?: 'terminal-replay-only';
 }
 
 const RESULTS: Record<Family, readonly string[]> = {
@@ -46,6 +48,7 @@ const RESULTS: Record<Family, readonly string[]> = {
 async function admitted(deps: VerificationDependencies, request: Request, family: Family,
   intent: { actingSubject: string; idempotencyKey: string; digest: string },
   execute: (admission: RegisteredAdmission) => Promise<GraphReceipt>, unavailable: (error: unknown) => boolean = () => false,
+  terminalReplayOnly = false,
 ): Promise<GraphReceipt & { replayed: boolean; admission: RegisteredAdmission }> {
   await assertGraphAdmissionOpen(deps.env.fuseki, deps.env.lineage);
   const { scope, action, accountScope } = ADMISSIONS[family];
@@ -53,11 +56,19 @@ async function admitted(deps: VerificationDependencies, request: Request, family
   const registered = await deps.access.register({ principal, actingSubject: intent.actingSubject, scope, action,
     idempotencyKey: intent.idempotencyKey, requestDigest: intent.digest });
   try {
+    const retained = terminalReplayOnly
+      ? await readReceipt(deps.env, registered.id, family, RESULTS[family]) : null;
+    if (terminalReplayOnly && !retained) {
+      // Seal the keyed refusal through the ordinary cancellation family; never leave a claimed command to dispatch later.
+      const cancelled = await sealVerificationAdmission(deps.env, registered, family, RESULTS[family]);
+      await deps.access.recordGraphOutcome(registered.id, cancelled);
+      throw new CancelledActivation('Legacy Claim creation is closed; use an existing terminal receipt');
+    }
     let admission: RegisteredAdmission = registered;
-    if (registered.state !== 'sealed' && registered.dispatchEligible) {
+    if (!retained && registered.state !== 'sealed' && registered.dispatchEligible) {
       admission = await deps.access.claim(registered.id, intent.digest);
     }
-    if (admission.state !== 'sealed') {
+    if (!retained && admission.state !== 'sealed') {
       if (!admission.dispatchEligible || admission.state === 'registered') {
         await sealVerificationAdmission(deps.env, admission, family, RESULTS[family]);
       } else {
@@ -73,7 +84,7 @@ async function admitted(deps: VerificationDependencies, request: Request, family
         }
       }
     }
-    const terminal = await readReceipt(deps.env, registered.id, family, RESULTS[family]);
+    const terminal = retained ?? await readReceipt(deps.env, registered.id, family, RESULTS[family]);
     if (!terminal) throw new PendingVerification(registered.id);
     await deps.access.recordGraphOutcome(registered.id, terminal);
     if (terminal.requestDigest !== intent.digest || terminal.admissionId !== registered.id
@@ -101,7 +112,8 @@ export async function createAdmittedClaim(deps: VerificationDependencies, reques
   const digest = claimDigest(input);
   const receipt = await admitted(deps, request, 'claim-create',
     { actingSubject: input.actingSubject, idempotencyKey: input.idempotencyKey, digest },
-    admission => createClaim(deps.env, admission, input));
+    admission => createClaim(deps.env, admission, input), undefined,
+    deps.legacyClaimDispatch === 'terminal-replay-only');
   const record = (await readClaimRevisions(deps.env, [receipt.result.claimRevision!])).get(receipt.result.claimRevision!);
   if (!record) throw new PendingVerification(receipt.admissionId);
   return { claim: claimView(receipt.result.claimRevision!, record), receipt: receipt.receipt,
@@ -111,10 +123,12 @@ export async function createAdmittedClaim(deps: VerificationDependencies, reques
 
 export function claimView(revision: string, record: ClaimRecord) {
   return { claim: record.claim, revision, head: record.head, referent: record.referent,
+    representation: record.representation, rdfValue: record.rdfValue,
     interpretationContext: record.interpretationContext, propositionPredicate: record.propositionPredicate,
     value: record.value, valuePrecision: record.valuePrecision, valueQualifiers: record.valueQualifiers,
     validFrom: record.validFrom, validUntil: record.validUntil, editionScope: record.editionScope,
-    claimStatus: record.claimStatus, statedBy: record.statedBy, recordedAt: record.recordedAt };
+    claimStatus: record.claimStatus, statedBy: record.statedBy, recordedAt: record.recordedAt,
+    ...(record.retainedSourceRevision ? { retainedSourceRevision: record.retainedSourceRevision } : {}) };
 }
 
 // ------------------------------------------------------- source reliability
@@ -190,8 +204,12 @@ async function assessmentBasis(deps: VerificationDependencies, claim: string, in
     principal: admission.principalId, actingSubject: admission.actingSubject, scope: admission.scope,
     authorityEpoch: admission.authorityEpoch, requestDigest: admission.requestDigest,
   }, input.lineageContinuation, admission.idempotencyKey, !requireCurrent);
+  if (record.representation === 'statement' && snapshot.revision.claimRevision !== input.claimRevision) {
+    throw new VerificationMissing('evidence revision targets another Statement revision');
+  }
   const reliability = await readReliability(deps.env, input.sourceAssessments);
-  const acceptance = input.adoptedRevision ? await readAcceptance(deps.env, input.adoptedRevision, claim) : null;
+  const acceptance = input.adoptedRevision ? await readAcceptance(deps.env, input.adoptedRevision, claim,
+    record.representation, input.claimRevision) : null;
   if (input.adoptedRevision && !acceptance) throw new VerificationMissing('acceptance decision is unavailable');
   if (reliability.size !== input.sourceAssessments.length) {
     throw new VerificationMissing('source assessment is unavailable');
@@ -259,6 +277,7 @@ export async function assessAdmittedClaim(deps: VerificationDependencies, reques
         throw new InvalidVerificationInput('assessment dependency manifest exceeds the admitted ceiling');
       }
       return recordAssessment(deps.env, admission, digest, { claim, claimRevision: input.claimRevision,
+        representation: basis.record.representation,
         evidenceSetRevision: input.evidenceSetRevision, sourceAssessments: [...input.sourceAssessments].sort(),
         method: input.method === 'automated' ? SUPPORT_METHOD : HUMAN_REVIEW_METHOD,
         methodRevision: input.method === 'automated' ? SUPPORT_METHOD : HUMAN_REVIEW_METHOD,

@@ -12,6 +12,16 @@
 # An editionScope restricts the proposition to that exact edition; omission imposes no restriction.
 # Qualification scope, precision, qualifiers, bounds and edition participate in qualified keys.
 # Speaker, recorded time, evidence and acceptance remain independent of qualification meaning.
+# The retained-Claim adapter binds only the original https://schema.org/datePublished:
+# first publication or broadcast, with an exact Date/DateTime literal and no language tag.
+# The existing Gregorian value codec bounds this slice to four-digit Date/full DateTime,
+# optional DateTime offsets and up to nine fractional-second digits, without rewriting lexicals.
+# Its sealed property DefinitionRevision declares statement-first-publication-date-v1,
+# independently of labels. The complete qualification Definition remains separately pinned.
+# Legacy HTTPS/URN referents remain exact; no projection or predicate alias retargets them.
+# retainedClaimHead retains the original Claim root identity; each new lifecycle revision
+# carries that same retainedSourceRevision, source receipt, original recordedAt and derivation.
+# These are representation provenance, not a Statement predecessor, assessment or acceptance.
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -33,6 +43,7 @@
     sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StatementRevision ] ;
     sh:property [ sh:path rv:source ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:migratedFrom ; sh:maxCount 1 ; sh:class rv:ClassificationApplication ] ;
+    sh:property [ sh:path rv:retainedClaimHead ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class rv:ClaimRevision ] ;
     sh:property [ sh:path rv:principal ; sh:maxCount 0 ] ;
     sh:property [ sh:path rv:qualificationDefinition ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class rv:DefinitionRevision ] ;
     sh:property [ sh:path rv:interpretationContext ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
@@ -66,5 +77,16 @@
     sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/statement-v1> ] ;
     sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/statement-v1> ] ;
     sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:retainedSourceRevision ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class rv:ClaimRevision ] ;
+    sh:property [ sh:path rv:retainedSourceReceipt ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:recordedAt ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:derivation ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:retainedSourceRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:retainedSourceReceipt ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:retainedSourceRevision ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:retainedSourceReceipt ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:recordedAt ; sh:minCount 1 ; sh:datatype xsd:dateTime ] ]
+    ) ;
     sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
     sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .

@@ -57,6 +57,39 @@ export function statementFrameChannels(frames: readonly Coordinate[]) {
  * their bounded merge retains specificity before predicate/meaning/Statement. */
 export class StatementSeek {
   constructor(private readonly pool: Pool,private readonly env: WorkActivationEnvironment) {}
+  /** One receipted Claim fold adds one exact reference on its held, unchanged cut. */
+  async projectClaimFold(claim: string, revision: string, marker: string, mapDigest: string,
+    deadline = performance.now()+30_000) {
+    const rows = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(this.env.lineage.routingEpoch)} ; rv:restoreHold true ; rv:sequence ?sequence .
+        ${iri(marker)} rv:claimStatementFoldFence true ; rv:foldMapDigest ${lit(mapDigest)} }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(claim)} a <http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement> ;
+        rv:head ${iri(revision)} ; rv:retainedClaimHead ?source }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:StatementRevision ;
+        rv:component ${iri(claim)} ; rv:retainedSourceRevision ?source }
+    } LIMIT 2`,STATEMENT_SEEK_COST.responseBytes)).results?.bindings ?? [];
+    if (rows.length !== 1 || !rows[0]?.sequence) throw new WorkReadUnavailable('Claim fold seek source is unavailable');
+    const references = await this.readReferences([claim]);
+    if (references.length !== 1) throw new WorkReadUnavailable('Claim fold seek reference is incomplete');
+    const client = await this.pool.connect();
+    try {
+      if (performance.now() >= deadline) throw new WorkReadUnavailable('Claim fold seek deadline expired');
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL statement_timeout = '${Math.max(1,Math.floor(deadline-performance.now()))}ms'`);
+      await client.query("SET LOCAL lock_timeout = '1s'");
+      const fence = await client.query<{open:boolean}>('SELECT open FROM access.recovery_fence WHERE id FOR SHARE');
+      const coverage = await client.query<{complete:boolean;through_sequence:string}>(
+        'SELECT complete,through_sequence::text FROM access.statement_seek_coverage WHERE data_epoch=$1 FOR UPDATE',[this.env.lineage.dataEpoch]);
+      if (fence.rows[0]?.open !== false || !coverage.rows[0]?.complete
+        || coverage.rows[0].through_sequence !== rows[0].sequence.value) {
+        throw new WorkReadUnavailable('Claim fold requires complete held Statement seek baseline');
+      }
+      await this.replace(client,references[0]!,this.env.lineage.dataEpoch);
+      await client.query('COMMIT');
+    } catch (error) { await client.query('ROLLBACK'); throw error; }
+    finally { client.release(); }
+  }
   async coverage() {
     const result = await this.pool.query<{ through_sequence: string; complete: boolean }>(
       'SELECT through_sequence::text,complete FROM access.statement_seek_coverage WHERE data_epoch=$1',[this.env.lineage.dataEpoch]);
