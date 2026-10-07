@@ -215,6 +215,13 @@ export const serializationAllowlist: SerializationAllowance[] = [
     ],
   },
   {
+    relation: 'verification.assessment_producer_gate',
+    class: 'operator/startup',
+    reason: 'Only maintenance closes the producer mode and drains in-flight DML with a table SHARE lock; ordinary producers read configuration without gate row locks or generation updates.',
+    writers: [content + '1704_verification_assessment_producer.sql',
+      main + 'modules/verification/store.ts'],
+  },
+  {
     relation: 'access.recovery_fence',
     class: 'recovery fence',
     reason:
