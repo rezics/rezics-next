@@ -2,7 +2,7 @@
 // Books the reader shelves, and four public Works classified under Fantasy, Magic and Romance with the discovery
 // generation the Concept page reads (Fantasy+Magic, Fantasy+Romance, Magic only, Fantasy only). Everything else the
 // journey needs (the writer, the book, the chapter and the cover) the browser creates through Main as a person would.
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
@@ -61,7 +61,8 @@ try {
   await stack.accessPool.query(`INSERT INTO access.platform_grant_episode
     (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
     VALUES ($1,$2,$3,'platform:use:platform-admin','platform:access',$4,$5)`,
-  [randomUUID(),platformGrant,author.actor,author.principalId,`urn:rezics:access-receipt:${platformGrant}`]);
+  [randomUUID(),platformGrant,author.actor,author.principalId,
+    `urn:rezics:access-receipt:${createHash('sha256').update(platformGrant).digest('hex')}`]);
   await author.grant('classification:define:global', 'classification.proposition.define');
   await author.grant('classification:decide:global', 'statement.decide');
   await author.grant(`statement:speak:${author.actor}`, 'statement.record');
