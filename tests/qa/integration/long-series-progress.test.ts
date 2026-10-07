@@ -37,6 +37,12 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
       return originalObjects.get(digest);
     } };
     const queryGraph = stack.fuseki.query.bind(stack.fuseki);
+    const commandGraph = stack.fuseki.commandWithReceipt.bind(stack.fuseki);
+    stack.fuseki.commandWithReceipt = async envelope => {
+      const result = await commandGraph(envelope);
+      if (result.status === 'invalid') console.error('Structure fixture admission report', result.report);
+      return result;
+    };
     stack.fuseki.query = async (sparql, bytes) => {
       const value = await queryGraph(sparql, bytes);
       if (!stack.fuseki.isBackgroundContext) graphRows += value.results?.bindings.length ?? 0;
