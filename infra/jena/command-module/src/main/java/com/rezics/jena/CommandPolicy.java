@@ -44,7 +44,7 @@ final class CommandPolicy {
         Set<String> revisions, Set<String> source, boolean bootstrap, boolean rebuild, boolean hasDelete) {}
 
     static boolean maintenanceReceipt(String receipt) {
-        return MAINTENANCE_RECEIPTS.stream().anyMatch(receipt::startsWith);
+        return ErasureRestorePolicy.applies(receipt) || MAINTENANCE_RECEIPTS.stream().anyMatch(receipt::startsWith);
     }
 
     static Plan parse(String text, String receipt) {
@@ -103,7 +103,8 @@ final class CommandPolicy {
                 source.add(subject.getURI());
             }
             if (name.equals(RECEIPTS) && (!subject.isURI() || !receipt.equals(subject.getURI())
-                && !StatementUpgradePolicy.retiringReceipt(receipt) && !StatementUpgradePolicy.restoringReceipt(receipt)))
+                && !StatementUpgradePolicy.retiringReceipt(receipt) && !StatementUpgradePolicy.restoringReceipt(receipt)
+                && !ErasureRestorePolicy.applies(receipt)))
                 throw new IllegalArgumentException("command may write only its own receipt");
         }
         if (delete.stream().anyMatch(quad -> RECEIPTS.equals(quad.getGraph().getURI())))
@@ -165,7 +166,7 @@ final class CommandPolicy {
                 || insert.stream().filter(quad -> CONTROL.equals(quad.getGraph().getURI())).anyMatch(quad -> !isControlSequence(quad))))
                 throw new IllegalArgumentException("occurrence label backfill footprint differs");
         }
-        boolean erasure = receipt.matches("urn:rezics:receipt:erasure-graph:[0-9a-f]{64}");
+        boolean erasure = receipt.matches("urn:rezics:receipt:erasure-graph:[0-9a-f]{64}") || ErasureRestorePolicy.applies(receipt);
         if (graphs.contains(PRIVATE_SEARCH) && (bootstrap || rebuild || revisions.isEmpty()
             || current.isEmpty() && !erasure))
             throw new IllegalArgumentException("private projection requires a product revision change");
@@ -211,6 +212,8 @@ final class CommandPolicy {
         Plan plan = new Plan(request, Set.copyOf(graphs), Set.copyOf(current),
             Set.copyOf(revisions), Set.copyOf(source), bootstrap, rebuild, !delete.isEmpty());
         if (StatementUpgradePolicy.applies(receipt)) StatementUpgradePolicy.validateTemplate(plan, receipt);
+        if (MetadataRestorePolicy.applies(receipt)) MetadataRestorePolicy.validateTemplate(plan, receipt);
+        if (ErasureRestorePolicy.applies(receipt)) ErasureRestorePolicy.validateTemplate(plan, receipt);
         return plan;
     }
 

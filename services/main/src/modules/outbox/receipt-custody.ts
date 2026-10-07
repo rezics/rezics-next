@@ -49,6 +49,8 @@ export interface CommittedCustodySource {
 export interface HistoricalReceiptSource {
   outbox: CustodiedOutbox;
   objectDigests: ReadonlySet<string>;
+  /** The same verified source supports held graph repair without another checkout. */
+  source: CommittedCustodySource;
 }
 export const CUSTODY_RECOVERY_COST = { commandBytes: 2_097_152, stateBytes: 65_536,
   shapeBytes: 4_194_304, selectedProfiles: 2 } as const;
@@ -310,7 +312,7 @@ export class ReceiptCustody implements CustodiedOutboxSource {
       || source.terminal.dataEpoch !== dataEpoch || source.terminal.streamSequence !== streamSequence) {
       throw new ObjectIntegrityError('Historical custody position differs from its exact terminal');
     }
-    return { outbox: this.deliveredOutbox(source.terminal.receipt,source.outbox),
+    return { source,outbox: this.deliveredOutbox(source.terminal.receipt,source.outbox),
       objectDigests: new Set(source.objectReferences.map(reference => reference.digest)) };
   }
 

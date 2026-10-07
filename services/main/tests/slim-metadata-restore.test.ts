@@ -6,13 +6,14 @@ import { CommandOutcomeUnknown, FusekiClient, type CommandEnvelope, type Command
   type CommandResult, type CommandValidation, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
+import { canonicalLanguage as displayLanguageTag } from '../src/modules/display-language/select.ts';
 import { ReceiptCustody, type CustodyRow, type PreparedCommand, type ReceiptCustodySession,
   type ReceiptCustodyStore } from '../src/modules/outbox/receipt-custody.ts';
 import * as relay from '../src/modules/outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import { DATASET, GRAPHS, hash, prepareWorkComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { workEditReceiptIri } from '../src/modules/work/edit.ts';
-import { METADATA_DETAILS_V2, METADATA_PROFILE, checkedEditionV2, checkedMetadataState, editionV2Digest, metadataDigest,
+import { METADATA_DETAILS_V2, METADATA_PROFILE, InvalidWorkMetadata, checkedEditionV2, checkedMetadataState, editionV2Digest, metadataDigest,
   type MetadataEditionState, type MetadataEditionStateV2 } from '../src/modules/work/metadata-schema.ts';
 import { reconcileRetainedSlimMetadata } from '../src/modules/work/reconcile-slim-metadata.ts';
 
@@ -213,12 +214,13 @@ async function fixture(version: 1 | 2 = 1, status: 'active' | 'withdrawn' = 'act
   };
   const pool = { connect: async () => ({ query, release: () => {} }) } as unknown as Pool;
   const erasureReads: unknown[][] = [];
-  const relayPool = { query: async (text: string, values: unknown[] = []) => {
+  const relayQuery = async (text: string, values: unknown[] = []) => {
     if (!text.includes('relay.erasure_target')) throw new Error(`Unexpected relay SQL: ${text}`);
     erasureReads.push(values); return { rows: native.ledgerErased ? [{}] : [], rowCount: native.ledgerErased ? 1 : 0 };
-  } } as unknown as Pool;
+  };
+  const relayPool = { query: relayQuery } as unknown as Pool;
   return { custody, store, objects, native, env, prepared, terminal, event, outbox, receipt, state, model, manifest, admission, sql,
-    pool, relayPool, coverage,
+    pool, relayPool, coverage, accessQuery: query, relayQuery, retained,
     payloadSha256, manifestSha256, componentPayloadSha256, shapeDigests,
     sourceQueries: () => sourceQueries, erasureReads,
     reconcile: (position = mainSequence) => reconcileRetainedSlimMetadata(env, pool, relayPool, coverage, position),
@@ -253,7 +255,7 @@ test('committed retired slim custody reads the original bare manifest digest wit
 });
 
 for (const version of [1, 2] as const) {
-  for (const tag of ['en-US', 'zh-Hans', 'sr-Latn']) {
+  for (const tag of ['en-US', 'zh-Hans', 'sr-Latn', 'de-DE-1996-u-co-phonebk']) {
     test(`retired v${version} edition restores canonical ${tag} owner meaning with identical custody bytes and pins`, async () => {
       const f = await fixture(version, 'active', null, { state: state => 'contentLanguage' in state
         ? { ...state, title: { ...state.title, language: tag }, contentLanguage: tag }
@@ -288,6 +290,67 @@ for (const version of [1, 2] as const) {
       } finally { f.stop(); }
     });
   }
+}
+
+for (const { version, tag } of [
+  { version: 2 as const, tag: 'zh-cmn-hans-cn' },
+  ...['und', 'zxx', 'mul'].map(tag => ({ version: 1 as const, tag })),
+]) {
+  test(`actual v${version} owner ${tag} content language survives retired custody and restore byte-identically`, async () => {
+    const f = await fixture(version, 'active', null, { state: state => 'contentLanguage' in state
+      ? { ...state, contentLanguage: tag }
+      : { ...state, contentLanguages: [tag], originalLanguages: [tag], titleLanguage: tag, tracklistLanguage: tag } });
+    try {
+      const original = JSON.stringify(f.store.row), puts = f.objects.puts;
+      const storedBytes = [...f.objects.bytes].map(([digest, bytes]) => [digest, Buffer.from(bytes).toString('hex')]);
+      expect(displayLanguageTag(tag)).toBe(tag);
+      expect(f.state.title.language).toBe('ja');
+      if ('contentLanguages' in f.state) {
+        expect(f.state.contentLanguages).toEqual([tag]); expect(f.state.originalLanguages).toEqual([tag]);
+        expect(f.state.titleLanguage).toBe(tag); expect(f.state.tracklistLanguage).toBe(tag);
+      } else expect(f.state.contentLanguage).toBe(tag);
+      const source = await f.custody.readCommitted(f.receipt);
+      expect(source?.prepared.state).toEqual(f.state);
+      expect(source?.payloadSha256).toBe(f.payloadSha256);
+      expect(source?.prepared.envelope.digest).toBe(f.admission.request_digest);
+      expect(source?.prepared.envelope.validations).toEqual(f.prepared.envelope.validations);
+      expect(await f.reconcile()).toMatchObject({ replayed: false });
+      expect(f.native.commands[0]!.validations).toEqual(f.prepared.envelope.validations);
+      expect(f.native.commands[0]!.update).toContain(JSON.stringify(JSON.stringify(f.state)));
+      expect(f.native.commands[0]!.update).toContain(`rv:sourceDigest "${f.admission.request_digest}"`);
+      expect(await f.reconcile()).toMatchObject({ replayed: true });
+      expect(f.native.commands).toHaveLength(1); expect(f.objects.puts).toBe(puts);
+      expect(JSON.stringify(f.store.row)).toBe(original);
+      expect([...f.objects.bytes].map(([digest, bytes]) => [digest, Buffer.from(bytes).toString('hex')])).toEqual(storedBytes);
+      expect(f.store.mutations).toBe(0); expect(f.sourceQueries()).toBe(0);
+    } finally { f.stop(); }
+  });
+}
+
+for (const version of [1, 2] as const) {
+  for (const tag of ['x-private', 'i-default']) {
+    test(`actual v${version} metadata field schema refuses ${tag} despite display-language support`, async () => {
+      expect(displayLanguageTag(tag)).toBe(tag);
+      await expect(fixture(version, 'active', null, { state: state => 'contentLanguage' in state
+        ? { ...state, contentLanguage: tag } : { ...state, contentLanguages: [tag] } }))
+        .rejects.toBeInstanceOf(InvalidWorkMetadata);
+    });
+  }
+}
+
+test('actual v1 metadata Intl admission refuses extlang fallback supported by v2 content-language fields', async () => {
+  const tag = 'zh-cmn-hans-cn';
+  expect(displayLanguageTag(tag)).toBe(tag);
+  await expect(fixture(1, 'active', null, { state: state => ({ ...state as MetadataEditionState, contentLanguage: tag }) }))
+    .rejects.toBeInstanceOf(InvalidWorkMetadata);
+});
+
+for (const tag of ['und', 'mul']) {
+  test(`actual v2 owner refuses ${tag} as a content-language list entry`, async () => {
+    expect(displayLanguageTag(tag)).toBe(tag);
+    await expect(fixture(2, 'active', null, { state: state => ({ ...state as MetadataEditionStateV2, contentLanguages: [tag] }) }))
+      .rejects.toBeInstanceOf(InvalidWorkMetadata);
+  });
 }
 
 for (const tag of ['en_US', 'zh--Hans', 'sr-Latn-']) {
@@ -580,12 +643,16 @@ test('slim metadata restore uses authenticated maintenance command transport', a
   } finally { fetch.mockRestore(); f.stop(); }
 });
 
-function heldCustodyClient(f: Awaited<ReturnType<typeof fixture>>) {
+function heldCustodyClient(f: Awaited<ReturnType<typeof fixture>>, restore = false) {
   const queries: { text: string; values: unknown[] }[] = [];
   let releases = 0;
   let alter = (value: Record<string, unknown>) => [value];
   const client = { query: async (text: string, values: unknown[] = []) => {
     queries.push({ text,values });
+    if (restore && text.startsWith('SELECT ')
+      && (text.includes('FROM access.recovery_fence') || text.includes('FROM access.admission'))) {
+      return f.accessQuery(text);
+    }
     if (!text.startsWith('SELECT ') || !text.includes('FROM access.command_custody')) {
       throw new Error('historical reader cannot own the held transaction');
     }
@@ -607,6 +674,9 @@ test('supplied-client historical read verifies retired superseded custody closur
     const original = JSON.stringify(f.store.row), puts = f.objects.puts;
     f.objects.gets = [];
     const result = await f.custody.readHistorical({ dataEpoch: retainedEpoch,streamSequence: mainSequence },held.client);
+    expect(result?.source).toMatchObject({ prepared: f.prepared, terminal: f.terminal, model: f.model,
+      payloadSha256: f.payloadSha256, manifestSha256: f.manifestSha256,
+      componentPayloadSha256: f.componentPayloadSha256 });
     expect(result?.outbox).toEqual({ batch: { batchId: f.outbox.batchId,streamScope: MAIN_RELAY_STREAM_SCOPE,
       dataEpoch: retainedEpoch,sequence: '4',graphSequence: '900',routingEpoch: f.prepared.routingEpoch,
       eventIds: [f.event.id],custodiedReceipt: f.receipt },events: f.outbox.events });
@@ -662,4 +732,159 @@ test('supplied-client historical read returns absence without a native fallback'
     expect(await f.custody.readHistorical({ dataEpoch: retainedEpoch,streamSequence: mainSequence },held.client)).toBeNull();
     expect(held.queries).toHaveLength(1); expect(held.releases()).toBe(0); expect(f.sourceQueries()).toBe(0);
   } finally { f.stop(); }
+});
+
+function borrowedRestore(f: Awaited<ReturnType<typeof fixture>>) {
+  const access = heldCustodyClient(f, true);
+  const relayQueries: { text: string; values: unknown[] }[] = [];
+  let relayReleases = 0, poolCalls = 0;
+  const relayClient = { query: async (text: string, values: unknown[] = []) => {
+    relayQueries.push({ text, values });
+    if (!text.startsWith('SELECT ') || !text.includes('relay.erasure_target')) {
+      throw new Error('borrowed slim restore cannot own relay transaction lifecycle');
+    }
+    return f.relayQuery(text, values);
+  }, release: () => { relayReleases++; throw new Error('borrowed slim restore cannot release relay client'); } } as unknown as PoolClient;
+  const deniedPool = (owner: string) => ({
+    connect: async () => { poolCalls++; throw new Error(`${owner} caller already holds its only client`); },
+    query: async () => { poolCalls++; throw new Error(`${owner} restore must use the supplied client`); },
+  }) as unknown as Pool;
+  const accessPool = deniedPool('Access'), relayPool = deniedPool('Relay');
+  const acquire = spyOn(f.store, 'withReceipt').mockImplementation(async () => { throw new Error('no custody checkout'); });
+  const indexed = spyOn(f.store, 'receiptAt').mockImplementation(async () => { throw new Error('no custody index checkout'); });
+  const committed = spyOn(f.custody, 'readCommitted').mockImplementation(async () => { throw new Error('use historical supplied-client reader'); });
+  const resolve = spyOn(f.custody, 'resolve').mockImplementation(async () => { throw new Error('no ordinary owner reconciliation'); });
+  const commit = spyOn(f.custody, 'commit').mockImplementation(async () => { throw new Error('no ordinary owner dispatch'); });
+  const historical = spyOn(f.custody, 'readHistorical');
+  return { access, relayClient, relayQueries, historical,
+    reconcile: () => reconcileRetainedSlimMetadata(f.env, accessPool, relayPool, f.coverage, mainSequence,
+      access.client, relayClient),
+    assertBorrowed: () => {
+      expect(poolCalls).toBe(0); expect(access.releases()).toBe(0); expect(relayReleases).toBe(0);
+      expect(acquire).not.toHaveBeenCalled(); expect(indexed).not.toHaveBeenCalled();
+      expect(committed).not.toHaveBeenCalled(); expect(resolve).not.toHaveBeenCalled(); expect(commit).not.toHaveBeenCalled();
+      expect(access.queries.every(query => query.text.startsWith('SELECT '))).toBe(true);
+      expect(relayQueries.every(query => query.text.startsWith('SELECT '))).toBe(true);
+      expect(f.retained).toHaveBeenCalledWith(relayPool, f.coverage, mainSequence, relayClient);
+      expect(f.sourceQueries()).toBe(0); expect(f.store.mutations).toBe(0);
+      expect(f.native.queries.some(query => query.includes('a rv:CommitProof'))).toBe(false);
+    },
+    stop: () => {
+      historical.mockRestore(); commit.mockRestore(); resolve.mockRestore(); committed.mockRestore();
+      indexed.mockRestore(); acquire.mockRestore();
+    } };
+}
+
+for (const version of [1, 2] as const) {
+  test(`borrowed Access and relay clients restore retired v${version} custody and replay without checkout or lifecycle`, async () => {
+    const f = await fixture(version), held = borrowedRestore(f);
+    try {
+      const original = JSON.stringify(f.store.row), puts = f.objects.puts;
+      expect(await held.reconcile()).toEqual({ receipt: f.receipt, component: f.prepared.component,
+        revision: f.prepared.revision, replayed: false });
+      expect(held.historical).toHaveBeenCalledWith({ dataEpoch: retainedEpoch, streamSequence: mainSequence }, held.access.client);
+      expect(held.access.queries.find(query => query.text.includes('FROM access.admission'))?.values).toEqual([f.terminal.admissionId]);
+      expect(held.relayQueries).toHaveLength(1);
+      expect(held.relayQueries[0]!.values[0]).toEqual(expect.arrayContaining([
+        f.terminal.work, f.prepared.component, f.prepared.revision, `sha256:${f.payloadSha256}`,
+        `sha256:${f.manifestSha256}`, `sha256:${f.componentPayloadSha256}`,
+      ]));
+      expect(f.native.commands[0]!.validations).toEqual(f.prepared.envelope.validations);
+      expect(f.native.diagnosticCursor).toBe(diagnostic); expect(f.native.mainCursor).toBe(mainSequence);
+      expect(await held.reconcile()).toMatchObject({ replayed: true });
+      expect(f.native.commands).toHaveLength(1); expect(held.historical).toHaveBeenCalledTimes(2);
+      expect(JSON.stringify(f.store.row)).toBe(original); expect(f.objects.puts).toBe(puts);
+      held.assertBorrowed();
+    } finally { held.stop(); f.stop(); }
+  });
+}
+
+for (const failure of ['pending', 'duplicate', 'authority', 'erased', 'concurrent', 'missing-shape'] as const) {
+  test(`borrowed slim restore refuses ${failure} while leaving caller transactions and source intact`, async () => {
+    const f = await fixture(2), held = borrowedRestore(f);
+    try {
+      if (failure === 'pending') f.store.row = { ...f.store.row!, reconciled: false };
+      if (failure === 'duplicate') held.access.alter(value => [value, value]);
+      if (failure === 'authority') f.admission.authority_epoch = 'wrong';
+      if (failure === 'erased') f.native.ledgerErased = true;
+      if (failure === 'concurrent') f.native.stale = true;
+      if (failure === 'missing-shape') f.objects.bytes.delete(f.shapeDigests[0]!);
+      const original = JSON.stringify(f.store.row), puts = f.objects.puts;
+      await expect(held.reconcile()).rejects.toThrow();
+      expect(f.native.diagnosticCursor).toBe('700'); expect(f.native.mainCursor).toBe('3');
+      expect(f.native.proof).toBeNull();
+      expect(f.native.commands).toHaveLength(failure === 'concurrent' ? 1 : 0);
+      expect(JSON.stringify(f.store.row)).toBe(original); expect(f.objects.puts).toBe(puts);
+      held.assertBorrowed();
+    } finally { held.stop(); f.stop(); }
+  });
+}
+
+test('borrowed slim restore verifies a lost native acknowledgement without taking over caller lifecycle', async () => {
+  const f = await fixture(2), held = borrowedRestore(f); f.native.loseResponse = true;
+  try {
+    const original = JSON.stringify(f.store.row), puts = f.objects.puts;
+    expect(await held.reconcile()).toMatchObject({ replayed: false });
+    expect(f.native.commands).toHaveLength(1); expect(f.native.proof).not.toBeNull();
+    expect(f.native.diagnosticCursor).toBe(diagnostic); expect(f.native.mainCursor).toBe(mainSequence);
+    expect(await held.reconcile()).toMatchObject({ replayed: true });
+    expect(f.native.commands).toHaveLength(1); expect(f.objects.puts).toBe(puts);
+    expect(JSON.stringify(f.store.row)).toBe(original); held.assertBorrowed();
+  } finally { held.stop(); f.stop(); }
+});
+
+test('pure relay coverage retains caller lifecycle while the existing idle-client reader owns its snapshot', async () => {
+  const f = await fixture(2);
+  const consumer = 'held-release-coverage';
+  const batches = Array.from({ length: 4 }, (_, index) => ({ sequence: String(index + 1),
+    batch_id: index === 3 ? f.outbox.batchId : `urn:rezics:outbox:retained-empty-${index + 1}`,
+    routing_epoch: f.prepared.routingEpoch, event_count: index === 3 ? 1 : 0, actual_count: index === 3 ? '1' : '0' }));
+  const event = { source: f.event.source, event_id: f.event.id, sequence: mainSequence, body: JSON.stringify(f.event) };
+  const queries: string[] = [];
+  let permitIdleLifecycle = false, releases = 0, poolCalls = 0;
+  const client = { query: async (text: string, values: unknown[] = []) => {
+    queries.push(text);
+    if (/^(BEGIN|COMMIT|ROLLBACK)\b/.test(text)) {
+      if (!permitIdleLifecycle) throw new Error('pure coverage cannot own the caller transaction');
+      return { rows: [], rowCount: 0 };
+    }
+    if (text.includes('FROM relay.checkpoint')) {
+      expect(values).toEqual([consumer]);
+      return { rows: [{ stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: retainedEpoch, sequence: mainSequence }], rowCount: 1 };
+    }
+    if (text.includes('UNION ALL SELECT 1 FROM relay.delivered_batch')) return { rows: [], rowCount: 0 };
+    if (text.includes('FROM relay.delivered_batch AS batch')) return { rows: batches, rowCount: batches.length };
+    if (text.includes('FROM relay.delivered_event AS event')) return { rows: [event], rowCount: 1 };
+    throw new Error(`unexpected held relay coverage query: ${text}`);
+  }, release: () => { releases++; throw new Error('caller owns relay client release'); } } as unknown as PoolClient;
+  const pool = { connect: async () => { poolCalls++; throw new Error('caller holds the only relay client'); },
+    query: async () => { poolCalls++; throw new Error('coverage must use supplied relay client'); } } as unknown as Pool;
+  const expected = { consumer, streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: retainedEpoch, sequence: mainSequence,
+    batchCount: '4', batchDigest: hash(batches.map(batch => JSON.stringify([
+      batch.sequence, batch.batch_id, batch.routing_epoch, batch.event_count]) + '\n').join('')),
+    eventCount: '1', eventDigest: hash(JSON.stringify([event.source, event.event_id, event.sequence, event.body]) + '\n') };
+  try {
+    expect(await relay.relayCoverageOnClient(client, consumer)).toEqual(expected);
+    expect(queries).toHaveLength(4); expect(queries.every(query => query.startsWith('SELECT '))).toBe(true);
+    expect(releases).toBe(0); expect(poolCalls).toBe(0);
+    expect(f.native.queries).toHaveLength(0); expect(f.sourceQueries()).toBe(0);
+    queries.length = 0; permitIdleLifecycle = true;
+    expect(await relay.relayCoverage(pool, consumer, client)).toEqual(expected);
+    expect(queries[0]).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    expect(queries.at(-1)).toBe('COMMIT'); expect(queries).toHaveLength(6);
+    expect(releases).toBe(0); expect(poolCalls).toBe(0);
+  } finally { f.stop(); }
+});
+
+test('pure relay coverage refusal leaves the caller transaction and client untouched', async () => {
+  const queries: string[] = [];
+  let releases = 0;
+  const client = { query: async (text: string) => {
+    queries.push(text);
+    if (!text.includes('FROM relay.checkpoint')) throw new Error('pure coverage refusal cannot roll back caller');
+    return { rows: [], rowCount: 0 };
+  }, release: () => { releases++; throw new Error('caller owns relay release'); } } as unknown as PoolClient;
+  await expect(relay.relayCoverageOnClient(client, 'held-release-coverage')).rejects.toBeInstanceOf(relay.RelayCheckpointConflict);
+  expect(queries).toHaveLength(1); expect(queries[0]).toContain('FROM relay.checkpoint');
+  expect(releases).toBe(0);
 });

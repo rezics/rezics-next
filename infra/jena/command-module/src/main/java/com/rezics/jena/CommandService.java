@@ -423,6 +423,21 @@ final class CommandService extends ActionService {
         return facts;
     }
 
+    /** Shared physical edition partition for live admission and exact held restore. */
+    static List<Quad> editionPhysicalFacts(DatasetGraph logical, Node component, Node revision, Node manifest, Node model) {
+        List<Quad> logicalFacts = Iter.toList(logical.find(NodeFactory.createURI(CommandPolicy.CURRENT), component, Node.ANY, Node.ANY));
+        if (logicalFacts.size() > 64) throw new IllegalArgumentException("slim current component exceeds quad bound");
+        List<Quad> physical = new ArrayList<>();
+        for (Quad quad : logicalFacts) if (!Set.of(NodeFactory.createURI(RV + "manifest"),
+            NodeFactory.createURI(RV + "modelRevision")).contains(quad.getPredicate())
+            && !EDITION_PUBLIC_FIELDS.contains(quad.getPredicate()))
+            physical.add(new Quad(Quad.defaultGraphNodeGenerated, quad.asTriple()));
+        physical.addAll(editionPublicFacts(logical, component, revision));
+        physical.add(new Quad(Quad.defaultGraphNodeGenerated, component, NodeFactory.createURI(RV + "manifest"), manifest));
+        physical.add(new Quad(Quad.defaultGraphNodeGenerated, component, NodeFactory.createURI(RV + "modelRevision"), model));
+        return List.copyOf(physical);
+    }
+
     /** One logical current scope for policy, focused SHACL and text projections.
      * The bounded slim component is physically default-graph data; legacy subjects
      * retain their named storage. Historical envelope types come from its pinned model. */
@@ -626,7 +641,11 @@ final class CommandService extends ActionService {
         boolean commit = false;
         try {
             Map<String, Object> result;
-            if (slim == null) result = evaluate(new CurrentScope(delta == null ? dataset : delta.observed()), receipt, digest, update,
+            if (MetadataRestorePolicy.applies(receipt)) {
+                if (slim != null) return invalid("metadata restore cannot carry a live slim envelope");
+                result = evaluateMetadataRestore(delta == null ? dataset : delta.observed(), receipt, digest, update,
+                    plan, validations, deadline, delta);
+            } else if (slim == null) result = evaluate(new CurrentScope(delta == null ? dataset : delta.observed()), receipt, digest, update,
                 titleAdmission, plan, validations, deadline, delta);
             else {
                 CommandInvariant.CommitProof existing = CommandInvariant.commitProof(dataset, receipt);
@@ -696,11 +715,9 @@ final class CommandService extends ActionService {
                     || !java.util.Objects.equals(exactlyOne(staged, receipts, own, "sequence"),
                         exactlyOne(staged, revisions, revision, "sequence")))
                     return invalid("slim success revision differs from exact CAS position");
-                List<Quad> facts = Iter.toList(staged.find(current, component, Node.ANY, Node.ANY));
-                if (facts.size() > 64) return invalid("slim current component exceeds quad bound");
-                List<Quad> publicFacts;
-                try { publicFacts = editionPublicFacts(staged, component, revision); }
-                catch (RuntimeException malformed) { return invalid("slim edition public state is invalid"); }
+                List<Quad> physicalFacts;
+                try { physicalFacts = editionPhysicalFacts(staged, component, revision, manifest, model); }
+                catch (RuntimeException malformed) { return invalid("slim edition physical state is invalid"); }
                 // The existing allocator stamped the temporary batch in this same
                 // overlay. Its stream control persists while graph outbox facts do not.
                 Node streamSequence = exactlyOne(staged, NodeFactory.createURI(CommandPolicy.CONTROL),
@@ -711,13 +728,7 @@ final class CommandService extends ActionService {
                 staged.apply();
                 dataset.deleteAny(current, component, Node.ANY, Node.ANY);
                 dataset.deleteAny(Quad.defaultGraphNodeGenerated, component, Node.ANY, Node.ANY);
-                for (Quad quad : facts) if (!Set.of(NodeFactory.createURI(RV + "manifest"),
-                    NodeFactory.createURI(RV + "modelRevision")).contains(quad.getPredicate())
-                    && !EDITION_PUBLIC_FIELDS.contains(quad.getPredicate()))
-                    dataset.add(Quad.defaultGraphNodeGenerated, component, quad.getPredicate(), quad.getObject());
-                publicFacts.forEach(dataset::add);
-                dataset.add(Quad.defaultGraphNodeGenerated, component, NodeFactory.createURI(RV + "manifest"), manifest);
-                dataset.add(Quad.defaultGraphNodeGenerated, component, NodeFactory.createURI(RV + "modelRevision"), model);
+                physicalFacts.forEach(quad -> dataset.add(quad.getGraph(),quad.getSubject(),quad.getPredicate(),quad.getObject()));
                 CommandInvariant.Control after = CommandInvariant.readControl(dataset);
                 CommandInvariant.writeCommitProof(dataset, receipt, new CommandInvariant.CommitProof(digest,
                     slim.payloadSha256(), after.epoch().getLiteralLexicalForm(), after.sequence().toString(),
@@ -767,6 +778,23 @@ final class CommandService extends ActionService {
                                         JsonValue titleAdmission, CommandPolicy.Plan plan, List<Validation> validations,
                                         long deadline, SearchDeltaJournal.Capture delta, boolean slim) {
         boolean touchesPublicIndex = plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH);
+            if (ErasureRestorePolicy.applies(receipt)) {
+                var before = ErasureRestorePolicy.capture(dataset, plan, receipt, digest,
+                    update, titleAdmission, titleAdmissionKey);
+                if (before.error() != null) return invalid(before.error());
+                if (before.replayed()) return committed(dataset, receipt);
+                String preflight = CommandInvariant.preflight(dataset, receipt, plan);
+                if (preflight != null) return invalid(preflight);
+                if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
+                var staged = new CommandOverlay(dataset);
+                UpdateAction.execute(plan.request(), DatasetFactory.wrap(staged));
+                String report = ErasureRestorePolicy.check(staged, before);
+                if (report != null) return invalid(report);
+                if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
+                staged.apply();
+                if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
+                return committed(dataset, receipt);
+            }
             String existing = receiptValue(dataset, receipt, "requestDigest");
             if (existing != null) {
                 if (!existing.equals(digest)
@@ -904,6 +932,57 @@ final class CommandService extends ActionService {
         String streamInvariant = CommandInvariant.advanceRelayStream(dataset, receipt, plan, before);
         if (streamInvariant != null) return invalid(streamInvariant);
         return result;
+    }
+
+    /** Metadata recovery reconstructs the custodied representation without dispatching a new product command. */
+    private Map<String, Object> evaluateMetadataRestore(DatasetGraph physical, String receipt, String digest,
+        String update, CommandPolicy.Plan plan, List<Validation> validations, long deadline, SearchDeltaJournal.Capture delta) {
+        String existing = receiptValue(physical, receipt, "requestDigest");
+        if (existing != null) return existing.equals(digest)
+            && MetadataRestorePolicy.templateDigest(update).equals(receiptValue(physical, receipt, "metadataRestoreTemplateDigest"))
+            ? committed(physical, receipt) : Map.of("status", "conflict");
+        if (validations.isEmpty() || validations.stream().anyMatch(entry -> !Set.of("work-metadata-details-v1", "work-metadata-details-v2")
+            .contains(entry.profileId()))) return invalid("metadata restore requires its original edition profiles");
+        var snapshot = MetadataRestorePolicy.capture(physical, receipt, digest, plan, CommandService::editionPhysicalFacts);
+        if (snapshot.error() != null) return invalid(snapshot.error());
+        if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
+        DatasetGraph logical = snapshot.logical();
+        Map<String, Object> scope = validateScope(logical, receipt, snapshot.plan(), validations, Set.of(), Set.of());
+        if (scope != null) return scope;
+        record Instance(String profile, Map<String, String> binding) {}
+        Map<Instance, List<Validation>> grouped = new LinkedHashMap<>();
+        for (Validation entry : validations) grouped.computeIfAbsent(new Instance(entry.profileId(), entry.binding()),
+            ignored -> new ArrayList<>()).add(entry);
+        for (var group : grouped.entrySet()) {
+            String report = BindingPolicy.check(logical, group.getKey().profile(),
+                profiles.get(group.getKey().profile()).binding(), group.getValue());
+            if (report != null) return invalid(report);
+        }
+        for (Validation validation : validations) {
+            Map<String, Object> invalid = validateOne(logical, validation);
+            if (invalid != null) return invalid;
+            if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
+        }
+        if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
+        CommandWork.enter("update");
+        CommandOverlay primary = new CommandOverlay(CommandWork.observe(physical));
+        MetadataRestorePolicy.apply(primary, snapshot);
+        MembershipNormalFormPolicy.Result membership = MembershipNormalFormPolicy.check(primary, profiles, deadline);
+        if (membership.error() != null) return invalid(membership.error());
+        String stagedInvariant = MetadataRestorePolicy.check(primary, snapshot);
+        if (stagedInvariant != null) return invalid(stagedInvariant);
+        if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
+        // Apply the proved bounded operation through its Node writer overload;
+        // live persistence observers and injected failures see the same calls.
+        MetadataRestorePolicy.apply(CommandWork.observe(physical), snapshot);
+        CommandWork.enter("invariants");
+        String invariant = MetadataRestorePolicy.check(physical, snapshot);
+        if (invariant != null) return invalid(invariant);
+        physical.add(NodeFactory.createURI(CommandPolicy.RECEIPTS), NodeFactory.createURI(receipt),
+            MetadataRestorePolicy.templateDigestPredicate(), NodeFactory.createLiteralString(MetadataRestorePolicy.templateDigest(update)));
+        if (delta != null) SearchDeltaJournal.append(physical, delta, publicSearchWriteEpoch.get() + 1);
+        // The dataset remains held at zero; owner custody retains the old event and both source positions.
+        return committed(physical, receipt);
     }
 
     /** Maintenance has its own closed write footprint, while canonical shapes still validate every native subject. */

@@ -21,6 +21,7 @@ final class ErasurePolicy {
     private static final Node ERASURE_EPOCH = NodeFactory.createURI("https://rezics.com/vocab/erasureEpoch");
 
     static String preflight(DatasetGraph data, CommandPolicy.Plan plan, String receipt) {
+        if (ErasureRestorePolicy.applies(receipt)) return "held erasure requires its authenticated restore path";
         Update update = plan.request().getOperations().getFirst();
         List<Quad> inserts = update instanceof UpdateModify modify ? modify.getInsertQuads()
             : update instanceof UpdateDataInsert insert ? insert.getQuads() : new ArrayList<>();
@@ -64,17 +65,17 @@ final class ErasurePolicy {
         for (String subject : plan.revisions()) {
             Node target = NodeFactory.createURI(subject);
             if (!data.contains(REVISIONS, target, RDF.type.asNode(), ERASED)) continue;
-            if (data.find(NodeFactory.createURI(CommandPolicy.PUBLIC_SEARCH), Node.ANY,
-                    REVISION, target).hasNext()
-                || data.find(NodeFactory.createURI(CommandPolicy.PRIVATE_SEARCH), Node.ANY,
-                    REVISION, target).hasNext()
-                || data.find(NodeFactory.createURI(CommandPolicy.PUBLIC_SEARCH), Node.ANY,
-                    CONTENT_REVISION, target).hasNext()
-                || data.find(NodeFactory.createURI(CommandPolicy.PRIVATE_SEARCH), Node.ANY,
-                    CONTENT_REVISION, target).hasNext())
+            if (indexedReference(data, target))
                 return "erased exact revision still has an indexed unit";
         }
         return null;
+    }
+
+    static boolean indexedReference(DatasetGraph data, Node target) {
+        for (String graph : List.of(CommandPolicy.PUBLIC_SEARCH, CommandPolicy.PRIVATE_SEARCH))
+            for (Node predicate : List.of(REVISION, CONTENT_REVISION))
+                if (data.contains(NodeFactory.createURI(graph), Node.ANY, predicate, target)) return true;
+        return false;
     }
 
     private ErasurePolicy() {}

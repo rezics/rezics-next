@@ -144,7 +144,7 @@ export async function relayCoverage(pool: Pool, consumer: string, client?: PoolC
   const held = client ?? await pool.connect();
   try {
     await held.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const { coverage } = await scanRelayCoverage(held, consumer);
+    const coverage = await relayCoverageOnClient(held, consumer);
     await held.query('COMMIT');
     return coverage;
   } catch (error) {
@@ -155,9 +155,15 @@ export async function relayCoverage(pool: Pool, consumer: string, client?: PoolC
   }
 }
 
+/** Verify the same complete handoff inside the caller's retained transaction.
+ * The caller owns its snapshot, locks and every lifecycle operation. */
+export async function relayCoverageOnClient(client: PoolClient, consumer: string): Promise<RelayCoverage> {
+  return (await scanRelayCoverage(client,consumer)).coverage;
+}
+
 /** Verify the full captured handoff and take one event/header from those same rows. */
 export async function relayRetainedEventAt(pool: Pool, expected: RelayCoverage,
-  sequence: string): Promise<{ eventId: string; envelope: MainCloudEvent;
+  sequence: string, heldClient?: PoolClient): Promise<{ eventId: string; envelope: MainCloudEvent;
     batch: { batchId: string; routingEpoch: string; eventCount: number } }> {
   // Pre-stream recovery cuts came exclusively from this Main handoff. Their
   // stored envelope digests survive the column-only migration unchanged.
@@ -166,9 +172,9 @@ export async function relayRetainedEventAt(pool: Pool, expected: RelayCoverage,
     || BigInt(sequence) > BigInt(expected.sequence)) {
     throw new RelayCheckpointConflict('invalid retained event position');
   }
-  const client = await pool.connect();
+  const client = heldClient ?? await pool.connect();
   try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    if (!heldClient) await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
     const { coverage, batch, events } = await scanRelayCoverage(client, expected.consumer, sequence);
     if (coverage.consumer !== expected.consumer || coverage.streamScope !== expectedScope || coverage.dataEpoch !== expected.dataEpoch
       || coverage.sequence !== expected.sequence || coverage.batchCount !== expected.batchCount
@@ -180,13 +186,13 @@ export async function relayRetainedEventAt(pool: Pool, expected: RelayCoverage,
     const event = events[0]!;
     const envelope = retainedEnvelopePosition(JSON.parse(event.body) as MainCloudEvent,
       coverage.streamScope, coverage.dataEpoch, sequence);
-    await client.query('COMMIT');
+    if (!heldClient) await client.query('COMMIT');
     return { eventId: event.eventId, envelope, batch };
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    if (!heldClient) try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
   } finally {
-    client.release();
+    if (!heldClient) client.release();
   }
 }
 

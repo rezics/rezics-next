@@ -30,7 +30,8 @@ final class CommandInvariant {
     private static final Node MAIN_STREAM = uri(MAIN_STREAM_SCOPE);
 
     record Control(Node epoch, Node routing, BigInteger sequence, Node marker, boolean held,
-        Node priorEpoch, BigInteger priorSequence, BigInteger cursor, Node textGeneration) {}
+        Node priorEpoch, BigInteger priorSequence, BigInteger cursor, Node textGeneration,
+        BigInteger priorMainSequence, BigInteger mainCursor) {}
 
     /** Upgrade only the fixed record before HTTP traffic; retained legacy batches stay immutable. */
     static void initializeRelayStreamAtStartup(DatasetGraph data) {
@@ -78,7 +79,9 @@ final class CommandInvariant {
         if (before.held()) {
             // Recovery reconstitutes an old immutable stream position while the
             // new epoch remains held. It cannot advance the new stream head.
-            next = number(one(data, RECEIPTS, uri(receipt), rv("sequence")));
+            next = before.priorMainSequence() == null
+                ? number(one(data, RECEIPTS, uri(receipt), rv("sequence"))) : after.mainCursor();
+            if (next == null || next.signum() < 1) return "retained relay position is missing";
         } else {
             Node epoch = one(data, CONTROL, MAIN_STREAM, rv("dataEpoch"));
             BigInteger prior = number(one(data, CONTROL, MAIN_STREAM, rv("streamSequence")));
@@ -144,6 +147,8 @@ final class CommandInvariant {
         }
         Control control = readControl(data);
         if (control == null) return "product control record is missing or ambiguous";
+        String recovery = recoveryBase(data, control);
+        if (recovery != null) return recovery;
         if (plan.rebuild()) {
             if (control.held()) return "rebuild cannot run during a graph restore hold";
             boolean open = data.contains(PUBLIC_SEARCH, PUBLIC_ANCHOR, RDF.type.asNode(), rv("SearchGraphAnchor"));
@@ -174,7 +179,9 @@ final class CommandInvariant {
             marker == null ? null : one(data, CONTROL, marker, rv("priorDataEpoch")),
             marker == null ? null : number(one(data, CONTROL, marker, rv("priorSequence"))),
             marker == null ? null : number(one(data, CONTROL, marker, rv("reconciledPriorSequence"))),
-            one(data, CONTROL, PRODUCT, rv("textIndexGeneration")));
+            one(data, CONTROL, PRODUCT, rv("textIndexGeneration")),
+            marker == null ? null : number(one(data, CONTROL, marker, rv("priorMainSequence"))),
+            marker == null ? null : number(one(data, CONTROL, marker, rv("reconciledPriorMainSequence"))));
     }
 
     static String check(DatasetGraph data, String receipt, String digest, CommandPolicy.Plan plan, Control before) {
@@ -211,6 +218,7 @@ final class CommandInvariant {
                 || before.epoch().equals(after.epoch()) || !routingIncreases(before.routing(), after.routing())
                 || after.marker() == null || !before.epoch().equals(after.priorEpoch())
                 || !before.sequence().equals(after.priorSequence())
+                || !savedMainCutMatches(data, after.marker(), before.epoch())
                 || after.sequence().signum() != 0 || !epoch.equals(after.epoch())
                 || sequence.signum() != 0) return "invalid restore cutover";
             return null;
@@ -221,6 +229,7 @@ final class CommandInvariant {
                 || !releaseDeletesOnlyHold(plan) || !before.held() || after.held()
                 || !before.epoch().equals(after.epoch()) || !before.routing().equals(after.routing())
                 || !java.util.Objects.equals(before.marker(), after.marker())
+                || !releasedMainCutMatches(data, before.marker(), own)
                 || after.sequence().signum() != 0 || before.sequence().signum() != 0
                 || !epoch.equals(after.epoch()) || sequence.signum() != 0)
                 return "invalid restore release";
@@ -234,13 +243,19 @@ final class CommandInvariant {
                 || !before.sequence().equals(after.sequence()) || before.sequence().signum() != 0)
                 return "invalid held recovery control";
             BigInteger previous = before.cursor() == null ? before.priorSequence() : before.cursor();
+            boolean paired = before.priorMainSequence() != null;
+            BigInteger previousMain = before.mainCursor() == null ? before.priorMainSequence() : before.mainCursor();
             if (before.priorEpoch() == null || before.priorSequence() == null || previous == null
                 || !before.priorEpoch().equals(after.priorEpoch())
                 || !before.priorSequence().equals(after.priorSequence())
                 || !epoch.equals(before.priorEpoch())
                 || after.cursor() == null || !after.cursor().equals(sequence)
-                || !sequence.equals(previous.add(BigInteger.ONE))
-                || !hasRecoveryCursorWrite(plan, marker))
+                || (paired ? sequence.compareTo(previous) <= 0
+                    || !java.util.Objects.equals(before.priorMainSequence(), after.priorMainSequence())
+                    || previousMain == null || after.mainCursor() == null
+                    || !after.mainCursor().equals(previousMain.add(BigInteger.ONE))
+                    : !sequence.equals(previous.add(BigInteger.ONE)) || after.mainCursor() != null)
+                || !hasRecoveryCursorWrite(plan, marker, paired))
                 return "invalid held recovery cursor";
         } else {
             if (after.held() || !before.epoch().equals(after.epoch())
@@ -365,7 +380,7 @@ final class CommandInvariant {
         Set<Node> productFields = Set.of(rv("dataEpoch"), rv("routingEpoch"), rv("sequence"),
             rv("restoreCutover"), rv("restoreHold"));
         Set<Node> markerFields = Set.of(RDF.type.asNode(), rv("priorDataEpoch"),
-            rv("priorSequence"), rv("dataEpoch"));
+            rv("priorSequence"), rv("priorMainSequence"), rv("dataEpoch"));
         for (Quad quad : modify.getInsertQuads()) if (CONTROL.equals(quad.getGraph())
             && !(PRODUCT.equals(quad.getSubject()) && productFields.contains(quad.getPredicate())
                 || marker.equals(quad.getSubject()) && markerFields.contains(quad.getPredicate()))) return false;
@@ -373,6 +388,27 @@ final class CommandInvariant {
             && (!PRODUCT.equals(quad.getSubject()) || !Set.of(rv("dataEpoch"), rv("routingEpoch"),
                 rv("sequence"), rv("restoreCutover")).contains(quad.getPredicate()))) return false;
         return true;
+    }
+
+    /** A scoped Main cut is read before advanceRelayStream resets its epoch. Legacy markers omit it. */
+    private static boolean savedMainCutMatches(DatasetGraph data, Node marker, Node priorEpoch) {
+        if (!data.contains(CONTROL, marker, rv("priorMainSequence"), Node.ANY)) return true;
+        BigInteger saved = number(one(data, CONTROL, marker, rv("priorMainSequence")));
+        BigInteger actual = number(one(data, CONTROL, MAIN_STREAM, rv("streamSequence")));
+        return saved != null && saved.signum() >= 0 && saved.equals(actual)
+            && priorEpoch.equals(one(data, CONTROL, MAIN_STREAM, rv("dataEpoch")));
+    }
+
+    private static boolean releasedMainCutMatches(DatasetGraph data, Node marker, Node own) {
+        boolean savedPresent = data.contains(CONTROL, marker, rv("priorMainSequence"), Node.ANY);
+        boolean cursorPresent = data.contains(CONTROL, marker, rv("reconciledPriorMainSequence"), Node.ANY);
+        if (!savedPresent) return !cursorPresent; // old markers are checked by their original release contract
+        BigInteger saved = number(one(data, CONTROL, marker, rv("priorMainSequence")));
+        BigInteger cursor = cursorPresent ? number(one(data, CONTROL, marker, rv("reconciledPriorMainSequence"))) : saved;
+        BigInteger expected = number(one(data, RECEIPTS, own, rv("priorMainSequence")));
+        return saved != null && saved.signum() >= 0 && cursor != null && cursor.compareTo(saved) >= 0
+            && cursor.equals(expected) && NodeFactory.createLiteralString(MAIN_STREAM_SCOPE)
+                .equals(one(data, RECEIPTS, own, rv("streamScope")));
     }
 
     private static boolean releaseDeletesOnlyHold(CommandPolicy.Plan plan) {
@@ -383,16 +419,36 @@ final class CommandInvariant {
         return true;
     }
 
-    private static boolean hasRecoveryCursorWrite(CommandPolicy.Plan plan, Node marker) {
+    private static boolean hasRecoveryCursorWrite(CommandPolicy.Plan plan, Node marker, boolean paired) {
         if (!(plan.request().getOperations().getFirst() instanceof UpdateModify modify)) return false;
-        boolean inserted = false;
+        Set<Node> allowed = paired ? Set.of(rv("reconciledPriorSequence"), rv("reconciledPriorMainSequence"))
+            : Set.of(rv("reconciledPriorSequence"));
+        Set<Node> inserted = new HashSet<>();
         for (Quad quad : modify.getInsertQuads()) if (CONTROL.equals(quad.getGraph())) {
-            if (!marker.equals(quad.getSubject()) || !rv("reconciledPriorSequence").equals(quad.getPredicate())) return false;
-            inserted = true;
+            if (!marker.equals(quad.getSubject()) || !allowed.contains(quad.getPredicate())) return false;
+            inserted.add(quad.getPredicate());
         }
         for (Quad quad : modify.getDeleteQuads()) if (CONTROL.equals(quad.getGraph())
-            && (!marker.equals(quad.getSubject()) || !rv("reconciledPriorSequence").equals(quad.getPredicate()))) return false;
-        return inserted;
+            && (!marker.equals(quad.getSubject()) || !allowed.contains(quad.getPredicate()))) return false;
+        return inserted.equals(allowed);
+    }
+
+    /** Held Main recovery orders its scoped stream independently of diagnostic
+     * gaps. Older markers retain their original diagnostic-only contract. */
+    private static String recoveryBase(DatasetGraph data, Control control) {
+        if (!control.held() || control.marker() == null) return null;
+        Node marker = control.marker();
+        boolean savedMain = data.contains(CONTROL, marker, rv("priorMainSequence"), Node.ANY);
+        boolean diagnostic = data.contains(CONTROL, marker, rv("reconciledPriorSequence"), Node.ANY);
+        boolean main = data.contains(CONTROL, marker, rv("reconciledPriorMainSequence"), Node.ANY);
+        if (!savedMain) return main ? "held recovery Main cursor has no saved cut" : null;
+        if (control.priorMainSequence() == null || control.priorMainSequence().signum() < 0
+            || control.priorSequence() == null || control.priorSequence().signum() < 0 || diagnostic != main
+            || diagnostic && (control.cursor() == null || control.mainCursor() == null
+                || control.cursor().compareTo(control.priorSequence()) < 0
+                || control.mainCursor().compareTo(control.priorMainSequence()) < 0))
+            return "held recovery paired cuts or cursors are incomplete";
+        return null;
     }
 
     static boolean hasControlGuards(CommandPolicy.Plan plan, Control before) {

@@ -122,6 +122,107 @@ public class MetadataRestoreTest {
     private static Set<Quad> record(DatasetGraph data,Node graph,Node subject) {
         Set<Quad> result = new HashSet<>(); data.find(graph,subject,Node.ANY,Node.ANY).forEachRemaining(result::add); return result;
     }
+    private static DatasetGraph endpointDataset() {
+        DatasetGraph data = dataset(); data.begin(ReadWrite.WRITE);
+        UpdateAction.parseExecute("PREFIX rv: <" + RV + "> INSERT DATA { "
+            + graph(CommandPolicy.CURRENT,"<" + WORK + "> rv:mainVersion <urn:test:main> ; rv:continuityProfile <urn:test:continuity> ; rv:descriptiveMetadataHead <urn:test:header> . "
+                + "<urn:test:main> a rv:MainVersion ; rv:work <" + WORK + "> ; rv:hostingPolicy rv:MetadataOnly .")
+            + graph(CommandPolicy.REVISIONS,"<urn:test:header> a rv:WorkMetadataRevision .") + " }",DatasetFactory.wrap(data));
+        data.commit(); data.end(); return data;
+    }
+    private static org.apache.jena.atlas.json.JsonObject envelope(Command command,ProfileRegistry profiles,boolean v2) {
+        var envelope = new org.apache.jena.atlas.json.JsonObject(); envelope.put("receipt",command.receipt()); envelope.put("digest",command.digest());
+        envelope.put("update",command.update()); envelope.put("deadlineMs",30_000);
+        JsonArray validations = new JsonArray();
+        String model = v2 ? V2 : V1, profile = v2 ? "work-metadata-details-v2" : "work-metadata-details-v1";
+        for (String[] focus : List.of(new String[]{"work-metadata-details-v1",V1 + "/work-shape",WORK},
+            new String[]{profile,model + "/component-shape",COMPONENT},new String[]{profile,model + "/revision-shape",command.revision()})) {
+            var validation = new org.apache.jena.atlas.json.JsonObject(); validation.put("profile",focus[0]); validation.put("sha256",profiles.get(focus[0]).sha256());
+            validation.put("shape",focus[1]); JsonArray targets = new JsonArray(); targets.add(new JsonString(focus[2])); validation.put("focus",targets);
+            JsonArray graphs = new JsonArray(); graphs.add(new JsonString(CommandPolicy.CURRENT)); graphs.add(new JsonString(CommandPolicy.REVISIONS)); validation.put("graphs",graphs);
+            validations.add(validation);
+        }
+        envelope.put("validations",validations); return envelope;
+    }
+    private static java.net.http.HttpResponse<String> post(int port,org.apache.jena.atlas.json.JsonObject envelope,String bearer) throws Exception {
+        var request = java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://127.0.0.1:" + port + "/data/command"))
+            .header("Content-Type","application/json").timeout(java.time.Duration.ofSeconds(30));
+        if (bearer != null) request.header("Authorization","Bearer " + bearer);
+        return java.net.http.HttpClient.newHttpClient().send(request.POST(java.net.http.HttpRequest.BodyPublishers.ofString(JSON.toStringFlat(envelope))).build(),
+            java.net.http.HttpResponse.BodyHandlers.ofString());
+    }
+    @Test public void productionCommandEndpointRequiresMaintenanceAndReplaysExactRestoredMetadata() throws Exception {
+        DatasetGraph data = endpointDataset(); ProfileRegistry profiles = SlimCommandTest.profiles();
+        var operation = org.apache.jena.fuseki.server.Operation.alloc("https://rezics.com/fuseki/command","command","REZICS transactional command");
+        var server = org.apache.jena.fuseki.main.FusekiServer.create().port(0).add("/data",data,false)
+            .registerOperation(operation,SlimCommandTest.service(profiles)).addEndpoint("/data","command",operation).build().start();
+        try {
+            String recorded = state(true,false).replace("[\"en\",\"fr\"]","[\"en-US\",\"sr-Latn\",\"zh-Hans\"]");
+            Command command = command(true,false,900,4,null,20,recorded); var request = envelope(command,profiles,true);
+            assertEquals(403,post(server.getPort(),request,null).statusCode());
+            assertEquals(403,post(server.getPort(),request,"2".repeat(64)).statusCode());
+            var first = post(server.getPort(),request,"1".repeat(64)); assertEquals(first.body(),200,first.statusCode());
+            var committed = JSON.parse(first.body()); assertEquals(first.body(),"committed",committed.get("status").getAsString().value());
+            assertEquals("new-epoch",committed.get("position").getAsObject().get("dataEpoch").getAsString().value());
+            assertEquals("0",committed.get("position").getAsObject().get("sequence").getAsString().value());
+            assertEquals(first.body(),post(server.getPort(),request,"1".repeat(64)).body());
+            var changed = envelope(command,profiles,true); changed.put("update",command.update() + "\n# different restore template");
+            assertEquals("conflict",JSON.parse(post(server.getPort(),changed,"1".repeat(64)).body()).get("status").getAsString().value());
+            var stalePin = envelope(command,profiles,true); stalePin.get("validations").getAsArray().get(1).getAsObject().put("sha256","f".repeat(64));
+            assertEquals("unknown-profile",JSON.parse(post(server.getPort(),stalePin,"1".repeat(64)).body()).get("status").getAsString().value());
+            data.begin(ReadWrite.READ);
+            try {
+                assertTrue(CommandInvariant.readControl(data).held()); assertEquals(BigInteger.valueOf(900),CommandInvariant.readControl(data).cursor());
+                assertEquals(BigInteger.valueOf(4),CommandInvariant.readControl(data).mainCursor());
+                assertTrue(data.contains(Quad.defaultGraphNodeGenerated,uri(COMPONENT),uri(RV + "contentLanguages"),NodeFactory.createLiteralString("en-US sr-Latn zh-Hans")));
+                assertFalse(data.contains(uri(CommandPolicy.REVISIONS),uri(command.revision()),Node.ANY,Node.ANY));
+                assertFalse(data.contains(uri(CommandPolicy.OUTBOX),Node.ANY,Node.ANY,Node.ANY));
+            } finally { data.end(); }
+        } finally { server.stop(); data.close(); }
+    }
+    private static org.apache.jena.atlas.json.JsonObject rawEnvelope(int diagnostic,int main,boolean paired,String name) {
+        String receipt = "urn:rezics:receipt:raw-held:" + name, batch = "urn:rezics:outbox:raw-held:" + name, event = batch + ":event";
+        String update = "PREFIX rv: <" + RV + "> DELETE { " + graph(CommandPolicy.CONTROL,"<" + MARKER + "> rv:reconciledPriorSequence ?last ."
+            + (paired ? " <" + MARKER + "> rv:reconciledPriorMainSequence ?lastMain ." : "")) + " } INSERT { "
+            + graph(CommandPolicy.CONTROL,"<" + MARKER + "> rv:reconciledPriorSequence " + diagnostic + " ."
+                + (paired ? " <" + MARKER + "> rv:reconciledPriorMainSequence " + main + " ." : ""))
+            + graph(CommandPolicy.RECEIPTS,"<" + receipt + "> a rv:OperationReceipt ; rv:requestDigest " + quote(hash(name))
+                + " ; rv:datasetId <" + PRODUCT + "> ; rv:dataEpoch \"old-epoch\" ; rv:sequence " + diagnostic + " ; rv:outcome rv:Succeeded .")
+            + graph(CommandPolicy.OUTBOX,"<" + batch + "> a rv:OutboxBatch ; rv:dataEpoch \"old-epoch\" ; rv:sequence " + diagnostic
+                + " ; rv:eventCount 1 ; rv:event <" + event + "> . <" + event + "> a rv:WorkEditedEvent ; rv:ordinal 0 ; rv:receipt <" + receipt + "> .")
+            + " } WHERE { " + graph(CommandPolicy.CONTROL,"<" + PRODUCT + "> rv:dataEpoch \"new-epoch\" ; rv:routingEpoch \"9\" ; rv:sequence 0 ; rv:restoreHold true ; rv:restoreCutover <" + MARKER
+                + "> . OPTIONAL { <" + MARKER + "> rv:reconciledPriorSequence ?last } OPTIONAL { <" + MARKER + "> rv:reconciledPriorMainSequence ?lastMain }") + " }";
+        var envelope = new org.apache.jena.atlas.json.JsonObject(); envelope.put("receipt",receipt); envelope.put("digest",hash(name));
+        envelope.put("update",update); envelope.put("validations",new JsonArray()); envelope.put("deadlineMs",30_000); return envelope;
+    }
+    @Test public void productionEndpointComposesSlimAndRawDiagnosticGapsWithoutAdvancingNewMainHead() throws Exception {
+        DatasetGraph data = endpointDataset(); data.begin(ReadWrite.WRITE);
+        data.deleteAny(uri(CommandPolicy.CONTROL),uri(MARKER),uri(RV + "priorMainSequence"),Node.ANY);
+        data.add(uri(CommandPolicy.CONTROL),uri(MARKER),uri(RV + "priorMainSequence"),NodeFactory.createLiteralByValue(1,org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+        data.commit(); data.end(); ProfileRegistry profiles = SlimCommandTest.profiles();
+        var operation = org.apache.jena.fuseki.server.Operation.alloc("https://rezics.com/fuseki/command","command","REZICS transactional command");
+        var server = org.apache.jena.fuseki.main.FusekiServer.create().port(0).add("/data",data,false)
+            .registerOperation(operation,SlimCommandTest.service(profiles)).addEndpoint("/data","command",operation).build().start();
+        try {
+            Command first = command(true,false,878,2,null,20);
+            var slim = post(server.getPort(),envelope(first,profiles,true),"1".repeat(64)); assertEquals(slim.body(),"committed",JSON.parse(slim.body()).get("status").getAsString().value());
+            var raw = post(server.getPort(),rawEnvelope(899,3,true,"paired"),"2".repeat(64)); assertEquals(raw.body(),"committed",JSON.parse(raw.body()).get("status").getAsString().value());
+            assertEquals("899",JSON.parse(raw.body()).get("position").getAsObject().get("sequence").getAsString().value());
+            var gap = post(server.getPort(),rawEnvelope(901,5,true,"main-gap"),"2".repeat(64)); assertEquals(gap.body(),"invalid",JSON.parse(gap.body()).get("status").getAsString().value());
+            var half = post(server.getPort(),rawEnvelope(901,4,false,"half-pair"),"2".repeat(64)); assertEquals(half.body(),"invalid",JSON.parse(half.body()).get("status").getAsString().value());
+            Command last = command(true,true,900,4,first.revision(),21);
+            var restored = post(server.getPort(),envelope(last,profiles,true),"1".repeat(64)); assertEquals(restored.body(),"committed",JSON.parse(restored.body()).get("status").getAsString().value());
+            data.begin(ReadWrite.READ);
+            try {
+                var control = CommandInvariant.readControl(data); assertTrue(control.held()); assertEquals(BigInteger.ZERO,control.sequence());
+                assertEquals(BigInteger.valueOf(900),control.cursor()); assertEquals(BigInteger.valueOf(4),control.mainCursor());
+                assertTrue(data.contains(uri(CommandPolicy.OUTBOX),uri("urn:rezics:outbox:raw-held:paired"),uri(RV + "sequence"),NodeFactory.createLiteralByValue(899,org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger)));
+                assertTrue(data.contains(uri(CommandPolicy.OUTBOX),uri("urn:rezics:outbox:raw-held:paired"),uri(RV + "streamSequence"),NodeFactory.createLiteralByValue(3,org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger)));
+                assertEquals("0",data.find(uri(CommandPolicy.CONTROL),uri(CommandInvariant.MAIN_STREAM_SCOPE),uri(RV + "streamSequence"),Node.ANY).next().getObject().getLiteralLexicalForm());
+                assertFalse(data.contains(uri(CommandPolicy.RECEIPTS),uri("urn:rezics:receipt:raw-held:main-gap"),Node.ANY,Node.ANY));
+            } finally { data.end(); }
+        } finally { server.stop(); data.close(); }
+    }
     @Test public void retiredProofRestorePreservesUnequalPositionsAndKeepsHistoryInOwnerCustody() {
         DatasetGraph data = dataset(); data.begin(ReadWrite.WRITE);
         try {
@@ -169,6 +270,25 @@ public class MetadataRestoreTest {
             assertEquals(command.digest(),data.find(uri(CommandPolicy.RECEIPTS),uri(command.receipt()),uri(RV + "requestDigest"),Node.ANY).next().getObject().getLiteralLexicalForm());
             data.commit(); data.end();
         } finally { if (data.isInTransaction()) { data.abort(); data.end(); } data.close(); }
+    }
+    @Test public void savepointSuccessorRetainsUnchangedDefaultAliasFactsAndStagesOnlyExactPhysicalDelta() {
+        DatasetGraph data = dataset(); data.begin(ReadWrite.WRITE);
+        try {
+            Command first = command(true,false,900,4,null,20); var initial = capture(data,first); assertNull(initial.error()); MetadataRestorePolicy.apply(data,initial);
+            Set<Quad> original = record(data,Quad.defaultGraphNodeGenerated,uri(COMPONENT));
+            Command next = command(true,true,950,5,first.revision(),21); var successor = capture(data,next); assertNull(successor.error());
+            CommandOverlay primary = new CommandOverlay(data); MetadataRestorePolicy.apply(primary,successor);
+            assertNull(MetadataRestorePolicy.check(primary,successor));
+            assertEquals(original,record(data,Quad.defaultGraphNodeGenerated,uri(COMPONENT)));
+            assertTrue(primary.contains(Quad.defaultGraphNodeGenerated,uri(COMPONENT),uri(RV + "work"),uri(WORK)));
+            assertTrue(primary.contains(Quad.defaultGraphNodeGenerated,uri(COMPONENT),uri(RV + "manifest"),uri(MANIFEST)));
+            assertTrue(primary.contains(Quad.defaultGraphNodeGenerated,uri(COMPONENT),uri(RV + "modelRevision"),uri(V2)));
+            assertFalse(primary.contains(Quad.defaultGraphNodeGenerated,uri(COMPONENT),uri("https://schema.org/name"),Node.ANY));
+            assertTrue(primary.removals().stream().noneMatch(q -> q.getSubject().equals(uri(COMPONENT))
+                && Set.of(uri(RV + "work"),uri(RV + "manifest"),uri(RV + "modelRevision")).contains(q.getPredicate())));
+            assertNull(MembershipNormalFormPolicy.check(primary,SlimCommandTest.profiles(),System.nanoTime() + 30_000_000_000L).error());
+            MetadataRestorePolicy.apply(data,successor); assertNull(MetadataRestorePolicy.check(data,successor));
+        } finally { data.abort(); data.end(); data.close(); }
     }
     @Test public void wrongCursorAuthorityDigestExtraHistoryAndPartialRestoreAreRefused() {
         DatasetGraph data = dataset(); data.begin(ReadWrite.WRITE);

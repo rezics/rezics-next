@@ -299,6 +299,13 @@ export async function cutoverRestoredGraphLineage(
     || before.sequence !== prior.sequence) {
     throw new RestoreLineageConflict('restored graph cut differs from recorded position');
   }
+  // Read both cuts together before the command resets the scoped Main counter.
+  // Existing cutover receipts return above without changing their original identity.
+  const source = await readGraphRecoverySource(fuseki);
+  if (source.dataEpoch !== prior.dataEpoch || source.routingEpoch !== prior.routingEpoch
+    || source.sequence !== prior.sequence) {
+    throw new RestoreLineageConflict('restored graph cut moved before lineage cutover');
+  }
   const marker = `urn:rezics:restore:${next.dataEpoch}`;
   const receipt = `urn:rezics:receipt:restore-cutover:${hash(next.dataEpoch)}`;
   const digest = hash(JSON.stringify({ family: 'restore-cutover-v1', prior, next }));
@@ -314,13 +321,15 @@ export async function cutoverRestoredGraphLineage(
       rv:routingEpoch ${lit(next.routingEpoch)} ; rv:sequence 0 ;
       rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
       ${iri(marker)} a rv:RestoreCutover ; rv:priorDataEpoch ${lit(prior.dataEpoch)} ;
-        rv:priorSequence ?oldSequence ; rv:dataEpoch ${lit(next.dataEpoch)} . }
+        rv:priorSequence ?oldSequence ; rv:priorMainSequence ?oldMainSequence ;
+        rv:dataEpoch ${lit(next.dataEpoch)} . }
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
       rv:requestDigest ${lit(digest)} ; rv:datasetId ${iri(DATASET)} ;
       rv:dataEpoch ${lit(next.dataEpoch)} ; rv:sequence 0 . } }
     WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(prior.dataEpoch)} ;
-      rv:routingEpoch ${lit(prior.routingEpoch)} ; rv:sequence ?oldSequence . }
-      FILTER(?oldSequence = ${prior.sequence})
+      rv:routingEpoch ${lit(prior.routingEpoch)} ; rv:sequence ?oldSequence .
+      ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:dataEpoch ${lit(prior.dataEpoch)} ; rv:streamSequence ?oldMainSequence . }
+      FILTER(?oldSequence = ${prior.sequence} && ?oldMainSequence = ${source.relay.sequence})
       OPTIONAL { GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:restoreCutover ?priorMarker . } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} ?p ?o } }
@@ -439,8 +448,37 @@ export async function releaseRestoredGraphHold(
         ? error.kind : 'unavailable'})`); }
     const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
     const receipt = `urn:rezics:receipt:restore-release:${hash(lineage.dataEpoch)}`;
-    const releaseDigest = hash(JSON.stringify({ family: 'restore-release-v1', lineage,
-      priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence }));
+    const cuts = (await fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?savedMainSequence ?reconciledMainSequence WHERE { GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
+          rv:sequence 0 ; rv:restoreCutover ${iri(marker)} .
+        ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ; rv:priorSequence ?savedSequence .
+        OPTIONAL { ${iri(marker)} rv:priorMainSequence ?savedMainSequence }
+        OPTIONAL { ${iri(marker)} rv:reconciledPriorMainSequence ?reconciledMainSequence }
+      } } LIMIT 2`)).results?.bindings ?? [];
+    const cut = cuts[0];
+    if (cuts.length !== 1 || !cut
+      || ['savedMainSequence', 'reconciledMainSequence'].some(key => cut[key] && !/^[0-9]+$/.test(cut[key]!.value))
+      || cut.reconciledMainSequence && !cut.savedMainSequence) {
+      throw new RestoreLineageConflict('restored graph Main cut is unavailable or ambiguous');
+    }
+    const pairedMain = cut.savedMainSequence !== undefined;
+    const mainCutGuard = pairedMain
+      ? `${iri(marker)} rv:priorMainSequence ?savedMainSequence .
+         OPTIONAL { ${iri(marker)} rv:reconciledPriorMainSequence ?reconciledMainSequence }
+         FILTER(COALESCE(?reconciledMainSequence, ?savedMainSequence) = ${coverage.relay.sequence})`
+      : `FILTER NOT EXISTS { ${iri(marker)} rv:priorMainSequence ?savedMainSequence }
+         FILTER NOT EXISTS { ${iri(marker)} rv:reconciledPriorMainSequence ?reconciledMainSequence }`;
+    // Exact legacy markers retain their original release digest and receipt.
+    // Paired markers additionally bind the signed scoped Main cut.
+    const releaseDigest = hash(JSON.stringify(pairedMain
+      ? { family: 'restore-release-v2', lineage, priorDataEpoch: coverage.priorDataEpoch,
+        priorSequence: coverage.priorSequence, priorMainSequence: coverage.relay.sequence,
+        streamScope: MAIN_RELAY_STREAM_SCOPE }
+      : { family: 'restore-release-v1', lineage,
+        priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence }));
+    const mainReceiptFacts = pairedMain
+      ? `; rv:priorMainSequence ${coverage.relay.sequence} ; rv:streamScope ${lit(MAIN_RELAY_STREAM_SCOPE)}` : '';
     const releasedQuery = `PREFIX rv: <${RV}> ASK {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
@@ -448,11 +486,12 @@ export async function releaseRestoredGraphHold(
         ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ; rv:priorSequence ?savedSequence .
         OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
         FILTER(COALESCE(?reconciledSequence, ?savedSequence) = ${coverage.priorSequence})
+        ${mainCutGuard}
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
       }
       GRAPH ${iri(GRAPHS.receipts)} {
         ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(releaseDigest)} ;
-          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 0 .
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 0 ${mainReceiptFacts} .
       }
     }`;
     const held = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
@@ -462,6 +501,7 @@ export async function releaseRestoredGraphHold(
         rv:priorSequence ?savedSequence .
       OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
       FILTER(COALESCE(?reconciledSequence, ?savedSequence) = ${coverage.priorSequence})
+        ${mainCutGuard}
     } }`);
     // A replay may alter Content/object copies. Verify the signed base before
     // it starts; an interrupted release additionally requires its exact receipt.
@@ -483,7 +523,7 @@ export async function releaseRestoredGraphHold(
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
         INSERT { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
           rv:requestDigest ${lit(releaseDigest)} ; rv:datasetId ${iri(DATASET)} ;
-          rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 0 . } }
+          rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 0 ${mainReceiptFacts} . } }
         WHERE { GRAPH ${iri(GRAPHS.control)} {
           ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
             rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
@@ -491,6 +531,7 @@ export async function releaseRestoredGraphHold(
             rv:priorSequence ?savedSequence .
           OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
           FILTER(COALESCE(?reconciledSequence, ?savedSequence) = ${coverage.priorSequence})
+        ${mainCutGuard}
         }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
         }` }); }

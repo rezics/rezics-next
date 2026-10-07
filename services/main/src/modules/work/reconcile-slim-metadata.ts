@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { relayRetainedEventAt, RelayCheckpointConflict, type RelayCoverage } from '../outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
 import type { CommittedCustodySource } from '../outbox/receipt-custody.ts';
@@ -52,10 +52,11 @@ function exactEdition(source: CommittedCustodySource) {
  * source; ordinary committed owner replay deliberately performs no graph repair. */
 export async function reconcileRetainedSlimMetadata(env: WorkActivationEnvironment,
   accessPool: Pool, relayPool: Pool, coverage: RelayCoverage, mainSequence: string,
+  accessClient?: PoolClient, relayClient?: PoolClient,
 ): Promise<{ receipt: string; component: string; revision: string; replayed: boolean }> {
   if (!env.receiptCustody) throw new SlimMetadataRestoreConflict('slim receipt custody is unavailable');
   let retained: Awaited<ReturnType<typeof relayRetainedEventAt>>;
-  try { retained = await relayRetainedEventAt(relayPool, coverage, mainSequence); }
+  try { retained = await relayRetainedEventAt(relayPool, coverage, mainSequence, relayClient); }
   catch (error) {
     if (error instanceof RelayCheckpointConflict) throw new SlimMetadataRestoreConflict(error.message, { cause: error });
     throw error;
@@ -67,7 +68,9 @@ export async function reconcileRetainedSlimMetadata(env: WorkActivationEnvironme
     throw new SlimMetadataRestoreConflict('retained slim metadata event is incomplete');
   }
   let source: CommittedCustodySource | null;
-  try { source = await env.receiptCustody.readCommitted(envelope.data.receipt.id); }
+  try { source = accessClient
+    ? (await env.receiptCustody.readHistorical({ dataEpoch: coverage.dataEpoch,streamSequence: mainSequence },accessClient))?.source ?? null
+    : await env.receiptCustody.readCommitted(envelope.data.receipt.id); }
   catch (error) { throw new SlimMetadataRestoreConflict('retained slim custody is unavailable or corrupt', { cause: error }); }
   if (!source) throw new SlimMetadataRestoreConflict('retained slim custody is unavailable');
   const { terminal, prepared } = source;
@@ -85,9 +88,9 @@ export async function reconcileRetainedSlimMetadata(env: WorkActivationEnvironme
   const { state, expectedHead } = edition;
   const { receipt: maintenanceReceipt, digest } = sourceIdentity(env, source);
   const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
-  const client = await accessPool.connect();
+  const client = accessClient ?? await accessPool.connect();
   try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    if (!accessClient) await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     const fence = await client.query<{ open: boolean }>('SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (fence.rows.length !== 1 || fence.rows[0]?.open !== false) {
       throw new SlimMetadataRestoreConflict('Access recovery fence is not held');
@@ -111,7 +114,7 @@ export async function reconcileRetainedSlimMetadata(env: WorkActivationEnvironme
     }
     const sourceRefs = [terminal.work, prepared.component, prepared.revision,
       ...(expectedHead ? [expectedHead] : []), ...source.objectReferences.map(ref => `sha256:${ref.digest}`)];
-    const erased = await relayPool.query(`SELECT 1 FROM relay.erasure_target t
+    const erased = await (relayClient ?? relayPool).query(`SELECT 1 FROM relay.erasure_target t
       JOIN relay.erasure e ON e.id = t.erasure_id
       WHERE e.suppression_status = 'suppressed' AND t.target_ref = ANY($1::text[]) LIMIT 1`, [sourceRefs]);
     const graphErased = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
@@ -231,10 +234,10 @@ export async function reconcileRetainedSlimMetadata(env: WorkActivationEnvironme
       `, 4096);
       if (head.boolean !== true) throw new SlimMetadataRestoreConflict('restored slim edition header is unavailable');
     }
-    await client.query('COMMIT');
+    if (!accessClient) await client.query('COMMIT');
     return { receipt: terminal.receipt, component: prepared.component, revision: prepared.revision, replayed };
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* Keep the refusal which left the graph held. */ }
+    if (!accessClient) try { await client.query('ROLLBACK'); } catch { /* Keep the refusal which left the graph held. */ }
     throw error;
-  } finally { client.release(); }
+  } finally { if (!accessClient) client.release(); }
 }

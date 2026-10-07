@@ -205,9 +205,17 @@ final class MetadataRestorePolicy {
 
     static void apply(DatasetGraph physical, Snapshot snapshot) {
         if (snapshot.error() != null) throw new IllegalArgumentException(snapshot.error());
-        physical.deleteAny(CURRENT,snapshot.component(),Node.ANY,Node.ANY); physical.deleteAny(DEFAULT,snapshot.component(),Node.ANY,Node.ANY);
+        Set<Quad> existing = physicalComponentRecord(physical,snapshot.component());
+        Set<Quad> canonicalExisting = existing.stream().map(MetadataRestorePolicy::canonicalGraph)
+            .collect(java.util.stream.Collectors.toSet());
+        // Keep unchanged facts in the parent view. A savepoint records the
+        // parent's default-graph alias, which may differ from the target's;
+        // delete/re-add would otherwise hide an unchanged fact in that view.
+        for (Quad quad : existing) if (!snapshot.componentFacts().contains(canonicalGraph(quad)))
+            physical.delete(quad.getGraph(),quad.getSubject(),quad.getPredicate(),quad.getObject());
+        for (Quad quad : snapshot.componentFacts()) if (!canonicalExisting.contains(quad)) addPhysical(physical,quad);
         physical.deleteAny(CURRENT,snapshot.work(),rv("editionsRevision"),Node.ANY); physical.deleteAny(DEFAULT,snapshot.work(),rv("editionsRevision"),Node.ANY);
-        snapshot.componentFacts().forEach(quad -> addPhysical(physical,quad)); addPhysical(physical,snapshot.workPointer());
+        addPhysical(physical,snapshot.workPointer());
         snapshot.receipt().forEach(quad -> addPhysical(physical,quad));
         for (Node predicate : CURSORS) physical.deleteAny(CONTROL,snapshot.marker(),predicate,Node.ANY);
         snapshot.cursors().forEach(quad -> addPhysical(physical,quad));
@@ -307,8 +315,19 @@ final class MetadataRestorePolicy {
         } return values;
     }
     private static Set<Quad> componentRecord(DatasetGraph data,Node component) {
-        Set<Quad> result = new HashSet<>(boundedRecord(data,CURRENT,component)); result.addAll(boundedRecord(data,DEFAULT,component));
-        if (result.size() > MAX_FACTS) throw new IllegalArgumentException("metadata restore component exceeds quad bound"); return result;
+        return physicalComponentRecord(data,component).stream().map(MetadataRestorePolicy::canonicalGraph)
+            .collect(java.util.stream.Collectors.toSet());
+    }
+    private static Set<Quad> physicalComponentRecord(DatasetGraph data,Node component) {
+        Set<Quad> result = new HashSet<>();
+        for (Node graph : List.of(CURRENT,DEFAULT)) {
+            var values = data.find(graph,component,Node.ANY,Node.ANY);
+            try { while (values.hasNext()) {
+                if (result.size() >= MAX_FACTS) throw new IllegalArgumentException("metadata restore component exceeds quad bound");
+                result.add(values.next());
+            } } finally { Iter.close(values); }
+        }
+        return result;
     }
     private static Set<Quad> boundedRecord(DatasetGraph data,Node graph,Node subject) {
         Set<Quad> result = new HashSet<>(); var iter = data.find(graph,subject,Node.ANY,Node.ANY);

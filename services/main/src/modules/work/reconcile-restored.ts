@@ -14,7 +14,7 @@ import { RELEASE_CONTEXT_ID, RELEASE_CONTEXT_PROFILE, RELEASE_OBSERVATION_ID, RE
 import { EXPERIENCE_CONTEXT_ID, EXPERIENCE_CONTEXT_PROFILE, EXPERIENCE_CADENCE,
   EXPERIENCE_OBSERVATION_ID, EXPERIENCE_OBSERVATION_PROFILE,
   experienceRatingIdentity, validOccasion } from '../rating/experience.ts';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { assertRetainedOrganizationModeration } from '../access/organization-moderation.ts';
 import { ORGANIZATION_MODERATION_ACTION, type OrganizationPublicationTarget }
   from '../access/organization-publication.ts';
@@ -44,6 +44,7 @@ import { metadataWorkEditDigest, readWorkEditTerminalReceipt,
 import { readWorkTerminalReceipt, workReceiptIri } from './receipt.ts';
 import { relayCoverage, relayRetainedEventAt, RelayCheckpointConflict,
   type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
 import { CONTRIBUTION_PROFILE, readTextContributionReceipt,
   textContributionDigest, textContributionReceiptIri } from '../contribution/draft.ts';
 import { readTextContributionEditReceipt, textContributionEditDigest,
@@ -108,10 +109,10 @@ function exactCoverage(left: RelayCoverage, right: RelayCoverage): boolean {
 }
 
 export async function loadRetainedEvent(
-  relayPool: Pool, coverage: RelayCoverage, sequence: string,
+  relayPool: Pool, coverage: RelayCoverage, sequence: string, relayClient?: PoolClient,
 ): Promise<{ eventId: string; envelope: MainCloudEvent }> {
   try {
-    const { eventId, envelope } = await relayRetainedEventAt(relayPool, coverage, sequence);
+    const { eventId, envelope } = await relayRetainedEventAt(relayPool, coverage, sequence, relayClient);
     return { eventId, envelope };
   } catch (error) {
     if (error instanceof RelayCheckpointConflict) {
@@ -227,16 +228,21 @@ export async function reconcileRetainedEmptyBatch(
 export async function reconcileRetainedWorkEdit(
   env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
   coverage: RelayCoverage, sequence: string,
+  accessClient?: PoolClient, relayClient?: PoolClient,
 ): Promise<{ receipt: string; revision: string; replayed: boolean }> {
-  const { eventId, envelope } = await loadRetainedEvent(relayPool, coverage, sequence);
+  const { eventId, envelope } = await loadRetainedEvent(relayPool, coverage, sequence, relayClient);
   const data = envelope?.data;
   const receipt = data?.receipt;
+  const delivery = data?.relayPosition ?? { streamScope: MAIN_RELAY_STREAM_SCOPE,
+    dataEpoch: data?.sourcePosition.dataEpoch,sequence: data?.sourcePosition.sequence };
   if (envelope.id !== eventId || envelope.specversion !== '1.0'
     || envelope.source !== 'https://rezics.com/services/main'
     || envelope.type !== 'com.rezics.work.edited.v1'
     || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
     || data.sourcePosition.dataEpoch !== coverage.dataEpoch
-    || data.sourcePosition.sequence !== sequence
+    || !/^[1-9][0-9]*$/.test(data.sourcePosition.sequence)
+    || delivery.streamScope !== (coverage.streamScope ?? MAIN_RELAY_STREAM_SCOPE)
+    || delivery.dataEpoch !== coverage.dataEpoch || delivery.sequence !== sequence
     || receipt.action !== 'work.edit' || receipt.outcome !== 'succeeded'
     || !receipt.operation || !receipt.work || !receipt.workRevision
     || !receipt.expectedHead || !receipt.workManifest || receipt.reason
@@ -257,33 +263,52 @@ export async function reconcileRetainedWorkEdit(
     throw new RetainedEffectConflict('retained Work edit digest differs from its exact payload');
   }
   const scalarTerm = scalarRdfTerm(payload.scalarValue);
-  const client = await accessPool.connect();
+  const diagnostic = data.sourcePosition.sequence;
+  const client = accessClient ?? await accessPool.connect();
   try {
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+    if (!accessClient) await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
     const fence = await client.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
     const access = await client.query<AccessEffectRow>(
       `SELECT action, state, scope_id, request_digest, authority_epoch,
          graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
-       FROM access.admission WHERE id = $1`, [receipt.admissionId]);
+       FROM access.admission WHERE id = $1 FOR UPDATE`, [receipt.admissionId]);
     const admitted = access.rows[0];
     if (!admitted || admitted.action !== 'work.edit' || admitted.state !== 'sealed'
       || admitted.scope_id !== receipt.scope || admitted.request_digest !== receipt.requestDigest
       || admitted.authority_epoch !== receipt.authorityEpoch
       || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
-      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence) {
+      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== diagnostic) {
       throw new RetainedEffectConflict('current Access admission does not prove retained edit');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const controls = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?saved ?savedMain ?last ?lastMain WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ; rv:restoreHold true ; rv:restoreCutover ${iri(marker)} .
+        ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ; rv:priorSequence ?saved .
+        OPTIONAL { ${iri(marker)} rv:priorMainSequence ?savedMain }
+        OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        OPTIONAL { ${iri(marker)} rv:reconciledPriorMainSequence ?lastMain }
+      } } LIMIT 2`)).results?.bindings ?? [];
+    const control = controls[0];
+    if (controls.length !== 1 || !control?.saved
+      || ['saved','savedMain','last','lastMain'].some(key => control[key] && !/^(0|[1-9][0-9]*)$/.test(control[key]!.value))
+      || Boolean(control.savedMain) && Boolean(control.last) !== Boolean(control.lastMain)
+      || !control.savedMain && (control.lastMain || diagnostic !== sequence)) {
+      throw new RetainedEffectConflict('held raw edit cut or paired source cursors differ');
+    }
+    const paired = Boolean(control.savedMain);
     const update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
       DELETE {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last .
+          ${paired ? `${iri(marker)} rv:reconciledPriorMainSequence ?lastMain .` : ''} }
         GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.work)} rv:head ${iri(receipt.expectedHead)} ;
           rdfs:label ?oldTitle . ${iri(receipt.work)} <${SCALAR_PREDICATE}> ?oldScalar . }
       }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${diagnostic} .
+          ${paired ? `${iri(marker)} rv:reconciledPriorMainSequence ${sequence} .` : ''} }
         GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.work)} rv:head ${iri(receipt.workRevision)} ;
           rdfs:label ${lit(payload.title)}@${payload.language} .
           ${scalarTerm ? `${iri(receipt.work)} <${SCALAR_PREDICATE}> ${scalarTerm} .` : ''} }
@@ -292,7 +317,7 @@ export async function reconcileRetainedWorkEdit(
             rv:predecessor ${iri(receipt.expectedHead)} ; rv:operation ${iri(receipt.operation)} ;
             rv:manifest ${iri(receipt.workManifest)} ; rv:modelRevision ${iri(PROFILE)} ;
             rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
-            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} .
         }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(receipt.id)} a rv:OperationReceipt ; rv:operation ${iri(receipt.operation)} ;
@@ -301,11 +326,11 @@ export async function reconcileRetainedWorkEdit(
             rv:outcome rv:Succeeded ; rv:work ${iri(receipt.work)} ;
             rv:workRevision ${iri(receipt.workRevision)} ; rv:expectedHead ${iri(receipt.expectedHead)} ;
             rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
-            rv:sequence ${sequence} .
+            rv:sequence ${diagnostic} .
         }
         GRAPH ${iri(GRAPHS.outbox)} {
           ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
-            rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+            rv:sequence ${diagnostic} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
           ${iri(eventId)} a rv:WorkEditedEvent ; rv:ordinal 0 ; rv:action "work.edit" ;
             rv:receipt ${iri(receipt.id)} ; rv:operation ${iri(receipt.operation)} ;
             rv:work ${iri(receipt.work)} .
@@ -320,7 +345,10 @@ export async function reconcileRetainedWorkEdit(
             rv:priorSequence ?saved .
           OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
           BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+          ${paired ? `${iri(marker)} rv:priorMainSequence ${control.savedMain!.value} .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorMainSequence ?lastMain }
+          BIND(COALESCE(?lastMain, ${control.savedMain!.value}) AS ?previousMain)
+          FILTER(?previous < ${diagnostic} && ?previousMain + 1 = ${sequence})` : `FILTER(?previous + 1 = ${diagnostic})`}
         }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(receipt.work)} rv:head ${iri(receipt.expectedHead)} ;
@@ -330,10 +358,14 @@ export async function reconcileRetainedWorkEdit(
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(receipt.workRevision)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
-          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} . } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
       }`;
-    const existing = await readWorkEditTerminalReceipt(env, receipt.admissionId);
+    // This verified raw event retains a graph receipt. It must not enter live
+    // slim custody reconciliation while the caller holds Access's sole client.
+    const graphReceiptEnv: WorkActivationEnvironment = { fuseki: env.fuseki,
+      lineage: env.lineage,objectDirectory: env.objectDirectory };
+    const existing = await readWorkEditTerminalReceipt(graphReceiptEnv, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
       try { await retainedCommand(env, update, receipt, 'work-metadata-v1', [
@@ -341,20 +373,24 @@ export async function reconcileRetainedWorkEdit(
       ]); }
       catch (error) { updateError = error; }
     }
-    const terminal = await readWorkEditTerminalReceipt(env, receipt.admissionId);
+    const terminal = await readWorkEditTerminalReceipt(graphReceiptEnv, receipt.admissionId);
     const cursor = await reconciledCursor(env, marker);
     const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}>
       ASK {
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(receipt.workRevision)} a rv:RevisionAnchor ;
         rv:component ${iri(receipt.work)} ; rv:predecessor ${iri(receipt.expectedHead)} ;
         rv:operation ${iri(receipt.operation)} ; rv:manifest ${iri(receipt.workManifest)} ;
-        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(data.batchId)} a rv:OutboxBatch ;
-        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} ;
+        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} ;
         rv:eventCount 1 ; rv:event ${iri(eventId)} .
+        ${paired ? `${iri(data.batchId)} rv:streamScope ${lit(MAIN_RELAY_STREAM_SCOPE)} ; rv:streamSequence ${sequence} .` : ''}
         ${iri(eventId)} a rv:WorkEditedEvent ; rv:receipt ${iri(receipt.id)} . }
     }`);
-    const currentCheck = cursor === BigInt(sequence)
+    const mainCheck = paired ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorMainSequence ?currentMain }
+      FILTER(?currentMain >= ${sequence}) }`) : { boolean: true };
+    const currentCheck = cursor === BigInt(diagnostic)
       ? await env.fuseki.query(`PREFIX rv: <${RV}>
           PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> ASK {
           GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.work)} rv:head ${iri(receipt.workRevision)} ;
@@ -368,18 +404,18 @@ export async function reconcileRetainedWorkEdit(
       || terminal.authorityEpoch !== receipt.authorityEpoch || terminal.scope !== receipt.scope
       || terminal.work !== receipt.work || terminal.revision !== receipt.workRevision
       || terminal.predecessor !== receipt.expectedHead || terminal.dataEpoch !== coverage.dataEpoch
-      || terminal.sequence !== sequence || cursor === null || cursor < BigInt(sequence)
-      || graphCheck.boolean !== true || currentCheck.boolean !== true) {
+      || terminal.sequence !== diagnostic || cursor === null || cursor < BigInt(diagnostic)
+      || graphCheck.boolean !== true || currentCheck.boolean !== true || mainCheck.boolean !== true) {
       throw new RetainedEffectConflict(updateError
         ? 'retained edit update outcome is unknown' : 'retained edit did not reconcile');
     }
-    await client.query('COMMIT');
+    if (!accessClient) await client.query('COMMIT');
     return { receipt: receipt.id, revision: receipt.workRevision, replayed: !!existing };
   } catch (error) {
-    try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
+    if (!accessClient) try { await client.query('ROLLBACK'); } catch { /* retain original error */ }
     throw error;
   } finally {
-    client.release();
+    if (!accessClient) client.release();
   }
 }
 
