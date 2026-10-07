@@ -1,0 +1,36 @@
+# A versioned semantic definition Resource. Each immutable revision is an exact DefinitionRef.
+# Retirement appends a Retired revision and an optional successor; referenced revisions never retarget.
+# Definitions assert no identity or equivalence axioms; admitted mappings are separate definitions.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/semantic-definition-v1/definition-shape>
+    a sh:NodeShape ;
+    sh:closed true ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:SemanticDefinition ] ;
+    sh:property [ sh:path rv:definitionKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:RelationDefinition rv:PropertyDefinition rv:ValueDefinition rv:UnitDefinition rv:InterpretationDefinition ) ] ;
+    sh:property [ sh:path rv:definitionHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:DefinitionRevision ] ;
+    sh:property [ sh:path rv:successor ; sh:maxCount 1 ; sh:class rv:SemanticDefinition ] ;
+    sh:property [ sh:path owl:sameAs ; sh:maxCount 0 ] ;
+    sh:property [ sh:path owl:hasKey ; sh:maxCount 0 ] .
+
+<https://rezics.com/definition/semantic-definition-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:closed true ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:DefinitionRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SemanticDefinition ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:DefinitionRevision ] ;
+    sh:property [ sh:path rv:definitionKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:RelationDefinition rv:PropertyDefinition rv:ValueDefinition rv:UnitDefinition rv:InterpretationDefinition ) ] ;
+    sh:property [ sh:path rv:lifecycle ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Active rv:Retired ) ] ;
+    sh:property [ sh:path rv:successor ; sh:maxCount 1 ; sh:class rv:SemanticDefinition ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelGeneration ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ModelGeneration ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/semantic-definition-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/semantic-definition-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .

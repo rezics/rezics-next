@@ -1,0 +1,26 @@
+# An explicit Work-maintainer attribution to a native Agent, not an external source author key.
+# The Work-edit admission records the credit; contribution authorship does not imply Work authorship.
+# Only current unerased credits to public Agents appear in public profile reads.
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rv: <https://rezics.com/vocab/> .
+@prefix schema: <https://schema.org/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://rezics.com/definition/native-agent-credit-v1/credit-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:NativeAgentCredit ] ;
+    sh:property [ sh:path rv:work ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:agent ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Agent ] ;
+    sh:property [ sh:path rv:creditRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:NativeAgentCreditRevision ] ;
+    sh:property [ sh:path schema:roleName ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "author" "translator" "editor" ) ] ;
+    sh:property [ sh:path rv:externalKey ; sh:maxCount 0 ] .
+
+<https://rezics.com/definition/native-agent-credit-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:NativeAgentCreditRevision ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:NativeAgentCredit ] ;
+    sh:property [ sh:path rv:work ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:CreativeWork ] ;
+    sh:property [ sh:path rv:agent ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Agent ] ;
+    sh:property [ sh:path rv:workRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path schema:roleName ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "author" "translator" "editor" ) ] .
