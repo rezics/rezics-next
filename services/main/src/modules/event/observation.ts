@@ -253,7 +253,9 @@ export async function setEventObservation(env: WorkActivationEnvironment & { eve
   if (oldSource && oldSource.head !== prior) {
     const terminal = await readEventObservationReceipt(env, admission.id);
     if (terminal) return checkedReceipt(terminal, admission, input, digest);
-    throw new EventObservationUnavailable('Event predecessor changed before publication');
+    const stale = await sealTerminal(env, admission, 'stale-head', eventTime, input.expectedRevisionHead);
+    if (stale) return checkedReceipt(stale, admission, input, digest);
+    throw new PendingActivation('stale Event predecessor was not sealed');
   }
   const old = oldSource?.rows[0];
   const registered = await registerEventPublication(env.eventTemporalAccess, { receipt, admission: admission.id, digest,

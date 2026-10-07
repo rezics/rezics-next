@@ -17,7 +17,7 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce }
 import { eventTimeSlotIri }
   from '../../../services/main/src/modules/event/observation.ts';
 import { UnsupportedEventTime } from '../../../services/main/src/modules/event/time.ts';
-import { GRAPHS, ID, RV, iri, type WorkActivationEnvironment }
+import { GRAPHS, ID, RV, hash, iri, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
 import { AccessAdmissionRegistry }
   from '../../../services/main/src/modules/access/admission.ts';
@@ -64,7 +64,7 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
   await migrateContent(contentPool);
   const content = new ContentCore(contentPool);
   const identity = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as Record<string, string>,
-    'openid work:create event:submit event:read classification:define statement:write statement:decide');
+    'openid work:create event:submit event:read classification:define statement:write statement:decide context:write');
   const env: WorkActivationEnvironment & { eventTemporalAccess: Pool } = { fuseki, eventTemporalAccess: access, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
     routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: join(stateDir, 'objects') };
   const queries = new EventTemporalQueries(access, env, Buffer.alloc(32, 7));
@@ -285,6 +285,23 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
       }
       topicConcepts.push(data.concept);
     }
+    const eventAliasBody = { profile: 'statement-v1', speaker: { kind: 'personal' }, subject: topicConcepts[0]!,
+      predicate: `${RV}denotesEvent`, relationDefinition: 'https://rezics.com/definition/event-time-v1',
+      value: { kind: 'resource', iri: eventA }, applicability: [], interpretation: { kind: 'selected' },
+      evidence: [], actingSubject: actor };
+    for (const changed of [
+      { predicate: `${RV}unreviewedEventPredicate` },
+      { relationDefinition: 'https://rezics.com/definition/event-time-v1-lookalike' },
+      { qualification: { definition: native(), interpretationContext: 'urn:rezics:event-test:scope',
+        valuePrecision: 'exact', valueQualifiers: [], validFrom: null, validUntil: null, editionScope: null } },
+    ]) {
+      const refused = await post('/v1/statements', { ...eventAliasBody, ...changed });
+      expect(refused.status).toBe(400);
+      expect(await refused.json()).toMatchObject({ code: 'invalid_request' });
+    }
+    const deniedAlias = await post('/v1/statements', { ...eventAliasBody, actingSubject: native() });
+    expect(deniedAlias.status).toBe(403);
+    console.info('Exact Event alias binding rejects malformed profile/predicate/qualification and denied authority');
     const topicStatements: string[] = [];
     for (const [index, topic] of topicConcepts.entries()) {
       const response = await post('/v1/statements', {
@@ -337,6 +354,29 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
     expect(singleAlias.items)
       .toEqual([expect.objectContaining({ event: eventA, topicStatements: [topicStatements[1]] })]);
 
+    const eventDefinition = eventAliasBody.relationDefinition;
+    await grant(`context:definition:${hash(eventDefinition)}`, 'context.definition.state');
+    const lifecycleBody = (state: 'active' | 'retired', expectedHead: string | null) => ({
+      profile: 'context-definition-state-v1', definition: eventDefinition, state, expectedHead, actingSubject: actor });
+    const activated = await post('/v1/context-definition-states', lifecycleBody('active', null));
+    expect(activated.status).toBe(201);
+    const activeSource = await activated.json() as { revision: string };
+    const retired = await post('/v1/context-definition-states', lifecycleBody('retired', activeSource.revision));
+    expect(retired.status).toBe(201);
+    const retiredSource = await retired.json() as { revision: string };
+    try {
+      const refused = await post('/v1/statements', { ...eventAliasBody, subject: topicConcepts[2]! });
+      expect(refused.status).toBe(409);
+      expect(await refused.json()).toMatchObject({ code: 'target_unavailable' });
+      const retainedAliases = await post('/v1/events/queries', topicQuery(topicStatements.slice(0, 2)));
+      expect(retainedAliases.status).toBe(200);
+      expect(await retainedAliases.json()).toMatchObject({ state: 'ready', items: [expect.objectContaining({ event: eventA })] });
+      console.info('Retired Event source refuses new aliases while retained accepted aliases remain readable');
+    } finally {
+      const restored = await post('/v1/context-definition-states', lifecycleBody('active', retiredSource.revision));
+      expect(restored.status).toBe(201);
+    }
+
     await access.query('UPDATE access.recovery_fence SET open=false WHERE id=true');
     try {
       await expect(queries.query({ interpretation: 'civil-date', match: 'possible', grain: 'day',
@@ -388,7 +428,7 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
       const result = await originalQuery(sparql);
       if (!injected && sparql.includes('SELECT ?epoch ?sequence ?relaySequence') && seenDependency++) {
         injected = true;
-        await write(eventA, '2026-07', winnerData.observationRevision);
+        await write(eventA, '2030-01', winnerData.observationRevision);
       }
       return result;
     };
