@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient, type CommandEnvelope } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { readMainOutboxEnvelope, readNextMainOutboxBatch }
   from '../../../services/main/src/modules/outbox/relay.ts';
@@ -62,7 +63,23 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
     const env = { fuseki, lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! },
       objectDirectory: '.temp' };
+    const platformUse = async (recipient: string, subject: string) => {
+      for (const group of ['wiki-agents', 'commerce', 'update-subscriptions']) {
+        const grant = randomUUID();
+        await accessPool.query(`INSERT INTO access.principal_permission_grant
+          (id, issuer_subject, principal_id, scope_id, action, valid_until)
+          VALUES ($1, $2, $3, 'platform:access', $4, 'infinity')`,
+        [grant, subject, recipient, `platform:use:${group}`]);
+        await accessPool.query(`INSERT INTO access.platform_grant_episode
+          (id, principal_grant_id, issuer_subject, permission, scope_id, assigned_by_principal, receipt)
+          VALUES ($1, $1, $2, $3, 'platform:access', $4, $5)`,
+        [grant, subject, `platform:use:${group}`, recipient,
+          `urn:rezics:access-receipt:${randomUUID().replaceAll('-', '')}${randomUUID().replaceAll('-', '')}`]);
+      }
+    };
+    await platformUse(principal, actor);
     const app = createMainApp(fuseki, { environment: env, account: account.verifier, access,
+      platformAccess: new AccessExposure(accessPool),
       verification, notifications: { store: notificationStore, dispatcher,
         providerSecrets: { fake: 'claim-test-provider-secret' } }, commerce });
     const call = (method: string, path: string, body?: object, key = randomUUID(), token = account.tokenA) =>
@@ -238,6 +255,7 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
     await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1, $2, $3)`, [challenger, account.issuer, account.b.id]);
     await accessPool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [challengerActor]);
+    await platformUse(challenger, challengerActor);
     const counterObservation = randomUUID();
     await contentPool.query(`INSERT INTO source.observation
       (id, record_id, principal_id, media_type, retention, coverage, rights_evidence)
@@ -295,7 +313,7 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
     const settlement = paymentProvider.settle(purchase.settlement.providerReference, 'succeeded');
     expect((await app.handle(new Request('http://main.local/v1/subscriptions/settlements', {
       method: 'POST', headers: { 'content-type': 'text/plain',
-        'rezics-provider-signature': settlement.signature }, body: settlement.body }))).status).toBe(200);
+        'rezics-provider-signature': settlement.signature, authorization: `Bearer ${account.tokenB}` }, body: settlement.body }))).status).toBe(200);
     const benefitResponse = await call('GET',
       `/v1/subscriptions/benefits?beneficiary=${encodeURIComponent(challengerActor)}`,
       undefined, randomUUID(), account.tokenB);
@@ -502,18 +520,34 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
         observation: longChain[0], selector: {}, availability: 'available' }] });
     const longEvidence = await longEvidenceResponse.json() as { evidence?: { revision: string } };
     expect(longEvidenceResponse.status).toBe(201);
-    const overBudgetResponse = await call('POST',
+    const longIntent = { ...assessIntent, evidenceSetRevision: longEvidence.evidence!.revision,
+      expectedSummary: circular.activation!.generation };
+    const longKey = randomUUID();
+    const partialResponse = await call('POST',
+      `/v1/claims/${short(created.claim!.claim)}/assessments`, longIntent, longKey);
+    expect(partialResponse.status).toBe(202);
+    const partial = await partialResponse.json() as { status: string; assessment: null; analysis: {
+      dependence: string; support: string; coverage: string; lineageNodes: number; lineageContinuation: string } };
+    expect(partial).toMatchObject({ status: 'analysis-partial', assessment: null,
+      analysis: { dependence: 'over-budget', support: 'abstained', coverage: 'incomplete', lineageNodes: 40 } });
+    const partialReplay = await call('POST',
+      `/v1/claims/${short(created.claim!.claim)}/assessments`, longIntent, longKey);
+    expect(partialReplay.status).toBe(202);
+    expect(await partialReplay.json()).toMatchObject({ replayed: true,
+      analysis: { lineageContinuation: partial.analysis.lineageContinuation } });
+    const completedResponse = await call('POST',
       `/v1/claims/${short(created.claim!.claim)}/assessments`, {
-        ...assessIntent, evidenceSetRevision: longEvidence.evidence!.revision,
-        expectedSummary: circular.activation!.generation });
-    const overBudget = await overBudgetResponse.json() as { assessment?: {
-      dependence: string; support: string; coverage: string }; analysis?: { lineageNodes: number } };
-    if (overBudgetResponse.status !== 201) console.error('over-budget assessment',
-      overBudgetResponse.status, overBudget);
-    expect(overBudgetResponse.status).toBe(201);
-    expect(overBudget.assessment).toMatchObject({ dependence: 'over-budget',
-      support: 'abstained', coverage: 'incomplete' });
-    expect(overBudget.analysis?.lineageNodes).toBe(40);
+        ...longIntent, lineageContinuation: partial.analysis.lineageContinuation }, longKey);
+    expect(completedResponse.status).toBe(200);
+    const completed = await completedResponse.json() as { assessment: { assessment: string }; analysis: { lineageNodes: number } };
+    expect(completed).toMatchObject({ assessment: { dependence: 'unknown', support: 'insufficient', coverage: 'complete' },
+      analysis: { lineageComplete: true, lineageContinuation: null, lineageNodes: 41 } });
+    // A successful receipt replays its completed proof even without the last cursor.
+    const completedReplay = await call('POST',
+      `/v1/claims/${short(created.claim!.claim)}/assessments`, longIntent, longKey);
+    expect(completedReplay.status).toBe(200);
+    expect(await completedReplay.json()).toMatchObject({ assessment: { assessment: completed.assessment.assessment },
+      analysis: { lineageComplete: true, lineageNodes: 41 } });
 
     // FACT03: a rating's applicable interval is checked against the exact
     // observation time, while its domain/context remain independent of support.
@@ -575,7 +609,7 @@ test('FACT01/FACT02/FACT03/FACT04/FACT06: claim verification preserves origin, h
     const dispositionQuality = await (await call('GET', qualityPath)).json() as { quality: {
       freshness: string; staleDependencies: { kind: string }[] } };
     expect(dispositionQuality.quality.freshness).not.toBe('current');
-    expect(dispositionQuality.quality.staleDependencies.map(item => item.kind)).toContain('source-disposition');
+    expect(dispositionQuality.quality.staleDependencies.map(item => item.kind)).toContain('lineage-walk');
     const reassessedWithdrawalResponse = await call('POST',
       `/v1/claims/${short(created.claim!.claim)}/assessments`, {
         ...assessIntent, evidenceSetRevision: focusedEvidence.evidence.revision,
