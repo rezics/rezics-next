@@ -17,6 +17,7 @@ import { searchRealmMembers } from './realm-management-search.ts';
 import { readRealmSettings, saveRealmSettings, readRealmAccessSettings, saveRealmAccessSettings } from './realm-management-settings.ts';
 import { spaceSettingsCommand, type SpaceSettingsCommand } from '../realm-admin/contract.ts';
 import { settleRealmPolicy } from './realm-management-recovery.ts';
+import { policyHead } from '../space/policy.ts';
 import { DATASET, GRAPHS, iri, lit, RV, type WorkActivationEnvironment } from '../work/activate.ts';
 
 export const realmAdminScope = (realm: string) => `governance:realm:${realm}`;
@@ -217,13 +218,14 @@ export class AccessRealmManagement {
 
   private async queuePolicy(client: PoolClient, realm: string, receipt: string, generation: string) {
     await client.query(`INSERT INTO access.realm_policy_delivery
-      (realm,receipt_id,generation,visibility,review_mode,listing,history,admission)
-      SELECT s.realm,$2,$3,s.visibility,s.review_mode,s.listing,s.history,
+      (realm,receipt_id,generation,policy_head,visibility,review_mode,listing,history,admission)
+      SELECT s.realm,$2,$3,$4,s.visibility,s.review_mode,s.listing,s.history,
         CASE WHEN s.self_join THEN 'open' ELSE COALESCE(p.admission,'invitation') END FROM access.realm_admin_settings s
       LEFT JOIN access.membership_policy p ON p.kind = 'realm' AND p.owner_subject = s.realm WHERE s.realm = $1
       ON CONFLICT (realm) DO UPDATE SET receipt_id = EXCLUDED.receipt_id,generation = EXCLUDED.generation,
+        policy_head = EXCLUDED.policy_head,
         visibility = EXCLUDED.visibility,review_mode = EXCLUDED.review_mode,listing = EXCLUDED.listing,
-        history = EXCLUDED.history,admission = EXCLUDED.admission,delivered = false`, [realm,receipt,generation]);
+        history = EXCLUDED.history,admission = EXCLUDED.admission,delivered = false`, [realm,receipt,generation,policyHead(receipt)]);
   }
 
   /** One bounded Space capability lookup. G-937 owns creation of Zone-only

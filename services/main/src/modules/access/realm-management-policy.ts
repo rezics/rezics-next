@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { AdmissionDenied, AdmissionUnavailable, type VerifiedPrincipal } from './admission.ts';
 import { realmMemberProof } from '../realm-reply/member-policy.ts';
-import { policyHead, type RealmReviewMode, type RealmVisibility } from '../space/policy.ts';
+import { realmPolicyDeliveryHead, type RealmReviewMode, type RealmVisibility } from '../space/policy.ts';
 import { spaceCreationReceiptIri } from '../space/create.ts';
 import type { RealmHistoryFloor } from '../realm-admin/history.ts';
 
@@ -26,8 +26,8 @@ export async function realmPermit(client: PoolClient, principal: VerifiedPrincip
   const settings = (await client.query<{ visibility: RealmVisibility; review_mode: RealmReviewMode;
     who_may_submit: string; history: string }>(`SELECT visibility,review_mode,who_may_submit,history
     FROM access.realm_admin_settings WHERE realm = $1 FOR SHARE`, [realm])).rows[0];
-  const delivery = (await client.query<{ receipt_id: string; delivered: boolean; admission_id: string | null }>(`
-    SELECT d.receipt_id, d.delivered, i.admission_id::text
+  const delivery = (await client.query<{ receipt_id: string; policy_head: string | null; delivered: boolean; admission_id: string | null }>(`
+    SELECT d.receipt_id, d.policy_head, d.delivered, i.admission_id::text
     FROM access.realm_policy_delivery d
     LEFT JOIN access.realm_creation_initialization i
       ON i.realm = d.realm AND i.policy_receipt = d.receipt_id
@@ -60,12 +60,11 @@ export async function realmPermit(client: PoolClient, principal: VerifiedPrincip
     // Earlier episodes and joins under everything retain their full history.
     historyFloor = row ? { dataEpoch: row.data_epoch, sequence: row.sequence } : null;
   }
-  // While the initial delivery is current, the graph head is the creation
-  // command receipt. A later publication's head is that command's receipt,
-  // urn:rezics:realm-policy:<uuid>, which deliverRealmPolicy still writes.
+  // Creation keeps its original command receipt; ordinary publications use
+  // their stored exact head, with the legacy fallback only for older rows.
   return { visibility, reviewMode: settings?.review_mode ?? 'mandatory', member: !!approved, historyFloor,
     revision: !delivery ? null : delivery.admission_id
-      ? spaceCreationReceiptIri(delivery.admission_id) : policyHead(delivery.receipt_id),
+      ? spaceCreationReceiptIri(delivery.admission_id) : realmPolicyDeliveryHead(delivery),
     stamp: JSON.stringify([identity, gate?.authority_epoch ?? null, approved, delivery?.receipt_id ?? null]) };
 }
 

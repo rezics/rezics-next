@@ -13,8 +13,14 @@ export interface RealmPolicy { visibility: RealmVisibility; reviewMode: RealmRev
   listing: ResourceListing; history: RealmHistory; admission: RealmAdmission }
 export interface RealmPolicyDelivery { realm: string; receipt_id: string; generation: string;
   visibility: RealmVisibility; review_mode: RealmReviewMode;
-  listing?: ResourceListing; history?: RealmHistory; admission?: RealmAdmission }
-export const policyHead = (id: string) => `urn:rezics:realm-policy:${id}`;
+  listing?: ResourceListing; history?: RealmHistory; admission?: RealmAdmission;
+  policy_head?: string | null }
+export const policyHead = (id: string) => `urn:rezics:receipt:${hash(`${id}\0realm-policy-publish-v1`)}`;
+
+/** A missing stored head identifies a legacy delivery, including one whose
+ * graph commit succeeded before Access recorded the acknowledgement. */
+export const realmPolicyDeliveryHead = (op: Pick<RealmPolicyDelivery, 'receipt_id' | 'policy_head'>) =>
+  op.policy_head ?? `urn:rezics:realm-policy:${op.receipt_id}`;
 
 /** Creation and later delivery publish the same policy fields on the Realm.
  * The head is the publishing command's receipt IRI, not a separate resource. */
@@ -64,8 +70,10 @@ export async function readRealmPolicy(env: WorkActivationEnvironment, realm: str
  * originals stay public; copies already downloaded cannot be recalled.
  * O(1) Realm mutations; public search checks the current Space disclosure. */
 export async function deliverRealmPolicy(env: WorkActivationEnvironment, op: RealmPolicyDelivery): Promise<void> {
-  const receipt = policyHead(op.receipt_id);
-  const digest = hash(JSON.stringify(op));
+  const receipt = realmPolicyDeliveryHead(op);
+  // Storage metadata must not change the bytes of an already committed intent.
+  const { policy_head: _head, ...intent } = op;
+  const digest = hash(JSON.stringify(intent));
   const committed = async () => (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:requestDigest ?digest ; rv:outcome rv:Succeeded .
       FILTER(?digest = ${lit(digest)}) }

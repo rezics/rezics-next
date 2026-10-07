@@ -65,8 +65,8 @@ export function realmSelectionSlotIri(realm: string, mainVersion: string): strin
   return `urn:rezics:realm-selection:${hash(`${realm}\0${mainVersion}`)}`;
 }
 
-/** Creation addresses the head as urn:rezics:receipt:<sha256>. A later publication
- * still addresses it as urn:rezics:realm-policy:<uuid>, that command's graph receipt. */
+/** New publications use immutable command receipts. Legacy pins remain exact
+ * inputs for replay and stale-head checks until an explicit migration. */
 const publishedPolicyRevision = /^(?:urn:rezics:realm-policy:[0-9a-f-]{36}|urn:rezics:receipt:[0-9a-f]{64})$/;
 
 export function realmSelectionDigest(input: SelectRealmLocalInput): string {

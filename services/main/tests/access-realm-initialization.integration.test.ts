@@ -207,6 +207,7 @@ test('An ordinary policy publication after creation admits submissions at its ne
         const ticket = (await pool.query(`SELECT id,request_digest,authority_epoch::text FROM access.admission
           WHERE principal_id=$1 AND action='submission.submit' AND idempotency_key=$2`, [memberId, key])).rows[0]!;
         const receipt = `urn:rezics:receipt:${hash(`${ticket.id}\0${receiptFamilyFor('submission.submit')}`)}`;
+        expect(sql).toContain(`<${receipt}>`);
         const terminal = { outcome: `${RV}Succeeded`, digest: ticket.request_digest, id: ticket.id,
           epoch: ticket.authority_epoch, scope, dataEpoch: h.env.lineage.dataEpoch, sequence: '2' };
         if (sql.includes('?reason')) {
@@ -256,7 +257,7 @@ test('An ordinary policy publication after creation admits submissions at its ne
   expect(updates).toHaveLength(1);
   expect(updates[0]).toContain(`rv:realmPolicyHead <${published}>`);
   expect(updates[0]).toContain(`<${published}> a rv:OperationReceipt`);
-  expect(published).toMatch(/^urn:rezics:realm-policy:[0-9a-f-]{36}$/);
+  expect(published).toMatch(/^urn:rezics:receipt:[0-9a-f]{64}$/);
   expect(published).not.toBe(created.revision);
   expect(await withRealmPermit(pool, memberPrincipal, member, h.realm, 'submission', async permit => permit))
     .toMatchObject({ revision: published, reviewMode: 'trusted-members', member: true });

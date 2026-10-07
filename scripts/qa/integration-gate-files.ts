@@ -73,4 +73,5 @@ export const integrationGateFiles = [
   'services/main/tests/settings-digest-migrations.integration.test.ts',
   'services/main/tests/verification-schema.integration.test.ts',
   'services/main/tests/showcase-author-batch.integration.test.ts',
+  'services/main/tests/realm-policy-revision.integration.test.ts',
 ] as const;

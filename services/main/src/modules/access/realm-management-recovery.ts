@@ -8,7 +8,7 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 export const REALM_POLICY_RECOVERY_COST = { page: 10, maxPage: 50, lockTimeoutMs: 2_000,
   statementTimeoutMs: 5_000, graphCommandsPerRealm: 1, intervalMs: 30_000 } as const;
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const columns = 'realm,receipt_id,generation::text,visibility,review_mode,listing,history,admission';
+const columns = 'realm,receipt_id,generation::text,visibility,review_mode,listing,history,admission,policy_head';
 
 /** Resume the already committed Access intent, without manufacturing authority.
  * The shared Realm gate excludes settings writes and prevents a delayed recovery from
