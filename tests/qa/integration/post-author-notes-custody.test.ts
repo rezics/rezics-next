@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { startMediaStack } from './media-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { StudioAccess } from '../../../services/main/src/modules/studio/access.ts';
+import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 
 const short = (value: string) => value.slice(-36);
 async function json<T>(response: Response, expected = 200): Promise<T> {
@@ -43,6 +44,10 @@ test('A second Person identity reads and edits its own unpublished chapter Post 
       `/v1/works/${short(book.work)}/chapters`, { profile: 'book-chapter-create-v1', title: 'Opening',
         language: 'en', direction: 'ltr', parent: composition.structure, position: 'last',
         expectedCompositionHead: composition.revision, actingSubject: writer }));
+    const identityTypes = async () => (await stack.fuseki.query(`SELECT ?type WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(chapter.post)} a ?type } }`)).results?.bindings
+      .map(row => row.type!.value).sort();
+    expect(await identityTypes()).toEqual(['https://rezics.com/vocab/Post']);
     expect((await stack.accessPool.query(`SELECT id FROM access.permission_grant
       WHERE recipient_subject = $1 AND scope_id LIKE $2`, [writer, `%${chapter.post}`])).rows).toHaveLength(0);
     expect((await studio.chapterWriters(principal, writer, [chapter.post])).get(chapter.post))
@@ -68,10 +73,22 @@ test('A second Person identity reads and edits its own unpublished chapter Post 
     expect((await call('GET', `${revisionPath}?actingSubject=${encodeURIComponent(sessionIdentity)}`)).status).toBe(404);
     expect((await call('POST', '/v1/content-drafts', { ...draft, expectedHead: saved.revisionId,
       actingSubject: sessionIdentity })).status).toBe(403);
-    const updated = await json<{ revisionId: string }>(await call('POST', '/v1/content-drafts', {
+    const updated = await json<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(await call('POST', '/v1/content-drafts', {
       ...draft, expectedHead: saved.revisionId, notes: { ...draft.notes, after: { body: 'Updated note' } },
     }), 201);
     expect(await json(await call('GET', `/v1/content-revisions/${updated.revisionId}?actingSubject=${encodeURIComponent(writer)}`)))
       .toMatchObject({ body: { body: draft.body, notes: { before: draft.notes.before, after: { body: 'Updated note' } } } });
+    const publication = { profile: 'content-publication-v1', preparationId: `chapter-${randomUUID()}`,
+      resourceId: chapter.post, variantId: chapter.variantId, revisionId: updated.revisionId,
+      expectedDigest: updated.byteDigest, expectedContentEpoch: updated.sourcePosition.dataEpoch,
+      expectedPublicationHead: null, actingSubject: writer };
+    expect((await call('POST', '/v1/content-publications', { ...publication,
+      preparationId: `denied-${randomUUID()}`, actingSubject: sessionIdentity })).status).toBe(404);
+    expect(await json(await call('POST', '/v1/content-publications', publication), 201))
+      .toMatchObject({ status: 'active' });
+    expect(await json(await call('GET', `/v1/content-revisions/${updated.revisionId}?actingSubject=${encodeURIComponent(writer)}`)))
+      .toMatchObject({ body: { body: draft.body, notes: { before: draft.notes.before, after: { body: 'Updated note' } } } });
+    expect((await call('GET', `/v1/content-revisions/${updated.revisionId}?actingSubject=${encodeURIComponent(sessionIdentity)}`)).status).toBe(404);
+    expect(await identityTypes()).toEqual(['https://rezics.com/vocab/Post']);
   } finally { await stack.stop(); }
 }, 240_000);

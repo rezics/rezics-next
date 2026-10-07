@@ -11,6 +11,7 @@ import type { RightsStore } from '../rights/store.ts';
 import { authoredDocumentBody, authoredPostNotes, POST_CONTENT_MODEL, CONTENT_TEXT_COST, checkedContentText,
   type PostNotesInput, type AuthoredBodyInput } from '../../../../content/src/document-body.ts';
 import { admittedTypes } from '../types/registry.ts';
+import { nativePostType, workContentTypes } from '../work/work-kinds.ts';
 import { withZonePageContentTarget, zonePageContentAllowed } from '../access/zone-content-authority.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { typeIri } from '../types/contract.ts';
@@ -65,20 +66,37 @@ function contentTypeTerm(type: string): string {
   return `<${type}>`;
 }
 
-/** Target state and owner identity must still hold in the dispatch snapshot. */
-export function contentTargetGuard(resourceId: string, target?: ContentTarget): string {
-  return `${iri(resourceId)} a ${target ? contentTypeTerm(target.type) : '?contentTargetType'} .
-    ${target ? '' : `VALUES ?contentTargetType { ${admittedTypes.map(entry => contentTypeTerm(entry.type)).join(' ')} }`}
-    FILTER((!EXISTS { ${iri(resourceId)} a <https://schema.org/CreativeWork> }
-      && !EXISTS { ${iri(resourceId)} a <https://rezics.com/vocab/Post> })
+// Native custody and catalogue descriptions are existing Content capabilities,
+// independent of the descriptive type catalogue's creation choices.
+const admittedContentTypes = () => [...new Set([
+  ...admittedTypes.map(entry => entry.type), nativePostType, 'https://schema.org/Organization',
+])];
+
+function contentTargetStateGuard(resourceId: string): string {
+  return `FILTER(!EXISTS { ${iri(resourceId)} a ?contentWorkType .
+      VALUES ?contentWorkType { ${workContentTypes().map(contentTypeTerm).join(' ')} } }
       || EXISTS { ${iri(resourceId)} <https://rezics.com/vocab/head> ?targetHead })
-    ${target?.zone ? `FILTER NOT EXISTS { ${iri(resourceId)} a ?otherOwner .
-      VALUES ?otherOwner { <https://schema.org/CreativeWork> <https://rezics.com/vocab/Post>
-        <https://schema.org/Organization> } }` : target ? `FILTER NOT EXISTS {
-      ${iri(resourceId)} a <https://rezics.com/vocab/Zone> }` : ''}
     FILTER(!EXISTS { ${iri(resourceId)} a <https://rezics.com/vocab/Zone> }
       || EXISTS { ${iri(resourceId)} <https://rezics.com/vocab/zoneState> <https://rezics.com/vocab/Active> ;
         <https://rezics.com/vocab/space> ?zoneSpace ; <https://rezics.com/vocab/zoneHead> ?zoneHead })`;
+}
+
+/** Target state and owner identity must still hold in the dispatch snapshot. */
+export function contentTargetGuard(resourceId: string, target?: ContentTarget): string {
+  if (target && (!admittedContentTypes().includes(target.type)
+    || (target.type === 'https://rezics.com/vocab/Zone' ? target.zone !== resourceId : target.zone !== null))) {
+    throw new ContentDraftUnavailable('Content target identity differs from its owner');
+  }
+  return `${iri(resourceId)} a ${target ? contentTypeTerm(target.type) : '?contentTargetType'} .
+    ${target ? '' : `VALUES ?contentTargetType { ${admittedContentTypes().map(contentTypeTerm).join(' ')} }`}
+    ${contentTargetStateGuard(resourceId)}
+    ${target?.zone ? `FILTER NOT EXISTS { ${iri(resourceId)} a ?otherOwner .
+      VALUES ?otherOwner { ${workContentTypes().map(contentTypeTerm).join(' ')}
+        <https://schema.org/Organization> } }` : target ? `FILTER NOT EXISTS {
+      ${iri(resourceId)} a <https://rezics.com/vocab/Zone> }
+      ${workContentTypes().includes(target.type) ? '' : `FILTER NOT EXISTS {
+        ${iri(resourceId)} a ?otherWorkOwner .
+        VALUES ?otherWorkOwner { ${workContentTypes().map(contentTypeTerm).join(' ')} } }`}` : ''}`;
 }
 
 /** Resolve identity from admitted current types, before choosing owner authority.
@@ -91,27 +109,26 @@ export async function resolveContentTarget(env: WorkActivationEnvironment,
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
       GRAPH ${iri(GRAPHS.current)} { ${iri(resourceId)} a ?type .
-        VALUES ?type { ${admittedTypes.map(entry => contentTypeTerm(entry.type)).join(' ')} }
-        FILTER((!EXISTS { ${iri(resourceId)} a <https://schema.org/CreativeWork> }
-          && !EXISTS { ${iri(resourceId)} a rv:Post })
-          || EXISTS { ${iri(resourceId)} rv:head ?head })
-        FILTER(!EXISTS { ${iri(resourceId)} a rv:Zone } || EXISTS { ${iri(resourceId)} rv:zoneState rv:Active ;
-          rv:space ?space ; rv:zoneHead ?head }) }
+        VALUES ?type { ${admittedContentTypes().map(contentTypeTerm).join(' ')} }
+        ${contentTargetStateGuard(resourceId)} }
     } LIMIT ${CONTENT_TARGET_COST.types + 1}`, CONTENT_TARGET_COST.graphBytes)).results?.bindings ?? [];
   const types = [...new Set(rows.flatMap(row => row.type ? [row.type.value] : []))];
   if (!types.length || rows.length > CONTENT_TARGET_COST.types
-    || types.some(type => !admittedTypes.some(entry => entry.type === type))) {
+    || types.some(type => !admittedContentTypes().includes(type))) {
     throw new ContentDraftUnavailable('Content target is unavailable');
   }
   const zone = types.includes('https://rezics.com/vocab/Zone');
-  if (zone && types.some(type => ['https://schema.org/CreativeWork', 'https://rezics.com/vocab/Post',
-    'https://schema.org/Organization'].includes(type))) {
+  if (zone && types.some(type => workContentTypes().includes(type)
+    || type === 'https://schema.org/Organization')) {
     throw new ContentDraftUnavailable('Content target owner is ambiguous');
   }
+  const workBase = admittedTypes.find(entry => entry.base === 'work' && entry.default)?.type;
+  const workType = types.filter(type => workContentTypes().includes(type)).sort()[0];
   const type = zone ? 'https://rezics.com/vocab/Zone'
-    : types.includes('https://rezics.com/vocab/Post') ? 'https://rezics.com/vocab/Post'
-      : types.includes('https://schema.org/CreativeWork') ? 'https://schema.org/CreativeWork'
-        : types.includes('https://schema.org/Organization') ? 'https://schema.org/Organization' : types.sort()[0]!;
+    : types.includes(nativePostType) ? nativePostType
+      : workBase && types.includes(workBase) ? workBase
+        : workType ?? (types.includes('https://schema.org/Organization')
+          ? 'https://schema.org/Organization' : types.sort()[0]!);
   return { type, zone: zone ? resourceId : null };
 }
 
@@ -142,7 +159,7 @@ export async function withZoneContentAuthority<T>(env: WorkActivationEnvironment
 export async function canReadContentTarget(env: WorkActivationEnvironment,
   access: ContentReadAuthority, principal: VerifiedPrincipal, actingSubject: string,
   resourceId: string, target: ContentTarget): Promise<boolean> {
-  if (['https://schema.org/CreativeWork', 'https://rezics.com/vocab/Post'].includes(target.type)) {
+  if (workContentTypes().includes(target.type)) {
     return access.canReadWork(principal, actingSubject, resourceId);
   }
   if (!access.withOwnerAuthority) {
@@ -177,7 +194,7 @@ async function assertCurrentTarget(env: WorkActivationEnvironment,
     if (hasNotes) throw new ContentConflict('notes require a current Post target');
     throw new ContentDraftUnavailable('Content target is unavailable');
   }
-  if (hasNotes && target.type !== 'https://rezics.com/vocab/Post'
+  if (hasNotes && target.type !== nativePostType
     || targetProfile === 'catalog-description' && target.type !== 'https://schema.org/Organization') {
     throw new ContentConflict('Content profile differs from its target');
   }

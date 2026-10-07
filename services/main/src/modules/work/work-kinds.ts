@@ -1,4 +1,5 @@
 import {
+  admittedTypes,
   onTypeRegistryChange,
   workTypeEntries,
   workSemanticTypeOptions,
@@ -7,6 +8,14 @@ import type { FeedKind } from '../feed/contract.ts';
 import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
 
 export type WorkPrimaryAction = (typeof workTypeEntries)[number]['primaryAction'];
+
+/** Native Posts own Content under Work custody, independently of catalogue kinds.
+ * This owner bridge does not admit a Post as a descriptive Work type. */
+export const nativePostType = 'https://rezics.com/vocab/Post';
+export const workContentTypes = (): string[] => [
+  ...admittedTypes.filter((entry) => entry.base === 'work').map((entry) => entry.type),
+  nativePostType,
+];
 
 /** Native and source-adopted Works share the compiled catalogue metadata.
  * A bare DigitalDocument has no human kind until a classification is accepted. */
