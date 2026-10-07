@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Tier } from './core.ts';
 import { declaredCases } from './cases/index.ts';
@@ -128,11 +128,54 @@ function isRetiredQaTest(test: TestResult): boolean {
 
 export { integrationGateFiles };
 
+// Exclusions are file-specific so a new test cannot silently inherit an opt-out.
+export const testExclusions: readonly { file: string; reason: string }[] = [
+  ...legacyHostJenaGateFiles.map(file => ({ file,
+    reason: 'Legacy host Jena harness needs separately installed REZICS_JAVA_HOME, REZICS_JENA_HOME and REZICS_FUSEKI_HOME.' })),
+  { file: 'apps/about/tests/build.test.ts', reason: 'The about site runs its tests through task about:check.' },
+  { file: 'apps/about/tests/catalogs.test.ts', reason: 'The about site runs its tests through task about:check.' },
+  { file: 'apps/about/tests/g-736-legal.test.ts', reason: 'The about site runs its tests through task about:check.' },
+  { file: 'apps/about/tests/status-badge.test.ts', reason: 'The about site runs its tests through task about:check.' },
+  { file: 'apps/about/tests/ui-sources.test.ts', reason: 'The about site runs its tests through task about:check.' },
+  { file: 'apps/about/tests/worker.test.ts', reason: 'The about site runs its tests through task about:check.' },
+  { file: 'tests/live/cargo-crates-io.test.ts', reason: 'Live network fixtures run only on explicit request.' },
+  { file: 'tests/live/g-722-images.test.ts', reason: 'Live network fixtures run only on explicit request.' },
+  { file: 'tests/live/go-proxy-live.test.ts', reason: 'Live network fixtures run only on explicit request.' },
+  { file: 'tests/live/go-refresh-live.test.ts', reason: 'Live network fixtures run only on explicit request.' },
+  { file: 'tests/live/mod-public-provider.test.ts', reason: 'Live network fixtures run only on explicit request.' },
+  { file: 'tests/live/npm-registry-oracle.test.ts', reason: 'Live network fixtures run only on explicit request.' },
+  { file: 'tests/live/open-library-work.test.ts', reason: 'Live network fixtures run only on explicit request.' },
+  { file: 'tests/live/source-run-open-library.test.ts', reason: 'Live network fixtures run only on explicit request.' },
+];
+
+const unitOwnerDirectories = [
+  'services', 'model', 'scripts', 'packages', 'apps/web', 'apps/accounts', 'infra/dev/tests', 'infra/jena/tests',
+] as const;
+
+// Discover Bun owner tests by capability location. Stack gates retain their
+// explicit registrations, and the registry test catches every other location.
+export function unitOwnerFiles(root = join(import.meta.dir, '../..')): string[] {
+  const reserved = new Set<string>([...integrationGateFiles, ...modelGateFiles, ...faultGateFiles,
+    ...testExclusions.map(item => item.file)]);
+  const found: string[] = [];
+  const walk = (directory: string) => {
+    for (const entry of readdirSync(join(root, directory), { withFileTypes: true })) {
+      const path = `${directory}/${entry.name}`;
+      if (entry.isDirectory() && !['node_modules', '.temp', '.artifacts', 'dist', '.git'].includes(entry.name)) walk(path);
+      else if (entry.isFile() && /\.test\.tsx?$/.test(entry.name)
+        && !entry.name.endsWith('.integration.test.ts') && !reserved.has(path)) found.push(path);
+    }
+  };
+  for (const directory of unitOwnerDirectories) walk(directory);
+  return found.sort();
+}
+
 export function isQaIntegrationPath(path: string): boolean {
   return path.startsWith('tests/qa/integration/') || integrationGateFiles.some(file => file === path);
 }
 export const modelGateFiles = [
   'infra/jena/tests/command.integration.test.ts',
+  'services/main/tests/read-snapshot-native.test.ts',
   'model/compiler/generate.test.ts',
   'model/tests/native-equivalence.test.ts',
   'model/tests/daily-rating.test.ts',
@@ -146,6 +189,7 @@ export const modelGateFiles = [
 export function isQaModelPath(path: string): boolean {
   // Native Jena fixture tests and the equivalence matrix require an isolated stack.
   return path === 'infra/jena/tests/command.integration.test.ts'
+    || path === 'services/main/tests/read-snapshot-native.test.ts'
     || path === 'model/tests/daily-rating.test.ts'
     || path === 'model/tests/experience-rating.test.ts'
     || path === 'model/tests/native-equivalence.test.ts';
@@ -205,25 +249,7 @@ export function testArgs(
     ? [...integrationGateFiles]
     : tier === 'model' ? [...modelGateFiles]
     : tier === 'fault/recovery' ? [...faultGateFiles]
-    : tier === 'load' ? [] : [
-      'scripts/dev/config.test.ts',
-      'services/main/tests/command.test.ts',
-      'services/main/tests/work-command.test.ts',
-      'services/main/tests/content-eligibility.test.ts',
-      'services/main/tests/content-projection-runtime.test.ts',
-      'services/main/tests/immutable-objects.test.ts',
-      'services/main/tests/api-contract.test.ts',
-      'services/main/tests/context-schema.test.ts',
-      'services/main/tests/rating-aggregate.test.ts',
-      'services/main/tests/rating-experience.test.ts',
-      'services/main/tests/rating-calendar.test.ts',
-      'services/main/tests/rating-global.test.ts',
-      'services/main/tests/event-time.test.ts',
-      'services/main/tests/vote-schema-commands.test.ts',
-      'services/main/tests/structure-listitem.test.ts',
-      'model/tests/claim-analysis.test.ts',
-      'model/tests/release-rating.test.ts',
-      'scripts/operations/search-state.test.ts'];
+    : tier === 'load' ? [] : unitOwnerFiles();
   const defaults = [...(base ? [base] : []), ...extraGates];
   const supportedGates = tier === 'unit' ? [...extraGates, ...unitHarnessFiles] : extraGates;
   if (chosen) {
