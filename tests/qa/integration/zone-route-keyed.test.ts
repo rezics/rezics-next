@@ -22,7 +22,12 @@ import { isForegroundOperation } from './support/operation-cost.ts';
 
 // Exercise the published route HTTP operation against admitted Jena state and
 // real S3 bytes. Empty Collection hydration cannot hide a navigation scan.
-for (const mountCount of [128, 1_000]) test(`published Zone routes seek one retained key across ${mountCount} mounts and fail closed without coverage`, async () => {
+// The sizes stop at 200 because native publication refuses a navigation whose
+// reverse dependency footprint exceeds 256 (ModelMutationPolicy, HTTP 403), so
+// 1,000 mounts cannot be published yet; raise the larger size once kernel lifts
+// that cap. Equal cost at two published sizes shows cost ignores navigation size.
+const costs = new Map<number, Record<'first' | 'middle' | 'last' | 'absent', number>>();
+for (const mountCount of [16, 200]) test(`published Zone routes seek one retained key across ${mountCount} mounts and fail closed without coverage`, async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const prepared = performance.now();
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
@@ -193,15 +198,20 @@ for (const mountCount of [128, 1_000]) test(`published Zone routes seek one reta
       return { body, graphCalls };
     };
     const first = await measure('route-0', 200);
+    const middle = await measure(`route-${mountCount / 2}`, 200);
     const lastSegment = `route-${mountCount - 1}`;
     const last = await measure(lastSegment, 200);
     const absent = await measure('absent', 404);
     expect(first.body).toMatchObject({ kind: 'index', mount: { occurrence: firstOccurrence, target: collection, key: 'alias' },
       items: [], nextCursor: null });
     expect(last.body).toMatchObject({ kind: 'index', mount: { target: collection, key: 'id' }, items: [] });
+    expect(middle.body).toMatchObject({ kind: 'index', mount: { target: collection, key: 'id' }, items: [] });
+    expect(middle.graphCalls).toBe(first.graphCalls);
     expect(last.graphCalls).toBe(first.graphCalls);
     expect(absent.graphCalls).toBeLessThanOrEqual(first.graphCalls);
     expect(absent.body).toEqual(missingProblem);
+    costs.set(mountCount, { first: first.graphCalls, middle: middle.graphCalls,
+      last: last.graphCalls, absent: absent.graphCalls });
 
     for (const failure of ['legacy-coverage', 'missing-key-root'] as const) {
       fault = failure;
@@ -270,3 +280,9 @@ for (const mountCount of [128, 1_000]) test(`published Zone routes seek one reta
     await f.close();
   }
 }, 600_000);
+
+test('published Zone route cost is identical at both navigation sizes', () => {
+  const small = costs.get(16), large = costs.get(200);
+  if (!small || !large) throw new Error('Run the sized route tests before comparing their cost');
+  expect(large).toEqual(small);
+});
