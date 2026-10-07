@@ -8,7 +8,7 @@ import { repositoryGuards } from '../qa/repository-guards.ts';
 import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
-  codexHoursUntil100, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, memoryFloorRefusal,
+  codexHoursUntil100, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
   qaWaitStatusLines, shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, unitFailureDetails, unitFileErrorDetails, withSlot,
   type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief } from './goalctl.ts';
 
@@ -268,16 +268,18 @@ describe('goalctl runtime policy', () => {
     expect(introducedUnitFailureFiles([file], report(baseline), [])).toEqual([file]);
   });
 
-  test('repeated diff findings block when branch counts exceed main and remain inherited at equal counts', () => {
+  test('permission diff signatures retain subject context and repeated counts', () => {
     const file = 'tests/qa/unit/permissions.test.ts';
-    const report = (...paths: string[]): UnitFailureDetail[] => paths.map(path => ({ file,
+    const report = (...subjects: string[]): UnitFailureDetail[] => subjects.map(subject => ({ file,
       test: 'permission results preserve each subject path',
-      detail: ['error: expect(received).toEqual(expected)', '- Expected  - 1', '+ Received  + 1',
-        `  ${path}: {`, '    + "permission": false,'].join('\n') }));
+      detail: ['error: expect(received).toEqual(expected)', '- Expected  - 1', '+ Received  + 1', '  {',
+        `    "${subject}": {`, '      + "permission": false,', '    },', '  }'].join('\n') }));
     const main = report('alice');
+    const differentSubject = report('bob');
     const branch = report('alice', 'bob');
-    const repeatedMain = report('alice', 'bob');
+    const repeatedMain = report('alice', 'alice');
 
+    expect(introducedUnitFailureFiles([file], differentSubject, main)).toEqual([file]);
     expect(introducedUnitFailureFiles([file], branch, main)).toEqual([file]);
     expect(introducedUnitFailureFiles([file], repeatedMain, repeatedMain)).toEqual([]);
   });
@@ -2396,6 +2398,8 @@ describe('heavy QA lock', () => {
         `Goal scoped-subjects since 2026-10-04T00:00:00.000Z (pid ${process.pid}): bun test affected (command not started); 2 waiting`);
       expect(heavyQaWaiters(lockDir)).toHaveLength(2);
       expect(heavyQaWaiters(lockDir)[0]).toContain('QA waiting for heavy turn:');
+      markHeavyCommandStarted(lockDir);
+      expect(heavyQaStatus(lockDir)).toContain('command started');
       expect(existsSync(join(queueDir, 'dead.json'))).toBe(false);
       writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
         pid: dead, goal: 'scoped-subjects', command: 'bun test affected', startedAt: '2026-10-04T00:00:00.000Z',
@@ -2452,8 +2456,9 @@ describe('heavy QA lock', () => {
       const code = await withSlot(['fake heavy run'], true, undefined, {
         slotDirectory: slots,
         reap: () => {},
-        runCommand: async (_command, _env, onStart) => {
+        runCommand: async (_command, env, onStart) => {
           expect([0, 1, 2].every(index => existsSync(join(slots, String(index))))).toBe(true);
+          expect(env.GOAL_QA_HEAVY_RUN).toBe('1');
           expect(heavyQaStatus(heavy)).toContain('command not started');
           onStart();
           expect(heavyQaStatus(heavy)).toContain('command started');
@@ -2465,6 +2470,64 @@ describe('heavy QA lock', () => {
       expect(existsSync(heavy)).toBe(false);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
+
+  test('the real QA CLI reaches stack startup with all ordinary slots held during a heavy run', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'heavy-qa-cli-slots-'));
+    const slots = join(root, 'qa-slots');
+    const marker = join(root, 'stack-startup-reached');
+    const holders: ChildProcess[] = [];
+    mkdirSync(slots, { recursive: true });
+    try {
+      for (let index = 0; index < 3; index++) {
+        const holder = spawn('bun', ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+        holders.push(holder);
+        await new Promise<void>((resolve, reject) => {
+          holder.once('spawn', () => resolve());
+          holder.once('error', reject);
+        });
+        const path = join(slots, String(index));
+        mkdirSync(path);
+        writeFileSync(join(path, 'pid'), String(holder.pid));
+      }
+      const script = join(root, 'qa-cli-heavy.test.ts');
+      const cli = join(import.meta.dir, '../qa/cli.ts');
+      const startup = join(import.meta.dir, '../qa/stack-startup.ts');
+      writeFileSync(script, `
+        import { expect, mock, test } from 'bun:test';
+        import { writeFileSync } from 'node:fs';
+        const marker = process.env.QA_CLI_STARTUP_MARKER!;
+        mock.module(${JSON.stringify(startup)}, () => ({
+          runQaStartupChildAsync: async () => {
+            writeFileSync(marker, 'reached after QA slot admission');
+            return { ok: false, timedOut: false, elapsedMs: 0, activeElapsedMs: 0, output: 'startup stubbed' };
+          },
+        }));
+        test('heavy QA CLI skips both ordinary slot acquisitions', async () => {
+          const argv = process.argv;
+          process.argv = ['bun', ${JSON.stringify(cli)}, '--tier', 'integration', '--file',
+            'tests/qa/integration/fresh-install.test.ts', '--keep'];
+          try {
+            await import(${JSON.stringify(cli)});
+            expect(await Bun.file(marker).exists()).toBe(true);
+          } finally {
+            process.argv = argv;
+            process.exitCode = 0;
+          }
+        });
+      `);
+      const result = spawnSync('bun', ['test', script], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000,
+        maxBuffer: 8 * 1024 * 1024, env: { ...process.env, GOAL_QA_HEAVY_RUN: '1', GOAL_QA_SLOTS: '3',
+          GOAL_QA_SLOT_DIRECTORY: slots, QA_CLI_STARTUP_MARKER: marker,
+          REZICS_QA_HOST_MEMORY_GIB: '0.001', REZICS_QA_HOST_RESERVE_GIB: '0' } });
+      if (result.status !== 0) throw new Error(`nested QA CLI test exited ${result.status}:\n${result.stdout}\n${result.stderr}`);
+      expect(result.stdout + result.stderr).toContain('1 pass');
+      expect(readFileSync(marker, 'utf8')).toBe('reached after QA slot admission');
+      expect([0, 1, 2].every(index => existsSync(join(slots, String(index))))).toBe(true);
+    } finally {
+      for (const holder of holders) holder.kill('SIGTERM');
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 35_000);
 
   test('a slot waiter reports its reason and appears in status until a slot opens', async () => {
     const root = mkdtempSync(join(tmpdir(), 'slot-wait-status-'));

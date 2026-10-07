@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statfsSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statfsSync, symlinkSync, writeFileSync } from 'node:fs';
 import * as filesystem from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -12,11 +12,14 @@ import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
 import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
   regressionBatchCommand, regressionCheckoutRoot, regressionRegistry,
-  runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
+  regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
+
+let repoSequence = 0;
 
 function repo(extraIntegration = 0) {
-  const fixtureRoot = regressionCheckoutRoot(import.meta.dir, join(homedir(), '.cache/rezics-r/tests'));
+  const fixtureRoot = regressionCheckoutRoot(import.meta.dir, join(import.meta.dir, '../../.temp/r'));
   const dir = mkdtempSync(join(fixtureRoot, 'repo-'));
+  const checkoutRoot = join(fixtureRoot, `c${(repoSequence++).toString(36)}`);
   const git = (...args: string[]) => {
     const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
     if (result.status !== 0) throw new Error(result.stderr);
@@ -49,7 +52,8 @@ function repo(extraIntegration = 0) {
     return { code: Object.values(outcomes).every(result => result === 'passed') ? 0 : 1, outcomes,
       queueMs: 2, testMs: 3, totalMs: 5, artifactPaths: [directory] };
   };
-  const options: RegressionOptions = { repo: dir, stateDir, checkoutRoot: join(dir, '.temp/r'), registry: async () => files.map(file => ({ ...file })),
+  const options: RegressionOptions = { repo: dir, stateDir, checkoutRoot, legacyRoot: join(checkoutRoot, 'l'),
+    registry: async () => files.map(file => ({ ...file })),
     prepare: async () => ({ ok: true, artifactPaths: [] }), runner, slots: 1, waitForTurn: async () => {} };
   const event = (before: string, after: string, goal = 'owner') => {
     mkdirSync(stateDir, { recursive: true });
@@ -60,7 +64,10 @@ function repo(extraIntegration = 0) {
   const run = (overrides: Partial<RegressionOptions> = {}) => runRegression({ ...options, ...overrides });
   const manifest = (id: string) => JSON.parse(readFileSync(join(stateDir, 'regress', id, 'manifest.json'), 'utf8')) as Manifest;
   return { dir, git, base, files, options, calls, runner, write, commit, event, run, manifest,
-    unit: files[0]!.file, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+    unit: files[0]!.file, cleanup: () => {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(checkoutRoot, { recursive: true, force: true });
+    } };
 }
 
 describe('pinned main-wide regression', () => {
@@ -137,6 +144,74 @@ describe('pinned main-wide regression', () => {
       expect(pooled.every(call => call.checkout !== result.checkout)).toBe(true);
     } finally { r.cleanup(); }
   });
+
+  test('regression shard leases share the two-slot limit with their parent QA runs', async () => {
+    const r = repo(60);
+    const slotDirectory = join(r.dir, '.temp', 'qa-slots');
+    const probes = join(r.dir, '.temp', 'slot-probes');
+    const script = join(r.dir, '.temp', 'slot-probe.ts');
+    mkdirSync(slotDirectory, { recursive: true });
+    mkdirSync(probes, { recursive: true });
+    writeFileSync(script, `
+      import { existsSync, writeFileSync } from 'node:fs';
+      import { join } from 'node:path';
+      import { acquireQaSlots } from ${JSON.stringify(join(import.meta.dir, '../qa/core.ts'))};
+      const [directory, probes, id, limit, shards] = process.argv.slice(2);
+      const env = { GOAL_QA_SLOTS: limit };
+      const parent = await acquireQaSlots(directory, 1, env, process.pid);
+      const projects = await acquireQaSlots(directory, Number(shards), env, process.pid);
+      writeFileSync(join(probes, id + '.held'), String(projects.count));
+      while (!existsSync(join(probes, id + '.release'))) await Bun.sleep(2);
+      projects.release();
+      parent.release();
+    `);
+    const children: ReturnType<typeof Bun.spawn>[] = [];
+    let serial = 0;
+    let complete = false;
+    let failure: unknown;
+    let result: Manifest | undefined;
+    let maximumLeases = 0;
+    const released = new Set<string>();
+    try {
+      const run = r.run({ runId: 'slot-leases', slots: 3, shards: 2, runner: async (...args) => {
+        const [checkout, batch, directory, shards, slotLimit] = args;
+        if (batch.tier === 'unit' || batch.tier === 'model') return r.runner(...args);
+        const id = String(serial++);
+        const env = regressionBatchEnvironment({ GOAL_QA_SLOTS: '3' }, shards, slotLimit);
+        expect(env.GOAL_QA_SLOTS).toBe('2');
+        const child = Bun.spawn(['bun', script, slotDirectory, probes, id, env.GOAL_QA_SLOTS!, String(shards)], {
+          cwd: r.dir, stdout: 'ignore', stderr: 'ignore',
+        });
+        children.push(child);
+        const code = await child.exited;
+        if (code !== 0) throw new Error(`slot probe ${id} exited with ${code}`);
+        return r.runner(checkout, batch, directory, shards);
+      } }).then(value => { result = value; complete = true; }, error => { failure = error; complete = true; });
+      const deadline = Date.now() + 30_000;
+      while (!complete || readdirSync(probes).some(name => name.endsWith('.held') && !released.has(name))) {
+        for (const name of readdirSync(probes).filter(name => name.endsWith('.held') && !released.has(name))) {
+          const held = [0, 1, 2].filter(index => existsSync(join(slotDirectory, String(index)))).length;
+          maximumLeases = Math.max(maximumLeases, held);
+          if (held > 2) failure ??= new Error(`regression held ${held} ordinary slot leases`);
+          writeFileSync(join(probes, name.replace(/\.held$/, '.release')), 'release');
+          released.add(name);
+        }
+        if (Date.now() >= deadline) { failure ??= new Error('regression shard slot probes timed out'); break; }
+        await Bun.sleep(2);
+      }
+      await run;
+      if (failure) throw failure;
+      expect(result?.status).toBe('passed');
+      expect(maximumLeases).toBe(2);
+      expect(released.size).toBeGreaterThan(2);
+    } finally {
+      for (const name of readdirSync(probes).filter(name => name.endsWith('.held'))) {
+        writeFileSync(join(probes, name.replace(/\.held$/, '.release')), 'release');
+      }
+      for (const child of children) if (child.exitCode === null) child.kill('SIGKILL');
+      r.cleanup();
+    }
+  }, 35_000);
 
   test('integration batch selection bounds costly fixture groups to five files without changing owner or fault widths', async () => {
     const r = repo(19);
@@ -747,11 +822,11 @@ test('default checkout cache is independent of a source repository filesystem an
   }
 });
 
-test('explicit disk cache configuration is canonicalized and still refuses RAM', () => {
-  const r = repo();
-  const previous = process.env.GOAL_REGRESS_CHECKOUT_ROOT;
-  try {
-    const target = join(r.dir, '.temp/cache');
+  test('explicit disk cache configuration is canonicalized and still refuses RAM', () => {
+    const r = repo();
+    const previous = process.env.GOAL_REGRESS_CHECKOUT_ROOT;
+    try {
+      const target = join(r.options.checkoutRoot!, 'x');
     process.env.GOAL_REGRESS_CHECKOUT_ROOT = target;
     expect(regressionCheckoutRoot(r.dir)).toBe(realpathSync(target));
     expect(() => regressionCheckoutRoot(r.dir, undefined, () => 0x01021994)).toThrow('RAM-backed');
@@ -791,7 +866,7 @@ test('socket length counts the physical checkout root behind a short symlink', (
 test('safe legacy disk checkouts resume without repeating passes or changing their paths', async () => {
   const r = repo();
   try {
-    const legacy = join(r.dir, '.temp/regress');
+    const legacy = r.options.legacyRoot!;
     const first = await r.run({ runId: 'legacy-disk', checkoutRoot: legacy });
     r.calls.length = 0;
     const resumed = await r.run({ resume: 'legacy-disk' });
@@ -805,7 +880,7 @@ test('RAM-backed legacy checkouts relocate to disk without deleting old trees or
   const r = repo();
   let probe: ReturnType<typeof spyOn> | undefined;
   try {
-    const legacy = join(r.dir, '.temp/regress');
+    const legacy = r.options.legacyRoot!;
     const first = await r.run({ runId: 'legacy-ram', checkoutRoot: legacy });
     const original = filesystem.statfsSync;
     probe = spyOn(filesystem, 'statfsSync').mockImplementation(((path: Parameters<typeof original>[0], options?: Parameters<typeof original>[1]) => {
@@ -827,7 +902,7 @@ test('deep legacy checkout maps relocate to a short cache while preserving prior
   const r = repo();
   try {
     await r.run({ runId: 'legacy-deep' });
-    const legacy = join(r.dir, '.temp/regress', 'old'.repeat(35));
+    const legacy = join(r.options.legacyRoot!, 'old'.repeat(35));
     r.git('worktree', 'add', '--detach', legacy, r.base);
     const directory = join(r.options.stateDir, 'regress/legacy-deep');
     const mapPath = join(directory, 'checkouts.json');

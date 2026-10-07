@@ -8,7 +8,7 @@ import { existsSync, readFileSync, readlinkSync,
 import { join, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 import { Client, Pool } from 'pg';
-import { acquireHeavy } from '../goal/goalctl.ts';
+import { acquireHeavy, markHeavyCommandStarted } from '../goal/goalctl.ts';
 import { migrationDirectories, migrationRecords, type SchemaOwner } from '../ops/migrate.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
@@ -504,6 +504,7 @@ export async function refreshSharedStack(root: string, args: string[]): Promise<
     console.log('A shared-stack refresh is already queued; it will include this merge when it starts.');
     return;
   }
+  markHeavyCommandStarted(lock);
   const onExit = release;
   process.once('exit', onExit);
   try {

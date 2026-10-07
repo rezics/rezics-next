@@ -43,10 +43,10 @@ export interface Manifest {
 }
 export interface RegressionOptions {
   repo: string; stateDir: string; at?: string; resume?: string; only?: RegressionTier[]; integrationBatches?: number;
-  shards?: number; slots?: number; runId?: string; checkoutRoot?: string;
+  shards?: number; slots?: number; runId?: string; checkoutRoot?: string; legacyRoot?: string;
   registry?: (checkout: string) => Promise<ExpectedFile[]>;
   prepare?: (checkout: string) => Promise<{ ok: boolean; artifactPaths: string[]; reason?: string }>;
-  runner?: (checkout: string, batch: Batch, directory: string, shards: number) => Promise<Execution>;
+  runner?: (checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number) => Promise<Execution>;
   waitForTurn?: typeof waitForRegressionTurn;
   route?: (entry: InboxEntry) => Promise<void>;
 }
@@ -314,13 +314,17 @@ export function regressionBatchCommand(batch: Batch, report: string, storyXmlPat
     '--result-file', report, ...args];
 }
 
-async function runBatch(checkout: string, batch: Batch, directory: string, shards: number): Promise<Execution> {
+export function regressionBatchEnvironment(env: NodeJS.ProcessEnv, shards: number, slotLimit: number): NodeJS.ProcessEnv {
+  return { ...env, REZICS_QA_SHARDS: String(shards), GOAL_QA_SLOTS: String(slotLimit) };
+}
+
+async function runBatch(checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number): Promise<Execution> {
   mkdirSync(directory, { recursive: true });
   const report = join(directory, 'slot.json');
   const storyXmlPath = join(directory, 'storybook.xml');
   const started = Date.now();
   const code = await command(checkout, regressionBatchCommand(batch, report, storyXmlPath), join(directory, 'runner.log'),
-    undefined, { ...process.env, REZICS_QA_SHARDS: String(shards) });
+    undefined, regressionBatchEnvironment(process.env, shards, slotLimit));
   const metadata = existsSync(report) ? json<Execution>(report) : { queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
   const tests: TestResult[] = [];
   let evidence = readFileSync(join(directory, 'runner.log'), 'utf8');
@@ -386,6 +390,9 @@ export function lastPassingCommit(repo: string, stateDir: string, file: string, 
 
 export async function runRegression(options: RegressionOptions): Promise<Manifest> {
   const { repo, stateDir } = options;
+  const configuredSlots = options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
+  if (!Number.isSafeInteger(configuredSlots) || configuredSlots < 1) throw new Error('GOAL_QA_SLOTS must be a positive integer');
+  const slotLimit = Math.min(configuredSlots, 2);
   const runner = options.runner ?? runBatch;
   const prepare = options.prepare ?? prepareCheckout;
   const runId = options.resume ?? options.runId ?? newRunId();
@@ -410,7 +417,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     const pinned = options.resume ? json<Manifest>(path).atCommit : git(repo, ['rev-parse', '--verify', `${options.at ?? 'main'}^{commit}`]);
     if (options.resume && options.at && git(repo, ['rev-parse', `${options.at}^{commit}`]) !== pinned) throw new Error('Resume revision differs from the pinned commit');
     const worktrees = regressionCheckoutRoot(repo, options.checkoutRoot);
-    const legacyRoot = resolve(repo, '.temp/regress');
+    const legacyRoot = resolve(options.legacyRoot ?? join(repo, '.temp/regress'));
     const physicalLegacyRoot = physicalPath(legacyRoot);
     const legacyOwned = within(realpathSync(repo), physicalLegacyRoot) || within(worktrees, physicalLegacyRoot);
     const treeMapPath = join(directory, 'checkouts.json');
@@ -528,7 +535,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       // Reports may use GOAL_REGRESS_STATE_DIR, but admission always observes goalctl's shared host lock.
       if (browserTier(batch.tier) && options.waitForTurn) await options.waitForTurn(undefined, () => interrupted);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
-      const result = await runner(tree, batch, join(directory, label), manifest.shards);
+      const result = await runner(tree, batch, join(directory, label), manifest.shards, slotLimit);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
       result.classification ??= result.code ? classify(result.evidence ?? '', result.code) : undefined;
       if (git(tree, ['rev-parse', 'HEAD']) !== commit || git(tree, ['status', '--porcelain'])) throw new Error(`Source changed during regression: ${tree}`);
@@ -556,12 +563,9 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     }
     const pending = manifest.batches.filter(batch => batch.state !== 'done' && !browserTier(batch.tier)
       && batch.tier !== 'unit' && batch.tier !== 'model');
-    const configuredSlots = options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
-    if (!Number.isSafeInteger(configuredSlots) || configuredSlots < 1) throw new Error('GOAL_QA_SLOTS must be a positive integer');
-    const slots = Math.min(configuredSlots, 2);
     let next = 0;
     let failure: unknown;
-    const workers = Array.from({ length: Math.min(slots, pending.length) }, async (_, index) => {
+    const workers = Array.from({ length: Math.min(slotLimit, pending.length) }, async (_, index) => {
       let tree: string | undefined;
       try {
         // Each lane has its own sockets and artifact root, reused only after its previous batch finishes.

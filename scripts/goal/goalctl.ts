@@ -2052,15 +2052,45 @@ export function unitFileErrorDetails(output: string, candidates: readonly string
     detail: normalizeUnitFileError(lines.join('\n'), root) })));
 }
 
-function normalizedFindingLines(detail: string | undefined): string[] {
+interface UnitFinding { path: string[]; text: string }
+
+function diffContainerKey(line: string): string | undefined {
+  const match = /^(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([A-Za-z_$][\w$.-]*))\s*:\s*[\[{]\s*,?$/.exec(line.trim());
+  return match?.[1] ?? match?.[2] ?? match?.[3];
+}
+
+function normalizedFindingLines(detail: string | undefined): UnitFinding[] {
   if (!detail) return [];
-  return detail.split('\n').flatMap(line => {
-    const added = /^\s*\+\s?(.*)$/.exec(line);
-    if (!added) return [];
-    const finding = added[1]!.trim();
-    if (!finding || /^(?:Received|Expected)(?:\s|$)/i.test(finding)) return [];
-    return [finding.replace(/((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:tsx?|jsx?|sql|json)):\d+(?::\d+)?/g, '$1:<line>')];
-  });
+  const contexts: { indent: number; key: string }[] = [];
+  const findings: UnitFinding[] = [];
+  const updateContext = (indent: number, text: string) => {
+    if (/^[}\]],?$/.test(text.trim())) {
+      while (contexts.length && contexts.at(-1)!.indent >= indent) contexts.pop();
+      return;
+    }
+    const key = diffContainerKey(text);
+    if (!key) return;
+    while (contexts.length && contexts.at(-1)!.indent >= indent) contexts.pop();
+    contexts.push({ indent, key });
+  };
+  const normalizeText = (value: string) => value.replace(
+    /((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:tsx?|jsx?|sql|json)):\d+(?::\d+)?/g, '$1:<line>');
+  for (const line of detail.split('\n')) {
+    const diff = /^(\s*)([+-])\s?(.*)$/.exec(line);
+    if (diff) {
+      const indent = diff[1]!.length;
+      const text = diff[3]!.trim();
+      if (diff[2] === '+' && text && !/^(?:Received|Expected)(?:\s|$)/i.test(text)) {
+        findings.push({ path: contexts.filter(frame => frame.indent < indent).map(frame => frame.key),
+          text: normalizeText(text) });
+      }
+      updateContext(indent, text);
+      continue;
+    }
+    const whitespace = /^(\s*)/.exec(line)![1]!;
+    updateContext(whitespace.length, line.slice(whitespace.length));
+  }
+  return findings;
 }
 
 function unitFailureSignatures(file: string, failures: readonly UnitFailureDetail[], errors: readonly UnitFileErrorDetail[]): Map<string, number> {
@@ -2069,7 +2099,7 @@ function unitFailureSignatures(file: string, failures: readonly UnitFailureDetai
   for (const failure of failures.filter(item => item.file === file)) {
     const findings = normalizedFindingLines(failure.detail);
     if (findings.length) {
-      for (const finding of findings) add(JSON.stringify(['test-finding', failure.test, finding]));
+      for (const finding of findings) add(JSON.stringify(['test-finding', failure.test, finding.path, finding.text]));
     } else {
       add(JSON.stringify(['test-error', failure.test, normalizeUnitFileError(failure.detail ?? '')]));
     }
@@ -3090,7 +3120,7 @@ async function runQaCommand(command: readonly string[], env: NodeJS.ProcessEnv, 
   }
 }
 
-function markHeavyCommandStarted(lockDirectory: string): void {
+export function markHeavyCommandStarted(lockDirectory: string): void {
   const path = join(lockDirectory, 'info.json');
   try {
     const info = JSON.parse(readFileSync(path, 'utf8')) as { pid: number; [key: string]: unknown };
@@ -3151,6 +3181,7 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
     (options.reap ?? reapStaleQaStacks)();
     const env: NodeJS.ProcessEnv = { ...process.env, GOAL_IN_SLOT: '1',
       GOAL_QA_WAIT_DIR: waiterDirectory, GOAL_QA_COMMAND: command.join(' ') };
+    if (heavy || process.env.GOAL_QA_HEAVY_RUN === '1') env.GOAL_QA_HEAVY_RUN = '1';
     if (goal) env.GOAL_ID = goal;
     code = await (options.runCommand ?? runQaCommand)(command, env, () => {
       startedAt = now();

@@ -121,6 +121,10 @@ async function admit<T>(kind: 'other' | 'browser', work: () => Promise<T>, env: 
   }, work);
 }
 let runSlots: Awaited<ReturnType<typeof acquireQaSlots>> | undefined;
+const qaSlotDirectory = process.env.GOAL_QA_SLOT_DIRECTORY ?? goalSlotDirectory(root);
+const heavyQaRun = process.env.GOAL_QA_HEAVY_RUN === '1';
+const acquireRunSlots = (wanted: number, slotOptions: Parameters<typeof acquireQaSlots>[4] = {}) =>
+  acquireQaSlots(heavyQaRun ? undefined : qaSlotDirectory, wanted, process.env, process.pid, slotOptions);
 const release = options.tier || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 
 async function resetChildStacks(registry: string): Promise<string[]> {
@@ -484,7 +488,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
     tier === 'fault/recovery'
       ? Math.min(maximum, estimates.size)
       : shardCount(estimates, budget, maximum);
-  const slots = await acquireQaSlots(goalSlotDirectory(root), wanted);
+  const slots = await acquireRunSlots(wanted);
   mkdirSync(join(directory, 'shards'), { recursive: true });
   try {
     const prefix = tier === 'integration' ? '' : 'f';
@@ -605,8 +609,7 @@ try {
   }
   // Reserve before any tier preparation: fixtures and singleton tiers also start stacks.
   if (selected.some(tier => !['static', 'unit', 'owner'].includes(tier))) {
-    runSlots = await acquireQaSlots(goalSlotDirectory(root), 1, process.env, process.pid,
-      { runDeadline });
+    runSlots = await acquireRunSlots(1, { runDeadline });
   }
   for (const tier of selected) {
     if (tier === 'static') await runTier(tier, 'bun', ['scripts/research/storage_architecture/check.ts', ...(options.backend ? ['--backend'] : [])], 120_000);
