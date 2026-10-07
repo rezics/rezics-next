@@ -1,4 +1,5 @@
 import type { ReaderLibraryImportStore } from './reader-import.ts';
+import { requireImportOwnerAvailable } from './reader-import.ts';
 import { importDigest } from './file-store.ts';
 import { mainCall } from './match.ts';
 import type { CanonicalRow, LibraryFileFormat } from './formats/contract.ts';
@@ -8,7 +9,8 @@ export class ImportSessionFailed extends Error {}
 type Desired = NonNullable<CanonicalRow['session']>;
 export async function readSessionImportState<T>(store: ReaderLibraryImportStore, request: Request, path: string): Promise<T | null> {
   const response = await mainCall(store,request,'GET',path);
-  if (response.status >= 500 || response.status === 202 || response.status === 429) return null;
+  requireImportOwnerAvailable(response);
+  if (response.status === 202) return null;
   if (!response.ok) throw new ImportSessionFailed('Session owner read was refused');
   return response.json() as Promise<T>;
 }
@@ -27,7 +29,8 @@ export async function findImportSession(store: ReaderLibraryImportStore, request
   do {
     const query = new URLSearchParams({ actingSubject: agent,...(source.work ? { work: source.work } : { target: desired.target }),limit: '20',...(cursor ? { cursor } : {}) });
     const response = await mainCall(store,request,'GET',`/v1/me/sessions?${query}`);
-    if (response.status >= 500 || response.status === 202 || response.status === 429) return null;
+    requireImportOwnerAvailable(response);
+    if (response.status === 202) return null;
     if (!response.ok) throw new ImportSessionFailed('Session owner read was refused');
     const page = await response.json() as { items: SessionState[]; nextCursor: string | null };
     const own = page.items.find(session => session.id === bound?.session_id || source.kind === 'session' && session.id === source.sourceId);

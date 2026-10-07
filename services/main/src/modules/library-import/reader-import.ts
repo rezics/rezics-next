@@ -9,6 +9,12 @@ export class ReaderImportBudgetExceeded extends Error {
   constructor(readonly kind: 'search' | 'acquisition') { super(`reader import ${kind} budget exceeded`); }
 }
 export class ReaderImportUnavailable extends Error {}
+/** An owner refusal must reach the caller; it is not accepted import work. */
+export function requireImportOwnerAvailable(response: Response): void {
+  if (response.status === 429 || response.status >= 500) {
+    throw new ReaderImportUnavailable(`Library import owner is unavailable (${response.status})`);
+  }
+}
 export class ReaderImportConflict extends Error {}
 export class ReaderImportInvalid extends Error {}
 export interface ImportPlacement { structure: string; expectedHead: string; attempt: number;

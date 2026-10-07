@@ -1,6 +1,7 @@
 import { ImportCommands, importReviewedBatch, portableShelfId, type ReviewedImportBatch } from './batch.ts';
 import { LibraryFileStore, importDigest, type ApplyIntent, type StoredSourceRow } from './file-store.ts';
 import type { ReaderLibraryImportStore } from './reader-import.ts';
+import { requireImportOwnerAvailable } from './reader-import.ts';
 import { mainCall } from './match.ts';
 import type { CanonicalRow, LibraryFileFormat } from './formats/contract.ts';
 import type { SessionState } from '../session/contract.ts';
@@ -23,7 +24,8 @@ async function sessionStep(store: ReaderLibraryImportStore, request: Request, ag
   const held = await store.planStep(agent,file,row,step,{ method,path,body,key });
   const plan = held.plan as { method: string; path: string; body: object; key: string };
   const response = await mainCall(store,request,plan.method,plan.path,plan.body,plan.key);
-  if (response.status >= 500 || response.status === 202 || response.status === 429) return null;
+  requireImportOwnerAvailable(response);
+  if (response.status === 202) return null;
   if (!response.ok) throw new ImportSessionFailed('Session import command was refused');
   await store.completeStep(agent,file,row,step);
   return response.json() as Promise<SessionState>;
@@ -41,8 +43,9 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
     const response = await mainCall(store,request,'POST','/v1/collections', { actingSubject: agent,
       collection, name, disclosure: row.raw.disclosure === 'public' ? 'public' : 'private' },
     commandKey(agent,fileKey,item.index,'portable-shelf'));
+    requireImportOwnerAvailable(response);
     if (response.ok && response.status !== 202) return { applied: ['shelf'], issues: [] };
-    return response.status >= 500 || response.status === 202 ? null : { applied: ['private-source'],issues: ['shelf-failed'] };
+    return response.status === 202 ? null : { applied: ['private-source'],issues: ['shelf-failed'] };
   }
   if (!work) return { applied: ['private-source'], issues: ['unresolved-work'] };
   const target = choice?.target ?? item.match?.target ?? row.target ?? work;
@@ -115,7 +118,8 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
           ...session.selections.filter(selection => selection.target!==session.target)] } });
       const plan = held.plan as { method: string; path: string; key: string; body: object };
       const response = await mainCall(store,request,plan.method,plan.path,plan.body,plan.key);
-      if (response.status >= 500 || response.status === 202 || response.status === 429) return null;
+      requireImportOwnerAvailable(response);
+      if (response.status === 202) return null;
       if (!response.ok) throw new ImportSessionFailed('Session import command was refused');
       saved = await response.json() as SessionState;
       await store.completeStep(agent,fileKey,item.index,'session');

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ReaderLibraryImportStore } from './reader-import.ts';
-import { READER_IMPORT_COST, ReaderImportInvalid } from './reader-import.ts';
+import { READER_IMPORT_COST, ReaderImportInvalid, ReaderImportUnavailable, requireImportOwnerAvailable } from './reader-import.ts';
 
 export interface ReviewedImportRow {
   work: string;
@@ -83,7 +83,9 @@ export class ImportCommands {
 
   async read<T>(path: string): Promise<T | null> {
     const response = await this.call('GET', path);
-    return response.ok ? await response.json() as T : null;
+    if (response.status === 202) return null;
+    if (!response.ok) throw new ReaderImportUnavailable(`Library import owner read was refused (${response.status})`);
+    return await response.json() as T;
   }
 
   async step(index: number, name: string, method: string, path: string, body: object,
@@ -93,6 +95,7 @@ export class ImportCommands {
     if (held.completed) return 'complete';
     const plan = held.plan as { method: string; path: string; body: object; commandKey: string };
     const response = await this.call(plan.method, plan.path, plan.body, plan.commandKey);
+    requireImportOwnerAvailable(response);
     if (response.status === 409) return 'stale';
     if (response.status !== 200 && response.status !== 201) {
       return response.status >= 400 && response.status < 500 ? 'failed' : 'retry';
@@ -109,6 +112,7 @@ export class ImportCommands {
       shelf = importShelfId(agent, name);
       const made = await this.call('POST', '/v1/collections', {
         collection: shelf, name, disclosure: this.batch.shelfDisclosures?.[name] ?? 'private', actingSubject: agent }, key(agent, 'shelf', name));
+      requireImportOwnerAvailable(made);
       if (made.status !== 200 && made.status !== 201) return made.status >= 400 && made.status < 500
         ? 'failed' : 'retry';
       existing.set(name, shelf);
@@ -123,6 +127,7 @@ export class ImportCommands {
       expectedHead: plan.expectedHead, actingSubject: agent,
       operations: [{ op: 'insert', parent: plan.structure, position: 'last', role: 'member', target: work,
         sourceKey: key(agent, shelf, work) }] }, key(agent, 'placement', shelf, work, plan.attempt));
+    requireImportOwnerAvailable(response);
     if (response.status === 200 || response.status === 201) {
       await this.store.completePlacement(agent, shelf, work);
       return 'complete';

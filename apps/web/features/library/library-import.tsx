@@ -17,6 +17,7 @@ import { writingLanguage } from '../content-language/writing-language.ts';
 import { type ApplyProgress, UPLOAD_LIMIT_BYTES, type CsvInspection, type CsvMapping, type ImportApi, ImportError, type ImportFormat,
   type ImportRow, mainImportApi, type RowResolution } from './import-api.ts';
 import { browserImportShelf, type ImportShelf, type PendingImport } from './import-store.ts';
+import { pollLibraryApply } from './import/apply.ts';
 import { applyFinished, applyStarted, countGroups, groupOf, loadAllRows, needsChoice, replaceRow, reloadRow,
   type RowGroup, rowGroups } from './import-rows.ts';
 import { CsvMapper } from './library-import-map.tsx';
@@ -64,6 +65,7 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
   const number = (value: number) => new Intl.NumberFormat(locale).format(value);
 
   useEffect(() => { setPending(shelf.list(agent)); }, [agent, shelf]);
+  useEffect(() => () => { run.current += 1; }, []);
   const refreshPending = () => setPending(shelf.list(agent));
   const patch = (change: Partial<Active>) => setActive(current => current && { ...current, ...change });
   const failureText = (failure: unknown) => failure instanceof ImportError
@@ -167,17 +169,8 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
       // From here the intent is fixed: remember it, so a reload resumes this apply.
       shelf.save(agent, withIntent);
       patch({ entry: withIntent });
-      let last = -1, stalled = 0;
-      for (;;) {
-        const progress = await client.apply(entry.id, intent);
-        if (!live()) return;
-        patch({ progress });
-        if (!progress.pending) break;
-        stalled = progress.completed === last ? stalled + 1 : 0;
-        last = progress.completed;
-        if (stalled >= 5) throw new ImportError('unavailable');
-        if (stalled) await new Promise(resolve => setTimeout(resolve, 300 * stalled));
-      }
+      if (!await pollLibraryApply(client, entry.id, intent, { active: live,
+        onProgress: progress => patch({ progress }) })) return;
       const rows = await loadAllRows(client, entry.id, entry.total, () => {}, live);
       if (!live()) return;
       patch({ rows, finished: true, stopped: false });
