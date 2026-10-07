@@ -1,43 +1,20 @@
-import type { ProfileDefinition } from '../compiler/ir.ts';
+import { readFileSync } from 'node:fs';
+import { parseTurtleProfile, type TurtleDeclaration } from '../compiler/shacl.ts';
 
-const requiredIri = (path: `rv:${string}`) => ({ path, minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' as const });
-
-export const spaceRealmProfile = {
+export const spaceRealmDeclaration = {
   id: 'space-realm-v1',
-  comments: ['First Space profile with one independently identified Realm capability.'],
-  prefixes: [
-    ['sh', 'http://www.w3.org/ns/shacl#'],
-    ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
-    ['rv', 'https://rezics.com/vocab/'],
-  ],
-  layout: 'compact',
-  shapes: [
-    {
-      iri: 'https://rezics.com/definition/space-realm-v1/space-shape',
-      properties: [
-        { path: 'rdf:type', hasValue: 'rv:Space' },
-        requiredIri('rv:owner'),
-        requiredIri('rv:realmCapability'),
-        { path: 'rv:disclosure', maxCount: 1, nodeKind: 'sh:IRI', in: ['rv:Public', 'rv:Private'] },
-      ],
+  canonical: {
+    space: {
+      types: ['<https://rezics.com/vocab/Space>'],
     },
-    {
-      iri: 'https://rezics.com/definition/space-realm-v1/realm-shape',
-      properties: [
-        { path: 'rdf:type', hasValue: 'rv:Realm' },
-        requiredIri('rv:space'),
-        { path: 'rv:realmState', hasValue: 'rv:Active' },
-        { path: 'rv:selectionPolicy', hasValue: '<https://rezics.com/definition/realm-manager-fixed-main-fallback-v1>' },
-        { path: 'rv:membershipPolicy', hasValue: '<https://rezics.com/definition/realm-closed-v1>' },
-        { ...requiredIri('rv:reviewPolicy'), in: [
-          '<https://rezics.com/definition/realm-manager-reviewed-v1>',
-          '<https://rezics.com/definition/realm-members-direct-v1>',
-          '<https://rezics.com/definition/realm-open-v1>',
-        ] },
-        { path: 'rv:visibility', maxCount: 1, in: ['"public"', '"restricted"', '"private"'] },
-        { path: 'rv:reviewMode', maxCount: 1, in: ['"mandatory"', '"trusted-members"', '"open"'] },
-        { path: 'rv:realmPolicyHead', maxCount: 1, nodeKind: 'sh:IRI' },
-      ],
+    realm: {
+      types: ['<https://rezics.com/vocab/Realm>'],
     },
-  ],
-} as const satisfies ProfileDefinition;
+  },
+} as const satisfies TurtleDeclaration;
+
+export const spaceRealmProfile = parseTurtleProfile(
+  spaceRealmDeclaration.id,
+  readFileSync(new URL('./space-realm-v1.ttl', import.meta.url), 'utf8'),
+  spaceRealmDeclaration,
+);

@@ -1,0 +1,12 @@
+# A Zone publication layout has bounded modules, sources, navigation, banners and theme tokens.
+# The immutable JSON document is stored with its Zone revision; this profile IRI marks a typed layout.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/zone-presentation-v1/zone-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:Zone ] ;
+    sh:property [ sh:path rv:presentation ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/zone-presentation-v1> ] .
+
+# Authored SHACL constraints for Space, Realm and Zone capabilities.

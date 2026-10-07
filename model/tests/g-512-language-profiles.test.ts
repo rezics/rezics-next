@@ -30,9 +30,7 @@ test('G-512 canonical title validation selects v2 by model revision and retains 
 test('G-512 Space payload language is versioned without losing legacy community profiles', () => {
   const registry = buildCommandRegistry([spaceRealmProfile, spaceRealmV2Profile, spaceRealmV3Profile], {
     canonicalOrder: ['<https://rezics.com/vocab/Space>', '<https://rezics.com/vocab/Realm>'], demandOrder: [],
-    established: { 'space-realm-v1': { canonical: {
-      space: { types: ['<https://rezics.com/vocab/Space>'] }, realm: { types: ['<https://rezics.com/vocab/Realm>'] },
-    } } },
+    established: {},
   });
   for (const entry of registry.canonical) {
     expect(entry.routes.map(route => route.profile)).toEqual(['space-realm-v2', 'space-realm-v3', 'space-realm-v1']);

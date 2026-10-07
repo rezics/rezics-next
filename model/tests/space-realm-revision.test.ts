@@ -15,10 +15,7 @@ test('persisted v1 Realm excludes community properties; v2 admits them', () => {
   expect(newShape).toContain('sh:path rv:topic ; sh:maxCount 3 ; sh:nodeKind sh:IRI');
   const registry = buildCommandRegistry([spaceRealmProfile, spaceRealmV2Profile], {
     canonicalOrder: ['<https://rezics.com/vocab/Space>', '<https://rezics.com/vocab/Realm>'], demandOrder: [],
-    established: { 'space-realm-v1': {
-      canonical: { space: { types: ['<https://rezics.com/vocab/Space>'] },
-        realm: { types: ['<https://rezics.com/vocab/Realm>'] } },
-    } },
+    established: {},
   });
   for (const entry of registry.canonical) {
     expect(entry.routes.map(route => route.profile)).toEqual(['space-realm-v2', 'space-realm-v1']);

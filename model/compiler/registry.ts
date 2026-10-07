@@ -68,7 +68,6 @@ export const establishedDeclarations: Readonly<Record<string, EstablishedDeclara
       value: '<https://rezics.com/definition/content-search-eligibility-v1>' }],
   } } },
   'content-match-unit-v1': { canonical: { projection: only(rv('ContentProjection')) } },
-  'space-realm-v1': { canonical: { space: only(rv('Space')), realm: only(rv('Realm')) } },
   'realm-experience-rating-context-v1': {
     canonical: { context: only(rv('ExperienceRatingContext')) },
     binding: { required: ['realm', 'context', 'question'], roles: ['realm', 'context'],

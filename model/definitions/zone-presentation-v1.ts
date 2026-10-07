@@ -1,24 +1,12 @@
-import type { ProfileDefinition } from '../compiler/ir.ts';
+import { readFileSync } from 'node:fs';
+import { parseTurtleProfile, type TurtleDeclaration } from '../compiler/shacl.ts';
 
-/** The JSON layout is validated at the Zone configuration boundary. */
-export const zonePresentationProfile = {
+export const zonePresentationDeclaration = {
   id: 'zone-presentation-v1',
-  comments: [
-    'A Zone publication layout has bounded modules, sources, navigation, banners and theme tokens.',
-    'The immutable JSON document is stored with its Zone revision; this profile IRI marks a typed layout.',
-  ],
-  prefixes: [
-    ['sh', 'http://www.w3.org/ns/shacl#'],
-    ['rdf', 'http://www.w3.org/1999/02/22-rdf-syntax-ns#'],
-    ['rv', 'https://rezics.com/vocab/'],
-  ],
-  layout: 'compact',
-  shapes: [{
-    iri: 'https://rezics.com/definition/zone-presentation-v1/zone-shape',
-    properties: [
-      { path: 'rdf:type', hasValue: 'rv:Zone', maxCount: 1 },
-      { path: 'rv:presentation', hasValue: '<https://rezics.com/definition/zone-presentation-v1>',
-        maxCount: 1 },
-    ],
-  }],
-} as const satisfies ProfileDefinition;
+} as const satisfies TurtleDeclaration;
+
+export const zonePresentationProfile = parseTurtleProfile(
+  zonePresentationDeclaration.id,
+  readFileSync(new URL('./zone-presentation-v1.ttl', import.meta.url), 'utf8'),
+  zonePresentationDeclaration,
+);
