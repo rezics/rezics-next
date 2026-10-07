@@ -321,7 +321,9 @@ background notifications and no cross-session messages, so:
   the Goal's tasks changes state, the Goal's inbox grows, or after 20 minutes.
 - The inbox is `.temp/goal-orchestration/messages/<goal>.md`. Other managers
   append to it (`## <time> from <goal>` and the text); read what is new there.
-- To reach another manager, append to its inbox the same way. Claude managers
-  watch theirs.
+- To reach another manager, append to its inbox the same way. A Claude manager
+  keeps `scripts/goal/next-event.sh <goal>` running as a background command and
+  re-arms it each time it returns. Without it, a Codex manager's messages go
+  unread: on 2026-10-07 kernel's loan requests to launch waited over an hour.
 - Keep the same reserve as any manager: if the account the manager runs on
   nears its limit, move workers to the other account first.
