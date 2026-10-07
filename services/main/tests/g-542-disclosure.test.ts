@@ -92,6 +92,9 @@ test('G-542: configured recovery and incomplete results fail closed; absent gove
 
 test('G-542: the search graph adapter retains the live required owner across graph-client identities', async () => {
   const s = storage(), graph = new FusekiClient('http://graph.invalid');
+  graph.query = async query => ({ results: { bindings:
+    [...new Set([...query.matchAll(/<https:\/\/rezics\.com\/id\/[0-9a-f-]{36}>/g)]
+      .map(match => match[0].slice(1, -1)))].map(work => ({ work: { type: 'uri', value: work } })) } });
   const env = { fuseki: graph, objectDirectory: '.temp/g-542', lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   const position = { dataEpoch: 'epoch', sequence: '1', generation: 'generation' } as PublicTextPosition;
   configureDisclosure(env, new DisclosureStore(s.pool));

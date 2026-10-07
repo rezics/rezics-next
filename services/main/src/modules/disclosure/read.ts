@@ -5,6 +5,9 @@ import { GLOBAL_CONTEXT, governanceOwners, governanceComponents } from '../gover
 import { MediaUnavailable } from '../media/store.ts';
 import { ANONYMOUS_VIEWER, eligible, validLabels, type Labels, type Viewer } from '../suitability/policy.ts';
 import { mediaVisibility } from '../media/visibility.ts';
+import { nameOwnerPolicySql } from '../preferences/store.ts';
+import { BASELINE_MEMBER_POLICY } from '../access/baseline.ts';
+import { namePolicyViewerPrincipal } from './name-policy.ts';
 
 export type DisclosureChannel = 'read' | 'summary' | 'thread' | 'feed' | 'search' | 'typeahead'
   | 'count' | 'inbox' | 'digest' | 'preview' | 'seo' | 'sitemap' | 'export' | 'media' | 'email' | 'push';
@@ -22,13 +25,17 @@ export interface DisclosureTarget {
   /** Owner-established parent for governance fences and noninteractive delivery. */
   work?: string | null;
   workRevision?: string | null;
+  /** Owner-established Agent whose name this occurrence carries. Readability
+   * of resource or work does not grant permission to disclose this name. */
+  nameOwner?: string;
 }
 export type DisclosureDecision = 'visible' | 'tombstone' | 'hidden';
 export interface DisclosureReader {
   read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel): Promise<DisclosureDecision[]>;
 }
 export class DisclosureUnavailable extends MediaUnavailable {}
-export const DISCLOSURE_COST = { batch: 64, ownerStatements: 1, recoveryStatements: 1 } as const;
+export const DISCLOSURE_COST = { batch: 64, ownerStatements: 1, recoveryStatements: 1,
+  nameOwnerQueries: 1, namePreferenceStatements: 1 } as const;
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const ownerReference = /^(?:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}|urn:rezics:[A-Za-z0-9:._/-]{1,480})$/;
 const effects = (channel: DisclosureChannel) => ['disclosure',
@@ -47,7 +54,9 @@ const suitabilityChannel = (channel: DisclosureChannel) =>
 const usesSuitabilityDefault = (channel: DisclosureChannel) =>
   ['digest', 'preview', 'seo', 'sitemap', 'email', 'push'].includes(channel);
 
-/** One indexed owner query evaluates governance and strong Work read fences.
+/** One indexed owner statement evaluates governance, strong Work read fences
+ * and name preferences together; mixing independent policy cuts can disclose
+ * a name even when those policies were never simultaneously permissive.
  * Noninteractive delivery also reads the direct target/parent suitability heads;
  * no descendants are traversed.
  * The recovery fence is held through evaluation; no policy result is cached.
@@ -65,6 +74,7 @@ export class DisclosureStore implements DisclosureReader {
       || targets.some(target => !ownerReference.test(target.resource)
         || !governanceOwners.includes(target.owner) || !governanceComponents.includes(target.component)
         || target.work != null && !native.test(target.work)
+        || target.nameOwner !== undefined && !native.test(target.nameOwner)
         || (target.context?.length ?? 0) > 512 || (target.revision?.length ?? 0) > 512)
       || typeof viewer.signedIn !== 'boolean' || !['unknown', 'under-15', '15-17', 'adult'].includes(viewer.age)
       || !viewer.optIns || typeof viewer.optIns.general !== 'boolean' || typeof viewer.optIns.r15 !== 'boolean'
@@ -74,18 +84,54 @@ export class DisclosureStore implements DisclosureReader {
     if (!targets.length) return [];
     const suitabilityDefault = usesSuitabilityDefault(channel);
     try {
+      const nameOwners = new Map<string, string>();
+      const resources = [...new Set(targets.filter(target => target.owner === 'graph'
+        && ['name', 'title'].includes(target.component) && !target.nameOwner).map(target => target.resource))];
+      if (resources.length && this.environment) {
+        // Resolve only the exact named resources. Never walk credits, Works or
+        // dependent Concepts to discover whether an Agent's name is private.
+        const rows = (await this.environment.fuseki.query(`PREFIX rv: <${RV}>
+          SELECT ?work ?head ?nameOwner WHERE {
+            VALUES ?work { ${resources.map(iri).join(' ')} }
+            OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
+            OPTIONAL { VALUES ?work { ${resources.map(iri).join(' ')} }
+              GRAPH ${iri(GRAPHS.current)} { ?work a rv:Agent }
+              BIND(?work AS ?nameOwner) }
+          } LIMIT ${resources.length + 1}`, 131_072)).results?.bindings ?? [];
+        if (rows.length !== resources.length || new Set(rows.map(row => row.work?.value)).size !== resources.length
+          || rows.some(row => !row.work || !resources.includes(row.work.value)
+            || row.nameOwner && row.nameOwner.value !== row.work.value)) {
+          throw new DisclosureUnavailable('Name ownership is unavailable');
+        }
+        for (const row of rows) if (row.nameOwner) nameOwners.set(row.work!.value, row.nameOwner.value);
+      } else if (resources.length) {
+        // Pool-only owner consumers still enforce privacy. Include inactive
+        // Agents so they cannot inherit a public name after revocation.
+        const rows = (await this.pool.query<{ agent: string }>(`SELECT id AS agent
+          FROM access.authority_subject WHERE id = ANY($1::text[]) AND kind = 'agent'`, [resources])).rows;
+        if (rows.length > resources.length || new Set(rows.map(row => row.agent)).size !== rows.length
+          || rows.some(row => !resources.includes(row.agent))) throw new DisclosureUnavailable('Name ownership is unavailable');
+        for (const row of rows) nameOwners.set(row.agent, row.agent);
+      }
+      const owners = targets.map(target => target.nameOwner ?? nameOwners.get(target.resource));
+      const distinct = [...new Set(owners.filter((owner): owner is string => owner !== undefined))];
+      const principal = namePolicyViewerPrincipal(viewer, channel);
       // The recovery lock lives until this autocommit statement finishes;
       // policy and the fence share one snapshot, without six protocol calls.
       const rows = (await this.pool.query<{ ordinal: number;
-          open: boolean; restricted: boolean; assessments: Labels[]
+          open: boolean; restricted: boolean; assessments: Labels[]; nameVisible: boolean
         }>(`
           -- The boolean primary key/check makes this a singleton. Spell out its
           -- bound before joining the batch: fresh owner statistics otherwise
           -- estimate thousands of fence rows and trigger costly per-read JIT.
           WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id LIMIT 1 FOR SHARE),
           requested AS (SELECT * FROM jsonb_to_recordset($1::jsonb) AS wanted(
-            ordinal int, owner text, resource text, component text, revision text, context text, work text, "workRevision" text))
+            ordinal int, owner text, resource text, component text, revision text, context text, work text,
+            "workRevision" text, "nameOwner" text)),
+          name_policy AS MATERIALIZED (${nameOwnerPolicySql(4, 5, 6, 7)})
           SELECT wanted.ordinal, fence.open,
+            CASE WHEN wanted."nameOwner" IS NULL THEN true
+              ELSE COALESCE(n.visible AND n.open, false) END AS "nameVisible",
             EXISTS (SELECT 1 FROM access.governance_enforcement e
               WHERE e.state = 'restricted' AND e.effect = ANY($2::text[])
                 AND e.context = ANY(ARRAY[$3::text, wanted.context])
@@ -112,10 +158,12 @@ export class DisclosureStore implements DisclosureReader {
               CROSS JOIN LATERAL (SELECT a.labels FROM access.suitability_assessment a
                 WHERE a.target = refs.ref ORDER BY a.revision_number DESC LIMIT 1) head), '[]'::jsonb)`
               : "'[]'::jsonb"} AS assessments
-          FROM requested wanted CROSS JOIN fence ORDER BY wanted.ordinal`, [JSON.stringify(targets.map((target, ordinal) => ({
+          FROM requested wanted CROSS JOIN fence LEFT JOIN name_policy n ON n.agent = wanted."nameOwner"
+          ORDER BY wanted.ordinal`, [JSON.stringify(targets.map((target, ordinal) => ({
           ...target, ordinal, revision: target.revision ?? null, context: target.context ?? GLOBAL_CONTEXT,
-          work: target.work ?? null,
-        }))), effects(channel), GLOBAL_CONTEXT])).rows;
+          work: target.work ?? null, nameOwner: owners[ordinal] ?? null,
+        }))), effects(channel), GLOBAL_CONTEXT, distinct, principal?.issuer ?? null,
+        principal?.subject ?? null, BASELINE_MEMBER_POLICY])).rows;
         if (rows.length !== targets.length || rows.some((row, index) =>
             !row.open ||
             row.ordinal !== index
@@ -123,7 +171,10 @@ export class DisclosureStore implements DisclosureReader {
           || row.assessments.some(labels => !validLabels(labels)))) {
           throw new DisclosureUnavailable('Disclosure result is incomplete');
         }
-        return rows.map((row): DisclosureDecision => {
+        return rows.map((row, index): DisclosureDecision => {
+          // A private name uses the existing indistinct unavailable outcome;
+          // a tombstone would confirm the identity the policy withholds.
+          if (owners[index] && row.nameVisible !== true) return 'hidden';
           if (!row.restricted && (!suitabilityDefault || row.assessments.every(labels => eligible({
             assessment: { status: 'assessed', labels }, viewer, channel: suitabilityChannel(channel),
           }).eligible))) return 'visible';

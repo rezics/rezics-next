@@ -423,7 +423,8 @@ test('G-904: sitemap fills after hidden identities and ends without a hidden con
   works.slice(0, 65).forEach((work) => f.labels.set(work, ['r18']));
   const headQuery = f.graph.query.bind(f.graph);
   f.graph.query = async (query) => {
-    if (query.includes('SELECT ?work ?head ?owningWork')) return headQuery(query);
+    if (query.includes('SELECT ?work ?head ?owningWork') || query.includes('SELECT ?work ?head ?nameOwner'))
+      return headQuery(query);
     if (!query.includes('SELECT ?sequence ?work ?head'))
       return { results: { bindings: [row({ sequence: '1' })] } };
     const after = /FILTER\(STR\(\?work\) > "([^"]+)"\)/.exec(query)?.[1] ?? '';

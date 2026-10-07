@@ -7,6 +7,8 @@ export interface SearchDisclosureMatch {
   contribution?: string;
   revision?: string;
   matchedField?: string;
+  /** A credited name belongs to its participant, independently of the Work. */
+  nameOwner?: string;
   matchedChapter?: { post: string; book: string };
 }
 /** Gate the complete candidate relation before ranking, pagination, counts or facets.
@@ -28,7 +30,7 @@ export async function discloseSearchMatches<T extends SearchDisclosureMatch>(env
   const targets: DisclosureTarget[] = [], ranges: number[][] = [];
   for (const match of matches) {
     const selected: DisclosureTarget[] = [{ owner: 'graph', resource: match.work,
-      component: 'name', revision: heads.get(match.work) }];
+      component: 'name', revision: heads.get(match.work), nameOwner: match.nameOwner }];
     if (match.matchedChapter) selected.push({ owner: 'graph', resource: match.matchedChapter.post,
       component: 'name', revision: heads.get(match.matchedChapter.post) });
     if (!match.matchedField || match.matchedField === 'body') {

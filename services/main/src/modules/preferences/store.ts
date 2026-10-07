@@ -4,7 +4,7 @@ import { defaultNamePreferencesProjection, type NamePreferencesProjection } from
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { agentPattern, controlRead, controlTransaction, ControlConflict, ControlDenied,
   ControlInvalid, ControlStale, ControlUnavailable, requirePrincipal } from '../access/topology-control.ts';
-import { baselineMemberProof } from '../access/baseline.ts';
+import { baselineMemberProof, BASELINE_MEMBER_POLICY } from '../access/baseline.ts';
 import { followPrincipal } from '../follows/authority.ts';
 import { canonicalReadingLanguages, invalidateHomePreferences, lockReadingPreferences,
   PRIMARY_READING_PERSON_SQL, READING_LANGUAGE_LIMIT } from './languages.ts';
@@ -23,6 +23,7 @@ export const DEFAULT_PERSON_CHOICES: PersonChoices = { profileVisibility: 'publi
 /** One bounded settings row and at most 500 blocks; page admission checks at most 128 actors. */
 export const PERSON_PREFERENCES_COST = { blocks: 500, actors: 128, readingActors: 256, readStatements: 4,
   writeStatements: 11, readerLanguageStatements: 2, publicProfiles: 64, publicProfileStatements: 1,
+  nameOwners: 64, nameStatements: 1,
   languages: READING_LANGUAGE_LIMIT } as const;
 const keyPattern = /^[A-Za-z0-9:_./-]{1,128}$/;
 interface Row { profile_visibility: PersonChoices['profileVisibility']; follow_policy: PersonChoices['followPolicy'];
@@ -41,6 +42,26 @@ function valid(value: PersonChoices): boolean {
     && Array.isArray(value.contentLanguages) && value.contentLanguages.length <= READING_LANGUAGE_LIMIT;
 }
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+
+/** Shared name policy relation, evaluated inside the caller's recovery-fenced
+ * statement. Parameter positions are supplied only by owner SQL, never clients.
+ * Materialize the principal once and probe each requested owner's indexed rows. */
+export function nameOwnerPolicySql(agents: number, issuer: number, subject: number, baseline: number): string {
+  return `WITH reader AS MATERIALIZED (SELECT id FROM access.principal
+      WHERE account_issuer = $${issuer} AND account_subject = $${subject} AND active)
+    SELECT wanted.agent, fence.open, (s.id IS NOT NULL AND
+      (COALESCE(p.profile_visibility, 'public') = 'public' OR EXISTS (
+        SELECT 1 FROM access.agent_provision a
+        JOIN access.representation r ON r.subject_id = a.agent_id
+        JOIN access.baseline_member_policy b ON b.id = $${baseline} AND b.active
+        WHERE a.agent_id = s.id AND a.agent_kind = 'person' AND a.state = 'active'
+          AND r.principal_id = (SELECT id FROM reader) AND r.action = 'agent.control'
+          AND r.active AND r.valid_until > clock_timestamp()
+      ))) AS visible
+    FROM unnest($${agents}::text[]) AS wanted(agent) CROSS JOIN fence
+    LEFT JOIN access.authority_subject s ON s.id = wanted.agent AND s.kind = 'agent' AND s.active
+    LEFT JOIN access.person_preferences p ON p.agent_id = s.id`;
+}
 
 export class PersonPreferencesStore {
   constructor(private readonly pool: Pool, private readonly projectNames?: NamePreferencesProjection) {}
@@ -242,5 +263,24 @@ export class PersonPreferencesStore {
       const identity = await requirePrincipal(client, principal);
       return !!await baselineMemberProof(client, identity.id, agent);
     });
+  }
+
+  /** One primary-key preference probe per distinct name owner, in one fenced
+   * statement. Only an active Agent inherits the public default. Private names
+   * require the same current baseline controller proof as profileVisible;
+   * semantic or Work readability is never a substitute for that proof. */
+  async visibleNameOwners(agents: readonly string[], principal: VerifiedPrincipal | null): Promise<Set<string>> {
+    if (agents.length > PERSON_PREFERENCES_COST.nameOwners || new Set(agents).size !== agents.length
+      || agents.some(agent => !agentPattern.test(agent))) throw new ControlInvalid('Name owner batch exceeds budget');
+    if (!agents.length) return new Set();
+    const rows = (await this.pool.query<{ agent: string; open: boolean; visible: boolean }>(`
+      WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id LIMIT 1 FOR SHARE)
+      SELECT * FROM (${nameOwnerPolicySql(1, 2, 3, 4)}) policy`,
+    [agents, principal?.issuer ?? null, principal?.subject ?? null, BASELINE_MEMBER_POLICY])).rows;
+    if (rows.length !== agents.length || new Set(rows.map(row => row.agent)).size !== agents.length
+      || rows.some(row => row.open !== true || !agents.includes(row.agent) || typeof row.visible !== 'boolean')) {
+      throw new ControlUnavailable('Name policy recovery fence or result is unavailable');
+    }
+    return new Set(rows.filter(row => row.visible).map(row => row.agent));
   }
 }

@@ -19,6 +19,7 @@ function database(row: unknown) {
   const pool = {
     query: async (sql: string, values: unknown) => {
       calls.push({ sql, values });
+      if (sql.includes('SELECT id AS agent')) return { rows: [] };
       return { rows: [row] };
     },
   } as unknown as Pool;
@@ -81,7 +82,7 @@ test('G1034: atomic language/disclosure probes never interpret a missing recover
   expect(await new DisclosureStore(db.pool).read(target, ANONYMOUS_VIEWER, 'summary')).toEqual([
     'tombstone',
   ]);
-  expect(db.calls).toHaveLength(1);
+  expect(db.calls).toHaveLength(2); // Exact name-owner lookup, then the atomic disclosure fence.
   await expect(
     new DisclosureStore(
       database({ open: false, ordinal: 0, restricted: false, assessments: [] }).pool,
