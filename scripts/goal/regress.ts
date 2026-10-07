@@ -89,7 +89,7 @@ const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault
 const browserTier = (tier: RegressionTier): boolean => tier === 'e2e' || tier === 'accounts:storybook';
 const routineBrowserReason = 'Browser journeys and Storybook run in the nightly full regression';
 const batchSize = (tier: RegressionTier, files: number): number =>
-  tier === 'owner' || tier === 'integration' || tier === 'fault/recovery' ? 15 : files;
+  tier === 'integration' ? 5 : tier === 'owner' || tier === 'fault/recovery' ? 15 : files;
 const json = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T;
 function atomic(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -499,6 +499,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       const planned = manifest.batches.flatMap(batch => batch.files.map(file => `${batch.tier}:${file}`)).sort();
       const required = manifest.files.filter(file => file.outcome !== 'excluded' && file.outcome !== 'deferred')
         .map(file => `${file.tier}:${file.file}`).sort();
+      // Older runs used fifteen-file integration batches; resume preserves their original plan.
       if (planned.join('\n') !== required.join('\n') || new Set(planned).size !== planned.length
         || manifest.batches.some(batch => !batch.files.length || (batch.tier === 'integration' && batch.files.length > 15))) {
         throw new Error('Incomplete regression batch plan');

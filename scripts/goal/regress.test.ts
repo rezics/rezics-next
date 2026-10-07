@@ -127,12 +127,26 @@ describe('pinned main-wide regression', () => {
       for (const tier of ['owner', 'integration', 'fault/recovery'] as const) {
         const batches = result.batches.filter(batch => batch.tier === tier);
         expect(batches.length).toBeGreaterThan(1);
-        expect(batches.every(batch => batch.files.length <= 15)).toBe(true);
+        expect(batches.every(batch => batch.files.length <= (tier === 'integration' ? 5 : 15))).toBe(true);
         expect(batches.flatMap(batch => batch.files).sort()).toEqual(r.files.filter(file => file.tier === tier).map(file => file.file).sort());
       }
       const pooled = r.calls.filter(call => ['owner', 'integration', 'fault/recovery'].includes(call.batch.tier));
       expect(new Set(pooled.map(call => call.checkout)).size).toBe(3);
       expect(pooled.every(call => call.checkout !== result.checkout)).toBe(true);
+    } finally { r.cleanup(); }
+  });
+
+  test('integration batch selection bounds costly fixture groups to five files without changing owner or fault widths', async () => {
+    const r = repo(19);
+    try {
+      const result = await r.run({ runId: 'integration-width', only: ['unit', 'owner'], integrationBatches: 3 });
+      const integration = result.batches.filter(batch => batch.tier === 'integration');
+      expect(integration.map(batch => batch.files.length)).toEqual([5, 5, 5]);
+      expect(result.files.filter(file => file.tier === 'integration' && file.outcome === 'passed')).toHaveLength(15);
+      expect(result.files.filter(file => file.tier === 'integration' && file.outcome === 'deferred')).toHaveLength(5);
+      expect(result.partial).toBe(true);
+      expect((await r.run({ resume: 'integration-width' })).batches.filter(batch => batch.tier === 'integration')
+        .map(batch => batch.files.length)).toEqual([5, 5, 5]);
     } finally { r.cleanup(); }
   });
 
@@ -448,7 +462,7 @@ export function testArgs(tier) { return tier === 'owner' ? ['scripts/ops/tests/e
       expect(resumed.status).toBe('passed');
       expect(r.calls.every(call => !completed.includes(call.batch.id))).toBe(true);
       expect(r.calls).toHaveLength(1);
-      expect(resumed.batches.filter(batch => batch.tier === 'integration').every(batch => batch.files.length <= 15)).toBe(true);
+      expect(resumed.batches.filter(batch => batch.tier === 'integration').every(batch => batch.files.length <= 5)).toBe(true);
     } finally { r.cleanup(); }
   });
 
