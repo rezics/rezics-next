@@ -8,12 +8,13 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 17:56 UTC. Launch reports a successful shared refresh at
-`2e394b95f`, including long-series progress and onboarding Statement reads.
-Content1490–1492 applied; concurrent-index rehearsal and migration execution
-passed. Launch released its code hold. Kernel's C4/C2 union hold remains active;
-Trust has no refresh ticket and holds further Main runtime gates until that
-checkpoint. The prior accepted native/model pins were906d1f549ffc/ab6d394. G-1330's mixed retained repair/cutover is active; positive restore
+Checkpoint 2026-10-07 19:08 UTC. Kernel's C4/C2 activation completed at
+3024c202e with native539276d294e2/model fa39610, Content1704 applied and all
+six applications healthy. Retained volumes are preserved and the hold is
+released. Trust has no refresh ticket; further backend code activation can
+coalesce with kernel's next owner wave. Curator270ad, Trustf83/dda, credits
+and Showcase delivery are included in the accepted checkpoint.
+G-1330's mixed retained repair/cutover is active; positive restore
 release and the remaining Claim/source-projection unions are unqualified.
 
 G-1343 borrowed reconciliation and retained-native-event component landed at
@@ -44,15 +45,17 @@ bounds; it does not qualify the current medium100k workload, all historical root
 media/backups destruction or the final populated600second restore. The run used
 current scheduling and the committed measurement repair with older runtime pins.
 G-1344 current-pin HTTP proof passed54.7s/138assertions; fixture correction landed
-`2e394b95f48c` with all160 unit/guard files green. Canonical fixture producer repair a810feb63 is reviewed and awaits the kernel
-code-hold checkpoint before its gate. Fresh small preparation passed93.440s;
+`2e394b95f48c` with all160 unit/guard files green. Canonical fixture producer repair landed d86ba417d0cf; all163 selected
+unit/guard files passed after automatic Main reconciliation. Fresh small preparation passed93.440s;
 medium native readiness qualified10,000units, but the build failed the600s wall
 ceiling with152.283s admission. No medium backup or copies were published.
 Program has the coordinated host-window request for one strict-budget retry.
 The extra temporary600s wall guard was incorrect and is removed: established
 fixture/restore budgets judge active work, exclude admission waits and report
 both. The interrupted run still published no backup; completed preparation
-under600s active remains required after the activation checkpoint. Manager-exclusive100k
+under600s active remains required. G-1344 attempt9 now retries current pins
+in the program-coordinated15-minute quiet startup window, preserving prior
+backups and reporting active/wait/wall separately. Manager-exclusive100k
 qualification remains required.
 
 Program has enrolled the manager in the supervised coordinator for native session
@@ -198,6 +201,12 @@ and repository guards. It reuses only existing semantic authority in the same
 fenced client; Work-read paths remain independent. Launch's original import
 regression still needs to run on its producer candidate. Kernel's sole C4/C2
 refresh is active; backend activation is pending its terminal checkpoint.
+
+G-1394 landed a8952cebf55c with all85 affected unit/guard files green.
+It pairs viewer and anonymous classification in the final owner statement; no
+authority cache or fence is removed. Current Main/native canonical Realm query
+passed and both audiences use11graph calls under the unchanged12. Shared
+activation and Launch's original browser regression remain pending.
 
 G-1394 owns the proven signed-in release-browse budget failure: two summary
 passes duplicate anonymous disclosure, producing13graph calls versus12. The
