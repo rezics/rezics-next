@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 13:49 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 13:50 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
 Goal remains active. Completion cannot be projected reliably until the physical
 locality and exact restore/Claim qualifications pass.
@@ -22,13 +22,13 @@ The old native operation inspection failure is fixed by d04038cac: prepare chang
 storage before inspecting membership through the candidate native module; retain
 interactive budgets. Program owns queued refresh re-execution from staged code.
 
-**Current required refresh is active**, acquired13:45:52, targetingfe7fb82d4922
-and native0.5.39-eeaa550c0acc. Log `.temp/kernel/refresh-realm-owner-pool.log`.
-Main code gates are held from queue through checkpoint. It covers new canonical
-Realm ownera299f1f16255 and admission phase repair112b05137e45. Do not start a
-second lifecycle request or declare these changes activated before checkpoint.
-Preserve all retained volumes. Cold populated600sec startup/restore remains
-unqualified; a successful shared small-stack prepare is insufficient.
+Latest Realm refresh completed13:49: fe7fb82d49222eab3ec88148a0541fa32ef835ec,
+native0.5.39-eeaa550c0acc, no pending SQL, unchanged modelab6d394. Log
+`.temp/kernel/refresh-realm-owner-pool.log` ends Shared stack refresh complete.
+Canonical Realm ownera299f1f16255 and admission112b05137e45 are now activated.
+Main code hold released; no kernel lifecycle waiter. Preserve retained volumes.
+Cold populated600sec startup/restore remains unqualified; a successful shared
+small-stack prepare is insufficient.
 
 ## Accepted contracts and evidence
 
