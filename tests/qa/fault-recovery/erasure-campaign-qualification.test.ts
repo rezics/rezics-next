@@ -22,7 +22,7 @@ import {
   workEnvironment,
   type FixtureSampleCall,
 } from '../../../scripts/fixture/smoke.ts';
-import { fixtureProject, projectRunning } from '../../../scripts/fixture/stack.ts';
+import { fixtureProject } from '../../../scripts/fixture/stack.ts';
 import {
   assertPinnedState,
   docker,
@@ -249,7 +249,7 @@ test(
             startSourceCopy(
               ids[index]!,
               {
-                running: () => projectRunning(stack.project, stack.dockerEnv),
+                restoredReady: !supplied,
                 up: () =>
                   runQaAdmissionChildAsync(
                     root,
@@ -929,14 +929,15 @@ interface SourceStartChild {
   admissionWaitMs: number;
 }
 
-/** A supplied copy is stopped; a copy fixture:restore just left running is not
- * started again, so its start work is counted once, by the qualified restore. */
+/** A supplied copy always goes through idempotent stack:up: one running
+ * container does not establish owner readiness. Only the just-completed,
+ * qualified fixture:restore branch has already performed and counted startup. */
 async function startSourceCopy(
   target: string,
-  deps: { running(): boolean; up(): Promise<SourceStartChild> },
+  deps: { restoredReady: boolean; up(): Promise<SourceStartChild> },
   report: (record: SourceStartup, output?: string) => void,
 ): Promise<SourceStartup> {
-  if (deps.running()) {
+  if (deps.restoredReady) {
     const record: SourceStartup = {
       target,
       outcome: 'already-running',
@@ -1663,7 +1664,7 @@ test('OPS10: supplied copy starts once, before its first native query, and stops
       startSourceCopy(
         'fixture-a',
         {
-          running: () => false,
+          restoredReady: false,
           up: async () => {
             calls.push('up');
             return startChild(40_000, 5_000);
@@ -1705,7 +1706,7 @@ test('OPS10: a copy fixture:restore left running is not started or counted again
   const record = await startSourceCopy(
     'fixture-auto',
     {
-      running: () => true,
+      restoredReady: true,
       up: async () => {
         ups++;
         return startChild(1, 0);
@@ -1739,7 +1740,7 @@ test('OPS10: a failed or over-budget copy start is persisted and refuses all lat
         start: () =>
           startSourceCopy(
             'fixture-b',
-            { running: () => false, up: async () => child },
+            { restoredReady: false, up: async () => child },
             (record, output) => {
               records.push(record);
               logs.push(output);
@@ -1759,7 +1760,7 @@ test('OPS10: a failed or over-budget copy start is persisted and refuses all lat
     startSourceCopy(
       'fixture-b',
       {
-        running: () => false,
+        restoredReady: false,
         up: async () => ({ ...startChild(10, 5), admissionWaitMs: 50 }),
       },
       () => {},
