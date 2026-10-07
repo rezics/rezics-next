@@ -66,6 +66,11 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
     setSaving(false);
     if (!written.ok) { setFailed(true); return; }
     setSelected(now => (now?.episode.occurrence === episode.occurrence ? { episode, mark: written.data } : now));
+    // The next episode marked moves the run on at once; Main is read again either way, and settles it.
+    const after = read!.mains.items[episode.number];
+    if (completed && episode.occurrence === read!.next?.occurrence && (after || read!.mains.next === null)) {
+      setStanding({ ok: true, data: { ...read!, through: episode, next: after ?? null } });
+    }
     setReload(count => count + 1);
   }
 

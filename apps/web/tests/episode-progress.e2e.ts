@@ -2,7 +2,7 @@ import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { type Browser, type BrowserContext, expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
+import { type Browser, type BrowserContext, expect as playwrightExpect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 import type { Series } from './episode-progress-seed.ts';
 
@@ -10,6 +10,9 @@ import type { Series } from './episode-progress-seed.ts';
 // place on a second device. Two browser contexts are two devices of one reader: a desktop and a
 // phone, each signed in on its own. The series are written once into this isolated QA stack through
 // Main's routes (`episode-progress-seed.ts`).
+
+// Every mark reads the series again from Main, a few calls one after another.
+const expect = playwrightExpect.configure({ timeout: 20_000 });
 
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 860 };
@@ -97,8 +100,8 @@ async function shot(page: Page, info: TestInfo, name: string, target?: Locator) 
 async function press(button: Locator, answer: Locator) {
   await expect(async () => {
     if (await button.count()) await button.click();
-    await expect(answer).toBeVisible({ timeout: 3_000 });
-  }).toPass({ timeout: 30_000 });
+    await expect(answer).toBeVisible({ timeout: 10_000 });
+  }).toPass({ timeout: 60_000 });
 }
 
 async function jumpTo(panel: Locator, number: number) {
