@@ -100,6 +100,11 @@ On the recovery host, make the recipient private key available through GnuPG's
 protected keyring or agent and supply the independent HMAC key and **current**
 frontier. Fence the original project; it cannot run alongside its successor.
 
+The release must supply an authenticated `RestoreChecks` adapter before target
+creation. The default CLI has no deployment adapter and refuses before target
+mutation when those checks are missing. The invocation below applies only to a
+release with that owner integration:
+
 ```sh
 task ops:restore -- --set <directory> --project rezics-qa-<new-id>
 ```
@@ -118,8 +123,8 @@ old cursors, handles, caches and workers cannot cross that boundary. Owner login
 roles and Access remain closed throughout. It rebuilds Lucene offline with the
 pinned assembler and erasure-aware indexer.
 
-The CLI leaves this copy held. Serving release needs owner integration through
-the command's `RestoreChecks` interface: check exact samples, authorized and
+The integrated command keeps the copy held through replay and verification.
+Its `RestoreChecks` interface must check exact samples, authorized and
 denied reads, retained deletions/revocations, representative search
 additions/deletions and both Account and library takeout. Authenticate through
 Account and invoke `POST /v1/owners/reconciliations` with
@@ -128,15 +133,21 @@ required deletion sets and a unique `Idempotency-Key`. Only a matched reconciled
 response permits Access and login release. Account authentication is never
 replaced by a recovery-command assertion.
 
-The CLI has no deployment release adapter today: it performs physical
-verification and text rebuild, records a held result and stops storage. The
-QA drills share an in-process Main route adapter with test authentication;
-they require no listening Main or environment-selected verification Task.
-A newer authority/erasure frontier also requires its owner's journal replay and
-a new matching capture before release. The commands
-currently reject that mismatch; they do not automate arbitrary later journal
-application. Missing required data stays unavailable. A held result needs repair
-and a new project/idempotency key, not a forced Access reopen. Failed copies
+The default CLI cannot create a physical held copy without authenticated
+checks. The QA drills supply an in-process Main route adapter with test
+authentication; they require no listening Main or environment-selected
+verification Task. Replay uses the independently retained current relay, not the
+restored backup's own journal. Keep the graph and Access holds closed throughout
+retained erasure replay. Held erasure replay must authenticate exact target/epoch
+and original receipt evidence while preserving diagnostic sequence zero,
+restore lineage and the prior cursor; ordinary suppression cannot substitute
+for that replay. Release the graph only inside the retained-erasure callback,
+after current journal, authority, live-copy and exact original custody checks,
+then release the captured Access fence generation on its held client. Missing
+or divergent evidence keeps the copy unavailable. A newer authority/erasure
+frontier still needs the owner's verified replay and reconciliation; it is never
+permission to reopen a stale cut. A held result needs repair and a new
+project/idempotency key, not a forced Access reopen. Failed copies
 preserve their stopped volumes and `recovery-evidence.json` for diagnosis;
 remove only that failed target when discarding it.
 
