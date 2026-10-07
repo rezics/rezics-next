@@ -250,6 +250,7 @@ function audienceScene(kind = 'moderation_outcome') {
             return { rows: [], rowCount: 1 };
           }
           if (sql.includes('SELECT p.active AND')) return { rows: [{ inbox: true, email: false }] };
+          if (sql.includes('SELECT level FROM access.watch')) return { rows: [{ level: 'all' }] };
           if (sql.includes('SELECT generation::text'))
             return { rows: [{ generation: uid(9010), head_sequence: '0' }] };
           if (sql.includes('FROM access.notification_item i')) {
