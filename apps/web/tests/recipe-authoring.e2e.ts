@@ -69,16 +69,22 @@ async function linkStep(scope: Locator, section: string | null, ingredient: stri
   await where.getByRole('checkbox', { name: ingredient }).check();
 }
 
+const started = Date.now();
+/** Where the journey's time goes, printed as it runs. */
+const mark = (label: string) => console.log(`[recipe-journey] ${Math.round((Date.now() - started) / 1000)}s ${label}`);
+
 test('a cook writes a recipe with sections and linked steps, edits it from two tabs, publishes it and reads it back', async ({ page, context }, info) => {
   test.setTimeout(900_000);
   const member = fixture<{ member: { email: string; password: string } }>('REZICS_WEB_AUTH_PRIVATE_PATH').member;
   await signInAtAccounts(page, sessionStudio(), member);
   await page.setViewportSize(desktop);
   const id = await createRecipe(page, 'Lemon muffins');
+  mark('created');
   const workPath = localizedPath(resourceHref('/w/', id), 'en');
   const editorPath = `${workPath}/edit/recipe`;
   await page.goto(editorPath);
   await expect(page.getByRole('heading', { name: 'About this recipe' })).toBeVisible();
+  mark('editor open');
 
   // Details: the title is the Work's own, so changing it renames the Work.
   const title = page.getByRole('textbox', { name: 'Title' });
@@ -88,6 +94,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await page.getByRole('textbox', { name: 'Notes' }).blur();
   await settled(page);
 
+  mark('details saved');
   // Yield and times.
   await page.getByRole('textbox', { name: 'Makes', exact: true }).fill('12');
   await page.getByRole('textbox', { name: 'What it makes' }).fill('muffins');
@@ -98,6 +105,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await page.getByRole('textbox', { name: 'Total time' }).blur();
   await settled(page);
 
+  mark('yield and times saved');
   // Two sections that each hold butter; a quantity written as "1½" keeps its written form.
   await page.getByRole('textbox', { name: 'Section name' }).fill('Cake');
   await page.getByRole('button', { name: 'Add section' }).click();
@@ -113,6 +121,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await expect(icing).toBeVisible();
   await addLine(page, 'Add an ingredient to Icing', '100 g butter');
   await expect(lines(icing)).toHaveText(['100 g butter']);
+  mark('sections and lines written');
   // The line is read into parts that stay editable, and the edit keeps its place.
   await page.getByRole('button', { name: 'Edit 1½ cups flour, sifted' }).click();
   const edit = page.getByRole('form', { name: 'Edit 1½ cups flour, sifted' });
@@ -124,6 +133,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await edit.getByRole('button', { name: 'Save' }).click();
   await expect(lines(cake)).toHaveText(['1 1/2 cups flour, sifted', '200 g butter, softened']);
 
+  mark('line edited');
   // Steps; the third uses the icing's butter, not the cake's.
   const addStep = async (text: string, section: string | null, ingredient: string | null) => {
     const form = page.getByRole('form', { name: 'Add a step' });
@@ -140,7 +150,9 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await expect(steps(page).nth(2).getByRole('button', { name: /1 ingredient linked/ })).toBeVisible();
   await expect(page.getByRole('article')).toContainText('Beat the icing butter until pale.');
   await shoot(page, 'recipe-editor', info);
+  mark('steps written');
 
+  mark('editor shots taken');
   // A second tab opened on the recipe as it is now.
   const other = await context.newPage();
   await other.setViewportSize(desktop);
@@ -148,6 +160,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await expect(steps(other)).toHaveCount(3);
   await expect(lines(other)).toHaveCount(3);
 
+  mark('second tab open');
   // This tab moves the head: it adds a fourth step.
   await addStep('Ice the cooled muffins.', null, null);
   await expect(steps(page)).toHaveCount(4);
@@ -164,6 +177,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await shoot(other, 'recipe-editor-after-stale-edit', info);
   await other.close();
 
+  mark('stale edit settled');
   // After a reload everything is as written, with the links still on the right ingredients.
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Title' })).toHaveValue('Lemon poppy muffins');
@@ -174,16 +188,19 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await expect(page.getByRole('textbox', { name: 'Cook time' })).toHaveValue('25');
   await expect(page.getByRole('textbox', { name: 'Servings' })).toHaveValue('12');
 
+  mark('reload checked');
   // Publish.
   await page.getByRole('button', { name: 'Publish', exact: true }).click();
   await expect(page.getByText('Published. Everyone can read this recipe.')).toBeVisible();
 
+  mark('published');
   // The Work page shows the recipe as written.
   await expect(async () => {
     await page.goto(workPath);
     await expect(page.getByRole('heading', { name: 'Lemon poppy muffins' }).first()).toBeVisible({ timeout: 5_000 });
     await expect(page.getByRole('region', { name: 'Recipe', exact: true })).toContainText('120 g butter', { timeout: 5_000 });
   }).toPass({ timeout: 120_000 });
+  mark('work page loaded');
   const recipe = page.getByRole('region', { name: 'Recipe', exact: true });
   await expect(recipe.getByRole('heading', { name: 'Cake' })).toBeVisible();
   await expect(recipe.getByRole('heading', { name: 'Icing' })).toBeVisible();
