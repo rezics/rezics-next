@@ -8,14 +8,19 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Kernel's latest canonical native refresh succeeded at 09:34 UTC, retaining
-volumes and applying model generation 15 (`1a60542ab47b`) with native
-`0.5.39-5607e0e56a0d`. The subsequent session-fence refresh completed, applying
-Account1750/1751 and restarting writers. No trust refresh is queued. Kernel's
-next complete-name native `490ac125e519` wave waits for G-1343's corrected gate;
-coalesce inputs before the one fresh refresh process, then hold **all authored
-code** from queue through checkpoint because queued Bun imports can be cached.
-Kernel owns shared lifecycle. No duplicate waiter or volume reset.
+Program owns the shared-stack recovery and pinned-backend switch from
+11:22 UTC; **all Main code merges are held until its switch checkpoint**.
+Kernel has no duplicate refresh ticket. The current committed native wave is
+`c04c234006fa`, including trust Access1767 and native fixture repair; its actual
+activation is not yet accepted. Trust cancelled its queued campaign QA before
+acquisition so recovery gets priority. The stopped compatible small fixture
+`fx-small-95570bd9906b` remains intact, built in70.8seconds at pinned
+`683697792` (native `bf6d2cec0508`); campaign execution remains unverified.
+
+The previous accepted runtime checkpoint was model generation15
+`1a60542ab47b`/native `5607e0e56a0d`, followed by successful Account1750/1751
+session-fence refresh. After the pinned-backend switch, merging managers must
+explicitly refresh to make new code live; merging must no longer reload it.
 
 C6 owner delivery is accepted. Exact original legacy model custody is now
 accepted: 15 generations/1976 artifacts backfilled in9seconds; the independent
@@ -60,16 +65,27 @@ above for the inherited verification gaps.
 | Task | State / next action |
 | --- | --- |
 | G-1321 | Closed/verified `793d7b2e813e`: immediate session-only generation fence, bounded fair cleanup, same transaction adapter client; real max1 signup/sign-in and 21 integration tests/1329 assertions. Pinned manager integration `20261007t094427-7d5212` passed; Account1750/1751 refreshed. Offline third-party consent remains independent. |
-| G-1333 | Merged `3b12289689e1`: checkout hold context/release correction and isolated LISTEN acquisition; plain/instrumented Bun startup, true nested rejection and real max1 proofs passed. Await launch's notification ownership review before closing; manager acknowledged premature landing before loan acknowledgement. |
-| G-1342 | Closed/verified `98e679a8edc0`: two lent projection error sites use existing safe worker logger; focused privacy/runtime checks passed. |
-| G-1343 | Resumed after current Main rebase; preserve G-1289 Zone public/exact disclosure and optional actingSubject. Three old revision HTTP fixtures timeout before their rights assertion; 28 other custody/comment/page/search checks pass. Correct fixtures/local generated pins, then gate/land with kernel consumer loan. |
-| G-1344 | Campaign implementation merged `192d5e825979`, native union accepted/refreshed. Resumed for a real populated qualification fixture using retained medium backup and isolated copies. Manager owns exclusive time/space/compaction qualification. |
+| G-1333 | Closed/verified `3b12289689e1` after launch accepted its listener ownership fix. Plain/instrumented Bun startup, true nested rejection and real max1 proofs passed. |
+| G-1342 | Closed/verified `98e679a8edc0`: two lent projection faults use the existing safe logger. |
+| G-1343 | First slice landed `2c170ab16` plus fixture `9f0d51423`, pins `6a25409ec`, budget adapters `dc8482551`; 31 owner/5 integration/118.6s restore/148 native proofs passed. Borrowed helper partial `05e16c510` is isolated, tested35owner/5integration/restore, not landed. Full wiring needs G-1330's committed held-client historical reader/root closure and launch's one-line library-import Access type loan. |
+| G-1344 | Native campaign `192d5e825979` accepted/refreshed. Real small/medium qualification fixture complete but not yet executed; obsolete backups correctly refuse compatibility. Same Sol now implements lent native held-erasure replay preserving sequence-zero; no held CommandService/Policy/Overlay edits. |
+| G-1351 | Safe operator seam `c53d3effc` and lock-order correction `ffae4dbd3` landed;60 focused cases and old-order mutation counterexample passed. Default release remains held until actual erasure composition. Same worker audits private command-custody bytes versus active-store erasure before final wiring. |
+| G-1353 | Realm triage `85a01f3c` with Access1767 landed: pending/completion/later correspondence, count/cursor consistency and indexed seeks proved in4realPGtests/42asserts. Same Sol now repairs exact reply evidence using its actual reader/context; migration activation and outside-claim management/moderation acceptance pending switch. |
+| G-1359 | Closed/verified `46dd3930714e`: exact Content GET declares optional bearer and generated anonymous-or-bearer security; other private/closed readers remain mandatory. Luna/max accepted first handoff,5files33insert/10delete;103 affected unit/guards all green after current rebase. |
 
-Remaining operator gap: `OwnerOperations.reconcileRestore` and
-`scripts/ops/restore.ts` verify captured cuts then release Access without the
-retained erasure replay/custody composition. Exact kernel consumer loan requested;
-connect this before claiming backup/timed restore qualification. Keep existing
-owner authentication, holds, journal frontier and exact retained roots.
+Kernel G-1341 has a narrow registry/Realm callback loan: durable admission must
+commit before graph effects, with live policy/revocation checks; G-1343 retains
+only the recovery-fence helper in admission.ts. Kernel G-1358 has the exact
+Content delivery-ordering/race loan after G-1359 closed; metadata remains ours.
+Launch owns durable notification audience continuation after the257-recipient
+counterexample (4adaptertests/24asserts); no whole old moderation cherry-pick.
+
+The actual operator release remains incomplete. Its two new maintenance lock
+writers were omitted from the guard allowances; `8a1d5a28b` narrowly registers
+them and the serialization guard's28cases/55asserts pass. The merge did select
+the guard, but file-level inherited-failure comparison grandfathered new
+findings. Program G-1356 owns comparison of finding/assertion differences and
+inconclusive timeout handling; no skip flag or runtime gate override was used.
 
 Completed since the previous checkpoint:
 
@@ -199,7 +215,7 @@ until those inputs are supplied. No production action is authorized.
 ## Current follow-ups
 
 - G-1343 suppression/restore custody and G-1351 authenticated operator release
-  composition, with the explicit kernel restore-method/ordering loan.
+  composition, with explicit kernel loans and current independent relay evidence.
 - G-1344 real populated campaign qualification; consistent backup and timed
   restore, long populated migrations, retained recovery-window peak disk use.
 - Launch's G-1333 listener-context owner review and inherited cross-Goal requests
