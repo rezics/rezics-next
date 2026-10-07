@@ -166,7 +166,6 @@ test('every served Main route, including transports, has a reviewed exposure', (
     'postV1MeLibrary-loansByIdReturn',
   ];
   // Recipe reads use Composition; Work versions, adoptions and credits use the public query transport.
-  // Recipe timings add one public write, reviewed with the measures route it extends.
   // Approved public by trust-ops on 2026-10-07 within the first public Zone scope.
   expect(publicOperations).toContain('postV1ZonesByIdSite-publications');
   // Trust-ops approved public on 2026-10-07 13:14 UTC: first Bangumi/progress scope, bearer, read family, signed-in reader's data only.
