@@ -1,10 +1,19 @@
 # State
 
-Checkpoint: 2026-10-07 06:27 UTC. Manager GPT-6.1 Sol in tmux
+Checkpoint: 2026-10-07 06:37 UTC. Manager GPT-6.1 Sol in tmux
 `goal-kernel`, registered as `goal-kernel-codex`. Live truth:
 `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
 
 ## Immediate priority
+
+Repair kernel's introduced serialization point first: G-1300's landed Content
+1520 adds writable singleton `verification.lineage_change_head`. Main
+reproduction was our own earlier landing, not inherited debt. Attempt 4 is
+redesigning freshness on default codex/xhigh with a forward migration that
+retires the singleton; no allowance or site-wide quiet-period substitution.
+Require independent-source concurrency, delayed-commit correctness, bounded
+work and stale-proof handling before asynchronous fan-out. Challenge counts
+are deferred. Program and trust-ops have been notified.
 
 The shared stack is repaired. G-1315 landed at 67883e853690, artifacts at
 ea78e29c6. The product assembler regression keeps `/update` absent and proves
@@ -39,24 +48,26 @@ keeps readable resource names and role identities. G-1243/G-1297/G-1271 closed.
 
 ## Active work and next slices
 
-- G-1245 exited attempt 4, reviewed Post-aware chapter disclosure/progress
-  repair; merge started. Both automatic upgrade paths stay. On landing send
+- G-1245 running attempt 5: merge gate found the exact public exposure count
+  stale after retired Recipe routes. Fix it without weakening disclosure;
+  qualify membership preparation's graph-wide sorting work. On landing send
   launch episode acceptance, generate artifacts and refresh.
 - G-1282 running attempt 2: C5; send launch feed query IRI and program exact
   acceptance after landing. It holds FusekiClient; urgent repair uses existing
   maintenance receipt auth family to avoid conflict.
 - G-1290 running attempt 2: remaining Work eligibility and authored label
   population scans; first slice already landed, reuse worker.
-- G-1300 exited attempt 2: bounded lineage walk and source invalidation drain
-  reviewed, ready for merge with --allow-scope (Content migration 1520 and
-  existing claim-template test). Source edits now emit one local journal event;
-  indexed freshness refuses stale replay before asynchronous fan-out drains.
+- G-1300 first slice 302a6cf8e8a8 landed, API 5309dcbbb and refresh passed,
+  but its singleton makes C3 acceptance incomplete. Attempt 4 fixes it first
+  as described above; preserve the durable DFS and exact authority checks.
 - G-1306 resumed attempt 2 on codex: incremental Event projection is done, but
   source backfill still sorts the full graph before LIMIT. Qualify/fix physical
   work bounds; returned row counts alone are insufficient.
 - G-1289 queued: dispatch when G-1284 lands; G-1288 landed 0e5218da741d.
   Stage exact owner hooks and publication membership signatures in its worktree.
 - G-1315 closed and archived after product-layout and shared-stack acceptance.
+- G-1326 running: three source profiles migrate to authored Turtle through
+  only their required extensions to the existing converter.
 
 ## Cross-Goal commitments
 
