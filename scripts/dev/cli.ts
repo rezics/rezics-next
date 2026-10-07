@@ -16,12 +16,13 @@ import { compatibleLoadStorage, loadCompatibility,
   type LoadCompatibility } from '../load/compatibility.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { devResetPlan, devResetTarget } from './reset.ts';
-import { ensureBackend, backendCommand, activeBackend, storageBackend, readPendingRefresh } from './refresh.ts';
-import { expectedRefreshEnvironment, refreshSharedStack } from './refresh-stack.ts';
+import { ensureBackend, activeBackend, storageBackend, readPendingRefresh } from './refresh.ts';
+import { expectedRefreshEnvironment, prepareRefreshStorage, refreshSharedStack } from './refresh-stack.ts';
 import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
 import { forgetQaStack, rememberQaStack, qaStartupServices, QA_STACK_TIER } from '../qa/stack-ownership.ts';
 import { assertOwnerMigrationsComplete, migrateFixtureOwners, migrateOwnerData } from '../fixture/migrate.ts';
 import { withQaStackStartup, type StartupMemoryOptions } from '../qa/memory-admission.ts';
+import { runHostAdmission } from '../qa/host-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -268,7 +269,16 @@ export async function startDevCompose<T>(root: string, env: NodeJS.ProcessEnv,
   profile: StackOptions['profile'], start: (timeout: number) => T | Promise<T>,
   admission: Partial<StartupMemoryOptions> = {}): Promise<T> {
   const ready = () => start(180_000);
-  return profile === 'qa' ? await withQaStackStartup(root, env, undefined, ready, admission) : await ready();
+  if (profile === 'qa') return await withQaStackStartup(root, env, undefined, ready, admission);
+  // A saved dev profile controls storage recovery, but it cannot exempt an
+  // implicit image build from host admission beside isolated QA. Compose keeps
+  // the original environment; only the host check omits this profile override.
+  const buildEnvironment = { ...env };
+  delete buildEnvironment.REZICS_STACK_PROFILE;
+  let result!: T;
+  await runHostAdmission(4, ['docker', 'compose', 'up'], { ...admission, root, env: buildEnvironment,
+    run: async () => { result = await ready(); return 0; } });
+  return result;
 }
 
 async function stackUp(options: StackOptions): Promise<{ apps: Record<string, string>; dir: string }> {
@@ -514,12 +524,14 @@ async function devStart(args: string[]): Promise<void> {
         // Existing owners already match the last successful refresh. Starting
         // AppHost must not apply newer main's migrations implicitly.
         const storage = storageBackend(stackDirectory(root, options!)) ?? activeBackend(stackDirectory(root, options!))!;
-        run('docker', ['compose', '--env-file', join(stackDirectory(root, options!), 'compose.env'),
-          '-f', join(storage, 'infra/dev/compose.yaml'), '--project-name', 'rezics-dev', 'up', '-d', '--wait'],
-          composeProcessEnvironment(process.env, readEnv(join(stackDirectory(root, options!), 'compose.env'))), 180_000);
+        const composeEnvironment = composeProcessEnvironment(process.env, readEnv(join(stackDirectory(root, options!), 'compose.env')));
+        await startDevCompose(root, composeEnvironment, 'dev', timeout =>
+          run('docker', ['compose', '--env-file', join(stackDirectory(root, options!), 'compose.env'),
+            '-f', join(storage, 'infra/dev/compose.yaml'), '--project-name', 'rezics-dev', 'up', '-d', '--wait'],
+            composeEnvironment, timeout));
         if (!readPendingRefresh(stackDirectory(root, options!))?.mutatingStep)
           replacePrivate(envFile, expectedRefreshEnvironment(root));
-      } else backendCommand(backend, 'task', ['dev:prepare']);
+      } else prepareRefreshStorage(backend);
     } else replacePrivate(envFile, await prepareDev(options!));
   }
   aspireCli(['start', '--format', 'Json', ...(mode === 'main' ? [] : ['--isolated'])],

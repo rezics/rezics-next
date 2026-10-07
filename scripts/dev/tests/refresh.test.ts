@@ -5,6 +5,8 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statS
 import { dirname, join, resolve } from 'node:path';
 import { Client } from 'pg';
 import { acquireHeavy, withRecovery } from '../../goal/goalctl.ts';
+import { startDevCompose } from '../cli.ts';
+import { GiB } from '../../qa/memory-admission.ts';
 import { appEnvironment, readEnv } from '../config.ts';
 import { activeBackend,
   activateBackend,
@@ -276,6 +278,49 @@ if (readFileSync(${JSON.stringify(join(lock, 'pid'))}, 'utf8') !== String(proces
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
+
+  test('already-staged recovery startup waits for image-build memory while browser QA holds the heavy lock', async () => {
+    const { dir, stack } = repository();
+    const heavy = join(dir, '.temp/goal-orchestration/qa-slots/heavy');
+    let releaseBrowser: (() => void) | undefined;
+    try {
+      ensureBackend(dir, stack);
+      const candidate = activeBackend(stack)!;
+      const stagedAdmission = readFileSync(join(candidate, '.temp/build-admission'), 'utf8');
+      releaseBrowser = await acquireHeavy(['browser'], { lockDir: heavy });
+      const env = { REZICS_STACK_PROFILE: 'dev', GOAL_TASK_ID: 'recovery-startup-probe' };
+      let now = 0, builds = 0;
+      const result = await startDevCompose(dir, env, 'dev', timeout => {
+        // Compose discovers a missing pinned image and builds it only now.
+        expect(now).toBe(10);
+        expect(timeout).toBe(180_000);
+        expect(existsSync(heavy)).toBe(true);
+        expect(env.REZICS_STACK_PROFILE).toBe('dev');
+        builds++;
+        return 'image rebuilt; storage ready';
+      }, { now: () => now, deadline: 100, pollMs: 10, announce: () => {},
+        sleep: async ms => { expect(builds).toBe(0); now += ms; },
+        read: async () => ({ vmTotal: 0, vmUsed: 0, hostAvailable: (now === 0 ? 11 : 12) * GiB }) });
+      expect(result).toBe('image rebuilt; storage ready');
+      expect(builds).toBe(1);
+      expect(readFileSync(join(candidate, '.temp/build-admission'), 'utf8')).toBe(stagedAdmission);
+      expect(readFileSync(join(heavy, 'pid'), 'utf8')).toBe(String(process.pid));
+    } finally {
+      releaseBrowser?.();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('shared recovery startup leaves Compose unstarted when host memory never admits its image build', async () => {
+    let now = 0, starts = 0;
+    await expect(startDevCompose(root, { REZICS_STACK_PROFILE: 'dev', GOAL_TASK_ID: 'recovery-startup-probe' },
+      'dev', () => { starts++; }, { now: () => now, deadline: 20, pollMs: 10,
+        announce: () => {}, sleep: async ms => { now += ms; },
+        read: async () => ({ vmTotal: 0, vmUsed: 0, hostAvailable: 11 * GiB }) }))
+      .rejects.toThrow('Memory admission deadline');
+    expect(starts).toBe(0);
+    expect(now).toBe(20);
+  });
 
   test('recovery startup admits installation and generation when its pinned revision needs staging', () => {
     const { dir, stack, revision } = repository();
