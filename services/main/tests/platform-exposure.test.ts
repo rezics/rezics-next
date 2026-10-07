@@ -166,6 +166,7 @@ test('every served Main route, including transports, has a reviewed exposure', (
     'postV1MeLibrary-loansByIdReturn',
   ];
   // Recipe reads use Composition; Work versions, adoptions and credits use the public query transport.
+  // Recipe timings add one public write, reviewed with the measures route it extends.
   // Approved public by trust-ops on 2026-10-07 within the first public Zone scope.
   expect(publicOperations).toContain('postV1ZonesByIdSite-publications');
   // Trust-ops approved public on 2026-10-07 13:14 UTC: first Bangumi/progress scope, bearer, read family, signed-in reader's data only.
@@ -180,7 +181,9 @@ test('every served Main route, including transports, has a reviewed exposure', (
   expect(publicOperations).toContain('getV1WorksByIdCredits');
   expect(matrix.find(entry => entry.path === '/v1/works/{id}/credits' && entry.method === 'get'))
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'read', bearer: false });
-  expect(publicOperations).toHaveLength(522);
+  // Recipe timings add one public write, reviewed with the measures route it extends.
+  expect(publicOperations).toContain('postV1RecipesByIdTimings');
+  expect(publicOperations).toHaveLength(523);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
