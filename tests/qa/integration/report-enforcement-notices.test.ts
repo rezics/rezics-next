@@ -9,7 +9,6 @@ import { ownerModerationEffects } from '../../../services/main/src/modules/gover
 import { ContentModeration } from '../../../services/content/src/moderation.ts';
 import {
   SafetyDecisionMail,
-  SafetyNoticeContinuation,
   type SafetyNoticeMail,
 } from '../../../services/main/src/modules/governance/notices-mail.ts';
 import type {
@@ -176,9 +175,9 @@ test('report enforcement reaches two authors and three private reporters across 
         2,
       );
     f.producer.setSafetyCorrespondence(source());
-    await expect(f.producer.runSafetyCorrespondenceOnce()).rejects.toBeInstanceOf(
-      SafetyNoticeContinuation,
-    );
+    // A committed notice page is producer progress. The safety cursor stays on
+    // that event; a lost Account acknowledgement still fails the delivery page.
+    expect(await f.producer.runSafetyCorrespondenceOnce()).toBe(1);
     expect(
       (
         await pool.query(

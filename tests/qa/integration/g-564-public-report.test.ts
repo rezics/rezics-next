@@ -290,6 +290,18 @@ test('G-564: public API intake, private correspondence, legal deadlines, urgent 
     await accountPool.query(`UPDATE rezics_account_security SET suspended_at = NULL, generation = generation + 1
       WHERE user_id = $1`, [f.account.a.id]);
     const accountBase = f.account.issuer.replace(/\/api\/auth$/, '');
+    // The person Agent keeps another live controller, so fencing this Account
+    // principal still meets the control floor and can retain its deletion journal.
+    const controlled = await f.accessPool.query<{ subject_id: string }>(
+      `SELECT subject_id FROM access.representation
+       WHERE principal_id = $1 AND action = 'agent.control' AND active`, [f.principalId]);
+    for (const row of controlled.rows) {
+      await f.accessPool.query(
+        `INSERT INTO access.representation
+           (id, principal_id, subject_id, action, valid_until, assigned_by_principal)
+         VALUES ($1, $2, $3, 'agent.control', 'infinity', $2)`,
+        [randomUUID(), f.otherPrincipal, row.subject_id]);
+    }
     const deletion = await fetch(`${f.account.issuer}/delete-user`, { method: 'POST',
       headers: { 'content-type': 'application/json', origin: accountBase, cookie: f.account.a.cookie },
       body: JSON.stringify({ password: f.account.a.password }) });

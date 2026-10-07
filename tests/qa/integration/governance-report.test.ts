@@ -132,7 +132,7 @@ async function governanceStack(name: string) {
       variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: work.work,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
       expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
-      provenance: { fixture: 'governance-report' }, serializedJson: JSON.stringify({ text }) });
+      provenance: { fixture: 'governance-report' }, serializedJson: JSON.stringify({ body: text }) });
     return saved.revisionId!;
   };
   const close = async () => {
@@ -463,7 +463,8 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
         effect: 'disclosure' }],
       rule: ruleBasis[index],
       evidenceDigest: reports[index].evidenceDigest, reversesDecisionId: null, answersStepId: null,
-      rationale: 'Misleading title', disclosure: 'parties', idempotencyKey: randomUUID(), ...overrides });
+      rationale: 'Misleading title', disclosure: 'parties', reasons: fixtureReasons,
+      idempotencyKey: randomUUID(), ...overrides });
     const decide = async (body: object, token = s.account.tokenB) => {
       const accepted = await s.call('POST', '/v1/moderation/decisions', token, body);
       if (accepted.status !== 202) return accepted;
@@ -554,15 +555,8 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
     // A concurrent reviewer holding the old case generation is stale.
     expect((await decide(decision(0, { outcome: 'dismiss', targets: [] }))).body.code).toBe('stale_governance_basis');
 
-    // Realm 2 explicitly restricts the component, independent of Realm 1's exact old revision.
-    const second = await decide(decision(1, { targets: [{ owner: 'graph', resource: s.work.work, component: 'title',
-      locator: null, scopeKind: 'component', revision: null, expectedHead: racedHead,
-      effect: 'disclosure' }] }));
-    expect(second.status).toBe(200);
-    expect((await summary(realms[0]!)).status).toBe(200);
-    expect((await summary(realms[1]!)).status).toBe(404);
-
-    // GOV03: competing reversals of Realm 1's decision have one effect.
+    // A restriction in any realm blocks release of the same component, so the
+    // one-effect reversal is proved before Realm 2's overlapping fence.
     const reversal = (key: string) => decision(0, { outcome: 'reverse', expectedGeneration: '2',
       reversesDecisionId: restricted.body.decisionId, idempotencyKey: key,
       targets: [{ owner: 'graph', resource: s.work.work, component: 'title', locator: null,
@@ -580,14 +574,23 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
     expect(retried.status).toBe(200);
     expect(retried.body).toMatchObject({ decisionId: winner.body.decisionId, replayed: true });
     expect((await decide({ ...reversal('reverse-c'), expectedGeneration: '3' })).status).toBe(409);
+    // Reversal appended a decision; the reversed one is preserved.
+    expect((await s.pool.query(`SELECT outcome FROM access.moderation_decision WHERE case_id = $1
+      ORDER BY case_sequence`, [reports[0].caseId])).rows.map(row => row.outcome)).toEqual(['restrict', 'restrict', 'reverse']);
+
+    // Realm 2 explicitly restricts the component, independent of Realm 1's released exact revision.
+    const second = await decide(decision(1, { targets: [{ owner: 'graph', resource: s.work.work, component: 'title',
+      locator: null, scopeKind: 'component', revision: null, expectedHead: racedHead,
+      effect: 'disclosure' }] }));
+    expect(second.status).toBe(200);
     const after = await s.store.readEnforcement({ owner: 'graph', resource: s.work.work, component: 'title' });
     expect(after.map(fence => [fence.context, fence.state, fence.fenceEpoch]).sort()).toEqual([
       [realms[0], 'released', '2'], [realms[1], 'restricted', '1']].sort());
     expect((await summary(realms[0]!)).status).toBe(200);
     expect((await summary(realms[1]!)).status).toBe(404);
-    // Reversal appended a decision; the reversed one is preserved; one outbox fact per decision.
-    expect((await s.pool.query(`SELECT outcome FROM access.moderation_decision WHERE case_id = $1
-      ORDER BY case_sequence`, [reports[0].caseId])).rows.map(row => row.outcome)).toEqual(['restrict', 'restrict', 'reverse']);
+    expect((await decide({ ...reversal('reverse-overlap'), expectedGeneration: '3' })).body.code)
+      .toBe('stale_governance_basis');
+    // One outbox fact per confirmed decision, including Realm 2's restriction.
     expect((await s.pool.query(`SELECT count(*)::int AS n FROM access.outbox WHERE kind = 'moderation.decided'`))
       .rows[0].n).toBe(3);
     await expect(s.pool.query('DELETE FROM access.moderation_decision WHERE id = $1', [restricted.body.decisionId]))
@@ -633,7 +636,7 @@ test('GOV02: a Content head changing after preflight makes the decision stale', 
       variant: { id: variantId, resourceId: s.work.work,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
       expectedHead, model: 'content-shape-v1', sourceRevision: null,
-      provenance: { fixture: 'governance-race' }, serializedJson: JSON.stringify({ text }) });
+      provenance: { fixture: 'governance-race' }, serializedJson: JSON.stringify({ body: text }) });
     const original = (await draft(null, 'Reported exact body')).revisionId!;
     const report = await s.call('POST', '/v1/reports', s.account.tokenA, {
       ...reportBody(s, GLOBAL_CONTEXT, scope, [{ owner: 'content', resource: s.work.work,
