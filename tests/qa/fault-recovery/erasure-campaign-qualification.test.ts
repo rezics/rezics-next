@@ -51,6 +51,7 @@ const PRIVATE = 'urn:rezics:search:private';
 const CANDIDATE_BASE = '/fuseki/databases/campaign-candidate';
 const CANDIDATE = `${CANDIDATE_BASE}/databases/rezics`;
 const MEASURE = '/fuseki/databases/campaign-measure';
+const PREPARATION_ACTIVE_BUDGET_MS = 600_000;
 const digest = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
 const literal = (value: string) => JSON.stringify(value);
 
@@ -77,7 +78,8 @@ test(
     const evidence: Record<string, unknown> = {
       profile,
       startedAt: new Date().toISOString(),
-      preparationCeilingMs: 600_000,
+      routinePreparationActiveCeilingMs: PREPARATION_ACTIVE_BUDGET_MS,
+      localPreparationActiveCeilingMs: PREPARATION_ACTIVE_BUDGET_MS,
       faultFileActiveBudgetMs: 360_000,
       measurement: '250ms sampled allocated/apparent bytes; observed peak is a lower bound',
       destructionScope:
@@ -149,47 +151,81 @@ test(
         backupMounts: 'existing fixture:restore mounts all backup volumes read-only',
       };
       const restores: FixtureRestoreEvidence[] = [];
-      let externalPreparationMs = 0;
+      const restoreEvidenceSHA256: Record<string, string> = {};
+      evidence.restoreEvidenceSHA256 = restoreEvidenceSHA256;
+      const restoreTimings: RestorePreparationTiming[] = [];
+      const autoRestoreInvocations: {
+        target: string;
+        activeMs: number;
+        admissionWaitMs: number;
+        wallMs: number;
+      }[] = [];
+      let autoRestoreInvocationWallMs = 0;
       for (const [index, stack] of stacks.entries()) {
+        const restoreEvidencePath = join(
+          root,
+          '.artifacts',
+          'fixture-restore',
+          ids[index]!,
+          'run.json',
+        );
+        const retainedRestorePath = join(evidenceDirectory, `restore-${index}.json`);
         if (!supplied) {
           await phase(`restore-${index}`, async () => {
+            const invocationStarted = performance.now();
             const result = await runQaAdmissionChildAsync(
               root,
               'task',
               ['fixture:restore', '--', '--fixture', manifest.id, '--run-id', ids[index]!],
-              Math.max(1, 600_000 - (performance.now() - preparationStarted)),
+              PREPARATION_ACTIVE_BUDGET_MS,
             );
+            const invocationWallMs = performance.now() - invocationStarted;
             writeFileSync(join(evidenceDirectory, `restore-command-${index}.log`), result.output, {
               mode: 0o600,
             });
-            if (!result.ok)
+            if (!result.ok || result.activeElapsedMs > PREPARATION_ACTIVE_BUDGET_MS) {
+              if (readFileExists(restoreEvidencePath)) {
+                const failedEvidence = readFileSync(restoreEvidencePath);
+                writeFileSync(retainedRestorePath, failedEvidence, { mode: 0o600 });
+                restoreEvidenceSHA256[ids[index]!] = digest(failedEvidence);
+              }
               throw new Error(`fixture:restore failed; inspect restore-command-${index}.log`);
+            }
+            autoRestoreInvocationWallMs += invocationWallMs;
+            autoRestoreInvocations.push({
+              target: ids[index]!,
+              activeMs: result.activeElapsedMs,
+              admissionWaitMs: result.admissionWaitMs,
+              wallMs: result.elapsedMs,
+            });
           });
         }
-        const restore = JSON.parse(
-          readFileSync(
-            join(root, '.artifacts', 'fixture-restore', ids[index]!, 'run.json'),
-            'utf8',
-          ),
-        ) as FixtureRestoreEvidence;
-        if (
-          restore.failure ||
-          !restore.completedAt ||
-          restore.target !== ids[index] ||
-          restore.fixture !== manifest.id ||
-          restore.profile !== profile ||
-          restore.works !== PROFILES[profile].works ||
-          !restore.compatibility?.compatible
-        )
-          throw new Error('Source lacks successful exact matching fixture:restore evidence');
-        const wallMs = Date.parse(restore.completedAt) - Date.parse(restore.startedAt);
-        if (!Number.isFinite(wallMs) || wallMs < 0 || (restore.elapsedMs ?? Infinity) > 600_000)
-          throw new Error('Invalid restore preparation timing');
-        restores.push(restore);
-        writeFileSync(
-          join(evidenceDirectory, `restore-${index}.json`),
-          JSON.stringify(restore, null, 2),
+        const restoreBytes = readFileSync(restoreEvidencePath, 'utf8');
+        // Preserve original evidence even when parsing or qualification refuses it.
+        writeFileSync(retainedRestorePath, restoreBytes, {
+          mode: 0o600,
+        });
+        restoreEvidenceSHA256[ids[index]!] = digest(restoreBytes);
+        const restore = JSON.parse(restoreBytes) as FixtureRestoreEvidence;
+        restoreTimings.push(
+          validateRestorePreparation(restore, {
+            fixture: manifest.id,
+            target: ids[index]!,
+            profile,
+            works: PROFILES[profile].works,
+            samples: manifest.samples.length,
+            generation: manifest.build.textIndexGeneration,
+            sequence: manifest.importSequence,
+          }),
         );
+        restores.push(restore);
+        evidence.restores = restores;
+        evidence.restorePreparation = {
+          routines: restoreTimings,
+          aggregate: aggregateRestorePreparation(restoreTimings),
+          autoInvocations: autoRestoreInvocations,
+        };
+        persist();
         const pins = await inspectFusekiState(stack.runner, stack.dockerEnv, stack.fuseki);
         assertPinnedState(
           pins,
@@ -216,11 +252,6 @@ test(
         await checkSamples(stack.apps, manifest, owners);
         stack.runner.stop();
       }
-      evidence.restores = restores;
-      if (supplied)
-        externalPreparationMs =
-          Math.max(...restores.map((restore) => Date.parse(restore.completedAt!))) -
-          Math.min(...restores.map((restore) => Date.parse(restore.startedAt)));
       const corpus = fixtureCorpus(profile, manifest.seed);
       const targets = Array.from({ length: profile === 'medium' ? 64 : 4 }, (_, i) =>
         workAt(corpus, i + 1),
@@ -338,18 +369,15 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
         (evidence.copies as Record<string, unknown>[])[index]!.sourceCustody = proof;
         stack.runner.stop();
       }
-      const preparationMs = Math.round(
-        performance.now() - preparationStarted + externalPreparationMs + harnessSetupMs,
-      );
-      evidence.preparation = {
-        elapsedMs: preparationMs,
-        externalRestoreSpanMs: externalPreparationMs,
+      const preparation = localPreparationTiming(
+        performance.now() - preparationStarted,
+        autoRestoreInvocationWallMs,
         harnessSetupMs,
-        ceilingMs: 600_000,
-      };
-      if (preparationMs > 600_000)
-        throw new Error(`Actual preparation ${preparationMs}ms exceeded 600000ms`);
+      );
+      evidence.preparation = preparation;
       persist();
+      if (preparation.activeMs > PREPARATION_ACTIVE_BUDGET_MS)
+        throw new Error('Campaign-local active preparation exceeded 600000ms');
 
       for (const [index, stack] of stacks.entries()) {
         const name = `rezics-campaign-${nonce}-${index}`;
@@ -595,6 +623,174 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
   },
   qaStartupTestTimeout(360_000),
 );
+
+interface RestorePreparationTiming {
+  target: string;
+  startedAt: string;
+  completedAt: string;
+  activeMs: number;
+  admissionWaitMs: number;
+  wallMs: number;
+  clockSamplingOverheadMs: number;
+}
+
+function evidenceMilliseconds(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0)
+    throw new Error('Invalid restore preparation timing');
+  return value;
+}
+
+function evidenceTimestamp(value: unknown): number {
+  if (typeof value !== 'string' || !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(value))
+    throw new Error('Invalid restore preparation timestamp');
+  const time = Date.parse(value);
+  if (!Number.isFinite(time) || new Date(time).toISOString() !== value)
+    throw new Error('Invalid restore preparation timestamp');
+  return time;
+}
+
+function evidenceStrings(value: unknown): string[] {
+  if (
+    !Array.isArray(value) ||
+    value.some((item) => typeof item !== 'string' || !item.trim() || /[\r\n\0]/.test(item)) ||
+    new Set(value).size !== value.length
+  )
+    throw new Error('Incomplete restore preparation evidence');
+  return [...value] as string[];
+}
+
+/** Validate the original routine's proof, independent of other restores or
+ * current release compatibility. Its recorded generation stays literal. */
+function validateRestorePreparation(
+  restore: FixtureRestoreEvidence,
+  expected: {
+    fixture: string;
+    target: string;
+    profile: FixtureProfile;
+    works: number;
+    samples: number;
+    generation: string;
+    sequence: string;
+  },
+): RestorePreparationTiming {
+  if (
+    !restore ||
+    typeof restore !== 'object' ||
+    Array.isArray(restore) ||
+    Object.hasOwn(restore, 'failure') ||
+    restore.fixture !== expected.fixture ||
+    restore.target !== expected.target ||
+    restore.profile !== expected.profile ||
+    restore.works !== expected.works ||
+    restore.deadlineMs !== PREPARATION_ACTIVE_BUDGET_MS ||
+    typeof restore.artifacts !== 'string' ||
+    !restore.artifacts.startsWith('/') ||
+    /[\r\n\0]/.test(restore.artifacts) ||
+    !restore.artifacts.endsWith(`/fixture-restore/${expected.target}`)
+  )
+    throw new Error('Source lacks successful exact matching fixture:restore evidence');
+  const activeMs = evidenceMilliseconds(restore.elapsedMs);
+  const admissionWaitMs = evidenceMilliseconds(restore.admissionWaitMs);
+  if (activeMs === 0) throw new Error('Invalid restore preparation timing');
+  if (activeMs > PREPARATION_ACTIVE_BUDGET_MS)
+    throw new Error('Individual restore active preparation exceeded 600000ms');
+  const started = evidenceTimestamp(restore.startedAt),
+    completed = evidenceTimestamp(restore.completedAt);
+  const wallMs = completed - started;
+  const accounted = evidenceMilliseconds(activeMs + admissionWaitMs);
+  const clockSamplingOverheadMs = wallMs - accounted;
+  // The producer samples its outer timestamp, budget constructor and completed
+  // timestamp separately. Retain <=2ms sampling overhead; never adjust active/wait.
+  if (
+    !Number.isSafeInteger(wallMs) ||
+    wallMs < 0 ||
+    clockSamplingOverheadMs < 0 ||
+    clockSamplingOverheadMs > 2
+  )
+    throw new Error('Restore active/admission/wall evidence does not reconcile');
+  const phaseNames = ['compatibility', 'configure', 'copy', 'start', 'migrate', 'ready', 'smoke'];
+  if (
+    !restore.phases ||
+    typeof restore.phases !== 'object' ||
+    Array.isArray(restore.phases) ||
+    !restore.copyMs ||
+    typeof restore.copyMs !== 'object' ||
+    Array.isArray(restore.copyMs)
+  )
+    throw new Error('Incomplete restore preparation evidence');
+  const phaseMs = phaseNames.map((name) => evidenceMilliseconds(restore.phases[name]));
+  if (phaseMs.reduce((sum, value) => sum + value, 0) > activeMs + phaseNames.length)
+    throw new Error('Restore phase work exceeds recorded active preparation');
+  for (const kind of ['postgres_data', 'fuseki_data', 'rustfs_data'])
+    if (evidenceMilliseconds(restore.copyMs[kind]) > restore.phases.copy! + 1)
+      throw new Error('Restore copy measurement exceeds its phase');
+  const ready = evidenceStrings(restore.ready).sort();
+  if (
+    JSON.stringify(ready) !==
+      JSON.stringify(
+        ['account', 'access', 'content', 'relay', 'fuseki', 'lucene', 'rustfs'].sort(),
+      ) ||
+    restore.samples !== expected.samples ||
+    restore.graph?.generation !== expected.generation ||
+    restore.graph?.sequence !== expected.sequence ||
+    restore.compatibility?.compatible !== true ||
+    typeof restore.compatibility.engineChanged !== 'boolean' ||
+    evidenceStrings(restore.compatibility.reasons).length !== 0 ||
+    JSON.stringify(evidenceStrings(restore.compatibility.pendingMigrations).sort()) !==
+      JSON.stringify(evidenceStrings(restore.appliedMigrations).sort())
+  )
+    throw new Error('Incomplete restore readiness or compatibility evidence');
+  return {
+    target: restore.target,
+    startedAt: restore.startedAt,
+    completedAt: restore.completedAt!,
+    activeMs,
+    admissionWaitMs,
+    wallMs,
+    clockSamplingOverheadMs,
+  };
+}
+
+/** Aggregate observations are reported, never compared with a routine ceiling. */
+function aggregateRestorePreparation(routines: readonly RestorePreparationTiming[]) {
+  if (!routines.length) throw new Error('Missing restore preparation evidence');
+  const sum = (field: 'activeMs' | 'admissionWaitMs' | 'wallMs') =>
+    evidenceMilliseconds(routines.reduce((total, routine) => total + routine[field], 0));
+  const externalSpanMs =
+    Math.max(...routines.map((routine) => evidenceTimestamp(routine.completedAt))) -
+    Math.min(...routines.map((routine) => evidenceTimestamp(routine.startedAt)));
+  return {
+    activeMs: sum('activeMs'),
+    admissionWaitMs: sum('admissionWaitMs'),
+    routineWallMs: sum('wallMs'),
+    externalSpanMs,
+    interRoutineGapMs: Math.max(0, externalSpanMs - sum('wallMs')),
+    budgetScope: 'reported-only',
+  };
+}
+
+function localPreparationTiming(
+  localWallMs: number,
+  qualifiedAutoRestoreWallMs: number,
+  harnessActiveMs: number,
+) {
+  if (
+    [localWallMs, qualifiedAutoRestoreWallMs, harnessActiveMs].some(
+      (value) => !Number.isFinite(value) || value < 0,
+    ) ||
+    qualifiedAutoRestoreWallMs > localWallMs
+  )
+    throw new Error('Invalid campaign-local preparation timing');
+  // The harness timestamp already excludes its admission. Only complete measured
+  // auto-restore calls are excluded; probes, seed/custody work and local startup stay.
+  return {
+    activeMs: Math.round(localWallMs - qualifiedAutoRestoreWallMs + harnessActiveMs),
+    localWallMs: Math.round(localWallMs),
+    qualifiedAutoRestoreWallMs: Math.round(qualifiedAutoRestoreWallMs),
+    harnessActiveMs: Math.round(harnessActiveMs),
+    activeCeilingMs: PREPARATION_ACTIVE_BUDGET_MS,
+  };
+}
 
 function readFileExists(path: string): boolean {
   try {
@@ -849,6 +1045,300 @@ ${campaignFileRead('sizes.tsv').replaceAll('/fuseki/databases', directory)}`,
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+// Literal retained539/fa restore observations; never rewritten for current pins.
+const recordedCampaignRestores: FixtureRestoreEvidence[] = [
+  JSON.parse(`{
+  "fixture": "fx-medium-605f041f8150",
+  "target": "fixture-quiet-medium-a",
+  "profile": "medium",
+  "works": 100000,
+  "startedAt": "2026-10-07T19:22:24.082Z",
+  "deadlineMs": 600000,
+  "phases": {
+    "compatibility": 225,
+    "configure": 5,
+    "copy": 235219,
+    "start": 31190,
+    "migrate": 4763,
+    "ready": 396,
+    "smoke": 1472
+  },
+  "artifacts": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-1344/.artifacts/fixture-restore/fixture-quiet-medium-a",
+  "compatibility": {
+    "compatible": true,
+    "reasons": [],
+    "pendingMigrations": [],
+    "engineChanged": false
+  },
+  "copyMs": {
+    "fuseki_data": 14637,
+    "postgres_data": 21263,
+    "rustfs_data": 234575
+  },
+  "appliedMigrations": [],
+  "graph": {
+    "generation": "urn:rezics:text-index-generation:a3f55b32-438e-4e1f-8661-2befca1b2a0d",
+    "sequence": "0"
+  },
+  "ready": [
+    "account",
+    "access",
+    "content",
+    "relay",
+    "fuseki",
+    "lucene",
+    "rustfs"
+  ],
+  "samples": 3,
+  "elapsedMs": 273668,
+  "admissionWaitMs": 112988,
+  "completedAt": "2026-10-07T19:28:50.738Z"
+}`),
+  JSON.parse(`{
+  "fixture": "fx-medium-605f041f8150",
+  "target": "fixture-quiet-medium-b",
+  "profile": "medium",
+  "works": 100000,
+  "startedAt": "2026-10-07T19:32:13.934Z",
+  "deadlineMs": 600000,
+  "phases": {
+    "compatibility": 229,
+    "configure": 5,
+    "copy": 329589,
+    "start": 20526,
+    "migrate": 804,
+    "ready": 588,
+    "smoke": 354
+  },
+  "artifacts": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-1344/.artifacts/fixture-restore/fixture-quiet-medium-b",
+  "compatibility": {
+    "compatible": true,
+    "reasons": [],
+    "pendingMigrations": [],
+    "engineChanged": false
+  },
+  "copyMs": {
+    "fuseki_data": 18706,
+    "postgres_data": 37348,
+    "rustfs_data": 327905
+  },
+  "appliedMigrations": [],
+  "graph": {
+    "generation": "urn:rezics:text-index-generation:a3f55b32-438e-4e1f-8661-2befca1b2a0d",
+    "sequence": "0"
+  },
+  "ready": [
+    "account",
+    "access",
+    "content",
+    "relay",
+    "fuseki",
+    "lucene",
+    "rustfs"
+  ],
+  "samples": 3,
+  "elapsedMs": 352561,
+  "admissionWaitMs": 4931,
+  "completedAt": "2026-10-07T19:38:11.426Z"
+}`),
+];
+const recordedRestoreExpectation = (target: string) => ({
+  fixture: 'fx-medium-605f041f8150',
+  target,
+  profile: 'medium' as const,
+  works: 100_000,
+  samples: 3,
+  generation: 'urn:rezics:text-index-generation:a3f55b32-438e-4e1f-8661-2befca1b2a0d',
+  sequence: '0',
+});
+
+test('OPS10: campaign preparation qualifies each literal restore independently and retains ungated aggregates', () => {
+  const original = JSON.stringify(recordedCampaignRestores);
+  const routines = recordedCampaignRestores.map((restore) =>
+    validateRestorePreparation(restore, recordedRestoreExpectation(restore.target)),
+  );
+  expect(
+    routines.map((routine) => [routine.activeMs, routine.admissionWaitMs, routine.wallMs]),
+  ).toEqual([
+    [273_668, 112_988, 386_656],
+    [352_561, 4_931, 357_492],
+  ]);
+  expect(aggregateRestorePreparation(routines)).toEqual({
+    activeMs: 626_229,
+    admissionWaitMs: 117_919,
+    routineWallMs: 744_148,
+    externalSpanMs: 947_344,
+    interRoutineGapMs: 203_196,
+    budgetScope: 'reported-only',
+  });
+  expect(JSON.stringify(recordedCampaignRestores)).toBe(original);
+});
+
+test('OPS10: campaign preparation rejects failed, malformed, incomplete and individually over-budget restore evidence', () => {
+  const changes: ((restore: FixtureRestoreEvidence) => void)[] = [
+    (restore) => {
+      restore.elapsedMs = 600_001;
+    },
+    (restore) => {
+      delete restore.elapsedMs;
+    },
+    (restore) => {
+      restore.elapsedMs = Number.NaN;
+    },
+    (restore) => {
+      restore.elapsedMs = Number.POSITIVE_INFINITY;
+    },
+    (restore) => {
+      restore.elapsedMs = -1;
+    },
+    (restore) => {
+      restore.elapsedMs = 273_668.5;
+    },
+    (restore) => {
+      restore.elapsedMs = 0;
+    },
+    (restore) => {
+      delete restore.admissionWaitMs;
+    },
+    (restore) => {
+      restore.admissionWaitMs = -1;
+    },
+    (restore) => {
+      restore.admissionWaitMs = 4.5;
+    },
+    (restore) => {
+      restore.admissionWaitMs = 0;
+    },
+    (restore) => {
+      restore.startedAt = '';
+    },
+    (restore) => {
+      restore.startedAt = ' 2026-10-07T19:22:24.082Z';
+    },
+    (restore) => {
+      restore.startedAt = '2026-02-30T19:22:24.082Z';
+    },
+    (restore) => {
+      delete restore.completedAt;
+    },
+    (restore) => {
+      restore.completedAt = '';
+    },
+    (restore) => {
+      restore.completedAt = '2026-10-07T19:22:00.000Z';
+    },
+    (restore) => {
+      restore.completedAt = '2026-10-07T19:28:51.738Z';
+    },
+    (restore) => {
+      restore.failure = '';
+    },
+    (restore) => {
+      restore.failure = 'restore interrupted';
+    },
+    (restore) => {
+      restore.target = 'fixture-other';
+    },
+    (restore) => {
+      restore.fixture = 'fx-medium-000000000000';
+    },
+    (restore) => {
+      restore.profile = 'small';
+    },
+    (restore) => {
+      restore.works = 1_000;
+    },
+    (restore) => {
+      restore.deadlineMs = 900_000;
+    },
+    (restore) => {
+      restore.artifacts = '/fixture-restore/fixture-other';
+    },
+    (restore) => {
+      delete restore.phases.copy;
+    },
+    (restore) => {
+      restore.phases.start = -1;
+    },
+    (restore) => {
+      restore.phases.copy = 600_000;
+    },
+    (restore) => {
+      delete restore.copyMs;
+    },
+    (restore) => {
+      delete restore.copyMs!.rustfs_data;
+    },
+    (restore) => {
+      restore.copyMs!.rustfs_data = 600_000;
+    },
+    (restore) => {
+      delete restore.ready;
+    },
+    (restore) => {
+      restore.ready = restore.ready!.filter((owner) => owner !== 'lucene');
+    },
+    (restore) => {
+      restore.ready!.push('account');
+    },
+    (restore) => {
+      restore.samples = 2;
+    },
+    (restore) => {
+      delete restore.graph;
+    },
+    (restore) => {
+      restore.graph!.generation = 'urn:rezics:text-index-generation:foreign';
+    },
+    (restore) => {
+      restore.graph!.sequence = '1';
+    },
+    (restore) => {
+      restore.compatibility!.compatible = false;
+    },
+    (restore) => {
+      restore.compatibility!.reasons = ['changed owner'];
+    },
+    (restore) => {
+      delete restore.appliedMigrations;
+    },
+    (restore) => {
+      restore.compatibility!.pendingMigrations = ['unapplied.sql'];
+    },
+  ];
+  for (const change of changes) {
+    const restore = structuredClone(recordedCampaignRestores[0]!);
+    change(restore);
+    expect(() =>
+      validateRestorePreparation(restore, recordedRestoreExpectation('fixture-quiet-medium-a')),
+    ).toThrow();
+  }
+});
+
+test('OPS10: campaign preparation excludes only separately qualified auto restore calls from local work', () => {
+  const setup = localPreparationTiming(900_000, 744_148, 12_000);
+  expect(setup).toEqual({
+    activeMs: 167_852,
+    localWallMs: 900_000,
+    qualifiedAutoRestoreWallMs: 744_148,
+    harnessActiveMs: 12_000,
+    activeCeilingMs: 600_000,
+  });
+  // Supplied records'947.344s span is reported separately; no child ran here.
+  expect(localPreparationTiming(155_852, 0, 12_000).activeMs).toBe(167_852);
+  const overBudget = localPreparationTiming(1_345_000, 744_148, 12_000);
+  expect(overBudget.activeMs).toBeGreaterThan(600_000);
+  // Actual source probes/seeding/custody/startup stay in the600ACTIVE local gate.
+  for (const [wall, restore, harness] of [
+    [-1, 0, 0],
+    [1, 2, 0],
+    [1, 0, -1],
+    [Number.NaN, 0, 0],
+    [1, Number.POSITIVE_INFINITY, 0],
+  ])
+    expect(() => localPreparationTiming(wall!, restore!, harness!)).toThrow();
 });
 
 async function retainedCustody(
