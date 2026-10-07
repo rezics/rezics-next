@@ -166,7 +166,9 @@ test('every served Main route, including transports, has a reviewed exposure', (
     'postV1MeLibrary-loansByIdReturn',
   ];
   // Recipe create, change and read now use the existing Composition operations.
-  expect(publicOperations).toHaveLength(521);
+  // Approved public by trust-ops on 2026-10-07 within the first public Zone scope.
+  expect(publicOperations).toContain('postV1ZonesByIdSite-publications');
+  expect(publicOperations).toHaveLength(522);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
