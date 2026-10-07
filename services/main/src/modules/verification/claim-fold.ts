@@ -31,6 +31,11 @@ import {
   type StatementRetainedClaimProvenance,
 } from '../statement/schema.ts';
 import { native, CLAIM_PROFILE, ADMISSIONS, receiptIri } from './graph.ts';
+import {
+  assertClaimFoldCustodyText,
+  readClaimFoldCustody,
+  type ClaimFoldCustodyBytes,
+} from './claim-fold-custody.ts';
 
 const XSD = 'http://www.w3.org/2001/XMLSchema#';
 const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
@@ -61,6 +66,14 @@ export interface ClaimStatementFoldFence {
   job: string;
 }
 export interface PreparedClaimStatementFold extends ClaimStatementFoldInput {
+  sealedBytes: {
+    relationManifest: string;
+    relationPayload: string;
+    qualificationManifest: string;
+    qualificationPayload: string;
+    statementManifest: string;
+    statementPayload: string;
+  };
   statementRevision: string;
   meaning: StatementMeaning;
   meaningKey: string;
@@ -378,7 +391,17 @@ export async function prepareClaimStatementFold(
         editionScope: reference(source, `${RV}editionScope`, true) ?? null,
       },
     });
-    const definitions = await validateRetainedClaimStatementDefinitions(env, input);
+    const custody = new Map<string, ClaimFoldCustodyBytes>();
+    const definitions = await validateRetainedClaimStatementDefinitions(
+      env,
+      input,
+      undefined,
+      async (sourceEnv, manifest, component, profile) => {
+        const exact = await readClaimFoldCustody(sourceEnv, manifest, component, profile);
+        custody.set(manifest, exact);
+        return exact.state;
+      },
+    );
     const meaningKey = statementMeaningKey(meaning);
     const sourceDigest = hash(
       JSON.stringify([
@@ -416,6 +439,14 @@ export async function prepareClaimStatementFold(
       },
       STATEMENT_PROFILE,
     );
+    const statementBytes = await readClaimFoldCustody(
+      env,
+      `urn:rezics:sha256:${manifest}`,
+      input.claim,
+      STATEMENT_PROFILE,
+    );
+    const relationBytes = custody.get(definitions.relation.manifest)!;
+    const qualificationBytes = custody.get(definitions.qualification.manifest)!;
     const historicalCurrent = triples(input.claim, current);
     const currentRecord = `${iri(input.claim)} a <${RDF}Statement> ;
       <${RDF}subject> ${retainedClaimStatementTerm(meaning.subject)} ; <${RDF}predicate> <${predicate}> ;
@@ -449,6 +480,14 @@ export async function prepareClaimStatementFold(
       status: 'eligible',
       prepared: {
         ...input,
+        sealedBytes: {
+          relationManifest: relationBytes.manifest,
+          relationPayload: relationBytes.payload,
+          qualificationManifest: qualificationBytes.manifest,
+          qualificationPayload: qualificationBytes.payload,
+          statementManifest: statementBytes.manifest,
+          statementPayload: statementBytes.payload,
+        },
         statementRevision: revision,
         meaning,
         meaningKey,
@@ -520,7 +559,7 @@ function envelope(
     facts: `${iri(receipt)} a rv:OperationReceipt ; rv:commandFamily ${lit(`claim-statement-fold-${phase}-v1`)} ;
     rv:requestDigest ${lit(digest)} ; rv:outcome rv:Succeeded ; rv:datasetId ${iri(DATASET)} ;
     rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?sequence ; rv:claimStatementFold ${iri(fence.marker)} ;
-    rv:foldMapDigest ${lit(fence.mapDigest)} .`,
+    rv:foldMapDigest ${lit(fence.mapDigest)} ; rv:claimFoldJob ${lit(fence.job)} .`,
     control: `${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?sequence .`,
   };
 }
@@ -563,6 +602,15 @@ async function closeAccessFence(pool: Pool, deadline: number) {
     client.release();
   }
 }
+
+async function assertClaimFoldAdmissionsDrained(pool: Pick<Pool, 'query'>) {
+  const pending = await pool.query(`SELECT 1 FROM access.admission WHERE action IN
+    ('verification.claim-create','verification.claim-assess') AND state <> 'sealed' LIMIT 1`);
+  if (pending.rowCount)
+    throw new ClaimStatementFoldUnavailable(
+      'Claim fold found pending verification admissions after closure; owned fences retained',
+    );
+}
 async function terminal(
   env: WorkActivationEnvironment,
   receipt: string,
@@ -600,6 +648,15 @@ export async function executeClaimStatementFold(
   pool?: Pick<Pool, 'query'>,
   deadline = performance.now() + CLAIM_STATEMENT_FOLD_COST.deadlineMs,
 ) {
+  for (const key of [
+    'relationManifest',
+    'relationPayload',
+    'qualificationManifest',
+    'qualificationPayload',
+    'statementManifest',
+    'statementPayload',
+  ] as const)
+    assertClaimFoldCustodyText(prepared.sealedBytes[key]);
   if (
     !pool ||
     (await pool.query<{ open: boolean }>('SELECT open FROM access.recovery_fence WHERE id')).rows[0]
@@ -614,13 +671,20 @@ export async function executeClaimStatementFold(
     prepared.sourceDigest,
   ]);
   await ownFence(env, fence);
+  await assertClaimFoldAdmissionsDrained(pool);
   const update = `PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} { ${prepared.historicalCurrent} } }
     INSERT { GRAPH ${iri(GRAPHS.current)} { ${prepared.current} }
       GRAPH ${iri(GRAPHS.revisions)} { ${prepared.historicalCurrent}\n${prepared.revisions} }
       GRAPH ${iri(GRAPHS.receipts)} { ${command.facts}
         ${iri(command.receipt)} rv:convertedClaim ${iri(prepared.claim)} ; rv:sourceClaimRevision ${iri(prepared.claimRevision)} ;
         rv:statementRevision ${iri(prepared.statementRevision)} ; rv:relationDefinition ${iri(prepared.relationDefinition)} ;
-        rv:qualificationDefinition ${iri(prepared.qualificationDefinition)} ; rv:sourceDigest ${lit(prepared.sourceDigest)} . }
+        rv:qualificationDefinition ${iri(prepared.qualificationDefinition)} ; rv:sourceDigest ${lit(prepared.sourceDigest)} ;
+        rv:claimFoldRelationManifest ${lit(prepared.sealedBytes.relationManifest)} ;
+        rv:claimFoldRelationPayload ${lit(prepared.sealedBytes.relationPayload)} ;
+        rv:claimFoldQualificationManifest ${lit(prepared.sealedBytes.qualificationManifest)} ;
+        rv:claimFoldQualificationPayload ${lit(prepared.sealedBytes.qualificationPayload)} ;
+        rv:claimFoldStatementManifest ${lit(prepared.sealedBytes.statementManifest)} ;
+        rv:claimFoldStatementPayload ${lit(prepared.sealedBytes.statementPayload)} . }
     } WHERE { GRAPH ${iri(GRAPHS.control)} { ${command.control} ${iri(DATASET)} rv:restoreHold true .
       ${iri(fence.marker)} rv:claimStatementFoldFence true ; rv:foldMapDigest ${lit(fence.mapDigest)} . }
       ${prepared.sourceGuard} ${prepared.definitionGuard}
@@ -799,7 +863,13 @@ async function convertEligibleClaimsTurnAtBudget(
   }
   if (!owned) {
     // Never stop writers for an unreviewed or unavailable meaning binding.
-    await validateRetainedClaimStatementDefinitions(env, input);
+    await validateRetainedClaimStatementDefinitions(
+      env,
+      input,
+      undefined,
+      async (sourceEnv, manifest, component, profile) =>
+        (await readClaimFoldCustody(sourceEnv, manifest, component, profile)).state,
+    );
     if (
       (
         await pool.query(`SELECT 1 FROM access.admission WHERE action IN
@@ -840,6 +910,8 @@ async function convertEligibleClaimsTurnAtBudget(
     await closeAccessFence(pool, deadline);
   }
   await ownFence(env, fence);
+  // Closure waits for in-flight Access transactions; the pre-acquire check alone cannot prove this cut.
+  await assertClaimFoldAdmissionsDrained(pool);
   const converted: Awaited<ReturnType<typeof executeClaimStatementFold>>[] = [];
   const retained: { claim: string; reason: string }[] = [];
   for (let index = 0; index < input.claims.length; index++) {

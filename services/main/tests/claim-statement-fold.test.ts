@@ -1,5 +1,5 @@
 import { afterAll, expect, spyOn, test } from 'bun:test';
-import { mkdtempSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Parser } from 'n3';
 import type { Pool } from 'pg';
@@ -284,6 +284,30 @@ function definitionFixture() {
   define(id(2), id(10), 'property', DATE_PUBLISHED_DEFINITION_NOTATION);
   define(id(3), id(11), 'interpretation', QUALIFICATION_DEFINITION_NOTATION);
   return { env, definitions, define, queries };
+}
+
+function definitionBytes(
+  f: ReturnType<typeof definitionFixture>,
+  revision: string,
+  payload?: string,
+) {
+  const definition = f.definitions.get(revision)!;
+  const descriptor = JSON.parse(
+    readFileSync(join(f.env.objectDirectory, definition.manifest.slice(-64)), 'utf8'),
+  );
+  const original = readFileSync(join(f.env.objectDirectory, descriptor.payload.slice(-64)), 'utf8');
+  const payloadBytes = payload ?? `\n${JSON.stringify(JSON.parse(original), null, 2)}\n`;
+  const payloadDigest = hash(payloadBytes);
+  descriptor.payload = `sha256:${payloadDigest}`;
+  descriptor.payloadBytes = Buffer.byteLength(payloadBytes);
+  const manifestBytes = `\n${JSON.stringify(descriptor, null, 2)}\n`;
+  const manifestDigest = hash(manifestBytes);
+  const manifestPath = join(f.env.objectDirectory, manifestDigest);
+  const payloadPath = join(f.env.objectDirectory, payloadDigest);
+  writeFileSync(payloadPath, payloadBytes);
+  writeFileSync(manifestPath, manifestBytes);
+  definition.manifest = `urn:rezics:sha256:${manifestDigest}`;
+  return { manifestBytes, payloadBytes, manifestPath, payloadPath };
 }
 
 test('D binds only the fixed reviewed original publication predicate and Q binds the finite qualification', async () => {
@@ -835,6 +859,7 @@ function retainedRootFixture() {
     accessOpen: boolean;
     failAccessCloseOnce?: boolean;
     acquired?: Row;
+    pendingAfterClose?: boolean;
   } = {
     roots: [{ revision: uri(revision) }],
     owned: true,
@@ -968,6 +993,11 @@ function retainedRootFixture() {
     }
     if (text.includes('access.recovery_fence'))
       return { rows: [{ open: state.accessOpen }], rowCount: 1 };
+    if (text.includes('FROM access.admission'))
+      return {
+        rows: state.pendingAfterClose && !state.accessOpen ? [{ pending: 1 }] : [],
+        rowCount: state.pendingAfterClose && !state.accessOpen ? 1 : 0,
+      };
     if (text.includes('SELECT complete,through_sequence'))
       return {
         rows: [{ complete: state.coverage, through_sequence: state.coverageSequence }],
@@ -1511,4 +1541,127 @@ test('closed legacy creation seals an unknown key as cancelled and replays the o
   });
   expect(commands).toHaveLength(1);
   expect(outcomes.at(-1)).toEqual({ id: oldId, outcome: 'succeeded' });
+});
+
+test('the native fold wire carries the job and six original custody byte strings without reserialization', async () => {
+  const f = retainedRootFixture();
+  const relation = definitionBytes(f, f.target.relationDefinition);
+  const qualification = definitionBytes(f, f.target.qualificationDefinition);
+  const before = structuredClone({
+    source: f.source,
+    current: f.current,
+    receipt: f.originalReceipt,
+  });
+  const prepared = await prepareClaimStatementFold(f.env, f.target);
+  if (prepared.status !== 'eligible') throw new Error(prepared.reason);
+  const bytes = prepared.prepared.sealedBytes;
+  expect(bytes).toMatchObject({
+    relationManifest: relation.manifestBytes,
+    relationPayload: relation.payloadBytes,
+    qualificationManifest: qualification.manifestBytes,
+    qualificationPayload: qualification.payloadBytes,
+  });
+  expect(bytes.relationPayload).not.toBe(JSON.stringify(JSON.parse(bytes.relationPayload)));
+  const manifest = prepared.prepared.revisions.match(
+    /rv:manifest <urn:rezics:sha256:([0-9a-f]{64})>/,
+  )![1]!;
+  expect(bytes.statementManifest).toBe(readFileSync(join(f.env.objectDirectory, manifest), 'utf8'));
+  const statement = JSON.parse(bytes.statementManifest);
+  expect(bytes.statementPayload).toBe(
+    readFileSync(join(f.env.objectDirectory, statement.payload.slice(-64)), 'utf8'),
+  );
+  expect(statement.payload).toBe(`sha256:${hash(bytes.statementPayload)}`);
+  expect(statement.payloadBytes).toBe(Buffer.byteLength(bytes.statementPayload));
+  await executeClaimStatementFold(f.env, prepared.prepared, f.fence, f.pool);
+  const insert = f.commands[0]!.update.match(/INSERT\s*\{([\s\S]*?)\}\s*WHERE\s*\{/)![1]!;
+  const quads = new Parser({ format: 'TriG' }).parse(`@prefix rv: <${RV}> .
+    ${insert.replaceAll('?sequence', '41')}`);
+  const receipt = f.commands[0]!.receipt;
+  expect(
+    quads
+      .filter(
+        (quad) => quad.subject.value === receipt && quad.predicate.value === `${RV}claimFoldJob`,
+      )
+      .map((quad) => quad.object.value),
+  ).toEqual([f.fence.job]);
+  for (const [name, value] of Object.entries(bytes)) {
+    const field = `claimFold${name[0]!.toUpperCase()}${name.slice(1)}`;
+    const found = quads.filter(
+      (quad) => quad.subject.value === receipt && quad.predicate.value === `${RV}${field}`,
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]!.graph.value).toBe(GRAPHS.receipts);
+    expect(found[0]!.object.value).toBe(value);
+    expect(found[0]!.object.termType).toBe('Literal');
+  }
+  expect({ source: f.source, current: f.current, receipt: f.originalReceipt }).toEqual(before);
+});
+
+test('missing, mutated, oversized and over-deep pinned definition bytes refuse before Claim dispatch', async () => {
+  for (const defect of [
+    'missing-manifest',
+    'missing-payload',
+    'mutated-payload',
+    'oversized-payload',
+    'deep-payload',
+    'duplicate-key',
+  ]) {
+    const f = retainedRootFixture();
+    let bytes = definitionBytes(f, f.target.relationDefinition);
+    if (defect === 'missing-manifest') rmSync(bytes.manifestPath);
+    if (defect === 'missing-payload') rmSync(bytes.payloadPath);
+    if (defect === 'mutated-payload') writeFileSync(bytes.payloadPath, `${bytes.payloadBytes} `);
+    if (defect === 'oversized-payload')
+      bytes = definitionBytes(
+        f,
+        f.target.relationDefinition,
+        `${bytes.payloadBytes}${' '.repeat(16_385)}`,
+      );
+    if (defect === 'deep-payload') {
+      const payload = JSON.parse(bytes.payloadBytes);
+      payload.state.roles = Array.from({ length: 17 }).reduce<object>((value) => [value], {});
+      bytes = definitionBytes(f, f.target.relationDefinition, JSON.stringify(payload));
+    }
+    if (defect === 'duplicate-key')
+      bytes = definitionBytes(
+        f,
+        f.target.relationDefinition,
+        bytes.payloadBytes.replace('"format":', '"\\u0066ormat":"unreviewed","format":'),
+      );
+    const before = structuredClone({ current: f.current, source: f.source });
+    const prepared = await prepareClaimStatementFold(f.env, f.target);
+    expect(prepared.status).toBe('retained');
+    expect(f.commands).toHaveLength(0);
+    expect({ current: f.current, source: f.source }).toEqual(before);
+  }
+});
+
+test('an admission registered between the initial check and Access closure stops preparation and conversion', async () => {
+  const f = retainedRootFixture();
+  f.state.held = false;
+  f.state.owned = false;
+  f.state.accessOpen = true;
+  f.state.pendingAfterClose = true;
+  const files = readdirSync(f.env.objectDirectory).sort();
+  await expect(
+    convertEligibleClaimsTurn(f.env, f.pool, {
+      ...f.target,
+      job: f.fence.job,
+      claims: [{ claim: f.claim, claimRevision: f.revision }],
+    }),
+  ).rejects.toThrow(/admissions|effects/iu);
+  expect(f.commands).toHaveLength(1);
+  expect(f.commands[0]!.receipt).toContain(':acquire:');
+  expect(f.state).toMatchObject({ held: true, owned: true, accessOpen: false });
+  expect(readdirSync(f.env.objectDirectory).sort()).toEqual(files);
+  const checks = f.sql
+    .map((entry, index) => ({ ...entry, index }))
+    .filter((entry) => entry.text.includes('FROM access.admission'));
+  expect(checks).toHaveLength(2);
+  const close = f.sql.findIndex((entry) => entry.text.startsWith('UPDATE access.recovery_fence'));
+  expect(checks[0]!.index).toBeLessThan(close);
+  expect(checks[1]!.index).toBeGreaterThan(close);
+  expect(f.sql.some((entry) => entry.text.startsWith('INSERT INTO access.statement_seek'))).toBe(
+    false,
+  );
 });

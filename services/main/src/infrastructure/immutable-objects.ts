@@ -5,12 +5,13 @@ const DIGEST = /^[0-9a-f]{64}$/;
 
 export class ObjectUnavailable extends Error {}
 export class ObjectIntegrityError extends Error {}
+export class ObjectReadBudgetExceeded extends Error {}
 
 export interface ImmutableObjects {
   /** Return the digest only after a conditional create and verified read-back. */
   put(bytes: Uint8Array): Promise<string>;
   /** A missing object is unavailable; bytes with the wrong digest are corrupt. */
-  get(digest: string): Promise<Uint8Array>;
+  get(digest: string, maxBytes?: number, signal?: AbortSignal): Promise<Uint8Array>;
   /** Remove a known-unpublished staging candidate when the backend supports it. */
   discard?(digest: string): Promise<void>;
 }
@@ -119,16 +120,48 @@ export class S3ImmutableObjects implements ImmutableObjects {
     throw new ObjectUnavailable('immutable object was not visible after conditional create');
   }
 
-  async get(digest: string): Promise<Uint8Array> {
+  async get(digest: string, maxBytes?: number, signal?: AbortSignal): Promise<Uint8Array> {
+    if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 1))
+      throw new ObjectReadBudgetExceeded('invalid immutable object read budget');
     const key = this.key(digest);
     let response: Response;
     try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`,
-      { method: 'GET', signal: this.readSignal?.() }); }
+      { method: 'GET', signal: signal ?? this.readSignal?.() }); }
     catch { throw new ObjectUnavailable('committed immutable object is unavailable'); }
     if (!response.ok) throw new ObjectUnavailable(`committed immutable object is unavailable (${response.status})`);
     let bytes: Uint8Array;
-    try { bytes = new Uint8Array(await response.arrayBuffer()); }
-    catch { throw new ObjectUnavailable('committed immutable object could not be read'); }
+    try {
+      if (maxBytes === undefined) bytes = new Uint8Array(await response.arrayBuffer());
+      else {
+        const length = response.headers.get('content-length');
+        if (length && /^\d+$/.test(length) && Number(length) > maxBytes) {
+          await response.body?.cancel().catch(() => {});
+          throw new ObjectReadBudgetExceeded('immutable object exceeds its read budget');
+        }
+        const reader = response.body?.getReader();
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        if (reader) try {
+          for (;;) {
+            const next = await reader.read();
+            if (next.done) break;
+            total += next.value.byteLength;
+            if (total > maxBytes) {
+              await reader.cancel().catch(() => {});
+              throw new ObjectReadBudgetExceeded('immutable object exceeds its read budget');
+            }
+            chunks.push(next.value);
+          }
+        } finally { reader.releaseLock(); }
+        bytes = new Uint8Array(total);
+        let offset = 0;
+        for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+      }
+    }
+    catch (error) {
+      if (error instanceof ObjectReadBudgetExceeded) throw error;
+      throw new ObjectUnavailable('committed immutable object could not be read');
+    }
     if (sha256(bytes) !== digest) throw new ObjectIntegrityError('immutable object digest differs');
     return bytes;
   }

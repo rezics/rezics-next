@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { S3ImmutableObjects, ObjectIntegrityError } from '../src/infrastructure/immutable-objects.ts';
+import { S3ImmutableObjects, ObjectIntegrityError, ObjectReadBudgetExceeded } from '../src/infrastructure/immutable-objects.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { prepareComponent, prepareWorkComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { readWorkComponentState, RevisionCorrupt } from '../src/modules/work/history.ts';
@@ -112,6 +112,32 @@ test('P0.5 equal bytes in different retention namespaces remain separate objects
   expect(await privateStore.put(bytes)).toBe(expected);
   expect([...data.keys()].sort()).toEqual([
     `semantic/private/sha256/${expected}`, `semantic/work/sha256/${expected}`]);
+});
+
+test('bounded immutable reads accept the exact boundary and reject over-budget custody before returning bytes', async () => {
+  const { store } = fakeS3();
+  const bytes = Buffer.from('exact verified bytes');
+  const expected = await store.put(bytes);
+  expect(Buffer.from(await store.get(expected, bytes.length))).toEqual(bytes);
+  await expect(store.get(expected, bytes.length - 1)).rejects.toBeInstanceOf(ObjectReadBudgetExceeded);
+  await expect(store.get(expected, 0)).rejects.toBeInstanceOf(ObjectReadBudgetExceeded);
+  expect(Buffer.from(await store.get(expected))).toEqual(bytes);
+});
+
+test('bounded immutable reads refuse a streamed object without a declared length', async () => {
+  const bytes = Buffer.alloc(16_385, 65);
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch() {
+    return new Response(new ReadableStream<Uint8Array>({ start(controller) {
+      controller.enqueue(bytes.subarray(0, 8192));
+      controller.enqueue(bytes.subarray(8192));
+      controller.close();
+    } }));
+  } });
+  servers.push(server);
+  const store = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
+    bucket: 'rezics-semantic', accessKeyId: 'local-test-key', secretAccessKey: 'local-test-secret',
+    prefix: 'semantic/work/' });
+  await expect(store.get(digest(bytes), 16_384)).rejects.toBeInstanceOf(ObjectReadBudgetExceeded);
 });
 
 test('P0.5 exact legacy Work references read verified local bytes during migration', async () => {

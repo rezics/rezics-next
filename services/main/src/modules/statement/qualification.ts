@@ -409,6 +409,7 @@ async function exactDefinitions(
   env: WorkActivationEnvironment,
   references: readonly string[],
   canReadDefinition?: (definition: string) => Promise<boolean>,
+  readState: typeof readComponent = readComponent,
 ): Promise<Map<string, ExactStatementDefinition>> {
   const unique = [...new Set(references.map(nativeDefinition))];
   const rows =
@@ -444,7 +445,7 @@ async function exactDefinitions(
       throw new ContextCommandUnavailable('Statement definition is unavailable');
     }
     const state = checkedStoredState(
-      await readComponent(env, row.manifest.value, definition, PROFILES.definition),
+      await readState(env, row.manifest.value, definition, PROFILES.definition),
     );
     if (
       state.component !== 'definition' ||
@@ -527,9 +528,11 @@ export async function validateStatementDefinitions(
 /** The reviewed fold binds the original external predicate through fixed sealed D/Q contracts. */
 export async function validateRetainedClaimStatementDefinitions(env: WorkActivationEnvironment,
   input: { relationDefinition: string; qualificationDefinition: string },
-  canReadDefinition?: (definition: string) => Promise<boolean>): Promise<{ guard: string }> {
+  canReadDefinition?: (definition: string) => Promise<boolean>,
+  readState: typeof readComponent = readComponent): Promise<{ guard: string;
+    relation: { component: string; manifest: string }; qualification: { component: string; manifest: string } }> {
   const references = [input.relationDefinition, input.qualificationDefinition];
-  const definitions = await exactDefinitions(env, references, canReadDefinition);
+  const definitions = await exactDefinitions(env, references, canReadDefinition, readState);
   const relation = definitions.get(input.relationDefinition)!;
   const qualification = definitions.get(input.qualificationDefinition)!;
   if (relation.state.kind !== 'property' || relation.state.notation !== DATE_PUBLISHED_DEFINITION_NOTATION
@@ -539,7 +542,9 @@ export async function validateRetainedClaimStatementDefinitions(env: WorkActivat
     throw new InvalidContextCommand('retained Claim definitions do not declare the reviewed publication proposition');
   }
   return { guard: [...definitions.values()].map(definitionGuard).join('\n')
-    + `\n${activeDirectDefinitionsGuard(references)}` };
+    + `\n${activeDirectDefinitionsGuard(references)}`,
+    relation: { component: relation.definition, manifest: relation.manifest },
+    qualification: { component: qualification.definition, manifest: qualification.manifest } };
 }
 
 /** Literal interpretation is an explicit exact DefinitionRef, never a resource-object default. */
