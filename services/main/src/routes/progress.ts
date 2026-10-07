@@ -114,7 +114,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
             || !await canReadCompositionWork(session, header.work)) {
             throw new CompositionUnavailable('composition is unavailable');
           }
-          const binding = ['completed-occurrences-v1', structure, header.head,
+          const binding = ['completed-occurrences-v1', structure,
             session.principal, query.actingSubject];
           const cursor = decodeReadCursor(query.cursor, binding, session.position);
           let after: ProgressPageKey | undefined;
