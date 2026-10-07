@@ -406,15 +406,20 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         let results = await (target.zone ? withDisclosureViewer(viewer, read) : read());
         if (target.zone) results = await discloseContent(work.environment, results,
           viewer);
-        if (published && target.zone && !await isZonePublishedPageRevision(work.environment,
-          target.zone, resourceId, params.revision)) {
-          return problem(404, 'revision_unavailable', 'Revision is unavailable');
-        }
         const exact = results[0];
         if (exact?.status === 'available'
           && exact.reference.resourceId === resourceId
           && await publicDomainRevisionCurrent(exact.reference, work.rights?.store)
           && await revisionDeliverable(params.revision)) {
+          // Rights and delivery checks can await while the bundle or editor's
+          // owner proof moves. Recheck the same Zone path immediately before bytes leave.
+          if (target.zone) {
+            const readable = published
+              ? await isZonePublishedPageRevision(work.environment, target.zone, resourceId, params.revision)
+              : principal && query.actingSubject && await canReadContentTarget(work.environment,
+                work.access, principal, query.actingSubject, resourceId, target);
+            if (!readable) return problem(404, 'revision_unavailable', 'Revision is unavailable');
+          }
           return Response.json({ reference: exact.reference, serializedJson: exact.serializedJson,
             body: exact.body }, { headers: { 'cache-control': 'no-store' } });
         }
