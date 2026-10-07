@@ -18,6 +18,8 @@ type ShowcaseEnvironment = WorkActivationEnvironment & { [contentOwner]?: Conten
 
 /** Bind the existing exact Content owner without changing either media guard. */
 export function configureZoneShowcaseDisclosure(work: MainWorkDependencies): void {
+  // Contract generation mounts routes without runtime owner dependencies.
+  if (!work.environment) return;
   (work.environment as ShowcaseEnvironment)[contentOwner] = {
     content: work.content, contentAuthoring: work.contentAuthoring,
   };
