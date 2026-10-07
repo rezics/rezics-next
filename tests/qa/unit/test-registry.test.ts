@@ -33,16 +33,18 @@ test('owner discovery registers nested Bun TSX tests without admitting an unregi
   try {
     for (const directory of ['services', 'model', 'scripts', 'packages', 'apps/web', 'apps/accounts',
       'infra/dev/tests', 'infra/jena/tests']) mkdirSync(join(fixture, directory), { recursive: true });
-    const owner = 'services/main/tests/nested/behavior.test.tsx';
+    const unit = 'apps/web/tests/nested/behavior.test.tsx';
+    const service = 'services/main/tests/resource.test.ts';
+    const retained = 'services/main/tests/context-schema.test.ts';
     const script = 'scripts/static/contract.test.ts';
     const packageFile = 'packages/document/tests/checker.test.ts';
-    for (const file of [owner, 'services/main/tests/unregistered.integration.test.ts', 'services/main/tests/unregistered.integration.test.tsx',
+    for (const file of [unit, service, retained, 'services/main/tests/unregistered.integration.test.ts', 'services/main/tests/unregistered.integration.test.tsx',
       'model/tests/daily-rating.test.ts', 'apps/web/node_modules/dependency.test.ts', script, packageFile]) {
       mkdirSync(dirname(join(fixture, file)), { recursive: true });
       writeFileSync(join(fixture, file), '');
     }
-    expect(unitOwnerFiles(fixture)).toEqual([owner]);
-    expect(ownerGateFiles(fixture)).toEqual([packageFile, script]);
+    expect(unitOwnerFiles(fixture)).toEqual([unit, retained]);
+    expect(ownerGateFiles(fixture)).toEqual([packageFile, script, service]);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }

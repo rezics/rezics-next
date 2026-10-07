@@ -117,7 +117,7 @@ export async function regressionRegistry(checkout: string): Promise<ExpectedFile
     outcome: 'excluded' as const, reason: 'Legacy tests require host JVM/Jena; retained QA gates run instead' })));
   for (const exclusion of registry.testExclusions ?? []) {
     if (!files.some(item => item.file === exclusion.file)) files.push({ file: exclusion.file,
-      tier: exclusion.file.startsWith('apps/about/') ? 'external' : 'live', outcome: 'excluded', reason: exclusion.reason });
+      tier: exclusion.category ?? (exclusion.file.startsWith('apps/about/') ? 'external' : 'live'), outcome: 'excluded', reason: exclusion.reason });
   }
   return files;
 }

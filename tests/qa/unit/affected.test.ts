@@ -68,11 +68,14 @@ test('an unreferenced input fails closed to every registered tier', () => {
 });
 
 test('a widened unit tier still runs affected unit tests outside the registered tier', () => {
-  const result = plan(['yarn.lock', 'services/main/src/rating.ts', 'scripts/operations/rebuild.ts']);
-  // tests/qa/unit is registered, so only the service test runs separately.
-  expect(result.tests.unit).toEqual(['services/main/tests/rating.test.ts']);
+  const outside = 'tests/custom/rating.test.ts';
+  const result = plan(['yarn.lock', 'services/main/src/rating.ts', 'scripts/operations/rebuild.ts'], {
+    graph: graph.map(item => item.source === 'services/main/tests/rating.test.ts' ? { ...item, source: outside } : item),
+    exists: path => path === outside || files.has(path),
+  });
+  expect(result.tests.unit).toEqual([outside]);
   expect(affectedCommands(result).slice(0, 2).map(item => item.command)).toEqual([
-    ['bun', ['scripts/qa/cli.ts', '--tier', 'unit']], ['bun', ['test', './services/main/tests/rating.test.ts']]]);
+    ['bun', ['scripts/qa/cli.ts', '--tier', 'unit']], ['bun', ['test', `./${outside}`]]]);
 });
 
 test('data files, deleted modules and spawned scripts reach tests without import edges', () => {
@@ -87,7 +90,7 @@ test('data files, deleted modules and spawned scripts reach tests without import
     exists: path => files.has(path) || path === 'services/main/tests/gone.test.ts',
     graph: [...graph, { source: 'services/main/tests/gone.test.ts', dependencies: [
       { module: '../src/gone.ts', resolved: '../src/gone.ts', couldNotResolve: true, coreModule: false }] }] });
-  expect(withFile.tests.unit).toEqual(['services/main/tests/gone.test.ts']);
+  expect(withFile.tests.owner).toEqual(['services/main/tests/gone.test.ts']);
 });
 
 test('stack harness and root script wiring add the shared-stack smoke test instead of every tier', () => {
@@ -113,7 +116,7 @@ test('affected arguments accept an optional revision and list mode only', () => 
 test('affected commands run unit files directly and stack tiers through the QA harness', () => {
   const result = plan(['services/main/src/access.ts', 'services/main/src/rating.ts']);
   expect(affectedCommands(result).map(item => item.command)).toEqual([
-    ['bun', ['test', './services/main/tests/rating.test.ts']],
+    ['bun', ['scripts/qa/cli.ts', '--tier', 'owner', '--file', 'services/main/tests/rating.test.ts']],
     ['bun', ['scripts/qa/cli.ts', '--tier', 'integration', '--file', 'tests/qa/integration/access-api.test.ts']],
     ['bun', ['scripts/qa/cli.ts', '--tier', 'fault/recovery', '--file', 'tests/qa/fault-recovery/access-restore.test.ts']],
   ]);

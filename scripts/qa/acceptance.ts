@@ -129,9 +129,11 @@ function isRetiredQaTest(test: TestResult): boolean {
 export { integrationGateFiles };
 
 // Exclusions are file-specific so a new test cannot silently inherit an opt-out.
-export const testExclusions: readonly { file: string; reason: string }[] = [
+export const testExclusions: readonly { file: string; reason: string; category?: 'live' | 'load' | 'external' }[] = [
   ...legacyHostJenaGateFiles.map(file => ({ file,
     reason: 'Legacy host Jena harness needs separately installed REZICS_JAVA_HOME, REZICS_JENA_HOME and REZICS_FUSEKI_HOME.' })),
+  { file: 'scripts/research/storage_architecture/dgraph.test.ts', category: 'load',
+    reason: 'Opt-in 10k Dgraph load evidence requires a completed research:architecture Dgraph probe and its retained results; ordinary Bun tiers do not prepare that workload.' },
   { file: 'apps/web/tests/g-944-shared-browser.test.ts',
     reason: 'Live shared-stack Playwright fixture requires running web, Accounts and Main services; run it explicitly through goalctl rather than the isolated Bun unit tier.' },
   { file: 'apps/about/tests/build.test.ts', reason: 'The about site runs its tests through task about:check.' },
@@ -172,11 +174,31 @@ function bunOwnerFiles(root = join(import.meta.dir, '../..')): string[] {
   return found.sort();
 }
 
-const retainedUnitOwners = new Set(['scripts/dev/config.test.ts', 'scripts/operations/search-state.test.ts']);
+// Keep declared acceptance evidence in its reviewed unit tier. The coverage
+// gate rejects a future declaration whose owner file has not been retained.
+const retainedUnitOwners = new Set([
+  'model/tests/claim-analysis.test.ts',
+  'model/tests/release-rating.test.ts',
+  'scripts/dev/config.test.ts',
+  'scripts/operations/search-state.test.ts',
+  'services/main/tests/api-contract.test.ts',
+  'services/main/tests/command.test.ts',
+  'services/main/tests/content-eligibility.test.ts',
+  'services/main/tests/content-projection-runtime.test.ts',
+  'services/main/tests/context-schema.test.ts',
+  'services/main/tests/event-time.test.ts',
+  'services/main/tests/immutable-objects.test.ts',
+  'services/main/tests/rating-aggregate.test.ts',
+  'services/main/tests/rating-calendar.test.ts',
+  'services/main/tests/rating-experience.test.ts',
+  'services/main/tests/rating-global.test.ts',
+  'services/main/tests/structure-listitem.test.ts',
+  'services/main/tests/vote-schema-commands.test.ts',
+  'services/main/tests/work-command.test.ts',
+]);
 export function isQaOwnerPath(path: string): boolean {
   return /\.test\.tsx?$/.test(path) && !retainedUnitOwners.has(path) && !modelGateFiles.some(file => file === path)
-    && (path.startsWith('scripts/') || path.startsWith('packages/')
-    || path === 'services/main/tests/g-903-api-inputs.test.ts');
+    && (path.startsWith('scripts/') || path.startsWith('packages/') || path.startsWith('services/'));
 }
 export function unitOwnerFiles(root = join(import.meta.dir, '../..')): string[] {
   return bunOwnerFiles(root).filter(file => !isQaOwnerPath(file));
