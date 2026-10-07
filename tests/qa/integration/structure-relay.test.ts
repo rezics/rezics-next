@@ -84,8 +84,15 @@ test('G-320: composition and chapter commands drain in ordinal order; progress r
     ]);
 
     await f.grant(`work:read:${chapter.post}`, 'work.read');
+    const progressUrl = `http://main.local${path}/occurrences/${shortId(chapter.occurrence)}/progress`;
+    const readProgress = () => progressApp.handle(new Request(
+      `${progressUrl}?actingSubject=${encodeURIComponent(f.actor)}`,
+      { headers: { authorization: `Bearer ${f.account.tokenA}` } }));
+    const initialProgress = await readProgress();
+    expect(initialProgress.status).toBe(200);
+    expect(await initialProgress.json()).toMatchObject({ completed: false, version: 0 });
     const progressResponse = await progressApp.handle(new Request(
-      `http://main.local${path}/occurrences/${shortId(chapter.occurrence)}/progress`, {
+      progressUrl, {
         method: 'PUT', headers: { authorization: `Bearer ${f.account.tokenA}`,
           'content-type': 'application/json', 'idempotency-key': `progress-${randomUUID()}` },
         body: JSON.stringify({ actingSubject: f.actor, expectedVersion: 0,
@@ -93,6 +100,9 @@ test('G-320: composition and chapter commands drain in ordinal order; progress r
       }));
     expect(progressResponse.status).toBe(200);
     expect(await progressResponse.json()).toMatchObject({ completed: true, version: 1 });
+    const savedProgress = await readProgress();
+    expect(savedProgress.status).toBe(200);
+    expect(await savedProgress.json()).toMatchObject({ completed: true, position: 'paragraph:1', version: 1 });
     const content = new ContentCore(f.pool);
     const cursor = new ContentProjectionCursor(f.pool);
     const contentConsumer = `structure-relay-${randomUUID()}`;

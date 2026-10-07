@@ -50,7 +50,9 @@ export async function canReadCompositionResource(session: WorkReadSession, resou
 export function compositionTargetReader(session: WorkReadSession, profile: StructureProfileRegistration) {
   return (target: string) => {
     if (isCatalogTarget(profile, target)) return Promise.resolve(true);
-    if (profile.id === 'book-composition') return canReadCompositionWork(session, target);
+    // Studio chapters are Posts; their public/granted disclosure and erasure
+    // belong to the resource reader, without a CreativeWork/MainVersion gate.
+    if (profile.id === 'book-composition') return canReadCompositionResource(session, target);
     if (profile.id === 'collection-membership' || profile.id === 'work-composition') {
       return resolveTargets(session, [target], 'collection-member').then(() => true).catch((error: unknown) => {
         if (error instanceof WorkReadMissing) return false;
