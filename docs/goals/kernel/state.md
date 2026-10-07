@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 20:43 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 20:47 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
@@ -20,12 +20,20 @@ precede snapshots; maintenance UPDATE+SHARE drains producers. Program approved.
 Real PG12cases/312assertions and owner38/472 passed with stable source;
 156 affected/guard files passed. Completion/release remains denied.
 
-Latest ONE refresh completed exit0 to3afbdeb02652:
+Kernel roots/membership refresh completed exit0 to3afbdeb02652:
 `.temp/kernel/roots-membership-activation-1954.log`. Native
 `rezics/fuseki:6.2.0-cmd0.5.39-25ce9fb19154`, model generation
 `fa39610f05366ac072a3aa10d94d4ef02e5f72f8d404f3cb3da4b7d0c8a5fe49`.
 Content1705/1706 applied; all six apps Running Healthy. No AppHost restart,
 volumes kept. Kernel code hold RELEASED; no gate or refresh pending.
+Program lifecycle activation now SERVESf4c9d9301098 (refresh.json), including
+G1330 erased-pin45181 and G1345 auditbd968; six apps Running Healthy on
+20:46 verification. Native/model pins unchanged. G1346 lifecycle9c9c563e7
+verified live by Program44s/Main200 during heavy lock. Refresh/recovery now
+use their separate lifecycle lock, no heavy lock/QA slot; frozen staged code
+reexecutes after lock acquisition and builds use host admission. Main merges
+continue while refresh waits/runs: do not issue a Goal-wide merge hold. Announce
+behavior-changing activations; mandatory model/migration refresh still applies.
 Carries Rating89a170592714, Trust browsea895 and Launch judgment236f3a426.
 Program's100k medium backup qualified566.4s active/573.9wall/7.5admission;
 full populated erase/release/startup remains open. Quiet window ended19:30.
@@ -115,7 +123,8 @@ qualifier branch preserved as `goal/g-1352-before-curator-selection-1852`.
 - G1345 RUNNING#15 implementing receipt+Assessment original comparison BEFORE
   terminal replay; defer stronger C/R anchors/B custody/E equality. Shared
   two-call80KiB/10s strict raw RDF windows17/65. AuditLANDEDbd968879a98d,
- 161affected/guards with one timeoutsolo PASS; no mandatory refresh needed.
+ 161affected/guards with one timeoutsolo PASS; now serving Programf4c9d930.
+  No mandatory refresh needed for that TS-only landing.
   Audit2b3b3b8cc independently ACCEPT42owner637/16PG377;32raw+lookahead,
   invalid/pending originals explicit, exact maintenance job/generation/epoch,
   PK33rows40vs41buffers64/10k. ContentEOF only under quiescence, not Access/native
@@ -125,7 +134,7 @@ qualifier branch preserved as `goal/g-1352-before-curator-selection-1852`.
 - G1330 MERGED#15 erased-pin component45181d8fd39d, independently accepted
   9a756d8e4+882d5aa68; explicit prep/epoch/sequence mismatch blocker closed.
   Actual fresh OPS1210143/sourceStable plus original available16 exact-byte proof.
-  All163affected/19guards pass. Trust types/native suppression/caller loans
+  All163affected/19guards pass, now serving Programf4c9d930. Trust types/native suppression/caller loans
   preserved. FullTask not closed: original owner release/interruption union
   depends on corrected G1397 +Trust G1351; graph/Access remains held.
 - G1397 RUNNING#2 exact released-native-proof reader corrections. Trust additive G1351
