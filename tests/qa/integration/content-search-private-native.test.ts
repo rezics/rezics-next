@@ -14,7 +14,7 @@ import { AccessAdmissionRegistry, AdmissionDenied, AdmissionUnavailable,
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { saveAdmittedContentDraft }
   from '../../../services/main/src/modules/content-publication/draft.ts';
-import { CONTENT_PRIVATE_SEARCH_COST, prepareAdmittedPrivateContentPhrase }
+import { CONTENT_PRIVATE_SEARCH_COST, PrivateContentSearchUnavailable, prepareAdmittedPrivateContentPhrase }
   from '../../../services/main/src/modules/content-publication/search-private.ts';
 import { contentPrivateUnit }
   from '../../../services/main/src/modules/content-publication/search-private-projection.ts';
@@ -26,6 +26,24 @@ import { activateMetadataWork, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+
+class PrivateIndexFuseki extends ObservedFuseki {
+  uncertain = false;
+
+  override async commandHealth() {
+    const health = await super.commandHealth();
+    return this.uncertain ? { ...health, textIndexUncertain: true } : health;
+  }
+}
+
+class PrivateSearchContent extends ContentCore {
+  exactReads = 0;
+
+  override async readExactBatch(...args: Parameters<ContentCore['readExactBatch']>) {
+    this.exactReads++;
+    return super.readExactBatch(...args);
+  }
+}
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -57,8 +75,8 @@ test('SEARCH11: private Content draft uses an Access lease, exact unit and recei
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   try {
     await migrateContent(pool);
-    const content = new ContentCore(pool);
-    const fuseki = new ObservedFuseki(Bun.env.FUSEKI_URL);
+    const content = new PrivateSearchContent(pool);
+    const fuseki = new PrivateIndexFuseki(Bun.env.FUSEKI_URL);
     const env = { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
       routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: join(state, 'objects') };
     const title = `Private Content ${randomUUID()}`;
@@ -109,6 +127,24 @@ test('SEARCH11: private Content draft uses an Access lease, exact unit and recei
       VALUES ($1, $2, $2, $3, 'work.read', now() + interval '1 hour')`,
     [randomUUID(), actor, readScope]);
     const settlement = new PrivateSearchSettlement(accessPool);
+    const latestLeaseState = async () => (await accessPool.query<{ state: string }>(
+      `SELECT state FROM access.search_read_lease WHERE target_kind = 'content-variant'
+       AND content_variant = $1 ORDER BY created_at DESC, id DESC LIMIT 1`, [variant])).rows[0]?.state;
+
+    // Inject the native uncertainty flag while retaining real owner/Access operations.
+    fuseki.uncertain = true;
+    const uncertainBytes = content.exactReads;
+    const uncertainCommands = fuseki.commands;
+    const uncertainQueries = fuseki.queries.length;
+    await expect(prepareAdmittedPrivateContentPhrase(env, content, searchAccess,
+      settlement, principal, actor, { resource: created.work, variant, phrase: bodyTerm }))
+      .rejects.toBeInstanceOf(PrivateContentSearchUnavailable);
+    expect(content.exactReads).toBe(uncertainBytes);
+    expect(fuseki.commands).toBe(uncertainCommands);
+    expect(fuseki.queries.slice(uncertainQueries).some(query => query.includes('text:query'))).toBe(false);
+    expect(await latestLeaseState()).toBe('aborted');
+    fuseki.uncertain = false;
+
     const readStart = fuseki.queries.length + fuseki.healthReads;
     const commandStart = fuseki.commands;
     const queryStart = fuseki.queries.length;
@@ -136,6 +172,31 @@ test('SEARCH11: private Content draft uses an Access lease, exact unit and recei
     const lease = (await accessPool.query<{ state: string }>(
       'SELECT state FROM access.search_read_lease WHERE id = $1', [offered.leaseId])).rows[0];
     expect(lease?.state).toBe('delivered');
+
+    const miss = await prepareAdmittedPrivateContentPhrase(env, content, searchAccess,
+      settlement, principal, actor, { resource: created.work, variant,
+        phrase: `absent${randomUUID().replaceAll('-', '')}` });
+    let missFrame = '';
+    expect(await miss.send(message => { missFrame = message; return 1; })).toBe(1);
+    const missOffer = JSON.parse(missFrame) as typeof offered;
+    expect(missOffer.result).toMatchObject({ total: 0, results: [] });
+    expect(await miss.receipt({ type: 'private-content-receipt-v1',
+      leaseId: missOffer.leaseId, receiptChallenge: missOffer.receiptChallenge })).toBe(true);
+
+    const uncertainDelivery = await prepareAdmittedPrivateContentPhrase(env, content, searchAccess,
+      settlement, principal, actor, { resource: created.work, variant, phrase: bodyTerm });
+    const deliveryBytes = content.exactReads;
+    const deliveryCommands = fuseki.commands;
+    const deliveryQueries = fuseki.queries.length;
+    fuseki.uncertain = true;
+    await expect(uncertainDelivery.send(() => { throw new Error('uncertain frame was offered'); }))
+      .rejects.toThrow('private Content index is uncertain');
+    expect(uncertainDelivery.offered).toBe(false);
+    expect(content.exactReads).toBe(deliveryBytes);
+    expect(fuseki.commands).toBe(deliveryCommands);
+    expect(fuseki.queries.slice(deliveryQueries).some(query => query.includes('text:query'))).toBe(false);
+    expect(await latestLeaseState()).toBe('withheld');
+    fuseki.uncertain = false;
     const rawPublic = await fuseki.query(`PREFIX rv: <${RV}>
       PREFIX text: <http://jena.apache.org/text#> SELECT ?unit WHERE {
         GRAPH <urn:rezics:search:public> {

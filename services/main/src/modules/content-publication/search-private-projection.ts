@@ -35,6 +35,15 @@ export async function projectPrivateContentDraft(env: WorkActivationEnvironment,
   content: ContentCore, resource: string, variant: string, expectedRevision: string,
   expectedOwnerEpoch: string): Promise<{ unit: string; body: string; language: string;
     byteDigest: string }> {
+  // Refuse an uncertain index before reading exact private bytes or projecting them.
+  const profile = profileRegistry[PROFILE_ID];
+  const health = await env.fuseki.commandHealth();
+  if ((health as { textIndexUncertain?: boolean }).textIndexUncertain === true) {
+    throw new ContentPrivateProjectionUnavailable('private Content index is uncertain');
+  }
+  if (!profile || health.profiles[PROFILE_ID] !== profile.sha256) {
+    throw new ContentPrivateProjectionUnavailable('private Content projection profile differs');
+  }
   const exact = (await content.readExactBatch([expectedRevision],
     async () => new Set([expectedRevision])))[0];
   if (exact?.status !== 'available' || exact.reference.resourceId !== resource
@@ -49,11 +58,6 @@ export async function projectPrivateContentDraft(env: WorkActivationEnvironment,
   if (!source || source.revisionId !== expectedRevision
     || source.position.dataEpoch !== expectedOwnerEpoch) {
     throw new ContentPrivateProjectionUnavailable('Content draft head changed');
-  }
-  const profile = profileRegistry[PROFILE_ID];
-  const health = await env.fuseki.commandHealth();
-  if (!profile || health.profiles[PROFILE_ID] !== profile.sha256) {
-    throw new ContentPrivateProjectionUnavailable('private Content projection profile differs');
   }
   const identity = identities(exact.reference, expectedOwnerEpoch);
   const digest = hash(JSON.stringify({ reference: exact.reference, ownerEpoch: expectedOwnerEpoch,

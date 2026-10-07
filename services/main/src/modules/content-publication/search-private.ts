@@ -36,6 +36,9 @@ interface Position { instance: string; writeEpoch: string; generation: string; g
 
 async function position(env: WorkActivationEnvironment): Promise<Position> {
   const health = await env.fuseki.commandHealth();
+  if ((health as { textIndexUncertain?: boolean }).textIndexUncertain === true) {
+    throw new PrivateContentSearchUnavailable('private Content index is uncertain');
+  }
   if (!health.privateSearchWriteEpoch || !decimal.test(health.privateSearchWriteEpoch)
     || health.privateSearchWriteActive !== false
     || BigInt(health.privateSearchWriteEpoch) % 2n !== 0n) {
