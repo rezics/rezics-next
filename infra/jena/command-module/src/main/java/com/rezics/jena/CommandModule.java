@@ -82,7 +82,9 @@ public final class CommandModule implements FusekiAutoModule {
             data.begin(org.apache.jena.query.ReadWrite.WRITE);
             try {
                 var control = CommandInvariant.readControl(data);
-                if (control != null && !control.held()) {
+                // Any restoreHold value is an uncertain cut, like a held one: no qualification
+                // is minted. Source admission and effects stay closed while inspection can start.
+                if (control != null && !control.held() && !hasRestoreHold(data)) {
                     long deadline = System.nanoTime() + 10_000_000_000L;
                     SemanticSourceBasis.qualifyAtStartup(data, deadline);
                     SemanticSourceBasis.check(deadline);
@@ -94,6 +96,15 @@ public final class CommandModule implements FusekiAutoModule {
             try { SemanticSourceBasis.invalidate(data); data.commit(); }
             finally { data.end(); }
         }
+    }
+
+    /** One indexed (control, product, restoreHold, ANY) probe; the value's type or truth is not interpreted. */
+    static boolean hasRestoreHold(org.apache.jena.sparql.core.DatasetGraph data) {
+        return data.contains(
+            org.apache.jena.graph.NodeFactory.createURI(CommandPolicy.CONTROL),
+            org.apache.jena.graph.NodeFactory.createURI("urn:rezics:dataset:product"),
+            org.apache.jena.graph.NodeFactory.createURI("https://rezics.com/vocab/restoreHold"),
+            org.apache.jena.graph.Node.ANY);
     }
 
     @Override public void serverStopped(FusekiServer server) {
