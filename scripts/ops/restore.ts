@@ -426,7 +426,7 @@ export async function restoreRecoverySet(options: RestoreOptions): Promise<Resto
       await assertContentRecoveryCoverage(restoredPools.content, fuseki, coverage.content);
       await assertObjectRecoveryCoverage(
         fuseki,
-        objectStore(context!.apps, budget),
+        objectStore(context!.apps, budget, restoredPools.content),
         coverage.objects,
       );
       for (const sealedSet of manifest.sealedDeletionSets)
