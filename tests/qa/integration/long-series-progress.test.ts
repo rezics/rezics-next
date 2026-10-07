@@ -360,7 +360,9 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
       expect(page.scope).toBe('positions');
       expect(graphRows - before.rows).toBeLessThan(160);
       expect(objectReads - before.reads).toBeLessThan(40);
-      expect(stack.fuseki.queries - before.calls).toBeLessThan(40);
+      // Resolved pages compose the fixed resume window and fixed search
+      // window; pending pages perform only the former.
+      expect(stack.fuseki.queries - before.calls).toBeLessThan(page.resolved === 'pending' ? 40 : 80);
       expect(page.items.every(item => !Object.hasOwn(item, 'ordinal'))).toBe(true);
       if (page.resolved === 'pending') {
         expect(resolvedSearch).toBe(false);
