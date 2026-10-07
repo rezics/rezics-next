@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
@@ -46,7 +46,7 @@ describe('goalctl briefs', () => {
 describe('goalctl claims', () => {
   const parsed = parseBrief(brief);
 
-  test('a branch may not add migrations numbered below main', () => {
+  test('identifies migrations that need normalization above main', () => {
     const main = () => ['985_a.sql', '1004_b.sql'];
     expect(migrationsBelowMain(['services/main/migrations/access/990_x.sql'], main))
       .toEqual(['services/main/migrations/access/990_x.sql (main already has 1004)']);
@@ -791,6 +791,163 @@ process.exit(await child.exited);
       expect(r.ledger().tasks[task.id]!.state).toBe('merged');
     } finally { r.cleanup(); }
   }, 30_000);
+
+  for (const scenario of ['references', 'ordered', 'outside-reference', 'outside-symlink', 'unsafe-self-reference', 'unsafe-named-reference', 'unsafe-fraction-reference', 'above-head', 'padded', 'multiple-directories', 'ambiguous-directories', 'foreign-directory'] as const) {
+    test(`migration normalization handles ${scenario} before the unit gate and fast-forward`, async () => {
+      const r = repo();
+      try {
+        const directory = 'services/main/migrations/access';
+        const task = await r.start('G-001');
+        const ledger = r.ledger();
+        ledger.tasks[task.id]!.paths.push('services/main/migrations/**', 'migration-references.test.ts');
+        r.save(ledger);
+        // Main advances after dispatch, reproducing reservations merged in another order.
+        mkdirSync(join(r.dir, directory), { recursive: true });
+        writeFileSync(join(r.dir, directory, '1004_main.sql'), 'SELECT 1;\n');
+        if (scenario === 'outside-reference') writeFileSync(join(r.dir, 'other-owner.ts'), 'export const migrationVersion = 990;\n');
+        if (scenario === 'outside-symlink') symlinkSync(`${directory}/990_first.sql`, join(r.dir, 'other-owner.ts'));
+        r.git('add', '.'); r.git('commit', '-qm', 'Advance main migration head');
+        mkdirSync(join(task.worktree, directory), { recursive: true });
+        const first = scenario === 'above-head' ? 1010 : 990;
+        const digits = scenario === 'padded' ? '0990' : String(first);
+        const self = scenario === 'unsafe-self-reference' ? 'INSERT INTO schema_versions VALUES (990);'
+          : scenario === 'unsafe-named-reference' ? "SELECT 'schema_migration_990';"
+          : scenario === 'unsafe-fraction-reference' ? '-- migration 990.5\nSELECT 1;' : `-- migration ${digits}\nSELECT 1;`;
+        writeFileSync(join(task.worktree, directory, `${digits}_first.sql`), `${self}\n`);
+        const refs = [`const MIGRATION_VERSION: number = ${first};`,
+          `const filename = '${directory}/${digits}_first.sql';`,
+          `const unrelated = ${first};`, `const longer = ${first}0;`, `const identifier${first} = true;`];
+        if (scenario === 'padded') refs.push("const QUOTED_VERSION = '0990';");
+        if (scenario === 'foreign-directory') refs.push("const foreign = 'services/main/migrations/relay/990_first.sql';");
+        if (scenario === 'ordered') {
+          // An already higher addition still belongs after the low one. Its number is occupied.
+          writeFileSync(join(task.worktree, directory, '1005_second.sql'), '-- migration 1005\nSELECT 2;\n');
+          refs.push("const second = '1005_second.sql';");
+        }
+        if (scenario === 'multiple-directories' || scenario === 'ambiguous-directories') {
+          const relay = 'services/main/migrations/relay';
+          mkdirSync(join(r.dir, relay), { recursive: true });
+          writeFileSync(join(r.dir, relay, '1200_main.sql'), 'SELECT 1;\n');
+          r.git('add', relay); r.git('commit', '-qm', 'Advance relay head');
+          mkdirSync(join(task.worktree, relay), { recursive: true });
+          writeFileSync(join(task.worktree, relay, '990_first.sql'), '-- migration 990\nSELECT 2;\n');
+          refs.push(`const relay = '${relay}/990_first.sql';`);
+          // A bare version cannot choose between the directory-specific assignments.
+          if (scenario === 'multiple-directories') refs[0] = 'const unrelatedVersion = 1;';
+        }
+        if (scenario === 'references') {
+          // This assertion can pass only after filenames and constants have been normalized.
+          refs.push("import { test, expect } from 'bun:test';", "import { existsSync } from 'node:fs';",
+            `test('migration references resolve after normalization', () => { expect(MIGRATION_VERSION).toBe(1005); expect(existsSync(filename)).toBe(true); expect(unrelated).toBe(990); expect(longer).toBe(9900); expect(identifier990).toBe(true); });`);
+        }
+        writeFileSync(join(task.worktree, 'migration-references.test.ts'), `${refs.join('\n')}\n`);
+        expect(spawnSync('git', ['-C', task.worktree, 'add', '.']).status).toBe(0);
+        expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add task migrations and references']).status).toBe(0);
+        await r.stopFixture(task.id);
+        const before = r.git('rev-parse', 'main');
+        const plan = join(r.dir, '.temp/unit-plan');
+        writeFileSync(plan, scenario === 'references' ? '  unit: migration-references.test.ts\n' : '');
+        const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan });
+        if (scenario.startsWith('outside-') || scenario.startsWith('unsafe-') || scenario === 'ambiguous-directories' || scenario === 'foreign-directory') {
+          expect(result.status).toBe(1);
+          expect(result.stderr).toContain(scenario.startsWith('outside-')
+            ? "other-owner.ts references old migration number 990 outside the task's changed files"
+            : scenario === 'ambiguous-directories' ? 'migration 990 is ambiguous across directories'
+            : scenario === 'foreign-directory' ? 'refers to a directory not being renumbered'
+            : 'its own migration number 990 occurs outside a proven migration context');
+          expect(r.git('rev-parse', 'main')).toBe(before);
+          expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+          expect(existsSync(join(task.worktree, directory, '990_first.sql'))).toBe(true);
+          expect(spawnSync('git', ['-C', task.worktree, 'status', '--porcelain'], { encoding: 'utf8' }).stdout).toBe('');
+        } else {
+          expect(result.stderr).toBe('');
+          expect(result.status).toBe(0);
+          expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+          const next = scenario === 'above-head' ? 1010 : scenario === 'ordered' ? 1006 : 1005;
+          expect(readFileSync(join(r.dir, directory, `${next}_first.sql`), 'utf8')).toBe(`-- migration ${next}\nSELECT 1;\n`);
+          expect(readFileSync(join(r.dir, directory, '1004_main.sql'), 'utf8')).toBe('SELECT 1;\n');
+          const references = readFileSync(join(r.dir, 'migration-references.test.ts'), 'utf8');
+          expect(references).toContain(`${next}_first.sql`);
+          expect(references).toContain(`const unrelated = ${first};`);
+          if (scenario === 'padded') expect(references).toContain("const QUOTED_VERSION = '1005';");
+          expect(result.stdout.includes('Migration normalization:')).toBe(scenario !== 'above-head');
+          if (scenario === 'ordered') {
+            expect(readFileSync(join(r.dir, directory, '1007_second.sql'), 'utf8')).toBe('-- migration 1007\nSELECT 2;\n');
+            expect(references).toContain('1007_second.sql');
+          }
+          if (scenario === 'multiple-directories') expect(references).toContain('relay/1201_first.sql');
+          if (scenario !== 'above-head') expect(r.git('log', '-1', '--format=%s')).toBe('Normalize migration numbers after rebase (goalctl)');
+        }
+      } finally { r.cleanup(); }
+    }, 30_000);
+  }
+
+  test('a failed normalized merge can retry exact migration claims above a newly moved head', async () => {
+    const r = repo();
+    try {
+      const directory = 'services/main/migrations/access';
+      mkdirSync(join(r.dir, directory), { recursive: true });
+      writeFileSync(join(r.dir, directory, '1004_main.sql'), 'SELECT 1;\n');
+      r.git('add', '.'); r.git('commit', '-qm', 'Main migration');
+      const task = await r.start('G-001');
+      const file = 'migration-retry.test.ts';
+      const original = `${directory}/990_retry.sql`;
+      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(original, file); r.save(ledger);
+      writeFileSync(join(task.worktree, original), '-- migration 990\nSELECT 2;\n');
+      writeFileSync(join(task.worktree, file), "import { test, expect } from 'bun:test';\nimport { existsSync } from 'node:fs';\n"
+        + `test('normalized filename resolves', () => expect(existsSync('${original}')).toBe(false));\n`);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', '.']).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add migration and failing reference test']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const plan = join(r.dir, '.temp/unit-plan'); writeFileSync(plan, `  unit: ${file}\n`);
+      const first = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan });
+      expect(first.status).toBe(1);
+      expect(first.stderr).toContain('introduced unit failures');
+      expect(r.ledger().tasks[task.id]!.migrationOrigins).toEqual({ [`${directory}/1005_retry.sql`]: original });
+      writeFileSync(join(r.dir, directory, '1006_later.sql'), 'SELECT 3;\n');
+      r.git('add', '.'); r.git('commit', '-qm', 'Another migration lands before retry');
+      const testPath = join(task.worktree, file);
+      writeFileSync(testPath, readFileSync(testPath, 'utf8').replace('toBe(false)', 'toBe(true)'));
+      expect(spawnSync('git', ['-C', task.worktree, 'add', file]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Fix filename assertion']).status).toBe(0);
+      const second = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan });
+      expect(second.stderr).toBe('');
+      expect(second.status).toBe(0);
+      expect(r.ledger().tasks[task.id]!.migrationOrigins).toEqual({ [`${directory}/1007_retry.sql`]: original });
+      expect(existsSync(join(r.dir, directory, '1007_retry.sql'))).toBe(true);
+      expect(readFileSync(join(r.dir, file), 'utf8')).toContain('1007_retry.sql');
+    } finally { r.cleanup(); }
+  }, 30_000);
+
+  for (const boundary of ['main', 'task'] as const) {
+    test(`merge refuses when ${boundary} changes while the normalized branch is tested`, async () => {
+      const r = repo();
+      try {
+        const task = await r.start('G-001');
+        const file = 'moving-boundary.test.ts';
+        const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(file, 'advance.ts'); r.save(ledger);
+        const directory = boundary === 'main' ? r.dir : task.worktree;
+        writeFileSync(join(task.worktree, file), `import { test, expect } from 'bun:test';\n`
+          + `import { writeFileSync } from 'node:fs';\nimport { spawnSync } from 'node:child_process';\n`
+          + `test('advance a merge boundary', () => {\n`
+          + `writeFileSync(${JSON.stringify(join(directory, 'advance.ts'))}, 'export {};\\n');\n`
+          + `expect(spawnSync('git', ['-C', ${JSON.stringify(directory)}, 'add', 'advance.ts']).status).toBe(0);\n`
+          + `expect(spawnSync('git', ['-C', ${JSON.stringify(directory)}, 'commit', '-qm', 'Advance boundary']).status).toBe(0);\n});\n`);
+        r.commit(task);
+        expect(spawnSync('git', ['-C', task.worktree, 'add', file]).status).toBe(0);
+        expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add moving boundary probe']).status).toBe(0);
+        await r.stopFixture(task.id);
+        const before = r.git('rev-parse', 'main');
+        const plan = join(r.dir, '.temp/unit-plan'); writeFileSync(plan, `  unit: ${file}\n`);
+        const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan });
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('changed during the unit gate; retry merge');
+        expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+        expect(existsSync(join(r.dir, file))).toBe(false);
+        if (boundary === 'task') expect(r.git('rev-parse', 'main')).toBe(before);
+      } finally { r.cleanup(); }
+    }, 30_000);
+  }
 
   for (const outcome of ['introduced', 'inherited', 'skipped', 'dirty-main', 'new-file'] as const) {
     test(`pre-merge unit gate handles ${outcome} failures before fast-forward`, async () => {

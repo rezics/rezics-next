@@ -3,7 +3,7 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync,
-  renameSync, readlinkSync, rmSync, statSync, writeFileSync } from 'node:fs';
+  renameSync, readlinkSync, rmSync, statSync, lstatSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
@@ -31,6 +31,8 @@ export interface Task extends Omit<Brief, 'worktree'> {
   /** Merge refuses files and lines that name tasks (`historyIntroductions`). Unset on tasks dispatched before
    * 2026-10-04, whose briefs still asked for task-named tests. */
   historyGate?: boolean;
+  /** Normalized migration paths retain the original claim when a failed unit gate is retried. */
+  migrationOrigins?: Record<string, string>;
 }
 /** One running Goal. Its intent and areas live in `docs/goals/<slug>/GOAL.md`; the ledger keeps only runtime state. */
 export interface GoalRecord { manager: string; startedAt: string; closedAt?: string; archive?: string }
@@ -1412,6 +1414,127 @@ export function migrationsBelowMain(added: readonly string[], listMain: (directo
   return late;
 }
 
+interface MigrationRename { from: string; to: string; number: number; next: number }
+
+const migrationPath = /^(.*\/migrations\/[^/]+)\/(\d+)_[^/]+\.sql$/;
+const escapePattern = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const numberToken = (number: number) => `(?<![\\w$])0*${number}(?![\\w$]|\\.\\d)`;
+
+/** Plan every rewrite before mutating: uncertainty leaves a clean branch for manual renumbering. */
+function normalizeMigrations(worktree: string, branch: string): string | MigrationRename[] {
+  // https://git-scm.com/docs/git-diff documents the A filter; existing main migrations may not move.
+  const added = git(worktree, ['diff', '--find-renames', '--diff-filter=A', '--name-only', `main..${branch}`])
+    .split('\n').filter(path => migrationPath.test(path));
+  const listMain = (directory: string) => git(worktree, ['ls-tree', '--name-only', 'main', `${directory}/`])
+    .split('\n').filter(Boolean).map(path => basename(path));
+  const directories = new Set(added.map(path => dirname(path)));
+  const renames: MigrationRename[] = [];
+  for (const directory of directories) {
+    const highest = Math.max(0, ...listMain(directory).map(name => Number(/^(\d+)_/.exec(name)?.[1] ?? 0)));
+    const own = added.filter(path => dirname(path) === directory)
+      .sort((a, b) => Number(migrationPath.exec(a)![2]) - Number(migrationPath.exec(b)![2]) || a.localeCompare(b));
+    if (!own.some(path => Number(migrationPath.exec(path)![2]) <= highest)) continue;
+    // Move the directory's entire added sequence to keep its order, including additions above main.
+    const occupied = new Set(readdirSync(join(worktree, directory)).map(name => Number(/^(\d+)_/.exec(name)?.[1] ?? 0)));
+    let next = highest;
+    for (const from of own) {
+      do { next++; } while (occupied.has(next));
+      if (!Number.isSafeInteger(next)) return `${directory}: migration number exceeds the safe integer range; renumber by hand`;
+      occupied.add(next);
+      const digits = migrationPath.exec(from)![2]!;
+      const to = join(directory, basename(from).replace(/^\d+/, String(next).padStart(Math.max(3, digits.length), '0')));
+      renames.push({ from, to, number: Number(digits), next });
+    }
+  }
+  if (!renames.length) return [];
+  const plannedPaths = new Map(renames.map(rename => [rename.from, rename.to]));
+  const early = migrationsBelowMain(added.map(path => plannedPaths.get(path) ?? path), listMain);
+  if (early.length) return `planned migrations still fall below main:\n  ${early.join('\n  ')}`;
+  const changed = new Set(git(worktree, ['diff', '--name-only', `main..${branch}`]).split('\n').filter(Boolean));
+  const files = git(worktree, ['ls-files', '-z']).split('\0').filter(Boolean);
+  const writes = new Map<string, string>();
+  const numbers = new Set(renames.map(rename => rename.number));
+  for (const file of files) {
+    const path = join(worktree, file);
+    const kind = lstatSync(path);
+    if (!kind.isFile() && !kind.isSymbolicLink()) continue;
+    const source = kind.isSymbolicLink() ? readlinkSync(path) : readFileSync(path, 'utf8');
+    const self = renames.find(rename => rename.from === file);
+    const selfToken = self ? new RegExp(`(?<!\\d)0*${self.number}(?!\\d)`, 'g') : undefined;
+    const mentions = [...numbers].filter(number => new RegExp(numberToken(number)).test(source)
+      || renames.some(rename => rename.number === number && source.includes(basename(rename.from)))
+      || (self?.number === number && selfToken?.test(source)));
+    if (!mentions.length) continue;
+    if (!changed.has(file)) return `${file} references old migration number ${mentions.join(', ')} outside the task's changed files; renumber by hand`;
+    if (!kind.isFile()) return `${file}: migration reference is in a symbolic link; renumber by hand`;
+    const edits = new Map<number, { end: number; value: string }>();
+    const addEdit = (start: number, end: number, value: string) => {
+      const existing = edits.get(start);
+      if (existing && (existing.end !== end || existing.value !== value)) throw new Error(`${file}: ambiguous migration reference; renumber by hand`);
+      edits.set(start, { end, value });
+    };
+    // Qualified filenames select the directory even when two owners used the same basename.
+    for (const rename of renames) {
+      const pattern = new RegExp(`(?<![\\w.-])${escapePattern(rename.from)}(?![\\w.-])`, 'g');
+      for (const match of source.matchAll(pattern)) {
+        const start = match.index + rename.from.length - basename(rename.from).length;
+        addEdit(start, start + /^\d+/.exec(basename(rename.from))![0].length, /^\d+/.exec(basename(rename.to))![0]);
+      }
+    }
+    for (const rename of renames) {
+      const pattern = new RegExp(`(?<![\\w.-])${escapePattern(basename(rename.from))}(?![\\w.-])`, 'g');
+      for (const match of source.matchAll(pattern)) {
+        if (edits.has(match.index)) continue;
+        const qualified = /([\w./-]+\/migrations\/[^/]+)\/$/.exec(source.slice(0, match.index));
+        if (qualified) return `${file}: filename ${basename(rename.from)} refers to a directory not being renumbered (${qualified[1]}); renumber by hand`;
+        const targets = new Set(renames.filter(other => basename(other.from) === basename(rename.from)).map(other => other.to));
+        if (targets.size !== 1) return `${file}: filename ${basename(rename.from)} is ambiguous across directories; renumber by hand`;
+        addEdit(match.index, match.index + /^\d+/.exec(match[0])![0].length, /^\d+/.exec(basename(rename.to))![0]);
+      }
+    }
+    for (const number of mentions) {
+      // These contexts identify a migration reference without guessing what other numeric data means.
+      const token = numberToken(number);
+      const patterns = [new RegExp(`\\bmigration\\s+(${token})`, 'gi'),
+        new RegExp(`\\b(?:const|let|var)\\s+(?:[\\w$]*(?:migration|version)[\\w$]*)(?:\\s*:\\s*number)?\\s*=\\s*(['\"]?)(${token})\\1(?![\\d.])`, 'gi')];
+      for (const pattern of patterns) {
+        for (const match of source.matchAll(pattern)) {
+          const old = match[match.length - 1]!;
+          const start = match.index + match[0].lastIndexOf(old);
+          if ([...edits].some(([offset, edit]) => start >= offset && start < edit.end)) continue;
+          const candidates = self ? renames.filter(rename => dirname(rename.from) === dirname(file)) : renames;
+          const targets = new Set(candidates.filter(rename => rename.number === number).map(rename => rename.next));
+          if (targets.size !== 1) return `${file}: migration ${number} is ambiguous across directories; renumber by hand`;
+          addEdit(start, start + old.length, String([...targets][0]));
+        }
+      }
+    }
+    if (self && selfToken) {
+      selfToken.lastIndex = 0;
+      for (const match of source.matchAll(selfToken)) {
+        if (![...edits].some(([start, edit]) => match.index >= start && match.index < edit.end)) {
+          return `${file}: its own migration number ${self.number} occurs outside a proven migration context; renumber by hand`;
+        }
+      }
+    }
+    let rewritten = source;
+    for (const [start, edit] of [...edits].sort(([a], [b]) => b - a)) rewritten = rewritten.slice(0, start) + edit.value + rewritten.slice(edit.end);
+    if (rewritten !== source) {
+      if (!Buffer.from(source).equals(readFileSync(path))) return `${file}: migration references are not UTF-8 text; renumber by hand`;
+      writes.set(file, rewritten);
+    }
+  }
+  for (const rename of renames) {
+    if (!lstatSync(join(worktree, rename.from)).isFile()) return `${rename.from}: migration is not a regular file; renumber by hand`;
+  }
+  for (const [file, source] of writes) writeFileSync(join(worktree, file), source);
+  for (const rename of renames) renameSync(join(worktree, rename.from), join(worktree, rename.to));
+  git(worktree, ['add', '--', ...new Set([...writes.keys(), ...renames.flatMap(rename => [rename.from, rename.to])])]);
+  git(worktree, ['commit', '-q', '-m', 'Normalize migration numbers after rebase (goalctl)']);
+  console.log(`Migration normalization:\n  ${renames.map(rename => `${rename.from} -> ${rename.to}`).join('\n  ')}`);
+  return renames;
+}
+
 /** A hand-landed cherry-pick is attributable only across its contiguous patch-equivalent suffix.
  * An unknown boundary is recorded with zero width, so unrelated manager commits cannot be blamed on this task. */
 export function landedBoundary(repo: string, task: Pick<Task, 'base' | 'branch'>, after: string): string {
@@ -1675,20 +1798,10 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
 }
 
 async function mergeTask(id: string, flags: Set<string>): Promise<void> {
-  // The unit gate runs before the ledger lock: minutes of tests inside it blocked every Goal's goalctl
-  // on 2026-10-07. It checks the task's branch as handed off against main's HEAD; the rebase follows.
-  if (!flags.has('--landed')) {
-    const pending = taskOf(readLedger(), id);
-    assertOwner(pending);
-    const unitFailure = await preMergeUnitGate(pending.worktree, root, git(root, ['rev-parse', 'HEAD']), flags.has('--skip-unit-gate'));
-    if (unitFailure) {
-      await withLedger(ledger => { taskOf(ledger, id).state = 'conflict'; });
-      throw new Error(`${pending.id} ${unitFailure}`);
-    }
-  }
+  type PreparedMerge = { before: string; after: string; worktree: string; branch: string; sharers: string[]; committed: string[] };
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
-  const failure = await withLedger((ledger): string | undefined => {
+  const preparedMerge = await withLedger((ledger): string | PreparedMerge | undefined => {
     const task = taskOf(ledger, id);
     assertOwner(task);
     const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree
@@ -1710,11 +1823,6 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
     const { committed, dirty, ahead } = changedFiles(task);
     if (dirty.length) throw new Error(`${task.id} worktree has uncommitted files:\n  ${dirty.join('\n  ')}`);
-    const early = migrationsBelowMain(committed, (directory) => git(root, ['ls-tree', '--name-only', 'main', `${directory}/`])
-      .split('\n').filter(Boolean).map(path => path.slice(directory.length + 1)));
-    if (early.length) {
-      throw new Error(`${task.id} adds migrations numbered below ones already on main; renumber them above:\n  ${early.join('\n  ')}`);
-    }
     if (flags.has('--landed')) {
       // The manager already landed this work on main by hand (a cherry-pick, often with a conflict resolved).
       const commit = git(root, ['rev-parse', 'HEAD']);
@@ -1737,7 +1845,9 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     const union = new Set(committed.filter(file =>
       git(root, ['check-attr', 'merge', '--', file], true).endsWith(': merge: union')));
     const sharedTree = !!task.worktreeName || sharers.length > 1;
-    const violations = outOfScope(committed.filter(file => sharedTree || !union.has(file)), sharers.flatMap(sharer => sharer.paths));
+    const migrationOrigins = Object.assign({}, ...sharers.map(sharer => sharer.migrationOrigins ?? {})) as Record<string, string>;
+    const violations = outOfScope(committed.filter(file => sharedTree || !union.has(file))
+      .map(file => migrationOrigins[file] ?? file), sharers.flatMap(sharer => sharer.paths));
     if (violations.length && !flags.has('--allow-scope')) {
       throw new Error(`${task.id} changed files outside its claim:\n  ${violations.join('\n  ')}`);
     }
@@ -1788,12 +1898,57 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     if (git(task.worktree, ['status', '--porcelain', '--', 'services/main/src'], true)) {
       git(task.worktree, ['commit', '-q', '-am', 'Normalize Main composition roots after rebase (goalctl)']);
     }
+    let normalization: string | MigrationRename[];
+    try { normalization = normalizeMigrations(task.worktree, task.branch); }
+    catch (error) { normalization = error instanceof Error ? error.message : String(error); }
+    if (typeof normalization === 'string') {
+      task.state = 'conflict';
+      return `${task.id} migration normalization refused; not merging:\n  ${normalization}`;
+    }
+    if (normalization.length) {
+      for (const rename of normalization) {
+        migrationOrigins[rename.to] = migrationOrigins[rename.from] ?? rename.from;
+        delete migrationOrigins[rename.from];
+      }
+      task.migrationOrigins = migrationOrigins;
+    }
     const before = git(root, ['rev-parse', 'HEAD']);
     const after = git(root, ['rev-parse', task.branch]);
-    const merge = spawnSync('git', ['merge', '--ff-only', task.branch], { cwd: root, encoding: 'utf8' });
+    return { before, after, worktree: task.worktree, branch: task.branch,
+      sharers: sharers.map(sharer => sharer.id).sort(), committed: changedFiles(task).committed };
+  });
+  if (typeof preparedMerge === 'string') throw new Error(preparedMerge);
+  if (!preparedMerge) return;
+  // Test the normalized branch outside the ledger lock. Other Goals may merge while it runs, so
+  // both commit boundaries and the open sharers must still match before the fast-forward.
+  const unitFailure = await preMergeUnitGate(preparedMerge.worktree, root, preparedMerge.before, flags.has('--skip-unit-gate'));
+  const failure = await withLedger((ledger): string | undefined => {
+    const task = taskOf(ledger, id);
+    assertOwner(task);
+    const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree && HOLDING.includes(other.state));
+    if (unitFailure) {
+      task.state = 'conflict';
+      return `${task.id} ${unitFailure}`;
+    }
+    if (task.worktree !== preparedMerge.worktree || task.branch !== preparedMerge.branch
+      || git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main'
+      || git(root, ['rev-parse', 'HEAD']) !== preparedMerge.before
+      || git(root, ['rev-parse', task.branch]) !== preparedMerge.after
+      || git(task.worktree, ['rev-parse', 'HEAD']) !== preparedMerge.after
+      || changedFiles(task).dirty.length
+      || sharers.map(sharer => sharer.id).sort().join(',') !== preparedMerge.sharers.join(',')
+      || sharers.some(sharer => sharer.goal !== task.goal || sharer.branch !== task.branch || running(sharer))
+      || !['exited', 'conflict', 'stopped', 'merged'].includes(task.state)) {
+      task.state = 'conflict';
+      return `${task.id} main, task branch or sharers changed during the unit gate; retry merge to rebase, normalize and test again`;
+    }
+    const merge = spawnSync('git', ['merge', '--ff-only', preparedMerge.after], { cwd: root, encoding: 'utf8' });
     if (merge.status !== 0) throw new Error(`Fast-forward failed in the main checkout:\n${merge.stderr}`);
-    recordMerged(after, before);
-
+    const event: MergeEvent = { before: preparedMerge.before, after: preparedMerge.after, goal: task.goal ?? 'program',
+      taskIds: preparedMerge.sharers, at: new Date().toISOString() };
+    appendFileSync(join(stateDir, 'merges.jsonl'), `${JSON.stringify(event)}\n`);
+    for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = preparedMerge.after; }
+    const committed = preparedMerge.committed;
     console.log(`${sharers.map(sharer => sharer.id).join(', ')} merged at ${task.mergedCommit!.slice(0, 12)}; ${committed.length} file(s):`);
     console.log(`  ${committed.join('\n  ')}`);
     return undefined;

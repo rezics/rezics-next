@@ -33,7 +33,9 @@ problems as blockers or proposed tasks instead of changing process.
   `unclaimed`, make the minimal change and list the file under OWNER CHANGES
   (the manager reviews it at merge); if another task claims it, hand off with
   that blocker instead. Do not stop merely because a needed file is unclaimed.
-- Use only the claimed migration numbers. Register routes and coverage only in
+- Start migrations in the claimed range as a numbering hint. Merge assigns
+  final numbers above main's current head when the range has fallen behind.
+  Register routes and coverage only in
   the shared slots the brief names.
 - Name new files, tests and identifiers by the capability they cover, never by
   task ID, and title tests by acceptance ID or behavior. A comment states its
@@ -72,8 +74,16 @@ conventions below come from the first backend Goal:
   properties and relaxed constraints refine the same profile; a tightened
   constraint needs a new constraint revision with admission coverage, and a
   different meaning needs a new term.
-- Use only your reserved migration numbers. Content migration versions may have
-  gaps; Access and relay files apply in file-name order. Register a new Content
+- Reserved migration ranges are starting hints, not a prediction of main's
+  moving head. Access and relay files apply in file-name order. After rebase,
+  `goalctl merge` moves a task's added migrations in each directory that has
+  fallen behind to free numbers above main, preserving their relative order.
+  It rewrites filenames, `migration <n>` references and migration/version
+  constants in task-changed files, commits the normalization and runs the unit
+  gate on that branch. Keep references explicit: a number referenced outside
+  the task's changed files, an ambiguous reference across directories or an
+  unproven self-reference in SQL requires the manager to renumber by hand.
+  Content migration versions may have gaps. Register a new Content
   receipt action with `INSERT INTO content.receipt_action ... ON CONFLICT DO
   NOTHING` (migration 022); never drop or re-list a receipt action constraint.
   When an Access migration must widen a shared CHECK (for example
