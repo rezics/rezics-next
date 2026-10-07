@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFile, stat } from 'node:fs/promises';
 
 export type RequiredMatch = 'clear' | 'blocked';
 export type RequiredMatcherMode =
@@ -45,9 +46,10 @@ export class LocalRequiredSafetyMatcher implements RequiredSafetyMatcher {
     signal.throwIfAborted();
     if (!bytes.length || bytes.length > 8 * 1024 * 1024)
       throw new Error('required matcher byte bound exceeded');
-    const file = Bun.file(this.corpusPath);
-    if (file.size > 700_000) throw new Error('local required matcher corpus byte bound exceeded');
-    const corpus: unknown = await file.json();
+    // node:fs keeps this module loadable from the Node-typed AppHost via config.ts.
+    if ((await stat(this.corpusPath)).size > 700_000)
+      throw new Error('local required matcher corpus byte bound exceeded');
+    const corpus: unknown = JSON.parse(await readFile(this.corpusPath, 'utf8'));
     if (
       !Array.isArray(corpus) ||
       corpus.length > 10_000 ||
