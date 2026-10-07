@@ -164,7 +164,7 @@ runs the integration tiers, Storybook and browser journeys once.
   concurrent QA stacks (default 3 slots, `GOAL_QA_SLOTS`; four exhausted a 62 GB host beside a dozen workers).
 - Heavy runs take a host-wide lock as well as a slot, so the host carries at
   most one heavy run, from whichever Goal, beside two light ones. `--affected`
-  and whole `--tier` runs are heavy by themselves; bounded `--tier ... --file ...` batches use ordinary slots. Pass `--heavy` to `test` or `slot`
+  and whole `--tier` runs are heavy by themselves; bounded nonbrowser `--tier ... --file ...` batches use ordinary slots. Selected e2e journeys retain the heavy lock. Pass `--heavy` to `test` or `slot`
   for wave batches, Storybook and browser suites. The lock belongs to the
   process and frees itself when it exits; `status` shows its holder, and a
   heavy run waits for it.

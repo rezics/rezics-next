@@ -432,6 +432,14 @@ describe('goalctl Goals', () => {
     expect(isHeavyTest(['--result-file', 'slot.json', '--tier', 'integration'])).toBe(true);
     expect(isHeavyTest(['--tier', 'integration', '--file', 'tests/qa/integration/a.test.ts'])).toBe(false);
     expect(isHeavyTest(['--result-file', 'slot.json', '--tier', 'owner', '--file', 'scripts/goal/regress.test.ts'])).toBe(false);
+    for (const tier of ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'load']) {
+      expect(isHeavyTest(['--tier', tier, '--file', 'tests/example.test.ts'])).toBe(false);
+    }
+    for (const tier of ['e2e', 'accounts:storybook', 'future-browser']) {
+      expect(isHeavyTest(['--tier', tier, '--file', 'apps/web/tests/example.e2e.ts'])).toBe(true);
+      expect(isHeavyTest(['--result-file', 'slot.json', '--tier', tier, '--file', 'apps/web/tests/example.e2e.ts'])).toBe(true);
+    }
+    expect(isHeavyTest(['--tier', 'e2e', '--storybook', '--file', 'apps/web/tests/example.e2e.ts'])).toBe(true);
     expect(isHeavyTest(['--heavy', 'tests/qa/integration/a.test.ts'])).toBe(true);
     expect(isHeavyTest(['--affected', '--list'])).toBe(false);
     expect(isHeavyTest(['tests/qa/integration/a.test.ts'])).toBe(false);

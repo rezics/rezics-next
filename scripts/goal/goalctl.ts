@@ -376,7 +376,13 @@ export function ownerRefusal(task: Pick<Task, 'id' | 'goal'>, caller = process.e
 export function isHeavyTest(args: readonly string[]): boolean {
   if (args.includes('--heavy')) return true;
   if (args.includes('--list')) return false;
-  return (args.includes('--tier') && !args.includes('--file')) || args.some(arg => arg === '--affected' || arg.startsWith('--affected='));
+  const tierIndex = args.indexOf('--tier');
+  if (tierIndex >= 0) {
+    // Only known nonbrowser tiers may share slots when their file selection is bounded.
+    const lightTier = ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'load'].includes(args[tierIndex + 1] ?? '');
+    if (!args.includes('--file') || !lightTier) return true;
+  }
+  return args.some(arg => arg === '--affected' || arg.startsWith('--affected='));
 }
 
 const FIVE_HOURS = 5 * 3600;

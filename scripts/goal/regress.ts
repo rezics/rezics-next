@@ -308,7 +308,8 @@ export function executionOutcomes(checkout: string, batch: Batch, tests: TestRes
 export function regressionBatchCommand(batch: Batch, report: string, storyXmlPath: string): string[] {
   const standaloneStories = batch.files.every(file => file.includes('.stories.'));
   const args = standaloneStories ? [...batch.files, '--reporter=junit', `--outputFile=${storyXmlPath}`]
-    : ['--tier', batch.tier, ...batch.files.filter(file => !file.includes('.stories.')).flatMap(file => ['--file', file])];
+    : ['--tier', batch.tier, ...batch.files.filter(file => !file.includes('.stories.')).flatMap(file => ['--file', file]),
+      ...(batch.tier === 'e2e' && batch.files.some(file => file.includes('.stories.')) ? ['--storybook'] : [])];
   return ['bun', join(import.meta.dir, 'goalctl.ts'), 'test', ...(browserTier(batch.tier) ? ['--heavy'] : []),
     '--result-file', report, ...args];
 }

@@ -6,6 +6,8 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, spyOn, test } from 'bun:test';
 import { selectTestCommand } from '../qa/test.ts';
+import { parseArgs } from '../qa/core.ts';
+import { e2eBrowserPlan, storybookCommands } from '../qa/browser-budget.ts';
 import { isHeavyTest } from './goalctl.ts';
 import * as goalctl from './goalctl.ts';
 import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs,
@@ -676,6 +678,39 @@ test('only browser and Storybook commands acquire the heavy lock', () => {
     if (tier === 'accounts:storybook') expect(command).toContain('--reporter=junit');
     else expect(command).toContain('--tier');
   }
+});
+
+test('mixed nightly browser batches request stories through the actual QA parser and retain complete evidence', () => {
+  const batch: Batch = { id: 'nightly-browser', tier: 'e2e', state: 'pending', attempts: [], files: [
+    'apps/web/tests/journey.e2e.ts', 'apps/web/features/card.stories.tsx', 'packages/ui/src/button.stories.tsx',
+  ] };
+  const command = regressionBatchCommand(batch, '/disk/report.json', '/disk/stories.xml');
+  const args = command.slice(command.indexOf('--tier'));
+  const [program, runnerArgs] = selectTestCommand(args);
+  expect(program).toBe('bun');
+  expect(runnerArgs[0]).toBe('scripts/qa/cli.ts');
+  const options = parseArgs(runnerArgs.slice(1));
+  expect(options.files).toEqual(['apps/web/tests/journey.e2e.ts']);
+  expect(options.storybook).toBe(true);
+  const plan = e2eBrowserPlan(options.files ?? [], options.storybook);
+  expect(plan).toMatchObject({ selectedFiles: ['apps/web/tests/journey.e2e.ts'], stories: true });
+  expect(storybookCommands(plan)).toEqual([
+    { name: 'storybook', root: 'apps/web' }, { name: 'accounts-storybook', root: 'apps/accounts' },
+  ]);
+  expect(executionOutcomes('/repo', batch, [{ file: batch.files[0]!, name: 'journey', tier: 'e2e', failed: false, skipped: false }], '',
+    ' ✓ |storybook (chromium)| features/card.stories.tsx (2 tests) 10ms\n ✓ |storybook (chromium)| ../../packages/ui/src/button.stories.tsx (1 test) 10ms\n'))
+    .toEqual(Object.fromEntries(batch.files.map(file => [file, 'passed'])));
+});
+
+test('journey-only browser subsets keep Storybook skipped', () => {
+  const batch: Batch = { id: 'journey-subset', tier: 'e2e', state: 'pending', attempts: [], files: ['apps/web/tests/journey.e2e.ts'] };
+  const command = regressionBatchCommand(batch, '/disk/report.json', '/disk/stories.xml');
+  expect(command).not.toContain('--storybook');
+  const [, runnerArgs] = selectTestCommand(command.slice(command.indexOf('--tier')));
+  const options = parseArgs(runnerArgs.slice(1));
+  const plan = e2eBrowserPlan(options.files ?? [], options.storybook);
+  expect(plan.stories).toBe(false);
+  expect(storybookCommands(plan)).toEqual([]);
 });
 
 test('detached worktree names leave room for owner PostgreSQL Unix sockets', () => {
