@@ -45,14 +45,15 @@ beforeAll(async () => {
       graph.runner.stop();
       graph.runner.offline(`exec 9>>/fuseki/databases/rezics/owner.lock
 flock -n 9
-cat > /tmp/retained-erasure-position.ru <<'RETAINED_ERASURE_POSITION'
+mkdir -p /fuseki/databases/.temp
+cat > /fuseki/databases/.temp/retained-erasure-position.ru <<'RETAINED_ERASURE_POSITION'
 PREFIX rv: <https://rezics.com/vocab/>
 DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?before } }
 INSERT { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence 899 } }
 WHERE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?before } }
 RETAINED_ERASURE_POSITION
 java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \\
-  tdb2.tdbupdate --loc=/fuseki/databases/rezics/tdb2 --update=/tmp/retained-erasure-position.ru`);
+  tdb2.tdbupdate --loc=/fuseki/databases/rezics/tdb2 --update=/fuseki/databases/.temp/retained-erasure-position.ru`);
       await graph.runner.start();
     }
     const targets = Array.from({ length: position === 4 ? 2 : 1 }, () => randomUUID());
