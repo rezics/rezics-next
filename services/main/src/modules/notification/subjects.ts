@@ -1,8 +1,8 @@
 import type { ContentCore, ExactReadResult } from '../../../../content/src/core.ts';
 import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../access/admission.ts';
 import type { NotificationSubjectReader, SubjectResolution } from './dispatcher.ts';
-import type { NotificationStore } from './store.ts';
-import type { NotificationAgentReader } from './store.ts';
+import type { NotificationActorAudience, NotificationAgentReader, NotificationAgentSummary,
+  NotificationStore } from './store.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { agentAddress } from '../agent/handle.ts';
 import type { AgentVanityHandles } from '../agent/vanity.ts';
@@ -10,6 +10,7 @@ import { GRAPHS, RV, iri, type GraphLineage } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { publicAgent } from '../profiles/read.ts';
 import { avatarImageEligible, DEFAULT_MEDIA_CONTEXT, type MediaStore } from '../media/store.ts';
+import { checkNamePolicy, NAME_POLICY_COST, type NamePolicyDecision } from '../disclosure/name-policy.ts';
 
 /** Recipient-specific disclosure decided by the subject's owner at delivery time. */
 export type RecipientDisclosure = (principalId: string, revisionIds: readonly string[]) =>
@@ -87,12 +88,32 @@ export function currentContentSubjectReader(content: Pick<ContentCore,
   };
 }
 
-/** Current public Agent description; missing, protected or erased Agents stay anonymous. */
+/** One name-policy statement for the distinct actors of a page or delivery. */
+export const NOTIFICATION_ACTOR_NAME_COST = {
+  namePolicyStatements: 1,
+  owners: NAME_POLICY_COST.owners,
+  complexity: 'O(distinct actors); one indexed name-policy probe; no dependents',
+} as const;
+
+const namedAgent = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+
+/** Keep the actor. A withheld name is absent so the unnamed rendering applies,
+ * rather than a substitute that would assert a different identity. */
+function disclosedActor(actor: NotificationAgentSummary & { name: string },
+  decision: NamePolicyDecision): NotificationAgentSummary {
+  if (decision === 'visible') return actor;
+  const { name: _omitted, ...rest } = actor;
+  return rest;
+}
+
+/** Current Agent description. Missing, protected or erased Agents stay anonymous.
+ * A profile name is included only when this recipient may see it on this channel,
+ * and the decision is read again for every page and delivery. */
 export function currentNotificationAgentReader(fuseki: FusekiClient,
   lineage: GraphLineage, media: Pick<MediaStore, 'avatarRows'>,
   handles?: Pick<AgentVanityHandles, 'current'>): NotificationAgentReader {
-  return async agent => {
-    if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(agent)) return null;
+  const load = async (agent: string): Promise<(NotificationAgentSummary & { name: string }) | null> => {
+    if (!namedAgent.test(agent)) return null;
     await assertGraphAdmissionOpen(fuseki, lineage);
     const rows = (await fuseki.query(`PREFIX rv: <${RV}>
       PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
@@ -114,4 +135,19 @@ export function currentNotificationAgentReader(fuseki: FusekiClient,
     }).catch(() => null) : null;
     return { id: agent, name, handle, address: agentAddress(agent, handle), avatar };
   };
+  const gate = async (agents: readonly string[], audience?: NotificationActorAudience) => {
+    const distinct = [...new Set(agents)];
+    const loaded = (await Promise.all(distinct.map(load)))
+      .filter((actor): actor is NotificationAgentSummary & { name: string } => actor !== null);
+    const visible = new Map<string, NotificationAgentSummary>(loaded.map(actor => [actor.id, actor]));
+    if (!audience || !loaded.length) return visible;
+    const decisions = await checkNamePolicy(audience.preferences, loaded.map(actor => actor.id),
+      audience.viewer, audience.channel);
+    loaded.forEach((actor, index) => visible.set(actor.id, disclosedActor(actor, decisions[index]!)));
+    return visible;
+  };
+  const read: NotificationAgentReader = async (agent, audience) =>
+    (await gate([agent], audience)).get(agent) ?? null;
+  read.readBatch = (agents, audience) => gate(agents, audience);
+  return read;
 }

@@ -5,11 +5,13 @@ import { deliveryChannels, notificationKinds, notificationPurposes, optionalPurp
   preferenceChannels } from './schema.ts';
 import type { NotificationSubjectReader, SubjectResolution } from './dispatcher.ts';
 import { notificationNewWorkDisplay } from './display.ts';
-import { disclosurePoolReader } from '../disclosure/read.ts';
+import { disclosurePoolReader, type DisclosureChannel } from '../disclosure/read.ts';
 import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { discloseNotifications } from '../disclosure/notifications.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
+import { PersonPreferencesStore } from '../preferences/store.ts';
+import type { Viewer } from '../suitability/policy.ts';
 import { notificationRecipientAllowed } from './recipient-policy.ts';
 import { relationshipRecipientPage, type RelationshipRecipients, type RecipientFrontier } from '../follows/recipients.ts';
 
@@ -32,10 +34,24 @@ export interface NotificationDisplayContext {
   groupKey: string | null;
 }
 export interface NotificationAgentSummary {
-  id: string; name: string; handle: string | null;
+  id: string;
+  /** Omitted when this recipient may not see the profile name. The id stays. */
+  name?: string;
+  handle: string | null;
   address?: import('@rezics/model/address').CanonicalAddress; avatar: string | null;
 }
-export type NotificationAgentReader = (agent: string) => Promise<NotificationAgentSummary | null>;
+/** Recipient and delivery channel for one name-policy decision. A copied viewer has no authority. */
+export interface NotificationActorAudience {
+  viewer: Viewer;
+  channel: DisclosureChannel;
+  preferences: Pick<PersonPreferencesStore, 'visibleNameOwners'>;
+}
+export interface NotificationAgentReader {
+  (agent: string, audience?: NotificationActorAudience): Promise<NotificationAgentSummary | null>;
+  /** One name-policy read for every actor on a page or delivery, not one per pair. */
+  readBatch?(agents: readonly string[], audience: NotificationActorAudience):
+    Promise<ReadonlyMap<string, NotificationAgentSummary>>;
+}
 
 /** Fixed bounds of the first notification profile; every operation is O(bound). */
 export const NOTIFICATION_LIMITS = {
@@ -207,6 +223,22 @@ export class NotificationStore {
   setReadAgentReader(reader: NotificationAgentReader): void {
     if (this.readAgent) throw new NotificationInvalid('read Agent reader is already registered');
     this.readAgent = reader;
+  }
+
+  /** Current names for this recipient and channel. One policy read for the whole page. */
+  private async notificationActors(agents: readonly string[], viewer: Viewer,
+    channel: DisclosureChannel): Promise<ReadonlyMap<string, NotificationAgentSummary>> {
+    if (!this.readAgent || !agents.length) return new Map();
+    const audience: NotificationActorAudience = {
+      viewer, channel, preferences: new PersonPreferencesStore(this.pool),
+    };
+    if (this.readAgent.readBatch) return this.readAgent.readBatch(agents, audience);
+    const summaries = new Map<string, NotificationAgentSummary>();
+    for (const agent of [...new Set(agents)]) {
+      const summary = await this.readAgent(agent, audience);
+      if (summary) summaries.set(agent, summary);
+    }
+    return summaries;
   }
 
   setDefaultReadSubjectReader(reader: NotificationSubjectReader): void {
@@ -664,6 +696,7 @@ export class NotificationStore {
     });
     const items: StreamItem[] = [];
     const resolutions: SubjectResolution[] = [];
+    const pendingActors: { display: NonNullable<StreamItem['display']>; agent: string }[] = [];
     for (const item of result.items) {
       const { raw, ...base } = item;
       const resolver = this.readSubjects.get(raw.disclosure_basis) ?? this.defaultReadSubject;
@@ -694,24 +727,30 @@ export class NotificationStore {
           items.push(base); continue;
         }
       }
-      const actor = raw.actor_agent && this.readAgent
-        ? await this.readAgent(raw.actor_agent).catch(() => {
-          throw new NotificationUnavailable('Agent owner is unavailable');
-        }) : null;
+      const display: StreamItem['display'] = raw.kind || newWork ? { kind: newWork ? 'new_work' : raw.kind!,
+        actor: null as NotificationAgentSummary | null, realm: fields.realm ?? null,
+        realmName: fields.realmName ?? null, realmRouteSegment: fields.realmRouteSegment ?? null,
+        roleName: fields.roleName ?? null,
+        roleChange: fields.roleChange === 'given' || fields.roleChange === 'taken' ? fields.roleChange : null,
+        groupKey: raw.group_key, target: {
+          title: fields.title ?? null, excerpt: fields.excerpt ?? null,
+          language: fields.language ?? null, linkTarget: fields.linkTarget ?? null,
+          reviewId: fields.reviewId ?? null,
+          ...(newWork ?? {}),
+        } } : null;
+      if (display && raw.actor_agent) pendingActors.push({ display, agent: raw.actor_agent });
       items.push({ ...base,
         reason: raw.reason,
         proposal: raw.proposal ? { id: raw.proposal, revision: raw.proposal_revision! } : null,
         subject: { owner: raw.subject_owner, ref: raw.subject_ref, revision: raw.subject_revision },
-        display: raw.kind || newWork ? { kind: newWork ? 'new_work' : raw.kind!, actor, realm: fields.realm ?? null,
-          realmName: fields.realmName ?? null, realmRouteSegment: fields.realmRouteSegment ?? null,
-          roleName: fields.roleName ?? null,
-          roleChange: fields.roleChange === 'given' || fields.roleChange === 'taken' ? fields.roleChange : null,
-          groupKey: raw.group_key, target: {
-            title: fields.title ?? null, excerpt: fields.excerpt ?? null,
-            language: fields.language ?? null, linkTarget: fields.linkTarget ?? null,
-            reviewId: fields.reviewId ?? null,
-            ...(newWork ?? {}),
-          } } : null });
+        display });
+    }
+    if (pendingActors.length) {
+      const actors = await this.notificationActors(pendingActors.map(item => item.agent),
+        disclosureViewer(principal), 'inbox').catch(() => {
+        throw new NotificationUnavailable('Agent owner is unavailable');
+      });
+      for (const item of pendingActors) item.display.actor = actors.get(item.agent) ?? null;
     }
     const checked = await discloseNotifications(this.pool, items.map((item, index) => ({
       input: { principalId: principalId!, owner: result.items[index]!.raw.subject_owner,
