@@ -172,11 +172,15 @@ test('every served Main route, including transports, has a reviewed exposure', (
   expect(publicOperations).toContain('getV1CompositionsByIdProgress');
   expect(matrix.find(entry => entry.path === '/v1/compositions/{id}/progress' && entry.method === 'get'))
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'read', bearer: true });
+  // Trust-ops approved public on 2026-10-07 23:32 UTC: Library import status, bearer, work:read, read family, the signed-in reader's own upload only; polling never starts or accepts a new job.
+  expect(publicOperations).toContain('getV1MeLibrary-importsByIdApply');
+  expect(matrix.find(entry => entry.path === '/v1/me/library-imports/{id}/apply' && entry.method === 'get'))
+    .toMatchObject({ exposure: 'public', rateLimitFamily: 'read', bearer: true });
   // Trust approved the credits facade with optional bearer reads.
   expect(publicOperations).toContain('getV1WorksByIdCredits');
   expect(matrix.find(entry => entry.path === '/v1/works/{id}/credits' && entry.method === 'get'))
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'read', bearer: false });
-  expect(publicOperations).toHaveLength(521);
+  expect(publicOperations).toHaveLength(522);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
