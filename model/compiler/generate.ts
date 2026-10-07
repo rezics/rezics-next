@@ -38,9 +38,9 @@ const authored = <T>(suffix: string) => definitionModules.flatMap(([file, module
  */
 export function discoverProfiles(directory: string,
   modules: readonly (readonly [string, Record<string, unknown>])[]): ProfileDefinition[] {
-  const profiles = modules.flatMap(([, module]) => Object.entries(module)
-    .filter(([name, value]) => name.endsWith('Profile') && value && typeof value === 'object')
-    .map(([, value]) => value as ProfileDefinition));
+  const turtleFiles = [...new Bun.Glob('*.ttl').scanSync({ cwd: directory })].sort();
+  const turtleSources = new Map<string, string>(turtleFiles.map(file => [file.slice(0, -4),
+    readFileSync(join(directory, file), 'utf8')] as const));
   const declarations = new Map<string, TurtleDeclaration>();
   for (const [file, module] of modules) for (const [name, value] of Object.entries(module)) {
     if (!name.endsWith('Declaration') || !value || typeof value !== 'object') continue;
@@ -50,10 +50,19 @@ export function discoverProfiles(directory: string,
     }
     declarations.set(declaration.id, declaration);
   }
-  for (const file of [...new Bun.Glob('*.ttl').scanSync({ cwd: directory })].sort()) {
-    const id = file.slice(0, -4);
+  const profiles = modules.flatMap(([file, module]) => Object.entries(module)
+    .filter(([name, value]) => name.endsWith('Profile') && value && typeof value === 'object')
+    .map(([, value]) => value as ProfileDefinition)
+    .filter(profile => {
+      const source = turtleSources.get(profile.id);
+      if (source === undefined) return true;
+      if (file !== `${profile.id}.ts` || profileSource(profile) !== source)
+        throw new Error(`Duplicate profile ID ${profile.id}`);
+      return false;
+    }));
+  for (const [id, source] of turtleSources) {
     if (profiles.some(profile => profile.id === id)) throw new Error(`Duplicate profile ID ${id}`);
-    profiles.push(parseTurtleProfile(id, readFileSync(join(directory, file), 'utf8'), declarations.get(id)));
+    profiles.push(parseTurtleProfile(id, source, declarations.get(id)));
     declarations.delete(id);
   }
   if (declarations.size) throw new Error(`Turtle source is missing for ${[...declarations.keys()].join(', ')}`);

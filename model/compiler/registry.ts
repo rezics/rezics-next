@@ -58,7 +58,6 @@ const ratingObservationKeys = ['realm', 'context', 'work', 'main', 'slot', 'obse
  * and delete it here, because declaring both is an error.
  */
 export const establishedDeclarations: Readonly<Record<string, EstablishedDeclaration>> = {
-  'work-title-control-v1': { canonical: { control: only(rv('EditorialControlRevision')) } },
   'work-author-credit-v1': {
     canonical: { credit: only(rv('AuthorCredit')), revision: only(rv('AuthorCreditRevision')) },
     binding: {
@@ -136,14 +135,6 @@ export const establishedDeclarations: Readonly<Record<string, EstablishedDeclara
       required: ['link', 'target-work', 'target-main', 'target-revision', 'source-work', 'source-main',
         'status', 'language', 'translator', 'publisher', 'evidence', 'actor', 'receipt', 'scope', 'epoch'],
       optional: ['source-revision'], roles: ['link'], demandedBy: [rv('TranslationLink')],
-    },
-  },
-  'work-derivation-v1': {
-    canonical: { derivation: only(rv('WorkDerivation')) },
-    binding: {
-      required: ['derivation', 'target-work', 'target-main', 'target-revision', 'source-work',
-        'source-main', 'source-revision', 'kind', 'evidence', 'actor', 'receipt', 'scope', 'epoch'],
-      roles: ['derivation'], demandedBy: [rv('WorkDerivation')],
     },
   },
   'fixed-native-text-release-v1': {
