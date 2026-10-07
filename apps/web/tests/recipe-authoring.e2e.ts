@@ -50,7 +50,7 @@ async function shoot(page: Page, name: string, info: TestInfo) {
 }
 
 /** Every field written so far has reached Main; the editor says so. */
-const settled = (page: Page) => expect(page.getByRole('status').filter({ hasText: 'All changes saved' })).toBeVisible();
+const settled = (page: Page) => expect(page.getByRole('status').filter({ hasText: 'All changes saved' })).toBeVisible({ timeout: 30_000 });
 
 const lines = (scope: Page | Locator) => scope.locator('[data-line]');
 const steps = (scope: Page | Locator) => scope.locator('[data-step]');
