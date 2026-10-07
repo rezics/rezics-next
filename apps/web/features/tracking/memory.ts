@@ -2,6 +2,7 @@ import type { ReaderActions, ReadingStatus } from '../catalogue/reader-actions.t
 import { shelfFollowing } from '../catalogue/reader-store.ts';
 import type { AttemptWrite, StartInput, StaleChange, TrackingApi } from './api.ts';
 import { equivalentDefinition, iri, session as sessionOf } from './fixtures.ts';
+import { memoryEpisodeApi, type MemoryEpisodes } from './episode-memory.ts';
 import { movesFrom } from './model.ts';
 import type { Editions, EditionChoice, EditionPreference, Relations, SelectionInput, ProgressSummary, Session,
   SessionChanges } from './types.ts';
@@ -18,12 +19,14 @@ export interface MemoryMain {
   summaries: Record<string, ProgressSummary | (() => ProgressSummary)>;
   preferences: Map<string, EditionPreference>;
   relations: Relations | null;
+  /** The Work's episodes or chapters, when the story has any. */
+  episodes?: MemoryEpisodes;
   /** What was written, in order, so a test can tell that nothing was written silently. */
   calls: { started: string[]; changed: string[] };
   next: number;
 }
 
-export function createMemoryMain(seed: Partial<Pick<MemoryMain, 'sessions' | 'editions' | 'summaries' | 'relations'>> = {}): MemoryMain {
+export function createMemoryMain(seed: Partial<Pick<MemoryMain, 'sessions' | 'editions' | 'summaries' | 'relations' | 'episodes'>> = {}): MemoryMain {
   return { sessions: [], editions: { realizations: [], releases: [], more: false }, summaries: {}, relations: null,
     ...seed, preferences: new Map(), calls: { started: [], changed: [] }, next: 100 };
 }
@@ -67,6 +70,7 @@ function applied(main: MemoryMain, current: Session, changes: SessionChanges): S
 /** One device's calls over the shared Main. */
 export function memoryTracking(main: MemoryMain): TrackingApi {
   return {
+    ...(main.episodes ? { episodes: memoryEpisodeApi(main.episodes) } : {}),
     async sessions(work) {
       return { ok: true, data: { items: main.sessions.filter(item => item.target.work === work), next: null } };
     },

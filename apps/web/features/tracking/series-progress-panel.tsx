@@ -11,6 +11,7 @@ import { useReaderActions } from '../catalogue/reader-actions.tsx';
 import Link from '../shell/localized-link.tsx';
 import type { TrackingApi } from './api.ts';
 import { languageName, locatorParts } from './display.ts';
+import { EpisodeProgress } from './episode-progress.tsx';
 import { copyOf, type Copy } from './messages.ts';
 import { SeriesStates } from './series-states.tsx';
 import type { ReadFailure } from '../feed/types.ts';
@@ -157,11 +158,24 @@ type Progress = { language: string; value: ProgressSummary } | { language: strin
  * Where the reader stands in a series, as Main reports it: the four states as separate lines, the
  * next part with its reason, the furthest part finished, and the language and edition choice. Where a
  * correspondence is recorded it offers to mark the counterpart read, only when the reader asks.
- * Nothing is computed here; a Work with no parts and no correspondence shows nothing.
+ * Nothing is computed here; a Work with no parts and no correspondence shows nothing. A series that
+ * places episodes or chapters as Structure occurrences also gets its episode progress above these.
  */
-export function SeriesProgressPanel({ work, locale, className, preferenceForm = true }: {
+export function SeriesProgressPanel(props: {
   work: string; locale: UiLocale; className?: string;
   /** False where the page offers the same choice elsewhere (the Work page's edition section). */
+  preferenceForm?: boolean;
+}) {
+  const actions = useReaderActions();
+  const episodes = actions.kind === 'ready' ? actions.tracking?.episodes ?? null : null;
+  return <>
+    {episodes ? <EpisodeProgress work={props.work} api={episodes} t={copyOf(props.locale)} className={props.className} /> : null}
+    <SeriesPartsPanel {...props} />
+  </>;
+}
+
+function SeriesPartsPanel({ work, locale, className, preferenceForm = true }: {
+  work: string; locale: UiLocale; className?: string;
   preferenceForm?: boolean;
 }) {
   const actions = useReaderActions();
