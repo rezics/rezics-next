@@ -58,7 +58,10 @@ Platform grants use the existing direct-principal and group grant tables with
 immutable episodes, expiry and receipts. The existing grant routes accept
 `platform-grant-change-v1` for changes and `platform-grants-v1` or
 `platform-grant-v1` for reads. `platform:grant` permits assignment and revocation
-within the issuer's `access.grant.assign.platform` ceiling. At least one
+within the issuer's `access.grant.assign.platform` ceiling. Granting it to a
+principal confers that ceiling on the recipient's live Agent for the grant's
+lifetime, and never beyond the issuer's ceiling; revocation or expiry removes
+it. A group grant does not confer a ceiling. At least one
 permanent direct holder remains, so expiry or principal deactivation cannot
 remove the final governance authority. Administrator resource permissions are
 separate `platform:resource:<action>` grants with exact scopes or scoped resource

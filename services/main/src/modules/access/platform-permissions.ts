@@ -9,6 +9,9 @@ export const PLATFORM_COST = Object.freeze({
   operations: 64,
   cacheEntries: 1024,
   statementMs: 5000,
+  // One live controller, then one ceiling row and its link. Revocation updates that row.
+  assignmentCeilingReads: 1,
+  assignmentCeilingWrites: 2,
 });
 export class PlatformAccessUnavailable extends Error {}
 export interface PlatformPermission {

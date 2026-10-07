@@ -361,12 +361,7 @@ test('the last governance anchor and its principal cannot be removed; parallel r
     null,
     receipt(),
   );
-  // A second holder has its own assignment ceiling and can govern independently.
-  await pool.query(
-    `INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
-    VALUES ($1,$2,$2,'platform:access','access.grant.assign.platform','infinity')`,
-    [randomUUID(), other.actor],
-  );
+  // The appointment confers the assignment ceiling, so the second holder can govern.
   const results = await Promise.allSettled([
     grants.platform.revoke(await context(), anchor.id, anchor.generation, receipt()),
     grants.platform.revoke(
@@ -397,31 +392,171 @@ test('the last governance anchor and its principal cannot be removed; parallel r
   }
 });
 
-test('assignment beyond the ceiling and assignment by a mere platform user are refused', async () => {
+test('a platform:grant confers its assignment ceiling and loses it on revoke, expiry and overreach', async () => {
   const limited = await person();
-  await grants.platform.create(
+  const audience = await person();
+  const grantId = randomUUID();
+  const deadline = new Date(Date.now() + 5_000);
+  const granted = await grants.platform.create(
     await context(),
-    randomUUID(),
+    grantId,
     'platform:grant',
     { principalId: limited.id },
-    new Date(Date.now() + 60_000),
+    deadline,
     receipt(),
   );
-  await pool.query(
-    `INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
-    VALUES ($1,$2,$2,'platform:access','access.grant.assign.platform',clock_timestamp()+interval '10 seconds')`,
-    [randomUUID(), limited.actor],
+  const linked = (
+    await pool.query<{ ceiling_id: string; active: boolean; matched: boolean }>(
+      `SELECT c.ceiling_id, g.active, g.valid_until = p.valid_until AS matched
+      FROM access.platform_assignment_ceiling c
+      JOIN access.permission_grant g ON g.id = c.ceiling_id
+      JOIN access.principal_permission_grant p ON p.id = c.grant_id
+      WHERE c.grant_id = $1`,
+      [granted.grant.id],
+    )
+  ).rows;
+  expect(PLATFORM_COST.assignmentCeilingReads).toBe(1);
+  expect(PLATFORM_COST.assignmentCeilingWrites).toBe(2);
+  expect(linked).toHaveLength(1);
+  expect(linked[0]!.active).toBe(true);
+  expect(linked[0]!.matched).toBe(true);
+  await grants.platform.create(
+    await context(limited),
+    randomUUID(),
+    'platform:use:saved-views',
+    { principalId: audience.id },
+    new Date(Date.now() + 1_000),
+    receipt(),
   );
   await expect(
     grants.platform.create(
       await context(limited),
       randomUUID(),
       'platform:use:events',
-      { principalId: reader.id },
+      { principalId: audience.id },
       new Date(Date.now() + 60_000),
       receipt(),
     ),
   ).rejects.toBeInstanceOf(PlatformGrantDenied);
+  await expect(
+    grants.platform.create(
+      await context(limited),
+      randomUUID(),
+      'platform:grant',
+      { principalId: audience.id },
+      null,
+      receipt(),
+    ),
+  ).rejects.toBeInstanceOf(PlatformGrantDenied);
+  await expect(
+    pool.query(
+      "UPDATE access.permission_grant SET valid_until = clock_timestamp() + interval '1 day' WHERE id = $1",
+      [linked[0]!.ceiling_id],
+    ),
+  ).rejects.toMatchObject({ code: '23514' });
+  await expect(
+    pool.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [
+      linked[0]!.ceiling_id,
+    ]),
+  ).rejects.toMatchObject({ code: '23514' });
+  await grants.platform.revoke(await context(), granted.grant.id, granted.grant.generation, receipt());
+  expect(
+    (
+      await pool.query('SELECT active FROM access.permission_grant WHERE id = $1', [
+        linked[0]!.ceiling_id,
+      ])
+    ).rows[0].active,
+  ).toBe(false);
+  await expect(
+    pool.query('UPDATE access.permission_grant SET active = true WHERE id = $1', [
+      linked[0]!.ceiling_id,
+    ]),
+  ).rejects.toMatchObject({ code: '23514' });
+  await expect(
+    grants.platform.create(
+      await context(limited),
+      randomUUID(),
+      'platform:use:events',
+      { principalId: audience.id },
+      new Date(Date.now() + 1_000),
+      receipt(),
+    ),
+  ).rejects.toBeInstanceOf(PlatformGrantDenied);
+
+  const expiring = await person();
+  await grants.platform.create(
+    await context(),
+    randomUUID(),
+    'platform:grant',
+    { principalId: expiring.id },
+    new Date(Date.now() + 300),
+    receipt(),
+  );
+  await Bun.sleep(400);
+  await expect(
+    grants.platform.create(
+      await context(expiring),
+      randomUUID(),
+      'platform:use:saved-views',
+      { principalId: audience.id },
+      new Date(Date.now() + 1_000),
+      receipt(),
+    ),
+  ).rejects.toBeInstanceOf(PlatformGrantDenied);
+
+  const bare = randomUUID();
+  await pool.query(
+    'INSERT INTO access.principal(id,account_issuer,account_subject) VALUES ($1,$2,$3)',
+    [bare, 'https://account.platform.test', randomUUID()],
+  );
+  await expect(
+    grants.platform.create(
+      await context(),
+      randomUUID(),
+      'platform:grant',
+      { principalId: bare },
+      null,
+      receipt(),
+    ),
+  ).rejects.toBeInstanceOf(PlatformGrantDenied);
+  expect(
+    (await pool.query('SELECT id FROM access.principal_permission_grant WHERE principal_id = $1', [
+      bare,
+    ])).rows,
+  ).toEqual([]);
+
+  const group = randomUUID();
+  const groupGrant = randomUUID();
+  await pool.query("INSERT INTO access.recipient_group(id,scope_id) VALUES ($1,'work:create:root')", [
+    group,
+  ]);
+  await grants.platform.create(
+    await context(),
+    groupGrant,
+    'platform:grant',
+    { groupId: group },
+    null,
+    receipt(),
+  );
+  expect(
+    (await pool.query('SELECT grant_id FROM access.platform_assignment_ceiling WHERE grant_id = $1', [
+      groupGrant,
+    ])).rows,
+  ).toEqual([]);
+  const useGrant = randomUUID();
+  await grants.platform.create(
+    await context(),
+    useGrant,
+    'platform:use:events',
+    { principalId: audience.id },
+    new Date(Date.now() + 60_000),
+    receipt(),
+  );
+  expect(
+    (await pool.query('SELECT grant_id FROM access.platform_assignment_ceiling WHERE grant_id = $1', [
+      useGrant,
+    ])).rows,
+  ).toEqual([]);
   await expect(
     grants.platform.create(
       await context(reader),

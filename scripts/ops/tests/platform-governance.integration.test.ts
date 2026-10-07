@@ -253,11 +253,13 @@ test('first governance designation is atomic, ordinary grants add backups and op
       ),
     ).rejects.toBeInstanceOf(PlatformGrantDenied);
     // Finite holders and duplicate grants never supply a permanent backup.
+    const leased = await principal();
+    const third = await principal();
     await grants.create(
       await context(),
       randomUUID(),
       'platform:grant',
-      { principalId: backup.id },
+      { principalId: leased.id },
       new Date(Date.now() + 60_000),
       receipt(),
     );
@@ -270,29 +272,51 @@ test('first governance designation is atomic, ordinary grants add backups and op
       receipt(),
     );
     expect(await assertPlatformGovernance(owner)).toBe(1);
+    const holders = new Map([
+      ['admin', administrator],
+      ['backup', backup],
+      ['leased', leased],
+    ]);
     const grantApp = new Elysia().use(
       accessAuthorityRoutes({
         grants: new AccessGrants(owner),
-        account: { verify: async () => administrator.identity },
+        account: {
+          verify: async (request: Request) =>
+            holders.get(request.headers.get('authorization') ?? 'admin')?.identity ??
+            administrator.identity,
+        },
       } as unknown as MainWorkDependencies),
     );
-    const issued = await grantApp.handle(
-      new Request('http://main.test/v1/access/grant-changes', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', 'idempotency-key': randomUUID() },
-        body: JSON.stringify({
-          profile: 'platform-grant-change-v1',
-          action: 'create',
-          issuerSubject: administrator.actor,
-          expectedAuthorityEpoch: (await context()).expectedAuthorityEpoch,
-          grantId: randomUUID(),
-          permission: 'platform:grant',
-          scopeId: 'platform:access',
-          recipient: { principalId: backup.id },
-          validUntil: null,
+    const change = (
+      token: string,
+      body: Record<string, unknown>,
+    ) => {
+      const issuer = holders.get(token)!;
+      return grantApp.handle(
+        new Request('http://main.test/v1/access/grant-changes', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'idempotency-key': randomUUID(),
+            authorization: token,
+          },
+          body: JSON.stringify({
+            profile: 'platform-grant-change-v1',
+            issuerSubject: issuer.actor,
+            ...body,
+          }),
         }),
-      }),
-    );
+      );
+    };
+    const issued = await change('admin', {
+      action: 'create',
+      expectedAuthorityEpoch: (await context()).expectedAuthorityEpoch,
+      grantId: randomUUID(),
+      permission: 'platform:grant',
+      scopeId: 'platform:access',
+      recipient: { principalId: backup.id },
+      validUntil: null,
+    });
     expect(issued.status).toBe(200);
     const permanent = (await issued.json()) as PlatformGrantResult;
     warnings.length = 0;
@@ -300,13 +324,28 @@ test('first governance designation is atomic, ordinary grants add backups and op
       await checkPlatformGovernance(url('postgres'), (message) => warnings.push(message)),
     ).toBe(2);
     expect(warnings).toEqual([]);
-    // A separate ordinary assignment ceiling makes the backup an independent
-    // issuer, so its failed revocation below exercises the continuity guard.
-    await owner.query(
-      `INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
-      VALUES ($1,$2,$3,'platform:access','access.grant.assign.platform','infinity')`,
-      [randomUUID(), administrator.actor, backup.actor],
-    );
+    const delegated = await change('backup', {
+      action: 'create',
+      expectedAuthorityEpoch: (await context(backup)).expectedAuthorityEpoch,
+      grantId: randomUUID(),
+      permission: 'platform:use:saved-views',
+      scopeId: 'platform:access',
+      recipient: { principalId: third.id },
+      validUntil: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(delegated.status).toBe(200);
+    const delegatedGrant = (await delegated.json()) as PlatformGrantResult;
+    const beyond = await change('leased', {
+      action: 'create',
+      expectedAuthorityEpoch: (await context(leased)).expectedAuthorityEpoch,
+      grantId: randomUUID(),
+      permission: 'platform:use:saved-views',
+      scopeId: 'platform:access',
+      recipient: { principalId: third.id },
+      validUntil: null,
+    });
+    expect(beyond.status).toBe(403);
+    expect(await beyond.json()).toMatchObject({ code: 'grant_denied' });
     await owner.query('UPDATE access.principal SET active = false WHERE id = $1', [
       administrator.id,
     ]);
@@ -334,6 +373,40 @@ test('first governance designation is atomic, ordinary grants add backups and op
     expect(
       (await owner.query('SELECT active FROM access.principal WHERE id = $1', [administrator.id]))
         .rows[0].active,
+    ).toBe(false);
+    await owner.query('UPDATE access.principal SET active = true WHERE id = $1', [administrator.id]);
+    const removed = await change('admin', {
+      action: 'revoke',
+      expectedAuthorityEpoch: (await context()).expectedAuthorityEpoch,
+      grantId: permanent.grant.id,
+      expectedObjectGeneration: permanent.grant.generation,
+    });
+    expect(removed.status).toBe(200);
+    const ended = await change('backup', {
+      action: 'create',
+      expectedAuthorityEpoch: (await context(backup)).expectedAuthorityEpoch,
+      grantId: randomUUID(),
+      permission: 'platform:use:saved-views',
+      scopeId: 'platform:access',
+      recipient: { principalId: third.id },
+      validUntil: new Date(Date.now() + 30_000).toISOString(),
+    });
+    expect(ended.status).toBe(403);
+    expect(
+      (
+        await owner.query('SELECT active FROM access.principal_permission_grant WHERE id = $1', [
+          delegatedGrant.grant.id,
+        ])
+      ).rows[0].active,
+    ).toBe(true);
+    expect(
+      (
+        await owner.query(
+          `SELECT g.active FROM access.platform_assignment_ceiling c
+          JOIN access.permission_grant g ON g.id = c.ceiling_id WHERE c.grant_id = $1`,
+          [permanent.grant.id],
+        )
+      ).rows[0].active,
     ).toBe(false);
 
     let statements = 0;

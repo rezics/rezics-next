@@ -50,9 +50,12 @@ a new grant UUID, the current authority epoch and an idempotency key; the Main
 token needs the `access:grant` OAuth scope.
 The issuer needs a live Agent controller and the permanent
 `access.grant.assign.platform` assignment ceiling supplied at first designation.
-Every later holder that assigns or revokes grants also needs its own controller
-and assignment ceiling; issuing `platform:grant` does not create that ceiling.
-Later assignments and revocations use this same grant path within its ceilings;
+Issuing `platform:grant` to a principal confers that assignment ceiling on the
+recipient's live Agent controller for the same lifetime, never longer than the
+issuer's own ceiling. Revoking the grant, or letting it expire, removes the
+ceiling. A principal with no live Agent controller cannot receive
+`platform:grant`, and a group grant does not confer a ceiling.
+Later assignments and revocations use this same grant path within that ceiling;
 the last active permanent holder cannot be removed or deactivated. Assign
 `platform:use:platform-admin` and resource permissions separately when the
 backup also needs administrator operations. A governance grant alone supplies

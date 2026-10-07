@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import type { GrantReceipt } from './grants.ts';
@@ -72,7 +72,9 @@ const view = (row: Row): PlatformGrantView => ({
 
 /** Ordinary direct/group Access grants, with immutable issuance episodes and
  * receipts. Every mutation uses the issuer's current control and exact
- * assignment ceiling; holding platform:use never permits assignment. */
+ * assignment ceiling; holding platform:use never permits assignment.
+ * A direct platform:grant confers access.grant.assign.platform on the
+ * recipient's live agent for that grant's lifetime. Group grants confer none. */
 export class AccessPlatformGrants {
   constructor(private readonly pool: Pool) {}
 
@@ -300,8 +302,49 @@ export class AccessPlatformGrants {
     }
   }
 
+  /** One indexed controller read and two inserts. No member fan-out. */
+  private async conferAssignmentCeiling(
+    client: PoolClient,
+    issuerPrincipalId: string,
+    grantId: string,
+    principalId: string,
+    validUntil: Date | null,
+    issuerSubject: string,
+  ) {
+    const controller = (
+      await client.query<{ subject_id: string }>(
+        `SELECT r.subject_id FROM access.representation r
+      JOIN access.authority_subject s ON s.id = r.subject_id
+      WHERE r.principal_id = $1 AND r.action = 'agent.control' AND r.active
+        AND r.valid_until > clock_timestamp() AND s.kind = 'agent' AND s.active
+      ORDER BY r.id LIMIT $2 FOR SHARE OF r,s`,
+        [principalId, PLATFORM_COST.assignmentCeilingReads],
+      )
+    ).rows[0];
+    if (!controller)
+      throw new PlatformGrantDenied('Platform grant recipient has no live agent controller');
+    const ceilingId = randomUUID();
+    await client.query(
+      `INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until,assigned_by_principal)
+      VALUES ($1,$2,$3,$4,'access.grant.assign.platform',COALESCE($5::timestamptz,'infinity'::timestamptz),$6)`,
+      [
+        ceilingId,
+        issuerSubject,
+        controller.subject_id,
+        PLATFORM_SCOPE,
+        validUntil,
+        issuerPrincipalId,
+      ],
+    );
+    await client.query(
+      'INSERT INTO access.platform_assignment_ceiling(grant_id,ceiling_id) VALUES ($1,$2)',
+      [grantId, ceilingId],
+    );
+  }
+
   /** <=129 grants on one recipient plus exact controller/ceiling/receipt reads.
-   * Finite leases and permanent governance anchors share the same episode. */
+   * Finite leases and permanent governance anchors share the same episode.
+   * A principal platform:grant writes its assignment ceiling in the same transaction. */
   create(
     context: PlatformGrantContext,
     grantId: string,
@@ -402,6 +445,17 @@ export class AccessPlatformGrants {
             audit,
           ],
         );
+        // The ceiling is this grant's lifetime, already refused when it would
+        // outlast the issuer. Revocation and expiry clear it with the grant.
+        if (action === 'platform:grant' && recipient.principalId)
+          await this.conferAssignmentCeiling(
+            client,
+            issuer.id,
+            grantId,
+            recipient.principalId,
+            validUntil,
+            context.issuerSubject,
+          );
       },
       validUntil,
       action.startsWith('platform:resource:') ? { permission: action, scope } : undefined,
