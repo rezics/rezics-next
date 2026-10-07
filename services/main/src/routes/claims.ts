@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
-import { AdmissionDenied } from '../modules/access/admission.ts';
+import { AdmissionDenied, AdmissionExpired } from '../modules/access/admission.ts';
 import { InvalidVerificationInput, readAssessment, readClaimRevisions, VerificationGraphStale }
   from '../modules/verification/graph.ts';
 import { assessAdmittedClaim, createAdmittedClaim, PendingVerification, readClaimQuality,
@@ -38,6 +38,18 @@ const note = t.String({ minLength: 1, maxLength: 2000 });
 const openResult = t.Object({}, { additionalProperties: true });
 const written = { 200: openResult, 201: openResult, 202: pendingOperation, ...writeProblems,
   404: problemResult(404), 422: problemResult(422) };
+const walkWork = t.Object({ expansions: t.Integer({ minimum: 0 }), links: t.Integer({ minimum: 0 }) });
+const assessmentWritten = { ...written, 202: t.Union([pendingOperation, t.Object({
+  status: t.Literal('analysis-partial'), assessment: t.Null(), replayed: t.Boolean(),
+  activation: t.Object({ status: t.Literal('analysis-partial') }),
+  analysis: t.Object({ support: t.Literal('abstained'), coverage: t.Literal('incomplete'),
+    dependence: t.Literal('over-budget'), independentOrigins: t.Null(), origins: t.Array(t.String(), { maxItems: 0 }),
+    reasons: t.Array(t.String()), applicableSourceAssessments: t.Array(reference, { maxItems: 32 }),
+    work: t.Object({ expansions: t.Integer({ minimum: 0, maximum: 40 }), links: t.Integer({ minimum: 0, maximum: 160 }) }),
+    totalWork: walkWork, lineageNodes: t.Integer({ minimum: 0 }), lineageComplete: t.Literal(false),
+    lineageContinuation: t.String({ maxLength: 60, pattern: '^[0-9a-f-]{36}:[0-9]+$' }),
+  }),
+})]) };
 const read = { 200: openResult, ...authorizedReadProblems };
 
 const evidenceItem = t.Object({
@@ -62,6 +74,7 @@ function claimError(error: unknown): Response {
     return problem(403, 'authority_denied', 'Verification authority is not granted');
   }
   if (error instanceof VerificationMissing) return problem(404, 'verification_record_unavailable', error.message);
+  if (error instanceof AdmissionExpired) return problem(409, 'admission_expired', 'Verification admission expired; retry with a new Idempotency-Key');
   if (error instanceof VerificationStale || error instanceof VerificationGraphStale) {
     return problem(409, 'stale_head', error.message);
   }
@@ -86,8 +99,8 @@ export function claimRoutes(work: MainWorkDependencies) {
     if (!id) throw new VerificationDenied('principal is inactive');
     return id;
   };
-  const respond = (result: { replayed: boolean }) => Response.json(result,
-    { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+  const respond = (result: { replayed: boolean; status?: string }) => Response.json(result,
+    { status: result.status === 'analysis-partial' ? 202 : result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
   const ok = (result: unknown) => Response.json(result, { headers: { 'cache-control': 'no-store' } });
   const keyed = async (request: Request, run: (key: string) => Promise<Response>) => {
     const key = keyOf(request);
@@ -141,7 +154,7 @@ export function claimRoutes(work: MainWorkDependencies) {
     .post('/v1/claims/:claim/assessments', {
       params: t.Object({ claim: uuid }),
       body: t.Object({ profile: t.Literal('claim-assessment-v1'), claimRevision: nativeRef,
-        evidenceSetRevision: nativeRef, sourceAssessments: t.Array(nativeRef, { maxItems: 32 }),
+        evidenceSetRevision: nativeRef, lineageContinuation: t.Optional(t.String({ maxLength: 60, pattern: '^[0-9a-f-]{36}:[0-9]+$' })), sourceAssessments: t.Array(nativeRef, { maxItems: 32 }),
         method: t.Union([t.Literal('automated'), t.Literal('human-review')]),
         judgment: t.Nullable(t.Union([t.Literal('supported'), t.Literal('contradicted'),
           t.Literal('material-conflict'), t.Literal('insufficient')])),
@@ -151,7 +164,7 @@ export function claimRoutes(work: MainWorkDependencies) {
         limitations: note, expectedSummary: t.Nullable(nativeRef),
         resolvesChallenges: t.Array(uuid, { maxItems: 8 }), actingSubject: nativeRef,
       }, { additionalProperties: false }),
-      response: written,
+      response: assessmentWritten,
     }, ({ request, params, body }) => keyed(request, async key => {
       const { profile: _profile, ...input } = body;
       return respond(await assessAdmittedClaim(deps(), request, nativeId(params.claim),

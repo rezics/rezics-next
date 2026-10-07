@@ -33,7 +33,7 @@ const summaryCoverage = ['complete', 'partial', 'incomplete'] as const;
 const summaryDependence = ['established', 'unknown', 'circular', 'over-budget'] as const;
 const dependencyOwners = ['graph', 'content'] as const;
 const dependencyKinds = ['claim', 'evidence-set', 'source-assessment', 'source-observation',
-  'source-disposition', 'challenge', 'policy', 'rule', 'acceptance', 'adopted-revision'] as const;
+  'source-disposition', 'challenge', 'policy', 'rule', 'acceptance', 'adopted-revision', 'lineage-walk'] as const;
 const invalidationProducers = ['graph', 'content'] as const;
 
 type Of<T extends readonly string[]> = T[number];
@@ -149,6 +149,15 @@ interface CorrectionNoticeRow {
 
 /** Row types keyed by table, as pg returns them (snake_case, bigint as string). */
 export interface VerificationRows {
+  lineage_walk: { id: string; claim: string; evidence_revision: string; authority_digest: string; start_key: string;
+    root_ordinal: number; complete: boolean; unknown: boolean; circular: boolean; origin_count: string;
+    version: number; expansions: string; edges: string; node_count: string };
+  lineage_walk_observation: { walk_id: string; observation_id: string; lineage_head: string | null;
+    disposition_head: string | null; stale: boolean };
+  lineage_walk_node: { walk_id: string; root_ordinal: number; observation_id: string; depth: number;
+    done: boolean; phase: number; edge_cursor: string | null; input_cursor: number; has_links: boolean };
+  lineage_walk_origin: { walk_id: string; origin_id: string };
+  lineage_walk_step: { walk_id: string; version: number; result: Record<string, unknown> };
   receipt: ReceiptRow; origin: OriginRow; derivation: DerivationRow; derivation_input: DerivationInputRow;
   lineage_edge: LineageEdgeRow; lineage_retraction: LineageRetractionRow;
   evidence_set_revision: EvidenceSetRevisionRow; evidence_item: EvidenceItemRow; evidence_head: EvidenceHeadRow;
@@ -166,6 +175,12 @@ export interface VerificationRows {
 
 /** Physical column order per table; `satisfies` ties each list to its row type. */
 export const verificationColumns = {
+  lineage_walk: ['id', 'claim', 'evidence_revision', 'authority_digest', 'start_key', 'root_ordinal', 'complete',
+    'unknown', 'circular', 'origin_count', 'version', 'expansions', 'edges', 'node_count'],
+  lineage_walk_observation: ['walk_id', 'observation_id', 'lineage_head', 'disposition_head', 'stale'],
+  lineage_walk_node: ['walk_id', 'root_ordinal', 'observation_id', 'depth', 'done', 'phase', 'edge_cursor', 'input_cursor', 'has_links'],
+  lineage_walk_origin: ['walk_id', 'origin_id'],
+  lineage_walk_step: ['walk_id', 'version', 'result'],
   receipt: ['id', 'principal_id', 'action', 'idempotency_key', 'request_digest', 'outcome',
     'result_id', 'reason', 'created_at'] satisfies (keyof ReceiptRow)[],
   origin: ['id', 'kind', 'locator', 'operation_id', 'principal_id', 'created_at'] satisfies (keyof OriginRow)[],

@@ -3,7 +3,7 @@
 // the exact head and invalidation work commit together. SQL stays here.
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import { LINEAGE_BUDGET, type LineageLink } from './analysis.ts';
+import { LINEAGE_BUDGET, LINEAGE_EDGE_BUDGET, type LineageLink, type LineageProof } from './analysis.ts';
 import { verificationLimits } from './schema.ts';
 
 export class VerificationInvalid extends Error {}
@@ -42,7 +42,25 @@ export interface Dependency {
   owner: 'graph' | 'content'; kind: string; reference: string; expectedHead: string | null;
 }
 
-export interface AnalysisSnapshot {
+export interface WalkAuthority {
+  principal: string; actingSubject: string; scope: string; authorityEpoch: string; requestDigest: string;
+}
+export interface WalkProgress {
+  continuation: string | null; walk: string; complete: boolean; lineageNodes: number;
+  work: { expansions: number; links: number }; totalWork: { expansions: number; links: number };
+  lineageProof: LineageProof;
+}
+interface WalkRow {
+  id: string; root_ordinal: number; version: number; complete: boolean; unknown: boolean; circular: boolean;
+  origin_count: string; expansions: string; edges: string; node_count: string;
+}
+interface WalkNode {
+  observation_id: string; depth: number; phase: number; done: boolean;
+  edge_cursor: string | null; input_cursor: number; has_links: boolean;
+}
+
+export interface AnalysisSnapshot extends WalkProgress {
+  stepReplayed: boolean;
   revision: EvidenceRevision; evidenceHead: string | null; links: LineageLink[]; truncated: boolean;
   visited: string[]; lineageHeads: Map<string, string | null>; recordOf: Map<string, string>;
   observedAt: Map<string, string>;
@@ -412,68 +430,180 @@ export class VerificationStore {
     return row ? nativeId(row.head) : null;
   }
 
-  /** Load one exact manifest with its bounded lineage closure and local heads. */
-  async analysisSnapshot(claim: string, revision: string): Promise<AnalysisSnapshot> {
+  /** Durable, owner-local DFS. A token names the input step, so lost responses replay it. */
+  async analysisSnapshot(claim: string, revision: string, authority: WalkAuthority,
+    continuation?: string, startKey = authority.requestDigest, readOnly = false): Promise<AnalysisSnapshot> {
+    const authorityDigest = digestOf({ principal: authority.principal, actingSubject: authority.actingSubject,
+      scope: authority.scope, authorityEpoch: authority.authorityEpoch, requestDigest: authority.requestDigest });
+    const token = continuation?.match(/^([0-9a-f-]{36}):(\d+)$/);
+    if (continuation && (!token || !UUID.test(token[1]!))) throw new VerificationMissing('lineage continuation is unavailable');
     return this.tx(async client => {
-      const manifest = await this.readEvidenceWith(client, revision);
-      if (manifest.claim !== claim || manifest.purpose !== 'claim-head') {
-        throw new VerificationMissing('evidence revision belongs to another claim');
+      let walk: WalkRow;
+      if (token) {
+        const row = (await client.query<WalkRow>(`SELECT * FROM verification.lineage_walk
+          WHERE id = $1 AND claim = $2 AND evidence_revision = $3 AND authority_digest = $4 FOR UPDATE`,
+        [token[1], claim, revision, authorityDigest])).rows[0];
+        if (!row) throw new VerificationMissing('lineage continuation is unavailable');
+        walk = row;
+      } else {
+        const manifest = await this.readEvidenceWith(client, revision);
+        if (manifest.claim !== claim || manifest.purpose !== 'claim-head') {
+          throw new VerificationMissing('evidence revision belongs to another claim');
+        }
+        if (!readOnly) await client.query(`INSERT INTO verification.lineage_walk (id, claim, evidence_revision, authority_digest, start_key)
+          VALUES ($1, $2, $3, $4, $5) ON CONFLICT (claim, evidence_revision, authority_digest, start_key) DO NOTHING`,
+        [crypto.randomUUID(), claim, revision, authorityDigest, startKey]);
+        walk = (await client.query<WalkRow>(`SELECT * FROM verification.lineage_walk
+          WHERE claim = $1 AND evidence_revision = $2 AND authority_digest = $3 AND start_key = $4 FOR UPDATE`,
+        [claim, revision, authorityDigest, startKey])).rows[0]!;
       }
-      const head = (await client.query<{ head: string }>('SELECT head FROM verification.evidence_head WHERE claim = $1',
-        [claim])).rows[0]?.head ?? null;
+      if (!walk || (readOnly && !walk.complete)) {
+        throw new VerificationStale('completed lineage proof is unavailable');
+      }
+      // A read never relies on asynchronous invalidation delivery.
+      if (await this.localHead(client, { kind: 'lineage-walk', reference: walk.id }) === null) {
+        throw new VerificationStale('lineage continuation basis changed');
+      }
+      const manifest = await this.readEvidenceWith(client, revision);
       const roots = [...new Set(manifest.items.flatMap(item => item.observation ? [item.observation] : []))];
-      // One bounded recursive walk; the LIMIT stops expansion after the budget.
-      const reached = roots.length ? (await client.query<{ observation_id: string }>(`WITH RECURSIVE reach(observation_id) AS (
-          SELECT unnest($1::uuid[])
-          UNION
-          SELECT next.target FROM reach r CROSS JOIN LATERAL (
-            SELECT e.target_observation_id AS target FROM verification.lineage_edge e
-              WHERE e.observation_id = r.observation_id AND e.target_observation_id IS NOT NULL
-                AND NOT EXISTS (SELECT 1 FROM verification.lineage_retraction x WHERE x.edge_id = e.id)
-            UNION ALL
-            SELECT i.input_observation_id FROM verification.derivation d
+      const supporting = new Set(manifest.items.filter(item => item.stance === 'supports'
+        && item.currentAvailability === 'available').map(item => item.observation));
+      const version = readOnly ? walk.version - 1 : token ? Number(token[2]) : 0;
+      if (!Number.isSafeInteger(version) || version < 0 || version > walk.version
+        || (walk.complete && version === walk.version)) {
+        throw new VerificationStale('lineage continuation step is unavailable');
+      }
+      const replay = (await client.query<{ result: WalkProgress }>(`SELECT result FROM verification.lineage_walk_step
+        WHERE walk_id = $1 AND version = $2`, [walk.id, version])).rows[0]?.result;
+      if (!replay && (readOnly || version !== walk.version)) throw new VerificationStale('lineage continuation step is unavailable');
+      const work = { expansions: 0, links: 0 };
+      let progress = replay;
+      if (!progress) {
+        const pin = async (observation: string) => {
+          // Writers take this lock before publishing invalidation. It protects absent heads too.
+          await client.query('SELECT id FROM source.observation WHERE id = $1 FOR SHARE', [observation]);
+          const inserted = await client.query(`INSERT INTO verification.lineage_walk_observation
+            (walk_id, observation_id, lineage_head, disposition_head)
+            SELECT $1, o.id, h.revision::text, d.head FROM source.observation o
+            LEFT JOIN verification.lineage_head h ON h.observation_id = o.id
+            LEFT JOIN verification.observation_disposition_head d ON d.observation_id = o.id WHERE o.id = $2
+            ON CONFLICT DO NOTHING`, [walk.id, observation]);
+          walk.node_count = String(Number(walk.node_count) + (inserted.rowCount ?? 0));
+        };
+        // Pin the whole bounded manifest, including unavailable/non-supporting roots.
+        for (const root of roots) await pin(root);
+        const addNode = async (observation: string, depth: number) => {
+          await pin(observation);
+          await client.query(`INSERT INTO verification.lineage_walk_node
+            (walk_id, root_ordinal, observation_id, depth) VALUES ($1, $2, $3, $4)`,
+          [walk.id, walk.root_ordinal, observation, depth]);
+          work.expansions++;
+        };
+        const origin = async (id: string) => {
+          if (!supporting.has(roots[walk.root_ordinal])) return;
+          const added = await client.query(`INSERT INTO verification.lineage_walk_origin (walk_id, origin_id)
+            VALUES ($1, $2) ON CONFLICT DO NOTHING`, [walk.id, id]);
+          walk.origin_count = String(Number(walk.origin_count) + (added.rowCount ?? 0));
+        };
+        // Transitions include empty phases and stack pops, keeping zero-edge work bounded.
+        for (let transitions = 0; transitions < 240 && !walk.complete; transitions++) {
+          if (work.expansions >= LINEAGE_BUDGET || work.links >= LINEAGE_EDGE_BUDGET) break;
+          const root = roots[walk.root_ordinal];
+          if (!root) { walk.complete = true; break; }
+          let node = (await client.query<WalkNode>(`SELECT * FROM verification.lineage_walk_node
+            WHERE walk_id = $1 AND root_ordinal = $2 AND NOT done ORDER BY depth DESC LIMIT 1`,
+          [walk.id, walk.root_ordinal])).rows[0];
+          if (!node) {
+            const seeded = await client.query(`SELECT 1 FROM verification.lineage_walk_node
+              WHERE walk_id = $1 AND root_ordinal = $2 AND observation_id = $3`, [walk.id, walk.root_ordinal, root]);
+            if (seeded.rowCount) { walk.root_ordinal++; continue; }
+            await addNode(root, 0);
+            continue;
+          }
+          let link: LineageLink | undefined;
+          if (node.phase === 0 || node.phase === 2) {
+            const relation = node.phase === 0 ? "<> 'publishes-origin'" : "= 'publishes-origin'";
+            const edge = (await client.query(`SELECT e.*, EXISTS (SELECT 1 FROM verification.lineage_retraction r
+              WHERE r.edge_id = e.id) AS retracted FROM verification.lineage_edge e
+              WHERE e.observation_id = $1 AND e.relation ${relation}
+              AND e.id > $2::uuid ORDER BY e.id LIMIT 1`,
+            [node.observation_id, node.edge_cursor ?? '00000000-0000-0000-0000-000000000000'])).rows[0];
+            if (edge) {
+              node.edge_cursor = edge.id;
+              work.links++;
+              if (!edge.retracted) link = { source: node.observation_id, relation: edge.relation,
+                targetObservation: edge.target_observation_id, targetOrigin: edge.target_origin_id,
+                targetReference: edge.target_reference };
+            } else if (node.phase === 0) { node.phase = 1; node.edge_cursor = null; }
+            else node.done = true;
+          } else {
+            const item = (await client.query(`SELECT i.* FROM verification.derivation d
               JOIN verification.derivation_input i ON i.derivation_id = d.id
-              WHERE d.output_observation_id = r.observation_id AND i.input_observation_id IS NOT NULL) next)
-        SELECT observation_id FROM reach LIMIT $2`, [roots, LINEAGE_BUDGET + 1])).rows.map(row => row.observation_id) : [];
-      const truncated = reached.length > LINEAGE_BUDGET;
-      const visited = reached.slice(0, LINEAGE_BUDGET);
-      const links = visited.length ? (await client.query(`
-        SELECT e.observation_id AS source, e.relation, e.target_observation_id, e.target_origin_id, e.target_reference
-          FROM verification.lineage_edge e WHERE e.observation_id = ANY($1::uuid[])
-          AND NOT EXISTS (SELECT 1 FROM verification.lineage_retraction x WHERE x.edge_id = e.id)
-        UNION ALL
-        SELECT d.output_observation_id, 'derived-from', i.input_observation_id, i.input_origin_id, i.input_reference
-          FROM verification.derivation d JOIN verification.derivation_input i ON i.derivation_id = d.id
-          WHERE d.output_observation_id = ANY($1::uuid[])`, [visited])).rows.map(row => ({
-        source: row.source, relation: row.relation, targetObservation: row.target_observation_id,
-        targetOrigin: row.target_origin_id, targetReference: row.target_reference })) : [];
-      const heads = new Map<string, string | null>(visited.map(id => [id, null]));
-      const dispositionHeads = new Map<string, string | null>(visited.map(id => [id, null]));
-      for (const row of visited.length ? (await client.query<{ observation_id: string; revision: string }>(
-        `SELECT observation_id, revision::text FROM verification.lineage_head WHERE observation_id = ANY($1::uuid[])`,
-        [visited])).rows : []) heads.set(row.observation_id, row.revision);
-      for (const row of visited.length ? (await client.query<{ observation_id: string; head: string }>(
-        `SELECT observation_id, head FROM verification.observation_disposition_head
-          WHERE observation_id = ANY($1::uuid[])`, [visited])).rows : []) {
-        dispositionHeads.set(row.observation_id, nativeId(row.head));
+              WHERE d.output_observation_id = $1 AND i.ordinal > $2 ORDER BY i.ordinal LIMIT 1`,
+            [node.observation_id, node.input_cursor])).rows[0];
+            if (item) {
+              node.input_cursor = item.ordinal;
+              work.links++;
+              link = { source: node.observation_id, relation: 'derived-from', targetObservation: item.input_observation_id,
+                targetOrigin: item.input_origin_id, targetReference: item.input_reference };
+            } else if (node.has_links) node.done = true;
+            else node.phase = 2;
+          }
+          if (link) {
+            node.has_links = true;
+            if (link.targetObservation) {
+              const known = (await client.query<{ done: boolean }>(`SELECT done FROM verification.lineage_walk_node
+                WHERE walk_id = $1 AND root_ordinal = $2 AND observation_id = $3`,
+              [walk.id, walk.root_ordinal, link.targetObservation])).rows[0];
+              if (!known) await addNode(link.targetObservation, node.depth + 1);
+              else if (!known.done && supporting.has(root)) walk.circular = true;
+            } else if (link.targetOrigin) await origin(link.targetOrigin);
+            else if (supporting.has(root)) walk.unknown = true;
+          }
+          if (node.done && !node.has_links && supporting.has(root)) walk.unknown = true;
+          await client.query(`UPDATE verification.lineage_walk_node SET done = $4, phase = $5,
+            edge_cursor = $6, input_cursor = $7, has_links = $8
+            WHERE walk_id = $1 AND root_ordinal = $2 AND observation_id = $3`,
+          [walk.id, walk.root_ordinal, node.observation_id, node.done, node.phase,
+            node.edge_cursor, node.input_cursor, node.has_links]);
+        }
+        walk.expansions = String(Number(walk.expansions) + work.expansions);
+        walk.edges = String(Number(walk.edges) + work.links);
+        await client.query(`UPDATE verification.lineage_walk SET root_ordinal = $2, complete = $3,
+          unknown = $4, circular = $5, origin_count = $6, version = version + 1, expansions = $7, edges = $8, node_count = $9 WHERE id = $1`,
+        [walk.id, walk.root_ordinal, walk.complete, walk.unknown, walk.circular, walk.origin_count, walk.expansions, walk.edges, walk.node_count]);
+        const origins = (await client.query<{ origin_id: string }>(`SELECT origin_id FROM verification.lineage_walk_origin
+          WHERE walk_id = $1 ORDER BY origin_id LIMIT 32`, [walk.id])).rows.map(row => `origin:${row.origin_id}`);
+        const dependence = !walk.complete ? 'over-budget' : walk.circular ? 'circular' : walk.unknown ? 'unknown' : 'established';
+        progress = { continuation: walk.complete ? null : `${walk.id}:${version + 1}`, walk: walk.id,
+          complete: walk.complete, lineageNodes: Number(walk.node_count), work, totalWork: { expansions: Number(walk.expansions), links: Number(walk.edges) },
+          lineageProof: { dependence, independentOrigins: dependence === 'established' ? Number(walk.origin_count) : null,
+            origins: dependence === 'established' ? origins : [] } };
+        await client.query(`INSERT INTO verification.lineage_walk_step (walk_id, version, result) VALUES ($1, $2, $3)`,
+        [walk.id, version, progress]);
       }
       const recordOf = new Map<string, string>();
       const observedAt = new Map<string, string>();
-      for (const row of roots.length ? (await client.query<{ id: string; record_id: string; submitted_at: Date }>(
-        'SELECT id, record_id, submitted_at FROM source.observation WHERE id = ANY($1::uuid[])', [roots])).rows : []) {
+      for (const row of (await client.query<{ id: string; record_id: string; submitted_at: Date }>(
+        'SELECT id, record_id, submitted_at FROM source.observation WHERE id = ANY($1::uuid[])', [roots])).rows) {
         recordOf.set(row.id, nativeId(row.record_id));
         observedAt.set(row.id, iso(row.submitted_at));
       }
-      const challenge = (await client.query<{ revision: string; open_count: number; resolved: number }>(`
-        SELECT h.revision::text, h.open_count, (SELECT count(*)::int FROM verification.challenge c
-          JOIN verification.challenge_resolution r ON r.challenge_id = c.id WHERE c.claim = h.claim) AS resolved
-        FROM verification.challenge_head h WHERE h.claim = $1`, [claim])).rows[0];
-      return { revision: manifest, evidenceHead: head ? nativeId(head) : null, links, truncated, visited,
-        lineageHeads: heads, dispositionHeads, recordOf, observedAt,
-        challenge: { revision: challenge?.revision ?? null, open: challenge?.open_count ?? 0,
-          resolved: challenge?.resolved ?? 0 } };
-    }, true);
+      return { revision: manifest, evidenceHead: nativeId(revision), links: [], truncated: !progress.complete,
+        visited: roots, lineageHeads: new Map(), dispositionHeads: new Map(), recordOf, observedAt,
+        challenge: await this.challengeStateWith(client, claim), ...progress, stepReplayed: Boolean(replay) };
+    });
   }
+
+  private async challengeStateWith(client: PoolClient, claim: string) {
+    const row = (await client.query<{ revision: string; open_count: number; resolved: number }>(`
+      SELECT h.revision::text, h.open_count, (SELECT count(*)::int FROM verification.challenge c
+        JOIN verification.challenge_resolution r ON r.challenge_id = c.id WHERE c.claim = h.claim) AS resolved
+      FROM verification.challenge_head h WHERE h.claim = $1`, [claim])).rows[0];
+    return { revision: row?.revision ?? null, open: row?.open_count ?? 0, resolved: row?.resolved ?? 0 };
+  }
+
+  async challengeState(claim: string) { return this.tx(client => this.challengeStateWith(client, claim)); }
 
   // ------------------------------------------------------------ challenges
 
@@ -655,6 +785,13 @@ export class VerificationStore {
       return (await client.query<{ revision: string }>(
         `SELECT revision::text FROM verification.challenge_head WHERE claim = $1${share}`, [dependency.reference]))
         .rows[0]?.revision ?? null;
+    }
+    if (dependency.kind === 'lineage-walk') {
+      const row = (await client.query<{ id: string }>(`SELECT w.id FROM verification.lineage_walk w
+        JOIN verification.evidence_head e ON e.claim = w.claim AND e.head = w.evidence_revision
+        WHERE w.id = $1 AND NOT EXISTS (SELECT 1 FROM verification.lineage_walk_observation o
+          WHERE o.walk_id = w.id AND o.stale)${lock ? ' FOR SHARE OF w' : ''}`, [dependency.reference])).rows[0];
+      return row?.id ?? null;
     }
     if (dependency.kind === 'source-observation') {
       return (await client.query<{ revision: string }>(

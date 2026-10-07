@@ -6,8 +6,16 @@
 export const SUPPORT_METHOD = 'https://rezics.com/definition/verification-lineage-support-v1';
 export const HUMAN_REVIEW_METHOD = 'https://rezics.com/definition/verification-human-review-v1';
 export const SUMMARY_POLICY = 'https://rezics.com/definition/verification-summary-policy-v1';
-/** Distinct lineage observations one analysis may visit; more is reported as over-budget. */
+/** Node expansions in one durable lineage step. */
 export const LINEAGE_BUDGET = 40;
+export const LINEAGE_EDGE_BUDGET = 160;
+
+/** Owner-computed proof; only complete durable walks can establish independence. */
+export interface LineageProof {
+  dependence: Dependence;
+  independentOrigins: number | null;
+  origins: string[];
+}
 
 /** Recheck graph owner heads and the deployed deterministic policy revision. */
 export function currentVerificationHead(kind: string, reference: string,
@@ -54,6 +62,7 @@ export interface AnalysisInput {
   /** Links of every loaded observation; `truncated` when the closure exceeded the budget. */
   links: readonly LineageLink[];
   truncated: boolean;
+  lineageProof?: LineageProof;
   /** Source record (as `https://rezics.com/id/<uuid>`) of each evidence observation. */
   recordOf: ReadonlyMap<string, string>;
   /** Source-observation acquisition instants used for reliability applicability. */
@@ -131,7 +140,11 @@ export function analyzeClaimSupport(input: AnalysisInput): AnalysisResult {
   const work = { expansions: 0, links: 0 };
   const reasons = new Set<string>();
   const outgoing = new Map<string, LineageLink[]>();
-  for (const link of input.links) outgoing.set(link.source, [...outgoing.get(link.source) ?? [], link]);
+  for (const link of input.links) {
+    const group = outgoing.get(link.source) ?? [];
+    group.push(link);
+    outgoing.set(link.source, group);
+  }
   const appliesTo = (rating: ReliabilityInput, observation: string) => {
     const observed = input.observedAt.get(observation);
     if (observed === undefined) return false;
@@ -166,7 +179,12 @@ export function analyzeClaimSupport(input: AnalysisInput): AnalysisResult {
   const memo = new Map<string, Roots>();
   const origins = new Set<string>();
   let dependence: Dependence = input.truncated ? 'over-budget' : 'established';
+  if (!input.truncated && input.lineageProof) {
+    dependence = input.lineageProof.dependence;
+    for (const origin of input.lineageProof.origins) origins.add(origin);
+  }
   for (const item of supporting) {
+    if (input.lineageProof && item.observation) continue;
     if (dependence === 'over-budget' || dependence === 'circular') break;
     // Exact anchors are inspectable, but their identities alone say nothing
     // about independence from another source or from each other.
@@ -196,7 +214,7 @@ export function analyzeClaimSupport(input: AnalysisInput): AnalysisResult {
   } else if (dependence === 'unknown') {
     support = 'insufficient';
     reasons.add('dependence-unknown');
-  } else if (origins.size >= 2) {
+  } else if ((input.lineageProof?.independentOrigins ?? origins.size) >= 2) {
     support = 'supported';
     reasons.add('independent-origins');
   } else if (supporting.some(item => item.observation && applicable.some(reliability =>
@@ -211,7 +229,7 @@ export function analyzeClaimSupport(input: AnalysisInput): AnalysisResult {
   }
   if (dependence === 'unknown') reasons.add('dependence-unknown');
   return {
-    dependence, independentOrigins: dependence === 'established' ? origins.size : null,
+    dependence, independentOrigins: dependence === 'established' ? (input.lineageProof?.independentOrigins ?? origins.size) : null,
     origins: dependence === 'established' ? [...origins].sort() : [],
     coverage, support, reasons: [...reasons].sort(),
     applicableReliability: applicable.map(item => item.assessment).sort(), work,

@@ -21,6 +21,10 @@ import { uuidOf, VerificationDenied, VerificationMissing, VerificationStale,
   type ActivationOutcome, type Dependency, type VerificationStore } from './store.ts';
 import { verificationLimits } from './schema.ts';
 
+class PartialVerification extends Error {
+  constructor(readonly basis: Basis) { super('lineage analysis is incomplete'); }
+}
+
 export class PendingVerification extends PendingActivation {
   constructor(readonly operationId: string) { super('verification outcome requires reconciliation'); }
 }
@@ -51,8 +55,7 @@ async function admitted(deps: VerificationDependencies, request: Request, family
   try {
     let admission: RegisteredAdmission = registered;
     if (registered.state !== 'sealed' && registered.dispatchEligible) {
-      try { admission = await deps.access.claim(registered.id, intent.digest); }
-      catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
+      admission = await deps.access.claim(registered.id, intent.digest);
     }
     if (admission.state !== 'sealed') {
       if (!admission.dispatchEligible || admission.state === 'registered') {
@@ -60,7 +63,8 @@ async function admitted(deps: VerificationDependencies, request: Request, family
       } else {
         try { await execute(admission); }
         catch (error) {
-          if (error instanceof IdempotencyConflict || error instanceof InvalidVerificationInput) throw error;
+          if (error instanceof IdempotencyConflict || error instanceof InvalidVerificationInput
+            || error instanceof PartialVerification) throw error;
           // A refused basis seals the admission, then reports the refusal itself.
           if (unavailable(error)) {
             await sealVerificationAdmission(deps.env, admission, family, RESULTS[family]);
@@ -82,7 +86,7 @@ async function admitted(deps: VerificationDependencies, request: Request, family
     }
     return { ...terminal, replayed: registered.replayed, admission: registered };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation
+    if (error instanceof AdmissionExpired || error instanceof PartialVerification || error instanceof IdempotencyConflict || error instanceof CancelledActivation
       || error instanceof AdmissionDenied || error instanceof InvalidVerificationInput
       || error instanceof VerificationGraphStale || error instanceof VerificationStale
       || error instanceof VerificationMissing || error instanceof PendingVerification) throw error;
@@ -135,6 +139,7 @@ export async function recordAdmittedReliability(deps: VerificationDependencies, 
 
 export interface AssessClaimInput {
   claimRevision: string; evidenceSetRevision: string; sourceAssessments: readonly string[];
+  lineageContinuation?: string;
   method: 'automated' | 'human-review'; judgment: Exclude<Support, 'abstained'> | null;
   evaluationContext: string; adoptedRevision: string | null;
   scorePerMillion: number | null; calibration: string | null; evaluationReference?: string | null;
@@ -160,7 +165,8 @@ function assessmentDigest(claim: string, input: AssessClaimInput): string {
   }
   if (input.evaluationReference != null) validateVerificationReference(input.evaluationReference, 'evaluationReference');
   for (const item of input.sourceAssessments) native(item, 'sourceAssessment');
-  return hash(JSON.stringify({ family: 'claim-assessment-v1', claim, ...input,
+  const { lineageContinuation: _continuation, ...intent } = input;
+  return hash(JSON.stringify({ family: 'claim-assessment-v1', claim, ...intent,
     evaluationReference: input.evaluationReference ?? null,
     sourceAssessments: [...input.sourceAssessments].sort(), resolvesChallenges: [...input.resolvesChallenges].sort() }));
 }
@@ -174,13 +180,16 @@ interface Basis {
 
 /** Load exact inputs and apply the deterministic method; every basis head must be current. */
 async function assessmentBasis(deps: VerificationDependencies, claim: string, input: AssessClaimInput,
-  requireCurrent: boolean): Promise<Basis> {
+  requireCurrent: boolean, admission: RegisteredAdmission): Promise<Basis> {
   const records = await readClaimRevisions(deps.env, [input.claimRevision]);
   const record = records.get(input.claimRevision);
   if (!record || record.claim !== claim) throw new VerificationMissing('claim revision is unavailable');
   const evidence = uuidOf(input.evidenceSetRevision);
   if (!evidence) throw new VerificationMissing('evidence revision is unavailable');
-  const snapshot = await deps.store.analysisSnapshot(claim, evidence);
+  const snapshot = await deps.store.analysisSnapshot(claim, evidence, {
+    principal: admission.principalId, actingSubject: admission.actingSubject, scope: admission.scope,
+    authorityEpoch: admission.authorityEpoch, requestDigest: admission.requestDigest,
+  }, input.lineageContinuation, admission.idempotencyKey, !requireCurrent);
   const reliability = await readReliability(deps.env, input.sourceAssessments);
   const acceptance = input.adoptedRevision ? await readAcceptance(deps.env, input.adoptedRevision, claim) : null;
   if (input.adoptedRevision && !acceptance) throw new VerificationMissing('acceptance decision is unavailable');
@@ -201,13 +210,14 @@ async function assessmentBasis(deps: VerificationDependencies, claim: string, in
     items: snapshot.revision.items.map(item => ({ ordinal: item.ordinal, stance: item.stance,
       availability: item.currentAvailability as 'available', observation: item.observation ?? null,
       contentRevision: item.contentRevision ?? null, graphReference: item.graphReference ?? null })),
-    links: snapshot.links, truncated: snapshot.truncated, recordOf: snapshot.recordOf,
+    links: snapshot.links, truncated: snapshot.truncated, lineageProof: snapshot.lineageProof, recordOf: snapshot.recordOf,
     observedAt: snapshot.observedAt,
     referencedClaims: new Map([...referenced].map(([key, value]) => [key, scope(value)])),
     reliability: [...reliability.values()].map(item => ({ assessment: item.assessment, source: item.source,
       domain: item.domain, context: item.context, result: item.result,
       applicableFrom: item.applicableFrom, applicableUntil: item.applicableUntil })) });
-  const support: Support = input.method === 'human-review' ? input.judgment! : analysis.support;
+  const support: Support = snapshot.truncated ? 'abstained'
+    : input.method === 'human-review' ? input.judgment! : analysis.support;
   return { record, analysis, support, snapshot, reliability, acceptance };
 }
 
@@ -222,10 +232,7 @@ function dependencies(claim: string, input: AssessClaimInput, basis: Basis,
       reference: basis.acceptance.slot, expectedHead: input.adoptedRevision }] : []),
     ...[...basis.reliability.values()].sort((a, b) => a.scope.localeCompare(b.scope)).map(item => ({
       owner: 'graph' as const, kind: 'source-assessment', reference: item.scope, expectedHead: item.assessment })),
-    ...basis.snapshot.visited.map(observation => ({ owner: 'content' as const, kind: 'source-observation',
-      reference: observation, expectedHead: basis.snapshot.lineageHeads.get(observation) ?? null })),
-    ...basis.snapshot.visited.map(observation => ({ owner: 'content' as const, kind: 'source-disposition',
-      reference: observation, expectedHead: basis.snapshot.dispositionHeads.get(observation) ?? null })),
+    { owner: 'content', kind: 'lineage-walk', reference: basis.snapshot.walk, expectedHead: basis.snapshot.walk },
   ];
 }
 
@@ -242,9 +249,11 @@ export async function assessAdmittedClaim(deps: VerificationDependencies, reques
     if (submitter === principal) throw new VerificationDenied('a submitter cannot resolve its own challenge');
   }
   let basis: Basis | null = null;
-  const receipt = await admitted(deps, request, 'claim-assess',
+  let receipt: Awaited<ReturnType<typeof admitted>>;
+  try { receipt = await admitted(deps, request, 'claim-assess',
     { actingSubject: input.actingSubject, idempotencyKey, digest }, async admission => {
-      basis = await assessmentBasis(deps, claim, intent, true);
+      basis = await assessmentBasis(deps, claim, intent, true, admission);
+      if (basis.snapshot.truncated) throw new PartialVerification(basis);
       if (dependencies(claim, intent, basis, basis.snapshot.challenge.revision).length
         > verificationLimits.summaryDependencies) {
         throw new InvalidVerificationInput('assessment dependency manifest exceeds the admitted ceiling');
@@ -261,11 +270,20 @@ export async function assessAdmittedClaim(deps: VerificationDependencies, reques
         assessorKind: input.method === 'human-review' ? 'human' : 'automated', actingSubject: input.actingSubject });
     }, error => error instanceof VerificationMissing || error instanceof VerificationStale
       || error instanceof VerificationGraphStale);
+  } catch (error) {
+    if (!(error instanceof PartialVerification)) throw error;
+    const partial = error.basis;
+    return { status: 'analysis-partial' as const, replayed: partial.snapshot.stepReplayed, assessment: null, activation: { status: 'analysis-partial' as const },
+      analysis: { support: 'abstained' as const, coverage: 'incomplete' as const, dependence: 'over-budget' as const,
+        independentOrigins: null, origins: [], reasons: partial.analysis.reasons,
+        applicableSourceAssessments: partial.analysis.applicableReliability, work: partial.snapshot.work, totalWork: partial.snapshot.totalWork,
+        lineageContinuation: partial.snapshot.continuation, lineageComplete: false, lineageNodes: partial.snapshot.lineageNodes } };
+  }
   const assessment = receipt.result.assessment!;
   const recorded = await readAssessment(deps.env, assessment);
   if (!recorded) throw new PendingVerification(receipt.admissionId);
   // Replays recompute the deterministic basis and activate only if it still yields the recorded result.
-  const current: Basis = basis ?? await assessmentBasis(deps, claim, intent, false);
+  const current: Basis = basis ?? await assessmentBasis(deps, claim, intent, false, receipt.admission);
   const reproduced = current.support === recorded.support && current.analysis.dependence === recorded.dependence
     && current.analysis.coverage === recorded.coverage
     && current.analysis.independentOrigins === recorded.independentOrigins;
@@ -276,7 +294,7 @@ export async function assessAdmittedClaim(deps: VerificationDependencies, reques
   }
   let activation: ActivationOutcome | { status: 'not-reproduced' } = { status: 'not-reproduced' };
   if (reproduced) {
-    const challenge = (await deps.store.analysisSnapshot(claim, uuidOf(input.evidenceSetRevision)!)).challenge;
+    const challenge = await deps.store.challengeState(claim);
     const pinned = dependencies(claim, intent, current, challenge.revision);
     const graph = await graphHeads(deps.env, pinned);
     const graphStale = pinned.filter(item => item.owner === 'graph' && item.kind !== 'policy'
@@ -294,7 +312,9 @@ export async function assessAdmittedClaim(deps: VerificationDependencies, reques
   }
   return { assessment: { ...recorded }, analysis: { reasons: current.analysis.reasons,
     origins: current.analysis.origins, applicableSourceAssessments: current.analysis.applicableReliability,
-    work: current.analysis.work, lineageNodes: current.snapshot.visited.length },
+    work: current.snapshot.work, totalWork: current.snapshot.totalWork,
+    lineageContinuation: current.snapshot.continuation, lineageComplete: current.snapshot.complete,
+    lineageNodes: current.snapshot.lineageNodes },
   activation, receipt: receipt.receipt, replayed: receipt.replayed,
   sourcePosition: { datasetId: 'product' as const, dataEpoch: receipt.dataEpoch, sequence: receipt.sequence } };
 }
