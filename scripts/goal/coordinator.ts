@@ -2,49 +2,39 @@ import { Database } from 'bun:sqlite';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, writeSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 export interface ProcessIdentity { pid: number; start: string; boot: string; cgroup: string }
-export function processIdentity(pid: number): ProcessIdentity | undefined {
+export function processIdentity(pid: number, procRoot = '/proc'): ProcessIdentity | undefined {
   try {
-    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+    const stat = readFileSync(join(procRoot, String(pid), 'stat'), 'utf8');
     const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
     if (fields[0] === 'Z' || fields[0] === 'X') return undefined;
-    return { pid, start: fields[19]!, boot: readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim(),
-      cgroup: readFileSync(`/proc/${pid}/cgroup`, 'utf8').trim() };
+    return { pid, start: fields[19]!, boot: readFileSync(join(procRoot, 'sys/kernel/random/boot_id'), 'utf8').trim(),
+      cgroup: readFileSync(join(procRoot, String(pid), 'cgroup'), 'utf8').trim() };
   } catch { return undefined; }
 }
-export function sameProcess(identity: ProcessIdentity): boolean {
-  const current = processIdentity(identity.pid);
+export function sameProcess(identity: ProcessIdentity, procRoot = '/proc'): boolean {
+  const current = processIdentity(identity.pid, procRoot);
   return current?.start === identity.start && current.boot === identity.boot;
 }
 
-/** Conservatively refuse an account's interactive CLI/app-server, even when its native ID is hidden. */
-export function nativeOwner(home: string, session: string): string | undefined {
-  let canonicalHome: string;
-  try { canonicalHome = realpathSync(home); }
-  catch { return 'Cannot establish the enrolled Codex account home'; }
-  for (const entry of readdirSync('/proc').filter(name => /^\d+$/.test(name))) {
+/** Ownership is the handed-over process generation or evidence naming this exact session. */
+export function nativeOwner(_home: string, session: string, previousOwner?: ProcessIdentity, procRoot = '/proc'): string | undefined {
+  if (previousOwner && sameProcess(previousOwner, procRoot)) return `waiting for previous owner ${previousOwner.pid}`;
+  for (const entry of readdirSync(procRoot).filter(name => /^\d+$/.test(name))) {
     const pid = Number(entry);
-    if (!processIdentity(pid)) continue;
+    if (!processIdentity(pid, procRoot)) continue;
     let args: string[];
-    try { args = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0').filter(Boolean); } catch { continue; }
-    if (!/^codex(?:\.exe)?$/.test(basename(args[0] ?? ''))) continue;
-    let env: Record<string, string>;
-    try { env = Object.fromEntries(readFileSync(`/proc/${pid}/environ`, 'utf8').split('\0').filter(Boolean)
-      .map(pair => { const at = pair.indexOf('='); return [pair.slice(0, at), pair.slice(at + 1)]; })); }
-    catch { return `Cannot establish ownership of Codex process ${pid}`; }
-    let account: string;
-    try { account = realpathSync(resolve(env.CODEX_HOME ?? join(env.HOME ?? '', '.codex'))); }
-    catch { return `Cannot establish account home of Codex process ${pid}`; }
-    if (account !== canonicalHome) continue;
-    // goalctl launches `codex exec ...`; an option value named "exec" is not that command.
-    // Other command shapes remain conservatively account-owned until explicit handover.
-    const exec = args[1] === 'exec' ? 1 : -1;
-    const resume = args.indexOf('resume', Math.max(exec + 1, 0));
-    const nativeIds = resume < 0 ? [] : args.slice(resume + 1).filter(arg => /^[0-9a-f-]{36}$/i.test(arg));
-    if (exec < 0 || (resume >= 0 && (nativeIds.length !== 1 || nativeIds[0] === session))) {
-      return `Native session/account still owned by Codex process ${pid}`;
+    try { args = readFileSync(join(procRoot, entry, 'cmdline'), 'utf8').split('\0').filter(Boolean); } catch { args = []; }
+    // Codex allows options between resume and its session argument.
+    if (args.some((arg, index) => arg === 'resume' && args.slice(index + 1).includes(session))) {
+      return `Native session still owned by process ${pid} (resume)`;
+    }
+    let env: string[];
+    try { env = readFileSync(join(procRoot, entry, 'environ'), 'utf8').split('\0'); } catch { continue; }
+    if (env.includes(`CODEX_SESSION_ID=${session}`) || env.includes(`CODEX_THREAD_ID=${session}`)) {
+      return `Native session still owned by process ${pid} (environment)`;
     }
   }
   return undefined;
@@ -53,7 +43,7 @@ export function nativeOwner(home: string, session: string): string | undefined {
 export interface LaunchDescriptor {
   goal: string; generation: string; session: string; engine: 'codex' | 'codex-1' | 'luna'; effort: string;
   cwd: string; home: string; program: string; args: string[]; env: Record<string, string>;
-  socket: string; server: ProcessIdentity;
+  socket: string; server: ProcessIdentity; previousOwner: ProcessIdentity;
 }
 export const WAKE_PROMPT = '__GOAL_WAKE_PROMPT__';
 export const WAKE_LAST_MESSAGE = '__GOAL_WAKE_LAST_MESSAGE__';
@@ -70,7 +60,7 @@ export interface CoordinatorOptions {
   /** Existing goalctl account/concurrency/memory gates; no alternate admission policy. */
   admit: (descriptor: LaunchDescriptor) => void;
   launcher?: IndependentLauncher;
-  owner?: (home: string, session: string) => string | undefined;
+  owner?: (home: string, session: string, previousOwner?: ProcessIdentity) => string | undefined;
   now?: () => number;
   afterIntent?: (token: string) => void;
   afterLaunch?: (token: string) => void;
@@ -144,10 +134,10 @@ export class GoalCoordinator {
   }
   enroll(descriptor: LaunchDescriptor): void {
     if (!/^[a-z0-9][a-z0-9-]{0,60}$/.test(descriptor.goal) || !descriptor.generation || !descriptor.session
-      || !descriptor.args.includes(WAKE_PROMPT) || !descriptor.args.includes(WAKE_LAST_MESSAGE)) throw new Error('Invalid manager launch descriptor');
+      || !descriptor.args.includes(WAKE_PROMPT) || !descriptor.args.includes(WAKE_LAST_MESSAGE)
+      || !Number.isSafeInteger(descriptor.previousOwner?.pid) || descriptor.previousOwner.pid <= 0
+      || !descriptor.previousOwner.start || !descriptor.previousOwner.boot) throw new Error('Invalid manager launch descriptor');
     this.launcher.verify(descriptor);
-    const owner = (this.options.owner ?? nativeOwner)(descriptor.home, descriptor.session);
-    if (owner) throw new Error(owner);
     this.db.transaction(() => {
       if (this.db.query('SELECT goal FROM managers WHERE goal=?').get(descriptor.goal)) throw new Error('Manager already enrolled; descriptor is immutable');
       const enrolled = this.db.query('SELECT descriptor FROM managers').all() as {descriptor:string}[];
@@ -159,9 +149,13 @@ export class GoalCoordinator {
       this.db.query('INSERT INTO managers VALUES(?,?)').run(descriptor.goal, JSON.stringify(descriptor));
     }).immediate();
   }
-  status(): { managers: LaunchDescriptor[]; wakes: WakeRow[]; attempts: Attempt[] } {
-    return {managers:(this.db.query('SELECT descriptor FROM managers ORDER BY goal').all() as {descriptor:string}[])
-      .map(row => JSON.parse(row.descriptor) as LaunchDescriptor),
+  private managers(): LaunchDescriptor[] {
+    return (this.db.query('SELECT descriptor FROM managers ORDER BY goal').all() as {descriptor:string}[])
+      .map(row => JSON.parse(row.descriptor) as LaunchDescriptor);
+  }
+  status(): { managers: (LaunchDescriptor & { ownership: string | null })[]; wakes: WakeRow[]; attempts: Attempt[] } {
+    return {managers:this.managers().map(descriptor => ({ ...descriptor,
+      ownership: (this.options.owner ?? nativeOwner)(descriptor.home, descriptor.session, descriptor.previousOwner) ?? null })),
     wakes:this.db.query('SELECT * FROM wakes ORDER BY goal').all() as WakeRow[],
     attempts:this.db.query('SELECT * FROM attempts ORDER BY created_at').all() as Attempt[]};
   }
@@ -177,7 +171,7 @@ export class GoalCoordinator {
     this.db.query('UPDATE wakes SET due_at=?,failures=?,error=? WHERE goal=?').run(this.now()+delay, failures, error, goal);
   }
   step(): void {
-    for (const descriptor of this.status().managers) {
+    for (const descriptor of this.managers()) {
       const goal = descriptor.goal;
       const incoming = this.options.events(goal);
       this.db.transaction(() => {
@@ -229,7 +223,7 @@ export class GoalCoordinator {
           }
           if (this.launcher.live(attempt.token,descriptor)) continue;
           if (this.now() < wake.due_at) continue;
-          const owner = (this.options.owner ?? nativeOwner)(descriptor.home,descriptor.session);
+          const owner = (this.options.owner ?? nativeOwner)(descriptor.home,descriptor.session,descriptor.previousOwner);
           if (owner) throw new Error(owner);
           this.options.admit(descriptor);
           this.defer(goal, 'Retrying unregistered independent wrapper');
@@ -241,7 +235,7 @@ export class GoalCoordinator {
       if (this.now() < wake.due_at) continue;
       try {
         this.launcher.verify(descriptor);
-        const owner = (this.options.owner ?? nativeOwner)(descriptor.home,descriptor.session);
+        const owner = (this.options.owner ?? nativeOwner)(descriptor.home,descriptor.session,descriptor.previousOwner);
         if (owner) throw new Error(owner);
         this.options.admit(descriptor);
       } catch (error) { this.defer(goal,String(error)); continue; }
@@ -301,7 +295,7 @@ export async function runAttempt(stateDir: string, token: string): Promise<void>
   const stdout = openSync(join(directory,'output.jsonl'),'w');
   const stderr = openSync(join(directory,'stderr.log'),'w');
   try {
-    const owner = nativeOwner(descriptor.home,descriptor.session);
+    const owner = nativeOwner(descriptor.home,descriptor.session,descriptor.previousOwner);
     if (owner) throw new Error(owner);
     const child = spawn(descriptor.program,args,{cwd:descriptor.cwd,env:descriptor.env,stdio:['ignore',stdout,stderr]});
     if (!child.pid) throw new Error('Native resume failed to spawn');

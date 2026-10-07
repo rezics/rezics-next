@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, nativeOwner, nativeSession,
   processIdentity, runAttempt, sameProcess, tmuxServer, type CoordinatorOptions, type IndependentLauncher,
@@ -36,8 +36,21 @@ function fixture() {
     engine: 'codex-1', effort: 'high', cwd: dir, home: join(dir, 'account'), program: process.execPath,
     args: [script, '--model', 'gpt-6.1-sol', '--effort', 'high', WAKE_PROMPT, WAKE_LAST_MESSAGE],
     env: { PATH: process.env.PATH ?? '', CODEX_HOME: join(dir, 'account'), GOAL_ID: 'program', CALLS: join(dir, 'calls.jsonl') },
-    socket: join(dir, 'unused.socket'), server: processIdentity(process.pid)! };
-  return { dir, stateDir, launcher, descriptor,
+    socket: join(dir, 'unused.socket'), server: processIdentity(process.pid)!,
+    previousOwner: { ...processIdentity(process.pid)!, start: 'exited-owner' } };
+  const procRoot = join(dir, 'proc');
+  mkdirSync(join(procRoot, 'sys/kernel/random'), { recursive: true });
+  writeFileSync(join(procRoot, 'sys/kernel/random/boot_id'), 'test-boot\n');
+  return { dir, stateDir, launcher, descriptor, procRoot,
+    process(pid: number, args: string[], env: string[] = [], start = '100', state = 'S') {
+      const directory = join(procRoot, String(pid)); mkdirSync(directory, { recursive: true });
+      const fields = Array<string>(22).fill('0'); fields[0] = state; fields[19] = start;
+      writeFileSync(join(directory, 'stat'), `${pid} (tool with spaces) ${fields.join(' ')}\n`);
+      writeFileSync(join(directory, 'cgroup'), '0::/test\n');
+      writeFileSync(join(directory, 'cmdline'), `${args.join('\0')}\0`);
+      writeFileSync(join(directory, 'environ'), `${env.join('\0')}\0`);
+      return processIdentity(pid, procRoot)!;
+    },
     open(overrides: Partial<CoordinatorOptions> = {}) {
       const coordinator = new GoalCoordinator({ stateDir, launcher, now: () => now,
         events: () => events, admit: () => {}, owner: () => undefined, ...overrides });
@@ -304,15 +317,14 @@ describe('durable Goal wake coordinator', () => {
     } finally { f.cleanup(); }
   });
 
-  test('handover descriptor is immutable, native sessions are unique, and a live interactive owner refuses enrollment or wake', () => {
+  test('handover descriptor is immutable, native sessions are unique, and a live owner delays wake after enrollment', () => {
     const f = fixture();
     let owner: string | undefined;
     try {
       const coordinator = f.open({ owner: () => owner });
       owner = 'interactive process owns session';
-      expect(() => coordinator.enroll(f.descriptor)).toThrow('interactive process');
-      expect(coordinator.status().managers).toEqual([]);
-      owner = undefined; coordinator.enroll(f.descriptor);
+      coordinator.enroll(f.descriptor);
+      expect(coordinator.status().managers[0]!.ownership).toBe(owner);
       expect(() => coordinator.enroll({ ...f.descriptor, effort: 'medium' })).toThrow('immutable');
       expect(() => coordinator.enroll({ ...f.descriptor, goal: 'kernel' })).toThrow('already enrolled');
       expect(() => coordinator.enroll({ ...f.descriptor, goal: 'kernel', session: 'different-native-session' }))
@@ -341,61 +353,101 @@ describe('durable Goal wake coordinator', () => {
     } finally { f.cleanup(); }
   });
 
-  test('native ownership examines actual account processes, and never borrows ownership from another home', async () => {
+  test('named previous owner enrolls while alive; status and first wake wait until its exact process exits', () => {
     const f = fixture();
-    let child: ChildProcess | undefined;
     try {
-      child = spawn('sleep', ['30'], { argv0: 'codex', env: { ...process.env, CODEX_HOME: f.descriptor.home }, stdio: 'ignore' });
-      await waitFor(() => !!child?.pid && !!processIdentity(child.pid));
-      expect(nativeOwner(f.descriptor.home, f.descriptor.session)).toContain(`process ${child.pid}`);
-      expect(nativeOwner(join(f.dir, 'other-account'), f.descriptor.session)).toBeUndefined();
-    } finally { child?.kill(); f.cleanup(); }
+      const previousOwner = f.process(123, ['codex']);
+      const coordinator = f.open({ owner: (home, session, prior) => nativeOwner(home, session, prior, f.procRoot) });
+      coordinator.enroll({ ...f.descriptor, previousOwner });
+      expect(coordinator.status().managers[0]).toMatchObject({ previousOwner, ownership: 'waiting for previous owner 123' });
+      coordinator.step();
+      expect(coordinator.status().wakes[0]!.error).toContain('waiting for previous owner 123');
+      expect(coordinator.status().attempts).toEqual([]);
+      coordinator.close();
+      const restarted = f.open({ owner: (home, session, prior) => nativeOwner(home, session, prior, f.procRoot) });
+      expect(restarted.status().managers[0]!.ownership).toBe('waiting for previous owner 123');
+      f.process(124, ['/bin/bash', 'next-event.sh'], [`CODEX_THREAD_ID=${f.descriptor.session}`]);
+      rmSync(join(f.procRoot, '123'), { recursive: true });
+      expect(restarted.status().managers[0]!.ownership).toContain('process 124 (environment)');
+      f.setNow(restarted.status().wakes[0]!.due_at); restarted.step();
+      expect(f.launcher.launches).toEqual([]);
+      rmSync(join(f.procRoot, '124'), { recursive: true });
+      expect(restarted.status().managers[0]!.ownership).toBeNull();
+      f.setNow(restarted.status().wakes[0]!.due_at); restarted.step();
+      expect(f.launcher.launches).toHaveLength(1);
+    } finally { f.cleanup(); }
   });
 
-  test('an interactive process using a symlink account home still owns the canonical account', async () => {
+  test('the independent attempt rechecks the named owner before spawning the manager', async () => {
     const f = fixture();
-    let child: ChildProcess | undefined;
     try {
-      const alias = join(f.dir, 'account-alias'); symlinkSync(f.descriptor.home, alias);
-      child = spawn('sleep', ['30'], { argv0: 'codex', env: { ...process.env, CODEX_HOME: alias }, stdio: 'ignore' });
-      await waitFor(() => !!child?.pid && !!processIdentity(child.pid));
-      expect(nativeOwner(f.descriptor.home, f.descriptor.session)).toContain(`process ${child.pid}`);
-      expect(nativeOwner(alias, f.descriptor.session)).toContain(`process ${child.pid}`);
-    } finally { child?.kill(); f.cleanup(); }
+      const coordinator = f.open();
+      coordinator.enroll({ ...f.descriptor, previousOwner: processIdentity(process.pid)! });
+      coordinator.step();
+      await runAttempt(f.stateDir, coordinator.status().attempts[0]!.token);
+      expect(coordinator.status().attempts[0]).toMatchObject({ phase: 'done', code: 127 });
+      expect(f.calls()).toEqual([]);
+      expect(readFileSync(join(f.stateDir, 'manager-runs', coordinator.status().attempts[0]!.token, 'stderr.log'), 'utf8'))
+        .toContain(`waiting for previous owner ${process.pid}`);
+    } finally { f.cleanup(); }
   });
 
-  test('resume flags before the native UUID or an ambiguous --last resume cannot evade ownership refusal', async () => {
+  test('a reused PID, another boot, or a zombie does not retain previous ownership', () => {
     const f = fixture();
-    const session = '11111111-1111-4111-8111-111111111111';
     try {
-      // A real executable with argv[1]=exec exercises the native headless command shape.
-      writeFileSync(join(f.dir, 'exec'), 'setInterval(() => {}, 1000);');
-      for (const args of [['exec', 'resume', '--model', 'gpt-6.1-sol', session], ['exec', 'resume', '--last'],
-        ['exec', 'resume', '--resume-flag-not-understood', session]]) {
-        const child = spawn('node', args,
-          { argv0: 'codex', cwd: f.dir, env: { ...process.env, CODEX_HOME: f.descriptor.home }, stdio: 'ignore' });
-        try {
-          await waitFor(() => !!child.pid && !!processIdentity(child.pid));
-          expect(nativeOwner(f.descriptor.home, session)).toContain(`process ${child.pid}`);
-        } finally {
-          if (child.exitCode === null && child.signalCode === null) {
-            const exited = new Promise<void>(resolveExit => child.once('exit', () => resolveExit()));
-            child.kill(); await exited;
-          }
-        }
+      const previousOwner = f.process(123, ['codex']);
+      expect(nativeOwner(f.descriptor.home, f.descriptor.session, previousOwner, f.procRoot)).toBe('waiting for previous owner 123');
+      f.process(123, ['codex'], [], '101');
+      expect(nativeOwner(f.descriptor.home, f.descriptor.session, previousOwner, f.procRoot)).toBeUndefined();
+      f.process(123, ['codex']);
+      writeFileSync(join(f.procRoot, 'sys/kernel/random/boot_id'), 'another-boot');
+      expect(nativeOwner(f.descriptor.home, f.descriptor.session, previousOwner, f.procRoot)).toBeUndefined();
+      writeFileSync(join(f.procRoot, 'sys/kernel/random/boot_id'), 'test-boot');
+      f.process(123, ['codex'], [], '100', 'Z');
+      expect(nativeOwner(f.descriptor.home, f.descriptor.session, previousOwner, f.procRoot)).toBeUndefined();
+    } finally { f.cleanup(); }
+  });
+
+  test('only a resume naming the exact session owns it, including flags before the UUID', () => {
+    const f = fixture();
+    try {
+      for (const args of [['codex', 'resume', f.descriptor.session],
+        ['codex', 'exec', 'resume', '--model', 'gpt-6.1-sol', f.descriptor.session]]) {
+        f.process(123, args);
+        expect(nativeOwner(f.descriptor.home, f.descriptor.session, undefined, f.procRoot)).toContain('process 123 (resume)');
+      }
+      for (const args of [['codex', 'resume', 'other-session'], ['codex', 'exec', 'resume', '--last'],
+        ['codex', '--profile', 'exec'], ['codex', 'exec', f.descriptor.session]]) {
+        f.process(123, args);
+        expect(nativeOwner(f.descriptor.home, f.descriptor.session, undefined, f.procRoot)).toBeUndefined();
       }
     } finally { f.cleanup(); }
   });
 
-  test('an interactive profile value named exec cannot be mistaken for a headless command', async () => {
+  test('a tool owns the session by either exact native environment ID, independent of executable and account home', () => {
     const f = fixture();
-    let child: ChildProcess | undefined;
     try {
-      child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', '--', '--profile', 'exec'],
-        { argv0: 'codex', env: { ...process.env, CODEX_HOME: f.descriptor.home }, stdio: 'ignore' });
-      await waitFor(() => !!child?.pid && !!processIdentity(child.pid));
-      expect(nativeOwner(f.descriptor.home, f.descriptor.session)).toContain(`process ${child.pid}`);
-    } finally { child?.kill(); f.cleanup(); }
+      for (const key of ['CODEX_SESSION_ID', 'CODEX_THREAD_ID']) {
+        f.process(123, ['/bin/bash', 'next-event.sh'], [`${key}=${f.descriptor.session}`]);
+        expect(nativeOwner(f.descriptor.home, f.descriptor.session, undefined, f.procRoot)).toContain('process 123 (environment)');
+        rmSync(join(f.procRoot, '123/cmdline'));
+        expect(nativeOwner(f.descriptor.home, f.descriptor.session, undefined, f.procRoot)).toContain('process 123 (environment)');
+        f.process(123, ['/bin/bash', 'next-event.sh'], [`${key}=${f.descriptor.session}-other`]);
+        expect(nativeOwner(f.descriptor.home, f.descriptor.session, undefined, f.procRoot)).toBeUndefined();
+      }
+    } finally { f.cleanup(); }
+  });
+
+  test('account app-server, exec-server, ChatGPT bundled processes and unreadable unrelated environments do not own a session', () => {
+    const f = fixture();
+    try {
+      for (const [index, args] of [['codex', 'app-server', 'daemon'], ['codex', 'exec-server', '--remote'],
+        ['/usr/lib/chatgpt/resources/codex', 'app-server'], ['/usr/lib/chatgpt/resources/codex', 'exec-server', '--remote']].entries()) {
+        f.process(100 + index, args, [`CODEX_HOME=${f.descriptor.home}`]);
+      }
+      f.process(123, ['codex', 'app-server']); rmSync(join(f.procRoot, '123/environ'));
+      expect(nativeOwner(f.descriptor.home, f.descriptor.session, undefined, f.procRoot)).toBeUndefined();
+    } finally { f.cleanup(); }
   });
 
   test('native session handover validates exact session, account and working directory metadata', () => {

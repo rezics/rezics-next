@@ -9,9 +9,10 @@ import { repositoryGuards } from '../qa/repository-guards.ts';
 import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
-  codexHoursUntil100, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
+  codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
   qaWaitStatusLines, shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, unitFailureDetails, unitFileErrorDetails, withSlot,
-  mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief } from './goalctl.ts';
+  mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief,
+  workerSessionEnvironment } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -2668,6 +2669,59 @@ function waitForWaiter(child: ChildProcess, ready: () => boolean, output: () => 
   });
 }
 
+
+describe('Goal coordinator enrollment CLI', () => {
+  const enrollment = ['program', '--session', '01a114cb-4d63-7f23-bf70-1610b4db2b2b', '--effort', 'high', '--cwd', '/manager'];
+  const ownerFlag = ['--previous-owner-pid', String(process.pid)];
+
+  test('a launched worker cannot inherit its manager native session ownership', () => {
+    const parent = { ...process.env, CODEX_SESSION_ID: 'manager-session', CODEX_THREAD_ID: 'manager-session',
+      CODEX_HOME: '/worker-account', GOAL_MANAGER: 'manager', GOAL_ID: 'program' };
+    const child = spawnSync(process.execPath, ['-e', `console.log(JSON.stringify({
+      session: process.env.CODEX_SESSION_ID ?? null, thread: process.env.CODEX_THREAD_ID ?? null,
+      home: process.env.CODEX_HOME, manager: process.env.GOAL_MANAGER, goal: process.env.GOAL_ID }))`],
+      { env: workerSessionEnvironment(parent), encoding: 'utf8' });
+    expect(child.status, child.stderr).toBe(0);
+    expect(JSON.parse(child.stdout)).toEqual({ session: null, thread: null, home: '/worker-account', manager: 'manager', goal: 'program' });
+    expect(parent.CODEX_SESSION_ID).toBe('manager-session');
+    expect(parent.CODEX_THREAD_ID).toBe('manager-session');
+  });
+
+  test('records the named live owner identity and accepts every supported engine', () => {
+    for (const engine of ['codex', 'codex-1', 'luna']) {
+      const options = coordinatorEnrollmentOptions([...enrollment, ...ownerFlag, '--engine', engine, '--tmux-socket', '/socket']);
+      expect(options).toMatchObject({ goal: 'program', session: enrollment[2], engine, effort: 'high', cwd: '/manager',
+        socket: '/socket', previousOwner: { pid: process.pid } });
+      expect(options.previousOwner.start).toMatch(/^\d+$/);
+      expect(options.previousOwner.boot).toBe(readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim());
+      expect(options.previousOwner.cgroup).toBe(readFileSync(`/proc/${process.pid}/cgroup`, 'utf8').trim());
+    }
+    expect(coordinatorEnrollmentOptions([...enrollment, ...ownerFlag]).engine).toBe('codex');
+  });
+
+  test('requires an explicit positive integer PID and refuses a vanished previous owner', () => {
+    expect(() => coordinatorEnrollmentOptions(enrollment)).toThrow('--previous-owner-pid <pid>');
+    for (const pid of ['0', '-1', '1.5', 'NaN', 'Infinity', '+1', ' 1', '1e3', '9007199254740992']) {
+      expect(() => coordinatorEnrollmentOptions([...enrollment, '--previous-owner-pid', pid])).toThrow('positive integer PID');
+    }
+    const exited = spawnSync(process.execPath, ['-e', ''], { encoding: 'utf8' });
+    expect(exited.status).toBe(0);
+    const pid = exited.pid;
+    expect(() => coordinatorEnrollmentOptions([...enrollment, '--previous-owner-pid', String(pid)]))
+      .toThrow(`Cannot establish the live previous owner ${pid}`);
+  });
+
+  test('rejects duplicate, unknown and valueless options and invalid launch selections', () => {
+    const valid = [...enrollment, ...ownerFlag];
+    for (const extra of [['--previous-owner-pid', String(process.pid)], ['--unknown', 'value'], ['--tmux-socket'],
+      ['--tmux-socket', '--engine', 'codex']]) {
+      expect(() => coordinatorEnrollmentOptions([...valid, ...extra])).toThrow('Invalid option');
+    }
+    expect(() => coordinatorEnrollmentOptions([...valid, '--engine', 'claude'])).toThrow('Codex managers only');
+    expect(() => coordinatorEnrollmentOptions([...enrollment.slice(0, 4), 'invalid', ...enrollment.slice(5), ...ownerFlag]))
+      .toThrow('Enrollment requires');
+  });
+});
 
 describe('Goal mail CLI', () => {
   test('lost sender response and acknowledgement retries preserve IDs and each Goal receipt', () => {
