@@ -167,9 +167,8 @@ until those inputs are supplied. No production action is authorized.
     `{ revision, current }`;
   - the permit revision of an initial policy is the creation receipt IRI
     (`rv:realmPolicyHead`).
-  - **Open:** ordinary publications still use `urn:rezics:realm-policy:<uuid>`,
-    so two revision forms remain, and kernel's `work/select-realm.ts` accepts
-    both. Unify them with kernel.
+  - Ordinary publication revision is unified by G-1334 `5b7dca27d132`;
+    exact legacy heads remain readable without changing digest replay.
 - **Private names** (G-1259 and G-1268, trust-ops part done): kernel's G-1271
   covers export, relations, references, `readName`, search credits and summary
   metadata (media/summary.ts was lent to it). Kernel also plans a Sol task for
@@ -179,7 +178,7 @@ until those inputs are supplied. No production action is authorized.
   G-1232's `scripts/ops/migrate.ts` merge was allowed on condition that the
   g-722 tests pass at its merge commit.
 
-## Requests routed to other Goals, still open
+## Inherited requests to other Goals (re-verify remaining items)
 
 - **Launch:**
   - The production catalogue bootstrap (`scripts/ops/bootstrap`) must grant
@@ -197,21 +196,19 @@ until those inputs are supplied. No production action is authorized.
   - the list convention on the post identifications, projections and
     continuities reads (also sent to the program).
 
-## Follow-ups owned by trust-ops
+## Current follow-ups
 
-- Logs: `pg-pool.ts:102,156`, Account `app.ts:72,82`, `address/migrate.ts:43`,
-  and two files G-1229 held (`content-projection-worker.ts:24`,
-  `rankings/projection.ts:59`).
-- Carry each route's rate-limit family beside its `exposure` in
-  `openApiOperations`, replacing the separate inventory in
-  `rate-limit/routes.ts`. The merge guards (program G-1293) now catch a missing
-  family before main.
-- Unify the Realm policy revision form (see above).
+- G-1343 suppression/restore custody and G-1351 authenticated operator release
+  composition, with the explicit kernel restore-method/ordering loan.
+- G-1344 real populated campaign qualification; consistent backup and timed
+  restore, long populated migrations, retained recovery-window peak disk use.
+- Launch's G-1333 listener-context owner review and inherited cross-Goal requests
+  above; verify their current code before dispatching any duplicates.
 
-## Next wave (not started)
+## Qualification still required
 
 - **Qualification exit:**
-  - fixes from G-1294's High findings;
+  - H1–H4 are fixed and pinned-verified; program owns whole-main regression;
   - the six registration and market gates (US, TW, SG, JP, KR, EU) within the
     zero-budget decision.
 - **Launch workload budgets:** at the launch catalogue's size, against
@@ -221,9 +218,9 @@ until those inputs are supplied. No production action is authorized.
   in `apps/about/src/legal/facts.ts` need the maintainer's deployment
   settings.
 - **Deployment preparation:**
-  - images;
+  - targeted current-image qualification after later native/model changes;
   - backup and timed restore;
-  - the TDB2 compaction procedure;
+  - populated time/space proof of the implemented compaction procedure;
   - email operations;
   - safety drills and responders.
 
@@ -232,13 +229,12 @@ until those inputs are supplied. No production action is authorized.
   NCMEC, PhotoDNA and Cloudflare CSAM registrations, SMTP and the hostname
   freeze, the backup responder, the $6 DMCA fee and the Workers plan. No answer
   has been recorded yet.
-- **T8, suppression and restore first:** waits for kernel K5 (C6).
+- **T8:** C6 delivery and legacy model closure accepted; G-1343/G-1351
+  implement suppression and operator restore, with G-1330 historical roots.
 - **Inherited items still open from GOAL.md:**
-  - TDB2 compaction;
-  - batched showcase author proofs;
-  - logo-language counting;
-  - the production PostgreSQL grants (`pg_read_all_stats`,
-    `max_prepared_transactions=0`);
+  - populated TDB2 compaction (procedure implemented);
+  - author proofs, active logo capacity and production PostgreSQL preflight
+    are closed/verified in the checkpoint above;
   - long migrations on a populated restore;
   - lock-upgrade and deadlock alerts;
   - migration 1080 in a rolling deploy;
