@@ -357,6 +357,88 @@ replacement allocation, command/phase durations and outcomes. Each maintenance
 command has a 600-second ceiling; record preparation/restore separately against
 the 600-second preparation budget. No live populated drill is qualified here.
 
+## Offline physical erasure campaign
+
+Fence admission, publication, projection and disclosure through the existing
+erasure journal, quiesce writers and cleanly stop Fuseki. Retain a verified
+paired recovery set and current authority/erasure frontier. Run these scripts
+inside the release's pinned Fuseki image with its saved volume; do not open a
+second JVM on a live owner or manufacture `clean-stop`.
+
+Prepare one protected `campaign.tsv` from committed exact Content revision and
+erasure-epoch pairs. Each row is a lower-case UUID Content revision URN, one tab,
+a positive decimal epoch of at most 19 digits, and LF. Supply 1–64 rows, without
+headers, comments, blank rows, CRLF or repeated revisions. Input order and every
+byte are part of the SHA-256 identity. Keep this file immutable throughout the
+campaign. An existing graph tombstone must carry the supplied exact epoch; a
+missing graph target or conflicting epoch rejects the whole copy.
+
+```sh
+sh /path/to/purge-tdb2.sh /fuseki/databases/erasure-candidate --campaign /protected/campaign.tsv
+```
+
+The [sanitizer](../../infra/jena/purge-tdb2.sh) snapshots the exact campaign,
+copies retained quads and prefixes in one transaction, then compacts once and
+rebuilds one empty Lucene index. It preserves each target's `ErasedRevision`
+tombstone and epoch, unrelated public/private bytes, lineage and retained
+model/command/object custody. Reserve space for the complete candidate,
+compaction replacement and inaccessible source; qualify elapsed time and peak
+space on the populated deployment cut before promising a maintenance budget.
+The 64-pair bound limits one maintenance input, not the erasure backlog.
+
+Before activation, verify every target is absent from sensitive graph triples
+and direct public/private Lucene reads; confirm its exact tombstone/epoch.
+Compare retained unrelated revisions, private/public data, prefixes, lineage,
+receipts and model/command/object references against the stopped source and
+owner inventory. Keep required immutable objects in custody; this graph command
+does not retire them. Record these results, cleanly stop the candidate after any
+read checks, then copy its `databases/rezics/erasure-purge.ready` to
+`erasure-purge.verified`. The version-two record binds the exact campaign
+digest/count, candidate identity and retained source identity/inventory. Missing,
+corrupt, mixed or legacy two-line evidence fails closed.
+
+```sh
+sh /path/to/purge-activate.sh activate /fuseki/databases/erasure-candidate --campaign /protected/campaign.tsv maintenance-name
+# Before the candidate has served, explicitly recover or undo this campaign:
+sh /path/to/purge-activate.sh rollback maintenance-name --campaign /protected/campaign.tsv maintenance-name
+```
+
+The [activation command](../../infra/jena/purge-activate.sh) requires the same
+state volume, stopped owners and exact verification. It retains the source at
+`databases/rezics-retired-maintenance-name` and durable evidence at
+`databases/erasure-retirement-maintenance-name`. An interrupted rename leaves
+`databases/purge.incomplete`, so startup stays closed. Ensure the maintenance
+process has exited; use the exact rollback command to recover an interrupted
+activation or rollback. Never clear the fence by hand. Rollback restores only
+the recorded unchanged source, quarantines the candidate and releases only its
+own fence. It refuses after the candidate consumes its original clean-stop
+marker: after serving, recover the whole paired set with current authority and
+erasure reconciliation instead of swapping old RDF back beneath newer writes.
+
+After successful activation and graph/text/owner verification, cleanly stop
+writers and Fuseki again. Explicitly retire the recorded source:
+
+```sh
+sh /path/to/purge-activate.sh destroy maintenance-name --campaign /protected/campaign.tsv maintenance-name
+```
+
+Destruction binds the whole campaign, retirement ID and exact retained fileset.
+It records authorization before unlinking and supports retry after interrupted
+partial deletion; the evidence digest is reported only after the recorded
+source is absent. Record that digest for the live TDB2/Lucene retention domains
+of every campaign target. Snapshots, backups, media and immutable object copies
+need separate evidence and remain retained or unverified until resolved.
+Unlinking a fileset does not establish storage-media destruction.
+
+The original single-target build and activation/destruction argument forms
+remain adapters to this campaign implementation. They create version-two
+campaign evidence; old two-line readiness markers are never reinterpreted.
+The [native campaign checks](../../infra/jena/tests/erasure-campaign-native.test.ts)
+exercise a 64-target TDB2 copy and direct Lucene queries; shell recovery fixtures
+check evidence refusal, cutover interruption, rollback and exact retirement.
+These fixtures establish correctness for their cuts, not populated timing or
+peak allocation. The manager owns that separate qualification.
+
 ## Offline Lucene rebuild
 
 Treat text as unavailable after uncertain index state, I/O failure, analyzer
