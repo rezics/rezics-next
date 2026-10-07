@@ -1,8 +1,17 @@
-import { ImportError, type ApplyIntent, type ApplyProgress, type ImportApi } from '../import-api.ts';
+import { ImportError, type ApplyIntent, type ApplyProgress, type ImportApi, type ImportRow } from '../import-api.ts';
+import { groupOf } from '../import-rows.ts';
 import { abortable, pauseForImport } from './lifetime.ts';
 
 export const APPLY_POLL_WINDOW_MS = 30_000;
 export const APPLY_POLL_LIMIT = 16;
+
+/**
+ * Main rejects apply while an ambiguous row has no choice. The intent may be remembered only after
+ * those choices exist: a remembered intent hides the controls that would resolve the rows.
+ */
+export function canCommitApplyIntent(rows: readonly ImportRow[], intentSaved: boolean): boolean {
+  return intentSaved || rows.every(row => groupOf(row) !== 'ambiguous');
+}
 
 /** Submit once, then read the server-owned job. A local deadline leaves its last truthful progress intact. */
 export async function pollLibraryApply(api: Pick<ImportApi, 'apply' | 'status'>, id: string, intent: ApplyIntent, {

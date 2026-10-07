@@ -17,7 +17,7 @@ import { writingLanguage } from '../content-language/writing-language.ts';
 import { type ApplyProgress, UPLOAD_LIMIT_BYTES, type CsvInspection, type CsvMapping, type ImportApi, ImportError, type ImportFormat,
   type ImportRow, mainImportApi, type RowResolution } from './import-api.ts';
 import { browserImportShelf, type ImportShelf, type PendingImport } from './import-store.ts';
-import { pollLibraryApply } from './import/apply.ts';
+import { canCommitApplyIntent, pollLibraryApply } from './import/apply.ts';
 import { applyFinished, applyStarted, countGroups, groupOf, loadAllRows, needsChoice, replaceRow, reloadRow,
   type RowGroup, rowGroups } from './import-rows.ts';
 import { CsvMapper } from './library-import-map.tsx';
@@ -51,6 +51,7 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
   const reviewLanguage = writingLanguage({ reading: useReadingLanguages(agent) });
   const run = useRef(0);
   const controller = useRef<AbortController | null>(null);
+  const loadingRows = useRef(false);
   const session = () => {
     if (!controller.current || controller.current.signal.aborted) controller.current = new AbortController();
     return controller.current;
@@ -92,23 +93,28 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
     const generation = run.current;
     const live = () => generation === run.current && !signal.aborted;
     setOpen(true); setError(null); setMapping(null); setPage(0); setUploading(false); setResolving(false);
+    loadingRows.current = true;
     setActive({ entry, rows: [], loaded: false, progress: null, stopped: false, finished: false, deferred: false });
-    let rows: ImportRow[];
     try {
-      rows = await loadAllRows(client, entry.id, entry.total, loaded => live() && patch({ rows: loaded }), live, signal);
-    } catch (failure) {
+      let rows: ImportRow[];
+      try {
+        rows = await loadAllRows(client, entry.id, entry.total, loaded => live() && patch({ rows: loaded }), live, signal);
+      } catch (failure) {
+        if (!live()) return;
+        if (failure instanceof ImportError && failure.failure === 'missing') { shelf.remove(agent, entry.id); refreshPending(); setActive(null); }
+        else patch({ loaded: false, stopped: true });
+        setError(failureText(failure));
+        return;
+      }
       if (!live()) return;
-      if (failure instanceof ImportError && failure.failure === 'missing') { shelf.remove(agent, entry.id); refreshPending(); setActive(null); }
-      else patch({ loaded: false, stopped: true });
-      setError(failureText(failure));
-      return;
+      const finished = applyFinished(rows);
+      setGroup(finished ? 'issues' : countGroups(rows).ambiguous ? 'ambiguous' : 'matched');
+      patch({ rows, loaded: true, finished });
+      if (finished) { shelf.remove(agent, entry.id); refreshPending(); }
+      else if (applyStarted(rows) || entry.intent) void apply(entry, rows, { checkOnly: true });
+    } finally {
+      if (generation === run.current) loadingRows.current = false;
     }
-    if (!live()) return;
-    const finished = applyFinished(rows);
-    setGroup(finished ? 'issues' : countGroups(rows).ambiguous ? 'ambiguous' : 'matched');
-    patch({ rows, loaded: true, finished });
-    if (finished) { shelf.remove(agent, entry.id); refreshPending(); }
-    else if (applyStarted(rows) || entry.intent) void apply(entry, rows, { checkOnly: true });
   }
 
   async function upload(file: File, chosen: CsvMapping | null = null, text?: string) {
@@ -186,6 +192,12 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
   }
 
   async function apply(entry: PendingImport, current: readonly ImportRow[], options: { checkOnly?: boolean; resume?: boolean } = {}) {
+    // A 409 for an unresolved row must not be remembered: the saved intent would hide every resolution control.
+    const commitIntent = canCommitApplyIntent(current, entry.intent !== null);
+    if (!options.checkOnly && !commitIntent) {
+      patch({ stopped: false, deferred: false, progress: null });
+      return;
+    }
     const { signal } = session();
     const generation = run.current;
     const live = () => generation === run.current && !signal.aborted;
@@ -200,8 +212,7 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
       if (!options.checkOnly && !entry.intent && useImported) await useImportedValues(entry.id, current, signal);
       if (!live()) return;
       // From here the intent is fixed: remember it, so a reload resumes this apply.
-      shelf.save(agent, withIntent);
-      patch({ entry: withIntent });
+      if (commitIntent) { shelf.save(agent, withIntent); patch({ entry: withIntent }); }
       const result = await pollLibraryApply(client, entry.id, intent, { active: live, signal, ...options,
         onProgress: progress => patch({ progress }) });
       if (!result) return;
@@ -240,6 +251,8 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
   const sealed = applyStarted(rows) || !!active?.entry.intent;
   const unresolved = rows.filter(needsChoice);
   const choose = unresolved.filter(row => groupOf(row) === 'ambiguous').length;
+  // Continue resumes an apply that already started. An unfinished review keeps Add, which stays disabled until each ambiguous row has a choice.
+  const awaitingChoice = !sealed && choose > 0;
   const issues = rows.filter(row => row.outcome?.issues.length).length;
   const tabs: Array<{ key: RowGroup | 'issues' | 'all'; label: string; count: number }> = active?.finished
     ? [{ key: 'issues', label: t.importTabIssues, count: issues }, { key: 'all', label: t.importTabAll, count: rows.length }]
@@ -255,7 +268,17 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
     <details open={open} onToggle={event => {
       const next = event.currentTarget.open;
       setOpen(next);
-      if (!next) { stop(); setUploading(false); setResolving(false); patch({ deferred: !!active?.entry.intent, stopped: !active?.entry.intent }); }
+      if (!next) {
+        stop(); loadingRows.current = false; setUploading(false); setResolving(false);
+        setActive(current => {
+          if (!current) return current;
+          // The row read was aborted. Reopening starts it again, so this must not look like a matcher that is still running.
+          if (!current.loaded && !current.finished) return { ...current, deferred: false, stopped: false, progress: null };
+          // An unfinished review stays a review. Marking it stopped would offer Continue, which submits apply before the choices exist.
+          if (!current.entry.intent && !current.finished) return { ...current, deferred: false, stopped: false, progress: null };
+          return { ...current, deferred: !!current.entry.intent, stopped: !current.entry.intent };
+        });
+      } else if (active && !active.loaded && !active.finished && !loadingRows.current) void openImport(active.entry);
       else session();
     }}>
       <summary className="cursor-pointer rounded-sm font-semibold text-lg outline-none focus-visible:ring-2
@@ -359,9 +382,9 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
                 <Button size="sm" variant="outline" disabled={resolving}
                   onClick={() => void keepAllPrivate()}>{t.importKeepAllPrivate}</Button></div> : null}
               <div className="flex flex-wrap items-center gap-3">
-                {active.progress?.pending || active.stopped ? null : <Button disabled={busy || resolving || !!choose}
+                {active.progress?.pending || (active.stopped && !awaitingChoice) ? null : <Button disabled={busy || resolving || !!choose}
                   onClick={() => void apply(active.entry, rows)}>{t.importApply}</Button>}
-                {active.stopped && active.loaded ? <Button onClick={() => void apply(active.entry, rows, { resume: true })}>{t.importContinue}</Button> : null}
+                {active.stopped && active.loaded && !awaitingChoice ? <Button onClick={() => void apply(active.entry, rows, { resume: true })}>{t.importContinue}</Button> : null}
                 {choose && !sealed ? <p className="text-muted-foreground text-sm">{t.importNeedChoices(choose)}</p> : null}
               </div>
               {active.deferred ? <div className="grid gap-2" role="status">

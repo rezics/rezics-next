@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { ImportError, type ApplyProgress } from '../import-api.ts';
-import { pollLibraryApply } from './apply.ts';
+import { goodreadsRows } from '../import-fixtures.ts';
+import { canCommitApplyIntent, pollLibraryApply } from './apply.ts';
 
 const intent = { context: 'reader', language: 'en' };
 const pending: ApplyProgress = { total: 3, completed: 0, issues: 0, pending: true };
@@ -110,6 +111,15 @@ describe('library apply polling', () => {
   test('exhausted first submission is an admission refusal, not a manufactured accepted job', async () => {
     await expect(pollLibraryApply({ apply: async () => { throw new ImportError('admission'); } }, 'file', intent,
       { active: () => true, onProgress: () => {} })).rejects.toEqual(new ImportError('admission'));
+  });
+
+  test('an apply intent is committed only after every ambiguous row has a choice', () => {
+    const rows = goodreadsRows();
+    expect(canCommitApplyIntent(rows, false)).toBe(false);
+    expect(canCommitApplyIntent(rows, true)).toBe(true);
+    const chosen = rows.map(row => row.match?.kind === 'ambiguous' ? { ...row, resolution: { choice: 'private' as const } } : row);
+    // Not-found rows are kept private as apply starts; they do not block the intent.
+    expect(canCommitApplyIntent(chosen, false)).toBe(true);
   });
 
 });

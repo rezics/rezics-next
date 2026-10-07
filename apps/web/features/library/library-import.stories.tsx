@@ -13,10 +13,12 @@ import zhHans from './messages/zh-Hans.ts';
 import { chooseOption } from '../stories/choose-option.ts';
 
 /** Each render gets its own Main and browser storage, so a story can be replayed. */
+let remembered: ImportShelf | undefined;
 function Harness({ make, entries = [], unmountControl = false, strictMode = false, ...props }: Omit<React.ComponentProps<typeof LibraryImport>, 'api' | 'shelf'>
   & { make: () => ImportApi; entries?: readonly PendingImport[]; unmountControl?: boolean; strictMode?: boolean }) {
   const [api] = useState(make);
   const [shelf] = useState<ImportShelf>(() => memoryImportShelf(entries));
+  remembered = shelf;
   const [mounted, setMounted] = useState(true);
   const importer = mounted ? <LibraryImport {...props} api={api} shelf={shelf} /> : null;
   return <>{unmountControl ? <button type="button" onClick={() => setMounted(current => !current)}>
@@ -268,6 +270,48 @@ async play({ canvasElement }) {
   await waitFor(() => expect(admissionSignals).toHaveLength(2));
   await expect(admissionSignals[1]!.aborted).toBe(false);
   await userEvent.click(canvas.getByRole('button', { name: 'Unmount importer' }));
+} };
+
+/** Closing an unfinished review keeps the choices. Continue must not remember an apply Main will refuse. */
+export const ReviewStaysReview: Story = { async play({ canvasElement }) {
+  const canvas = await openAndUpload(canvasElement);
+  await expect(canvas.getByRole('button', { name: 'Add to my library' })).toBeDisabled();
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.click(canvas.getByText('Import your books'));
+  await expect(canvas.getByRole('button', { name: 'Add to my library' })).toBeDisabled();
+  await expect(canvas.getByText(/Choose a match for 2 more rows/)).toBeVisible();
+  await expect(canvas.queryByRole('button', { name: /^Continue$/ })).toBeNull();
+  await expect(remembered!.list(agentId).every(entry => entry.intent === null)).toBe(true);
+  await expect(last!.calls).not.toContain('apply');
+  const ambiguous = canvas.getAllByText('Ambiguous Tale')[0]!.closest('li')!;
+  await userEvent.click(within(ambiguous).getAllByRole('button', { name: /Ambiguous Tale/ })[0]!);
+  await waitFor(() => expect(canvas.getByRole('button', { name: /^Choose a match 1$/ })).toBeVisible());
+  await expect(remembered!.list(agentId).every(entry => entry.intent === null)).toBe(true);
+} };
+
+/** Closing while a saved import is still loading resumes that read, instead of leaving an idle matcher. */
+export const ResumeRowLoad: Story = { args: { make: () => {
+  const fake = fakeImportApi(halfApplied(), { step: 9 });
+  let reads = 0;
+  return { ...fake, rows: async (id, cursor, options) => {
+    if (++reads === 1) await new Promise<void>((_resolve, reject) => {
+      const signal = options?.signal;
+      const timer = setTimeout(() => reject(new Error('row load was not aborted')), 8_000);
+      const abort = () => { clearTimeout(timer); reject(new DOMException('The operation was aborted.', 'AbortError')); };
+      if (signal?.aborted) { abort(); return; }
+      signal?.addEventListener('abort', abort, { once: true });
+    });
+    return fake.rows(id, cursor, options);
+  } };
+}, entries: [pending({ intent: { context: agentId, language: 'und' } })] },
+async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.click(canvas.getByRole('button', { name: /Continue/ }));
+  await expect(await canvas.findByText(/Checking matches:/)).toBeVisible();
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.click(canvas.getByText('Import your books'));
+  await expect(await canvas.findByText(/Finished: 9 of 9 rows/, undefined, { timeout: 5000 })).toBeVisible();
 } };
 
 /** Closing the disclosure interrupts abandoned commands while the server keeps accepted jobs. */
