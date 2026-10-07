@@ -9,6 +9,8 @@ import { startAccount, freePort, qaEnvironment } from './account-boundary-fixtur
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { AccessGrants } from '../../../services/main/src/modules/access/grants.ts';
+import { grantPlatformUse } from '../fixtures/platform-grant.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import {
   readExportPlan,
@@ -88,7 +90,7 @@ test('G-724: first administrator is granted once, replay/other configuration is 
     ]);
 
     const scopes =
-      'openid agent:create space:create zone:edit collection:edit semantic:read work:create work:edit work:read source:intake owner:operate classification:define rating:configure';
+      'openid access:grant agent:create space:create zone:edit collection:edit semantic:read work:create work:edit work:read source:intake owner:operate classification:define rating:configure';
     const verifierClient = await account.workloadApp('Bootstrap token verifier', ['work:read']);
     const client = await account.nativeApp('Launch operator', scopes);
     const token = (await account.issue(client.client_id, account.operator, scopes)).access_token;
@@ -121,6 +123,7 @@ test('G-724: first administrator is granted once, replay/other configuration is 
     };
     const access = new AccessAdmissionRegistry(accessPool);
     access.configureBaseline(fuseki);
+    const grants = new AccessGrants(accessPool);
     const rights = new RightsStore(contentPool, accessPool);
     const intake = new SourceIntakeStore(contentPool);
     intake.setRawRetentionGate((provider, scope) => rights.rawRetentionPermitted(provider, scope));
@@ -139,6 +142,7 @@ test('G-724: first administrator is granted once, replay/other configuration is 
         environment: env,
         account: verifier,
         access,
+        grants,
         // Non-public routes stay closed until this owner reads the designated grants.
         platformAccess: new AccessExposure(accessPool),
         agentProvisioning: new AgentProvisioning(accessPool, env),
@@ -207,6 +211,13 @@ test('G-724: first administrator is granted once, replay/other configuration is 
     });
     expect(designation[0]!.receipt).toMatch(/^urn:rezics:access-receipt:[0-9a-f]{64}$/);
 
+    const principalId = (
+      await accessPool.query<{ id: string }>(
+        `SELECT id FROM access.principal
+         WHERE account_issuer = $1 AND account_subject = $2 AND active`,
+        [account.issuer, account.operator.id],
+      )
+    ).rows[0]!.id;
     expect(
       await limits.classify(
         await verifier.verify(
@@ -218,6 +229,14 @@ test('G-724: first administrator is granted once, replay/other configuration is 
       ),
     ).toBe('trusted');
     main = startMain();
+    // Source intake stays behind the catalogue-import gate. Open that group
+    // through the grant API for this principal; the gate still enforces it.
+    const catalogueImport = await grantPlatformUse(
+      { mainOrigin: origin, token, actingSubject: agent.agent, principalId },
+      principalId,
+      'catalogue-import',
+    );
+    expect(catalogueImport.permission).toBe('platform:use:catalogue-import');
     const plan = YAML.parse(
       await readFile(join(root, 'tests/fixtures/launch/plan.yaml'), 'utf8'),
     ) as BootstrapPlan;
