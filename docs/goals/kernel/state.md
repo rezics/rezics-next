@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 23:06 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 23:32 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
@@ -18,14 +18,16 @@ remain attached to their original inputs. Whole Goal remains active.
   22:15min. Only the unchanged90s trimmedReceiptBoundBodyAndSourceEvidenceNeverAcceptsWrongPhysicalDelivery
   deadline expired. Work8 and Retirement7 now pass. Evidence:
   `.temp/kernel/native-build-default-policy-351-one-timeout.log`.
-- Root build-only170ce4989 on G1330 runs the normal164-file/19-guard gate:
-  `.temp/kernel/native-build-policy-merge-2304.log`, handle71962.
-  MODULE-only Maven128MiB/test384MiB, SerialGC/four processors and sequential
-  nonreused forks match the accepted owner gate. The wrapper now derives exact
-  Docker Maven/JVM policy and complete COPY inputs. Native900s and every original
-  test cap/assertion remain unchanged; runtime server stage unchanged. Candidate
-  pin1ca9ffd0e6b0; refresh mandatory after landing. Previous refresh handle73866
-  finished exit201. Servingcb2446/25ce with retained populated volumes; no merge hold.
+- Build-only repair LANDED49684e75050e: all164 affected/19 guards pass,
+  actual225 cases/16 suites/0 failures/errors/skips, run-4aQWU4. Native shard
+  841768ms; others60917/73491/20008. Main advanced, gate remained valid.
+  MODULE-only Maven128MiB/test384MiB, SerialGC/four processors/sequential
+  nonreused forks match the accepted gate. Wrapper derives Docker execution
+  policy and complete COPY inputs; native900s/test caps/runtime stage unchanged.
+  Newpin1ca9ffd0e6b0. Mandatory refresh handle38317 owns lifecycle and froze
+  49684e75050e; `.temp/kernel/native-build-policy-activation-2319.log`. Full351
+  original package tests currently run; image availability/activation not claimed.
+  Previous refresh73866 finished exit201. Retained servingcb2446/25ce healthy.
 - Audit deadline repair LANDED6bc98cdba635, owner51/957 and original real Access
   integration21/704. All162 affected/19 guards pass; native shard752879ms.
   Awaited Content expiry and final return check refuse the whole turn; caller
@@ -40,22 +42,34 @@ remain attached to their original inputs. Whole Goal remains active.
   Accepted61-native proof remains historical ab6d; current-fa396 rerun and LIVE
   G1300 facade reconciliation remain required. No REPEATABLE READ proof.
 - G1379 opt-in original association13dc8efac exited: actual16/9320 units, original
-  owner1/3 hashes. Independent review pending. Real stage64 integration remains
+  owner1/3 hashes. Byte-cap correctionfe3c63bad accepted, actual16/9414 QA232017-bb2302;
+  each GET receives min(pageBytes,remaining), exhausted turns refuse before fetch.
+  Only two owner files in normal105-file gate83575, log
+  `.temp/kernel/structure-association-merge-2327.log`; not yet landed. Real stage64 integration remains
   pending activation, no Episode completeness/absence claim. Ordinary recursive,
   signed and original-generation coverage must remain unchanged.
 - G1397 Sonnet4 exiteda74f9c823: shaded Jena integer-writer patch and actual
   separate-JVM proof. HEAD image original three release cases passed348.6s;
-  borrowed native overlay paired case failed mutation-loop startup90s. Independent
-  critical review and current-union packaged-image qualification still required.
+  borrowed native overlay paired case failed mutation-loop startup90s. Independent source review ACCEPT. Root composedad8fa0d30+34fbb8293
+  onto74298+MODULE policy; matching pin062958ae6957 unbuilt. Overlay failure
+  statically diagnosed: lone restoreHold=false reaches Source qualification and
+  throws. Sonnet6 corrects bounded ANY-hold startup guard in Module only, leaving
+  Source admission closed and original reader assertions unchanged. Matching
+  packaged-image qualification still required.
   Temporary Maven test skips restored; no healing existing truncated stores.
-- G1373 Cursor/Grok13 builds bounded original private Contribution CREATE source
-  using existing RevisionReadBudget and LIMIT2 receipt/history cardinality.
-  Physical private delivery/erasure qualification remains later, no inferred actor.
+- G1373 Cursor/Grok13 exited05198ca4e, actual14/74 QA231913-ea8ba8, source
+  stable. Review BLOCK: ordinary draft authorization ASK plus two owner reads
+  exceeds two-call budget; RDF term types/conflicting hidden receipt facts must
+  be checked; legal original en-us spelling must not be rejected canonically.
+  Cursor14 corrects exact callback composition, bounded unfiltered receipt read
+  and original spelling, retaining deadline/caller signal and all old assertions.
+  Physical private delivery/recovery/erasure remains later, no inferred edit actor.
 - G1352 Cursor/Grok18 readonly comment excerpt inventory done, no runtime edits.
   Content1708 reservation released through reclaim. Trust sole repairG1408 owns
   atomic journal-id/epoch source-selector erasure and authorized erased-anchor
   read/list/replay. Kernel exact Content/locator loans granted; critical inventory
-  review pending. Preserve authored body/IDs/digests, all original assertions,
+  review accepted with exact comment revision/journal-ID+epoch binding, fixed-count
+  SQL and post-migration/pre-terminal catalog coverage qualification. Preserve authored body/IDs/digests, all original assertions,
   immutable transition/holds/lock fences and coverage-before-replay. Inventory's
   suggested new table/split owners/404-only wording is nonbinding under Program.
 - ProgramG1404 image-specific45min streamed0600 diagnostics live; G1406d283c845d
@@ -64,8 +78,17 @@ remain attached to their original inputs. Whole Goal remains active.
 
 Admission RESTRICTED. New/resumed workers default Cursor/Grok4.7, no new Sol or
 Luna and no force-usage. Sonnet only assertion-integrity/contested/flaky/correctness
-critical work, at most two per Goal; currently G1300 live, G1397 exited. Existing
+critical work, at most two per Goal; currently G1300 and G1397 live. Existing
 admitted Codex workers finish. Protect manager codex-1 reserve (93% observed).
+G1352 Cursor19 inventories other retained locator source excerpts read-only.
+G1290 Cursor22 proposed lock rewrite rejected by independent review: production
+custody already serializes on receipt lock; ordinary scope closure preserves
+claimed leases, and admission-to-gate order would reverse the drain lock order.
+No harmful fresh acceptance demonstrated; original lease/expiry/historical
+semantics retained. G1282 Cursor25 additive union prepared only in temp; selected
+16-class suite would be242, unfiltered full module368 (351 minus39 plus56).
+No new executed qualification or authentic producer closure.
+
 Host-wide24 ceiling and kernel12GiB dispatch floor remain. No reset credits.
 
 ## Shared stack and latest landings
