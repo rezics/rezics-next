@@ -5,6 +5,7 @@ import { ShieldCheckIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { WebMediaImage } from '../document-editor/media-image.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { installHostZoneAddresses } from './addresses.ts';
 import type { Execution } from './execution.ts';
 import type { ZoneMessages } from './messages.ts';
 import { SlotBoundary } from './slot-boundary.tsx';
@@ -78,6 +79,7 @@ export function ZoneFrame({ zone, dataZone, theme, pkg, nonce, masthead, actions
   position?: ReactNode;
   crumbs?: { label: string; items: readonly SiteCrumb[] };
 }) {
+  installHostZoneAddresses();
   const Header = pkg?.slots.header;
   const Footer = pkg?.slots.footer;
   return <div data-zone={dataZone} data-zone-mode={pkg ? 'package' : 'fallback'}

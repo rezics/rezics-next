@@ -1,9 +1,7 @@
-import { localizedPath } from '../../../i18n/locale.ts';
-import { isUiLocale } from '../../../i18n/define.ts';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@rezics/ui/tabs';
 import { WorkCover } from '@rezics/ui/work-cover';
 import { type HeaderSlotProps, type HeroSlotProps, type ModuleSlotProps, type WorkCardSlotProps, workCoverProps,
-  type ZoneHubItem, type ZoneLinkProps, type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
+  zoneLocalizedHref, type ZoneHubItem, type ZoneLinkProps, type ZoneSlotProps, type ZoneWork } from '@rezics/zone-sdk';
 import { ArrowRightIcon, CornerDownLeftIcon, FolderOpenIcon, SquareTerminalIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { CopyButton } from './copy-button.tsx';
@@ -31,7 +29,7 @@ function Actions({ zone, work, title, t, Link, compact }: {
   const { hub } = work;
   const words = t.copy[hub?.kind ?? 'link'];
   return <div className="aw-actions">
-    <CopyButton text={hub?.copyText ?? null} href={localizedPath(work.href, isUiLocale(zone.locale) ? zone.locale : 'en')} title={title} label={words.label}
+    <CopyButton text={hub?.copyText ?? null} href={zoneLocalizedHref(work.href, zone.locale)} title={title} label={words.label}
       copied={words.copied} failed={words.failed} compact={compact} />
     <Link href={work.href} className="aw-try" data-compact={compact ? '' : undefined}>
       <span className={compact ? 'sr-only' : undefined}>{t.tryIt}</span><span className="sr-only"> {title}</span>

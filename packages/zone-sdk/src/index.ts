@@ -11,7 +11,9 @@ import type { AnchorHTMLAttributes, ComponentType, ReactNode } from 'react';
  * platform chrome (the account menu, the Zone menu, report and age gates stay
  * outside the slots, and every Work keeps its "Why here?" stamp, which the
  * platform renders). Every slot also receives `fallback`, the platform's own
- * rendering, which a package may wrap or replace.
+ * rendering, which a package may wrap or replace. A path the package builds
+ * (another Zone's site, an address a reader copies) comes from address rules
+ * the host installs; the package does not encode prefixes or locales.
  */
 
 /** Presets a Zone starts from; choosing one copies its tokens into the Zone. */
@@ -580,6 +582,42 @@ export function workCoverProps(work: ZoneWork) {
   return { title: work.title?.value ?? '', lang: work.title?.lang, dir: work.title?.dir,
     authors: work.author ? [work.author.value] : [], kind: work.kind, id: work.id,
     image: work.cover ? { src: work.cover.url, width: work.cover.width, height: work.cover.height } : null };
+}
+
+/**
+ * How the host writes a Space's site and prefixes a path with the reader's
+ * locale. The host installs one of these before a package slot runs.
+ */
+export interface ZoneAddressRules {
+  /** Site home of a Space by its route segment, without an interface-locale prefix. */
+  site(segment: string): string;
+  /**
+   * `path` with the reader's interface locale. A locale the host does not
+   * serve falls back as the host decides.
+   */
+  localized(path: string, locale: string): string;
+}
+
+let addressRules: ZoneAddressRules | undefined;
+
+/** Installs the host's address rules. A later call replaces them. */
+export function installZoneAddresses(rules: ZoneAddressRules): void {
+  addressRules = rules;
+}
+
+function zoneAddresses(): ZoneAddressRules {
+  if (!addressRules) throw new Error('Zone address rules are not installed');
+  return addressRules;
+}
+
+/** The site home of a Space identified by its route segment. The host owns the path. */
+export function zoneSiteHref(segment: string): string {
+  return zoneAddresses().site(segment);
+}
+
+/** A platform path including the interface locale, for an address a reader copies. */
+export function zoneLocalizedHref(path: string, locale: string): string {
+  return zoneAddresses().localized(path, locale);
 }
 
 /** Gzipped size limits per package (docs/plan/frontend.md, "Zones"). */

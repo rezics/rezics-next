@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
+import { installHostZoneAddresses } from './addresses.ts';
 import { ZoneBrowseBar } from './browse.tsx';
 import { WhyHere, ZoneWorkCard, ZoneWorkRow } from './card.tsx';
 import type { ZoneMessages } from './messages.ts';
@@ -48,6 +49,7 @@ const shows = (placed: PlacedModule) => placed.state.state === 'ready' || placed
  */
 export function cardRenderer(zone: ZoneContext, pkg: ZonePackage | null, locale: UiLocale, messages: ZoneMessages,
   avatarQuery?: string): CardRenderer {
+  installHostZoneAddresses();
   const Slot = pkg?.slots.workCard;
   const platform = (work: ZoneWork, options: ZoneCardOptions, whyHere: boolean) => options.layout === 'row'
     || options.layout === 'rail'

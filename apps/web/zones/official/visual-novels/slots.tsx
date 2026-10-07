@@ -1,9 +1,9 @@
-import { spaceHref } from '../../../features/address/path.ts';
-import type {
-  BrowseHeaderSlotProps,
-  WorkCardSlotProps,
-  ZoneMatchedRelease,
-  ZoneSlotProps,
+import {
+  zoneSiteHref,
+  type BrowseHeaderSlotProps,
+  type WorkCardSlotProps,
+  type ZoneMatchedRelease,
+  type ZoneSlotProps,
 } from '@rezics/zone-sdk';
 import { strings } from './strings.ts';
 
@@ -151,7 +151,7 @@ export function VisualNovelFooter({ zone, Link }: ZoneSlotProps) {
           </h2>
           <p>{t.siblingBody}</p>
           <p>
-            <Link href={spaceHref('light-novels', 'site')}>{t.siblingLink}</Link>
+            <Link href={zoneSiteHref('light-novels')}>{t.siblingLink}</Link>
           </p>
         </section>
       </div>
