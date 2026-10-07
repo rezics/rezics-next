@@ -60,6 +60,7 @@ function* workQuads(corpus: Corpus, work: FixtureWork): Generator<[GraphKind, st
     yield current(realm.rejectionSlot, RDF_TYPE, node(`${RV}RealmPublicationSlot`));
     yield current(realm.rejectionSlot, `${RV}realm`, node(realm.realm));
     yield current(realm.rejectionSlot, `${RV}mainVersion`, node(rejected.work.mainVersion));
+    yield current(realm.rejectionSlot, `${RV}work`, node(rejected.work.work));
     yield current(realm.rejectionSlot, `${RV}selectionHead`, node(realm.rejectionSelection));
   }
   yield current(work.work, RDF_TYPE, node('https://schema.org/CreativeWork'));
@@ -145,7 +146,7 @@ async function count(fuseki: FusekiClient, graph: string): Promise<number> {
 
 export const graphOwner: FixtureOwner = {
   name: 'graph',
-  generator: 'graph-work-public-search-v3',
+  generator: 'graph-work-public-search-v4',
   phase: 'offline-graph',
   compatibilityInputs(root) {
     const dockerfile = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8');

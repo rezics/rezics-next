@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { CONTINUITY, ID } from '../../services/main/src/modules/work/activate.ts';
+import { realmSelectionSlotIri } from '../../services/main/src/modules/work/select-realm.ts';
 
 /** Changing what any owner stores for the same entity requires a new fixture format. */
 export const FIXTURE_FORMAT = 'rezics-fixture-v2';
@@ -152,7 +153,9 @@ export function publicUnitAt(corpus: Corpus, ordinal: number): FixturePublicUnit
 
 export function fixtureRealm(corpus: Corpus) {
   const id = (kind: string) => ID + fixtureUuid(corpus.seed, `public-${kind}`);
-  return { space: id('space'), realm: id('realm'), rejectionSlot: id('rejection-slot'),
+  const realm = id('realm');
+  const rejected = publicUnitAt(corpus, Math.min(129, corpus.publicUnits - 1));
+  return { space: id('space'), realm, rejectionSlot: realmSelectionSlotIri(realm, rejected.work.mainVersion),
     rejectionSelection: id('rejection-selection') };
 }
 

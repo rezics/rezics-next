@@ -181,12 +181,14 @@ async function buildLocked(
     }
     await phase('restart-graph', () => budget.startup(root, env,
       () => { compose(['up', '-d', '--wait', 'fuseki']); }, { ...admission, services: ['fuseki'] }));
+    // Refuse an unqualified native generation before loading online owners.
+    const index = await phase('graph-ready', () => assertGraphReady(apps, core));
     await phase('load:online', async () => {
       const online = owners.filter(item => item.phase === 'online');
       const results = await Promise.all(online.map(owner => owner.load(corpus, target)));
       online.forEach((owner, index) => { loads[owner.name] = results[index]; });
     });
-    const index = await phase('verify', async () => {
+    await phase('verify', async () => {
       for (const owner of owners) {
         const actual = await owner.verify(corpus, target);
         const planned = core.owners[owner.name]!.counts;
@@ -195,7 +197,6 @@ async function buildLocked(
         }
       }
       await checkSamples(apps, core, target.pools);
-      return assertGraphReady(apps, core);
     });
     await Promise.all([pools.access.end(), pools.content.end()]);
     pools = undefined;

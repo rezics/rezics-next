@@ -24,7 +24,7 @@ test('fixture: the same seed and profile give the same manifest digest and fixtu
   const second = core();
   expect(manifestIdentity(second)).toEqual(manifestIdentity(first));
   expect(first.entities).toEqual({ works: 1_000, agents: 10, publicUnits: 100 });
-  expect(first.owners.graph!.counts).toEqual({ 'graph:current': 10_495,
+  expect(first.owners.graph!.counts).toEqual({ 'graph:current': 10_496,
     'graph:public': 1_102, 'graph:revisions': 18_700 });
   expect(first.owners.objects!.counts).toEqual({ object: 4_000 });
   expect(first.owners.access!.counts).toEqual({ 'access.authority_subject': 10,
