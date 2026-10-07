@@ -42,7 +42,11 @@ G-1344 current-pin HTTP proof passed54.7s/138assertions; fixture correction land
 code-hold checkpoint before its gate. Fresh small preparation passed93.440s;
 medium native readiness qualified10,000units, but the build failed the600s wall
 ceiling with152.283s admission. No medium backup or copies were published.
-Program has the coordinated host-window request for one strict-budget retry. Manager-exclusive100k
+Program has the coordinated host-window request for one strict-budget retry.
+The extra temporary600s wall guard was incorrect and is removed: established
+fixture/restore budgets judge active work, exclude admission waits and report
+both. The interrupted run still published no backup; completed preparation
+under600s active remains required after the activation checkpoint. Manager-exclusive100k
 qualification remains required.
 
 Program has enrolled the manager in the supervised coordinator for native session
