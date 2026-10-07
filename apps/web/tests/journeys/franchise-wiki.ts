@@ -336,15 +336,7 @@ export function registerFranchiseWikiJourney(viewports: readonly { name: 'phone'
         await expect(rows.getByText(w.acquaintance, { exact: true })).toBeVisible();
         await expect(rows.getByRole('link', { name: w.darcy })).toBeVisible();
         const passages = page.locator('[data-wiki-passages]');
-        // Relationships can arrive before the passages they cite. Reload until that read includes them.
-        await expect(async () => {
-          if ((await passages.count()) === 0) {
-            await page.reload();
-            await ready(page);
-          }
-          await expect(rows.getByRole('link', { name: w.darcy })).toBeVisible({ timeout: 5_000 });
-          await expect(passages.getByRole('heading', { name: w.passages })).toBeVisible({ timeout: 5_000 });
-        }).toPass({ timeout: 90_000 });
+        await expect(passages.getByRole('heading', { name: w.passages })).toBeVisible();
         // Sources are not ordered: verify the citation belonging to this quotation.
         const sisterEvidence = passages
           .locator('[data-wiki-evidence]')

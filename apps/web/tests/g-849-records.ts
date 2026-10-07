@@ -222,18 +222,11 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
       const membersBody = { expectedHead: made.revision, actingSubject: holder.actor, operations: [{ op: 'insert', parent: made.structure, role: 'member',
         position: 'last', target: work }] };
       const membersPath = `/v1/collections/${short(collection)}/changes`;
-      // A write still moving the graph cancels this insert. The same key would replay that cancellation,
-      // and a moved head has to be read again before the insert is offered.
+      // A write still moving the graph cancels this insert. The same key would replay that cancellation.
       let members = await wiki('POST', membersPath, membersBody, holder.token, fixtureKey('franchise-members'));
-      if (members.status === 409) {
-        const detail = await members.clone().text();
-        if (detail.includes('read_basis_changed') || detail.includes('collection_conflict')) {
-          await new Promise(done => setTimeout(done, 1_000));
-          const current = await json<{ revision: string }>(await wiki('GET',
-            `/v1/collections/${short(collection)}?actingSubject=${encodeURIComponent(holder.actor)}`));
-          members = await wiki('POST', membersPath, { ...membersBody, expectedHead: current.revision },
-            holder.token, fixtureKey('franchise-members-again'));
-        }
+      if (members.status === 409 && (await members.clone().text()).includes('read_basis_changed')) {
+        await new Promise(done => setTimeout(done, 1_000));
+        members = await wiki('POST', membersPath, membersBody, holder.token, fixtureKey('franchise-members-again'));
       }
       await json(members);
     }

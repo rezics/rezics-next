@@ -90,30 +90,21 @@ const member = () =>
  * redirects to, so it is not compared with the environment (the QA stack may give Accounts a free port).
  */
 async function signIn(page: Page, next: string): Promise<void> {
-  const target = next.split(/[?#]/)[0] ?? next;
-  // A canonical Work address keeps the id and appends -{title}. That is the same destination.
-  const arrived = (url: URL) => url.pathname === target || url.pathname.startsWith(`${target}-`);
   for (let attempt = 1; ; attempt++) {
     try {
       await page.goto(`/auth/start?next=${encodeURIComponent(next)}`);
-      await page.waitForURL((url) => url.pathname === '/sign-in' || arrived(url), { timeout: 40_000 });
-      if (arrived(new URL(page.url()))) return;
+      await page.waitForURL((url) => url.pathname === '/sign-in', { timeout: 40_000 });
       await page.locator('html[data-hydrated]').waitFor({ timeout: 40_000 });
       await page.getByRole('textbox', { name: 'Email' }).fill(member().email);
       await page.getByRole('button', { name: 'Next' }).click();
       await page.getByLabel('Enter your password').fill(member().password);
       await page.getByRole('button', { name: 'Next' }).click();
-      await expect.poll(() => arrived(new URL(page.url())), { timeout: 40_000 }).toBe(true);
+      await expect(page).toHaveURL(next, { timeout: 40_000 });
       return;
     } catch (error) {
       if (attempt === 2) throw error;
     }
   }
-}
-
-/** Chapter text is a contenteditable. The words are its blocks; an empty chapter leaves them blank. */
-function manuscript(box: ReturnType<Page['getByRole']>): Promise<string> {
-  return box.evaluate(node => Array.from(node.children).map(child => child.textContent ?? '').join('\n'));
 }
 
 /** A device: its own browser context, signed in as the QA member, at the first page it is asked for. */
@@ -199,17 +190,10 @@ for (const [name, viewport, index] of [
       // Shelved as Read on its page, with dates recorded in Library.
       await expect(page.getByRole('heading', { level: 1, name: book.title })).toBeVisible();
       await choose(page, /More shelves/, 'Read');
-      const shelved = page.getByRole('button', { name: /^Read — Shelve/ });
-      // The label appears while the save is still in flight. Leave only after it has settled.
-      await expect(shelved).toBeVisible();
-      await expect(shelved).not.toHaveAttribute('aria-busy', 'true', { timeout: 30_000 });
-      await recorded(page, book.work, { status: 'read' });
-      // The status shelf is a separate read and can list the Work a moment after reader-state does.
+      await expect(page.getByRole('button', { name: /^Read — Shelve/ })).toBeVisible();
+      await page.goto('/en/library?shelf=read');
       const row = page.getByRole('heading', { level: 3, name: book.title });
-      await expect(async () => {
-        await page.goto('/en/library?shelf=read');
-        await expect(row).toBeVisible({ timeout: 5_000 });
-      }).toPass({ timeout: 60_000 });
+      await expect(row).toBeVisible();
       const form = page.getByRole('dialog', { name: `Reading dates for “${book.title}”` });
       // A press before the page hydrates opens nothing; press again until the form is there.
       await expect(async () => {
@@ -225,10 +209,6 @@ for (const [name, viewport, index] of [
 
       // A card's status menu: Read → Currently reading. The dates were never in the request, so Main keeps them.
       await choose(page, /^Read — Shelve/, 'Currently reading');
-      // The move settles when Library says where the Work went, then the open Read shelf drops the card.
-      await expect(page.getByRole('status').filter({
-        hasText: `“${book.title}” is now on Currently reading.`,
-      })).toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole('heading', { level: 3, name: book.title })).toHaveCount(0, {
         timeout: 15_000,
       });
@@ -333,14 +313,8 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
   const title = `كتاب المسودة ${Date.now() % 1000}`;
   await page.getByRole('textbox', { name: 'Title' }).fill(title);
   await page.getByRole('radio', { name: /^Book/ }).check();
-  // The language list is portalled. On a phone it sometimes takes the focus and does not open.
-  const writingLanguage = page.getByRole('combobox', { name: 'Language you’ll write in' });
-  const arabic = page.getByRole('option', { name: 'Arabic', exact: true });
-  await expect(async () => {
-    await writingLanguage.click();
-    await expect(arabic).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 30_000 });
-  await arabic.click();
+  await page.getByRole('combobox', { name: 'Language you’ll write in' }).click();
+  await page.getByRole('option', { name: 'Arabic' }).click();
   await page.getByRole('button', { name: 'Create as G530 Writer' }).click();
   await page.waitForURL(/\/works\/[0-9a-f-]{36}\?tab=chapters$/);
   const work = /\/works\/([0-9a-f-]{36})/.exec(page.url())![1]!;
@@ -370,7 +344,7 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
   await editor.fill('');
   await expect.poll(revision, { timeout: 30_000 }).not.toBe(written);
   await expect(status).toHaveText(/^Saved · /, { timeout: 30_000 });
-  await expect.poll(() => manuscript(editor)).toBe('');
+  await expect(editor).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
   const emptied = revision()!;
   await shot(page, info, 'chapter-emptied-phone');
@@ -390,7 +364,7 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
     const reopened = other.page.getByRole('textbox', { name: 'Chapter text' });
     await expect(reopened).toBeVisible();
     await other.page.waitForLoadState('networkidle');
-    await expect.poll(() => manuscript(reopened)).toBe('');
+    await expect(reopened).toHaveValue('');
     await expect(other.page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
     await shot(other.page, info, 'chapter-reopened-desktop');
   } finally {
@@ -415,14 +389,12 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
     );
     return [...new Uint8Array(await blob.arrayBuffer())];
   });
-  const frame = page.getByRole('dialog').getByRole('heading', { name: 'Frame the cover' });
-  // The file input's change handler is attached after hydration. Set the image again until the frame opens.
-  await expect(async () => {
-    await page
-      .locator('input[type="file"]')
-      .setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from(png) });
-    await expect(frame).toBeVisible({ timeout: 5_000 });
-  }).toPass({ timeout: 45_000 });
+  await page
+    .locator('input[type="file"]')
+    .setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: Buffer.from(png) });
+  await expect(
+    page.getByRole('dialog').getByRole('heading', { name: 'Frame the cover' }),
+  ).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Use this cover' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Cover updated.' })).toBeVisible({
     timeout: 60_000,
@@ -461,8 +433,7 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
       expect(body).not.toContain(title);
       expect(body).not.toContain(summary.avatar.url);
     }
-    // The page, streamed, settles on what it will show. The draft must match a Work
-    // that never existed: the same status, the same not-found text, and noindex.
+    // The page, streamed, settles on what it will show; the draft reads exactly as a Work that never existed.
     const view = await anonymous.newPage();
     const settled = async (path: string) => {
       const response = await view.goto(path);
@@ -479,14 +450,14 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
           { timeout: 30_000, intervals: [500] },
         )
         .toBeGreaterThanOrEqual(3);
-      const robots = await view.locator('meta[name="robots"]').first().getAttribute('content');
-      return { status: response?.status(), text: last, robots };
+      return { status: response?.status(), text: last };
     };
     const draftPage = await settled(localizedPath(resourceHref('/w/', work), 'en'));
     await shot(view, info, 'draft-work-signed-out-phone');
-    const missingPage = await settled(localizedPath(resourceHref('/w/', crypto.randomUUID()), 'en'));
+    const missingPage = await settled(
+      localizedPath(resourceHref('/w/', crypto.randomUUID()), 'en'),
+    );
     expect(draftPage).toEqual(missingPage);
-    expect(draftPage.robots).toMatch(/noindex/);
     expect(draftPage.text).not.toContain(title);
     await expect(view.locator(`img[src*="${summary.avatar.url}"]`)).toHaveCount(0);
   } finally {

@@ -2,7 +2,7 @@
 // Books the reader shelves, and four public Works classified under Fantasy, Magic and Romance with the discovery
 // generation the Concept page reads (Fantasy+Magic, Fantasy+Romance, Magic only, Fantasy only). Everything else the
 // journey needs (the writer, the book, the chapter and the cover) the browser creates through Main as a person would.
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
@@ -53,16 +53,9 @@ try {
 
   // Four Works under Concepts, then the discovery generation the Concept page lists them from.
   await author.grant(MANAGE_SCOPE, MANAGE_ACTION);
-  const platformGrant = randomUUID();
-  await stack.accessPool.query(`INSERT INTO access.principal_permission_grant
-    (id,issuer_subject,principal_id,scope_id,action,valid_until)
-    VALUES ($1,$2,$3,'platform:access','platform:use:platform-admin',now()+interval '1 hour')`,
-  [platformGrant,author.actor,author.principalId]);
-  await stack.accessPool.query(`INSERT INTO access.platform_grant_episode
-    (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
-    VALUES ($1,$2,$3,'platform:use:platform-admin','platform:access',$4,$5)`,
-  [randomUUID(),platformGrant,author.actor,author.principalId,
-    `urn:rezics:access-receipt:${createHash('sha256').update(platformGrant).digest('hex')}`]);
+  // Discovery generation is closed under platform-admin. Open it for the seed author.
+  const administrator = await platformAdministratorSession();
+  await grantPlatformUse(administrator, author.principalId, 'platform-admin');
   await author.grant('classification:define:global', 'classification.proposition.define');
   await author.grant('classification:decide:global', 'statement.decide');
   await author.grant(`statement:speak:${author.actor}`, 'statement.record');
@@ -101,9 +94,6 @@ try {
   await accept(works[1]!, fantasy); await accept(works[1]!, romance);
   await accept(works[2]!, magic);
   await accept(works[3]!, fantasy);
-  // Discovery generation is closed under platform-admin. The author's own principal opens it.
-  const administrator = await platformAdministratorSession();
-  await grantPlatformUse(administrator, author.principalId, 'platform-admin');
   type Generation = { generation: string; checkpoint: string; complete: boolean; state: string };
   let row = await json<Generation>(await call('POST', '/v1/discovery/generation-builds', {
     profile: 'discovery-generation-build-v1', actingSubject: author.actor,
