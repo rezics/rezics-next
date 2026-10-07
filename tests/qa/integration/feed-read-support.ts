@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { expect } from 'bun:test';
 import pg, { Pool, type QueryResult } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
@@ -15,6 +16,7 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce, type MainOutboxBatch } 
 import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
+import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
 import { RealmReplyThreadStore } from '../../../services/main/src/modules/realm-reply/thread-store.ts';
@@ -263,6 +265,9 @@ export async function seedHome(home: HomeStack, works = 6) {
   const book = published[2]!;
   await stack.fuseki.update(`PREFIX schema: <https://schema.org/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
     ${iri(book.work)} a schema:Book } }`);
+  // Raw graph writes invalidate native membership completion; restore it before
+  // chapter commands validate a parent list that already contains a chapter.
+  expect((await normalizeStoredMembership(stack.env)).complete).toBe(true);
   await grant(`work:edit:${book.work}`, 'work.edit');
   const composition = await json<{ structure: string; revision: string }>(await call('POST', '/v1/compositions', {
     profile: 'book-composition', work: book.work, mainVersion: book.mainVersion, actingSubject: author }, a.token), 201);
