@@ -177,7 +177,7 @@ export default {
   rsnDetailsRequired: 'Ajoutez d’abord les précisions pour ce motif.',
   rsnPreviewRules: insert('Décidé selon les règles publiées de la communauté ({{ref}}, révision {{revision}}).', { ref: String, revision: String }),
   rsnPreviewAbout: insert('Concerne : {{target}}', { target: String }),
-  rsnAutomationChecked: 'Si les preuves du dossier mentionnent une automatisation, l’exposé des motifs l’indique à l’envoi.',
+  rsnAutomationChecked: 'L’exposé des motifs de chaque dossier indique à l’envoi si ses preuves mentionnent une automatisation.',
   rsnNotABreach: 'Respecte les règles',
   rsnNotABreachFacts: 'Nous avons examiné le signalement et constaté que ce contenu respecte les règles de la communauté.',
   rsnInsufficientEvidence: 'Éléments insuffisants',

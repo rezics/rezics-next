@@ -177,7 +177,7 @@ export default {
   rsnDetailsRequired: 'Ergänze zuerst die Angaben zu diesem Grund.',
   rsnPreviewRules: insert('Entschieden nach den veröffentlichten Regeln der Community ({{ref}}, Revision {{revision}}).', { ref: String, revision: String }),
   rsnPreviewAbout: insert('Betrifft: {{target}}', { target: String }),
-  rsnAutomationChecked: 'Wenn die Belege des Falls Automatisierung vermerken, steht das beim Senden in der Begründung.',
+  rsnAutomationChecked: 'Die Begründung zu jedem Fall gibt beim Senden an, ob dessen Belege Automatisierung vermerken.',
   rsnNotABreach: 'Entspricht den Regeln',
   rsnNotABreachFacts: 'Wir haben die Meldung geprüft und festgestellt, dass dieser Inhalt den Regeln der Community entspricht.',
   rsnInsufficientEvidence: 'Zu wenig Anhaltspunkte',

@@ -156,7 +156,7 @@ export default {
   rsnDetailsRequired: '请先补充此原因的具体说明。',
   rsnPreviewRules: insert('依据领域已发布的规则（{{ref}}，修订版 {{revision}}）作出裁决。', { ref: String, revision: String }),
   rsnPreviewAbout: insert('涉及：{{target}}', { target: String }),
-  rsnAutomationChecked: '如果事项的证据记录了自动化参与，发送时说明中会如实注明。',
+  rsnAutomationChecked: '每个事项的说明在发送时会如实注明其证据是否记录了自动化参与。',
   rsnNotABreach: '符合规则',
   rsnNotABreachFacts: '我们审核了这条举报，认为该内容符合领域规则。',
   rsnInsufficientEvidence: '依据不足',

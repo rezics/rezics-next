@@ -172,10 +172,12 @@ describe('automation in the evidence', () => {
     expect(automationOf(read([{ automation: 'x' }], 'next'))).toBe(true);
   });
 
-  test('several cases are automated if any is, manual only when every one is known to be', () => {
-    expect(combineAutomation([false, true, null])).toBe(true);
+  test('several cases are stated only when they agree: a mixed or unread batch is unknown, never "involved"', () => {
+    expect(combineAutomation([true, true])).toBe(true);
     expect(combineAutomation([false, false])).toBe(false);
-    expect(combineAutomation([false, null])).toBeNull();
+    expect(combineAutomation([false, true])).toBeNull();
+    expect(combineAutomation([true, null])).toBeNull();
+    expect(combineAutomation([null])).toBeNull();
     expect(combineAutomation([])).toBeNull();
   });
 });
@@ -274,18 +276,70 @@ describe('sending a report decision', () => {
       revision: basis.reports[0]!.evidence[0]!.revision, expectedHead: basis.reports[0]!.evidence[0]!.expectedHead }] });
   });
 
-  test('the statement says automation was involved when the evidence records it, even if the screen showed none', async () => {
-    const automated = { ...basisFor(item), reports: basisFor(item).reports.map(entry => ({ ...entry,
+  const automatedBasis = (overrides: Partial<ReturnType<typeof basisFor>> = {}) => {
+    const basis = basisFor(item);
+    return { ...basis, ...overrides, reports: basis.reports.map(entry => ({ ...entry,
       evidence: entry.evidence.map(found => ({ ...found, provenance: { automation: 'local-image-screen' } })) })) };
+  };
+  const keepDecision = (automation: boolean) => ({ action: 'keep' as const, reason: reasons.facts, note: null,
+    reasons: { ...reasons, automation } });
+  /** A Main whose basis comes page by page: each read gives the next page, and records the cursor it asked with. */
+  const paged = (pages: Array<ReturnType<typeof basisFor>>, posted: Array<Record<string, unknown>>, cursors: Array<string | undefined>) =>
+    ({ v1: { realms: () => ({ moderation: () => ({ get: async ({ query }: { query: { cursor?: string } }) => {
+      cursors.push(query.cursor);
+      const index = query.cursor ? Number(query.cursor) : 0;
+      return { data: { ...pages[index]!, nextCursor: index + 1 < pages.length ? String(index + 1) : null }, error: null };
+    } }) }), moderation: { decisions: { post: async (body: Record<string, unknown>) => {
+      posted.push(body);
+      return { data: {}, error: null };
+    } } } } }) as unknown as MainClient;
+
+  test('the statement says automation was involved when this case\'s evidence records it, whatever the screen showed', async () => {
     const calls: Array<{ body: Record<string, unknown> }> = [];
-    const main = { v1: { realms: () => ({ moderation: () => ({ get: async () => ({ data: automated, error: null }) }) }),
+    const main = { v1: { realms: () => ({ moderation: () => ({ get: async () => ({ data: automatedBasis(), error: null }) }) }),
       moderation: { decisions: { post: async (body: Record<string, unknown>) => { calls.push({ body }); return { data: {}, error: null }; } } } } } as unknown as MainClient;
-    await decideReport(main, uuid(7), item, { action: 'keep', reason: reasons.facts, note: null, reasons }, iri(11), 'k');
+    await decideReport(main, uuid(7), item, keepDecision(false), iri(11), 'k');
     expect(calls[0]!.body.reasons).toEqual({ ...reasons, automation: true });
-    // A manual case stays as the screen said.
+  });
+
+  test('a manual case in a batch is not told automation was involved because another case in it was', async () => {
+    // The dialog's one statement is shared by the whole batch; here it came from an automated sibling.
     const manual: unknown[] = [];
-    await decideReport(mainFor(manual), uuid(7), item, { action: 'keep', reason: reasons.facts, note: null, reasons }, iri(11), 'k');
+    await decideReport(mainFor(manual), uuid(7), item, keepDecision(true), iri(11), 'k');
     expect(manual).toEqual([{ body: expect.objectContaining({ reasons: { ...reasons, automation: false } }), options: expect.anything() }]);
+  });
+
+  test('automation recorded on a later page of reports is found before the statement denies it', async () => {
+    const posted: Array<Record<string, unknown>> = [];
+    const cursors: Array<string | undefined> = [];
+    const later = { ...basisFor(item), reports: automatedBasis().reports };
+    const main = paged([basisFor(item), basisFor(item), later], posted, cursors);
+    expect(await decideReport(main, uuid(7), item, keepDecision(false), iri(11), 'k')).toEqual({ ok: true, data: {} });
+    expect(cursors).toEqual([undefined, '1', '2']);
+    expect(posted[0]!.reasons).toEqual({ ...reasons, automation: true });
+  });
+
+  test('every page without automation still sends a manual statement, and a case that moved between pages is stale', async () => {
+    const posted: Array<Record<string, unknown>> = [];
+    expect(await decideReport(paged([basisFor(item), basisFor(item)], posted, []), uuid(7), item, keepDecision(true), iri(11), 'k'))
+      .toEqual({ ok: true, data: {} });
+    expect(posted[0]!.reasons).toEqual({ ...reasons, automation: false });
+    const moved: Array<Record<string, unknown>> = [];
+    expect(await decideReport(paged([basisFor(item), { ...basisFor(item), generation: '9' }], moved, []), uuid(7), item,
+      keepDecision(false), iri(11), 'k')).toEqual({ ok: false, failure: 'stale' });
+    expect(moved).toEqual([]);
+  });
+
+  test('a case with more reports than can be read is refused rather than stated falsely', async () => {
+    const posted: Array<Record<string, unknown>> = [];
+    const cursors: Array<string | undefined> = [];
+    const endless = { v1: { realms: () => ({ moderation: () => ({ get: async ({ query }: { query: { cursor?: string } }) => {
+      cursors.push(query.cursor);
+      return { data: { ...basisFor(item), nextCursor: 'more' }, error: null };
+    } }) }), moderation: { decisions: { post: async (body: Record<string, unknown>) => { posted.push(body); return { data: {}, error: null }; } } } } } as unknown as MainClient;
+    expect(await decideReport(endless, uuid(7), item, keepDecision(false), iri(11), 'k')).toEqual({ ok: false, failure: 'budget' });
+    expect(cursors).toHaveLength(50);
+    expect(posted).toEqual([]);
   });
 
   test('without a note there is no rationale, and the facts are not copied into it', async () => {

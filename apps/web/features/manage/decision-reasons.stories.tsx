@@ -229,7 +229,7 @@ export const SeveralCases: Story = {
     const bulk = canvas.getByRole('group', { name: 'Selected items' });
     await userEvent.click(within(bulk).getByRole('button', { name: 'Keep' }));
     const dialog = await dialogNamed('Keep content from 2 reports');
-    await visible(() => dialog.getByText('If the case’s evidence records automation, the statement says so when it is sent.'));
+    await visible(() => dialog.getByText('Each case’s statement says, as it is sent, whether that case’s evidence records automation.'));
     await expect(dialog.queryByText(/^About:/)).toBeNull();
   },
 };

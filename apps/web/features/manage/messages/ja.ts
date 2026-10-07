@@ -172,7 +172,7 @@ export default {
   rsnDetailsRequired: '先にこの理由の補足を入力してください。',
   rsnPreviewRules: insert('コミュニティの公開ルール（{{ref}}、リビジョン{{revision}}）に基づく判断です。', { ref: String, revision: String }),
   rsnPreviewAbout: insert('対象: {{target}}', { target: String }),
-  rsnAutomationChecked: '案件の証拠に自動化の関与が記録されている場合は、送信時に理由書でその旨を伝えます。',
+  rsnAutomationChecked: '各案件の理由書には、送信時にその案件の証拠に自動化の関与が記録されているかどうかが明記されます。',
   rsnNotABreach: 'ルールに沿っている',
   rsnNotABreachFacts: '報告を確認した結果、この内容はコミュニティのルールに沿っていると判断しました。',
   rsnInsufficientEvidence: '対応できる情報が不足',

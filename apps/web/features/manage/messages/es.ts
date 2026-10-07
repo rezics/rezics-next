@@ -177,7 +177,7 @@ export default {
   rsnDetailsRequired: 'Añade primero los detalles de este motivo.',
   rsnPreviewRules: insert('Decidido según las reglas publicadas de la comunidad ({{ref}}, revisión {{revision}}).', { ref: String, revision: String }),
   rsnPreviewAbout: insert('Sobre: {{target}}', { target: String }),
-  rsnAutomationChecked: 'Si las pruebas del caso registran automatización, la declaración lo indica al enviarse.',
+  rsnAutomationChecked: 'La declaración de cada caso indica al enviarse si sus pruebas registran automatización.',
   rsnNotABreach: 'Cumple las reglas',
   rsnNotABreachFacts: 'Revisamos la denuncia y comprobamos que este contenido cumple las reglas de la comunidad.',
   rsnInsufficientEvidence: 'Información insuficiente',

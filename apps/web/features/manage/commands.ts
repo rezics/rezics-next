@@ -141,6 +141,31 @@ export function reportDecision(basis: DecisionBasis, action: 'keep' | 'remove' |
 /** A basis Main could not read, as the decision's failure: a moved basis means the case changed. */
 const basisFailure = (failure: ReadFailure): CommandFailure => failure === 'moved' ? 'stale' : failure;
 
+/** Pages of reports read when looking for automation; at four a page, the most reports one decision weighs. */
+const AUTOMATION_PAGES = 50;
+
+/**
+ * Whether this case's retained evidence records automation. Main checks all of
+ * it and refuses a statement that denies it, so a page of reports that shows
+ * none is not enough: the rest are read before saying there is none. A case
+ * that changed between pages is stale, and one with more reports than the
+ * bound cannot be stated truthfully here.
+ */
+async function caseAutomation(main: MainClient, realm: string, caseId: string, actingSubject: string,
+  first: DecisionBasis): Promise<Outcome<boolean>> {
+  let page = first;
+  for (let read = 1; ; read++) {
+    const found = automationOf(page);
+    if (found !== null) return { ok: true, data: found };
+    if (read >= AUTOMATION_PAGES) return { ok: false, failure: 'budget' };
+    const next = await readDecisionBasis(main, realm, caseId, actingSubject, page.nextCursor!);
+    if (!next.ok) return { ok: false, failure: basisFailure(next.failure) };
+    if (next.data.generation !== first.generation) return { ok: false, failure: 'stale' };
+    // Pages read before this one showed none, or the answer would already be true.
+    page = next.data;
+  }
+}
+
 /**
  * Keeps or removes one report's content. The basis is read again when the
  * decision is sent, so it cites what is true then; Main compares the case
@@ -157,8 +182,10 @@ export async function decideReport(main: MainClient, realm: string, item: Modera
   if (!given) return { ok: false, failure: 'invalid', code: 'statement_of_reasons_required' };
   const basis = await readDecisionBasis(main, realm, item.id, actingSubject);
   if (!basis.ok) return { ok: false, failure: basisFailure(basis.failure) };
-  // The statement says whether automation was involved as the case's evidence records it now, never less than the screen showed.
-  const reasons = { ...given, automation: given.automation || automationOf(basis.data) === true };
+  const automated = await caseAutomation(main, realm, item.id, actingSubject, basis.data);
+  if (!automated.ok) return automated;
+  // Automation is a fact of this case's evidence, read now; one statement shared by a batch cannot state it for every case.
+  const reasons = { ...given, automation: automated.data };
   if (!basis.data.ruleBasis) return { ok: false, failure: 'invalid', code: 'rules_unpublished' };
   // The reason the parties read is `reasons`; the rationale is the moderators' private note.
   const command = reportDecision(basis.data, decision.action as 'keep' | 'remove' | 'interim-restrict' | 'final-restrict',

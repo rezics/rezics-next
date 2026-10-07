@@ -171,7 +171,7 @@ export default {
   rsnDetailsRequired: '請先補充此原因的具體說明。',
   rsnPreviewRules: insert('依據社群已發布的規範（{{ref}}，修訂版 {{revision}}）作出裁決。', { ref: String, revision: String }),
   rsnPreviewAbout: insert('涉及：{{target}}', { target: String }),
-  rsnAutomationChecked: '如果案件的證據記錄了自動化參與，送出時說明中會如實註明。',
+  rsnAutomationChecked: '每個案件的說明在送出時會如實註明其證據是否記錄了自動化參與。',
   rsnNotABreach: '符合規範',
   rsnNotABreachFacts: '我們審查了這則檢舉，認為該內容符合社群規範。',
   rsnInsufficientEvidence: '依據不足',

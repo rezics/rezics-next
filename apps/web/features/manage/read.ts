@@ -98,9 +98,10 @@ export function readManagedRealms(main: MainClient, actingSubject: string, after
  * reports with their private statements and evidence, the target's current
  * heads and the Realm's published rules (null until rules are published).
  */
-export function readDecisionBasis(main: MainClient, realm: string, caseId: string, actingSubject: string) {
-  return settle(() => main.v1.realms({ realm }).moderation({ caseId }).get({ query: { actingSubject } }),
-    { management: true });
+export function readDecisionBasis(main: MainClient, realm: string, caseId: string, actingSubject: string,
+  cursor?: string) {
+  return settle(() => main.v1.realms({ realm }).moderation({ caseId }).get({ query: { actingSubject,
+    ...cursor ? { cursor } : {} } }), { management: true });
 }
 
 export function readRealmHeader(main: MainClient, realm: string, language: string) {

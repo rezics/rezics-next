@@ -177,7 +177,7 @@ export const messages = {
   rsnDetailsRequired: 'Add the details for this reason first.',
   rsnPreviewRules: insert('Decided under the Realm’s published rules ({{ref}}, revision {{revision}}).', { ref: String, revision: String }),
   rsnPreviewAbout: insert('About: {{target}}', { target: String }),
-  rsnAutomationChecked: 'If the case’s evidence records automation, the statement says so when it is sent.',
+  rsnAutomationChecked: 'Each case’s statement says, as it is sent, whether that case’s evidence records automation.',
   rsnNotABreach: 'It follows the rules',
   rsnNotABreachFacts: 'We reviewed the report and found that this content follows the Realm’s rules.',
   rsnInsufficientEvidence: 'Not enough to act on',

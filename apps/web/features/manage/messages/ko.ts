@@ -177,7 +177,7 @@ export default {
   rsnDetailsRequired: '먼저 이 사유의 세부 내용을 입력하세요.',
   rsnPreviewRules: insert('커뮤니티의 게시된 규칙({{ref}}, 개정 {{revision}})에 따라 결정했습니다.', { ref: String, revision: String }),
   rsnPreviewAbout: insert('대상: {{target}}', { target: String }),
-  rsnAutomationChecked: '사건의 증거에 자동화가 기록되어 있으면, 보낼 때 사유서에 그렇게 표시됩니다.',
+  rsnAutomationChecked: '각 사건의 사유서에는 보낼 때 그 사건의 증거에 자동화가 기록되어 있는지가 표시됩니다.',
   rsnNotABreach: '규칙을 지킴',
   rsnNotABreachFacts: '신고를 검토한 결과, 이 내용은 커뮤니티 규칙을 지키고 있습니다.',
   rsnInsufficientEvidence: '조치할 근거 부족',

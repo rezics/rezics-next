@@ -104,10 +104,14 @@ export function automationOf(basis: Pick<DecisionBasis, 'reports' | 'nextCursor'
   return automated ? true : basis.nextCursor ? null : false;
 }
 
-/** The one value every case agrees on: true if any is, false if all are known to be, otherwise unknown. */
+/**
+ * What the preview may say for several cases at once: a value only when every
+ * case is known to agree. Each case's own evidence decides its statement when
+ * it is sent, so a mixed or unread batch is unknown here, never "involved".
+ */
 export function combineAutomation(values: readonly (boolean | null)[]): boolean | null {
-  if (values.includes(true)) return true;
-  return values.length > 0 && values.every(value => value === false) ? false : null;
+  const [first] = values;
+  return first !== undefined && first !== null && values.every(value => value === first) ? first : null;
 }
 
 /** The one Realm rule every reported item names, as its number and title; null when they differ or none is named. */
