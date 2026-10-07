@@ -13,6 +13,7 @@ import { AgentProvisioning } from '../../../services/main/src/modules/agent/prov
 import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
+import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { activateMetadataWork, metadataWorkRequestDigest }
   from '../../../services/main/src/modules/work/activate.ts';
@@ -410,6 +411,7 @@ test.each(['initial context', 'retained context'])(
     expect((await view()).status).toBe(503);
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(observed.observation)} rv:observationHead ${iri(observed.observationRevision)} } }`);
+    expect((await normalizeStoredMembership(stack.env)).complete).toBe(true);
 
     const bookTitle = `Library book ${randomUUID()}`;
     const book = await activateMetadataWork(stack.env, { title: bookTitle,

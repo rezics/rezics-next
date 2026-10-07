@@ -19,6 +19,7 @@ import { FollowsStore } from '../../../services/main/src/modules/follows/store.t
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
 import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
+import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 import { FOLLOWS_COST, type FollowResult } from '../../../services/main/src/modules/follows/contract.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
@@ -575,6 +576,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     // composition. Native text selections alone do not invent chapter numbers.
     await stack.fuseki.update(`PREFIX schema: <https://schema.org/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(second.work)} a schema:Book } }`);
+    expect((await normalizeStoredMembership(stack.env)).complete).toBe(true);
     await grant(`work:edit:${second.work}`, 'work.edit');
     const composition = await json<{ structure: string; revision: string }>(await call('POST', '/v1/compositions', {
       profile: 'book-composition', work: second.work, mainVersion: second.mainVersion, actingSubject: author }, a.token), 201);
@@ -587,10 +589,28 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       await grant(`content:draft:${chapter.work}`, 'content.draft');
       await grant(`content:publish:${chapter.work}`, 'content.publish');
       await grant(`content:search-eligibility:${chapter.work}`, 'content.search-eligibility');
+      // Content publication does not disclose a private chapter Work. Its
+      // author also publishes and selects the native text for ordinary readers.
+      const body = ordinal === 2 ? '# Chapter 1\nPublished chapter 2' : `Published chapter ${ordinal}`;
+      await grant(`contribution:create:${chapter.work}`, 'contribution.create');
+      const draft = await json<{ contribution: string; draftRevision: string }>(await call('POST', '/v1/contributions', {
+        profile: 'text-contribution-v1', work: chapter.work, language: 'zh-Hans', body,
+        actingSubject: author }, a.token), 201);
+      await grant(`contribution:publish:${draft.contribution}`, 'contribution.publish');
+      const nativePublication = await json<{ publicationDecision: string }>(await call('POST', '/v1/contribution-publications', {
+        profile: 'text-publication-v1', contribution: draft.contribution,
+        expectedDraftHead: draft.draftRevision, expectedPublicationHead: null,
+        rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: author }, a.token), 201);
+      await grant(`publication:select:${chapter.mainVersion}`, 'publication.select');
+      await json(await call('POST', '/v1/publication-selections', {
+        profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: chapter.mainVersion },
+        work: chapter.work, contribution: draft.contribution, publicationDecision: nativePublication.publicationDecision,
+        expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: author }, a.token), 201);
+      expect((await call('GET', `/v1/works/${chapter.work.slice(-36)}`)).status).toBe(200);
       const saved = await json<{ revisionId: string; sourcePosition: { dataEpoch: string } }>(await call('POST', '/v1/content-drafts', {
         profile: 'content-text-v1', resourceId: chapter.work, variantId: variant,
         language: { kind: 'tag', tag: 'zh-Hans', originalTag: 'zh-Hans' }, direction: 'ltr', expectedHead: null,
-        body: ordinal === 2 ? '# Chapter 1\nPublished chapter 2' : `Published chapter ${ordinal}`,
+        body,
         actingSubject: author }, a.token), 201);
       const exact = (await stack.content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
       if (exact?.status !== 'available') throw new Error('Missing chapter fixture');

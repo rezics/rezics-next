@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { expect } from 'bun:test';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { authorCreditFixture } from '../fixtures/author-credit.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 import type { AliasReceipt } from '../../../services/main/src/modules/address/registry.ts';
 
 export async function addressFixture(label: string) {
@@ -60,6 +62,7 @@ export async function addressFixture(label: string) {
     await f.nativeFuseki
       .update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(record.work)} rv:catalogueVisible true } }`);
+    expect((await normalizeStoredMembership(f.env)).complete).toBe(true);
     return record;
   };
   const permit = async (holder: string) => {
