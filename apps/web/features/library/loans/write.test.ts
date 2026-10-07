@@ -70,17 +70,26 @@ describe('loan write lane', () => {
     expect(result).toEqual({ ok: true, data: { dueAt: '2026-11-01T00:00:00.000Z', version: 3 } });
   });
 
-  test('an unchanged intent keeps its key and a changed one receives a new key', async () => {
+  test('an unresolved command keeps its key and a settled one retires it', async () => {
     resetRecordLanes();
     const keys: string[] = [];
+    let outcome: RecordResult<string> = { ok: false, failure: 'unavailable' };
     const apply = (choice: string, round: WriteRound) => {
       keys.push(round.key);
-      return Promise.resolve({ ok: true as const, data: choice });
+      return Promise.resolve(outcome.ok ? { ...outcome, data: choice } : outcome);
     };
     await submitRecord('intent-key', 'same', apply);
     await submitRecord('intent-key', 'same', apply);
-    await submitRecord('intent-key', 'edited', apply);
     expect(keys[0]).toBe(keys[1]);
-    expect(keys[2]).not.toBe(keys[0]);
+    expect(keys[0]).not.toBe('');
+    outcome = { ok: true, data: 'same' };
+    await submitRecord('intent-key', 'same', apply);
+    await submitRecord('intent-key', 'same', apply);
+    expect(keys[2]).toBe(keys[1]);
+    expect(keys[3]).not.toBe(keys[2]);
+    outcome = { ok: false, failure: 'conflict' };
+    await submitRecord('intent-key', 'same', apply);
+    await submitRecord('intent-key', 'same', apply);
+    expect(keys[5]).not.toBe(keys[4]);
   });
 });

@@ -1,6 +1,5 @@
 import type { CopyChange, CopyRecord, LoanRecord, PersonCard, RecordPage, RecordResult, ReleaseChoice } from './types.ts';
 import type { CopiesApi } from './api.ts';
-import { dueIsOverdue } from './format.ts';
 
 export interface MemoryCopies {
   /** The Work these releases and new copies belong to. */
@@ -27,9 +26,10 @@ function slicePage<T>(items: readonly T[], cursor?: string | null): RecordPage<T
   return { items: [...next], nextCursor, complete: nextCursor === null };
 }
 
+/** Matches LibraryLoanStore: overdue once the due instant has passed. The view does not recompute this. */
 function loanState(loan: Pick<LoanRecord, 'returnedAt' | 'dueAt'>, now: number): LoanRecord['state'] {
   if (loan.returnedAt) return 'returned';
-  return dueIsOverdue(loan.dueAt, now) ? 'overdue' : 'open';
+  return Date.parse(loan.dueAt) < now ? 'overdue' : 'open';
 }
 
 function definedChanges(changes: CopyChange): CopyChange {

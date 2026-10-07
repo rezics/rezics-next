@@ -1,10 +1,7 @@
-import { today } from '../format.ts';
-
 /**
- * A loan is due on a calendar day, not at a clock time. The day is stored as
- * the last instant of that UTC date: `formatDay` prints the day, and the day
- * is overdue only once that date is over. A time on the instant does not move
- * the day or the overdue decision.
+ * A loan's due date is a calendar day, stored as the last instant of that UTC
+ * date so `formatDay` prints the day and no clock. Overdue is the API's loan
+ * state, not a day compared here.
  */
 export function dueDay(value: string): string | null {
   const day = value.slice(0, 10);
@@ -21,13 +18,6 @@ export function laterDay(day: string, days: number): string {
   const date = new Date(`${day}T00:00:00.000Z`);
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
-}
-
-/** True once the due day is before today in the same fixed zone `formatDay` uses. */
-export function dueIsOverdue(dueAt: string, now: number): boolean {
-  const day = dueDay(dueAt);
-  if (!day) return false;
-  return day < today(now);
 }
 
 /** A `datetime-local` value for an instant, in the browser's zone. Dialogs open on the client. */

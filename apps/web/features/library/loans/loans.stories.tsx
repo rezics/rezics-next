@@ -71,7 +71,7 @@ async function shot(name: string) {
 
 function loansView(items: readonly LoanListItem[], extra?: { nextCursor?: string | null; cursor?: string | null }) {
   return <LoansView items={items} nextCursor={extra?.nextCursor ?? null} failure={null} cursor={extra?.cursor ?? null}
-    now={storyNow} locale="en" messages={messages} />;
+    locale="en" messages={messages} />;
 }
 
 /** Overdue is first and marked, then what is still due. Extend and Return update the list. */
@@ -118,7 +118,7 @@ export const AfterWrite: Story = {
     onPush: (href: string) => { firstPageReads.push(href); } } },
   render: args => <LibraryPage {...args} api={memoryLibraryApi()} readerActions={storyReaderActions()}
     copiesApi={pagedLoans.copies} loansView={<LoansView items={pagedLoans.items} nextCursor="stale-fence" failure={null}
-      cursor="stale-page" now={storyNow} locale="en" messages={messages} />} />,
+      cursor="stale-page" locale="en" messages={messages} />} />,
   async play({ canvasElement }) {
     firstPageReads.length = 0;
     const canvas = within(canvasElement);
@@ -133,7 +133,7 @@ export const AfterWrite: Story = {
   },
 };
 
-/** A clock on the due day does not make it overdue, and a previous day does, whatever the stored state says. */
+/** The API's state decides the group. A due time earlier the same day stays overdue, and the date is shown without a clock. */
 export const ByDate: Story = {
   render: args => {
     const sameDay = loan(release(80), release(81), 'lent', 'Neighborhood shelf', Date.parse('2026-09-28T01:00:00.000Z'),
@@ -149,11 +149,12 @@ export const ByDate: Story = {
     const canvas = within(canvasElement);
     const overdue = canvas.getByRole('region', { name: 'Overdue' });
     const due = canvas.getByRole('region', { name: 'Due soon' });
-    await expect(within(overdue).getByText('Due Sep 27, 2026')).toBeVisible();
-    await expect(within(overdue).getByText('Borrowed from Prior Reader')).toBeVisible();
-    await expect(within(due).getByText('Due Sep 28, 2026')).toBeVisible();
-    await expect(within(due).getByText('Lent to Neighborhood shelf')).toBeVisible();
-    await expect(within(due).queryByText(/\d:\d{2}|AM|PM/)).toBeNull();
+    await expect(within(overdue).getByText('Due Sep 28, 2026')).toBeVisible();
+    await expect(within(overdue).getByText('Lent to Neighborhood shelf')).toBeVisible();
+    await expect(within(due).getByText('Due Sep 27, 2026')).toBeVisible();
+    await expect(within(due).getByText('Borrowed from Prior Reader')).toBeVisible();
+    await expect(within(overdue).queryByText(/\d:\d{2}|AM|PM/)).toBeNull();
+    await shot('api-overdue');
   },
 };
 

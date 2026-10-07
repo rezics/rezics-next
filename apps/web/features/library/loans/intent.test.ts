@@ -3,8 +3,10 @@ import type { MainClient } from '../../discover/types.ts';
 import { mainCopiesApi } from './api.ts';
 import { changedCopyMatches, extendedLoanMatches, openedLoanMatches, removedCopyMatches, returnedLoanMatches,
   savedCopyMatches } from './intent.ts';
+import { memoryCopiesApi } from './memory.ts';
+import { recordOwnedCopy } from './record.ts';
 import type { CopyChange, CopyDraft, CopyRecord, LoanDraft, LoanRecord, RecordResult } from './types.ts';
-import { resetRecordLanes, submitRecord, writeNewest } from './write.ts';
+import { commandInstance, resetRecordLanes, submitRecord, writeNewest } from './write.ts';
 
 const party = { kind: 'name' as const, name: 'City Library' };
 const copy: CopyRecord = {
@@ -86,6 +88,19 @@ async function conflicted<T, R extends { version: number }>(record: string, choi
 }
 
 describe('command identity', () => {
+  test('two identical copies recorded in a row are two copies', async () => {
+    resetRecordLanes();
+    const work = copy.work;
+    const api = memoryCopiesApi({ work });
+    const command = commandInstance();
+    const first = await recordOwnedCopy(api, command, work, draft);
+    const second = await recordOwnedCopy(api, command, work, draft);
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    expect(api.state.copies).toHaveLength(2);
+    if (first.ok && second.ok) expect(first.data.id).not.toBe(second.data.id);
+  });
+
   test('save copy retries a lost response with the intent key', async () => {
     await lost('save-copy', draft, copy, (api, choice, key) => api.createCopy(choice, key));
   });

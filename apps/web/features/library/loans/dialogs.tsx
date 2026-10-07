@@ -15,11 +15,12 @@ import { formatDay, today } from '../format.ts';
 import { useCopiesApi } from './provider.tsx';
 import { dayInstant, dueDay, dueInstant, instantFromLocal, laterDay, localInput } from './format.ts';
 import { handleText, partyFromInput } from './party.ts';
-import { extendedLoanMatches, openedLoanMatches, returnedLoanMatches, savedCopyMatches } from './intent.ts';
+import { extendedLoanMatches, openedLoanMatches, returnedLoanMatches } from './intent.ts';
 import { recordContinuation, reduceRecordPage, type RecordList } from './paging.ts';
+import { recordOwnedCopy } from './record.ts';
 import type { CopyRecord, LibraryParty, LoanRecord, RecordFailure, RecordResult, ReleaseChoice } from './types.ts';
 import type { CopiesApi } from './api.ts';
-import { submitRecord, writeNewest } from './write.ts';
+import { commandInstance, submitRecord, writeNewest } from './write.ts';
 
 type T = ReturnType<typeof materializeData<LibraryMessages>>;
 type PartyMode = 'name' | 'person';
@@ -130,6 +131,7 @@ export function CopyDialog({ work, title, open, onOpenChange, locale, messages, 
   const [moreBusy, setMoreBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const generation = useRef(0);
+  const command = useRef(commandInstance());
   const releases = editions.items;
 
   useEffect(() => {
@@ -169,15 +171,7 @@ export function CopyDialog({ work, title, open, onOpenChange, locale, messages, 
     if (acquiredFrom === 'invalid') { setSaving(false); return; }
     const draft = { release, format: format.trim() || null, acquiredFrom, acquiredAt: dayInstant(acquiredOn),
       ownedFrom: dayInstant(ownedSince) };
-    const written = await submitRecord(`copy:${work}`, draft, (choice, round) => writeNewest(round, 0,
-      () => api.createCopy(choice, round.key),
-      async () => {
-        const copies = await api.copies(work);
-        if (!copies.ok) return copies;
-        return { ok: true, data: copies.data.items.find(copy => savedCopyMatches(copy, choice)) ?? null };
-      },
-      current => savedCopyMatches(current, choice),
-      current => current.version, false));
+    const written = await recordOwnedCopy(api, command.current, work, draft);
     setSaving(false);
     if (!written.ok) { setError(failureText(written.failure, t, true)); return; }
     onSaved(written.data);

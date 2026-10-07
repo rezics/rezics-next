@@ -14,17 +14,17 @@ import Link from '../../shell/localized-link.tsx';
 import { formatDay } from '../format.ts';
 import type { LibraryMessages } from '../messages.ts';
 import { ExtendDialog, ReturnDialog } from './dialogs.tsx';
-import { dueIsOverdue } from './format.ts';
 import { counterpartyLabel } from './party.ts';
+import { loanSections } from './sections.ts';
 import type { LoanListItem, LoanRecord } from './types.ts';
 
 /**
  * Loans beside the shelves: overdue first, then what is still due, each with
  * Return and Extend. Names typed by the reader are shown as stored.
  */
-export function LoansView({ items, nextCursor, failure, cursor, now, locale, messages }: {
+export function LoansView({ items, nextCursor, failure, cursor, locale, messages }: {
   items: readonly LoanListItem[]; nextCursor: string | null; failure: string | null; cursor: string | null;
-  now: number; locale: UiLocale; messages: LibraryMessages;
+  locale: UiLocale; messages: LibraryMessages;
 }) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
@@ -37,8 +37,7 @@ export function LoansView({ items, nextCursor, failure, cursor, now, locale, mes
     setRows(items);
     setPageCursor(nextCursor);
   }
-  const overdue = rows.filter(item => item.loan.state !== 'returned' && dueIsOverdue(item.loan.dueAt, now));
-  const due = rows.filter(item => item.loan.state !== 'returned' && !dueIsOverdue(item.loan.dueAt, now));
+  const { overdue, due } = loanSections(rows);
 
   function apply(loan: LoanRecord, done: string) {
     setRows(current => loan.state === 'returned' ? current.filter(item => item.loan.id !== loan.id)

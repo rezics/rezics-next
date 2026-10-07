@@ -43,5 +43,5 @@ export default async function LibraryLoansRoute({ searchParams }: Props) {
   return <LibraryPage state={parseLibraryState({})} overview={overview} view={emptyShelf} reading={[]} now={now}
     avatarQuery={reader?.avatarQuery} locale={locale} messages={messages}
     loansView={<LoansView items={loans.ok ? loans.data.items : []} nextCursor={loans.ok ? loans.data.nextCursor : null}
-      failure={loans.ok ? null : 'unavailable'} cursor={cursor} now={now} locale={locale} messages={messages} />} />;
+      failure={loans.ok ? null : 'unavailable'} cursor={cursor} locale={locale} messages={messages} />} />;
 }

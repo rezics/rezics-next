@@ -5,8 +5,8 @@ import type { RecordResult } from './types.ts';
  * One round of a record's write lane, shared with the reader store: the newest
  * intent replaces anything waiting, and a round that was superseded after
  * reading the record tells the next round it may trust that read.
- * `key` is that intent's Idempotency-Key for every attempt, including a retry
- * after a lost response.
+ * `key` is this command's Idempotency-Key. Retries of the unresolved command
+ * reuse it. A confirmed success or a definitive refusal retires it.
  */
 export interface WriteRound {
   seq: number;
@@ -14,6 +14,28 @@ export interface WriteRound {
   superseded: () => boolean;
   confirm: () => void;
   afterConfirmed: boolean;
+}
+
+/**
+ * One create or other command, from the reader's action until it succeeds or
+ * is refused. The lane is this instance, not a Work and not a shared create lane.
+ */
+export interface CommandInstance {
+  id: () => string;
+  finish: (result: { ok: boolean; failure?: string }) => void;
+}
+
+export function commandInstance(): CommandInstance {
+  let current: string | null = null;
+  return {
+    id() {
+      current ??= commandKey();
+      return current;
+    },
+    finish(result) {
+      if (result.ok || result.failure !== 'unavailable') current = null;
+    },
+  };
 }
 
 /** Field order does not make a new intent. Undefined fields are absent. */
@@ -25,10 +47,14 @@ function intentText(value: unknown): string {
   return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${intentText(item)}`).join(',')}}`;
 }
 
+function unresolved(result: unknown): boolean {
+  return !!result && typeof result === 'object' && 'ok' in result && (result as { ok: boolean }).ok === false
+    && 'failure' in result && (result as { failure?: string }).failure === 'unavailable';
+}
+
 interface Ticket<T, R> {
   choice: T;
   seq: number;
-  key: string;
   apply: (choice: T, round: WriteRound) => Promise<R>;
 }
 
@@ -37,14 +63,21 @@ function lane<T, R>(failed: R) {
   let latest: Ticket<T, R> | null = null;
   let waiting: ((result: R) => void)[] = [];
   let seq = 0;
+  let open = false;
   let intentChoice = '';
   let intentKey = '';
   const keyFor = (choice: T) => {
     const text = intentText(choice);
-    if (text === intentChoice && intentKey) return intentKey;
+    if (open && text === intentChoice && intentKey) return intentKey;
     intentChoice = text;
     intentKey = commandKey();
+    open = true;
     return intentKey;
+  };
+  const retire = (result: R) => {
+    if (unresolved(result)) return;
+    open = false;
+    intentKey = '';
   };
   async function run() {
     running = true;
@@ -56,9 +89,10 @@ function lane<T, R>(failed: R) {
       waiting = [];
       let confirmed = false;
       const result = await current.apply(current.choice, {
-        seq: current.seq, key: current.key, afterConfirmed, confirm: () => { confirmed = true; },
+        seq: current.seq, key: keyFor(current.choice), afterConfirmed, confirm: () => { confirmed = true; },
         superseded: () => latest !== null,
       }).catch(() => failed);
+      retire(result);
       afterConfirmed = confirmed && latest !== null;
       // Callers of a replaced intent wait for the one that stood, and receive its outcome.
       if (latest) waiting = [...batch, ...waiting];
@@ -69,7 +103,7 @@ function lane<T, R>(failed: R) {
   return {
     submit<U>(choice: T, apply: (choice: T, round: WriteRound) => Promise<U>): Promise<U> {
       return new Promise(resolve => {
-        latest = { choice, seq: ++seq, key: keyFor(choice), apply: apply as unknown as Ticket<T, R>['apply'] };
+        latest = { choice, seq: ++seq, apply: apply as unknown as Ticket<T, R>['apply'] };
         waiting.push(resolve as (result: R) => void);
         if (!running) void run();
       });
@@ -85,8 +119,10 @@ export function resetRecordLanes(): void {
 }
 
 /**
- * One write at a time for one record. A newer intent replaces any intent
- * waiting behind the write in flight; nothing is queued in browser storage.
+ * One write at a time for one record or one command instance. A newer intent
+ * replaces any intent waiting behind the write in flight; nothing is queued
+ * in browser storage. A settled command leaves the lane, so the next command
+ * does not reuse its key.
  */
 export function submitRecord<T, R>(record: string, choice: T,
   apply: (choice: T, round: WriteRound) => Promise<RecordResult<R>>): Promise<RecordResult<R>> {
@@ -96,12 +132,15 @@ export function submitRecord<T, R>(record: string, choice: T,
     existing = lane<T, RecordResult<R>>(failed);
     lanes.set(record, existing as ReturnType<typeof lane<unknown, RecordResult<unknown>>>);
   }
-  return existing.submit(choice, apply);
+  return existing.submit(choice, apply).then(result => {
+    if (!unresolved(result)) lanes.delete(record);
+    return result;
+  });
 }
 
 /**
  * Writes `choice` at `version`. A lost response is tried once more with the
- * same intent key, so a committed command is replayed instead of abandoned.
+ * same command key, so a committed command is replayed instead of abandoned.
  * A 409 reads the record again and writes only when this round is still the
  * newest intent and the record does not already hold the whole intent.
  * `retry` is false for a create: a second insert would add another copy.
