@@ -18,6 +18,14 @@ const work = native(1),
 const base = { scope: 'global' as const, realm: null, context: null, owner: null };
 const rated = { ...base, context };
 
+test('Metadata events invalidate their exact Work without changing the retained envelope contract', () => {
+  const receipt = { action: 'work.edit', outcome: 'succeeded', metadata: { work } };
+  expect(discoveryEventEffect(receipt)).toBe('work');
+  expect(discoveryEventWorks(receipt)).toEqual([work]);
+  expect(discoveryEventWorks({ ...receipt, work: target })).toBeNull();
+  expect(discoveryEventWorks({ ...receipt, metadata: { work: 'foreign-identity' } })).toBeNull();
+});
+
 test('Only an exact MainVersion target changes a standing Work aggregate', () => {
   const rating = { action: 'rating.observation.set', ratingContext: context, work, mainVersion };
   expect(discoveryEventEffect({ ...rating, target: mainVersion }, rated)).toBe('work');

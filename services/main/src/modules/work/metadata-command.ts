@@ -52,11 +52,11 @@ async function commitMetadataEnvelope(env: WorkActivationEnvironment, admission:
   envelope: CommandEnvelope, metadata: {
     work: string; component: string; revision: string; manifest: string; predecessor: string;
   },
-  edition: boolean) {
+  state: MetadataState | MetadataEditionStateV2) {
   const dispatch = (command: CommandEnvelope) => validatedCommand(env, command, admission);
-  if (!edition || !env.receiptCustody) return dispatch(envelope);
+  if (state.kind !== 'edition' || !env.receiptCustody) return dispatch(envelope);
   return env.receiptCustody.commit({ envelope, component: metadata.component,
-    revision: metadata.revision, manifest: metadata.manifest,
+    revision: metadata.revision, manifest: metadata.manifest, state, routingEpoch: env.lineage.routingEpoch,
     receipt: { outcome: 'succeeded', receipt: envelope.receipt, admissionId: admission.id,
       requestDigest: envelope.digest, authorityEpoch: admission.authorityEpoch, scope: admission.scope,
       dataEpoch: env.lineage.dataEpoch, work: metadata.work, component: metadata.component,
@@ -203,7 +203,7 @@ export async function commitMetadata(env: WorkActivationEnvironment, admission: 
     }`;
   const result = await commitMetadataEnvelope(env, admission, { receipt, digest, update, validations,
     deadlineMs: WORK_METADATA_COST.deadlineMs }, { work, component, revision, manifest,
-      predecessor: expectedHead ?? component }, state.kind === 'edition');
+      predecessor: expectedHead ?? component }, state);
   if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
   if (!await readMetadataReceipt(env, admission.id)) {
     await sealMetadataWorkEditAdmission(env, admission);
@@ -368,7 +368,7 @@ async function commitEditionV2(env: WorkActivationEnvironment, admission: Regist
     }`;
   const result = await commitMetadataEnvelope(env, admission, { receipt, digest, update, validations,
     deadlineMs: WORK_METADATA_COST.deadlineMs }, { work: intent.work, component, revision, manifest,
-      predecessor: prior ?? component }, true);
+      predecessor: prior ?? component }, intent.state);
   if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
   if (!await readMetadataReceipt(env, admission.id)) {
     await sealMetadataWorkEditAdmission(env, admission);

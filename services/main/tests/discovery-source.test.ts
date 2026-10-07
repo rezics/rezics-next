@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
-import { projectDiscoveryBatch } from '../src/modules/discovery/source.ts';
+import { DiscoveryRefreshInputs, projectDiscoveryBatch } from '../src/modules/discovery/source.ts';
 import type { WorkReadSession } from '../src/modules/work/read-session.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const field = (value: string) => ({ type: 'literal', value });
@@ -40,4 +41,21 @@ test('global discovery admits publicly selected Works through its source query',
     } } as unknown as WorkReadSession;
   const result = await projectDiscoveryBatch(session, { scope: 'global', realm: null, context: null }, '');
   expect(result.items.map(item => item.work)).toEqual([work]);
+});
+
+test('metadata refresh consumes the Main position independently of its graph receipt basis', async () => {
+  const event = { specversion: '1.0', source: 'https://rezics.com/services/main', id: 'event',
+    data: { batchId: 'batch', routingEpoch: '1', ordinal: 0,
+      sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '900' },
+      relayPosition: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '4' },
+      receipt: { action: 'work.edit', outcome: 'succeeded', metadata: { work: id(1) } } } };
+  const pool = { query: async () => ({ rows: [{ sequence: '4', batch_id: 'batch', routing_epoch: '1',
+    event_count: 1, event_id: 'event', envelope: event }] }) };
+  const inputs = new DiscoveryRefreshInputs(pool as never, 'main');
+  expect(await inputs.read({ dataEpoch: 'epoch', sequence: '4' }, '3')).toEqual({ works: [id(1)], created: [] });
+  event.data.relayPosition.streamScope = 'urn:rezics:stream:content';
+  expect(await inputs.read({ dataEpoch: 'epoch', sequence: '4' }, '3')).toBeNull();
+  event.data.relayPosition.streamScope = MAIN_RELAY_STREAM_SCOPE;
+  event.data.relayPosition.sequence = '900';
+  expect(await inputs.read({ dataEpoch: 'epoch', sequence: '4' }, '3')).toBeNull();
 });

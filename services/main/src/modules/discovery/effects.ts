@@ -121,6 +121,7 @@ export interface DiscoveryEventInput {
   action: string;
   outcome?: string;
   work?: string;
+  metadata?: { work?: string };
   mainVersion?: string;
   target?: string;
   ratingContext?: string;
@@ -173,6 +174,7 @@ export function discoveryEventEffect(
   return effect;
 }
 export function discoveryEventWorks(event: DiscoveryEventInput): string[] | null {
-  const works = [event.work ?? event.chapterWork].filter((value): value is string => !!value);
+  if (event.work && event.metadata?.work && event.work !== event.metadata.work) return null;
+  const works = [event.work ?? event.metadata?.work ?? event.chapterWork].filter((value): value is string => !!value);
   return works.length && works.every((value) => nativeWork.test(value)) ? works : null;
 }

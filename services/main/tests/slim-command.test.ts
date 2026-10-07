@@ -2,20 +2,27 @@ import { expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
 import { CommandOutcomeUnknown, CommandRejected, type CommandEnvelope, type CommandResult,
   type SparqlResult } from '../src/infrastructure/fuseki.ts';
-import { ObjectUnavailable, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
+import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { hash, prepareWorkComponent } from '../src/modules/work/activate.ts';
 import { ReceiptCustody, type CustodyRow, type ReceiptCustodySession, type ReceiptCustodyStore,
   type SlimEnvelope } from '../src/modules/outbox/receipt-custody.ts';
 import type { ProofRetirement } from '../src/modules/graph/slim-command.ts';
+import type { MetadataEditionState } from '../src/modules/work/metadata-schema.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 
 class MemoryCustody implements ReceiptCustodyStore {
   row: CustodyRow | null = null;
   failPrepare = false;
   failReconcile = false;
+  indexedReceipt?: string;
   private tail: Promise<unknown> = Promise.resolve();
-  withReceipt<T>(_receipt: string, operation: (session: ReceiptCustodySession) => Promise<T>): Promise<T> {
+  receiptAt(dataEpoch: string, streamSequence: string): Promise<string | null> {
+    return Promise.resolve(this.indexedReceipt ?? (this.row?.terminal?.dataEpoch === dataEpoch
+      && this.row.terminal.streamSequence === streamSequence ? this.row.receipt : null));
+  }
+  withReceipt<T>(receipt: string, operation: (session: ReceiptCustodySession) => Promise<T>): Promise<T> {
     const next = this.tail.then(() => operation({
-      read: () => Promise.resolve(this.row),
+      read: () => Promise.resolve(this.row?.receipt === receipt ? this.row : null),
       prepare: row => {
         if (this.failPrepare) throw new Error('owner unavailable');
         this.row = row; return Promise.resolve();
@@ -49,20 +56,33 @@ async function fixture() {
   const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000005';
   const receipt = `urn:rezics:receipt:${hash('slim edition')}`, digest = hash('edition intent');
   const store = new MemoryCustody(), objects = new MemoryObjects();
+  const state: MetadataEditionState = { kind: 'edition', id: component, status: 'active',
+    title: { value: 'Measured edition', language: 'en' }, contentLanguage: 'en',
+    editionStatement: 'First edition', publisher: 'Fixture Press', publicationYear: 2026,
+    isbn13: '9780306406157' };
   const manifest = await prepareWorkComponent(objects, component, { revision, intent: { work,
-    expectedHead: null, state: { kind: 'edition', id: component, status: 'active' } } },
+    expectedHead: null, state } },
   'https://rezics.com/definition/work-metadata-details-v1');
-  let proof: { digest: string; payloadSha256: string; dataEpoch: string; sequence: string } | null = null;
+  let proof: { digest: string; payloadSha256: string; dataEpoch: string; sequence: string; streamSequence: string } | null = null;
   let sends = 0, loseResponse = false, refusal: CommandResult | undefined;
+  const queries: string[] = [];
   const retirements: ProofRetirement[] = [];
   const key = 'a'.repeat(64);
-  const custody = new ReceiptCustody(store, objects, { query: (): Promise<SparqlResult> => Promise.resolve({
-    results: { bindings: proof ? [{ digest: { type: 'literal', value: proof.digest },
+  const custody = new ReceiptCustody(store, objects, { query: (query): Promise<SparqlResult> => {
+    queries.push(query);
+    if (query.includes('SELECT ?receipt')) {
+      const matches = proof && query.includes(JSON.stringify(proof.dataEpoch))
+        && query.includes(`rv:streamSequence ${proof.streamSequence}`);
+      return Promise.resolve({ results: { bindings: matches ? [{ receipt: { type: 'uri', value: receipt } }] : [] } });
+    }
+    return Promise.resolve({ results: { bindings: proof ? [{ digest: { type: 'literal', value: proof.digest },
       payload: { type: 'literal', value: proof.payloadSha256 }, epoch: { type: 'literal', value: proof.dataEpoch },
-      sequence: { type: 'literal', value: proof.sequence } }] : [] },
-  }) }, key, retirement => { retirements.push(retirement); proof = null; return Promise.resolve(); });
+      sequence: { type: 'literal', value: proof.sequence },
+      streamSequence: { type: 'literal', value: proof.streamSequence } }] : [] } });
+  } }, key, retirement => { retirements.push(retirement); proof = null; return Promise.resolve(); });
   const envelope: CommandEnvelope = { receipt, digest, update: 'bounded edition update', validations: [], deadlineMs: 10_000 };
-  const input = { envelope, component, revision, manifest, receipt: { outcome: 'succeeded' as const,
+  const input = { envelope, component, revision, manifest, routingEpoch: 'routing-a', state,
+    receipt: { outcome: 'succeeded' as const,
     receipt, admissionId: '00000000-0000-4000-8000-000000000006', requestDigest: digest,
     authorityEpoch: '1', scope: `work:edit:${work}`, dataEpoch: 'epoch-a', work, component, revision },
   dispatch: (candidate: CommandEnvelope): Promise<CommandResult> => {
@@ -72,12 +92,12 @@ async function fixture() {
     expect(objects.bytes.has(store.row!.payloadSha256)).toBe(true);
     if (refusal) return Promise.resolve(refusal);
     proof = { digest: candidate.digest, payloadSha256: (candidate as SlimEnvelope).slim.payloadSha256,
-      dataEpoch: 'epoch-a', sequence: '17' };
+      dataEpoch: 'epoch-a', sequence: '17', streamSequence: '4' };
     if (loseResponse) throw new CommandOutcomeUnknown('response lost after graph commit');
     return Promise.resolve({ status: 'committed', position: {
       datasetId: 'urn:rezics:dataset:product', dataEpoch: 'epoch-a', sequence: '17' } });
   } };
-  return { custody, store, objects, input, retirements, key, sends: () => sends,
+  return { custody, store, objects, input, retirements, key, queries, sends: () => sends,
     loseResponse: () => { loseResponse = true; }, refuse: (result: CommandResult) => { refusal = result; },
     setProof: (value: typeof proof) => { proof = value; } };
 }
@@ -185,8 +205,86 @@ test('a graph commit with failed owner reconciliation retains the proof and reco
   const row = f.store.row!;
   expect(f.retirements[0]?.signature).toBe(createHmac('sha256', f.key).update(JSON.stringify([
     'rezics-commit-proof-retirement-v1', row.receipt, row.requestDigest, row.payloadSha256,
-    recovered!.dataEpoch, recovered!.sequence,
+    recovered!.dataEpoch, recovered!.sequence, recovered!.streamSequence,
   ])).digest('hex'));
+});
+
+test('owner source reads the legacy-compatible event at its Main stream position after proof retirement', async () => {
+  const f = await fixture();
+  await f.custody.commit(f.input);
+  await f.custody.retire(f.input.envelope.receipt);
+  f.queries.length = 0;
+  const batchId = `urn:rezics:outbox:${hash(f.input.envelope.receipt)}`;
+  const eventId = `urn:rezics:event:${hash(f.input.envelope.receipt)}`;
+  expect(await f.custody.read('epoch-a', '4')).toMatchObject({
+    batch: { batchId, streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch-a', sequence: '4',
+      graphSequence: '17', routingEpoch: 'routing-a', eventIds: [eventId],
+      custodiedReceipt: f.input.envelope.receipt },
+    events: [{ specversion: '1.0', id: eventId, source: 'https://rezics.com/services/main',
+      type: 'com.rezics.work.metadata-changed.v1', datacontenttype: 'application/json',
+      data: { batchId, routingEpoch: 'routing-a', ordinal: 0,
+        sourcePosition: { datasetId: 'product', dataEpoch: 'epoch-a', sequence: '17' },
+        relayPosition: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch-a', sequence: '4' },
+        receipt: { id: f.input.envelope.receipt, action: 'work.edit', outcome: 'succeeded',
+          admissionId: f.input.receipt.admissionId, requestDigest: f.input.envelope.digest,
+          authorityEpoch: '1', scope: f.input.receipt.scope,
+          metadata: { work: f.input.receipt.work, component: f.input.component,
+            revision: f.input.revision, manifest: `urn:rezics:sha256:${f.input.manifest}` } } } }],
+  });
+  expect(f.queries).toEqual([]);
+  expect(f.sends()).toBe(1);
+});
+
+test('owner source reconciles a pending lost-response command before returning its event', async () => {
+  const f = await fixture();
+  f.loseResponse();
+  f.store.failReconcile = true;
+  await expect(f.custody.commit(f.input)).rejects.toThrow('reconciliation response lost');
+  expect(f.store.row?.terminal).toBeNull();
+  expect(await f.store.receiptAt('epoch-a', '4')).toBeNull();
+  f.store.failReconcile = false;
+  f.queries.length = 0;
+  const retained = await f.custody.read('epoch-a', '4');
+  expect(f.queries.some(query => query.includes('SELECT ?receipt'))).toBe(true);
+  expect(f.store.row?.reconciled).toBe(true);
+  expect(f.store.row?.terminal).toMatchObject({ receipt: f.input.envelope.receipt,
+    sequence: '17', streamSequence: '4' });
+  expect(await f.store.receiptAt('epoch-a', '4')).toBe(f.input.envelope.receipt);
+  expect(retained).toMatchObject({ batch: { sequence: '4', graphSequence: '17' },
+    events: [{ data: { receipt: { id: f.input.envelope.receipt, metadata: { work: f.input.receipt.work } } } }] });
+  expect(f.sends()).toBe(1);
+  expect(await f.custody.read('epoch-a', '4')).toEqual(retained);
+});
+
+test('owner source refuses mismatched or corrupt indexed custody', async () => {
+  for (const [dataEpoch, sequence] of [['wrong-epoch', '4'], ['epoch-a', '5']] as const) {
+    const f = await fixture();
+    await f.custody.commit(f.input);
+    await f.custody.retire(f.input.envelope.receipt);
+    f.store.indexedReceipt = f.input.envelope.receipt;
+    await expect(f.custody.read(dataEpoch, sequence)).rejects.toBeInstanceOf(ObjectIntegrityError);
+    expect(f.sends()).toBe(1);
+  }
+  const corrupt = await fixture();
+  await corrupt.custody.commit(corrupt.input);
+  corrupt.store.indexedReceipt = corrupt.input.envelope.receipt;
+  corrupt.store.row = { ...corrupt.store.row!, terminal: {
+    ...corrupt.store.row!.terminal!, streamSequence: 'corrupt-index' } };
+  await expect(corrupt.custody.read('epoch-a', '4')).rejects.toBeInstanceOf(ObjectIntegrityError);
+});
+
+test('owner source refuses missing exact objects after proof retirement', async () => {
+  for (const missing of ['command', 'manifest', 'payload'] as const) {
+    const f = await fixture();
+    await f.custody.commit(f.input);
+    await f.custody.retire(f.input.envelope.receipt);
+    const manifest = JSON.parse(Buffer.from(await f.objects.get(f.input.manifest)).toString('utf8')) as { payload: string };
+    const digest = missing === 'command' ? f.store.row!.payloadSha256
+      : missing === 'manifest' ? f.input.manifest : manifest.payload.slice(7);
+    f.objects.bytes.delete(digest);
+    await expect(f.custody.read('epoch-a', '4')).rejects.toBeInstanceOf(ObjectUnavailable);
+    expect(f.sends()).toBe(1);
+  }
 });
 
 test('retirement refuses missing command, manifest or component payload bytes even after reconciliation', async () => {
@@ -203,14 +301,18 @@ test('retirement refuses missing command, manifest or component payload bytes ev
 
 test('mismatched proof cannot reconcile, sign retirement or overwrite a durable result', async () => {
   const f = await fixture(); await f.custody.commit(f.input);
-  f.setProof({ digest: f.input.envelope.digest, payloadSha256: hash('wrong object'), dataEpoch: 'epoch-a', sequence: '17' });
+  f.setProof({ digest: f.input.envelope.digest, payloadSha256: hash('wrong object'), dataEpoch: 'epoch-a', sequence: '17', streamSequence: '4' });
   await expect(f.custody.retire(f.input.envelope.receipt)).rejects.toThrow('differs from owner custody');
+  expect(f.retirements).toEqual([]);
+  f.setProof({ digest: f.input.envelope.digest, payloadSha256: f.store.row!.payloadSha256,
+    dataEpoch: 'epoch-a', sequence: '17', streamSequence: '5' });
+  await expect(f.custody.retire(f.input.envelope.receipt)).rejects.toThrow('Receipt position differs');
   expect(f.retirements).toEqual([]);
   const unresolved = await fixture(); unresolved.store.failReconcile = true;
   await expect(unresolved.custody.commit(unresolved.input)).rejects.toThrow();
   unresolved.store.failReconcile = false;
   unresolved.setProof({ digest: unresolved.input.envelope.digest, payloadSha256: unresolved.store.row!.payloadSha256,
-    dataEpoch: 'wrong-epoch', sequence: '17' });
+    dataEpoch: 'wrong-epoch', sequence: '17', streamSequence: '4' });
   await expect(unresolved.custody.resolve(unresolved.input.envelope.receipt)).rejects.toThrow('differs from owner custody');
   expect(unresolved.store.row?.terminal).toBeNull();
 });
@@ -220,7 +322,7 @@ test('custody rejects an exact object bound to another revision before dispatch'
   const manifest = await prepareWorkComponent(f.objects, f.input.component, {
     revision: 'https://rezics.com/id/00000000-0000-4000-8000-000000000099',
     intent: { work: f.input.receipt.work, expectedHead: null,
-      state: { kind: 'edition', id: f.input.component, status: 'active' } },
+      state: f.input.state },
   }, 'https://rezics.com/definition/work-metadata-details-v1');
   await expect(f.custody.commit({ ...f.input, manifest })).rejects.toThrow('Component payload binding differs');
   expect(f.sends()).toBe(0); expect(f.store.row?.reconciled).toBe(false);

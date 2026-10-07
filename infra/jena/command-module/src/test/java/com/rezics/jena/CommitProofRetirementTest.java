@@ -17,10 +17,13 @@ import org.junit.Test;
 
 public class CommitProofRetirementTest {
     private static CommandService.Retirement evidence(String payload, String sequence, boolean signed) throws Exception {
-        var evidence = new CommandService.Retirement(SlimCommandTest.RECEIPT, SlimCommandTest.DIGEST, payload, "test", sequence, "");
+        return evidence(payload, sequence, "1", signed);
+    }
+    private static CommandService.Retirement evidence(String payload, String sequence, String streamSequence, boolean signed) throws Exception {
+        var evidence = new CommandService.Retirement(SlimCommandTest.RECEIPT, SlimCommandTest.DIGEST, payload, "test", sequence, streamSequence, "");
         Mac mac = Mac.getInstance("HmacSHA256"); mac.init(new SecretKeySpec("3".repeat(64).getBytes(StandardCharsets.US_ASCII), "HmacSHA256"));
         return new CommandService.Retirement(evidence.receipt(), evidence.digest(), evidence.payloadSha256(), evidence.dataEpoch(),
-            evidence.sequence(), signed ? HexFormat.of().formatHex(mac.doFinal(CommandService.retirementPayload(evidence).getBytes(StandardCharsets.UTF_8))) : "0".repeat(64));
+            evidence.sequence(), evidence.streamSequence(), signed ? HexFormat.of().formatHex(mac.doFinal(CommandService.retirementPayload(evidence).getBytes(StandardCharsets.UTF_8))) : "0".repeat(64));
     }
     @Test public void retirementRequiresOwnerSignatureAndExactReconciledTupleAndIsIdempotent() throws Exception {
         var profiles = SlimCommandTest.profiles(); var service = SlimCommandTest.service(profiles); var data = SlimCommandTest.dataset();
@@ -30,15 +33,23 @@ public class CommitProofRetirementTest {
             assertEquals("invalid", service.retireProof(data, evidence("malformed", "1", true)).get("status"));
             assertEquals("conflict", service.retireProof(data, evidence("e".repeat(64), "1", true)).get("status"));
             assertEquals("conflict", service.retireProof(data, evidence(SlimCommandTest.PAYLOAD, "2", true)).get("status"));
-            data.begin(ReadWrite.READ); assertNotNull(CommandInvariant.commitProof(data, SlimCommandTest.RECEIPT)); data.end();
+            assertEquals("conflict", service.retireProof(data, evidence(SlimCommandTest.PAYLOAD, "1", "2", true)).get("status"));
+            assertEquals("invalid", service.retireProof(data, evidence(SlimCommandTest.PAYLOAD, "1", "0", true)).get("status"));
+            data.begin(ReadWrite.READ);
+            assertNotNull(CommandInvariant.commitProof(data, SlimCommandTest.RECEIPT));
+            assertEquals(6, org.apache.jena.atlas.iterator.Iter.count(data.find(SlimCommandTest.uri(CommandPolicy.RECEIPTS),
+                SlimCommandTest.uri(SlimCommandTest.RECEIPT), org.apache.jena.graph.Node.ANY, org.apache.jena.graph.Node.ANY)));
+            data.end();
             assertEquals("retired", service.retireProof(data, evidence(SlimCommandTest.PAYLOAD, "1", true)).get("status"));
             assertEquals("retired", service.retireProof(data, evidence(SlimCommandTest.PAYLOAD, "1", true)).get("status"));
-            data.begin(ReadWrite.READ); assertNull(CommandInvariant.commitProof(data, SlimCommandTest.RECEIPT)); data.end();
+            data.begin(ReadWrite.READ);
+            assertNull(CommandInvariant.commitProof(data, SlimCommandTest.RECEIPT));
+            assertEquals("1", SlimCommandTest.streamSequence(data)); data.end();
         } finally { data.close(); }
     }
     @Test public void ownerSignatureUsesTheSameCompactJsonTupleAsTheTypeScriptSigner() {
-        var evidence = new CommandService.Retirement("urn:test:receipt", "a".repeat(64), "b".repeat(64), "test", "1", "");
-        assertEquals("[\"rezics-commit-proof-retirement-v1\",\"urn:test:receipt\",\"" + "a".repeat(64) + "\",\"" + "b".repeat(64) + "\",\"test\",\"1\"]",
+        var evidence = new CommandService.Retirement("urn:test:receipt", "a".repeat(64), "b".repeat(64), "test", "1", "2", "");
+        assertEquals("[\"rezics-commit-proof-retirement-v1\",\"urn:test:receipt\",\"" + "a".repeat(64) + "\",\"" + "b".repeat(64) + "\",\"test\",\"1\",\"2\"]",
             CommandService.retirementPayload(evidence));
     }
     @Test public void anotherSignatureDomainCannotAuthorizeProofRetirement() throws Exception {
@@ -49,7 +60,7 @@ public class CommitProofRetirementTest {
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec("3".repeat(64).getBytes(StandardCharsets.US_ASCII), "HmacSHA256"));
             String otherDomain = CommandService.retirementPayload(valid).replace("rezics-commit-proof-retirement-v1", "rezics-title-admission-v1");
-            var forged = new CommandService.Retirement(valid.receipt(), valid.digest(), valid.payloadSha256(), valid.dataEpoch(), valid.sequence(),
+            var forged = new CommandService.Retirement(valid.receipt(), valid.digest(), valid.payloadSha256(), valid.dataEpoch(), valid.sequence(), valid.streamSequence(),
                 HexFormat.of().formatHex(mac.doFinal(otherDomain.getBytes(StandardCharsets.UTF_8))));
             assertEquals("invalid", service.retireProof(data, forged).get("status"));
             data.begin(ReadWrite.READ); assertNotNull(CommandInvariant.commitProof(data, SlimCommandTest.RECEIPT)); data.end();

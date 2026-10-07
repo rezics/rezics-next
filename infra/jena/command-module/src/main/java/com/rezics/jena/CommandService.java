@@ -144,11 +144,12 @@ final class CommandService extends ActionService {
                     respond(action, 403, Map.of("status", "forbidden")); return;
                 }
                 JsonObject evidence = body.get("retireProof").getAsObject();
-                if (evidence.size() != 6) throw new IllegalArgumentException("invalid retirement evidence");
+                if (evidence.size() != 7) throw new IllegalArgumentException("invalid retirement evidence");
                 Map<String, Object> result = retireProof(action.getDataService().getDataset(), new Retirement(
                     iri(ProfileRegistry.required(evidence, "receipt")), ProfileRegistry.required(evidence, "digest"),
                     ProfileRegistry.required(evidence, "payloadSha256"), ProfileRegistry.required(evidence, "dataEpoch"),
-                    ProfileRegistry.required(evidence, "sequence"), ProfileRegistry.required(evidence, "signature")));
+                    ProfileRegistry.required(evidence, "sequence"), ProfileRegistry.required(evidence, "streamSequence"),
+                    ProfileRegistry.required(evidence, "signature")));
                 respond(action, 200, result); return;
             }
             if (body.get("items") != null) {
@@ -306,7 +307,7 @@ final class CommandService extends ActionService {
 
     record Slim(String payloadSha256, String component, String revision) {}
     record Retirement(String receipt, String digest, String payloadSha256, String dataEpoch,
-                      String sequence, String signature) {}
+                      String sequence, String streamSequence, String signature) {}
 
     Map<String, Object> runCommand(DatasetGraph dataset, String receipt, String digest, String update,
                                   List<Validation> validations, long deadline) {
@@ -332,7 +333,8 @@ final class CommandService extends ActionService {
         // Main signs only after matching the durable owner receipt and exact object.
         // This is a domain-separated custody assertion, never a caller SPARQL delete.
         if (!evidence.digest().matches("[0-9a-f]{64}") || !evidence.payloadSha256().matches("[0-9a-f]{64}")
-            || evidence.dataEpoch().isEmpty() || !evidence.sequence().matches("[1-9][0-9]*"))
+            || evidence.dataEpoch().isEmpty() || !evidence.sequence().matches("[1-9][0-9]*")
+            || !evidence.streamSequence().matches("[1-9][0-9]*"))
             return invalid("owner custody reconciliation evidence is malformed");
         try {
             Mac mac = Mac.getInstance("HmacSHA256");
@@ -353,7 +355,7 @@ final class CommandService extends ActionService {
                 if (proof == null) return Map.of("status", dataset.contains(NodeFactory.createURI(CommandPolicy.RECEIPTS),
                     NodeFactory.createURI(evidence.receipt()), Node.ANY, Node.ANY) ? "conflict" : "retired");
                 if (!proof.equals(new CommandInvariant.CommitProof(evidence.digest(), evidence.payloadSha256(),
-                    evidence.dataEpoch(), evidence.sequence()))) return Map.of("status", "conflict");
+                    evidence.dataEpoch(), evidence.sequence(), evidence.streamSequence()))) return Map.of("status", "conflict");
                 tracksIndex = SearchDeltaJournal.canTrackCommit(dataset);
                 if (tracksIndex) {
                     publicSearchWriteEpoch.incrementAndGet();
@@ -377,7 +379,7 @@ final class CommandService extends ActionService {
     static String retirementPayload(Retirement evidence) {
         // Canonical compact JSON matches the owner signer; JSON quoting handles all IRI/epoch characters.
         return "[" + java.util.stream.Stream.of("rezics-commit-proof-retirement-v1", evidence.receipt(), evidence.digest(), evidence.payloadSha256(),
-            evidence.dataEpoch(), evidence.sequence()).map(CommandService::jsonString)
+            evidence.dataEpoch(), evidence.sequence(), evidence.streamSequence()).map(CommandService::jsonString)
             .collect(java.util.stream.Collectors.joining(",")) + "]";
     }
     private static String jsonString(String value) {
@@ -648,6 +650,8 @@ final class CommandService extends ActionService {
                 if (sink.contains(revisions, revision, Node.ANY, Node.ANY)) return invalid("slim revision is not fresh");
                 Node priorHead = exactlyOne(sink, current, component, "metadataHead");
                 Node priorWork = exactlyOne(sink, current, component, "work");
+                CommandInvariant.Control beforeControl = CommandInvariant.readControl(sink);
+                if (beforeControl == null || beforeControl.held()) return invalid("slim command requires active product lineage");
                 if (priorHead == null && sink.contains(current, component, NodeFactory.createURI(RV + "metadataHead"), Node.ANY)
                     || priorWork == null && sink.contains(current, component, NodeFactory.createURI(RV + "work"), Node.ANY))
                     return invalid("slim metadata CAS prestate is ambiguous");
@@ -697,6 +701,13 @@ final class CommandService extends ActionService {
                 List<Quad> publicFacts;
                 try { publicFacts = editionPublicFacts(staged, component, revision); }
                 catch (RuntimeException malformed) { return invalid("slim edition public state is invalid"); }
+                // The existing allocator stamped the temporary batch in this same
+                // overlay. Its stream control persists while graph outbox facts do not.
+                Node streamSequence = exactlyOne(staged, NodeFactory.createURI(CommandPolicy.CONTROL),
+                    NodeFactory.createURI(CommandInvariant.MAIN_STREAM_SCOPE), "streamSequence");
+                if (streamSequence == null || !streamSequence.isLiteral()
+                    || !streamSequence.getLiteralLexicalForm().matches("[1-9][0-9]*"))
+                    return invalid("slim command requires an exact Main stream position");
                 staged.apply();
                 dataset.deleteAny(current, component, Node.ANY, Node.ANY);
                 dataset.deleteAny(Quad.defaultGraphNodeGenerated, component, Node.ANY, Node.ANY);
@@ -709,7 +720,8 @@ final class CommandService extends ActionService {
                 dataset.add(Quad.defaultGraphNodeGenerated, component, NodeFactory.createURI(RV + "modelRevision"), model);
                 CommandInvariant.Control after = CommandInvariant.readControl(dataset);
                 CommandInvariant.writeCommitProof(dataset, receipt, new CommandInvariant.CommitProof(digest,
-                    slim.payloadSha256(), after.epoch().getLiteralLexicalForm(), after.sequence().toString()));
+                    slim.payloadSha256(), after.epoch().getLiteralLexicalForm(), after.sequence().toString(),
+                    streamSequence.getLiteralLexicalForm()));
                 if (delta != null) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
             }
             if (!"committed".equals(result.get("status"))) return result;
@@ -874,7 +886,7 @@ final class CommandService extends ActionService {
                 if (plan.bootstrap()) SearchDeltaJournal.initialize(dataset);
                 else SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1);
             }
-        String streamInvariant = slim ? null : CommandInvariant.advanceRelayStream(dataset, receipt, plan, before);
+        String streamInvariant = CommandInvariant.advanceRelayStream(dataset, receipt, plan, before);
         if (streamInvariant != null) return invalid(streamInvariant);
         return result;
     }

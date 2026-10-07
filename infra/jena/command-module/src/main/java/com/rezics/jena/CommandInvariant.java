@@ -106,7 +106,7 @@ final class CommandInvariant {
         return NodeFactory.createLiteralByValue(value, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger);
     }
 
-    record CommitProof(String digest, String payloadSha256, String dataEpoch, String sequence) {}
+    record CommitProof(String digest, String payloadSha256, String dataEpoch, String sequence, String streamSequence) {}
 
     static CommitProof commitProof(DatasetGraph data, String receipt) {
         Node own = uri(receipt);
@@ -115,14 +115,15 @@ final class CommandInvariant {
         Node payload = one(data, RECEIPTS, own, rv("payloadDigest"));
         Node epoch = one(data, RECEIPTS, own, rv("dataEpoch"));
         BigInteger sequence = number(one(data, RECEIPTS, own, rv("sequence")));
-        if (count(data, RECEIPTS, own, Node.ANY) != 5 || digest == null || !digest.isLiteral()
+        BigInteger streamSequence = number(one(data, RECEIPTS, own, rv("streamSequence")));
+        if (count(data, RECEIPTS, own, Node.ANY) != 6 || digest == null || !digest.isLiteral()
             || !digest.getLiteralLexicalForm().matches("[0-9a-f]{64}")
             || payload == null || !payload.isLiteral() || !payload.getLiteralLexicalForm().matches("[0-9a-f]{64}")
             || epoch == null || !epoch.isLiteral() || epoch.getLiteralLexicalForm().isEmpty()
-            || sequence == null || sequence.signum() <= 0)
+            || sequence == null || sequence.signum() <= 0 || streamSequence == null || streamSequence.signum() <= 0)
             throw new IllegalArgumentException("compact commit proof is incomplete");
         return new CommitProof(digest.getLiteralLexicalForm(), payload.getLiteralLexicalForm(),
-            epoch.getLiteralLexicalForm(), sequence.toString());
+            epoch.getLiteralLexicalForm(), sequence.toString(), streamSequence.toString());
     }
 
     static void writeCommitProof(DatasetGraph data, String receipt, CommitProof proof) {
@@ -132,6 +133,7 @@ final class CommandInvariant {
         data.add(RECEIPTS, own, rv("payloadDigest"), NodeFactory.createLiteralString(proof.payloadSha256()));
         data.add(RECEIPTS, own, rv("dataEpoch"), NodeFactory.createLiteralString(proof.dataEpoch()));
         data.add(RECEIPTS, own, rv("sequence"), integer(new BigInteger(proof.sequence())));
+        data.add(RECEIPTS, own, rv("streamSequence"), integer(new BigInteger(proof.streamSequence())));
     }
 
     static String preflight(DatasetGraph data, String receipt, CommandPolicy.Plan plan) {

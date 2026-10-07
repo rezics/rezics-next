@@ -24,7 +24,8 @@ import {
 import { readEpochOrder } from './lineage.ts';
 import { primaryDiscoveryCreditBatch, DISCOVERY_CREDIT_BATCH_COST } from './credits.ts';
 import type { Pool } from 'pg';
-import type { MainCloudEvent } from '../outbox/relay.ts';
+import type { DeliveredMainEvent } from '../outbox/relay.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
 import { FusekiQueryResponseTooLarge } from '../../infrastructure/fuseki.ts';
 import { DISCOVERY_DELTA_COST, type DiscoveryChanges } from './changes.ts';
 import { discoveryEventEffect, discoveryEventWorks, type DiscoveryEventInput } from './effects.ts';
@@ -64,13 +65,13 @@ export class DiscoveryRefreshInputs {
         routing_epoch: string;
         event_count: number;
         event_id: string | null;
-        envelope: MainCloudEvent | null;
+        envelope: DeliveredMainEvent | null;
       }>(
         `SELECT b.sequence::text,
         b.batch_id,b.routing_epoch,b.event_count,e.event_id,e.envelope
-      FROM relay.checkpoint c JOIN relay.delivered_batch b ON b.data_epoch=c.data_epoch
-      LEFT JOIN relay.delivered_event e ON e.data_epoch=b.data_epoch AND e.sequence=b.sequence
-      WHERE c.consumer=$1 AND c.data_epoch=$2 AND c.sequence >= $4::numeric
+      FROM relay.checkpoint c JOIN relay.delivered_batch b ON b.stream_scope=c.stream_scope AND b.data_epoch=c.data_epoch
+      LEFT JOIN relay.delivered_event e ON e.stream_scope=b.stream_scope AND e.data_epoch=b.data_epoch AND e.sequence=b.sequence
+      WHERE c.consumer=$1 AND c.stream_scope='${MAIN_RELAY_STREAM_SCOPE}' AND c.data_epoch=$2 AND c.sequence >= $4::numeric
         AND b.sequence > $3::numeric AND b.sequence <= $4::numeric
       ORDER BY b.sequence,e.event_id LIMIT $5`,
         [
@@ -137,6 +138,8 @@ export class DiscoveryRefreshInputs {
       const event = row.envelope,
         data = event?.data,
         receipt = data?.receipt;
+      const positionInStream = data?.relayPosition ?? (data?.sourcePosition
+        ? { ...data.sourcePosition, streamScope: MAIN_RELAY_STREAM_SCOPE } : undefined);
       if (
         !event ||
         !data ||
@@ -147,7 +150,8 @@ export class DiscoveryRefreshInputs {
         data.batchId !== row.batch_id ||
         data.routingEpoch !== row.routing_epoch ||
         data.sourcePosition?.dataEpoch !== position.dataEpoch ||
-        data.sourcePosition.sequence !== row.sequence
+        positionInStream?.streamScope !== MAIN_RELAY_STREAM_SCOPE ||
+        positionInStream.dataEpoch !== position.dataEpoch || positionInStream.sequence !== row.sequence
       )
         return null;
       const input = { ...receipt } as DiscoveryEventInput;

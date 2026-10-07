@@ -5,6 +5,7 @@ import type { Pool, PoolClient } from 'pg';
 import { accessOutboxCoverage, accessStateCoverage,
   scanAccessOutbox, scanAccessState } from './access-recovery-coverage.ts';
 import { relayCoverage, type RelayCoverage } from '../outbox/relay.ts';
+import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 import { assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
 import { assertAccountSubjectDeletionsAbsent } from
@@ -66,6 +67,44 @@ export interface AuthenticatedRecoveryCoverage {
 
 export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-coverage.ts';
 
+export interface GraphRecoverySource extends GraphLineage {
+  sequence: string;
+  relay: RelayHandoffPosition;
+}
+
+/** The diagnostic graph cut and Main's delivery cut share one source snapshot. */
+export async function readGraphRecoverySource(fuseki: FusekiClient): Promise<GraphRecoverySource> {
+  const result = await fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?epoch ?routing ?sequence ?streamEpoch ?streamSequence WHERE { GRAPH ${iri(GRAPHS.control)} {
+      ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:routingEpoch ?routing ; rv:sequence ?sequence .
+      ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:dataEpoch ?streamEpoch ; rv:streamSequence ?streamSequence .
+    } } LIMIT 2`);
+  const rows = result.results?.bindings ?? [];
+  const row = rows[0];
+  if (rows.length !== 1 || !row?.epoch || !row.routing || !row.sequence || !row.streamEpoch || !row.streamSequence
+    || row.streamEpoch.value !== row.epoch.value || !/^[0-9]+$/.test(row.sequence.value)
+    || !/^[0-9]+$/.test(row.streamSequence.value)) {
+    throw new RestoreLineageConflict('graph recovery source control is unavailable or ambiguous');
+  }
+  return { dataEpoch: row.epoch.value, routingEpoch: row.routing.value, sequence: row.sequence.value,
+    relay: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: row.streamEpoch.value, sequence: row.streamSequence.value } };
+}
+
+function validRecoveryRelayCut(relay: RelayCoverage, epoch: string): boolean {
+  return relay?.streamScope === MAIN_RELAY_STREAM_SCOPE && relay.dataEpoch === epoch
+    && /^[0-9]+$/.test(relay.sequence) && relay.batchCount === relay.sequence
+    && /^[0-9a-f]{64}$/.test(relay.batchDigest) && /^[0-9]+$/.test(relay.eventCount)
+    && /^[0-9a-f]{64}$/.test(relay.eventDigest);
+}
+
+/** All allocated Main positions must have reached the acknowledged relay cut. */
+export function assertGraphRecoveryRelayCut(source: GraphRecoverySource, relay: RelayCoverage): void {
+  if (!validRecoveryRelayCut(relay, source.dataEpoch) || source.relay.streamScope !== MAIN_RELAY_STREAM_SCOPE
+    || source.relay.dataEpoch !== source.dataEpoch || source.relay.sequence !== relay.sequence) {
+    throw new RestoreLineageConflict('source graph or relay moved during recovery capture');
+  }
+}
+
 /** Capture only after Account, graph and relay writers are externally quiesced. */
 export async function captureGraphRecoveryCoverage(
   fuseki: FusekiClient, accountPool: Pool, accessPool: Pool,
@@ -78,7 +117,7 @@ export async function captureGraphRecoveryCoverage(
   if (fence.rows[0]?.open !== false) {
     throw new RestoreLineageConflict('Access recovery fence must be held for capture');
   }
-  const before = await control(fuseki);
+  const before = await readGraphRecoverySource(fuseki);
   await assertGraphAdmissionOpen(fuseki, {
     dataEpoch: before.dataEpoch, routingEpoch: before.routingEpoch,
   });
@@ -93,10 +132,10 @@ export async function captureGraphRecoveryCoverage(
   const relay = await relayCoverage(relayPool, consumer);
   await assertAccountSubjectDeletionsAbsent(accountPool, relayPool);
   await assertAccountDeletionJournalCoverage(accessPool, relayPool);
-  const after = await control(fuseki);
+  const after = await readGraphRecoverySource(fuseki);
+  assertGraphRecoveryRelayCut(before, relay);
   if (before.dataEpoch !== after.dataEpoch || before.routingEpoch !== after.routingEpoch
-    || before.sequence !== after.sequence || relay.dataEpoch !== before.dataEpoch
-    || relay.sequence !== before.sequence || relay.batchCount !== before.sequence) {
+    || before.sequence !== after.sequence || before.relay.sequence !== after.relay.sequence) {
     throw new RestoreLineageConflict('source graph or relay moved during recovery capture');
   }
   // A second checkout of a pool that this capture already holds deadlocks a
@@ -106,7 +145,7 @@ export async function captureGraphRecoveryCoverage(
     (async () => [await capturePgRecoveryFrontier(accountPool), await accountRecoveryCoverage(accountPool)] as const)(),
     relayCoverage(relayPool, consumer),
   ]);
-  const final = await control(fuseki);
+  const final = await readGraphRecoverySource(fuseki);
   const graphReferencesAfter = await graphContentReferences(fuseki);
   const contentAfter = await captureContentRecoveryCoverage(contentPool, graphReferencesAfter);
   const commerceAfter = await captureCommerceRecoveryCoverage(accessPool);
@@ -122,7 +161,7 @@ export async function captureGraphRecoveryCoverage(
   const moved = [
     fenceAfter.rows[0]?.open !== false ? 'Access fence' : null,
     before.dataEpoch !== final.dataEpoch || before.routingEpoch !== final.routingEpoch
-      || before.sequence !== final.sequence ? 'graph control' : null,
+      || before.sequence !== final.sequence || before.relay.sequence !== final.relay.sequence ? 'graph control' : null,
     outbox.count !== outboxAfter.count || outbox.digest !== outboxAfter.digest
       ? 'Access outbox' : null,
     state.count !== stateAfter.count || state.digest !== stateAfter.digest
@@ -288,16 +327,8 @@ export async function cutoverRestoredGraphLineage(
   return { lineage: next, sequence: '0', replayed: false };
 }
 
-/** Release only after an independently retained authority/receipt frontier is compared. */
-export async function releaseRestoredGraphHold(
-  fuseki: FusekiClient, accessPool: Pool, relayPool: Pool,
-  lineage: GraphLineage, evidence: AuthenticatedRecoveryCoverage,
-  relayClient?: PoolClient,
-): Promise<void> {
-  let coverage: RecoveryCoverage;
-  try { coverage = openRecoveryPayload<RecoveryCoverage>(
-    evidence?.sealedCoverage, evidence?.hmacKey, 'graph-recovery-coverage'); }
-  catch { throw new RestoreLineageConflict('recovery coverage envelope is invalid'); }
+/** Signed coverage retains independent diagnostic and scoped relay cuts. */
+export function assertRecoveryCoverage(coverage: RecoveryCoverage): void {
   if (!coverage || !/^[0-9]+$/.test(coverage.priorSequence)
     || !/^[0-9]+$/.test(coverage.accountPg?.systemIdentifier ?? '')
     || !/^[0-9A-F]+\/[0-9A-F]+$/i.test(coverage.accountPg?.flushedLsn ?? '')
@@ -309,14 +340,32 @@ export async function releaseRestoredGraphHold(
     || !/^[0-9]+$/.test(coverage.accessStateCount)
     || !/^[0-9a-f]{64}$/.test(coverage.accessStateDigest)
     || !coverage.commerce || coverage.commerce.version !== 1
-    || !coverage.relay || coverage.relay.dataEpoch !== coverage.priorDataEpoch
-    || coverage.relay.sequence !== coverage.priorSequence
-    || coverage.relay.batchCount !== coverage.priorSequence
-    || !/^[0-9a-f]{64}$/.test(coverage.relay.batchDigest)
-    || !/^[0-9]+$/.test(coverage.relay.eventCount)
-    || !/^[0-9a-f]{64}$/.test(coverage.relay.eventDigest)) {
+    || !validRecoveryRelayCut(coverage.relay, coverage.priorDataEpoch)) {
     throw new RestoreLineageConflict('invalid recovery coverage');
   }
+}
+
+export function assertRetainedRecoveryRelayCut(coverage: RecoveryCoverage, retained: RelayCoverage): void {
+  if (!validRecoveryRelayCut(retained, coverage.priorDataEpoch)
+    || retained.streamScope !== coverage.relay.streamScope || retained.consumer !== coverage.relay.consumer
+    || retained.sequence !== coverage.relay.sequence || retained.batchCount !== coverage.relay.batchCount
+    || retained.batchDigest !== coverage.relay.batchDigest || retained.eventCount !== coverage.relay.eventCount
+    || retained.eventDigest !== coverage.relay.eventDigest) {
+    throw new RestoreLineageConflict('relay handoff differs from recovery coverage');
+  }
+}
+
+/** Release only after an independently retained authority/receipt frontier is compared. */
+export async function releaseRestoredGraphHold(
+  fuseki: FusekiClient, accessPool: Pool, relayPool: Pool,
+  lineage: GraphLineage, evidence: AuthenticatedRecoveryCoverage,
+  relayClient?: PoolClient,
+): Promise<void> {
+  let coverage: RecoveryCoverage;
+  try { coverage = openRecoveryPayload<RecoveryCoverage>(
+    evidence?.sealedCoverage, evidence?.hmacKey, 'graph-recovery-coverage'); }
+  catch { throw new RestoreLineageConflict('recovery coverage envelope is invalid'); }
+  assertRecoveryCoverage(coverage);
   const client = await accessPool.connect();
   let relayHeadClient: PoolClient | undefined;
   const borrowedRelay = relayClient !== undefined;
@@ -349,14 +398,7 @@ export async function releaseRestoredGraphHold(
     let retainedRelay: RelayCoverage;
     try { retainedRelay = await relayCoverage(relayPool, coverage.relay.consumer, relayClient); }
     catch { throw new RestoreLineageConflict('relay checkpoint or delivered events are unavailable'); }
-    if (retainedRelay.dataEpoch !== coverage.priorDataEpoch
-      || retainedRelay.sequence !== coverage.priorSequence
-      || retainedRelay.batchCount !== coverage.relay.batchCount
-      || retainedRelay.batchDigest !== coverage.relay.batchDigest
-      || retainedRelay.eventCount !== coverage.relay.eventCount
-      || retainedRelay.eventDigest !== coverage.relay.eventDigest) {
-      throw new RestoreLineageConflict('relay handoff differs from recovery coverage');
-    }
+    assertRetainedRecoveryRelayCut(coverage, retainedRelay);
     relayHeadClient = relayClient ?? await relayPool.connect();
     await relayHeadClient.query('BEGIN');
     await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");

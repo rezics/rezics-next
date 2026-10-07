@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <!-- The only definition of the command-module version: the jar reports it through
        module.properties, and yarn gen copies it into the TypeScript constant and image tag. -->
-  <groupId>com.rezics</groupId><artifactId>fuseki-command</artifactId><version>0.5.38</version>
+  <groupId>com.rezics</groupId><artifactId>fuseki-command</artifactId><version>0.5.39</version>
   <properties><maven.compiler.release>21</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
   <dependencies>
     <dependency><groupId>org.apache.jena</groupId><artifactId>jena-fuseki-main</artifactId><version>6.2.0</version><scope>provided</scope></dependency>

@@ -276,6 +276,13 @@ export interface MainOutboxBatch {
   sequence: string;
   routingEpoch: string;
   eventIds: string[];
+  /** Full receipt/event custody replaces the graph batch for this native position. */
+  custodiedReceipt?: string;
+}
+
+export interface CustodiedOutbox { batch: MainOutboxBatch; events: DeliveredMainEvent[] }
+export interface CustodiedOutboxSource {
+  read(dataEpoch: string, streamSequence: string): Promise<CustodiedOutbox | null>;
 }
 
 export interface MainCloudEvent {
@@ -415,6 +422,7 @@ function decimal(value: string): bigint {
 /** One bounded source batch; each query uses the same wrapped Fuseki dataset. */
 export async function readNextMainOutboxBatch(
   fuseki: FusekiClient, dataEpoch: string, afterSequence: string,
+  ownerOutbox?: CustodiedOutboxSource,
 ): Promise<MainOutboxBatch | null> {
   const after = decimal(afterSequence);
   const next = after + 1n;
@@ -454,7 +462,20 @@ export async function readNextMainOutboxBatch(
   const highWater = decimal(row.controlSequence!.value);
   if (after > highWater) throw new OutboxGap('checkpoint exceeds source position');
   if (!row.batch || !row.eventCount) {
-    if (highWater > after) throw new OutboxGap('retained outbox batch is missing');
+    if (highWater > after) {
+      const retained = await ownerOutbox?.read(dataEpoch, next.toString());
+      if (retained) {
+        const batch = retained.batch;
+        if (batch.streamScope !== MAIN_RELAY_STREAM_SCOPE || batch.dataEpoch !== dataEpoch
+          || batch.sequence !== next.toString() || batch.routingEpoch !== row.routing!.value
+          || !batch.custodiedReceipt || batch.eventIds.length !== 1
+          || retained.events.length !== 1 || retained.events[0]?.id !== batch.eventIds[0]) {
+          throw new OutboxIncomplete('custodied outbox differs from the native stream position');
+        }
+        return batch;
+      }
+      throw new OutboxGap('retained outbox batch is missing');
+    }
     return null;
   }
   if (highWater < next) throw new OutboxGap('outbox batch exceeds source position');
@@ -823,9 +844,28 @@ async function fixedReleaseEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch
 export async function readMainOutboxEnvelope(fuseki: FusekiClient, batch: MainOutboxBatch,
   eventId: string,
   handlerFor: (kind: string) => OwnerOutboxEventHandler | undefined = ownerOutboxEventHandler,
+  ownerOutbox?: CustodiedOutboxSource,
 ): Promise<DeliveredMainEvent> {
   if (batch.streamScope !== undefined && batch.streamScope !== MAIN_RELAY_STREAM_SCOPE) {
     throw new OutboxIncomplete('outbox batch stream differs');
+  }
+  if (batch.custodiedReceipt) {
+    const retained = await ownerOutbox?.read(batch.dataEpoch, batch.sequence);
+    const event = retained?.events.find(event => event.id === eventId);
+    if (!retained || !event || retained.batch.custodiedReceipt !== batch.custodiedReceipt
+      || retained.batch.batchId !== batch.batchId || retained.batch.routingEpoch !== batch.routingEpoch
+      || retained.batch.graphSequence !== batch.graphSequence
+      || JSON.stringify(retained.batch.eventIds) !== JSON.stringify(batch.eventIds)
+      || event.data.batchId !== batch.batchId || event.data.routingEpoch !== batch.routingEpoch
+      || event.data.receipt.id !== batch.custodiedReceipt
+      || event.data.sourcePosition.datasetId !== 'product'
+      || event.data.sourcePosition.dataEpoch !== batch.dataEpoch
+      || event.data.sourcePosition.sequence !== batch.graphSequence
+      || event.data.relayPosition?.streamScope !== MAIN_RELAY_STREAM_SCOPE
+      || event.data.relayPosition.dataEpoch !== batch.dataEpoch || event.data.relayPosition.sequence !== batch.sequence) {
+      throw new OutboxIncomplete('custodied event differs from its retained native batch');
+    }
+    return event;
   }
   const event = await readMainOutboxGraphEnvelope(fuseki,
     { ...batch, sequence: batch.graphSequence ?? batch.sequence }, eventId, handlerFor);
@@ -1669,17 +1709,17 @@ export async function initializeRelayCheckpoint(pool: Pool, consumer: string, da
 /** At least once handoff: a crash after delivery repeats the batch safely. */
 export async function relayMainOutboxOnce(
   fuseki: FusekiClient, pool: Pool, consumer: string,
-  hooks?: { afterDelivery?: (batch: MainOutboxBatch) => Promise<void> },
+  hooks?: { afterDelivery?: (batch: MainOutboxBatch) => Promise<void>; ownerOutbox?: CustodiedOutboxSource },
 ): Promise<MainOutboxBatch | null> {
   const checkpoint = await pool.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
     'SELECT stream_scope, data_epoch, sequence FROM relay.checkpoint WHERE consumer = $1', [consumer]);
   const cursor = checkpoint.rows[0];
   if (!cursor) throw new RelayCheckpointConflict('relay checkpoint is uninitialized');
   if (cursor.stream_scope !== MAIN_RELAY_STREAM_SCOPE) throw new RelayCheckpointConflict('relay checkpoint stream differs');
-  const batch = await readNextMainOutboxBatch(fuseki, cursor.data_epoch, cursor.sequence);
+  const batch = await readNextMainOutboxBatch(fuseki, cursor.data_epoch, cursor.sequence, hooks?.ownerOutbox);
   if (!batch) return null;
   const events = await Promise.all(batch.eventIds.map(async eventId => {
-    try { return await readMainOutboxEnvelope(fuseki, batch, eventId); }
+    try { return await readMainOutboxEnvelope(fuseki, batch, eventId, undefined, hooks?.ownerOutbox); }
     catch (error) {
       if (isRelayTransientFailure(error)) throw error;
       throw new RelayEventBlocked(batch, eventId,

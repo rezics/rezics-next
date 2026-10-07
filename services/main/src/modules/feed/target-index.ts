@@ -9,6 +9,7 @@ import { feedWorkAuthors, followIdentities } from './presentation.ts';
 import { AUTHOR_NEWS_KINDS } from './presentation.ts';
 import type { FeedCheckpoint } from './store.ts';
 import { refreshReadRankingAdmissions } from './ranking-admission.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
 
 const BATCH = 20;
 interface Reference { id: string; kind: string; group_key: string; work: string | null }
@@ -41,8 +42,9 @@ export class FeedTargetIndex {
     if (position.sequence === through && position.after_event === '￿') return false;
     const events = (await this.relay.query<{ sequence: string; event_id: string; work: string | null; type: string }>(`
       SELECT sequence::text,event_id,envelope->>'type' AS type,
-        COALESCE(envelope#>>'{data,receipt,work}',envelope#>>'{data,payload,work}',envelope#>>'{data,work}') AS work
-      FROM relay.delivered_event WHERE data_epoch=$1 AND sequence<=$2
+        COALESCE(envelope#>>'{data,receipt,work}',envelope#>>'{data,receipt,metadata,work}',
+          envelope#>>'{data,payload,work}',envelope#>>'{data,work}') AS work
+      FROM relay.delivered_event WHERE stream_scope='${MAIN_RELAY_STREAM_SCOPE}' AND data_epoch=$1 AND sequence<=$2
         AND (sequence>$3::numeric OR sequence=$3::numeric AND $4<>'￿' AND event_id>$4)
         ORDER BY sequence,event_id LIMIT $5`,
     [epoch,through,position.sequence,position.after_event,BATCH])).rows;

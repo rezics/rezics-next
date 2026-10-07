@@ -4,6 +4,9 @@ import { CommandOutcomeUnknown, CommandRejected, type CommandEnvelope, type Comm
   type FusekiClient } from '../../infrastructure/fuseki.ts';
 import { ObjectIntegrityError, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import type { ProofRetirement } from '../graph/slim-command.ts';
+import type { MetadataEditionState, MetadataEditionStateV2 } from '../work/metadata-schema.ts';
+import type { CustodiedOutbox, CustodiedOutboxSource, MainOutboxBatch } from './relay.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from './relay-position.ts';
 
 const RV = 'https://rezics.com/vocab/';
 const RECEIPTS = 'urn:rezics:graph:receipts';
@@ -18,7 +21,7 @@ const nativeIri = (value: string) => {
 
 export interface CustodiedReceipt {
   outcome: 'succeeded'; receipt: string; admissionId: string; requestDigest: string;
-  authorityEpoch: string; scope: string; dataEpoch: string; sequence: string;
+  authorityEpoch: string; scope: string; dataEpoch: string; sequence: string; streamSequence: string;
   work: string; component: string; revision: string;
   predecessor?: string;
 }
@@ -28,7 +31,8 @@ export interface SlimEnvelope extends CommandEnvelope {
 export interface PreparedCommand {
   format: 'rezics-owner-command-v1'; envelope: CommandEnvelope;
   component: string; revision: string; manifest: string;
-  receipt: Omit<CustodiedReceipt, 'sequence'>;
+  routingEpoch: string; state: MetadataEditionState | MetadataEditionStateV2;
+  receipt: Omit<CustodiedReceipt, 'sequence' | 'streamSequence'>;
 }
 export interface CustodyRow {
   receipt: string; requestDigest: string; payloadSha256: string; payload: Uint8Array;
@@ -42,6 +46,7 @@ export interface ReceiptCustodySession {
   retire(): Promise<void>;
 }
 export interface ReceiptCustodyStore {
+  receiptAt(dataEpoch: string, streamSequence: string): Promise<string | null>;
   /** Serialize preparation, dispatch, reconciliation and retirement for one receipt across processes. */
   withReceipt<T>(receipt: string, operation: (session: ReceiptCustodySession) => Promise<T>): Promise<T>;
 }
@@ -49,6 +54,11 @@ export interface ReceiptCustodyStore {
 /** Session locks survive each durable statement: preparation is committed BEFORE the graph request. */
 export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
   constructor(private readonly pool: Pool) {}
+  async receiptAt(dataEpoch: string, streamSequence: string): Promise<string | null> {
+    const rows = (await this.pool.query<{ receipt: string }>(`SELECT receipt FROM access.command_custody
+      WHERE data_epoch = $1 AND stream_sequence = $2`, [dataEpoch, streamSequence])).rows;
+    return rows[0]?.receipt ?? null;
+  }
   async withReceipt<T>(receipt: string, operation: (session: ReceiptCustodySession) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     let locked = false;
@@ -85,8 +95,9 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
         }),
         reconcile: (terminal, outbox) => durable(async () => {
           const updated = await client.query(`UPDATE access.command_custody SET terminal = $2, outbox = $3,
+            data_epoch = $4, stream_sequence = $5,
             reconciled_at = clock_timestamp() WHERE receipt = $1 AND terminal IS NULL`,
-          [receipt, JSON.stringify(terminal), JSON.stringify(outbox)]);
+          [receipt, JSON.stringify(terminal), JSON.stringify(outbox), terminal.dataEpoch, terminal.streamSequence]);
           if (updated.rowCount !== 1) throw new Error('Custody reconciliation lost its prepared command');
         }),
         retire: async () => {
@@ -105,13 +116,14 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
   }
 }
 
-interface CommitProof { digest: string; payloadSha256: string; dataEpoch: string; sequence: string }
+interface CommitProof { digest: string; payloadSha256: string; dataEpoch: string; sequence: string; streamSequence: string }
+type CustodiedOutboxRecord = Omit<MainOutboxBatch, 'eventIds'> & { eventCount: number; events: CustodiedOutbox['events'] };
 const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, member: unknown) =>
   member && typeof member === 'object' && !Array.isArray(member)
     ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a.localeCompare(b))) : member);
 
 /** Extends the existing receipt path; the graph proof is never the only copy of command intent. */
-export class ReceiptCustody {
+export class ReceiptCustody implements CustodiedOutboxSource {
   constructor(private readonly store: ReceiptCustodyStore, private readonly objects: ImmutableObjects,
     private readonly fuseki: Pick<FusekiClient, 'query'>, private readonly retirementKey: string,
     private readonly sendRetirement: (evidence: ProofRetirement) => Promise<void>) {
@@ -124,7 +136,8 @@ export class ReceiptCustody {
     if (value.format !== 'rezics-owner-command-v1' || value.envelope.receipt !== row.receipt
       || value.envelope.digest !== row.requestDigest || value.receipt.receipt !== row.receipt
       || value.receipt.requestDigest !== row.requestDigest || value.revision !== row.revision
-      || value.receipt.revision !== row.revision || value.receipt.component !== value.component) {
+      || value.receipt.revision !== row.revision || value.receipt.component !== value.component
+      || !value.routingEpoch || value.state?.kind !== 'edition' || value.state.id !== value.component) {
       throw new ObjectIntegrityError('Prepared command binding differs');
     }
     return value;
@@ -157,11 +170,13 @@ export class ReceiptCustody {
     const component = JSON.parse(Buffer.from(payload).toString('utf8')) as {
       format: string; component: string;
       state?: { revision?: string; intent?: { work?: string; expectedHead?: string | null;
-        state?: { kind?: string; id?: string } } };
+        state?: MetadataEditionState | MetadataEditionStateV2 } };
     };
     if (component.format !== 'rezics-component-v1' || component.component !== prepared.component
       || component.state?.revision !== prepared.revision || component.state.intent?.work !== prepared.receipt.work
       || component.state.intent.state?.kind !== 'edition' || component.state.intent.state.id !== prepared.component
+      || canonicalJson(component.state.intent.state) !== canonicalJson(prepared.state)
+      || (manifest.model.endsWith('-v2')) !== ('contentLanguages' in prepared.state)
       || (prepared.receipt.predecessor !== undefined
         && (component.state.intent.expectedHead ?? prepared.component) !== prepared.receipt.predecessor)) {
       throw new ObjectIntegrityError('Component payload binding differs from the prepared command');
@@ -170,16 +185,17 @@ export class ReceiptCustody {
   }
 
   private async proof(receipt: string): Promise<CommitProof | null> {
-    const rows = (await this.fuseki.query(`PREFIX rv: <${RV}> SELECT ?digest ?payload ?epoch ?sequence WHERE {
+    const rows = (await this.fuseki.query(`PREFIX rv: <${RV}> SELECT ?digest ?payload ?epoch ?sequence ?streamSequence WHERE {
       GRAPH <${RECEIPTS}> { ${nativeIri(receipt)} a rv:CommitProof ; rv:requestDigest ?digest ;
-        rv:payloadDigest ?payload ; rv:dataEpoch ?epoch ; rv:sequence ?sequence }
+        rv:payloadDigest ?payload ; rv:dataEpoch ?epoch ; rv:sequence ?sequence ; rv:streamSequence ?streamSequence }
     } LIMIT 2`, 4096)).results?.bindings ?? [];
     if (!rows.length) return null;
     const row = rows[0]!;
     if (rows.length !== 1 || !row.digest || !row.payload || !row.epoch || !row.sequence
+      || !row.streamSequence || !/^[1-9][0-9]{0,99}$/.test(row.streamSequence.value)
       || !/^[1-9][0-9]*$/.test(row.sequence.value)) throw new ObjectIntegrityError('Commit proof is ambiguous');
     return { digest: row.digest.value, payloadSha256: row.payload.value,
-      dataEpoch: row.epoch.value, sequence: row.sequence.value };
+      dataEpoch: row.epoch.value, sequence: row.sequence.value, streamSequence: row.streamSequence.value };
   }
 
   private matched(row: CustodyRow, prepared: PreparedCommand, proof: CommitProof) {
@@ -187,23 +203,33 @@ export class ReceiptCustody {
       || proof.dataEpoch !== prepared.receipt.dataEpoch) throw new ObjectIntegrityError('Commit proof differs from owner custody');
   }
 
-  private outbox(row: CustodyRow, prepared: PreparedCommand, terminal: CustodiedReceipt): Record<string, unknown> {
+  private outbox(row: CustodyRow, prepared: PreparedCommand, terminal: CustodiedReceipt): CustodiedOutboxRecord {
     const revised = prepared.envelope.validations.some(validation => validation.profile === 'work-metadata-details-v2');
     const batchId = `urn:rezics:outbox:${sha256(row.receipt)}`;
-    return { batchId, streamScope: 'urn:rezics:stream:owner:work-metadata',
-      sourcePosition: { datasetId: DATASET, dataEpoch: terminal.dataEpoch, sequence: terminal.sequence },
+    return { batchId, streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: terminal.dataEpoch,
+      sequence: terminal.streamSequence, graphSequence: terminal.sequence, routingEpoch: prepared.routingEpoch,
       eventCount: 1, events: [{ specversion: '1.0', id: `urn:rezics:event:${sha256(row.receipt)}`,
         source: 'https://rezics.com/services/main',
         type: revised ? 'com.rezics.work.metadata-revised.v1' : 'com.rezics.work.metadata-changed.v1',
-        datacontenttype: 'application/json', data: { receipt: terminal, manifest: prepared.manifest,
-          payloadSha256: row.payloadSha256, ordinal: 0, action: 'work.edit' } }] };
+        datacontenttype: 'application/json', data: { batchId, routingEpoch: prepared.routingEpoch, ordinal: 0,
+          sourcePosition: { datasetId: 'product', dataEpoch: terminal.dataEpoch, sequence: terminal.sequence },
+          relayPosition: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: terminal.dataEpoch,
+            sequence: terminal.streamSequence },
+          receipt: { id: terminal.receipt, action: 'work.edit', outcome: terminal.outcome,
+            admissionId: terminal.admissionId, requestDigest: terminal.requestDigest,
+            authorityEpoch: terminal.authorityEpoch, scope: terminal.scope,
+            ...revised && 'contentLanguages' in prepared.state ? { work: terminal.work, component: terminal.component,
+              revision: terminal.revision, contentLanguages: prepared.state.contentLanguages }
+              : { metadata: { work: terminal.work, component: terminal.component, revision: terminal.revision,
+                manifest: `urn:rezics:sha256:${prepared.manifest.replace(/^urn:rezics:sha256:/, '')}` } },
+          } } }] };
   }
 
   private async reconcile(row: CustodyRow, session: ReceiptCustodySession): Promise<CustodiedReceipt | null> {
     if (row.reconciled) {
       if (!row.terminal || !row.outbox) throw new ObjectIntegrityError('Reconciled owner receipt is incomplete');
       const prepared = this.prepared(row);
-      if (!/^[1-9][0-9]*$/.test(row.terminal.sequence)
+      if (!/^[1-9][0-9]*$/.test(row.terminal.sequence) || !/^[1-9][0-9]{0,99}$/.test(row.terminal.streamSequence)
         || Object.entries(prepared.receipt).some(([key, value]) =>
           row.terminal![key as keyof CustodiedReceipt] !== value)
         || canonicalJson(row.outbox) !== canonicalJson(this.outbox(row, prepared, row.terminal))) {
@@ -215,7 +241,7 @@ export class ReceiptCustody {
     if (!proof) return null;
     const prepared = await this.exactObject(row);
     this.matched(row, prepared, proof);
-    const terminal = { ...prepared.receipt, sequence: proof.sequence };
+    const terminal = { ...prepared.receipt, sequence: proof.sequence, streamSequence: proof.streamSequence };
     const outbox = this.outbox(row, prepared, terminal);
     await session.reconcile(terminal, outbox);
     return terminal;
@@ -226,6 +252,38 @@ export class ReceiptCustody {
     return this.store.withReceipt(receipt, async session => {
       const row = await session.read();
       return row ? this.reconcile(row, session) : null;
+    });
+  }
+
+  /** The existing relay probes one indexed owner position; an interrupted
+   * reconciliation resolves the exact native proof before the handoff proceeds. */
+  async read(dataEpoch: string, streamSequence: string): Promise<CustodiedOutbox | null> {
+    if (!dataEpoch || !/^[1-9][0-9]{0,99}$/.test(streamSequence)) throw new ObjectIntegrityError('Invalid owner outbox position');
+    let receipt = await this.store.receiptAt(dataEpoch, streamSequence);
+    if (!receipt) {
+      const rows = (await this.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt WHERE {
+        GRAPH <${RECEIPTS}> { ?receipt a rv:CommitProof ; rv:dataEpoch ${JSON.stringify(dataEpoch)} ;
+          rv:streamSequence ${streamSequence} }
+      } LIMIT 2`, 4096)).results?.bindings ?? [];
+      if (rows.length > 1 || rows.length === 1 && !rows[0]?.receipt) throw new ObjectIntegrityError('Owner proof position is ambiguous');
+      receipt = rows[0]?.receipt?.value ?? null;
+    }
+    if (!receipt) return null;
+    nativeIri(receipt);
+    return this.store.withReceipt(receipt, async session => {
+      const row = await session.read();
+      if (!row) return null;
+      const terminal = await this.reconcile(row, session);
+      if (!terminal) return null;
+      if (terminal.dataEpoch !== dataEpoch || terminal.streamSequence !== streamSequence) {
+        throw new ObjectIntegrityError('Custodied outbox position differs');
+      }
+      const prepared = await this.exactObject(row);
+      const retained = this.outbox(row, prepared, terminal);
+      return { batch: { batchId: retained.batchId, streamScope: MAIN_RELAY_STREAM_SCOPE,
+        dataEpoch, sequence: streamSequence, graphSequence: terminal.sequence,
+        routingEpoch: prepared.routingEpoch, eventIds: retained.events.map(event => event.id), custodiedReceipt: receipt },
+        events: retained.events };
     });
   }
 
@@ -247,7 +305,9 @@ export class ReceiptCustody {
     nativeIri(input.envelope.receipt); nativeIri(input.component); nativeIri(input.revision);
     if (input.receipt.outcome !== 'succeeded' || input.receipt.receipt !== input.envelope.receipt
       || input.receipt.requestDigest !== input.envelope.digest || input.receipt.component !== input.component
-      || input.receipt.revision !== input.revision || !/^[0-9a-f]{64}$/.test(input.envelope.digest)) {
+      || input.receipt.revision !== input.revision || !input.routingEpoch
+      || input.state.kind !== 'edition' || input.state.id !== input.component
+      || !/^[0-9a-f]{64}$/.test(input.envelope.digest)) {
       throw new ObjectIntegrityError('Slim command receipt binding differs');
     }
     return this.store.withReceipt(input.envelope.receipt, async session => {
@@ -300,13 +360,16 @@ export class ReceiptCustody {
       const proof = await this.proof(receipt);
       if (proof) {
         this.matched(row, prepared, proof);
-        if (proof.sequence !== row.terminal.sequence) throw new ObjectIntegrityError('Receipt position differs');
+        if (proof.sequence !== row.terminal.sequence || proof.streamSequence !== row.terminal.streamSequence) {
+          throw new ObjectIntegrityError('Receipt position differs');
+        }
       }
       const fields = ['rezics-commit-proof-retirement-v1', receipt, row.requestDigest,
-        row.payloadSha256, row.terminal.dataEpoch, row.terminal.sequence];
+        row.payloadSha256, row.terminal.dataEpoch, row.terminal.sequence, row.terminal.streamSequence];
       const signature = createHmac('sha256', this.retirementKey).update(JSON.stringify(fields)).digest('hex');
       await this.sendRetirement({ receipt, digest: row.requestDigest, payloadSha256: row.payloadSha256,
-        dataEpoch: row.terminal.dataEpoch, sequence: row.terminal.sequence, signature });
+        dataEpoch: row.terminal.dataEpoch, sequence: row.terminal.sequence,
+        streamSequence: row.terminal.streamSequence, signature });
       await session.retire();
     });
   }

@@ -2,7 +2,7 @@ import { CommandOutcomeUnknown } from '../../infrastructure/fuseki.ts';
 
 export interface ProofRetirement {
   receipt: string; digest: string; payloadSha256: string; dataEpoch: string;
-  sequence: string; signature: string;
+  sequence: string; streamSequence: string; signature: string;
 }
 
 /** The existing native command endpoint owns proof deletion; arbitrary SPARQL cannot retire it. */

@@ -23,6 +23,14 @@ public class SlimCommandTest {
     static final String MODEL = "https://rezics.com/definition/work-metadata-details-v1";
     static Node uri(String value) { return NodeFactory.createURI(value); }
     static Node rv(String value) { return uri(RV + value); }
+    static String streamSequence(DatasetGraph data) {
+        var rows = data.find(uri(CommandPolicy.CONTROL), uri(CommandInvariant.MAIN_STREAM_SCOPE), rv("streamSequence"), Node.ANY);
+        try {
+            if (!rows.hasNext()) return null;
+            String result = rows.next().getObject().getLiteralLexicalForm();
+            assertFalse("Main stream head is ambiguous", rows.hasNext()); return result;
+        } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
     static ProfileRegistry profiles() { return ProfileRegistry.load(java.nio.file.Files.isRegularFile(Path.of("profiles/manifest.json"))
         ? Path.of("profiles") : Path.of("../../../generated/model")); }
     static CommandService service(ProfileRegistry profiles) {
@@ -113,14 +121,15 @@ public class SlimCommandTest {
             new CommandService.Slim(PAYLOAD, COMPONENT, next), validations(profiles, next),
             System.nanoTime() + 30_000_000_000L);
     }
-    @Test public void slimKeepsPublicDefaultFactsFiveQuadProofAndSameLostResponseReceipt() {
+    @Test public void slimKeepsPublicDefaultFactsSixQuadProofAndSameLostResponseReceipt() {
         ProfileRegistry profiles = profiles(); var service = service(profiles); var data = dataset();
         try {
             var first = run(service, data, profiles, RECEIPT, OLD, NEW, 0);
             assertEquals(first.toString(), "committed", first.get("status"));
             assertEquals(first, run(service, data, profiles, RECEIPT, OLD, NEW, 0));
             data.begin(ReadWrite.READ);
-            assertEquals(5, org.apache.jena.atlas.iterator.Iter.count(data.find(uri(CommandPolicy.RECEIPTS), uri(RECEIPT), Node.ANY, Node.ANY)));
+            assertEquals(6, org.apache.jena.atlas.iterator.Iter.count(data.find(uri(CommandPolicy.RECEIPTS), uri(RECEIPT), Node.ANY, Node.ANY)));
+            assertEquals("1", CommandInvariant.commitProof(data, RECEIPT).streamSequence());
             assertFalse(data.contains(uri(CommandPolicy.CURRENT), uri(COMPONENT), Node.ANY, Node.ANY));
             assertTrue(data.contains(Quad.defaultGraphNodeGenerated, uri(COMPONENT), rv("metadataHead"), uri(NEW)));
             assertTrue(data.contains(Quad.defaultGraphNodeGenerated, uri(COMPONENT), rv("manifest"), uri("urn:rezics:sha256:" + "d".repeat(64))));
@@ -134,7 +143,7 @@ public class SlimCommandTest {
             assertEquals(1, org.apache.jena.atlas.iterator.Iter.count(data.find(uri(CommandPolicy.CURRENT), uri(WORK), rv("editionsRevision"), Node.ANY)));
             assertFalse(data.contains(uri(CommandPolicy.REVISIONS), uri(NEW), Node.ANY, Node.ANY));
             assertFalse(data.contains(uri(CommandPolicy.OUTBOX), Node.ANY, Node.ANY, Node.ANY));
-            assertFalse(data.contains(uri(CommandPolicy.CONTROL), uri(CommandInvariant.MAIN_STREAM_SCOPE), Node.ANY, Node.ANY));
+            assertEquals("1", streamSequence(data));
             data.end();
             assertEquals("conflict", service.runSlim(data, RECEIPT, DIGEST, update(RECEIPT, OLD, NEW, 0),
                 new CommandService.Slim("e".repeat(64), COMPONENT, NEW), validations(profiles, NEW), System.nanoTime() + 30_000_000_000L).get("status"));
@@ -145,6 +154,8 @@ public class SlimCommandTest {
             assertFalse(data.contains(uri(CommandPolicy.CURRENT), uri(WORK), rv("editionsRevision"), uri(NEW)));
             assertFalse(data.contains(uri(CommandPolicy.CURRENT), uri(WORK), rv("editionsRevision"), uri(OLD)));
             assertEquals(1, org.apache.jena.atlas.iterator.Iter.count(data.find(uri(CommandPolicy.CURRENT), uri(WORK), rv("editionsRevision"), Node.ANY)));
+            assertEquals("2", streamSequence(data));
+            assertEquals("2", CommandInvariant.commitProof(data, RECEIPT + ":second").streamSequence());
             data.end();
         } finally { data.close(); }
     }
@@ -161,6 +172,56 @@ public class SlimCommandTest {
             assertFalse(data.contains(Quad.defaultGraphNodeGenerated, uri(COMPONENT), uri("https://schema.org/name"), Node.ANY));
             assertFalse(data.contains(Quad.defaultGraphNodeGenerated, uri(COMPONENT), uri("https://schema.org/isbn"), Node.ANY));
             assertTrue(data.contains(Quad.defaultGraphNodeGenerated, uri(COMPONENT), rv("manifest"), Node.ANY));
+            data.end();
+        } finally { data.close(); }
+    }
+    @Test public void slimAndNormalCommandsShareContiguousMainPositionsAcrossDiagnosticGaps() {
+        ProfileRegistry profiles = profiles(); var service = service(profiles); var data = dataset();
+        try {
+            assertEquals("committed", run(service, data, profiles, RECEIPT, OLD, NEW, 0).get("status"));
+            // An unrelated owner's diagnostic movement does not publish in Main's stream.
+            data.begin(ReadWrite.WRITE);
+            data.deleteAny(uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), rv("sequence"), Node.ANY);
+            data.add(uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), rv("sequence"),
+                NodeFactory.createLiteralByValue(900, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+            data.commit(); data.end();
+            String receipt = RECEIPT + ":after-gap", next = NEW + "5";
+            assertEquals("guard-unmatched", run(service, data, profiles, receipt, NEW, next, 1).get("status"));
+            var second = run(service, data, profiles, receipt, NEW, next, 900);
+            assertEquals("committed", second.get("status"));
+            assertEquals(Map.of("datasetId", "urn:rezics:dataset:product", "dataEpoch", "test", "sequence", "901"), second.get("position"));
+            data.begin(ReadWrite.READ);
+            assertEquals("2", streamSequence(data));
+            assertEquals("2", CommandInvariant.commitProof(data, receipt).streamSequence());
+            assertFalse(data.contains(uri(CommandPolicy.OUTBOX), Node.ANY, Node.ANY, Node.ANY)); data.end();
+            String normalReceipt = RECEIPT + ":normal", batch = normalReceipt + ":batch";
+            String normal = """
+                PREFIX rv: <https://rezics.com/vocab/>
+                DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?n } }
+                INSERT {
+                  GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?next }
+                  GRAPH <urn:rezics:graph:receipts> { <%s> a rv:OperationReceipt ; rv:outcome rv:Cancelled ;
+                    rv:requestDigest "%s" ; rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch "test" ; rv:sequence ?next }
+                  GRAPH <urn:rezics:graph:outbox> { <%s> a rv:OutboxBatch ; rv:dataEpoch "test" ; rv:sequence ?next ; rv:eventCount 0 }
+                } WHERE {
+                  GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch "test" ; rv:routingEpoch "0" ; rv:sequence ?n }
+                  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:receipts> { <%s> ?p ?o } }
+                  BIND(?n + 1 AS ?next)
+                }
+                """.formatted(normalReceipt, DIGEST, batch, normalReceipt);
+            assertEquals("committed", service.runCommand(data, normalReceipt, DIGEST, normal, List.of(), System.nanoTime() + 30_000_000_000L).get("status"));
+            assertEquals(second, run(service, data, profiles, receipt, NEW, next, 900));
+            data.begin(ReadWrite.READ);
+            assertEquals("3", streamSequence(data));
+            assertTrue(data.contains(uri(CommandPolicy.OUTBOX), uri(batch), rv("streamSequence"),
+                NodeFactory.createLiteralByValue(3, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger)));
+            assertEquals("2", CommandInvariant.commitProof(data, receipt).streamSequence()); data.end();
+            String thirdReceipt = RECEIPT + ":third", third = NEW + "6";
+            assertEquals("committed", run(service, data, profiles, thirdReceipt, next, third, 902).get("status"));
+            data.begin(ReadWrite.READ);
+            assertEquals("4", streamSequence(data));
+            assertEquals("4", CommandInvariant.commitProof(data, thirdReceipt).streamSequence());
+            assertFalse(data.contains(uri(CommandPolicy.OUTBOX), uri(thirdReceipt + ":batch"), Node.ANY, Node.ANY));
             data.end();
         } finally { data.close(); }
     }
@@ -230,7 +291,8 @@ public class SlimCommandTest {
             assertFalse(data.contains(Quad.defaultGraphNodeGenerated, Node.ANY, Node.ANY, Node.ANY));
             assertFalse(data.contains(uri(CommandPolicy.RECEIPTS), Node.ANY, Node.ANY, Node.ANY));
             assertFalse(data.contains(uri(CommandPolicy.REVISIONS), uri(NEW), Node.ANY, Node.ANY));
-            assertEquals("0", CommandInvariant.readControl(data).sequence().toString()); data.end();
+            assertEquals("0", CommandInvariant.readControl(data).sequence().toString());
+            assertNull(streamSequence(data)); data.end();
         } finally { data.close(); }
     }
     @Test public void compactSuccessRequiresSuccessfulReceiptAndExactRevisionCasPosition() {
@@ -257,6 +319,7 @@ public class SlimCommandTest {
                 assertEquals("0", CommandInvariant.readControl(data).sequence().toString());
                 assertTrue(data.contains(uri(CommandPolicy.CURRENT), uri(COMPONENT), rv("metadataHead"), uri(OLD)));
                 assertNull(CommandInvariant.commitProof(data, RECEIPT));
+                assertNull(streamSequence(data));
                 assertFalse(data.contains(Quad.defaultGraphNodeGenerated, Node.ANY, Node.ANY, Node.ANY));
                 data.end();
             } finally { data.close(); }
@@ -350,8 +413,10 @@ public class SlimCommandTest {
             data.begin(ReadWrite.READ);
             assertEquals("0", CommandInvariant.readControl(data).sequence().toString());
             assertFalse(data.contains(Quad.defaultGraphNodeGenerated, Node.ANY, Node.ANY, Node.ANY));
-            assertNull(CommandInvariant.commitProof(data, RECEIPT)); data.end();
+            assertNull(CommandInvariant.commitProof(data, RECEIPT));
+            assertNull(streamSequence(data)); data.end();
             assertEquals("committed", run(service, data, profiles, RECEIPT, OLD, NEW, 0).get("status"));
+            data.begin(ReadWrite.READ); assertEquals("1", streamSequence(data)); data.end();
         } finally { data.close(); }
     }
     @Test public void concurrentCommandsAtOneCasPositionCommitExactlyOne() throws Exception {
