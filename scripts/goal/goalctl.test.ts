@@ -7,11 +7,11 @@ import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { TmuxLauncher, processIdentity, tmuxServer, type LaunchDescriptor } from './coordinator.ts';
-import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
-  goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
+import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
+  goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, inheritedSharedLifecycleOwnership, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
-  qaWaitStatusLines, shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, unitFailureDetails, unitFileErrorDetails, withSlot,
+  qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, withRecovery, withSlot,
   mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 
@@ -2212,6 +2212,174 @@ describe('heavy QA lock', () => {
     };
   }
 
+  test('shared refresh starts while an isolated browser run owns the heavy lock', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'lifecycle-beside-browser-'));
+    const heavy = join(root, 'heavy');
+    const lifecycle = join(root, 'shared-lifecycle');
+    try {
+      const releaseBrowser = await acquireHeavy(['browser'], { lockDir: heavy, bindExit: false });
+      const releaseRefresh = await acquireSharedLifecycle(['task', 'dev:refresh'], { lockDir: lifecycle, bindExit: false,
+        sleep: () => Promise.reject(new Error('refresh waited for browser')) });
+      expect(heavyQaStatus(heavy)).toContain('browser');
+      expect(sharedLifecycleStatus(lifecycle)).toContain('task dev:refresh');
+      releaseRefresh();
+      expect(existsSync(heavy)).toBe(true);
+      releaseBrowser();
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('pending shared lifecycle is admitted before queued heavy QA without preempting its holder', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'lifecycle-admission-'));
+    const heavy = join(root, 'heavy');
+    const lifecycle = join(root, 'shared-lifecycle');
+    const qaGate = gatedSleep();
+    const refreshGate = gatedSleep();
+    const alive = () => true;
+    try {
+      const releaseBrowser = await acquireHeavy(['browser'], { lockDir: heavy, alive, bindExit: false });
+      const qaSleeping = qaGate.next();
+      const nextBrowser = acquireHeavy(['next-browser'], { lockDir: heavy, alive, bindExit: false, pid: 1001,
+        sleep: () => qaGate.sleep() });
+      await qaSleeping;
+      const releaseRepair = await acquireSharedLifecycle(['repair'], { lockDir: lifecycle, alive, bindExit: false });
+      const refreshSleeping = refreshGate.next();
+      const refresh = acquireSharedLifecycle(['task', 'dev:refresh'], { lockDir: lifecycle, alive, goal: 'program', bindExit: false, pid: 1002,
+        sleep: () => refreshGate.sleep() });
+      await refreshSleeping;
+      expect(heavyQaStatus(heavy, alive)).toContain('browser');
+      expect(sharedLifecycleWaiters(lifecycle, alive)).toEqual([
+        'Shared lifecycle waiting: Goal program (pid 1002): task dev:refresh',
+      ]);
+      releaseBrowser();
+      releaseRepair();
+      // The lifecycle holder released but its queued refresh has not polled yet.
+      let slept = qaGate.next();
+      qaGate.wake();
+      await slept;
+      expect(existsSync(heavy)).toBe(false);
+      refreshGate.wake();
+      const releaseRefresh = await refresh;
+      slept = qaGate.next();
+      qaGate.wake();
+      await slept;
+      expect(existsSync(heavy)).toBe(false);
+      releaseRefresh();
+      qaGate.wake();
+      (await nextBrowser)();
+      expect(sharedLifecycleStatus(lifecycle, alive)).toBe('free; 0 waiting');
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('repair takes no QA slot or heavy lease and does not reap isolated stacks', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'recovery-without-qa-'));
+    const slots = join(root, 'qa-slots');
+    const heavy = join(slots, 'heavy');
+    const lifecycle = join(root, 'shared-lifecycle');
+    try {
+      for (const path of [heavy, ...[0, 1, 2].map(slot => join(slots, String(slot)))]) {
+        mkdirSync(path, { recursive: true });
+        writeFileSync(join(path, 'pid'), String(process.pid));
+        writeFileSync(join(path, 'marker'), 'QA owns this');
+      }
+      const code = await withRecovery(['repair-stack'], { slotDirectory: slots, heavyLockDirectory: heavy,
+        lifecycleLockDirectory: lifecycle, slots: 0, reap: () => { throw new Error('repair reaped QA stacks'); },
+        runCommand: async (command, env, onStart) => {
+          expect(command).toEqual(['repair-stack']);
+          expect(env.GOAL_SHARED_LIFECYCLE).toBe('1');
+          expect(inheritedSharedLifecycleOwnership(lifecycle, env)?.pid).toBe(process.pid);
+          for (const key of ['GOAL_IN_SLOT', 'GOAL_QA_HEAVY_RUN', 'GOAL_QA_SLOT_DIRECTORY', 'GOAL_QA_WAIT_DIR', 'GOAL_QA_COMMAND']) {
+            expect(env[key]).toBeUndefined();
+          }
+          expect(sharedLifecycleStatus(lifecycle)).toContain('command not started');
+          onStart();
+          expect(sharedLifecycleStatus(lifecycle)).toContain('command started');
+          for (const path of [heavy, ...[0, 1, 2].map(slot => join(slots, String(slot)))]) {
+            expect(readFileSync(join(path, 'marker'), 'utf8')).toBe('QA owns this');
+          }
+          return 7;
+        } });
+      expect(code).toBe(7);
+      expect(existsSync(lifecycle)).toBe(false);
+      expect(existsSync(join(slots, 'waiters'))).toBe(false);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('a failed repair releases the lifecycle lock', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'recovery-failure-'));
+    const lockDir = join(root, 'shared-lifecycle');
+    try {
+      await expect(withRecovery(['repair'], { lifecycleLockDirectory: lockDir,
+        runCommand: () => Promise.reject(new Error('repair failed')) })).rejects.toThrow('repair failed');
+      expect(sharedLifecycleStatus(lockDir)).toBe('free; 0 waiting');
+      const release = await acquireSharedLifecycle(['retry'], { lockDir, bindExit: false });
+      release();
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('the staged child keeps the lifecycle lease after its launcher dies and old cleanup cannot erase another lease', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'lifecycle-transfer-'));
+    const lockDir = join(root, 'shared-lifecycle');
+    const deadParent = unusedPid();
+    try {
+      const parentRelease = await acquireSharedLifecycle(['task', 'dev:refresh'], { lockDir,
+        pid: deadParent, alive: () => true, bindExit: false });
+      const childRelease = transferSharedLifecycleOwnership(lockDir, process.pid, deadParent);
+      // An old directory is still held by its transferred, live child, even with a dead launcher.
+      utimesSync(lockDir, new Date(0), new Date(0));
+      parentRelease();
+      expect(readFileSync(join(lockDir, 'pid'), 'utf8')).toBe(String(process.pid));
+      expect(sharedLifecycleStatus(lockDir)).toContain(`(pid ${process.pid})`);
+      let clock = 0;
+      await expect(acquireSharedLifecycle(['repair'], { lockDir, bindExit: false, now: () => clock, deadline: 1,
+        sleep: async () => { clock = 2; }, announce: () => {} })).rejects.toThrow('shared lifecycle lock stayed held');
+      expect(sharedLifecycleWaiters(lockDir)).toEqual([]);
+      childRelease();
+      const nextRelease = await acquireSharedLifecycle(['next-repair'], { lockDir, bindExit: false });
+      parentRelease();
+      childRelease();
+      expect(sharedLifecycleStatus(lockDir)).toContain('next-repair');
+      nextRelease();
+      expect(sharedLifecycleStatus(lockDir)).toBe('free; 0 waiting');
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('nested lifecycle context rejects stale leases and locks from another checkout', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'lifecycle-inherited-'));
+    const lockDir = join(root, 'shared-lifecycle');
+    try {
+      expect(inheritedSharedLifecycleOwnership(lockDir, {})).toBeUndefined();
+      const release = await acquireSharedLifecycle(['repair'], { lockDir, bindExit: false });
+      const env = sharedLifecycleEnvironment(lockDir);
+      expect(inheritedSharedLifecycleOwnership(lockDir, env)?.pid).toBe(process.pid);
+      expect(() => inheritedSharedLifecycleOwnership(join(root, 'different'), env)).toThrow('another lock');
+      release();
+      const nextRelease = await acquireSharedLifecycle(['another-repair'], { lockDir, bindExit: false });
+      expect(() => inheritedSharedLifecycleOwnership(lockDir, env)).toThrow('stale');
+      expect(() => transferSharedLifecycleOwnership(lockDir, process.pid, unusedPid())).toThrow('changed');
+      nextRelease();
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('an external repair child owns the lease and accepts the inherited caller context', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'recovery-child-owner-'));
+    const lockDir = join(root, 'shared-lifecycle');
+    const seen = join(root, 'owner.json');
+    try {
+      const code = await withRecovery(['bun', '-e', `
+        import { writeFileSync } from 'node:fs';
+        import { inheritedSharedLifecycleOwnership } from ${JSON.stringify(join(import.meta.dir, 'goalctl.ts'))};
+        const inherited = inheritedSharedLifecycleOwnership(${JSON.stringify(lockDir)});
+        if (inherited?.pid !== process.pid) throw new Error('repair child does not own its lease');
+        writeFileSync(${JSON.stringify(seen)}, JSON.stringify({ pid: process.pid, caller: process.ppid }));
+      `], { lifecycleLockDirectory: lockDir });
+      expect(code).toBe(0);
+      const owner = JSON.parse(readFileSync(seen, 'utf8')) as { pid: number; caller: number };
+      expect(owner.pid).not.toBe(process.pid);
+      expect(owner.caller).toBe(process.pid);
+      expect(sharedLifecycleStatus(lockDir)).toBe('free; 0 waiting');
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
   test('refresh precedes round-robin Goals and each Goal keeps its arrival order', async () => {
     const root = mkdtempSync(join(tmpdir(), 'heavy-goal-turns-'));
     const lockDir = join(root, 'heavy');
@@ -2254,41 +2422,41 @@ describe('heavy QA lock', () => {
   });
 
   test('a second queued refresh coalesces immediately without releasing the holder', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'heavy-refresh-coalesce-'));
-    const lockDir = join(root, 'heavy');
+    const root = mkdtempSync(join(tmpdir(), 'lifecycle-refresh-coalesce-'));
+    const lockDir = join(root, 'shared-lifecycle');
     const gate = gatedSleep();
     const options = { lockDir, alive: () => true, bindExit: false, coalesceRefresh: true };
     try {
-      const releaseHolder = await acquireHeavy(['holder'], { ...options, coalesceRefresh: false });
+      const releaseHolder = await acquireSharedLifecycle(['holder'], { ...options, coalesceRefresh: false });
       const sleeping = gate.next();
-      const first = acquireHeavy(['task', 'dev:refresh'], { ...options, pid: 1001, sleep: () => gate.sleep() });
+      const first = acquireSharedLifecycle(['task', 'dev:refresh'], { ...options, pid: 1001, sleep: () => gate.sleep() });
       await sleeping;
-      const second = await acquireHeavy(['task', 'dev:refresh'], { ...options, pid: 1002,
+      const second = await acquireSharedLifecycle(['task', 'dev:refresh'], { ...options, pid: 1002,
         sleep: () => Promise.reject(new Error('duplicate refresh waited')) });
       expect(second).toBeUndefined();
-      expect(ticketRows(join(root, 'heavy-queue'))).toHaveLength(1);
+      expect(ticketRows(join(root, 'shared-lifecycle-queue'))).toHaveLength(1);
       expect(JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')).command).toBe('holder');
       releaseHolder();
       gate.wake();
       (await first)!();
-      expect(ticketRows(join(root, 'heavy-queue'))).toEqual([]);
+      expect(ticketRows(join(root, 'shared-lifecycle-queue'))).toEqual([]);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 
   test('a started refresh cannot absorb a later refresh', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'heavy-refresh-started-'));
-    const lockDir = join(root, 'heavy');
+    const root = mkdtempSync(join(tmpdir(), 'lifecycle-refresh-started-'));
+    const lockDir = join(root, 'shared-lifecycle');
     const gate = gatedSleep();
     const options = { lockDir, alive: () => true, bindExit: false, coalesceRefresh: true };
     try {
-      const first = await acquireHeavy(['task', 'dev:refresh'], { ...options, pid: 1001 });
+      const first = await acquireSharedLifecycle(['task', 'dev:refresh'], { ...options, pid: 1001 });
       const sleeping = gate.next();
       let secondStarted = false;
-      const second = acquireHeavy(['task', 'dev:refresh'], { ...options, pid: 1002, sleep: () => gate.sleep() })
+      const second = acquireSharedLifecycle(['task', 'dev:refresh'], { ...options, pid: 1002, sleep: () => gate.sleep() })
         .then(release => { secondStarted = true; return release; });
       await sleeping;
       expect(secondStarted).toBe(false);
-      expect(ticketRows(join(root, 'heavy-queue'))).toHaveLength(1);
+      expect(ticketRows(join(root, 'shared-lifecycle-queue'))).toHaveLength(1);
       first!();
       gate.wake();
       (await second)!();

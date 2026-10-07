@@ -2830,6 +2830,8 @@ async function status(): Promise<void> {
   for (const account of codexAccounts()) console.log(describeAccount(account));
   console.log(`heavy QA: ${heavyQaStatus()}`);
   for (const waiting of heavyQaWaiters()) console.log(waiting);
+  console.log(`shared lifecycle: ${sharedLifecycleStatus()}`);
+  for (const waiting of sharedLifecycleWaiters()) console.log(waiting);
   for (const waiting of qaWaitStatusLines()) console.log(waiting);
   const active = activeGoals(ledger);
   for (const slug of active) {
@@ -2875,10 +2877,11 @@ export function reapStaleQaStacks(now = Date.now(), maxAgeMs = 3 * 3_600_000): s
 }
 
 const heavyLock = join(stateDir, 'qa-slots', 'heavy');
+const sharedLifecycleLock = join(stateDir, 'shared-lifecycle');
 const HEAVY_POLL_MS = 10_000;
 const HEAVY_DEADLINE_MS = 6 * 3_600_000;
 
-interface HeavyTicket {
+interface CommandTicket {
   pid: number;
   goal?: string;
   command?: string;
@@ -2888,11 +2891,11 @@ interface HeavyTicket {
 }
 
 /** Beside the lock, not inside it: releasing the lock deletes the lock directory, and later waiters must keep their tickets. */
-function heavyQueueDir(lockDir: string): string {
+function commandQueueDir(lockDir: string): string {
   return join(dirname(lockDir), `${basename(lockDir)}-queue`);
 }
 
-function heavyGoalTurns(queueDir: string): string[] {
+function commandGoalTurns(queueDir: string): string[] {
   try {
     const turns: unknown = JSON.parse(readFileSync(join(queueDir, 'turns'), 'utf8'));
     return Array.isArray(turns) ? turns.filter((goal): goal is string => typeof goal === 'string') : [];
@@ -2900,15 +2903,15 @@ function heavyGoalTurns(queueDir: string): string[] {
 }
 
 /** Live tickets: shared refresh first, then Goals in turn order, FIFO within a Goal. Dead or unordered tickets are removed. */
-function heavyTickets(queueDir: string, alive: (pid: number) => boolean): { path: string; ticket: HeavyTicket }[] {
+function commandTickets(queueDir: string, alive: (pid: number) => boolean): { path: string; ticket: CommandTicket }[] {
   let names: string[];
   try { names = readdirSync(queueDir); } catch { return []; }
-  const live: { path: string; ticket: HeavyTicket }[] = [];
+  const live: { path: string; ticket: CommandTicket }[] = [];
   for (const name of names) {
     if (!name.endsWith('.json')) continue;
     const path = join(queueDir, name);
     try {
-      const ticket = JSON.parse(readFileSync(path, 'utf8')) as HeavyTicket;
+      const ticket = JSON.parse(readFileSync(path, 'utf8')) as CommandTicket;
       if (typeof ticket?.pid !== 'number' || typeof ticket.arrivedAt !== 'number' || !alive(ticket.pid)) {
         rmSync(path, { force: true });
         continue;
@@ -2917,9 +2920,9 @@ function heavyTickets(queueDir: string, alive: (pid: number) => boolean): { path
     } catch { rmSync(path, { force: true }); }
   }
   // Refresh repairs the shared stack for every Goal. It gets the next turn, never the holder’s turn.
-  const priority = (ticket: HeavyTicket) => ticket.command === 'task dev:refresh' ? 0 : 1;
-  const turns = heavyGoalTurns(queueDir);
-  const turn = (ticket: HeavyTicket) => priority(ticket) === 0 ? -1 : turns.indexOf(ticket.goal ?? '?');
+  const priority = (ticket: CommandTicket) => ticket.command === 'task dev:refresh' ? 0 : 1;
+  const turns = commandGoalTurns(queueDir);
+  const turn = (ticket: CommandTicket) => priority(ticket) === 0 ? -1 : turns.indexOf(ticket.goal ?? '?');
   live.sort((a, b) => priority(a.ticket) - priority(b.ticket) || turn(a.ticket) - turn(b.ticket)
     || a.ticket.arrivedAt - b.ticket.arrivedAt
     || (a.ticket.seq ?? '').localeCompare(b.ticket.seq ?? '')
@@ -2929,7 +2932,7 @@ function heavyTickets(queueDir: string, alive: (pid: number) => boolean): { path
 }
 
 /** Who holds the heavy QA lock, or undefined when it is free (a dead holder's lock is free). */
-function heavyHolder(lockDir = heavyLock, alive: (pid: number) => boolean = pidAlive): string | undefined {
+function commandHolder(lockDir = heavyLock, alive: (pid: number) => boolean = pidAlive): string | undefined {
   try {
     const info = JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')) as
       { pid: number; goal?: string; command: string; startedAt: string; commandStartedAt?: string | null };
@@ -2941,13 +2944,22 @@ function heavyHolder(lockDir = heavyLock, alive: (pid: number) => boolean = pidA
 
 /** Holder text as before, plus how many live tickets are waiting. Reading the queue drops tickets of dead pids. */
 export function heavyQaStatus(lockDir = heavyLock, alive: (pid: number) => boolean = pidAlive): string {
-  const waiting = heavyTickets(heavyQueueDir(lockDir), alive).length;
-  return `${heavyHolder(lockDir, alive) ?? 'free'}; ${waiting} waiting`;
+  const waiting = commandTickets(commandQueueDir(lockDir), alive).length;
+  return `${commandHolder(lockDir, alive) ?? 'free'}; ${waiting} waiting`;
 }
 
 export function heavyQaWaiters(lockDir = heavyLock, alive: (pid: number) => boolean = pidAlive): string[] {
-  return heavyTickets(heavyQueueDir(lockDir), alive).map(({ ticket }) =>
+  return commandTickets(commandQueueDir(lockDir), alive).map(({ ticket }) =>
     `QA waiting for heavy turn: Goal ${ticket.goal ?? '?'} (pid ${ticket.pid}): ${ticket.command ?? 'QA command'}`);
+}
+
+export function sharedLifecycleStatus(lockDir = sharedLifecycleLock, alive: (pid: number) => boolean = pidAlive): string {
+  return `${commandHolder(lockDir, alive) ?? 'free'}; ${commandTickets(commandQueueDir(lockDir), alive).length} waiting`;
+}
+
+export function sharedLifecycleWaiters(lockDir = sharedLifecycleLock, alive: (pid: number) => boolean = pidAlive): string[] {
+  return commandTickets(commandQueueDir(lockDir), alive).map(({ ticket }) =>
+    `Shared lifecycle waiting: Goal ${ticket.goal ?? '?'} (pid ${ticket.pid}): ${ticket.command ?? 'lifecycle command'}`);
 }
 
 export interface QaWaitStatus {
@@ -2983,7 +2995,7 @@ export function qaWaitStatusLines(qaSlotsDir = join(stateDir, 'qa-slots'), alive
 }
 
 /** `process.exit` from a signal still runs the exit hook, which is the one place a waiting ticket is removed without `finally`. */
-function bindHeavyTicketCleanup(remove: () => void): () => void {
+function bindCommandTicketCleanup(remove: () => void): () => void {
   const onExit = () => remove();
   const onSignal = (signal: NodeJS.Signals) => {
     process.off('SIGHUP', onSignal);
@@ -3005,6 +3017,8 @@ function bindHeavyTicketCleanup(remove: () => void): () => void {
 
 export interface HeavyWaitOptions {
   lockDir?: string;
+  /** Lifecycle takes the next admission turn while existing isolated QA is allowed to finish. */
+  lifecycleLockDir?: string;
   pid?: number;
   goal?: string;
   now?: () => number;
@@ -3022,15 +3036,30 @@ export interface HeavyWaitOptions {
 
 /** Heavy runs (affected sets, whole tiers, wave and browser suites) are host-wide exclusive: two managers' waves
  * together would put four or more QA stacks beside the workers, past what a 62 GB host held on 2026-09-27/28. A heavy
- * run still takes an ordinary slot, so the host carries at most one heavy run and two light ones, as with one manager.
+ * run owns only its heavy lease; bounded light runs use the ordinary slots independently.
  * The lock belongs to the process and is freed when it exits, so no manager has to remember to release it.
  * Waiters poll, so a run that starts at the moment the lock frees would otherwise cut in front of one that has been
  * waiting. Tickets preserve FIFO within each Goal, with a shared rotation preventing one Goal's backlog from starving peers. */
 export function acquireHeavy(command: readonly string[], options?: HeavyWaitOptions & { coalesceRefresh?: false }): Promise<() => void>;
 export function acquireHeavy(command: readonly string[], options: HeavyWaitOptions & { coalesceRefresh: boolean }): Promise<(() => void) | undefined>;
 export async function acquireHeavy(command: readonly string[], options: HeavyWaitOptions = {}): Promise<(() => void) | undefined> {
-  const lockDir = options.lockDir ?? heavyLock;
-  const queueDir = heavyQueueDir(lockDir);
+  return acquireQueuedCommand(command, options, 'heavy QA');
+}
+
+export type SharedLifecycleWaitOptions = Omit<HeavyWaitOptions, 'lifecycleLockDir'>;
+
+/** Shared-stack mutation has its own lease. Existing isolated QA can keep running while refresh or repair starts. */
+export function acquireSharedLifecycle(command: readonly string[], options?: SharedLifecycleWaitOptions & { coalesceRefresh?: false }): Promise<() => void>;
+export function acquireSharedLifecycle(command: readonly string[], options: SharedLifecycleWaitOptions & { coalesceRefresh: boolean }): Promise<(() => void) | undefined>;
+export async function acquireSharedLifecycle(command: readonly string[], options: SharedLifecycleWaitOptions = {}): Promise<(() => void) | undefined> {
+  return acquireQueuedCommand(command, options, 'shared lifecycle');
+}
+
+async function acquireQueuedCommand(command: readonly string[], options: HeavyWaitOptions,
+  kind: 'heavy QA' | 'shared lifecycle'): Promise<(() => void) | undefined> {
+  const lockDir = options.lockDir ?? (kind === 'heavy QA' ? heavyLock : sharedLifecycleLock);
+  const lifecycleLockDir = options.lifecycleLockDir ?? (options.lockDir ? join(dirname(lockDir), 'shared-lifecycle') : sharedLifecycleLock);
+  const queueDir = commandQueueDir(lockDir);
   const pid = options.pid ?? process.pid;
   const goal = options.goal ?? process.env.GOAL_ID;
   const now = options.now ?? Date.now;
@@ -3048,16 +3077,16 @@ export async function acquireHeavy(command: readonly string[], options: HeavyWai
   let unbind = () => {};
   try {
     // Bound before the ticket exists, so a signal between the write and the first poll still removes it.
-    if (options.bindExit !== false) unbind = bindHeavyTicketCleanup(removeTicket);
+    if (options.bindExit !== false) unbind = bindCommandTicketCleanup(removeTicket);
     mkdirSync(queueDir, { recursive: true });
-    const ticket: HeavyTicket = {
+    const ticket: CommandTicket = {
       pid, goal, command: commandText, arrivedAt, seq: process.hrtime.bigint().toString().padStart(24, '0'),
     };
     writeFileSync(`${ticketPath}.tmp`, JSON.stringify(ticket));
     renameSync(`${ticketPath}.tmp`, ticketPath);
     let announced = false;
     for (;;) {
-      const tickets = heavyTickets(queueDir, alive);
+      const tickets = commandTickets(queueDir, alive);
       const ahead = tickets.findIndex(entry => entry.path === ticketPath);
       if (options.coalesceRefresh && commandText === 'task dev:refresh') {
         const prior = tickets.find(entry => entry.path !== ticketPath && entry.ticket.command === commandText
@@ -3066,34 +3095,38 @@ export async function acquireHeavy(command: readonly string[], options: HeavyWai
           // A refresh that has already taken the lock must not absorb changes arriving after its snapshot.
           let started = false;
           try {
-            const holder = JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')) as HeavyTicket;
+            const holder = JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')) as CommandTicket;
             started = holder.command === commandText && holder.pid === prior.ticket.pid && alive(holder.pid);
           } catch { /* a queued refresh has no holder record */ }
           if (!started) return undefined;
         }
       }
-      if (ahead === 0 && !dirLockHeld(lockDir, alive)) {
+      const lifecyclePending = kind === 'heavy QA' && (dirLockHeld(lifecycleLockDir, alive)
+        || commandTickets(commandQueueDir(lifecycleLockDir), alive).length > 0);
+      if (ahead === 0 && !lifecyclePending && !dirLockHeld(lockDir, alive)) {
         try {
           // A negative timeout fails at once when the directory is held, so this loop's poll is the only wait.
           // The stale-owner reap inside acquireDir still runs before that failure.
-          await acquireDir(lockDir, -1, 'heavy QA');
+          await acquireDir(lockDir, -1, kind);
+          const leaseId = randomUUID();
           writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
-            pid, goal, command: commandText, startedAt: new Date().toISOString(), commandStartedAt: null,
+            pid, goal, command: commandText, startedAt: new Date().toISOString(), commandStartedAt: null, leaseId,
           }));
+          atomicJson(join(lockDir, 'pid'), pid);
           if (commandText !== 'task dev:refresh') {
-            const turns = heavyGoalTurns(queueDir).filter(turn => turn !== (goal ?? '?'));
+            const turns = commandGoalTurns(queueDir).filter(turn => turn !== (goal ?? '?'));
             turns.push(goal ?? '?');
             writeFileSync(join(queueDir, 'turns'), JSON.stringify(turns));
           }
-          return () => rmSync(lockDir, { recursive: true, force: true });
+          return () => releaseCommandLease(lockDir, leaseId, pid);
         } catch { /* the lock was taken between the check and the create */ }
       }
-      if (now() > deadline) throw new Error('The heavy QA lock stayed held for six hours');
+      if (now() > deadline) throw new Error(`The ${kind} lock stayed held for six hours`);
       if (!announced) {
-        const holder = heavyHolder(lockDir, alive);
-        (options.announce ?? console.error)(ahead > 0
-          ? `waiting for heavy QA turn; ${ahead} waiter${ahead === 1 ? '' : 's'} in line${holder ? ` (${holder})` : ''}`
-          : `waiting for heavy QA turn held by ${holder ?? 'a starting run'}`);
+        const holder = commandHolder(lockDir, alive);
+        (options.announce ?? console.error)(lifecyclePending ? 'waiting for shared lifecycle before heavy QA admission' : ahead > 0
+          ? `waiting for ${kind} turn; ${ahead} waiter${ahead === 1 ? '' : 's'} in line${holder ? ` (${holder})` : ''}`
+          : `waiting for ${kind} turn held by ${holder ?? 'a starting run'}`);
         announced = true;
       }
       await sleep(pollMs);
@@ -3107,6 +3140,7 @@ export async function acquireHeavy(command: readonly string[], options: HeavyWai
 export interface SlotRunOptions {
   slotDirectory?: string;
   heavyLockDirectory?: string;
+  lifecycleLockDirectory?: string;
   slots?: number;
   timeoutMs?: number;
   pollMs?: number;
@@ -3117,20 +3151,29 @@ export interface SlotRunOptions {
   runCommand?: (command: readonly string[], env: NodeJS.ProcessEnv, onStart: () => void) => Promise<number>;
 }
 
-async function runQaCommand(command: readonly string[], env: NodeJS.ProcessEnv, onStart: () => void): Promise<number> {
+async function runQaCommand(command: readonly string[], env: NodeJS.ProcessEnv, onStart: () => void,
+  lifecycleLockDirectory?: string): Promise<number> {
+  const owner = lifecycleLockDirectory ? commandLease(lifecycleLockDirectory) : undefined;
   const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit', env });
+  let restoreOwner: (() => void) | undefined;
+  if (lifecycleLockDirectory && child.pid && owner) {
+    onStart();
+    // Transfer synchronously before yielding: a killed launcher must not make its still-running repair look stale.
+    restoreOwner = transferSharedLifecycleOwnership(lifecycleLockDirectory, child.pid, owner.pid);
+  }
   const forward = (signal: NodeJS.Signals) => child.kill(signal);
   process.on('SIGINT', forward);
   process.on('SIGTERM', forward);
   try {
     return await new Promise<number>((done, reject) => {
       child.once('error', reject);
-      child.once('spawn', onStart);
+      if (!restoreOwner) child.once('spawn', onStart);
       child.once('exit', exit => done(exit ?? 1));
     });
   } finally {
     process.off('SIGINT', forward);
     process.off('SIGTERM', forward);
+    restoreOwner?.();
   }
 }
 
@@ -3140,6 +3183,88 @@ export function markHeavyCommandStarted(lockDirectory: string): void {
     const info = JSON.parse(readFileSync(path, 'utf8')) as { pid: number; [key: string]: unknown };
     if (info.pid === process.pid) atomicJson(path, { ...info, commandStartedAt: new Date().toISOString() });
   } catch { /* status may read the lock while it is being acquired */ }
+}
+
+export function markSharedLifecycleCommandStarted(lockDirectory = sharedLifecycleLock): void {
+  markHeavyCommandStarted(lockDirectory);
+}
+
+interface CommandLease { pid: number; leaseId: string; [key: string]: unknown }
+
+function commandLease(lockDirectory: string): CommandLease | undefined {
+  try {
+    const info = JSON.parse(readFileSync(join(lockDirectory, 'info.json'), 'utf8')) as CommandLease;
+    return Number.isSafeInteger(info.pid) && info.pid > 0 && typeof info.leaseId === 'string'
+      && info.pid === Number(readFileSync(join(lockDirectory, 'pid'), 'utf8')) ? info : undefined;
+  } catch { return undefined; }
+}
+
+function releaseCommandLease(lockDirectory: string, leaseId: string, pid: number): void {
+  const info = commandLease(lockDirectory);
+  if (info?.leaseId === leaseId && info.pid === pid) rmSync(lockDirectory, { recursive: true, force: true });
+}
+
+export function sharedLifecycleEnvironment(lockDirectory = sharedLifecycleLock): NodeJS.ProcessEnv {
+  const info = commandLease(lockDirectory);
+  if (!info || !pidAlive(info.pid)) throw new Error('Shared lifecycle lease is absent or stale');
+  return { GOAL_SHARED_LIFECYCLE_LOCK: resolve(lockDirectory), GOAL_SHARED_LIFECYCLE_PID: String(info.pid),
+    GOAL_SHARED_LIFECYCLE_LEASE: info.leaseId };
+}
+
+/** Nested maintenance uses the caller's validated lease, so a repair may invoke refresh without queuing behind itself. */
+export function inheritedSharedLifecycleOwnership(lockDirectory = sharedLifecycleLock, env = process.env):
+  { lockDirectory: string; pid: number; leaseId: string } | undefined {
+  if (!env.GOAL_SHARED_LIFECYCLE_LOCK) return undefined;
+  const info = commandLease(lockDirectory);
+  if (resolve(env.GOAL_SHARED_LIFECYCLE_LOCK) !== resolve(lockDirectory) || !info || !pidAlive(info.pid)
+    || ![String(info.pid), String(info.delegatedFromPid)].includes(env.GOAL_SHARED_LIFECYCLE_PID ?? '')
+    || info.leaseId !== env.GOAL_SHARED_LIFECYCLE_LEASE) {
+    throw new Error('Inherited shared lifecycle lease is absent, stale or belongs to another lock');
+  }
+  return { lockDirectory, pid: info.pid, leaseId: info.leaseId };
+}
+
+/** The staged child owns the lease while running. Restore a live caller for the rest of its repair command;
+ * if that caller was killed, the child releases it. Every cleanup checks both the lease and the owner. */
+export function transferSharedLifecycleOwnership(lockDirectory: string, pid: number,
+  expectedOwnerPid = process.ppid): () => void {
+  const info = commandLease(lockDirectory);
+  if (!Number.isSafeInteger(pid) || pid < 1 || !info || info.pid !== expectedOwnerPid) {
+    throw new Error('Shared lifecycle ownership changed before transfer');
+  }
+  atomicJson(join(lockDirectory, 'info.json'), { ...info, pid, delegatedFromPid: expectedOwnerPid,
+    transferredAt: new Date().toISOString() });
+  atomicJson(join(lockDirectory, 'pid'), pid);
+  return () => {
+    const current = commandLease(lockDirectory);
+    if (current?.leaseId !== info.leaseId || current.pid !== pid) return;
+    if (expectedOwnerPid !== pid && pidAlive(expectedOwnerPid)) {
+      atomicJson(join(lockDirectory, 'info.json'), { ...current, pid: expectedOwnerPid, delegatedFromPid: info.delegatedFromPid });
+      atomicJson(join(lockDirectory, 'pid'), expectedOwnerPid);
+    } else releaseCommandLease(lockDirectory, info.leaseId, pid);
+  };
+}
+
+/** Repairs mutate the shared stack, not a QA stack: no QA lease, stack reap or QA admission environment. */
+export async function withRecovery(command: string[], options: SlotRunOptions = {}): Promise<number> {
+  if (!command.length) throw new Error('slot --recovery needs a command after --');
+  const lockDirectory = options.lifecycleLockDirectory ?? sharedLifecycleLock;
+  const inherited = inheritedSharedLifecycleOwnership(lockDirectory);
+  const release = inherited ? () => {} : await acquireSharedLifecycle(command, { lockDir: lockDirectory, goal: currentQaGoal(),
+    now: options.now, sleep: options.sleep, pollMs: options.pollMs,
+    deadline: options.timeoutMs === undefined ? undefined : (options.now ?? Date.now)() + options.timeoutMs,
+    announce: options.announce });
+  try {
+    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_SHARED_LIFECYCLE: '1', ...sharedLifecycleEnvironment(lockDirectory) };
+    delete env.GOAL_IN_SLOT;
+    delete env.GOAL_QA_HEAVY_RUN;
+    delete env.GOAL_QA_SLOT_DIRECTORY;
+    delete env.GOAL_QA_WAIT_DIR;
+    delete env.GOAL_QA_COMMAND;
+    const onStart = () => markSharedLifecycleCommandStarted(lockDirectory);
+    return await (options.runCommand ? options.runCommand(command, env, onStart)
+      : runQaCommand(command, env, onStart, lockDirectory));
+  } finally { release(); }
 }
 
 function currentQaGoal(): string | undefined {
@@ -3182,7 +3307,9 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
   let heldSlot: string | undefined;
   let waitPath: string | undefined;
   try {
-    releaseHeavy = heavy ? await acquireHeavy(command, { lockDir: heavyLockDirectory, goal, announce }) : undefined;
+    releaseHeavy = heavy ? await acquireHeavy(command, { lockDir: heavyLockDirectory,
+      lifecycleLockDir: options.lifecycleLockDirectory ?? (options.slotDirectory ? join(dir, 'shared-lifecycle') : sharedLifecycleLock),
+      goal, announce }) : undefined;
     if (!heavy && !deferred) {
       const deadline = now() + (options.timeoutMs ?? 3_600_000);
       let announced = false;
@@ -3444,6 +3571,10 @@ async function main(argv: string[]): Promise<number> {
       return withSlot(['bun', 'scripts/qa/test.ts', ...args], isHeavyTest(rest), resultFile);
     }
     case 'slot': {
+      if (rest[0] === '--recovery') {
+        const command = rest.slice(1);
+        return withRecovery(command[0] === '--' ? command.slice(1) : command);
+      }
       const heavy = rest[0] === '--heavy';
       const command = heavy ? rest.slice(1) : rest;
       return withSlot(command[0] === '--' ? command.slice(1) : command, heavy);
@@ -3458,7 +3589,7 @@ async function main(argv: string[]): Promise<number> {
         + ' | status | usage | regress [--at <rev>] [--resume <run-id>] [--only <tiers>] [--integration-batches <n>]'
         + ' | mail send <goal> --file <path> --key <key> | mail inbox [goal] | mail ack <id> [--goal <goal>]'
         + ' | coordinator [enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <dir> --previous-owner-pid <pid> [--tmux-socket <path>]|status|unenroll <goal>]'
-        + ' | inbox [--ack <n>] | test [--heavy] <task test args> | slot [--heavy] -- <command>');
+        + ' | inbox [--ack <n>] | test [--heavy] <task test args> | slot [--heavy|--recovery] -- <command>');
       return 2;
   }
 }

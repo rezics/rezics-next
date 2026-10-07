@@ -90,6 +90,13 @@ export const backendCommand: BackendCommand = (root, executable, args) => {
   return result.stdout.trim();
 };
 
+/** Installation can compile native dependencies and build the pinned image.
+ * Generation imports the backend. Admit their host memory without taking QA. */
+export const backendBuildCommand: BackendCommand = (root, executable, args) =>
+  executable === 'task' && ['install', 'gen'].includes(args[0] ?? '')
+    ? backendCommand(root, 'bun', [join(root, 'scripts/qa/host-admission.ts'), '--gib', '4', '--', executable, ...args])
+    : backendCommand(root, executable, args);
+
 /** Model alignment's small intent/audit checkpoints survive executable revisions.
  * This is metadata, not a copy of owner data, and lets a newer code fix resume
  * the same generation's lost-response finalization. */
@@ -114,7 +121,7 @@ export function stageBackend(
   root: string,
   stack: string,
   revision: string,
-  command: BackendCommand = backendCommand,
+  command: BackendCommand = backendBuildCommand,
 ): string {
   if (!/^[a-f0-9]{40,64}$/.test(revision))
     throw new Error('Backend revision must be a full Git commit ID');
@@ -160,6 +167,9 @@ export function stageBackend(
   } else command(checkout, 'task', ['install']);
   command(checkout, 'task', ['gen']);
   mkdirSync(join(checkout, '.temp/stack'), { recursive: true });
+  // Toolchain installation may have written a private configuration here; it
+  // did not start storage. Serving and maintenance use the canonical stack.
+  rmSync(join(checkout, '.temp/stack/rezics-dev'), { recursive: true, force: true });
   symlinkSync(stack, join(checkout, '.temp/stack/rezics-dev'), 'dir');
   syncBackendInputs(root, checkout);
   linkBackendModelJournal(checkout, stack);

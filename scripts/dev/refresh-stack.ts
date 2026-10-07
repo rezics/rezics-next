@@ -8,7 +8,7 @@ import { existsSync, readFileSync, readlinkSync,
 import { join, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 import { Client, Pool } from 'pg';
-import { acquireHeavy, markHeavyCommandStarted } from '../goal/goalctl.ts';
+import { acquireSharedLifecycle, inheritedSharedLifecycleOwnership, markSharedLifecycleCommandStarted, sharedLifecycleEnvironment, transferSharedLifecycleOwnership } from '../goal/goalctl.ts';
 import { migrationDirectories, migrationRecords, type SchemaOwner } from '../ops/migrate.ts';
 import { sqlMigration } from '../lib/concurrent-index.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
@@ -31,6 +31,7 @@ import { AppHostResourceLost, appHostRestartInstruction, type RefreshInputs, ass
   readPendingRefresh,
   type PendingRefresh,
   refreshResources, type RefreshResource } from './refresh.ts';
+import { runHostAdmission } from '../qa/host-admission.ts';
 import { inspectOfficialZoneApprovals } from './seed/official-zones-step.ts';
 import { officialSourceDigest } from './seed/official-theme-step.ts';
 
@@ -251,7 +252,7 @@ export async function rehearseRefreshMigrations(root: string, env: Record<string
 }
 
 /** Read the lock without reaping stale tickets: dry-run has no writes. */
-export function refreshHeavyLockHeld(path: string, alive = (pid: number): boolean => {
+export function refreshLifecycleLockHeld(path: string, alive = (pid: number): boolean => {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try { process.kill(pid, 0); return true; } catch { return false; }
 }): boolean {
@@ -366,7 +367,7 @@ export async function inspectRefresh(root: string, stackRoot = root) {
   const zoneApprovals = lostResources.includes('main') || resources.main.state !== 'Running'
     || resources.main.healthStatus !== 'Healthy' ? [] : await inspectOfficialZoneApprovals(
       path => fetch(new URL(path, env.MAIN_ORIGIN!), { signal: AbortSignal.timeout(10_000)}),
-      slug => officialSourceDigest(slug, join(stackRoot, 'apps/web/zones/official')));
+      slug => officialSourceDigest(slug, join(root, 'apps/web/zones/official')));
   const input : RefreshInputs = { revision, previousRevision: pinnedRevision ?? checkpoint?.revision,
     checkpointMissing: !checkpoint, imagePresent, storageChanged, pendingMigrations,
     modelCurrent: active.generation === targetGeneration, statementCurrent,
@@ -468,13 +469,13 @@ export async function refreshSharedStack(root: string, args: string[]): Promise<
     command(root, 'git', ['branch', '--show-current']),
     Boolean(command(root, 'git', ['status', '--porcelain', '--untracked-files=no'])),
   );
-  const lock = join(resolve(common, '..'), '.temp/goal-orchestration/qa-slots/heavy');
-  if (!wait && refreshHeavyLockHeld(lock))
+  const lock = join(resolve(common, '..'), '.temp/goal-orchestration/shared-lifecycle');
+  const inherited = inheritedSharedLifecycleOwnership(lock);
+  if (!wait && !inherited && refreshLifecycleLockHeld(lock))
     throw new Error(
-      'Shared-stack refresh refused: the host-wide heavy QA lock is held; retry after that run finishes or pass --wait',
+      'Shared-stack refresh refused: shared lifecycle is held; retry after it finishes or pass --wait',
     );
   const dir = stackDirectory(root, { profile: 'dev' });
-  const pendingPath = join(dir, 'refresh-pending');
   const checkpointPath = join(dir, 'refresh.json');
   const pendingTarget = () => {
     const pending = readPendingRefresh(dir);
@@ -497,52 +498,24 @@ export async function refreshSharedStack(root: string, args: string[]): Promise<
   }
   let release: (() => void) | undefined;
   try {
-    release = await acquireHeavy(['task', 'dev:refresh'], {
+    release = inherited ? () => {} : await acquireSharedLifecycle(['task', 'dev:refresh'], {
       lockDir: lock,
       coalesceRefresh: wait,
       deadline: wait ? Date.now() + 2 * 3_600_000 : Date.now() - 1,
     });
   } catch {
     throw new Error(
-      `Shared-stack refresh refused: heavy QA is held or queued; ${wait ? 'it stayed held for two hours' : 'retry after it finishes or pass --wait'}`,
+      `Shared-stack refresh refused: shared lifecycle is held or queued; ${wait ? 'it stayed held for two hours' : 'retry after it finishes or pass --wait'}`,
     );
   }
   if (!release) {
     console.log('A shared-stack refresh is already queued; it will include this merge when it starts.');
     return;
   }
-  markHeavyCommandStarted(lock);
+  markSharedLifecycleCommandStarted(lock);
   const onExit = release;
   process.once('exit', onExit);
   try {
-    const pending = pendingTarget();
-    if (pending && !pending.mutatingStep)
-      throw new Error(`A refresh was interrupted before maintenance. ${appHostRestartInstruction}`);
-    if (pending?.mutatingStep) {
-      // A killed refresh may have left some candidate writers running. Stop
-      // them before even inspecting or staging an idempotent maintenance retry.
-      try {
-        await stopRefreshWriters(root);
-      } catch (error) {
-        try {
-          command(root, 'task', ['dev:stop'], process.env, 60_000);
-        } catch {
-          throw new Error(
-            `Refresh failed at stop-writers: ${String(error)}. AppHost shutdown failed; task dev:stop must succeed. Retry: task dev:refresh -- --wait`,
-            {
-              cause: error,
-            },
-          );
-        }
-        throw new Error(
-          `Refresh failed at stop-writers: ${String(error)}. Writers remain stopped. ${appHostRestartInstruction}. Retry: task dev:refresh -- --wait`,
-          { cause: error },
-        );
-      }
-    }
-    const previous = pending?.backend ?? activeBackend(dir);
-    if (!previous) throw new Error(`Shared backend is not pinned. ${appHostRestartInstruction}`);
-    const previousStorage = pending?.storage ?? storageBackend(dir)!;
     // Each invocation freezes current committed main, so a code fix can
     // advance unfinished forward-only maintenance while writers stay stopped.
     const revision = command(root, 'git', ['rev-parse', 'HEAD']);
@@ -551,191 +524,273 @@ export async function refreshSharedStack(root: string, args: string[]): Promise<
       candidate = stageBackend(root, dir, revision);
     } catch (error) {
       throw new Error(
-        `Refresh failed at stage-backend: ${String(error)}. ${pending?.mutatingStep ? 'Writers remain stopped' : 'Previous revision retained'}. Retry: task dev:refresh -- --wait`,
+        `Refresh failed at stage-backend: ${String(error)}. ${pendingTarget()?.mutatingStep ? 'Writers remain stopped' : 'Previous revision retained'}. Retry: task dev:refresh -- --wait`,
         { cause: error },
       );
     }
-    syncBackendInputs(root, candidate);
-    if (pending?.mutatingStep === 'prepare-storage') {
-      // Preparation may have retired an OAuth fixture before failing. Complete
-      // its idempotent turn before inspection reads the generated private files.
-      try {
-        activateBackend(dir, candidate, 'storage-backend');
-        backendCommand(candidate, 'task', ['dev:prepare']);
-        pending.mutatingStep = 'align-model';
-        pending.revision = revision;
-        pending.pid = process.pid;
-        writeFileSync(`${pendingPath}.tmp`, JSON.stringify(pending), { mode: 0o600 });
-        renameSync(`${pendingPath}.tmp`, pendingPath);
-      } catch (error) {
-        throw new Error(
-          `Refresh failed at prepare-storage: ${String(error)}. Writers remain stopped. Retry: task dev:refresh -- --wait`,
-          { cause: error },
-        );
-      }
-    }
-    let snapshot: Awaited<ReturnType<typeof inspectRefresh>>;
+    // Imports in this process predate the wait. Only the detached checkout's
+    // fresh process may inspect or maintain the frozen revision.
+    const child = Bun.spawn([process.execPath, join(candidate, 'scripts/dev/refresh-stack.ts'),
+      '--staged', root, revision, lock, String(inherited?.pid ?? process.pid)], {
+      cwd: candidate, env: process.env, stdin: 'ignore', stdout: 'inherit', stderr: 'inherit',
+    });
+    const forward = (signal: NodeJS.Signals) => { child.kill(signal); };
+    process.on('SIGINT', forward);
+    process.on('SIGTERM', forward);
     try {
-      snapshot = await inspectRefresh(candidate, root);
-    } catch (error) {
-      throw new Error(
-        `Refresh failed at inspect: ${String(error)}. ${pending?.mutatingStep ? 'Writers remain stopped' : 'Previous revision retained'}. Retry: task dev:refresh -- --wait`,
-        { cause: error },
-      );
+      const status = await child.exited;
+      if (status !== 0) throw new Error(`Refresh failed in staged checkout (exit ${status}); see the step and retry command above`);
+    } finally {
+      process.off('SIGINT', forward);
+      process.off('SIGTERM', forward);
     }
-    snapshot.input.resumeStep = pending?.mutatingStep;
-    snapshot.plan = refreshPlan(snapshot.input);
-    printRefreshPlan(snapshot);
-    const state: PendingRefresh = {
-      revision,
-      backend: previous,
-      storage: previousStorage,
-      pid: process.pid,
-      refreshId: randomBytes(16).toString('hex'),
-      mutatingStep: pending?.mutatingStep,
-    };
-    const saveState = () => {
-      writeFileSync(`${pendingPath}.tmp`, JSON.stringify(state), {
-        mode: 0o600,
-      });
-      renameSync(`${pendingPath}.tmp`, pendingPath);
-    };
-    const stopWriters = async () => {
-      saveState();
-      await stopRefreshWriters(root);
-    };
-    const restartResources = async () => {
-      for (const name of refreshResources) {
-        aspire(root, ['resource', name, 'restart']);
-        aspire(root, ['wait', name, '--timeout', '120'], 125_000);
-        assertRefreshResourcePresent(root, name);
-        console.log(`  Restarted: ${name}`);
-      }
-    };
-    const waitReady = () => waitRefreshReady(() => describeRefreshResources(root));
-    await executeRefresh(
-      snapshot.plan,
-      {
-        buildImage: async () => {
-          compose(candidate, ['build', 'fuseki'], 300_000, root);
-        },
-        rehearseMigrations: async () => {
-          await rehearseRefreshMigrations(
-            candidate,
-            readEnv(join(dir, 'dev.env')),
-            snapshot.input.pendingMigrations,
-          );
-        },
-        stopWriters,
-        beforeMutation: async (step) => {
-          state.mutatingStep = step;
-          saveState();
-        },
-        switchBackend: async () => {
-          activateBackend(dir, candidate);
-        },
-        restartPrevious: async () => {
-          await stopWriters();
-          activateBackend(dir, previous);
-          await restartResources();
-          await waitReady();
-          rmSync(pendingPath, { force: true });
-          console.log('  Previous backend revision restarted; no storage/model maintenance began');
-        },
-        prepareStorage: async () => {
-          const before = readEnv(join(dir, 'dev.env'));
-          // Track the attempted storage topology before up/migration can partially
-          // commit, so inspection and restart use those same Compose bind paths.
-          activateBackend(dir, candidate, 'storage-backend');
-          backendCommand(candidate, 'task', ['dev:prepare']);
-          const changes = changedEnvironment(before, readEnv(join(dir, 'dev.env')));
-          if (changes.length)
-            throw new Error(
-              `Prepared environment changed (${changes.join(', ')}). ${appHostRestartInstruction}`,
-            );
-        },
-        alignModel: async () => {
-          command(
-            candidate,
-            'task',
-            ['dataset:bootstrap-model'],
-            { ...process.env, REZICS_DATASET_STACK: dir },
-            180_000,
-          );
-          backendCommand(candidate, 'task', [
-            'dev:prepare',
-            '--',
-            '--seek-only',
-            join(dir, 'dev.env'),
-          ]);
-        },
-        restartResources,
-        waitReady,
-        approveZones: async (beforeMutation) => {
-          const env = readEnv(join(dir, 'dev.env'));
-          const zones = await inspectOfficialZoneApprovals(
-            (path) =>
-              fetch(new URL(path, env.MAIN_ORIGIN!), {
-                signal: AbortSignal.timeout(10_000),
-              }),
-            (slug) => officialSourceDigest(slug),
-          );
-          if (zones.length) {
-            await beforeMutation();
-            command(
-              root,
-              'task',
-              [
-                'dev:seed',
-                '--',
-                '--themes-only',
-                `--packages=${zones.map((zone) => zone.slug).join(',')}`,
-              ],
-              process.env,
-              600_000,
-            );
-          }
-        },
-        stopAppHost: async () => {
-          command(root, 'task', ['dev:stop'], process.env, 60_000);
-        },
-        recordSuccess: async () => {
-          const checked = await inspectRefresh(candidate, root);
-          if (!refreshIsCurrent(checked.input))
-            throw new Error(
-              'Shared stack is not current after refresh; no success checkpoint recorded',
-            );
-          writeFileSync(
-            `${checkpointPath}.tmp`,
-            JSON.stringify({ ...checked.checkpoint, refreshId: state.refreshId }) + '\n',
-            {
-              mode: 0o600,
-            },
-          );
-          renameSync(`${checkpointPath}.tmp`, checkpointPath);
-          try {
-            rmSync(pendingPath, { force: true });
-          } catch {
-            console.warn(
-              'Refresh committed; completed maintenance marker will be ignored on the next refresh',
-            );
-          }
-        },
-      },
-      Boolean(pending?.mutatingStep),
-    );
-    try {
-      pruneBackendRevisions(root, dir);
-    } catch {
-      console.warn('An unused backend revision could not be removed');
-    }
-    console.log(
-      snapshot.plan.steps.length
-        ? 'Shared stack refresh complete'
-        : 'Shared stack already current; no changes',
-    );
   } finally {
     process.removeListener('exit', onExit);
     release();
+  }
+}
+
+/** The fresh child takes lifecycle ownership, including if its launcher dies.
+ * Validate the frozen checkout and lease before any maintenance. */
+export async function refreshStagedStack(root: string, revision: string, lock: string, parentPid: number): Promise<void> {
+  const dir = stackDirectory(root, { profile: 'dev' });
+  const candidate = join(dir, 'backend-revisions', revision);
+  if (!/^[a-f0-9]{40,64}$/.test(revision) || realpathSync(process.cwd()) !== realpathSync(candidate)
+    || readFileSync(join(lock, 'pid'), 'utf8').trim() !== String(parentPid)
+    || !refreshProcessAlive(parentPid)
+    || command(candidate, 'git', ['rev-parse', 'HEAD']) !== revision
+    || readFileSync(join(candidate, '.temp/backend-ready'), 'utf8') !== revision)
+    throw new Error('Staged refresh requires its frozen checkout and a live lifecycle owner');
+  const release = transferSharedLifecycleOwnership(lock, process.pid, parentPid);
+  Object.assign(process.env, sharedLifecycleEnvironment(lock));
+  process.once('exit', release);
+  try {
+    await maintainStagedStack(root, candidate, revision, dir);
+  } finally {
+    process.removeListener('exit', release);
+    release();
+  }
+}
+
+async function maintainStagedStack(root: string, candidate: string, revision: string, dir: string): Promise<void> {
+  const pendingPath = join(dir, 'refresh-pending');
+  const checkpointPath = join(dir, 'refresh.json');
+  const checkpoint = existsSync(checkpointPath)
+    ? (JSON.parse(readFileSync(checkpointPath, 'utf8')) as Checkpoint) : undefined;
+  const saved = readPendingRefresh(dir);
+  const pending = saved && saved.refreshId !== checkpoint?.refreshId ? saved : undefined;
+  if (pending && !pending.mutatingStep)
+    throw new Error(`A refresh was interrupted before maintenance. ${appHostRestartInstruction}`);
+  if (pending?.mutatingStep) {
+    // A killed refresh may have left candidate writers running. Stop them
+    // before inspecting the idempotent maintenance retry with fresh code.
+    try {
+      await stopRefreshWriters(root);
+    } catch (error) {
+      try { command(root, 'task', ['dev:stop'], process.env, 60_000); }
+      catch {
+        throw new Error(`Refresh failed at stop-writers: ${String(error)}. AppHost shutdown failed; task dev:stop must succeed. Retry: task dev:refresh -- --wait`, { cause: error });
+      }
+      throw new Error(`Refresh failed at stop-writers: ${String(error)}. Writers remain stopped. ${appHostRestartInstruction}. Retry: task dev:refresh -- --wait`, { cause: error });
+    }
+  }
+  const previous = pending?.backend ?? activeBackend(dir);
+  if (!previous) throw new Error(`Shared backend is not pinned. ${appHostRestartInstruction}`);
+  const previousStorage = pending?.storage ?? storageBackend(dir)!;
+  syncBackendInputs(root, candidate);
+  if (pending?.mutatingStep === 'prepare-storage') {
+    // Preparation may have retired an OAuth fixture before failing. Complete
+    // its idempotent turn before inspection reads the generated private files.
+    try {
+      activateBackend(dir, candidate, 'storage-backend');
+      backendCommand(candidate, 'task', ['dev:prepare']);
+      pending.mutatingStep = 'align-model';
+      pending.revision = revision;
+      pending.pid = process.pid;
+      writeFileSync(`${pendingPath}.tmp`, JSON.stringify(pending), { mode: 0o600 });
+      renameSync(`${pendingPath}.tmp`, pendingPath);
+    } catch (error) {
+      throw new Error(
+        `Refresh failed at prepare-storage: ${String(error)}. Writers remain stopped. Retry: task dev:refresh -- --wait`,
+        { cause: error },
+      );
+    }
+  }
+  let snapshot: Awaited<ReturnType<typeof inspectRefresh>>;
+  try {
+    snapshot = await inspectRefresh(candidate, root);
+  } catch (error) {
+    throw new Error(
+      `Refresh failed at inspect: ${String(error)}. ${pending?.mutatingStep ? 'Writers remain stopped' : 'Previous revision retained'}. Retry: task dev:refresh -- --wait`,
+      { cause: error },
+    );
+  }
+  snapshot.input.resumeStep = pending?.mutatingStep;
+  snapshot.plan = refreshPlan(snapshot.input);
+  printRefreshPlan(snapshot);
+  const state: PendingRefresh = {
+    revision,
+    backend: previous,
+    storage: previousStorage,
+    pid: process.pid,
+    refreshId: randomBytes(16).toString('hex'),
+    mutatingStep: pending?.mutatingStep,
+  };
+  const saveState = () => {
+    writeFileSync(`${pendingPath}.tmp`, JSON.stringify(state), {
+      mode: 0o600,
+    });
+    renameSync(`${pendingPath}.tmp`, pendingPath);
+  };
+  const stopWriters = async () => {
+    saveState();
+    await stopRefreshWriters(root);
+  };
+  const restartResources = async () => {
+    for (const name of refreshResources) {
+      aspire(root, ['resource', name, 'restart']);
+      aspire(root, ['wait', name, '--timeout', '120'], 125_000);
+      assertRefreshResourcePresent(root, name);
+      console.log(`  Restarted: ${name}`);
+    }
+  };
+  const waitReady = () => waitRefreshReady(() => describeRefreshResources(root));
+  await executeRefresh(
+    snapshot.plan,
+    {
+      buildImage: async () => {
+        await runHostAdmission(4, ['docker', 'compose', 'build', 'fuseki'], {
+          root: candidate, run: async () => {
+            compose(candidate, ['build', 'fuseki'], 300_000, root);
+            return 0;
+          },
+        });
+      },
+      rehearseMigrations: async () => {
+        await rehearseRefreshMigrations(
+          candidate,
+          readEnv(join(dir, 'dev.env')),
+          snapshot.input.pendingMigrations,
+        );
+      },
+      stopWriters,
+      beforeMutation: async (step) => {
+        state.mutatingStep = step;
+        saveState();
+      },
+      switchBackend: async () => {
+        activateBackend(dir, candidate);
+      },
+      restartPrevious: async () => {
+        await stopWriters();
+        activateBackend(dir, previous);
+        await restartResources();
+        await waitReady();
+        rmSync(pendingPath, { force: true });
+        console.log('  Previous backend revision restarted; no storage/model maintenance began');
+      },
+      prepareStorage: async () => {
+        const before = readEnv(join(dir, 'dev.env'));
+        // Track the attempted storage topology before up/migration can partially
+        // commit, so inspection and restart use those same Compose bind paths.
+        activateBackend(dir, candidate, 'storage-backend');
+        backendCommand(candidate, 'task', ['dev:prepare']);
+        const changes = changedEnvironment(before, readEnv(join(dir, 'dev.env')));
+        if (changes.length)
+          throw new Error(
+            `Prepared environment changed (${changes.join(', ')}). ${appHostRestartInstruction}`,
+          );
+      },
+      alignModel: async () => {
+        command(
+          candidate,
+          'task',
+          ['dataset:bootstrap-model'],
+          { ...process.env, REZICS_DATASET_STACK: dir },
+          180_000,
+        );
+        backendCommand(candidate, 'task', [
+          'dev:prepare',
+          '--',
+          '--seek-only',
+          join(dir, 'dev.env'),
+        ]);
+      },
+      restartResources,
+      waitReady,
+      approveZones: async (beforeMutation) => {
+        const env = readEnv(join(dir, 'dev.env'));
+        const zones = await inspectOfficialZoneApprovals(
+          (path) =>
+            fetch(new URL(path, env.MAIN_ORIGIN!), {
+              signal: AbortSignal.timeout(10_000),
+            }),
+          (slug) => officialSourceDigest(slug, join(candidate, 'apps/web/zones/official')),
+        );
+        if (zones.length) {
+          await beforeMutation();
+          command(
+            candidate,
+            'task',
+            [
+              'dev:seed',
+              '--',
+              '--themes-only',
+              `--packages=${zones.map((zone) => zone.slug).join(',')}`,
+            ],
+            process.env,
+            600_000,
+          );
+        }
+      },
+      stopAppHost: async () => {
+        command(root, 'task', ['dev:stop'], process.env, 60_000);
+      },
+      recordSuccess: async () => {
+        const checked = await inspectRefresh(candidate, root);
+        if (!refreshIsCurrent(checked.input))
+          throw new Error(
+            'Shared stack is not current after refresh; no success checkpoint recorded',
+          );
+        writeFileSync(
+          `${checkpointPath}.tmp`,
+          JSON.stringify({ ...checked.checkpoint, refreshId: state.refreshId }) + '\n',
+          {
+            mode: 0o600,
+          },
+        );
+        renameSync(`${checkpointPath}.tmp`, checkpointPath);
+        try {
+          rmSync(pendingPath, { force: true });
+        } catch {
+          console.warn(
+            'Refresh committed; completed maintenance marker will be ignored on the next refresh',
+          );
+        }
+      },
+    },
+    Boolean(pending?.mutatingStep),
+  );
+  try {
+    pruneBackendRevisions(root, dir);
+  } catch {
+    console.warn('An unused backend revision could not be removed');
+  }
+  console.log(
+    snapshot.plan.steps.length
+      ? 'Shared stack refresh complete'
+      : 'Shared stack already current; no changes',
+  );
+ }
+
+if (import.meta.main) {
+  try {
+    const [mode, root, revision, lock, parent] = process.argv.slice(2);
+    if (mode !== '--staged' || process.argv.length !== 7 || !root || !revision || !lock || !parent)
+      throw new Error('Refresh child requires --staged <root> <revision> <lock> <parent-pid>');
+    await refreshStagedStack(root, revision, lock, Number(parent));
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
   }
 }

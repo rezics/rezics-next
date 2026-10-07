@@ -81,7 +81,7 @@ tasks:
       - bun scripts/dev/cli.ts dev:prepare {{.CLI_ARGS}}
 
   dev:refresh:
-    desc: Bring the shared dev stack to committed main, preserving data; use -- --dry-run to inspect the plan, -- --wait to queue for heavy QA.
+    desc: Bring the shared dev stack to committed main, preserving data; use -- --dry-run to inspect the plan, -- --wait to queue for shared lifecycle.
     cmds:
       - bun scripts/dev/cli.ts dev:refresh {{.CLI_ARGS}}
 

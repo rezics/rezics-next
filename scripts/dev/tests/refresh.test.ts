@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { Client } from 'pg';
-import { acquireHeavy } from '../../goal/goalctl.ts';
+import { acquireHeavy, withRecovery } from '../../goal/goalctl.ts';
 import { appEnvironment, readEnv } from '../config.ts';
 import { activeBackend,
   activateBackend,
@@ -18,7 +18,7 @@ import { activeBackend,
   AppHostResourceLost, assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
   type RefreshActions, type RefreshInputs } from '../refresh.ts';
 import { inspectRefresh, refreshMembershipCurrent, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
-  refreshHeavyLockHeld, refreshIsCurrent, refreshLoadedEnvironmentChanges, refreshProcessAlive,
+  refreshLifecycleLockHeld, refreshIsCurrent, refreshLoadedEnvironmentChanges, refreshProcessAlive,
   refreshStorageDefinitionChanged, rehearseRefreshMigrations, waitRefreshReady} from '../refresh-stack.ts';
 import { refreshSharedStack } from '../refresh-stack.ts';
 import { inspectOfficialZoneApprovals } from '../seed/official-zones-step.ts';
@@ -40,6 +40,24 @@ describe('pinned shared backend', () => {
     mkdirSync(join(dir, 'services/main/src'), { recursive: true });
     mkdirSync(join(dir, 'scripts/dev'), { recursive: true });
     cpSync(join(root, 'scripts/dev/refresh.ts'), join(dir, 'scripts/dev/refresh.ts'));
+    mkdirSync(join(dir, 'scripts/qa'), { recursive: true });
+    writeFileSync(join(dir, 'scripts/qa/host-admission.ts'), `
+import { appendFileSync, mkdirSync } from 'node:fs';
+mkdirSync('.temp', { recursive: true });
+appendFileSync('.temp/build-admission', process.argv.slice(2).join(' ') + '\\n');
+const split = process.argv.indexOf('--');
+process.exit(Bun.spawnSync(process.argv.slice(split + 1), { stdout: 'inherit', stderr: 'inherit' }).exitCode);
+`);
+    writeFileSync(join(dir, 'scripts/dev/inspection.ts'), `export const inspection = 'original';`);
+    writeFileSync(join(dir, 'scripts/dev/refresh-stack.ts'), `
+import { writeFileSync } from 'node:fs';
+import { inspection } from './inspection.ts';
+import { refreshStagedStack } from '${join(root, 'scripts/dev/refresh-stack.ts')}';
+writeFileSync('.temp/inspection-result', JSON.stringify({ inspection, pid: process.pid, cwd: process.cwd() }));
+const [, stackRoot, revision, lock, parent] = process.argv.slice(2);
+try { await refreshStagedStack(stackRoot!, revision!, lock!, Number(parent)); }
+catch (error) { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 1; }
+`);
     writeFileSync(join(dir, '.gitignore'), '.temp/\nnode_modules/\ngenerated/\n');
     writeFileSync(join(dir, 'package.json'), '{"name":"backend-probe","private":true}');
     writeFileSync(join(dir, '.yarnrc.yml'), 'nodeLinker: node-modules\n');
@@ -50,7 +68,7 @@ describe('pinned shared backend', () => {
 tasks:
   install:
     cmds:
-      - mkdir -p node_modules
+      - mkdir -p node_modules .temp/stack/rezics-dev
       - cp yarn.lock node_modules/dependency-version
   gen:
     cmds:
@@ -115,9 +133,9 @@ console.log(JSON.stringify({ revision, url: app.server!.url.toString() }));
     };
   }
 
-  test('coalesced waiting refresh stages committed main at admission, including a later merge', async () => {
+  test('a coalesced waiting refresh runs repaired inspection in a fresh staged process', async () => {
     const { dir, stack, revision } = repository();
-    const lock = join(dir, '.temp/goal-orchestration/qa-slots/heavy');
+    const lock = join(dir, '.temp/goal-orchestration/shared-lifecycle');
     let queued: Promise<unknown> | undefined;
     try {
       activateBackend(stack, stageBackend(dir, stack, revision));
@@ -126,7 +144,9 @@ console.log(JSON.stringify({ revision, url: app.server!.url.toString() }));
       queued = refreshSharedStack(dir, ['--wait']).catch(error => error);
       const duplicate = refreshSharedStack(dir, ['--wait']);
       await expect(duplicate).resolves.toBeUndefined();
-      backendCommand(dir, 'git', ['commit', '--allow-empty', '-m', 'Merge while refresh waits']);
+      writeFileSync(join(dir, 'scripts/dev/inspection.ts'), `export const inspection = 'repaired';`);
+      backendCommand(dir, 'git', ['add', 'scripts/dev/inspection.ts']);
+      backendCommand(dir, 'git', ['commit', '-m', 'Repair inspection while refresh waits']);
       const merged = backendCommand(dir, 'git', ['rev-parse', 'HEAD']);
       const candidate = join(stack, 'backend-revisions', merged);
       expect(existsSync(candidate)).toBe(false);
@@ -135,12 +155,59 @@ console.log(JSON.stringify({ revision, url: app.server!.url.toString() }));
       // before it can issue any Aspire, Docker or owner-storage commands.
       const result = await queued;
       expect(result).toBeInstanceOf(Error);
-      expect(String(result)).toContain('Refresh failed at inspect');
+      expect(String(result)).toContain('Refresh failed in staged checkout');
+      const inspection = JSON.parse(readFileSync(join(candidate, '.temp/inspection-result'), 'utf8'));
+      expect(inspection.inspection).toBe('repaired');
+      expect(inspection.pid).not.toBe(process.pid);
+      expect(inspection.cwd).toBe(candidate);
       expect(readFileSync(join(candidate, '.temp/backend-ready'), 'utf8')).toBe(merged);
       expect(activeBackend(stack)).toBe(join(stack, 'backend-revisions', revision));
     } finally {
       rmSync(lock, { recursive: true, force: true });
       await queued;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('refresh starts while a browser run holds the heavy lock', async () => {
+    const { dir, stack, revision } = repository();
+    const heavy = join(dir, '.temp/goal-orchestration/qa-slots/heavy');
+    let release: (() => void) | undefined;
+    try {
+      activateBackend(stack, stageBackend(dir, stack, revision));
+      release = await acquireHeavy(['task', 'web:e2e'], { lockDir: heavy });
+      await expect(refreshSharedStack(dir, ['--wait'])).rejects.toThrow('Refresh failed in staged checkout');
+      const inspected = JSON.parse(readFileSync(join(stack, 'backend-revisions', revision, '.temp/inspection-result'), 'utf8'));
+      expect(inspected.inspection).toBe('original');
+      expect(readFileSync(join(heavy, 'pid'), 'utf8')).toBe(String(process.pid));
+      expect(existsSync(join(dir, '.temp/goal-orchestration/shared-lifecycle'))).toBe(false);
+      const admissions = readFileSync(join(stack, 'backend-revisions', revision, '.temp/build-admission'), 'utf8');
+      expect(admissions).toContain('--gib 4 -- task install');
+      expect(admissions).toContain('--gib 4 -- task gen');
+    } finally {
+      release?.();
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  test('a recovery command can invoke refresh and retains its lifecycle lease afterward', async () => {
+    const { dir, stack, revision } = repository();
+    const lock = join(dir, '.temp/goal-orchestration/shared-lifecycle');
+    const probe = join(dir, '.temp/recovery-refresh.ts');
+    try {
+      activateBackend(stack, stageBackend(dir, stack, revision));
+      writeFileSync(probe, `
+import { readFileSync } from 'node:fs';
+import { refreshSharedStack } from '${join(root, 'scripts/dev/refresh-stack.ts')}';
+try { await refreshSharedStack(${JSON.stringify(dir)}, ['--wait']); }
+catch (error) { if (!String(error).includes('Refresh failed in staged checkout')) throw error; }
+if (readFileSync(${JSON.stringify(join(lock, 'pid'))}, 'utf8') !== String(process.pid)) throw new Error('Recovery lost its lease after nested refresh');
+`);
+      const status = await withRecovery(['bun', probe], { lifecycleLockDirectory: lock });
+      expect(status).toBe(0);
+      expect(existsSync(lock)).toBe(false);
+      expect(existsSync(join(stack, 'backend-revisions', revision, '.temp/inspection-result'))).toBe(true);
+    } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30_000);
@@ -885,19 +952,19 @@ describe('shared stack refresh execution and guards', () => {
     expect(refreshAspireOutput(['describe'], { status: 0, stdout: ' {}\n', stderr: '' })).toBe('{}');
   });
 
-  test('heavy lock inspection detects live owners and the creation race without modifying stale locks', () => {
+  test('lifecycle lock inspection detects live owners and the creation race without modifying stale locks', () => {
     mkdirSync(join(root, '.temp'), { recursive: true });
     const dir = mkdtempSync(join(root, '.temp/refresh-lock-'));
-    const lock = join(dir, 'heavy');
+    const lock = join(dir, 'shared-lifecycle');
     try {
-      expect(refreshHeavyLockHeld(lock)).toBe(false);
+      expect(refreshLifecycleLockHeld(lock)).toBe(false);
       mkdirSync(lock);
-      expect(refreshHeavyLockHeld(lock, () => false)).toBe(true);
+      expect(refreshLifecycleLockHeld(lock, () => false)).toBe(true);
       writeFileSync(join(lock, 'pid'), '99999999');
       const old = new Date(Date.now() - 20_000);
       utimesSync(lock, old, old);
-      expect(refreshHeavyLockHeld(lock, () => true)).toBe(true);
-      expect(refreshHeavyLockHeld(lock, () => false)).toBe(false);
+      expect(refreshLifecycleLockHeld(lock, () => true)).toBe(true);
+      expect(refreshLifecycleLockHeld(lock, () => false)).toBe(false);
       expect(readFileSync(join(lock, 'pid'), 'utf8')).toBe('99999999');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
