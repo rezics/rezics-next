@@ -99,7 +99,13 @@ describe('G-722 production configuration', () => {
       );
       expect(() =>
         checkProductionEnv(
-          { ...configured, WEB_OAUTH_CLIENT_ID: productionExample().WEB_OAUTH_CLIENT_ID },
+          {
+            ...configured,
+            WEB_OAUTH_CLIENT_ID: productionExample().WEB_OAUTH_CLIENT_ID,
+            ...(app === 'accounts'
+              ? { ACCOUNT_TURNSTILE_SITE_KEY: productionExample().ACCOUNT_TURNSTILE_SITE_KEY }
+              : {}),
+          },
           [app],
         ),
       ).not.toThrow();

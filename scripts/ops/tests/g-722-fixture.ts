@@ -19,6 +19,11 @@ export function productionExample(): Record<string, string> {
   result.ACCOUNT_SMTP_HOST = 'smtp.rezics.com';
   result.ACCOUNT_EMAIL_FROM = 'REZICS <accounts@rezics.com>';
   result.ACCOUNT_SMTP_REQUIRE_TLS = 'true';
+  result.ACCOUNT_TURNSTILE_SECRET_KEY = 'provisioned-turnstile-secret';
+  result.ACCOUNT_TURNSTILE_SITE_KEY = 'provisioned-turnstile-site';
+  // Synthetic subjects are test inputs, never an operator appointment.
+  result.SAFETY_PRIMARY_ACCOUNT = 'fixture-primary-subject';
+  result.SAFETY_BACKUP_ACCOUNT = 'fixture-backup-subject';
   result.MAIN_ORIGIN = 'https://main.rezics.com';
   result.ACCOUNT_ORIGIN = 'https://accounts.rezics.com';
   result.ACCOUNT_SERVICE_ORIGIN = 'https://account.rezics.com';
