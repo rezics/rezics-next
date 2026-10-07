@@ -13,7 +13,9 @@ test('every tracked Bun test belongs to a full QA tier or a reasoned exclusion',
   const files = tracked.stdout.split('\0').filter(file => /\.test\.tsx?$/.test(file));
   const registered = new Set(unitHarnessFiles);
   for (const tier of ['unit', 'integration', 'model', 'fault/recovery', 'load'] as const) {
-    for (const file of expandTestPaths(root, splitTestArgs(testArgs(tier)).paths)) registered.add(file);
+    const paths = splitTestArgs(testArgs(tier)).paths;
+    expect(paths, `Duplicate test arguments in ${tier}`).toEqual([...new Set(paths)]);
+    for (const file of expandTestPaths(root, paths)) registered.add(file);
   }
   const exclusions = new Map(testExclusions.map(item => [item.file, item.reason]));
   expect(exclusions.size).toBe(testExclusions.length);
