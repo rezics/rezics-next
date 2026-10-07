@@ -54,7 +54,7 @@ test('G-652: every resource ratings response variant requires complete aggregati
 });
 
 test('G-652: scope is mandatory for every aggregate, including an empty population', () => {
-  const result = { profile: 'realm-target-latest-mean-v1', complete: true, context: id(2), realm: id(4),
+  const result = { profile: 'realm-target-latest-mean-v1', complete: true, context: id(2), contextRevision: id(6), lastAdmissionId: null, realm: id(4),
     target: id(3), targetGrain: 'realization', scope: { question: 'How good is this translation?', language: 'en',
       grain: 'realization', population: 'account-principal', countedTarget: id(3) }, scale: { min: 1, max: 10, step: 1 },
     cadence: 'standing', populationPolicy: 'account-principal', aggregationPolicy: 'latest-per-rater-mean',

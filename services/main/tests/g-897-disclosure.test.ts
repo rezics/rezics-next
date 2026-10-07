@@ -27,20 +27,19 @@ function fixture() {
   let failed = false, ownerQueries = 0;
   const ownerSql: string[] = [];
   const requested: DisclosureTarget[][] = [];
-  const pool = { connect: async () => ({ release() {}, query: async (sql: string, args?: unknown[]) => {
-    if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
-    if (sql.includes('WITH requested')) {
+  const pool = { query: async (sql: string, args?: unknown[]) => {
+    if (sql.includes('requested AS')) {
       ownerQueries++;
       ownerSql.push(sql);
       if (failed) throw new Error('Assessment store unavailable');
       const targets = JSON.parse(String(args![0])) as (DisclosureTarget & { ordinal: number })[];
       requested.push(targets);
-      return { rows: targets.map(target => ({ ordinal: target.ordinal, restricted: false,
+      return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true, restricted: false,
         assessments: [...new Set([target.resource, target.work])]
           .flatMap(ref => ref && labels.has(ref) ? [labels.get(ref)!] : []) })) };
     }
     return { rows: [] };
-  } }) } as unknown as Pool;
+  } } as unknown as Pool;
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async query => {
     if (query.includes('SELECT ?epoch ?sequence WHERE')) return { results: { bindings: [{

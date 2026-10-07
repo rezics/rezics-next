@@ -10,13 +10,14 @@ import type { AlsoEnjoyedStore } from '../src/modules/also-enjoyed/store.ts';
 test('discovery ticks fold co-reader logs on their schedule and advance one build batch every tick', async () => {
   const calls: string[] = [];
   const store = { purge: async () => {}, claim: async () => null } as unknown as DiscoveryRefreshStore;
-  const alsoEnjoyed = { fold: async () => { calls.push('fold'); },
+  const alsoEnjoyed = { purge: async () => { calls.push('purge'); },
+    fold: async () => { calls.push('fold'); },
     refresh: async () => { calls.push('refresh'); } } as unknown as AlsoEnjoyedStore;
   const worker = new DiscoveryRefreshWorker({ alsoEnjoyed } as MainWorkDependencies, store, {} as DiscoveryProjection);
   (worker as unknown as { enroll: () => Promise<void> }).enroll = async () => {};
   expect(await worker.tick()).toBe('idle');
   expect(await worker.tick()).toBe('idle');
-  expect(calls).toEqual(['fold', 'refresh', 'refresh']);
+  expect(calls).toEqual(['purge', 'fold', 'refresh', 'purge', 'refresh']);
 });
 
 test('a slow catalog read defers enrollment while the refresh tick still claims a Work', async () => {

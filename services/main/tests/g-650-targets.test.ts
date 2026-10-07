@@ -46,7 +46,7 @@ function fixture(type: 'work' | 'release' | 'occurrence' | 'character' | 'realiz
     else if (query.includes('SELECT ?main WHERE')) rows = [{ main: uri(id(3)) }];
     else if (query.includes('SELECT ?decision WHERE')) rows = options.draft ? [{ decision: uri(id(4)) }] : [];
     else if (query.includes('SELECT ?root WHERE')) rows = options.erasedRoot ? [] : [{ root: uri(id(9)) }];
-    else if (query.includes('SELECT ?context')) rows = [];
+    else if (query.includes('SELECT ?context') || query.includes('SELECT ?type ?dimension')) rows = [];
     else if (query.includes('SELECT ?grain WHERE')) rows = [];
     else if (query.includes('SELECT ?r ?mergedInto WHERE')) rows = [];
     else if (query.includes('SELECT ?resource ?manifest')) rows = [{ resource: uri(id(1)),

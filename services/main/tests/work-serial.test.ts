@@ -31,7 +31,7 @@ test('serial metadata records a short, localized hook separately from descriptio
 
 test('serial list hydration stays within one page and represents unavailable counts as unknown', async () => {
   const query = async (_body: string, _limit: number) => [{ work: { value: work } }];
-  const session = { query, options: { language: 'en' } } as unknown as WorkReadSession;
+  const session = { query, deps: {}, position: { dataEpoch: 'epoch', sequence: '1' }, options: { language: 'en' } } as unknown as WorkReadSession;
   expect(await readSerialSummaries(session, [work])).toEqual(new Map([[work, {
     tagline: null, completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null,
   }]]));

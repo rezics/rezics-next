@@ -15,7 +15,7 @@ function focusFixture() {
       clearTimeout() { deadline = undefined; },
     },
   };
-  const target = { ownerDocument: document, contains: (element: unknown) => element === inside } as unknown as HTMLElement;
+  const target = { isConnected: true, ownerDocument: document, contains: (element: unknown) => element === inside } as unknown as HTMLElement;
   return {
     target, document, inside, frames,
     expire() { deadline!(); },

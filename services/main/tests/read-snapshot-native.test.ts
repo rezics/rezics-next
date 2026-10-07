@@ -15,6 +15,7 @@ test('G336 native retained-read counterexamples and optional qualified-corpus co
   const module = join(root, 'infra/jena/command-module');
   cpSync(join(module, 'pom.xml'), join(context, 'pom.xml'));
   cpSync(join(module, 'src'), join(context, 'src'), { recursive: true });
+  cpSync(join(root, 'generated/model'), join(context, 'profiles'), { recursive: true });
   const base = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8').split('\n')[0]!
     .replace(/ AS module$/, '');
   writeFileSync(join(context, 'Dockerfile'), `${base}
@@ -22,6 +23,7 @@ WORKDIR /build
 COPY pom.xml .
 RUN mvn -B -ntp dependency:go-offline
 COPY src src
+COPY profiles profiles
 RUN mvn -B -ntp package
 RUN mvn -B -ntp dependency:build-classpath -Dmdep.outputFile=/build/classpath
 `);

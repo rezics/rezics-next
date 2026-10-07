@@ -21,11 +21,13 @@ test('settings list has one bounded read and preserves saved channel revisions',
   }, release: () => {} };
   const store = new NotificationStore({ connect: async () => client } as unknown as Pool);
   const choices = await store.readSettingsPreferences(principal);
-  expect(choices).toHaveLength(SETTINGS_NOTIFICATION_TOPICS.length * 2);
+  expect(choices).toHaveLength(SETTINGS_NOTIFICATION_TOPICS.length * 3);
   expect(choices.find(item => item.topic === 'reply' && item.channel === 'inbox')).toEqual({
     purpose: 'social', topic: 'reply', channel: 'inbox', state: 'disabled', revision: '3' });
   expect(choices.find(item => item.topic === 'reply' && item.channel === 'email')).toEqual({
     purpose: 'social', topic: 'reply', channel: 'email', state: 'disabled', revision: null });
+  expect(choices.find(item => item.topic === 'reply' && item.channel === 'push')).toEqual({
+    purpose: 'social', topic: 'reply', channel: 'push', state: 'enabled', revision: null });
   expect(statements.filter(sql => sql.includes('FROM access.notification_preference'))).toHaveLength(1);
 });
 

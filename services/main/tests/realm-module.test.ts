@@ -55,9 +55,9 @@ function session(options: { cursor?: string; candidate?: boolean; privateRealm?:
       if (body.includes('SELECT ?state')) return [{ state: binding(JSON.stringify({ kind: 'header',
         originalTitle: null, completionStatus: options.status ?? 'completed', localized: [] })) }];
       if (body.includes('SELECT ?work ?type')) return [];
-      if (body.includes('SELECT ?id ?key ?ordinal ?agent')) return [
-        { id: binding(credit), key: binding(sourceKey), ordinal: binding('1') },
-        { id: binding(secondCredit), key: binding(secondSourceKey), ordinal: binding('2') },
+      if (body.includes('SELECT ?work ?id ?key ?ordinal ?agent')) return [
+        { work: binding(work), id: binding(credit), key: binding(sourceKey), ordinal: binding('1') },
+        { work: binding(work), id: binding(secondCredit), key: binding(secondSourceKey), ordinal: binding('2') },
       ];
       return [];
     },

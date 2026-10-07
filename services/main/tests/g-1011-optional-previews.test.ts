@@ -59,8 +59,8 @@ function fixture(fault: 'credits' | 'rating' | 'profile' | 'missing' | 'rating-o
       queries.push(query);
       if (query.includes('GlobalRatingContext')) return [{ context: field(id(99)) }];
       return [1, 2].filter(n => query.includes(`<${id(n)}>`)).map(n => ({
-        agent: field(id(n)), displayName: field(`Author ${n}`), agentKind: field(`${RV}PersonAgent`),
-        handle: field(fault === 'profile' && n === 1 ? 'invalid-handle' : allocateAgentHandle(id(n))),
+        agent: field(id(n)), displayName: field(fault === 'profile' && n === 1 ? '' : `Author ${n}`),
+        agentKind: field(`${RV}PersonAgent`), handle: field(allocateAgentHandle(id(n))),
         agentHead: field(id(n + 200)),
       }));
     },

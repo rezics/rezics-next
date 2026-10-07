@@ -69,11 +69,14 @@ test('G-409 a Condition page never decides a Work past a full drive window', () 
 
 test('G-409 the Condition seek probes by primary key once per group and exclusion', () => {
   const sql = discoveryConditionSql(2, true, true);
-  expect(sql.match(/EXISTS \(SELECT 1 FROM access\.discovery_entry x/g)).toHaveLength(3);
-  expect(sql).toContain('x.term = ANY($7::text[])');
-  expect(sql).toContain('NOT EXISTS');
+  expect(sql.match(/coalesce\(\(SELECT true FROM access\.discovery_entries\(\$1,\$2\) x/g)).toHaveLength(3);
+  expect(sql.match(/x\.generation_id = \$1 AND x\.work = d\.work AND x\.work_type = \$3/g)).toHaveLength(3);
+  expect(sql.match(/LIMIT 1\),false\)/g)).toHaveLength(3);
+  expect(sql).toContain('x.term = ANY($8::text[])');
+  expect(sql).toContain('NOT coalesce');
   expect(sql).toContain('x.term = ANY($9::text[])');
-  expect(sql).toContain('LIMIT $4');
+  expect(sql).toContain('x.term = ANY($10::text[])');
+  expect(sql).toContain('LIMIT $5');
   expect(discoveryConditionSql(0, false, false)).toContain('true AS matched');
   expect(DISCOVERY_CONDITION_COST.window * DISCOVERY_CONDITION_COST.driveTerms).toBeLessThanOrEqual(480);
 });
