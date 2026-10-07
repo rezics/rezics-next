@@ -20,6 +20,8 @@ export default {
   signInToRate: 'Connectez-vous pour noter cette œuvre',
   saving: 'Enregistrement…',
   saveFailed: 'Enregistrement impossible. Réessayez.',
+  ratingProcessing: 'Votre note est encore en cours de traitement.',
+  refresh: 'Actualiser',
   ongoing: 'En cours', hiatus: 'En pause',
   whyItsHere: 'Pourquoi cette œuvre est ici', openRecipe: 'Ouvrir la recette', install: 'Installer', copyPrompt: 'Copier le prompt',
   promptCopied: 'Prompt copié', copyFailed: 'Copie impossible. Réessayez.',

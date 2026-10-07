@@ -20,6 +20,8 @@ export default {
   signInToRate: '登入以為這部作品評分',
   saving: '儲存中…',
   saveFailed: '無法儲存，請再試一次。',
+  ratingProcessing: '你的評分仍在處理中。',
+  refresh: '重新整理',
   ongoing: '連載中', hiatus: '暫停更新',
   whyItsHere: '入選原因', openRecipe: '打開食譜', install: '安裝', copyPrompt: '複製提示詞',
   promptCopied: '已複製提示詞', copyFailed: '無法複製，請再試一次。',

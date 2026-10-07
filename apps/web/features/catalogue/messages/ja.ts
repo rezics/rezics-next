@@ -20,6 +20,8 @@ export default {
   signInToRate: 'ログインしてこの作品を評価',
   saving: '保存中…',
   saveFailed: '保存できませんでした。もう一度お試しください。',
+  ratingProcessing: 'あなたの評価はまだ処理中です。',
+  refresh: '更新',
   ongoing: '連載中', hiatus: '休載中',
   whyItsHere: 'ここに掲載された理由', openRecipe: 'レシピを開く', install: 'インストール', copyPrompt: 'プロンプトをコピー',
   promptCopied: 'プロンプトをコピーしました', copyFailed: 'コピーできませんでした。もう一度お試しください。',

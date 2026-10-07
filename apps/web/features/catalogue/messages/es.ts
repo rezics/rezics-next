@@ -20,6 +20,8 @@ export default {
   signInToRate: 'Inicia sesión para valorar esta obra',
   saving: 'Guardando…',
   saveFailed: 'No se pudo guardar. Inténtalo de nuevo.',
+  ratingProcessing: 'Tu valoración aún se está procesando.',
+  refresh: 'Actualizar',
   ongoing: 'En curso', hiatus: 'En pausa',
   whyItsHere: 'Por qué aparece aquí', openRecipe: 'Abrir receta', install: 'Instalar', copyPrompt: 'Copiar prompt',
   promptCopied: 'Prompt copiado', copyFailed: 'No se pudo copiar. Inténtalo de nuevo.',

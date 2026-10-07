@@ -19,6 +19,8 @@ export default {
   signInToRate: '평가하려면 로그인하세요',
   saving: '저장 중…',
   saveFailed: '저장하지 못했습니다. 다시 시도해 주세요.',
+  ratingProcessing: '평점을 아직 처리하고 있습니다.',
+  refresh: '새로고침',
   ongoing: '연재 중', hiatus: '휴재 중',
   whyItsHere: '선정 이유', openRecipe: '레시피 열기', install: '설치', copyPrompt: '프롬프트 복사',
   promptCopied: '프롬프트를 복사했습니다', copyFailed: '복사하지 못했습니다. 다시 시도해 주세요.',

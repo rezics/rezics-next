@@ -185,6 +185,17 @@ test('private exact-release copies and overdue loans preserve replay, CAS, concu
     const copiesPath = `/v1/works/${target.work.slice(-36)}/copies?actingSubject=${encodeURIComponent(agent)}`;
     expect(await json<Page<CopyState>>(await call('GET', copiesPath))).toMatchObject({ items: [{ id: copy.id, release }], nextCursor: null });
     expect((await call('GET', copiesPath, undefined, randomUUID(), home.author.token)).status).toBe(403);
+    // The Work path is public, but a copy list is the viewer's own. Another Person
+    // sees none of these copies, and a request with no token does not reveal them.
+    const viewerCopies = `/v1/works/${target.work.slice(-36)}/copies?actingSubject=${encodeURIComponent(other)}`;
+    const asViewer = await json<Page<CopyState>>(await call('GET', viewerCopies, undefined, randomUUID(), home.author.token));
+    expect(asViewer).toMatchObject({ items: [], nextCursor: null });
+    expect(JSON.stringify(asViewer)).not.toContain(copy.id);
+    const anonymous = await app.handle(new Request(`http://main.local${copiesPath}`, { method: 'GET' }));
+    const anonymousBody = await anonymous.text();
+    expect(anonymousBody).not.toContain(copy.id);
+    if (anonymous.status === 200) expect(JSON.parse(anonymousBody)).toMatchObject({ items: [] });
+    else expect(anonymous.status).toBe(401);
     const yesterday = new Date(Date.now() - 86_400_000).toISOString(), startedAt = new Date(Date.now() - 3 * 86_400_000).toISOString();
     const dueFuture = new Date(Date.now() + 7 * 86_400_000).toISOString();
     const loanBody = { actingSubject: agent, expectedVersion: 0, copy: copy.id, direction: 'lent',

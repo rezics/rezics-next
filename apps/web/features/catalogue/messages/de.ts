@@ -20,6 +20,8 @@ export default {
   signInToRate: 'Melde dich an, um dieses Werk zu bewerten',
   saving: 'Wird gespeichert…',
   saveFailed: 'Speichern fehlgeschlagen. Bitte versuche es erneut.',
+  ratingProcessing: 'Deine Bewertung wird noch verarbeitet.',
+  refresh: 'Aktualisieren',
   ongoing: 'Laufend', hiatus: 'Pausiert',
   whyItsHere: 'Warum es hier steht', openRecipe: 'Rezept öffnen', install: 'Installieren', copyPrompt: 'Prompt kopieren',
   promptCopied: 'Prompt kopiert', copyFailed: 'Kopieren fehlgeschlagen. Bitte versuche es erneut.',

@@ -95,7 +95,9 @@ function decisionItem(row: ReadRow) {
 export async function readRealmDecisions(session: WorkReadSession, realm: string) {
   await readRealmBasis(session, realm);
   const history = await realmHistoryFilter(session, realm);
-  const origin = await realmHistoryOriginFilter(session, realm, 'selection', '?work');
+  // An empty cut already read this Realm's policy. Asking again would repeat that
+  // one probe and still return no origin filter.
+  const origin = history ? await realmHistoryOriginFilter(session, realm, 'selection', '?work') : '';
   const limit = session.options.limit ?? 20;
   const binding = ['realm-decisions-v1', realm];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
@@ -175,7 +177,8 @@ export async function readRealmDecisions(session: WorkReadSession, realm: string
 export async function readRealmDecision(session: WorkReadSession, realm: string, decision: string) {
   await readRealmBasis(session, realm);
   const history = await realmHistoryFilter(session, realm);
-  const origin = await realmHistoryOriginFilter(session, realm, 'selection', '?work');
+  // Same policy probe as the page: no cut means there is no older publication to exclude.
+  const origin = history ? await realmHistoryOriginFilter(session, realm, 'selection', '?work') : '';
   const rows = await session.query(
     `SELECT DISTINCT ?id ?kind ?work ?subject ?outcome
     ?revisionEpoch ?sequence WHERE {

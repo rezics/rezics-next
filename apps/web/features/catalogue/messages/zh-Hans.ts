@@ -19,6 +19,8 @@ export default {
   signInToRate: '登录后可评分',
   saving: '正在保存…',
   saveFailed: '未能保存，请重试。',
+  ratingProcessing: '你的评分仍在处理中。',
+  refresh: '刷新',
   ongoing: '连载中', hiatus: '暂停更新',
   whyItsHere: '为何入选',
   openRecipe: '查看菜谱', install: '安装', copyPrompt: '复制提示词',
