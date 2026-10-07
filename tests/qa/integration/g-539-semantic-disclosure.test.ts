@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { startMediaStack, png } from './media-support.ts';
 import { publicSemantics, SEMANTIC_DISCLOSURE_LIMIT }
   from '../../../services/main/src/modules/access/semantic-disclosure.ts';
@@ -15,6 +15,13 @@ import { readActiveModelGeneration }
   from '../../../services/main/src/modules/semantic/generation-guard.ts';
 import { readExportPlan, ExportSourceNotFound }
   from '../../../services/main/src/modules/export/readers.ts';
+import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
+import type { VerifiedPrincipal } from '../../../services/main/src/modules/access/admission.ts';
+import { REFERENCE_DISCLOSURE_COST, type SemanticDisclosure }
+  from '../../../services/main/src/modules/access/semantic-disclosure.ts';
+import { startHomeStack } from './feed-read-support.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 
 const ID = 'https://rezics.com/id/';
 const local = (ref: string) => ref.slice(ID.length);
@@ -29,6 +36,18 @@ test('G-539: current accepted semantic Resources follow live Work disclosure and
     const owner = await f.member('semantic-owner');
     const outsider = await f.member('semantic-outsider');
     const editor = await f.member('semantic-editor');
+    const openPlatform = async (member: typeof owner, capability: string) => {
+      const grantId = randomUUID(), action = `platform:use:${capability}`;
+      await f.accessPool.query(`INSERT INTO access.principal_permission_grant
+        (id,issuer_subject,principal_id,scope_id,action,valid_until)
+        VALUES ($1,$2,$3,'platform:access',$4,now()+interval '1 hour')`,
+        [grantId, member.actor, member.principalId, action]);
+      await f.accessPool.query(`INSERT INTO access.platform_grant_episode
+        (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+        VALUES ($1,$1,$2,$3,'platform:access',$4,$5)`,
+        [grantId, member.actor, action, member.principalId,
+          `urn:rezics:access-receipt:${createHash('sha256').update(grantId).digest('hex')}`]);
+    };
     const shown = await f.publicWork(owner.actor);
     const hidden = await f.privateWork(owner.actor);
     await owner.grant('semantic:create:root', 'semantic.change');
@@ -68,6 +87,9 @@ test('G-539: current accepted semantic Resources follow live Work disclosure and
     const restricted = await create('Restricted heroine', [shown.work]);
     const closed = await create('Closed heroine', [shown.work]);
     const place = await create('Public place', [hidden.work, shown.work], 'Place');
+    // Event publication uses its selected capability and a retained grant
+    // episode, in addition to the existing semantic creation authority.
+    await openPlatform(owner, 'events');
     const event = await create('Public event', [shown.work], 'https://schema.org/Event');
     // An actual Content stage has pages but no committed graph head.
     const staged = id();
@@ -196,6 +218,8 @@ test('G-539: current accepted semantic Resources follow live Work disclosure and
     expect(restrictedAvatarResponse.status).toBe(201);
     const restrictedAvatar = (await restrictedAvatarResponse.json() as { selection: string }).selection;
     expect((await anonymous(`/v1/media/avatars/${restrictedAvatar}`)).status).toBe(404);
+    // A policy allow narrows an existing exact-scope capability; authentication alone cannot create it.
+    await owner.grant(restriction.scopeId, 'work.read');
     const decisionRequest = { profile: 'access-policy-decision-v1', scopeId: restriction.scopeId,
       action: 'work.read', actingSubject: owner.actor, reusable: true };
     const decisionResponse = await owner.send('POST', '/v1/access/policy-decisions', decisionRequest);
@@ -316,13 +340,14 @@ test('G-539: current accepted semantic Resources follow live Work disclosure and
       expect((await read(`${readPath(visible.component)}/revisions/${local(latest.revision)}`)).status).toBe(200);
       expect((await read(`${readPath(visible.component)}/revisions/${local(visible.revision)}`)).status).toBe(404);
     }
-    const exported = (revision: Write) => readExportPlan({ env: f.env,
+    await openPlatform(outsider, 'dataset-dumps');
+    const exported = (revision: Write) => readExportPlan({ env: f.env, platformAccess: new AccessExposure(f.accessPool),
       canReadWork: (principal, actor, work) => f.access.canReadWork(principal, actor, work),
       canReadSemantic: (principal, actor, resource, exactRevision) =>
         f.access.canReadSemanticResource(principal, actor, resource, exactRevision),
     }, outsider.principal, outsider.actor, { kind: 'semantic-revision', resource: visible.component,
       reference: revision.revision, expectedPosition: revision.sourcePosition }, 'excerpt');
-    await expect(exported(latest)).resolves.toMatchObject({ targetProfile: 'rezics-semantic-values-v1' });
+    expect(await exported(latest)).toMatchObject({ targetProfile: 'rezics-semantic-values-v1' });
     await expect(exported(visible)).rejects.toBeInstanceOf(ExportSourceNotFound);
     await owner.grant(`semantic:read:${visible.component}`, 'semantic.read');
     expect((await owner.read(`${readPath(visible.component)}/revisions/${local(visible.revision)}`)).status).toBe(200);
@@ -343,4 +368,156 @@ test('G-539: current accepted semantic Resources follow live Work disclosure and
     await expect(publicSemantics({ pool: f.accessPool, graph: f.fuseki },
       Array.from({ length: SEMANTIC_DISCLOSURE_LIMIT + 1 }, id))).rejects.toBeInstanceOf(RangeError);
   } finally { await f.stop(); }
+}, 360_000);
+
+test('semantic batches preserve real private Collection curator authority and scalar restrictions', async () => {
+  const home = await startHomeStack('semantic-curator-batch', { projectionStart: 'current' });
+  const f = home.stack;
+  Object.assign(home.deps, { accessPolicy: new AccessPolicyOwner(f.accessPool) });
+  try {
+    const curator = await home.provision('Semantic Collection curator', home.author.token);
+    const peerCurator = await home.provision('Semantic Collection peer', home.reader.token);
+    const principal: VerifiedPrincipal = { ...home.author.principal, emailVerified: true };
+    const peerPrincipal: VerifiedPrincipal = { ...home.reader.principal, emailVerified: true };
+    const batch = new MediaAccessBatchReader(f.accessPool, f.fuseki);
+    const grant = async (resource: string, action: string, prefix: string) => {
+      const scope = `${prefix}${resource}`, grantId = randomUUID();
+      await f.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+      await f.accessPool.query(`INSERT INTO access.representation
+        (id,principal_id,subject_id,action,valid_until) VALUES ($1,$2,$3,$4,now()+interval '1 hour')`,
+        [randomUUID(), home.author.principalId, curator, action]);
+      await f.accessPool.query(`INSERT INTO access.permission_grant
+        (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+        VALUES ($1,$2,$2,$3,$4,now()+interval '1 hour')`, [grantId, curator, scope, action]);
+      return grantId;
+    };
+    const collection = async (name: string, actor = curator, token = home.author.token) => {
+      const reference = id();
+      await home.json(await home.call('POST', '/v1/collections', {
+        collection: reference, name, disclosure: 'private', actingSubject: actor,
+      }, token), 201);
+      return reference;
+    };
+    const selected = await collection('Current private curator');
+    const changed = await collection('Changed private curator');
+    const inactive = await collection('Inactive private Collection');
+    const closed = await collection('Closed private Collection');
+    const governed = await collection('Policy-owned private Collection');
+    const unprovisioned = await collection('Ordinary represented curator');
+    const peer = await collection('Private peer Collection', peerCurator, home.reader.token);
+
+    // A public semantic Resource is still public; curator and explicit-grant
+    // authority belong only to the separate granted result.
+    const work = await f.publicWork(curator);
+    await grant('root', 'semantic.change', 'semantic:create:');
+    const resource = await home.json<Write>(await home.call('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', expectedHead: null, actingSubject: curator,
+      state: { component: 'resource', types: ['https://rezics.com/vocab/Character'], lifecycle: 'active', properties: [
+        { predicate: 'https://schema.org/name', value: { kind: 'language-string', lexical: 'Batch public Character', language: 'en' } },
+        { predicate: SEMANTIC_TERMS.semanticWork, value: { kind: 'resource', ref: work.work } },
+      ] },
+    }, home.author.token), 201);
+    const parity = async (label: string, references: readonly string[], expectedPublic: readonly string[],
+      expectedGranted: readonly string[], viewer: VerifiedPrincipal | null = principal, actor: string | null = curator) => {
+      const before = f.fuseki.queries, checkouts = f.accessPool.checkouts, started = performance.now();
+      const disclosure = await batch.canReadSemantics(viewer, actor, references) as SemanticDisclosure;
+      const graphQueries = f.fuseki.queries - before;
+      expect(f.accessPool.checkouts - checkouts).toBe(1);
+      expect(graphQueries).toBeLessThanOrEqual(REFERENCE_DISCLOSURE_COST.graphReads);
+      expect(performance.now() - started).toBeLessThan(10_000);
+      expect(disclosure.public).toEqual(new Set(expectedPublic));
+      expect(disclosure.granted).toEqual(new Set(expectedGranted));
+      expect([...disclosure.public].some(reference => disclosure.granted.has(reference))).toBe(false);
+      for (const reference of new Set(references)) {
+        expect(await f.access.canReadSemanticResource(viewer, actor, reference))
+          .toBe(disclosure.public.has(reference) || disclosure.granted.has(reference));
+      }
+      console.log('Semantic Collection batch parity', JSON.stringify({ label, references: references.length, graphQueries, checkouts: 1 }));
+      return graphQueries;
+    };
+    await parity('current-curator', [selected, peer, resource.component], [resource.component], [selected]);
+    await parity('non-curator', [selected, peer, resource.component], [resource.component], [peer], peerPrincipal, peerCurator);
+    await parity('anonymous', [selected, resource.component], [resource.component], [], null, null);
+    await parity('unverified-curator', [selected, resource.component], [resource.component], [],
+      { ...principal, emailVerified: false });
+    await f.fuseki.update(`PREFIX rv:<https://rezics.com/vocab/> DELETE {
+      GRAPH <urn:rezics:graph:current> { <${unprovisioned}> rv:curator <${curator}> } }
+      INSERT { GRAPH <urn:rezics:graph:current> { <${unprovisioned}> rv:curator <${home.author.actor}> } }
+      WHERE { GRAPH <urn:rezics:graph:current> { <${unprovisioned}> rv:curator <${curator}> } }`);
+    await parity('ordinary-representation-lacks-member-provision', [unprovisioned], [], [], principal, home.author.actor);
+
+    // Only semantic.read grants can fill the private peer alternative.
+    await grant(peer, 'work.read', 'work:read:');
+    expect(await f.access.canReadWork(principal, curator, peer)).toBe(true);
+    await parity('work-read-is-not-semantic-read', [selected, peer], [], [selected]);
+    const peerGrant = await grant(peer, 'semantic.read', 'semantic:read:');
+    await parity('explicit-private-peer', [selected, peer, resource.component], [resource.component], [selected, peer]);
+    await f.accessPool.query('UPDATE access.permission_grant SET active=false WHERE id=$1', [peerGrant]);
+    await parity('private-peer-revoked', [selected, peer], [], [selected]);
+
+    await f.fuseki.update(`PREFIX rv:<https://rezics.com/vocab/> DELETE {
+      GRAPH <urn:rezics:graph:current> { <${changed}> rv:curator <${curator}> } }
+      INSERT { GRAPH <urn:rezics:graph:current> { <${changed}> rv:curator <${peerCurator}> } }
+      WHERE { GRAPH <urn:rezics:graph:current> { <${changed}> rv:curator <${curator}> } }`);
+    await parity('changed-curator-old', [changed], [], []);
+    await parity('changed-curator-new', [changed], [], [changed], peerPrincipal, peerCurator);
+    await f.fuseki.update(`PREFIX rv:<https://rezics.com/vocab/> DELETE {
+      GRAPH <urn:rezics:graph:current> { <${inactive}> rv:collectionState rv:Active } }
+      INSERT { GRAPH <urn:rezics:graph:current> { <${inactive}> rv:collectionState rv:Retired } }
+      WHERE { GRAPH <urn:rezics:graph:current> { <${inactive}> rv:collectionState rv:Active } }`);
+    await parity('inactive-collection', [inactive], [], []);
+
+    await f.accessPool.query('UPDATE access.principal SET active=false WHERE id=$1', [home.author.principalId]);
+    try { await parity('inactive-principal', [selected], [], []); }
+    finally { await f.accessPool.query('UPDATE access.principal SET active=true WHERE id=$1', [home.author.principalId]); }
+    await f.accessPool.query('UPDATE access.authority_subject SET active=false WHERE id=$1', [curator]);
+    try { await parity('inactive-curator-subject', [selected], [], []); }
+    finally { await f.accessPool.query('UPDATE access.authority_subject SET active=true WHERE id=$1', [curator]); }
+    await f.accessPool.query(`INSERT INTO access.scope_gate(id,open) VALUES ($1,false)
+      ON CONFLICT(id) DO UPDATE SET open=false`, [`semantic:read:${closed}`]);
+    await parity('closed-semantic-gate', [closed, selected], [], [selected]);
+
+    const policyId = randomUUID(), scopeId = `semantic:read:${governed}`;
+    await grant(governed, 'semantic.change', 'semantic:edit:');
+    await f.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [scopeId]);
+    await home.json(await home.call('POST', '/v1/access/policy-changes', {
+      profile: 'access-policy-change-v1', action: 'publish-revision', scopeId,
+      expectedAuthorityEpoch: '0', policyId, expectedHeadRevision: '0', issuerSubject: curator,
+      mandatory: [], ordered: [],
+    }, home.author.token));
+    await parity('active-policy-excludes-curator-baseline', [governed, selected], [], [selected]);
+    await home.json(await home.call('POST', '/v1/access/policy-changes', {
+      profile: 'access-policy-change-v1', action: 'end-policy', scopeId,
+      expectedAuthorityEpoch: '1', policyId, expectedHeadRevision: '1', issuerSubject: curator,
+    }, home.author.token));
+    expect((await f.accessPool.query('SELECT ended_at FROM access.policy WHERE id=$1', [policyId])).rows[0]!.ended_at)
+      .toBeInstanceOf(Date);
+    await parity('ended-policy-still-excludes-curator-baseline', [governed, selected], [], [selected]);
+
+    const references = [selected, resource.component, ...Array.from({ length: SEMANTIC_DISCLOSURE_LIMIT - 2 }, id)];
+    const graphBefore = f.fuseki.queries, sqlBefore = f.accessPool.checkouts;
+    await expect(batch.canReadSemantics(principal, curator, [...references, selected])).rejects.toBeInstanceOf(RangeError);
+    expect(f.fuseki.queries).toBe(graphBefore);
+    expect(f.accessPool.checkouts).toBe(sqlBefore);
+    const initial = await parity('maximum-65', references, [resource.component], [selected]);
+    await parity('maximum-with-duplicate', [...references.slice(0, -1), selected], [resource.component], [selected]);
+    const unrelated = Array.from({ length: 1_024 }, id);
+    await f.fuseki.update(`PREFIX rv:<https://rezics.com/vocab/> INSERT DATA { GRAPH <urn:rezics:graph:current> {
+      ${unrelated.map(reference => `<${reference}> a rv:Collection ; rv:curator <${peerCurator}> ; rv:collectionState rv:Active .`).join('\n')}
+    } }`);
+    await f.accessPool.query(`INSERT INTO access.scope_gate(id)
+      SELECT 'semantic:read:'||resource FROM unnest($1::text[]) AS fixture(resource) ON CONFLICT DO NOTHING`, [unrelated]);
+    expect(await parity('65-after-unrelated-growth', references, [resource.component], [selected])).toBe(initial);
+
+    const absentGraph = new MediaAccessBatchReader(f.accessPool);
+    const absentBefore = f.accessPool.checkouts;
+    await expect(absentGraph.canReadSemantics(principal, curator, [selected])).rejects.toThrow('baseline graph');
+    expect(f.accessPool.checkouts).toBe(absentBefore);
+    await f.accessPool.query('UPDATE access.recovery_fence SET open=false');
+    try {
+      await expect(batch.canReadSemantics(principal, curator, [selected])).rejects.toThrow('Access recovery is held');
+      await expect(f.access.canReadSemanticResource(principal, curator, selected)).rejects.toThrow('Access recovery is held');
+    } finally { await f.accessPool.query('UPDATE access.recovery_fence SET open=true'); }
+    await parity('recovery-reopened', [selected, resource.component], [resource.component], [selected]);
+  } finally { await home.stop(); }
 }, 360_000);

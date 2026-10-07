@@ -116,10 +116,9 @@ export async function publicInTransaction(access: PoolClient, graph: Pick<Fuseki
   return new Set(allowed.rows.map(row => row.resource));
 }
 
-/** Public and explicit-grant outcomes stay separate so summaries cannot label a
- * granted restriction public. The private path uses one indexed batch query;
- * relation vocabulary is the sole type exception to the public Work link;
- * containers, Contexts and other semantic types supply no read authority. */
+/** Public and authenticated outcomes stay separate so a private curator baseline
+ * cannot label a Collection public. Reuse the reference reader's bounded semantic
+ * authority inside this recovery-fenced transaction, excluding independent Work reads. */
 export async function readSemanticDisclosure(client: SemanticDisclosureClient,
   principal: VerifiedPrincipal | null, actor: string | null, refs: readonly string[]): Promise<SemanticDisclosure> {
   const unique = checkedRefs(refs);
@@ -129,20 +128,9 @@ export async function readSemanticDisclosure(client: SemanticDisclosureClient,
     await requireRecoveryOpen(access, true);
     const publicRefs = await publicInTransaction(access, graph, unique);
     if (!principal || !actor || !nativeId.test(actor)) return { public: publicRefs, granted: new Set() };
-    const rows = await access.query<{ resource: string }>(`SELECT wanted.resource
-      FROM unnest($3::text[]) AS wanted(resource)
-      JOIN access.scope_gate gate ON gate.id = 'semantic:read:' || wanted.resource AND gate.open
-      JOIN access.principal principal ON principal.account_issuer = $1
-        AND principal.account_subject = $2 AND principal.active
-      JOIN access.authority_subject subject ON subject.id = $4 AND subject.active
-      JOIN LATERAL (SELECT id FROM access.representation WHERE principal_id = principal.id
-        AND subject_id = subject.id AND action = 'semantic.read' AND active
-        AND valid_until > clock_timestamp() ORDER BY id LIMIT 1 FOR SHARE) represented ON true
-      JOIN LATERAL (SELECT id FROM access.permission_grant WHERE recipient_subject = subject.id
-        AND scope_id = gate.id AND action = 'semantic.read' AND active
-        AND valid_until > clock_timestamp() ORDER BY id LIMIT 1 FOR SHARE) granted ON true
-      FOR SHARE OF gate, principal, subject`, [principal.issuer, principal.subject, unique, actor]);
-    return { public: publicRefs, granted: new Set(rows.rows.map(row => row.resource)) };
+    const readable = await privateReferenceInTransaction(access, graph, principal, actor,
+      unique, publicRefs, false);
+    return { public: publicRefs, granted: new Set([...readable].filter(ref => !publicRefs.has(ref))) };
   });
 }
 
@@ -256,172 +244,185 @@ export async function readReferenceDisclosure(
   const graph = requireDisclosureGraph(client.graph);
   return inAccessTransaction(client.pool, 'read committed', async (access) => {
     await requireRecoveryOpen(access, true);
-    const allowed = new Set(await publicInTransaction(access, graph, unique));
-    if (!principal || !actor || !nativeId.test(actor)) return allowed;
-    const remaining = unique.filter((ref) => !allowed.has(ref));
-    if (!remaining.length) return allowed;
-    const identity = (
-      await access.query<{ id: string }>(
-        `SELECT id FROM access.principal
-      WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
-        [principal.issuer, principal.subject],
-      )
-    ).rows[0];
-    if (!identity) return allowed;
-    const scopes = remaining.flatMap((ref) => [`semantic:read:${ref}`, `work:read:${ref}`]);
-    const gates = (
-      await access.query<{ id: string; open: boolean }>(
-        `SELECT id, open
-      FROM access.scope_gate WHERE id = ANY($1::text[]) FOR SHARE`,
+    const publicRefs = await publicInTransaction(access, graph, unique);
+    return privateReferenceInTransaction(access, graph, principal, actor, unique, publicRefs, true);
+  });
+}
+
+/** Only the reference reader enables independent Work authority. Both readers
+ * retain the existing exact semantic gates, policies and live baseline proofs. */
+async function privateReferenceInTransaction(access: PoolClient, graph: Pick<FusekiClient, 'query'>,
+  principal: VerifiedPrincipal | null, actor: string | null, unique: readonly string[],
+  publicRefs: ReadonlySet<string>, includeWorks: boolean): Promise<ReadonlySet<string>> {
+  const allowed = new Set(publicRefs);
+  if (!principal || !actor || !nativeId.test(actor)) return allowed;
+  const remaining = unique.filter((ref) => !allowed.has(ref));
+  if (!remaining.length) return allowed;
+  const identity = (
+    await access.query<{ id: string }>(
+      `SELECT id FROM access.principal
+    WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
+      [principal.issuer, principal.subject],
+    )
+  ).rows[0];
+  if (!identity) return allowed;
+  const scopes = includeWorks
+    ? remaining.flatMap(ref => [`semantic:read:${ref}`, `work:read:${ref}`])
+    : remaining.map(ref => `semantic:read:${ref}`);
+  const gates = (
+    await access.query<{ id: string; open: boolean }>(
+      `SELECT id, open
+    FROM access.scope_gate WHERE id = ANY($1::text[]) FOR SHARE`,
+      [scopes],
+    )
+  ).rows;
+  const closed = new Set(gates.filter((gate) => !gate.open).map((gate) => gate.id));
+  // Ended policies also exclude baseline authority, just as the scalar reader does.
+  const policies = new Set(
+    (
+      await access.query<{ scope_id: string }>(
+        `SELECT scope_id
+    FROM access.policy WHERE scope_id = ANY($1::text[])`,
         [scopes],
       )
-    ).rows;
-    const closed = new Set(gates.filter((gate) => !gate.open).map((gate) => gate.id));
-    // Ended policies also exclude baseline authority, just as the scalar reader does.
-    const policies = new Set(
-      (
-        await access.query<{ scope_id: string }>(
-          `SELECT scope_id
-      FROM access.policy WHERE scope_id = ANY($1::text[])`,
-          [scopes],
-        )
-      ).rows.map((row) => row.scope_id),
+    ).rows.map((row) => row.scope_id),
+  );
+  const grants = (
+    await access.query<{ resource: string }>(
+      `SELECT wanted.resource
+    FROM unnest($3::text[]) AS wanted(resource)
+    CROSS JOIN (VALUES ${includeWorks
+      ? "('semantic:read:', 'semantic.read'), ('work:read:', 'work.read')"
+      : "('semantic:read:', 'semantic.read')"}) AS kind(prefix, action)
+    JOIN access.scope_gate gate ON gate.id = kind.prefix || wanted.resource AND gate.open
+    JOIN access.authority_subject subject ON subject.id = $2 AND subject.active
+    JOIN LATERAL (SELECT id FROM access.representation WHERE principal_id = $1
+      AND subject_id = $2 AND action = kind.action AND active AND valid_until > clock_timestamp()
+      ORDER BY id LIMIT 1 FOR SHARE) represented ON true
+    JOIN LATERAL (SELECT id FROM access.permission_grant WHERE recipient_subject = $2
+      AND scope_id = gate.id AND action = kind.action AND active AND valid_until > clock_timestamp()
+      ORDER BY id LIMIT 1 FOR SHARE) granted ON true
+    FOR SHARE OF gate, subject`,
+      [identity.id, actor, remaining],
+    )
+  ).rows;
+  for (const row of grants) allowed.add(row.resource);
+  const eligible = (prefix: string) =>
+    remaining.filter(
+      (ref) =>
+        !allowed.has(ref) && !closed.has(`${prefix}${ref}`) && !policies.has(`${prefix}${ref}`),
     );
-    const grants = (
+  const semantic = eligible('semantic:read:'),
+    works = includeWorks ? eligible('work:read:') : [];
+  if (!semantic.length && !works.length) return allowed;
+  const administrator = semantic.length
+    ? !!(await platformAdministratorProof(access, identity.id, actor,true,{ action: 'semantic.read',scope: 'semantic:read:*' }))
+    : false;
+  const member =
+    principal.emailVerified === true && !!(await baselineMemberProof(access, identity.id, actor));
+  const definitions = administrator
+    ? await referenceReceipts(graph, semantic, definitionReceiptPattern, true)
+    : [];
+  if (definitions.length) {
+    // Creation fixes the steward Agent, not its controller principal. Keep
+    // the sealed provenance exact and lock that Agent's current controller.
+    const rows = (
       await access.query<{ resource: string }>(
-        `SELECT wanted.resource
-      FROM unnest($3::text[]) AS wanted(resource)
-      CROSS JOIN (VALUES ('semantic:read:', 'semantic.read'), ('work:read:', 'work.read')) AS kind(prefix, action)
-      JOIN access.scope_gate gate ON gate.id = kind.prefix || wanted.resource AND gate.open
-      JOIN access.authority_subject subject ON subject.id = $2 AND subject.active
-      JOIN LATERAL (SELECT id FROM access.representation WHERE principal_id = $1
-        AND subject_id = $2 AND action = kind.action AND active AND valid_until > clock_timestamp()
-        ORDER BY id LIMIT 1 FOR SHARE) represented ON true
-      JOIN LATERAL (SELECT id FROM access.permission_grant WHERE recipient_subject = $2
-        AND scope_id = gate.id AND action = kind.action AND active AND valid_until > clock_timestamp()
-        ORDER BY id LIMIT 1 FOR SHARE) granted ON true
-      FOR SHARE OF gate, subject`,
-        [identity.id, actor, remaining],
+        `SELECT proof.resource
+      FROM jsonb_to_recordset($1::jsonb) AS proof(resource text, admission uuid, receipt text, digest text)
+      JOIN access.admission a ON a.id = proof.admission AND a.acting_subject = $3
+        AND a.action = 'semantic.change' AND a.scope_id = 'semantic:create:root'
+        AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
+        AND a.graph_receipt = proof.receipt AND a.request_digest = proof.digest
+      JOIN LATERAL (SELECT r.id FROM access.representation r
+        JOIN access.principal p ON p.id = r.principal_id AND p.active
+        JOIN access.authority_subject s ON s.id = r.subject_id AND s.active AND s.kind = 'agent'
+        WHERE r.principal_id = $2 AND r.subject_id = a.acting_subject
+          AND r.action = 'agent.control' AND r.active AND r.valid_until > clock_timestamp()
+        ORDER BY r.id LIMIT 1 FOR SHARE OF r, p, s) controlled ON true
+      FOR SHARE OF a`,
+        [JSON.stringify(definitions), identity.id, actor],
       )
     ).rows;
-    for (const row of grants) allowed.add(row.resource);
-    const eligible = (prefix: string) =>
-      remaining.filter(
-        (ref) =>
-          !allowed.has(ref) && !closed.has(`${prefix}${ref}`) && !policies.has(`${prefix}${ref}`),
-      );
-    const semantic = eligible('semantic:read:'),
-      works = eligible('work:read:');
-    if (!semantic.length && !works.length) return allowed;
-    const administrator = semantic.length
-      ? !!(await platformAdministratorProof(access, identity.id, actor,true,{ action: 'semantic.read',scope: 'semantic:read:*' }))
-      : false;
-    const member =
-      principal.emailVerified === true && !!(await baselineMemberProof(access, identity.id, actor));
-    const definitions = administrator
-      ? await referenceReceipts(graph, semantic, definitionReceiptPattern, true)
-      : [];
-    if (definitions.length) {
-      // Creation fixes the steward Agent, not its controller principal. Keep
-      // the sealed provenance exact and lock that Agent's current controller.
-      const rows = (
-        await access.query<{ resource: string }>(
-          `SELECT proof.resource
-        FROM jsonb_to_recordset($1::jsonb) AS proof(resource text, admission uuid, receipt text, digest text)
-        JOIN access.admission a ON a.id = proof.admission AND a.acting_subject = $3
-          AND a.action = 'semantic.change' AND a.scope_id = 'semantic:create:root'
-          AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
-          AND a.graph_receipt = proof.receipt AND a.request_digest = proof.digest
-        JOIN LATERAL (SELECT r.id FROM access.representation r
-          JOIN access.principal p ON p.id = r.principal_id AND p.active
-          JOIN access.authority_subject s ON s.id = r.subject_id AND s.active AND s.kind = 'agent'
-          WHERE r.principal_id = $2 AND r.subject_id = a.acting_subject
-            AND r.action = 'agent.control' AND r.active AND r.valid_until > clock_timestamp()
-          ORDER BY r.id LIMIT 1 FOR SHARE OF r, p, s) controlled ON true
-        FOR SHARE OF a`,
-          [JSON.stringify(definitions), identity.id, actor],
-        )
-      ).rows;
-      for (const row of rows) allowed.add(row.resource);
-    }
-    const zones = await referenceReceipts(
-      graph,
-      semantic.filter((ref) => !allowed.has(ref)),
-      (resource) => zoneReceiptPattern(resource, actor),
-    );
-    if (zones.length) {
-      const rows = (
-        await access.query<{ resource: string }>(
-          `SELECT proof.resource
-        FROM jsonb_to_recordset($1::jsonb) AS proof(resource text, admission uuid, receipt text, digest text)
-        JOIN access.admission a ON a.id = proof.admission AND a.principal_id = $2 AND a.acting_subject = $3
-          AND a.action = 'space.create' AND a.scope_id = 'space:create:root'
-          AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
-          AND a.graph_receipt = proof.receipt AND a.request_digest = proof.digest
-        JOIN LATERAL (SELECT r.id FROM access.representation r JOIN access.authority_subject s ON s.id = r.subject_id
-          WHERE r.principal_id = a.principal_id AND r.subject_id = a.acting_subject
-            AND r.action = 'agent.control' AND r.active AND r.valid_until > clock_timestamp()
-            AND s.kind = 'agent' AND s.active ORDER BY r.id LIMIT 1 FOR SHARE OF r,s) controlled ON true
-        FOR SHARE OF a`,
-          [JSON.stringify(zones), identity.id, actor],
-        )
-      ).rows;
-      for (const row of rows) allowed.add(row.resource);
-    }
-    const patterns = [
-      ...(administrator
-        ? semantic
-            .filter((ref) => !allowed.has(ref))
-            .map(
-              (ref) => `{
-        BIND(${iri(ref)} AS ?resource) FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
-          ?resource a rv:Zone ; rv:space ?space . ?space a rv:Space ; rv:owner ${iri(actor)} . } } }`,
-            )
-        : []),
-      ...(member
-        ? semantic
-            .filter((ref) => !allowed.has(ref))
-            .map(
-              (ref) => `{
-        BIND(${iri(ref)} AS ?resource) FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
-          ?resource a ?kind ; rv:curator ${iri(actor)} ; rv:collectionState rv:Active .
-          VALUES ?kind { rv:Collection rv:DynamicCollection } } } }`,
-            )
-        : []),
-      ...(member
-        ? works
-            .filter((ref) => !allowed.has(ref))
-            .map(
-              (ref) => `{
-        BIND(${iri(ref)} AS ?resource) FILTER EXISTS {
-          { ${publicWork('?resource', '?main')} } UNION { ${publicPost('?resource')} } } }`,
-            )
-        : []),
-    ];
-    if (patterns.length) {
-      const rows =
-        (
-          await graph.query(
-            `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-        SELECT DISTINCT ?resource WHERE { ${patterns.join(' UNION ')} } LIMIT ${remaining.length + 1}`,
-            32_768,
+    for (const row of rows) allowed.add(row.resource);
+  }
+  const zones = await referenceReceipts(
+    graph,
+    semantic.filter((ref) => !allowed.has(ref)),
+    (resource) => zoneReceiptPattern(resource, actor),
+  );
+  if (zones.length) {
+    const rows = (
+      await access.query<{ resource: string }>(
+        `SELECT proof.resource
+      FROM jsonb_to_recordset($1::jsonb) AS proof(resource text, admission uuid, receipt text, digest text)
+      JOIN access.admission a ON a.id = proof.admission AND a.principal_id = $2 AND a.acting_subject = $3
+        AND a.action = 'space.create' AND a.scope_id = 'space:create:root'
+        AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
+        AND a.graph_receipt = proof.receipt AND a.request_digest = proof.digest
+      JOIN LATERAL (SELECT r.id FROM access.representation r JOIN access.authority_subject s ON s.id = r.subject_id
+        WHERE r.principal_id = a.principal_id AND r.subject_id = a.acting_subject
+          AND r.action = 'agent.control' AND r.active AND r.valid_until > clock_timestamp()
+          AND s.kind = 'agent' AND s.active ORDER BY r.id LIMIT 1 FOR SHARE OF r,s) controlled ON true
+      FOR SHARE OF a`,
+        [JSON.stringify(zones), identity.id, actor],
+      )
+    ).rows;
+    for (const row of rows) allowed.add(row.resource);
+  }
+  const patterns = [
+    ...(administrator
+      ? semantic
+          .filter((ref) => !allowed.has(ref))
+          .map(
+            (ref) => `{
+      BIND(${iri(ref)} AS ?resource) FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ?resource a rv:Zone ; rv:space ?space . ?space a rv:Space ; rv:owner ${iri(actor)} . } } }`,
           )
-        ).results?.bindings ?? [];
-      if (
-        rows.length > remaining.length ||
-        rows.some((row) => !remaining.includes(row.resource?.value ?? ''))
-      ) {
-        throw new Error('reference baseline batch is ambiguous');
-      }
-      for (const row of rows) allowed.add(row.resource!.value);
+      : []),
+    ...(member
+      ? semantic
+          .filter((ref) => !allowed.has(ref))
+          .map(
+            (ref) => `{
+      BIND(${iri(ref)} AS ?resource) FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ?resource a ?kind ; rv:curator ${iri(actor)} ; rv:collectionState rv:Active .
+        VALUES ?kind { rv:Collection rv:DynamicCollection } } } }`,
+          )
+      : []),
+    ...(member
+      ? works
+          .filter((ref) => !allowed.has(ref))
+          .map(
+            (ref) => `{
+      BIND(${iri(ref)} AS ?resource) FILTER EXISTS {
+        { ${publicWork('?resource', '?main')} } UNION { ${publicPost('?resource')} } } }`,
+          )
+      : []),
+  ];
+  if (patterns.length) {
+    const rows =
+      (
+        await graph.query(
+          `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      SELECT DISTINCT ?resource WHERE { ${patterns.join(' UNION ')} } LIMIT ${remaining.length + 1}`,
+          32_768,
+        )
+      ).results?.bindings ?? [];
+    if (
+      rows.length > remaining.length ||
+      rows.some((row) => !remaining.includes(row.resource?.value ?? ''))
+    ) {
+      throw new Error('reference baseline batch is ambiguous');
     }
-    const authored = member ? works.filter((ref) => !allowed.has(ref)) : [];
-    if (authored.length) {
-      // Creation receipts prove provenance. The live maintainer set and current
-      // controller prove authority, including after either kind of handover.
-      const generations = await authorWorkGenerations(access, graph, identity.id, actor, authored);
-      for (const resource of generations.keys()) allowed.add(resource);
-    }
-    return allowed;
-  });
+    for (const row of rows) allowed.add(row.resource!.value);
+  }
+  const authored = member ? works.filter((ref) => !allowed.has(ref)) : [];
+  if (authored.length) {
+    // Creation receipts prove provenance. The live maintainer set and current
+    // controller prove authority, including after either kind of handover.
+    const generations = await authorWorkGenerations(access, graph, identity.id, actor, authored);
+    for (const resource of generations.keys()) allowed.add(resource);
+  }
+  return allowed;
 }
