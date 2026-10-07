@@ -223,8 +223,7 @@ test('IAM01: the rewritten Cookie header replaces session cookies and keeps the 
 function configure(fetcher: typeof fetch) {
   process.env.WEB_OAUTH_CLIENT_ID = 'web';
   process.env.ACCOUNT_ORIGIN = 'http://account.test';
-  // Address resolution precedes session handling; this suite isolates the
-  // Account exchanges while admitting its public Work fixture through Main.
+  // Keep Main admission reads separate from the Account exchanges this suite counts.
   globalThis.fetch = (async (input, init) => {
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
     if (url.pathname === '/v1/addresses/resolve') {
@@ -242,6 +241,11 @@ function configure(fetcher: typeof fetch) {
     if (url.pathname === '/v1/me/session-agent') {
       return Response.json({ sessionAgent: { eligible: false } });
     }
+    if (url.pathname === '/v1/works/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d') {
+      return new Response(null, { status: 200 });
+    }
+    expect(url.pathname).toBe('/api/auth/oauth2/token');
+    expect(init?.method).toBe('POST');
     return fetcher(input, init);
   }) as typeof fetch;
 }

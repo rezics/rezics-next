@@ -85,7 +85,7 @@ test('a retired chapter alias keeps 410 and an unreadable placement does not red
   });
 });
 
-test('a signed-in chapter reader resolves as their session Agent before rendering', async () => {
+test.each([false, true])('a signed-in chapter reader resolves their reader or Contents place as their session Agent (%s)', async (contents) => {
   const actor = `https://rezics.com/id/${post}`;
   const token = `header.${Buffer.from(JSON.stringify({ sub: 'chapter-reader' })).toString('base64url')}.signature`;
   const record = encodeSessionRecord({
@@ -93,17 +93,22 @@ test('a signed-in chapter reader resolves as their session Agent before renderin
     expiresAt: new Date(Date.now() + 60_000).toISOString(),
   });
   let resolvedAsReader = false;
+  let admittedAsReader = false;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
     if (url.pathname === '/v1/me/session-agent') {
       expect(new Headers(init?.headers).get('authorization')).toBe(`Bearer ${token}`);
       return Response.json({ sessionAgent: { eligible: true, actingSubject: actor } });
     }
-    expect(url.pathname).toBe('/v1/addresses/resolve');
     expect(url.searchParams.get('actingSubject')).toBe(actor);
     expect(new Headers(init?.headers).get('authorization')).toBe(`Bearer ${token}`);
+    if (url.pathname === `/v1/posts/${post}`) {
+      admittedAsReader = true;
+      return new Response(null, { status: 200 });
+    }
+    expect(url.pathname).toBe('/v1/addresses/resolve');
     resolvedAsReader = true;
-    return Response.json(answer());
+    return Response.json(answer(contents));
   }) as unknown as typeof fetch;
   const response = await proxy(
     // ast-grep-ignore: web-links-use-address -- The retained chapter alias must resolve using live reader authority.
@@ -115,6 +120,7 @@ test('a signed-in chapter reader resolves as their session Agent before renderin
   expect(response.status).toBe(301);
   expect(response.headers.get('cache-control')).toBe('private, no-store');
   expect(resolvedAsReader).toBe(true);
+  expect(admittedAsReader).toBe(true);
   const slash = await beforePathNormalization(
     // ast-grep-ignore: web-links-use-address -- A private retained alias must resolve before slash normalization too.
     new Request(`https://rezics.test/zh-Hant/w/${alias}/`, {

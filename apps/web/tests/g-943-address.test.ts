@@ -23,6 +23,7 @@ import { beforePathNormalization } from '../features/address/edge.ts';
 import { workViewAddress } from '../features/seo/work.ts';
 import { representationPath } from '../features/seo/address.ts';
 import { readRoster } from '../features/realm/read.ts';
+import { WORK_MISSING_HEADER } from '../features/work-page/admission.ts';
 
 const uuid = '0199a0fe-0b21-7000-8000-123456789abc';
 const sid = uuidToSid(uuid);
@@ -175,10 +176,17 @@ const originalClient = process.env.WEB_OAUTH_CLIENT_ID;
 afterEach(() => { globalThis.fetch = originalFetch; process.env.WEB_OAUTH_CLIENT_ID = originalClient; });
 test('G-943 proxy emits HTTP 301; resolver sends no credentials; canonical request carries trusted data', async () => {
   process.env.WEB_OAUTH_CLIENT_ID = 'g-943-test';
-  globalThis.fetch = (async (_input: unknown, init?: RequestInit) => {
+  let ownerReads = 0;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
     const incoming = new Headers(init?.headers);
     expect(incoming.has('authorization')).toBe(false);
     expect(incoming.has('cookie')).toBe(false);
+    if (url.pathname === `/v1/works/${uuid}`) {
+      ownerReads++;
+      return new Response(null, { status: 200 });
+    }
+    expect(url.pathname).toBe('/v1/addresses/resolve');
     expect(incoming.get('x-rezics-display-languages')).toBe('sv,ja');
     return Response.json(full(answer('work', '/w/', 'story', 'Story')));
   }) as typeof fetch;
@@ -190,6 +198,45 @@ test('G-943 proxy emits HTTP 301; resolver sends no credentials; canonical reque
   }));
   expect(canonical.status).toBe(200);
   expect(JSON.parse(decodeURIComponent(canonical.headers.get(`x-middleware-request-${ADDRESS_HEADER}`)!)).holder).toBe(holder);
+  expect(ownerReads).toBe(2);
+});
+test('a cached public Work that becomes private has the same admission refusal as a missing Work', async () => {
+  const id = crypto.randomUUID();
+  const key = uuidToSid(id);
+  const missing = uuidToSid(crypto.randomUUID());
+  const address = { ...full(answer('work', '/w/', key, '')), holder: `https://rezics.com/id/${id}` };
+  let visible = true;
+  let ownerReads = 0;
+  let resolutions = 0;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
+    if (url.pathname === `/v1/works/${id}`) {
+      ownerReads++;
+      return new Response(null, { status: visible ? 200 : 404 });
+    }
+    expect(url.pathname).toBe('/v1/addresses/resolve');
+    resolutions++;
+    return url.searchParams.get('key') === key
+      ? Response.json(address, { headers: { 'cache-control': 'public, max-age=60', etag: '"visible-work"' } })
+      : new Response(null, { status: 404 });
+  }) as typeof fetch;
+  const path = `https://rezics.test/en/w/${key}`;
+  const warm = await proxy(new NextRequest(path, { headers: { [WORK_MISSING_HEADER]: '1' } }));
+  expect(warm.status).toBe(200);
+  expect(warm.headers.get(`x-middleware-request-${WORK_MISSING_HEADER}`)).toBeNull();
+  visible = false;
+  const denied = await proxy(new NextRequest(path, { headers: { [ADDRESS_HEADER]: 'forged' } }));
+  const absent = await proxy(new NextRequest(`https://rezics.test/en/w/${missing}`));
+  for (const response of [denied, absent]) {
+    expect(response.status).toBe(404);
+    expect(response.headers.get('location')).toBeNull();
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('x-robots-tag')).toBe('noindex');
+    expect(response.headers.get(`x-middleware-request-${WORK_MISSING_HEADER}`)).toBe('1');
+    expect(response.headers.get(`x-middleware-request-${ADDRESS_HEADER}`)).toBeNull();
+  }
+  expect(resolutions).toBe(2);
+  expect(ownerReads).toBe(2);
 });
 test('G-943 proxy returns a non-indexable unavailable response rather than rendering an empty page', async () => {
   process.env.WEB_OAUTH_CLIENT_ID = 'g-943-test';
