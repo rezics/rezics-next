@@ -1,0 +1,71 @@
+# A first-party theme is bound to one public Zone and has immutable revisions, reviews, activations and controls.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/theme-first-party-v1/theme-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:FirstPartyTheme ] ;
+    sh:property [ sh:path rv:themeOwner ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:hostZone ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:themeRevisionHead ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:themeActivationHead ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/theme-first-party-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:FirstPartyThemeRevision ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:hostZone ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:submittedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:submittedPrincipal ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:dependencyDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:bundle ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 32768 ] .
+
+<https://rezics.com/definition/theme-first-party-v1/review-slot-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:FirstPartyThemeReviewSlot ] ;
+    sh:property [ sh:path rv:reviewHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/theme-first-party-v1/review-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:FirstPartyThemeReview ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:revision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:reviewedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:reviewerPrincipal ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:decision ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Approved rv:Rejected ) ] ;
+    sh:property [ sh:path rv:reviewEvidenceDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] .
+
+<https://rezics.com/definition/theme-first-party-v1/activation-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:FirstPartyThemeActivation ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:revision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:review ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:hostZone ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:approvedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:controlBasis ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:approvalExpiresAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .
+
+<https://rezics.com/definition/theme-first-party-v1/revocation-slot-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:FirstPartyThemeRevocationSlot ] ;
+    sh:property [ sh:path rv:revocation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/theme-first-party-v1/revocation-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:FirstPartyThemeRevocation ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:activation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] ;
+    sh:property [ sh:path rv:revokedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] .
+
+<https://rezics.com/definition/theme-first-party-v1/control-head-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:FirstPartyThemeControlHead ] ;
+    sh:property [ sh:path rv:controlHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/theme-first-party-v1/control-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:FirstPartyThemeControl ] ;
+    sh:property [ sh:path rv:changedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^https://rezics\\.com/id/[0-9a-f-]{36}$" ] .
