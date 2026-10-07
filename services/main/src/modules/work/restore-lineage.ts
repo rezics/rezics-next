@@ -37,6 +37,133 @@ export interface RestoreLineageCutover {
   next: GraphLineage;
 }
 
+export interface RestoredGraphReleaseExpectation {
+  lineage: GraphLineage;
+  restoreCutover: string;
+  saved: { dataEpoch: string; graphSequence: string; main?: RelayHandoffPosition };
+  effective: { dataEpoch: string; graphSequence: string; main?: RelayHandoffPosition };
+}
+
+export interface RestoredGraphReleaseProof {
+  expectation: RestoredGraphReleaseExpectation;
+  receipt: { id: string; requestDigest: string; dataEpoch: string; sequence: '0' };
+}
+
+/** Read native release evidence afresh; this never authorizes an owner effect. */
+export async function readRestoredGraphReleaseProof(
+  fuseki: FusekiClient, expected: RestoredGraphReleaseExpectation,
+): Promise<RestoredGraphReleaseProof | null> {
+  // Project only primitive contract members: caller extras/toJSON cannot change identity.
+  const main = (value: RelayHandoffPosition | undefined) => value === undefined ? undefined : {
+    streamScope: value?.streamScope, dataEpoch: value?.dataEpoch, sequence: value?.sequence,
+  };
+  expected = { lineage: { dataEpoch: expected?.lineage?.dataEpoch, routingEpoch: expected?.lineage?.routingEpoch },
+    restoreCutover: expected?.restoreCutover,
+    saved: { dataEpoch: expected?.saved?.dataEpoch, graphSequence: expected?.saved?.graphSequence,
+      ...(expected?.saved?.main === undefined ? {} : { main: main(expected.saved.main) }) },
+    effective: { dataEpoch: expected?.effective?.dataEpoch, graphSequence: expected?.effective?.graphSequence,
+      ...(expected?.effective?.main === undefined ? {} : { main: main(expected.effective.main) }) } };
+  const { lineage, saved, effective, restoreCutover } = expected;
+  const paired = saved.main !== undefined;
+  if (paired !== (effective.main !== undefined)) return null;
+  let bytes = 0;
+  const strings = [lineage.dataEpoch, lineage.routingEpoch, restoreCutover, saved.dataEpoch,
+    saved.graphSequence, effective.dataEpoch, effective.graphSequence, ...(paired
+      ? [saved.main!.streamScope, saved.main!.dataEpoch, saved.main!.sequence,
+        effective.main!.streamScope, effective.main!.dataEpoch, effective.main!.sequence] : [])];
+  if (!strings.every(value => typeof value === 'string' && value.length <= 16_384
+    && (bytes += Buffer.byteLength(JSON.stringify(value))) <= 16_384)
+    || Buffer.byteLength(JSON.stringify(expected)) > 16_384) return null;
+  const canonical = (value: string) => /^(0|[1-9][0-9]*)$/.test(value);
+  if (saved.dataEpoch !== effective.dataEpoch
+    || restoreCutover !== `urn:rezics:restore:${lineage.dataEpoch}`
+    || !canonical(saved.graphSequence) || !canonical(effective.graphSequence)
+    || BigInt(effective.graphSequence) < BigInt(saved.graphSequence)) return null;
+  if (paired && [saved, effective].some(cut => cut.main?.streamScope !== MAIN_RELAY_STREAM_SCOPE
+    || cut.main.dataEpoch !== cut.dataEpoch || !canonical(cut.main.sequence))) return null;
+  if (paired && BigInt(effective.main!.sequence) < BigInt(saved.main!.sequence)) return null;
+  // Keep the release writer's ordered v1/v2 identity, including graph/Main separation.
+  const id = `urn:rezics:receipt:restore-release:${hash(lineage.dataEpoch)}`;
+  const requestDigest = hash(JSON.stringify(paired
+    ? { family: 'restore-release-v2', lineage, priorDataEpoch: effective.dataEpoch,
+      priorSequence: effective.graphSequence, priorMainSequence: effective.main!.sequence,
+      streamScope: MAIN_RELAY_STREAM_SCOPE }
+    : { family: 'restore-release-v1', lineage, priorDataEpoch: effective.dataEpoch,
+      priorSequence: effective.graphSequence }));
+  const result = await fuseki.query(`SELECT ?graph ?subject ?predicate ?object WHERE {
+    { BIND(${iri(GRAPHS.control)} AS ?graph) BIND(${iri(DATASET)} AS ?subject)
+      GRAPH ?graph { ?subject ?predicate ?object }
+      VALUES ?predicate { ${['dataEpoch', 'routingEpoch', 'sequence', 'restoreCutover', 'restoreHold']
+        .map(name => `<${RV}${name}>`).join(' ')} } }
+    UNION { BIND(${iri(GRAPHS.control)} AS ?graph) BIND(IRI(${lit(restoreCutover)}) AS ?subject)
+      GRAPH ?graph { ?subject ?predicate ?object } }
+    ${paired ? `UNION { BIND(${iri(GRAPHS.control)} AS ?graph) BIND(${iri(MAIN_RELAY_STREAM_SCOPE)} AS ?subject)
+      GRAPH ?graph { ?subject ?predicate ?object } }` : ''}
+    UNION { BIND(${iri(GRAPHS.receipts)} AS ?graph) BIND(${iri(id)} AS ?subject)
+      GRAPH ?graph { ?subject ?predicate ?object } }
+  } LIMIT 22`, 16_384);
+  const rows = result.results?.bindings;
+  if (!rows || rows.length > 21) return null;
+  type Term = NonNullable<typeof rows>[number][string];
+  const uri = (value: string): Term => ({ type: 'uri', value });
+  const literal = (value: string, datatype = 'string'): Term => ({ type: 'literal', value,
+    datatype: `http://www.w3.org/2001/XMLSchema#${datatype}` });
+  const same = (actual: Term | undefined, wanted: Term): boolean => !!actual
+    && actual.type === wanted.type && actual.value === wanted.value
+    // SPARQL JSON may omit xsd:string; integer identity still requires its datatype.
+    && (actual.datatype === wanted.datatype || actual.datatype === undefined
+      && wanted.datatype === 'http://www.w3.org/2001/XMLSchema#string')
+    && actual['xml:lang'] === undefined;
+  const type = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
+  const facts = new Map<string, Map<string, Term>>();
+  for (const row of rows) {
+    const graph = row.graph, subject = row.subject, predicate = row.predicate, object = row.object;
+    if (!graph || !subject || !predicate || !object
+      || !same(graph, uri(graph.value)) || !same(subject, uri(subject.value))
+      || !same(predicate, uri(predicate.value))) return null;
+    const key = `${graph.value}\n${subject.value}`;
+    const fields = facts.get(key) ?? new Map<string, Term>();
+    if (fields.has(predicate.value)) return null;
+    fields.set(predicate.value, object);
+    facts.set(key, fields);
+  }
+  const exact = (graph: string, subject: string, wanted: [string, Term][]): boolean => {
+    const fields = facts.get(`${graph}\n${subject}`);
+    return fields?.size === wanted.length && wanted.every(([predicate, object]) => same(fields.get(predicate), object));
+  };
+  const field = (name: string, value: string, datatype = 'string'): [string, Term] =>
+    [RV + name, literal(value, datatype)];
+  const marker = facts.get(`${GRAPHS.control}\n${restoreCutover}`);
+  const graphCursor = marker?.get(RV + 'reconciledPriorSequence');
+  const mainCursor = marker?.get(RV + 'reconciledPriorMainSequence');
+  if (paired && Boolean(graphCursor) !== Boolean(mainCursor)
+    || !paired && mainCursor
+    || !graphCursor && effective.graphSequence !== saved.graphSequence
+    || paired && !mainCursor && effective.main!.sequence !== saved.main!.sequence) return null;
+  const markerFacts: [string, Term][] = [[type, uri(RV + 'RestoreCutover')],
+    field('dataEpoch', lineage.dataEpoch), field('priorDataEpoch', saved.dataEpoch),
+    field('priorSequence', saved.graphSequence, 'integer')];
+  if (paired) markerFacts.push(field('priorMainSequence', saved.main!.sequence, 'integer'));
+  if (graphCursor) markerFacts.push(field('reconciledPriorSequence', effective.graphSequence, 'integer'));
+  if (mainCursor) markerFacts.push(field('reconciledPriorMainSequence', effective.main!.sequence, 'integer'));
+  const receiptFacts: [string, Term][] = [[type, uri(RV + 'OperationReceipt')],
+    field('requestDigest', requestDigest), [RV + 'datasetId', uri(DATASET)],
+    field('dataEpoch', lineage.dataEpoch), field('sequence', '0', 'integer')];
+  if (paired) receiptFacts.push(field('priorMainSequence', effective.main!.sequence, 'integer'),
+    field('streamScope', MAIN_RELAY_STREAM_SCOPE));
+  if (facts.size !== (paired ? 4 : 3)
+    || !exact(GRAPHS.control, DATASET, [field('dataEpoch', lineage.dataEpoch),
+      field('routingEpoch', lineage.routingEpoch), field('sequence', '0', 'integer'),
+      [RV + 'restoreCutover', uri(restoreCutover)]])
+    || paired && !exact(GRAPHS.control, MAIN_RELAY_STREAM_SCOPE, [field('dataEpoch', lineage.dataEpoch),
+      field('streamSequence', '0', 'integer'), field('legacyThroughSequence', '0', 'integer')])
+    || !exact(GRAPHS.control, restoreCutover, markerFacts)
+    || !exact(GRAPHS.receipts, id, receiptFacts)) return null;
+  return { expectation: expected, receipt: { id, requestDigest, dataEpoch: lineage.dataEpoch, sequence: '0' } };
+}
+
+
+
 export interface RecoveryCoverage {
   priorDataEpoch: string;
   priorSequence: string;
