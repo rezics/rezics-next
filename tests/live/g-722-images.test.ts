@@ -1,15 +1,104 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { repositoryRoot } from '../../scripts/ops/migrate.ts';
+import type { ReleaseManifest } from '../../scripts/dev/release-manifest.ts';
+import { checkProductionEnv } from '../../scripts/ops/production-env.ts';
 import { prepareImageContext, runtimeRoles } from '../../scripts/ops/release-images.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
 
-test('G-722 image context excludes development data and credentials', async () => {
-  const directory = join(repositoryRoot, '.temp/g722-context-test');
+/** Values qualify only an isolated container startup, never production opening. */
+function smokeEnvironment(postgres: string, secret: string): Record<string, string> {
+  return {
+    ACCOUNT_DATABASE_URL: `postgres://account:${secret}@${postgres}/account`,
+    ACCESS_DATABASE_URL: `postgres://access:${secret}@${postgres}/access`,
+    CONTENT_DATABASE_URL: `postgres://content:${secret}@${postgres}/content`,
+    MAIN_RELAY_DATABASE_URL: `postgres://relay:${secret}@${postgres}/relay`,
+    ACCOUNT_ACCESS_DATABASE_URL: `postgres://access:${secret}@${postgres}/access`,
+    ACCOUNT_RELAY_DATABASE_URL: `postgres://relay:${secret}@${postgres}/relay`,
+    ACCOUNT_BASE_URL: 'https://accounts.rezics.com',
+    ACCOUNT_ISSUER: 'https://accounts.rezics.com/api/auth',
+    ACCOUNT_MAIN_RESOURCE: 'https://main.rezics.com',
+    ACCOUNT_SECRET: secret,
+    ACCOUNT_MAIN_CLIENT_SECRET: secret,
+    FUSEKI_TITLE_ADMISSION_KEY: '5db75dc8f93220c9a68776fc8b1f3c3c5db75dc8f93220c9a68776fc8b1f3c3c',
+    ACCOUNT_TURNSTILE_MODE: 'cloudflare',
+    ACCOUNT_TURNSTILE_SECRET_KEY: secret,
+    ACCOUNT_SMTP_HOST: 'smtp.rezics.com',
+    ACCOUNT_SMTP_PORT: '587',
+    ACCOUNT_SMTP_REQUIRE_TLS: 'true',
+    ACCOUNT_EMAIL_FROM: 'REZICS <accounts@rezics.com>',
+    SAFETY_PRIMARY_ACCOUNT: 'isolated-primary-subject',
+    SAFETY_BACKUP_ACCOUNT: 'isolated-backup-subject',
+    MAIN_REQUIRED_MEDIA_MATCHER: 'none',
+  };
+}
+
+function mainSmokeEnvironment(
+  env: Record<string, string>,
+  graph: string,
+  objects: string,
+  secret: string,
+) {
+  return {
+    ...env,
+    FUSEKI_URL: `http://${graph}:3030/rezics/`,
+    FUSEKI_MAINTENANCE_TOKEN: secret,
+    FUSEKI_COMMAND_TOKEN: secret,
+    FUSEKI_TITLE_ADMISSION_KEY: env.FUSEKI_TITLE_ADMISSION_KEY!,
+    MAIN_DATA_EPOCH: '1',
+    MAIN_ROUTING_EPOCH: '1',
+    MAIN_RELAY_CONSUMER: 'main-graph-v1',
+    MAIN_OBJECT_DIRECTORY: '/tmp/rezics-objects',
+    MAIN_S3_ENDPOINT: `http://${objects}:9000`,
+    MAIN_S3_BUCKET: 'rezics-release-test',
+    MAIN_S3_REGION: 'us-east-1',
+    MAIN_S3_ACCESS_KEY: secret,
+    MAIN_S3_SECRET_KEY: secret,
+    ACCOUNT_ISSUER: 'https://accounts.rezics.com/api/auth',
+    ACCOUNT_JWKS_URL: 'https://accounts.rezics.com/api/auth/jwks',
+    ACCOUNT_INTROSPECT_URL: 'https://accounts.rezics.com/api/auth/oauth2/introspect',
+    ACCOUNT_MAIN_CLIENT_ID: 'release-main',
+  };
+}
+
+function imageScript(image: string, network: string, variables: string[], script: string) {
+  return spawnSync(
+    'docker',
+    [
+      'run',
+      '--rm',
+      '--network',
+      network,
+      ...variables,
+      '--entrypoint',
+      'bun',
+      image,
+      '-e',
+      `await Bun.write('/tmp/production.env', Object.entries(process.env).map(([key, value]) => \`\${key}=\${value}\`).join('\\n') + '\\n');
+     const child = Bun.spawn([process.execPath, ${JSON.stringify(script)}, '/tmp/production.env'], { stdout: 'inherit', stderr: 'inherit' });
+     process.exit(await child.exited);`,
+    ],
+    { encoding: 'utf8', timeout: 60_000 },
+  );
+}
+
+test('isolated image smoke inputs satisfy every runtime production guard', () => {
+  const secret = 'a'.repeat(64);
+  const env = mainSmokeEnvironment(
+    smokeEnvironment('isolated-postgres', secret),
+    'isolated-graph',
+    'isolated-objects',
+    secret,
+  );
+  for (const role of runtimeRoles) expect(() => checkProductionEnv(env, [role])).not.toThrow();
+});
+
+test('release image context excludes development data and credentials', async () => {
+  const directory = join(repositoryRoot, '.temp/image-context-test');
   try {
     await prepareImageContext(directory);
     for (const path of ['.temp', 'node_modules', 'services/main/.env.example', 'tests/fixtures']) {
@@ -20,29 +109,70 @@ test('G-722 image context excludes development data and credentials', async () =
   }
 });
 
-test('G-722 pinned runtime builds reproduce identities and resolve every runtime import', async () => {
-  const logDirectory = join(repositoryRoot, '.temp/g722-image-check');
+test('pinned runtime images reproduce identities and satisfy production startup contracts', async () => {
+  const logDirectory = join(repositoryRoot, '.temp/image-smoke');
   mkdirSync(logDirectory, { recursive: true });
+  const source = spawnSync(
+    'git',
+    [
+      'rev-parse',
+      '--verify',
+      '--end-of-options',
+      `${process.env.REZICS_RELEASE_COMMIT ?? 'HEAD'}^{commit}`,
+    ],
+    { cwd: repositoryRoot, encoding: 'utf8' },
+  );
+  if (source.error || source.status !== 0)
+    throw new Error('Image smoke requires a committed release revision');
+  const sourceCommit = source.stdout.trim();
   async function build(number: number) {
     writeFileSync(join(logDirectory, `build-${number}.stdout`), '');
     writeFileSync(join(logDirectory, `build-${number}.stderr`), '');
     const stdout = Bun.file(join(logDirectory, `build-${number}.stdout`));
     const stderr = Bun.file(join(logDirectory, `build-${number}.stderr`));
-    const child = Bun.spawn([process.execPath, 'scripts/ops/release-images.ts'], {
-      cwd: repositoryRoot,
-      stdout,
-      stderr,
-      env: process.env,
-    });
+    const child = Bun.spawn(
+      [process.execPath, 'scripts/ops/release-images.ts', '--commit', sourceCommit],
+      {
+        cwd: repositoryRoot,
+        stdout,
+        stderr,
+        env: process.env,
+      },
+    );
     if ((await child.exited) !== 0) throw new Error(await stderr.text());
     const path = (await stdout.text()).trim();
     return JSON.parse(readFileSync(path, 'utf8')) as {
+      sourceCommit: string;
       images: Record<string, { reference: string; digest: string }>;
     };
   }
   const first = await build(1);
   const second = await build(2);
+  expect(first.sourceCommit).toBe(sourceCommit);
   expect(second).toEqual(first);
+  const pins = JSON.parse(
+    docker([
+      'run',
+      '--rm',
+      '--entrypoint',
+      'bun',
+      first.images.main!.digest,
+      '-e',
+      "import { releaseManifest } from './scripts/dev/release-manifest.ts'; console.log(JSON.stringify(releaseManifest));",
+    ]),
+  ) as ReleaseManifest;
+  expect(first.images.fuseki!.reference).toBe(pins.images.fuseki);
+  const expectedScopes = JSON.parse(
+    docker([
+      'run',
+      '--rm',
+      '--entrypoint',
+      'bun',
+      first.images.account!.digest,
+      '-e',
+      "import { resourceScopes } from './services/account/src/oauth-scopes.ts'; console.log(JSON.stringify(resourceScopes));",
+    ]),
+  ) as string[];
   for (const role of runtimeRoles) {
     const image = first.images[role]!;
     expect(image.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
@@ -56,45 +186,53 @@ test('G-722 pinned runtime builds reproduce identities and resolve every runtime
         'bun',
         image.digest,
         '-e',
-        "const r = await Bun.build({ entrypoints: ['infra/release/entrypoint.ts', 'services/main/src/index.ts', 'services/account/src/index.ts', 'services/main/src/relay.ts', 'services/main/src/relay-init.ts', 'scripts/ops/migrate.ts'], target: 'bun' }); if (!r.success) { console.error(r.logs); process.exit(1); }",
+        "const r = await Bun.build({ entrypoints: ['infra/release/entrypoint.ts', 'services/main/src/index.ts', 'services/account/src/index.ts', 'services/main/src/relay.ts', 'services/main/src/relay-init.ts', 'scripts/ops/migrate.ts', 'scripts/ops/postgres-preflight.ts', 'services/main/src/telemetry.ts', 'services/main/src/relay-telemetry.ts', 'services/account/src/telemetry.ts', 'services/main/src/modules/media-screen/classifier-process.ts'], target: 'bun' }); if (!r.success) { console.error(r.logs); process.exit(1); }",
       ],
       { encoding: 'utf8', timeout: 60_000 },
     );
     if (result.status !== 0) throw new Error(`${role} runtime imports: ${result.stderr}`);
   }
-  await accountSmoke(first.images);
+  const native = docker([
+    'run',
+    '--rm',
+    '--entrypoint',
+    'bun',
+    first.images.main!.digest,
+    '-e',
+    `const sharp = (await import(Bun.resolveSync('sharp', '/app/services/main/src'))).default;
+     const expected = (await Bun.file('/app/services/main/package.json').json()).dependencies.sharp;
+     if (sharp.versions.sharp !== expected || !sharp.versions.vips) throw new Error('native image decoder differs from release');
+     const png = await sharp({ create: { width: 2, height: 2, channels: 3, background: '#ffffff' } }).png().toBuffer();
+     const decoded = await sharp(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+     if (decoded.info.width !== 2 || decoded.info.height !== 2 || decoded.data.length !== 12) throw new Error('native image decode failed');
+     console.log(JSON.stringify({ sharp: sharp.versions.sharp, libvips: sharp.versions.vips, decodedBytes: decoded.data.length }));`,
+  ]);
+  writeFileSync(join(logDirectory, 'native-decoder.json'), native + '\n');
+  await accountSmoke(first.images, pins, expectedScopes);
 }, 1_200_000);
 
 function docker(args: string[]) {
   const result = spawnSync('docker', args, { encoding: 'utf8', timeout: 120_000 });
   if (result.error || result.status !== 0)
-    throw new Error(`Docker ${args[0]} failed: ${result.stderr}`);
+    throw new Error(`Docker ${args[0]} failed: ${result.stderr || result.error?.message}`);
   if (args[0] === 'logs') return result.stdout + result.stderr;
   return result.stdout.trim();
 }
 
-async function accountSmoke(images: Record<string, { reference: string; digest: string }>) {
-  const name = `g722-smoke-${randomUUID()}`;
+async function accountSmoke(
+  images: Record<string, { reference: string; digest: string }>,
+  pins: ReleaseManifest,
+  expectedScopes: string[],
+) {
+  const name = `image-smoke-${randomUUID()}`;
   const account = `${name}-account`;
   const main = `${name}-main`;
   const relay = `${name}-relay`;
   const graph = `${name}-graph`;
   const objects = `${name}-objects`;
   const network = `${name}-network`;
-  const secret = '8d4cb67658b2d230c437b8a97c2757e18d4cb67658b2d230c437b8a97c2757e1';
-  const env = {
-    ACCOUNT_DATABASE_URL: `postgres://postgres:${secret}@${name}/account`,
-    ACCESS_DATABASE_URL: `postgres://postgres:${secret}@${name}/access`,
-    CONTENT_DATABASE_URL: `postgres://postgres:${secret}@${name}/content`,
-    MAIN_RELAY_DATABASE_URL: `postgres://postgres:${secret}@${name}/relay`,
-    ACCOUNT_BASE_URL: 'https://accounts.rezics.com',
-    ACCOUNT_MAIN_RESOURCE: 'https://main.rezics.com',
-    ACCOUNT_SECRET: secret,
-    ACCOUNT_MAIN_CLIENT_SECRET: secret,
-    ACCOUNT_SMTP_HOST: 'smtp.rezics.com',
-    ACCOUNT_SMTP_REQUIRE_TLS: 'true',
-    ACCOUNT_EMAIL_FROM: 'REZICS <accounts@rezics.com>',
-  };
+  const secret = randomBytes(32).toString('hex');
+  const env = smokeEnvironment(name, secret);
   const variables = Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]);
   try {
     docker(['network', 'create', network]);
@@ -107,7 +245,9 @@ async function accountSmoke(images: Record<string, { reference: string; digest: 
       network,
       '-e',
       `POSTGRES_PASSWORD=${secret}`,
-      'postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722',
+      pins.images.postgres,
+      '-c',
+      'max_prepared_transactions=0',
     ]);
     const deadline = Date.now() + 60_000;
     while (true) {
@@ -120,7 +260,18 @@ async function accountSmoke(images: Record<string, { reference: string; digest: 
       if (Date.now() > deadline) throw new Error('Smoke PostgreSQL readiness timed out');
       await Bun.sleep(250);
     }
-    for (const database of ['access', 'relay', 'content', 'account'])
+    for (const database of ['access', 'relay', 'content', 'account']) {
+      docker([
+        'exec',
+        name,
+        'psql',
+        '-U',
+        'postgres',
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-c',
+        `CREATE ROLE ${database} LOGIN NOSUPERUSER PASSWORD '${secret}'`,
+      ]);
       docker([
         'exec',
         name,
@@ -130,16 +281,130 @@ async function accountSmoke(images: Record<string, { reference: string; digest: 
         '-U',
         'postgres',
         '-c',
-        `CREATE DATABASE ${database}`,
+        `CREATE DATABASE ${database} OWNER ${database}`,
       ]);
+    }
+    docker([
+      'exec',
+      name,
+      'psql',
+      '-U',
+      'postgres',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      'GRANT pg_read_all_stats TO access, content WITH INHERIT TRUE',
+    ]);
+    const ownerProbe = imageScript(
+      images.migrate!.digest,
+      network,
+      variables,
+      'scripts/ops/postgres-preflight.ts',
+    );
+    expect(ownerProbe.status).toBe(0);
+    expect(ownerProbe.stdout).toContain('PostgreSQL owner diagnostics verified');
+    writeFileSync(
+      join(repositoryRoot, '.temp/image-smoke/postgres-preflight.stdout'),
+      ownerProbe.stdout,
+    );
+    docker([
+      'exec',
+      name,
+      'psql',
+      '-U',
+      'postgres',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      'REVOKE pg_read_all_stats FROM access',
+    ]);
+    const missingDiagnostics = imageScript(
+      images.migrate!.digest,
+      network,
+      variables,
+      'scripts/ops/postgres-preflight.ts',
+    );
+    expect(missingDiagnostics.status).not.toBe(0);
+    expect(missingDiagnostics.stderr).toContain('requires inherited pg_read_all_stats');
+    writeFileSync(
+      join(repositoryRoot, '.temp/image-smoke/postgres-preflight-denied.stderr'),
+      missingDiagnostics.stderr,
+    );
+    docker([
+      'exec',
+      name,
+      'psql',
+      '-U',
+      'postgres',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      'GRANT pg_read_all_stats TO access WITH INHERIT TRUE',
+    ]);
+    expect(
+      imageScript(images.migrate!.digest, network, variables, 'scripts/ops/postgres-preflight.ts')
+        .status,
+    ).toBe(0);
     const migrate = () =>
       JSON.parse(
         docker(['run', '--rm', '--network', network, ...variables, images.migrate!.digest])
           .split('\n')
           .at(-1)!,
       ) as { applied: string[] };
-    expect(migrate().applied.length).toBeGreaterThan(10);
+    const initialMigration = migrate();
+    expect(initialMigration.applied.length).toBeGreaterThan(10);
+    writeFileSync(
+      join(repositoryRoot, '.temp/image-smoke/migrations.json'),
+      JSON.stringify(initialMigration) + '\n',
+    );
     expect(migrate().applied).toEqual([]);
+    // Existing isolated subjects are not operator appointments or launch qualification.
+    for (const subject of [env.SAFETY_PRIMARY_ACCOUNT!, env.SAFETY_BACKUP_ACCOUNT!]) {
+      docker([
+        'exec',
+        name,
+        'psql',
+        '-U',
+        'postgres',
+        '-d',
+        'account',
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-c',
+        `INSERT INTO public."user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+         VALUES ('${subject}', 'Isolated smoke subject', '${subject}@smoke.rezics.com', true, now(), now())`,
+      ]);
+      docker([
+        'exec',
+        name,
+        'psql',
+        '-U',
+        'postgres',
+        '-d',
+        'access',
+        '-v',
+        'ON_ERROR_STOP=1',
+        '-c',
+        `INSERT INTO access.principal (id, account_issuer, account_subject)
+         VALUES ('${randomUUID()}', '${env.ACCOUNT_ISSUER}', '${subject}')`,
+      ]);
+    }
+    // An older resource ceiling must gain every installed scope on Account startup.
+    docker([
+      'exec',
+      name,
+      'psql',
+      '-U',
+      'postgres',
+      '-d',
+      'account',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      `INSERT INTO public."oauthResource" (id, identifier, name, "allowedScopes", "createdAt", "updatedAt")
+       VALUES ('${randomUUID()}', '${env.ACCOUNT_MAIN_RESOURCE}', 'Main', '["openid"]'::jsonb, now(), now())
+       ON CONFLICT (identifier) DO UPDATE SET "allowedScopes" = '["openid"]'::jsonb`,
+    ]);
     // Relay initialization is a successful finite job; a repeated run is safe.
     for (let i = 0; i < 2; i++)
       docker([
@@ -154,6 +419,28 @@ async function accountSmoke(images: Record<string, { reference: string; digest: 
         'MAIN_DATA_EPOCH=1',
         images['relay-init']!.digest,
       ]);
+    const checkpoint = JSON.parse(
+      docker([
+        'exec',
+        name,
+        'psql',
+        '-U',
+        'postgres',
+        '-d',
+        'relay',
+        '-tAc',
+        "SELECT json_build_object('dataEpoch', data_epoch, 'sequence', sequence::text, 'streamScope', stream_scope) FROM relay.checkpoint WHERE consumer = 'main-graph-v1'",
+      ]),
+    );
+    expect(checkpoint).toEqual({
+      dataEpoch: '1',
+      sequence: '0',
+      streamScope: 'urn:rezics:stream:main-rdf',
+    });
+    writeFileSync(
+      join(repositoryRoot, '.temp/image-smoke/relay-init.json'),
+      JSON.stringify(checkpoint) + '\n',
+    );
     docker([
       'run',
       '--detach',
@@ -171,7 +458,8 @@ async function accountSmoke(images: Record<string, { reference: string; digest: 
     const healthDeadline = Date.now() + 60_000;
     while (true) {
       try {
-        if ((await fetch(`${origin}/health/ready`)).ok) break;
+        if ((await fetch(`${origin}/health/ready`, { signal: AbortSignal.timeout(2_000) })).ok)
+          break;
       } catch {
         /* still starting */
       }
@@ -179,10 +467,49 @@ async function accountSmoke(images: Record<string, { reference: string; digest: 
         throw new Error(`Account startup failed: ${docker(['logs', account]).slice(-1000)}`);
       await Bun.sleep(250);
     }
-    expect((await fetch(`${origin}/health/live`)).status).toBe(200);
-    expect(await (await fetch(`${origin}/health/ready`)).json()).toEqual({
+    const installedScopes = JSON.parse(
+      docker([
+        'exec',
+        name,
+        'psql',
+        '-U',
+        'postgres',
+        '-d',
+        'account',
+        '-tAc',
+        `SELECT "allowedScopes" FROM public."oauthResource" WHERE identifier = '${env.ACCOUNT_MAIN_RESOURCE}'`,
+      ]),
+    );
+    expect(installedScopes).toEqual(expectedScopes);
+    writeFileSync(
+      join(repositoryRoot, '.temp/image-smoke/account-scopes.json'),
+      JSON.stringify(installedScopes) + '\n',
+    );
+    expect(
+      (await fetch(`${origin}/health/live`, { signal: AbortSignal.timeout(2_000) })).status,
+    ).toBe(200);
+    expect(
+      await (await fetch(`${origin}/health/ready`, { signal: AbortSignal.timeout(2_000) })).json(),
+    ).toEqual({
       status: 'ready',
     });
+    const missingMigration = docker([
+      'exec',
+      name,
+      'psql',
+      '-U',
+      'postgres',
+      '-d',
+      'account',
+      '-tAc',
+      'WITH removed AS (DELETE FROM public.rezics_local_migration WHERE name = (SELECT name FROM public.rezics_local_migration LIMIT 1) RETURNING name) SELECT name FROM removed',
+    ]);
+    expect(
+      (await fetch(`${origin}/health/ready`, { signal: AbortSignal.timeout(2_000) })).status,
+    ).toBe(503);
+    expect(
+      (await fetch(`${origin}/health/live`, { signal: AbortSignal.timeout(2_000) })).status,
+    ).toBe(200);
     docker([
       'exec',
       name,
@@ -191,13 +518,30 @@ async function accountSmoke(images: Record<string, { reference: string; digest: 
       'postgres',
       '-d',
       'account',
+      '-v',
+      'ON_ERROR_STOP=1',
       '-c',
-      'DELETE FROM public.rezics_local_migration WHERE name = (SELECT name FROM public.rezics_local_migration LIMIT 1)',
+      `INSERT INTO public.rezics_local_migration(name) VALUES ('${missingMigration}')`,
     ]);
-    expect((await fetch(`${origin}/health/ready`)).status).toBe(503);
-    expect((await fetch(`${origin}/health/live`)).status).toBe(200);
-    await mainSmoke(images, { name, main, relay, graph, objects, network, secret, env });
+    expect(
+      (await fetch(`${origin}/health/ready`, { signal: AbortSignal.timeout(2_000) })).status,
+    ).toBe(200);
+    await mainSmoke(images, { name, main, relay, graph, objects, network, secret, env, pins });
   } finally {
+    for (const [role, container] of Object.entries({
+      main,
+      relay,
+      account,
+      fuseki: graph,
+      objects,
+      postgres: name,
+    })) {
+      const logs = spawnSync('docker', ['logs', container], { encoding: 'utf8', timeout: 10_000 });
+      writeFileSync(
+        join(repositoryRoot, `.temp/image-smoke/${role}.log`),
+        `${logs.stdout ?? ''}${logs.stderr ?? ''}`,
+      );
+    }
     // These names belong only to this test; no shared stack is touched.
     spawnSync(
       'docker',
@@ -222,10 +566,11 @@ async function mainSmoke(
     network: string;
     secret: string;
     env: Record<string, string>;
+    pins: ReleaseManifest;
   },
 ) {
-  const { name, main, relay, graph, objects, network, secret, env } = input;
-  const titleKey = '5db75dc8f93220c9a68776fc8b1f3c3c5db75dc8f93220c9a68776fc8b1f3c3c';
+  const { name, main, relay, graph, objects, network, secret, env, pins } = input;
+  const titleKey = env.FUSEKI_TITLE_ADMISSION_KEY!;
   const capabilities = [
     'FUSEKI_MAINTENANCE_TOKEN',
     'FUSEKI_COMMAND_TOKEN',
@@ -262,7 +607,7 @@ async function mainSmoke(
     '/data:mode=0777',
     '-p',
     '127.0.0.1::9000',
-    'rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff',
+    pins.images.rustfs,
   ]);
   const graphPort = docker(['port', graph, '3030/tcp']).split(':').at(-1)!;
   const fuseki = new FusekiClient(`http://127.0.0.1:${graphPort}/rezics/`, secret, secret);
@@ -290,45 +635,13 @@ async function mainSmoke(
     await Bun.sleep(250);
   }
   await initializeFreshGraph(fuseki, { dataEpoch: '1', routingEpoch: '1' });
-  const mainEnv = {
-    ...env,
-    FUSEKI_URL: `http://${graph}:3030/rezics/`,
-    FUSEKI_MAINTENANCE_TOKEN: secret,
-    FUSEKI_COMMAND_TOKEN: secret,
-    FUSEKI_TITLE_ADMISSION_KEY: titleKey,
-    MAIN_DATA_EPOCH: '1',
-    MAIN_ROUTING_EPOCH: '1',
-    MAIN_RELAY_CONSUMER: 'main-graph-v1',
-    MAIN_OBJECT_DIRECTORY: '/tmp/rezics-objects',
-    MAIN_S3_ENDPOINT: `http://${objects}:9000`,
-    MAIN_S3_BUCKET: 'rezics-release-test',
-    MAIN_S3_REGION: 'us-east-1',
-    MAIN_S3_ACCESS_KEY: secret,
-    MAIN_S3_SECRET_KEY: secret,
-    ACCOUNT_ISSUER: 'https://accounts.rezics.com/api/auth',
-    ACCOUNT_JWKS_URL: 'https://accounts.rezics.com/api/auth/jwks',
-    ACCOUNT_INTROSPECT_URL: 'https://accounts.rezics.com/api/auth/oauth2/introspect',
-    ACCOUNT_MAIN_CLIENT_ID: 'release-main',
-  };
+  const mainEnv = mainSmokeEnvironment(env, graph, objects, secret);
   const variables = Object.entries(mainEnv).flatMap(([key, value]) => ['-e', `${key}=${value}`]);
   const envCheck = () =>
-    spawnSync(
-      'docker',
-      [
-        'run',
-        '--rm',
-        '--network',
-        network,
-        ...variables,
-        '--entrypoint',
-        'bun',
-        images.main!.digest,
-        '-e',
-        "await Bun.write('/tmp/production.env', Object.entries(process.env).map(([key, value]) => `${key}=${value}`).join('\\n') + '\\n'); const child = Bun.spawn([process.execPath, 'scripts/ops/production-env.ts', '/tmp/production.env'], { stdout: 'inherit', stderr: 'inherit' }); process.exit(await child.exited);",
-      ],
-      { encoding: 'utf8', timeout: 30_000 },
-    );
-  expect(envCheck().status).toBe(0);
+    imageScript(images.main!.digest, network, variables, 'scripts/ops/production-env.ts');
+  const accepted = envCheck();
+  expect(accepted.status).toBe(0);
+  writeFileSync(join(repositoryRoot, '.temp/image-smoke/production-env.stdout'), accepted.stdout);
   docker([
     'run',
     '--detach',
@@ -356,7 +669,7 @@ async function mainSmoke(
   const readyDeadline = Date.now() + 60_000;
   while (true) {
     try {
-      if ((await fetch(`${origin}/health/ready`)).ok) break;
+      if ((await fetch(`${origin}/health/ready`, { signal: AbortSignal.timeout(2_000) })).ok) break;
     } catch {
       /* still starting */
     }
@@ -364,15 +677,35 @@ async function mainSmoke(
       throw new Error(`Main startup failed: ${docker(['logs', main]).slice(-2000)}`);
     await Bun.sleep(250);
   }
-  expect((await fetch(`${origin}/health/live`)).status).toBe(200);
-  expect(await (await fetch(`${origin}/health/ready`)).json()).toEqual({ status: 'ready' });
-  const searchReady = (await (await fetch(`${origin}/health/search-ready`)).json()) as {
+  expect(
+    (await fetch(`${origin}/health/live`, { signal: AbortSignal.timeout(2_000) })).status,
+  ).toBe(200);
+  expect(
+    await (await fetch(`${origin}/health/ready`, { signal: AbortSignal.timeout(2_000) })).json(),
+  ).toMatchObject({ status: 'ready' });
+  let searchResponse: Response;
+  const searchDeadline = Date.now() + 60_000;
+  while (true) {
+    searchResponse = await fetch(`${origin}/health/search-ready`, {
+      signal: AbortSignal.timeout(2_000),
+    });
+    if (searchResponse.ok) break;
+    if (Date.now() > searchDeadline) throw new Error('Main search readiness timed out');
+    await Bun.sleep(250);
+  }
+  expect(searchResponse.status).toBe(200);
+  const searchReady = (await searchResponse.json()) as {
     dataEpoch: string;
     indexGeneration: string;
   };
+  writeFileSync(
+    join(repositoryRoot, '.temp/image-smoke/main-search-ready.json'),
+    JSON.stringify(searchReady) + '\n',
+  );
   expect(searchReady.dataEpoch).toBe('1');
   expect(searchReady.indexGeneration).toMatch(/^urn:rezics:text-index-generation:/);
   expect(docker(['inspect', relay, '--format', '{{.State.Running}}'])).toBe('true');
+  expect(docker(['logs', relay])).toContain('main_relay_started');
   docker([
     'exec',
     name,
@@ -384,9 +717,45 @@ async function mainSmoke(
     '-c',
     "INSERT INTO commerce.payment_provider(id, kind, callback_key_reference, enabled) VALUES ('blocked', 'fake', 'custody-key', false)",
   ]);
-  expect((await fetch(`${origin}/health/ready`)).status).toBe(503);
-  expect((await fetch(`${origin}/health/live`)).status).toBe(200);
+  expect(
+    (await fetch(`${origin}/health/ready`, { signal: AbortSignal.timeout(2_000) })).status,
+  ).toBe(503);
+  expect(
+    (await fetch(`${origin}/health/live`, { signal: AbortSignal.timeout(2_000) })).status,
+  ).toBe(200);
   const rejected = envCheck();
   expect(rejected.status).not.toBe(0);
   expect(rejected.stderr).toContain('Production forbids payment provider rows');
+  const refusal: Record<string, { exit: number | null; reason: string }> = {};
+  for (const role of runtimeRoles) {
+    const result = spawnSync(
+      'docker',
+      ['run', '--rm', '--network', network, ...variables, images[role]!.digest],
+      { encoding: 'utf8', timeout: 30_000 },
+    );
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('Production forbids payment provider rows');
+    refusal[role] = { exit: result.status, reason: 'payment provider rows refused' };
+  }
+  writeFileSync(
+    join(repositoryRoot, '.temp/image-smoke/provider-row-refused.json'),
+    JSON.stringify(refusal) + '\n',
+  );
+  docker([
+    'exec',
+    name,
+    'psql',
+    '-U',
+    'postgres',
+    '-d',
+    'access',
+    '-v',
+    'ON_ERROR_STOP=1',
+    '-c',
+    "DELETE FROM commerce.payment_provider WHERE id = 'blocked'",
+  ]);
+  expect(envCheck().status).toBe(0);
+  expect(
+    (await fetch(`${origin}/health/ready`, { signal: AbortSignal.timeout(2_000) })).status,
+  ).toBe(200);
 }

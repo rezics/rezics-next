@@ -11,6 +11,7 @@ import {
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { prepareImageContext } from '../release-images.ts';
+import { productionExample } from './g-722-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const temporary: string[] = [];
@@ -232,9 +233,9 @@ test('G-919 reused context loads release pins from the newly selected commit', a
   git(options.repository, 'add', '--all');
   git(options.repository, 'commit', '--quiet', '-m', 'New pins');
   const prepared = await prepareImageContext(options.context, { ...options, revision: 'HEAD' });
-  expect(prepared.base).toBe('new-base');
+  expect<string>(prepared.base).toBe('new-base');
   expect(prepared.release).toBe('new-release');
-  expect(prepared.releaseManifest.images.fuseki).toBe('new-fuseki');
+  expect<string>(prepared.releaseManifest.images.fuseki).toBe('new-fuseki');
 });
 
 test('G-919 missing production workspace edges fail before a Docker build', async () => {
@@ -280,11 +281,25 @@ test('G-919 patch symlinks cannot include private files', async () => {
   ).rejects.toThrow('Release payload must be a regular Git file');
 });
 
-test('G-919 repository context resolves wiki-toolkit and Account public contract through production Yarn', async () => {
+test('production image context loads owner scopes, preflight and native dependencies through focused Yarn', async () => {
   const context = join(temporaryDirectory(), 'context');
   await prepareImageContext(context);
   expect(existsSync(join(context, 'packages/wiki-toolkit/protocol/locator.ts'))).toBe(true);
   expect(existsSync(join(context, '.yarn/patches/elysia-opentelemetry-status.patch'))).toBe(true);
+  // Glob-loaded owner declarations are invisible to a static import resolver.
+  const scopeDeclarations = git(
+    root,
+    'ls-tree',
+    '-r',
+    '--name-only',
+    'HEAD',
+    '--',
+    'services/account/src/oauth-scopes',
+  )
+    .split('\n')
+    .filter((path) => path.endsWith('.ts'));
+  expect(scopeDeclarations.length).toBeGreaterThan(0);
+  for (const path of scopeDeclarations) expect(existsSync(join(context, path))).toBe(true);
   const document = JSON.parse(
     readFileSync(join(context, 'generated/openapi/main/public.json'), 'utf8'),
   );
@@ -322,6 +337,43 @@ test('G-919 repository context resolves wiki-toolkit and Account public contract
   expect(resolved.status).toBe(0);
   expect(resolved.stdout.trim()).toBe(join(context, 'packages/wiki-toolkit/protocol/index.ts'));
   expect(existsSync(join(context, 'node_modules/vinext'))).toBe(false);
+  const loaded = spawnSync(
+    process.execPath,
+    [
+      '--eval',
+      `
+      // The context lives below the checkout; refuse ancestor dependency fallback.
+      for (const name of ['sharp', 'envalid', 'pg', '@rezics/observability/config']) {
+        if (!Bun.resolveSync(name, process.cwd() + '/services/main/src').startsWith(process.cwd() + '/'))
+          throw new Error('Dependency escaped the production context: ' + name);
+      }
+      const scopes = await import('./services/account/src/oauth-scopes.ts');
+      if (!scopes.providerScopes.includes('context:read') ||
+          !scopes.closedGroupScopes.includes('package:install') ||
+          scopes.dynamicRegistrationScopes(['openid', 'package:install']).join(' ') !== 'openid')
+        throw new Error('Installed Account scope contract differs');
+      const { checkProductionEnv } = await import('./scripts/ops/production-env.ts');
+      checkProductionEnv(JSON.parse(process.env.RELEASE_TEST_ENV));
+      const { postgresPreflightConfig } = await import('./scripts/ops/postgres-preflight.ts');
+      if (postgresPreflightConfig('postgres://access@postgres.internal/access').options !==
+          '-c default_transaction_read_only=on') throw new Error('PostgreSQL probe missing');
+      const sharp = (await import('sharp')).default;
+      const png = await sharp({ create: { width: 1, height: 1, channels: 3,
+        background: { r: 0, g: 0, b: 0 } } }).png().toBuffer();
+      if ((await sharp(png).metadata()).format !== 'png') throw new Error('Native decoder failed');
+    `,
+    ],
+    {
+      cwd: context,
+      encoding: 'utf8',
+      timeout: 30_000,
+      env: { ...process.env, RELEASE_TEST_ENV: JSON.stringify(productionExample()) },
+    },
+  );
+  if (loaded.error || loaded.status !== 0)
+    throw new Error(
+      `Focused runtime load failed: ${loaded.error?.message ?? ''}\n${loaded.stderr}`,
+    );
   const auth = Bun.build({
     entrypoints: [join(context, 'services/account/src/auth.ts')],
     target: 'bun',
