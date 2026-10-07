@@ -45,7 +45,7 @@ export const searchPagingCases: CaseDeclarations = {
   { tier: 'integration', file: 'tests/qa/integration/search-title-body-native.test.ts',
     name: 'SEARCH14: dedicated public title and selected body join at one unit without unrelated labels' },
   { tier: 'unit', file: 'tests/qa/unit/search-multifield.test.ts',
-    name: 'SEARCH14: title/body binds one public unit, sums one score per field and ignores labels' },
+    name: 'SEARCH14: complete maintained Work names join one current public body and sum field scores' },
   { tier: 'unit', file: 'tests/qa/unit/search-multifield.test.ts',
     name: 'SEARCH14: an unmapped title field cannot report a false complete empty relation' }],
 };
