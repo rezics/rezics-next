@@ -440,9 +440,9 @@ test('rating contexts map fixed numbers, language literals and availability IRIs
         '@id': `${rv}ratingAvailability`,
         '@type': '@id',
       });
-      // The withdrawn branch permits no values, so the existing context leaves
-      // coercion unset; the available branch's JSON schema requires integers.
-      expect(context['rv:ratingValue']).toEqual({ '@id': `${rv}ratingValue` });
+      // The withdrawn branch admits no values; present rating values retain
+      // the available branch's integer datatype in JSON-LD.
+      expect(context['rv:ratingValue']).toEqual({ '@id': `${rv}ratingValue`, '@type': 'xsd:integer' });
     }
   }
 });

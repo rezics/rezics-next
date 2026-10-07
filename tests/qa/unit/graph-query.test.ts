@@ -50,7 +50,9 @@ test('GRAPH03/GRAPH04: traversal has a hard candidate bound and does not expose 
   expect(GRAPH_QUERY_COST.relationPage.textSeed).toMatchObject({ maxCandidates: 513,
     maxFusekiCalls: 72, maxFusekiBytes: 8_388_608, maxRequestMs: 10_000 });
   expect(GRAPH_QUERY_COST.statementPage.graphQueries).toBe(2);
-  expect(GRAPH_QUERY_COST.statementPage.resourceAccessChecks).toBe(68);
+  // Each of 65 candidates can carry a value resource, qualification Context
+  // and edition; the three anchor/predicate/Realm checks remain fixed.
+  expect(GRAPH_QUERY_COST.statementPage.resourceAccessChecks).toBe(198);
   const query = relationGraphQueryText(request(), roles, 'epoch-1');
   expect(query).toContain('LIMIT 65');
   expect(query).toContain('FILTER(?epoch = "epoch-1")');

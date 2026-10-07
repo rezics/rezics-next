@@ -26,10 +26,10 @@ let renderProfile: (profile: Profile) => string;
 let shapes: Record<string, unknown> = {};
 
 beforeAll(async () => {
-  const modules = await Promise.all(['context-v1', 'context-selection-v1', 'statement-v1', 'statement-decision-v1']
-    .map(name => load<Record<string, Profile>>(`model/definitions/${name}.ts`)));
-  profiles = modules.map(module => Object.entries(module).find(([name]) => name.endsWith('Profile'))![1]);
-  ({ renderProfile } = await load<{ renderProfile: typeof renderProfile }>('model/compiler/ir.ts'));
+  const { authoredProfiles } = await load<{ authoredProfiles: Profile[] }>('model/compiler/generate.ts');
+  profiles = ['context-v1', 'context-selection-v1', 'statement-v1', 'statement-decision-v1']
+    .map(id => authoredProfiles.find(profile => profile.id === id)!);
+  ({ profileSource: renderProfile } = await load<{ profileSource: typeof renderProfile }>('model/compiler/shacl.ts'));
   const { buildModelOutputs } = await load<{ buildModelOutputs: (profiles: Profile[]) => Map<string, string> }>(
     'model/compiler/outputs.ts');
   // Compile the authored profiles in memory; committed generated files are regenerated per wave.
