@@ -272,18 +272,37 @@ describe('goalctl runtime policy', () => {
     const file = 'tests/qa/unit/load-failure.test.ts';
     const branchRoot = '/tmp/worktrees/worker';
     const mainRoot = '/tmp/unit-gate-baseline';
-    const output = (root: string, missing: string, line: number, column: number, duration: number) => [
+    const output = (root: string, missing: string, line: number, column: number, duration: number,
+      sourceLine: number, passes: number) => [
       `${file}:`, '# Unhandled error between tests',
-      `error: Cannot find module '${root}/modules/${missing}.js' from '${root}/${file}'`,
-      `    at load (${root}/runtime/loader.js:${line}:${column})`, `completed in ${duration}ms`,
+      `error: Cannot find module '${root}/modules/${missing}.js' from '${root}/${file}' after ${duration}ms`,
+      `    at load (${root}/runtime/loader.js:${line}:${column})`,
+      `    ${sourceLine} | responseBytes: createResponseBytes()`, `${passes} pass`, '1 fail',
+      `Ran ${passes + 1} tests across 1 files`,
     ].join('\n');
-    const branch = unitFileErrorDetails(output(branchRoot, 'shared-module', 394, 7, 12), [file], branchRoot);
-    const same = unitFileErrorDetails(output(mainRoot, 'shared-module', 398, 21, 31), [file], mainRoot);
-    const different = unitFileErrorDetails(output(mainRoot, 'main-module', 398, 21, 31), [file], mainRoot);
+    const branch = unitFileErrorDetails(output(branchRoot, 'shared-module', 394, 7, 12, 39, 1), [file], branchRoot);
+    const same = unitFileErrorDetails(output(mainRoot, 'shared-module', 398, 21, 31, 44, 7), [file], mainRoot);
+    const different = unitFileErrorDetails(output(mainRoot, 'main-module', 398, 21, 31, 44, 7), [file], mainRoot);
     expect(branch).toHaveLength(1);
     expect(branch[0]!.detail).toBe(same[0]!.detail);
     expect(introducedUnitFailureFiles([file], [], [], branch, same)).toEqual([]);
     expect(introducedUnitFailureFiles([file], [], [], branch, different)).toEqual([file]);
+  });
+
+  test('a branch-only unhandled error blocks beside an inherited named test failure', () => {
+    const file = 'tests/qa/unit/load-failure.test.ts';
+    const root = '/tmp/worktrees/worker';
+    const namedFailure = [
+      `${file}:`, 'error: expect(received).toBe(expected)', '- Expected  - 1', '+ Received  + 1',
+      '  + 1', `    at test (${root}/${file}:20:4)`, '(fail) existing guard > checks the baseline [1ms]',
+    ].join('\n');
+    const branchNamed = unitFailureDetails(namedFailure, [file], root);
+    const mainNamed = unitFailureDetails(namedFailure, [file], root);
+    const branchError = unitFileErrorDetails([
+      namedFailure, '# Unhandled error between tests', `error: Cannot find module '${root}/modules/new-import.js'`,
+      `    at load (${root}/runtime/loader.js:30:2)`, '1 fail', 'Ran 1 tests across 1 files',
+    ].join('\n'), [file], root);
+    expect(introducedUnitFailureFiles([file], branchNamed, mainNamed, branchError, [])).toEqual([file]);
   });
 
   test('loads reset status by GET, caches it, and projects account runway from the later reset boundary', async () => {

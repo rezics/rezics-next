@@ -1986,8 +1986,13 @@ export function normalizeUnitFileError(error: string, root?: string): string {
   return normalized
     .replace(/((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:tsx?|jsx?|sql|json|mjs|cjs)):\d+:\d+/g,
       '$1:<line>:<column>')
+    .replace(/^(\s*(?:>\s*)?)\d+\s*\|\s?/gm, '$1<line> | ')
     .replace(/\b\d+(?:\.\d+)?\s*(?:ms|msec|milliseconds?|s|sec|seconds?)\b/gi, '<duration>')
     .trim();
+}
+
+function bunRunSummaryLine(line: string): boolean {
+  return /^\s*(?:\d+\s+(?:pass|fail|skip|todo|error)\b|Ran\s+\d+\s+tests?\b|(?:Test Suites|Tests|Time|Duration):|Completed in\b)/i.test(line);
 }
 
 /** Load errors have no failing test name, so retain the file-scoped error block for baseline comparison. */
@@ -1995,6 +2000,7 @@ export function unitFileErrorDetails(output: string, candidates: readonly string
   const known = new Set(candidates);
   const errors = new Map<string, string[]>();
   const plain = output.replace(/\u001b\[[\d;]*m/g, '');
+  const namedFailures = new Set(unitFailureDetails(output, candidates, root).map(failure => failure.file));
   let current: string | undefined;
   let collecting = false;
   for (const line of plain.split('\n')) {
@@ -2007,12 +2013,21 @@ export function unitFileErrorDetails(output: string, candidates: readonly string
       continue;
     }
     if (!current) continue;
-    if (/^(?:# Unhandled error|error:)/i.test(line)) {
+    if (/^# Unhandled error/i.test(line)) {
       const bucket = errors.get(current) ?? [];
       bucket.push(line.trim());
       errors.set(current, bucket);
       collecting = true;
-    } else if (collecting && /^\s*at\s/.test(line)) {
+    } else if (/^error:/i.test(line)) {
+      if (collecting || !namedFailures.has(current)) {
+        const bucket = errors.get(current) ?? [];
+        bucket.push(line.trim());
+        errors.set(current, bucket);
+        collecting = true;
+      }
+    } else if (collecting && bunRunSummaryLine(line)) collecting = false;
+    else if (collecting && /^\((?:pass|fail|skip|todo)\)/.test(line)) collecting = false;
+    else if (collecting && /^\s*at\s/.test(line)) {
       const bucket = errors.get(current)!;
       bucket.push(line.trimEnd());
     } else if (collecting && /^\(fail\)/.test(line)) collecting = false;
@@ -2039,9 +2054,13 @@ export function introducedUnitFailureFiles(branchFiles: readonly string[], branc
   for (const file of branchFiles) {
     const branchFailures = branch.filter(failure => failure.file === file);
     const mainFailures = main.filter(failure => failure.file === file);
+    const branchFileErrors = branchErrors.filter(error => error.file === file);
+    const mainFileErrors = mainErrors.filter(error => error.file === file);
+    if (branchFileErrors.some(branchError => !mainFileErrors.some(error => error.detail === branchError.detail))) {
+      introduced.push(file);
+      continue;
+    }
     if (!branchFailures.length && !mainFailures.length) {
-      const branchFileErrors = branchErrors.filter(error => error.file === file);
-      const mainFileErrors = mainErrors.filter(error => error.file === file);
       if (!branchFileErrors.length || !mainFileErrors.some(error => branchFileErrors.some(branchError => branchError.detail === error.detail))) {
         introduced.push(file);
       }
