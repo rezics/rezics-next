@@ -28,6 +28,36 @@ import type { PolicyVersion } from './policy-versions.ts';
 
 export const AGENT_REGISTRATION_BUDGET = Object.freeze({ maximum: 10, seconds: 300 });
 const enrollmentEndpoints = ['/sign-up/email', '/request-password-reset', '/send-verification-email'];
+const discoveryEndpoints = new Set(['/.well-known/oauth-authorization-server', '/.well-known/openid-configuration']);
+
+function withoutBackchannelMetadata<T extends object>(metadata: T) {
+  return { ...metadata, backchannel_logout_supported: false, backchannel_logout_session_supported: false };
+}
+
+/** Only the pinned provider's session-delete initializer uses JWT-disabled
+ * mode: it still revokes session tokens, but builds no outbound targets, even
+ * for legacy client rows. Endpoint signing and token storage keep normal mode.
+ * Keep the normal initializer's validation before taking the revocation hooks. */
+function accountOAuthProvider(options: Parameters<typeof oauthProvider>[0]) {
+  const provider = oauthProvider(options);
+  const revocations = oauthProvider({ ...options, disableJwtPlugin: true, storeClientSecret: 'encrypted' });
+  return { ...provider,
+    init: async (ctx: Parameters<typeof provider.init>[0]) => {
+      const initialized = await provider.init(ctx);
+      const revocationHooks = await revocations.init(ctx);
+      initialized.options.databaseHooks.session.delete = revocationHooks.options.databaseHooks.session.delete;
+      return initialized;
+    },
+    onRequest: async (request: Request, ctx: Parameters<typeof provider.onRequest>[1]) => {
+      const result = await provider.onRequest(request, ctx);
+      if (result && 'response' in result && result.response.status === 200 && request.method !== 'HEAD') {
+        return { response: Response.json(withoutBackchannelMetadata(await result.response.json()),
+          { status: result.response.status, headers: result.response.headers }) };
+      }
+      return result;
+    },
+  };
+}
 
 export interface AccountConfig {
   baseURL: string;
@@ -167,6 +197,13 @@ export function accountAuthOptions(config: AccountConfig) {
           { 'Retry-After': String(AGENT_REGISTRATION_BUDGET.seconds) });
       }
       await operatorHooks.before(ctx);
+    }), after: createAuthMiddleware(async ctx => {
+      await operatorHooks.after(ctx);
+      // Embedded discovery calls run endpoint hooks; HTTP discovery is served
+      // by the provider's onRequest hook instead.
+      if (discoveryEndpoints.has(ctx.path) && ctx.context.returned && !(ctx.context.returned instanceof APIError)) {
+        ctx.context.returned = withoutBackchannelMetadata(ctx.context.returned);
+      }
     }) },
     databaseHooks: { user: { create: {
       before: async (user: Record<string, unknown>, context: { path?: string; body?: Record<string, unknown>; headers?: Headers } | null) => {
@@ -285,7 +322,7 @@ export function accountAuthOptions(config: AccountConfig) {
         } },
       }),
       jwt(signingKeyOptions(config.pool)),
-      oauthProvider({
+      accountOAuthProvider({
         loginPage: '/sign-in',
         consentPage: '/consent',
         // The signed authorization request lets /sign-in name the App before

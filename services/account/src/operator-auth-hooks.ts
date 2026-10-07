@@ -7,6 +7,8 @@ import { decodeJwt } from 'jose';
 
 const mutationPaths = new Set(['/oauth2/create-client', '/admin/oauth2/create-client',
   '/oauth2/update-client', '/admin/oauth2/update-client', '/oauth2/delete-client', '/oauth2/client/rotate-secret']);
+const clientMetadataPaths = new Set(['/oauth2/register', '/oauth2/create-client', '/admin/oauth2/create-client',
+  '/oauth2/update-client', '/admin/oauth2/update-client']);
 interface AuditContext { actorId: string; action: string; targetId: string; reason: string;
   before: unknown; requestId: string; requested?: { name: string } }
 
@@ -23,6 +25,16 @@ async function clientSummary(pool: Pool, clientId: string) {
 export function operatorAuthHooks(pool: Pool, bootstrapIds: ReadonlySet<string>) {
   return {
     before: createAuthMiddleware(async ctx => {
+      if (clientMetadataPaths.has(ctx.path)) {
+        const body = ctx.body as { update?: Record<string, unknown>; backchannel_logout_uri?: unknown } | undefined;
+        const metadata = ctx.path.endsWith('/update-client') ? body?.update : body;
+        // A public hostname can resolve to a private destination. The pinned
+        // provider checks URL syntax, but cannot pin DNS at logout dispatch.
+        if (metadata?.backchannel_logout_uri !== undefined) {
+          throw new APIError('BAD_REQUEST', { error: 'invalid_client_metadata',
+            error_description: 'Backchannel logout is unavailable; omit backchannel_logout_uri' });
+        }
+      }
       // Reject outstanding provider email-change JWTs, including its legacy
       // one-step form. Decoding here grants no authority; valid ordinary email
       // verification still goes through the provider's signature validation.
