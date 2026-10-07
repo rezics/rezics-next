@@ -17,7 +17,11 @@ import {
   compatibleFixture,
   type FixtureRestoreEvidence,
 } from '../../../scripts/fixture/restore.ts';
-import { checkSamples, workEnvironment } from '../../../scripts/fixture/smoke.ts';
+import {
+  checkSamples,
+  workEnvironment,
+  type FixtureSampleCall,
+} from '../../../scripts/fixture/smoke.ts';
 import { fixtureProject } from '../../../scripts/fixture/stack.ts';
 import {
   assertPinnedState,
@@ -88,6 +92,8 @@ test(
       copies: [],
     };
     const phases = evidence.phases as Record<string, number>;
+    const phaseDetails: Record<string, CampaignPhaseRecord> = {};
+    evidence.phaseDetails = phaseDetails;
     const persist = () => {
       writeFileSync(
         join(evidenceDirectory, 'qualification.json'),
@@ -100,15 +106,11 @@ test(
         { mode: 0o600 },
       );
     };
-    const phase = async <T>(name: string, work: () => T | Promise<T>): Promise<T> => {
-      const started = performance.now();
-      try {
-        return await work();
-      } finally {
-        phases[name] = Math.round(performance.now() - started);
-        persist();
-      }
-    };
+    const phase = <T>(
+      name: string,
+      work: () => T | Promise<T>,
+      sample?: FixtureSampleCall,
+    ): Promise<T> => attributedCampaignPhase(name, work, phases, phaseDetails, persist, sample);
     const preparationStarted = performance.now();
     const harnessStart = Number(process.env.REZICS_QA_PREPARATION_STARTED_AT ?? Date.now());
     if (!Number.isFinite(harnessStart) || harnessStart > Date.now())
@@ -226,31 +228,40 @@ test(
           autoInvocations: autoRestoreInvocations,
         };
         persist();
-        const pins = await inspectFusekiState(stack.runner, stack.dockerEnv, stack.fuseki);
-        assertPinnedState(
-          pins,
-          repositoryPins(root, stack.dockerEnv, stack.stateVolume, [
-            `${fixtureProject(manifest.id)}_fuseki_data`,
-            stacks[1 - index]!.stateVolume,
-          ]),
-        );
+        const pins = await phase(`source-${index}-pins`, async () => {
+          const inspected = await inspectFusekiState(stack.runner, stack.dockerEnv, stack.fuseki);
+          assertPinnedState(
+            inspected,
+            repositoryPins(root, stack.dockerEnv, stack.stateVolume, [
+              `${fixtureProject(manifest.id)}_fuseki_data`,
+              stacks[1 - index]!.stateVolume,
+            ]),
+          );
+          return inspected;
+        });
         (evidence.copies as unknown[]).push({
           id: ids[index],
           stateVolume: stack.stateVolume,
           pins,
         });
-        const count = await stack.fuseki.query(
-          `SELECT (COUNT(?work) AS ?n) WHERE { GRAPH <${GRAPHS.current}> { ?work a <https://schema.org/CreativeWork> } }`,
-        );
-        expect(Number(count.results?.bindings[0]?.n?.value)).toBe(PROFILES[profile].works);
+        await phase(`source-${index}-work-count`, async () => {
+          const count = await stack.fuseki.query(
+            `SELECT (COUNT(?work) AS ?n) WHERE { GRAPH <${GRAPHS.current}> { ?work a <https://schema.org/CreativeWork> } }`,
+          );
+          expect(Number(count.results?.bindings[0]?.n?.value)).toBe(PROFILES[profile].works);
+        });
         const owners = {
           access: new Pool({ connectionString: stack.apps.ACCESS_DATABASE_URL, max: 1 }),
           content: new Pool({ connectionString: stack.apps.CONTENT_DATABASE_URL, max: 1 }),
         };
         pools.push(owners.access, owners.content);
         sourceOwners.push(owners);
-        await checkSamples(stack.apps, manifest, owners);
-        stack.runner.stop();
+        await phase(`source-${index}-samples`, () =>
+          checkSamples(stack.apps, manifest, owners, (call, read) =>
+            phase(`source-${index}-sample-${call.index}-${call.operation}`, read, call),
+          ),
+        );
+        await phase(`source-${index}-stop`, () => stack.runner.stop());
       }
       const corpus = fixtureCorpus(profile, manifest.seed);
       const targets = Array.from({ length: profile === 'medium' ? 64 : 4 }, (_, i) =>
@@ -598,6 +609,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
       evidence.completedAt = new Date().toISOString();
     } catch (error) {
       evidence.failure = error instanceof Error ? error.message : String(error);
+      evidence.failureDetails = campaignFailure(error);
       throw error;
     } finally {
       candidate?.remove();
@@ -623,6 +635,66 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
   },
   qaStartupTestTimeout(360_000),
 );
+
+interface CampaignPhaseRecord {
+  status: 'running' | 'succeeded' | 'failed';
+  startedAt: string;
+  completedAt?: string;
+  elapsedMs?: number;
+  error?: ReturnType<typeof campaignFailure>;
+  sample?: FixtureSampleCall;
+}
+
+function campaignFailure(
+  error: unknown,
+  depth = 0,
+): {
+  name: string;
+  message: string;
+  cause?: ReturnType<typeof campaignFailure>;
+} {
+  const value = error instanceof Error ? error : undefined;
+  return {
+    name: (value?.name ?? 'Error').slice(0, 128),
+    message: (value?.message ?? String(error)).slice(0, 1024),
+    ...(value?.cause !== undefined && depth < 2
+      ? { cause: campaignFailure(value.cause, depth + 1) }
+      : {}),
+  };
+}
+
+/** Persist a pending call before it runs; a deadline cannot leave an anonymous
+ * timeout. Call names come only from bounded fixture phases and exact samples. */
+async function attributedCampaignPhase<T>(
+  name: string,
+  work: () => T | Promise<T>,
+  phases: Record<string, number>,
+  details: Record<string, CampaignPhaseRecord>,
+  persist: () => void,
+  sample?: FixtureSampleCall,
+): Promise<T> {
+  const started = performance.now();
+  const record: CampaignPhaseRecord = {
+    status: 'running',
+    startedAt: new Date().toISOString(),
+    ...(sample ? { sample: { ...sample } } : {}),
+  };
+  details[name] = record;
+  persist();
+  try {
+    const result = await work();
+    record.status = 'succeeded';
+    return result;
+  } catch (error) {
+    record.status = 'failed';
+    record.error = campaignFailure(error);
+    throw error;
+  } finally {
+    phases[name] = record.elapsedMs = Math.round(performance.now() - started);
+    record.completedAt = new Date().toISOString();
+    persist();
+  }
+}
 
 interface RestorePreparationTiming {
   target: string;
@@ -1152,6 +1224,94 @@ const recordedRestoreExpectation = (target: string) => ({
   samples: 3,
   generation: 'urn:rezics:text-index-generation:a3f55b32-438e-4e1f-8661-2befca1b2a0d',
   sequence: '0',
+});
+
+test('OPS10: campaign source attribution persists the exact pending call and original timeout', async () => {
+  const phases: Record<string, number> = {},
+    details: Record<string, CampaignPhaseRecord> = {};
+  const writes: Record<string, CampaignPhaseRecord>[] = [];
+  const persist = () => {
+    writes.push(structuredClone(details));
+  };
+  const timeout = new DOMException('The operation timed out.', 'TimeoutError');
+  let observed: unknown;
+  try {
+    await attributedCampaignPhase(
+      'source-0-work-count',
+      async () => {
+        expect(writes.at(-1)!['source-0-work-count']!.status).toBe('running');
+        throw timeout;
+      },
+      phases,
+      details,
+      persist,
+    );
+  } catch (error) {
+    observed = error;
+  }
+  expect(observed).toBe(timeout);
+  expect(details['source-0-work-count']).toMatchObject({
+    status: 'failed',
+    error: { name: 'TimeoutError', message: 'The operation timed out.' },
+  });
+  expect(details['source-0-work-count']!.startedAt).toMatch(/^\d{4}-/);
+  expect(details['source-0-work-count']!.completedAt).toMatch(/^\d{4}-/);
+  expect(phases['source-0-work-count']).toBeGreaterThanOrEqual(0);
+});
+
+test('OPS10: campaign source attribution retains nested sample identity, success and bounded causes', async () => {
+  const phases: Record<string, number> = {},
+    details: Record<string, CampaignPhaseRecord> = {};
+  const snapshots: Record<string, CampaignPhaseRecord>[] = [];
+  const persist = () => {
+    snapshots.push(structuredClone(details));
+  };
+  const timeout = new DOMException('network deadline', 'TimeoutError');
+  const error = new Error('sample failed', { cause: timeout });
+  await expect(
+    attributedCampaignPhase(
+      'source-0-samples',
+      () =>
+        attributedCampaignPhase(
+          'source-0-sample-50000-main-revision',
+          () => {
+            throw error;
+          },
+          phases,
+          details,
+          persist,
+          { index: 50_000, operation: 'main-revision', target: 'urn:rezics:test:main-revision' },
+        ),
+      phases,
+      details,
+      persist,
+    ),
+  ).rejects.toBe(error);
+  expect(details['source-0-sample-50000-main-revision']).toMatchObject({
+    status: 'failed',
+    sample: { index: 50_000, operation: 'main-revision', target: 'urn:rezics:test:main-revision' },
+    error: {
+      name: 'Error',
+      message: 'sample failed',
+      cause: { name: 'TimeoutError', message: 'network deadline' },
+    },
+  });
+  expect(
+    snapshots.some(
+      (snapshot) =>
+        snapshot['source-0-samples']?.status === 'running' &&
+        snapshot['source-0-sample-50000-main-revision']?.status === 'running',
+    ),
+  ).toBe(true);
+  expect(
+    await attributedCampaignPhase('source-1-work-count', () => 100_000, phases, details, persist),
+  ).toBe(100_000);
+  expect(details['source-1-work-count']!.status).toBe('succeeded');
+  const cycle = new Error('x'.repeat(2_000));
+  cycle.cause = cycle;
+  const failure = campaignFailure(cycle);
+  expect(failure.message).toHaveLength(1024);
+  expect(failure.cause?.cause?.cause).toBeUndefined();
 });
 
 test('OPS10: campaign preparation qualifies each literal restore independently and retains ungated aggregates', () => {
