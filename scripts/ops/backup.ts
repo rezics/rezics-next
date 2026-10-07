@@ -25,7 +25,7 @@ import { parseOptions, type StackOptions } from '../dev/config.ts';
 import { releaseDigest } from '../dev/release-manifest.ts';
 import { migrationInventory } from '../fixture/manifest.ts';
 import { currentEngines, root } from '../fixture/stack.ts';
-import { withQaStackStartup, type QaMemoryService } from '../qa/memory-admission.ts';
+import { withQaStackStartup } from '../qa/memory-admission.ts';
 import {
   assertPinnedState,
   inspectFusekiState,
@@ -113,16 +113,11 @@ export function graphRunner(context: ReturnType<typeof stackContext>): FusekiSta
     stop: () => {
       context.compose(['stop', 'fuseki']);
     },
-    start: () => startRecoveryServices(context, ['fuseki']),
+    start: () => withQaStackStartup(root, context.environment, Date.now() + 600_000, () => {
+      context.compose(['up', '-d', '--wait', 'fuseki']);
+    }, { services: ['fuseki'] }),
     container: () => context.compose(['ps', '-q', 'fuseki']),
   };
-}
-
-async function startRecoveryServices(context: ReturnType<typeof stackContext>, services: QaMemoryService[]): Promise<void> {
-  const start = () => { context.compose(['up', '-d', '--wait', ...services]); };
-  if (context.project.startsWith('rezics-qa-'))
-    await withQaStackStartup(root, context.environment, context.deadline, start, { services });
-  else start();
 }
 
 async function assertServicesStopped(apps: Record<string, string>): Promise<void> {
@@ -521,7 +516,7 @@ export async function backupRecoverySet(
     await budget.phase('source-fence-release', async () => {
       // Only PostgreSQL is briefly started to release the SOURCE fence. Product
       // processes and graph/object storage stay stopped throughout.
-      await startRecoveryServices(context, ['postgres']);
+      context.compose(['up', '-d', '--wait', 'postgres']);
       await releaseAccessRecoveryFence(pools.access, capturedGeneration);
       await pools.account.query(
         'ALTER ROLE account LOGIN; ALTER ROLE access LOGIN; ALTER ROLE content LOGIN; ALTER ROLE relay LOGIN',
@@ -554,14 +549,14 @@ export async function backupRecoverySet(
           });
           for (const pool of [account, access]) pool.on('error', () => {});
           try {
-            await startRecoveryServices(cleanup, ['postgres']);
+            cleanup.compose(['up', '-d', '--wait', 'postgres']);
             if (generation) await releaseAccessRecoveryFence(access, generation);
             await account.query(
               'ALTER ROLE account LOGIN; ALTER ROLE access LOGIN; ALTER ROLE content LOGIN; ALTER ROLE relay LOGIN',
             );
             // Restore the storage precondition for an immediate retry. Main,
             // Account and all worker processes remain in their maintenance stop.
-            await startRecoveryServices(cleanup, ['postgres', 'fuseki', 'rustfs']);
+            cleanup.compose(['up', '-d', '--wait', 'postgres', 'fuseki', 'rustfs']);
           } catch {
             try {
               cleanup.compose(['stop']);

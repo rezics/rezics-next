@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { Database } from 'bun:sqlite';
 import { qaResourceClasses, type QaResourceClass } from './resource-classes.ts';
@@ -90,11 +90,23 @@ export async function readMemory(remainingMs: number, env: NodeJS.ProcessEnv = p
 
 export interface MemoryWaitOptions {
   deadline: number;
+  root?: string;
+  env?: NodeJS.ProcessEnv;
   read?: (remainingMs: number) => Promise<MemoryReading>;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   announce?: (message: string) => void;
   pollMs?: number;
+}
+
+/** Archived production restores also use QA project names. Only actual local
+ * orchestration or the saved QA profile opts into this host's QA reserves. */
+export async function isLocalQaRun(root = resolve(import.meta.dir, '../..'),
+  env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  if (env.GOAL_TASK_ID?.trim() || env.REZICS_STACK_PROFILE === 'qa') return true;
+  // core imports admission; load its existing worktree-aware slot lookup lazily.
+  const { goalSlotDirectory } = await import('./core.ts');
+  return goalSlotDirectory(root) !== undefined;
 }
 
 export interface StartupMemoryOptions extends MemoryWaitOptions {
@@ -107,6 +119,7 @@ export interface StartupMemoryOptions extends MemoryWaitOptions {
  * created by this startup instead of sharing its pre-start memory snapshot. */
 export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMemoryOptions,
   start: () => T | Promise<T>): Promise<T> {
+  if (!await isLocalQaRun(options.root, options.env)) return await start();
   const lockFile = options.lockFile ?? '/tmp/rezics-qa-memory-startup.sqlite';
   mkdirSync(dirname(lockFile), { recursive: true });
   const mutex = new Database(lockFile, { create: true });
@@ -151,11 +164,12 @@ export function qaMemoryDeadline(env: NodeJS.ProcessEnv, deadline: number): numb
   return Math.min(value, deadline);
 }
 
-export function withQaStackStartup<T>(root: string, env: NodeJS.ProcessEnv, deadline: number,
+export async function withQaStackStartup<T>(root: string, env: NodeJS.ProcessEnv, deadline: number,
   start: () => T | Promise<T>, options: Partial<StartupMemoryOptions> & { services?: readonly QaMemoryService[] } = {}): Promise<T> {
+  if (!await isLocalQaRun(root, env)) return await start();
   return withMemoryStartup(qaMemoryNeed(root, env.REZICS_QA_MEMORY_KIND === 'browser' ? 'browser' : 'other',
     'catalogue-disk', env, options.services), {
-    ...options, deadline: qaMemoryDeadline(env, deadline),
+    ...options, root, env, deadline: qaMemoryDeadline(env, deadline),
     read: options.read ?? (remaining => readMemory(remaining, env)),
   }, start);
 }
@@ -170,6 +184,7 @@ function admissionMessage(need: MemoryNeed, reading?: MemoryReading): string {
 
 /** A slot authorizes concurrency; only a fresh measured reading admits the work. */
 export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions): Promise<void> {
+  if (!await isLocalQaRun(options.root, options.env)) return;
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? (ms => Bun.sleep(ms));
   const announce = options.announce ?? console.log;

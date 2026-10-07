@@ -246,7 +246,7 @@ async function runE2e(): Promise<void> {
     const result: typeof steps[number] = { step, budgetMs, elapsedMs: 0, passed: false };
     console.log(`${step}: ${budgetMs / 1000}s budget`);
     try {
-      await waitForMemory(qaMemoryNeed(root, 'browser'), { deadline: start + budgetMs });
+      await waitForMemory(qaMemoryNeed(root, 'browser'), { root, env, deadline: start + budgetMs });
       await run(); result.passed = true;
     }
     catch (error) { result.error = error instanceof Error ? error.message : String(error); throw error; }

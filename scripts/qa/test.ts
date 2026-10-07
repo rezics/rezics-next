@@ -125,6 +125,7 @@ export async function dispatchTest(args: string[], options: TestDispatchOptions 
   const command = selectTestCommand(args);
   if (command[0] === 'task' && ['storybook:test', 'accounts:storybook:test'].includes(command[1][0]!)) {
     await (options.admission ?? waitForMemory)(qaMemoryNeed(root, 'browser', undefined, options.env ?? process.env), {
+      root, env: options.env ?? process.env,
       deadline: options.deadline ?? Date.now() + 6 * 3_600_000,
     });
   }

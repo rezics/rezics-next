@@ -2,9 +2,10 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
-import { startRestoredServices } from '../../../scripts/ops/restore.ts';
+import { execFileSync } from 'node:child_process';
+import { withQaMemory } from '../../../scripts/qa/core.ts';
 import { GiB, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory,
-  qaMemoryDeadline, withMemoryStartup, withQaStackStartup,
+  isLocalQaRun, qaMemoryDeadline, withMemoryStartup, withQaStackStartup,
   type MemoryReading } from '../../../scripts/qa/memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -36,6 +37,52 @@ async function untilFile(path: string): Promise<void> {
   while (!existsSync(path) && Date.now() < deadline) await Bun.sleep(5);
   expect(existsSync(path)).toBe(true);
 }
+
+test('admission uses existing Goal orchestration or the actual QA profile, never a target name', async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-memory-context-'));
+  try {
+    execFileSync('git', ['init', '--quiet'], { cwd: dir });
+    expect(await isLocalQaRun(dir, {})).toBe(false);
+    expect(await isLocalQaRun(dir, { REZICS_STACK_PROFILE: 'dev', REZICS_QA_RUN_ID: 'production-restore' })).toBe(false);
+    expect(await isLocalQaRun(dir, { GOAL_TASK_ID: 'G-1234' })).toBe(true);
+    expect(await isLocalQaRun(dir, { REZICS_STACK_PROFILE: 'qa' })).toBe(true);
+    mkdirSync(join(dir, '.temp', 'goal-orchestration', 'qa-slots'), { recursive: true });
+    expect(await isLocalQaRun(dir, {})).toBe(true);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('production operations bypass all admission entry points while local QA still waits', async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-memory-production-'));
+  const lockFile = join(dir, 'must-not-be-created.sqlite');
+  const starts: string[] = [];
+  try {
+    execFileSync('git', ['init', '--quiet'], { cwd: dir });
+    const env = { REZICS_STACK_PROFILE: 'dev', REZICS_QA_MEMORY_DEADLINE: 'invalid',
+      REZICS_FUSEKI_MEMORY_LIMIT: '0', REZICS_QA_HOST_RESERVE_GIB: 'invalid' };
+    const options = { root: dir, env, lockFile, deadline: -1, pollMs: 0,
+      now: () => { throw new Error('Production inspected a QA clock'); },
+      read: async () => { throw new Error('Production inspected memory'); },
+      announce: () => { throw new Error('Production printed QA admission'); } };
+    await waitForMemory(need, options);
+    expect(await withMemoryStartup(need, options, () => { starts.push('mutex'); return 'restored'; })).toBe('restored');
+    await withQaMemory(need, options, async () => { starts.push('host'); });
+    await withQaStackStartup(dir, env, -1, () => { starts.push('stack'); }, options);
+    expect(starts).toEqual(['mutex', 'host', 'stack']);
+    expect(existsSync(lockFile)).toBe(false);
+
+    mkdirSync(join(dir, 'infra', 'dev'), { recursive: true });
+    writeFileSync(join(dir, 'infra', 'dev', 'compose.qa.yaml'), readFileSync(join(root, 'infra', 'dev', 'compose.qa.yaml')));
+    let now = 0, reads = 0, started = false;
+    await expect(withQaStackStartup(dir, { REZICS_STACK_PROFILE: 'qa', REZICS_FUSEKI_MEMORY_LIMIT: '2g' }, 10,
+      () => { started = true; }, { lockFile, now: () => now, pollMs: 10,
+        sleep: async ms => { now += ms; }, announce: () => {},
+        read: async () => { reads++; return { ...plenty, vmUsed: plenty.vmTotal }; },
+      })).rejects.toThrow('free 0.00 GiB');
+    expect(started).toBe(false);
+    expect(reads).toBe(1);
+    expect(now).toBe(10);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 test('independent QA processes measure after the preceding startup and wait for its memory to clear', async () => {
   const dir = mkdtempSync(join(scratch, 'qa-memory-processes-'));
@@ -142,7 +189,7 @@ test('each source and restore target startup receives a fresh reading and its in
   const dir = mkdtempSync(join(scratch, 'qa-memory-children-'));
   let now = 0, used = 0, reads = 0;
   const starts: string[] = [];
-  const env = { REZICS_QA_MEMORY_DEADLINE: '25' };
+  const env = { REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '25' };
   const options = { lockFile: join(dir, 'mutex.sqlite'), now: () => now, pollMs: 10,
     announce: () => {}, sleep: async (ms: number) => { now += ms; }, read: async () => {
       reads++; return { vmTotal: 12 * GiB, vmUsed: used, hostAvailable: 20 * GiB };
@@ -153,13 +200,13 @@ test('each source and restore target startup receives a fresh reading and its in
       expect(args).toEqual(['up', '-d', '--wait', 'postgres', 'fuseki', 'rustfs']);
       starts.push(name); return '';
     } });
-    await expect(startRestoredServices(target('restore-target'), 100, {}, options))
+    await expect(withQaStackStartup(root, env, 100, () => { target('restore-target').compose(['up', '-d', '--wait', 'postgres', 'fuseki', 'rustfs']); }, options))
       .rejects.toThrow('free 9.00 GiB');
     expect(starts).toEqual(['source']);
     expect(reads).toBeGreaterThan(1);
     expect(now).toBe(25);
     now = 0; used = 0;
-    await startRestoredServices(target('fresh-restore-target'), 100, {}, options);
+    await withQaStackStartup(root, env, 100, () => { target('fresh-restore-target').compose(['up', '-d', '--wait', 'postgres', 'fuseki', 'rustfs']); }, options);
     expect(starts).toEqual(['source', 'fresh-restore-target']);
     expect(qaMemoryDeadline(env, 10)).toBe(10);
     expect(() => qaMemoryDeadline({ REZICS_QA_MEMORY_DEADLINE: 'unknown' }, 100)).toThrow('Invalid');

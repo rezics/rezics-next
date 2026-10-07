@@ -90,6 +90,7 @@ const selected = selection?.tiers ?? (options.tier ? [options.tier] : options.ba
 const chosen = options.files || options.id ? options : undefined;
 const runDeadline = qaMemoryDeadline(process.env, Date.now() + 6 * 3_600_000);
 process.env.REZICS_QA_MEMORY_DEADLINE = String(runDeadline);
+process.env.REZICS_STACK_PROFILE = 'qa';
 function noteMemory(message: string): void {
   if (!message.includes('QA memory:')) return;
   console.log(message);
@@ -98,6 +99,7 @@ function noteMemory(message: string): void {
 // Host work is admitted here; every Compose startup owns the shared VM guard.
 async function admit<T>(kind: 'other' | 'browser', deadline: number, work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
   return withQaMemory(qaMemoryNeed(root, kind, undefined, env), {
+    root, env,
     deadline: Math.min(runDeadline, deadline),
     announce: noteMemory,
   }, work);
