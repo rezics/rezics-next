@@ -3,12 +3,14 @@ import { randomUUID } from 'node:crypto';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { CompositionConflict } from '../src/modules/structure/change.ts';
 import type { PlacementState } from '../src/modules/structure/graph.ts';
-import { structureProfiles } from '../src/modules/zone/structure-profile.ts';
+import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { ZONE_RESERVED_SEGMENTS } from '../src/modules/zone/route-path.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
-const validate = structureProfiles[0]!.qualifierValidations!;
+// Structure discovery loads this profile while the profile module is still evaluating.
+// Importing that module directly never finishes; the registry returns the same validator.
+const validate = structureProfileFor('zone-navigation').qualifierValidations!;
 
 function fixture() {
   const zone = id(), structure = id(), generation = id(), queries: string[] = [];
