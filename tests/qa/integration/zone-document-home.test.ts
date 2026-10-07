@@ -283,8 +283,23 @@ test('Realm-less site binds exact revisions; drafts stay outside and republishin
 test('local Showcase delivery applies existing schedule and live Work disclosure while exact Content stays unchanged', async () => {
   const f = await fixture();
   try {
-    const work = await f.json<{ work: string }>(await f.call('POST', '/v1/works',
+    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works',
       await f.authoredBody({ profile: 'metadata-only-v1', title: 'Live Showcase Work', language: 'en', actingSubject: f.actor })), 201);
+    await f.grant(`contribution:create:${work.work}`, 'contribution.create');
+    const contribution = await f.json<{ contribution: string; draftRevision: string }>(await f.call('POST', '/v1/contributions', {
+      profile: 'text-contribution-v1', work: work.work, language: 'en', body: 'Public Showcase Work text', actingSubject: f.actor,
+    }), 201);
+    await f.grant(`contribution:publish:${contribution.contribution}`, 'contribution.publish');
+    const publication = await f.json<{ publicationDecision: string }>(await f.call('POST', '/v1/contribution-publications', {
+      profile: 'text-publication-v1', contribution: contribution.contribution, expectedDraftHead: contribution.draftRevision,
+      expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: f.actor,
+    }), 201);
+    await f.grant(`publication:select:${work.mainVersion}`, 'publication.select');
+    const selection = await f.json<{ selection: string }>(await f.call('POST', '/v1/publication-selections', {
+      profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: work.mainVersion },
+      work: work.work, contribution: contribution.contribution, publicationDecision: publication.publicationDecision,
+      expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: f.actor,
+    }), 201);
     const slides: ZonePresentation['slides'] = [
       { id: 'live-link', href: '/', title: 'Live link' },
       { id: 'live-work', work: work.work, title: 'Live Work' },
@@ -301,12 +316,10 @@ test('local Showcase delivery applies existing schedule and live Work disclosure
     expect(visible.presentation.slides.map(slide => slide.id)).toEqual(['live-link', 'live-work']);
     const exported = await f.json<{ serializedJson: string; body: { document: DocumentSnapshot } }>(await f.exact(page.revisionId), 200);
     expect(exported.body.document).toEqual(document);
-    // Controlled fixture preparation changes the live target's disclosure;
+    // Controlled fixture preparation removes the Work's live public selection;
     // the immutable Content revision and its publication pin never move.
     await f.env.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
-      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(work.work)} rv:disclosure ?before } }
-      INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(work.work)} rv:disclosure rv:Private } }
-      WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(work.work)} a ?type . OPTIONAL { ${iri(work.work)} rv:disclosure ?before } } }`);
+      DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(work.mainVersion)} rv:selectionHead ${iri(selection.selection)} } }`);
     const hidden = await read();
     expect(hidden.presentation.slides.map(slide => slide.id)).toEqual(['live-link']);
     expect(hidden.home.showcases.find(showcase => showcase.id === 'block:document-showcase')?.slides)
