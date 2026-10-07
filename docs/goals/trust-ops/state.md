@@ -8,7 +8,7 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 21:18 UTC. Serving frozen revisionf7a340611d0c is healthy at
+Checkpoint 2026-10-07 22:23 UTC. Serving frozen revisionf7a340611d0c is healthy at
 native25ce9fb19154/model fa39610, with Access1774, Content1705/1706,
 erased-pin45181 and deadlock signal36f887 active. All six resources are healthy;
 volumes retained, no AppHost restart, refresh terminal0 and no pending ticket. No Trust refresh is queued. G-1398 is closed/verified atf7a340611d0c after10realPG/native tests/218assertions,
@@ -483,3 +483,23 @@ terminal codeg1343-corrected-merge-retry-2203.exit under.temp/trust-ops. Do not
 restart it on observation timeout or mutateG-1343 while it is live. Kernel's full
 package failed1090.4s/346tests with2failures+3errors in two known fixture/config
 classes, so no new image/activation is accepted. Priorcb244/native25ce healthy.
+
+G-1343 corrected component landedd78f248b0969 after Main types and all162
+unit/guard files passed. The same-budget retry's native shard650.758s passed;
+original720s inconclusive evidence stays retained. Actual helper graphcommit→
+Accessfail retry is proved; actual both-ownercommit→outer-record restart and
+private family/WAL remain open. G-1351 must bind genuine durable pre/post-CAS
+complete authority including the two invalidation rows through existing records.
+
+G-1344 startupae64 plus manager correction47f224040 passed12focused cases/129
+assertions and static checks. Any supplied copy uses idempotent stack:up; only
+a just-qualified automatic restore skips duplicate startup. Partial-container
+liveness cannot stand for readiness. Actual startup work remains in600ACTIVE
+local preparation, with measured admission excluded and reported. One manager
+100k retry is live in tmuxgoal-trust-ops:medium-campaign-retry, goalctl2264207,
+currently in startup admission. Log.temp/worktrees/g-1344/.temp/goal/
+campaign-medium-manager-retry-2220.log andterminal.exit/result.json; do not
+mutate/rebase the frozen539/fa tree or restart a live job. Original backup and
+both restore SHA values are unchanged. No campaign pass or current-native
+qualification is inferred. Kernel package repairs/ProgramG1404/G1406 remain
+separate; no Trustshared refresh ticket is queued.
