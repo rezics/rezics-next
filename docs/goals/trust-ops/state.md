@@ -228,6 +228,14 @@ the limit12. Launch G-1391 retains the real signed-in/out regression. Kernel
 coordinates any minimal request seam. G-1289 has the exact one-line restored
 Content pool verification-store hook loan; G-1351 composition remains its owner.
 
+G-1398 now owns the fixed Access verification.claim-assess admission-history
+reader and reserved Access1774 partial(id) index. Its32raw-plus-lookahead window
+must include every state and scope, keep malformed/oversized admission IDs
+explicitly unresolved, and use a genuine existing Access cut/quiescence. Content
+EOF or null graph fields do not prove missing original input or producer
+completeness. The active admission module remains with G-1343; no new custody
+table, global frontier or inferred C/R/challenge tail is permitted.
+
 ## Contracts and promises to other Goals
 
 - **C1 landed:** e64b08472 (policy in admission, earliest-expiry lease) and
