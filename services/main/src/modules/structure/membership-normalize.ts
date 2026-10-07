@@ -12,6 +12,10 @@ import {
 import { CompositionCorrupt, itemListIri, itemPosition, structureIri } from './graph.ts';
 import { structureProfileForGraph } from './profiles.ts';
 
+/** LIMIT bounds returned rows, not physical candidate work: DISTINCT/ORDER BY
+ * runs over graph-wide matches, and each batch filters converted placements again.
+ * Native owner seek/checkpoint support is needed to bound touched rows and sorting.
+ */
 function membershipCandidateQuery(limit: number): string {
   return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       SELECT DISTINCT ?placement ?type ?generation ?profile ?parent ?segmentKey ?orderKey
@@ -43,8 +47,9 @@ export async function hasUnnormalizedMembership(
 }
 
 /** Owner preparation must finish conversion before product processes start.
- * Batches share one wall deadline. Receipts let a failed preparation resume
- * from the remaining rows without replaying already converted membership.
+ * The wall deadline is checked between batches, not inside the candidate query.
+ * Receipts let a failed preparation resume without rewriting converted membership;
+ * candidate discovery still re-examines those placements on every batch.
  */
 export async function upgradeStoredMembership(env: WorkActivationEnvironment) {
   const deadline = Date.now() + 540_000;
@@ -62,8 +67,10 @@ export async function upgradeStoredMembership(env: WorkActivationEnvironment) {
 }
 
 /** Privileged representation repair, never exposed through a product route.
- * One transaction covers at most 24 placements and their parent lists. Each
- * exact basis has a durable receipt; interruption resumes from unconverted rows.
+ * One transaction writes at most 24 placements and their parent lists. Candidate
+ * discovery is graph-wide and parent-list SHACL can revisit all members, so this
+ * does not bound total touched or sorted rows. Each exact basis has a durable
+ * receipt; interruption resumes from unconverted rows.
  * Heads, retained manifests, selection pins and parent-local keys do not change.
  */
 export async function normalizeStoredMembership(
@@ -72,7 +79,7 @@ export async function normalizeStoredMembership(
   deadline = Date.now() + 540_000,
 ): Promise<{ complete: boolean; placements: number; receipts: string[] }> {
   if (!Number.isInteger(maxBatches) || maxBatches < 1 || maxBatches > 256) {
-    throw new Error('membership normalization requires 1-256 bounded batches');
+    throw new Error('membership normalization requires 1-256 write batches');
   }
   const receipts: string[] = [];
   let placements = 0;

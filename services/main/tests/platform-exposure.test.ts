@@ -165,7 +165,8 @@ test('every served Main route, including transports, has a reviewed exposure', (
     'postV1MeLibrary-loansByIdExtend',
     'postV1MeLibrary-loansByIdReturn',
   ];
-  expect(publicOperations).toHaveLength(524);
+  // Recipe create, change and read now use the existing Composition operations.
+  expect(publicOperations).toHaveLength(521);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
