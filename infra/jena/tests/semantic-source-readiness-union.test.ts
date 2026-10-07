@@ -49,13 +49,22 @@ test('accepted semantic source prerequisites share one native TDB2 owner runtime
   const dockerfile = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8');
   const image = /^FROM (\S+) AS module$/m.exec(dockerfile)?.[1];
   if (!image) throw new Error('missing pinned native builder');
+  const moduleStage = dockerfile.split(/\nFROM /, 1)[0]!;
+  const nativeEnvironment = ['MAVEN_OPTS', 'JAVA_TOOL_OPTIONS'].map((name) => {
+    const declaration = new RegExp(`^ENV ${name}="([^"\\n]*)"$`, 'm').exec(moduleStage);
+    if (!declaration) throw new Error(`missing native builder ${name}`);
+    return `${name}=${declaration[1]!}`;
+  });
+  const packageInvocation = /^RUN mvn (.+) package$/m.exec(moduleStage)?.[1];
+  if (!packageInvocation || !packageInvocation.split(' ').every((argument) => /^-[^\s"'`]+$/.test(argument)))
+    throw new Error('unsupported native builder Maven invocation');
+  const mavenArguments = packageInvocation.split(' ');
   const cache = join(temporary, 'semantic-source-readiness-maven-cache');
   mkdirSync(cache, { recursive: true });
 
   try {
     // Use the exact image build inputs, including startup configuration and query
     // fixtures. Refuse new COPY syntax instead of silently diverging from Docker.
-    const moduleStage = dockerfile.split(/\nFROM /, 1)[0]!;
     for (const line of moduleStage.split('\n')) {
       if (!/^COPY\s/.test(line)) continue;
       const copy = /^COPY (\S+) (\/build\/\S+)$/.exec(line);
@@ -123,23 +132,14 @@ test('accepted semantic source prerequisites share one native TDB2 owner runtime
       `${cache}:/maven-cache`,
       '--env',
       'MAVEN_CONFIG=/maven-cache',
-      '--env',
-      'MAVEN_OPTS=-Xmx128m',
-      // Keep the unchanged Membership child heap while bounding inherited GC threads.
-      '--env',
-      'JAVA_TOOL_OPTIONS=-XX:+UseSerialGC -XX:ActiveProcessorCount=4',
+      ...nativeEnvironment.flatMap((declaration) => ['--env', declaration]),
       '--workdir',
       '/build',
       image,
       'mvn',
-      '-B',
-      '-ntp',
+      ...mavenArguments,
       '-Dmaven.repo.local=/maven-cache',
       '-Djava.io.tmpdir=/build/tmp',
-      '-DargLine=-Xmx384m',
-      // Sequential class forks release each original fixture's native mappings.
-      '-DforkCount=1',
-      '-DreuseForks=false',
       `-Dtest=${classes.join(',')}`,
       'test',
     ];

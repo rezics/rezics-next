@@ -6,7 +6,9 @@ COPY infra/jena/command-module/src /build/src
 COPY services/main/src/modules/query/templates /build/src/test/resources/query-templates/
 COPY generated/model/ /build/profiles/
 COPY infra/jena/fuseki-text.ttl /build/fuseki-text.ttl
-RUN mvn -B -ntp package
+ENV MAVEN_OPTS="-Xmx128m"
+ENV JAVA_TOOL_OPTIONS="-XX:+UseSerialGC -XX:ActiveProcessorCount=4"
+RUN mvn -B -ntp -DargLine=-Xmx384m -DforkCount=1 -DreuseForks=false package
 
 FROM maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 AS distribution
 ARG FUSEKI_VERSION=6.2.0
