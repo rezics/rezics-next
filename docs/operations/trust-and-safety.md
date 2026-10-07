@@ -183,8 +183,8 @@ deadline tracking from alert delivery, and a private case inbox from safety
 email. Responder alerts and mandatory uploader email are separate deliveries.
 Keep readiness unclaimed until
 SAFETY03, SAFETY07 and SAFETY08 run with production responder configuration and
-real delivery. The [security review](security.md#launch-review-2026-10-01)
-records the reviewed source and release-image limitation.
+real delivery. The [security review](security.md#qualification-evidence-2026-10-07)
+records the reviewed source, verified repairs and pinned release-image limits.
 
 The focused [launch image drill](../../tests/qa/integration/safety-launch-drill.test.ts)
 uses isolated owner databases, real Account assertions, local mail transport and
