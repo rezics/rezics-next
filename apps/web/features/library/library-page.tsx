@@ -16,6 +16,9 @@ import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { LibraryApi } from './api.ts';
+import type { CopiesApi } from './loans/api.ts';
+import { BringIntoRow } from './loans/bring-into-row.tsx';
+import { CopiesApiProvider } from './loans/provider.tsx';
 import { NewShelf, SortControl, VisibilityControl } from './controls.tsx';
 import { LibraryProvider } from './library-context.tsx';
 import { statusLabel } from './labels.ts';
@@ -45,11 +48,11 @@ const navItem = cn('flex min-h-10 items-center gap-2 whitespace-nowrap rounded-f
  * shelves with their counts, then the reader's own. A row of chips that
  * scrolls on a phone, a column beside the list on a wide screen.
  */
-function ShelfNav({ state, overview, locale, messages }: {
-  state: LibraryState; overview: LibraryOverview; locale: UiLocale; messages: LibraryMessages;
+function ShelfNav({ state, overview, locale, messages, loansCurrent = false }: {
+  state: LibraryState; overview: LibraryOverview; locale: UiLocale; messages: LibraryMessages; loansCurrent?: boolean;
 }) {
   const t = materializeData(messages, { locale });
-  const current = shelfKey(state.shelf);
+  const current = loansCurrent ? 'loans' : shelfKey(state.shelf);
   const href = (shelf: LibraryShelf) => libraryHref(state, { shelf, layout: state.layout });
   const total = statusShelves.reduce((sum, status) => sum + overview.counts[status], 0);
   const entries: { key: string; shelf: LibraryShelf; label: string; count: number }[] = [
@@ -66,6 +69,11 @@ function ShelfNav({ state, overview, locale, messages }: {
             <span className="tabular-nums opacity-70">{count(entry.count, locale)}</span>
           </Link>
         </li>)}
+        <BringIntoRow active={current === 'loans'}>
+          <Link href="/library/loans" aria-current={current === 'loans' ? 'page' : undefined} className={navItem}>
+            <span className="lg:flex-1">{t.loans}</span>
+          </Link>
+        </BringIntoRow>
       </ul>
       <div className="flex items-center gap-2 lg:grid lg:gap-1">
         <h2 className="hidden px-3 font-semibold text-muted-foreground text-xs uppercase tracking-wide lg:block">
@@ -319,6 +327,10 @@ export interface LibraryPageProps {
   avatarQuery?: string;
   /** Stories supply these; pages write to Main. */
   api?: LibraryApi;
+  /** Stories record copies and loans here; the page uses Main. */
+  copiesApi?: CopiesApi;
+  /** When set, the shelf column is this loans view and Loans is the current destination. */
+  loansView?: ReactNode;
   readerActions?: Extract<ReaderActions, { kind: 'ready' }>;
   locale: UiLocale;
   messages: LibraryMessages;
@@ -330,7 +342,7 @@ export interface LibraryPageProps {
  * shelf sortable, as a list or a grid, with several Works moved at once.
  */
 export function LibraryPage({ state, overview, view, reading, authors, goal, stats, now, avatarQuery, api,
-  readerActions, locale,
+  copiesApi, loansView, readerActions, locale,
   messages }: LibraryPageProps) {
   const t = materializeData(messages, { locale });
   if (!overview.ok) return <LibraryUnavailable failure={overview.failure} locale={locale} messages={messages} />;
@@ -343,6 +355,7 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
   return <LibraryProvider key={libraryHref(state)} actingSubject={data.agent} seed={view.ok ? view.data.seed : {}}
     ratingContext={data.ratingContext} titles={titles} api={api} readerActions={readerActions} locale={locale}
     messages={messages}>
+    <CopiesApiProvider api={copiesApi}>
     {/* Titles mix Latin and CJK; space them apart. */}
     <PageContainer className="grid grid-cols-[minmax(0,1fr)] gap-8 [text-autospace:normal]">
       <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
@@ -352,28 +365,33 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
         </div>
         <VisibilityControl initial={data.visibility} locale={locale} messages={messages} />
       </header>
-      {goal ? <ReadingGoal agent={data.agent} initial={goal} locale={locale} messages={messages} /> : null}
-      {stats ? <ReadingStats stats={stats} locale={locale} messages={messages} /> : null}
-      <LibraryImport agent={data.agent} context={data.ratingContext} locale={locale} messages={messages} />
-      <LibraryExport agent={data.agent} locale={locale} messages={messages} />
-      {firstUse ? <>
+      {loansView ? null : <>
+        {goal ? <ReadingGoal agent={data.agent} initial={goal} locale={locale} messages={messages} /> : null}
+        {stats ? <ReadingStats stats={stats} locale={locale} messages={messages} /> : null}
+        <LibraryImport agent={data.agent} context={data.ratingContext} locale={locale} messages={messages} />
+        <LibraryExport agent={data.agent} locale={locale} messages={messages} />
+      </>}
+      {!loansView && firstUse ? <>
         <FirstUse locale={locale} messages={messages} />
         {authors ? <FollowedAuthorsSection authors={authors} avatarQuery={avatarQuery} locale={locale}
           messages={messages} /> : null}
       </>
         : <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-12">
-          <ShelfNav state={state} overview={data} locale={locale} messages={messages} />
+          <ShelfNav state={state} overview={data} locale={locale} messages={messages} loansCurrent={loansView !== undefined} />
           <div className="grid min-w-0 content-start gap-10">
-            {state.shelf.kind === 'all' && !state.cursor && reading.length
-              ? <CurrentlyReading rows={reading} total={data.counts.reading} state={state}
-                avatarQuery={avatarQuery} locale={locale} messages={messages} /> : null}
-            {authors ? <FollowedAuthorsSection authors={authors} avatarQuery={avatarQuery} locale={locale}
-              messages={messages} /> : null}
-            {state.shelf.kind === 'all' ? null : <ShelfSection state={state} view={view} overview={data} now={now}
-              avatarQuery={avatarQuery} locale={locale} messages={messages} />}
+            {loansView ?? <>
+              {state.shelf.kind === 'all' && !state.cursor && reading.length
+                ? <CurrentlyReading rows={reading} total={data.counts.reading} state={state}
+                  avatarQuery={avatarQuery} locale={locale} messages={messages} /> : null}
+              {authors ? <FollowedAuthorsSection authors={authors} avatarQuery={avatarQuery} locale={locale}
+                messages={messages} /> : null}
+              {state.shelf.kind === 'all' ? null : <ShelfSection state={state} view={view} overview={data} now={now}
+                avatarQuery={avatarQuery} locale={locale} messages={messages} />}
+            </>}
           </div>
         </div>}
     </PageContainer>
+    </CopiesApiProvider>
   </LibraryProvider>;
 }
 

@@ -20,6 +20,7 @@ import { slotRatio } from '../catalogue/work.ts';
 import { CoverLink, WorkTile, workTitle } from '../catalogue/work-tile.tsx';
 import Link from '../shell/localized-link.tsx';
 import { TrackingControl } from '../tracking/tracking-control.tsx';
+import { CopyLoanActions } from './loans/row-actions.tsx';
 import { formatDay } from './format.ts';
 import { hasKindWords, isUseWork, rowStatusLabel, statusLabel } from './labels.ts';
 import { useLibrary } from './library-context.tsx';
@@ -109,6 +110,7 @@ function Row({ row, selecting, selected, onSelect, now, avatarQuery, locale, mes
         <ShelfButton work={row.work.id} title={title} locale={locale} size="sm" variant="outline" className="w-44" />
         {/* Attempts (paused, did not finish, reread) are kept and edited in G-838's sheet. */}
         {unavailable ? null : <TrackingControl work={row.work.id} title={title} locale={locale} size="sm" className="w-44" />}
+        {unavailable ? null : <CopyLoanActions work={row.work.id} title={title} locale={locale} messages={messages} />}
       </div>
     </article>
   </li>;

@@ -50,6 +50,7 @@ export const All: Story = {
     const shelves = within(canvas.getByRole('navigation', { name: 'Shelves' }));
     await expect(shelves.getByRole('link', { name: 'All 12' })).toHaveAttribute('aria-current', 'page');
     await expect(shelves.getByRole('link', { name: 'Read 4' })).toHaveAttribute('href', '/en/library?shelf=read');
+    await expect(shelves.getByRole('link', { name: 'Loans' })).toHaveAttribute('href', '/en/library/loans');
     await expect(shelves.getByRole('link', { name: 'Comfort reads Only you can see this shelf' }))
       .toHaveAttribute('href', `/en/library?shelf=${comfortReads.id.slice(-36)}`);
     // Continue opens the next unread chapter.
