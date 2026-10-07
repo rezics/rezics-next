@@ -212,8 +212,8 @@ const sample = (locale: UiLocale): Story => ({
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const words = copyOf(locale);
-    await expect(canvas.getByRole('heading', { name: words.ingredientsHeading })).toBeVisible();
-    await expect(canvas.getByRole('heading', { name: words.methodHeading })).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: words.ingredientsHeading })).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: words.methodHeading })).toBeVisible();
     await noOverflow();
   },
 });

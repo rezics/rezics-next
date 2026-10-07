@@ -50,6 +50,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
   const saved = useSnapshot(details);
   const written = useSnapshot(notes);
   const notesField = useRef<HTMLTextAreaElement>(null);
+  const [typedNotes, setTypedNotes] = useState(initial.notes.body);
   const [view, setView] = useState<'edit' | 'preview'>('edit');
   const [published, setPublished] = useState(false);
   const [dismissed, setDismissed] = useState<{ details: typeof saved.failure; notes: typeof written.failure }>({ details: null, notes: null });
@@ -57,10 +58,12 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
   const entry = entryOf(saved.values, language);
   const saving = recipe.busy || saved.busy || written.busy;
   const missing = missingBeforePublishing({ title: entry.title, ingredients: ingredients(state).length, steps: steps(state).length,
-    notes: written.notes.body });
+    notes: typedNotes });
   const common = { store, state, language, t, busy: recipe.busy };
   const detailsFailure = saved.failure && saved.failure !== dismissed.details ? saved.failure : null;
   const notesFailure = written.failure && written.failure !== dismissed.notes ? written.failure : null;
+  // What Main holds replaces the typed text once it is saved, as the field does.
+  useEffect(() => setTypedNotes(written.notes.body), [written.notes.body]);
   const publish = async () => {
     // The text in the field may not have been left yet: it is what gets published.
     const outcome = await notes.publish((notesField.current?.value ?? written.notes.body).trim());
@@ -92,7 +95,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
     </div>
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem]">
       <div className={cn('grid min-w-0 content-start gap-10', view === 'preview' && 'hidden lg:grid')}>
-        <DetailsSection details={details} notes={notes} notesField={notesField} language={language} t={t} />
+        <DetailsSection details={details} notes={notes} notesField={notesField} onNotesInput={setTypedNotes} language={language} t={t} />
         <MeasuresSection {...common} />
         <IngredientsSection {...common} />
         <MethodSection {...common} />

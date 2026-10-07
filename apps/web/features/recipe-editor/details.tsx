@@ -7,8 +7,9 @@ import { type DetailsSaver, entryOf, type NotesWriter } from './saves.ts';
 import { directionOf } from '../studio/types.ts';
 
 /** Title and description share one header record, so leaving either writes both as they are typed. */
-export function DetailsSection({ details, notes, notesField, language, t }: { details: DetailsSaver; notes: NotesWriter;
-  notesField: RefObject<HTMLTextAreaElement | null>; language: string; t: Copy }) {
+export function DetailsSection({ details, notes, notesField, onNotesInput, language, t }: { details: DetailsSaver; notes: NotesWriter;
+  notesField: RefObject<HTMLTextAreaElement | null>; /** Tells the editor what is typed, before the field is left and saved. */ onNotesInput: (value: string) => void;
+  language: string; t: Copy }) {
   const saved = useSnapshot(details);
   const written = useSnapshot(notes);
   const title = useRef<HTMLInputElement>(null);
@@ -33,6 +34,7 @@ export function DetailsSection({ details, notes, notesField, language, t }: { de
     <div className="grid gap-1 text-sm"><label htmlFor="recipe-notes" className="font-medium">{t.notes}</label>
       <SyncedTextarea id="recipe-notes" ref={notesField} value={written.notes.body} maxLength={20000}
         className="min-h-28" aria-describedby="recipe-notes-help" {...lang}
+        onChange={event => onNotesInput(event.currentTarget.value)}
         onBlur={event => void notes.save(event.currentTarget.value.trim())} />
       <span id="recipe-notes-help" className="text-muted-foreground text-xs">{t.notesHelp}</span></div>
   </section>;
