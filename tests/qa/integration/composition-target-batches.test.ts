@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { createHash, randomInt, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Elysia } from 'elysia';
+import type { PoolClient } from 'pg';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 import { claimFixture, fixtureReasons } from './g-565-decision-support.ts';
 import { isForegroundOperation } from './support/operation-cost.ts';
@@ -16,14 +17,15 @@ import { PROTECTION_RULE } from '../../../services/main/src/modules/protection/s
 import { rightsRoutes } from '../../../services/main/src/routes/rights.ts';
 
 interface Work { work: string; workRevision: string; mainVersion: string }
+interface Episode { component: string; revision: string }
 interface Composition { structure: string; revision: string; occurrences: string[] }
 interface Occurrence { occurrence: string; target: string; displayLabel?: string }
 interface Page { revision: string; occurrences: Occurrence[]; next: string | null }
 interface Parts { parts: Array<{ occurrence: string; work: string }>; next: string | null }
 
-// Keep the targets distinct and author their public heads through the same HTTP
-// commands as users. Repeated placements alone cannot detect scalar hydration.
-test('100 distinct public Episodes fit current/exact Composition and Work parts budgets, with live withholding and sparse continuation', async () => {
+// Episodes use their admitted semantic Resource grain. Repeated placements
+// alone cannot detect scalar hydration; Work parts must exclude these targets.
+test('100 distinct public semantic Episodes fit current/exact Composition budgets, with Work-only parts, live withholding and sparse continuation', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through goalctl test');
   const started = performance.now();
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
@@ -51,7 +53,7 @@ test('100 distinct public Episodes fit current/exact Composition and Work parts 
   const rightsCall = (path: string, body: object, token: string, key = randomUUID()) => rightsApp.handle(
     new Request(`http://main.local${path}`, { method: 'POST', headers: { authorization: `Bearer ${token}`,
       'idempotency-key': key, 'content-type': 'application/json' }, body: JSON.stringify(body) }));
-  const createWork = async (title: string, type = 'https://schema.org/Episode', publicText = true) => {
+  const createWork = async (title: string, type = 'https://schema.org/Book', publicText = true) => {
     const work = await f.json<Work>(await f.call('POST', '/v1/works', await f.authoredBody({
       profile: 'metadata-only-v1', title, language: 'en', semanticTypes: [type], actingSubject: f.actor })), 201);
     await f.grant(`work:edit:${work.work}`, 'work.edit');
@@ -72,12 +74,26 @@ test('100 distinct public Episodes fit current/exact Composition and Work parts 
       expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: f.actor }), 201);
     return work;
   };
+  const createEpisode = async (name: string, number: number, publicWork?: string) => {
+    const episode = await f.json<Episode>(await f.call('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', expectedHead: null, actingSubject: f.actor,
+      state: { component: 'resource', types: ['https://schema.org/Episode'], properties: [
+        { predicate: 'https://schema.org/name', value: { kind: 'language-string', lexical: name, language: 'en' } },
+        { predicate: 'https://schema.org/episodeNumber', value: {
+          kind: Number.isInteger(number) ? 'integer' : 'decimal', lexical: String(number) } },
+        ...(publicWork ? [{ predicate: `${RV}semanticWork`, value: { kind: 'resource', ref: publicWork } }] : []),
+      ] },
+    }), 201);
+    await f.grant(`semantic:read:${episode.component}`, 'semantic.read');
+    return episode;
+  };
   // Record actual graph transport debits and the real Access owner's queries, rather
   // than using the response limit as a cost estimate. Background stays attributed.
   const originalFetch = globalThis.fetch;
   const graphBase = new URL(Bun.env.FUSEKI_URL!);
   graphBase.pathname = graphBase.pathname.replace(/\/*$/, '/');
-  const originalSql = f.accessPool.query.bind(f.accessPool);
+  const originalConnect = f.accessPool.connect.bind(f.accessPool);
+  const clients = new Map<PoolClient, PoolClient['query']>();
   const originalCanReadWork = f.access.canReadWork.bind(f.access);
   let measuring = false, graphCalls = 0, graphBytes = 0, ownerSql = 0, workProbes = 0;
   globalThis.fetch = Object.assign(async (...args: Parameters<typeof fetch>) => {
@@ -94,10 +110,24 @@ test('100 distinct public Episodes fit current/exact Composition and Work parts 
     if (count) graphBytes += (await response.clone().arrayBuffer()).byteLength;
     return response;
   }, originalFetch);
-  f.accessPool.query = ((...args: unknown[]) => {
-    if (measuring && isForegroundOperation()) ownerSql++;
-    return Reflect.apply(originalSql, f.accessPool, args);
-  }) as typeof f.accessPool.query;
+  const meterClient = (client: PoolClient) => {
+    if (clients.has(client)) return;
+    const original = client.query;
+    clients.set(client, original);
+    client.query = ((...args: unknown[]) => {
+      if (measuring && isForegroundOperation()) ownerSql++;
+      return Reflect.apply(original, client, args);
+    }) as typeof client.query;
+  };
+  // Pool.query also checks out one of these clients. Counting at the client
+  // observes real public semantic-gate transactions without double-counting.
+  f.accessPool.connect = ((callback?: Parameters<typeof f.accessPool.connect>[0]) => {
+    if (callback) return originalConnect((error, client, release) => {
+      if (client) meterClient(client);
+      callback(error, client, release);
+    });
+    return originalConnect().then(client => { meterClient(client); return client; });
+  }) as typeof f.accessPool.connect;
   f.access.canReadWork = async (...args) => { if (measuring) workProbes++; return originalCanReadWork(...args); };
   const evidence: object[] = [];
   const measured = async <T>(label: string, path: string, authenticated = false): Promise<T> => {
@@ -111,6 +141,7 @@ test('100 distinct public Episodes fit current/exact Composition and Work parts 
     const ms = performance.now() - readStarted;
     const sample = { label, graphCalls, graphTransportBytes: graphBytes, ownerSql, workProbes, ms };
     evidence.push(sample);
+    console.log('Composition target batch cost', JSON.stringify(sample));
     expect(graphCalls).toBeGreaterThan(0);
     expect(graphCalls).toBeLessThanOrEqual(WORK_READ_COST.graphCalls);
     expect(graphCalls).toBeLessThanOrEqual(authenticated ? 60 : 40);
@@ -156,45 +187,50 @@ test('100 distinct public Episodes fit current/exact Composition and Work parts 
     await f.accessPool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
       VALUES ($1,$2,$2,$3,'governance.rights.decide',now() + interval '1 hour')`, [randomUUID(), decider, scopes]);
     const series = await createWork('A hundred distinct public Episodes', 'https://schema.org/TVSeries');
-    const episodes: Work[] = [];
-    for (let index = 0; index < 100; index++) episodes.push(await createWork(`Public Episode ${index + 1}`));
-    expect(new Set(episodes.map(work => work.work)).size).toBe(100);
-    const types = (await f.env.fuseki.query(`SELECT ?work WHERE { GRAPH ${iri(GRAPHS.current)} {
-      VALUES ?work { ${episodes.map(work => iri(work.work)).join(' ')} } ?work a <https://schema.org/Episode> } }`)).results?.bindings ?? [];
+    await f.grant('semantic:create:root', 'semantic.change');
+    const episodes: Episode[] = [];
+    // Specials and fractional accepted numbers are data, independent of placement order.
+    for (let index = 0; index < 100; index++) episodes.push(await createEpisode(`Public Episode ${index + 1}`,
+      index === 0 ? 0 : index === 1 ? 1.5 : index, series.work));
+    expect(new Set(episodes.map(episode => episode.component)).size).toBe(100);
+    const types = (await f.env.fuseki.query(`SELECT ?episode WHERE { GRAPH ${iri(GRAPHS.current)} {
+      VALUES ?episode { ${episodes.map(episode => iri(episode.component)).join(' ')} }
+      ?episode a <https://schema.org/Episode> .
+      FILTER NOT EXISTS { ?episode a <https://schema.org/CreativeWork> } } }`)).results?.bindings ?? [];
     expect(types).toHaveLength(100);
     const composition = await f.json<Composition>(await f.call('POST', '/v1/compositions', {
       profile: 'work-composition', work: series.work, mainVersion: series.mainVersion, actingSubject: f.actor }), 201);
     const path = `/v1/compositions/${shortId(composition.structure)}`;
     const partsPath = `/v1/resources/${shortId(series.work)}/parts`;
     let current = composition;
-    const insert = async (targets: Work[]) => {
+    const insert = async (targets: readonly string[]) => {
       const changed = await f.json<Composition>(await f.call('POST', `${path}/changes`, {
         profile: 'work-composition', expectedHead: current.revision, actingSubject: f.actor,
-        operations: targets.map(work => ({ op: 'insert', parent: composition.structure, position: 'last', role: 'part',
-          target: work.work, displayLabel: `Placement ${shortId(work.work)}`, inclusion: 'required' })),
+        operations: targets.map(target => ({ op: 'insert', parent: composition.structure, position: 'last', role: 'part',
+          target, displayLabel: `Placement ${shortId(target)}`, inclusion: 'required' })),
       }), 200);
       current = changed;
       return changed;
     };
     const occurrences: string[] = [];
-    for (let at = 0; at < episodes.length; at += 16) occurrences.push(...(await insert(episodes.slice(at, at + 16))).occurrences);
+    for (let at = 0; at < episodes.length; at += 16) occurrences.push(...(await insert(episodes.slice(at, at + 16).map(episode => episode.component))).occurrences);
     const originalRevision = current.revision;
     const exactPath = `${path}/revisions/${shortId(originalRevision)}`;
     expect(performance.now() - started).toBeLessThan(600_000);
-    const targetIds = episodes.map(work => work.work);
+    const targetIds = episodes.map(episode => episode.component);
     for (const [label, endpoint] of [['current-100', path], ['exact-100', exactPath]] as const) {
       const page = await measured<Page>(label, `${endpoint}?limit=100`);
       expect(page.occurrences.map(item => item.target)).toEqual(targetIds);
       expect(page.next).toBeNull();
     }
-    const parts = await measured<Parts>('parts-100', `${partsPath}?limit=100`);
-    expect(parts.parts.map(item => item.work)).toEqual(targetIds);
+    const parts = await measured<Parts>('parts-exclude-100-Episodes', `${partsPath}?limit=100`);
+    expect(parts.parts).toEqual([]);
     expect(parts.next).toBeNull();
 
     // Duplicate placements retain their identities while target hydration is shared.
-    const privateEpisode = await createWork('Private trailing Episode', 'https://schema.org/Episode', false);
-    const appended = await insert([episodes[0]!, privateEpisode]);
-    await f.accessPool.query('DELETE FROM access.permission_grant WHERE scope_id=$1', [`work:read:${privateEpisode.work}`]);
+    const privateEpisode = await createEpisode('Private trailing Episode', 0);
+    const appended = await insert([episodes[0]!.component, privateEpisode.component]);
+    await f.accessPool.query('DELETE FROM access.permission_grant WHERE scope_id=$1', [`semantic:read:${privateEpisode.component}`]);
     const duplicate = await measured<Page>('duplicate-lookahead', `${path}?limit=100`);
     expect(duplicate.occurrences.map(item => item.target)).toEqual(targetIds);
     expect(duplicate.next).not.toBeNull();
@@ -204,28 +240,36 @@ test('100 distinct public Episodes fit current/exact Composition and Work parts 
     const exact = await measured<Page>('exact-after-new-head', `${exactPath}?limit=100`);
     expect(exact.occurrences.map(item => item.occurrence)).toEqual(occurrences);
 
-    const restricted = episodes[1]!;
+    const restricted = await createWork('Rights-restricted Book');
+    const protectedWork = await createWork('Protected Book');
+    const raceTarget = await createWork('Book restricted during hydration');
+    await insert([restricted.work, protectedWork.work, raceTarget.work]);
     await (await prepareRestriction(restricted))();
-    const protectedEpisode = episodes[2]!;
-    await f.grant(`work:protect:${protectedEpisode.work}`, 'work.protection.tighten');
+    await f.grant(`work:protect:${protectedWork.work}`, 'work.protection.tighten');
     const state = await f.json<{ contentHead: string; protectionHead: string | null; controlHead: string | null;
-      controlEpoch: string }>(await f.call('GET', `/v1/works/${shortId(protectedEpisode.work)}/editorial-state?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+      controlEpoch: string }>(await f.call('GET', `/v1/works/${shortId(protectedWork.work)}/editorial-state?actingSubject=${encodeURIComponent(f.actor)}`), 200);
     await f.json(await f.call('POST', '/v1/work-title-protections', { profile: 'work-title-protection-v1', action: 'tighten',
-      work: protectedEpisode.work, expectedHead: state.contentHead, expectedProtection: state.protectionHead,
+      work: protectedWork.work, expectedHead: state.contentHead, expectedProtection: state.protectionHead,
       expectedControl: state.controlHead, expectedControlEpoch: state.controlEpoch, expectedRuleRevision: PROTECTION_RULE,
-      actingSubject: f.actor, reason: 'Review disputed Episode title', evidence: [] }), 201);
+      actingSubject: f.actor, reason: 'Review disputed Book title', evidence: [] }), 201);
+    // A closed semantic gate withholds public Resources even from explicit grantees.
+    const closedEpisodes = [episodes[1]!, episodes[2]!, episodes[4]!];
+    for (const episode of closedEpisodes) await f.access.strongCloseScope(`semantic:read:${episode.component}`, '0');
     const erased = episodes[3]!;
     await f.nativeFuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
-      ${iri(erased.workRevision)} a <${RV}ErasedRevision> } }`);
+      ${iri(erased.revision)} a <${RV}ErasedRevision> } }`);
     const proposal = await f.propose(`OL${randomInt(1, 1_000_000_000_000)}W`, [], 'Withdrawn source title');
     const withdrawn = await f.adoptWork(proposal);
     await f.grant(`work:read:${withdrawn.work}`, 'work.read');
-    const beforeWithdrawal = await insert([withdrawn]);
+    const beforeWithdrawal = await insert([withdrawn.work]);
+    const mixedExactPath = `${path}/revisions/${shortId(current.revision)}`;
     await f.json(await f.call('POST', '/v1/sources/withdrawals', { profile: 'source-support-withdrawal-v1',
       support: withdrawn.binding, expectedSupport: withdrawn.binding, reason: 'Withdraw copied title evidence' }), 201);
     // Source support withdrawal retains independent native identity and title.
-    const denied = new Set([restricted.work, protectedEpisode.work, erased.work, privateEpisode.work]);
-    const expected = [...targetIds.filter(target => !denied.has(target)), episodes[0]!.work, withdrawn.work];
+    const denied = new Set([restricted.work, protectedWork.work, erased.component, privateEpisode.component,
+      ...closedEpisodes.map(episode => episode.component)]);
+    const expected = [...targetIds.filter(target => !denied.has(target)), episodes[0]!.component,
+      raceTarget.work, withdrawn.work];
     const mixed = await measured<Page>('mixed-current', `${path}?limit=100`);
     expect(mixed.occurrences.map(item => item.target)).toEqual(expected);
     expect(mixed.next).toBeNull();
@@ -235,9 +279,9 @@ test('100 distinct public Episodes fit current/exact Composition and Work parts 
     const granted = await measured<Page>('mixed-granted', `${path}?limit=100&actingSubject=${encodeURIComponent(f.actor)}`, true);
     expect(granted.occurrences.map(item => item.target)).toEqual(expected);
     const mixedParts = await measured<Parts>('mixed-parts', `${partsPath}?limit=100`);
-    expect(mixedParts.parts.map(item => item.work)).toEqual(expected);
+    expect(mixedParts.parts.map(item => item.work)).toEqual([raceTarget.work, withdrawn.work]);
     for (const target of denied) expect(JSON.stringify(mixed)).not.toContain(target);
-    for (const hidden of occurrences.slice(1, 4)) expect(JSON.stringify(mixed)).not.toContain(hidden!);
+    for (const hidden of occurrences.slice(1, 5)) expect(JSON.stringify(mixed)).not.toContain(hidden!);
     expect(mixed).not.toHaveProperty('placementCount');
     expect(mixed).not.toHaveProperty('count');
 
@@ -254,7 +298,6 @@ test('100 distinct public Episodes fit current/exact Composition and Work parts 
 
     // A restriction committed after initial summary admission must win the
     // final hydrated-name fence. The immutable exact revision grants no rights.
-    const raceTarget = episodes[4]!;
     const restrictRace = await prepareRestriction(raceTarget);
     const originalDisclosure = DisclosureStore.prototype.read;
     let targetReads = 0, raced = false;
@@ -269,16 +312,16 @@ test('100 distinct public Episodes fit current/exact Composition and Work parts 
       return originalDisclosure.call(this, targets, viewer, channel);
     };
     try {
-      const page = await measured<Page>('rights-race-exact', `${exactPath}?limit=100`);
+      const page = await measured<Page>('rights-race-exact', `${mixedExactPath}?limit=100`);
       expect(raced).toBe(true);
-      expect(page.occurrences.map(item => item.target)).toEqual(targetIds.filter(target => !denied.has(target) && target !== raceTarget.work));
-      expect(JSON.stringify(page)).not.toContain(occurrences[4]!);
+      expect(page.occurrences.map(item => item.target)).toEqual(expected.filter(target => target !== raceTarget.work));
       expect(JSON.stringify(page)).not.toContain(raceTarget.work);
     } finally { DisclosureStore.prototype.read = originalDisclosure; }
     console.log('Composition target batch costs', JSON.stringify(evidence));
   } finally {
     globalThis.fetch = originalFetch;
-    f.accessPool.query = originalSql;
+    f.accessPool.connect = originalConnect;
+    for (const [client, query] of clients) client.query = query;
     f.access.canReadWork = originalCanReadWork;
     await f.close();
   }

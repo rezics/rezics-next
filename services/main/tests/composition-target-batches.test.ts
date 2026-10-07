@@ -6,6 +6,8 @@ import { compositionTargetBatchReader } from '../src/modules/composition/disclos
 import { readWorkParts, readWorkWholes } from '../src/modules/composition/read.ts';
 import { compositionWorkBatchReader } from '../src/modules/composition/visible-targets.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { checkedComponentState } from '../src/modules/semantic/change.ts';
+import { PROFILES } from '../src/modules/semantic/schema.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
 import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE,
   type OccurrenceRecord, type StructureManifest } from '../src/modules/structure/format.ts';
@@ -13,11 +15,12 @@ import { derivedId, orderTreeKey } from '../src/modules/structure/graph.ts';
 import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
 import { WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { prepareWorkComponent } from '../src/modules/work/activate.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const literal = (value: string) => ({ type: 'literal' as const, value });
 const uri = (value: string) => ({ type: 'uri' as const, value });
-type Target = { resource: string; base?: 'work' | 'realization' | 'release' | 'occurrence';
+type Target = { resource: string; base?: 'work' | 'realization' | 'release' | 'occurrence' | 'resource';
   private?: boolean; granted?: boolean; erased?: boolean; hidden?: boolean; missingRevision?: boolean };
 const targets = (count: number): Target[] => Array.from({ length: count }, (_, index) =>
   ({ resource: derivedId(`composition-batch-target-${index}`) }));
@@ -29,6 +32,16 @@ function fixture(input: Target[], signedIn = false) {
   const revision = derivedId('composition-batch-revision');
   const graph = new FusekiClient('http://graph.invalid');
   const queries: string[] = [], hydration: string[][] = [], disclosure: string[][] = [], grants: string[] = [];
+  const semanticBatches: string[][] = [], semanticManifests = new Map<string, string>();
+  const stored = new Map<string, Uint8Array>();
+  const objects: ImmutableObjects = { async put(bytes) {
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    stored.set(digest, bytes); return digest;
+  }, async get(digest) {
+    const bytes = stored.get(digest);
+    if (!bytes) throw new Error('Missing semantic fixture object');
+    return bytes;
+  } };
   let sequence = '1', ambiguous = false, failOwner = false;
   let graphBytes = 0;
   graph.query = async query => {
@@ -36,9 +49,20 @@ function fixture(input: Target[], signedIn = false) {
     if (query.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
       const resources = [...new Set([...query.matchAll(/VALUES \?work \{([^}]+)\}/g)].flatMap(match =>
         [...match[1]!.matchAll(/<([^>]+)>/g)].map(iri => iri[1]!)))];
-      const result = { results: { bindings: resources.map(resource => ({ work: uri(resource), head: uri(revision),
-        owningWork: uri(indexed.get(resource)?.base && indexed.get(resource)?.base !== 'work'
-          ? derivedId('composition-target-parent') : resource), owningHead: uri(revision) })) } };
+      const result = { results: { bindings: resources.map(resource => {
+        const base = indexed.get(resource)?.base ?? 'work';
+        return { work: uri(resource), ...(base !== 'resource' ? { head: uri(revision),
+          owningWork: uri(base !== 'work' ? derivedId('composition-target-parent') : resource),
+          owningHead: uri(revision) } : {}) };
+      }) } };
+      graphBytes += Buffer.byteLength(JSON.stringify(result));
+      return result;
+    }
+    if (query.includes('SELECT ?resource ?manifest')) {
+      const resources = [...query.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
+        [...match[1]!.matchAll(/<([^>]+)>/g)].map(iri => iri[1]!));
+      const result = { results: { bindings: resources.flatMap(resource => semanticManifests.has(resource)
+        ? [{ resource: uri(resource), manifest: uri(semanticManifests.get(resource)!) }] : []) } };
       graphBytes += Buffer.byteLength(JSON.stringify(result));
       return result;
     }
@@ -51,14 +75,19 @@ function fixture(input: Target[], signedIn = false) {
       if (query.includes('SELECT ?epoch ?sequence ?hold')) {
         const base = target.base ?? 'work';
         bindings.push({ epoch: literal('epoch'), sequence: literal(sequence), r: uri(resource),
-          type: literal(base), work: uri(base === 'work' ? resource : derivedId('composition-target-parent')),
-          head: uri(revision), public: literal(String(!target.private)), erased: literal(String(!!target.erased)),
-          label: { ...literal('Episode target'), 'xml:lang': 'en' } });
+          type: literal(base), ...(base !== 'resource' ? {
+            work: uri(base === 'work' ? resource : derivedId('composition-target-parent')), head: uri(revision),
+            label: { ...literal('Work target'), 'xml:lang': 'en' } } : {}),
+          public: literal(String(!target.private)), erased: literal(String(!!target.erased)) });
       } else if (query.includes('SELECT ?epoch ?sequence ?r ?revision')) {
         if (target.missingRevision) continue;
-        bindings.push({ epoch: literal('epoch'), sequence: literal(sequence), r: uri(resource),
-          revision: uri(revision), type: uri('https://schema.org/Episode') });
-        bindings.push({ ...bindings.at(-1)!, type: uri('https://schema.org/CreativeWork') });
+        const base = target.base ?? 'work';
+        const types = base === 'work' ? ['https://schema.org/Book', 'https://schema.org/CreativeWork']
+          : base === 'resource' ? ['https://schema.org/Episode']
+            : base === 'occurrence' ? ['https://schema.org/ListItem']
+              : [`https://rezics.com/vocab/${base === 'realization' ? 'Realization' : 'Release'}`];
+        for (const type of types) bindings.push({ epoch: literal('epoch'), sequence: literal(sequence), r: uri(resource),
+          revision: uri(revision), type: uri(type) });
         if (ambiguous) bindings.push({ ...bindings.at(-1)!, revision: uri(derivedId('composition-other-revision')) });
       } else throw new Error(`Unexpected target query: ${query}`);
     }
@@ -67,15 +96,30 @@ function fixture(input: Target[], signedIn = false) {
     graphBytes += Buffer.byteLength(JSON.stringify(result));
     return result;
   };
-  const environment = { fuseki: graph, objectDirectory: '.temp/composition-target-batches',
+  const environment = { fuseki: graph, workObjects: objects, objectDirectory: '.temp/composition-target-batches',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(environment, { read: async resources => {
     disclosure.push(resources.map(target => target.resource));
     return resources.map(target => indexed.get(target.resource)?.hidden ? 'tombstone' : 'visible');
   } });
+  const canReadSemantic = (principal: unknown, resource: string) => {
+    const target = indexed.get(resource);
+    return !!target && (!target.private || !!principal && !!target.granted);
+  };
   const deps = { environment, access: { canReadWork: async (_principal: unknown, _actor: string, work: string) => {
     grants.push(work); return indexed.get(work)?.granted ?? false;
-  } }, media: { store: { avatarRows: async (resources: string[]) => {
+  }, canReadSemanticResource: async (principal: unknown, _actor: string | null, resource: string) =>
+    canReadSemantic(principal, resource) }, mediaAccess: {
+    canReadWorks: async (_principal: unknown, _actor: string, works: readonly string[]) => {
+      grants.push(...works);
+      return new Set(works.filter(work => indexed.get(work)?.granted));
+    },
+    canReadSemantics: async (principal: unknown, _actor: string | null, resources: readonly string[]) => {
+      semanticBatches.push([...resources]);
+      return { public: new Set(resources.filter(resource => indexed.has(resource) && !indexed.get(resource)!.private)),
+        granted: new Set(resources.filter(resource => !!principal && !!indexed.get(resource)?.granted)) };
+    },
+  }, media: { store: { avatarRows: async (resources: string[]) => {
     if (failOwner) throw new Error('Media owner unavailable');
     hydration.push([...resources]);
     return { rows: new Map(), generation: { dataEpoch: 'media', sequence: '1' } };
@@ -86,12 +130,12 @@ function fixture(input: Target[], signedIn = false) {
     if (signedIn) read.principal = { issuer: 'account', subject: 'reader' };
     return read;
   };
-  return { deps, input, graph, revision, session, queries, hydration, disclosure, grants,
+  return { deps, input, graph, revision, session, queries, hydration, disclosure, grants, objects, semanticManifests, semanticBatches,
     graphBytes: () => graphBytes, move: () => { sequence = '2'; },
     ambiguous: () => { ambiguous = true; }, failOwner: () => { failOwner = true; } };
 }
 
-test('Composition profile batches hydrate 100 distinct Episode identities in two bounded owner passes', async () => {
+test('Composition profile batches hydrate 100 distinct Work identities in two bounded owner passes', async () => {
   for (const profile of ['work-composition', 'collection-membership']) {
     const f = fixture(targets(100));
     const read = compositionTargetBatchReader(f.session(), structureProfileFor(profile))!;
@@ -104,6 +148,28 @@ test('Composition profile batches hydrate 100 distinct Episode identities in two
     expect(f.graphBytes()).toBeLessThan(4 * 1024 * 1024);
     expect(f.grants).toEqual([]);
   }
+});
+
+test('Composition batches retain 100 admitted Episode resource grains with bounded semantic owner probes', async () => {
+  const input = targets(100).map(target => ({ ...target, base: 'resource' as const }));
+  const f = fixture(input);
+  for (const [index, target] of input.entries()) {
+    const state = checkedComponentState({ component: 'resource', types: ['https://schema.org/Episode'], lifecycle: 'active',
+      properties: [{ predicate: 'https://schema.org/name',
+        value: { kind: 'language-string', lexical: `Episode ${index + 1}`, language: 'en' } }] });
+    const digest = await prepareWorkComponent(f.objects, target.resource, state, PROFILES.resource);
+    f.semanticManifests.set(target.resource, `urn:rezics:sha256:${digest}`);
+  }
+  const resources = input.map(target => target.resource);
+  expect([...await compositionTargetBatchReader(f.session(), structureProfileFor('work-composition'))!(resources)])
+    .toEqual(resources);
+  expect(f.semanticBatches.map(batch => batch.length)).toEqual([64, 36]);
+  expect(f.hydration.map(batch => batch.length)).toEqual([64, 36]);
+  expect(f.disclosure.map(batch => batch.length)).toEqual([64, 64, 36, 36]);
+  expect(f.queries).toHaveLength(10);
+  expect(f.graphBytes()).toBeLessThan(4 * 1024 * 1024);
+  expect([...await compositionWorkBatchReader(f.session())(resources)]).toEqual([]);
+  expect(f.semanticBatches.map(batch => batch.length)).toEqual([64, 36, 64, 36]);
 });
 
 test('Composition batching deduplicates targets and accepts empty candidate sets without owner work', async () => {
@@ -179,7 +245,7 @@ test('Composition batch cancellation stops before graph or owner hydration', asy
   expect(f.hydration).toEqual([]);
 });
 
-test('Work parts disclose 100 distinct Episode targets without scalar target probes', async () => {
+test('Work parts disclose 100 distinct Work targets without scalar target probes', async () => {
   const f = fixture(targets(100));
   const stored = new Map<string, Uint8Array>();
   const objects: ImmutableObjects = { async put(bytes) {
@@ -195,7 +261,7 @@ test('Work parts disclose 100 distinct Episode targets without scalar target pro
   const records: OccurrenceRecord[] = f.input.map((target, index) => ({
     occurrence: derivedId(`composition-batch-part-${index}`), parent: structure, state: 'active', role: 'part',
     segmentKey: 'i', orderKey: String(index).padStart(8, '0'), labels: [], introducedBy: f.revision,
-    target: target.resource, qualifier: { type: 'work-part', displayLabel: `Episode ${index + 1}`, inclusion: 'required' },
+    target: target.resource, qualifier: { type: 'work-part', displayLabel: `Part ${index + 1}`, inclusion: 'required' },
   }));
   const cost = newCost(), recordIndex = recordTree(objects), orderIndex = orderTree(objects);
   const manifest: StructureManifest = { format: STRUCTURE_MANIFEST_FORMAT, structure, structureOf: main,
