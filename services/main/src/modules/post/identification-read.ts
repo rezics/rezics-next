@@ -86,5 +86,7 @@ export async function readPostIdentifications(session: WorkReadSession, post: st
   }
   if (!next && rows.length > POST_IDENTIFICATION_COST.scan) throw new WorkReadUnavailable('Identification scan exceeds its budget');
   await readPost(session, post);
-  return { profile: 'post-identifications-v1' as const, post, ...pageResult(session, items, next) };
+  // A page that stops at its limit continues; a scan that finishes inside the budget is the whole list.
+  return { profile: 'post-identifications-v1' as const, post, ...pageResult(session, items, next),
+    complete: next === null };
 }

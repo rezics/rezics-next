@@ -1,4 +1,4 @@
-import { Elysia } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { writeProblems } from '../api-responses.ts';
 import { PendingContextCommand } from '../modules/context/command.ts';
@@ -48,7 +48,8 @@ export function projectionRoutes(deps: MainWorkDependencies) {
     })
     .get('/v1/projections', {
       query: projectionQuery,
-      response: { 200: projectionPage, ...workReadProblems },
+      response: { 200: t.Object({ ...projectionPage.properties, complete: t.Boolean() },
+        { additionalProperties: false }), ...workReadProblems },
     }, async ({ request, query }) => {
       try {
         const store = deps.projections;
@@ -72,7 +73,7 @@ export function projectionRoutes(deps: MainWorkDependencies) {
           await boundary.fence();
           return { ...page, sourcePosition: session.position };
         });
-        return Response.json(result, { headers });
+        return Response.json({ ...result, complete: result.nextCursor === null }, { headers });
       } catch (error) { return projectionError(error); }
     });
 }

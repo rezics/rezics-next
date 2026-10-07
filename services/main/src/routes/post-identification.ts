@@ -57,7 +57,7 @@ export function postIdentificationRoutes(deps: MainWorkDependencies) {
       limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })), cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) },
     { additionalProperties: false }),
     response: { 200: t.Object({ profile: t.Literal('post-identifications-v1'), post: readId,
-      items: t.Array(link, { maxItems: 20 }), ...pageFields }), ...workReadProblems },
+      items: t.Array(link, { maxItems: 20 }), ...pageFields, complete: t.Boolean() }), ...workReadProblems },
   }, async ({ request, params, query: options }) => {
     try { return Response.json(await workRead(deps, request, options,
       session => readPostIdentifications(session, `https://rezics.com/id/${params.id}`, options.operation)), { headers }); }

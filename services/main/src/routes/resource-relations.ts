@@ -47,7 +47,8 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
         cursor: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
       response: { 200: t.Object({ profile: t.Literal('work-continuities-v1'), work: native,
         items: t.Array(t.Object({ key: native, iri: native, label: readName }, { additionalProperties: false }),
-          { maxItems: WORK_CONTINUITIES_COST.pageLimit }), nextCursor: t.Nullable(t.String()), sourcePosition: position }),
+          { maxItems: WORK_CONTINUITIES_COST.pageLimit }), nextCursor: t.Nullable(t.String()),
+        complete: t.Boolean(), sourcePosition: position }),
       ...authorizedReadProblems, 409: problemResult(409) },
     }, async ({ request, params, query }) => {
       try {
@@ -58,7 +59,8 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
         const page = await workRead(work, request, { actingSubject: query.actingSubject,
           languages: query.languages, cursor: query.cursor }, session =>
           readWorkContinuities(session, `https://rezics.com/id/${params.resource}`, query));
-        return Response.json(page, { headers: { 'cache-control': 'private, no-store' } });
+        return Response.json({ ...page, complete: page.nextCursor === null },
+          { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return workReadError(error); }
     })
     .post('/v1/resources/:resource/derivations', {
