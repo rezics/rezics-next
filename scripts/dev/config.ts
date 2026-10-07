@@ -167,12 +167,16 @@ export function ensureSecrets(root: string, options: StackOptions,
   if (!existsSync(path)) savePrivate(path, { ...createSecrets(), ...ports,
     ...(accountsPort ? { ACCOUNTS_PORT: accountsPort } : {}),
     REZICS_STACK_STORAGE: stackStorage(options),
-    REZICS_STACK_RAW_UPDATE: options.rawUpdate ? '1' : '0', ...stackMemorySettings(options) });
+    REZICS_STACK_RAW_UPDATE: options.rawUpdate ? '1' : '0',
+    // Kept with the project so a derived environment can tell a local stack
+    // from a restored one. A profile already stored is never replaced.
+    REZICS_STACK_PROFILE: options.profile, ...stackMemorySettings(options) });
   const values = readEnv(path);
   assertSavedStackStorage(options, values);
   assertSavedStackRawUpdate(options, values);
   let upgraded = false;
   if (!values.REZICS_STACK_STORAGE) { values.REZICS_STACK_STORAGE = stackStorage(options); upgraded = true; }
+  if (!values.REZICS_STACK_PROFILE) { values.REZICS_STACK_PROFILE = options.profile; upgraded = true; }
   if (accountsPort && !values.ACCOUNTS_PORT) { values.ACCOUNTS_PORT = String(accountsPort); upgraded = true; }
   for (const [name, value] of Object.entries(stackMemorySettings(options))) {
     if (!values[name]) { values[name] = value; upgraded = true; }
@@ -188,6 +192,17 @@ export function devPorts(): Record<string, number> { return { ...DEV_PORTS }; }
 
 function pgUrl(role: string, password: string, port: string): string {
   return `postgres://${role}:${encodeURIComponent(password)}@127.0.0.1:${port}/${role}`;
+}
+
+/** Main's existing designation. A dev or QA project may name one account that
+ * already exists; every other profile, including a restored production project,
+ * stays unconfigured even when that variable is present. */
+function firstPlatformAdministrator(compose: Record<string, string>): Record<string, string> {
+  if (compose.REZICS_STACK_PROFILE !== 'dev' && compose.REZICS_STACK_PROFILE !== 'qa') return {};
+  const subject = compose.PLATFORM_FIRST_ADMIN_ACCOUNT;
+  if (!subject) return {};
+  if (!/^[^\s\0]{1,256}$/.test(subject)) throw new Error('Invalid PLATFORM_FIRST_ADMIN_ACCOUNT');
+  return { PLATFORM_FIRST_ADMIN_ACCOUNT: subject };
 }
 
 export function appEnvironment(compose: Record<string, string>, dir: string): Record<string, string> {
@@ -248,5 +263,6 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
     MAIN_S3_ACCESS_KEY: compose.RUSTFS_ACCESS_KEY,
     MAIN_S3_SECRET_KEY: compose.RUSTFS_SECRET_KEY,
     MAIN_CANDIDATE_DIRECTORY: join(dir, 'candidates'),
+    ...firstPlatformAdministrator(compose),
   };
 }

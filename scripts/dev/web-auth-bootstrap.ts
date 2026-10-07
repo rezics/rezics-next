@@ -12,7 +12,7 @@ import { createAgentGraph } from '../../services/main/src/modules/agent/graph.ts
 import { agentProvisionDigest } from '../../services/main/src/modules/agent/provision.ts';
 import { repairJoiningFixtureConsent } from '../../services/main/src/modules/access/join-fixture-consent.ts';
 import { MAIN_SITE_SCOPE, MAIN_SITE_SCOPES } from '../../apps/web/features/auth/scopes.ts';
-import { appEnvironment, readEnv, savePrivate, stackDirectory } from './config.ts';
+import { appEnvironment, readEnv, replacePrivate, savePrivate, stackDirectory } from './config.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const runIdPattern = /^[a-z0-9][a-z0-9-]{0,30}$/;
@@ -204,6 +204,36 @@ export interface WebAuthResult {
   actingSubject: string;
 }
 
+/** The primary local member becomes this stack's first platform administrator.
+ * Main applies the subject only after that Account principal exists. A caller
+ * names the dev or QA profile; a joining fixture must not replace the member. */
+function recordStackPlatformAdministrator(stackDir: string, subject: string): Record<string, string> {
+  if (!/^[^\s\0]{1,256}$/.test(subject)) throw new Error('Invalid PLATFORM_FIRST_ADMIN_ACCOUNT');
+  const composePath = join(stackDir, 'compose.env');
+  const compose = readEnv(composePath);
+  if (compose.REZICS_STACK_PROFILE !== 'dev' && compose.REZICS_STACK_PROFILE !== 'qa') {
+    throw new Error('A first platform administrator is recorded only for a local dev or QA stack');
+  }
+  if (compose.PLATFORM_FIRST_ADMIN_ACCOUNT && compose.PLATFORM_FIRST_ADMIN_ACCOUNT !== subject) {
+    throw new Error('This stack already designates a different first platform administrator');
+  }
+  if (compose.PLATFORM_FIRST_ADMIN_ACCOUNT !== subject) {
+    compose.PLATFORM_FIRST_ADMIN_ACCOUNT = subject;
+    replacePrivate(composePath, compose);
+  }
+  const apps = appEnvironment(compose, stackDir);
+  replacePrivate(join(stackDir, 'apps.env'), apps);
+  const runtimePath = join(stackDir, 'web-auth', 'runtime.env');
+  if (existsSync(runtimePath)) {
+    const runtime = readEnv(runtimePath);
+    if (runtime.PLATFORM_FIRST_ADMIN_ACCOUNT !== apps.PLATFORM_FIRST_ADMIN_ACCOUNT) {
+      replacePrivate(runtimePath, { ...runtime,
+        PLATFORM_FIRST_ADMIN_ACCOUNT: apps.PLATFORM_FIRST_ADMIN_ACCOUNT! });
+    }
+  }
+  return apps;
+}
+
 /** One-time fixture for a fresh, disposable QA project. Never accepts a production URL. */
 export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuthResult> {
   const { runId, redirectUris } = parseWebAuthOptions([
@@ -310,6 +340,9 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
     const principalId = await grantWorkCreation(accessPool, discovery.issuer, member.id, actor,
       { id: provisionId, digest, dataEpoch: receipt.dataEpoch, sequence: receipt.sequence });
     await repairJoiningFixtureConsent(accessPool, principalId, actor);
+    // The runtime file is written below, after this subject is on the derived environment.
+    const designated = options.profile && !options.fixture
+      ? recordStackPlatformAdministrator(stackDir, member.id) : apps;
     const publicConfigPath = join(outputDir, 'public.json');
     const privateConfigPath = join(outputDir, 'private.json');
     const runtimeEnvPath = join(outputDir, 'runtime.env');
@@ -326,7 +359,7 @@ export async function bootstrapWebAuth(options: WebAuthOptions): Promise<WebAuth
       principalId, actingSubject: actor,
       mainClient: { id: mainClient.client_id, secret: mainClient.client_secret },
     }, null, 2) + '\n', { mode: 0o600 });
-    savePrivate(runtimeEnvPath, { ...apps, ACCOUNT_OPERATOR_USER_IDS: operator.id,
+    savePrivate(runtimeEnvPath, { ...designated, ACCOUNT_OPERATOR_USER_IDS: operator.id,
       ACCOUNT_MAIN_CLIENT_ID: mainClient.client_id,
       ACCOUNT_MAIN_CLIENT_SECRET: mainClient.client_secret });
     if (!options.fixture) rmSync(recoveryPath, { force: true });
@@ -391,8 +424,13 @@ export async function upgradeWebClient(options: { runId: string; profile?: 'dev'
   const publicPath = join(authDir, 'public.json');
   const current = JSON.parse(readFileSync(publicPath, 'utf8')) as {
     clientId: string; redirectUris: string[]; scope: string; grantTypes?: string[] };
-  const { operator, principalId, actingSubject } = JSON.parse(readFileSync(join(authDir, 'private.json'), 'utf8')) as {
-    operator: { id: string; email: string; password: string }; principalId: string; actingSubject: string };
+  const { operator, principalId, actingSubject, member } = JSON.parse(readFileSync(join(authDir, 'private.json'), 'utf8')) as {
+    operator: { id: string; email: string; password: string }; principalId: string; actingSubject: string;
+    member?: { id: string } };
+  if (options.profile && !options.fixtureName) {
+    if (!member?.id) throw new Error('Web auth private.json has no member; the stack cannot designate its first platform administrator');
+    recordStackPlatformAdministrator(stackDir, member.id);
+  }
   const apps = readEnv(join(stackDir, 'apps.env'));
   requireLocalApps(apps);
   const access = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
@@ -439,7 +477,7 @@ export async function upgradeWebClient(options: { runId: string; profile?: 'dev'
 
 if (import.meta.main) {
   try {
-    const result = await bootstrapWebAuth(parseWebAuthOptions(process.argv.slice(2)));
+    const result = await bootstrapWebAuth({ ...parseWebAuthOptions(process.argv.slice(2)), profile: 'qa' });
     console.log(`Local public client: ${result.clientId}`);
     console.log(`Acting subject: ${result.actingSubject}`);
     console.log(`Public web config: ${result.publicConfigPath}`);

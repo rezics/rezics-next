@@ -389,10 +389,12 @@ async function prepareDev(options: StackOptions,
         : ['http://localhost:3000/auth/callback', 'http://127.0.0.1:3003/auth/callback'] });
   } else await upgradeWebClient({ profile: options.profile, runId: options.runId ?? 'dev' });
   await assertWebInstallationReady(apps, publicPath);
+  // Web auth records the first platform administrator after the stack environment is derived.
+  const currentApps = readEnv(join(stackDirectory(root, options), 'apps.env'));
   const issued = readEnv(runtimePath);
   const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as { clientId: string };
   const overrides = existsSync(overridesFile) ? parseEnv(readFileSync(overridesFile, 'utf8')) : {};
-  return { ...apps,
+  return { ...currentApps,
     ACCOUNT_OPERATOR_USER_IDS: issued.ACCOUNT_OPERATOR_USER_IDS ?? '',
     ACCOUNT_MAIN_CLIENT_ID: issued.ACCOUNT_MAIN_CLIENT_ID ?? apps.ACCOUNT_MAIN_CLIENT_ID!,
     ACCOUNT_MAIN_CLIENT_SECRET: issued.ACCOUNT_MAIN_CLIENT_SECRET ?? apps.ACCOUNT_MAIN_CLIENT_SECRET!,

@@ -329,6 +329,9 @@ async function runE2e(): Promise<void> {
         REZICS_WEB_E2E_BASE_URL: web.origin,
       });
       await ready('Accounts', `http://127.0.0.1:${apps.ACCOUNTS_PORT}/sign-in`, accounts, 240_000);
+      if (!env.PLATFORM_FIRST_ADMIN_ACCOUNT) {
+        throw new Error('The e2e stack has no first platform administrator');
+      }
       const main = launch('main', 'bun', ['services/main/src/index.ts']);
       await ready('Main', `http://127.0.0.1:${apps.MAIN_PORT}/health/ready`, main, 30_000);
       const preview = launch('preview', 'bun', ['scripts/dev/web-preview.ts', '--profile', 'qa', '--run-id', runId]);
