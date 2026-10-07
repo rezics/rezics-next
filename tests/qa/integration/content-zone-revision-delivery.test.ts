@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { fromPlainText } from '@rezics/document';
+import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { readZoneConfiguration, type ZoneSitePublicationReceipt }
@@ -62,12 +62,13 @@ async function fixture() {
       '/v1/spaces', { profile: 'space-zone-v1', name: 'Exact document site',
         capabilities: ['zone'], actingSubject: actor }), 201);
     const variantId = `urn:rezics:variant:${randomUUID()}`;
-    const draft = async (body: string, expectedHead: string | null) => json<Draft>(await call('POST',
+    const draft = async (document: DocumentSnapshot, expectedHead: string | null) => json<Draft>(await call('POST',
       '/v1/content-drafts', { profile: 'content-text-v1', resourceId: created.zone, variantId,
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
-        expectedHead, document: fromPlainText(body), actingSubject: actor }), 201);
-    const first = await draft('Selected exact site document', null);
-    const later = await draft('Unpublished replacement document', first.revisionId);
+        expectedHead, document, actingSubject: actor }), 201);
+    const firstDocument = fromPlainText('Selected exact site document');
+    const first = await draft(firstDocument, null);
+    const later = await draft(fromPlainText('Unpublished replacement document'), first.revisionId);
     const publish = async (saved: Draft) => json<ZoneSitePublicationReceipt>(await call('POST',
       `/v1/zones/${created.zone.slice(-36)}/site-publications`, {
         pages: [{ page: created.zone, variantId, revisionId: saved.revisionId }],
@@ -85,7 +86,7 @@ async function fixture() {
       })]);
       return { pending, reached, release: barrier.release };
     };
-    return { ...stack, ...created, actor, otherActor, first, later, publish, read, pauseRead };
+    return { ...stack, ...created, actor, otherActor, firstDocument, first, later, publish, read, pauseRead };
   } catch (error) { await stack.stop(); throw error; }
 }
 
@@ -95,7 +96,7 @@ test('exact Zone delivery refuses actual bundle, controller and owner withdrawal
     const privateExact = await json<Exact>(await f.read(f.first, true));
     expect(privateExact.reference).toMatchObject({ resourceId: f.zone,
       revisionId: f.first.revisionId, byteDigest: f.first.byteDigest });
-    expect(privateExact.body.document).toEqual(fromPlainText('Selected exact site document'));
+    expect(privateExact.body.document).toEqual(f.firstDocument);
     expect((await f.read(f.first)).status).toBe(404);
     await f.publish(f.first);
     const healthy = f.pauseRead(f.first);
