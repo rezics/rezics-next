@@ -241,6 +241,31 @@ test('G-431 onboarding offers the shared scheme\'s Concepts by type with covers,
       .find(concept => concept.id === refillTopic.concept)?.samples.map(sample => sample.id))
       .toEqual([acceptedSample.work]);
 
+    // A visible chosen parent cannot borrow a match from a withheld narrower
+    // Concept, even when that narrower classification remains accepted.
+    const publicParent = await define(label('Onboarding public parent', '入门公开上级'), [],
+      { id: refillTopic.scheme, expectedHead: refillTopic.schemeHead });
+    const protectedChild = await define(label('Onboarding protected child', '入门受保护下级'), [publicParent.concept],
+      { id: publicParent.scheme, expectedHead: publicParent.schemeHead });
+    for (const term of [publicParent, protectedChild]) {
+      await discloseConcept(stack.accessPool, author.principal, author.actor, term.concept);
+    }
+    const childInterpretation = await shareClassifiedConcepts(send, json, author.actor, [protectedChild]);
+    await acceptTopic(send, json, author.actor, novel, protectedChild, childInterpretation, true);
+    const parentQuery = `/v1/onboarding/suggested-follows?concepts=${encodeURIComponent(publicParent.concept)}&locale=en`;
+    const childMatch = await json<Suggestions>(await call('GET', parentQuery));
+    expect(childMatch.items).toContainEqual(expect.objectContaining({ realm: realm.realm,
+      reason: { kind: 'matching-concept', concept: { id: publicParent.concept,
+        name: expect.objectContaining({ value: 'Onboarding public parent' }) } },
+      sampleWorks: [expect.objectContaining({ id: novel.work })] }));
+    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(protectedChild.concept)} rv:protectionHead ${iri(`https://rezics.com/id/${randomUUID()}`)} . }
+    }`);
+    const protectedMatch = await json<Suggestions>(await call('GET', parentQuery));
+    expect(protectedMatch.items.find(item => item.realm === realm.realm)?.reason.kind).toBe('popular');
+    expect(protectedMatch.items.some(item => item.reason.concept?.id === publicParent.concept)).toBe(false);
+
     // Any BCP 47 language the reader reads is accepted; a malformed or repeated one is not, nor a foreign Concept ID.
     expect((await call('GET', '/v1/onboarding/suggested-follows?languages=yue&languages=pt-BR')).status).toBe(200);
     expect((await call('GET', '/v1/onboarding/suggested-follows?languages=en&languages=en')).status).toBe(400);

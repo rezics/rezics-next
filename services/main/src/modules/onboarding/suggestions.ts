@@ -9,7 +9,7 @@ import { readWorkClassifications } from '../work/read-classifications.ts';
 import { WorkReadInvalid, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { listOfficialZones } from '../zone/publication.ts';
 import { SUGGESTION_COST, type suggestedFollow, type SuggestionReason } from './contract.ts';
-import { readOnboardingClassifications } from './classifications.ts';
+import { readOnboardingClassifications, readVisibleOnboardingConcepts } from './classifications.ts';
 
 type Suggestion = Static<typeof suggestedFollow>;
 
@@ -23,7 +23,8 @@ export async function readConceptMatches(session: WorkReadSession,
   works: readonly { work: string; mainVersion: string }[], chosen: readonly string[]): Promise<Map<string, string[]>> {
   const matches = new Map<string, string[]>(works.map(target => [target.work, []]));
   if (!works.length || !chosen.length) return matches;
-  const chosenNames = await session.summaries([...chosen]);
+  const eligible = await readVisibleOnboardingConcepts(session, chosen);
+  const chosenNames = await session.summaries(chosen.filter(concept => eligible.has(concept)));
   const visibleChosen = chosenNames.flatMap(summary => summary.status === 'available'
     && summary.type === 'concept' ? [summary.reference] : []);
   if (!visibleChosen.length) return matches;

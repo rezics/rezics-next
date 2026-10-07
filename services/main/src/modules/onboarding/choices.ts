@@ -1,6 +1,7 @@
 import { choiceWorkTypeOptions } from '../types/registry.ts';
 import type { Static } from 'typebox';
 import { VOCABULARY_PROFILE } from '../classification/vocabulary.ts';
+import { visibleConcept } from '../discovery/concepts.ts';
 import { CLASSIFIED_AS } from '../statement/schema.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { publicWork } from '../work/public-patterns.ts';
@@ -53,13 +54,11 @@ export function groupChoices(concepts: readonly Sampled[]) {
 
 /** `GET /v1/onboarding/choices`: languages, then the shared scheme's Concepts by type with example covers. */
 export async function readChoices(session: WorkReadSession): Promise<OnboardingChoices> {
-  const scheme = await session.query(`SELECT ?concept ?broader WHERE { GRAPH ${iri(GRAPHS.current)} {
-    ?concept a skos:Concept ; rv:definitionProfile ${iri(VOCABULARY_PROFILE)} ; rv:conceptState rv:Active ;
-      skos:inScheme ?scheme .
+  const scheme = await session.query(`SELECT ?concept ?broader WHERE {
+    ${visibleConcept('?concept')}
+    GRAPH ${iri(GRAPHS.current)} {
+    ?concept rv:definitionProfile ${iri(VOCABULARY_PROFILE)} ; skos:inScheme ?scheme .
     ?scheme a skos:ConceptScheme ; rv:schemeState rv:Active .
-    FILTER NOT EXISTS { ?concept rv:conceptState rv:Retired }
-    FILTER NOT EXISTS { ?concept rv:protectionHead ?protection }
-    FILTER NOT EXISTS { ?concept rv:conceptRealm ?realm }
     OPTIONAL { ?concept skos:broader ?broader . ?broader skos:inScheme ?scheme }
   } } ORDER BY STR(?concept) STR(?broader) LIMIT ${CHOICES_COST.schemeConcepts * 2}`, CHOICES_COST.schemeConcepts * 2);
   const concepts = new Map<string, Sampled>();

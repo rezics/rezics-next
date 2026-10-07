@@ -1,7 +1,23 @@
 import { readWorkClassificationBatch, WORK_CLASSIFICATION_BATCH_COST } from '../work/read-classifications.ts';
+import { visibleConcept } from '../discovery/concepts.ts';
+import { iri } from '../work/activate.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 
 interface PublicTarget { work: string; mainVersion: string }
+
+/** General summaries name resources; Concept search owns public topic eligibility. */
+export async function readVisibleOnboardingConcepts(session: WorkReadSession, concepts: readonly string[]) {
+  const unique = [...new Set(concepts)];
+  if (!unique.length) return new Set<string>();
+  const rows = await session.query(`SELECT DISTINCT ?concept WHERE {
+    VALUES ?concept { ${unique.map(iri).join(' ')} }
+    ${visibleConcept('?concept')}
+  } LIMIT ${unique.length + 1}`, unique.length);
+  if (rows.some(row => !row.concept || !unique.includes(row.concept.value))) {
+    throw new WorkReadUnavailable('Onboarding Concepts are ambiguous');
+  }
+  return new Set(rows.map(row => row.concept!.value));
+}
 
 /** Onboarding consumes the same disclosed acceptance as Work classification pages.
  * Callers supply targets from public Work reads. Consume every continuation:
@@ -34,6 +50,10 @@ export async function readOnboardingClassifications(session: WorkReadSession, ta
     for (const name of await session.summaries(own.map(target => target.work))) {
       if (name.status !== 'available' || name.type !== 'work' || name.disclosure !== 'public') concepts.delete(name.reference);
     }
+  }
+  const visible = await readVisibleOnboardingConcepts(session, [...new Set([...concepts.values()].flatMap(values => [...values]))]);
+  for (const values of concepts.values()) {
+    for (const concept of values) if (!visible.has(concept)) values.delete(concept);
   }
   return concepts;
 }
