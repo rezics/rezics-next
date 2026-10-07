@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { sessionBasisActive } from './first-party-session.ts';
 
 /** Better Auth 1.7.5 deletes tokens linked to a code when that code is replayed,
  * and consumes a pending code before it checks the presenting client, redirect,
@@ -54,6 +55,12 @@ export async function guardedAuthorizationCodeExchange(guardPool: Pool, request:
        WHERE identifier = $1 AND "expiresAt" > now()`, [identifier]);
     const snapshot = pending.rows[0]?.rows;
     if (!snapshot) return invalidGrant();
+    // Session revocation must serialize before consumption/restoration too.
+    // A revoked code is a denied grant, not a failed restoration retry.
+    const authored = codeSession(snapshot);
+    if (!authored) return invalidGrant();
+    await client.query('SELECT 1 FROM rezics_account_security WHERE user_id = $1 FOR SHARE', [authored.userId]);
+    if (!await sessionBasisActive(client, authored.sessionId, authored.userId)) return invalidGrant();
     let response: Response | undefined;
     try { response = await exchange(); }
     catch { /* restore the pending code below */ }
@@ -69,6 +76,16 @@ export async function guardedAuthorizationCodeExchange(guardPool: Pool, request:
     }
     client.release();
   }
+}
+
+function codeSession(snapshot: unknown[]): { sessionId: string; userId: string } | null {
+  const value = (snapshot[0] as { value?: unknown } | undefined)?.value;
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value) as { type?: unknown; sessionId?: unknown; userId?: unknown };
+    return parsed.type === 'authorization_code' && typeof parsed.sessionId === 'string' && typeof parsed.userId === 'string'
+      ? { sessionId: parsed.sessionId, userId: parsed.userId } : null;
+  } catch { return null; }
 }
 
 /** A pending code has no tokens: the provider writes them only while redeeming

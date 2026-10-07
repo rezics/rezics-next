@@ -91,10 +91,26 @@ export function consentApi(auth: AccountAuth, pool: Pool) {
       }
       // Claim once before invoking the provider: a replay or concurrent click
       // cannot issue a second code. An interrupted decision starts a new flow.
-      const claimed = await pool.query(`UPDATE rezics_account_pending_consent SET decided_at = now()
-        WHERE id = $1 AND session_id = $2 AND decided_at IS NULL AND expires_at > now() RETURNING id`,
-      [current.id, current.session.session.id]);
-      if (!claimed.rowCount) throw new AccountProblem('stale_request', 409);
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '5s'");
+        // Maintenance locks the owner before its pending-consent children.
+        // Take that same order before UPDATE obtains the child's row lock;
+        // the existing trigger then rechecks the live session admission.
+        const owner = await client.query('SELECT 1 FROM rezics_account_security WHERE user_id = $1 FOR SHARE',
+          [current.session.user.id]);
+        if (!owner.rowCount) throw new AccountProblem('stale_request', 409);
+        const claimed = await client.query(`UPDATE rezics_account_pending_consent SET decided_at = now()
+          WHERE id = $1 AND session_id = $2 AND decided_at IS NULL AND expires_at > now() RETURNING id`,
+        [current.id, current.session.session.id]);
+        if (!claimed.rowCount) throw new AccountProblem('stale_request', 409);
+        await client.query('COMMIT');
+      } catch (error) {
+        try { await client.query('ROLLBACK'); } catch { /* preserve the decision failure */ }
+        throw error;
+      } finally { client.release(); }
       const decision = thirdPartyConsentDecision(body,
         current.view.scopes.map(item => item.scope), current.view.client.unverified);
       return auth.handler(new Request(new URL('/api/auth/oauth2/consent', request.url), {

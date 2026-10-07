@@ -158,6 +158,7 @@ export async function withRecoveryAuthentication(
       coalesce($4::timestamptz <= recovered_at, false) AS stale_trust,
       $3::text IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public."session" s
         WHERE s.id = $3 AND s."userId" = $1 AND s."expiresAt" > clock_timestamp()
+          AND s.rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = $1)
           AND (recovered_at IS NULL OR s."createdAt" > recovered_at)) AS stale_session
       FROM public.rezics_account_recovery_policy WHERE id = $1 FOR SHARE`,
       [userId, verificationCreatedAt ?? null, sessionId ?? null, trustCreatedAt ?? null],

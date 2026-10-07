@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { sessionBasisActive } from './first-party-session.ts';
+import { decodeJwt } from 'jose';
 
 type TokenRow = {
   id: string;
@@ -8,6 +10,7 @@ type TokenRow = {
   authorizationCodeId: string | null;
   referenceId: string | null;
   sessionId: string | null;
+  firstParty: boolean;
   authMode: string | null;
   consentId: string | null;
   consentGeneration: string | null;
@@ -36,7 +39,7 @@ const unavailable = () => Response.json({ error: 'temporarily_unavailable' }, { 
  * whole user/client family, O(family size). One guard connection is held per
  * exchange with a bounded connect and advisory-lock wait. */
 export async function guardedRefreshTokenExchange(guardPool: Pool, request: Request,
-  exchange: () => Promise<Response>): Promise<Response> {
+  exchange: (request: Request) => Promise<Response>): Promise<Response> {
   const contentType = request.headers.get('content-type')?.split(';', 1)[0]?.trim();
   let grantType: unknown;
   let presented: unknown;
@@ -56,10 +59,10 @@ export async function guardedRefreshTokenExchange(guardPool: Pool, request: Requ
       grantType = body?.grant_type;
       presented = body?.refresh_token;
       claimingClient = body?.client_id;
-    } else return exchange();
-  } catch { return exchange(); }
+    } else return exchange(request);
+  } catch { return exchange(request); }
   if (grantType !== 'refresh_token' || typeof presented !== 'string' || !presented) {
-    return exchange();
+    return exchange(request);
   }
   const basic = request.headers.get('authorization')?.match(/^Basic +([^ ]+)$/i)?.[1];
   if (basic) {
@@ -67,6 +70,7 @@ export async function guardedRefreshTokenExchange(guardPool: Pool, request: Requ
     catch { claimingClient = undefined; }
   }
   const hash = tokenHash(presented);
+  const rotationRequest = request.clone();
   let client;
   try { client = await guardPool.connect(); }
   catch { return unavailable(); }
@@ -76,7 +80,12 @@ export async function guardedRefreshTokenExchange(guardPool: Pool, request: Requ
     await client.query("SET LOCAL lock_timeout = '8000ms'");
     await client.query("SET LOCAL statement_timeout = '5000ms'");
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [hash]);
-    const response = await exchange();
+    // Take the owner lock before provider rotation locks its token row. This
+    // gives the existing HTTP boundary the same order as bounded maintenance.
+    const owner = (await client.query<{ userId: string }>(`SELECT "userId" AS "userId"
+      FROM "oauthRefreshToken" WHERE token = $1`, [hash])).rows[0];
+    if (owner) await client.query('SELECT 1 FROM rezics_account_security WHERE user_id = $1 FOR SHARE', [owner.userId]);
+    let response = await exchange(request);
     if (!response.ok) {
       if (typeof claimingClient === 'string' && claimingClient) {
         if (await revokeMismatchedFamily(client, hash, claimingClient)) {
@@ -86,9 +95,31 @@ export async function guardedRefreshTokenExchange(guardPool: Pool, request: Requ
       }
       return response;
     }
-    const body = await response.clone().json() as { refresh_token?: unknown };
+    let body = await response.clone().json() as { access_token?: unknown; refresh_token?: unknown };
     if (typeof body.refresh_token !== 'string') return unavailable();
-    return await liveRotation(client, hash, tokenHash(body.refresh_token)) ? response : invalidGrant();
+    let sourceHash = hash;
+    const token = await tokenRow(client, hash);
+    let accessSession: unknown;
+    try { if (typeof body.access_token === 'string') accessSession = decodeJwt(body.access_token).sid; }
+    catch { /* opaque access has no JWT session claim */ }
+    if (token && !token.firstParty && token.scopes.includes('offline_access') && typeof accessSession === 'string'
+      && !await sessionBasisActive(client, accessSession, token.userId)) {
+      // A grace replay may carry the pre-sign-out JWT even though its retained
+      // child is deliberately detached. Recover through exactly one ordinary
+      // child rotation, under that child's existing advisory fence too.
+      sourceHash = tokenHash(body.refresh_token);
+      if (sourceHash === hash) return invalidGrant();
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [sourceHash]);
+      // The provider will UPDATE this child on another connection. Its
+      // advisory/owner fences suffice here; retain token-row locks only after
+      // exchange, or a preflight SHARE lock would block our own rotation.
+      if (!await liveRotation(client, hash, sourceHash, false)) return invalidGrant();
+      response = await exchange(await detachedRotationRequest(rotationRequest, body.refresh_token));
+      if (!response.ok) return response;
+      body = await response.clone().json() as { access_token?: unknown; refresh_token?: unknown };
+      if (typeof body.refresh_token !== 'string') return unavailable();
+    }
+    return await liveRotation(client, sourceHash, tokenHash(body.refresh_token)) ? response : invalidGrant();
   } catch { return unavailable(); }
   finally {
     if (!committed) try { await client.query('ROLLBACK'); } catch { /* preserve the response */ }
@@ -96,15 +127,37 @@ export async function guardedRefreshTokenExchange(guardPool: Pool, request: Requ
   }
 }
 
+async function detachedRotationRequest(request: Request, child: string): Promise<Request> {
+  const headers = new Headers(request.headers);
+  headers.delete('content-length');
+  let body: string;
+  if (headers.get('content-type')?.split(';', 1)[0]?.trim() === 'application/json') {
+    body = JSON.stringify({ ...await request.clone().json() as Record<string, unknown>, refresh_token: child });
+  } else {
+    const form = new URLSearchParams(await request.clone().text());
+    form.set('refresh_token', child);
+    body = form.toString();
+  }
+  return new Request(request.url, { method: request.method, headers, body });
+}
+
 /** Better Auth rejects a mismatched client before its reuse detector runs.
  * A token presented by another registered client consumes the same family as
  * late reuse. Both deletes use the provider's user/client family boundary. */
 async function revokeMismatchedFamily(client: PoolClient, hash: string,
   claimingClient: string): Promise<boolean> {
-  const token = await client.query<{ userId: string; clientId: string }>(`SELECT "userId" AS "userId",
-    "clientId" AS "clientId" FROM public."oauthRefreshToken" WHERE token = $1`, [hash]);
+  const token = await client.query<{ userId: string; clientId: string;
+    sessionId: string | null; firstParty: boolean }>(`SELECT r."userId" AS "userId",
+    r."clientId" AS "clientId", r."sessionId" AS "sessionId",
+    EXISTS (SELECT 1 FROM rezics_oauth_first_party_client fp WHERE fp.client_id = r."clientId") AS "firstParty"
+    FROM public."oauthRefreshToken" r WHERE token = $1`, [hash]);
   const owner = token.rows[0];
   if (!owner || owner.clientId === claimingClient) return false;
+  // Logical session retirement makes retained product refresh rows absent to
+  // the provider. Keep that same boundary here so an old token cannot consume
+  // the current session's still-admitted user/client family during cleanup.
+  if (owner.firstParty && (!owner.sessionId
+    || !await sessionBasisActive(client, owner.sessionId, owner.userId))) return false;
   const registration = await client.query(`SELECT 1 FROM public."oauthClient"
     WHERE "clientId" = $1 AND disabled = false`, [claimingClient]);
   if (!registration.rowCount) return false;
@@ -116,7 +169,7 @@ async function revokeMismatchedFamily(client: PoolClient, hash: string,
   return true;
 }
 
-async function tokenRow(client: PoolClient, hash: string): Promise<TokenRow | undefined> {
+async function tokenRow(client: PoolClient, hash: string, holdRow = true): Promise<TokenRow | undefined> {
   const result = await client.query<TokenRow>(`SELECT id, "userId" AS "userId",
     "clientId" AS "clientId", "authorizationCodeId" AS "authorizationCodeId",
     "referenceId" AS "referenceId", "sessionId" AS "sessionId",
@@ -126,16 +179,22 @@ async function tokenRow(client: PoolClient, hash: string): Promise<TokenRow | un
     "rezicsRecoveryGeneration"::text AS "recoveryGeneration",
     "rezicsAccountGeneration"::text AS "accountGeneration",
     "rezicsGrantGeneration"::text AS "grantGeneration",
-    revoked, "rotatedAt" AS "rotatedAt", scopes, resources
-    FROM public."oauthRefreshToken" WHERE token = $1 FOR SHARE`, [hash]);
-  return result.rows[0];
+    revoked, "rotatedAt" AS "rotatedAt", scopes, resources,
+    EXISTS (SELECT 1 FROM rezics_oauth_first_party_client fp WHERE fp.client_id = r."clientId") AS "firstParty"
+    FROM public."oauthRefreshToken" r WHERE token = $1 ${holdRow ? 'FOR SHARE' : ''}`, [hash]);
+  const token = result.rows[0];
+  // The provider projects a stale external offline link as detached before
+  // maintenance reaches it. Compare that same basis for fresh/cache responses.
+  if (token?.sessionId && !token.firstParty && token.scopes.includes('offline_access')
+    && !await sessionBasisActive(client, token.sessionId, token.userId)) token.sessionId = null;
+  return token;
 }
 
 async function liveRotation(client: PoolClient, oldHash: string,
-  newHash: string): Promise<boolean> {
-  const old = await tokenRow(client, oldHash);
+  newHash: string, holdRows = true): Promise<boolean> {
+  const old = await tokenRow(client, oldHash, holdRows);
   if (!old?.revoked || !old.rotatedAt || !old.authorizationCodeId) return false;
-  const current = await tokenRow(client, newHash);
+  const current = await tokenRow(client, newHash, holdRows);
   if (!current || current.revoked || current.id === old.id
     || current.userId !== old.userId || current.clientId !== old.clientId
     || current.authorizationCodeId !== old.authorizationCodeId
@@ -156,6 +215,10 @@ async function liveRotation(client: PoolClient, oldHash: string,
       AND NOT password_reset_required AND (suspended_at IS NULL OR suspended_until <= now())
     FOR SHARE`, [current.userId]);
   if (!security.rows[0] || security.rows[0].generation !== current.accountGeneration) return false;
+  // Under the existing security share lock, a concurrent session epoch change
+  // either committed before this probe or waits until this response decision.
+  if ((current.firstParty || !current.scopes.includes('offline_access'))
+    && (!current.sessionId || !await sessionBasisActive(client, current.sessionId, current.userId))) return false;
   const grant = await client.query<{ generation: string; revoked: boolean }>(`SELECT
     generation::text AS generation, revoked_at IS NOT NULL AS revoked
     FROM public.rezics_account_grant WHERE user_id = $1 AND client_id = $2 FOR SHARE`,

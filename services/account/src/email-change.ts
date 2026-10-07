@@ -5,12 +5,13 @@ import { markEmailChangeStep, recipientLocale } from './account-settings.ts';
 import { enqueueAccountEmail } from './email.ts';
 import { accountFailure, accountJson, AccountProblem, accountSession, type AccountAuth } from './http.ts';
 import { requireStepUp } from './methods.ts';
+import { sessionBasisActive } from './first-party-session.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { observeAuthentication } from './security-activity.ts';
 
 const digest = (token: string) => createHash('sha256').update(token).digest('hex');
 const newToken = () => `ec_${randomBytes(32).toString('base64url')}`;
-type Intent = { user_id: string; token_hash: string; stage: 'confirm' | 'verify'; old_email: string;
+type Intent = { user_id: string; session_id: string; token_hash: string; stage: 'confirm' | 'verify'; old_email: string;
   new_email: string; security_generation: string; recovery_generation: string; callback_path: string };
 
 function callbackPath(value: string, origin: string): string {
@@ -117,7 +118,8 @@ export function emailChangeApi(auth: AccountAuth, pool: Pool) {
           const user = (await db.query<{ email: string; locale: unknown }>(
             'SELECT email, locale FROM "user" WHERE id = $1', [userId])).rows[0];
           if (!intent || !user || user.email !== intent.old_email
-            || generation.security !== intent.security_generation || generation.recovery !== intent.recovery_generation) {
+            || generation.security !== intent.security_generation || generation.recovery !== intent.recovery_generation
+            || !await sessionBasisActive(db, intent.session_id, userId)) {
             throw new AccountProblem('stale_request', 403);
           }
           if (intent.stage === 'confirm') {

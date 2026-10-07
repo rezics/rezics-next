@@ -200,6 +200,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
         FROM public.rezics_account_recovery_policy WHERE id = $1 FOR SHARE`, [session.user.id]);
       const existing = await client.query(`SELECT 1 FROM public."session"
         WHERE id = $1 AND "userId" = $2
+          AND rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = $2)
           AND ($3::timestamptz IS NULL OR "createdAt" > $3)`,
       [session.session.id, session.user.id, current.rows[0]?.recovered_at ?? null]);
       if (!existing.rowCount) {
@@ -286,7 +287,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
     .use(displayPreferencesApi(auth, pool, options.displayPreferenceClientIds ?? new Set()))
     .post('/api/auth/oauth2/token', ({ request }) =>
       guardedAuthorizationCodeExchange(guard(), request, () =>
-        guardedRefreshTokenExchange(guard(), request, () => auth.handler(request))))
+        guardedRefreshTokenExchange(guard(), request, tokenRequest => auth.handler(tokenRequest))))
     // A product must bind and consume state at its callback. Require the input
     // here as well so an authorization request cannot omit that CSRF binding.
     // An App asks only within its active installation, so neither consent nor

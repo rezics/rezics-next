@@ -8,7 +8,8 @@ import { accountFailure, accountJson, accountSession, type AccountAuth } from '.
 import { decodeCursor, encodeCursor, pageQuery } from './pagination.ts';
 import { requireStepUp } from './methods.ts';
 import { accountResponses, activityView, pageView, sessionView } from './views.ts';
-import { deleteFirstPartySessionTokens } from './first-party-session.ts';
+import { revokeSessionSelection } from './first-party-session.ts';
+import { APIError } from 'better-auth/api';
 
 export function deviceLabel(userAgent?: string | null) {
   const ua = userAgent ?? '';
@@ -72,7 +73,9 @@ export async function readSessions(pool: Pool, secret: string, userId: string, c
       s."userAgent", s."ipAddress", s.rezics_client_id AS "clientId", c.name AS "clientName",
       s."createdAt"::text AS "cursorKey"
     FROM "session" s LEFT JOIN "oauthClient" c ON c."clientId" = s.rezics_client_id
-    WHERE s."userId" = $1 AND (s."expiresAt" > now() OR EXISTS (
+    WHERE s."userId" = $1 AND s.rezics_generation = (
+      SELECT session_generation FROM rezics_account_security WHERE user_id = $1)
+      AND (s."expiresAt" > now() OR EXISTS (
       SELECT 1 FROM "oauthRefreshToken" r JOIN rezics_oauth_first_party_client fp ON fp.client_id = r."clientId"
       WHERE r."userId" = s."userId" AND r."sessionId" = s.id AND r.revoked IS NULL AND r."expiresAt" > now()))
       AND ($2::timestamptz IS NULL OR (s."createdAt", s.id) < ($2, $3))
@@ -87,31 +90,11 @@ export async function readSessions(pool: Pool, secret: string, userId: string, c
   nextCursor: result.rows.length > limit && last ? encodeCursor(secret, scope, last.cursorKey, last.id) : null };
 }
 
-/** User-indexed session and refresh-token writes. Lock the selected sessions
- * before touching tokens: the provider stores sessionId on issuance and rotation,
- * and its FK cannot admit a replacement token after that session is deleted.
- * Revoke before deletion, whose ON DELETE SET NULL otherwise loses the binding. */
+/** Reuse the native session-only fence. Cleanup progress survives the caller;
+ * a large bulk selection reports an unknown count instead of scanning it. */
 export async function revokeSessions(pool: Pool, userId: string, currentId: string,
   selection: { sessionId: string } | { sessionIds: string[] } | { others: true }) {
-  const db = await pool.connect();
-  try {
-    await db.query('BEGIN');
-    await db.query('SELECT 1 FROM rezics_account_security WHERE user_id = $1 FOR SHARE', [userId]);
-    const selected = 'sessionId' in selection
-      ? await db.query<{ id: string }>('SELECT id FROM "session" WHERE "userId" = $1 AND id = $2 FOR UPDATE',
-        [userId, selection.sessionId])
-      : 'sessionIds' in selection
-        ? await db.query<{ id: string }>(`SELECT id FROM "session" WHERE "userId" = $1 AND id <> $2
-          AND id = ANY($3::text[]) ORDER BY id FOR UPDATE`, [userId, currentId, selection.sessionIds])
-        : await db.query<{ id: string }>('SELECT id FROM "session" WHERE "userId" = $1 AND id <> $2 ORDER BY id FOR UPDATE',
-          [userId, currentId]);
-    const ids = selected.rows.map(row => row.id);
-    await deleteFirstPartySessionTokens(db, userId, ids);
-    const result = await db.query('DELETE FROM "session" WHERE "userId" = $1 AND id = ANY($2::text[])', [userId, ids]);
-    await db.query('COMMIT');
-    return { revoked: result.rowCount ?? 0 };
-  } catch (error) { await db.query('ROLLBACK'); throw error; }
-  finally { db.release(); }
+  return revokeSessionSelection(pool, userId, currentId, selection);
 }
 
 export function securityActivityApi(auth: AccountAuth, pool: Pool) {
@@ -127,7 +110,7 @@ export function securityActivityApi(auth: AccountAuth, pool: Pool) {
         return accountJson(await readSessions(pool, secret, session.user.id, session.session.id, query));
       } catch (error) { return accountFailure(error); }
     })
-    .post('/api/account/sessions/revoke', { response: accountResponses(t.Object({ revoked: t.Integer() })), body: t.Union([
+    .post('/api/account/sessions/revoke', { response: accountResponses(t.Object({ revoked: t.Nullable(t.Integer()) })), body: t.Union([
       t.Object({ sessionId: t.String({ minLength: 1, maxLength: 128 }) }),
       t.Object({ sessionIds: t.Array(t.String({ minLength: 1, maxLength: 128 }), { minItems: 1, maxItems: 100 }) }),
       t.Object({ others: t.Literal(true) }),
@@ -136,7 +119,10 @@ export function securityActivityApi(auth: AccountAuth, pool: Pool) {
         const session = await accountSession(auth, request);
         await requireStepUp(pool, session);
         return accountJson(await revokeSessions(pool, session.user.id, session.session.id, body));
-      } catch (error) { return accountFailure(error); }
+      } catch (error) {
+        if (error instanceof APIError && error.status === 'UNAUTHORIZED') return accountJson({ error: 'unauthenticated' }, 401);
+        return accountFailure(error);
+      }
     });
 }
 

@@ -187,6 +187,7 @@ export async function approveAccountRecovery(pool: Pool, claimId: string,
     [guardianUserId]);
     const guardianSession = await client.query(`SELECT 1 FROM public."session"
       WHERE id = $1 AND "userId" = $2 AND "expiresAt" > clock_timestamp()
+        AND rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = $2)
         AND ($3::timestamptz IS NULL OR "createdAt" > $3) FOR SHARE`,
     [guardianSessionId, guardianUserId, guardianPolicy.rows[0]?.recovered_at ?? null]);
     if (!guardianSession.rowCount) throw new AccountRecoveryDenied('guardian session is stale');

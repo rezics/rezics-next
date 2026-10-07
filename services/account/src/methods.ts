@@ -16,6 +16,7 @@ export const sensitiveAuthPaths = new Set([
 
 export async function requireStepUp(pool: Pool | PoolClient, session: { session: { id: string; createdAt: Date } }) {
   const current = await pool.query(`SELECT 1 FROM "session" s WHERE s.id = $1 AND s."expiresAt" > now()
+    AND s.rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = s."userId")
     AND (s."createdAt" > now() - interval '5 minutes' OR EXISTS (
       SELECT 1 FROM rezics_account_step_up p WHERE p.session_id = s.id
         AND p.verified_at > now() - interval '5 minutes'))`, [session.session.id]);
@@ -33,7 +34,9 @@ async function mutateMethod<T>(pool: Pool, session: { session: { id: string }; u
     await db.query("SET LOCAL lock_timeout = '2s'");
     await db.query("SET LOCAL statement_timeout = '5s'");
     const policy = await db.query<{ recovered_at: Date | null }>('SELECT recovered_at FROM rezics_account_recovery_policy WHERE id = $1 FOR SHARE', [session.user.id]);
+    await db.query('SELECT 1 FROM rezics_account_security WHERE user_id = $1 FOR SHARE', [session.user.id]);
     const current = await db.query(`SELECT 1 FROM "session" WHERE id = $1 AND "userId" = $2
+      AND rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = $2)
       AND "expiresAt" > now() AND ($3::timestamptz IS NULL OR "createdAt" > $3) FOR SHARE`,
     [session.session.id, session.user.id, policy.rows[0]?.recovered_at ?? null]);
     if (!current.rowCount) throw new AccountProblem('stale_request', 403);

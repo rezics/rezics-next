@@ -76,6 +76,7 @@ export function validateAction(body: ActionInput) {
 export async function checkActor(db: PoolClient, actor: Actor, permission: OperatorPermission) {
   const current = await db.query<{ role: OperatorRole }>(`SELECT o.role FROM rezics_account_operator o
     JOIN "session" s ON s."userId" = o.user_id AND s.id = $2 AND s."expiresAt" > now()
+      AND s.rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = o.user_id)
     WHERE o.user_id = $1 FOR SHARE OF o, s`, [actor.userId, actor.sessionId]);
   if (!current.rows[0] || !rolePermits(current.rows[0].role, permission)) throw new AccountProblem('forbidden', 403);
   return current.rows[0].role;

@@ -1,7 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { APIError, createAuthMiddleware, createEmailVerificationToken, getAuthoritativeSessionFromCtx, getSessionFromCtx } from 'better-auth/api';
+import { APIError, createAuthMiddleware, createEmailVerificationToken, getAuthoritativeSessionFromCtx, getSessionFromCtx, originCheckMiddleware } from 'better-auth/api';
 import { jwtVerify } from 'jose';
 import { captcha, jwt, openAPI, twoFactor } from 'better-auth/plugins';
 import { getAuthenticatorName, passkey } from '@better-auth/passkey';
@@ -20,7 +20,7 @@ import { deviceLabel } from './security-activity.ts';
 import { ACCOUNT_GENERATION_CLAIM, GRANT_GENERATION_CLAIM, currentAccountGenerations } from './account-fence.ts';
 import { bootstrapOperators, operatorRole, rolePermits } from './operators.ts';
 import { operatorAuthHooks } from './operator-auth-hooks.ts';
-import { beforeSessionDelete } from './first-party-session.ts';
+import { beforeSessionDelete, revokeSessionSelection } from './first-party-session.ts';
 import { consumeAccountLimit } from './rate-limit.ts';
 import { signupPolicyInput, policyAcceptanceRequired } from './policy-acceptance.ts';
 import { SignupPolicyProblem } from './market-policy.ts';
@@ -34,11 +34,11 @@ function withoutBackchannelMetadata<T extends object>(metadata: T) {
   return { ...metadata, backchannel_logout_supported: false, backchannel_logout_session_supported: false };
 }
 
-/** Only the pinned provider's session-delete initializer uses JWT-disabled
- * mode: it still revokes session tokens, but builds no outbound targets, even
- * for legacy client rows. Endpoint signing and token storage keep normal mode.
- * Keep the normal initializer's validation before taking the revocation hooks. */
-function accountOAuthProvider(options: Parameters<typeof oauthProvider>[0]) {
+/** The pinned provider's session-delete initializer uses JWT-disabled mode
+ * so legacy client rows cannot build outbound targets. Our logical deletion
+ * veto leaves token retirement to bounded maintenance; endpoint signing and
+ * token storage keep normal mode. Retain normal initializer validation. */
+function accountOAuthProvider(pool: Pool, options: Parameters<typeof oauthProvider>[0]) {
   const provider = oauthProvider(options);
   const revocations = oauthProvider({ ...options, disableJwtPlugin: true, storeClientSecret: 'encrypted' });
   return { ...provider,
@@ -46,7 +46,7 @@ function accountOAuthProvider(options: Parameters<typeof oauthProvider>[0]) {
       const initialized = await provider.init(ctx);
       const revocationHooks = await revocations.init(ctx);
       initialized.options.databaseHooks.session.delete = revocationHooks.options.databaseHooks.session.delete;
-      return initialized;
+      return { ...initialized, context: { adapter: fencedSessionAdapter(pool, ctx.adapter) } };
     },
     onRequest: async (request: Request, ctx: Parameters<typeof provider.onRequest>[1]) => {
       const result = await provider.onRequest(request, ctx);
@@ -57,6 +57,118 @@ function accountOAuthProvider(options: Parameters<typeof oauthProvider>[0]) {
       return result;
     },
   };
+}
+
+type AccountAdapter = Parameters<ReturnType<typeof oauthProvider>['init']>[0]['adapter'];
+type SessionReadAdapter = Pick<AccountAdapter, 'create' | 'findOne' | 'findMany'> & Partial<Pick<AccountAdapter, 'transaction'>>;
+type SessionFenceRow = { id: string; userId: string; rezicsGeneration?: number | string | null };
+type SessionTokenRow = { sessionId?: string | null; clientId?: string; scopes?: string[] };
+
+type TransactionAdmissions = { sessions: Set<string>; users: Set<string> };
+
+/** Check both committed stamps in one bounded batch: a fetched session can
+ * become terminal without changing its owner's epoch. Only sessions created
+ * by this transaction may use an uncommitted returned admission stamp. */
+function fencedSessionAdapter<T extends SessionReadAdapter>(pool: Pool, adapter: T,
+  admissions?: TransactionAdmissions): T {
+  async function activeSessionIds(sessions: SessionFenceRow[]): Promise<Set<string>> {
+    if (!sessions.length) return new Set();
+    const bases = await pool.query<{ id: string; userId: string; committed: boolean;
+      stamp: string | null; generation: string | null }>(`SELECT wanted.id,
+      wanted.user_id AS "userId", s.id IS NOT NULL AS committed,
+      s.rezics_generation::text AS stamp, p.session_generation::text AS generation
+      FROM unnest($1::text[], $2::text[]) wanted(id, user_id)
+      LEFT JOIN "session" s ON s.id = wanted.id AND s."userId" = wanted.user_id
+      LEFT JOIN rezics_account_security p ON p.user_id = wanted.user_id`,
+    [sessions.map(session => session.id), sessions.map(session => session.userId)]);
+    const fetched = new Map(sessions.map(session => [session.id, session]));
+    return new Set(bases.rows.filter(basis => {
+      if (basis.committed) {
+        return basis.stamp !== null && basis.generation !== null && basis.stamp === basis.generation;
+      }
+      if (!admissions?.sessions.has(basis.id)) return false;
+      const session = fetched.get(basis.id);
+      // The user INSERT initializes security in the same transaction. Permit
+      // its zero epoch only when this exact transaction created that user;
+      // an existing account with missing security always fails closed.
+      const generation = basis.generation ?? (admissions.users.has(basis.userId) ? '0' : null);
+      return generation !== null && session?.rezicsGeneration !== null
+        && session?.rezicsGeneration !== undefined && String(session.rezicsGeneration) === generation;
+    }).map(basis => basis.id));
+  }
+
+  async function visibleRows<R>(model: string, rows: R[]): Promise<R[]> {
+    if (!rows.length) return rows;
+    if (model === 'session') {
+      const active = await activeSessionIds(rows as SessionFenceRow[]);
+      return rows.filter(row => active.has((row as SessionFenceRow).id));
+    }
+    if (model !== 'oauthAccessToken' && model !== 'oauthRefreshToken') return rows;
+    const linked = rows as SessionTokenRow[];
+    const ids = [...new Set(linked.flatMap(row => row.sessionId ? [row.sessionId] : []))];
+    if (!ids.length) return rows;
+    const sessions = await adapter.findMany<SessionFenceRow>({ model: 'session',
+      where: [{ field: 'id', operator: 'in', value: ids }], limit: ids.length,
+      select: ['id', 'userId', 'rezicsGeneration'] });
+    const active = await activeSessionIds(sessions);
+    if (model === 'oauthAccessToken') {
+      return rows.filter(row => !(row as SessionTokenRow).sessionId
+        || active.has((row as SessionTokenRow).sessionId!));
+    }
+    const staleClients = [...new Set(linked.flatMap(row => row.sessionId && !active.has(row.sessionId)
+      && row.clientId ? [row.clientId] : []))];
+    if (!staleClients.length) return rows;
+    const firstParty = await pool.query<{ client_id: string }>(`SELECT client_id
+      FROM rezics_oauth_first_party_client WHERE client_id = ANY($1::text[])`, [staleClients]);
+    const productClients = new Set(firstParty.rows.map(row => row.client_id));
+    return rows.flatMap(row => {
+      const token = row as SessionTokenRow;
+      if (!token.sessionId || active.has(token.sessionId)) return [row];
+      // Consented offline access deliberately outlives ordinary Account
+      // sign-out. Project its stale session link as the detached basis that
+      // the existing refresh guard admits, before physical cleanup catches up.
+      return token.clientId && !productClients.has(token.clientId) && token.scopes?.includes('offline_access')
+        ? [{ ...row, sessionId: null }] : [];
+    });
+  }
+
+  function readFields(model: string, select?: string[]) {
+    if (!select) return select;
+    const fields = model === 'session' ? ['id', 'userId', 'rezicsGeneration']
+      : model === 'oauthRefreshToken' ? ['sessionId', 'clientId', 'scopes']
+        : model === 'oauthAccessToken' ? ['sessionId', 'clientId'] : [];
+    return [...new Set([...select, ...fields])];
+  }
+  function originalFields<R>(row: R, selected?: string[]): R {
+    if (!selected) return row;
+    return Object.fromEntries(Object.entries(row as Record<string, unknown>)
+      .filter(([field]) => selected.includes(field))) as R;
+  }
+  return { ...adapter,
+    create: async (data: Parameters<AccountAdapter['create']>[0]) => {
+      const row = await adapter.create(data);
+      // Keep the database's returned trigger-authored stamp. Tracking is local
+      // to the transaction adapter and disappears after commit or rollback.
+      if (admissions && typeof row?.id === 'string') {
+        if (data.model === 'session') admissions.sessions.add(row.id);
+        else if (data.model === 'user') admissions.users.add(row.id);
+      }
+      return row;
+    },
+    findOne: async <R>(data: Parameters<AccountAdapter['findOne']>[0]): Promise<R | null> => {
+      const row = await adapter.findOne<R>({ ...data, select: readFields(data.model, data.select) });
+      if (!row) return null;
+      const visible = (await visibleRows(data.model, [row]))[0];
+      return visible ? originalFields(visible, data.select) : null;
+    },
+    findMany: async <R>(data: Parameters<AccountAdapter['findMany']>[0]): Promise<R[]> => {
+      const rows = await adapter.findMany<R>({ ...data, select: readFields(data.model, data.select) });
+      return (await visibleRows(data.model, rows)).map(row => originalFields(row, data.select));
+    },
+    ...(adapter.transaction ? { transaction: async <R>(callback: Parameters<AccountAdapter['transaction']>[0]) =>
+      adapter.transaction!(transaction => callback(fencedSessionAdapter(pool, transaction,
+        { sessions: new Set(), users: new Set() }))) as Promise<R> } : {}),
+  } as T;
 }
 
 export interface AccountConfig {
@@ -117,7 +229,10 @@ export function accountAuthOptions(config: AccountConfig) {
     advanced: { ipAddress: { ipAddressHeaders: ['x-rezics-client-ip'] } },
     // The HTTP boundary checks our session-bound reauthentication proof. The
     // provider's age-only check cannot recognize that proof after step-up.
-    session: { freshAge: 0 },
+    session: { freshAge: 0, additionalFields: {
+      rezicsGeneration: { type: 'number', bigint: true, defaultValue: 0,
+        fieldName: 'rezics_generation', required: false, input: false, returned: false } as const,
+    } },
     hooks: { ...operatorHooks, before: createAuthMiddleware(async ctx => {
       if (ctx.path === '/verify-email' && typeof ctx.query?.token === 'string') {
         // Email verification links are stateless JWTs, so deleting verification
@@ -197,13 +312,15 @@ export function accountAuthOptions(config: AccountConfig) {
           { 'Retry-After': String(AGENT_REGISTRATION_BUDGET.seconds) });
       }
       await operatorHooks.before(ctx);
-      if (ctx.path === '/revoke-other-sessions') {
-        // A sample of expired sessions may produce no provider delete hook at
-        // all. Drain the same bounded selection after its authoritative read;
-        // the current session remains available to the endpoint middleware.
+      if (ctx.path === '/revoke-sessions' || ctx.path === '/revoke-other-sessions') {
+        // This before hook short-circuits the provider endpoint and its
+        // middleware, so retain its origin check and authoritative admission.
+        await originCheckMiddleware(ctx);
         const session = await getAuthoritativeSessionFromCtx(ctx);
         if (!session) throw new APIError('UNAUTHORIZED');
-        await beforeSessionDelete(config.pool, session.session, ctx);
+        await revokeSessionSelection(config.pool, session.user.id, session.session.id,
+          ctx.path === '/revoke-sessions' ? { all: true } : { others: true });
+        return ctx.json({ status: true });
       }
     }), after: createAuthMiddleware(async ctx => {
       await operatorHooks.after(ctx);
@@ -330,7 +447,7 @@ export function accountAuthOptions(config: AccountConfig) {
         } },
       }),
       jwt(signingKeyOptions(config.pool)),
-      accountOAuthProvider({
+      accountOAuthProvider(config.pool, {
         loginPage: '/sign-in',
         consentPage: '/consent',
         // The signed authorization request lets /sign-in name the App before

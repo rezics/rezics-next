@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { sessionBasisActive } from './first-party-session.ts';
 
 export const ACCOUNT_GENERATION_CLAIM = 'rezics_account_generation';
 export const GRANT_GENERATION_CLAIM = 'rezics_grant_generation';
@@ -18,6 +19,9 @@ export async function accountBasisActive(db: PoolClient, payload: Record<string,
   const current = await currentAccountGenerations(db, payload.sub, clientId);
   if (!current || (payload[ACCOUNT_GENERATION_CLAIM] ?? '0') !== current.account
     || (payload[GRANT_GENERATION_CLAIM] ?? '0') !== current.grant) return false;
+  if (typeof payload.sid === 'string' && !await sessionBasisActive(db, payload.sid, payload.sub)) return false;
+  if (typeof payload.sid !== 'string' && (await db.query(`SELECT 1 FROM rezics_oauth_first_party_client
+    WHERE client_id = $1`, [clientId])).rowCount) return false;
   // Record actual resource use at most once per minute. Never create or
   // resurrect a grant from introspection of a previously issued token.
   await db.query(`UPDATE rezics_account_grant SET last_used_at = now()

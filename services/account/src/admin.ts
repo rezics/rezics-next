@@ -142,7 +142,8 @@ export async function exportDirectory(pool: Pool, secret: string, actorId: strin
 /** Until when the session's recent sign-in or re-authentication admits writes. */
 async function stepUpUntil(pool: Pool, sessionId: string) {
   const result = await pool.query<{ until: Date | null }>(`SELECT greatest(s."createdAt", p.verified_at) + interval '5 minutes' AS until
-    FROM "session" s LEFT JOIN rezics_account_step_up p ON p.session_id = s.id WHERE s.id = $1`, [sessionId]);
+    FROM "session" s LEFT JOIN rezics_account_step_up p ON p.session_id = s.id WHERE s.id = $1
+      AND s.rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = s."userId")`, [sessionId]);
   const until = result.rows[0]?.until;
   return until && until.getTime() > Date.now() ? until.toISOString() : null;
 }

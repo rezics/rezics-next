@@ -44,6 +44,7 @@ export async function requireRecoverySession(
     LEFT JOIN public.rezics_account_recovery_policy p ON p.id = u.id
     LEFT JOIN public.rezics_account_security security ON security.user_id = u.id
     WHERE u.id = $1 AND s.id = $2 AND s."expiresAt" > clock_timestamp()
+      AND s.rezics_generation = security.session_generation
       AND (p.recovered_at IS NULL OR s."createdAt" > p.recovered_at)
       AND security.deletion_started_at IS NULL`,
     [userId, sessionId],

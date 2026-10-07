@@ -6,6 +6,7 @@ import { accountConfig } from './config.ts';
 import { accountEmailQueue, smtpSender } from './email.ts';
 import { bootstrapOperators } from './operators.ts';
 import { reconcileResourceScopes } from './resource-scopes.ts';
+import { cleanupRevokedSessionPage } from './first-party-session.ts';
 import { boundedPool } from '../../main/src/infrastructure/pg-pool.ts';
 import { AccessAdmissionRegistry } from '../../main/src/modules/access/admission.ts';
 import { mirrorAccountDeletionIntent } from '../../main/src/modules/outbox/account-deletion-journal.ts';
@@ -36,7 +37,10 @@ let delivery: Promise<unknown> | undefined;
 const deliveryTimer = setInterval(() => {
   if (delivering) return;
   delivering = true;
-  delivery = withWorkerTelemetry('account.email.drain', () => email.drain()).catch(() => telemetryLog('account_email_unavailable', 'error'))
+  delivery = Promise.all([
+    withWorkerTelemetry('account.email.drain', () => email.drain()).catch(() => telemetryLog('account_email_unavailable', 'error')),
+    cleanupRevokedSessionPage(pool).catch(error => { console.error('Account session cleanup unavailable', error); }),
+  ])
     .finally(() => { delivering = false; });
 }, 1_000);
 const app = createAccountApp(createAccountAuth({ baseURL, secret, resource, pool, operatorUserIds, email, requireEmailVerification: true,
