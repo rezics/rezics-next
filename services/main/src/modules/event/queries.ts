@@ -6,6 +6,7 @@ import { resolveStatementAcceptance } from '../statement/read.ts';
 import { eventTimeSlotIri } from './observation.ts';
 import { checkedDateRange, checkedInstantRange, UnsupportedEventTime } from './time.ts';
 import { readEventDependencies, readEventSource, EventSourceUnavailable } from './source.ts';
+import { hasEventEffects, type EventEffectWindow } from './effects.ts';
 
 const PROFILE = 'event-interval-v2';
 /** Per-request index and response work; inventory size is not a product limit. */
@@ -138,7 +139,11 @@ interface Checkpoint {
   generation: string; data_epoch: string; relay_sequence: string; backfill_complete: boolean;
   processed: string; actual_revision: string; planned_revision: string;
 }
-interface Window { id: string; state: string; processed: string; revision: string; created_at: string; unsupported_actual_count: string; unsupported_planned_count: string }
+interface Window extends EventEffectWindow {
+  state: string; processed: string; revision: string; created_at: string;
+  actual_revision: string; planned_revision: string;
+  unsupported_actual_count: string; unsupported_planned_count: string;
+}
 
 async function topicHeads(env: WorkActivationEnvironment, events: string[], status?: 'actual' | 'planned') {
   if (!events.length) return [];
@@ -181,18 +186,19 @@ export class EventTemporalQueries {
     const topics = await acceptedTopics(this.env, input);
     const selectedTopics = Boolean(input.topics?.length);
     const heads = selectedTopics ? await topicHeads(this.env, [...topics.byEvent.keys()], input.timeStatus) : [];
-    const basisOf = (current: typeof dependencies, topicBasis: unknown[], eventHeads: typeof heads) => digest({
+    const basisOf = (current: typeof dependencies, topicBasis: unknown[], eventHeads: typeof heads,
+      currentWindow: Window) => digest({
       epoch: current.dataEpoch, topics: topicBasis,
       events: selectedTopics ? eventHeads : {
-        ...(input.timeStatus !== 'planned' ? { actual: current.actual } : {}),
-        ...(input.timeStatus !== 'actual' ? { planned: current.planned } : {}),
+        window: currentWindow.id,
+        ...(input.timeStatus !== 'planned' ? { actual: currentWindow.actual_revision } : {}),
+        ...(input.timeStatus !== 'actual' ? { planned: currentWindow.planned_revision } : {}),
       },
     });
-    const basis = basisOf(dependencies, topics.basis, heads);
     const cursor = input.continuation ? readCursor(input.continuation, this.cursorKey, normalized.requestDigest) : undefined;
-    if (cursor && cursor.basis !== basis) throw new EventQueryRestart('Event query dependencies changed');
     const client = await this.access.connect();
     let checkpoint: Checkpoint | undefined, window: Window;
+    let basis: string;
     let rows: { event: string; time_status: 'actual' | 'planned'; revision: string; definite: boolean }[];
     let histogram: { time_status: 'actual' | 'planned'; bucket_start: string; definite_count: string; possible_count: string }[];
     try {
@@ -210,20 +216,23 @@ export class EventTemporalQueries {
         VALUES ($1,$2,$3,$4,$5::date,$6::date,$7,$8) ON CONFLICT (scope_key) DO NOTHING`,
       [randomUUID(), normalized.scopeKey, input.interpretation, input.grain, normalized.bucketStart,
         normalized.bucketEnd, normalized.query.start, normalized.query.end]);
-      window = (await client.query<Window>(`SELECT id::text,state,processed::text,revision::text,created_at::text,unsupported_actual_count::text,unsupported_planned_count::text
+      window = (await client.query<Window>(`SELECT id::text,state,processed::text,revision::text,created_at::text,
+        interpretation,grain,bucket_start::text,bucket_end::text,scan_started_at::text,
+        actual_revision::text,planned_revision::text,unsupported_actual_count::text,unsupported_planned_count::text
         FROM access.event_temporal_window WHERE scope_key=$1`, [normalized.scopeKey])).rows[0]!;
-      // Builds wait for every delta job, so a ready window predates outstanding
-      // jobs. Waiting for selected jobs to finish avoids scanning their history
-      // to prove that this window's position has already been reached.
-      const pending = (await client.query<{ pending: boolean; failed: boolean; updates: boolean }>(`SELECT
+      basis = basisOf(dependencies, topics.basis, heads, window);
+      if (cursor && cursor.basis !== basis) throw new EventQueryRestart('Event query dependencies changed');
+      // Unresolved targets can move into this window, so their unknown effects
+      // remain conservative. Known deltas fence only their affected windows.
+      const pending = (await client.query<{ pending: boolean; failed: boolean }>(`SELECT
         EXISTS(SELECT 1 FROM access.event_temporal_pending
           WHERE ($1::text IS NULL OR time_status=$1) AND ($2::text[] IS NULL OR event=ANY($2)) LIMIT 1) AS pending,
         EXISTS(SELECT 1 FROM access.event_temporal_pending
           WHERE state='failed' AND ($1::text IS NULL OR time_status=$1)
-            AND ($2::text[] IS NULL OR event=ANY($2)) LIMIT 1) AS failed,
-        EXISTS(SELECT 1 FROM access.event_temporal_window_update
-          WHERE ($1::text IS NULL OR time_status=$1) AND ($2::text[] IS NULL OR event=ANY($2)) LIMIT 1) AS updates`,
+            AND ($2::text[] IS NULL OR event=ANY($2)) LIMIT 1) AS failed`,
       [input.timeStatus ?? null, selectedTopics ? [...topics.byEvent.keys()] : null])).rows[0]!;
+      const updates = await hasEventEffects(client, window, input.timeStatus,
+        selectedTopics ? [...topics.byEvent.keys()] : undefined);
       let covered = Boolean(checkpoint?.backfill_complete);
       if (selectedTopics && covered) {
         const indexed = heads.length ? (await client.query<{ event: string; time_status: string; time_revision: string | null }>(
@@ -236,12 +245,12 @@ export class EventTemporalQueries {
         covered = (input.timeStatus === 'planned' || checkpoint!.actual_revision === dependencies.actual)
           && (input.timeStatus === 'actual' || checkpoint!.planned_revision === dependencies.planned);
       }
-      if (!covered || pending.pending || pending.updates || window.state !== 'ready') {
+      if (!covered || pending.pending || updates || window.state !== 'ready') {
         await client.query('COMMIT');
         return { profile: 'event-query-v1' as const,
           state: checkpoint && BigInt(checkpoint.processed) > 0n ? 'partial' as const : 'unavailable' as const,
           progress: { phase: !checkpoint?.backfill_complete ? 'backfill' as const
-            : !covered || pending.pending || pending.updates ? 'targets' as const : 'buckets' as const,
+            : !covered || pending.pending || updates ? 'targets' as const : 'buckets' as const,
           processed: checkpoint?.processed ?? '0', windowProcessed: window.processed, failed: pending.failed },
           items: [], histogram: [], continuation: null };
       }
@@ -304,7 +313,11 @@ export class EventTemporalQueries {
     const live = await readEventDependencies(this.env);
     const liveTopics = selectedTopics ? await acceptedTopics(this.env, input) : topics;
     const liveHeads = selectedTopics ? await topicHeads(this.env, [...liveTopics.byEvent.keys()], input.timeStatus) : [];
-    if (basisOf(live, liveTopics.basis, liveHeads) !== basis) throw new EventQueryRestart('Event dependencies changed during query');
+    if (basisOf(live, liveTopics.basis, liveHeads, window) !== basis
+      || !selectedTopics && ((input.timeStatus !== 'planned' && live.actual !== dependencies.actual)
+        || (input.timeStatus !== 'actual' && live.planned !== dependencies.planned))) {
+      throw new EventQueryRestart('Event dependencies changed during query');
+    }
     const last = rows.at(-1);
     const continuation = more && last ? cursorToken({ v: 2, basis, digest: normalized.requestDigest,
       generation: checkpoint!.generation, expiresAt: Date.now() + 5 * 60_000,

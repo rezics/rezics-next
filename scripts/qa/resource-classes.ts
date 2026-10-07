@@ -13,6 +13,14 @@ export const qaResourceClasses = {
     jvmArgs: '-Xms128m -Xmx1536m -XX:MaxDirectMemorySize=512m',
     budgetMs: 600_000,
   },
+  // Real Event history plus faster unrelated writer churn retains more TDB2
+  // copy-on-write files than the ordinary large corpus.
+  'temporal-tmpfs': {
+    storage: 'test',
+    memory: '12g',
+    jvmArgs: '-Xms128m -Xmx3072m -XX:MaxDirectMemorySize=512m',
+    budgetMs: 600_000,
+  },
   'catalogue-disk': {
     storage: 'scale',
     memory: '7g',
@@ -34,8 +42,8 @@ export function qaResourceHeapBytes(name: QaResourceClass): number {
 export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = new Map([
   // Container restart must retain legacy RDF, and the terminal gap needs its own project.
   ['tests/qa/integration/local-read-basis.test.ts', 'catalogue-disk'],
+  ['tests/qa/integration/event-query-bounds.test.ts', 'temporal-tmpfs'],
   ...[
-    'event-query-bounds',
     'g-1021-reading-cost',
     'g-1022-reading-cost',
     'g-1025-home-cost',

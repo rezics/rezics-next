@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { EVENT_SOURCE_COST, readEventDependencies, readEventSource, readEventSourceKeys } from './source.ts';
+import { effectInsertSql, effectInsertValues, hasEventEffects, uuidOrdinal } from './effects.ts';
+import { EVENT_COLLECTION_BATCH, EVENT_SOURCE_COST, readEventCollectionKeys, readEventDependencies, readEventSource, readEventSourceKeys } from './source.ts';
 
 export const EVENT_PROJECTION_COST = {
   sourceKeys: EVENT_SOURCE_COST.members, relayBatches: EVENT_SOURCE_COST.batches, targets: 32, relayEvents: EVENT_SOURCE_COST.members, windowRows: 100,
-  windowUpdates: 8, windowsPerUpdate: 8,
+  collectionKeys: EVENT_COLLECTION_BATCH * 2, windowUpdates: 8, windowsPerUpdate: 8, windowCandidates: 8,
 } as const;
 
 export class EventProjectionUnavailable extends Error {}
@@ -13,7 +14,9 @@ export class EventProjectionUnavailable extends Error {}
 interface Key { event: string; status: 'actual' | 'planned' }
 interface Checkpoint {
   generation: string; data_epoch: string; relay_sequence: string;
-  backfill_complete: boolean;
+  backfill_complete: boolean; initial_sequence: string | null;
+  actual_source_sequence: string; actual_source_event: string | null; actual_prefix: string;
+  planned_source_sequence: string; planned_source_event: string | null; planned_prefix: string;
 }
 interface Interval {
   event: string; time_status: Key['status']; time_revision: string; manifest: string;
@@ -29,7 +32,7 @@ interface Window {
   id: string; interpretation: 'civil-date' | 'instant'; grain: 'year' | 'month' | 'day';
   bucket_start: string; bucket_end: string; query_start: string; query_end: string; state: string;
   after_event: string | null; after_status: Key['status'] | null;
-  before_update?: boolean;
+  scan_started_at: string | null;
 }
 const columns = ['event', 'time_status', 'time_revision', 'manifest', 'temporal_kind',
   'start_state', 'start_precision', 'end_state', 'end_precision',
@@ -136,54 +139,58 @@ export class EventTemporalProjection {
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE')).rows[0];
       if (recovery?.open !== true) throw new EventProjectionUnavailable('Access is held for recovery');
       let checkpoint = (await client.query<Checkpoint>(`SELECT generation::text,data_epoch,relay_sequence::text,
-        backfill_complete FROM access.event_temporal_checkpoint
+        backfill_complete,initial_sequence::text,
+        actual_source_sequence::text,actual_source_event,actual_prefix::text,
+        planned_source_sequence::text,planned_source_event,planned_prefix::text FROM access.event_temporal_checkpoint
         WHERE singleton FOR UPDATE`)).rows[0];
       if (!checkpoint) {
+        const boundary = await readEventDependencies(this.env);
         const generation = randomUUID();
         await client.query(`INSERT INTO access.event_temporal_checkpoint
-          (singleton,generation,data_epoch,relay_sequence,actual_revision,planned_revision)
-          VALUES (true,$1,$2,0,'','')`, [generation, this.env.lineage.dataEpoch]);
+          (singleton,generation,data_epoch,relay_sequence,actual_revision,planned_revision,initial_sequence)
+          VALUES (true,$1,$2,0,'','',$3)`, [generation, this.env.lineage.dataEpoch, boundary.relaySequence]);
         checkpoint = { generation, data_epoch: this.env.lineage.dataEpoch, relay_sequence: '0',
-          backfill_complete: false };
+          backfill_complete: false, initial_sequence: boundary.relaySequence,
+          actual_source_sequence: '0', actual_source_event: null, actual_prefix: '0',
+          planned_source_sequence: '0', planned_source_event: null, planned_prefix: '0' };
       }
       if (checkpoint.data_epoch !== this.env.lineage.dataEpoch) {
         throw new EventProjectionUnavailable('Event projection epoch requires recovery');
+      }
+      if (checkpoint.initial_sequence === null) {
+        const boundary = await readEventDependencies(this.env);
+        checkpoint.initial_sequence = boundary.relaySequence;
+        await client.query('UPDATE access.event_temporal_checkpoint SET initial_sequence=$1 WHERE singleton', [boundary.relaySequence]);
       }
       let worked = await this.ingestRelay(client, checkpoint);
       const source = await readEventDependencies(this.env);
       if (BigInt(checkpoint.relay_sequence) > BigInt(source.relaySequence)) {
         throw new EventProjectionUnavailable('Event journal checkpoint exceeds its source');
       }
-      // A delayed relay tail keeps initial coverage incomplete, while already
-      // covered Event collections and target retries can still make progress.
-      if (!checkpoint.backfill_complete && checkpoint.relay_sequence === source.relaySequence) {
+      // Completion is a retained finite prefix, independent of later Main writes.
+      if (!checkpoint.backfill_complete && BigInt(checkpoint.relay_sequence) >= BigInt(checkpoint.initial_sequence)) {
         checkpoint.backfill_complete = true;
         await client.query('UPDATE access.event_temporal_checkpoint SET backfill_complete=true WHERE singleton');
       }
+      worked += await this.ingestCollections(client, checkpoint);
       worked += await this.projectTargets(client);
       worked += await this.updateWindows(client);
-      const updates = (await client.query<{ pending: boolean }>(
-        'SELECT EXISTS(SELECT 1 FROM access.event_temporal_window_update LIMIT 1) AS pending')).rows[0]!.pending;
-      // A delayed delta must reach a window before its scan passes the target.
-      if (!updates) worked += await this.buildWindow(client, checkpoint);
+      worked += await this.buildWindow(client, checkpoint);
       if (checkpoint.backfill_complete) {
         const dependencies = await readEventDependencies(this.env);
         if (dependencies.dataEpoch !== checkpoint.data_epoch) throw new EventProjectionUnavailable('Event owner epoch changed');
-        if (BigInt(checkpoint.relay_sequence) >= BigInt(dependencies.relaySequence)) {
-          // Each collection can acknowledge its own coverage while another
-          // status retains a failed target or unfinished bucket delta.
-          await client.query(`UPDATE access.event_temporal_checkpoint SET
-            actual_revision = CASE WHEN ($1='none' OR EXISTS(
-              SELECT 1 FROM access.event_temporal_applied WHERE time_revision=$1))
-              AND NOT EXISTS(SELECT 1 FROM access.event_temporal_pending WHERE time_status='actual' LIMIT 1)
-              AND NOT EXISTS(SELECT 1 FROM access.event_temporal_window_update WHERE time_status='actual' LIMIT 1)
-              THEN $1 ELSE actual_revision END,
-            planned_revision = CASE WHEN ($2='none' OR EXISTS(
-              SELECT 1 FROM access.event_temporal_applied WHERE time_revision=$2))
-              AND NOT EXISTS(SELECT 1 FROM access.event_temporal_pending WHERE time_status='planned' LIMIT 1)
-              AND NOT EXISTS(SELECT 1 FROM access.event_temporal_window_update WHERE time_status='planned' LIMIT 1)
-              THEN $2 ELSE planned_revision END WHERE singleton`, [dependencies.actual, dependencies.planned]);
-        }
+        // Exact applied heads qualify only after their own owner batch was
+        // consumed. Other targets and bucket jobs fence their own read scopes.
+        await client.query(`UPDATE access.event_temporal_checkpoint SET
+          actual_revision = CASE WHEN $1='none' OR EXISTS(
+            SELECT 1 FROM access.event_temporal_applied WHERE time_status='actual'
+              AND time_revision=$1 AND journal_sequence<= $3::numeric)
+            THEN $1 ELSE actual_revision END,
+          planned_revision = CASE WHEN $2='none' OR EXISTS(
+            SELECT 1 FROM access.event_temporal_applied WHERE time_status='planned'
+              AND time_revision=$2 AND journal_sequence<= $4::numeric)
+            THEN $2 ELSE planned_revision END WHERE singleton`,
+        [dependencies.actual, dependencies.planned, checkpoint.actual_prefix, checkpoint.planned_prefix]);
       }
       await client.query('COMMIT');
       return worked;
@@ -193,34 +200,62 @@ export class EventTemporalProjection {
     } finally { client.release(); }
   }
 
-  private async enqueue(client: PoolClient, key: Key, sequence: string) {
+  private async enqueue(client: PoolClient, key: Key & { revision: string; sequence: string }) {
     if (!native.test(key.event) || !['actual', 'planned'].includes(key.status)) {
       throw new EventProjectionUnavailable('Event relay target is invalid');
     }
+    const applied = await client.query(`UPDATE access.event_temporal_applied SET journal_sequence=$3
+      WHERE event=$1 AND time_status=$2 AND time_revision=$4`, [key.event, key.status, key.sequence, key.revision]);
+    if (applied.rowCount) {
+      await client.query('DELETE FROM access.event_temporal_pending WHERE event=$1 AND time_status=$2 AND source_sequence<=$3',
+        [key.event, key.status, key.sequence]);
+      return;
+    }
     await client.query(`INSERT INTO access.event_temporal_pending
-      (event,time_status,source_sequence,state,attempts,retry_at)
-      VALUES ($1,$2,$3,'queued',0,clock_timestamp())
-      ON CONFLICT (event,time_status) DO UPDATE SET source_sequence = greatest(
-        event_temporal_pending.source_sequence,EXCLUDED.source_sequence),state='queued',retry_at=clock_timestamp()`,
-    [key.event, key.status, sequence]);
+      (event,time_status,source_sequence,journal_revision,state,attempts,retry_at)
+      VALUES ($1,$2,$3,$4,'queued',0,clock_timestamp())
+      ON CONFLICT (event,time_status) DO UPDATE SET source_sequence=EXCLUDED.source_sequence,
+        journal_revision=EXCLUDED.journal_revision,state='queued',retry_at=clock_timestamp()
+      WHERE event_temporal_pending.source_sequence<=EXCLUDED.source_sequence`,
+    [key.event, key.status, key.sequence, key.revision]);
   }
 
   private async ingestRelay(client: PoolClient, checkpoint: Checkpoint): Promise<number> {
     const source = await readEventSourceKeys(this.relay, {
       dataEpoch: checkpoint.data_epoch, afterSequence: checkpoint.relay_sequence });
     if (!source) return 0;
-    for (const key of source.keys) await this.enqueue(client, key, source.sequence);
+    for (const key of source.keys) await this.enqueue(client, key);
     await client.query(`UPDATE access.event_temporal_checkpoint SET relay_sequence=$1,
       processed=processed+$2 WHERE singleton`, [source.sequence, source.members]);
     checkpoint.relay_sequence = source.sequence;
     return source.batches;
   }
 
+  private async ingestCollections(client: PoolClient, checkpoint: Checkpoint): Promise<number> {
+    let worked = 0;
+    for (const status of ['actual', 'planned'] as const) {
+      const coveredByMain = BigInt(checkpoint.relay_sequence) > BigInt(checkpoint[`${status}_source_sequence`]);
+      const source = await readEventCollectionKeys(this.relay, { dataEpoch: checkpoint.data_epoch, status,
+        sequence: coveredByMain ? checkpoint.relay_sequence : checkpoint[`${status}_source_sequence`],
+        eventId: coveredByMain ? null : checkpoint[`${status}_source_event`] });
+      for (const key of source.keys) await this.enqueue(client, key);
+      await client.query(`UPDATE access.event_temporal_checkpoint SET
+        ${status}_source_sequence=$1,${status}_source_event=$2,${status}_prefix=$3 WHERE singleton`,
+      [source.sequence, source.eventId, source.prefix]);
+      checkpoint[`${status}_source_sequence`] = source.sequence;
+      checkpoint[`${status}_source_event`] = source.eventId;
+      checkpoint[`${status}_prefix`] = source.prefix;
+      worked += source.keys.length;
+    }
+    return worked;
+  }
+
   private async projectTargets(client: PoolClient): Promise<number> {
-    const activeWindows = (await client.query<{ active: boolean }>(`SELECT EXISTS(
-      SELECT 1 FROM access.event_temporal_window WHERE state IN ('building','ready') LIMIT 1) AS active`)).rows[0]!.active;
-    const pending = (await client.query<{ event: string; time_status: Key['status'] }>(
-      `SELECT event,time_status FROM access.event_temporal_pending WHERE retry_at<=clock_timestamp()
+    const receivers = (await client.query<{ active: boolean; last_window: string | null }>(`SELECT EXISTS(
+      SELECT 1 FROM access.event_temporal_window WHERE state IN ('building','ready') LIMIT 1) AS active,
+      (SELECT id::text FROM access.event_temporal_window ORDER BY access.event_temporal_window.id DESC LIMIT 1) AS last_window`)).rows[0]!;
+    const pending = (await client.query<{ event: string; time_status: Key['status']; journal_revision: string | null; source_sequence: string }>(
+      `SELECT event,time_status,journal_revision,source_sequence::text FROM access.event_temporal_pending WHERE retry_at<=statement_timestamp()
        ORDER BY retry_at,event,time_status LIMIT $1 FOR UPDATE`, [EVENT_PROJECTION_COST.targets])).rows;
     for (const target of pending) {
       await client.query('SAVEPOINT event_target');
@@ -246,13 +281,26 @@ export class EventTemporalProjection {
             [target.event, target.time_status]);
           // Queued windows have not consumed any interval yet. Their seek scan
           // will read the new row directly; enqueue deltas only after a scan starts.
-          if (activeWindows) await client.query(`INSERT INTO access.event_temporal_window_update
-            (event,time_status,old_interval,new_interval) VALUES ($1,$2,$3::jsonb,$4::jsonb)`,
-          [target.event, target.time_status, old ? JSON.stringify(old) : null, next ? JSON.stringify(next) : null]);
+          if (receivers.active && receivers.last_window) {
+            // Changes to one target retain FIFO across receivers; independent
+            // targets rotate fairly without waiting for that target's windows.
+            const prior = (await client.query<{ id: string }>(`SELECT id::text
+              FROM access.event_temporal_window_update WHERE event=$1 AND time_status=$2
+              ORDER BY access.event_temporal_window_update.id DESC LIMIT 1 FOR UPDATE`,
+            [target.event, target.time_status])).rows[0];
+            const job = (await client.query<{ id: string }>(`${effectInsertSql} RETURNING id::text`,
+              effectInsertValues(target.event, target.time_status, old, next, receivers.last_window, !prior))).rows[0]!;
+            if (prior) await client.query('UPDATE access.event_temporal_window_update SET next_job=$2 WHERE id=$1',
+              [prior.id, job.id]);
+          }
         }
-        await client.query(`INSERT INTO access.event_temporal_applied (event,time_status,time_revision)
-          VALUES ($1,$2,$3) ON CONFLICT (event,time_status) DO UPDATE SET time_revision=EXCLUDED.time_revision`,
-        [target.event, target.time_status, source.head]);
+        await client.query(`INSERT INTO access.event_temporal_applied (event,time_status,time_revision,journal_sequence)
+          VALUES ($1,$2,$3,$4) ON CONFLICT (event,time_status) DO UPDATE SET
+            journal_sequence=CASE WHEN event_temporal_applied.time_revision=EXCLUDED.time_revision
+              THEN coalesce(EXCLUDED.journal_sequence,event_temporal_applied.journal_sequence)
+              ELSE EXCLUDED.journal_sequence END,time_revision=EXCLUDED.time_revision`,
+        [target.event, target.time_status, source.head,
+          source.head === target.journal_revision ? target.source_sequence : null]);
         await client.query('DELETE FROM access.event_temporal_pending WHERE event=$1 AND time_status=$2',
           [target.event, target.time_status]);
       } catch (error) {
@@ -271,19 +319,17 @@ export class EventTemporalProjection {
     let worked = 0;
     for (let index = 0; index < EVENT_PROJECTION_COST.windowUpdates; index++) {
       const job = (await client.query<{ id: string; event: string; time_status: Key['status'];
-        old_interval: Interval | null; new_interval: Interval | null; after_window: string | null; created_at: string }>(
-        `SELECT id::text,event,time_status,old_interval,new_interval,after_window::text,created_at::text
-         FROM access.event_temporal_window_update ORDER BY event_temporal_window_update.id LIMIT 1 FOR UPDATE`)).rows[0];
+        old_interval: Interval | null; new_interval: Interval | null; after_window: string | null; last_window: string | null; next_job: string | null }>(
+        `SELECT id::text,event,time_status,old_interval,new_interval,after_window::text,last_window::text,next_job::text
+         FROM access.event_temporal_window_update WHERE ready ORDER BY work_at,event_temporal_window_update.id LIMIT 1 FOR UPDATE`)).rows[0];
       if (!job) break;
       const windows = (await client.query<Window>(`SELECT id::text,interpretation,grain,
         bucket_start::text,bucket_end::text,query_start,query_end,state,after_event,after_status,
-        created_at<=$1::timestamptz AS before_update FROM access.event_temporal_window
-        WHERE ($2::uuid IS NULL OR id>$2::uuid) ORDER BY id LIMIT $3 FOR UPDATE`,
-      [job.created_at, job.after_window, EVENT_PROJECTION_COST.windowsPerUpdate])).rows;
+        scan_started_at::text FROM access.event_temporal_window
+        WHERE ($1::uuid IS NULL OR id>$1::uuid) AND id<=$2::uuid ORDER BY access.event_temporal_window.id LIMIT $3 FOR UPDATE`,
+      [job.after_window, job.last_window, EVENT_PROJECTION_COST.windowsPerUpdate])).rows;
       for (const window of windows) {
-        // Evaluate creation eligibility after the bounded primary-key seek:
-        // filtering first could walk every newer window to return no rows.
-        if (!window.before_update) continue;
+        if (!await hasEventEffects(client, window, undefined, undefined, job.id)) continue;
         const included = window.state === 'ready' || Boolean(window.after_event && (
           job.event < window.after_event || job.event === window.after_event && job.time_status <= window.after_status!));
         if (!included) continue;
@@ -295,13 +341,16 @@ export class EventTemporalProjection {
           await changeBuckets(client, window, job.new_interval, 1);
           await changeMember(client, window, job.new_interval, 1);
         }
-        await client.query('UPDATE access.event_temporal_window SET revision=revision+1 WHERE id=$1', [window.id]);
+        await client.query(`UPDATE access.event_temporal_window SET revision=revision+1,
+          ${job.time_status === 'actual' ? 'actual_revision=actual_revision+1' : 'planned_revision=planned_revision+1'} WHERE id=$1`, [window.id]);
       }
       if (windows.length < EVENT_PROJECTION_COST.windowsPerUpdate) {
         await client.query('DELETE FROM access.event_temporal_window_update WHERE id=$1', [job.id]);
+        if (job.next_job) await client.query('UPDATE access.event_temporal_window_update SET ready=true WHERE id=$1', [job.next_job]);
       } else {
-        await client.query('UPDATE access.event_temporal_window_update SET after_window=$2 WHERE id=$1',
-          [job.id, windows.at(-1)!.id]);
+        await client.query(`UPDATE access.event_temporal_window_update SET after_window=$2,work_at=clock_timestamp(),
+          unvisited_windows=numrange($3::numeric,upper(unvisited_windows),'(]') WHERE id=$1`,
+          [job.id, windows.at(-1)!.id, uuidOrdinal(windows.at(-1)!.id)]);
       }
       worked++;
     }
@@ -310,13 +359,37 @@ export class EventTemporalProjection {
 
   private async buildWindow(client: PoolClient, checkpoint: Checkpoint): Promise<number> {
     if (!checkpoint.backfill_complete) return 0;
-    const pending = (await client.query<{ pending: boolean }>(
-      "SELECT EXISTS(SELECT 1 FROM access.event_temporal_pending WHERE state='queued' LIMIT 1) AS pending")).rows[0]!.pending;
-    if (pending) return 0;
-    const window = (await client.query<Window>(`SELECT id::text,interpretation,grain,bucket_start::text,
-      bucket_end::text,query_start,query_end,state,after_event,after_status FROM access.event_temporal_window
-      WHERE state IN ('queued','building') ORDER BY created_at,id LIMIT 1 FOR UPDATE`)).rows[0];
+    const candidates = (await client.query<Window>(`SELECT id::text,interpretation,grain,bucket_start::text,
+      bucket_end::text,query_start,query_end,state,after_event,after_status,scan_started_at::text
+      FROM access.event_temporal_window WHERE state IN ('queued','building')
+      ORDER BY work_at,access.event_temporal_window.id LIMIT $1 FOR UPDATE`, [EVENT_PROJECTION_COST.windowCandidates])).rows;
+    let window: Window | undefined;
+    for (const candidate of candidates) {
+      await client.query('UPDATE access.event_temporal_window SET work_at=clock_timestamp() WHERE id=$1', [candidate.id]);
+      // An older queued window has not consumed old rows yet. A running scan
+      // must not overtake a relevant delta, but disjoint jobs never fence it.
+      if (await hasEventEffects(client, candidate)) continue;
+      window = candidate; break;
+    }
     if (!window) return 0;
+    if (!window.scan_started_at) {
+      const started = (await client.query<{ started: string }>(`UPDATE access.event_temporal_window
+        SET scan_started_at=clock_timestamp() WHERE id=$1 RETURNING scan_started_at::text AS started`, [window.id])).rows[0]!;
+      window.scan_started_at = started.started;
+    }
+    // An empty indexed extent is complete immediately. Disjoint windows need
+    // not walk the unrelated interval population merely to establish zero.
+    const unit = window.grain === 'year' ? '1 year' : window.grain === 'month' ? '1 month' : '1 day';
+    const occupied = (await client.query<{ occupied: boolean }>(`SELECT EXISTS(
+      SELECT 1 FROM access.event_temporal_interval WHERE ${window.interpretation === 'civil-date'
+        ? "civil_possible && daterange($1::date,($2::date+$3::interval)::date,'[)')"
+        : "instant_supported AND instant_possible && tstzrange($1::date::timestamp AT TIME ZONE 'UTC',($2::date+$3::interval) AT TIME ZONE 'UTC','[)')"} LIMIT 1)
+      ${window.interpretation === 'instant' ? "OR EXISTS(SELECT 1 FROM access.event_temporal_interval WHERE NOT instant_supported AND civil_possible && daterange($1::date,($2::date+$3::interval)::date,'[)') LIMIT 1)" : ''}
+      AS occupied`, [window.bucket_start, window.bucket_end, unit])).rows[0]!.occupied;
+    if (!occupied) {
+      await client.query("UPDATE access.event_temporal_window SET state='ready' WHERE id=$1", [window.id]);
+      return 1;
+    }
     const rows = (await client.query<Interval>(`SELECT ${columns.map(column =>
       column.includes('_min') || column.includes('_max') ? `${column}::text AS ${column}` : column).join(',')}
       FROM access.event_temporal_interval WHERE ($1::text IS NULL OR (event,time_status)>($1,$2))

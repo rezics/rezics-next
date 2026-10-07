@@ -31,7 +31,9 @@ same request while the existing Main projection worker advances it. Queries
 do not build coverage or enumerate source slots. A ready page rechecks its
 current graph heads and exact manifests. Its cursor binds the selected Event
 collection heads and topic acceptance basis, so unrelated owner writes keep
-it usable.
+it usable. Untargeted continuations bind the selected window's status revisions;
+disjoint date changes leave them usable after their collection head is qualified.
+An unresolved target retains a conservative fence until its effect is known.
 
 ## Projection recovery
 
@@ -39,7 +41,11 @@ The existing Main projection lifecycle also advances Event source backfill,
 retained outbox batches, target retries and requested bucket windows. Initial
 populated backfill replays retained Main relay history from sequence zero;
 indexed batch headers and members share the live delta path and commit durable
-stream checkpoints. Each tick bounds all members, including unrelated writes,
+stream checkpoints. The initial replay captures one fixed boundary. Actual and
+planned effects also seek their own indexes in the retained acknowledged journal;
+a cursor stopped inside a batch preserves its event key. A collection head is
+qualified by its exact applied revision and consumed Event prefix, so unrelated
+Main traffic does not keep it behind a moving global tail. Each tick bounds all members, including unrelated writes,
 before selecting Event keys. Window scans also commit seek checkpoints;
 restarting Main resumes them. Missing journal coverage leaves the index
 unavailable rather than enumerating or sorting the current graph. Recovery must
@@ -61,7 +67,7 @@ backfill, target isolation, retries, withdrawal, cursor changes and more than
 observations and measures the actual PostgreSQL inventory plans before and
 after unrelated Event growth: batch/member visits, filtered rows and shared
 buffer accesses remain bounded. Its owner-command corpus uses the existing
-large-tmpfs QA allocation so retained TDB2 transaction files fit during setup. Returned source rows separately count exact
+temporal-tmpfs QA allocation so retained TDB2 transaction files fit during setup. Returned source rows separately count exact
 target hydration; they do not measure Jena quad visits or production throughput.
 
 Requested windows retain their own membership and counters so pagination and
@@ -69,5 +75,11 @@ histograms stay independent of the total Event population. This uses more
 projection storage as distinct windows are requested. Status-leading page and
 work indexes follow PostgreSQL's [multicolumn index guidance](https://www.postgresql.org/docs/current/indexes-multicolumn.html);
 the sparse-status fixture checks actual filtered rows through `EXPLAIN`.
+Known old/new effects retain typed ranges and the remaining receiver span.
+Their GiST indexes fence only intersecting windows whose scans preceded the
+change. A scan never overtakes a relevant delayed delta; a window already visited
+by that delta can progress while other receivers remain. Per-target delta order, fair work timestamps and
+fixed receiver boundaries prevent new windows or jobs from monopolizing the
+consumer. Empty indexed extents complete without traversing unrelated intervals.
 Consumer transactions use an [advisory transaction lock](https://www.postgresql.org/docs/current/explicit-locking.html#ADVISORY-LOCKS)
 to serialize durable scans and deltas within the existing worker lifecycle.

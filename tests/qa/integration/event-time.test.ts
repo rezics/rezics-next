@@ -359,9 +359,9 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
     const stale = await post('/v1/events/observations', makeBody(eventA, '2026-07', first.observationRevision!));
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ code: 'stale_head' });
-    await expect(queries.query({ interpretation: 'civil-date', match: 'possible', grain: 'day',
+    expect((await queries.query({ interpretation: 'civil-date', match: 'possible', grain: 'day',
       start: '2026-05-01', end: '2026-05-31', pageSize: 1,
-      continuation: paged.continuation! })).rejects.toBeInstanceOf(EventQueryRestart);
+      continuation: paged.continuation! })).state).toBe('partial');
 
     const competingCommands = ['2026-07', '2026-08'].map((lexical) =>
       post.bind(

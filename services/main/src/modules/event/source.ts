@@ -68,27 +68,72 @@ export async function readEventSourceKeys(relay: Pick<Pool, 'query'>,
   }
   if (!batches.length) return null;
   const rows = (await relay.query<{ sequence: string; envelope: { type?: string;
-    data?: { receipt?: { outcome?: string; event?: string; timeStatus?: 'actual' | 'planned' } } } }>(
+    data?: { receipt?: { outcome?: string; event?: string; timeStatus?: 'actual' | 'planned'; observationRevision?: string } } } }>(
     EVENT_SOURCE_MEMBERS_SQL, [MAIN_RELAY_STREAM_SCOPE, options.dataEpoch,
       batches.map(batch => batch.sequence), EVENT_SOURCE_COST.members + 1])).rows;
   const counts = new Map(batches.map(batch => [batch.sequence, 0]));
-  const keys: EventSourceKey[] = [];
+  const keys: (EventSourceKey & { revision: string; sequence: string })[] = [];
   for (const row of rows) {
     if (!counts.has(row.sequence)) throw new EventSourceUnavailable('Event journal member is outside its batch');
     counts.set(row.sequence, counts.get(row.sequence)! + 1);
     if (row.envelope.type !== 'com.rezics.event.time-changed.v1') continue;
     const receipt = row.envelope.data?.receipt;
     if (receipt?.outcome !== 'succeeded' || !nativeId.test(receipt.event ?? '')
-      || !['actual', 'planned'].includes(receipt.timeStatus ?? '')) {
+      || !['actual', 'planned'].includes(receipt.timeStatus ?? '') || !nativeId.test(receipt.observationRevision ?? '')) {
       throw new EventSourceUnavailable('Event relay proof is incomplete');
     }
-    keys.push({ event: receipt.event!, status: receipt.timeStatus! });
+    keys.push({ event: receipt.event!, status: receipt.timeStatus!, revision: receipt.observationRevision!, sequence: row.sequence });
   }
   if (rows.length !== members || batches.some(batch => counts.get(batch.sequence) !== batch.event_count)) {
     throw new EventSourceUnavailable('Event retained batch members are incomplete');
   }
   return { sequence: sequence.toString(), keys, members, batches: batches.length };
 }
+export const EVENT_COLLECTION_BATCH = 32;
+/** A status-specific index walks only admitted Event effects within one
+ * acknowledged immutable prefix. A partial batch retains its exact event key. */
+export async function readEventCollectionKeys(relay: Pick<Pool, 'query'>,
+  options: { dataEpoch: string; status: 'actual' | 'planned'; sequence: string; eventId: string | null }) {
+  if (!['actual', 'planned'].includes(options.status) || !/^(0|[1-9][0-9]{0,99})$/.test(options.sequence)) {
+    throw new EventSourceUnavailable('Event collection seek is invalid');
+  }
+  const result = (await relay.query<{ cut: string; sequence: string | null; event_id: string | null;
+    envelope: { data?: { receipt?: { event?: string; timeStatus?: string; observationRevision?: string; outcome?: string } } } | null }>(`
+    WITH cut AS MATERIALIZED (
+      SELECT sequence FROM relay.checkpoint WHERE stream_scope=$1 AND data_epoch=$2
+      ORDER BY sequence DESC LIMIT 1
+    ), page AS MATERIALIZED (
+      SELECT sequence,event_id,envelope FROM relay.delivered_event
+      WHERE ($4::text IS NULL OR $4::text IS NOT NULL) AND stream_scope=$1 AND data_epoch=$2 AND sequence<=(SELECT sequence FROM cut)
+        AND ${options.eventId === null ? 'sequence>$3::numeric' : '(sequence,event_id)>($3::numeric,$4::text)'}
+        AND envelope->>'type'='com.rezics.event.time-changed.v1'
+        AND envelope#>>'{data,receipt,timeStatus}'='${options.status}'
+      ORDER BY sequence,event_id LIMIT ${EVENT_COLLECTION_BATCH + 1}
+    ) SELECT cut.sequence::text AS cut,page.sequence::text,page.event_id,page.envelope
+      FROM cut LEFT JOIN page ON true ORDER BY page.sequence,page.event_id`,
+  [MAIN_RELAY_STREAM_SCOPE, options.dataEpoch, options.sequence, options.eventId])).rows;
+  const cut = result[0]?.cut;
+  if (!cut || BigInt(cut) < BigInt(options.sequence)) {
+    if (options.eventId !== null) throw new EventSourceUnavailable('Event acknowledged prefix regressed');
+    // The primary replay already verified this whole batch prefix, including
+    // a fully delivered batch whose relay ACK is delayed. Do not invent more.
+    return { keys: [], sequence: options.sequence, eventId: null, prefix: options.sequence };
+  }
+  const page = result.filter(row => row.sequence !== null);
+  const keys = page.slice(0, EVENT_COLLECTION_BATCH).map(row => {
+    const receipt = row.envelope?.data?.receipt;
+    if (!receipt || receipt.outcome !== 'succeeded' || receipt.timeStatus !== options.status
+      || !nativeId.test(receipt.event ?? '') || !nativeId.test(receipt.observationRevision ?? '')) {
+      throw new EventSourceUnavailable('Event collection receipt is incomplete');
+    }
+    return { event: receipt.event!, status: options.status, revision: receipt.observationRevision!, sequence: row.sequence! };
+  });
+  if (page.length <= EVENT_COLLECTION_BATCH) return { keys, sequence: cut, eventId: null, prefix: cut };
+  const last = page[EVENT_COLLECTION_BATCH - 1]!, next = page[EVENT_COLLECTION_BATCH]!;
+  return { keys, sequence: last.sequence!, eventId: last.event_id!,
+    prefix: (BigInt(next.sequence!) - 1n).toString() };
+}
+
 interface GraphRow {
   slotPresent?: { value: string };
   eventPresent?: { value: string };

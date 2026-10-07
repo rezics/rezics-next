@@ -7,8 +7,9 @@ import { prepareComponent, RV, type WorkActivationEnvironment } from '../src/mod
 import { contentEvidenceIri, eventTimeSlotIri, EventObservationUnavailable } from '../src/modules/event/observation.ts';
 import { EventTemporalQueries, EventQueryDenied, EventQueryRestart, EventQueryUnavailable,
   type EventQueryInput } from '../src/modules/event/queries.ts';
-import { readEventDependencies, readEventSource, readEventSourceKeys,
+import { readEventCollectionKeys, readEventDependencies, readEventSource, readEventSourceKeys,
   EventSourceUnavailable } from '../src/modules/event/source.ts';
+import { eventEffectFence, effectInsertSql, effectInsertValues, uuidOrdinal } from '../src/modules/event/effects.ts';
 import { outboxEventHandlers } from '../src/modules/event/outbox-event.ts';
 import { GRAPHS } from '../src/modules/work/activate.ts';
 import { UnsupportedEventTime, type EventPoint } from '../src/modules/event/time.ts';
@@ -241,7 +242,7 @@ function journalFixture() {
   } } as unknown as Pool;
   const read = (afterSequence = '0') => readEventSourceKeys(relay, { dataEpoch: 'epoch-event', afterSequence });
   const member = (sequence: string, event = id(1)) => ({ sequence, envelope: {
-    type: 'com.rezics.event.time-changed.v1', data: { receipt: { outcome: 'succeeded', event, timeStatus: 'actual' } } } });
+    type: 'com.rezics.event.time-changed.v1', data: { receipt: { outcome: 'succeeded', event, timeStatus: 'actual', observationRevision: id(10) } } } });
   return { data, calls, read, member };
 }
 
@@ -249,7 +250,7 @@ test('RATE07: populated backfill seeks retained owner batches and counts unrelat
   const { data, calls, read, member } = journalFixture();
   data.headers = [{ sequence: '1', event_count: 0 }, { sequence: '2', event_count: 2 }];
   data.members = [member('2'), { sequence: '2', envelope: { type: 'com.rezics.work.created.v1' } }];
-  expect(await read()).toEqual({ sequence: '2', keys: [{ event: id(1), status: 'actual' }], members: 2, batches: 2 });
+  expect(await read()).toEqual({ sequence: '2', keys: [{ event: id(1), status: 'actual', revision: id(10), sequence: '2' }], members: 2, batches: 2 });
   expect(calls[0]!.values).toEqual(['urn:rezics:stream:main-rdf', 'epoch-event', '0', 32]);
   expect(calls[0]!.text).toContain('sequence>$3::numeric');
   expect(calls[1]!.values).toEqual(['urn:rezics:stream:main-rdf', 'epoch-event', ['1', '2'], 101]);
@@ -313,7 +314,9 @@ function indexedFixture() {
   const checkpoint = { generation: '11111111-1111-4111-8111-111111111111', data_epoch: 'epoch-event',
     relay_sequence: '3', backfill_complete: true, processed: '2', actual_revision: id(101), planned_revision: id(102) };
   const window = { id: '22222222-2222-4222-8222-222222222222', state: 'ready', processed: '2',
-    revision: '1', created_at: '2026-05-01T00:00:00Z', unsupported_actual_count: '0', unsupported_planned_count: '0' };
+    revision: '1', created_at: '2026-05-01T00:00:00Z',
+    interpretation: 'civil-date',grain: 'day',bucket_start: '2026-05-15',bucket_end: '2026-05-15',
+    scan_started_at: '2026-05-01T00:00:00Z',actual_revision: '1',planned_revision: '1',unsupported_actual_count: '0', unsupported_planned_count: '0' };
   const pending = { pending: false, failed: false, updates: false };
   const members = [1, 2].map(number => {
     const retained = retainedSource(env, { event: id(number) });
@@ -328,6 +331,7 @@ function indexedFixture() {
       if (text.includes('SELECT open FROM')) return { rows: [{ open: recovery }] };
       if (text.includes('FROM access.event_temporal_checkpoint')) return { rows: [checkpoint] };
       if (text.includes('SELECT id::text,state')) return { rows: [window] };
+      if (text.includes('FROM access.event_temporal_window_update')) return { rows: [{ pending: pending.updates }] };
       if (text.includes('AS pending')) return { rows: [pending] };
       if (text.includes('FROM access.event_temporal_member')) {
         const after = text.includes('AND (event,time_status)>') ? String(values.at(-2)) : '';
@@ -426,7 +430,7 @@ test('RATE07/RATE08: pages seek the bounded index, hydrate only returned rows an
   expect(seek.values.slice(-2)).toEqual([id(1), 'actual']);
 });
 
-test('RATE07: signed continuations reject tampering, changed queries and relevant collection revisions', async () => {
+test('RATE07: signed continuations reject tampering, changed queries and relevant window revisions', async () => {
   const fixture = indexedFixture();
   const first = await fixture.facade.query(queryInput);
   const token = first.continuation!;
@@ -436,8 +440,10 @@ test('RATE07: signed continuations reject tampering, changed queries and relevan
   await expect(fixture.facade.query({ ...queryInput, continuation: `${body}.${forgedSignature}` })).rejects.toBeInstanceOf(EventQueryRestart);
   await expect(fixture.facade.query({ ...queryInput, pageSize: 2, continuation: token })).rejects.toBeInstanceOf(EventQueryRestart);
   fixture.fuseki.actual = id(999);
+  fixture.checkpoint.actual_revision = id(999);
+  fixture.window.actual_revision = '2';
   await expect(fixture.facade.query({ ...queryInput, continuation: token })).rejects.toBeInstanceOf(EventQueryRestart);
-  expect(fixture.connects()).toBe(connects);
+  expect(fixture.connects()).toBe(connects + 1);
 });
 
 test('RATE07: recovery holds and stale hydrated heads cannot return a cached ready basis', async () => {
@@ -480,4 +486,41 @@ test('RATE07: Event outbox hydration binds its exact receipt before reading reta
   await expect(outboxEventHandlers[0].read(input)).rejects.toThrow('ambiguous');
   receiptRows = [{ receipt: value(receipt) }, { receipt: value('urn:rezics:receipt:other') }];
   await expect(outboxEventHandlers[0].read(input)).rejects.toThrow('ambiguous');
+});
+
+
+test('RATE07: Event collection seek retains a partial batch and uses an acknowledged local prefix', async () => {
+  const calls: string[] = [];
+  let rows = Array.from({ length: 33 }, (_, index) => ({ cut: '900', sequence: '80',
+    event_id: `event-${index.toString().padStart(3, '0')}`, envelope: { data: { receipt: {
+      outcome: 'succeeded', event: id(index + 1), timeStatus: 'actual', observationRevision: id(index + 100),
+    } } } }));
+  const relay = { query: async (text: string) => { calls.push(text); return { rows }; } } as unknown as Pool;
+  const page = await readEventCollectionKeys(relay, { dataEpoch: 'epoch-event', status: 'actual', sequence: '79', eventId: null });
+  expect(page.keys).toHaveLength(32);
+  expect(page).toMatchObject({ sequence: '80', eventId: 'event-031', prefix: '79' });
+  expect(calls[0]).toContain('sequence>$3::numeric');
+  expect(calls[0]).toContain("timeStatus}'='actual'");
+  rows = [rows[32]!];
+  const end = await readEventCollectionKeys(relay, { dataEpoch: 'epoch-event', status: 'actual', sequence: '80', eventId: 'event-031' });
+  expect(end).toMatchObject({ sequence: '900', eventId: null, prefix: '900' });
+  expect(calls[1]).toContain('(sequence,event_id)>($3::numeric,$4::text)');
+});
+
+
+test('RATE07: typed effects fence only unvisited intersecting scans and selected statuses/targets', () => {
+  const window = { id: '22222222-2222-4222-8222-222222222222', interpretation: 'civil-date' as const,
+    grain: 'day' as const, bucket_start: '2026-05-15',bucket_end: '2026-05-15',scan_started_at: '2026-05-01T00:00:00Z' };
+  const scoped = eventEffectFence(window, 'actual', [id(1)]);
+  expect(scoped.text).toContain("u.time_status='actual'");
+  expect(scoped.text).toContain('u.civil_effect &&');
+  expect(scoped.text).toContain('u.unvisited_windows @>');
+  expect(scoped.text).toContain('u.existing_windows @>');
+  expect(scoped.text).toContain('u.target @> ANY');
+  expect(scoped.values[0]).toBe(uuidOrdinal(window.id));
+  expect(eventEffectFence({ ...window, scan_started_at: null }).text).toBe('SELECT false AS pending');
+  expect(eventEffectFence({ ...window, interpretation: 'instant' }).text).toContain('u.unsupported_effect &&');
+  expect(effectInsertSql).toContain("CASE WHEN $3::jsonb IS NULL THEN 'empty'::daterange");
+  expect(effectInsertSql).toContain('ready,civil_effect');
+  expect(effectInsertValues(id(1),'actual',null,null,window.id,false).at(-1)).toBe(false);
 });
