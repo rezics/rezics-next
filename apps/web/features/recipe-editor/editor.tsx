@@ -79,7 +79,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
           {saving ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.saving}</>
             : <><CircleCheckIcon aria-hidden="true" className="size-4" />{t.allSaved}</>}</p>
       </div>
-      <PublishBar snapshot={written} missing={missing} saving={saving} onPublish={() => void publish()} workHref={workHref} t={t} />
+      <PublishBar snapshot={written} missing={missing} onPublish={() => void publish()} workHref={workHref} t={t} />
     </div>
     {published && written.published ? <Alert variant="success" role="status"><CircleCheckIcon aria-hidden="true" />
       <AlertDescription>{t.publishedNotice}</AlertDescription></Alert> : null}

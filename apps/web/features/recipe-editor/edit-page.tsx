@@ -42,7 +42,7 @@ export async function RecipeEditPage({ workRef, id, locale }: { workRef: string;
       signInHref={signInPath(localizedPath(recipeEditHref(workRef), locale))} />;
   }
   if (!header.ok || !actingSubject) {
-    return <EmptyState icon={ChefHatIcon} role="status" tone="destructive" title={t.unavailableTitle} description={t.unavailableBody} />;
+    return <EmptyState icon={ChefHatIcon} role="status" tone="destructive" title={t.unavailableTitle} description={`${t.unavailableBody} DEBUG header=${header.ok ? 'ok' : header.failure} agent=${Boolean(actingSubject)}`} />;
   }
   const work = header.data;
   if (workKind(work.types) !== 'recipe') {
@@ -54,7 +54,7 @@ export async function RecipeEditPage({ workRef, id, locale }: { workRef: string;
     main.v1.works({ id }).metadata.get({ query: { actingSubject } }),
     readNotes(actingSubject, work.id, language),
   ]);
-  if (!recipe.ok) return <EmptyState icon={ChefHatIcon} role="status" tone="destructive" title={t.unavailableTitle} description={t.unavailableBody} />;
+  if (!recipe.ok) return <EmptyState icon={ChefHatIcon} role="status" tone="destructive" title={t.unavailableTitle} description={`${t.unavailableBody} DEBUG recipe=${recipe.failure}`} />;
   return <RecipeEditor work={work.id} mainVersion={work.mainVersion} language={language} actingSubject={actingSubject}
     workHref={globalWorkHref(workRef)} locale={locale} messages={messages[locale]}
     initial={{ recipe: stateOf(recipe.data as RecipePageLike | null), notes,

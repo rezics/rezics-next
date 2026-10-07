@@ -12,9 +12,13 @@ export function missingBeforePublishing({ title, ingredients, steps, notes }: { 
   return { title: !title.trim(), ingredients: ingredients === 0, steps: steps === 0, notes: !notes.trim() };
 }
 
-/** The state of the recipe and the one action that changes it: publish, or publish what changed since. */
-export function PublishBar({ snapshot, missing, saving, onPublish, workHref, t }: {
-  snapshot: NotesSnapshot; missing: ReturnType<typeof missingBeforePublishing>; saving: boolean; onPublish: () => void; workHref: string; t: Copy;
+/**
+ * The state of the recipe and the one action that changes it: publish, or publish what changed since.
+ * It stays enabled while a field's save is in flight: leaving the notes field to click it starts that
+ * save, and the publish waits for it.
+ */
+export function PublishBar({ snapshot, missing, onPublish, workHref, t }: {
+  snapshot: NotesSnapshot; missing: ReturnType<typeof missingBeforePublishing>; onPublish: () => void; workHref: string; t: Copy;
 }) {
   const needs = [missing.title ? t.needTitle : null, missing.ingredients ? t.needIngredient : null,
     missing.steps ? t.needStep : null, missing.notes ? t.needNotes : null].filter((item): item is string => item !== null);
@@ -22,7 +26,7 @@ export function PublishBar({ snapshot, missing, saving, onPublish, workHref, t }
   return <div className="flex flex-wrap items-center gap-2">
     {snapshot.published ? <Badge variant="success"><CircleCheckIcon aria-hidden="true" />{t.statePublished}</Badge>
       : <Badge variant="outline">{t.stateDraft}</Badge>}
-    <Button type="button" onClick={onPublish} disabled={blocked || saving || snapshot.publishing}
+    <Button type="button" onClick={onPublish} disabled={blocked || snapshot.publishing}
       aria-describedby={blocked ? 'publish-needs' : undefined} className="pointer-coarse:h-11">
       <SendIcon aria-hidden="true" />{snapshot.publishing ? t.publishing : snapshot.published ? t.publishUpdate : t.publish}</Button>
     {snapshot.published ? <Link href={workHref} className={buttonVariants({ variant: 'outline', className: 'pointer-coarse:h-11' })}>
