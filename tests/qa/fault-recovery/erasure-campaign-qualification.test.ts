@@ -22,7 +22,7 @@ import {
   workEnvironment,
   type FixtureSampleCall,
 } from '../../../scripts/fixture/smoke.ts';
-import { fixtureProject } from '../../../scripts/fixture/stack.ts';
+import { fixtureProject, projectRunning } from '../../../scripts/fixture/stack.ts';
 import {
   assertPinnedState,
   docker,
@@ -56,6 +56,7 @@ const CANDIDATE_BASE = '/fuseki/databases/campaign-candidate';
 const CANDIDATE = `${CANDIDATE_BASE}/databases/rezics`;
 const MEASURE = '/fuseki/databases/campaign-measure';
 const PREPARATION_ACTIVE_BUDGET_MS = 600_000;
+const SOURCE_START_ACTIVE_BUDGET_MS = 180_000;
 const digest = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
 const literal = (value: string) => JSON.stringify(value);
 
@@ -156,6 +157,7 @@ test(
       const restoreEvidenceSHA256: Record<string, string> = {};
       evidence.restoreEvidenceSHA256 = restoreEvidenceSHA256;
       const restoreTimings: RestorePreparationTiming[] = [];
+      const sourceStartups: SourceStartup[] = [];
       const autoRestoreInvocations: {
         target: string;
         activeMs: number;
@@ -188,7 +190,9 @@ test(
             if (!result.ok || result.activeElapsedMs > PREPARATION_ACTIVE_BUDGET_MS) {
               if (readFileExists(restoreEvidencePath)) {
                 const failedEvidence = readFileSync(restoreEvidencePath);
-                writeFileSync(retainedRestorePath, failedEvidence, { mode: 0o600 });
+                writeFileSync(retainedRestorePath, failedEvidence, {
+                  mode: 0o600,
+                });
                 restoreEvidenceSHA256[ids[index]!] = digest(failedEvidence);
               }
               throw new Error(`fixture:restore failed; inspect restore-command-${index}.log`);
@@ -228,40 +232,70 @@ test(
           autoInvocations: autoRestoreInvocations,
         };
         persist();
-        const pins = await phase(`source-${index}-pins`, async () => {
-          const inspected = await inspectFusekiState(stack.runner, stack.dockerEnv, stack.fuseki);
-          assertPinnedState(
-            inspected,
-            repositoryPins(root, stack.dockerEnv, stack.stateVolume, [
-              `${fixtureProject(manifest.id)}_fuseki_data`,
-              stacks[1 - index]!.stateVolume,
-            ]),
-          );
-          return inspected;
-        });
-        (evidence.copies as unknown[]).push({
-          id: ids[index],
-          stateVolume: stack.stateVolume,
-          pins,
-        });
-        await phase(`source-${index}-work-count`, async () => {
-          const count = await stack.fuseki.query(
-            `SELECT (COUNT(?work) AS ?n) WHERE { GRAPH <${GRAPHS.current}> { ?work a <https://schema.org/CreativeWork> } }`,
-          );
-          expect(Number(count.results?.bindings[0]?.n?.value)).toBe(PROFILES[profile].works);
-        });
         const owners = {
-          access: new Pool({ connectionString: stack.apps.ACCESS_DATABASE_URL, max: 1 }),
-          content: new Pool({ connectionString: stack.apps.CONTENT_DATABASE_URL, max: 1 }),
+          access: new Pool({
+            connectionString: stack.apps.ACCESS_DATABASE_URL,
+            max: 1,
+          }),
+          content: new Pool({
+            connectionString: stack.apps.CONTENT_DATABASE_URL,
+            max: 1,
+          }),
         };
         pools.push(owners.access, owners.content);
         sourceOwners.push(owners);
-        await phase(`source-${index}-samples`, () =>
-          checkSamples(stack.apps, manifest, owners, (call, read) =>
-            phase(`source-${index}-sample-${call.index}-${call.operation}`, read, call),
-          ),
-        );
-        await phase(`source-${index}-stop`, () => stack.runner.stop());
+        await verifySourceCopy(index, phase, {
+          start: () =>
+            startSourceCopy(
+              ids[index]!,
+              {
+                running: () => projectRunning(stack.project, stack.dockerEnv),
+                up: () =>
+                  runQaAdmissionChildAsync(
+                    root,
+                    'task',
+                    ['stack:up', '--', ...stack.args],
+                    SOURCE_START_ACTIVE_BUDGET_MS,
+                  ),
+              },
+              (record, output) => {
+                sourceStartups.push(record);
+                evidence.sourceStartup = sourceStartups;
+                if (output !== undefined)
+                  writeFileSync(join(evidenceDirectory, `source-start-${index}.log`), output, {
+                    mode: 0o600,
+                  });
+                persist();
+              },
+            ),
+          pins: async () => {
+            const inspected = await inspectFusekiState(stack.runner, stack.dockerEnv, stack.fuseki);
+            assertPinnedState(
+              inspected,
+              repositoryPins(root, stack.dockerEnv, stack.stateVolume, [
+                `${fixtureProject(manifest.id)}_fuseki_data`,
+                stacks[1 - index]!.stateVolume,
+              ]),
+            );
+            (evidence.copies as unknown[]).push({
+              id: ids[index],
+              stateVolume: stack.stateVolume,
+              pins: inspected,
+            });
+            return inspected;
+          },
+          count: async () => {
+            const count = await stack.fuseki.query(
+              `SELECT (COUNT(?work) AS ?n) WHERE { GRAPH <${GRAPHS.current}> { ?work a <https://schema.org/CreativeWork> } }`,
+            );
+            expect(Number(count.results?.bindings[0]?.n?.value)).toBe(PROFILES[profile].works);
+          },
+          samples: () =>
+            checkSamples(stack.apps, manifest, owners, (call, read) =>
+              phase(`source-${index}-sample-${call.index}-${call.operation}`, read, call),
+            ),
+          stop: () => stack.runner.stop(),
+        });
       }
       const corpus = fixtureCorpus(profile, manifest.seed);
       const targets = Array.from({ length: profile === 'medium' ? 64 : 4 }, (_, i) =>
@@ -279,7 +313,10 @@ test(
       ]);
       const campaignFiles: string[] = [];
       for (const [index, stack] of stacks.entries()) {
-        const relay = new Pool({ connectionString: stack.apps.ACCOUNT_RELAY_DATABASE_URL, max: 1 });
+        const relay = new Pool({
+          connectionString: stack.apps.ACCOUNT_RELAY_DATABASE_URL,
+          max: 1,
+        });
         pools.push(relay);
         const pairs: { iri: string; epoch: string }[] = [];
         for (let offset = 0; offset < targets.length; offset += Math.ceil(targets.length / 2)) {
@@ -291,7 +328,10 @@ test(
             principalId: randomUUID(),
             admissionId: randomUUID(),
             authorityEpoch: '0',
-            targets: group.map((item) => ({ kind: 'content_revision', ref: item.contentRevision })),
+            targets: group.map((item) => ({
+              kind: 'content_revision',
+              ref: item.contentRevision,
+            })),
           });
           pairs.push(
             ...group.map((item) => ({
@@ -384,6 +424,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
         performance.now() - preparationStarted,
         autoRestoreInvocationWallMs,
         harnessSetupMs,
+        sourceStartupAdmissionWaitMs(sourceStartups),
       );
       evidence.preparation = preparation;
       persist();
@@ -460,7 +501,10 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
           name,
           image: pinnedImage(),
           volume: stack.stateVolume,
-          secrets: { ...fusekiSecrets(stack.composeEnv), FUSEKI_BASE: CANDIDATE_BASE },
+          secrets: {
+            ...fusekiSecrets(stack.composeEnv),
+            FUSEKI_BASE: CANDIDATE_BASE,
+          },
           command: [
             'sh',
             '-ec',
@@ -845,23 +889,108 @@ function localPreparationTiming(
   localWallMs: number,
   qualifiedAutoRestoreWallMs: number,
   harnessActiveMs: number,
+  sourceStartupAdmissionWaitMs = 0,
 ) {
   if (
-    [localWallMs, qualifiedAutoRestoreWallMs, harnessActiveMs].some(
+    [localWallMs, qualifiedAutoRestoreWallMs, harnessActiveMs, sourceStartupAdmissionWaitMs].some(
       (value) => !Number.isFinite(value) || value < 0,
     ) ||
-    qualifiedAutoRestoreWallMs > localWallMs
+    qualifiedAutoRestoreWallMs + sourceStartupAdmissionWaitMs > localWallMs
   )
     throw new Error('Invalid campaign-local preparation timing');
   // The harness timestamp already excludes its admission. Only complete measured
-  // auto-restore calls are excluded; probes, seed/custody work and local startup stay.
+  // auto-restore calls and the measured admission wait of source copy starts are
+  // excluded; probes, seed/custody work and the copies' actual startup stay.
   return {
-    activeMs: Math.round(localWallMs - qualifiedAutoRestoreWallMs + harnessActiveMs),
+    activeMs: Math.round(
+      localWallMs - qualifiedAutoRestoreWallMs - sourceStartupAdmissionWaitMs + harnessActiveMs,
+    ),
     localWallMs: Math.round(localWallMs),
     qualifiedAutoRestoreWallMs: Math.round(qualifiedAutoRestoreWallMs),
+    sourceStartupAdmissionWaitMs: Math.round(sourceStartupAdmissionWaitMs),
     harnessActiveMs: Math.round(harnessActiveMs),
     activeCeilingMs: PREPARATION_ACTIVE_BUDGET_MS,
   };
+}
+
+interface SourceStartup {
+  target: string;
+  outcome: 'started' | 'already-running' | 'failed';
+  activeMs: number;
+  admissionWaitMs: number;
+  wallMs: number;
+}
+
+interface SourceStartChild {
+  ok: boolean;
+  output: string;
+  elapsedMs: number;
+  activeElapsedMs: number;
+  admissionWaitMs: number;
+}
+
+/** A supplied copy is stopped; a copy fixture:restore just left running is not
+ * started again, so its start work is counted once, by the qualified restore. */
+async function startSourceCopy(
+  target: string,
+  deps: { running(): boolean; up(): Promise<SourceStartChild> },
+  report: (record: SourceStartup, output?: string) => void,
+): Promise<SourceStartup> {
+  if (deps.running()) {
+    const record: SourceStartup = {
+      target,
+      outcome: 'already-running',
+      activeMs: 0,
+      admissionWaitMs: 0,
+      wallMs: 0,
+    };
+    report(record);
+    return record;
+  }
+  const child = await deps.up();
+  const timing = [child.elapsedMs, child.activeElapsedMs, child.admissionWaitMs];
+  if (
+    timing.some((value) => !Number.isSafeInteger(value) || value < 0) ||
+    child.activeElapsedMs + child.admissionWaitMs !== child.elapsedMs
+  )
+    throw new Error('Source copy start active/admission/wall timing does not reconcile');
+  const record: SourceStartup = {
+    target,
+    outcome:
+      child.ok && child.activeElapsedMs <= SOURCE_START_ACTIVE_BUDGET_MS ? 'started' : 'failed',
+    activeMs: child.activeElapsedMs,
+    admissionWaitMs: child.admissionWaitMs,
+    wallMs: child.elapsedMs,
+  };
+  report(record, child.output);
+  if (record.outcome === 'failed')
+    throw new Error(`Source copy ${target} did not start; inspect its source-start log`);
+  return record;
+}
+
+function sourceStartupAdmissionWaitMs(records: readonly SourceStartup[]): number {
+  return records.reduce((total, record) => total + record.admissionWaitMs, 0);
+}
+
+/** Start, pin, count, sample and stop in this order; a refusal stops all later
+ * work, and only the final step stops the copy. */
+async function verifySourceCopy<P>(
+  index: number,
+  phase: <T>(name: string, work: () => T | Promise<T>) => Promise<T>,
+  steps: {
+    start(): Promise<unknown>;
+    pins(): Promise<P>;
+    count(): Promise<unknown>;
+    samples(): Promise<unknown>;
+    stop(): unknown;
+  },
+): Promise<P> {
+  await phase(`source-${index}-start`, steps.start);
+  const pins = await phase(`source-${index}-pins`, steps.pins);
+  await phase(`source-${index}-work-count`, steps.count);
+  await phase(`source-${index}-samples`, steps.samples);
+  await phase(`source-${index}-stop`, steps.stop);
+  return pins;
 }
 
 function readFileExists(path: string): boolean {
@@ -1280,7 +1409,11 @@ test('OPS10: campaign source attribution retains nested sample identity, success
           phases,
           details,
           persist,
-          { index: 50_000, operation: 'main-revision', target: 'urn:rezics:test:main-revision' },
+          {
+            index: 50_000,
+            operation: 'main-revision',
+            target: 'urn:rezics:test:main-revision',
+          },
         ),
       phases,
       details,
@@ -1289,7 +1422,11 @@ test('OPS10: campaign source attribution retains nested sample identity, success
   ).rejects.toBe(error);
   expect(details['source-0-sample-50000-main-revision']).toMatchObject({
     status: 'failed',
-    sample: { index: 50_000, operation: 'main-revision', target: 'urn:rezics:test:main-revision' },
+    sample: {
+      index: 50_000,
+      operation: 'main-revision',
+      target: 'urn:rezics:test:main-revision',
+    },
     error: {
       name: 'Error',
       message: 'sample failed',
@@ -1483,6 +1620,7 @@ test('OPS10: campaign preparation excludes only separately qualified auto restor
     activeMs: 167_852,
     localWallMs: 900_000,
     qualifiedAutoRestoreWallMs: 744_148,
+    sourceStartupAdmissionWaitMs: 0,
     harnessActiveMs: 12_000,
     activeCeilingMs: 600_000,
   });
@@ -1499,6 +1637,168 @@ test('OPS10: campaign preparation excludes only separately qualified auto restor
     [1, Number.POSITIVE_INFINITY, 0],
   ])
     expect(() => localPreparationTiming(wall!, restore!, harness!)).toThrow();
+});
+
+const startChild = (
+  activeElapsedMs: number,
+  admissionWaitMs: number,
+  ok = true,
+): SourceStartChild => ({
+  ok,
+  output: 'stack:up output',
+  elapsedMs: activeElapsedMs + admissionWaitMs,
+  activeElapsedMs,
+  admissionWaitMs,
+});
+
+test('OPS10: supplied copy starts once, before its first native query, and stops once after verification', async () => {
+  const calls: string[] = [];
+  const records: SourceStartup[] = [];
+  const phase = async <T>(name: string, work: () => T | Promise<T>) => {
+    calls.push(`phase:${name}`);
+    return await work();
+  };
+  await verifySourceCopy(0, phase, {
+    start: () =>
+      startSourceCopy(
+        'fixture-a',
+        {
+          running: () => false,
+          up: async () => {
+            calls.push('up');
+            return startChild(40_000, 5_000);
+          },
+        },
+        (record) => records.push(record),
+      ),
+    pins: async () => calls.push('pins'),
+    count: async () => calls.push('count'),
+    samples: async () => calls.push('samples'),
+    stop: () => calls.push('stop'),
+  });
+  expect(calls).toEqual([
+    'phase:source-0-start',
+    'up',
+    'phase:source-0-pins',
+    'pins',
+    'phase:source-0-work-count',
+    'count',
+    'phase:source-0-samples',
+    'samples',
+    'phase:source-0-stop',
+    'stop',
+  ]);
+  expect(records).toEqual([
+    {
+      target: 'fixture-a',
+      outcome: 'started',
+      activeMs: 40_000,
+      admissionWaitMs: 5_000,
+      wallMs: 45_000,
+    },
+  ]);
+});
+
+test('OPS10: a copy fixture:restore left running is not started or counted again', async () => {
+  let ups = 0;
+  const records: SourceStartup[] = [];
+  const record = await startSourceCopy(
+    'fixture-auto',
+    {
+      running: () => true,
+      up: async () => {
+        ups++;
+        return startChild(1, 0);
+      },
+    },
+    (value) => records.push(value),
+  );
+  expect(ups).toBe(0);
+  expect(record).toEqual({
+    target: 'fixture-auto',
+    outcome: 'already-running',
+    activeMs: 0,
+    admissionWaitMs: 0,
+    wallMs: 0,
+  });
+  expect(records).toEqual([record]);
+});
+
+test('OPS10: a failed or over-budget copy start is persisted and refuses all later work', async () => {
+  for (const child of [startChild(1_000, 0, false), startChild(180_001, 0)]) {
+    const calls: string[] = [];
+    const records: SourceStartup[] = [];
+    const logs: (string | undefined)[] = [];
+    const phase = async <T>(name: string, work: () => T | Promise<T>) => {
+      calls.push(name);
+      return await work();
+    };
+    const later = (name: string) => async () => void calls.push(name);
+    await expect(
+      verifySourceCopy(1, phase, {
+        start: () =>
+          startSourceCopy(
+            'fixture-b',
+            { running: () => false, up: async () => child },
+            (record, output) => {
+              records.push(record);
+              logs.push(output);
+            },
+          ),
+        pins: later('pins'),
+        count: later('count'),
+        samples: later('samples'),
+        stop: later('stop'),
+      }),
+    ).rejects.toThrow('did not start');
+    expect(calls).toEqual(['source-1-start']);
+    expect(records.map((record) => record.outcome)).toEqual(['failed']);
+    expect(logs).toEqual(['stack:up output']);
+  }
+  await expect(
+    startSourceCopy(
+      'fixture-b',
+      {
+        running: () => false,
+        up: async () => ({ ...startChild(10, 5), admissionWaitMs: 50 }),
+      },
+      () => {},
+    ),
+  ).rejects.toThrow('does not reconcile');
+});
+
+test('OPS10: local campaign time keeps actual copy-start work and excludes only its measured admission', () => {
+  const starts = [
+    {
+      target: 'a',
+      outcome: 'started',
+      activeMs: 120_000,
+      admissionWaitMs: 30_000,
+      wallMs: 150_000,
+    },
+    {
+      target: 'b',
+      outcome: 'started',
+      activeMs: 110_000,
+      admissionWaitMs: 0,
+      wallMs: 110_000,
+    },
+  ] satisfies SourceStartup[];
+  const admission = sourceStartupAdmissionWaitMs(starts);
+  expect(admission).toBe(30_000);
+  // 400s local wall = 260s of start wall + 140s of other work; harness admission is not subtracted twice.
+  const timing = localPreparationTiming(400_000, 0, 12_000, admission);
+  expect(timing.activeMs).toBe(400_000 - 30_000 + 12_000);
+  expect(timing.activeMs).toBeGreaterThanOrEqual(230_000 + 140_000);
+  expect(timing.sourceStartupAdmissionWaitMs).toBe(30_000);
+  // Omitting the start work from the wall cannot help: a too-large wait is invalid, and
+  // the same slow starts still push the aggregate over the 600s ceiling.
+  expect(() => localPreparationTiming(20_000, 0, 0, 30_000)).toThrow();
+  expect(() => localPreparationTiming(400_000, 380_000, 0, 30_000)).toThrow();
+  expect(localPreparationTiming(640_000, 0, 12_000, admission).activeMs).toBeGreaterThan(
+    PREPARATION_ACTIVE_BUDGET_MS,
+  );
+  expect(localPreparationTiming(400_000, 0, 12_000).activeMs).toBe(412_000);
 });
 
 async function retainedCustody(
