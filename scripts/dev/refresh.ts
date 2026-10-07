@@ -16,8 +16,7 @@ import { dirname, join } from 'node:path';
 
 export function appHostSourceHash(root: string): string {
   const digest = createHash('sha256');
-  for (const path of ['apphost/apphost.mts', 'scripts/dev/refresh.ts'])
-    digest.update(readFileSync(join(root, path)));
+  digest.update(readFileSync(join(root, 'apphost/apphost.mts')));
   return digest.digest('hex');
 }
 

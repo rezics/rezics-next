@@ -19,6 +19,7 @@ import { activeBackend,
 import { inspectRefresh, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
   refreshHeavyLockHeld, refreshIsCurrent, refreshProcessAlive, refreshStorageDefinitionChanged, rehearseRefreshMigrations,
   waitRefreshReady} from '../refresh-stack.ts';
+import { refreshSharedStack } from '../refresh-stack.ts';
 import { inspectOfficialZoneApprovals } from '../seed/official-zones-step.ts';
 import { officialPackageSlugs, officialSourceDigest } from '../seed/official-theme-step.ts';
 import { officialTheme } from '../seed/official-plan.ts';
@@ -111,6 +112,36 @@ console.log(JSON.stringify({ revision, url: app.server!.url.toString() }));
       },
     };
   }
+
+  test('coalesced waiting refresh stages committed main at admission, including a later merge', async () => {
+    const { dir, stack, revision } = repository();
+    const lock = join(dir, '.temp/goal-orchestration/qa-slots/heavy');
+    let queued: Promise<unknown> | undefined;
+    try {
+      activateBackend(stack, stageBackend(dir, stack, revision));
+      mkdirSync(lock, { recursive: true });
+      writeFileSync(join(lock, 'pid'), String(process.pid));
+      queued = refreshSharedStack(dir, ['--wait']).catch(error => error);
+      const duplicate = refreshSharedStack(dir, ['--wait']);
+      await expect(duplicate).resolves.toBeUndefined();
+      backendCommand(dir, 'git', ['commit', '--allow-empty', '-m', 'Merge while refresh waits']);
+      const merged = backendCommand(dir, 'git', ['rev-parse', 'HEAD']);
+      const candidate = join(stack, 'backend-revisions', merged);
+      expect(existsSync(candidate)).toBe(false);
+      rmSync(lock, { recursive: true });
+      // Missing dev.env intentionally stops this stub stack at inspection,
+      // before it can issue any Aspire, Docker or owner-storage commands.
+      const result = await queued;
+      expect(result).toBeInstanceOf(Error);
+      expect(String(result)).toContain('Refresh failed at inspect');
+      expect(readFileSync(join(candidate, '.temp/backend-ready'), 'utf8')).toBe(merged);
+      expect(activeBackend(stack)).toBe(join(stack, 'backend-revisions', revision));
+    } finally {
+      rmSync(lock, { recursive: true, force: true });
+      await queued;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30_000);
 
   test('a no-op main commit holds the serving revision until a code-only refresh switches and restarts', async () => {
     const { dir, stack, revision } = repository();

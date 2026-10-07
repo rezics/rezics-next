@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { ACCOUNTS_PORT, appEnvironment, assertSavedStackRawUpdate, assertSavedStackStorage,
   composeProcessEnvironment, ensureSecrets,
   parseOptions, projectName, stackDirectory, stackMemorySettings } from './config.ts';
@@ -51,7 +51,9 @@ test('P0.1 stack credentials and lineage persist across starts and remain privat
   expect(apps.CONTENT_DATABASE_URL).toContain(`:${first.REZICS_CONTENT_PASSWORD}@127.0.0.1:5432/content`);
   expect(apps.MAIN_RELAY_DATABASE_URL).toContain(`:${first.REZICS_RELAY_PASSWORD}@127.0.0.1:5432/relay`);
   expect(apps.MAIN_RELAY_CONSUMER).toBe('main-graph-v1');
-  expect(apps.MAIN_OBJECT_DIRECTORY).toBe(join(dir, 'objects'));
+  expect(apps.MAIN_OBJECT_DIRECTORY).toBe(resolve(dir, 'objects'));
+  expect(apps.MAIN_CANDIDATE_DIRECTORY).toBe(resolve(dir, 'candidates'));
+  expect(apps.MAIN_OPEN_LIBRARY_FIXTURE_ROOT).toBe(resolve(dir, '../../..'));
   expect(apps.MAIN_S3_ENDPOINT).toBe(`http://127.0.0.1:${first.RUSTFS_PORT}`);
   expect(apps.MAIN_S3_ACCESS_KEY).toBe(first.RUSTFS_ACCESS_KEY);
   expect(apps.MAIN_S3_SECRET_KEY).toBe(first.RUSTFS_SECRET_KEY);

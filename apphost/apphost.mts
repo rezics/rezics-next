@@ -15,10 +15,10 @@
 // process receives only the variables its envalid spec declares; secrets are
 // Aspire secret parameters, and service addresses flow through endpoint
 // references so ports can be fixed or random.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { mainSpec, relaySpec } from '../services/main/src/config.ts';
-import { appHostSourceHash, backendExecutable, ensureBackend, readPendingRefresh } from '../scripts/dev/refresh.ts';
 import { accountSpec } from '../services/account/src/config.ts';
 import { webSpec } from '../apps/web/features/config/env.ts';
 import { accountsSpec } from '../apps/accounts/features/config/env.ts';
@@ -80,12 +80,35 @@ if (mode === 'frontend') {
   // its issuer URL is built from them, so they bind directly.
   const fixed = mode === 'main';
   const stack = resolve(envFile, '..');
-  if (fixed) ensureBackend(root, stack);
-  if (fixed) writeFileSync(join(stack, 'apphost-hash'), appHostSourceHash(root));
-  const holdWriters = fixed && Boolean(readPendingRefresh(stack)?.mutatingStep);
+  // The dev CLI/refresh prepares this pointer. AppHost only consumes stack
+  // files; its Node-only build and cold startup need no development scripts.
+  const backendDirectory = join(stack, 'backend');
+  let holdWriters = false;
+  if (fixed) {
+    if (!existsSync(backendDirectory)) throw new Error('Pinned backend is missing; prepare it with task dev');
+    const pendingPath = join(stack, 'refresh-pending');
+    const pending = existsSync(pendingPath) ? JSON.parse(readFileSync(pendingPath, 'utf8')) as {
+      pid: number; refreshId: string; mutatingStep?: string;
+    } : undefined;
+    const checkpointPath = join(stack, 'refresh.json');
+    const checkpoint = existsSync(checkpointPath) ? JSON.parse(readFileSync(checkpointPath, 'utf8')) as {
+      refreshId?: string;
+    } : undefined;
+    if (pending && pending.refreshId !== checkpoint?.refreshId) {
+      // Re-check after CLI preparation: refresh may have started in between.
+      try { process.kill(pending.pid, 0); throw new Error('A backend refresh is running; AppHost startup cannot change its revision'); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+      holdWriters = Boolean(pending.mutatingStep);
+    }
+    writeFileSync(join(stack, 'apphost-hash'), createHash('sha256')
+      .update(readFileSync(join(root, 'apphost/apphost.mts'))).digest('hex'));
+  }
   const start = <T extends { withExplicitStart(): T }>(resource: T): T => holdWriters ? resource.withExplicitStart() : resource;
-  const executable = (preload: string, entry: string) =>
-    backendExecutable(mode, stack, preload, entry);
+  const executable = (preload: string, entry: string) => fixed
+    ? { executable: 'sh', args: ['-c', 'set -e; cd "$1"; shift; exec bun "$@"',
+      'backend', backendDirectory, '--preload', preload, entry] }
+    : { executable: 'bun', args: ['--preload', preload,
+      ...(entry.endsWith('/relay.ts') ? [] : ['--watch']), entry] };
   const accountCommand = executable(
     './services/account/src/telemetry.ts',
     'services/account/src/index.ts',
