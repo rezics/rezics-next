@@ -13,6 +13,8 @@ import { WORK_READ_COST } from '../../../services/main/src/modules/work/read-con
 import { DisclosureStore } from '../../../services/main/src/modules/disclosure/read.ts';
 import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
 import { ownerEvidenceCapture } from '../../../services/main/src/modules/governance/evidence.ts';
+import { ownerModerationEffects } from '../../../services/main/src/modules/governance/effects.ts';
+import { ContentModeration } from '../../../services/content/src/moderation.ts';
 import { PROTECTION_RULE } from '../../../services/main/src/modules/protection/schema.ts';
 import { rightsRoutes } from '../../../services/main/src/routes/rights.ts';
 
@@ -47,7 +49,8 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
     if (rows.length > 1) throw new Error('Governance target head is ambiguous');
     return rows[0]?.head?.value ?? null;
   } }, { current: async ref => ref === 'urn:rezics:rule:source-rights'
-    ? { revision: 'v1', digest: f.ruleDigest } : null });
+    ? { revision: 'v1', digest: f.ruleDigest } : null },
+  ownerModerationEffects(new ContentModeration(f.pool), f.env));
   const rightsApp = new Elysia().use(rightsRoutes({ environment: f.env, account: f.account.verifier,
     access: f.access, governance: { store: governance }, rights: { store: f.rightsStore } }));
   const rightsCall = (path: string, body: object, token: string, key = randomUUID()) => rightsApp.handle(
@@ -142,14 +145,17 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
     const sample = { label, graphCalls, graphTransportBytes: graphBytes, ownerSql, workProbes, ms };
     evidence.push(sample);
     console.log('Composition target batch cost', JSON.stringify(sample));
+    // The graph-owned restriction moves the dataset cut; the read retries once
+    // under the same production call/byte/deadline envelope.
+    const attempts = label === 'rights-race-exact' ? 2 : 1;
     expect(graphCalls).toBeGreaterThan(0);
     expect(graphCalls).toBeLessThanOrEqual(WORK_READ_COST.graphCalls);
-    expect(graphCalls).toBeLessThanOrEqual(authenticated ? 60 : 40);
+    expect(graphCalls).toBeLessThanOrEqual((authenticated ? 60 : 40) * attempts);
     expect(graphBytes).toBeGreaterThan(0);
     expect(graphBytes).toBeLessThanOrEqual(WORK_READ_COST.graphBytes);
     expect(ms).toBeLessThan(WORK_READ_COST.deadlineMs);
     expect(ownerSql).toBeGreaterThan(0);
-    expect(ownerSql).toBeLessThanOrEqual(authenticated ? 64 : 48);
+    expect(ownerSql).toBeLessThanOrEqual((authenticated ? 64 : 48) * attempts);
     // Public targets cannot turn a fixed range into one private owner probe per target.
     if (!authenticated) expect(workProbes).toBe(0);
     return body;
@@ -176,7 +182,12 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
       rationale: 'Withhold the disputed title during review.', disclosure: 'parties', idempotencyKey: decisionKey };
     return async () => {
       await f.json(await rightsCall('/v1/rights/restrictions', body, f.account.tokenB, decisionKey), 202);
-      await f.json(await rightsCall('/v1/rights/restrictions', body, f.account.tokenB, decisionKey), 200);
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const response = await rightsCall('/v1/rights/restrictions', body, f.account.tokenB, decisionKey);
+        if (response.status === 200) { await f.json(response, 200); return; }
+        await f.json(response, 202);
+      }
+      throw new Error('Rights restriction did not settle within its bounded notice steps');
     };
   };
   try {
