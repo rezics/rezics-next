@@ -1,13 +1,16 @@
 import { spawnSync } from 'node:child_process';
 import { accessSync, constants, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 /** Containers started for QA carry this label. Compose stacks and the dev stack do not. */
 export const reapOwnerLabel = 'rezics.reap-owner';
 const dockerTimeoutMs = 30_000;
 
+/** Repository path of the executable placed first on a test process PATH. */
+export const dockerShimExecutable = 'scripts/qa/docker-shim/docker';
+
 export function dockerShimDirectory(): string {
-  return join(import.meta.dir, 'docker-shim');
+  return resolve(import.meta.dir, '..', '..', dirname(dockerShimExecutable));
 }
 
 /** Clock ticks since boot, field 22 of /proc/pid/stat. The command name can contain spaces, so count after the last ')'. */
