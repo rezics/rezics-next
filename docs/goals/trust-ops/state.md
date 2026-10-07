@@ -8,9 +8,9 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 20:47 UTC. Serving roots/membership remains healthy at
-native25ce9fb19154/model fa39610, with Content1705/1706 applied and the Main
-hold released. No Trust refresh is queued. G-1398 attempt2 is qualifying its
+Checkpoint 2026-10-07 20:47 UTC. Serving frozen revisionf4c9d9301098 is healthy at
+native25ce9fb19154/model fa39610, with Content1705/1706 and erased-pin45181
+active. The Main hold is released; signal36f887 awaits next activation. No Trust refresh is queued. G-1398 attempt2 is qualifying its
 new private Access history reader and migration1774 in isolated PG/native tests.
 G-1351's two commits are rebased to a7b4d5cf9 with current GroupRole/qualifier
 custody and restoredContent hooks preserved; attempt6 checks this exact current
@@ -395,3 +395,10 @@ refresh. Announce behavior activations; mandatory migration/model refreshes stil
 apply. Kernel erased-pin repair45181d8fd39d is landed and source-qualified with
 10143actual assertions; no source/native/schema change is conflated with serving
 activation or complete operator retry/private payload/WAL destruction.
+
+Quota routing checkpoint20:49UTC: codex82%/codex-187%; let the five running
+workers reach handoff and send subsequent new/resumed slices to appropriate
+alternate engines, keeping manager turns short. Do not use Grok/Cursor for
+assertion-integrity or flaky-test work. Program's proposed banked reset conflicts
+with unchanged standing direction4 forbidding reset credits; the conflict is
+mailed, no reset action or external credential use is authorized/inferred here.
