@@ -18,7 +18,9 @@ remain attached to their original inputs. Whole Goal remains active.
 - Root G1330 disk-backed MODULE fixture mount repair022014948 is in normal164
   affected/guard gate19975, parent960s/native900s and all original per-case caps
   unchanged. Log `.temp/kernel/native-filesystem-merge-2359.log`; PID3113634,
-  child3113687. BuildKit locked cache `/build/tmp` and identical gate tmpdir ENV;
+  child3113687. Manager-owned Task wake15666 watches this exact process identity
+  and mails kernel on exit; log `.temp/kernel/filesystem-gate-wake.log`.
+  Coordinator resumes this session for the mandatory refresh/retry. BuildKit locked cache `/build/tmp` and identical gate tmpdir ENV;
   no RAM filesystem or test skips. Mandatory refresh follows accepted landing.
 - G1373 ac99ca0d1 source review ACCEPT, actual17/130 QA234220-76abd4. Ordinary
   draft uses one authorization ASK plus two owner reads under one deadline;
