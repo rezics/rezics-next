@@ -53,6 +53,8 @@ export const ZonePresentationV1 = Type.Object({
   { additionalProperties: false }), { maxItems: 6 }),
   modules: Type.Array(Type.Object({
     id: slug,
+    // docs/contracts/api.md "Platform exposure": introducing a third-party block
+    // representation requires requireSelectedPlatformCapability and a refusal test.
     type: Type.Union([Type.Literal('hero-carousel'), Type.Literal('chip-nav'),
       Type.Literal('announcement'), Type.Literal('shelf'), Type.Literal('ranking'),
       Type.Literal('editorial-list'), Type.Literal('quote-stream'), Type.Literal('people'),
