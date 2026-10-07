@@ -64,22 +64,32 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
     const syntaxGraph = new FusekiClient(Bun.env.FUSEKI_URL);
     const fakeGraph = { query: async (sparql: string, budget: number) => {
       await syntaxGraph.query(sparql, budget);
-      return { results: { bindings: [{ author: { type: 'uri', value: member } }] } };
+      if (sparql.includes('ASK {') && sparql.includes('VALUES ?author')) {
+        const candidates = sparql.match(/VALUES\s+\?author\s*\{([^}]*)\}/)?.[1] ?? '';
+        return { boolean: candidates.includes(`<${member}>`) };
+      }
+      const after = sparql.match(/FILTER\(STR\(\?author\) > "([^"]+)"\)/)?.[1];
+      return { results: { bindings: after && member <= after ? []
+        : [{ author: { type: 'uri', value: member } }] } };
     } } as unknown as FusekiClient;
     const sourceAccess = { connect: () => access.connect(),
       query: (statement: string, params: unknown[]) => statement.includes('FROM access.admission WHERE id = $1')
         ? Promise.resolve({ rows: [{ principal_id: actorId }] }) : access.query(statement, params) } as unknown as Pool;
     const producer = new NotificationProducer(sourceAccess, relay, fakeContent, fakeGraph, sink, 'test-relay');
+    const drainAccess = async (current = producer) => {
+      for (let tick = 0; tick < 32; tick++) if (await current.runAccessOnce() === 0) return;
+      throw new Error('Access notification audience did not finish within 32 test ticks');
+    };
     await expect(producer.runAccessOnce()).rejects.toThrow('simulated Access write failure');
     expect((await access.query(`SELECT epoch::text, xid::text, id::text
       FROM access.notification_producer_cursor WHERE consumer = 'notification-producer-v1'`)).rows[0]).toBeUndefined();
-    expect(await producer.runAccessOnce()).toBe(1);
+    await drainAccess();
     const items = await access.query<{ principal_id: string; source_event: string }>(`
       SELECT principal_id, source_event FROM access.notification_item ORDER BY principal_id`);
     expect(items.rows).toEqual([{ principal_id: recipientId, source_event: `realm:${receipt}` }]);
     await access.query(`UPDATE access.notification_producer_cursor SET epoch = 0, xid = '0', id = 0
       WHERE consumer = 'notification-producer-v1'`);
-    expect(await producer.runAccessOnce()).toBe(1);
+    await drainAccess();
     expect((await access.query(`SELECT 1 FROM access.notification_item`)).rowCount).toBe(1);
 
     const roleId = randomUUID();
@@ -104,7 +114,7 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
     finally { client.release(); }
     expect((await access.query<{ member: string }>(`SELECT member FROM access.notification_realm_effect
       WHERE receipt_id = $1`, [renamed])).rows).toEqual([{ member }]);
-    expect(await producer.runAccessOnce()).toBe(1);
+    await drainAccess();
     expect((await access.query(`SELECT 1 FROM access.notification_item WHERE source_event = $1`,
       [`realm:${renamed}`])).rowCount).toBe(1);
 
@@ -119,32 +129,35 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
       (id,realm,principal_id,acting_subject,idempotency_key,request_digest,action,reason,result)
       VALUES ($1,$2,$3,$4,$5,$6,'realm.members.manage','Member changed',$7)`,
     [membership, realm, actorId, actor, `member-${membership}`, '4'.repeat(64), { member }]);
-    expect(await producer.runAccessOnce()).toBe(1);
+    await drainAccess();
     expect((await access.query(`SELECT 1 FROM access.notification_item WHERE source_event = $1`,
       [`realm:${membership}`])).rowCount).toBe(1);
+    const largeMember = agent();
+    const largeRecipients = Array.from({ length: 600 }, () => randomUUID());
+    await access.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'agent')`, [largeMember]);
+    await access.query(`INSERT INTO access.principal (id,account_issuer,account_subject)
+      SELECT id,'large-audience',id::text FROM unnest($1::uuid[]) id`, [largeRecipients]);
+    await access.query(`INSERT INTO access.representation
+      (id,principal_id,subject_id,action,valid_until)
+      SELECT gen_random_uuid(),id,$2,'submission.submit',clock_timestamp()+interval '1 day'
+      FROM unnest($1::uuid[]) id`, [largeRecipients, largeMember]);
     const bounded = randomUUID();
     await access.query(`INSERT INTO access.realm_admin_receipt
       (id,realm,principal_id,acting_subject,idempotency_key,request_digest,action,reason,result)
       VALUES ($1,$2,$3,$4,$5,$6,'realm.members.manage','Member changed',$7)`,
-    [bounded, realm, actorId, actor, `member-${bounded}`, '5'.repeat(64), { member }]);
+    [bounded, realm, actorId, actor, `member-${bounded}`, '5'.repeat(64), { member: largeMember }]);
     const beforeBound = (await access.query(`SELECT epoch::text, xid::text, id::text FROM
       access.notification_producer_cursor WHERE consumer = 'notification-producer-v1'`)).rows[0];
-    const tooMany = { connect: async () => {
-      const client = await access.connect();
-      return new Proxy(client, { get(target, property) {
-        if (property === 'query') return (statement: string, params: unknown[]) =>
-          statement.includes('SELECT DISTINCT p.id FROM access.representation r')
-            ? Promise.resolve({ rows: Array.from({ length: 257 }, () => ({ id: randomUUID() })) })
-            : target.query(statement, params);
-        const value = Reflect.get(target, property);
-        return typeof value === 'function' ? value.bind(target) : value;
-      } });
-    }, query: access.query.bind(access) } as unknown as Pool;
-    await expect(new NotificationProducer(tooMany, null, fakeContent, fakeGraph, sink, null)
-      .runAccessOnce()).rejects.toThrow('notification recipient bound exceeded');
+    expect(await producer.runAccessOnce()).toBe(1);
+    expect((await access.query(`SELECT 1 FROM access.notification_item WHERE source_event=$1`,
+      [`realm:${bounded}`])).rowCount).toBe(256);
     expect((await access.query(`SELECT epoch::text, xid::text, id::text FROM
       access.notification_producer_cursor WHERE consumer = 'notification-producer-v1'`)).rows[0]).toEqual(beforeBound);
-    expect(await producer.runAccessOnce()).toBe(1);
+    const restarted = new NotificationProducer(sourceAccess, relay, fakeContent, fakeGraph, sink, 'test-relay');
+    await drainAccess(restarted);
+    expect((await access.query<{ principal_id: string }>(`SELECT principal_id FROM access.notification_item
+      WHERE source_event=$1 ORDER BY principal_id`, [`realm:${bounded}`])).rows.map(row => row.principal_id))
+      .toEqual([...largeRecipients].sort());
 
     // A retained, validated graph envelope is consumed only after its batch checkpoint.
     await relay.query(`INSERT INTO relay.checkpoint (consumer,data_epoch,sequence)
@@ -350,7 +363,7 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
       generation = generation + 1, decision_operation = $3, reviewer = $4,
       public_reason = 'Needs revision' WHERE id = $1`,
     [submissionId, decisionRevision, admissionId, actor]);
-    expect(await producer.runAccessOnce()).toBe(1);
+    await drainAccess();
     expect((await access.query<{ principal_id: string }>(`SELECT principal_id FROM access.notification_item
       WHERE source_event = $1`, [`submission:${decisionRevision}`])).rows).toEqual([{ principal_id: recipientId }]);
     expect((await reader.resolve({ principalId: recipientId, owner: 'access', ref: submissionId,
@@ -380,7 +393,7 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
       `moderation-${moderationId}`, '1'.repeat(64), 'rule', 'revision', '2'.repeat(64), '3'.repeat(64)]);
     await access.query(`UPDATE access.governance_case SET generation = 1, decision_head = $2 WHERE id = $1`,
       [caseId, moderationId]);
-    expect(await producer.runAccessOnce()).toBe(1);
+    await drainAccess();
     expect((await access.query<{ principal_id: string }>(`SELECT principal_id FROM access.notification_item
       WHERE source_event = $1 ORDER BY principal_id`, [`moderation:${moderationId}`])).rows
       .map(row => row.principal_id).sort()).toEqual([recipientId, mutedId].sort());
