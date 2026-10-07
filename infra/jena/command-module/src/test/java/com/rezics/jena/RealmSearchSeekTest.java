@@ -65,10 +65,10 @@ public class RealmSearchSeekTest {
             return org.apache.jena.util.iterator.WrappedIterator.create(super.find(graph,subject,predicate,object)).mapWith(quad->{rows++;return quad;});
         }
     }
-    private record Scan(List<FilteredGraphTextIndex.RankHit> hits,int pages,long maxRows,long maxGroups,int emptyPages){}
+    private record Scan(List<FilteredGraphTextIndex.RankHit> hits,int pages,long maxRows,long maxGroups,int emptyPages,long maxWitnesses,long maxScores,long maxMoves,long maxCollections){}
     private static long count(CommandWork work,String name){var match=java.util.regex.Pattern.compile("(?:^|,)"+name+"=([0-9]+)").matcher(work.counters());return match.find()?Long.parseLong(match.group(1)):0;}
     private static Scan scan(Fixture fixture,String phrase,String realm,int size){
-        var all=new ArrayList<FilteredGraphTextIndex.RankHit>();var seen=new HashSet<String>();int pages=0,empty=0;long maxRows=0,maxGroups=0;
+        var all=new ArrayList<FilteredGraphTextIndex.RankHit>();var seen=new HashSet<String>();int pages=0,empty=0;long maxRows=0,maxGroups=0,maxWitnesses=0,maxScores=0,maxMoves=0,maxCollections=0;
         FilteredGraphTextIndex.RankAfter after=null;fixture.data.begin(ReadWrite.READ);
         try{
             for(;;){
@@ -76,6 +76,11 @@ public class RealmSearchSeekTest {
                 try(var work=new CommandWork()){
                     page=fixture.index.ranked(p("searchBody"),phrase,size,after,measured,new FilteredGraphTextIndex.RankScope(realm,"zh-Hant",null,true));
                     maxGroups=Math.max(maxGroups,count(work,"rank_group_candidates_visited"));
+                    maxWitnesses=Math.max(maxWitnesses,count(work,"rank_live_witnesses_visited"));
+                    maxScores=Math.max(maxScores,count(work,"rank_lucene_score_calls"));
+                    maxMoves=Math.max(maxMoves,count(work,"rank_lucene_iterator_next_calls")+count(work,"rank_lucene_iterator_advance_calls"));
+                    maxCollections=Math.max(maxCollections,count(work,"rank_lucene_collection_events"));
+                    assertTrue("snapshot witness ceiling exceeded",count(work,"rank_live_witnesses_visited")<=128);
                 }
                 maxRows=Math.max(maxRows,measured.rows);pages++;assertTrue("cursor did not finish",pages<2000);
                 int visible=0;for(var hit:page.hits())if(hit.key()!=null){assertTrue("group repeated across pages",seen.add(hit.key()));all.add(hit);visible++;}
@@ -85,7 +90,7 @@ public class RealmSearchSeekTest {
                 assertNotEquals(after,next);after=next;
             }
         }finally{fixture.data.end();}
-        return new Scan(all,pages,maxRows,maxGroups,empty);
+        return new Scan(all,pages,maxRows,maxGroups,empty,maxWitnesses,maxScores,maxMoves,maxCollections);
     }
     @Test public void realmBodyPostingSeekIsCompleteAndIndependentOfAdoptionAndUnrelatedPopulation()throws Exception{
         for(int population:List.of(1,1500))try(var fixture=new Fixture()){
@@ -96,7 +101,7 @@ public class RealmSearchSeekTest {
             fixture.committed();var result=scan(fixture,BODY,REALM.getURI(),13);
             assertEquals(expected,new HashSet<>(result.hits().stream().map(FilteredGraphTextIndex.RankHit::key).toList()));assertTrue(result.pages()>1);
             assertTrue("RDF work grew with population: "+result.maxRows(),result.maxRows()<=13*100);assertEquals(13,result.maxGroups());
-            System.out.println("realm body adoption/unrelated="+population+" pages="+result.pages()+" maxRows="+result.maxRows()+" groupProbes="+result.maxGroups());
+            System.out.println("realm body adoption/unrelated="+population+" pages="+result.pages()+" maxRows="+result.maxRows()+" groupProbes="+result.maxGroups()+" ownerWitnesses="+result.maxWitnesses()+" observedScoreCalls="+result.maxScores()+" iteratorMoves="+result.maxMoves()+" collectionEvents="+result.maxCollections());
         }
     }
     @Test public void completeRealmNamesAdvanceThroughUnrelatedNamesWithoutASilentPopulationCap()throws Exception{
@@ -118,7 +123,7 @@ public class RealmSearchSeekTest {
             for(var owner:owners){fixture.data.add(PUBLIC,owner.unit(),p("searchResultMain"),book.main());fixture.data.add(PUBLIC,owner.unit(),p("searchResultWork"),book.work());fixture.index.refreshRankSubject(fixture.data,owner.unit().getURI());}
             fixture.committed();var result=scan(fixture,BODY,REALM.getURI(),16);
             assertEquals(1,result.hits().size());assertEquals(book.main().getURI(),result.hits().getFirst().key());assertTrue(result.maxGroups()<=32);assertTrue(result.maxRows()<=16*150);
-            System.out.println("realm chapters="+chapters+" names=1001 pages="+result.pages()+" maxRows="+result.maxRows()+" groupProbes="+result.maxGroups());
+            System.out.println("realm chapters="+chapters+" names=1001 pages="+result.pages()+" maxRows="+result.maxRows()+" groupProbes="+result.maxGroups()+" ownerWitnesses="+result.maxWitnesses()+" observedScoreCalls="+result.maxScores()+" iteratorMoves="+result.maxMoves()+" collectionEvents="+result.maxCollections());
             if(chapters>1){
                 Node winner=NodeFactory.createURI(result.hits().getFirst().id());Owner stale=owners.stream().filter(owner->owner.unit().equals(winner)).findFirst().orElseThrow();
                 fixture.data.begin(ReadWrite.WRITE);fixture.data.add(REVISIONS,stale.draft(),RDF.type.asNode(),p("ErasedRevision"));fixture.committed();
@@ -213,6 +218,79 @@ public class RealmSearchSeekTest {
             assertThrows(TextIndexException.class,()->scan(fixture,BODY,REALM.getURI(),64));
             fixture.data.begin(ReadWrite.WRITE);for(var owner:stale)fixture.data.deleteAny(PUBLIC,owner.unit(),Node.ANY,Node.ANY);fixture.committed();
             var repaired=scan(fixture,BODY,REALM.getURI(),64);assertEquals(1,repaired.hits().size());assertEquals(valid.unit().getURI(),repaired.hits().getFirst().id());
+        }
+    }
+
+    private static void copyUnit(Fixture fixture,Owner owner,Node duplicate,Node selection,String body){
+        var rows=fixture.data.find(PUBLIC,owner.unit(),Node.ANY,Node.ANY);var facts=new ArrayList<Quad>();
+        try{rows.forEachRemaining(facts::add);}finally{org.apache.jena.atlas.iterator.Iter.close(rows);}
+        for(var fact:facts)if(!fact.getPredicate().equals(p("searchBody"))&&!fact.getPredicate().equals(p("selection")))
+            fixture.data.add(PUBLIC,duplicate,fact.getPredicate(),fact.getObject());
+        fixture.data.add(PUBLIC,duplicate,p("selection"),selection);
+        fixture.data.add(PUBLIC,duplicate,p("searchBody"),NodeFactory.createLiteralLang(body,"zh-Hant"));
+    }
+    private static void assertSelectionAmbiguity(Fixture fixture,String phrase,String realm){
+        fixture.data.begin(ReadWrite.READ);
+        try(var work=new CommandWork()){
+            var failure=assertThrows(TextIndexException.class,()->fixture.index.ranked(p("searchBody"),phrase,64,null,new Measured(fixture.data),
+                new FilteredGraphTextIndex.RankScope(realm,"zh-Hant",null,true)));
+            assertTrue(failure.getMessage(),failure.getMessage().contains("ambiguous"));
+            assertEquals(2,count(work,"rank_selection_units_visited"));
+            assertTrue(count(work,"rank_live_witnesses_visited")<=128);
+        }finally{fixture.data.end();}
+    }
+    @Test public void selectedOwnerAmbiguityIncludesASecondBodyOutsideThePhraseAndRefusesNamesToo()throws Exception{
+        for(boolean realm:List.of(false,true))try(var fixture=new Fixture()){
+            var owner=fixture.owner(10000,realm,true,BODY,null);Node duplicate=id(19000);
+            copyUnit(fixture,owner,duplicate,owner.selection(),"Only unrelated nonmatching words");fixture.committed();
+            // Both copies are current/public, but the second is outside both
+            // queried phrases. Text filtering must never conceal its identity.
+            assertSelectionAmbiguity(fixture,BODY,realm?REALM.getURI():null);
+            assertSelectionAmbiguity(fixture,ALIAS,realm?REALM.getURI():null);
+            fixture.data.begin(ReadWrite.WRITE);fixture.data.deleteAny(PUBLIC,duplicate,Node.ANY,Node.ANY);fixture.committed();
+            assertEquals(1,scan(fixture,BODY,realm?REALM.getURI():null,64).hits().size());
+            assertEquals(1,scan(fixture,ALIAS,realm?REALM.getURI():null,64).hits().size());
+        }
+    }
+    @Test public void duplicateCurrentLanguageHeadsAndRealmHeadsAreRefusedOutsidePhraseFiltering()throws Exception{
+        for(boolean realm:List.of(false,true))try(var fixture=new Fixture()){
+            var owner=fixture.owner(10000,realm,true,BODY,null);Node secondSelection=id(19000),duplicate=id(19001);
+            var rows=fixture.data.find(REVISIONS,owner.selection(),Node.ANY,Node.ANY);var facts=new ArrayList<Quad>();
+            try{rows.forEachRemaining(facts::add);}finally{org.apache.jena.atlas.iterator.Iter.close(rows);}
+            for(var fact:facts)fixture.data.add(REVISIONS,secondSelection,fact.getPredicate(),fact.getObject());
+            set(fixture.data,REVISIONS,secondSelection,"language",NodeFactory.createLiteralString("zh-hant"));
+            fixture.data.add(CURRENT,owner.slot(),p("selectionHead"),secondSelection);
+            copyUnit(fixture,owner,duplicate,secondSelection,"Only unrelated nonmatching words");fixture.committed();
+            for(String phrase:List.of(BODY,ALIAS)){
+                fixture.data.begin(ReadWrite.READ);
+                try{assertThrows(TextIndexException.class,()->fixture.index.ranked(p("searchBody"),phrase,64,null,new Measured(fixture.data),
+                    new FilteredGraphTextIndex.RankScope(realm?REALM.getURI():null,"zh-Hant",null,true)));}finally{fixture.data.end();}
+            }
+        }
+    }
+    @Test public void bodyAndNameWitnessesRequireTheSameExactSelectedRevisionContributionAndLanguage()throws Exception{
+        for(String mismatch:List.of("contribution","revision","language"))try(var fixture=new Fixture()){
+            var owner=fixture.owner(10000,true,true,BODY,null);
+            Node value=mismatch.equals("language")?NodeFactory.createLiteralString("en"):id(19000);
+            set(fixture.data,PUBLIC,owner.unit(),mismatch,value);fixture.committed();
+            assertTrue(mismatch,scan(fixture,BODY,REALM.getURI(),64).hits().isEmpty());
+            assertTrue(mismatch,scan(fixture,ALIAS,REALM.getURI(),64).hits().isEmpty());
+        }
+    }
+    @Test public void observedLuceneCollectionWorkIsDistinctFromReturnedWitnessAndRdfBounds()throws Exception{
+        long previous=0;
+        for(int population:List.of(20,600))try(var fixture=new Fixture()){
+            for(int i=0;i<population;i++)fixture.owner(10000+i*10,true,false,BODY,null);
+            fixture.committed();fixture.data.begin(ReadWrite.READ);
+            try(var work=new CommandWork()){
+                var page=fixture.index.ranked(p("searchBody"),BODY,1,null,new Measured(fixture.data),new FilteredGraphTextIndex.RankScope(REALM.getURI(),"zh-Hant",null,true));
+                assertEquals(1,page.hits().size());assertTrue(count(work,"rank_live_witnesses_visited")<=128);
+                long collections=count(work,"rank_lucene_collection_events");assertTrue(collections>previous);previous=collections;
+                assertTrue("actual scoring must be observed",count(work,"rank_lucene_score_calls")>0);
+                System.out.println("lucene matching="+population+" returned="+page.hits().size()+" ownerWitnesses="+count(work,"rank_live_witnesses_visited")
+                    +" observedCollectionEvents="+collections+" scoreCalls="+count(work,"rank_lucene_score_calls")
+                    +" iteratorNextCalls="+count(work,"rank_lucene_iterator_next_calls")+" iteratorAdvanceCalls="+count(work,"rank_lucene_iterator_advance_calls"));
+            }finally{fixture.data.end();}
         }
     }
 

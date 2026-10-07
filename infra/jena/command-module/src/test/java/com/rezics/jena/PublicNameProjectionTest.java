@@ -707,7 +707,7 @@ public class PublicNameProjectionTest {
             try(var cost=new CommandWork()) {
                 var hits=catalogueNameHits(fixture,language.toUpperCase(java.util.Locale.ROOT),null,id(90001).getURI());
                 assertEquals(1,hits.size());assertEquals(last.body().getURI(),hits.getFirst().unit());
-                assertEquals(128,counter(cost,"catalogue_name_witness_heads_visited")); // Candidate plus canonical group witness.
+                assertEquals(64,counter(cost,"catalogue_name_witness_heads_visited")); // One cached owner proof for candidate and group.
             }
             assertTrue(catalogueNameHits(fixture,"zz",null,null).isEmpty());
             assertTrue(catalogueNameHits(fixture,language,null,id(90002).getURI()).isEmpty());
@@ -754,7 +754,7 @@ public class PublicNameProjectionTest {
             assertEquals(1,catalogueNameHits(fixture,"zh-Hant",null,null).size());
             try(var cost=new CommandWork()) {
                 assertEquals(1,catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).size());
-                assertEquals(2,counter(cost,"catalogue_name_witness_heads_visited"));
+                assertEquals(1,counter(cost,"catalogue_name_witness_heads_visited"));
             }
             assertTrue(catalogueNameHits(fixture,"en",REALM.getURI(),null).isEmpty()); // No Main fallback.
             for(String reason:List.of("publication","draft","contribution")) {
@@ -792,7 +792,7 @@ public class PublicNameProjectionTest {
             set(data,slot,"selectionHead",adoptionHead);
             set(data,slot,"work",id(99999));assertTrue(catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).isEmpty());set(data,slot,"work",WORK);
             set(data,slot,"mainVersion",id(99999));assertTrue(catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).isEmpty());set(data,slot,"mainVersion",MAIN);
-            data.add(PUBLIC,id(99998),p("selection"),selected.selection());assertTrue(catalogueNameHits(fixture,"zh-Hant",null,null).isEmpty());
+            data.add(PUBLIC,id(99998),p("selection"),selected.selection());assertThrows(TextIndexException.class,()->catalogueNameHits(fixture,"zh-Hant",null,null));
             data.deleteAny(PUBLIC,id(99998),Node.ANY,Node.ANY);
             assertEquals(1,catalogueNameHits(fixture,"zh-Hant",null,null).size());assertEquals(1,catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).size());
             // Existing Realm body selections declare their immutable slot;
