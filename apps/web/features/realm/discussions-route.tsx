@@ -3,10 +3,12 @@ import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
 import { CalendarRangeIcon, MessagesSquareIcon, PlusIcon, RefreshCwIcon, RotateCwIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { Suspense } from 'react';
+import { signInPath } from '../auth/paths.ts';
 import type { FeedMessages } from '../feed/messages.ts';
 import { parseThreadSort, parseThreadWindow, type ThreadSort, type ThreadWindow } from '../feed/thread.ts';
-import { settle } from '../feed/types.ts';
-import { EmptyState } from '../shell/empty-state.tsx';
+import { failureText, settle } from '../feed/types.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { EmptyState, failureDetail } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { DiscussionFrame, discussionView, readerMain, realmPathOf, type Search } from './discussion-page.tsx';
 import { DiscussionList } from './discussion-list.tsx';
@@ -49,11 +51,19 @@ async function Threads({ view, sort, window, cursor, feed }: { view: RealmView; 
     ...view.reader.actingSubject ? { actingSubject: view.reader.actingSubject } : {} } }));
   const top = listHref(path, sort, window);
   if (!page.ok) {
-    const moved = page.failure === 'moved' || page.failure === 'invalid';
-    return <EmptyState icon={moved ? RefreshCwIcon : TriangleAlertIcon} tone={moved ? 'default' : 'destructive'}
-      role="alert" title={moved ? t.moved : t.discussionsFailed} description={moved ? t.movedBody : t.failedBody}>
-      <LocalizedLink href={top} className={buttonVariants({ variant: 'outline' })}>
-        <RotateCwIcon aria-hidden="true" />{moved ? t.refresh : t.retry}</LocalizedLink>
+    const text = failureText(page.failure, { failedTitle: t.discussionsFailed, offline: t.failedBody, server: t.serverBody,
+      missingTitle: t.discussionsMissing, missingBody: t.missingBody, deniedTitle: t.deniedTitle, deniedBody: t.deniedBody,
+      movedTitle: t.moved, movedBody: t.movedBody, budget: t.budgetBody });
+    if (text.kind === 'absent') return null;
+    const moved = text.action === 'restart';
+    const quiet = text.action === 'none' || text.action === 'sign-in';
+    return <EmptyState icon={moved ? RefreshCwIcon : TriangleAlertIcon} tone={quiet || moved ? 'default' : 'destructive'}
+      role={quiet ? 'status' : 'alert'} title={text.title}
+      description={failureDetail(text.description, page.reference, t.errorReference, text.reference)}>
+      {text.action === 'none' ? null : text.action === 'sign-in'
+        ? <LocalizedLink href={signInPath(localizedPath(top, locale))} className={buttonVariants()}>{t.signIn}</LocalizedLink>
+        : <LocalizedLink href={top} className={buttonVariants({ variant: 'outline' })}>
+          <RotateCwIcon aria-hidden="true" />{moved ? t.refresh : t.retry}</LocalizedLink>}
     </EmptyState>;
   }
   const hrefs = {

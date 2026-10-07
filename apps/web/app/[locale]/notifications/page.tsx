@@ -32,7 +32,8 @@ export default async function NotificationsPage({ params, searchParams }: { para
   // Invitations are to an Agent, so they read as the session's Agent.
   const [latest, reader, official] = await Promise.all([readLatest(await mainApi(), selection), shellReader(),
     readOfficialZones(locale)]);
-  if (!latest.ok) return <NotificationsUnavailable reason="failed" signInHref={signInHref} />;
+  if (!latest.ok) return <NotificationsUnavailable reason="failed" failure={latest.failure} reference={latest.reference}
+    signInHref={signInHref} />;
   const invitations = reader.actingSubject
     ? await readInvitations(reader.main, reader.anonymous, reader.actingSubject, locale, official) : [];
   return <NotificationsView key={`${selection.view}:${selection.reason ?? ''}`} initial={latest.data} now={Date.now()}

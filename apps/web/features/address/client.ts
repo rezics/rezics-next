@@ -4,6 +4,7 @@ import { serviceOrigin } from '../api/origins.ts';
 import { mainReadHeaders } from '../api/main-read.ts';
 import { serverRead, serverDeadline } from '../api/server-read.ts';
 import { SERVER_READ_LIMITS } from '../api/server-fetch.ts';
+import { isOfflineError } from '../feed/types.ts';
 import { parseAddressSegment, type AddressLookup } from './path.ts';
 
 type MainClient = ReturnType<typeof mainApiWithToken>;
@@ -21,7 +22,7 @@ export type AddressRead =
   | { kind: 'resolved'; data: ResolvedAddress }
   | { kind: 'missing' }
   | { kind: 'retired' }
-  | { kind: 'unavailable'; status?: 429; retryAfter?: string };
+  | { kind: 'unavailable'; status?: 429; retryAfter?: string; failure?: 'offline' | 'unavailable' };
 export const ADDRESS_HEADER = 'x-rezics-resolved-address';
 const nativeIri = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
@@ -206,8 +207,10 @@ export async function readAddress(
     if (cacheKey && data.key === lookup.key)
       rememberAddress(cacheKey, data, response.headers, startedAt);
     return { kind: 'resolved', data };
-  } catch {
+  } catch (error) {
     if (cacheKey) publicAddresses.delete(cacheKey);
-    return { kind: 'unavailable' };
+    // A thrown transport error never reached Main. A timeout or a bad body still
+    // looks like a server failure, and keeps the shape callers already match.
+    return isOfflineError(error) ? { kind: 'unavailable', failure: 'offline' } : { kind: 'unavailable' };
   }
 }

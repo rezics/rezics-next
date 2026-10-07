@@ -147,8 +147,11 @@ export async function loadRealmView(
       ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
       : null,
   ]);
-  if (surface === 'site' && (!read || !read.ok))
-    return { kind: read && !read.ok && read.failure === 'missing' ? 'missing' : 'unavailable' };
+  if (surface === 'site' && (!read || !read.ok)) {
+    if (read && !read.ok && read.failure === 'missing') return { kind: 'missing' };
+    return { kind: 'unavailable', ...(read && !read.ok
+      ? { failure: read.failure, ...(read.reference ? { reference: read.reference } : {}) } : {}) };
+  }
   // A Zone whose presentation cannot be read still renders its Realm with the default layout.
   const presentation: ZonePresentation = read?.ok
     ? {

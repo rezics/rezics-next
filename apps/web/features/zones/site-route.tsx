@@ -158,13 +158,11 @@ function failure(
   firstPage: string,
   messages: RealmMessages,
 ) {
+  const failure = reason === 'identity' ? 'unavailable' : reason;
+  if (failure === 'closed') return null;
   return (
     <PageContainer>
-      <ListFailure
-        failure={reason === 'identity' || reason === 'sign-in' ? 'unavailable' : reason}
-        messages={messages}
-        firstPage={firstPage}
-      />
+      <ListFailure failure={failure} messages={messages} firstPage={firstPage} />
     </PageContainer>
   );
 }
@@ -175,7 +173,8 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
   const resolved = await resolveSite(space, locale);
   if (resolved.kind === 'missing') notFound();
   if (resolved.kind === 'unavailable')
-    return <RealmUnavailable messages={await getMessages('realm', locale)} />;
+    return <RealmUnavailable messages={await getMessages('realm', locale)} failure={resolved.failure}
+      reference={resolved.reference} />;
   if (resolved.kind === 'join')
     return privateJoinPage(resolved.page, locale, siteHref(locale, space, path));
   if (!resolved.realm) return standaloneSite(resolved, locale, path, search);
@@ -193,7 +192,8 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
   const view = await loadRealmView(space, locale, search, 'site');
   if (view.kind === 'missing') notFound();
   if (view.kind === 'unavailable')
-    return <RealmUnavailable messages={await getMessages('realm', locale)} />;
+    return <RealmUnavailable messages={await getMessages('realm', locale)} failure={view.failure}
+      reference={view.reference} />;
   if (view.kind === 'join')
     return privateJoinPage(view.page, locale, siteHref(locale, space, path));
   const zone = view.realm.zone;

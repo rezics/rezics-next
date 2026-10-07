@@ -2,6 +2,12 @@ import { cn } from '@rezics/ui/utils';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+/** A server failure's description, with the short id the response carried. */
+export function failureDetail(description: string, reference: string | undefined, label: string, show: boolean): ReactNode {
+  if (!show || !reference) return description;
+  return <>{description}<span className="mt-2 block text-xs">{label}: <span className="font-mono break-all">{reference}</span></span></>;
+}
+
 /**
  * A place with nothing to show yet: no results, a missing page, a failure or a
  * feature still to come. Say what happened and offer the next step.

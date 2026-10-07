@@ -18,9 +18,9 @@ import { useRef, useState } from 'react';
 import { localizedPath } from '../../../i18n/locale.ts';
 import { browserMainApi } from '../../api/browser.ts';
 import { relativeTime } from '../../feed/time.ts';
-import { type MainClient, settle } from '../../feed/types.ts';
+import { failureText, type MainClient, type ReadFailure, settle } from '../../feed/types.ts';
 import { CommunityIcon } from '../community-icon.tsx';
-import { EmptyState } from '../empty-state.tsx';
+import { EmptyState, failureDetail } from '../empty-state.tsx';
 import LocalizedLink from '../localized-link.tsx';
 import { PageContainer, PageHeader } from '../page.tsx';
 import { useShell } from '../shell-provider.tsx';
@@ -363,17 +363,30 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
 }
 
 /** Signed out, or Main could not answer: say which, and offer the one next step. */
-export function NotificationsUnavailable({ reason, signInHref }: { reason: 'signed-out' | 'failed'; signInHref: string }) {
+export function NotificationsUnavailable({ reason, failure = 'unavailable', reference, signInHref }: {
+  reason: 'signed-out' | 'failed'; failure?: ReadFailure; reference?: string; signInHref: string;
+}) {
   const { t } = useShell();
-  return <PageContainer className="max-w-3xl">
-    {reason === 'signed-out'
-      ? <EmptyState icon={BellIcon} headingLevel={1} title={t.signInForNotifications}
+  if (reason === 'signed-out' || failure === 'sign-in') {
+    return <PageContainer className="max-w-3xl">
+      <EmptyState icon={BellIcon} headingLevel={1} title={t.signInForNotifications}
         description={t.signInForNotificationsBody}>
         <a href={signInHref} className={buttonVariants()}>{t.signIn}</a>
       </EmptyState>
-      : <EmptyState icon={TriangleAlertIcon} tone="destructive" role="alert" headingLevel={1}
-        title={t.notificationsFailed} description={t.notificationsFailedBody}>
-        <Button onClick={() => location.reload()}><RotateCwIcon aria-hidden="true" />{t.retry}</Button>
-      </EmptyState>}
+    </PageContainer>;
+  }
+  const text = failureText(failure, { failedTitle: t.notificationsFailed, offline: t.notificationsFailedBody,
+    server: t.notificationsServerBody, missingTitle: t.notificationsMissing, missingBody: t.notificationsMissingBody,
+    deniedTitle: t.signInForNotifications, deniedBody: t.signInForNotificationsBody,
+    movedTitle: t.notificationsMoved, movedBody: t.notificationsMovedBody, budget: t.notificationsBudgetBody });
+  if (text.kind === 'absent') return null;
+  const quiet = text.action === 'none' || text.action === 'restart';
+  return <PageContainer className="max-w-3xl">
+    <EmptyState icon={TriangleAlertIcon} tone={quiet ? 'default' : 'destructive'} role={quiet ? 'status' : 'alert'}
+      headingLevel={1} title={text.title}
+      description={failureDetail(text.description, reference, t.errorReference, text.reference)}>
+      {text.action === 'none' ? null : <Button onClick={() => location.reload()}>
+        <RotateCwIcon aria-hidden="true" />{t.retry}</Button>}
+    </EmptyState>
   </PageContainer>;
 }

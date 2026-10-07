@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@rezics/ui/button';
+import { Button, buttonVariants } from '@rezics/ui/button';
 import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
 import { cn, scrollBehavior } from '@rezics/ui/utils';
 import {
@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { EmptyState } from '../shell/empty-state.tsx';
+import { EmptyState, failureDetail } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { commandKey } from './api.ts';
 import { FeedCard } from './card.tsx';
@@ -20,7 +20,7 @@ import { postRhythm } from './post-row.tsx';
 import { relativeTime } from './time.ts';
 import { useFeed } from './feed-context.tsx';
 import { appendPosts, projecting, recoverProjection, sameProjection } from './projection.ts';
-import type { FeedHead, FeedItem, FeedPage, FeedQuery, Loaded, ReadFailure } from './types.ts';
+import { failureText, type FeedHead, type FeedItem, type FeedPage, type FeedQuery, type Loaded, type ReadFailure } from './types.ts';
 
 /** How often an open feed asks whether newer posts exist. */
 const HEAD_INTERVAL_MS = 60_000;
@@ -38,6 +38,7 @@ interface ListState {
   caughtUp: FeedPage['caughtUp'];
   loading: boolean;
   failure: ReadFailure | null;
+  reference?: string;
   /** Consecutive pages that added nothing; Main's filters can leave a page empty. */
   sparse: number;
 }
@@ -82,24 +83,31 @@ export function FeedSkeleton({ count = 3 }: { count?: number }) {
   );
 }
 
-/** The first page failed: say so in words and offer the one fix. */
-function FeedFailure({ failure }: { failure: ReadFailure }) {
-  const { t } = useFeed();
+/** The first page failed: say what failed, and offer the one next step. */
+function FeedFailure({ failure, reference }: { failure: ReadFailure; reference?: string }) {
+  const { t, signInHref } = useFeed();
   const router = useRouter();
-  const moved = failure === 'moved';
+  const text = failureText(failure, { failedTitle: t.failed, offline: t.failedBody, server: t.serverBody,
+    missingTitle: t.feedMissing, missingBody: t.missingBody, deniedTitle: t.deniedTitle, deniedBody: t.deniedBody,
+    movedTitle: t.moved, movedBody: t.movedBody, budget: t.budgetBody });
+  if (text.kind === 'absent') return null;
+  const moved = text.action === 'restart';
+  const quiet = text.action === 'none' || text.action === 'sign-in';
   return (
     <EmptyState
       icon={moved ? RefreshCwIcon : TriangleAlertIcon}
-      tone={moved ? 'default' : 'destructive'}
-      role="alert"
-      title={moved ? t.moved : t.failed}
-      description={moved ? t.movedBody : t.failedBody}
+      tone={quiet || moved ? 'default' : 'destructive'}
+      role={quiet ? 'status' : 'alert'}
+      title={text.title}
+      description={failureDetail(text.description, reference, t.errorReference, text.reference)}
       className="m-3 sm:m-4"
     >
-      <Button onClick={() => router.refresh()}>
-        <RotateCwIcon aria-hidden="true" />
-        {moved ? t.refresh : t.retry}
-      </Button>
+      {text.action === 'none' ? null : text.action === 'sign-in'
+        ? <LocalizedLink href={signInHref} className={buttonVariants()}>{t.signIn}</LocalizedLink>
+        : <Button onClick={() => router.refresh()}>
+          <RotateCwIcon aria-hidden="true" />
+          {moved ? t.refresh : t.retry}
+        </Button>}
     </EmptyState>
   );
 }
@@ -200,7 +208,7 @@ export function FeedList({
   /** How often to ask for newer posts; stories shorten it. */
   headInterval?: number;
 }) {
-  if (!initial.ok) return <FeedFailure failure={initial.failure} />;
+  if (!initial.ok) return <FeedFailure failure={initial.failure} reference={initial.reference} />;
   return (
     <FeedPages
       key={`${JSON.stringify(query)}:${initial.data.projection.sequence}`}
@@ -280,7 +288,7 @@ function FeedPages({
         );
         if (stopped) return;
         if (!recovered.ok) {
-          setState((current) => ({ ...current, failure: recovered.failure }));
+          setState((current) => ({ ...current, failure: recovered.failure, reference: recovered.reference }));
           return;
         }
         // Measure at commit time: the reader may have scrolled during the read.
@@ -322,14 +330,14 @@ function FeedPages({
     const cursor = state.cursor;
     if (!cursor || reading.current) return;
     reading.current = true;
-    setState((current) => ({ ...current, loading: true, failure: null }));
+    setState((current) => ({ ...current, loading: true, failure: null, reference: undefined }));
     const next = await api().page({ ...query, cursor });
     reading.current = false;
     if (!active.current) return;
     setState((current) => {
-      if (!next.ok) return { ...current, loading: false, failure: next.failure };
+      if (!next.ok) return { ...current, loading: false, failure: next.failure, reference: next.reference };
       if (!sameProjection(current.page, next.data))
-        return { ...current, loading: false, failure: 'moved' };
+        return { ...current, loading: false, failure: 'moved' as const, reference: undefined };
       const items = appendPosts(current.items, next.data.items);
       return {
         page: next.data,
@@ -408,13 +416,21 @@ function FeedPages({
         </>
       ) : null}
       <div ref={sentinel} aria-hidden="true" />
-      {state.failure ? (
+      {state.failure && state.failure !== 'closed' ? (
         <div
           role="alert"
           className="flex flex-wrap items-center justify-center gap-3 px-4 py-6 text-sm"
         >
           <span className="text-muted-foreground">
-            {state.failure === 'moved' ? t.moved : t.loadMoreFailed}
+            {state.failure === 'moved' ? t.moved
+              : state.failure === 'offline' ? t.failedBody
+                : state.failure === 'unavailable' ? t.serverBody
+                  : state.failure === 'sign-in' ? t.deniedBody
+                    : state.failure === 'budget' ? t.budgetBody
+                      : t.loadMoreFailed}
+            {state.failure === 'unavailable' && state.reference
+              ? <span className="mt-1 block text-xs">{t.errorReference}: <span className="font-mono">{state.reference}</span></span>
+              : null}
           </span>
           {state.failure === 'moved' ? (
             <Button size="sm" variant="outline" onClick={() => router.refresh()}>

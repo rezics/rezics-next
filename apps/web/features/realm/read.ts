@@ -12,6 +12,7 @@ import { sessionAgentState } from '../auth/session.ts';
 import { displayLanguages } from '../../i18n/display-languages.ts';
 import { readSpacePage } from '../address/space-read.ts';
 import type { JoinPage } from '../manage/settings-api.ts';
+import { failedRead, isOfflineError } from '../feed/types.ts';
 import {
   type AgentRead,
   failureOf,
@@ -23,6 +24,7 @@ import {
   type RealmDecisionsPage,
   type RealmDecisionRead,
   type RealmDirectoryPage,
+  type ReadFailure,
   type RealmHeader,
   type RealmRoster,
   type RealmWorksPage,
@@ -44,7 +46,12 @@ import {
 
 const main = () => mainApiWithToken(undefined);
 
-type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null };
+type Answer<T> = {
+  data: T | null;
+  error: { status: number; value?: unknown } | null;
+  headers?: unknown;
+  response?: { headers?: unknown };
+};
 
 /**
  * One Main read as a `Loaded` result. Main answers 409 when the graph moved
@@ -53,12 +60,14 @@ type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | 
  */
 async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promise<Loaded<T>> {
   try {
-    let { data, error } = await call();
-    if (error?.status === 409 && !cursor) ({ data, error } = await call());
-    if (error) return { ok: false, failure: failureOf(error.status, error.value) };
+    let answer = await call();
+    if (answer.error?.status === 409 && !cursor) answer = await call();
+    const { data, error } = answer;
+    if (error) return failedRead(failureOf(error.status, error.value), error.value,
+      answer.headers ?? answer.response?.headers);
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
-  } catch {
-    return { ok: false, failure: 'unavailable' };
+  } catch (error) {
+    return { ok: false, failure: isOfflineError(error) ? 'offline' : 'unavailable' };
   }
 }
 
@@ -72,7 +81,7 @@ export type RealmResolution =
     }
   | { kind: 'missing' }
   | { kind: 'join'; page: JoinPage }
-  | { kind: 'unavailable' };
+  | { kind: 'unavailable'; failure?: ReadFailure; reference?: string };
 
 export const readRealmHeader = cache(
   async (realm: string, _locale: UiLocale): Promise<Loaded<RealmHeader>> =>
@@ -88,7 +97,9 @@ export const resolveRealm = cache(
     const resolved = await resolveAddress('space', ref, locale);
     if (resolved.kind !== 'resolved') {
       if (resolved.kind !== 'missing')
-        return { kind: resolved.kind === 'unavailable' ? 'unavailable' : 'missing' };
+        return resolved.kind === 'unavailable'
+          ? { kind: 'unavailable', ...(resolved.failure ? { failure: resolved.failure } : {}) }
+          : { kind: 'missing' };
       const fallback = await readPrivateRealm(ref, locale);
       if (fallback.kind !== 'realm') return fallback;
       // Keep an admitted legacy identity when no public landing address exists;
@@ -108,7 +119,7 @@ export const resolveRealm = cache(
       ? { kind: 'realm' as const, header: header.data }
       : header.failure === 'missing'
         ? await readPrivateRealm(ref, locale, resolved.data)
-        : { kind: 'unavailable' as const };
+        : { kind: 'unavailable' as const, failure: header.failure, ...(header.reference ? { reference: header.reference } : {}) };
     if (page.kind !== 'realm') return page;
     const zoneId = idOf(resolved.data.capabilities?.zone ?? '');
     return {
@@ -125,14 +136,16 @@ export type SiteResolution =
   | { kind: 'site'; address: ResolvedAddress; zone: string; realm: string | null }
   | { kind: 'join'; page: JoinPage }
   | { kind: 'missing' }
-  | { kind: 'unavailable' };
+  | { kind: 'unavailable'; failure?: ReadFailure; reference?: string };
 
 /** Site resolution never guesses a Zone segment or requires a Realm capability. */
 export const resolveSite = cache(async (ref: string, locale: UiLocale): Promise<SiteResolution> => {
   const resolved = await resolveAddress('space', ref, locale);
   if (resolved.kind !== 'resolved') {
     if (resolved.kind !== 'missing')
-      return { kind: resolved.kind === 'unavailable' ? 'unavailable' : 'missing' };
+      return resolved.kind === 'unavailable'
+        ? { kind: 'unavailable', ...(resolved.failure ? { failure: resolved.failure } : {}) }
+        : { kind: 'missing' };
     const fallback = await readPrivateRealm(ref, locale);
     return fallback.kind === 'realm' ? { kind: 'missing' } : fallback;
   }

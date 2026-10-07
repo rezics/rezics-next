@@ -44,11 +44,14 @@ export type WorkCard = Pick<RealmWork, 'id' | 'title' | 'cover' | 'types' | 'tag
 export type MainName = RealmHeader['name'];
 export type MainAvatar = RealmHeader['icon'];
 
-/** Why a region has no data. Each region shows its own; the rest of the page stays. */
-/** `closed` is an operation the platform has not opened for this viewer: absent, not an error. */
-export type ReadFailure = 'missing' | 'moved' | 'invalid' | 'budget' | 'closed' | 'unavailable';
+/**
+ * Why a region has no data. Each region shows its own; the rest of the page stays.
+ * `closed` is an operation the platform has not opened for this viewer: absent, not an error.
+ * `offline` never reached Main; `unavailable` is a failure Main answered with.
+ */
+export type ReadFailure = 'missing' | 'moved' | 'invalid' | 'budget' | 'closed' | 'offline' | 'unavailable';
 
-export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure };
+export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure; reference?: string };
 
 export function failureOf(status: number, body?: unknown): ReadFailure {
   if (platformClosed(status, body)) return 'closed';

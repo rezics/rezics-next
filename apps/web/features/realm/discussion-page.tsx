@@ -47,7 +47,8 @@ export async function discussionView(
   ]);
   if (view.kind === 'missing') notFound();
   if (view.kind === 'unavailable')
-    return { page: <RealmUnavailable messages={await getMessages('realm', locale)} /> };
+    return { page: <RealmUnavailable messages={await getMessages('realm', locale)} failure={view.failure}
+      reference={view.reference} /> };
   if (view.kind === 'join')
     return {
       page: await privateJoinPage(

@@ -9,8 +9,10 @@ import { isUiLocale } from '../../i18n/define.ts';
 import { threadPath } from '../feed/discussion.ts';
 import type { FeedMessages } from '../feed/messages.ts';
 import { parseThreadSort, type ThreadRead, type ThreadSort } from '../feed/thread.ts';
-import { type Loaded, settle } from '../feed/types.ts';
-import { EmptyState } from '../shell/empty-state.tsx';
+import { failureText, type Loaded, settle } from '../feed/types.ts';
+import { signInPath } from '../auth/paths.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { EmptyState, failureDetail } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { mainApiWithToken } from '../api/main.ts';
 import {
@@ -142,19 +144,26 @@ async function ThreadContent({
     }),
   ) as Record<ThreadSort, string>;
   if (!read.ok) {
+    const text = failureText(read.failure, { failedTitle: t.threadFailed, offline: t.threadFailedBody, server: t.serverBody,
+      missingTitle: t.threadFailed, missingBody: t.missingBody, deniedTitle: t.deniedTitle, deniedBody: t.deniedBody,
+      movedTitle: t.moved, movedBody: t.movedBody, budget: t.budgetBody });
+    if (text.kind === 'absent') return null;
+    const quiet = text.action === 'none' || text.action === 'sign-in';
     return (
       <EmptyState
         icon={TriangleAlertIcon}
-        tone="destructive"
-        role="alert"
+        tone={quiet ? 'default' : 'destructive'}
+        role={quiet ? 'status' : 'alert'}
         headingLevel={1}
-        title={t.threadFailed}
-        description={t.threadFailedBody}
+        title={text.title}
+        description={failureDetail(text.description, read.reference, t.errorReference, text.reference)}
       >
-        <LocalizedLink href={sortHrefs[sort]} className={buttonVariants({ variant: 'outline' })}>
-          <RotateCwIcon aria-hidden="true" />
-          {t.retry}
-        </LocalizedLink>
+        {text.action === 'none' ? null : text.action === 'sign-in'
+          ? <LocalizedLink href={signInPath(localizedPath(here, locale))} className={buttonVariants()}>{t.signIn}</LocalizedLink>
+          : <LocalizedLink href={sortHrefs[sort]} className={buttonVariants({ variant: 'outline' })}>
+            <RotateCwIcon aria-hidden="true" />
+            {text.action === 'restart' ? t.refresh : t.retry}
+          </LocalizedLink>}
       </EmptyState>
     );
   }

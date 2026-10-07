@@ -28,7 +28,8 @@ export default async function Page({ params }: Props) {
   if (selected.kind === 'join')
     return privateJoinPage(selected.page, locale, spaceHref(realm, 'community', ['submit']));
   if (selected.kind === 'unavailable')
-    return <RealmUnavailable messages={await getMessages('realm', locale)} />;
+    return <RealmUnavailable messages={await getMessages('realm', locale)} failure={selected.failure}
+      reference={selected.reference} />;
   return (
     <PostComposePage
       locale={locale}

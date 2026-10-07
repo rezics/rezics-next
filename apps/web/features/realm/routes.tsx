@@ -116,7 +116,7 @@ async function realmRoute(
   const view = await loadRealmView(realm, locale, search, site ? 'site' : 'community');
   if (view.kind === 'missing') notFound();
   if (view.kind === 'unavailable')
-    return <RealmUnavailable messages={await getMessages('realm', locale)} />;
+    return <RealmUnavailable messages={await getMessages('realm', locale)} failure={view.failure} reference={view.reference} />;
   if (view.kind === 'join')
     return privateJoinPage(
       view.page,
@@ -150,11 +150,13 @@ function paging(
   };
 }
 
-function failure(view: RealmView, tab: CommunityPage, reason: ReadFailure) {
+function failure(view: RealmView, tab: CommunityPage, reason: ReadFailure, reference?: string) {
+  if (reason === 'closed') return null;
   return (
     <PageContainer>
       <ListFailure
         failure={reason}
+        reference={reference}
         messages={view.messages}
         firstPage={realmHref(view.context.locale, view.context.ref, tab)}
       />
@@ -324,7 +326,7 @@ export function RealmBrowseRoute(props: RealmRouteProps) {
         readZoneBrowse(view.context.realm, locale, mainBrowseQuery(state)),
         readFacets(),
       ]);
-      if (!page.ok) return failure(view, 'browse', page.failure);
+      if (!page.ok) return failure(view, 'browse', page.failure, page.reference);
       const admitted = new Map(
         (facets.ok ? facets.data.facets : [])
           .filter((facet) => facet.current)
@@ -367,7 +369,7 @@ export function RealmDecisionsRoute(props: RealmRouteProps) {
     );
     if (decision) {
       const exact = await readRealmDecision(view.context.realm, decision);
-      if (!exact.ok) return failure(view, 'decisions', exact.failure);
+      if (!exact.ok) return failure(view, 'decisions', exact.failure, exact.reference);
       return (
         <RealmDecisions
           locale={locale}
@@ -381,7 +383,7 @@ export function RealmDecisionsRoute(props: RealmRouteProps) {
     }
     const cursor = parseCursor(search);
     const page = await readRealmDecisions(view.context.realm, cursor);
-    if (!page.ok) return failure(view, 'decisions', page.failure);
+    if (!page.ok) return failure(view, 'decisions', page.failure, page.reference);
     return (
       <RealmDecisions
         locale={locale}
@@ -517,7 +519,7 @@ export function RealmMembersRoute(props: RealmRouteProps) {
   return realmRoute(props, 'members', async (view, locale, search) => {
     const cursor = parseCursor(search);
     const roster = await readRoster(view.context.realm, cursor);
-    if (!roster.ok) return failure(view, 'members', roster.failure);
+    if (!roster.ok) return failure(view, 'members', roster.failure, roster.reference);
     const people = roster.data.items.flatMap((item) =>
       item.displayName
         ? [

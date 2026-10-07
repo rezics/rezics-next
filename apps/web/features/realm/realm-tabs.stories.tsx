@@ -16,7 +16,7 @@ import { RealmNotFound, RealmUnavailable } from './states.tsx';
 import { RealmPageStory, realmMessagesFor } from './story-page.tsx';
 import { type AboutPerson, ListFailure, RealmAbout, RealmDecisions } from './views.tsx';
 
-type Tab = 'browse' | 'decisions' | 'about' | 'browse-moved' | 'rules' | 'members';
+type Tab = 'browse' | 'decisions' | 'about' | 'browse-moved' | 'browse-failed' | 'browse-offline' | 'rules' | 'members';
 
 const person = (
   id: string,
@@ -82,6 +82,17 @@ function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
         />
       </div>
     ),
+    'browse-failed': (
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-10">
+        <ListFailure failure="unavailable" reference="ab12cd34" firstPage={siteHref(locale, 'fiction', ['browse'])}
+          messages={messages} />
+      </div>
+    ),
+    'browse-offline': (
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 lg:px-10">
+        <ListFailure failure="offline" firstPage={siteHref(locale, 'fiction', ['browse'])} messages={messages} />
+      </div>
+    ),
     decisions: (
       <RealmDecisions
         decisions={decisions}
@@ -137,7 +148,7 @@ function TabPage({ tab, locale }: { tab: Tab; locale: UiLocale }) {
     <RealmPageStory
       zone={zone}
       locale={locale}
-      site={tab === 'browse' || tab === 'browse-moved'}
+      site={tab === 'browse' || tab === 'browse-moved' || tab === 'browse-failed' || tab === 'browse-offline'}
       members={locale === 'zh-Hans' ? '12,408 位成员' : '12,408 members'}
     >
       {content}
@@ -294,11 +305,45 @@ export const Unavailable: Story = {
   render: (_, { globals }) => (
     <RealmUnavailable
       messages={realmMessagesFor((globals.locale as UiLocale | undefined) ?? 'en')}
+      failure="unavailable"
+      reference="ab12cd34"
     />
   ),
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
-      'Couldn’t load this community',
-    );
+    const alert = within(canvasElement).getByRole('alert');
+    await expect(alert).toHaveTextContent('Couldn’t load this community');
+    await expect(alert).toHaveTextContent('Something went wrong on our side.');
+    await expect(alert).toHaveTextContent('Reference: ab12cd34');
+    await expect(alert).not.toHaveTextContent('connection');
+  },
+};
+
+/** The request never reached REZICS: the connection sentence, and no server reference. */
+export const Offline: Story = {
+  render: (_, { globals }) => (
+    <RealmUnavailable messages={realmMessagesFor((globals.locale as UiLocale | undefined) ?? 'en')} failure="offline" />
+  ),
+  async play({ canvasElement }) {
+    const alert = within(canvasElement).getByRole('alert');
+    await expect(alert).toHaveTextContent('Check your connection, then try again.');
+    await expect(alert).not.toHaveTextContent('Reference');
+  },
+};
+
+/** A server failure of a list names our side and quotes the response’s reference. */
+export const BrowseFailed: Story = {
+  args: { tab: 'browse-failed' },
+  async play({ canvasElement }) {
+    const alert = within(canvasElement).getByRole('alert');
+    await expect(alert).toHaveTextContent('Something went wrong on our side.');
+    await expect(alert).toHaveTextContent('Reference: ab12cd34');
+    await expect(alert).not.toHaveTextContent('connection');
+  },
+};
+
+export const BrowseOffline: Story = {
+  args: { tab: 'browse-offline' },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent('Check your connection, then try again.');
   },
 };

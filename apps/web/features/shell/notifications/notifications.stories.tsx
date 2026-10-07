@@ -230,11 +230,23 @@ export const SignedOut: Story = {
 
 export const Failed: Story = {
   args: args(),
-  render: () => <NotificationsUnavailable reason="failed" signInHref="/auth/start" />,
+  render: () => <NotificationsUnavailable reason="failed" failure="unavailable" reference="ab12cd34" signInHref="/auth/start" />,
   async play({ canvasElement }) {
-    await expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
-      'Couldn’t load your notifications',
-    );
+    const alert = within(canvasElement).getByRole('alert');
+    await expect(alert).toHaveTextContent('Couldn’t load your notifications');
+    await expect(alert).toHaveTextContent('Something went wrong on our side.');
+    await expect(alert).toHaveTextContent('Reference: ab12cd34');
+    await expect(alert).not.toHaveTextContent('connection');
+  },
+};
+
+export const Offline: Story = {
+  args: args(),
+  render: () => <NotificationsUnavailable reason="failed" failure="offline" signInHref="/auth/start" />,
+  async play({ canvasElement }) {
+    const alert = within(canvasElement).getByRole('alert');
+    await expect(alert).toHaveTextContent('Check your connection, then try again.');
+    await expect(alert).not.toHaveTextContent('Reference');
   },
 };
 

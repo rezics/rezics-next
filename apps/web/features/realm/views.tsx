@@ -2,8 +2,8 @@ import { Badge } from '@rezics/ui/badge';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import type { ZoneDecision } from '@rezics/zone-sdk';
-import { ArrowLeftIcon, ArrowRightIcon, GavelIcon, LandmarkIcon, PlusIcon, RotateCwIcon, ScaleIcon, ShieldIcon,
-  TagIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
+import { ArrowLeftIcon, ArrowRightIcon, GavelIcon, LandmarkIcon, PlusIcon, RotateCwIcon, ScaleIcon, SearchXIcon,
+  ShieldIcon, TagIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { direction } from '@rezics/main/language';
 import type { ReactNode } from 'react';
@@ -11,7 +11,8 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { browseMessages } from '../discover/browse-messages.ts';
 import { isolate } from '../language/untagged.ts';
 import { ProfileAvatar } from '../profile/profile-avatar.tsx';
-import { EmptyState } from '../shell/empty-state.tsx';
+import { failureText, type ReadFailure } from '../feed/types.ts';
+import { EmptyState, failureDetail } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { ZoneMessages } from '../zones/messages.ts';
@@ -20,7 +21,6 @@ import { decisionText } from '../zones/modules.tsx';
 import type { RealmMessages } from './messages.ts';
 import { decisionAnchor } from './route.ts';
 import { LinkedDecision } from './linked-decision.tsx';
-import type { ReadFailure } from './types.ts';
 
 /** A tab's heading block: the view's title and one line on what it lists. */
 function ViewHeader({ id, title, intro, children }: { id: string; title: string; intro?: string; children?: ReactNode }) {
@@ -33,16 +33,22 @@ function ViewHeader({ id, title, intro, children }: { id: string; title: string;
   </header>;
 }
 
-/** A tab's list failed or moved under its cursor; the frame stays. */
-export function ListFailure({ failure, firstPage, messages }: {
-  failure: ReadFailure; firstPage: string; messages: RealmMessages;
+/** A tab's list failed or moved under its cursor; the frame stays. A closed read is absent. */
+export function ListFailure({ failure, reference, firstPage, messages }: {
+  failure: ReadFailure; reference?: string; firstPage: string; messages: RealmMessages;
 }) {
-  const moved = failure === 'moved';
-  return <EmptyState icon={moved ? RotateCwIcon : TriangleAlertIcon} role="status"
-    title={moved ? messages.movedTitle : messages.failedTitle}
-    description={moved ? messages.movedBody : messages.unavailableBody}>
-    <LocalizedLink href={firstPage} className={buttonVariants({ variant: moved ? 'default' : 'outline' })}>
-      {moved ? messages.startOver : messages.retry}</LocalizedLink>
+  const text = failureText(failure, { failedTitle: messages.failedTitle, offline: messages.offlineBody,
+    server: messages.unavailableBody, missingTitle: messages.notFoundTitle, missingBody: messages.notFoundBody,
+    deniedTitle: messages.deniedTitle, deniedBody: messages.deniedBody, movedTitle: messages.movedTitle,
+    movedBody: messages.movedBody, budget: messages.budgetBody });
+  if (text.kind === 'absent') return null;
+  const moved = text.action === 'restart';
+  const quiet = text.action === 'none' || text.action === 'sign-in';
+  return <EmptyState icon={moved ? RotateCwIcon : quiet ? SearchXIcon : TriangleAlertIcon}
+    role={quiet || moved ? 'status' : 'alert'} tone={quiet || moved ? 'default' : 'destructive'}
+    title={text.title} description={failureDetail(text.description, reference, messages.errorReference, text.reference)}>
+    {text.action === 'none' ? null : <LocalizedLink href={firstPage} className={buttonVariants({ variant: moved ? 'default' : 'outline' })}>
+      {moved ? messages.startOver : messages.retry}</LocalizedLink>}
   </EmptyState>;
 }
 

@@ -27,7 +27,8 @@ export default async function RealmNotFoundPage() {
       );
     }
     if (view.kind === 'unavailable')
-      return <RealmUnavailable messages={await getMessages('realm', locale)} />;
+      return <RealmUnavailable messages={await getMessages('realm', locale)} failure={view.failure}
+        reference={view.reference} />;
   }
   return <RealmNotFound messages={await getMessages('realm', locale)} />;
 }
