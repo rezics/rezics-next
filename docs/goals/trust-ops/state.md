@@ -57,9 +57,11 @@ The100k consistent backup fx-medium-605f041f8150 completed on current
 native539/model fa, graph generatorv4 and429migration inputs:566.405s active,
 7.467s admission and573.873s wall. Its manifest records100,000Works,
 1,000Agents,10,000public units and400,000objects, with allowner counts,
-readiness, exact samples and clean stop passed. The first isolated restore is
-queued; the second and manager-exclusive campaign/timed/peak/destruction checks
-remain required. The quiet startup window lasts until19:30UTC. Frozen prior
+readiness, exact samples and clean stop passed. The first isolated restore fixture-quiet-medium-a passed273.668s active;
+all seven owners, unchanged native index, migration compatibility and three
+exact samples passed. Its source backup is unchanged. CopyB is queued; the
+manager-exclusive campaign/peak/destruction checks remain required. Program
+released the quiet window; normal QA admission has resumed. Frozen prior
 backups are unchanged; this background population is not command-cost evidence. Manager-exclusive100k
 qualification remains required.
 
