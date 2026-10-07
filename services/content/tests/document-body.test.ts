@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { fromPlainText, serializeDocument } from '@rezics/document';
+import { fromPlainText, serializeDocument, type JsonValue } from '@rezics/document';
 import { authoredDocumentBody, retainedDocumentBody, authoredPostNotes, retainedPostNotes } from '../src/document-body.ts';
 import { resolveParagraphSelector } from '../src/comments.ts';
 
@@ -106,13 +106,15 @@ test('unknown components preserve external specification payload and fallback te
 test('Content round-trips the Work-reference block and future opaque payloads with their fallback projection', () => {
   const payload = { 'rv:work': ['https://rezics.com/id/11111111-1111-4111-8111-111111111111'],
     'schema:name': [{ '@value': '雨夜書店', '@language': 'zh-Hant' }] };
-  for (const [version, value] of [['1', payload], ['2', { future: [null, { preserved: true }] }]] as const) {
+  const future: JsonValue = { future: [null, { preserved: true }] };
+  for (const [version, value] of [['1', payload], ['2', future]] as [string, JsonValue][]) {
     const document = structuredClone(fromPlainText('', 'blocks'));
     document.doc.content!.push({ type: 'extensionBlock', attrs: { id: 'work-reference',
       definition: 'https://rezics.com/definition/work-reference-block-v1', version, payload: value, fallback: '雨夜書店' } });
     const saved = authoredDocumentBody({ document });
     expect(saved.body).toBe('\n雨夜書店');
-    expect(retainedDocumentBody(saved)).toEqual(saved);
-    expect(retainedDocumentBody(saved).document!.doc.content!.at(-1)!.attrs!.payload).toEqual(value);
+    const retained = retainedDocumentBody({ ...saved });
+    expect(retained).toEqual(saved);
+    expect(retained.document!.doc.content!.at(-1)!.attrs!.payload).toEqual(value);
   }
 });
