@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import pg, { Pool, type QueryResult } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
@@ -126,7 +127,12 @@ export function meterStatements() {
 
 /** The feed-home composition: real Account principals, API-provisioned Agents,
  * relay delivery and the projection worker, without a web server. */
-export async function startHomeStack(label: string, options: { projectionStart?: 'current' } = {}) {
+export async function startHomeStack(label: string, options: {
+  projectionStart?: 'current';
+  // Closed catalogue commands consult grants only when a caller asks. Other
+  // Home reads stay on public routes and do not pay that lookup.
+  platformAccess?: boolean;
+} = {}) {
   const stack = await startMediaStack(label);
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 2 });
   const author = await stack.member('author'), reader = await stack.member('reader');
@@ -153,7 +159,8 @@ export async function startHomeStack(label: string, options: { projectionStart?:
     content: stack.content, contentAuthoring: stack.content, media: stack.media, structureObjects,
     profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool), agentHandles: new AgentVanityHandles(stack.accessPool),
     agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
-    relayPosition: new RelayHandoffPositions(relay, consumer) };
+    relayPosition: new RelayHandoffPositions(relay, consumer),
+    ...(options.platformAccess ? { platformAccess: new AccessExposure(stack.accessPool) } : {}) };
   const app = createMainApp(stack.fuseki, deps);
   const call = (method: string, path: string, body?: unknown, token?: string, key = randomUUID()) => app.handle(
     new Request(`http://main.local${path}`, { method, headers: {

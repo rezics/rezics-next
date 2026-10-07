@@ -1,5 +1,5 @@
 import { expect } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import {
@@ -53,7 +53,10 @@ export async function classificationCostProfile() {
     ? ((await import(resolve('.temp/g-1041/discovery-before.ts'))) as typeof discovery)
     : discovery;
   // Earlier files' outbox positions are outside this fixture's preparation.
-  const home = await startHomeStack('g-1041-classification', { projectionStart: 'current' });
+  const home = await startHomeStack('g-1041-classification', {
+    projectionStart: 'current',
+    platformAccess: true,
+  });
   const { stack, author } = home;
   const definitions = [...(corpus?.definitions ?? [])];
   const works = [...(corpus?.works ?? [])];
@@ -67,6 +70,25 @@ export async function classificationCostProfile() {
     await author.grant('classification:define:global', 'classification.proposition.define');
     await author.grant('classification:decide:global', 'classification.decision.set');
     await author.grant('work:create:catalogue-import', 'work.create');
+    // Catalogue import is closed until the caller holds that platform use.
+    const platformGrant = randomUUID();
+    await stack.accessPool.query(
+      `INSERT INTO access.principal_permission_grant
+        (id,issuer_subject,principal_id,scope_id,action,valid_until)
+        VALUES ($1,$2,$3,'platform:access','platform:use:catalogue-import','infinity')`,
+      [platformGrant, author.actor, author.principalId],
+    );
+    await stack.accessPool.query(
+      `INSERT INTO access.platform_grant_episode
+        (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+        VALUES ($1,$1,$2,'platform:use:catalogue-import','platform:access',$3,$4)`,
+      [
+        platformGrant,
+        author.actor,
+        author.principalId,
+        `urn:rezics:access-receipt:${createHash('sha256').update(platformGrant).digest('hex')}`,
+      ],
+    );
     const creditedAuthor = await home.provision('G1041 catalogue author', author.token);
     for (let index = definitions.length; index < 21; index++)
       definitions.push(
