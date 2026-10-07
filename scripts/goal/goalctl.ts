@@ -1905,7 +1905,7 @@ async function stopProcessGroup(child: ChildProcess): Promise<void> {
 
 interface UnitShardResult {
   done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[]; fileErrors: UnitFileErrorDetail[];
-  files: string[]; output: string; ms: number;
+  runnerErrors: UnitRunnerError[]; files: string[]; output: string; ms: number;
 }
 
 function unitFileFromHeader(output: string, files: readonly string[], cwd: string): string | undefined {
@@ -1944,6 +1944,11 @@ export function shardTimeoutFiles(output: string, candidates: readonly string[],
 
 export interface UnitFailureDetail { file: string; test: string; detail?: string }
 export interface UnitFileErrorDetail { file: string; detail: string }
+export interface UnitRunnerError { files: string[]; diagnostic: string }
+
+function isUnitErrorLine(line: string): boolean {
+  return /^(?:error|Error|[A-Z][\w$]*(?:Error|Exception)):\s*/i.test(line.trim());
+}
 
 /** Capture each failed test's assertion detail without file-specific stack locations. */
 export function unitFailureDetails(output: string, candidates: readonly string[], root?: string): UnitFailureDetail[] {
@@ -1973,7 +1978,7 @@ export function unitFailureDetails(output: string, candidates: readonly string[]
       collectingError = false;
       continue;
     }
-    if (/^error:\s*/i.test(line)) { errorLines = [line.trim()]; collectingError = true; }
+    if (isUnitErrorLine(line)) { errorLines = [line.trim()]; collectingError = true; }
     else if (collectingError && /^\s*at\s/.test(line)) collectingError = false;
     else if (collectingError) errorLines!.push(line.trimEnd());
   }
@@ -1999,7 +2004,7 @@ function bunRunSummaryLine(line: string): boolean {
 export function unitFileErrorDetails(output: string, candidates: readonly string[], root?: string,
   failingFiles: readonly string[] = []): UnitFileErrorDetail[] {
   const known = new Set(candidates);
-  const errors = new Map<string, string[]>();
+  const errors = new Map<string, string[][]>();
   const sections = new Map<string, string[]>();
   const plain = output.replace(/\u001b\[[\d;]*m/g, '');
   const namedFailures = new Set(unitFailureDetails(output, candidates, root).map(failure => failure.file));
@@ -2019,31 +2024,32 @@ export function unitFileErrorDetails(output: string, candidates: readonly string
     sections.get(current)!.push(line);
     if (/^# Unhandled error/i.test(line)) {
       const bucket = errors.get(current) ?? [];
-      bucket.push(line.trim());
+      bucket.push([line.trim()]);
       errors.set(current, bucket);
       collecting = true;
-    } else if (/^error:/i.test(line)) {
+    } else if (isUnitErrorLine(line)) {
       if (collecting || !namedFailures.has(current)) {
         const bucket = errors.get(current) ?? [];
-        bucket.push(line.trim());
+        if (!collecting) bucket.push([]);
+        bucket[bucket.length - 1]!.push(line.trim());
         errors.set(current, bucket);
         collecting = true;
       }
     } else if (collecting && bunRunSummaryLine(line)) collecting = false;
     else if (collecting && /^\((?:pass|fail|skip|todo)\)/.test(line)) collecting = false;
     else if (collecting && /^\s*at\s/.test(line)) {
-      const bucket = errors.get(current)!;
-      bucket.push(line.trimEnd());
+      errors.get(current)!.at(-1)!.push(line.trimEnd());
     } else if (collecting && /^\(fail\)/.test(line)) collecting = false;
-    else if (collecting) errors.get(current)!.push(line.trimEnd());
+    else if (collecting) errors.get(current)!.at(-1)!.push(line.trimEnd());
   }
   for (const file of failingFiles) {
     if (errors.has(file) || namedFailures.has(file)) continue;
     const diagnostic = (sections.get(file) ?? []).filter(line => !bunRunSummaryLine(line)
       && !/^\((?:pass|fail|skip|todo)\)/.test(line)).join('\n').trim();
-    if (diagnostic) errors.set(file, [diagnostic]);
+    if (diagnostic) errors.set(file, [[diagnostic]]);
   }
-  return [...errors].map(([file, lines]) => ({ file, detail: normalizeUnitFileError(lines.join('\n'), root) }));
+  return [...errors].flatMap(([file, blocks]) => blocks.map(lines => ({ file,
+    detail: normalizeUnitFileError(lines.join('\n'), root) })));
 }
 
 function normalizedFindingLines(detail: string | undefined): string[] {
@@ -2087,7 +2093,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   const unfinished = (output: string, timedOut: string[] = timedOutTestFiles(output, files, cwd)): UnitShardResult =>
     ({ done: false, failing: [], timedOut, failures: unitFailureDetails(output, files, cwd),
       fileErrors: unitFileErrorDetails(output, files, cwd),
-      files: [...files], output, ms: Date.now() - startedAt });
+      runnerErrors: [], files: [...files], output, ms: Date.now() - startedAt });
   // Inventory guards include owner files. Run the selected Bun files directly
   // through Task so the public selector's tier-mixing refusal cannot mask them.
   const child = spawn('task', ['goal:unit-files', '--', ...files.map(file => `./${file}`)], {
@@ -2095,6 +2101,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   });
   const stdout: string[] = [];
   const stderr: string[] = [];
+  let launchError: string | undefined;
   let bytes = 0;
   let truncated = false;
   const take = (bucket: string[]) => (chunk: string) => {
@@ -2108,7 +2115,10 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   child.stderr?.on('data', take(stderr));
   const output = () => `${stdout.join('')}\n${stderr.join('')}`;
   const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
-    child.once('error', () => resolve({ code: null, signal: null }));
+    child.once('error', error => {
+      launchError = `Unable to start unit runner: ${error.message}`;
+      resolve({ code: null, signal: null });
+    });
     child.once('close', (code, signal) => resolve({ code, signal }));
   });
   // Node fires a delay above 2^31-1 immediately; the budget is a deadline, not an overflow.
@@ -2120,6 +2130,9 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     if (outcome === 'timeout' || truncated || outcome.code === null) {
       await stopProcessGroup(child);
       const text = output();
+      if (outcome !== 'timeout' && !truncated && outcome.code === null) {
+        return { ...unfinished(text), runnerErrors: [{ files: [...files], diagnostic: launchError ?? (text.trim() || 'Unit runner could not be started') }] };
+      }
       const timedOut = outcome === 'timeout'
         ? shardTimeoutFiles(text, files, cwd)
         : timedOutTestFiles(text, files, cwd);
@@ -2128,12 +2141,16 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     const text = output();
     const timedOut = timedOutTestFiles(text, files, cwd);
     const failures = unitFailureDetails(text, files, cwd);
-    const failing = [...new Set([...(outcome.code === 0 ? [] : failingTestFiles(text, files, cwd)), ...timedOut,
+    const namedFailing = outcome.code === 0 ? [] : failingTestFiles(text, files, cwd);
+    const failing = [...new Set([...namedFailing, ...timedOut,
       ...failures.map(failure => failure.file)])];
     const fileErrors = unitFileErrorDetails(text, files, cwd, failing);
+    const runnerErrors = outcome.code !== 0 && !namedFailing.length && !timedOut.length && !failures.length && !fileErrors.length
+      ? [{ files: [...files], diagnostic: text.trim() || `task goal:unit-files exited with status ${outcome.code}` }]
+      : [];
     // A failure bun did not attribute to a file counts against that shard.
     return { done: true, failing: outcome.code !== 0 && !failing.length ? [...files] : failing, timedOut, failures, fileErrors,
-      files: [...files], output: text,
+      runnerErrors, files: [...files], output: text,
       ms: Date.now() - startedAt };
   } catch {
     // A shard that cannot be reaped is unfinished, not a merge-blocking failure.
@@ -2148,9 +2165,9 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
  * failures from shards that did finish are not a verdict, because the set was not fully run. */
 export async function runUnitGate(cwd: string, files: readonly string[], shards?: number): Promise<{
   done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[];
-  fileErrors: UnitFileErrorDetail[]; unfinished: string[]; output: string;
+  fileErrors: UnitFileErrorDetail[]; runnerErrors: UnitRunnerError[]; unfinished: string[]; output: string;
 }> {
-  if (!files.length) return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], unfinished: [], output: '' };
+  if (!files.length) return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '' };
   const groups = balanceUnitShards(files, shards ?? unitGateShards());
   const budget = unitGateBudgetMs();
   console.log(`Unit gate: ${files.length} file(s) in ${groups.length} shard(s), budget ${budget}ms`);
@@ -2166,8 +2183,9 @@ export async function runUnitGate(cwd: string, files: readonly string[], shards?
   const failing = [...new Set(completed.flatMap(result => result.failing))].sort();
   const failures = completed.flatMap(result => result.failures);
   const fileErrors = completed.flatMap(result => result.fileErrors);
-  if (unfinished.length) return { done: false, failing, timedOut, failures, fileErrors, unfinished, output };
-  return { done: true, failing, timedOut, failures, fileErrors, unfinished: [], output };
+  const runnerErrors = results.flatMap(result => result.runnerErrors);
+  if (unfinished.length) return { done: false, failing, timedOut, failures, fileErrors, runnerErrors, unfinished, output };
+  return { done: true, failing, timedOut, failures, fileErrors, runnerErrors, unfinished: [], output };
 }
 
 function reportUnfinished(side: 'affected' | 'main', unfinished: readonly string[]): void {
@@ -2180,15 +2198,19 @@ function reportUnfinished(side: 'affected' | 'main', unfinished: readonly string
 
 interface TimeoutRetryResult {
   failing: string[]; passing: string[]; unfinished: string[]; inconclusive: string[];
-  failures: UnitFailureDetail[]; fileErrors: UnitFileErrorDetail[];
+  failures: UnitFailureDetail[]; fileErrors: UnitFileErrorDetail[]; runnerErrors: UnitRunnerError[];
 }
 
 async function retryTimedOutFiles(cwd: string, files: readonly string[], side: 'affected' | 'main'): Promise<TimeoutRetryResult> {
-  const result: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [] };
+  const result: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [], runnerErrors: [] };
   for (const file of [...new Set(files)].sort()) {
     console.log(`Unit gate: ${file} timed out on ${side}; rerunning alone`);
     const retry = await runUnitGate(cwd, [file], 1);
-    if (!retry.done) {
+    if (retry.runnerErrors.length) {
+      result.inconclusive.push(file);
+      result.runnerErrors.push(...retry.runnerErrors);
+      console.log(`Unit gate inconclusive: runner failure when retrying ${file} alone on ${side}:\n${retry.runnerErrors.map(error => error.diagnostic).join('\n')}`);
+    } else if (!retry.done) {
       result.unfinished.push(...retry.unfinished);
       result.inconclusive.push(file);
       reportUnfinished(side, retry.unfinished);
@@ -2202,6 +2224,15 @@ async function retryTimedOutFiles(cwd: string, files: readonly string[], side: '
     } else result.passing.push(file);
   }
   return result;
+}
+
+function runnerErrorRefusal(side: 'affected' | 'main', errors: readonly UnitRunnerError[]): string {
+  const detail = errors.map(error => {
+    const diagnostic = error.diagnostic.length > 12_000
+      ? `[showing the last 12,000 characters]\n${error.diagnostic.slice(-12_000)}` : error.diagnostic;
+    return `  ${error.files.join(', ')}:\n${diagnostic}`;
+  }).join('\n');
+  return `unit gate inconclusive: unattributed ${side} runner failure; not merging:\n${detail}`;
 }
 
 /** Streams retain responsibility for failures from earlier merges, including shared-branch merges. */
@@ -2229,9 +2260,11 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
   const branch = await runUnitGate(worktree, files);
   let branchFailureFiles = branch.failing;
   let branchTimedOut = branch.timedOut;
-  let branchTimeoutRetry: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [] };
+  let branchTimeoutRetry: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [], runnerErrors: [] };
+  if (branch.runnerErrors.length) return runnerErrorRefusal('affected', branch.runnerErrors);
   if (!branch.done) {
     branchTimeoutRetry = await retryTimedOutFiles(worktree, branch.timedOut, 'affected');
+    if (branchTimeoutRetry.runnerErrors.length) return runnerErrorRefusal('affected', branchTimeoutRetry.runnerErrors);
     branchFailureFiles = [...new Set([...branch.failing, ...branchTimeoutRetry.failing])].sort();
     const unresolved = [...new Set([
       ...branch.unfinished.filter(file => !branch.timedOut.includes(file)),
@@ -2252,7 +2285,8 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
   // then retry every timeout alone so the side's decision comes from its isolated run.
   const together = branchFailureFiles.filter(file => !branchTimedOut.includes(file));
   const confirmed = together.length ? await runUnitGate(worktree, together, 1)
-    : { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], unfinished: [], output: '' };
+    : { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '' };
+  if (confirmed.runnerErrors.length) return runnerErrorRefusal('affected', confirmed.runnerErrors);
   const alreadyRetried = new Set(branch.done ? [] : branch.timedOut);
   const retryNewTimeouts = (files: readonly string[]) => files.filter(file => !alreadyRetried.has(file));
   let retry: TimeoutRetryResult;
@@ -2268,6 +2302,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
     ...(!confirmed.done ? confirmed.unfinished.filter(file => !confirmed.timedOut.includes(file)) : []),
     ...retry.inconclusive,
   ])].sort();
+  if (retry.runnerErrors.length) return runnerErrorRefusal('affected', retry.runnerErrors);
   if (branchUnresolved.length) {
     reportUnfinished('affected', branchUnresolved);
     return `unit gate remains inconclusive after isolated timeout retry:\n  ${branchUnresolved.join('\n  ')}`;
@@ -2301,7 +2336,9 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
       const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
       if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
       const main = await runUnitGate(directory, existing);
+      if (main.runnerErrors.length) return runnerErrorRefusal('main', main.runnerErrors);
       const mainRetry = await retryTimedOutFiles(directory, main.timedOut, 'main');
+      if (mainRetry.runnerErrors.length) return runnerErrorRefusal('main', mainRetry.runnerErrors);
       const mainUnresolved = [...new Set([
         ...main.unfinished.filter(file => !main.timedOut.includes(file)),
         ...mainRetry.inconclusive,

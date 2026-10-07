@@ -327,6 +327,158 @@ describe('goalctl runtime policy', () => {
     expect(introducedUnitFailureFiles([file], [], mainTestFailure, loadError, loadError)).toEqual([]);
   });
 
+  test('real Bun 1.4.2 failure output keeps native exceptions and scalar errors distinct', () => {
+    const file = '.temp/goal-gate-probes/a-typeerror.test.ts';
+    const root = process.cwd();
+    // These are the relevant lines captured from the real one-file Bun runs in .temp/goal-gate-probes.
+    const captured = (errorType: string, message: string, line: number) => [
+      'bun test v1.4.2 (744846f84)', `${file}:`,
+      "1 | import { test } from 'bun:test';", '2 |', "3 | test('throws a native error', () => {",
+      `4 |   throw new ${errorType}('${message}');`, '                                                     ^',
+      `${errorType}: ${message}`,
+      `      at <anonymous> (${root}/${file}:4:${line})`, '(fail) throws a native error [0.23ms]',
+      ' 0 pass', ' 1 fail', 'Ran 1 test across 1 file. [3.00ms]',
+      'task: Failed to run task "goal:unit-files": exit status 1',
+    ].join('\n');
+    const typeError = unitFailureDetails(captured('TypeError', 'native type failure probe', 50), [file], root);
+    const referenceError = unitFailureDetails(captured('ReferenceError', 'native reference failure probe', 60), [file], root);
+    expect(typeError[0]?.test).toBe('throws a native error');
+    expect(typeError[0]?.detail).toContain('TypeError: native type failure probe');
+    expect(referenceError[0]?.detail).toContain('ReferenceError: native reference failure probe');
+    expect(introducedUnitFailureFiles([file], referenceError, typeError)).toEqual([file]);
+
+    const scalarFile = '.temp/goal-gate-probes/d-scalar.test.ts';
+    const scalar = (expected: number, received: number) => [
+      'bun test v1.4.2 (744846f84)', `${scalarFile}:`,
+      "1 | import { expect, test } from 'bun:test';", '2 |', "3 | test('has a scalar assertion failure', () => {",
+      `4 |   expect(${received}).toBe(${expected});`, '                ^',
+      'error: expect(received).toBe(expected)', '', `Expected: ${expected}`, `Received: ${received}`,
+      `      at <anonymous> (${root}/${scalarFile}:4:13)`, '(fail) has a scalar assertion failure [0.30ms]',
+      ' 0 pass', ' 1 fail', 'Ran 1 test across 1 file. [4.00ms]',
+      'task: Failed to run task "goal:unit-files": exit status 1',
+    ].join('\n');
+    const oldScalar = unitFailureDetails(scalar(1, 2), [scalarFile], root);
+    const newScalar = unitFailureDetails(scalar(1, 3), [scalarFile], root);
+    expect(introducedUnitFailureFiles([scalarFile], newScalar, oldScalar)).toEqual([scalarFile]);
+  });
+
+  test('real Bun assertion, unhandled rejection, import error, and timeout output retain their findings', () => {
+    const root = process.cwd();
+    const diffFile = '.temp/goal-gate-probes/c-equal-diff.test.ts';
+    const diffOutput = [
+      'bun test v1.4.2 (744846f84)', `${diffFile}:`,
+      "1 | import { expect, test } from 'bun:test';", '2 |', "3 | test('has an object assertion diff', () => {",
+      "4 |   expect({ restore: 'new' }).toEqual({ restore: 'old' });", '                                 ^',
+      'error: expect(received).toEqual(expected)', '', '  {', '-   "restore": "old",', '+   "restore": "new",', '  }', '',
+      '- Expected  - 1', '+ Received  + 1',
+      `      at <anonymous> (${root}/${diffFile}:4:30)`, '(fail) has an object assertion diff [0.33ms]',
+      ' 0 pass', ' 1 fail', 'Ran 1 test across 1 file. [3.00ms]',
+      'task: Failed to run task "goal:unit-files": exit status 1',
+    ].join('\n');
+    const sameDiff = unitFailureDetails(diffOutput, [diffFile], root);
+    const addedDiff = unitFailureDetails(diffOutput.replace('"restore": "new"', '"restore": "newer"'), [diffFile], root);
+    expect(introducedUnitFailureFiles([diffFile], sameDiff, sameDiff)).toEqual([]);
+    expect(introducedUnitFailureFiles([diffFile], addedDiff, sameDiff)).toEqual([diffFile]);
+
+    const rejectionFile = '.temp/goal-gate-probes/e-unhandled-rejection.test.ts';
+    const rejection = (message: string) => [
+      'bun test v1.4.2 (744846f84)', `${rejectionFile}:`,
+      "1 | import { test } from 'bun:test';", '2 |', "3 | test('leaves an unhandled rejection', async () => {",
+      `4 |   queueMicrotask(() => { void Promise.reject(new Error('${message}')); });`, '                                                     ^',
+      `error: ${message}`, `      at <anonymous> (${root}/${rejectionFile}:4:50)`,
+      '(fail) leaves an unhandled rejection [0.36ms]', ' 0 pass', ' 1 fail',
+      'Ran 1 test across 1 file. [4.00ms]', 'task: Failed to run task "goal:unit-files": exit status 1',
+    ].join('\n');
+    const oldRejection = unitFailureDetails(rejection('unhandled rejection probe'), [rejectionFile], root);
+    const newRejection = unitFailureDetails(rejection('new rejection regression'), [rejectionFile], root);
+    expect(oldRejection[0]?.detail).toContain('error: unhandled rejection probe');
+    expect(introducedUnitFailureFiles([rejectionFile], newRejection, oldRejection)).toEqual([rejectionFile]);
+
+    const importFile = '.temp/goal-gate-probes/f-import-error.test.ts';
+    const importOutput = (worktree: string, errors: string[]) => [
+      'bun test v1.4.2 (744846f84)', `${importFile}:`, '',
+      ...errors.flatMap(error => ['# Unhandled error between tests', '-------------------------------',
+        `error: Cannot find module '${error}' from '${worktree}/${importFile}'`, '-------------------------------', '']),
+      ' 0 pass', ` ${errors.length} fail`, ` ${errors.length} error`,
+      `Ran ${errors.length} test across 1 file. [3.00ms]`,
+      'task: Failed to run task "goal:unit-files": exit status 1',
+    ].join('\n');
+    const branchErrors = unitFileErrorDetails(importOutput(root, ['./missing-probe-import.ts']), [importFile], root);
+    const sameErrors = unitFileErrorDetails(importOutput('/tmp/unit-gate-baseline', ['./missing-probe-import.ts']), [importFile], '/tmp/unit-gate-baseline');
+    const twoMainErrors = unitFileErrorDetails(importOutput('/tmp/unit-gate-baseline', ['./missing-probe-import.ts', './another-missing.ts']),
+      [importFile], '/tmp/unit-gate-baseline');
+    expect(branchErrors).toHaveLength(1);
+    expect(branchErrors[0]?.detail).toContain("Cannot find module './missing-probe-import.ts'");
+    expect(introducedUnitFailureFiles([importFile], [], [], branchErrors, sameErrors)).toEqual([]);
+    expect(introducedUnitFailureFiles([importFile], [], [], branchErrors, twoMainErrors)).toEqual([]);
+
+    const timeoutFile = '.temp/goal-gate-probes/g-timeout.test.ts';
+    const timeoutOutput = [
+      'bun test v1.4.2 (744846f84)', `${timeoutFile}:`, '(fail) times out [20.10ms]',
+      '  ^ this test timed out after 20ms.', ' 0 pass', ' 1 fail',
+      'Ran 1 test across 1 file. [24.00ms]', 'task: Failed to run task "goal:unit-files": exit status 1',
+    ].join('\n');
+    expect(timedOutTestFiles(timeoutOutput, [timeoutFile])).toEqual([timeoutFile]);
+  });
+
+  test('real file-level import errors remain separate signatures and remove cleanly', () => {
+    const file = '.temp/goal-gate-probes/f-import-error.test.ts';
+    const output = (names: string[]) => [
+      `${file}:`, ...names.flatMap(name => ['# Unhandled error between tests', '-------------------------------',
+        `error: Cannot find module './${name}.ts'`, '-------------------------------']),
+      ' 0 pass', ` ${names.length} fail`, ` ${names.length} error`,
+    ].join('\n');
+    const main = unitFileErrorDetails(output(['missing-probe-import', 'another-missing']), [file]);
+    const branch = unitFileErrorDetails(output(['missing-probe-import']), [file]);
+    expect(main).toHaveLength(2);
+    expect(branch).toHaveLength(1);
+    expect(introducedUnitFailureFiles([file], [], [], branch, main)).toEqual([]);
+  });
+
+  test('real combined Bun output attributes each test and unhandled import error', () => {
+    const root = process.cwd();
+    const files = [
+      '.temp/goal-gate-probes/a-typeerror.test.ts', '.temp/goal-gate-probes/b-referenceerror.test.ts',
+      '.temp/goal-gate-probes/c-equal-diff.test.ts', '.temp/goal-gate-probes/d-scalar.test.ts',
+      '.temp/goal-gate-probes/e-unhandled-rejection.test.ts', '.temp/goal-gate-probes/f-import-error.test.ts',
+      '.temp/goal-gate-probes/g-timeout.test.ts',
+    ];
+    // Captured from one real task goal:unit-files invocation over all seven probes.
+    const output = [
+      `task: [goal:unit-files] bun test ${files.map(file => `./${file}`).join(' ')}`,
+      'bun test v1.4.2 (744846f84)',
+      `${files[0]}:`, "1 | import { test } from 'bun:test';", '2 |', "3 | test('throws a TypeError', () => {",
+      "4 |   throw new TypeError('native type failure probe');", '                                                     ^',
+      'TypeError: native type failure probe', `      at <anonymous> (${root}/${files[0]}:4:50)`,
+      '(fail) throws a TypeError [0.26ms]',
+      `${files[1]}:`, "1 | import { test } from 'bun:test';", '2 |', "3 | test('throws a ReferenceError', () => {",
+      "4 |   throw new ReferenceError('native reference failure probe');", '                                                               ^',
+      'ReferenceError: native reference failure probe', `      at <anonymous> (${root}/${files[1]}:4:60)`,
+      '(fail) throws a ReferenceError [0.06ms]',
+      `${files[2]}:`, "1 | import { expect, test } from 'bun:test';", '2 |', "3 | test('has an object assertion diff', () => {",
+      "4 |   expect({ restore: 'new' }).toEqual({ restore: 'old' });", '                                 ^',
+      'error: expect(received).toEqual(expected)', '', '  {', '-   "restore": "old",', '+   "restore": "new",', '  }', '',
+      '- Expected  - 1', '+ Received  + 1', `      at <anonymous> (${root}/${files[2]}:4:30)`,
+      '(fail) has an object assertion diff [0.22ms]',
+      `${files[3]}:`, "1 | import { expect, test } from 'bun:test';", '2 |', "3 | test('has a scalar assertion failure', () => {",
+      '4 |   expect(2).toBe(1);', '                ^', 'error: expect(received).toBe(expected)', '',
+      'Expected: 1', 'Received: 2', `      at <anonymous> (${root}/${files[3]}:4:13)`,
+      '(fail) has a scalar assertion failure [0.06ms]',
+      `${files[4]}:`, "1 | import { test } from 'bun:test';", '2 |', "3 | test('leaves an unhandled rejection', async () => {",
+      '4 |   queueMicrotask(() => { void Promise.reject(new Error(\'unhandled rejection probe\')); });', '                                                     ^',
+      'error: unhandled rejection probe', `      at <anonymous> (${root}/${files[4]}:4:50)`,
+      '(fail) leaves an unhandled rejection [0.22ms]',
+      `${files[5]}:`, '', '# Unhandled error between tests', '-------------------------------',
+      `error: Cannot find module './missing-probe-import.ts' from '${root}/${files[5]}'`, '-------------------------------',
+      `${files[6]}:`, '(fail) times out [20.07ms]', '  ^ this test timed out after 20ms.',
+      ' 0 pass', ' 7 fail', ' 1 error', ' 2 expect() calls', 'Ran 7 tests across 7 files. [26.00ms]',
+    ].join('\n');
+    expect(failingTestFiles(output, files, root)).toEqual(files);
+    expect(unitFailureDetails(output, files, root)).toHaveLength(6);
+    expect(unitFileErrorDetails(output, files, root, files)).toHaveLength(1);
+    expect(timedOutTestFiles(output, files, root)).toEqual([files[6]!]);
+  });
+
   test('loads reset status by GET, caches it, and projects account runway from the later reset boundary', async () => {
     const directory = mkdtempSync(join(import.meta.dir, '../../.temp/codex-reset-status-test-'));
     const cacheFile = join(directory, 'status.json');
@@ -804,6 +956,10 @@ if (args.includes('--list')) {
   process.exit(0);
 }
 if (process.env.GOAL_TEST_LOG) appendFileSync(process.env.GOAL_TEST_LOG, JSON.stringify({ cwd: process.cwd(), args }) + '\\n');
+if (process.env.GOAL_TEST_RUNNER_FAILURE) {
+  console.error(process.env.GOAL_TEST_RUNNER_FAILURE);
+  process.exit(1);
+}
 const child = Bun.spawn(['bun', 'test', ...args.slice(2)], { stdout: 'inherit', stderr: 'inherit' });
 process.exit(await child.exited);
 `);
@@ -1398,6 +1554,38 @@ ${edit}
       } finally { r.cleanup(); }
     }, 30_000);
   }
+
+  test('an unattributed task runner failure blocks with its diagnostic', async () => {
+    const r = repo();
+    try {
+      const file = 'runner-failure.test.ts';
+      const task = await r.start('G-001');
+      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(file); r.save(ledger);
+      writeFileSync(join(task.worktree, file), "import { expect, test } from 'bun:test';\ntest('passes', () => expect(true).toBe(true));\n");
+      r.commit(task);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', file]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add runner failure probe']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const plan = join(r.dir, '.temp/unit-plan');
+      const log = join(r.dir, '.temp/unit-log');
+      writeFileSync(plan, `  unit: ${file}\n`);
+      const before = r.git('rev-parse', 'main');
+      // This exact diagnostic line was captured from the real Taskfile failure probe in .temp/goal-gate-probes.
+      const diagnostic = 'task: Task "goal:unit-files-missing-probe" does not exist';
+      const result = r.run(['merge', task.id], {
+        GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_TEST_RUNNER_FAILURE: diagnostic,
+      });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('unit gate inconclusive: unattributed affected runner failure; not merging');
+      expect(result.stderr).toContain(diagnostic);
+      expect(r.git('rev-parse', 'main')).toBe(before);
+      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+      const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+      expect(runs).toHaveLength(1);
+      expect(runs[0].args).toContain(`./${file}`);
+      expect(r.git('worktree', 'list', '--porcelain')).not.toContain('unit-gate');
+    } finally { r.cleanup(); }
+  }, 30_000);
 
   test('eight affected files run as four shards and the union of their failures is reported', async () => {
     const r = repo();
