@@ -5,6 +5,7 @@ import { HttpBootstrapApi } from './api.ts';
 import { executeBootstrap, verifyBootstrap, type BootstrapResult } from './execute.ts';
 import { digest, openJournal } from './journal.ts';
 import { inside, loadPlan } from './plan.ts';
+import { verifyPlatformGovernance, verifyProductionOpening, type BootstrapOperator } from './platform-grant.ts';
 import { checkProductionEnv, readProductionEnv } from '../production-env.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -104,8 +105,16 @@ export async function run(args: string[]): Promise<void> {
   const operator = plan.operators[0]!;
   // Identity labels are compared here; Main performs signature, current-state
   // and scope verification on every authenticated request.
-  if (decodeJwt(token).sub !== operator.accountSubject)
+  const claims = decodeJwt(token);
+  if (typeof claims.iss !== 'string' || claims.iss.length === 0)
+    throw new Error('Bearer token has no account issuer');
+  if (claims.sub !== operator.accountSubject)
     throw new Error('Bearer principal differs from the launch operator');
+  const bootstrapOperator: BootstrapOperator = {
+    issuer: claims.iss,
+    accountSubject: operator.accountSubject,
+    actor: operator.actingSubject,
+  };
   const account = new URL(values['--account']!).origin;
   const accountRead = async (path: string) => {
     const response = await fetch(`${account}${path}`, {
@@ -149,14 +158,22 @@ export async function run(args: string[]): Promise<void> {
         planDigest,
         operator.actingSubject,
       );
-      result = await executeBootstrap({ root, plan, zones, api, journal });
+      result = await executeBootstrap({
+        root,
+        plan,
+        zones,
+        api,
+        journal,
+        operator: bootstrapOperator,
+      });
       await writeFile(
         `${folder}/result.json`,
         `${JSON.stringify({ planDigest, result }, null, 2)}\n`,
         { mode: 0o600 },
       );
     }
-    await verifyBootstrap(api, result, zones);
+    await verifyBootstrap(api, result, zones, bootstrapOperator);
+    await verifyProductionOpening(production, values['--env'], verifyPlatformGovernance);
     console.log(
       JSON.stringify(
         {

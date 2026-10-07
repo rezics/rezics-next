@@ -13,6 +13,11 @@ import {
   operationOutcome,
   type OperationOutcome,
 } from '../../../services/main/src/modules/operation/outcome.ts';
+import {
+  assertCatalogueImportGrant,
+  ensureCatalogueImportGrant,
+  type BootstrapOperator,
+} from './platform-grant.ts';
 
 const short = (iri: string) => iri.slice(-36);
 export function resource(namespace: string, name: string): string {
@@ -63,7 +68,9 @@ export function atPointer(value: unknown, pointer: string): unknown {
   return current;
 }
 
-/** O(zones + mounts + vocabulary labels + bounded records) sequential API calls.
+/** O(zones + mounts + vocabulary labels + bounded records) sequential API calls,
+ * plus one catalogue-import grant before those writes. A stale authority epoch
+ * replaces that unconfirmed command once.
  * No parallel writes, changed client identity, throttle bypass or demo material.
  * Source mapping is plan data; this executor has no provider/type branches. */
 export async function executeBootstrap(input: {
@@ -72,8 +79,11 @@ export async function executeBootstrap(input: {
   zones: ZoneManifest[];
   api: BootstrapApi;
   journal: BootstrapJournal;
+  /** The command supplies the bearer account. Omitted only by executor tests
+   * that do not exercise the catalogue-import gate. */
+  operator?: BootstrapOperator;
 }): Promise<BootstrapResult> {
-  const { root, plan, zones, api, journal } = input;
+  const { root, plan, zones, api, journal, operator } = input;
   const actor = plan.operators[0]!.actingSubject;
   if (journal.state.actor !== actor || journal.state.planDigest !== digest({ plan, zones })) {
     throw new Error('Bootstrap journal does not match the launch plan');
@@ -128,6 +138,12 @@ export async function executeBootstrap(input: {
     }
     if (source.zones.some((id) => !zones.some((zone) => zone.id === id)))
       throw new Error(`Source ${source.id} names an absent Zone`);
+  }
+  if (operator) {
+    if (operator.actor !== actor) throw new Error('Bootstrap grant actor differs from the launch operator');
+    // Intake is closed without this grant. A missing journaled grant fails here,
+    // before a later intake response of 403.
+    await ensureCatalogueImportGrant({ api, journal, namespace: plan.namespace, operator });
   }
   const key = (label: string) => `bootstrap:${plan.namespace}:${label}`;
   const unfinished = (label: string) => {
@@ -496,7 +512,9 @@ export async function verifyBootstrap(
   api: BootstrapApi,
   result: BootstrapResult,
   zones: ZoneManifest[],
+  operator?: BootstrapOperator,
 ): Promise<void> {
+  if (operator) await assertCatalogueImportGrant(api, operator);
   if (!result.questions) throw new Error('Bootstrap result has no Global questions; rerun bootstrap before verification');
   for (const spec of scopedSubjectQuestions) {
     const question = result.questions[spec.key];

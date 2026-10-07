@@ -20,10 +20,11 @@ Provision the operator's Person Agent through Main's Agent API. Put its native
 IRI and the Account subject in a local copy of
 [the launch plan](../../tests/fixtures/launch/plan.yaml). Use the operator's
 Account session cookie and a consented Main bearer token for that same subject.
-Include `classification:define` and `rating:configure` in the token's scopes:
-bootstrap installs the variant-kind and canonicity Concept schemes and the three
-Global questions for Characters, performances within a position or event, and
-units within a release. Each question is authored once in English, with reviewed
+Include `access:grant`, `classification:define` and `rating:configure` in the
+token's scopes: bootstrap grants its principal `platform:use:catalogue-import`
+before source intake, and installs the variant-kind and canonicity Concept
+schemes and the three Global questions for Characters, performances within a
+position or event, and units within a release. Each question is authored once in English, with reviewed
 presentations in the other seven UI locales. Resource means start at five ratings;
 projection means start at ten. Bootstrap creates no observations.
 Supply them as `BOOTSTRAP_ACCOUNT_COOKIE` and `BOOTSTRAP_MAIN_TOKEN`; neither is
@@ -75,8 +76,9 @@ in and provision the Agent that receives designation. Production `/health/ready`
 checks whether Main is safe to serve, including recorded migrations and the
 absence of payment provider rows; governance is the separate opening gate.
 `ops:env-check` validates configuration and states
-this opening rule; it does not establish governance verification. Run catalogue
-bootstrap verification separately after designation.
+this opening rule; it does not establish governance verification. Catalogue
+bootstrap verification runs `task ops:platform-governance` on the same
+environment file and fails when that command fails. Run it after designation.
 
 Account ownership and Main grants are separate. The platform administrator's
 live Agent controller can create/configure its own official Zones, change its
@@ -89,7 +91,9 @@ fence operations. A holder of `platform:use:platform-admin` receives the existin
 `trusted` rate-limit class;
 bootstrap uses its ordinary budget without installing a service client or
 overriding limits. It refuses denied operations and retains commands for replay.
-It never inserts grants into a database.
+It never inserts grants into a database. Its only grant is permanent
+`platform:use:catalogue-import` for its own principal, through the public
+grant API.
 
 The creating principal receives definition stewardship from its successful
 sealed semantic creation receipt and current Agent controller proof. This
@@ -160,17 +164,25 @@ task ops:bootstrap -- --plan .temp/launch/plan.yaml --env .temp/production.env \
 
 The command validates the production environment and matching service origins,
 confirms the Account owner session, creates the launch structure and vocabulary,
-then admits the bounded source records. Every catalogue creation first obtains
+then admits the bounded source records. Before source intake, it grants its
+principal permanent `platform:use:catalogue-import` through
+`POST /v1/access/grant-changes` and records that command in the journal. A
+re-run does not grant again. Every catalogue creation first obtains
 a candidate receipt and declares `new-creative-scope`; the executor never calls
 the `own-work` authoring path for imported material. A nonempty candidate result
 requires adjudication and stops the import. Verification then confirms the
-catalogue receipt, public Zones, definition keys, public Work reads and each
-question's wording in all eight UI locales. Question presentations preserve the
+principal still holds `platform:use:catalogue-import`, the catalogue receipt,
+public Zones, definition keys, public Work reads and each question's wording in
+all eight UI locales. A missing or revoked catalogue-import grant fails
+verification by name. Production verification also runs
+`task ops:platform-governance` on the same environment file and fails when that
+command fails. Question presentations preserve the
 English measurement and its rating population.
 
 For an isolated QA environment, use `--mode qa` and its loopback service origins.
-That mode relaxes production environment and steward prerequisites; it does not
-relax API authority, source pins, request bounds or Account owner identity.
+That mode relaxes production environment and steward prerequisites. It still
+enforces API authority, source pins, request bounds and Account owner identity.
+Platform governance stays on the production environment file.
 
 Re-read the resulting public resources without writes:
 
