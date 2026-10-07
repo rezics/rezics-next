@@ -86,6 +86,26 @@ final class CommandOverlay extends DatasetGraphWrapper implements DatasetGraphWr
      * membership owner checks this before any RDF/Lucene mutation escapes. */
     Set<Quad> additions() { return java.util.Collections.unmodifiableSet(adds); }
     Set<Quad> removals() { return java.util.Collections.unmodifiableSet(deletes); }
+    /** Membership owns physical named CURRENT, whereas C6 metadata deliberately
+     * uses CurrentScope's default merge. Retain this exact staged net delta but
+     * remove only that logical merge from membership reads. Other read wrappers
+     * and the existing outer item savepoint stay intact. */
+    static DatasetGraph membershipStorage(DatasetGraph data) {
+        DatasetGraph cursor=data;
+        while(cursor instanceof DatasetGraphWrapper wrapper) {
+            if(cursor instanceof CommandOverlay delta) {
+                DatasetGraph source=membershipStorage(delta.getWrapped());
+                if(source==delta.getWrapped()) return delta;
+                CommandOverlay physical=new CommandOverlay(source);
+                physical.adds.addAll(delta.adds); physical.deletes.addAll(delta.deletes);
+                return physical;
+            }
+            if(cursor instanceof CommandService.CurrentScope)
+                return membershipStorage(wrapper.getWrapped());
+            cursor=wrapper.getWrapped();
+        }
+        return data;
+    }
     boolean changed() { return !adds.isEmpty() || !deletes.isEmpty(); }
     void apply() {
         // Preserve delete-before-add semantics for the text wrapper, too.

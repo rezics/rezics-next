@@ -250,9 +250,13 @@ final class TemplateIndexService {
         // C6 default storage belongs to slim metadata. Ordered membership uses
         // the named current graph; an unsafe restored default placement must
         // never hide outside the preparer's native named-graph seek.
-        for(String type:List.of(RV+"OccurrencePlacement",RV+"RemovedPlacement",SCHEMA+"ItemList",SCHEMA+"ListItem"))
+        for(String type:List.of(RV+"OccurrencePlacement",RV+"RemovedPlacement",SCHEMA+"ItemList",SCHEMA+"ListItem",RV+"Structure",RV+"StructureGeneration",RV+"OrderSegment"))
             if(data.contains(org.apache.jena.sparql.core.Quad.defaultGraphNodeGenerated,Node.ANY,RDF.type.asNode(),uri(type))) return true;
-        return data.contains(org.apache.jena.sparql.core.Quad.defaultGraphNodeGenerated,Node.ANY,uri(SCHEMA+"itemListElement"),Node.ANY);
+        // Even an otherwise named owner/segment can have its lookup fields
+        // split into default storage. These owner fields are not C6 Work metadata.
+        for(String predicate:List.of(RV+"structureProfile",RV+"structure",RV+"generation",RV+"parent",RV+"segmentKey",SCHEMA+"itemListElement"))
+            if(data.contains(org.apache.jena.sparql.core.Quad.defaultGraphNodeGenerated,Node.ANY,uri(predicate),Node.ANY)) return true;
+        return false;
     }
     static void invalidateMembershipCompletion(DatasetGraph data) {
         if(!data.isInTransaction() || data.transactionMode()!=ReadWrite.WRITE)
@@ -394,10 +398,15 @@ final class TemplateIndexService {
         for (int i=bytes.length-1;i>=0;i--) if (++bytes[i]!=0) return;
         throw new IllegalArgumentException("membership checkpoint overflow");
     }
+    private static void membershipNamedSubject(DatasetGraph data,Node subject) {
+        if(data.contains(org.apache.jena.sparql.core.Quad.defaultGraphNodeGenerated,subject,Node.ANY,Node.ANY))
+            throw new IllegalArgumentException("ordered membership requires named current storage; mixed default owner/reference facts are unsafe");
+    }
     private static boolean membershipPlacement(DatasetGraph data, Node placement, boolean live, ProfileRegistry profiles) {
-        membershipUri(placement);
+        membershipUri(placement); membershipNamedSubject(data,placement);
         Node generation=membershipOne(data,CURRENT,placement,RV+"generation",true),occurrence=membershipOne(data,CURRENT,placement,RV+"occurrence",true);
         membershipUri(generation);membershipUri(occurrence);
+        membershipNamedSubject(data,generation);membershipNamedSubject(data,occurrence);
         Node structure=membershipOne(data,CURRENT,generation,RV+"structure",true);
         membershipUri(structure);membershipOwnerProfile(data,structure,profiles);
         Node item=membershipOne(data,CURRENT,placement,SCHEMA+"item",false),legacy=membershipOne(data,CURRENT,placement,RV+"target",false),
@@ -411,7 +420,7 @@ final class TemplateIndexService {
         if (item==null && (live || legacy!=null)) { data.add(uri(CURRENT),placement,uri(SCHEMA+"item"),target);changed=true; }
         if (!live) return changed;
         Node segment=membershipOne(data,CURRENT,placement,RV+"orderSegment",true);
-        membershipUri(segment);
+        membershipUri(segment);membershipNamedSubject(data,segment);
         Node parent=membershipOne(data,CURRENT,segment,RV+"parent",true);membershipUri(parent);
         String segmentKey=membershipText(membershipOne(data,CURRENT,segment,RV+"segmentKey",true)),
             orderKey=membershipText(membershipOne(data,CURRENT,placement,RV+"orderKey",true));
@@ -458,6 +467,7 @@ final class TemplateIndexService {
         membershipCopy(source,target,REVISIONS,subject,RDF.type.asNode(),16);
     }
     private static String membershipOwnerProfile(DatasetGraph data, Node structure, ProfileRegistry profiles) {
+        membershipNamedSubject(data,structure);
         Node graphProfile=membershipOne(data,CURRENT,structure,RV+"structureProfile",true);membershipUri(graphProfile);
         var focus=org.apache.jena.sparql.core.DatasetGraphFactory.create();
         try {
@@ -481,6 +491,8 @@ final class TemplateIndexService {
         } finally { focus.close(); }
     }
     static Map<String,Object> membershipValidatePlacement(DatasetGraph data, Node subject, ProfileRegistry profiles) {
+        data=CommandOverlay.membershipStorage(data);
+        membershipNamedSubject(data,subject);
         var focused=org.apache.jena.sparql.core.DatasetGraphFactory.create();
         try {
             // The Structure protocol admits at most 16 translated labels. Read
@@ -493,12 +505,15 @@ final class TemplateIndexService {
                 membershipCopy(data,focused,CURRENT,subject,uri(RV+predicate),16);
             for (String predicate:List.of("occurrence","generation","orderSegment","removedBy","selectionRealm")) {
                 Node reference=membershipOne(data,CURRENT,subject,RV+predicate,false);
-                if(reference!=null) membershipTypes(data,focused,reference);
+                if(reference!=null) { membershipNamedSubject(data,reference);membershipTypes(data,focused,reference); }
             }
             Map<String,Object> invalid=CanonicalPolicy.validate(profiles,focused,subject.getURI(),false);
             if (invalid!=null) return invalid;
             Node generation=membershipOne(data,CURRENT,subject,RV+"generation",true);
+            membershipNamedSubject(data,generation);
             Node structure=membershipOne(data,CURRENT,generation,RV+"structure",true);
+            Node segment=membershipOne(data,CURRENT,subject,RV+"orderSegment",false);
+            if(segment!=null) membershipNamedSubject(data,segment);
             String ownerProfile=membershipOwnerProfile(data,structure,profiles);
             String shape=data.contains(uri(CURRENT),subject,RDF.type.asNode(),uri(RV+"OccurrencePlacement"))?"placement":"removed-placement";
             return CommandService.validateOne(focused,new CommandService.Validation(ownerProfile,profiles.get(ownerProfile),
@@ -506,12 +521,13 @@ final class TemplateIndexService {
         } finally { focused.close(); }
     }
     static Map<String,Object> membershipValidateList(DatasetGraph data, Node list, Node member, ProfileRegistry profiles) {
-        membershipUri(list);
+        data=CommandOverlay.membershipStorage(data);
+        membershipUri(list); membershipNamedSubject(data,list);
         var focused=org.apache.jena.sparql.core.DatasetGraphFactory.create();
         try {
             for (Node predicate:List.of(RDF.type.asNode(),uri(RV+"generation"),uri(RV+"parent"))) membershipCopy(data,focused,CURRENT,list,predicate,16);
-            Node generation=membershipOne(data,CURRENT,list,RV+"generation",true);membershipTypes(data,focused,generation);
-            if(member!=null) { focused.add(uri(CURRENT),list,uri(SCHEMA+"itemListElement"),member);membershipTypes(data,focused,member); }
+            Node generation=membershipOne(data,CURRENT,list,RV+"generation",true);membershipNamedSubject(data,generation);membershipTypes(data,focused,generation);
+            if(member!=null) { membershipNamedSubject(data,member);focused.add(uri(CURRENT),list,uri(SCHEMA+"itemListElement"),member);membershipTypes(data,focused,member); }
             return CommandService.validateFocused(focused,new CommandService.Validation("structure-composition-v1",profiles.get("structure-composition-v1"),
                 "https://rezics.com/definition/structure-composition-v1/item-list-shape",List.of(list.getURI()),List.of(CURRENT,REVISIONS),Map.of()));
         } finally { focused.close(); }

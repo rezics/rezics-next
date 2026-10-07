@@ -887,6 +887,92 @@ public class MembershipSeekTest {
             assertEquals(0, counted.populationProbes); assertEquals(before, snapshot(data)); assertFalse(needsPreparation(data));
         } finally { data.close(); }
     }
+    private static final List<String> DEFAULT_OWNER_CASES = List.of("structure", "generation", "segment",
+        "segment-fields", "structure-profile", "generation-owner", "segment-key");
+    private static void moveOwnerFactsToDefault(DatasetGraph data, String defect) {
+        Node subject = defect.startsWith("structure") ? STRUCTURE : defect.startsWith("generation") ? GENERATION : SEGMENT;
+        var facts = Iter.toList(data.find(CURRENT, subject, Node.ANY, Node.ANY));
+        for (Quad quad : facts) {
+            boolean move = switch (defect) {
+                case "segment-fields" -> !quad.getPredicate().equals(RDF.type.asNode());
+                case "structure-profile" -> quad.getPredicate().equals(p("structureProfile"));
+                case "generation-owner" -> quad.getPredicate().equals(p("structure"));
+                case "segment-key" -> quad.getPredicate().equals(p("segmentKey"));
+                default -> true;
+            };
+            if (move) {
+                data.delete(quad);
+                data.add(Quad.defaultGraphNodeGenerated, quad.getSubject(), quad.getPredicate(), quad.getObject());
+            }
+        }
+    }
+    private static void unplacedOccurrence(DatasetGraph data) {
+        data.add(CURRENT, NEW_OCCURRENCE, RDF.type.asNode(), s("ListItem"));
+        data.add(CURRENT, NEW_OCCURRENCE, p("structure"), STRUCTURE);
+        data.add(CURRENT, NEW_OCCURRENCE, p("introducedBy"), HEAD);
+    }
+    private static Map<String,Object> insertFirstOwnedPlacement(DatasetGraph data, String suffix) {
+        String placement = "<" + NEW_PLACEMENT.getURI() + ">";
+        String insert = placement + " a rv:OccurrencePlacement, schema:ListItem ; rv:generation <" + GENERATION.getURI()
+            + "> ; rv:occurrence <" + NEW_OCCURRENCE.getURI() + "> ; rv:occurrenceRole rv:ChapterRole ; rv:orderSegment <"
+            + SEGMENT.getURI() + "> ; rv:orderKey \"zzz\" ; schema:item <" + id(200000).getURI()
+            + "> ; schema:position \"0-zzz\" . <" + LIST.getURI() + "> a schema:ItemList ; rv:generation <"
+            + GENERATION.getURI() + "> ; rv:parent <" + STRUCTURE.getURI() + "> ; schema:itemListElement " + placement + " .";
+        String receipt = "urn:rezics:receipt:membership-first-owned-placement:" + suffix;
+        List<CommandService.Validation> checks = List.of(
+            new CommandService.Validation("structure-composition-v1", PROFILES.get("structure-composition-v1"),
+                "https://rezics.com/definition/structure-composition-v1/placement-shape", List.of(NEW_PLACEMENT.getURI()),
+                List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()),
+            new CommandService.Validation("structure-composition-v1", PROFILES.get("structure-composition-v1"),
+                "https://rezics.com/definition/structure-composition-v1/item-list-shape", List.of(LIST.getURI()),
+                List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
+        return SlimCommandTest.service(PROFILES).runCommand(data, receipt, SlimCommandTest.DIGEST,
+            membershipCommand(receipt, "", insert, "<" + NEW_OCCURRENCE.getURI() + "> a schema:ListItem ."), checks,
+            System.nanoTime() + 30_000_000_000L);
+    }
+    @Test public void emptyNamedMembershipCannotCertifyDefaultOwnersOrSplitOwnerFields() {
+        for (String defect : DEFAULT_OWNER_CASES) {
+            var data = fixture(0, 0, 0, 0);
+            try {
+                write(data, () -> moveOwnerFactsToDefault(data, defect));
+                Set<Quad> before = snapshot(data); long[] physical = countPhysicalRows(data);
+                assertTrue(needsPreparation(data));
+                var result = prepare(data, request());
+                assertEquals(defect + ": " + result, "invalid", result.get("status"));
+                assertTrue(result.toString(), result.get("report").toString().contains("ordered membership requires named current storage"));
+                assertEquals("owner default witness must refuse before empty named seeks are certified", 0, physical[0]);
+                assertTrue(completedProof(data).isEmpty()); assertEquals(before, snapshot(data));
+            } finally { data.close(); }
+        }
+    }
+    @Test public void nativeInsertionCannotUseUnchangedDefaultOwnersOrMixedGraphReferencesBehindAnOldProof() {
+        var named = fixture(0, 0, 0, 0);
+        try {
+            write(named, () -> unplacedOccurrence(named));
+            assertEquals(0, drain(named, countPhysicalRows(named), 1)); Set<Quad> proof = completedProof(named);
+            var admitted = insertFirstOwnedPlacement(named, "named-control");
+            assertEquals(admitted.toString(), "committed", admitted.get("status"));
+            assertEquals(proof, completedProof(named)); assertFalse(needsPreparation(named));
+        } finally { named.close(); }
+        for (String defect : DEFAULT_OWNER_CASES) {
+            var data = fixture(0, 0, 0, 0);
+            try {
+                write(data, () -> unplacedOccurrence(data));
+                assertEquals(0, drain(data, countPhysicalRows(data), 1)); assertFalse(needsPreparation(data));
+                Set<Quad> proof = completedProof(data); assertEquals(1, proof.size());
+                // The owner references change outside admission after a stopped
+                // restore. The old marker remains byte-identical and in epoch.
+                data.begin(ReadWrite.WRITE);
+                try { moveOwnerFactsToDefault(data, defect); data.commit(); } finally { data.end(); }
+                assertEquals(proof, completedProof(data)); assertTrue(needsPreparation(data));
+                Set<Quad> before = snapshot(data);
+                var result = insertFirstOwnedPlacement(data, defect);
+                assertEquals(defect + ": " + result, "invalid", result.get("status"));
+                assertEquals("default owner admission must leave no placement, list, receipt or projection changes", before, snapshot(data));
+                assertEquals(proof, completedProof(data)); assertTrue(needsPreparation(data));
+            } finally { data.close(); }
+        }
+    }
     private static String probe(Path directory, String mode) throws Exception {
         String classpath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
         var process = new ProcessBuilder(Path.of(System.getProperty("java.home"), "bin", "java").toString(),

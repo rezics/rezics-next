@@ -38,7 +38,7 @@ final class MembershipNormalFormPolicy {
     record Result(String error, Set<Node> validatedLists) {}
     static Result check(CommandOverlay delta, ProfileRegistry profiles, long deadlineNano) {
         try {
-            Check check=new Check(delta, profiles, deadlineNano); check.run();
+            Check check=new Check((CommandOverlay)CommandOverlay.membershipStorage(delta), profiles, deadlineNano); check.run();
             return new Result(null,Set.copyOf(check.validatedLists));
         } catch (IllegalArgumentException invalid) { return new Result(invalid.getMessage(),Set.of()); }
     }
@@ -106,7 +106,9 @@ final class MembershipNormalFormPolicy {
             for (Node subject : changed) {
                 deadline();
                 Set<Node> postTypes=types(false,subject);
-                if(postTypes.stream().anyMatch(type->List.of(LIVE,REMOVED,LIST,ITEM,SEGMENT,GENERATION,STRUCTURE).contains(type))
+                Set<Node> defaultTypes=values(false,Quad.defaultGraphNodeGenerated,subject,TYPE);
+                if(java.util.stream.Stream.concat(postTypes.stream(),defaultTypes.stream())
+                    .anyMatch(type->List.of(LIVE,REMOVED,LIST,ITEM,SEGMENT,GENERATION,STRUCTURE).contains(type))
                     && before.contains(Quad.defaultGraphNodeGenerated,subject,Node.ANY,Node.ANY))
                     fail("ordered membership cannot be redirected into default metadata storage");
                 if (typedEither(subject, LIVE) || typedEither(subject, REMOVED) || typedEither(subject, LIST)) focus(subject);
