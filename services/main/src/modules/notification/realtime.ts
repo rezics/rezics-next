@@ -1,3 +1,4 @@
+import { AsyncResource } from 'node:async_hooks';
 import type { Pool, PoolClient, Notification as PgNotification } from 'pg';
 import { NOTIFICATION_REALTIME_CHANNEL } from './store.ts';
 
@@ -49,7 +50,13 @@ export class NotificationRealtimeHub {
   private connect(): Promise<void> {
     if (this.stopping || this.client) return Promise.resolve();
     if (this.connecting) return this.connecting;
-    this.connecting = this.openListener().finally(() => { this.connecting = undefined; });
+    // The hub retains this checkout after start returns. Its owning context
+    // must not become the startup caller's or an unrelated worker's hold.
+    const resource = new AsyncResource('notification-realtime-listener');
+    this.connecting = resource.runInAsyncScope(() => this.openListener()).finally(() => {
+      resource.emitDestroy();
+      this.connecting = undefined;
+    });
     return this.connecting;
   }
 

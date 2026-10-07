@@ -46,7 +46,11 @@ export class NestedPoolCheckoutError extends Error {
 
 export type NestedPoolCheckoutMode = 'log' | 'throw';
 
-const checkoutHolds = new AsyncLocalStorage<Set<Pool>>();
+interface CheckoutHold {
+  pool: Pool;
+  active: boolean;
+}
+const checkoutHolds = new AsyncLocalStorage<ReadonlySet<CheckoutHold>>();
 let checkoutMode: NestedPoolCheckoutMode =
   process.env.REZICS_NESTED_POOL_CHECKOUT === 'throw' ? 'throw' : 'log';
 
@@ -66,29 +70,29 @@ function checkoutWait(requested: number | undefined): number {
   return requested;
 }
 
-function adoptHold(pool: Pool): void {
-  const existing = checkoutHolds.getStore();
-  if (existing) {
-    existing.add(pool);
-    return;
-  }
+function adoptHold(pool: Pool): CheckoutHold {
+  const hold = { pool, active: true };
+  // A sibling may inherit this snapshot, but a child must not add its checkout
+  // to the sibling's ownership. Releases retire the captured checkout token.
+  const inherited = [...(checkoutHolds.getStore() ?? [])].filter((item) => item.active);
   // enterWith during the synchronous connect() sticks across the caller's
   // await. Wrapping the resolved promise does not, on this runtime.
-  checkoutHolds.enterWith(new Set([pool]));
-}
-
-function releaseHold(pool: Pool): void {
-  checkoutHolds.getStore()?.delete(pool);
+  checkoutHolds.enterWith(new Set([...inherited, hold]));
+  return hold;
 }
 
 type ConnectCallback = (
-  err: Error | undefined, client: PoolClient | undefined, done: (release?: unknown) => void,
+  err: Error | undefined,
+  client: PoolClient | undefined,
+  done: (release?: unknown) => void,
 ) => void;
 
 function trackNestedCheckout(pool: Pool): void {
   const original = pool.connect.bind(pool) as Pool['connect'];
   const connect = (callback?: ConnectCallback) => {
-    const nested = checkoutHolds.getStore()?.has(pool) ?? false;
+    const nested = [...(checkoutHolds.getStore() ?? [])].some(
+      (hold) => hold.pool === pool && hold.active,
+    );
     if (nested) {
       const error = new NestedPoolCheckoutError();
       if (checkoutMode === 'throw') {
@@ -107,39 +111,47 @@ function trackNestedCheckout(pool: Pool): void {
       // the caller is not holding a connection across the await.
       return original(callback);
     }
-    if (nested) return original() as Promise<PoolClient>;
-    adoptHold(pool);
+    const hold = adoptHold(pool);
+    const clear = () => {
+      hold.active = false;
+    };
     let pending: Promise<PoolClient>;
     try {
       pending = original() as Promise<PoolClient>;
     } catch (error) {
-      releaseHold(pool);
+      clear();
       throw error;
     }
-    let released = false;
-    const clear = () => {
-      if (released) return;
-      released = true;
-      releaseHold(pool);
-    };
-    void pending.then(client => {
-      const release = client.release.bind(client);
-      client.release = (err?: Error | boolean) => {
+    // Return this chain so even an immediate release observes the wrapper.
+    return pending.then(
+      (client) => {
+        const release = client.release.bind(client);
+        client.release = (err?: Error | boolean) => {
+          clear();
+          release(err);
+        };
+        return client;
+      },
+      (error) => {
         clear();
-        release(err);
-      };
-    }, clear);
-    return pending;
+        throw error;
+      },
+    );
   };
   pool.connect = connect as Pool['connect'];
 }
 
 /** Startup options carrying the bounds, followed by any caller options. */
-export function connectionBoundOptions(extra?: string, bounds: ConnectionBounds = CONNECTION_BOUNDS): string {
-  return [`-c lock_timeout=${bounds.lockTimeout}`,
+export function connectionBoundOptions(
+  extra?: string,
+  bounds: ConnectionBounds = CONNECTION_BOUNDS,
+): string {
+  return [
+    `-c lock_timeout=${bounds.lockTimeout}`,
     `-c idle_in_transaction_session_timeout=${bounds.idleInTransactionSessionTimeout}`,
     `-c transaction_timeout=${bounds.transactionTimeout}`,
-    ...(extra ? [extra] : [])].join(' ');
+    ...(extra ? [extra] : []),
+  ].join(' ');
 }
 
 /**
@@ -148,7 +160,10 @@ export function connectionBoundOptions(extra?: string, bounds: ConnectionBounds 
  * checked out, so an idle-in-transaction kill would surface as an unhandled
  * client error and take the process down; keep one listener per client.
  */
-export function boundedPool(config: PoolConfig, bounds: ConnectionBounds = CONNECTION_BOUNDS): Pool {
+export function boundedPool(
+  config: PoolConfig,
+  bounds: ConnectionBounds = CONNECTION_BOUNDS,
+): Pool {
   const pool = new Pool({
     ...config,
     connectionTimeoutMillis: checkoutWait(config.connectionTimeoutMillis),
@@ -156,7 +171,9 @@ export function boundedPool(config: PoolConfig, bounds: ConnectionBounds = CONNE
   });
   const failed = (error: Error) => logWorkerFault('main.database.connection', error);
   pool.on('error', failed);
-  pool.on('connect', client => { client.on('error', failed); });
+  pool.on('connect', (client) => {
+    client.on('error', failed);
+  });
   trackNestedCheckout(pool);
   return pool;
 }

@@ -423,3 +423,32 @@ test('obsolete discovery inspection reuses its transaction while stale refresh a
     ).rows,
   ).toEqual([{ active_generation: rootId, revision: '1' }]);
 });
+
+test('Bun startup and instrumented workers release detector ownership across async contexts', async () => {
+  const connection = `postgres://${process.env.USER}@127.0.0.1:${port}/${database}`;
+  const results = [];
+  for (const mode of ['plain', 'telemetry']) {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        join(import.meta.dir, 'discovery-nested-checkout-startup.ts'),
+        connection,
+        mode,
+      ],
+      { stdout: 'pipe', stderr: 'pipe' },
+    );
+    const [code, stdout, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+    ]);
+    results.push({ code, stderr, result: JSON.parse(stdout.trim()) });
+  }
+  expect(results).toEqual(
+    ['plain', 'telemetry'].map((mode) => ({
+      code: 0,
+      stderr: '',
+      result: { instrumented: mode === 'telemetry', completed: 6, failures: [] },
+    })),
+  );
+}, 30_000);
