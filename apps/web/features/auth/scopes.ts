@@ -32,6 +32,8 @@ export const MAIN_SITE_SCOPES = [
   // Spaces, Realms and their classification.
   'space:create', 'realm:profile', 'realm:adopt', 'realm:reject', 'realm:classify',
   'classification:define', 'classification:decide',
+  // Descriptive types an administrator admits or retires.
+  'type:admit',
   // Shared Contexts and the reader's private selections.
   'context:read', 'context:write', 'context:select',
   // Source records can be read; Library imports use Main's constrained Work route.
@@ -65,6 +67,10 @@ export const SCOPES_NOT_REQUESTED = [
   'connected-app:invoke', 'connected-app:observe',
   // Operator runbooks for owner reconciliation and relocation.
   'owner:operate',
+  // Wiki name matching and extraction checks are agent tools; the site does not call them.
+  'wiki:propose',
+  // Realm quota reservation has no site caller.
+  'quota:reserve',
 ] as const;
 
 /** The space-separated `scope` parameter for authorization requests. */
