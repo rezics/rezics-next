@@ -261,6 +261,7 @@ const workObjects = config.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
 }) : undefined;
 if (workObjects) await workObjects.initialize();
 const environment = {
+  eventTemporalAccess: pool,
   addresses: new AliasRegistry(pool),
   fuseki,
   lineage: { dataEpoch: config.MAIN_DATA_EPOCH, routingEpoch: config.MAIN_ROUTING_EPOCH },

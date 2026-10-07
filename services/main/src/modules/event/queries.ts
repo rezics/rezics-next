@@ -6,7 +6,7 @@ import { resolveStatementAcceptance } from '../statement/read.ts';
 import { eventTimeSlotIri } from './observation.ts';
 import { checkedDateRange, checkedInstantRange, UnsupportedEventTime } from './time.ts';
 import { readEventDependencies, readEventSource, EventSourceUnavailable } from './source.ts';
-import { hasEventEffects, type EventEffectWindow } from './effects.ts';
+import { eventPendingTargets, hasEventEffects, type EventEffectWindow } from './effects.ts';
 
 const PROFILE = 'event-interval-v2';
 /** Per-request index and response work; inventory size is not a product limit. */
@@ -225,13 +225,8 @@ export class EventTemporalQueries {
       if (cursor && cursor.basis !== basis) throw new EventQueryRestart('Event query dependencies changed');
       // Unresolved targets can move into this window, so their unknown effects
       // remain conservative. Known deltas fence only their affected windows.
-      const pending = (await client.query<{ pending: boolean; failed: boolean }>(`SELECT
-        EXISTS(SELECT 1 FROM access.event_temporal_pending
-          WHERE ($1::text IS NULL OR time_status=$1) AND ($2::text[] IS NULL OR event=ANY($2)) LIMIT 1) AS pending,
-        EXISTS(SELECT 1 FROM access.event_temporal_pending
-          WHERE state='failed' AND ($1::text IS NULL OR time_status=$1)
-            AND ($2::text[] IS NULL OR event=ANY($2)) LIMIT 1) AS failed`,
-      [input.timeStatus ?? null, selectedTopics ? [...topics.byEvent.keys()] : null])).rows[0]!;
+      const pending = await eventPendingTargets(client, input.timeStatus,
+        selectedTopics ? [...topics.byEvent.keys()] : undefined);
       const updates = await hasEventEffects(client, window, input.timeStatus,
         selectedTopics ? [...topics.byEvent.keys()] : undefined);
       let covered = Boolean(checkpoint);
@@ -244,22 +239,16 @@ export class EventTemporalQueries {
           : indexed.some(row => row.event === head.event && row.time_status === head.status && row.time_revision === head.head
             && row.journal_sequence !== null && BigInt(row.journal_sequence) <= BigInt(checkpoint![`${head.status}_prefix`])));
       } else if (covered) {
-        covered = (input.timeStatus === 'planned' || checkpoint!.actual_revision === dependencies.actual)
-          && (input.timeStatus === 'actual' || checkpoint!.planned_revision === dependencies.planned);
-        // Older admitted slots predate collection heads. An absent head only
-        // proves coverage after the local index closes the captured prefix.
-        for (const status of input.timeStatus ? [input.timeStatus] : ['actual', 'planned'] as const) {
-          if (dependencies[status] === 'none') covered &&= checkpoint!.initial_sequence !== null
-            && BigInt(checkpoint![`${status}_prefix`]) >= BigInt(checkpoint!.initial_sequence!);
-        }
+        covered = checkpoint!.initial_sequence !== null
+          && (input.timeStatus === 'planned' || BigInt(checkpoint!.actual_prefix) >= BigInt(checkpoint!.initial_sequence!))
+          && (input.timeStatus === 'actual' || BigInt(checkpoint!.planned_prefix) >= BigInt(checkpoint!.initial_sequence!));
       }
       if (!covered || pending.pending || updates || window.state !== 'ready') {
         await client.query('COMMIT');
         return { profile: 'event-query-v1' as const,
           state: checkpoint ? 'partial' as const : 'unavailable' as const,
-          progress: { phase: !checkpoint || (!covered && (input.timeStatus !== 'planned' && checkpoint.actual_revision === ''
-            || input.timeStatus !== 'actual' && checkpoint.planned_revision === '')) ? 'backfill' as const
-            : !covered || pending.pending || updates ? 'targets' as const : 'buckets' as const,
+          progress: { phase: !covered ? 'backfill' as const
+            : pending.pending || updates ? 'targets' as const : 'buckets' as const,
           processed: checkpoint?.processed ?? '0', windowProcessed: window.processed, failed: pending.failed },
           items: [], histogram: [], continuation: null };
       }
@@ -322,11 +311,33 @@ export class EventTemporalQueries {
     const live = await readEventDependencies(this.env);
     const liveTopics = selectedTopics ? await acceptedTopics(this.env, input) : topics;
     const liveHeads = selectedTopics ? await topicHeads(this.env, [...liveTopics.byEvent.keys()], input.timeStatus) : [];
-    if (basisOf(live, liveTopics.basis, liveHeads, window) !== basis
-      || !selectedTopics && ((input.timeStatus !== 'planned' && live.actual !== dependencies.actual)
-        || (input.timeStatus !== 'actual' && live.planned !== dependencies.planned))) {
+    if (basisOf(live, liveTopics.basis, liveHeads, window) !== basis) {
       throw new EventQueryRestart('Event dependencies changed during query');
     }
+    // A fresh snapshot catches off-page publication during hydration. If its
+    // fence was already consumed, the changed scoped window revision catches it.
+    const fresh = await this.access.connect();
+    try {
+      await fresh.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      await recoveryOpen(fresh);
+      const current = (await fresh.query<Checkpoint>(`SELECT generation::text,data_epoch FROM access.event_temporal_checkpoint WHERE singleton`)).rows[0];
+      const currentWindow = (await fresh.query<Window>(`SELECT id::text,state,interpretation,grain,bucket_start::text,
+        bucket_end::text,scan_started_at::text,actual_revision::text,planned_revision::text
+        FROM access.event_temporal_window WHERE id=$1`, [window.id])).rows[0];
+      const pending = await eventPendingTargets(fresh, input.timeStatus, selectedTopics ? [...topics.byEvent.keys()] : undefined);
+      if (!current || current.generation !== checkpoint!.generation || current.data_epoch !== live.dataEpoch
+        || !currentWindow || currentWindow.state !== 'ready'
+        || basisOf(live, liveTopics.basis, liveHeads, currentWindow) !== basis || pending.pending
+        || await hasEventEffects(fresh, currentWindow, input.timeStatus, selectedTopics ? [...topics.byEvent.keys()] : undefined)) {
+        throw new EventQueryRestart('Event scope changed during query');
+      }
+      await fresh.query('COMMIT');
+    } catch (error) {
+      await fresh.query('ROLLBACK');
+      if (error instanceof EventQueryRestart || error instanceof EventQueryUnavailable) throw error;
+      throw new EventQueryUnavailable('Event temporal scope recheck is unavailable');
+    }
+    finally { fresh.release(); }
     const last = rows.at(-1);
     const continuation = more && last ? cursorToken({ v: 2, basis, digest: normalized.requestDigest,
       generation: checkpoint!.generation, expiresAt: Date.now() + 5 * 60_000,

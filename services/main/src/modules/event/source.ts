@@ -10,17 +10,15 @@ export class EventSourceUnavailable extends Error {}
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export interface EventSourceKey { event: string; status: 'actual' | 'planned' }
 
-/** Local collection heads are the read basis; sequence only reports owner progress. */
+/** Fixed owner lineage; the moving Main sequence never qualifies a window. */
 export async function readEventDependencies(env: WorkActivationEnvironment) {
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?epoch ?sequence ?actual ?planned ?relaySequence WHERE {
+    SELECT ?epoch ?sequence ?relaySequence WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?sequence .
         OPTIONAL { ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:dataEpoch ?epoch ; rv:streamSequence ?relaySequence }
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
       }
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { <urn:rezics:event-collection:actual> rv:eventTimeCollectionHead ?actual } }
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { <urn:rezics:event-collection:planned> rv:eventTimeCollectionHead ?planned } }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
     } LIMIT 2`)).results?.bindings ?? [];
   const row = rows[0];
@@ -29,7 +27,6 @@ export async function readEventDependencies(env: WorkActivationEnvironment) {
     throw new EventSourceUnavailable('event owner lineage is unavailable or held');
   }
   return { dataEpoch: row.epoch.value, sequence: row.sequence.value,
-    actual: row.actual?.value ?? 'none', planned: row.planned?.value ?? 'none',
     relaySequence: row.relaySequence.value };
 }
 
@@ -68,11 +65,11 @@ export async function readEventSourceKeys(relay: Pick<Pool, 'query'>,
   }
   if (!batches.length) return null;
   const rows = (await relay.query<{ sequence: string; envelope: { type?: string;
-    data?: { receipt?: { outcome?: string; event?: string; timeStatus?: 'actual' | 'planned'; observationRevision?: string } } } }>(
+    data?: { receipt?: { id?: string; outcome?: string; event?: string; timeStatus?: 'actual' | 'planned'; observationRevision?: string } } } }>(
     EVENT_SOURCE_MEMBERS_SQL, [MAIN_RELAY_STREAM_SCOPE, options.dataEpoch,
       batches.map(batch => batch.sequence), EVENT_SOURCE_COST.members + 1])).rows;
   const counts = new Map(batches.map(batch => [batch.sequence, 0]));
-  const keys: (EventSourceKey & { revision: string; sequence: string })[] = [];
+  const keys: (EventSourceKey & { revision: string; sequence: string; receipt?: string })[] = [];
   for (const row of rows) {
     if (!counts.has(row.sequence)) throw new EventSourceUnavailable('Event journal member is outside its batch');
     counts.set(row.sequence, counts.get(row.sequence)! + 1);
@@ -82,7 +79,7 @@ export async function readEventSourceKeys(relay: Pick<Pool, 'query'>,
       || !['actual', 'planned'].includes(receipt.timeStatus ?? '') || !nativeId.test(receipt.observationRevision ?? '')) {
       throw new EventSourceUnavailable('Event relay proof is incomplete');
     }
-    keys.push({ event: receipt.event!, status: receipt.timeStatus!, revision: receipt.observationRevision!, sequence: row.sequence });
+    keys.push({ event: receipt.event!, status: receipt.timeStatus!, revision: receipt.observationRevision!, sequence: row.sequence, ...(receipt.id ? { receipt: receipt.id } : {}) });
   }
   if (rows.length !== members || batches.some(batch => counts.get(batch.sequence) !== batch.event_count)) {
     throw new EventSourceUnavailable('Event retained batch members are incomplete');
@@ -98,7 +95,7 @@ export async function readEventCollectionKeys(relay: Pick<Pool, 'query'>,
     throw new EventSourceUnavailable('Event collection seek is invalid');
   }
   const result = (await relay.query<{ cut: string; sequence: string | null; event_id: string | null;
-    envelope: { data?: { receipt?: { event?: string; timeStatus?: string; observationRevision?: string; outcome?: string } } } | null }>(`
+    envelope: { data?: { receipt?: { id?: string; event?: string; timeStatus?: string; observationRevision?: string; outcome?: string } } } | null }>(`
     WITH cut AS MATERIALIZED (
       SELECT sequence FROM relay.checkpoint WHERE stream_scope=$1 AND data_epoch=$2
       ORDER BY sequence DESC LIMIT 1
@@ -126,7 +123,7 @@ export async function readEventCollectionKeys(relay: Pick<Pool, 'query'>,
       || !nativeId.test(receipt.event ?? '') || !nativeId.test(receipt.observationRevision ?? '')) {
       throw new EventSourceUnavailable('Event collection receipt is incomplete');
     }
-    return { event: receipt.event!, status: options.status, revision: receipt.observationRevision!, sequence: row.sequence! };
+    return { event: receipt.event!, status: options.status, revision: receipt.observationRevision!, sequence: row.sequence!, ...(receipt.id ? { receipt: receipt.id } : {}) };
   });
   if (page.length <= EVENT_COLLECTION_BATCH) return { keys, sequence: cut, eventId: null, prefix: cut };
   const last = page[EVENT_COLLECTION_BATCH - 1]!, next = page[EVENT_COLLECTION_BATCH]!;

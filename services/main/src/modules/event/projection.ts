@@ -1,3 +1,4 @@
+import { readEventObservationReceipt, sealEventObservationAdmission } from './observation.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
@@ -175,25 +176,10 @@ export class EventTemporalProjection {
         checkpoint.backfill_complete = true;
         await client.query('UPDATE access.event_temporal_checkpoint SET backfill_complete=true WHERE singleton');
       }
+      worked += await this.reconcilePublications(client);
       worked += await this.projectTargets(client);
       worked += await this.updateWindows(client);
       worked += await this.buildWindow(client);
-      {
-        const dependencies = await readEventDependencies(this.env);
-        if (dependencies.dataEpoch !== checkpoint.data_epoch) throw new EventProjectionUnavailable('Event owner epoch changed');
-        // Exact applied heads qualify only after their own owner batch was
-        // consumed. Other targets and bucket jobs fence their own read scopes.
-        await client.query(`UPDATE access.event_temporal_checkpoint SET
-          actual_revision = CASE WHEN ($1='none' AND $3::numeric>=initial_sequence) OR EXISTS(
-            SELECT 1 FROM access.event_temporal_applied WHERE time_status='actual'
-              AND time_revision=$1 AND journal_sequence<= $3::numeric)
-            THEN $1 ELSE actual_revision END,
-          planned_revision = CASE WHEN ($2='none' AND $4::numeric>=initial_sequence) OR EXISTS(
-            SELECT 1 FROM access.event_temporal_applied WHERE time_status='planned'
-              AND time_revision=$2 AND journal_sequence<= $4::numeric)
-            THEN $2 ELSE planned_revision END WHERE singleton`,
-        [dependencies.actual, dependencies.planned, checkpoint.actual_prefix, checkpoint.planned_prefix]);
-      }
       await client.query('COMMIT');
       return worked;
     } catch (error) {
@@ -202,24 +188,66 @@ export class EventTemporalProjection {
     } finally { client.release(); }
   }
 
-  private async enqueue(client: PoolClient, key: Key & { revision: string; sequence: string }) {
+  private async enqueue(client: PoolClient, key: Key & { revision: string; sequence: string; receipt?: string }) {
     if (!native.test(key.event) || !['actual', 'planned'].includes(key.status)) {
       throw new EventProjectionUnavailable('Event relay target is invalid');
     }
+    if (key.receipt) await client.query(`UPDATE access.event_temporal_window_update SET publication_sequence=$2
+      WHERE publication_receipt=$1 AND event=$3 AND time_status=$4`,
+    [key.receipt, key.sequence, key.event, key.status]);
     const applied = await client.query(`UPDATE access.event_temporal_applied SET journal_sequence=$3
       WHERE event=$1 AND time_status=$2 AND time_revision=$4`, [key.event, key.status, key.sequence, key.revision]);
     if (applied.rowCount) {
       await client.query('DELETE FROM access.event_temporal_pending WHERE event=$1 AND time_status=$2 AND source_sequence<=$3',
         [key.event, key.status, key.sequence]);
+      await this.retirePublication(client, key.receipt, key.sequence);
       return;
     }
     await client.query(`INSERT INTO access.event_temporal_pending
-      (event,time_status,source_sequence,journal_revision,state,attempts,retry_at)
-      VALUES ($1,$2,$3,$4,'queued',0,clock_timestamp())
+      (event,time_status,source_sequence,journal_revision,receipt_id,effect_registered,state,attempts,retry_at)
+      VALUES ($1,$2,$3,$4,$5,EXISTS(SELECT 1 FROM access.event_temporal_window_update WHERE publication_receipt=$5),
+        'queued',0,clock_timestamp())
       ON CONFLICT (event,time_status) DO UPDATE SET source_sequence=EXCLUDED.source_sequence,
-        journal_revision=EXCLUDED.journal_revision,state='queued',retry_at=clock_timestamp()
+        journal_revision=EXCLUDED.journal_revision,receipt_id=EXCLUDED.receipt_id,
+        effect_registered=EXCLUDED.effect_registered,state='queued',retry_at=clock_timestamp()
       WHERE event_temporal_pending.source_sequence<=EXCLUDED.source_sequence`,
-    [key.event, key.status, key.sequence, key.revision]);
+    [key.event, key.status, key.sequence, key.revision, key.receipt ?? null]);
+  }
+
+  private async retirePublication(client: PoolClient, receipt: string | null | undefined, sequence: string) {
+    if (receipt) await client.query(`DELETE FROM access.event_temporal_window_update WHERE publication_receipt=$1
+      AND publication_sequence<=$2::numeric`, [receipt, sequence]);
+  }
+
+  private async reconcilePublications(client: PoolClient): Promise<number> {
+    // Successful publications await their retained owner journal key. Only a
+    // proved cancellation can remove an undelivered admission fence.
+    const rows = (await client.query<{ id: string; publication_admission: string; publication_digest: string; event: string; publication_authority_epoch: string; expired: boolean }>(`
+      SELECT id::text,publication_admission::text,publication_digest,event,publication_authority_epoch,
+        publication_expiry<=clock_timestamp() AS expired FROM access.event_temporal_window_update
+      WHERE publication_receipt IS NOT NULL AND publication_sequence IS NULL ORDER BY work_at,id LIMIT 4 FOR UPDATE`)).rows;
+    for (const row of rows) {
+      let receipt = await readEventObservationReceipt(this.env, row.publication_admission);
+      if (!receipt && row.expired) receipt = await sealEventObservationAdmission(this.env, {
+        id: row.publication_admission, requestDigest: row.publication_digest, authorityEpoch: row.publication_authority_epoch,
+        scope: `event:observe:${row.event}`, action: 'event.observation.set',
+      });
+      if (receipt && (receipt.dataEpoch !== this.env.lineage.dataEpoch || receipt.requestDigest !== row.publication_digest)) {
+        throw new EventProjectionUnavailable('Event publication receipt differs from its admission');
+      }
+      if (receipt?.outcome === 'cancelled') await client.query('DELETE FROM access.event_temporal_window_update WHERE id=$1', [row.id]);
+      else await client.query('UPDATE access.event_temporal_window_update SET work_at=clock_timestamp() WHERE id=$1', [row.id]);
+    }
+    const delivered = (await client.query<{ id: string; projected: boolean }>(`SELECT u.id::text,
+      EXISTS(SELECT 1 FROM access.event_temporal_applied a WHERE a.event=u.event AND a.time_status=u.time_status
+        AND a.journal_sequence>=u.publication_sequence) AS projected
+      FROM access.event_temporal_window_update u WHERE publication_receipt IS NOT NULL
+        AND publication_sequence IS NOT NULL ORDER BY work_at,id LIMIT 32 FOR UPDATE`)).rows;
+    for (const row of delivered) {
+      if (row.projected) await client.query('DELETE FROM access.event_temporal_window_update WHERE id=$1', [row.id]);
+      else await client.query('UPDATE access.event_temporal_window_update SET work_at=clock_timestamp() WHERE id=$1', [row.id]);
+    }
+    return rows.length + delivered.length;
   }
 
   private async ingestRelay(client: PoolClient, checkpoint: Checkpoint): Promise<number> {
@@ -260,8 +288,8 @@ export class EventTemporalProjection {
     const receivers = (await client.query<{ active: boolean; last_window: string | null }>(`SELECT EXISTS(
       SELECT 1 FROM access.event_temporal_window WHERE state IN ('building','ready') LIMIT 1) AS active,
       (SELECT id::text FROM access.event_temporal_window ORDER BY access.event_temporal_window.id DESC LIMIT 1) AS last_window`)).rows[0]!;
-    const pending = (await client.query<{ event: string; time_status: Key['status']; journal_revision: string | null; source_sequence: string }>(
-      `SELECT event,time_status,journal_revision,source_sequence::text FROM access.event_temporal_pending WHERE retry_at<=statement_timestamp()
+    const pending = (await client.query<{ event: string; time_status: Key['status']; journal_revision: string | null; source_sequence: string; receipt_id: string | null }>(
+      `SELECT event,time_status,journal_revision,source_sequence::text,receipt_id FROM access.event_temporal_pending WHERE retry_at<=statement_timestamp()
        ORDER BY retry_at,event,time_status LIMIT $1 FOR UPDATE`, [EVENT_PROJECTION_COST.targets])).rows;
     for (const target of pending) {
       await client.query('SAVEPOINT event_target');
@@ -291,7 +319,7 @@ export class EventTemporalProjection {
             // Changes to one target retain FIFO across receivers; independent
             // targets rotate fairly without waiting for that target's windows.
             const prior = (await client.query<{ id: string }>(`SELECT id::text
-              FROM access.event_temporal_window_update WHERE event=$1 AND time_status=$2
+              FROM access.event_temporal_window_update WHERE event=$1 AND time_status=$2 AND publication_receipt IS NULL
               ORDER BY access.event_temporal_window_update.id DESC LIMIT 1 FOR UPDATE`,
             [target.event, target.time_status])).rows[0];
             const job = (await client.query<{ id: string }>(`${effectInsertSql} RETURNING id::text`,
@@ -307,6 +335,7 @@ export class EventTemporalProjection {
               ELSE EXCLUDED.journal_sequence END,time_revision=EXCLUDED.time_revision`,
         [target.event, target.time_status, source.head,
           source.head === target.journal_revision ? target.source_sequence : null]);
+        await this.retirePublication(client, target.receipt_id, target.source_sequence);
         await client.query('DELETE FROM access.event_temporal_pending WHERE event=$1 AND time_status=$2',
           [target.event, target.time_status]);
       } catch (error) {

@@ -1,9 +1,12 @@
+import type { Pool } from 'pg';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { readComponentState } from '../work/history.ts';
 import { IdempotencyConflict, PendingActivation,
   DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   type WorkActivationEnvironment } from '../work/activate.ts';
+import { eventIntentEffect, registerEventPublication } from './effects.ts';
+import { readEventSource } from './source.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { checkedEventObservation, eventPointRdf, type EventObservationIntent } from './time.ts';
 
@@ -103,7 +106,7 @@ export async function readEventObservationReceipt(env: WorkActivationEnvironment
       predecessor: get('predecessor') ?? null, recordedAt: get('recordedAt') } : {}) };
 }
 
-function receiptMatches(receipt: EventObservationReceipt, admission: RegisteredAdmission, digest: string) {
+function receiptMatches(receipt: EventObservationReceipt, admission: Pick<RegisteredAdmission, 'id' | 'authorityEpoch' | 'scope'>, digest: string) {
   return receipt.admissionId === admission.id && receipt.requestDigest === digest
     && receipt.authorityEpoch === admission.authorityEpoch && receipt.scope === admission.scope;
 }
@@ -130,7 +133,8 @@ async function readCurrentHead(env: WorkActivationEnvironment, eventTime: string
   return rows[0]?.head?.value ?? null;
 }
 
-async function sealTerminal(env: WorkActivationEnvironment, admission: RegisteredAdmission,
+async function sealTerminal(env: WorkActivationEnvironment,
+  admission: Pick<RegisteredAdmission, 'id' | 'requestDigest' | 'scope' | 'authorityEpoch'>,
   reason?: 'stale-head', eventTime?: string, expectedHead?: string | null): Promise<EventObservationReceipt | null> {
   const receipt = eventObservationReceiptIri(admission.id);
   const suffix = hash(`${receipt}\0${reason ? 'stale' : 'cancel'}`);
@@ -165,7 +169,7 @@ async function sealTerminal(env: WorkActivationEnvironment, admission: Registere
 }
 
 export async function sealEventObservationAdmission(env: WorkActivationEnvironment,
-  admission: RegisteredAdmission): Promise<EventObservationReceipt> {
+  admission: Pick<RegisteredAdmission, 'id' | 'requestDigest' | 'scope' | 'authorityEpoch' | 'action'>): Promise<EventObservationReceipt> {
   if (admission.action !== 'event.observation.set' || !admission.scope.startsWith('event:observe:')) {
     throw new IdempotencyConflict('unsupported event observation admission');
   }
@@ -190,7 +194,7 @@ function pointTriples(point: ReturnType<typeof eventPointRdf>): string {
     ? `${pointTriples}\n${point.temporalTriples.join(' .\n')} .` : pointTriples;
 }
 
-export async function setEventObservation(env: WorkActivationEnvironment,
+export async function setEventObservation(env: WorkActivationEnvironment & { eventTemporalAccess?: Pool },
   admission: RegisteredAdmission, rawInput: EventObservationIntent): Promise<EventObservationReceipt> {
   let input: EventObservationIntent;
   try { input = checkedEventObservation(rawInput); }
@@ -212,7 +216,6 @@ export async function setEventObservation(env: WorkActivationEnvironment,
     throw new PendingActivation('stale event observation was not sealed');
   }
   const revision = ID + Bun.randomUUIDv7();
-  const collection = `urn:rezics:event-collection:${input.timeStatus}`;
   const operation = ID + Bun.randomUUIDv7();
   const recordedAt = canonicalInstant(admission.registeredAt);
   const start = eventPointRdf(input.start, () => ID + Bun.randomUUIDv7());
@@ -224,8 +227,6 @@ export async function setEventObservation(env: WorkActivationEnvironment,
     revision, predecessor: prior, recordedAt };
   const manifest = prepareComponent(env.objectDirectory, eventTime, state, EVENT_TIME_PROFILE);
   const eventProfileChecks = await profileValidations(env.fuseki, EVENT_TIME_PROFILE_ID, [
-    { shape: 'https://rezics.com/definition/event-time-v1/collection-shape', focus: [collection],
-      graphs: [GRAPHS.current, GRAPHS.revisions] },
     { shape: 'https://rezics.com/definition/event-time-v1/event-shape', focus: [input.event], graphs: [GRAPHS.current] },
     { shape: 'https://rezics.com/definition/event-time-v1/slot-shape', focus: [eventTime],
       graphs: [GRAPHS.current, GRAPHS.revisions] },
@@ -247,18 +248,34 @@ export async function setEventObservation(env: WorkActivationEnvironment,
         rv:timeStatus rv:${eventTimeStatus} ; rv:eventTimeHead ${iri(prior)} . }
        GRAPH ${iri(GRAPHS.revisions)} { ${iri(prior)} a rv:EventTimeRevision, rv:RevisionAnchor ; rv:component ${iri(eventTime)} . }`
     : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(eventTime)} ?p ?o } }`;
+  if (!env.eventTemporalAccess) throw new EventObservationUnavailable('Event publication owner is unavailable');
+  const oldSource = prior ? await readEventSource(env, { target: { event: input.event, status: input.timeStatus } }) : null;
+  if (oldSource && oldSource.head !== prior) {
+    const terminal = await readEventObservationReceipt(env, admission.id);
+    if (terminal) return checkedReceipt(terminal, admission, input, digest);
+    throw new EventObservationUnavailable('Event predecessor changed before publication');
+  }
+  const old = oldSource?.rows[0];
+  const registered = await registerEventPublication(env.eventTemporalAccess, { receipt, admission: admission.id, digest,
+    expiresAt: admission.expiresAt, authorityEpoch: admission.authorityEpoch,
+    event: input.event, status: input.timeStatus, next: eventIntentEffect(input), old: old ? {
+      civil_start_min: old.civilStartMin, civil_end_max: old.civilEndMax,
+      instant_start_min: old.instantStartMin, instant_end_max: old.instantEndMax, instant_supported: old.instantSupported,
+    } : null }, env);
+  if (!registered) {
+    const terminal = await readEventObservationReceipt(env, admission.id);
+    if (!terminal) throw new PendingActivation('Event publication terminal is unavailable');
+    return checkedReceipt(terminal, admission, input, digest);
+  }
   let updateError: unknown;
   try {
     const result = await env.fuseki.commandWithReceipt({ receipt, digest, validations, deadlineMs: 10_000,
       update: `PREFIX rv: <${RV}> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
         DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
-          GRAPH ${iri(GRAPHS.current)} { ${iri(collection)} rv:eventTimeCollectionHead ?collectionHead }
           ${prior ? `GRAPH ${iri(GRAPHS.current)} { ${iri(eventTime)} rv:eventTimeHead ${iri(prior)} }` : ''} }
         INSERT {
           GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
           GRAPH ${iri(GRAPHS.current)} {
-            ${iri(collection)} a rv:EventTimeCollection ; rv:timeStatus rv:${eventTimeStatus} ;
-              rv:eventTimeCollectionHead ${iri(revision)} .
             ${iri(input.event)} a rv:Event ; rv:eventTime ${iri(eventTime)} .
             ${iri(eventTime)} a rv:EventTime ; rv:event ${iri(input.event)} ;
               rv:timeStatus rv:${eventTimeStatus} ; rv:eventTimeHead ${iri(revision)} . }
@@ -297,7 +314,6 @@ export async function setEventObservation(env: WorkActivationEnvironment,
         WHERE {
           GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
             rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
-          OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(collection)} rv:eventTimeCollectionHead ?collectionHead } }
           ${headGuard}
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
@@ -307,7 +323,10 @@ export async function setEventObservation(env: WorkActivationEnvironment,
     if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
     if (result.status === 'conflict') throw new IdempotencyConflict('event command receipt conflicts with another intent');
   } catch (error) {
-    if (error instanceof CommandRejected) throw new InvalidEventObservation('event time failed reviewed shape validation');
+    if (error instanceof CommandRejected) {
+      await sealEventObservationAdmission(env, admission);
+      throw new InvalidEventObservation('event time failed reviewed shape validation');
+    }
     if (error instanceof IdempotencyConflict) throw error;
     updateError = error;
   }

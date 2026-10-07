@@ -31,7 +31,7 @@ class EventSourceFuseki extends FusekiClient {
   constructor() { super('http://localhost:1/rezics'); }
   override async query(sparql: string): Promise<SparqlResult> {
     this.queries.push(sparql);
-    if (sparql.includes('SELECT ?epoch ?sequence ?actual')) {
+    if (sparql.includes('SELECT ?epoch ?sequence ?relaySequence')) {
       return { results: { bindings: this.dependencies ?? [{ epoch: value('epoch-event'), sequence: value(this.sequence),
         actual: value(this.actual), planned: value(this.planned), relaySequence: value('3') }] } };
     }
@@ -292,7 +292,7 @@ test('RATE07: incomplete, denied, malformed and gapped journal reads cannot adva
 test('RATE07: dependencies read only local collection revisions and enforce owner availability', async () => {
   const { env, fuseki } = sourceFixture();
   expect(await readEventDependencies(env)).toEqual({ dataEpoch: 'epoch-event', sequence: '10',
-    actual: id(101), planned: id(102), relaySequence: '3' });
+    relaySequence: '3' });
   expect(fuseki.queries[0]).toContain('LIMIT 2');
   expect(fuseki.queries[0]).toContain('rv:restoreHold true');
   expect(fuseki.queries[0]).not.toContain('rv:EventTime');
@@ -360,7 +360,7 @@ test('RATE07: cold, interrupted, failed and bucket-building coverage report prog
     fixture.checkpoint.backfill_complete = state === 'failed' || state === 'buckets';
     fixture.checkpoint.processed = state === 'cold' ? '0' : '2';
     if (state === 'cold') fixture.cold();
-    if (state === 'cold' || state === 'interrupted') fixture.checkpoint.actual_revision = '';
+    if (state === 'cold' || state === 'interrupted') fixture.checkpoint.actual_prefix = '0';
     fixture.pending.pending = state === 'failed';
     fixture.pending.failed = state === 'failed';
     fixture.window.state = state === 'buckets' ? 'building' : 'ready';
@@ -369,7 +369,7 @@ test('RATE07: cold, interrupted, failed and bucket-building coverage report prog
       items: [], histogram: [], continuation: null, progress: { processed: fixture.checkpoint.processed,
         phase: state === 'failed' ? 'targets' : state === 'buckets' ? 'buckets' : 'backfill', failed: state === 'failed' } });
     expect(fixture.fuseki.queries).toHaveLength(1);
-    expect(fixture.fuseki.queries[0]).toContain('SELECT ?epoch ?sequence ?actual');
+    expect(fixture.fuseki.queries[0]).toContain('SELECT ?epoch ?sequence ?relaySequence');
     expect(fixture.sql.some(call => call.text.includes('FROM access.event_temporal_member'))).toBe(false);
     expect(fixture.sql.some(call => call.text.includes('FROM access.event_temporal_bucket'))).toBe(false);
     expect(fixture.released()).toBe(1);
@@ -398,7 +398,7 @@ test('RATE09: exact instant coverage ignores unsupported points outside the sele
     start: '2026-05-15T00:00:00Z', end: '2026-05-15T23:59:59Z' });
   expect(result).toMatchObject({ state: 'ready', interpretation: 'instant', timeStatus: 'actual', items: [] });
   expect(fixture.sql.some(call => call.text.includes('FROM access.event_temporal_member'))).toBe(true);
-  expect(fixture.fuseki.queries.every(query => query.includes('SELECT ?epoch ?sequence ?actual'))).toBe(true);
+  expect(fixture.fuseki.queries.every(query => query.includes('SELECT ?epoch ?sequence ?relaySequence'))).toBe(true);
 });
 
 test('RATE09: unsupported selected instant points fail explicitly before page and histogram reads', async () => {
@@ -459,7 +459,7 @@ test('RATE07: recovery holds and stale hydrated heads cannot return a cached rea
   stale.fuseki.targets.delete(`${id(1)}/actual`);
   await expect(stale.facade.query(queryInput)).rejects.toBeInstanceOf(EventQueryRestart);
   const changed = indexedFixture();
-  changed.fuseki.afterTarget = () => { changed.fuseki.actual = id(999); };
+  changed.fuseki.afterTarget = () => { changed.pending.updates = true; };
   await expect(changed.facade.query(queryInput)).rejects.toBeInstanceOf(EventQueryRestart);
 });
 
@@ -521,7 +521,7 @@ test('RATE07: typed effects fence only unvisited intersecting scans and selected
   expect(scoped.text).toContain('u.existing_windows @>');
   expect(scoped.text).toContain('u.target @> ANY');
   expect(scoped.values[0]).toBe(uuidOrdinal(window.id));
-  expect(eventEffectFence({ ...window, scan_started_at: null }).text).toBe('SELECT false AS pending');
+  expect(eventEffectFence({ ...window, scan_started_at: null }).text).toContain('publication_receipt IS NOT NULL');
   expect(eventEffectFence({ ...window, interpretation: 'instant' }).text).toContain('u.unsupported_effect &&');
   expect(effectInsertSql).toContain("CASE WHEN $3::jsonb IS NULL THEN 'empty'::daterange");
   expect(effectInsertSql).toContain('ready,civil_effect');
@@ -546,7 +546,7 @@ test('RATE07: local current and continuation reads ignore an unrelated global re
 test('RATE07: local backfill reports partial progress before global replay finds any Event members', async () => {
   const fixture = indexedFixture();
   fixture.checkpoint.processed = '0';
-  fixture.checkpoint.actual_revision = '';
+  fixture.checkpoint.actual_prefix = '0';
   fixture.checkpoint.backfill_complete = false;
   expect(await fixture.facade.query(queryInput)).toMatchObject({ state: 'partial',
     progress: { phase: 'backfill', processed: '0', windowProcessed: '2' }, items: [] });

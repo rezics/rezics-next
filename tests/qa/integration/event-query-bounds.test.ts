@@ -7,7 +7,7 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { EVENT_PROJECTION_COST, EventTemporalProjection } from '../../../services/main/src/modules/event/projection.ts';
 import { EventQueryRestart, EventTemporalQueries, type EventQueryInput }
   from '../../../services/main/src/modules/event/queries.ts';
-import { eventObservationDigest, eventTimeSlotIri, setEventObservation }
+import { eventObservationDigest, eventObservationReceiptIri, eventTimeSlotIri, readEventObservationReceipt, setEventObservation }
   from '../../../services/main/src/modules/event/observation.ts';
 import { checkedEventObservation, type EventPoint }
   from '../../../services/main/src/modules/event/time.ts';
@@ -17,8 +17,8 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent, type WorkAct
   from '../../../services/main/src/modules/work/activate.ts';
 import { cancelSemanticAdmission } from '../../../services/main/src/modules/semantic/command.ts';
 import { profileValidations } from '../../../services/main/src/infrastructure/profile.ts';
-import { hasEventEffects } from '../../../services/main/src/modules/event/effects.ts';
-import { EVENT_SOURCE_BATCH_SQL, EVENT_SOURCE_MEMBERS_SQL, EVENT_SOURCE_COST, readEventCollectionKeys, readEventDependencies, readEventSourceKeys } from '../../../services/main/src/modules/event/source.ts';
+import { eventEffectFence, eventIntentEffect, hasEventEffects, registerEventPublication } from '../../../services/main/src/modules/event/effects.ts';
+import { EVENT_SOURCE_BATCH_SQL, EVENT_SOURCE_MEMBERS_SQL, EVENT_SOURCE_COST, readEventCollectionKeys, readEventDependencies, readEventSource, readEventSourceKeys } from '../../../services/main/src/modules/event/source.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
 const native = () => `${ID}${randomUUID()}`;
@@ -51,8 +51,8 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
   const relay = new Pool({ connectionString: databases.urls.relay, max: 4 });
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL, Bun.env.FUSEKI_MAINTENANCE_TOKEN,
     Bun.env.FUSEKI_COMMAND_TOKEN);
-  const env: WorkActivationEnvironment = { fuseki, objectDirectory: join(directory, 'objects'),
-    lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
+  const env: WorkActivationEnvironment & { eventTemporalAccess: Pool } = { fuseki, objectDirectory: join(directory, 'objects'),
+    eventTemporalAccess: access, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
   const queries = new EventTemporalQueries(access, env, Buffer.alloc(32, 9));
   let projection = new EventTemporalProjection(access, relay, env);
   const consumer = `event-bounds-${randomUUID()}`;
@@ -336,11 +336,10 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
     // older disjoint window still has pending receiver jobs. Every tick also
     // receives more unrelated Main batches than ordinary replay can consume.
     for (let tick = 0; tick < 100; tick++) {
-      const dependencies = await readEventDependencies(env);
-      const covered = (await access.query<{ head: string; pending: boolean }>(`SELECT actual_revision AS head,
+      const covered = (await access.query<{ covered: boolean; pending: boolean }>(`SELECT actual_prefix>=initial_sequence AS covered,
         EXISTS(SELECT 1 FROM access.event_temporal_pending WHERE time_status='actual' LIMIT 1) AS pending
         FROM access.event_temporal_checkpoint WHERE singleton`)).rows[0]!;
-      if (covered.head === dependencies.actual && !covered.pending) break;
+      if (covered.covered && !covered.pending) break;
       await advance();
       if (tick === 99) throw new Error('Local Event inventory did not complete');
     }
@@ -398,7 +397,7 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
     expect(new Set(events)).toEqual(new Set([target, ...fixtures.map(row => row.event)]));
 
     sustain = false; stressBoundary = null;
-    const firstPage = await queries.query(input);
+    let firstPage = await queries.query(input);
     if (firstPage.state !== 'ready' || !firstPage.continuation) throw new Error('Missing Event page cursor');
     // Unrelated Events have owner journal members too. Measure the same deep
     // inventory seek before and after growth, including filtered/operator work.
@@ -434,6 +433,68 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
     expect(observed.sourceRows).toBeLessThanOrEqual(input.pageSize + 2);
     expect(observed.bucketRows).toBe(1);
     expect(observed.pageRows).toBeLessThanOrEqual(51);
+    // Settled replay cannot recreate a receipt fence after its journal key is gone.
+    expect(await registerEventPublication(access, { receipt: initial.receipt, admission: initial.admissionId,
+      digest: initial.requestDigest, authorityEpoch: '0', expiresAt: new Date(Date.now() + 600000).toISOString(),
+      event: target, status: 'actual', old: null, next: eventIntentEffect(checkedEventObservation({
+        event: target, timeStatus: 'actual', temporalKind: 'instant', start: point(input.start),
+        actingSubject: actor, expectedRevisionHead: null,
+      })) }, env)).toBe(false);
+    expect((await queries.query({ ...input, continuation: firstPage.continuation! })).state).toBe('ready');
+    // A crash before dispatch retains a relevant pin. Expiry seals a native
+    // cancellation before removing it, rather than deleting it by age.
+    const abandoned = randomUUID(), abandonedEvent = native(), abandonedReceipt = eventObservationReceiptIri(abandoned);
+    const abandonedDigest = hash(abandoned);
+    await registerEventPublication(access, { receipt: abandonedReceipt, admission: abandoned, digest: abandonedDigest,
+      authorityEpoch: '0', expiresAt: new Date(Date.now() - 1000).toISOString(), event: abandonedEvent,
+      status: 'actual', old: null, next: { civil_start_min: input.start, civil_end_max: input.end,
+        instant_start_min: null, instant_end_max: null, instant_supported: false } }, env);
+    expect((await queries.query(input)).state).toBe('partial');
+    await projection.tick();
+    expect((await readEventObservationReceipt(env, abandoned))?.outcome).toBe('cancelled');
+    expect((await queries.query({ ...input, continuation: firstPage.continuation! })).state).toBe('ready');
+    // More same-status effects than one target budget must remain local, even
+    // before relay and again with a real undelivered/unapplied remainder.
+    const outside = Array.from({ length: 33 }, () => ({ event: native(), head: '' }));
+    unrelated.push(...outside.map(row => row.event));
+    for (const row of outside) row.head = (await write(row.event, '2099-04-01', null)).revision!;
+    resetObserved();
+    expect((await queries.query({ ...input, continuation: firstPage.continuation! })).state).toBe('ready');
+    expect(observed.sourceRows).toBeLessThanOrEqual(input.pageSize + 2);
+    await drain(); await projection.tick();
+    const outsideWork = (await access.query(`SELECT
+      (SELECT count(*)::int FROM access.event_temporal_applied WHERE event=ANY($1::text[]) AND time_status='actual') AS applied,
+      (SELECT count(*)::int FROM access.event_temporal_window_update WHERE publication_receipt IS NOT NULL
+        AND event=ANY($1::text[])) AS unapplied`, [outside.map(row => row.event)])).rows[0]!;
+    expect(outsideWork.applied).toBe(32); expect(outsideWork.unapplied).toBe(1);
+    expect((await queries.query({ ...input, continuation: firstPage.continuation! })).state).toBe('ready');
+    const measuredWindow = (await access.query<{ id: string; scan_started_at: string }>(
+      'SELECT id::text,scan_started_at::text FROM access.event_temporal_window WHERE id=$1', [window[0]!.id])).rows[0]!;
+    const scopedFence = eventEffectFence({ ...measuredWindow, interpretation: 'civil-date', grain: 'day',
+      bucket_start: input.start, bucket_end: input.end }, 'actual');
+    await access.query('ANALYZE access.event_temporal_window_update');
+    const fencePlan = (await access.query<{ 'QUERY PLAN': { Plan: QueryPlan }[] }>(
+      `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${scopedFence.text}`, scopedFence.values)).rows[0]!['QUERY PLAN'][0]!.Plan;
+    // Count filters and relation work, not merely the returned EXISTS boolean.
+    let fenceTouched = 0;
+    const visitFence = (node: QueryPlan) => {
+      if (node['Relation Name']) fenceTouched += node['Actual Rows'] * node['Actual Loops'];
+      fenceTouched += (node['Rows Removed by Filter'] ?? 0) * node['Actual Loops'];
+      for (const child of node.Plans ?? []) visitFence(child);
+    }; visitFence(fencePlan);
+    console.info('Scoped fence work with unapplied same-status backlog', { fenceTouched, outsideWork });
+    expect(fenceTouched).toBeLessThanOrEqual(64);
+    const moving = outside.at(-1)!;
+    moving.head = (await write(moving.event, input.start, moving.head)).revision!;
+    const affected = await queries.query({ ...input, continuation: firstPage.continuation! });
+    expect(affected.state).toBe('partial'); expect(affected.items).toEqual([]); expect(affected.histogram).toEqual([]);
+    await drain();
+    expect((await ready()).histogram[0]!.possible).toBe(2052);
+    moving.head = (await write(moving.event, '2099-04-01', moving.head)).revision!;
+    await drain(); expect((await ready()).histogram[0]!.possible).toBe(2051);
+    firstPage = await queries.query(input);
+    if (firstPage.state !== 'ready' || !firstPage.continuation) throw new Error('Missing scoped post-edit cursor');
+    console.info('Same-status out-of-window backlog remains readable', outsideWork);
     // Start several real window scopes whose first 100 consumed identities
     // lie before the high-key churn targets and contribute zero to these dates.
     const busy = Array.from({ length: 9 }, (_, index) => ({
@@ -549,27 +610,33 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
       event: broken.event, eventTime: broken.eventTime, timeStatus: 'actual', revision: withdrawnRevision,
       timeAvailability: 'withdrawn', timeEvidence: null, recordedAt: withdrawnAt, predecessor: broken.revision,
     }, PROFILE);
-    const actualCollection = 'urn:rezics:event-collection:actual';
     const operation = native(), suffix = hash(operation), receipt = `urn:rezics:receipt:${suffix}`;
     const batch = `urn:rezics:outbox:${suffix}`, ownerEvent = `urn:rezics:event:${suffix}`;
     const validations = await profileValidations(fuseki, 'event-time-v1', [
       { shape: `${PROFILE}/event-shape`, focus: [broken.event], graphs: [GRAPHS.current] },
-      { shape: `${PROFILE}/collection-shape`, focus: [actualCollection], graphs: [GRAPHS.current, GRAPHS.revisions] },
-      { shape: `${PROFILE}/slot-shape`, focus: [broken.eventTime], graphs: [GRAPHS.current, GRAPHS.revisions] },
+        { shape: `${PROFILE}/slot-shape`, focus: [broken.eventTime], graphs: [GRAPHS.current, GRAPHS.revisions] },
       { shape: `${PROFILE}/revision-shape`, focus: [withdrawnRevision], graphs: [GRAPHS.current, GRAPHS.revisions] },
     ]);
+    const withdrawnAdmission = randomUUID();
+    const priorSource = (await readEventSource(env, { target: { event: broken.event, status: 'actual' } })).rows[0]!;
+    await registerEventPublication(access, { receipt, admission: withdrawnAdmission, digest: hash(receipt),
+      expiresAt: new Date(Date.now() + 600000).toISOString(), authorityEpoch: '0',
+      event: broken.event, status: 'actual', next: null, old: {
+        civil_start_min: priorSource.civilStartMin, civil_end_max: priorSource.civilEndMax,
+        instant_start_min: priorSource.instantStartMin, instant_end_max: priorSource.instantEndMax,
+        instant_supported: priorSource.instantSupported,
+      } }, env);
     const withdrawnCommand = await fuseki.commandWithReceipt({ receipt, digest: hash(receipt), validations, deadlineMs: 10_000,
       update: `PREFIX rv: <${RV}>
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(broken.eventTime)} rv:eventTimeHead ${iri(broken.revision)} .
-          ${iri(actualCollection)} rv:eventTimeCollectionHead ?collectionHead . } }
+ } }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(broken.eventTime)} rv:eventTimeHead ${iri(withdrawnRevision)} .
-          ${iri(actualCollection)} a rv:EventTimeCollection ; rv:timeStatus rv:ActualTime ;
-            rv:eventTimeCollectionHead ${iri(withdrawnRevision)} . }
+ }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(withdrawnRevision)} a rv:EventTimeRevision, rv:RevisionAnchor ;
             rv:component ${iri(broken.eventTime)} ; rv:eventTime ${iri(broken.eventTime)} ;
@@ -580,7 +647,7 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
             rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(hash(receipt))} ;
-            rv:operation ${iri(operation)} ; rv:outcome rv:Succeeded ; rv:admissionId ${lit(randomUUID())} ;
+            rv:operation ${iri(operation)} ; rv:outcome rv:Succeeded ; rv:admissionId ${lit(withdrawnAdmission)} ;
             rv:authorityEpoch "0" ; rv:admittedScope ${lit(`event:observe:${broken.event}`)} ;
             rv:event ${iri(broken.event)} ; rv:eventTime ${iri(broken.eventTime)} ; rv:timeStatus rv:ActualTime ;
             rv:observationRevision ${iri(withdrawnRevision)} ; rv:expectedHead ${iri(broken.revision)} ;
@@ -594,7 +661,7 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
       } WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n }
         GRAPH ${iri(GRAPHS.current)} { ${iri(broken.eventTime)} rv:eventTimeHead ${iri(broken.revision)} .
-          ${iri(actualCollection)} rv:eventTimeCollectionHead ?collectionHead . }
+ }
         BIND(?n+1 AS ?next) }` });
     if (withdrawnCommand.status !== 'committed') throw new Error(`Withdrawal fixture rejected: ${JSON.stringify(withdrawnCommand)}`);
     await drain();

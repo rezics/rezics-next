@@ -65,7 +65,7 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
   const content = new ContentCore(contentPool);
   const identity = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as Record<string, string>,
     'openid work:create event:submit event:read classification:define statement:write statement:decide');
-  const env: WorkActivationEnvironment = { fuseki, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
+  const env: WorkActivationEnvironment & { eventTemporalAccess: Pool } = { fuseki, eventTemporalAccess: access, lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
     routingEpoch: Bun.env.MAIN_ROUTING_EPOCH }, objectDirectory: join(stateDir, 'objects') };
   const queries = new EventTemporalQueries(access, env, Buffer.alloc(32, 7));
   const projection = new EventTemporalProjection(access, relay, env);
@@ -383,10 +383,10 @@ test('RATE07/RATE08/RATE09: event precision, shared occurrence slots and generat
     await warm('2030-01-01');
     // A correction committed between the dependency checks must fence the read.
     const originalQuery = fuseki.query.bind(fuseki);
-    let injected = false;
+    let injected = false, seenDependency = 0;
     fuseki.query = async (sparql: string) => {
       const result = await originalQuery(sparql);
-      if (!injected && sparql.includes('SELECT ?epoch ?sequence ?actual ?planned')) {
+      if (!injected && sparql.includes('SELECT ?epoch ?sequence ?relaySequence') && seenDependency++) {
         injected = true;
         await write(eventA, '2026-07', winnerData.observationRevision);
       }

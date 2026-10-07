@@ -1,4 +1,7 @@
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { eventEndpointBounds, UnsupportedEventTime, type EventObservationIntent } from './time.ts';
+import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { readEventObservationReceipt } from './observation.ts';
 
 export interface EventEffectWindow {
   id: string;
@@ -63,11 +66,67 @@ export function effectInsertValues(event: string, status: Status,
     next ? JSON.stringify(next) : null, uuidOrdinal(event), uuidOrdinal(lastWindow), lastWindow, ready];
 }
 
+export function eventIntentEffect(input: EventObservationIntent): EventEffectInterval {
+  const end = input.temporalKind === 'instant' ? input.start : input.end!;
+  const civilStart = eventEndpointBounds(input.start, 'civil-date');
+  const civilEnd = eventEndpointBounds(end, 'civil-date');
+  let instantStart = null, instantEnd = null, supported = true;
+  try {
+    instantStart = eventEndpointBounds(input.start, 'instant').instantMin;
+    instantEnd = eventEndpointBounds(end, 'instant').instantMax;
+  } catch (error) {
+    if (!(error instanceof UnsupportedEventTime)) throw error;
+    supported = false;
+  }
+  return { civil_start_min: civilStart.civilMin, civil_end_max: civilEnd.civilMax,
+    instant_start_min: instantStart, instant_end_max: instantEnd, instant_supported: supported };
+}
+
+/** Durable admission-bound fence precedes graph visibility. Replays reuse the
+ * same effect; concurrent admissions retain independent conservative unions. */
+export async function registerEventPublication(pool: Pool, publication: {
+  receipt: string; admission: string; digest: string; event: string; status: Status;
+  expiresAt: string; authorityEpoch: string;
+  old: EventEffectInterval | null; next: EventEffectInterval | null;
+}, env: WorkActivationEnvironment) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const fence = (await client.query<{ open: boolean }>('SELECT open FROM access.recovery_fence WHERE id=true FOR SHARE')).rows[0];
+    if (!fence?.open) throw new Error('Event publication is held for recovery');
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [`event-publication:${publication.receipt}`]);
+    const prior = (await client.query<{ event: string; time_status: string; publication_digest: string }>(
+      `SELECT event,time_status,publication_digest FROM access.event_temporal_window_update
+        WHERE publication_receipt=$1 FOR UPDATE`, [publication.receipt])).rows[0];
+    if (prior) {
+      if (prior.event !== publication.event || prior.time_status !== publication.status
+        || prior.publication_digest !== publication.digest) throw new Error('Event publication intent conflicts');
+    } else {
+      // A slow retry must not resurrect an already projected receipt.
+      const terminal = await readEventObservationReceipt(env, publication.admission);
+      if (terminal) {
+        if (terminal.requestDigest !== publication.digest || terminal.dataEpoch !== env.lineage.dataEpoch)
+          throw new Error('Event publication terminal differs');
+        await client.query('COMMIT');
+        return false;
+      }
+      const row = (await client.query<{ id: string }>(`${effectInsertSql} RETURNING id::text`,
+        effectInsertValues(publication.event, publication.status, publication.old, publication.next,
+          '00000000-0000-0000-0000-000000000000', false))).rows[0]!;
+      await client.query(`UPDATE access.event_temporal_window_update SET publication_receipt=$2,
+        publication_admission=$3,publication_digest=$4,publication_expiry=$5,publication_authority_epoch=$6 WHERE id=$1`,
+      [row.id, publication.receipt, publication.admission, publication.digest, publication.expiresAt, publication.authorityEpoch]);
+    }
+    await client.query('COMMIT');
+    return true;
+  } catch (error) { await client.query('ROLLBACK'); throw error; }
+  finally { client.release(); }
+}
+
 /** A job fences only windows whose scan started before its creation and that its bounded
  * window seek has not visited. Both old and new contributions matter. */
 export function eventEffectFence(window: EventEffectWindow, status?: Status,
   events?: string[], jobId?: string): { text: string; values: unknown[] } {
-  if (!window.scan_started_at) return { text: 'SELECT false AS pending', values: [] };
   const unit = window.grain === 'year' ? '1 year' : window.grain === 'month' ? '1 month'
     : window.grain === 'day' ? '1 day' : undefined;
   if (!unit || !['civil-date', 'instant'].includes(window.interpretation)) {
@@ -77,7 +136,7 @@ export function eventEffectFence(window: EventEffectWindow, status?: Status,
   const civil = `daterange($3::date,($4::date+interval '${unit}')::date,'[)')`;
   const instant = `tstzrange($3::date::timestamp AT TIME ZONE 'UTC',
     ($4::date+interval '${unit}') AT TIME ZONE 'UTC','[)')`;
-  const predicates = ['u.unvisited_windows @> $1::numeric', 'u.existing_windows @> $2::timestamptz',
+  const predicates = [
     window.interpretation === 'civil-date' ? `u.civil_effect && ${civil}`
       : `(u.instant_effect && ${instant} OR u.unsupported_effect && ${civil})`];
   // Literal status predicates let PostgreSQL select the corresponding partial
@@ -91,12 +150,28 @@ export function eventEffectFence(window: EventEffectWindow, status?: Status,
     if (!/^[1-9][0-9]*$/.test(jobId)) throw new Error('Event effect job is invalid');
     predicates.push(`u.id=$${values.push(jobId)}::bigint`);
   }
-  return { text: `SELECT EXISTS(SELECT 1 FROM access.event_temporal_window_update u
-    WHERE ${predicates.join(' AND ')} LIMIT 1) AS pending`, values };
+  const geometry = predicates.join(' AND ');
+  return { text: `SELECT (
+    EXISTS(SELECT 1 FROM access.event_temporal_window_update u WHERE u.publication_receipt IS NOT NULL
+      AND ${geometry} LIMIT 1)
+    OR EXISTS(SELECT 1 FROM access.event_temporal_window_update u WHERE u.publication_receipt IS NULL
+      AND u.unvisited_windows @> $1::numeric AND u.existing_windows @> $2::timestamptz
+      AND ${geometry} LIMIT 1)) AS pending`, values };
 }
 
 export async function hasEventEffects(client: PoolClient, window: EventEffectWindow,
   status?: Status, events?: string[], jobId?: string): Promise<boolean> {
   const { text, values } = eventEffectFence(window, status, events, jobId);
   return (await client.query<{ pending: boolean }>(text, values)).rows[0]!.pending;
+}
+
+/** Historical/unregistered targets have unknown geometry and stay conservative.
+ * Registered attempts are fenced by their indexed old/new geometry instead. */
+export async function eventPendingTargets(client: PoolClient, status?: Status, events?: string[]) {
+  return (await client.query<{ pending: boolean; failed: boolean }>(`SELECT
+    EXISTS(SELECT 1 FROM access.event_temporal_pending WHERE NOT effect_registered
+      AND ($1::text IS NULL OR time_status=$1) AND ($2::text[] IS NULL OR event=ANY($2)) LIMIT 1) AS pending,
+    EXISTS(SELECT 1 FROM access.event_temporal_pending WHERE state='failed'
+      AND ($1::text IS NULL OR time_status=$1) AND ($2::text[] IS NULL OR event=ANY($2)) LIMIT 1) AS failed`,
+  [status ?? null, events ?? null])).rows[0]!;
 }
