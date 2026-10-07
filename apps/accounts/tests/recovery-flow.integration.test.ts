@@ -19,11 +19,13 @@ test('Accounts recovery: request, guardian approval, passwordless rebind, lost-r
     const owner = await f.signup('recovery-owner@example.test');
     const guardian = await f.signup('recovery-guardian@example.test');
     const code = randomBytes(32).toString('base64url');
+    expect((await f.request('/api/account/reauthenticate',
+      { password: owner.password }, owner.cookie)).status).toBe(200);
     expect(
       (
         await f.request(
           '/api/account/recovery-policy',
-          { guardianEmail: guardian.email, recoveryCode: code, currentPassword: owner.password },
+          { guardianEmail: guardian.email, recoveryCode: code },
           owner.cookie,
         )
       ).status,
@@ -172,11 +174,13 @@ test('Accounts recovery: request, guardian approval, passwordless rebind, lost-r
     const newCode = randomBytes(32).toString('base64url');
     const newId = randomUUID();
     const current = await f.request('/api/auth/sign-in/email', { email: owner.email, password });
+    expect((await f.request('/api/account/reauthenticate',
+      { password }, current.headers.get('set-cookie')!)).status).toBe(200);
     expect(
       (
         await f.request(
           '/api/account/recovery-policy',
-          { guardianEmail: guardian.email, recoveryCode: newCode, currentPassword: password },
+          { guardianEmail: guardian.email, recoveryCode: newCode },
           current.headers.get('set-cookie')!,
         )
       ).status,

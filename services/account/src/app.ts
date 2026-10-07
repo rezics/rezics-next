@@ -1,5 +1,4 @@
 import { Elysia, NotFound, ParseError, ValidationError, t } from 'elysia';
-import { APIError } from 'better-auth/api';
 import { httpTelemetry } from '@rezics/observability/elysia';
 import { isIP } from 'node:net';
 import { toOpenAPISchema } from '@elysia/openapi';
@@ -358,8 +357,7 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       } catch (error) { return installationError(error); }
     })
     .post('/api/account/recovery-policy', {
-      body: t.Object({ currentPassword: t.Optional(t.String({ minLength: 1, maxLength: 256 })),
-        guardianEmail: t.String({ minLength: 3, maxLength: 320 }), recoveryCode,
+      body: t.Object({ guardianEmail: t.String({ minLength: 3, maxLength: 320 }), recoveryCode,
         previousRecoveryCode: t.Optional(recoveryCode) },
       { additionalProperties: false }),
       response: { 200: t.Object({ generation: t.String(), replayed: t.Boolean() }),
@@ -368,14 +366,8 @@ export function createAccountApp(auth: ReturnType<typeof createAccountAuth>, poo
       const actor = await accountActor(request);
       if (actor instanceof Response) return actor;
       try {
-        if (body.currentPassword) await auth.api.verifyPassword({ headers: request.headers,
-          body: { password: body.currentPassword } });
-        else await requireStepUp(pool, await accountSession(auth, request));
+        await requireStepUp(pool, await accountSession(auth, request));
       } catch (error) {
-        if (body.currentPassword && error instanceof APIError && error.statusCode < 500) {
-          return Response.json({ error: error.statusCode === 401 ? 'unauthenticated' : 'invalid_password' },
-            { status: error.statusCode === 401 ? 401 : 403, headers: { 'cache-control': 'no-store' } });
-        }
         return accountFailure(error);
       }
       try {

@@ -27,11 +27,13 @@ export async function recoveryProof(
 ) {
   const recoveryCode = randomBytes(32).toString('base64url');
   const claimId = randomUUID();
+  expect((await f.request('/api/account/reauthenticate',
+    { password: member.password }, member.cookie)).status).toBe(200);
   expect(
     (
       await f.request(
         '/api/account/recovery-policy',
-        { guardianEmail: guardian.email, recoveryCode, currentPassword: member.password },
+        { guardianEmail: guardian.email, recoveryCode },
         member.cookie,
       )
     ).status,

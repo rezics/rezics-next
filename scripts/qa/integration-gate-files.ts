@@ -53,6 +53,7 @@ export const integrationGateFiles = [
   'services/account/tests/recovery-claim.integration.test.ts',
   'services/account/tests/recovery-coverage.integration.test.ts',
   'services/account/tests/recovery-factors.integration.test.ts',
+  'services/account/tests/recovery-step-up.integration.test.ts',
   'services/account/tests/refresh-coordination.integration.test.ts',
   'services/account/tests/security-activity.integration.test.ts',
   'services/account/tests/security-regressions.integration.test.ts',

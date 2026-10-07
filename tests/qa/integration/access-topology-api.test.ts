@@ -727,10 +727,12 @@ test('IAM08: independent Account claim replaces a compromised credential and fen
     const controlPath = `/v1/agents/control?subjectId=${encodeURIComponent(subject)}`;
     expect((await h.call('GET', controlPath, owner.token)).status).toBe(200);
     const code = randomBytes(32).toString('base64url');
-    const policy = { currentPassword: owner.password, guardianEmail: guardian.email,
+    const policy = { guardianEmail: guardian.email,
       recoveryCode: code };
-    expect((await h.accountRequest('/api/account/recovery-policy',
-      { ...policy, currentPassword: 'wrong-password' }, owner.sessionCookie)).status).toBe(403);
+    expect((await h.accountRequest('/api/account/reauthenticate',
+      { password: 'wrong-password' }, owner.sessionCookie)).status).toBe(403);
+    expect((await h.accountRequest('/api/account/reauthenticate',
+      { password: owner.password }, owner.sessionCookie)).status).toBe(200);
     expect((await h.accountRequest('/api/account/recovery-policy',
       { ...policy, guardianEmail: owner.email }, owner.sessionCookie)).status).toBe(403);
     expect((await h.accountRequest('/api/account/recovery-policy', policy,
@@ -804,7 +806,9 @@ test('IAM08: independent Account claim replaces a compromised credential and fen
     const recoveredCookie = recoveredSignIn.headers.get('set-cookie')!;
     const replacementCode = randomBytes(32).toString('base64url');
     const rotatedCode = randomBytes(32).toString('base64url');
-    const nextPolicy = { currentPassword: nextPassword, guardianEmail: other.email,
+    expect((await h.accountRequest('/api/account/reauthenticate',
+      { password: nextPassword }, recoveredCookie)).status).toBe(200);
+    const nextPolicy = { guardianEmail: other.email,
       recoveryCode: replacementCode };
     expect((await h.accountRequest('/api/account/recovery-policy', nextPolicy,
       recoveredCookie)).status).toBe(200);

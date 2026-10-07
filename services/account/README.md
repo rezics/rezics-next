@@ -44,8 +44,9 @@ startup.
 ### Independent credential recovery
 
 An authenticated credential holder enrolls a different Account user as guardian
-through `POST /api/account/recovery-policy`. Enrollment verifies the current
-password and requires a client-generated, 32-byte random code encoded as 43
+through `POST /api/account/recovery-policy`. Enrollment requires the existing
+session-bound step-up (a fresh sign-in, bounded password plus TOTP when enabled,
+or passkey reauthentication) and a client-generated, 32-byte random code encoded as 43
 base64url characters. Keep the code outside Account and outside ordinary session
 storage; Account retains its hash. Rotating an active policy requires the previous
 code. A code holder can create and read a claim through

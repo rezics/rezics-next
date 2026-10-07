@@ -86,13 +86,16 @@ test('Accounts guardians: invite, save, accept, renew, withdraw and deletion gui
     await ownerPage.locator('html[data-hydrated]').waitFor();
     await ownerPage.getByLabel('Guardian email').fill(guardian.email);
     await ownerPage.getByLabel('Current password').fill(owner.password);
+    await f.pool.query('UPDATE "session" SET "createdAt" = now() - interval \'10 minutes\' WHERE "userId" = $1', [owner.id]);
     const attempts: Record<string, string>[] = [];
     await ownerPage.route('**/api/account/recovery-policy', async (route) => {
+      const response = await route.fetch();
+      // Let the normal step-up refusal reach the client before losing a commit response.
+      if (response.status() !== 200) return route.fulfill({ response });
       attempts.push(route.request().postDataJSON());
       if (attempts.length === 1) {
-        expect((await route.fetch()).status()).toBe(200);
         await route.abort('failed');
-      } else await route.continue();
+      } else await route.fulfill({ response });
     });
     await ownerPage.getByRole('button', { name: 'Create a code and invite a guardian' }).click();
     await ownerPage

@@ -39,8 +39,10 @@ async function reset(f: Fixture, member: Member) {
 async function recovery(f: Fixture, member: Member, guardian: Member) {
   const recoveryCode = randomBytes(32).toString('base64url');
   const claimId = randomUUID();
-  expect((await f.request('/api/account/recovery-policy', { guardianEmail: guardian.email, recoveryCode,
-    currentPassword: member.password }, member.cookie)).status).toBe(200);
+  expect((await f.request('/api/account/reauthenticate',
+    { password: member.password }, member.cookie)).status).toBe(200);
+  expect((await f.request('/api/account/recovery-policy', { guardianEmail: guardian.email, recoveryCode },
+    member.cookie)).status).toBe(200);
   await acceptGuardian(f, member, guardian);
   expect((await f.request('/api/account/recovery-claims', { claimId, targetEmail: member.email, recoveryCode })).status).toBe(200);
   expect((await f.request(`/api/account/recovery-claims/${claimId}/approval`, {}, guardian.cookie)).status).toBe(200);

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
 import { RecoverySettings } from './recovery-settings.tsx';
 import { DeleteAccount } from './delete-account.tsx';
 import { AccountFrame } from '../../.storybook/account-frame.tsx';
@@ -15,8 +15,8 @@ const meta = {
     invitations: { status: 'ok', data: { items: [], nextCursor: null } },
   },
   decorators: [
-    (Story) => (
-      <AccountFrame section="security">
+    (Story, { parameters }) => (
+      <AccountFrame section="security" stepUp={parameters.stepUp}>
         <Story />
       </AccountFrame>
     ),
@@ -42,7 +42,6 @@ export const SetUp: Story = {
     await expect((shown as HTMLInputElement).value).toMatch(/^[A-Za-z0-9_-]{43}$/);
     await expect(enrolled).toHaveBeenCalledWith({
       guardianEmail: 'trusted@example.test',
-      currentPassword: 'correct horse battery staple',
       recoveryCode: (shown as HTMLInputElement).value,
     });
     await expect(canvas.getByRole('button', { name: 'Done' })).toBeDisabled();
@@ -51,6 +50,63 @@ export const SetUp: Story = {
   },
 };
 export const SetUpPhone: Story = { ...SetUp, globals: phone };
+
+let confirmedWithTotp = false;
+const enrollAfterStepUp = fn(async () =>
+  confirmedWithTotp
+    ? { ok: true as const, data: { generation: '0', replayed: false } }
+    : { ok: false as const, kind: 'step-up-required' as const, status: 403 },
+);
+const confirmEnrollment = fn(async (input: { password: string; totpCode?: string }) => {
+  confirmedWithTotp =
+    input.password === 'correct horse battery staple' && input.totpCode === '123456';
+  return confirmedWithTotp
+    ? { ok: true as const, data: undefined }
+    : { ok: false as const, kind: 'invalid-credentials' as const, status: 403 };
+});
+export const StaleSessionWithTotp: Story = {
+  parameters: {
+    stepUp: { password: true, passkey: false, totp: true },
+    account: { api: { enrollRecovery: enrollAfterStepUp, reauthenticate: confirmEnrollment } },
+  },
+  beforeEach() {
+    confirmedWithTotp = false;
+    enrollAfterStepUp.mockClear();
+    confirmEnrollment.mockClear();
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.type(await canvas.findByLabelText('Guardian email'), 'trusted@example.test');
+    await userEvent.type(canvas.getByLabelText('Current password'), 'correct horse battery staple');
+    await userEvent.click(
+      canvas.getByRole('button', { name: 'Create a code and invite a guardian' }),
+    );
+    const dialog = within(await screen.findByRole('dialog', { name: 'Confirm it’s you' }));
+    await expect(enrollAfterStepUp).toHaveBeenCalledTimes(1);
+    await expect(confirmEnrollment).not.toHaveBeenCalled();
+    await expect(canvas.queryByRole('textbox', { name: 'Your new recovery code' })).toBeNull();
+    await expect(dialog.queryByLabelText('Enter your password')).toBeNull();
+    await userEvent.click(dialog.getByRole('button', { name: /^Confirm$/ }));
+    await expect(confirmEnrollment).not.toHaveBeenCalled();
+    await expect(enrollAfterStepUp).toHaveBeenCalledTimes(1);
+    await userEvent.type(
+      dialog.getByRole('textbox', { name: 'Code from your authenticator app' }),
+      '123456',
+    );
+    await userEvent.click(dialog.getByRole('button', { name: /^Confirm$/ }));
+    await expect(confirmEnrollment).toHaveBeenCalledWith({
+      password: 'correct horse battery staple',
+      totpCode: '123456',
+    });
+    const shown = await canvas.findByRole('textbox', { name: 'Your new recovery code' });
+    await expect(enrollAfterStepUp).toHaveBeenCalledTimes(2);
+    await expect(enrollAfterStepUp.mock.calls[0]).toEqual(enrollAfterStepUp.mock.calls[1]);
+    await expect(enrollAfterStepUp).toHaveBeenLastCalledWith({
+      guardianEmail: 'trusted@example.test',
+      recoveryCode: (shown as HTMLInputElement).value,
+    });
+  },
+};
 
 const renewed = fn(async () => ({ ok: true as const, data: { generation: '1', replayed: false } }));
 export const RenewAcceptedGuardian: Story = {

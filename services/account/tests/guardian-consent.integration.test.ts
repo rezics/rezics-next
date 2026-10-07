@@ -19,7 +19,7 @@ const enroll = (
 ) =>
   f.request(
     '/api/account/recovery-policy',
-    { guardianEmail: email, recoveryCode, previousRecoveryCode, currentPassword: owner.password },
+    { guardianEmail: email, recoveryCode, previousRecoveryCode },
     owner.cookie,
   );
 const policy = async (f: RecoveryFixture, owner: RecoveryMember) =>

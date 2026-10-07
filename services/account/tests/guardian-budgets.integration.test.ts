@@ -12,19 +12,19 @@ test('guardian invitations: recipient limits disclose no account existence and a
       ['absent', 'absent-budget@example.test'],
     ]) {
       const owner = await f.signup(`${label}-budget-owner@example.test`);
+      await f.pool.query('UPDATE "session" SET "createdAt" = now() - interval \'10 minutes\' WHERE "userId" = $1', [owner.id]);
       expect(
         (
           await f.request(
-            '/api/account/recovery-policy',
-            {
-              guardianEmail: email,
-              recoveryCode: randomBytes(32).toString('base64url'),
-              currentPassword: 'wrong owner password',
-            },
+            '/api/account/reauthenticate',
+            { password: 'wrong owner password' },
             owner.cookie,
           )
         ).status,
       ).toBe(403);
+      expect((await f.request('/api/account/recovery-policy',
+        { guardianEmail: email, recoveryCode: randomBytes(32).toString('base64url') },
+        owner.cookie)).status).toBe(403);
       expect(
         (
           await f.pool.query('SELECT id FROM rezics_account_recovery_policy WHERE id = $1', [
@@ -32,6 +32,8 @@ test('guardian invitations: recipient limits disclose no account existence and a
           ])
         ).rowCount,
       ).toBe(0);
+      expect((await f.request('/api/account/reauthenticate',
+        { password: owner.password }, owner.cookie)).status).toBe(200);
       let previous: string | undefined;
       for (let attempt = 0; attempt < 3; attempt++) {
         const recoveryCode = randomBytes(32).toString('base64url');
@@ -43,7 +45,6 @@ test('guardian invitations: recipient limits disclose no account existence and a
                 guardianEmail: email,
                 recoveryCode,
                 previousRecoveryCode: previous,
-                currentPassword: owner.password,
               },
               owner.cookie,
             )
@@ -57,7 +58,6 @@ test('guardian invitations: recipient limits disclose no account existence and a
           guardianEmail: email,
           recoveryCode: randomBytes(32).toString('base64url'),
           previousRecoveryCode: previous,
-          currentPassword: owner.password,
         },
         owner.cookie,
       );
@@ -86,6 +86,8 @@ test('guardian invitations: the authenticated sender ceiling prevents flooding d
   const f = await accountFixture();
   try {
     const owner = await f.signup('sender-budget-owner@example.test');
+    expect((await f.request('/api/account/reauthenticate',
+      { password: owner.password }, owner.cookie)).status).toBe(200);
     let previous: string | undefined;
     for (let attempt = 0; attempt < 8; attempt++) {
       const recoveryCode = randomBytes(32).toString('base64url');
@@ -97,7 +99,6 @@ test('guardian invitations: the authenticated sender ceiling prevents flooding d
               guardianEmail: `recipient-${attempt}@example.test`,
               recoveryCode,
               previousRecoveryCode: previous,
-              currentPassword: owner.password,
             },
             owner.cookie,
           )
@@ -111,7 +112,6 @@ test('guardian invitations: the authenticated sender ceiling prevents flooding d
         guardianEmail: 'another@example.test',
         recoveryCode: randomBytes(32).toString('base64url'),
         previousRecoveryCode: previous,
-        currentPassword: owner.password,
       },
       owner.cookie,
     );

@@ -19,13 +19,14 @@ test('guardian costs: reading one live invitation does not scan expired mailbox 
   try {
     const owner = await f.signup('cost-owner@example.test');
     const guardian = await f.signup('cost-guardian@example.test');
+    expect((await f.request('/api/account/reauthenticate',
+      { password: owner.password }, owner.cookie)).status).toBe(200);
     expect(
       (
         await f.request(
           '/api/account/recovery-policy',
           {
             guardianEmail: guardian.email,
-            currentPassword: owner.password,
             recoveryCode: randomBytes(32).toString('base64url'),
           },
           owner.cookie,

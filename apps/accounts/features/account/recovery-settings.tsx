@@ -85,10 +85,9 @@ function RecoverySetup({
       api.enrollRecovery({
         guardianEmail: email.trim(),
         recoveryCode,
-        ...(hasPassword ? { currentPassword: password } : {}),
         ...(policy?.hasCode ? { previousRecoveryCode: previous.trim() } : {}),
       });
-    const result = hasPassword ? await run() : await stepUp(run);
+    const result = await stepUp(run, hasPassword ? { password } : undefined);
     setBusy(false);
     if (result.ok) {
       setShown(recoveryCode);

@@ -34,7 +34,6 @@ export interface RecoveryEnrollment {
   guardianEmail: string;
   recoveryCode: string;
   previousRecoveryCode?: string;
-  currentPassword?: string;
 }
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const date = (value: unknown): value is string =>
