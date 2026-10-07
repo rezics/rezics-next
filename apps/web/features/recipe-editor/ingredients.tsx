@@ -47,14 +47,15 @@ function LineFields({ line, parts, onLine, onParts, onSubmit, onCancel, t, langu
 }
 
 /** Adds an ingredient to a section: type the line, press Enter, and the field is ready for the next. */
-function AddLine({ section, label, store, language, t, busy }: Common & { section: string | null; label: string | null }) {
+function AddLine({ section, label, store, language, t }: Common & { section: string | null; label: string | null }) {
   const [line, setLine] = useState('');
   const [parts, setParts] = useState<IngredientParts>(emptyParts);
   const id = useId();
   const field = useRef<HTMLDivElement>(null);
   const problem = partsProblem(parts);
   const add = async () => {
-    if (problem || busy) return;
+    if (problem) return;
+    await store.whenIdle();
     const outcome = await store.submit({ kind: 'addLine', section, qualifier: qualifierOf(parts, language) });
     if (outcome.kind === 'saved' || outcome.kind === 'unchanged') {
       setLine(''); setParts(emptyParts);
@@ -70,12 +71,12 @@ function AddLine({ section, label, store, language, t, busy }: Common & { sectio
         onParts={value => { setParts(value); setLine(composeLine(value)); }} />
     </div>
     <p className="text-muted-foreground text-xs">{t.ingredientHelp}</p>
-    <div><Button type="submit" size="md" disabled={Boolean(problem) || busy} className="pointer-coarse:h-11">
+    <div><Button type="submit" size="md" disabled={Boolean(problem)} className="pointer-coarse:h-11">
       <PlusIcon aria-hidden="true" />{t.addAction}</Button></div>
   </form>;
 }
 
-function LineEditor({ node, store, state, language, t, busy, onDone }: Common & { node: IngredientNode; onDone: () => void }) {
+function LineEditor({ node, store, state, language, t, onDone }: Common & { node: IngredientNode; onDone: () => void }) {
   const initial = partsOf(node.qualifier);
   const [parts, setParts] = useState(initial);
   const [line, setLine] = useState(composeLine(initial));
@@ -103,7 +104,7 @@ function LineEditor({ node, store, state, language, t, busy, onDone }: Common & 
       <ChoiceSelect value={section} onValueChange={setSection} label={t.moveToSection} className="w-full" portalled={false}
         options={[{ value: '', label: t.noSection }, ...sections.map(group => ({ value: group.occurrence, label: group.label?.value ?? '' }))]} /></div> : null}
     <div className="flex flex-wrap gap-2">
-      <Button type="submit" disabled={Boolean(problem) || busy} className="pointer-coarse:h-11">{t.saveAction}</Button>
+      <Button type="submit" disabled={Boolean(problem)} className="pointer-coarse:h-11">{t.saveAction}</Button>
       <Button type="button" variant="outline" onClick={onDone} className="pointer-coarse:h-11">{t.cancel}</Button>
     </div>
   </form>;
@@ -164,10 +165,11 @@ function Lines({ lines, ...common }: Common & { lines: IngredientNode[] }) {
     : <p className="text-muted-foreground text-sm">{common.t.emptySection}</p>;
 }
 
-function AddSection({ store, language, t, busy }: Common) {
+function AddSection({ store, language, t }: Common) {
   const [name, setName] = useState('');
   const add = async () => {
-    if (!name.trim() || busy) return;
+    if (!name.trim()) return;
+    await store.whenIdle();
     const outcome = await store.submit({ kind: 'addSection', label: name.trim(), language });
     if (outcome.kind === 'saved') setName('');
   };
@@ -176,7 +178,7 @@ function AddSection({ store, language, t, busy }: Common) {
       <Input value={name} onChange={event => setName(event.target.value)} placeholder={t.sectionPlaceholder} maxLength={500}
         autoComplete="off" lang={language} dir={directionOf(language)} aria-label={t.sectionName} /></label>
     <p className="text-muted-foreground text-xs">{t.addSectionHelp}</p>
-    <div><Button type="submit" variant="outline" disabled={!name.trim() || busy} className="pointer-coarse:h-11">
+    <div><Button type="submit" variant="outline" disabled={!name.trim()} className="pointer-coarse:h-11">
       <PlusIcon aria-hidden="true" />{t.addSectionAction}</Button></div>
   </form>;
 }

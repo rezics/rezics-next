@@ -80,12 +80,13 @@ function StepRow({ node, index, count, store, state, language, t, busy }: Common
   </li>;
 }
 
-function AddStep({ store, state, language, t, busy }: Common) {
+function AddStep({ store, state, language, t }: Common) {
   const [text, setText] = useState('');
   const [uses, setUses] = useState<string[]>([]);
   const [linking, setLinking] = useState(false);
   const add = async () => {
-    if (!text.trim() || busy) return;
+    if (!text.trim()) return;
+    await store.whenIdle();
     const outcome = await store.submit({ kind: 'addStep', text, language, uses });
     if (outcome.kind === 'saved') { setText(''); setUses([]); setLinking(false); }
   };
@@ -98,7 +99,7 @@ function AddStep({ store, state, language, t, busy }: Common) {
         maxLength={4000} lang={language} dir={directionOf(language)} className="min-h-20" /></label>
     <p className="text-muted-foreground text-xs">{t.stepHelp}</p>
     <div className="flex flex-wrap items-center gap-2">
-      <Button type="submit" disabled={!text.trim() || busy} className="pointer-coarse:h-11"><PlusIcon aria-hidden="true" />{t.addAction}</Button>
+      <Button type="submit" disabled={!text.trim()} className="pointer-coarse:h-11"><PlusIcon aria-hidden="true" />{t.addAction}</Button>
       <Button type="button" variant="ghost" size="sm" aria-expanded={linking} className="pointer-coarse:h-11"
         onClick={() => setLinking(value => !value)}><LinkIcon aria-hidden="true" />
         {uses.length ? t.usesCount(uses.length) : t.usesChoose}</Button>

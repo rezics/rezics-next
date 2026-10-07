@@ -113,3 +113,20 @@ test('edits of different records made while one is written are each written, the
   expect(cooked?.value.numerator).toBe(30);
   expect(store.snapshot().state.nodes.find(node => node.occurrence === id2(11))).toMatchObject({ label: { value: 'Batter' } });
 });
+
+test('a form that adds something waits for the write in flight instead of dropping its turn', async () => {
+  let release: () => void = () => {};
+  const fake = createFixture({ recipe: { ...fixtureStart, nodes: [...fixtureStart.nodes] } });
+  fake.interference.gate = new Promise<void>(resolve => { release = resolve; });
+  const store = createRecipeStore({ work, mainVersion, actingSubject, initial: fixtureStart, main: fake.main });
+  const first = store.submit({ kind: 'addSection', label: 'Glaze', language: 'en' });
+  let idle = false;
+  const waited = store.whenIdle().then(() => { idle = true; });
+  await Promise.resolve();
+  expect(idle).toBe(false);
+  release();
+  await first; await waited;
+  expect(idle).toBe(true);
+  expect(await store.submit({ kind: 'addSection', label: 'Crumb', language: 'en' })).toEqual({ kind: 'saved' });
+  expect(store.snapshot().state.nodes.filter(node => node.role === 'group')).toHaveLength(4);
+});

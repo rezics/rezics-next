@@ -30,6 +30,8 @@ export interface RecipeStore {
   snapshot(): Snapshot;
   subscribe(listener: () => void): () => void;
   submit(intent: Intent): Promise<Outcome>;
+  /** Resolves once no write is in flight; a form that adds something waits here instead of dropping the person's Enter. */
+  whenIdle(): Promise<void>;
   /** Repeats the intent the last refusal belongs to; the same write at the same head replays. */
   retry(): Promise<Outcome>;
   dismiss(): void;
@@ -72,6 +74,7 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   type Waiting = { intent: Intent; id: string; key: string; resolvers: ((outcome: Outcome) => void)[] };
   const waiting = new Map<string, Waiting>();
   const listeners = new Set<() => void>();
+  let idlers: (() => void)[] = [];
   const notify = () => {
     snapshot = { state, busy: writing, failure: failure ? { intent: failure.intent, refusal: failure.refusal } : null };
     for (const listener of listeners) listener();
@@ -129,6 +132,7 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
     writing = false;
     waiting.clear();
     notify();
+    for (const resolve of idlers.splice(0)) resolve();
   }
 
   function submit(intent: Intent, id = newId()): Promise<Outcome> {
@@ -149,11 +153,12 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
     snapshot: () => snapshot,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     submit: intent => submit(intent),
+    whenIdle: () => writing ? new Promise<void>(resolve => { idlers.push(resolve); }) : Promise.resolve(),
     retry() {
       if (!failure) return Promise.resolve<Outcome>({ kind: 'unchanged' });
       return submit(failure.intent, failure.id);
     },
     dismiss() { failure = null; notify(); },
-    dispose() { disposed = true; listeners.clear(); },
+    dispose() { disposed = true; listeners.clear(); for (const resolve of idlers.splice(0)) resolve(); },
   };
 }
