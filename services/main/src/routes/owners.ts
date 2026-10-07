@@ -9,10 +9,10 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/owners/reconciliations': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/owners/reconciliations/{id}': { get: { exposure: 'public', bearer: true } },
-  '/v1/owners/relocations': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/owners/relocations/{id}': { get: { exposure: 'public', bearer: true } },
+  '/v1/owners/reconciliations': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/owners/reconciliations/{id}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/owners/relocations': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/owners/relocations/{id}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
 } as const;
 
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });

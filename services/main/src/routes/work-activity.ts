@@ -13,8 +13,8 @@ const headers = { 'cache-control': 'private, no-store' };
 const discussionRead = t.Object({ ...discussionPage.properties, complete: t.Boolean() });
 
 export const openApiOperations = {
-  '/v1/resources/{resource}/discussion': { get: { exposure: 'public', bearer: false } },
-  '/v1/works/{id}/history': { get: { exposure: 'public', bearer: false } },
+  '/v1/resources/{resource}/discussion': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/works/{id}/history': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 export function workActivityRoutes(work: MainWorkDependencies) {

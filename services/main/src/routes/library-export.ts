@@ -9,7 +9,7 @@ import { problem } from './problems.ts';
 import { workReadError } from './work-reads.ts';
 import type { CapabilityDeclarations } from '../modules/mcp/capabilities.ts';
 
-export const openApiOperations = { '/v1/me/library-export': { get: { exposure: 'public', bearer: true } } } as const;
+export const openApiOperations = { '/v1/me/library-export': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } } } as const;
 export const capabilities = { '/v1/me/library-export': { get: { disposition: 'supported', mcp: {
   tool: 'library_export',title: 'Export your complete library',
   scopes: ['work:read','rating:read'],

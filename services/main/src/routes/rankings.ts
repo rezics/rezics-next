@@ -14,9 +14,9 @@ const query = t.Object({ metric: t.Optional(rankingMetric), interval: t.Optional
 const headers = { 'cache-control': 'no-store' };
 const id = (uuid: string) => `https://rezics.com/id/${uuid}`;
 export const openApiOperations = {
-  '/v1/realms/{realm}/rankings': { get: { exposure: 'public', bearer: false } },
-  '/v1/rankings/trending': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/modules/rising': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/rankings': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/rankings/trending': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/modules/rising': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 export function rankingRoutes(work: MainWorkDependencies) {

@@ -9,8 +9,8 @@ const generation = t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' });
 const view = t.Object({ work: native, generation, maintainers: t.Array(native, { maxItems: 32 }) });
 const result = t.Object({ ...view.properties, receipt: t.String(), replayed: t.Boolean() });
 export const openApiOperations = {
-  '/v1/work-maintainer-changes': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/works/{id}/maintainers': { get: { exposure: 'public' } },
+  '/v1/work-maintainer-changes': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/maintainers': { get: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;
 
 export function workMaintainerRoutes(work: MainWorkDependencies) {

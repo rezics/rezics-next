@@ -12,7 +12,7 @@ import { wikiError } from './wiki.ts';
 import { readingPositionQuery } from './reading-positions.ts';
 import { WikiHistoryResponseSchema } from '../modules/wiki/history-schema.ts';
 
-export const openApiOperations = { '/v1/wiki/{work}/history': { get: { exposure: 'public', bearer: true } } } as const;
+export const openApiOperations = { '/v1/wiki/{work}/history': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } } } as const;
 export const capabilities = {
   '/v1/wiki/{work}/history': {
     get: {

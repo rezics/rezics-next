@@ -96,5 +96,5 @@ test('G-829 class guard: the complete lexicon GET inventory permits optional bea
     .map(route => route.path.replace(/:([a-z]+)/g, '{$1}')).sort();
   expect(gets).toEqual(Object.keys(lexiconOperations).sort());
   for (const operation of Object.values(lexiconOperations)) expect(operation.get.bearer).toBe(false);
-  expect(lexiconOperations['/v1/lexicon/presentations'].post).toEqual({ exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true });
+  expect(lexiconOperations['/v1/lexicon/presentations'].post).toEqual({ exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true, idempotencyKey: true });
 });

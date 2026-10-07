@@ -149,9 +149,9 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
 }
 
 export const openApiOperations = {
-  '/v1/rating-syntheses': { post: { exposure: 'public' } },
-  '/v1/global-rating-aggregates': { post: { exposure: 'public' } },
-  '/v1/global-rating-observations': { post: { exposure: 'public' } },
-  '/v1/global-rating-contexts/{id}': { get: { exposure: 'public' } },
-  '/v1/global-rating-contexts': { post: { exposure: 'public' } },
+  '/v1/rating-syntheses': { post: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/global-rating-aggregates': { post: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/global-rating-observations': { post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/global-rating-contexts/{id}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/global-rating-contexts': { post: { exposure: 'public', rateLimitFamily: 'write' } },
 } as const;

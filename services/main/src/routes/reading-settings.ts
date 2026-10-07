@@ -21,7 +21,7 @@ const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemR
 const noStore = { 'cache-control': 'private, no-store' };
 
 export const openApiOperations = {
-  '/v1/reader/settings': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/reader/settings': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 function failure(error: unknown): Response {

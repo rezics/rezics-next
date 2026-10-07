@@ -22,7 +22,7 @@ const result = t.Object({ profile: t.Literal('proposal-execution-v1'),
   target: native, policyRevision: t.String(), receipt: t.String(), replayed: t.Boolean() });
 
 export const openApiOperations = {
-  '/v1/proposals/executions': { post: { exposure: 'platform:institutional-voting', bearer: true, idempotencyKey: true } },
+  '/v1/proposals/executions': { post: { exposure: 'platform:institutional-voting', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 export function proposalRoutes(work: MainWorkDependencies) {

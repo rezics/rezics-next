@@ -91,7 +91,8 @@ export function mcpRoutes(work: Pick<MainWorkDependencies, 'account' | 'mcp' | '
 }
 
 export const openApiOperations = {
-  '/.well-known/oauth-protected-resource': { get: { exposure: 'public' } },
-  '/.well-known/oauth-protected-resource/mcp': { get: { exposure: 'public' } },
-  '/mcp': { all: { exposure: 'public' } },
+  '/.well-known/oauth-protected-resource': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/.well-known/oauth-protected-resource/mcp': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  // MCP messages have no domain budget; dispatched tool operations spend their own family.
+  '/mcp': { all: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;

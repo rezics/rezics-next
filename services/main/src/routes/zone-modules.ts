@@ -20,15 +20,15 @@ const query = t.Object({ limit: pageQuery.limit, cursor: pageQuery.cursor,
 const id = (uuid: string) => `https://rezics.com/id/${uuid}`;
 const headers = { 'cache-control': 'no-store' };
 export const openApiOperations = {
-  '/v1/realms/{realm}/modules/new-adoptions': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/modules/recently-completed': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/modules/recent-decisions': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/modules/latest-chapters': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/modules/discussions': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/modules/reader-quotes': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/modules/genres/{context}': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/modules/editor-lists': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/modules/browse': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/modules/new-adoptions': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/modules/recently-completed': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/modules/recent-decisions': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/modules/latest-chapters': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/modules/discussions': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/modules/reader-quotes': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/modules/genres/{context}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/modules/editor-lists': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/modules/browse': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 /** Zone modules are public publications; a stray bearer token cannot widen them. */

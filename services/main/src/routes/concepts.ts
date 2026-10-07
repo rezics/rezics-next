@@ -12,9 +12,9 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 
 // Public reads: a bearer never widens what a Concept page shows.
 export const openApiOperations = {
-  '/v1/concepts/{id}': { get: { exposure: 'public', bearer: false } },
-  '/v1/concepts/{id}/works': { get: { exposure: 'public', bearer: false } },
-  '/v1/concepts': { get: { exposure: 'public' } },
+  '/v1/concepts/{id}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/concepts/{id}/works': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/concepts': { get: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;
 
 const params = t.Object({ id: readUuid });

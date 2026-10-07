@@ -200,11 +200,11 @@ export function commerceRoutes(fuseki: FusekiClient, work: MainWorkDependencies 
 }
 
 export const openApiOperations = {
-  '/v1/subscriptions/{subscriptionId}': { get: { exposure: 'platform:commerce' } },
-  '/v1/subscriptions/benefits': { get: { exposure: 'platform:commerce' } },
-  '/v1/subscriptions/gifts': { post: { exposure: 'platform:commerce' } },
-  '/v1/subscriptions/reconciliations': { post: { exposure: 'platform:commerce' } },
-  '/v1/subscriptions/settlements': { post: { exposure: 'platform:commerce' } },
-  '/v1/subscriptions/changes': { post: { exposure: 'platform:commerce' } },
-  '/v1/subscriptions/quotes': { post: { exposure: 'platform:commerce' } },
+  '/v1/subscriptions/{subscriptionId}': { get: { exposure: 'platform:commerce', rateLimitFamily: 'read' } },
+  '/v1/subscriptions/benefits': { get: { exposure: 'platform:commerce', rateLimitFamily: 'read' } },
+  '/v1/subscriptions/gifts': { post: { exposure: 'platform:commerce', rateLimitFamily: 'write' } },
+  '/v1/subscriptions/reconciliations': { post: { exposure: 'platform:commerce', rateLimitFamily: 'write' } },
+  '/v1/subscriptions/settlements': { post: { exposure: 'platform:commerce', rateLimitFamily: 'provider' } },
+  '/v1/subscriptions/changes': { post: { exposure: 'platform:commerce', rateLimitFamily: 'write' } },
+  '/v1/subscriptions/quotes': { post: { exposure: 'platform:commerce', rateLimitFamily: 'write' } },
 } as const;

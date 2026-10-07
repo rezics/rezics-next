@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
+import type { RateLimitFamily } from '../rate-limit/budgets.ts';
 import {
   PLATFORM_COST,
   PLATFORM_SCOPE,
@@ -16,6 +17,7 @@ export interface ExposureSummary {
 }
 export interface ExposureDeclaration {
   exposure: Exposure;
+  rateLimitFamily?: RateLimitFamily | 'read';
   bearer?: boolean;
   idempotencyKey?: boolean;
 }

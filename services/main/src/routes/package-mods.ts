@@ -110,13 +110,13 @@ function decodeCursor(cursor: string): { boundAt: string; key: string } | null {
 }
 
 export const openApiOperations = {
-  '/v1/package-resolutions/mods': { post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true } },
-  '/v1/package-resolutions/mods/{resolution}': { get: { exposure: 'platform:developer-extras', bearer: true } },
+  '/v1/package-resolutions/mods': { post: { exposure: 'platform:developer-extras', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/package-resolutions/mods/{resolution}': { get: { exposure: 'platform:developer-extras', rateLimitFamily: 'read', bearer: true } },
   '/v1/package-resolutions/mods/{resolution}/work-binding': {
-    post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true } },
-  '/v1/mod-compatibility/{work}': { get: { exposure: 'platform:developer-extras', bearer: false } },
-  '/v1/mod-compatibility/{work}/exact': { get: { exposure: 'platform:developer-extras', bearer: false } },
-  '/v1/mod-releases/{work}': { get: { exposure: 'platform:developer-extras', bearer: false } },
+    post: { exposure: 'platform:developer-extras', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/mod-compatibility/{work}': { get: { exposure: 'platform:developer-extras', rateLimitFamily: 'read', bearer: false } },
+  '/v1/mod-compatibility/{work}/exact': { get: { exposure: 'platform:developer-extras', rateLimitFamily: 'read', bearer: false } },
+  '/v1/mod-releases/{work}': { get: { exposure: 'platform:developer-extras', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 async function publicModWork(work: MainWorkDependencies, request: Request, id: string): Promise<boolean> {

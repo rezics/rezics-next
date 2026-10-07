@@ -204,7 +204,7 @@ const statementResponse = t.Object(
 );
 
 export const openApiOperations = {
-  '/v1/graph/queries': { post: { exposure: 'public', bearer: true } },
+  '/v1/graph/queries': { post: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
 } as const;
 
 function graphQueryError(error: unknown): Response {

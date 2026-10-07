@@ -10,7 +10,7 @@ const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }
 const languageTag = t.String({ pattern: '^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$', maxLength: 100 });
 
 export const openApiOperations = {
-  '/v1/catalog/resources/{resource}/descriptions': { patch: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/catalog/resources/{resource}/descriptions': { patch: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 /** Organization descriptions are Content drafts; publication uses the existing Content route. */

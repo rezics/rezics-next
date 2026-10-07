@@ -108,5 +108,5 @@ export function operationsRoutes(work: MainWorkDependencies,
 }
 
 export const openApiOperations = {
-  '/v1/operations/backpressure': { get: { exposure: 'public' } },
+  '/v1/operations/backpressure': { get: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;

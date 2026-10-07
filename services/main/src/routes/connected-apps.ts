@@ -11,10 +11,10 @@ import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
 
 export const openApiOperations = {
-  '/v1/connected-apps/observations': { post: { exposure: 'platform:agent-mode', bearer: true, idempotencyKey: true } },
-  '/v1/connected-apps/consent-ceilings': { post: { exposure: 'platform:agent-mode', bearer: true, idempotencyKey: true } },
-  '/v1/connected-apps/invocations': { post: { exposure: 'platform:agent-mode', bearer: true, idempotencyKey: true } },
-  '/v1/connected-apps/invocations/{invocation}': { get: { exposure: 'platform:agent-mode', bearer: true } },
+  '/v1/connected-apps/observations': { post: { exposure: 'platform:agent-mode', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/connected-apps/consent-ceilings': { post: { exposure: 'platform:agent-mode', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/connected-apps/invocations': { post: { exposure: 'platform:agent-mode', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/connected-apps/invocations/{invocation}': { get: { exposure: 'platform:agent-mode', rateLimitFamily: 'read', bearer: true } },
 } as const;
 
 const sha = t.String({ pattern: '^[0-9a-f]{64}$' });

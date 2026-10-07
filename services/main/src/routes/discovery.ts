@@ -13,15 +13,15 @@ import { RecommendationMissing, RecommendationRestart, RecommendationUnavailable
 import { problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/discovery/concepts': { get: { exposure: 'public', bearer: false } },
-  '/v1/discovery/sections': { get: { exposure: 'public', bearer: false } },
-  '/v1/works': { get: { exposure: 'public', bearer: false } },
-  '/v1/discovery/popular-terms': { get: { exposure: 'public', bearer: false } },
-  '/v1/discovery/generation-builds': { post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
-  '/v1/discovery/generations/{generation}': { get: { exposure: 'platform:platform-admin', bearer: true } },
-  '/v1/discovery/generations/{generation}/advance': { post: { exposure: 'platform:platform-admin', bearer: true } },
-  '/v1/discovery/generations/{generation}/cancel': { post: { exposure: 'platform:platform-admin', bearer: true } },
-  '/v1/discovery/generation-activations': { post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
+  '/v1/discovery/concepts': { get: { exposure: 'public', rateLimitFamily: 'search', bearer: false } },
+  '/v1/discovery/sections': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/works': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/discovery/popular-terms': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/discovery/generation-builds': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/discovery/generations/{generation}': { get: { exposure: 'platform:platform-admin', rateLimitFamily: 'read', bearer: true } },
+  '/v1/discovery/generations/{generation}/advance': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true } },
+  '/v1/discovery/generations/{generation}/cancel': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true } },
+  '/v1/discovery/generation-activations': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 /** Phrase-free discovery over a separately built, admitted population. */

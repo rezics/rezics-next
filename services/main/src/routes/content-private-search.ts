@@ -10,7 +10,7 @@ import { requireSelectedPlatformCapability } from '../modules/access/exposure.ts
 import { resolvedSemanticCapabilities } from '../modules/semantic/admitted.ts';
 
 export const openApiOperations = {
-  '/v1/private-content-queries': { post: { exposure: 'public', bearer: true } , ws: { exposure: 'public' } },
+  '/v1/private-content-queries': { post: { exposure: 'public', rateLimitFamily: 'read', bearer: true } , ws: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;
 
 export function contentPrivateSearchRoutes(work: MainWorkDependencies) {

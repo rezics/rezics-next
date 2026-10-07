@@ -20,8 +20,8 @@ import { readingPositionQuery } from './reading-positions.ts';
 import { frameQuery, readFrames } from '../modules/projection/frame-read.ts';
 
 export const openApiOperations = {
-  '/v1/resources/{resource}/page': { get: { exposure: 'public', bearer: false } },
-  '/v1/resources/{resource}/statements': { get: { exposure: 'public', bearer: false } },
+  '/v1/resources/{resource}/page': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/resources/{resource}/statements': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 const params = t.Object({ resource: readUuid });
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };

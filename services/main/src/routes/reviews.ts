@@ -23,11 +23,11 @@ const reviewErrors = { ...workReadProblems, 400: problemResult(400), 403: proble
   409: problemResult(409), 422: problemResult(422), 503: problemResult(503) };
 
 export const openApiOperations = {
-  '/v1/reviews': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/reviews/{id}': { get: { exposure: 'public', bearer: false }, delete: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/reviews/{id}/helpful': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/resources/{resource}/reviews': { get: { exposure: 'public', bearer: false } },
-  '/v1/review-quotes/realms/{id}': { get: { exposure: 'public', bearer: false } },
+  '/v1/reviews': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/reviews/{id}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false }, delete: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/reviews/{id}/helpful': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/resources/{resource}/reviews': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/review-quotes/realms/{id}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 function reviewError(error: unknown): Response {

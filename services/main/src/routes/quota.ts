@@ -75,5 +75,5 @@ export function quotaRoutes(work: MainWorkDependencies & { quota?: QuotaStore })
 }
 
 export const openApiOperations = {
-  '/v1/realms/{realm}/quota-reservations': { get: { exposure: 'platform:commerce' }, post: { exposure: 'platform:commerce' } },
+  '/v1/realms/{realm}/quota-reservations': { get: { exposure: 'platform:commerce', rateLimitFamily: 'read' }, post: { exposure: 'platform:commerce', rateLimitFamily: 'write' } },
 } as const;

@@ -75,6 +75,6 @@ export function graphLayoutRoutes(work: MainWorkDependencies & GraphLayoutDepend
 }
 
 export const openApiOperations = {
-  '/v1/graph-layouts/{layoutId}': { get: { exposure: 'platform:worldbuilding' } },
-  '/v1/graph-layouts': { post: { exposure: 'platform:worldbuilding' } },
+  '/v1/graph-layouts/{layoutId}': { get: { exposure: 'platform:worldbuilding', rateLimitFamily: 'read' } },
+  '/v1/graph-layouts': { post: { exposure: 'platform:worldbuilding', rateLimitFamily: 'write' } },
 } as const;

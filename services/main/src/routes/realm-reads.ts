@@ -33,12 +33,12 @@ function realmReadError(error: unknown): Response {
 
 // Anonymous public reads; private Realms require a live approved membership.
 export const openApiOperations = {
-  '/v1/realms/{realm}/join-page': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/works': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/decisions': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/decisions/{decision}': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/zone': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/join-page': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/works': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/decisions': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/decisions/{decision}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/zone': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 export function realmReadRoutes(work: MainWorkDependencies) {

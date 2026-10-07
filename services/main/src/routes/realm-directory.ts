@@ -45,8 +45,8 @@ function directoryError(error: unknown): Response {
   return commandError(error);
 }
 
-export const openApiOperations = { '/v1/realms': { get: { exposure: 'public', bearer: false } },
-  '/v1/classification-vocabulary': { get: { exposure: 'public', bearer: false } } } as const;
+export const openApiOperations = { '/v1/realms': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/classification-vocabulary': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } } } as const;
 
 export function realmDirectoryRoutes(work: MainWorkDependencies) {
   return new Elysia().use(realmDirectoryLifecycle(work)).get('/v1/classification-vocabulary', {

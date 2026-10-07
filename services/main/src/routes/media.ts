@@ -79,22 +79,22 @@ function idempotencyKey(request: Request): string | null {
 const unavailable = () => problem(404, 'media_unavailable', 'Media is unavailable');
 
 export const openApiOperations = {
-  '/v1/zones/{id}/campaign-art': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/media/uploads': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/media/uploads/{upload}': { get: { exposure: 'public', bearer: true } },
-  '/v1/media/uploads/{upload}/bytes': { put: { exposure: 'public', bearer: true } },
-  '/v1/media/assets/{asset}/state': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/media/publications': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/media/assets/{asset}/bytes': { get: { exposure: 'public', bearer: true } },
-  '/v1/media/metadata': { post: { exposure: 'public', bearer: false } },
-  '/v1/media/representations/{representation}': { get: { exposure: 'public', bearer: false } },
-  '/v1/media/representations/{representation}/bytes': { get: { exposure: 'public', bearer: false } },
-  '/v1/media/representations/{representation}/labels': { post: { exposure: 'public', bearer: true,idempotencyKey:true } },
-  '/v1/media/representations/{representation}/inferences': { post: { exposure: 'public', bearer: true,idempotencyKey:true } },
-  '/v1/media/uses': { post: { exposure: 'public', bearer: true,idempotencyKey:true } },
-  '/v1/media/uses/{use}/conceal': { post: { exposure: 'public', bearer: true,idempotencyKey:true } },
-  '/v1/media/uses/{use}': { get: { exposure: 'public' } },
-  '/v1/media/avatars/{selection}': { get: { exposure: 'public' } },
+  '/v1/zones/{id}/campaign-art': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/media/uploads': { post: { exposure: 'public', rateLimitFamily: 'upload', bearer: true, idempotencyKey: true } },
+  '/v1/media/uploads/{upload}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/media/uploads/{upload}/bytes': { put: { exposure: 'public', rateLimitFamily: 'upload', bearer: true } },
+  '/v1/media/assets/{asset}/state': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/media/publications': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/media/assets/{asset}/bytes': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/media/metadata': { post: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/media/representations/{representation}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/media/representations/{representation}/bytes': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/media/representations/{representation}/labels': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true,idempotencyKey:true } },
+  '/v1/media/representations/{representation}/inferences': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true,idempotencyKey:true } },
+  '/v1/media/uses': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true,idempotencyKey:true } },
+  '/v1/media/uses/{use}/conceal': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true,idempotencyKey:true } },
+  '/v1/media/uses/{use}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/media/avatars/{selection}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;
 
 const DOWNLOAD_CHUNK_BYTES = 64 * 1024;

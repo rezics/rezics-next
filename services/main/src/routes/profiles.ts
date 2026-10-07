@@ -45,16 +45,16 @@ function readError(error: unknown) {
   return result;
 }
 export const openApiOperations = {
-  '/v1/agents/{id}/listing': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/agents/{id}': { get: { exposure: 'public', bearer: false } },
-  '/v1/handles/{handle}': { get: { exposure: 'public', bearer: false } },
-  '/v1/agents/{id}/works': { get: { exposure: 'public', bearer: false } },
-  '/v1/agents/{id}/collections': { get: { exposure: 'public', bearer: false } },
-  '/v1/agents/{id}/library-visibility': { get: { exposure: 'public', bearer: true },
-    put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/me/contributions': { get: { exposure: 'public', bearer: true } },
-  '/v1/me/ratings': { get: { exposure: 'public', bearer: true } },
-  '/v1/works/{id}/agent-credits': { get: { exposure: 'public', bearer: false }, post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/agents/{id}/listing': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/agents/{id}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/handles/{handle}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/agents/{id}/works': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/agents/{id}/collections': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/agents/{id}/library-visibility': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true },
+    put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/contributions': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/me/ratings': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/works/{id}/agent-credits': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false }, post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 export function profileRoutes(work: MainWorkDependencies) {

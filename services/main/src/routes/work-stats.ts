@@ -7,7 +7,7 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 
 // A public read: a bearer is optional and, with `actingSubject`, only authenticates; the numbers are everyone's.
 export const openApiOperations = {
-  '/v1/works/{id}/reader-stats': { get: { exposure: 'public', bearer: false } },
+  '/v1/works/{id}/reader-stats': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 /** The reader numbers under a Work page's rating (`modules/work/read-stats.ts`). */

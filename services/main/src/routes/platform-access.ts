@@ -6,7 +6,7 @@ import { platformExposureProblem } from '../modules/access/exposure-routes.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 
 export const openApiOperations = {
-  '/v1/me/platform-access': { get: { exposure: 'public' } },
+  '/v1/me/platform-access': { get: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;
 
 export function platformAccessRoutes(work: MainWorkDependencies) {

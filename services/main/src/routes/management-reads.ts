@@ -20,10 +20,10 @@ const detail = { security: [{ bearerAuth: [] }] };
 const headers = { 'cache-control': 'private, no-store' };
 const params = t.Object({ realm: readUuid });
 export const openApiOperations = {
-  '/v1/realms/{realm}/moderation': { get: { exposure: 'public', bearer: true } },
-  '/v1/realms/{realm}/audit': { get: { exposure: 'public', bearer: true } },
-  '/v1/realms/{realm}/moderation/{caseId}': { get: { exposure: 'public', bearer: true } },
-  '/v1/realms/{realm}/moderation/context': { get: { exposure: 'public', bearer: true } },
+  '/v1/realms/{realm}/moderation': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/realms/{realm}/audit': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/realms/{realm}/moderation/{caseId}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/realms/{realm}/moderation/context': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
 } as const;
 
 /** The principal when the token carries `scope`, or null when it was not consented. */

@@ -27,8 +27,8 @@ type Command = Static<typeof settings> & { actingSubject: string; expectedVersio
 type BlockCommand = { actingSubject: string; target: string; blocked: boolean };
 
 export const openApiOperations = {
-  '/v1/me/person-preferences': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/me/blocked-people': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/person-preferences': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/blocked-people': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 function failure(error: unknown): Response {

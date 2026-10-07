@@ -373,13 +373,13 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
 }
 
 export const openApiOperations = {
-  '/v1/revisions/{revision}': { get: { exposure: 'public' } },
-  '/v1/main-versions/{mainVersion}/revisions/{revision}': { get: { exposure: 'public' } },
-  '/v1/works/{id}/scalar-value/revisions/{revision}': { get: { exposure: 'public' } },
-  '/v1/works/{id}/scalar-value': { get: { exposure: 'public' }, post: { exposure: 'public' } },
-  '/v1/fixed-releases/{release}': { get: { exposure: 'platform:commerce' } },
-  '/v1/fixed-releases': { post: { exposure: 'platform:commerce' } },
-  '/v1/main-versions/{mainVersion}/revisions/{revision}/work-derivations': { get: { exposure: 'public' } },
-  '/v1/main-versions/{mainVersion}/revisions/{revision}/translation-links': { get: { exposure: 'public' } },
-  '/v1/works': { post: { exposure: 'public' } },
+  '/v1/revisions/{revision}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/main-versions/{mainVersion}/revisions/{revision}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/works/{id}/scalar-value/revisions/{revision}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/works/{id}/scalar-value': { get: { exposure: 'public', rateLimitFamily: 'read' }, post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/fixed-releases/{release}': { get: { exposure: 'platform:commerce', rateLimitFamily: 'read' } },
+  '/v1/fixed-releases': { post: { exposure: 'platform:commerce', rateLimitFamily: 'write' } },
+  '/v1/main-versions/{mainVersion}/revisions/{revision}/work-derivations': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/main-versions/{mainVersion}/revisions/{revision}/translation-links': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/works': { post: { exposure: 'public', rateLimitFamily: 'write' } },
 } as const;

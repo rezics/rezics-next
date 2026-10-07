@@ -19,16 +19,16 @@ import { commandError, problem } from './problems.ts';
 export type ProtectionDependencies = MainWorkDependencies;
 
 export const openApiOperations = {
-  '/v1/editorial-protections': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/corrections': { post: { exposure: 'public', bearer: true, idempotencyKey: true }, get: { exposure: 'public', bearer: true } },
-  '/v1/corrections/{proposalRevision}': { get: { exposure: 'public', bearer: true } },
-  '/v1/corrections/{proposalRevision}/decisions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/editorial-state-queries': { post: { exposure: 'public', bearer: true } },
-  '/v1/work-title-protections': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/work-title-corrections': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/work-title-corrections/{proposalRevision}/decisions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/work-title-corrections/{proposalRevision}': { get: { exposure: 'public', bearer: true } },
-  '/v1/works/{id}/editorial-state': { get: { exposure: 'public', bearer: true } },
+  '/v1/editorial-protections': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/corrections': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true }, get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/corrections/{proposalRevision}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/corrections/{proposalRevision}/decisions': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/editorial-state-queries': { post: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/work-title-protections': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/work-title-corrections': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/work-title-corrections/{proposalRevision}/decisions': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/work-title-corrections/{proposalRevision}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/works/{id}/editorial-state': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
 } as const;
 
 const NATIVE = '^https://rezics\\.com/id/[0-9a-f-]{36}$';

@@ -8,7 +8,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/me/onboarding': { post: { exposure: 'public', bearer: true } },
+  '/v1/me/onboarding': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true } },
 } as const;
 const result = t.Object({ profile: t.Literal('person-onboarding-v1'), agent: t.String(),
   state: t.Union([t.Literal('pending'), t.Literal('active'), t.Literal('compensating'),

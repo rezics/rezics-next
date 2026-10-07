@@ -11,8 +11,8 @@ declare module './dependencies.ts' {
 }
 
 export const openApiOperations = {
-  '/v1/access/authority-state': { get: { exposure: 'public', bearer: true } },
-  '/v1/access/revocation-sources/{sourceId}': { get: { exposure: 'public', bearer: true } },
+  '/v1/access/authority-state': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/access/revocation-sources/{sourceId}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
 } as const;
 
 const scopeId = t.String({ minLength: 1, maxLength: 256 });

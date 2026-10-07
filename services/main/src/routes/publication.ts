@@ -641,15 +641,15 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
 }
 
 export const openApiOperations = {
-  '/v1/main-versions/{mainVersion}/selection': { get: { exposure: 'public' } },
-  '/v1/me/realms/{realm}/main-versions/{mainVersion}/selection': { get: { exposure: 'public' } },
-  '/v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation': { put: { exposure: 'public' } },
-  '/v1/me/main-versions/{mainVersion}/selection': { get: { exposure: 'public' } },
-  '/v1/me/main-versions/{mainVersion}/variant-preference': { put: { exposure: 'public' } },
-  '/v1/main-versions/{mainVersion}/native-variants': { get: { exposure: 'public' } },
-  '/v1/realms/{realm}/main-versions/{mainVersion}/selections/{selection}/media/{use}': { get: { exposure: 'public' } },
-  '/v1/realms/{realm}/main-versions/{mainVersion}/selection': { get: { exposure: 'public' } },
-  '/v1/publication-rejections': { post: { exposure: 'public' } },
-  '/v1/organization-publication-rejections': { post: { exposure: 'platform:organization-authority' } },
-  '/v1/publication-selections': { post: { exposure: 'public' } },
+  '/v1/main-versions/{mainVersion}/selection': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/me/realms/{realm}/main-versions/{mainVersion}/selection': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/realms/{realm}/main-versions/{mainVersion}/variant-recommendation': { put: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/me/main-versions/{mainVersion}/selection': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/me/main-versions/{mainVersion}/variant-preference': { put: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/main-versions/{mainVersion}/native-variants': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/realms/{realm}/main-versions/{mainVersion}/selections/{selection}/media/{use}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/realms/{realm}/main-versions/{mainVersion}/selection': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/publication-rejections': { post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/organization-publication-rejections': { post: { exposure: 'platform:organization-authority', rateLimitFamily: 'write' } },
+  '/v1/publication-selections': { post: { exposure: 'public', rateLimitFamily: 'write' } },
 } as const;

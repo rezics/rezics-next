@@ -13,14 +13,14 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/editorial/proposals': { post: { exposure: 'public', bearer: true, idempotencyKey: true }, get: { exposure: 'public', bearer: false } },
-  '/v1/editorial/proposals/{proposal}': { get: { exposure: 'public', bearer: false } },
-  '/v1/editorial/proposals/{proposal}/revisions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/editorial/proposals/{proposal}/reviews': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/editorial/proposals/{proposal}/decisions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/editorial/proposals/{proposal}/withdrawal': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/editorial/proposals/{proposal}/reversal': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/editorial/proposals/{proposal}/recovery': { post: { exposure: 'public', bearer: false } },
+  '/v1/editorial/proposals': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true }, get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/editorial/proposals/{proposal}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/editorial/proposals/{proposal}/revisions': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/editorial/proposals/{proposal}/reviews': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/editorial/proposals/{proposal}/decisions': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/editorial/proposals/{proposal}/withdrawal': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/editorial/proposals/{proposal}/reversal': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/editorial/proposals/{proposal}/recovery': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: false } },
 } as const;
 
 const uuid = t.String({ format: 'uuid' });

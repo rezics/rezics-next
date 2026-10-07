@@ -9,8 +9,8 @@ import { homeError, homeHeaders } from './follows.ts';
 import { workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/onboarding/choices': { get: { exposure: 'public', bearer: false } },
-  '/v1/onboarding/suggested-follows': { get: { exposure: 'public', bearer: false } },
+  '/v1/onboarding/choices': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/onboarding/suggested-follows': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 /**

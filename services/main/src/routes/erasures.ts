@@ -16,8 +16,8 @@ import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid } from './shared.ts';
 
 export const openApiOperations = {
-  '/v1/erasures': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/erasures/{erasureId}': { get: { exposure: 'public', bearer: true } },
+  '/v1/erasures': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/erasures/{erasureId}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
 } as const;
 
 const literals = (values: readonly string[]) => t.Union(values.map(value => t.Literal(value)));

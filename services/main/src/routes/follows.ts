@@ -22,13 +22,13 @@ export function homeError(error: unknown) {
   return result;
 }
 export const openApiOperations = {
-  '/v1/me/follows': { get: { exposure: 'public', bearer: true } },
-  '/v1/follows': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/me/follows/batch': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/follows/{id}': { get: { exposure: 'public', bearer: false } },
-  '/v1/me/follows/authors': { get: { exposure: 'public', bearer: true } },
-  '/v1/me/follow-state': { get: { exposure: 'public', bearer: true } },
-  '/v1/authors/open-library/{author}/follow': { get: { exposure: 'public', bearer: false } },
+  '/v1/me/follows': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/follows': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/follows/batch': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/follows/{id}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/me/follows/authors': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/me/follow-state': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/authors/open-library/{author}/follow': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 const stateQuery = { language: t.Optional(readLanguage), actingSubject: t.Optional(readId) };

@@ -4,7 +4,7 @@ import { facetList } from '../modules/facets/contract.ts';
 import { facetListBody, facetListTag } from '../modules/facets/registry.ts';
 
 // Public and the same for every reader: no bearer, no graph read, one body per deploy.
-export const openApiOperations = { '/v1/facets': { get: { exposure: 'public', bearer: false } } } as const;
+export const openApiOperations = { '/v1/facets': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } } } as const;
 
 const headers = { 'cache-control': 'public, max-age=300', etag: facetListTag };
 

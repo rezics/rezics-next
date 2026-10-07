@@ -9,8 +9,8 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 const headers = { 'cache-control': 'private, no-store' };
 export const openApiOperations = {
-  '/v1/works/{id}/contents': { get: { exposure: 'public', bearer: false } },
-  '/v1/chapters/{id}': { get: { exposure: 'public', bearer: false } },
+  '/v1/works/{id}/contents': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/chapters/{id}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 export function workContentsRoutes(work: MainWorkDependencies) {

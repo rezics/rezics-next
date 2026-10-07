@@ -93,16 +93,16 @@ const caseView = t.Object({
 });
 const noStore = { headers: { 'cache-control': 'no-store' } };
 export const openApiOperations = {
-  '/v1/safety-cases': { get: { exposure: 'public', bearer: true } },
-  '/v1/safety-cases/due-steps': { get: { exposure: 'public', bearer: true } },
-  '/v1/safety-cases/{caseId}': { get: { exposure: 'public', bearer: true } },
-  '/v1/safety-cases/{caseId}/claim': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/safety-cases/{caseId}/preservation-holds': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/safety-cases/{caseId}/decisions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/safety-cases': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/safety-cases/due-steps': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/safety-cases/{caseId}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/safety-cases/{caseId}/claim': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/safety-cases/{caseId}/preservation-holds': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/safety-cases/{caseId}/decisions': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/safety-decisions/{decisionId}/cancellation': {
-    post: { exposure: 'public', bearer: true, idempotencyKey: true },
+    post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true },
   },
-  '/v1/safety-notices': { get: { exposure: 'public', bearer: true } },
+  '/v1/safety-notices': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
 } as const;
 
 export function safetyCaseRoutes(work: MainWorkDependencies) {

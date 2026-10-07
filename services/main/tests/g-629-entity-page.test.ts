@@ -135,8 +135,8 @@ test('G-629: registry precedence and component types cannot retarget a Work or g
 test('G-629: read contracts expose optional bearer, fixed projection profile and bounded traversal cost', () => {
   expect(entityPage.properties.profile.const).toBe('entity-page-v1');
   expect(openApiOperations).toEqual({
-    '/v1/resources/{resource}/page': { get: { exposure: 'public', bearer: false } },
-    '/v1/resources/{resource}/statements': { get: { exposure: 'public', bearer: false } },
+    '/v1/resources/{resource}/page': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+    '/v1/resources/{resource}/statements': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
   });
   expect(SUBJECT_STATEMENT_COST.inventoryQueriesPerBatch).toBe(2);
   expect(Number(SUBJECT_STATEMENT_COST.candidates)).toBe(SUBJECT_STATEMENT_COST.pageSize);

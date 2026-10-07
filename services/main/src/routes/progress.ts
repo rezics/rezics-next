@@ -26,7 +26,7 @@ const result = t.Object({ structure: ref, occurrence: ref, selectedRevision: t.N
 
 export const openApiOperations = {
   '/v1/compositions/{id}/occurrences/{occurrence}/progress': {
-    get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true },
+    get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true },
   },
 } as const;
 

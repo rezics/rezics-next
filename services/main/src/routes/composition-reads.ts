@@ -36,8 +36,8 @@ const failure = (error: unknown) => {
   return workReadError(error);
 };
 export const openApiOperations = {
-  '/v1/resources/{resource}/parts': { get: { exposure: 'public', bearer: false } },
-  '/v1/resources/{resource}/wholes': { get: { exposure: 'public', bearer: false } },
+  '/v1/resources/{resource}/parts': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/resources/{resource}/wholes': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 export function compositionReadRoutes(work: MainWorkDependencies) {

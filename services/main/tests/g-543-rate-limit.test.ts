@@ -58,10 +58,10 @@ test('G-543: every current OpenAPI operation has an explicit policy and path bou
   expect(rateLimitFamily('PUT', '/v1/media/uploads/123/bytes')).toBe('upload');
   expect(rateLimitFamily('POST', '/v1/media/uploads-evil')).toBeUndefined();
   expect(rateLimitFamily('POST', '/v1/public-reports')).toBe('report');
-  expect(rateLimitFamily('POST', '/v1/appeals')).toBe('report');
+  expect(rateLimitFamily('POST', '/v1/appeals')).toBeUndefined();
   expect(rateLimitFamily('POST', '/v1/rights/complaints')).toBe('report');
   expect(rateLimitFamily('POST', '/v1/public-reports/123/correspondence')).toBe('correspondence');
-  expect(rateLimitFamily('POST', '/v1/cases/123/messages')).toBe('correspondence');
+  expect(rateLimitFamily('POST', '/v1/cases/123/messages')).toBeUndefined();
   expect(() => rateLimitBudgets('{"member":{"write":{"maximum":0,"seconds":60}}}')).toThrow();
   expect(() => rateLimitBudgets('{"service":{"wriet":{"maximum":1,"seconds":60}}}')).toThrow();
 });
@@ -107,10 +107,11 @@ test('G-543 review: read POSTs survive counter loss; safety and provider intake 
     const app = new Elysia().use(rateLimitHook({ async verify() { verifications++; throw error; } },
       { options, budgets, store }))
       .post('/v1/query', () => 'read').post('/v1/resources/summaries', () => 'read')
-      .post('/v1/public-reports', () => 'received').post('/v1/appeals', () => 'received')
+      .post('/v1/public-reports', () => 'received')
+      .post('/v1/public-reports/case/correspondence', () => 'received')
       .post('/v1/subscriptions/settlements', () => 'signed callback')
       .post('/v1/new-unclassified-operation', () => 'effect');
-    for (const path of ['/v1/resources/summaries', '/v1/public-reports', '/v1/appeals',
+    for (const path of ['/v1/resources/summaries', '/v1/public-reports', '/v1/public-reports/case/correspondence',
       '/v1/subscriptions/settlements']) {
       expect((await app.handle(new Request(`http://localhost${path}`, { method: 'POST',
         headers: { authorization: 'Bearer rejected' } }))).status).toBe(200);
@@ -118,7 +119,7 @@ test('G-543 review: read POSTs survive counter loss; safety and provider intake 
     expect((await app.handle(new Request('http://localhost/v1/new-unclassified-operation', { method: 'POST' }))).status).toBe(503);
   }
   expect(verifications).toBe(0);
-  expect(seen.every(entry => entry.family === 'report' || entry.family === 'provider')).toBe(true);
+  expect(seen.every(entry => entry.family === 'report' || entry.family === 'correspondence' || entry.family === 'provider')).toBe(true);
   expect(seen.filter(entry => entry.family === 'provider').every(entry => entry.maximum > 10)).toBe(true);
   store.consume = async () => { throw new Error('counter outage'); };
   const reads = new Elysia().use(rateLimitHook({ async verify() { throw new Error('Account outage'); } },
@@ -308,8 +309,7 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
         idempotencyKey: request.headers.get('idempotency-key')!, requestDigest: 'a'.repeat(64),
       })))
       .post('/v1/public-reports', () => Response.json({ received: true }))
-      .post('/v1/appeals', () => Response.json({ received: true }))
-      .post('/v1/cases/1/messages', () => Response.json({ received: true }))
+      .post('/v1/public-reports/1/correspondence', () => Response.json({ received: true }))
       .post('/v1/media/uploads', () => Response.json({ created: true }));
     const send = (subject: string, path = '/v1/works', key?: string, token = 1) => app.handle(new Request(`http://localhost${path}`, {
       method: 'POST', headers: { ...(subject === 'anonymous' ? {} : { authorization: `Bearer ${subject}-token-${token}` }),
@@ -322,8 +322,7 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
       expect(exhausted.status).toBe(429);
       expect(Number(exhausted.headers.get('retry-after'))).toBeGreaterThan(0);
       expect((await send(principal, '/v1/public-reports')).status).toBe(200);
-      expect((await send(principal, '/v1/appeals')).status).toBe(200);
-      expect((await send(principal, '/v1/cases/1/messages')).status).toBe(200);
+      expect((await send(principal, '/v1/public-reports/1/correspondence')).status).toBe(200);
     }
     for (let i = 0; i < 5; i++) expect((await send('new-account', '/v1/media/uploads')).status).toBe(200);
     expect((await send('new-account', '/v1/media/uploads')).status).toBe(429);

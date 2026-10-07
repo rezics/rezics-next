@@ -7,14 +7,14 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/me/agents': { get: { exposure: 'public', bearer: true } },
-  '/v1/me/acting-contexts': { get: { exposure: 'public', bearer: true } },
-  '/v1/me/acting-context-checks': { post: { exposure: 'public', bearer: true } },
-  '/v1/me/acting-context-preferences/work.create': { put: { exposure: 'public', bearer: true } },
-  '/v1/me/session-agent': { get: { exposure: 'public', bearer: true },
-    put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/me/main-agent-preference': { get: { exposure: 'public', bearer: true },
-    put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/me/agents': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/me/acting-contexts': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/me/acting-context-checks': { post: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/me/acting-context-preferences/work.create': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true } },
+  '/v1/me/session-agent': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true },
+    put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/main-agent-preference': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true },
+    put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 const agentDiscovery = t.Object({ profile: t.Literal('agent-discovery-v1'),

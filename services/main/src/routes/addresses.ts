@@ -117,14 +117,14 @@ const receipt = t.Object({
 });
 
 export const openApiOperations = {
-  '/v1/addresses/current': { get: { exposure: 'public', bearer: true } },
-  '/v1/addresses/claims': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/addresses/renames': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/addresses/dispositions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/addresses/resolve': { get: { exposure: 'public', bearer: false } },
-  '/v1/addresses/resolutions': { post: { exposure: 'public', bearer: false } },
-  '/v1/addresses/availability': { get: { exposure: 'public', bearer: false } },
-  '/v1/addresses/revisions/{revision}': { get: { exposure: 'public', bearer: false } },
+  '/v1/addresses/current': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/addresses/claims': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/addresses/renames': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/addresses/dispositions': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/addresses/resolve': { get: { exposure: 'public', rateLimitFamily: 'address', bearer: false } },
+  '/v1/addresses/resolutions': { post: { exposure: 'public', rateLimitFamily: 'address', bearer: false } },
+  '/v1/addresses/availability': { get: { exposure: 'public', rateLimitFamily: 'address', bearer: false } },
+  '/v1/addresses/revisions/{revision}': { get: { exposure: 'public', rateLimitFamily: 'address', bearer: false } },
 } as const;
 
 export function addressError(error: unknown): Response {

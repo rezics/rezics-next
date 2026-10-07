@@ -53,9 +53,9 @@ const noStore = { 'cache-control': 'no-store' };
 
 export const openApiOperations = {
   '/v1/statements/{id}/judgments': {
-    post: { exposure: 'public', bearer: true, idempotencyKey: true }, get: { exposure: 'public', bearer: true },
+    post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true }, get: { exposure: 'public', rateLimitFamily: 'read', bearer: true },
   },
-  '/v1/concepts/{id}/spoiler-hints': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/concepts/{id}/spoiler-hints': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 function judgmentError(error: unknown): Response {

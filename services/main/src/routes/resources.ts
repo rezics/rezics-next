@@ -35,14 +35,14 @@ const language = t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLeng
 const unavailable = () => problem(404, 'resource_unavailable', 'Resource is unavailable');
 
 export const openApiOperations = {
-  '/v1/resources/{resource}/avatar': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/resources/{resource}/showcase/art': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/resources/{resource}/showcase/trailer': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/resources/showcase': { post: { exposure: 'public', bearer: false } },
-  '/v1/sitemap': { get: { exposure: 'public' } },
-  '/v1/public-previews/{resource}': { get: { exposure: 'public' } },
-  '/v1/resources/summaries': { post: { exposure: 'public' } },
-  '/v1/resources/{resource}': { get: { exposure: 'public' } },
+  '/v1/resources/{resource}/avatar': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/resources/{resource}/showcase/art': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/resources/{resource}/showcase/trailer': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/resources/showcase': { post: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/sitemap': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/public-previews/{resource}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/resources/summaries': { post: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/resources/{resource}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;
 
 /** Resource summaries, previews, sitemap and avatar selection, plus the media owner routes. */

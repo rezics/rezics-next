@@ -22,17 +22,17 @@ const errors = { ...workReadProblems, 409: problemResult(409) };
 const privateHeaders = { 'cache-control': 'private, no-store' };
 
 export const openApiOperations = {
-  '/v1/works/{id}/copies': { get: { bearer: true, exposure: 'public' } },
-  '/v1/me/library-copies': { post: { bearer: true, idempotencyKey: true, exposure: 'public' } },
+  '/v1/works/{id}/copies': { get: { bearer: true, exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/me/library-copies': { post: { bearer: true, idempotencyKey: true, exposure: 'public', rateLimitFamily: 'write' } },
   '/v1/me/library-copies/{id}': {
-    patch: { bearer: true, idempotencyKey: true, exposure: 'public' },
-    delete: { bearer: true, idempotencyKey: true, exposure: 'public' },
+    patch: { bearer: true, idempotencyKey: true, exposure: 'public', rateLimitFamily: 'write' },
+    delete: { bearer: true, idempotencyKey: true, exposure: 'public', rateLimitFamily: 'write' },
   },
   '/v1/me/library-loans': {
-    get: { bearer: true, exposure: 'public' }, post: { bearer: true, idempotencyKey: true, exposure: 'public' },
+    get: { bearer: true, exposure: 'public', rateLimitFamily: 'read' }, post: { bearer: true, idempotencyKey: true, exposure: 'public', rateLimitFamily: 'write' },
   },
-  '/v1/me/library-loans/{id}/extend': { post: { bearer: true, idempotencyKey: true, exposure: 'public' } },
-  '/v1/me/library-loans/{id}/return': { post: { bearer: true, idempotencyKey: true, exposure: 'public' } },
+  '/v1/me/library-loans/{id}/extend': { post: { bearer: true, idempotencyKey: true, exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/me/library-loans/{id}/return': { post: { bearer: true, idempotencyKey: true, exposure: 'public', rateLimitFamily: 'write' } },
 } as const;
 
 function failure(error: unknown): Response {

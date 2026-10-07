@@ -49,10 +49,10 @@ const installRequest = t.Object({ profile: t.Literal('main-version-package-insta
 
 export const openApiOperations = {
   '/v1/main-versions/{mainVersion}/package-release-recommendations': {
-    get: { exposure: 'platform:developer-extras', bearer: true }, post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true },
+    get: { exposure: 'platform:developer-extras', rateLimitFamily: 'read', bearer: true }, post: { exposure: 'platform:developer-extras', rateLimitFamily: 'write', bearer: true, idempotencyKey: true },
   },
-  '/v1/main-versions/{mainVersion}/package-release-recommendations/{revision}': { get: { exposure: 'platform:developer-extras', bearer: true } },
-  '/v1/package-install-requests': { post: { exposure: 'platform:developer-extras', bearer: true, idempotencyKey: true } },
+  '/v1/main-versions/{mainVersion}/package-release-recommendations/{revision}': { get: { exposure: 'platform:developer-extras', rateLimitFamily: 'read', bearer: true } },
+  '/v1/package-install-requests': { post: { exposure: 'platform:developer-extras', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 const json = (value: unknown, status = 200) => Response.json(value, {

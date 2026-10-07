@@ -55,5 +55,5 @@ export function fixedSiteRoutes(fuseki: FusekiClient, work: MainWorkDependencies
 }
 
 export const openApiOperations = {
-  '/v1/pro-sites/queries': { post: { exposure: 'platform:commerce' } },
+  '/v1/pro-sites/queries': { post: { exposure: 'platform:commerce', rateLimitFamily: 'read' } },
 } as const;

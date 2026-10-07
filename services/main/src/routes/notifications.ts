@@ -21,19 +21,19 @@ import { homeError } from './follows.ts';
 export const NOTIFICATION_SCOPE = 'notification:manage';
 
 export const openApiOperations = {
-  '/v1/me/notifications': { get: { exposure: 'public', bearer: true } },
-  '/v1/me/notifications/unread-count': { get: { exposure: 'public', bearer: true } },
-  '/v1/me/notifications/{item}/read': { put: { exposure: 'public', bearer: true } },
-  '/v1/me/notifications/{item}/triage': { put: { exposure: 'public', bearer: true } },
-  '/v1/me/proposal-subscriptions/{proposal}': { get: { exposure: 'platform:update-subscriptions', bearer: true }, put: { exposure: 'platform:update-subscriptions', bearer: true } },
-  '/v1/me/watches': { get: { exposure: 'public', bearer: true }, post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/me/notifications/hint': { get: { exposure: 'public', bearer: true } , ws: { exposure: 'public' } },
-  '/v1/me/notification-read-watermarks/inbox': { put: { exposure: 'public', bearer: true } },
-  '/v1/me/notification-streams/inbox/resets': { post: { exposure: 'public', bearer: true } },
-  '/v1/me/notification-preferences': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/me/notification-endpoints/push': { put: { exposure: 'public', bearer: true } },
-  '/v1/deliveries/{delivery}': { get: { exposure: 'public', bearer: true } },
-  '/v1/notification-providers/{provider}/events': { post: { exposure: 'public' } },
+  '/v1/me/notifications': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/me/notifications/unread-count': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/me/notifications/{item}/read': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true } },
+  '/v1/me/notifications/{item}/triage': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true } },
+  '/v1/me/proposal-subscriptions/{proposal}': { get: { exposure: 'platform:update-subscriptions', rateLimitFamily: 'read', bearer: true }, put: { exposure: 'platform:update-subscriptions', rateLimitFamily: 'write', bearer: true } },
+  '/v1/me/watches': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/notifications/hint': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } , ws: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/me/notification-read-watermarks/inbox': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true } },
+  '/v1/me/notification-streams/inbox/resets': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true } },
+  '/v1/me/notification-preferences': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/notification-endpoints/push': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true } },
+  '/v1/deliveries/{delivery}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/notification-providers/{provider}/events': { post: { exposure: 'public', rateLimitFamily: 'provider' } },
 } as const;
 
 export interface NotificationRouteDependencies {

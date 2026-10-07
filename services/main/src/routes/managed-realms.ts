@@ -11,16 +11,16 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/me/managed-realms': { get: { exposure: 'public', bearer: true } },
-  '/v1/me/realm-invitations': { get: { exposure: 'public', bearer: true } },
-  '/v1/realms/{realm}/joining': { get: { exposure: 'public', bearer: true } },
-  '/v1/realms/{realm}/join': { post: { exposure: 'public', bearer: true,idempotencyKey: true } },
-  '/v1/realms/{realm}/invitations': { post: { exposure: 'public', bearer: true,idempotencyKey: true } },
-  '/v1/realms/{realm}/invitations/{invitation}/response': { post: { exposure: 'public', bearer: true,idempotencyKey: true } },
-  '/v1/realms/{realm}/invitations/{invitation}/revoke': { post: { exposure: 'public', bearer: true,idempotencyKey: true } },
-  '/v1/realms/{realm}/roster': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/roster/listing': { put: { exposure: 'public', bearer: true } },
-  '/v1/realms/{realm}/roster/featured': { put: { exposure: 'public', bearer: true } },
+  '/v1/me/managed-realms': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/me/realm-invitations': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/realms/{realm}/joining': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/realms/{realm}/join': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true,idempotencyKey: true } },
+  '/v1/realms/{realm}/invitations': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true,idempotencyKey: true } },
+  '/v1/realms/{realm}/invitations/{invitation}/response': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true,idempotencyKey: true } },
+  '/v1/realms/{realm}/invitations/{invitation}/revoke': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true,idempotencyKey: true } },
+  '/v1/realms/{realm}/roster': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/realms/{realm}/roster/listing': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true } },
+  '/v1/realms/{realm}/roster/featured': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true } },
 } as const;
 const params = t.Object({ realm: readUuid });
 const actor = t.Object({ actingSubject: readId },{ additionalProperties: false });

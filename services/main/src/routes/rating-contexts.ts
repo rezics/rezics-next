@@ -4,7 +4,7 @@ import { workRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
-export const openApiOperations = { '/v1/rating-contexts': { get: { exposure: 'public', bearer: false } } } as const;
+export const openApiOperations = { '/v1/rating-contexts': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } } } as const;
 
 export function ratingContextReadRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/rating-contexts', {

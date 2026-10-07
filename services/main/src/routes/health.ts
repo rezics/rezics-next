@@ -106,10 +106,10 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
 }
 
 export const openApiOperations = {
-  '/health/search-ready': { get: { exposure: 'public' } },
-  '/health/feed-ready': { get: { exposure: 'public' } },
-  '/health/discovery-ready': { get: { exposure: 'public' } },
-  '/health/rating-ready': { get: { exposure: 'public' } },
-  '/health/ready': { get: { exposure: 'public' } },
-  '/health/live': { get: { exposure: 'public' } },
+  '/health/search-ready': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/health/feed-ready': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/health/discovery-ready': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/health/rating-ready': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/health/ready': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/health/live': { get: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;

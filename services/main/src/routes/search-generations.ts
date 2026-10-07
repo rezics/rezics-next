@@ -60,5 +60,5 @@ export function searchGenerationRoutes(fuseki: FusekiClient, work: MainWorkDepen
 }
 
 export const openApiOperations = {
-  '/v1/search/generations/current': { get: { exposure: 'public' } },
+  '/v1/search/generations/current': { get: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;

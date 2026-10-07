@@ -24,8 +24,8 @@ export function spaceCreationError(error: unknown): Response {
 }
 
 export const openApiOperations = {
-  '/v1/spaces': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/spaces/{space}': { get: { exposure: 'public' } },
+  '/v1/spaces': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/spaces/{space}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;
 
 const spaceCreateFields = {

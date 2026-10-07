@@ -18,8 +18,8 @@ import { scopedSelectionSchemas } from '../modules/export/scoped.ts';
 import { WikiRevisionSetSchema } from '../modules/wiki/delta.ts';
 
 export const openApiOperations = {
-  '/v1/exports': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/exports/{export}': { get: { exposure: 'public', bearer: true } },
+  '/v1/exports': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/exports/{export}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
 } as const;
 
 const position = t.Object({ dataEpoch: t.String({ minLength: 1, maxLength: 100 }),

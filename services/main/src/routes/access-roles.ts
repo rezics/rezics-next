@@ -283,13 +283,13 @@ export function accessRoleRoutes(work: MainWorkDependencies) {
 }
 
 export const openApiOperations = {
-  '/v1/access/role-bindings': { post: { exposure: 'public' }, get: { exposure: 'public' } },
-  '/v1/access/role-bindings/{bindingId}': { get: { exposure: 'public' } },
-  '/v1/access/roles/{familyId}': { get: { exposure: 'public' } },
-  '/v1/access/role-revisions': { post: { exposure: 'public' } },
-  '/v1/access/roles': { post: { exposure: 'public' } },
-  '/v1/access/representation-changes': { post: { exposure: 'public' } },
-  '/v1/access/representations/{representationId}': { get: { exposure: 'public' } },
-  '/v1/access/representation-requests/{requestId}': { get: { exposure: 'public' } },
-  '/v1/me/representation-requests': { post: { exposure: 'public' } },
+  '/v1/access/role-bindings': { post: { exposure: 'public', rateLimitFamily: 'write' }, get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/access/role-bindings/{bindingId}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/access/roles/{familyId}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/access/role-revisions': { post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/access/roles': { post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/access/representation-changes': { post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/access/representations/{representationId}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/access/representation-requests/{requestId}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/me/representation-requests': { post: { exposure: 'public', rateLimitFamily: 'write' } },
 } as const;

@@ -23,8 +23,8 @@ const view = t.Object({ ...facts, work: readId, revision: readId, source: realiz
     authorizationEpoch: t.Nullable(t.String()) })) });
 
 export const openApiOperations = {
-  '/v1/works/{id}/realizations': { get: { exposure: 'public', bearer: false } },
-  '/v1/works/{id}/realizations/{realization}': { get: { exposure: 'public', bearer: false }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/realizations': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/works/{id}/realizations/{realization}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false }, put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 function realizationError(error: unknown) {

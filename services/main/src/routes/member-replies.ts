@@ -15,9 +15,9 @@ const reply = t.Object({ reply: native, author: native, rootTarget: native, root
   variantId: t.String(), revisionId: uuid, body: t.String(), document: t.Optional(documentSnapshotSchema), revisionDigest: t.String(),
   parentReply: t.Optional(t.Nullable(native)), parentRevision: t.Optional(t.Nullable(uuid)) });
 export const openApiOperations = {
-  '/v1/member-reply-drafts': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/member-replies': { get: { exposure: 'public' } },
-  '/v1/member-replies/{reply}': { get: { exposure: 'public' } },
+  '/v1/member-reply-drafts': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/member-replies': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/member-replies/{reply}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;
 const draftFields = { profile: t.Literal('member-reply-draft-v1'), reply: native,
   variantId: t.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),

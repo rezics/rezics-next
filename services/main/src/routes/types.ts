@@ -19,8 +19,8 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/types': { get: { exposure: 'public', bearer: false }, post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
-  '/v1/types/retirements': { post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
+  '/v1/types': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false }, post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/types/retirements': { post: { exposure: 'platform:platform-admin', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 function fresh(request: Request): boolean {
   const tags = request.headers.get('if-none-match');

@@ -176,9 +176,9 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
 }
 
 export const openApiOperations = {
-  '/v1/contributions/{contribution}/drafts/{revision}': { get: { exposure: 'public' } },
-  '/v1/contributions': { post: { exposure: 'public' } },
-  '/v1/contribution-edits': { post: { exposure: 'public' } },
-  '/v1/contribution-publications': { post: { exposure: 'public' } },
-  '/v1/contributions/{contribution}': { get: { exposure: 'public' } },
+  '/v1/contributions/{contribution}/drafts/{revision}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/contributions': { post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/contribution-edits': { post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/contribution-publications': { post: { exposure: 'public', rateLimitFamily: 'write' } },
+  '/v1/contributions/{contribution}': { get: { exposure: 'public', rateLimitFamily: 'read' } },
 } as const;

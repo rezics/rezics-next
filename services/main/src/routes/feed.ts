@@ -16,15 +16,15 @@ import { homeError, homeHeaders } from './follows.ts';
 import { workReadProblems } from './work-reads.ts';
 
 export const openApiOperations = {
-  '/v1/feed': { get: { exposure: 'public', bearer: false } },
-  '/v1/feed/head': { get: { exposure: 'public', bearer: false } },
-  '/v1/feed/{id}/vote': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/me/feed-preferences': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/me/feed-feedback': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/me/mutes': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/me/feed-watermarks/{scope}': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/me/feed-watermarks': { get: { exposure: 'public', bearer: true } },
-  '/v1/trending': { get: { exposure: 'public', bearer: false } },
+  '/v1/feed': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/feed/head': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
+  '/v1/feed/{id}/vote': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/feed-preferences': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/feed-feedback': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/mutes': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/feed-watermarks/{scope}': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/me/feed-watermarks': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true } },
+  '/v1/trending': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 
 const privateQuery = t.Object({ actingSubject: readId }, { additionalProperties: false });

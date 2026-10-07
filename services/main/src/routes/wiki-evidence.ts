@@ -12,7 +12,7 @@ import { wikiError } from './wiki.ts';
 import { resolveTargets } from '../modules/target/resolve.ts';
 import { problem } from './problems.ts';
 
-export const openApiOperations = { '/v1/wiki/evidence/{id}': { get: { exposure: 'public', bearer: false } } } as const;
+export const openApiOperations = { '/v1/wiki/evidence/{id}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } } } as const;
 export const capabilities = {
   '/v1/wiki/evidence/{id}': { get: { disposition: 'supported',mcp: { tool: 'wiki_evidence',scopes: ['work:read'],
     title: 'Read wiki evidence',description: 'Read a claim’s source locator and permitted quotation at a reading position.' } } },

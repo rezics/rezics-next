@@ -11,7 +11,7 @@ import { commandError, problem } from './problems.ts';
 const headers = { 'cache-control': 'private, no-store' };
 const native = 'https://rezics.com/id/';
 export const openApiOperations = {
-  '/v1/works/{id}/web-publications/{release}/snapshots': { post: { exposure: 'platform:catalogue-import', bearer: true, idempotencyKey: true } },
+  '/v1/works/{id}/web-publications/{release}/snapshots': { post: { exposure: 'platform:catalogue-import', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
 } as const;
 
 function snapshotError(error: unknown) {

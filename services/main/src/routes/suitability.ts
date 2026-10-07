@@ -20,8 +20,8 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 
 const headers = { 'cache-control': 'private, no-store' };
 export const openApiOperations = {
-  '/v1/suitability/{target}': { put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/suitability/reads': { post: { exposure: 'public', bearer: false } },
+  '/v1/suitability/{target}': { put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/suitability/reads': { post: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
 } as const;
 function failure(error: unknown): Response {
   if (error instanceof ControlInvalid) return problem(400, 'invalid_suitability', error.message);

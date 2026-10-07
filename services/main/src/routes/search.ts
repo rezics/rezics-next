@@ -638,9 +638,9 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
 }
 
 export const openApiOperations = {
-  '/v1/queries/page': { post: { exposure: 'public' } },
-  '/v1/queries': { post: { exposure: 'public' } },
-  '/v1/private-queries': { ws: { exposure: 'public' }, post: { exposure: 'public' } },
-  '/v1/search/typeahead': { get: { exposure: 'public' } },
-  '/v1/search/catalogue': { get: { exposure: 'public' } },
+  '/v1/queries/page': { post: { exposure: 'public', rateLimitFamily: 'search' } },
+  '/v1/queries': { post: { exposure: 'public', rateLimitFamily: 'search' } },
+  '/v1/private-queries': { ws: { exposure: 'public', rateLimitFamily: 'read' }, post: { exposure: 'public', rateLimitFamily: 'search' } },
+  '/v1/search/typeahead': { get: { exposure: 'public', rateLimitFamily: 'read' } },
+  '/v1/search/catalogue': { get: { exposure: 'public', rateLimitFamily: 'search' } },
 } as const;
