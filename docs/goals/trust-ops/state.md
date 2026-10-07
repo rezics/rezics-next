@@ -8,12 +8,12 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 19:08 UTC. Kernel's C4/C2 activation completed at
-3024c202e with native539276d294e2/model fa39610, Content1704 applied and all
-six applications healthy. Retained volumes are preserved and the hold is
-released. Trust has no refresh ticket; further backend code activation can
-coalesce with kernel's next owner wave. Curator270ad, Trustf83/dda, credits
-and Showcase delivery are included in the accepted checkpoint.
+Checkpoint 2026-10-07 19:59 UTC. Kernel's roots/membership activation
+completed with native25ce9fb19154/model fa39610 unchanged, Content1705/1706
+applied and all six applications healthy. Retained volumes are preserved and
+the Main hold is released. The checkpoint carries GroupRole/qualifier custody,
+membership and Trust disclosure reusea895. No Trust refresh ticket exists.
+Launch is asked to run its unchanged signed-in browse regression on this runtime.
 G-1330's mixed retained repair/cutover is active; positive restore
 release and the remaining Claim/source-projection unions are unqualified.
 
@@ -62,8 +62,10 @@ all seven owners, unchanged native index, migration compatibility and three
 exact samples passed. Its source backup is unchanged. CopyB fixture-quiet-medium-b passed352.561s active,4.931s admission;
 all seven owners and exact samples are ready. The campaign fixture currently
 adds the combined947.344s external wall span to one600s setup check; even
-active restore sum626.229s exceeds that combined gate. Program is asked to
-resolve per-routine versus combined accounting before the exclusive campaign.
+active restore sum626.229s exceeds that combined gate. Program confirmed each ordinary build/restore is independently600ACTIVE;
+aggregate active/wait/wall remains evidence and is never labeled under600.
+G-1344 attempt10 now corrects only the campaign fixture accounting, preserving
+600ACTIVE local/harness setup and360ACTIVE operation before manager execution.
 No timing or backup evidence is edited, and campaign/peak/destruction remain
 unqualified. Program
 released the quiet window; normal QA admission has resumed. Frozen prior
@@ -218,7 +220,8 @@ G-1394 landed a8952cebf55c with all85 affected unit/guard files green.
 It pairs viewer and anonymous classification in the final owner statement; no
 authority cache or fence is removed. Current Main/native canonical Realm query
 passed and both audiences use11graph calls under the unchanged12. Shared
-activation and Launch's original browser regression remain pending.
+activation is accepted at the roots/membership checkpoint; Launch's original
+browser regression remains pending.
 
 G-1394 owns the proven signed-in release-browse budget failure: two summary
 passes duplicate anonymous disclosure, producing13graph calls versus12. The
