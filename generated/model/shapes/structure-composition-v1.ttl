@@ -33,15 +33,32 @@
     sh:property [ sh:path rv:segmentKey ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ; sh:maxLength 32 ] ;
     sh:property [ sh:path rv:memberCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 512 ] .
 
+<https://rezics.com/definition/structure-composition-v1/item-list-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue schema:ItemList ] ;
+    sh:property [ sh:path rv:generation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureGeneration ] ;
+    sh:property [ sh:path rv:parent ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path schema:itemListElement ; sh:class schema:ListItem ] .
+
 <https://rezics.com/definition/structure-composition-v1/occurrence-shape>
     a sh:NodeShape ;
-    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue schema:ListItem ] ;
-    sh:property [ sh:path rv:structure ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Structure ] ;
-    sh:property [ sh:path rv:introducedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision ] .
+    sh:property [ sh:path rdf:type ; sh:maxCount 2 ; sh:hasValue schema:ListItem ] ;
+    sh:property [ sh:path schema:item ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path schema:position ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ; sh:maxLength 65 ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:structure ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Structure ] ;
+          sh:property [ sh:path rv:introducedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureRevision ] ;
+          sh:property [ sh:path rv:generation ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:occurrence ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:ListItem ] ;
+          sh:property [ sh:path rv:generation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureGeneration ] ;
+          sh:property [ sh:path schema:item ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path schema:position ; sh:minCount 1 ; sh:datatype xsd:string ] ]
+    ) .
 
 <https://rezics.com/definition/structure-composition-v1/placement-shape>
     a sh:NodeShape ;
-    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:OccurrencePlacement ] ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:OccurrencePlacement schema:ListItem ) ] ;
+    sh:property [ sh:path schema:position ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ; sh:maxLength 65 ] ;
     sh:property [ sh:path rv:occurrence ; sh:minCount 1 ; sh:maxCount 1 ; sh:class schema:ListItem ] ;
     sh:property [ sh:path rv:generation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StructureGeneration ] ;
     sh:property [ sh:path rv:orderSegment ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:OrderSegment ] ;
@@ -50,12 +67,12 @@
     sh:property [ sh:path rv:occurrenceLabel ; sh:datatype rdf:langString ; sh:uniqueLang true ; sh:maxLength 500 ] ;
     sh:property [ sh:path rv:qualifier ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:sourceKey ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:minLength 1 ; sh:maxLength 200 ] ;
-    sh:property [ sh:path schema:item ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path schema:item ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:selectionMode ; sh:maxCount 1 ; sh:in ( rv:FollowContext rv:FixedRealm rv:FixedRevision ) ] ;
     sh:property [ sh:path rv:selectionRealm ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:pinnedRevision ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:or (
-        [ sh:property [ sh:path schema:item ; sh:maxCount 0 ] ;
+        [ sh:property [ sh:path schema:item ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
           sh:property [ sh:path rv:selectionMode ; sh:maxCount 0 ] ;
           sh:property [ sh:path rv:selectionRealm ; sh:maxCount 0 ] ;
           sh:property [ sh:path rv:pinnedRevision ; sh:maxCount 0 ] ]

@@ -40,8 +40,7 @@
       "@type": "@id"
     },
     "rv:generation": {
-      "@id": "https://rezics.com/vocab/generation",
-      "@type": "@id"
+      "@id": "https://rezics.com/vocab/generation"
     },
     "rv:generationState": {
       "@id": "https://rezics.com/vocab/generationState",
@@ -188,7 +187,15 @@
       "@type": "xsd:integer"
     },
     "schema:item": {
-      "@id": "https://schema.org/item"
+      "@id": "https://schema.org/item",
+      "@type": "@id"
+    },
+    "schema:itemListElement": {
+      "@id": "https://schema.org/itemListElement",
+      "@type": "@id"
+    },
+    "schema:position": {
+      "@id": "https://schema.org/position"
     }
   }
 }

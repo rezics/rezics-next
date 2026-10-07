@@ -1326,6 +1326,8 @@ export const iri = {
   "schema:DigitalDocument": "https://schema.org/DigitalDocument",
   "schema:isPartOf": "https://schema.org/isPartOf",
   "schema:item": "https://schema.org/item",
+  "schema:ItemList": "https://schema.org/ItemList",
+  "schema:itemListElement": "https://schema.org/itemListElement",
   "schema:ListItem": "https://schema.org/ListItem",
   "schema:Movie": "https://schema.org/Movie",
   "schema:MusicAlbum": "https://schema.org/MusicAlbum",

@@ -93,7 +93,11 @@
       "@type": "@id"
     },
     "schema:item": {
-      "@id": "https://schema.org/item"
+      "@id": "https://schema.org/item",
+      "@type": "@id"
+    },
+    "schema:position": {
+      "@id": "https://schema.org/position"
     }
   }
 }

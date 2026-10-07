@@ -1265,12 +1265,13 @@ export const profileRegistry = {
     ]
   },
   "structure-composition-v1": {
-    "sha256": "0043acb8748937d04d177a90695b06ac23fcccd5742b7d0da3c728e2d468d746",
+    "sha256": "d6bcd8a0f349a7d9926298317e24086ce038a4596c5fcb73f0a1d09a5c105bf0",
     "file": "shapes/structure-composition-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/structure-composition-v1/structure-shape",
       "https://rezics.com/definition/structure-composition-v1/generation-shape",
       "https://rezics.com/definition/structure-composition-v1/segment-shape",
+      "https://rezics.com/definition/structure-composition-v1/item-list-shape",
       "https://rezics.com/definition/structure-composition-v1/occurrence-shape",
       "https://rezics.com/definition/structure-composition-v1/placement-shape",
       "https://rezics.com/definition/structure-composition-v1/removed-placement-shape",
@@ -1281,6 +1282,7 @@ export const profileRegistry = {
       "structure",
       "generation",
       "segment",
+      "item-list",
       "occurrence",
       "placement",
       "removed-placement",
@@ -1289,7 +1291,7 @@ export const profileRegistry = {
     ]
   },
   "structure-work-composition-v1": {
-    "sha256": "c984bc7cce6e88b0b5cec96a325ffcaac7192d3c072da6224c850779b71a8910",
+    "sha256": "1361bcfab08143854e4a5cc6db132a79cb1adf737037d82433a839621903a11e",
     "file": "shapes/structure-work-composition-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/structure-work-composition-v1/structure-shape",
