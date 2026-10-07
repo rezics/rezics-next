@@ -9,14 +9,14 @@ const mailpit = process.env.MAILPIT_URL ?? 'http://127.0.0.1:8025';
 
 const localeText = {
   en: {
-    search: 'Search works',
+    search: 'Search everything',
     name: 'Public name',
     handle: 'Your handle',
     available: 'This handle is available.',
     current: 'This is your current handle.',
   },
   'zh-Hant': {
-    search: '搜尋作品',
+    search: '搜尋所有內容',
     name: '公開名稱',
     handle: '您的使用者名稱',
     available: '此使用者名稱可以使用。',
@@ -45,7 +45,7 @@ async function captureVariants(
         await page.goto(`/${locale}/${screen}${screen === 'onboarding' ? '?next=%2Fen' : ''}`);
         await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
         await expect(page.locator('html')).toHaveAttribute('lang', locale);
-        await expect(page.getByRole('combobox', { name: t.search })).toBeVisible();
+        await expect(page.getByRole('searchbox', { name: t.search })).toBeVisible();
         await expect(page.getByRole('textbox', { name: t.handle })).toHaveAttribute(
           'data-hydrated',
           'true',
@@ -328,7 +328,7 @@ test('new person picks a public name and handle, sets up Home, and the Account n
     page.getByRole('banner').getByRole('button', { name: 'Account menu' }),
   ).toHaveAttribute('data-hydrated', 'true');
   await page.getByRole('banner').getByRole('button', { name: 'Account menu' }).click();
-  await page.getByRole('menuitem', { name: 'Profile settings' }).click();
+  await page.getByRole('menuitem', { name: 'Settings', exact: true }).click();
   await expect(page).toHaveURL('/en/settings');
   await expect(page.getByRole('main').getByText(`@${person.handle}`)).toBeVisible();
   await page.getByRole('textbox', { name: 'Your handle' }).fill(`another_${suffix}`);
