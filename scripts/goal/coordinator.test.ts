@@ -315,6 +315,8 @@ describe('durable Goal wake coordinator', () => {
       owner = undefined; coordinator.enroll(f.descriptor);
       expect(() => coordinator.enroll({ ...f.descriptor, effort: 'medium' })).toThrow('immutable');
       expect(() => coordinator.enroll({ ...f.descriptor, goal: 'kernel' })).toThrow('already enrolled');
+      expect(() => coordinator.enroll({ ...f.descriptor, goal: 'kernel', session: 'different-native-session' }))
+        .toThrow('already has an enrolled manager');
       owner = 'interactive process owns session'; coordinator.step();
       expect(f.launcher.launches).toEqual([]);
       expect(coordinator.status().wakes[0]!.error).toContain('interactive process');
