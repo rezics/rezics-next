@@ -2,7 +2,7 @@ import { afterAll, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Parser } from 'n3';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import {
   CommandOutcomeUnknown,
@@ -56,7 +56,10 @@ import {
 } from '../src/modules/verification/claim-fold.ts';
 import {
   assessAdmittedClaim,
+  assessmentDigest,
   createAdmittedClaim,
+  PendingVerification,
+  reconcileAssessmentProducerEffects,
   readClaimQuality,
   type AssessClaimInput,
   type VerificationDependencies,
@@ -64,17 +67,24 @@ import {
 import {
   VerificationMissing,
   type AnalysisSnapshot,
+  type ActivationInput,
+  type AssessmentProducerPermit,
+  type AssessmentProducerRecord,
+  type AssessmentProducerStage,
+  type AssessmentProducerTerminal,
   type SummaryState,
   type VerificationStore,
 } from '../src/modules/verification/store.ts';
 import {
   GRAPHS,
   CancelledActivation,
+  IdempotencyConflict,
   hash,
   prepareComponent,
   RV,
   type WorkActivationEnvironment,
 } from '../src/modules/work/activate.ts';
+import { SUPPORT_METHOD, SUMMARY_POLICY } from '../src/modules/verification/analysis.ts';
 
 const id = (n: number) =>
   `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -656,6 +666,8 @@ test('a new assessment of B cannot reuse an evidence manifest pinned to historic
   const commands: CommandEnvelope[] = [];
   let registered: RegisteredAdmission | undefined;
   let cancelled = false;
+  let producer: AssessmentProducerRecord | undefined;
+  const producerPermit = { mode: 'ordinary' as const, job: null, generation: '0', restoreEpoch: '1' };
   const uri = (value: string) => ({ type: 'uri', value });
   const literal = (value: string) => ({ type: 'literal', value });
   f.env.fuseki.query = async (text) => {
@@ -684,6 +696,7 @@ test('a new assessment of B cannot reuse an evidence manifest pinned to historic
     return metadata(text);
   };
   f.env.fuseki.commandWithReceipt = async (envelope) => {
+    expect(producer?.intent.claimRevision).toBe(f.revision);
     commands.push(envelope);
     expect(envelope.update).toContain('rv:outcome rv:Cancelled');
     expect(envelope.update).not.toMatch(/\ba\s+rv:ClaimAssessment(?:\s|[,;.])/u);
@@ -753,7 +766,21 @@ test('a new assessment of B cannot reuse an evidence manifest pinned to historic
         throw new Error('Refused assessment published a successful outcome');
       },
     },
-    store: { analysisSnapshot: async () => snapshot } as unknown as VerificationStore,
+    store: {
+      analysisSnapshot: async () => snapshot,
+      stageAssessmentProducer: async (input: AssessmentProducerStage) => {
+        expect(commands).toHaveLength(0);
+        producer = { ...input, stageGeneration: '0', restoreEpoch: '1', terminal: null };
+        return { row: producer, permit: producerPermit };
+      },
+      readAssessmentProducer: async () => producer ?? null,
+      withAssessmentProducerEffects: async (_admission: string, _digest: string,
+        _permit: unknown, work: Parameters<VerificationStore['withAssessmentProducerEffects']>[3]) => {
+        if (!producer) throw new Error('Missing original producer intent');
+        producer = { ...producer, terminal: await work({} as PoolClient, producer) };
+        return producer;
+      },
+    } as unknown as VerificationStore,
   };
   const intent: AssessClaimInput & { idempotencyKey: string } = {
     claimRevision: f.revision,
@@ -781,6 +808,7 @@ test('a new assessment of B cannot reuse an evidence manifest pinned to historic
   ).rejects.toBeInstanceOf(VerificationMissing);
   expect(commands).toHaveLength(1);
   expect(snapshot.revision.claimRevision).toBe(f.source);
+  expect(producer?.terminal?.status).toBe('cancelled');
 });
 
 /** Exact owner metadata and receipts only; this fixture does not execute SPARQL. */
@@ -1664,4 +1692,283 @@ test('an admission registered between the initial check and Access closure stops
   expect(f.sql.some((entry) => entry.text.startsWith('INSERT INTO access.statement_seek'))).toBe(
     false,
   );
+});
+
+/** Exercises the actual admitted control flow; PostgreSQL transaction behavior has separate owner tests. */
+function assessmentProducerOperationsFixture() {
+  const f = foldedVerificationFixture();
+  const metadata = f.env.fuseki.query.bind(f.env.fuseki);
+  const admissionId = '00000000-0000-4000-8000-000000000207';
+  const principal = '00000000-0000-4000-8000-000000000205';
+  const permit: AssessmentProducerPermit = { mode: 'ordinary', job: null, generation: '0', restoreEpoch: '1' };
+  const events: string[] = [];
+  const commands: CommandEnvelope[] = [];
+  const resolutions: string[][] = [];
+  const activations: ActivationInput[] = [];
+  const state: { registered?: RegisteredAdmission; producer?: AssessmentProducerRecord; assessment?: string;
+    failStage: boolean; failEffects: boolean; analysisUnavailable: boolean; effectCallbacks: number; position: string;
+    representation: 'statement' | 'claim' } = {
+      failStage: false, failEffects: true, analysisUnavailable: false, effectCallbacks: 0, position: '42', representation: 'statement',
+    };
+  const intent: AssessClaimInput & { idempotencyKey: string } = {
+    claimRevision: f.revision, evidenceSetRevision: id(210), sourceAssessments: [], method: 'automated',
+    judgment: null, evaluationContext: qualification().interpretationContext, adoptedRevision: null,
+    scorePerMillion: null, calibration: null, limitations: 'Original exact assessment producer intent.',
+    expectedSummary: id(211), resolvesChallenges: [
+      '00000000-0000-4000-8000-000000000208', '00000000-0000-4000-8000-000000000209',
+    ], actingSubject: f.speaker, idempotencyKey: 'assessment-producer-operations',
+  };
+  const snapshot: AnalysisSnapshot = {
+    revision: { revision: id(210), claim: f.claim, claimRevision: f.revision, purpose: 'claim-head',
+      predecessor: null, itemCount: 0, manifestDigest: 'a'.repeat(64), createdAt: '2026-10-01T00:00:00.000Z', items: [] },
+    evidenceHead: id(210), links: [], truncated: false, visited: [], lineageHeads: new Map(),
+    dispositionHeads: new Map(), recordOf: new Map(), observedAt: new Map(),
+    challenge: { revision: null, open: 2, resolved: 0 }, walk: id(212), complete: true, lineageNodes: 0,
+    continuation: null, stepReplayed: false, work: { expansions: 0, links: 0 }, totalWork: { expansions: 0, links: 0 },
+    lineageProof: { dependence: 'unknown', independentOrigins: null, origins: [] },
+  };
+  const uri = (value: string) => ({ type: 'uri', value });
+  const literal = (value: string) => ({ type: 'literal', value });
+  f.env.fuseki.commandHealth = async () => ({
+    moduleVersion: 'fixture', instanceId: 'fixture', publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
+    profiles: Object.fromEntries(Object.entries(profileRegistry).map(([name, profile]) => [name, profile.sha256])),
+  });
+  f.env.fuseki.query = async text => {
+    if (text.includes('ASK')) return { boolean: !text.includes('rv:rejectionKind rv:InvalidProfile') };
+    if (text.includes('SELECT ?outcome ?digest ?id ?epoch ?scope')) {
+      const admission = state.registered;
+      return { results: { bindings: state.assessment && admission ? [{ outcome: uri(`${RV}Succeeded`),
+        digest: literal(admission.requestDigest), id: literal(admission.id), epoch: literal(admission.authorityEpoch),
+        scope: literal(admission.scope), dataEpoch: literal(f.env.lineage.dataEpoch), sequence: literal('42'),
+        key: uri(`${RV}assessment`), value: uri(state.assessment) }] : [] } };
+    }
+    if (text.includes('SELECT ?claim ?claimRevision ?statementRevision ?evidence')) {
+      return { results: { bindings: state.assessment ? [{ claim: uri(f.claim),
+        [state.representation === 'statement' ? 'statementRevision' : 'claimRevision']: uri(f.revision),
+        evidence: uri(intent.evidenceSetRevision), method: uri(SUPPORT_METHOD), methodRevision: uri(SUPPORT_METHOD),
+        policy: uri(SUMMARY_POLICY), context: uri(intent.evaluationContext), coverage: uri(`${RV}CompleteCoverage`),
+        support: uri(`${RV}InsufficientSupport`), dependence: uri(`${RV}DependenceUnknown`),
+        limitations: literal(intent.limitations), assessor: uri(f.speaker), kind: uri(`${RV}AutomatedAssessor`),
+        assessedAt: literal('2026-10-01T00:00:00.000Z'), epoch: literal(f.env.lineage.dataEpoch), sequence: literal(state.position) }] : [] } };
+    }
+    return metadata(text);
+  };
+  f.env.fuseki.commandWithReceipt = async envelope => {
+    expect(state.producer?.intent.claimRevision).toBe(f.revision);
+    expect(state.producer?.intent.resolvesChallenges).toEqual(intent.resolvesChallenges);
+    expect(envelope.update).toContain(`rv:statementRevision <${f.revision}>`);
+    state.assessment = envelope.update.match(/<([^>]+)> a rv:ClaimAssessment, rv:RevisionAnchor/u)?.[1];
+    if (!state.assessment) throw new Error('Assessment command did not identify its result');
+    events.push('graph-dispatch');
+    commands.push(envelope);
+    return { status: 'committed', position: { datasetId: 'product', dataEpoch: f.env.lineage.dataEpoch, sequence: '42' } };
+  };
+  const store = {
+    challengeSubmitter: async () => '00000000-0000-4000-8000-000000000206',
+    stageAssessmentProducer: async (input: AssessmentProducerStage) => {
+      events.push('stage');
+      if (!state.registered) throw new Error('Producer stage has no registered admission');
+      expect(input.admission).toBe(state.registered.id);
+      if (state.failStage) throw new Error('Producer stage unavailable');
+      if (state.producer) {
+        expect(state.producer.requestDigest).toBe(input.requestDigest);
+        expect(state.producer.intent).toEqual(input.intent);
+        return { row: state.producer, permit };
+      }
+      state.producer = { ...structuredClone(input), stageGeneration: '0', restoreEpoch: '1', terminal: null };
+      return { row: state.producer, permit };
+    },
+    readAssessmentProducer: async () => state.producer ?? null,
+    analysisSnapshot: async () => {
+      events.push('basis');
+      if (state.analysisUnavailable) throw new VerificationMissing('Historical analysis is unavailable');
+      return snapshot;
+    },
+    reassessmentDemand: async () => null,
+    withAssessmentProducerEffects: async (admission: string, digest: string, supplied: AssessmentProducerPermit,
+      work: (client: PoolClient, row: AssessmentProducerRecord) => Promise<AssessmentProducerTerminal>) => {
+      expect(admission).toBe(admissionId);
+      if (!state.producer) throw new Error('No original intent');
+      expect(digest).toBe(state.producer.requestDigest);
+      expect(supplied).toEqual(permit);
+      if (state.producer.terminal) return state.producer;
+      if (state.failEffects) { events.push('effect-interruption'); throw new Error('Interrupted after Access acknowledgement'); }
+      state.effectCallbacks++;
+      const client = { query: async (sql: string) => { events.push(sql); return { rows: [], rowCount: 0 }; } } as unknown as PoolClient;
+      const terminal = await work(client, state.producer);
+      state.producer = { ...state.producer, terminal };
+      events.push('terminal');
+      return state.producer;
+    },
+    resolveChallenges: async (_principal: string, _admission: string, _claim: string, assessment: string, requested: readonly string[]) => {
+      if (!state.assessment) throw new Error('Challenge resolution has no exact recorded assessment');
+      expect(assessment).toBe(state.assessment);
+      resolutions.push([...requested]); events.push('resolve-requested');
+    },
+    challengeState: async () => ({ revision: '00000000-0000-4000-8000-000000000213', open: 0, resolved: 2 }),
+    activateSummary: async (input: ActivationInput) => {
+      activations.push(input); events.push('activate');
+      return { status: 'activated' as const, generation: id(214), number: '1', dispute: 'resolved' };
+    },
+  } as unknown as VerificationStore;
+  const deps: VerificationDependencies = {
+    env: f.env, store,
+    account: { verify: async () => { events.push('account'); return { issuer: 'https://account.example', subject: 'reviewer' }; } },
+    access: {
+      activePrincipalId: async () => principal,
+      register: async request => {
+        events.push('register');
+        if (state.registered?.state === 'sealed') {
+          expect(request.requestDigest).toBe(state.registered.requestDigest);
+          expect(request.idempotencyKey).toBe(state.registered.idempotencyKey);
+          return { ...state.registered, replayed: true };
+        }
+        state.registered = { id: admissionId, principalId: principal, actingSubject: request.actingSubject,
+          scope: request.scope, action: request.action, requestDigest: request.requestDigest,
+          idempotencyKey: request.idempotencyKey, authorityEpoch: '1', expiresAt: '2099-01-01T00:00:00.000Z',
+          state: 'registered', dispatchEligible: true, replayed: false };
+        return state.registered;
+      },
+      claim: async () => {
+        events.push('access-claim');
+        expect(state.producer).toBeDefined();
+        if (!state.registered) throw new Error('No registered admission');
+        return { ...state.registered, state: 'claimed' as const, claimedAt: '2026-10-01T00:00:00.000Z' };
+      },
+      recordGraphOutcome: async (_admission, receipt) => {
+        if (!state.producer || !state.registered) throw new Error('Acknowledgement has no staged original admission');
+        expect(state.assessment).toBeDefined();
+        expect(receipt).toMatchObject({ admissionId, outcome: 'succeeded',
+          receipt: receiptIri(admissionId, 'claim-assess'), requestDigest: state.producer.requestDigest });
+        state.registered = { ...state.registered, state: 'sealed' };
+        events.push('access-ack');
+      },
+    },
+  };
+  return { ...f, deps, permit, state, intent, admissionId, events, commands, resolutions, activations };
+}
+
+test('original intent stages before actual dispatch and Access acknowledgement; interrupted effects resume without readmission', async () => {
+  const f = assessmentProducerOperationsFixture();
+  await expect(assessAdmittedClaim(f.deps, new Request('https://main.example/assessments'), f.claim, f.intent))
+    .rejects.toThrow('Interrupted after Access acknowledgement');
+  const ordered = ['register', 'stage', 'access-claim', 'graph-dispatch', 'access-ack', 'effect-interruption'];
+  for (let index = 1; index < ordered.length; index++) {
+    expect(f.events.indexOf(ordered[index - 1]!)).toBeLessThan(f.events.indexOf(ordered[index]!));
+  }
+  const { idempotencyKey: _key, ...intent } = f.intent;
+  expect(f.state.producer?.intent).toEqual(intent);
+  expect(f.state.producer?.requestDigest).toBe(assessmentDigest(f.claim, intent));
+  expect(f.state.producer?.terminal).toBeNull();
+  expect(f.resolutions).toEqual([]);
+  const before = [...f.events];
+  f.state.failEffects = false;
+  const forbidden = async () => { throw new Error('Effect recovery attempted Account/Access or graph redispatch'); };
+  f.deps.account.verify = forbidden;
+  f.deps.access.register = forbidden;
+  f.deps.access.claim = forbidden;
+  f.deps.access.recordGraphOutcome = forbidden;
+  f.env.fuseki.commandWithReceipt = forbidden;
+  const recovered = await reconcileAssessmentProducerEffects({ env: f.env, store: f.deps.store }, f.admissionId, f.permit);
+  expect(recovered.terminal).toMatchObject({ status: 'activated', assessment: f.state.assessment,
+    receipt: receiptIri(f.admissionId, 'claim-assess') });
+  expect(f.resolutions).toEqual([[...f.intent.resolvesChallenges]]);
+  expect(f.activations).toHaveLength(1);
+  expect(f.activations[0]).toMatchObject({ claim: f.claim, claimRevision: f.revision,
+    assessment: f.state.assessment, operationKey: `assessment:${f.admissionId}`, expectedActive: f.intent.expectedSummary });
+  expect(f.events.slice(before.length)).not.toContain('register');
+  expect(f.commands).toHaveLength(1);
+  const callbacks = f.state.effectCallbacks;
+  expect(await reconcileAssessmentProducerEffects({ env: f.env, store: f.deps.store }, f.admissionId, f.permit)).toEqual(recovered);
+  expect(f.state.effectCallbacks).toBe(callbacks);
+  expect(f.resolutions).toHaveLength(1);
+  expect(f.activations).toHaveLength(1);
+});
+
+test('a failed original intent stage cannot claim, dispatch, cancel or acknowledge the registered assessment', async () => {
+  const f = assessmentProducerOperationsFixture();
+  f.state.failStage = true;
+  await expect(assessAdmittedClaim(f.deps, new Request('https://main.example/assessments'), f.claim, f.intent))
+    .rejects.toBeInstanceOf(PendingVerification);
+  expect(f.events).toContain('register');
+  expect(f.events).toContain('stage');
+  expect(f.events).not.toContain('access-claim');
+  expect(f.events).not.toContain('graph-dispatch');
+  expect(f.events).not.toContain('access-ack');
+  expect(f.commands).toEqual([]);
+  expect(f.state.producer).toBeUndefined();
+});
+
+test('effect reconciliation refuses mismatched native assessment position, representation and stored terminal result', async () => {
+  const f = assessmentProducerOperationsFixture();
+  await expect(assessAdmittedClaim(f.deps, new Request('https://main.example/assessments'), f.claim, f.intent))
+    .rejects.toThrow('Interrupted after Access acknowledgement');
+  f.state.failEffects = false;
+  f.state.position = '43';
+  await expect(reconcileAssessmentProducerEffects({ env: f.env, store: f.deps.store }, f.admissionId, f.permit))
+    .rejects.toBeInstanceOf(IdempotencyConflict);
+  f.state.position = '42';
+  f.state.representation = 'claim';
+  await expect(reconcileAssessmentProducerEffects({ env: f.env, store: f.deps.store }, f.admissionId, f.permit))
+    .rejects.toBeInstanceOf(IdempotencyConflict);
+  f.state.representation = 'statement';
+  if (!f.state.producer) throw new Error('Original intent was not staged');
+  f.state.producer.terminal = { status: 'activated', receipt: receiptIri(f.admissionId, 'claim-assess'),
+    assessment: id(999), activation: { status: 'activated', generation: id(214), number: '1', dispute: 'resolved' } };
+  await expect(reconcileAssessmentProducerEffects({ env: f.env, store: f.deps.store }, f.admissionId, f.permit))
+    .rejects.toBeInstanceOf(IdempotencyConflict);
+  expect(f.state.effectCallbacks).toBe(0);
+  expect(f.resolutions).toEqual([]);
+  expect(f.activations).toEqual([]);
+  expect(f.commands).toHaveLength(1);
+});
+
+test('a sealed public assessment replay preserves its terminal when historical analysis is unavailable', async () => {
+  const f = assessmentProducerOperationsFixture();
+  f.state.failEffects = false;
+  const request = new Request('https://main.example/assessments');
+  const first = await assessAdmittedClaim(f.deps, request, f.claim, f.intent);
+  expect(first.analysis).not.toBeNull();
+  expect(f.state.registered?.state).toBe('sealed');
+  expect(f.state.producer?.terminal?.status).toBe('activated');
+  const terminal = structuredClone(f.state.producer?.terminal);
+  const callbacks = f.state.effectCallbacks;
+  const before = [...f.events];
+  f.state.analysisUnavailable = true;
+  f.env.fuseki.commandWithReceipt = async () => { throw new Error('Sealed replay attempted graph redispatch'); };
+  const replayed = await assessAdmittedClaim(f.deps, request, f.claim, f.intent);
+  if (!first.assessment || !replayed.assessment) throw new Error('Expected exact recorded assessments');
+  expect(replayed.analysis).toBeNull();
+  expect(replayed.replayed).toBe(true);
+  expect(replayed.assessment.assessment).toBe(first.assessment.assessment);
+  expect(replayed.activation).toEqual(first.activation);
+  expect(replayed.receipt).toBe(first.receipt);
+  expect(f.state.producer?.terminal).toEqual(terminal);
+  expect(f.state.effectCallbacks).toBe(callbacks);
+  expect(f.events.slice(before.length)).not.toContain('basis');
+  expect(f.events.slice(before.length)).not.toContain('access-claim');
+  expect(f.resolutions).toHaveLength(1);
+  expect(f.activations).toHaveLength(1);
+  expect(f.commands).toHaveLength(1);
+});
+
+test('a sealed historical assessment cannot backfill missing original producer intent from its terminal', async () => {
+  const f = assessmentProducerOperationsFixture();
+  f.state.failEffects = false;
+  await assessAdmittedClaim(f.deps, new Request('https://main.example/assessments'), f.claim, f.intent);
+  // Model the older custody boundary: graph terminal retained, original producer absent.
+  f.state.producer = undefined;
+  const before = [...f.events];
+  const callbacks = f.state.effectCallbacks;
+  await expect(assessAdmittedClaim(f.deps, new Request('https://main.example/assessments'), f.claim, f.intent))
+    .rejects.toBeInstanceOf(VerificationMissing);
+  expect(f.state.producer).toBeUndefined();
+  expect(f.events.slice(before.length)).toContain('register');
+  expect(f.events.slice(before.length)).not.toContain('stage');
+  expect(f.events.slice(before.length)).not.toContain('access-ack');
+  expect(f.events.slice(before.length)).not.toContain('graph-dispatch');
+  expect(f.state.effectCallbacks).toBe(callbacks);
+  expect(f.commands).toHaveLength(1);
+  expect(f.resolutions).toHaveLength(1);
+  expect(f.activations).toHaveLength(1);
 });

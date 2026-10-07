@@ -1,8 +1,9 @@
 // Typed declarations for the Content-DB `verification` schema (migrations
-// 090-096). SQL migrations remain the DDL owner; the schema test compares these
+// 090-096 and 1704). SQL migrations remain the DDL owner; the schema test compares these
 // column lists and enumerations with the installed catalog so they cannot drift.
 // Claims, claim revisions and assessment anchors are Jena-owned (claim-v1,
 // assessment-v1); rows here reference them by exact IRI only.
+import type { AssessmentProducerPermit, AssessmentProducerTerminal } from './assessment-producer.ts';
 
 /** Admission ceilings shared with the protection profile and the contract. */
 export const verificationLimits = {
@@ -149,8 +150,21 @@ interface CorrectionNoticeRow {
   previous_dispute: Of<typeof summaryDispute>; dispute: Of<typeof summaryDispute>; created_at: Date;
 }
 
+interface AssessmentProducerGateRow {
+  singleton: boolean; mode: AssessmentProducerPermit['mode']; job: string | null;
+  generation: string; restore_epoch: string;
+}
+interface AssessmentProducerRow {
+  admission_id: string; request_digest: string; principal_id: string; acting_subject: string;
+  scope: string; authority_epoch: string; idempotency_key: string; claim: string; claim_revision: string;
+  intent_json: string; stage_generation: string; restore_epoch: string;
+  terminal: AssessmentProducerTerminal | null; created_at: Date; terminal_at: Date | null;
+}
+
 /** Row types keyed by table, as pg returns them (snake_case, bigint as string). */
 export interface VerificationRows {
+  assessment_producer_gate: AssessmentProducerGateRow;
+  assessment_producer: AssessmentProducerRow;
   lineage_walk: { id: string; claim: string; evidence_revision: string; authority_digest: string; start_key: string;
     root_ordinal: number; complete: boolean; unknown: boolean; circular: boolean; origin_count: string;
     version: number; expansions: string; edges: string; node_count: string; validated_sequence: string;
@@ -179,6 +193,11 @@ export interface VerificationRows {
 
 /** Physical column order per table; `satisfies` ties each list to its row type. */
 export const verificationColumns = {
+  assessment_producer_gate: ['singleton', 'mode', 'job', 'generation', 'restore_epoch'] satisfies
+    (keyof AssessmentProducerGateRow)[],
+  assessment_producer: ['admission_id', 'request_digest', 'principal_id', 'acting_subject', 'scope',
+    'authority_epoch', 'idempotency_key', 'claim', 'claim_revision', 'intent_json', 'stage_generation',
+    'restore_epoch', 'terminal', 'created_at', 'terminal_at'] satisfies (keyof AssessmentProducerRow)[],
   lineage_walk: ['id', 'claim', 'evidence_revision', 'authority_digest', 'start_key', 'root_ordinal', 'complete',
     'unknown', 'circular', 'origin_count', 'version', 'expansions', 'edges', 'node_count', 'validated_sequence',
     'stream_principal', 'freshness_snapshot', 'freshness_target', 'freshness_phase', 'freshness_xid', 'freshness_id',
@@ -246,6 +265,7 @@ export const verificationColumns = {
 
 /** CHECK-constrained text columns whose allowed values the TypeScript unions mirror. */
 export const verificationEnumerations = [
+  ['assessment_producer_gate', 'mode', ['ordinary', 'maintenance']],
   ['receipt', 'action', receiptActions],
   ['origin', 'kind', originKinds],
   ['derivation', 'kind', derivationKinds],

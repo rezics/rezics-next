@@ -5,6 +5,21 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { LINEAGE_BUDGET, LINEAGE_EDGE_BUDGET, type LineageLink, type LineageProof } from './analysis.ts';
 import { verificationLimits } from './schema.ts';
+import {
+  ASSESSMENT_PRODUCER_COST,
+  type AssessmentProducerPermit,
+  type AssessmentProducerRecord,
+  type AssessmentProducerStage,
+  type AssessmentProducerTerminal,
+  type StagedAssessmentProducer,
+} from './assessment-producer.ts';
+export type {
+  AssessmentProducerPermit,
+  AssessmentProducerRecord,
+  AssessmentProducerStage,
+  AssessmentProducerTerminal,
+  StagedAssessmentProducer,
+} from './assessment-producer.ts';
 
 export class VerificationInvalid extends Error {}
 export class VerificationConflict extends Error {}
@@ -32,6 +47,230 @@ const iso = (value: Date | string) => new Date(value).toISOString();
 
 interface PgError { code?: string; constraint?: string }
 const pg = (error: unknown) => error as PgError;
+const verificationError = (error: unknown): unknown => {
+  const code = pg(error).code;
+  if (code === '23503')
+    return new VerificationMissing('referenced evidence or claim record is unavailable');
+  if (code === '23514' || code === '22P02' || code === '23502') {
+    return pg(error).constraint === 'challenge_independent_resolution'
+      ? new VerificationDenied('a submitter cannot resolve its own challenge')
+      : new VerificationInvalid(String((error as Error).message));
+  }
+  return error;
+};
+
+interface AssessmentProducerRow {
+  admission_id: string;
+  request_digest: string;
+  principal_id: string;
+  acting_subject: string;
+  scope: string;
+  authority_epoch: string;
+  idempotency_key: string;
+  claim: string;
+  claim_revision: string;
+  intent_json: string;
+  stage_generation: string;
+  restore_epoch: string;
+  terminal: AssessmentProducerTerminal | null;
+}
+const producerColumns = `admission_id, request_digest, principal_id, acting_subject, scope, authority_epoch,
+  idempotency_key, claim, claim_revision, intent_json, stage_generation::text, restore_epoch::text, terminal`;
+const producerRecord = (row: AssessmentProducerRow): AssessmentProducerRecord => {
+  try {
+    const record = {
+      admission: row.admission_id,
+      requestDigest: row.request_digest,
+      principal: row.principal_id,
+      actingSubject: row.acting_subject,
+      scope: row.scope,
+      authorityEpoch: row.authority_epoch,
+      idempotencyKey: row.idempotency_key,
+      claim: row.claim,
+      claimRevision: row.claim_revision,
+      intent: JSON.parse(row.intent_json),
+      stageGeneration: row.stage_generation,
+      restoreEpoch: row.restore_epoch,
+      terminal: row.terminal,
+    };
+    checkProducerStage(record);
+    if (record.terminal) checkProducerTerminal(record.admission, record.terminal);
+    return record;
+  } catch {
+    throw new VerificationUnavailable('stored assessment producer intent or terminal is invalid');
+  }
+};
+const nonnegative = (value: string) => /^(0|[1-9][0-9]*)$/.test(value);
+const producerJob = (value: string) => /^[A-Za-z0-9:_-]{1,128}$/.test(value);
+// Compare replay values independently of property order, without changing
+// arrays or lexical values. The retained text separately preserves digest order.
+const canonicalJson = (value: unknown): string =>
+  JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)))
+      : item,
+  );
+
+// These are the existing assessment digest's only unordered/optional inputs.
+// Normalize comparison copies; the original serialized intent stays untouched.
+const producerReplayValue = (input: AssessmentProducerStage) => ({
+  ...input,
+  intent: {
+    ...input.intent,
+    evaluationReference: input.intent.evaluationReference ?? null,
+    sourceAssessments: [...input.intent.sourceAssessments].sort(),
+    resolvesChallenges: [...input.intent.resolvesChallenges].sort(),
+  },
+});
+
+function checkProducerStage(input: AssessmentProducerStage) {
+  const intent = input.intent;
+  const native = (value: unknown) => typeof value === 'string' && uuidOf(value) !== null;
+  const reference = (value: unknown) =>
+    typeof value === 'string' &&
+    value.length >= 1 &&
+    value.length <= 300 &&
+    /^(?:https:\/\/[^/]+(?:\/[^\s<>"{}|\\^`]+)?|urn:[^\s<>"{}|\\^`]+)$/.test(value);
+  const nullableReference = (value: unknown) => value === null || reference(value);
+  const keys = [
+    'claimRevision',
+    'evidenceSetRevision',
+    'sourceAssessments',
+    'method',
+    'judgment',
+    'evaluationContext',
+    'adoptedRevision',
+    'scorePerMillion',
+    'calibration',
+    'evaluationReference',
+    'limitations',
+    'expectedSummary',
+    'resolvesChallenges',
+    'actingSubject',
+  ];
+  if (
+    !UUID.test(input.admission) ||
+    !UUID.test(input.principal) ||
+    !/^[0-9a-f]{64}$/.test(input.requestDigest) ||
+    !native(input.actingSubject) ||
+    !native(input.claim) ||
+    !native(input.claimRevision) ||
+    input.scope !== 'verification:assess:global' ||
+    typeof input.authorityEpoch !== 'string' ||
+    !input.authorityEpoch ||
+    input.authorityEpoch.length > 300 ||
+    !KEY.test(input.idempotencyKey) ||
+    !intent ||
+    typeof intent !== 'object' ||
+    Array.isArray(intent) ||
+    Object.keys(intent).some((key) => !keys.includes(key)) ||
+    Buffer.byteLength(JSON.stringify(intent), 'utf8') > ASSESSMENT_PRODUCER_COST.intentBytes ||
+    intent.claimRevision !== input.claimRevision ||
+    intent.actingSubject !== input.actingSubject ||
+    !Array.isArray(intent.sourceAssessments) ||
+    intent.sourceAssessments.length > verificationLimits.sourceAssessments ||
+    new Set(intent.sourceAssessments).size !== intent.sourceAssessments.length ||
+    intent.sourceAssessments.some((item) => !native(item)) ||
+    !Array.isArray(intent.resolvesChallenges) ||
+    intent.resolvesChallenges.length > ASSESSMENT_PRODUCER_COST.challenges ||
+    new Set(intent.resolvesChallenges).size !== intent.resolvesChallenges.length ||
+    intent.resolvesChallenges.some((item) => typeof item !== 'string' || !UUID.test(item)) ||
+    !native(intent.evidenceSetRevision) ||
+    !reference(intent.evaluationContext) ||
+    !nullableReference(intent.adoptedRevision) ||
+    !nullableReference(intent.calibration) ||
+    (intent.evaluationReference !== undefined && !nullableReference(intent.evaluationReference)) ||
+    !['automated', 'human-review'].includes(intent.method) ||
+    (intent.method === 'human-review'
+      ? !['supported', 'contradicted', 'material-conflict', 'insufficient'].includes(
+          intent.judgment!,
+        )
+      : intent.judgment !== null) ||
+    (intent.scorePerMillion !== null &&
+      (!Number.isInteger(intent.scorePerMillion) ||
+        intent.scorePerMillion < 0 ||
+        intent.scorePerMillion > 1_000_000)) ||
+    (intent.calibration !== null && intent.scorePerMillion === null) ||
+    (intent.expectedSummary !== null && !native(intent.expectedSummary)) ||
+    typeof intent.limitations !== 'string' ||
+    !intent.limitations.trim() ||
+    intent.limitations.length > 2000
+  ) {
+    throw new VerificationInvalid('assessment producer needs the bounded original admitted intent');
+  }
+}
+
+function checkProducerTerminal(admission: string, terminal: AssessmentProducerTerminal) {
+  const receipt = `urn:rezics:receipt:${createHash('sha256').update(`${admission}\0claim-assess`).digest('hex')}`;
+  const activation = terminal?.activation;
+  const exactKeys = (value: object, keys: readonly string[]) =>
+    Object.keys(value).every((key) => keys.includes(key));
+  const native = (value: unknown) => typeof value === 'string' && uuidOf(value) !== null;
+  const kinds = [
+    'claim',
+    'evidence-set',
+    'source-assessment',
+    'source-observation',
+    'source-disposition',
+    'challenge',
+    'policy',
+    'rule',
+    'acceptance',
+    'adopted-revision',
+    'lineage-walk',
+  ];
+  let validActivation = false;
+  if (activation && typeof activation === 'object' && !Array.isArray(activation)) {
+    if (activation.status === 'activated' || activation.status === 'replayed') {
+      validActivation =
+        exactKeys(activation, ['status', 'generation', 'number', 'dispute']) &&
+        native(activation.generation) &&
+        typeof activation.number === 'string' &&
+        /^[1-9][0-9]*$/.test(activation.number) &&
+        ['none', 'challenge-pending', 'disputed', 'resolved'].includes(activation.dispute);
+    } else if (activation.status === 'stale-summary') {
+      validActivation =
+        exactKeys(activation, ['status', 'active']) &&
+        (activation.active === null || native(activation.active));
+    } else if (activation.status === 'stale-dependency') {
+      validActivation =
+        exactKeys(activation, ['status', 'kinds']) &&
+        Array.isArray(activation.kinds) &&
+        activation.kinds.length > 0 &&
+        activation.kinds.length <= verificationLimits.summaryDependencies &&
+        new Set(activation.kinds).size === activation.kinds.length &&
+        activation.kinds.every((kind) => kinds.includes(kind));
+    } else if (
+      activation.status === 'not-reproduced' ||
+      activation.status === 'cancelled' ||
+      activation.status === 'refused'
+    ) {
+      const reason = 'reason' in activation ? activation.reason : undefined;
+      validActivation =
+        exactKeys(activation, ['status', 'reason']) &&
+        (reason === undefined ||
+          (typeof reason === 'string' && reason.length > 0 && reason.length <= 2000));
+    }
+  }
+  if (
+    !terminal ||
+    terminal.receipt !== receipt ||
+    !exactKeys(terminal, ['status', 'receipt', 'assessment', 'activation']) ||
+    Buffer.byteLength(JSON.stringify(terminal), 'utf8') > ASSESSMENT_PRODUCER_COST.terminalBytes ||
+    !['activated', 'refused', 'no-activation', 'cancelled'].includes(terminal.status) ||
+    !validActivation ||
+    (terminal.status === 'cancelled'
+      ? terminal.assessment !== null || terminal.activation.status !== 'cancelled'
+      : !native(terminal.assessment)) ||
+    (terminal.status === 'activated' &&
+      !['activated', 'replayed'].includes(terminal.activation.status)) ||
+    (terminal.status === 'no-activation' && terminal.activation.status !== 'not-reproduced') ||
+    (terminal.status === 'refused' &&
+      !['stale-summary', 'stale-dependency', 'refused'].includes(terminal.activation.status))
+  ) {
+    throw new VerificationInvalid('assessment producer terminal differs from its graph outcome');
+  }
+}
 
 export interface EvidenceItemInput {
   stance: 'supports' | 'contradicts' | 'uncertain';
@@ -140,7 +379,7 @@ export class VerificationStore {
   }
 
   private async txOnce<T>(work: (client: PoolClient) => Promise<T>, snapshot = false): Promise<T> {
-    const client = await this.pool.connect().catch(error => {
+    const client = await this.pool.connect().catch((error) => {
       throw new VerificationUnavailable(String(error));
     });
     try {
@@ -152,16 +391,349 @@ export class VerificationStore {
       return result;
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
-      const code = pg(error).code;
-      if (code === '23503') throw new VerificationMissing('referenced evidence or claim record is unavailable');
-      if (code === '23514' || code === '22P02' || code === '23502') {
-        if (pg(error).constraint === 'challenge_independent_resolution') {
-          throw new VerificationDenied('a submitter cannot resolve its own challenge');
-        }
-        throw new VerificationInvalid(String((error as Error).message));
-      }
-      throw error;
+      throw verificationError(error);
     } finally { client.release(); }
+  }
+
+  /** Compatible locks drain only this producer and its restore epoch. Ordinary
+   * writers never increment the gate generation or a global correctness head. */
+  private async assessmentProducerPermit(
+    client: PoolClient,
+    expected?: AssessmentProducerPermit,
+  ): Promise<AssessmentProducerPermit> {
+    const epoch = (
+      await client.query<{ epoch: string }>(`SELECT version::text AS epoch
+      FROM reading_position.generation WHERE singleton FOR SHARE`)
+    ).rows[0]?.epoch;
+    const gate = (
+      await client.query<{
+        mode: AssessmentProducerPermit['mode'];
+        job: string | null;
+        generation: string;
+        restore_epoch: string;
+      }>(`SELECT mode, job, generation::text, restore_epoch::text
+      FROM verification.assessment_producer_gate WHERE singleton FOR SHARE`)
+    ).rows[0];
+    if (!gate || epoch === undefined || gate.restore_epoch !== epoch) {
+      throw new VerificationStale('assessment producer restore epoch is unavailable or changed');
+    }
+    const permit = {
+      mode: gate.mode,
+      job: gate.job,
+      generation: gate.generation,
+      restoreEpoch: gate.restore_epoch,
+    };
+    if (
+      expected &&
+      (permit.mode !== expected.mode ||
+        permit.job !== expected.job ||
+        permit.generation !== expected.generation ||
+        permit.restoreEpoch !== expected.restoreEpoch)
+    ) {
+      throw new VerificationStale('assessment producer gate changed');
+    }
+    return permit;
+  }
+
+  /** Register original intent before dispatch or cancellation. Same admission
+   * replays only the same original request; it cannot replace the requested tail. */
+  async stageAssessmentProducer(
+    request: AssessmentProducerStage,
+  ): Promise<StagedAssessmentProducer> {
+    checkProducerStage(request);
+    const input = {
+      ...request,
+      intent: JSON.parse(JSON.stringify(request.intent)),
+    } as AssessmentProducerStage;
+    checkProducerStage(input);
+    return this.tx(async (client) => {
+      const permit = await this.assessmentProducerPermit(client);
+      if (permit.mode !== 'ordinary')
+        throw new VerificationStale('assessment producers are closed for maintenance');
+      await client.query(
+        `INSERT INTO verification.assessment_producer (admission_id, request_digest,
+        principal_id, acting_subject, scope, authority_epoch, idempotency_key, claim, claim_revision,
+        intent_json, stage_generation, restore_epoch) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+        ON CONFLICT (admission_id) DO NOTHING`,
+        [
+          input.admission,
+          input.requestDigest,
+          input.principal,
+          input.actingSubject,
+          input.scope,
+          input.authorityEpoch,
+          input.idempotencyKey,
+          input.claim,
+          input.claimRevision,
+          JSON.stringify(input.intent),
+          permit.generation,
+          permit.restoreEpoch,
+        ],
+      );
+      const stored = (
+        await client.query<AssessmentProducerRow>(
+          `SELECT ${producerColumns}
+        FROM verification.assessment_producer WHERE admission_id = $1`,
+          [input.admission],
+        )
+      ).rows[0];
+      if (!stored) throw new VerificationUnavailable('assessment producer staging did not settle');
+      const row = producerRecord(stored);
+      const {
+        stageGeneration: _generation,
+        restoreEpoch: _epoch,
+        terminal: _terminal,
+        ...original
+      } = row;
+      if (canonicalJson(producerReplayValue(original)) !== canonicalJson(producerReplayValue(input))) {
+        throw new VerificationConflict('assessment admission reused with another producer intent');
+      }
+      if (row.restoreEpoch !== permit.restoreEpoch || row.stageGeneration !== permit.generation) {
+        throw new VerificationStale(
+          'assessment producer belongs to another gate generation or restore epoch',
+        );
+      }
+      return { row, permit };
+    });
+  }
+
+  /** Historical read only: absence is unknown, including an empty pending page. */
+  async readAssessmentProducer(
+    admission: string,
+    requestDigest?: string,
+  ): Promise<AssessmentProducerRecord | null> {
+    if (!UUID.test(admission)) throw new VerificationInvalid('invalid assessment admission');
+    const stored = (
+      await this.pool.query<AssessmentProducerRow>(
+        `SELECT ${producerColumns}
+      FROM verification.assessment_producer WHERE admission_id = $1`,
+        [admission],
+      )
+    ).rows[0];
+    if (!stored) return null;
+    if (requestDigest !== undefined && stored.request_digest !== requestDigest) {
+      throw new VerificationConflict('assessment admission reused with another request');
+    }
+    return producerRecord(stored);
+  }
+
+  /** Effects and the terminal append share one transaction. A transient failure
+   * rolls them both back; exact terminal replay never invokes the effect callback. */
+  async withAssessmentProducerEffects(
+    admission: string,
+    requestDigest: string,
+    permit: AssessmentProducerPermit,
+    work: (
+      client: PoolClient,
+      row: AssessmentProducerRecord,
+    ) => Promise<AssessmentProducerTerminal>,
+  ): Promise<AssessmentProducerRecord> {
+    if (!UUID.test(admission) || !/^[0-9a-f]{64}$/.test(requestDigest)) {
+      throw new VerificationInvalid('invalid assessment producer identity');
+    }
+    return this.tx(async (client) => {
+      await this.assessmentProducerPermit(client, permit);
+      const stored = (
+        await client.query<AssessmentProducerRow>(
+          `SELECT ${producerColumns}
+        FROM verification.assessment_producer WHERE admission_id = $1 FOR UPDATE`,
+          [admission],
+        )
+      ).rows[0];
+      if (!stored)
+        throw new VerificationMissing('original assessment producer intent is unavailable');
+      if (stored.request_digest !== requestDigest)
+        throw new VerificationConflict('assessment producer digest differs');
+      const row = producerRecord(stored);
+      if (
+        row.restoreEpoch !== permit.restoreEpoch ||
+        (permit.mode === 'ordinary'
+          ? row.stageGeneration !== permit.generation
+          : BigInt(row.stageGeneration) >= BigInt(permit.generation))
+      ) {
+        throw new VerificationStale(
+          'assessment producer belongs to another gate generation or restore epoch',
+        );
+      }
+      if (row.terminal) return row;
+      const terminal = await work(client, row);
+      checkProducerTerminal(admission, terminal);
+      if (terminal.activation.status === 'activated' || terminal.activation.status === 'replayed') {
+        const activation = terminal.activation;
+        const authority = (
+          await client.query<{
+            claim: string;
+            claim_revision: string;
+            assessment: string;
+            target: string;
+            context: string;
+            generation: string;
+            dispute: string;
+          }>(
+            `SELECT claim, claim_revision,
+          assessment, target, context, generation::text, dispute FROM verification.summary_generation
+          WHERE id = $1 AND operation_key = $2`,
+            [uuidOf(activation.generation), `assessment:${admission}`],
+          )
+        ).rows[0];
+        if (
+          !authority ||
+          authority.claim !== row.claim ||
+          authority.claim_revision !== row.claimRevision ||
+          authority.assessment !== terminal.assessment ||
+          authority.target !== row.claim ||
+          authority.context !== row.intent.evaluationContext ||
+          authority.generation !== activation.number ||
+          authority.dispute !== activation.dispute
+        ) {
+          throw new VerificationInvalid(
+            'activated assessment producer lacks its exact immutable summary authority',
+          );
+        }
+      }
+      if (terminal.status === 'activated' || terminal.status === 'no-activation') {
+        // A summary alone cannot manufacture completion of the originally
+        // requested challenge tail. Every requested ID has its own immutable
+        // receipt/resolution authority; there are at most eight exact seeks.
+        for (const challenge of row.intent.resolvesChallenges) {
+          const authority = (
+            await client.query<{
+              request_digest: string;
+              outcome: string;
+              result_id: string;
+              claim: string;
+              resolution_outcome: string;
+              assessment: string;
+              acting_subject: string;
+              principal_id: string;
+            }>(
+              `
+            SELECT r.request_digest, r.outcome, r.result_id, c.claim, x.outcome AS resolution_outcome,
+              x.assessment, x.acting_subject, x.principal_id FROM verification.receipt r
+            JOIN verification.challenge_resolution x ON x.operation_id = r.id
+            JOIN verification.challenge c ON c.id = x.challenge_id
+            WHERE r.principal_id = $1 AND r.action = 'challenge.resolve' AND r.idempotency_key = $2
+              AND x.challenge_id = $3`,
+              [row.principal, `${admission}:${challenge}`, challenge],
+            )
+          ).rows[0];
+          if (
+            !authority ||
+            authority.outcome !== 'succeeded' ||
+            authority.result_id !== challenge ||
+            authority.claim !== row.claim ||
+            authority.assessment !== terminal.assessment ||
+            authority.acting_subject !== row.actingSubject ||
+            authority.principal_id !== row.principal ||
+            !['material-conflict', 'not-established'].includes(authority.resolution_outcome) ||
+            authority.request_digest !==
+              digestOf({
+                family: 'challenge-resolution-v1',
+                claim: row.claim,
+                challenge,
+                assessment: terminal.assessment,
+                outcome: authority.resolution_outcome,
+              })
+          ) {
+            throw new VerificationInvalid(
+              'completed assessment producer lacks its exact requested challenge authority',
+            );
+          }
+        }
+      }
+      await client.query(
+        `UPDATE verification.assessment_producer SET terminal = $2,
+        terminal_at = clock_timestamp() WHERE admission_id = $1`,
+        [admission, terminal],
+      );
+      return { ...row, terminal };
+    }, true);
+  }
+
+  /** UPDATE waits for all prior compatible effect locks. A timeout rolls back
+   * without a closure permit, and future ordinary tails must refuse. */
+  async closeAssessmentProducerGate(
+    job: string,
+    expectedGeneration: string,
+  ): Promise<AssessmentProducerPermit> {
+    if (!producerJob(job) || !nonnegative(expectedGeneration))
+      throw new VerificationInvalid('invalid producer closure');
+    return this.tx(async (client) => {
+      const epoch = (
+        await client.query<{ epoch: string }>(`SELECT version::text AS epoch
+        FROM reading_position.generation WHERE singleton FOR SHARE`)
+      ).rows[0]?.epoch;
+      const gate = (
+        await client.query<{
+          mode: AssessmentProducerPermit['mode'];
+          job: string | null;
+          generation: string;
+          restore_epoch: string;
+        }>(`SELECT mode, job, generation::text, restore_epoch::text
+        FROM verification.assessment_producer_gate WHERE singleton FOR UPDATE`)
+      ).rows[0];
+      if (!gate || epoch === undefined || gate.restore_epoch !== epoch) {
+        throw new VerificationStale('assessment producer restore epoch changed');
+      }
+      if (
+        gate.mode === 'maintenance' &&
+        gate.job === job &&
+        BigInt(gate.generation) === BigInt(expectedGeneration) + 1n
+      ) {
+        return { mode: gate.mode, job: gate.job, generation: gate.generation, restoreEpoch: epoch };
+      }
+      if (gate.mode !== 'ordinary' || gate.generation !== expectedGeneration) {
+        throw new VerificationStale('assessment producer closure generation changed');
+      }
+      const generation = String(BigInt(gate.generation) + 1n);
+      await client.query(
+        `UPDATE verification.assessment_producer_gate
+        SET mode = 'maintenance', job = $1, generation = $2 WHERE singleton`,
+        [job, generation],
+      );
+      return { mode: 'maintenance', job, generation, restoreEpoch: epoch };
+    });
+  }
+
+  /** An indexed bounded pending seek. A locked earliest row waits or fails;
+   * it is never omitted as evidence of an empty producer set. */
+  async listPendingAssessmentProducers(
+    permit: AssessmentProducerPermit,
+    after: string | null = null,
+    limit: number = ASSESSMENT_PRODUCER_COST.page,
+  ): Promise<AssessmentProducerRecord[]> {
+    if (
+      permit.mode !== 'maintenance' ||
+      (after !== null && !UUID.test(after)) ||
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > ASSESSMENT_PRODUCER_COST.page
+    ) {
+      throw new VerificationInvalid('invalid assessment producer pending seek');
+    }
+    return this.tx(async (client) => {
+      await this.assessmentProducerPermit(client, permit);
+      const rows = (
+        await client.query<AssessmentProducerRow>(
+          `SELECT ${producerColumns}
+        FROM verification.assessment_producer WHERE terminal IS NULL AND admission_id ${after === null ? '>=' : '>'} $1::uuid
+        ORDER BY admission_id LIMIT $2 FOR UPDATE`,
+          [after ?? MIN_UUID, limit],
+        )
+      ).rows.map(producerRecord);
+      if (
+        rows.some(
+          (row) =>
+            row.restoreEpoch !== permit.restoreEpoch ||
+            BigInt(row.stageGeneration) >= BigInt(permit.generation),
+        )
+      ) {
+        throw new VerificationStale(
+          'pending assessment producer belongs to another gate generation or restore epoch',
+        );
+      }
+      return rows;
+    });
   }
 
   /** Replay by (principal, action, key): same digest returns the recorded result. */
@@ -189,15 +761,25 @@ export class VerificationStore {
   private async keyed<T>(principal: string, action: string, key: string, digest: string,
     read: (client: PoolClient, id: string) => Promise<T>,
     write: (client: PoolClient, operation: (result: string) => Promise<string>) => Promise<string>,
+    suppliedClient?: PoolClient,
   ): Promise<T & { replayed: boolean }> {
+    const work = async (client: PoolClient) => {
+          const existing = await this.replay(client, principal, action, key, digest);
+          if (existing) return { ...(await read(client, existing)), replayed: true };
+          const id = await write(client, (result) => this.receipt(client, principal, action, key, digest, result),
+      );
+          return { ...(await read(client, id)), replayed: false };
+        };
+    if (suppliedClient) {
+      try {
+        return await work(suppliedClient);
+      } catch (error) {
+        throw verificationError(error);
+      }
+    }
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        return await this.tx(async client => {
-          const existing = await this.replay(client, principal, action, key, digest);
-          if (existing) return { ...await read(client, existing), replayed: true };
-          const id = await write(client, result => this.receipt(client, principal, action, key, digest, result));
-          return { ...await read(client, id), replayed: false };
-        });
+        return await this.tx(work);
       } catch (error) {
         if (pg(error).code !== '23505' || pg(error).constraint !== 'receipt_principal_id_action_idempotency_key_key'
           || attempt) throw error;
@@ -635,7 +1217,7 @@ export class VerificationStore {
     return { revision: row?.revision ?? null, open: row?.open_count ?? 0, resolved: row?.resolved ?? 0 };
   }
 
-  async challengeState(claim: string) { return this.tx(client => this.challengeStateWith(client, claim)); }
+  async challengeState(claim: string, client?: PoolClient) { return client ? this.challengeStateWith(client, claim) : this.tx(connection => this.challengeStateWith(connection, claim)); }
 
   // ------------------------------------------------------------ challenges
 
@@ -717,7 +1299,7 @@ export class VerificationStore {
   /** Resolve pending challenges from a recorded qualified assessment, idempotently per admission. */
   async resolveChallenges(principal: string, admission: string, claim: string, assessment: string,
     challenges: readonly string[], outcome: 'material-conflict' | 'not-established', reason: string,
-    actingSubject: string): Promise<void> {
+    actingSubject: string, suppliedClient?: PoolClient): Promise<void> {
     for (const challenge of challenges) {
       if (!UUID.test(challenge)) throw new VerificationInvalid('invalid challenge');
       const digest = digestOf({ family: 'challenge-resolution-v1', claim, challenge, assessment, outcome });
@@ -727,7 +1309,6 @@ export class VerificationStore {
           const owner = (await client.query('SELECT claim FROM verification.challenge WHERE id = $1', [challenge])).rows[0];
           if (!owner || owner.claim !== claim) throw new VerificationMissing('challenge is unavailable');
           try {
-            await client.query('SAVEPOINT resolution');
             await client.query(`INSERT INTO verification.challenge_resolution (challenge_id, outcome, assessment,
               reason, acting_subject, operation_id, principal_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [challenge, outcome, assessment, reason, actingSubject, await receipt(challenge), principal]);
@@ -736,7 +1317,7 @@ export class VerificationStore {
             throw error;
           }
           return challenge;
-        });
+        }, suppliedClient);
     }
   }
 
@@ -749,11 +1330,11 @@ export class VerificationStore {
   // -------------------------------------------------------------- summaries
 
   /** Activate a generation only as the exact successor with every local pinned head still current. */
-  async activateSummary(input: ActivationInput): Promise<ActivationOutcome> {
+  async activateSummary(input: ActivationInput, suppliedClient?: PoolClient): Promise<ActivationOutcome> {
     if (input.dependencies.length > verificationLimits.summaryDependencies) {
       throw new VerificationInvalid('summary dependency manifest exceeds its ceiling');
     }
-    return this.tx(async client => {
+    const work = async (client: PoolClient): Promise<ActivationOutcome> => {
       const replay = (await client.query(`SELECT g.id, g.generation::text, g.dispute FROM verification.summary_generation g
         WHERE g.operation_key = $1`, [input.operationKey])).rows[0];
       if (replay) return { status: 'replayed', generation: nativeId(replay.id), number: replay.generation, dispute: replay.dispute };
@@ -801,7 +1382,12 @@ export class VerificationStore {
           AND latest_invalidation = $3`, [input.target, input.context, input.observedDemand]);
       }
       return { status: 'activated', generation: nativeId(id), number, dispute };
-    }, true);
+    };
+    if (suppliedClient) {
+      try { return await work(suppliedClient); }
+      catch (error) { throw verificationError(error); }
+    }
+    return this.tx(work, true);
   }
 
   /** Newly visible source commits are above the old xmax or in its xip holes.
@@ -1096,8 +1682,8 @@ export class VerificationStore {
       support: notice.support, dispute: notice.dispute } : { status: 'undisclosed' };
   }
 
-  async reassessmentDemand(target: string, context: string): Promise<string | null> {
-    return (await this.pool.query<{ latest_invalidation: string }>(`SELECT latest_invalidation
+  async reassessmentDemand(target: string, context: string, client?: PoolClient): Promise<string | null> {
+    return (await (client ?? this.pool).query<{ latest_invalidation: string }>(`SELECT latest_invalidation
       FROM verification.reassessment_request WHERE target = $1 AND context = $2`, [target, context]))
       .rows[0]?.latest_invalidation ?? null;
   }

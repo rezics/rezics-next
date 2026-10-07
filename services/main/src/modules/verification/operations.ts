@@ -18,7 +18,14 @@ import { ADMISSIONS, claimDigest, createClaim, graphHeads, InvalidVerificationIn
   VerificationGraphStale, type ClaimRecord, type CreateClaimInput, type Family, type GraphReceipt,
   type ReliabilityInput } from './graph.ts';
 import { uuidOf, VerificationDenied, VerificationMissing, VerificationStale,
-  type ActivationOutcome, type Dependency, type VerificationStore } from './store.ts';
+  VerificationInvalid, type Dependency, type VerificationStore,
+} from './store.ts';
+import type {
+  AssessmentProducerPermit,
+  AssessmentProducerRecord,
+  AssessmentProducerTerminal,
+  StagedAssessmentProducer,
+} from './assessment-producer.ts';
 import { verificationLimits } from './schema.ts';
 
 class PartialVerification extends Error {
@@ -49,6 +56,7 @@ async function admitted(deps: VerificationDependencies, request: Request, family
   intent: { actingSubject: string; idempotencyKey: string; digest: string },
   execute: (admission: RegisteredAdmission) => Promise<GraphReceipt>, unavailable: (error: unknown) => boolean = () => false,
   terminalReplayOnly = false,
+  afterRegistration?: (admission: RegisteredAdmission) => Promise<void>,
 ): Promise<GraphReceipt & { replayed: boolean; admission: RegisteredAdmission }> {
   await assertGraphAdmissionOpen(deps.env.fuseki, deps.env.lineage);
   const { scope, action, accountScope } = ADMISSIONS[family];
@@ -56,6 +64,8 @@ async function admitted(deps: VerificationDependencies, request: Request, family
   const registered = await deps.access.register({ principal, actingSubject: intent.actingSubject, scope, action,
     idempotencyKey: intent.idempotencyKey, requestDigest: intent.digest });
   try {
+    // Assessment intent must survive before dispatch, cancellation and Access acknowledgement.
+    await afterRegistration?.(registered);
     const retained = terminalReplayOnly
       ? await readReceipt(deps.env, registered.id, family, RESULTS[family]) : null;
     if (terminalReplayOnly && !retained) {
@@ -161,7 +171,7 @@ export interface AssessClaimInput {
   expectedSummary: string | null; resolvesChallenges: readonly string[]; actingSubject: string;
 }
 
-function assessmentDigest(claim: string, input: AssessClaimInput): string {
+export function assessmentDigest(claim: string, input: AssessClaimInput): string {
   native(claim, 'claim');
   native(input.claimRevision, 'claimRevision');
   native(input.evidenceSetRevision, 'evidenceSetRevision');
@@ -193,8 +203,18 @@ interface Basis {
 }
 
 /** Load exact inputs and apply the deterministic method; every basis head must be current. */
-async function assessmentBasis(deps: VerificationDependencies, claim: string, input: AssessClaimInput,
-  requireCurrent: boolean, admission: RegisteredAdmission): Promise<Basis> {
+async function assessmentBasis(deps: Pick<VerificationDependencies, 'env' | 'store'>, claim: string, input: AssessClaimInput,
+  requireCurrent: boolean, admission: Pick<
+    RegisteredAdmission,
+    | 'id'
+    | 'principalId'
+    | 'actingSubject'
+    | 'scope'
+    | 'authorityEpoch'
+    | 'requestDigest'
+    | 'idempotencyKey'
+  >,
+): Promise<Basis> {
   const records = await readClaimRevisions(deps.env, [input.claimRevision]);
   const record = records.get(input.claimRevision);
   if (!record || record.claim !== claim) throw new VerificationMissing('claim revision is unavailable');
@@ -254,11 +274,225 @@ function dependencies(claim: string, input: AssessClaimInput, basis: Basis,
   ];
 }
 
+function producerReceipt(row: AssessmentProducerRecord, receipt: GraphReceipt) {
+  if (
+    receipt.admissionId !== row.admission ||
+    receipt.requestDigest !== row.requestDigest ||
+    receipt.authorityEpoch !== row.authorityEpoch ||
+    receipt.scope !== row.scope ||
+    assessmentDigest(row.claim, row.intent) !== row.requestDigest ||
+    (row.terminal &&
+      (row.terminal.receipt !== receipt.receipt ||
+        (receipt.outcome === 'cancelled'
+          ? row.terminal.status !== 'cancelled' || row.terminal.assessment !== null
+          : row.terminal.status === 'cancelled' ||
+            row.terminal.assessment !== receipt.result.assessment)))
+  ) {
+    throw new IdempotencyConflict('assessment producer differs from its original graph receipt');
+  }
+}
+
+/** Reconcile only Content effects against the original terminal; never admit or redispatch a graph command. */
+export async function reconcileAssessmentProducerEffects(
+  deps: Pick<VerificationDependencies, 'env' | 'store'>,
+  admission: string,
+  permit: AssessmentProducerPermit,
+): Promise<AssessmentProducerRecord> {
+  return reconcileAssessmentEffects(deps, admission, permit);
+}
+
+async function reconcileAssessmentEffects(
+  deps: Pick<VerificationDependencies, 'env' | 'store'>,
+  admission: string,
+  permit: AssessmentProducerPermit,
+  prepared?: Basis,
+): Promise<AssessmentProducerRecord> {
+  const original = await deps.store.readAssessmentProducer(admission);
+  if (!original)
+    throw new VerificationMissing('original assessment producer intent is unavailable');
+  const receipt = await readReceipt(deps.env, admission, 'claim-assess', ['assessment']);
+  if (!receipt) throw new PendingVerification(admission);
+  producerReceipt(original, receipt);
+  if (original.terminal || receipt.outcome === 'cancelled') {
+    return deps.store.withAssessmentProducerEffects(
+      admission,
+      original.requestDigest,
+      permit,
+      async () => ({
+        status: 'cancelled',
+        receipt: receipt.receipt,
+        assessment: null,
+        activation: { status: 'cancelled' },
+      }),
+    );
+  }
+  const assessment = receipt.result.assessment!;
+  const recorded = await readAssessment(deps.env, assessment);
+  if (!recorded) throw new PendingVerification(admission);
+  const input = original.intent;
+  if (
+    recorded.claim !== original.claim ||
+    recorded.claimRevision !== original.claimRevision ||
+    recorded.dataEpoch !== receipt.dataEpoch ||
+    recorded.sequence !== receipt.sequence ||
+    recorded.evidenceSetRevision !== input.evidenceSetRevision ||
+    recorded.actingSubject !== original.actingSubject ||
+    recorded.evaluationContext !== input.evaluationContext ||
+    recorded.method !== (input.method === 'automated' ? SUPPORT_METHOD : HUMAN_REVIEW_METHOD) ||
+    recorded.assessorKind !== (input.method === 'human-review' ? 'human' : 'automated') ||
+    recorded.methodRevision !== recorded.method ||
+    recorded.policyRevision !== SUMMARY_POLICY ||
+    JSON.stringify(recorded.sourceAssessments) !==
+      JSON.stringify([...input.sourceAssessments].sort()) ||
+    recorded.scorePerMillion !== input.scorePerMillion ||
+    recorded.calibration !== input.calibration ||
+    recorded.evaluationReference !== (input.evaluationReference ?? null) ||
+    recorded.limitations !== input.limitations
+  ) {
+    throw new IdempotencyConflict('recorded assessment differs from original producer pins');
+  }
+  // These reads use the exact original R and evidence pins. A later head never retargets this intent.
+  let current: Basis;
+  try {
+    current =
+      prepared ??
+      (await assessmentBasis(deps, original.claim, input, false, {
+        id: admission,
+        principalId: original.principal,
+        actingSubject: original.actingSubject,
+        scope: original.scope,
+        authorityEpoch: original.authorityEpoch,
+        requestDigest: original.requestDigest,
+        idempotencyKey: original.idempotencyKey,
+      }));
+  } catch (error) {
+    if (!(error instanceof VerificationStale || error instanceof VerificationMissing)) throw error;
+    return deps.store.withAssessmentProducerEffects(
+      admission,
+      original.requestDigest,
+      permit,
+      async () => ({
+        status: 'refused',
+        receipt: receipt.receipt,
+        assessment,
+        activation: { status: 'refused', reason: error.message },
+      }),
+    );
+  }
+  if ((recorded.representation ?? 'claim') !== current.record.representation) {
+    throw new IdempotencyConflict(
+      'recorded assessment differs from its exact claim representation',
+    );
+  }
+  const reproduced =
+    current.support === recorded.support &&
+    current.analysis.dependence === recorded.dependence &&
+    current.analysis.coverage === recorded.coverage &&
+    current.analysis.independentOrigins === recorded.independentOrigins;
+  const graphPins = dependencies(original.claim, input, current, null);
+  const graph = reproduced ? await graphHeads(deps.env, graphPins) : null;
+  const graphStale = graphPins
+    .filter(
+      (item) =>
+        item.owner === 'graph' &&
+        item.kind !== 'policy' &&
+        graph?.heads.get(item.reference) !== item.expectedHead,
+    )
+    .map((item) => item.kind);
+  const observedDemand = await deps.store.reassessmentDemand(
+    original.claim,
+    input.evaluationContext,
+  );
+  return deps.store.withAssessmentProducerEffects(
+    admission,
+    original.requestDigest,
+    permit,
+    async (client) => {
+      await client.query('SAVEPOINT assessment_effects');
+      try {
+        if (input.resolvesChallenges.length) {
+          await deps.store.resolveChallenges(
+            original.principal,
+            admission,
+            original.claim,
+            assessment,
+            input.resolvesChallenges,
+            recorded.support === 'material-conflict' ? 'material-conflict' : 'not-established',
+            `Resolved by assessment ${assessment}`,
+            original.actingSubject,
+            client,
+          );
+        }
+        const challenge = await deps.store.challengeState(original.claim, client);
+        const activation: AssessmentProducerTerminal['activation'] = !reproduced
+          ? { status: 'not-reproduced' }
+          : graphStale.length
+            ? { status: 'stale-dependency', kinds: [...new Set(graphStale)] }
+            : await deps.store.activateSummary(
+                {
+                  target: original.claim,
+                  context: input.evaluationContext,
+                  claim: original.claim,
+                  claimRevision: original.claimRevision,
+                  adoptedRevision: input.adoptedRevision,
+                  assessment,
+                  policyRevision: SUMMARY_POLICY,
+                  support: recorded.support,
+                  review: recorded.assessorKind === 'human' ? 'reviewed' : 'unreviewed',
+                  coverage: recorded.coverage,
+                  dependence: recorded.dependence,
+                  reasons: current.analysis.reasons,
+                  dependencies: dependencies(original.claim, input, current, challenge.revision),
+                  ownerPositions: { graph: graph!.position },
+                  operationKey: `assessment:${admission}`,
+                  expectedActive: input.expectedSummary,
+                  observedDemand,
+                  openChallenges: challenge.open,
+                  resolvedChallenges: challenge.resolved,
+                },
+                client,
+              );
+        return {
+          status:
+            activation.status === 'activated' || activation.status === 'replayed'
+              ? 'activated'
+              : activation.status === 'not-reproduced'
+                ? 'no-activation'
+                : 'refused',
+          receipt: receipt.receipt,
+          assessment,
+          activation,
+        };
+      } catch (error) {
+        if (
+          !(
+            error instanceof VerificationDenied ||
+            error instanceof VerificationMissing ||
+            error instanceof VerificationStale ||
+            error instanceof VerificationInvalid
+          )
+        )
+          throw error;
+        // Roll back this attempt's partial tail, retaining older exact challenge receipts.
+        await client.query('ROLLBACK TO SAVEPOINT assessment_effects');
+        return {
+          status: 'refused',
+          receipt: receipt.receipt,
+          assessment,
+          activation: { status: 'refused', reason: error.message },
+        };
+      }
+    },
+  );
+}
+
 export async function assessAdmittedClaim(deps: VerificationDependencies, request: Request, claim: string,
-  input: AssessClaimInput & { idempotencyKey: string }) {
+  input: AssessClaimInput & { idempotencyKey: string },
+) {
   const { idempotencyKey, ...intent } = input;
   const digest = assessmentDigest(claim, intent);
-  const principal = await deps.access.activePrincipalId(await deps.account.verify(request, ['claim:assess']));
+  const principal = await deps.access.activePrincipalId(await deps.account.verify(request, ['claim:assess']),
+  );
   if (!principal) throw new VerificationDenied('assessor principal is inactive');
   // A challenger never resolves its own challenge; refuse before any record is written.
   for (const challenge of input.resolvesChallenges) {
@@ -267,14 +501,16 @@ export async function assessAdmittedClaim(deps: VerificationDependencies, reques
     if (submitter === principal) throw new VerificationDenied('a submitter cannot resolve its own challenge');
   }
   let basis: Basis | null = null;
+  const staged: { value: StagedAssessmentProducer | null } = { value: null };
   let receipt: Awaited<ReturnType<typeof admitted>>;
   try { receipt = await admitted(deps, request, 'claim-assess',
-    { actingSubject: input.actingSubject, idempotencyKey, digest }, async admission => {
+    { actingSubject: input.actingSubject, idempotencyKey, digest }, async (admission) => {
       basis = await assessmentBasis(deps, claim, intent, true, admission);
       if (basis.snapshot.truncated) throw new PartialVerification(basis);
       if (dependencies(claim, intent, basis, basis.snapshot.challenge.revision).length
         > verificationLimits.summaryDependencies) {
-        throw new InvalidVerificationInput('assessment dependency manifest exceeds the admitted ceiling');
+        throw new InvalidVerificationInput('assessment dependency manifest exceeds the admitted ceiling',
+          );
       }
       return recordAssessment(deps.env, admission, digest, { claim, claimRevision: input.claimRevision,
         representation: basis.record.representation,
@@ -286,56 +522,84 @@ export async function assessAdmittedClaim(deps: VerificationDependencies, reques
         independentOrigins: basis.analysis.independentOrigins, scorePerMillion: input.scorePerMillion,
         calibration: input.calibration, evaluationReference: input.evaluationReference ?? null,
         limitations: input.limitations,
-        assessorKind: input.method === 'human-review' ? 'human' : 'automated', actingSubject: input.actingSubject });
-    }, error => error instanceof VerificationMissing || error instanceof VerificationStale
-      || error instanceof VerificationGraphStale);
+        assessorKind: input.method === 'human-review' ? 'human' : 'automated', actingSubject: input.actingSubject,
+        });
+    },
+      (error) => error instanceof VerificationMissing || error instanceof VerificationStale
+      || error instanceof VerificationGraphStale,
+      false,
+      async (admission) => {
+        if (admission.state === 'sealed' && !(await deps.store.readAssessmentProducer(admission.id))) {
+          // A terminal alone cannot backfill the historically missing original Content intent.
+          throw new VerificationMissing('original assessment producer intent is unavailable');
+        }
+        const { lineageContinuation: _continuation, ...originalIntent } = intent;
+        staged.value = await deps.store.stageAssessmentProducer({
+          admission: admission.id,
+          requestDigest: digest,
+          principal: admission.principalId,
+          actingSubject: admission.actingSubject,
+          scope: admission.scope,
+          authorityEpoch: admission.authorityEpoch,
+          idempotencyKey: admission.idempotencyKey,
+          claim,
+          claimRevision: input.claimRevision,
+          intent: originalIntent,
+        });
+      },
+    );
   } catch (error) {
-    if (!(error instanceof PartialVerification)) throw error;
+    if (!(error instanceof PartialVerification)) {
+      if (staged.value) {
+        // A cancelled graph terminal may already be durable even when its API refusal throws.
+        try {
+          await reconcileAssessmentProducerEffects(
+            deps,
+            staged.value.row.admission,
+            staged.value.permit,
+          );
+        } catch {
+          /* No exact terminal or a transient failure leaves the original producer pending. */
+        }
+      }
+      throw error;
+    }
     const partial = error.basis;
     return { status: 'analysis-partial' as const, replayed: partial.snapshot.stepReplayed, assessment: null, activation: { status: 'analysis-partial' as const },
       analysis: { support: 'abstained' as const, coverage: 'incomplete' as const, dependence: 'over-budget' as const,
         independentOrigins: null, origins: [], reasons: partial.analysis.reasons,
         applicableSourceAssessments: partial.analysis.applicableReliability, work: partial.snapshot.work, totalWork: partial.snapshot.totalWork,
-        lineageContinuation: partial.snapshot.continuation, lineageComplete: false, lineageNodes: partial.snapshot.lineageNodes } };
+        lineageContinuation: partial.snapshot.continuation, lineageComplete: false, lineageNodes: partial.snapshot.lineageNodes,
+      },
+    };
   }
   const assessment = receipt.result.assessment!;
   const recorded = await readAssessment(deps.env, assessment);
   if (!recorded) throw new PendingVerification(receipt.admissionId);
-  // Replays recompute the deterministic basis and activate only if it still yields the recorded result.
-  const current: Basis = basis ?? await assessmentBasis(deps, claim, intent, false, receipt.admission);
-  const reproduced = current.support === recorded.support && current.analysis.dependence === recorded.dependence
-    && current.analysis.coverage === recorded.coverage
-    && current.analysis.independentOrigins === recorded.independentOrigins;
-  if (input.resolvesChallenges.length) {
-    await deps.store.resolveChallenges(principal, receipt.admissionId, claim, assessment, input.resolvesChallenges,
-      recorded.support === 'material-conflict' ? 'material-conflict' : 'not-established',
-      `Resolved by assessment ${assessment}`, input.actingSubject);
-  }
-  let activation: ActivationOutcome | { status: 'not-reproduced' } = { status: 'not-reproduced' };
-  if (reproduced) {
-    const challenge = await deps.store.challengeState(claim);
-    const pinned = dependencies(claim, intent, current, challenge.revision);
-    const graph = await graphHeads(deps.env, pinned);
-    const graphStale = pinned.filter(item => item.owner === 'graph' && item.kind !== 'policy'
-      && graph.heads.get(item.reference) !== item.expectedHead).map(item => item.kind);
-    activation = graphStale.length ? { status: 'stale-dependency', kinds: [...new Set(graphStale)] }
-      : await deps.store.activateSummary({ target: claim, context: input.evaluationContext, claim,
-        claimRevision: input.claimRevision, adoptedRevision: input.adoptedRevision, assessment,
-        policyRevision: SUMMARY_POLICY, support: recorded.support,
-        review: recorded.assessorKind === 'human' ? 'reviewed' : 'unreviewed', coverage: recorded.coverage,
-        dependence: recorded.dependence, reasons: current.analysis.reasons, dependencies: pinned,
-        ownerPositions: { graph: graph.position }, operationKey: `assessment:${receipt.admissionId}`,
-        expectedActive: input.expectedSummary,
-        observedDemand: await deps.store.reassessmentDemand(claim, input.evaluationContext),
-        openChallenges: challenge.open, resolvedChallenges: challenge.resolved });
-  }
-  return { assessment: { ...recorded }, analysis: { reasons: current.analysis.reasons,
+  // The effect-only seam can also resume independently after a lost Access acknowledgement.
+  if (!staged.value) throw new PendingVerification(receipt.admissionId);
+  const producer = await reconcileAssessmentEffects(
+    deps, receipt.admissionId,
+    staged.value.permit,
+    basis ?? undefined,
+  );
+  if (!producer.terminal) throw new PendingVerification(receipt.admissionId);
+    const activation = producer.terminal.activation;
+  // A durable terminal replays even when its former analysis basis is unavailable.
+  // Never substitute a new basis merely to decorate that historical response.
+  const current = basis as Basis | null;
+  return { assessment: { ...recorded }, analysis: current
+      ? { reasons: current.analysis.reasons,
     origins: current.analysis.origins, applicableSourceAssessments: current.analysis.applicableReliability,
     work: current.snapshot.work, totalWork: current.snapshot.totalWork,
     lineageContinuation: current.snapshot.continuation, lineageComplete: current.snapshot.complete,
-    lineageNodes: current.snapshot.lineageNodes },
+    lineageNodes: current.snapshot.lineageNodes,
+        }
+      : null,
   activation, receipt: receipt.receipt, replayed: receipt.replayed,
-  sourcePosition: { datasetId: 'product' as const, dataEpoch: receipt.dataEpoch, sequence: receipt.sequence } };
+  sourcePosition: { datasetId: 'product' as const, dataEpoch: receipt.dataEpoch, sequence: receipt.sequence,
+    },
+  };
 }
 
 // --------------------------------------------------------------------- reads

@@ -8,7 +8,7 @@ import { analyzeClaimSupport, LINEAGE_BUDGET, type AnalysisInput, type EvidenceI
   type LineageLink, type LineageProof } from '../src/modules/verification/analysis.ts';
 import { assessAdmittedClaim, type AssessClaimInput,
   type VerificationDependencies } from '../src/modules/verification/operations.ts';
-import { VerificationDenied, type AnalysisSnapshot,
+import { VerificationDenied, type AnalysisSnapshot, type AssessmentProducerRecord, type AssessmentProducerStage,
   type VerificationStore } from '../src/modules/verification/store.ts';
 
 const claim = { referent: 'urn:rezics:lineage:referent', context: 'urn:rezics:lineage:context',
@@ -146,6 +146,7 @@ function admittedDependencies() {
   const bind = (value: string) => ({ type: 'uri', value });
   const query = mock(async (sparql: string) => {
     if (sparql.includes('ASK {')) return { boolean: true };
+    if (sparql.includes('SELECT ?revision ?claim ?head ?source ?root')) return { results: { bindings: [] } };
     if (!sparql.includes('SELECT ?revision ?claim')) throw new Error('unexpected graph query');
     return { results: { bindings: [{ revision: bind(deniedIntent.claimRevision), claim: bind(claimId),
       head: bind(deniedIntent.claimRevision), referent: bind(claim.referent), context: bind(claim.context),
@@ -176,12 +177,18 @@ function admittedDependencies() {
     lineageProof: { dependence: 'over-budget', independentOrigins: null, origins: [] },
   };
   const analysisSnapshot = mock(async (..._args: Parameters<VerificationStore['analysisSnapshot']>) => snapshot);
+  let producer: AssessmentProducerRecord | null = null;
+  const stageAssessmentProducer = mock(async (input: AssessmentProducerStage) => {
+    producer = { ...input, stageGeneration: '0', restoreEpoch: '1', terminal: null };
+    return { row: producer, permit: { mode: 'ordinary' as const, job: null, generation: '0', restoreEpoch: '1' } };
+  });
   const deps: VerificationDependencies = {
     account: { verify: async () => ({ issuer: 'https://account.example', subject: 'assessor' }) },
     access: { activePrincipalId: async () => 'assessor', register, claim: claimAdmission,
       recordGraphOutcome: forbidden },
     env: { fuseki: { query, update: forbidden }, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as unknown as VerificationDependencies['env'],
-    store: { analysisSnapshot, activateSummary: forbidden, resolveChallenges: forbidden } as unknown as VerificationStore,
+    store: { analysisSnapshot, stageAssessmentProducer, readAssessmentProducer: async () => producer,
+      activateSummary: forbidden, resolveChallenges: forbidden } as unknown as VerificationStore,
   };
   return { deps, forbidden, query, analysisSnapshot, snapshot };
 }
