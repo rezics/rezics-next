@@ -5,10 +5,13 @@
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { startHomeStack } from '../../../tests/qa/integration/feed-read-support.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
 
 if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '')) {
   throw new Error('The G-530 seed writes only into an isolated QA run');
@@ -23,7 +26,9 @@ const workObjects = stack.objects('semantic/work/');
 await workObjects.initialize();
 Object.assign(stack.env, { objectDirectory, workObjects });
 try {
-  const app = createMainApp(stack.fuseki, { ...home.deps, discovery: new DiscoveryProjection(stack.accessPool) });
+  const app = createMainApp(stack.fuseki, { ...home.deps, discovery: new DiscoveryProjection(stack.accessPool),
+    platformAccess: new AccessExposure(stack.accessPool),
+    judgments: new AccessJudgments(stack.accessPool), statementSeek: stack.statementSeek });
   const call = (method: string, path: string, body?: unknown) => app.handle(new Request(`http://main.local${path}`,
     { method, headers: { ...(body ? { 'content-type': 'application/json', 'idempotency-key': randomUUID() } : {}),
       authorization: `Bearer ${author.token}` }, ...(body ? { body: JSON.stringify(body) } : {}) }));
@@ -47,26 +52,53 @@ try {
 
   // Four Works under Concepts, then the discovery generation the Concept page lists them from.
   await author.grant(MANAGE_SCOPE, MANAGE_ACTION);
+  const platformGrant = randomUUID();
+  await stack.accessPool.query(`INSERT INTO access.principal_permission_grant
+    (id,issuer_subject,principal_id,scope_id,action,valid_until)
+    VALUES ($1,$2,$3,'platform:access','platform:use:platform-admin',now()+interval '1 hour')`,
+  [platformGrant,author.actor,author.principalId]);
+  await stack.accessPool.query(`INSERT INTO access.platform_grant_episode
+    (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+    VALUES ($1,$2,$3,'platform:use:platform-admin','platform:access',$4,$5)`,
+  [randomUUID(),platformGrant,author.actor,author.principalId,`urn:rezics:access-receipt:${platformGrant}`]);
   await author.grant('classification:define:global', 'classification.proposition.define');
-  await author.grant('classification:decide:global', 'classification.decision.set');
+  await author.grant('classification:decide:global', 'statement.decide');
+  await author.grant(`statement:speak:${author.actor}`, 'statement.record');
+  await author.grant('context:create:root','context.create');
   const run = randomUUID().slice(0, 8);
   const works: { work: string; mainVersion: string; title: string }[] = [];
   for (const index of [1, 2, 3, 4]) {
     const work = await stack.publicWork(author.actor, ['en'], `Concept Work ${index} ${run}`);
     works.push({ work: work.work, mainVersion: work.mainVersion, title: work.title });
   }
-  const define = async (label: string) => json<{ concept: string; sense: string }>(await call('POST',
-    '/v1/classification-propositions', { profile: 'classification-proposition-v1', label: `${label} ${run}`,
-      actingSubject: author.actor }), 201);
+  const define = async (label: string) => {
+    const term = await json<{concept: string;sense: string;definitionRevision: string}>(await call('POST',
+      '/v1/classification-propositions',{profile: 'classification-proposition-v1',label: `${label} ${run}`,
+        actingSubject: author.actor}),201);
+    await json(await call('POST',`/v1/concepts/${term.concept.slice(-36)}/spoiler-hints`,{
+      profile: 'concept-spoiler-hint-v1',context: {kind: 'global'},hint: 'not-spoiler',
+      expectedGeneration: '0',actingSubject: author.actor}),201);
+    const interpretation = await json<{context: string;semanticRevision: string}>(await call('POST','/v1/contexts',{
+      profile: 'context-v1',role: 'shared',disclosure: 'public',base: null,
+      entries: [{target: term.concept,relation: 'https://rezics.com/vocab/classifiedAs',state: 'defined',
+        definition: term.definitionRevision,applicability: []}],actingSubject: author.actor}),201);
+    return {...term,interpretation};
+  };
   const fantasy = await define('Fantasy'), magic = await define('Magic'), romance = await define('Romance');
-  const accept = async (work: typeof works[number], sense: string) => json(await call('POST',
-    '/v1/classification-decisions', { profile: 'classification-direct-decision-v1', work: work.work,
-      mainVersion: work.mainVersion, sense, context: { kind: 'global' }, outcome: 'accepted',
-      expectedDecisionHead: null, actingSubject: author.actor }), 201);
-  await accept(works[0]!, fantasy.sense); await accept(works[0]!, magic.sense);
-  await accept(works[1]!, fantasy.sense); await accept(works[1]!, romance.sense);
-  await accept(works[2]!, magic.sense);
-  await accept(works[3]!, fantasy.sense);
+  const accept = async (work: typeof works[number],term: Awaited<ReturnType<typeof define>>) => {
+    const statement = await json<{statement: string;meaningKey: string}>(await call('POST','/v1/statements',{
+      profile: 'statement-v1',speaker: {kind: 'personal'},subject: work.mainVersion,predicate: 'https://rezics.com/vocab/classifiedAs',
+      relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,value: {kind: 'resource',iri: term.concept},
+      applicability: [],interpretation: {kind: 'explicit',context: term.interpretation.context,
+        semanticRevision: term.interpretation.semanticRevision},evidence: [],actingSubject: author.actor}),201);
+    return json(await call('POST','/v1/statement-decisions',{profile: 'statement-decision-v1',
+      target: {kind: 'qualified-fact',meaningKey: statement.meaningKey,support: [statement.statement]},acceptance: {kind: 'global'},
+      outcome: 'accepted',expectedDecisionHead: null,actingSubject: author.actor}),201);
+  };
+  await accept(works[0]!, fantasy); await accept(works[0]!, magic);
+  await accept(works[1]!, fantasy); await accept(works[1]!, romance);
+  await accept(works[2]!, magic);
+  await accept(works[3]!, fantasy);
   type Generation = { generation: string; checkpoint: string; complete: boolean; state: string };
   let row = await json<Generation>(await call('POST', '/v1/discovery/generation-builds', {
     profile: 'discovery-generation-build-v1', actingSubject: author.actor,

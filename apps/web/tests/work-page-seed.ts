@@ -12,12 +12,14 @@ import { startMediaStack } from '../../../tests/qa/integration/media-support.ts'
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { RealmReplyContentStore } from '../../../services/main/src/modules/realm-reply/content-store.ts';
 import { RealmReplyStore } from '../../../services/main/src/modules/realm-reply/store.ts';
 import { globalRatingContext } from './global-rating-context.ts';
 import { activateMetadataWork, GRAPHS, iri, metadataWorkRequestDigest, RV }
   from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
 import { authorCreditTriples } from '../../../services/main/src/modules/work/author-credit.ts';
 
 if (!/^[a-z0-9][a-z0-9-]{0,30}$/.test(process.env.REZICS_QA_RUN_ID ?? '')) {
@@ -69,17 +71,33 @@ try {
     expectedSelectionHead: null, selectionBasis: 'realm-manager-review', actingSubject: a!.actor }));
 
   await a!.grant('classification:define:global', 'classification.proposition.define');
-  await a!.grant('classification:decide:global', 'classification.decision.set');
+  await a!.grant('classification:decide:global', 'statement.decide');
+  await a!.grant(`statement:speak:${a!.actor}`, 'statement.record');
   await a!.grant(`classification:context:${realm.realm}`, 'classification.context.configure');
-  await a!.grant(`classification:decide:${realm.realm}`, 'classification.decision.set');
+  await a!.grant(`classification:decide:${realm.realm}`, 'statement.decide');
   await created(await a!.send('POST', '/v1/classification-contexts',
     { profile: 'classification-context-v1', realm: realm.realm, actingSubject: a!.actor }));
   const decide = async (label: string, context: { kind: 'global' } | { kind: 'realm-classification'; id: string }) => {
-    const proposition = await created<{ sense: string }>(await a!.send('POST', '/v1/classification-propositions',
+    await a!.grant('context:create:root','context.create');
+    const proposition = await created<{ sense: string;concept: string;definitionRevision: string }>(await a!.send('POST', '/v1/classification-propositions',
       { profile: 'classification-proposition-v1', label, actingSubject: a!.actor }));
-    const decision = await created<{ decision: string }>(await a!.send('POST', '/v1/classification-decisions', {
-      profile: 'classification-direct-decision-v1', work: work.work, mainVersion: work.mainVersion,
-      sense: proposition.sense, expectedDecisionHead: null, context, outcome: 'accepted', actingSubject: a!.actor }));
+    await new AccessJudgments(stack.accessPool).declareHint(a!.principal,{concept: proposition.concept,
+      context: context.kind === 'global' ? {kind: 'global'} : {kind: 'realm',realm: context.id},
+      hint: 'not-spoiler',expectedGeneration: '0',actingSubject: a!.actor,idempotencyKey: randomUUID(),
+      requestDigest: createHash('sha256').update(proposition.concept).digest('hex')});
+    const interpretation = await created<{context: string;semanticRevision: string}>(await a!.send('POST','/v1/contexts',{
+      profile: 'context-v1',role: 'shared',disclosure: 'public',base: null,
+      entries: [{target: proposition.concept,relation: `${RV}classifiedAs`,state: 'defined',
+        definition: proposition.definitionRevision,applicability: []}],actingSubject: a!.actor}));
+    const statement = await created<{statement: string;meaningKey: string}>(await a!.send('POST','/v1/statements',{
+      profile: 'statement-v1',speaker: {kind: 'personal'},subject: work.mainVersion,predicate: `${RV}classifiedAs`,
+      relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,value: {kind: 'resource',iri: proposition.concept},
+      applicability: [],interpretation: {kind: 'explicit',context: interpretation.context,
+        semanticRevision: interpretation.semanticRevision},evidence: [],actingSubject: a!.actor}));
+    const decision = await created<{decision: string}>(await a!.send('POST','/v1/statement-decisions',{
+      profile: 'statement-decision-v1',target: {kind: 'qualified-fact',meaningKey: statement.meaningKey,support: [statement.statement]},
+      acceptance: context.kind === 'global' ? {kind: 'global'} : {kind: 'realm',realm: context.id},
+      expectedDecisionHead: null,outcome: 'accepted',actingSubject: a!.actor}));
     return { sense: proposition.sense, decision: decision.decision, context };
   };
   const adventure = await decide('Adventure', { kind: 'global' });
@@ -121,6 +139,7 @@ try {
 
   // One app with the owners the default QA app leaves out: Agent profiles and Realm replies.
   const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, content: stack.content,
+    judgments: new AccessJudgments(stack.accessPool), statementSeek: stack.statementSeek,
     contentAuthoring: stack.content,
     media: stack.media, structureObjects, profiles: new ProfilesAccess(stack.accessPool),
     agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),

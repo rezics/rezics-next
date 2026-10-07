@@ -8,9 +8,12 @@ import type { DiscoveryBasis } from '../../../services/main/src/modules/discover
 import { MANAGE_ACTION, MANAGE_SCOPE, RecommendationRestart, RecommendationStale,
   RecommendationUnavailable } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/global.ts';
-import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, RV, hash, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
+import { resolveClassification } from '../../../services/main/src/modules/classification/resolve.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { cloneOwners, requireQa } from './recommendation-support.ts';
 import { isolateDiscoveryProbeGraph } from './discovery-projection-fixture.ts';
 
@@ -36,6 +39,17 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
   const restoreGraph = await isolateDiscoveryProbeGraph(stack.env);
   try {
     const a = await stack.member('a'), b = await stack.member('b'), outsider = await stack.member('outsider');
+    for (const member of [a,b]) {
+      const grant = randomUUID();
+      await stack.accessPool.query(`INSERT INTO access.principal_permission_grant
+        (id,issuer_subject,principal_id,scope_id,action,valid_until)
+        VALUES ($1,$2,$3,'platform:access','platform:use:platform-admin',now()+interval '1 hour')`,
+      [grant,member.actor,member.principalId]);
+      await stack.accessPool.query(`INSERT INTO access.platform_grant_episode
+        (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+        VALUES ($1,$2,$3,'platform:use:platform-admin','platform:access',$4,$5)`,
+      [randomUUID(),grant,member.actor,member.principalId,`urn:rezics:access-receipt:${hash(grant)}`]);
+    }
     await a.grant(MANAGE_SCOPE, MANAGE_ACTION);
     const first = await stack.publicWork(a.actor, ['en'], 'Discovery first');
     const second = await stack.publicWork(a.actor, ['en'], 'Discovery second');
@@ -71,41 +85,50 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
         mainVersion: target.mainVersion, value, expectedRevisionHead: null, actingSubject: member.actor }), 201);
     }
     for (const [scope, action] of [['classification:define:global', 'classification.proposition.define'],
-      ['classification:decide:global', 'classification.decision.set'],
+      ['classification:decide:global', 'statement.decide'],
+      ['context:create:root','context.create'],
+      [`statement:speak:${a.actor}`, 'statement.record'],
       [`classification:context:${realm.realm}`, 'classification.context.configure'],
-      [`classification:decide:${realm.realm}`, 'classification.decision.set']] as const) await a.grant(scope, action);
+      [`classification:decide:${realm.realm}`, 'statement.decide']] as const) await a.grant(scope, action);
     await json(await a.send('POST', '/v1/classification-contexts',
       { profile: 'classification-context-v1', realm: realm.realm, actingSubject: a.actor }), 201);
-    const term = await json<{ sense: string; concept: string }>(await a.send('POST', '/v1/classification-propositions',
+    const term = await json<{ sense: string; concept: string; definitionRevision: string }>(await a.send('POST', '/v1/classification-propositions',
       { profile: 'classification-proposition-v1', label: 'Discovery adventure', actingSubject: a.actor }), 201);
+    for (const context of [{kind: 'global' as const},{kind: 'realm' as const,realm: realm.realm}]) {
+      await new AccessJudgments(stack.accessPool).declareHint(a.principal,{concept: term.concept,context,
+        hint: 'not-spoiler',expectedGeneration: '0',actingSubject: a.actor,idempotencyKey: randomUUID(),
+        requestDigest: hash(JSON.stringify([term.concept,context,'not-spoiler']))});
+    }
+    const interpretation = await json<{context: string;semanticRevision: string}>(await a.send('POST','/v1/contexts',{
+      profile: 'context-v1',role: 'shared',disclosure: 'public',base: null,
+      entries: [{target: term.concept,relation: `${RV}classifiedAs`,state: 'defined',
+        definition: term.definitionRevision,applicability: []}],actingSubject: a.actor}),201);
     await stack.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(term.concept)} <http://www.w3.org/2004/02/skos/core#prefLabel> "Aventure"@fr . } }`);
-    for (const target of [first, second]) await json(await a.send('POST', '/v1/classification-decisions', {
-      profile: 'classification-direct-decision-v1', work: target.work, mainVersion: target.mainVersion,
-      sense: term.sense, context: { kind: 'global' }, outcome: 'accepted', expectedDecisionHead: null, actingSubject: a.actor }), 201);
-    // Bootstrap heads are allowed only with the fixed global profile's revision proof.
-    // A head from another model must not weaken the global decision binding.
-    const bootstrapProfile = 'https://rezics.com/definition/classification-global-context-v1';
-    const replaceGlobalProfile = (before: string, after: string) => stack.fuseki.update(`
-      PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.revisions)} { ?head rv:modelRevision ${iri(before)} } }
-      INSERT { GRAPH ${iri(GRAPHS.revisions)} { ?head rv:modelRevision ${iri(after)} } }
-      WHERE { GRAPH ${iri(GRAPHS.current)} { <urn:rezics:classification-context:global> rv:head ?head }
-        GRAPH ${iri(GRAPHS.revisions)} { ?head rv:modelRevision ${iri(before)} } }`);
-    await replaceGlobalProfile(bootstrapProfile, 'urn:rezics:wrong-global-profile');
-    try {
-      expect((await a.send('POST', '/v1/classification-decisions', {
-        profile: 'classification-direct-decision-v1', work: third.work, mainVersion: third.mainVersion,
-        sense: term.sense, context: { kind: 'global' }, outcome: 'accepted', expectedDecisionHead: null,
-        actingSubject: a.actor })).status).toBe(409);
-    } finally { await replaceGlobalProfile('urn:rezics:wrong-global-profile', bootstrapProfile); }
-    await json(await a.send('POST', '/v1/classification-decisions', {
-      profile: 'classification-direct-decision-v1', work: first.work, mainVersion: first.mainVersion,
-      sense: term.sense, context: { kind: 'realm-classification', id: realm.realm }, outcome: 'rejected',
-      expectedDecisionHead: null, actingSubject: a.actor }), 201);
+    const statements = new Map<string,{statement: string;meaningKey: string}>();
+    for (const target of [first,second]) {
+      const statement = await json<{statement: string;meaningKey: string}>(await a.send('POST','/v1/statements',{
+        profile: 'statement-v1',speaker: {kind: 'personal'},subject: target.mainVersion,predicate: `${RV}classifiedAs`,
+        relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,value: {kind: 'resource',iri: term.concept},
+        applicability: [],interpretation: {kind: 'explicit',context: interpretation.context,
+          semanticRevision: interpretation.semanticRevision},evidence: [],actingSubject: a.actor}),201);
+      statements.set(target.work,statement);
+      await json(await a.send('POST','/v1/statement-decisions',{profile: 'statement-decision-v1',
+        target: {kind: 'qualified-fact',meaningKey: statement.meaningKey,support: [statement.statement]},
+        acceptance: {kind: 'global'},outcome: 'accepted',expectedDecisionHead: null,actingSubject: a.actor}),201);
+    }
+    const firstStatement = statements.get(first.work)!;
+    expect(await resolveClassification(stack.env,{work: first.work,mainVersion: first.mainVersion,
+      sense: term.sense,context: {kind: 'global'}})).toMatchObject({state: 'accepted',source: 'global'});
+    await json(await a.send('POST','/v1/statement-decisions',{profile: 'statement-decision-v1',
+      target: {kind: 'qualified-fact',meaningKey: firstStatement.meaningKey,support: [firstStatement.statement]},
+      acceptance: {kind: 'realm',realm: realm.realm},outcome: 'rejected',
+      expectedDecisionHead: null,actingSubject: a.actor}),201);
 
     const owner = new DiscoveryProjection(stack.accessPool);
     const people = [a, b, outsider];
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      platformAccess: new AccessExposure(stack.accessPool),
       discovery: owner, media: stack.media, judgments: new AccessJudgments(stack.accessPool),
       account: { verify: async request => {
         const member = people.find(person => request.headers.get('authorization') === `Bearer ${person.token}`);
@@ -339,24 +362,14 @@ test('Discovery projection: native scoped reads, durable builds, disclosure, cur
     expect((await get()).status).toBe(200);
     expect((await get({ cursor: page.nextCursor! })).status).toBe(200);
 
-    // Post-cutover Statement classification and spoiler protection use the real
-    // owner. Empty baseline inserts must not churn the discovery source fence.
-    await a.grant('statement:migrate:root', 'statement.migrate');
-    await a.grant('statement:migrate:root', 'statement.cutover');
-    const migration = await json<{ pending: { application: string; decision: string }[] }>(
-      await a.read('/v1/statement-migrations/v1/pending'));
-    for (const item of migration.pending) await json(await a.send('POST',
-      `/v1/statement-migrations/v1/${item.application.slice(-36)}`, { profile: 'statement-migration-v1',
-        expectedDecision: item.decision, actingSubject: a.actor }), 201);
-    await json(await a.send('POST', '/v1/statement-migrations/v1/cutover',
-      { profile: 'statement-cutover-v1', actingSubject: a.actor }), 201);
-    await a.grant('classification:decide:global', 'statement.decide');
+    // Statement classification and spoiler protection use the real owner.
+    // Revise the fixture's existing not-spoiler declaration with exact CAS.
     const hint = (value: string, expectedGeneration: string) => call(`/v1/concepts/${term.concept.slice(-36)}/spoiler-hints`,
       { profile: 'concept-spoiler-hint-v1', context: { kind: 'global' }, hint: value, expectedGeneration, actingSubject: a.actor });
-    await json(await hint('not-spoiler', '0'), 201);
+    await json(await hint('not-spoiler', '1'), 201);
     await build(base, a, '2');
     expect((await json<Page>(await get({ term: term.sense }))).items.length).toBe(2);
-    await json(await hint('major', '1'), 201);
+    await json(await hint('major', '2'), 201);
     expect(await json(await get({ term: term.sense }))).toMatchObject({ stale: true, items: [],
       matchedTerm: null, matches: { kind: 'lower-bound' } });
     await build(base, a, '3');

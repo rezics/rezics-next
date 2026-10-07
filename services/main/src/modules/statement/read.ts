@@ -327,16 +327,23 @@ export const STATEMENT_ACCEPTANCE_BATCH_COST = {
  * Local absence, rejection, withdrawal and unavailable slots stay distinct. */
 export async function resolveStatementAcceptancesAt(
   env: WorkActivationEnvironment,
-  statements: readonly string[],
+  targets: readonly (string | DecisionTarget)[],
   acceptance: Acceptance,
   position: { dataEpoch: string; sequence: string },
 ): Promise<Map<string, StatementResolution>> {
-  if (statements.length > MAX_STATEMENT_ACCEPTANCE_BATCH) {
+  if (targets.length > MAX_STATEMENT_ACCEPTANCE_BATCH) {
     throw new StatementBatchBudgetExceeded('Statement acceptance page exceeds 20 targets');
   }
-  const unique = [...new Set(statements)];
+  const byKey = new Map(targets.map(value => {
+    const target: DecisionTarget = typeof value === 'string' ? { kind: 'statement', statement: value } : value;
+    const key = target.kind === 'statement' ? target.statement : target.meaningKey;
+    return [key, target] as const;
+  }));
+  const unique = [...byKey.keys()];
   if (
-    unique.some((id) => !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(id)) ||
+    unique.some((id) => byKey.get(id)!.kind === 'statement'
+      ? !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(id)
+      : !/^urn:rezics:meaning:[0-9a-f]{64}$/.test(id)) ||
     position.dataEpoch !== env.lineage.dataEpoch ||
     !/^(0|[1-9][0-9]*)$/.test(position.sequence)
   ) {
@@ -378,15 +385,31 @@ export async function resolveStatementAcceptancesAt(
   if (![CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY].includes(policy)) {
     throw new StatementBatchUnavailable('Statement acceptance policy is unsupported');
   }
+  const targetValues = unique.map(statement => `(${iri(statement)}
+    rv:${byKey.get(statement)!.kind === 'statement' ? 'StatementTarget' : 'QualifiedFactTarget'}
+    ${iri(decisionSlotIri(byKey.get(statement)!, GLOBAL_CLASSIFICATION_CONTEXT))}
+    ${iri(decisionSlotIri(byKey.get(statement)!, context))})`).join(' ');
   const slots = (name: 'local' | 'global') => `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
-      ?wanted${name === 'local' ? 'Local' : 'Global'}Slot a rv:DecisionSlot .
+      VALUES (?statement ?wantedKind ?wantedGlobalSlot ?wantedLocalSlot) { ${targetValues} }
+      FILTER EXISTS { ?wanted${name === 'local' ? 'Local' : 'Global'}Slot ?presentProperty ?presentValue }
       BIND(?wanted${name === 'local' ? 'Local' : 'Global'}Slot AS ?${name}Slot)
       OPTIONAL { ?${name}Slot rv:decisionHead ?${name}Decision .
-        OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?${name}Decision a rv:StatementDecision ;
+        OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
+          VALUES (?statement ?wantedKind ?${name}Slot) { ${unique.map(statement => `(${iri(statement)}
+            rv:${byKey.get(statement)!.kind === 'statement' ? 'StatementTarget' : 'QualifiedFactTarget'}
+            ${iri(decisionSlotIri(byKey.get(statement)!,name === 'local' ? context : GLOBAL_CLASSIFICATION_CONTEXT))})`).join(' ')} }
+          ?${name}Decision a rv:StatementDecision ;
           rv:component ?${name}Slot ; rv:outcome ?${name}Outcome .
-          FILTER(?${name}Outcome = rv:Withdrawn || EXISTS {
-            GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rv:statementState rv:Active . }
-          }) } } } } }`;
+          FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ?${name}Slot a rv:DecisionSlot ;
+            rv:decisionTarget ?statement ; rv:targetKind ?wantedKind ;
+            rv:acceptanceContext ${iri(name === 'local' ? context : GLOBAL_CLASSIFICATION_CONTEXT)} } }
+          FILTER(?${name}Outcome = rv:Withdrawn
+            || ?wantedKind = rv:StatementTarget && EXISTS { GRAPH ${iri(GRAPHS.current)} {
+              ?statement a rdf:Statement ; rv:statementState rv:Active } }
+            || ?wantedKind = rv:QualifiedFactTarget && EXISTS {
+              GRAPH ${iri(GRAPHS.revisions)} { ?${name}Decision rv:support ?support }
+              GRAPH ${iri(GRAPHS.current)} { ?support a rdf:Statement ; rv:statementState rv:Active ; rv:meaningKey ?statement }
+            }) } } } } }`;
   const rows =
     (
       await env.fuseki.query(
@@ -396,14 +419,8 @@ export async function resolveStatementAcceptancesAt(
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
       FILTER(?epoch = ${lit(position.dataEpoch)} && ?sequence = ${position.sequence})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-      VALUES (?statement ?wantedGlobalSlot ?wantedLocalSlot) {
-        ${unique
-          .map(
-            (statement) => `(${iri(statement)}
-          ${iri(decisionSlotIri({ kind: 'statement', statement }, GLOBAL_CLASSIFICATION_CONTEXT))}
-          ${iri(decisionSlotIri({ kind: 'statement', statement }, context))})`,
-          )
-          .join(' ')}
+      VALUES (?statement ?wantedKind ?wantedGlobalSlot ?wantedLocalSlot) {
+        ${targetValues}
       }
       ${realm ? slots('local') : ''}
       ${!realm || policy === CLASSIFICATION_INHERIT_POLICY ? slots('global') : ''}
@@ -456,7 +473,7 @@ export async function resolveStatementAcceptancesAt(
         statement,
         {
           profile: 'statement-resolution-v1',
-          target: { kind: 'statement', statement },
+          target: byKey.get(statement)!,
           acceptance,
           acceptanceContext: context,
           policy,

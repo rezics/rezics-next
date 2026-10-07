@@ -7,6 +7,8 @@ import { DATASET, GRAPHS, PUBLIC_SEARCH_ANCHOR, iri, lit,
   from '../../../services/main/src/modules/work/activate.ts';
 import { queryPublicRealmClassifiedRatedPhrase }
   from '../../../services/main/src/modules/work/search-joined.ts';
+import { queryPublicMainClassifiedPhrase, PublicQueryUnavailable }
+  from '../../../services/main/src/modules/work/search-public.ts';
 import { pageCompletePublicRelation, SearchContinuationRestart }
   from '../../../services/main/src/modules/work/search-continuation.ts';
 import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructure/profile.ts';
@@ -17,7 +19,7 @@ import { CLASSIFICATION_PROPOSITION_PROFILE }
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT }
   from '../../../services/main/src/modules/classification/context.ts';
-import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE }
+import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE, statementMeaningKey, decisionSlotIri }
   from '../../../services/main/src/modules/statement/schema.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY,
   RATING_STANDING_CADENCE } from '../../../services/main/src/modules/rating/context.ts';
@@ -43,11 +45,13 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
   const works = [id(21), id(22)];
   const mains = [id(31), id(32)];
   const units = ['urn:rezics:match:statement-a', 'urn:rezics:match:statement-b'];
-  const keys = [`urn:rezics:meaning:${'a'.repeat(64)}`,
-    `urn:rezics:meaning:${'b'.repeat(64)}`];
+  const keys = mains.map(subject => statementMeaningKey({subject,predicate: CLASSIFIED_AS,
+    relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,interpretationDefinitions: [senseHead],
+    value: {kind: 'resource',iri: concept},applicability: []}));
+  const slots = keys.map(meaningKey => decisionSlotIri({kind: 'qualified-fact',meaningKey},GLOBAL_CLASSIFICATION_CONTEXT));
   const definitions = works.map((work, index) => {
     const main = mains[index]!;
-    const statement = id(41 + index), slot = `urn:rezics:decision-slot:statement-${index}`;
+    const statement = id(41 + index), slot = slots[index]!;
     const additionalSupport = index === 0 ? id(43) : null;
     const statementHead = id(121 + index), additionalHead = additionalSupport ? id(123) : null;
     const decision = id(51 + index), selection = id(61 + index);
@@ -113,10 +117,6 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
     INSERT DATA {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch "epoch" ;
         rv:sequence 7 ; rv:textIndexGeneration ${iri(generation)} . }
-      GRAPH ${iri(GRAPHS.receipts)} {
-        <urn:rezics:receipt:statement-search-fixture> a rv:OperationReceipt ;
-          rv:commandFamily "statement-cutover-v1" ; rv:outcome rv:Succeeded ;
-          rv:decisionModel <https://rezics.com/vocab/StatementDecisions> . }
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
       GRAPH ${iri(GRAPHS.current)} {
@@ -262,7 +262,9 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
       return answer;
     }
     if (sparql.includes('VALUES (?main ?key ?decision ?context)')
-      || sparql.includes('VALUES ?statement')) return native.query(sparql);
+      || sparql.includes('VALUES ?statement') || sparql.includes('?candidateCount')
+      || sparql.includes('?senseRevision ?concept WHERE')
+      || sparql.includes('?main ?key ?localFound ?localDecision')) return native.query(sparql);
     return { results: { bindings: [{ epoch: binding('epoch'), sequence: binding('7'),
       generation: binding(generation) }] } };
   } } as FusekiClient;
@@ -290,6 +292,14 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
   expect(result.results.every(row => row.score === rawScores.get(row.matchUnit))).toBe(true);
   expect(joinedReads).toBe(1);
 
+  const publicClassified = () => queryPublicMainClassifiedPhrase(env,{phrase,language: 'zh',sense});
+  expect((await publicClassified()).results.map(row => row.mainVersion).sort()).toEqual([...mains].sort());
+  await native.update(`DELETE DATA { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(slots[0]!)} <https://rezics.com/vocab/targetKind> <https://rezics.com/vocab/QualifiedFactTarget> } }`);
+  try {await expect(publicClassified()).rejects.toBeInstanceOf(PublicQueryUnavailable);}
+  finally {await native.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+    ${iri(slots[0]!)} <https://rezics.com/vocab/targetKind> <https://rezics.com/vocab/QualifiedFactTarget> } }`);}
+
   const replacementDefinition = id(112);
   await native.update(`PREFIX rv: <https://rezics.com/vocab/>
     DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(sense)} rv:head ${iri(senseHead)} . } }
@@ -316,7 +326,7 @@ test('SEARCH01/SEARCH04: one native graph/text read preserves scores across thre
     sense, ratingContext, minimumMeanTimes10: 80, pageSize: 1 };
   const firstPage = pageCompletePublicRelation(pageInput, result);
   expect(firstPage.next).not.toBeNull();
-  const localSlot = 'urn:rezics:decision-slot:statement-local-a';
+  const localSlot = decisionSlotIri({kind: 'qualified-fact',meaningKey: keys[0]!},context);
   const localDecision = id(111);
   await native.update(`PREFIX rv: <https://rezics.com/vocab/>
     INSERT DATA {

@@ -11,7 +11,7 @@ import { CONTEXT_LIMITS, GLOBAL_SEMANTIC_CONTEXT, InvalidContextSchemaInput, can
   contextEntryIri, contextSelectionCandidates, contextSelectionKey, contextSelectionScopeKey,
   nextInheritanceDepth, type ContextEntryRecord } from '../src/modules/context/schema.ts';
 import { privateSelectionLookupKeys } from '../src/modules/context/private-selection-schema.ts';
-import { InvalidStatementSchemaInput, convertV1ClassificationSlot, decisionSlotIri, resolveAcceptance,
+import { InvalidStatementSchemaInput, decisionSlotIri, resolveAcceptance,
   statementMeaningKey, type SlotReading, type StatementMeaning } from '../src/modules/statement/schema.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -275,42 +275,4 @@ test('CTX02: schema foundation local rejection suppresses, absence may inherit, 
   expect(resolveAcceptance({ scope: 'global', global: { state: 'unavailable' } })).toEqual({ state: 'unavailable' });
   expect(() => resolveAcceptance({ scope: 'local', policy: inherit, local: { state: 'absent' } }))
     .toThrow(InvalidStatementSchemaInput);
-});
-
-test('CTX09 schema foundation: v1 slots migrate losslessly to one decision model without inferred meaning', () => {
-  const [mainVersion, senseRevision, concept, realmContext] = [id(), id(), id(), id()];
-  const common = { mainVersion, senseRevision, concept, proposer: id(), headDecidedBy: id() };
-  const global = convertV1ClassificationSlot({ ...common, application: id(), headDecision: id(),
-    acceptanceContext: GLOBAL_CLASSIFICATION_CONTEXT, contextRevision: null, headOutcome: 'accepted',
-    headBasis: 'global-curator-review' }, { statement: id(), statementRevision: id(), decision: id() });
-  const realmApplication = id();
-  const realmHead = id();
-  const realm = convertV1ClassificationSlot({ ...common, application: realmApplication, headDecision: realmHead,
-    acceptanceContext: realmContext, contextRevision: id(), headOutcome: 'rejected',
-    headBasis: 'realm-manager-review' }, { statement: id(), statementRevision: id(), decision: id() });
-  expect(realm.statement.meaningKey).toBe(global.statement.meaningKey);
-  expect(realm.slot.id).not.toBe(global.slot.id);
-  expect(realm.statement).toMatchObject({ subject: mainVersion, value: { kind: 'resource', iri: concept },
-    interpretationDefinitions: [senseRevision], semanticContextRevision: null, migratedFrom: realmApplication });
-  expect(realm.decision).toMatchObject({ outcome: 'rejected', convertedFrom: realmHead, predecessor: null,
-    support: [realm.statement.id], basis: 'realm-manager-review' });
-  expect(realm.policy).toBe(CLASSIFICATION_INHERIT_POLICY);
-  expect(global.policy).toBe(CLASSIFICATION_ISOLATE_POLICY);
-  const read = (converted: typeof realm): SlotReading => ({ state: 'decided', slot: converted.slot.id,
-    decision: converted.decision.id, outcome: converted.decision.outcome });
-  expect(resolveAcceptance({ scope: 'local', policy: CLASSIFICATION_INHERIT_POLICY, local: read(realm),
-    global: read(global) }))
-    .toMatchObject({ state: 'rejected', source: 'local', decision: realm.decision.id });
-  expect(() => convertV1ClassificationSlot({ ...common, application: id(), headDecision: id(),
-    acceptanceContext: realmContext, contextRevision: id(), headOutcome: 'accepted', headBasis: 'global-curator-review' },
-  { statement: id(), statementRevision: id(), decision: id() })).toThrow('v1 acceptance scope and basis disagree');
-  const decision = { '@id': realm.decision.id, 'rdf:type': [`${RV}StatementDecision`, `${RV}RevisionAnchor`],
-    'rv:component': [realm.slot.id], 'rv:outcome': [`${RV}Rejected`], 'rv:decisionBasis': [`${RV}RealmManagerReview`],
-    'rv:decidedBy': [id()], 'rv:decisionPolicy': ['https://rezics.com/definition/statement-decision-v1'],
-    'rv:convertedFrom': [realmHead], 'rv:support': [realm.statement.id], ...anchor('statement-decision-v1') };
-  expect(check('statement-decision-v1', 'decision', decision)).toBe(true);
-  expect(check('statement-decision-v1', 'decision', { ...decision, 'rv:outcome': [`${RV}Withdrawn`] })).toBe(true);
-  expect(check('statement-decision-v1', 'decision', { ...decision, 'rv:outcome': [`${RV}Unknown`] })).toBe(false);
-  expect(check('statement-decision-v1', 'decision', { ...decision, 'rv:support': Array.from({ length: 33 }, id) }))
-    .toBe(false);
 });

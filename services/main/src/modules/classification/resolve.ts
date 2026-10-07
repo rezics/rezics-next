@@ -8,8 +8,6 @@ import {
   GLOBAL_CLASSIFICATION_CONTEXT,
 } from './context.ts';
 import {
-  CLASSIFICATION_DIRECT_DECISION_PROFILE,
-  classificationDecisionSlotIri,
   type ClassificationDecisionContext,
 } from './decision.ts';
 import {
@@ -95,15 +93,12 @@ export async function resolveClassifications(
     .join(' UNION ');
   const base = await env.fuseki.query(
     `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-    SELECT ?work ?main ?sense ?epoch ?sequence ?context ?contextRevision ?senseRevision ?concept ?cutover WHERE {
+    SELECT ?work ?main ?sense ?epoch ?sequence ?context ?contextRevision ?senseRevision ?concept WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:restoreHold true } }
-      BIND(EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ;
-        rv:commandFamily "statement-cutover-v1" ; rv:outcome rv:Succeeded ;
-        rv:decisionModel <https://rezics.com/vocab/StatementDecisions> } } AS ?cutover)
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ;
           rv:contextRole rv:GlobalClassification ; rv:contextState rv:Active ;
@@ -148,10 +143,9 @@ export async function resolveClassifications(
         !row.context ||
         !row.senseRevision ||
         !row.concept ||
-        !row.cutover ||
         (realm && !row.contextRevision),
     ) ||
-    ['epoch', 'sequence', 'context', 'contextRevision', 'cutover'].some(
+    ['epoch', 'sequence', 'context', 'contextRevision'].some(
       (name) => new Set(baseRows.map((row) => row[name]?.value)).size !== 1,
     )
   ) {
@@ -165,7 +159,6 @@ export async function resolveClassifications(
   ) {
     throw new ClassificationResolutionUnavailable('classification batch position moved');
   }
-  const cutover = target.cutover!.value === 'true';
   const values = inputs.map((row, index) => {
     const basis = targets.get(key(row.work, row.mainVersion, row.sense))!;
     const meaning = statementMeaningKey({
@@ -177,9 +170,7 @@ export async function resolveClassifications(
       applicability: [],
     });
     const slot = (ctx: string) =>
-      cutover
-        ? decisionSlotIri({ kind: 'qualified-fact', meaningKey: meaning }, ctx)
-        : classificationDecisionSlotIri(row.mainVersion, row.sense, ctx);
+      decisionSlotIri({ kind: 'qualified-fact', meaningKey: meaning }, ctx);
     return {
       index,
       main: row.mainVersion,
@@ -194,44 +185,30 @@ export async function resolveClassifications(
     ctx: string,
     slot: string,
     main: string,
-    sense: string,
     meaning: string,
   ) => `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
-    ${
-      cutover
-        ? `${iri(slot)} a rv:DecisionSlot ; rv:targetKind rv:QualifiedFactTarget ;
-      rv:decisionTarget ${iri(meaning)} ; rv:acceptanceContext ${iri(ctx)} .
-      BIND(${iri(slot)} AS ?${name}Application)`
-        : `?${name}Application rv:applicationKey ${iri(slot)} .`
-    }
-    OPTIONAL { ${
-      cutover
-        ? `${iri(slot)} rv:decisionHead ?${name}Decision .`
-        : `?${name}Application a rv:ClassificationApplication ; rv:targetMainVersion ${iri(main)} ;
-      rv:sense ${iri(sense)} ; rv:classificationContext ${iri(ctx)} ; rv:applicationChannel rv:Curated ;
-      rv:applicationState rv:Active ; rv:decisionHead ?${name}Decision .`
-    }
+      FILTER EXISTS { ${iri(slot)} ?presentProperty ?presentValue }
+      BIND(${iri(slot)} AS ?${name}Application)
+    OPTIONAL { ${iri(slot)} rv:decisionHead ?${name}Decision .
       OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
-        ?${name}Decision a ${cutover ? 'rv:StatementDecision' : 'rv:ClassificationDecision'}, rv:RevisionAnchor ;
-          rv:component ${cutover ? iri(slot) : `?${name}Application`} ;
-          ${cutover ? '' : `rv:application ?${name}Application ;`}
-          rv:outcome ?${name}Outcome ; rv:decisionPolicy ${iri(cutover ? STATEMENT_DECISION_PROFILE : CLASSIFICATION_DIRECT_DECISION_PROFILE)} .
-        ${
-          cutover
-            ? `FILTER(?${name}Outcome = rv:Withdrawn || EXISTS { ?${name}Decision rv:support ?support .
+        ?${name}Decision a rv:StatementDecision, rv:RevisionAnchor ;
+          rv:component ${iri(slot)} ;
+          rv:outcome ?${name}Outcome ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} .
+          FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} a rv:DecisionSlot ;
+            rv:targetKind rv:QualifiedFactTarget ; rv:decisionTarget ${iri(meaning)} ;
+            rv:acceptanceContext ${iri(ctx)} } }
+          FILTER(?${name}Outcome = rv:Withdrawn || EXISTS { ?${name}Decision rv:support ?support .
           GRAPH ${iri(GRAPHS.current)} { ?support a <http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement> ;
             rv:statementState rv:Active ; rv:meaningKey ${iri(meaning)} ;
-            <http://www.w3.org/1999/02/22-rdf-syntax-ns#subject> ${iri(main)} } })`
-            : ''
-        }
+            <http://www.w3.org/1999/02/22-rdf-syntax-ns#subject> ${iri(main)} } })
       } }
     }
   } }`;
   const decisionTargets = values
     .map(
       (row) => `{ BIND(${row.index} AS ?index)
-    ${realm ? readSlot('local', context, row.local, row.main, row.sense, row.meaning) : ''}
-    ${readSlot('global', GLOBAL_CLASSIFICATION_CONTEXT, row.global, row.main, row.sense, row.meaning)}
+    ${realm ? readSlot('local', context, row.local, row.main, row.meaning) : ''}
+    ${readSlot('global', GLOBAL_CLASSIFICATION_CONTEXT, row.global, row.main, row.meaning)}
   }`,
     )
     .join(' UNION ');
@@ -244,9 +221,6 @@ export async function resolveClassifications(
       FILTER(?epoch = ${lit(target.epoch!.value)})
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:restoreHold true } }
-      FILTER ${cutover ? 'EXISTS' : 'NOT EXISTS'} { GRAPH ${iri(GRAPHS.receipts)} { ?cutover a rv:OperationReceipt ;
-        rv:commandFamily "statement-cutover-v1" ; rv:outcome rv:Succeeded ;
-        rv:decisionModel <https://rezics.com/vocab/StatementDecisions> . } }
       { ${decisionTargets} }
     } LIMIT ${inputs.length + 1}`,
     CLASSIFICATION_RESOLUTION_COST.responseBytes,
@@ -272,7 +246,7 @@ export async function resolveClassifications(
       [value('localOutcome'), value('globalOutcome')].some(
         (outcome) =>
           outcome &&
-          ![`${RV}Accepted`, `${RV}Rejected`, ...(cutover ? [`${RV}Withdrawn`] : [])].includes(
+          ![`${RV}Accepted`, `${RV}Rejected`, `${RV}Withdrawn`].includes(
             outcome,
           ),
       )
@@ -283,11 +257,6 @@ export async function resolveClassifications(
     const global = !!value('globalDecision') && value('globalOutcome') !== `${RV}Withdrawn`;
     const inherited = !!realm && !local && global;
     const decision = local ? value('localDecision') : global ? value('globalDecision') : undefined;
-    const application = local
-      ? value('localApplication')
-      : global
-        ? value('globalApplication')
-        : undefined;
     const outcome = local ? value('localOutcome') : global ? value('globalOutcome') : undefined;
     return {
       work: input.work,
@@ -310,7 +279,7 @@ export async function resolveClassifications(
             ? ('global' as const)
             : ('none' as const),
       sourceContext: decision ? (local ? context : GLOBAL_CLASSIFICATION_CONTEXT) : null,
-      application: cutover ? null : (application ?? null),
+      application: null,
       decision: decision ?? null,
       policy: realm ? CLASSIFICATION_INHERIT_POLICY : CLASSIFICATION_ISOLATE_POLICY,
       sourcePosition: {

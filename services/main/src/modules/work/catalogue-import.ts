@@ -7,9 +7,11 @@ import { profileRegistry } from '../../../../../packages/model/src/generated/pro
 import { AdmissionConflict, type RegisteredAdmission } from '../access/admission.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
 import { catalogueTitleKey } from '../catalogue-intake/title-keys.ts';
-import { classificationDecisionSlotIri } from '../classification/decision.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_ISOLATE_POLICY } from '../classification/context.ts';
-import { classificationModelRevisions } from '../classification/vocabulary.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
+import { activeDirectDefinitionsGuard } from '../context/definition-state.ts';
+import { CLASSIFIED_AS, STATEMENT_PROFILE, STATEMENT_DECISION_PROFILE,
+  decisionSlotIri, statementMeaningKey, type StatementMeaning } from '../statement/schema.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { discardUnpublishedWorkObjects, stagedWorkObjectCandidates, type StagedWorkObjectCandidates } from './object-gc.ts';
@@ -40,7 +42,7 @@ export const catalogueImportInput = t.Object({
   semanticTypes: t.Array(t.String(), { maxItems: 3, uniqueItems: true }),
   credits: t.Array(t.Object({ agent: native, expectedAgentHead: t.Optional(native),
     role: t.Union([t.Literal('author'), t.Literal('translator'), t.Literal('editor')]) }, closed), { maxItems: 8 }),
-  classifications: t.Array(t.Object({ sense: native, expectedSenseHead: native,
+  classifications: t.Array(t.Object({ concept: native, definition: native,
     expectedDecisionHead: t.Null(), outcome: t.Union([t.Literal('accepted'), t.Literal('rejected')]) }, closed), { maxItems: 8 }),
 }, closed);
 export type CatalogueImportInput = Static<typeof catalogueImportInput>;
@@ -61,7 +63,7 @@ function checked(input: CatalogueImportInput): CatalogueImportInput {
   };
   const tag = canonicalLanguage(input.language);
   if (!tag || new Set(input.credits.map(row => `${row.agent}\0${row.role}`)).size !== input.credits.length
-    || new Set(input.classifications.map(row => row.sense)).size !== input.classifications.length)
+    || new Set(input.classifications.map(row => `${row.concept}\0${row.definition}`)).size !== input.classifications.length)
     throw new InvalidCatalogueImport('Languages and credit/classification slots must be valid and unique');
   const result: CatalogueImportInput = { profile: input.profile, ...(input.work ? { work: input.work } : {}),
     expectedWorkHead: null, title: input.title, language: tag, evidence: input.evidence,
@@ -71,7 +73,7 @@ function checked(input: CatalogueImportInput): CatalogueImportInput {
     semanticTypes: [...input.semanticTypes].sort(),
     credits: input.credits.map(row => ({ agent: row.agent, role: row.role,
       ...(row.expectedAgentHead ? { expectedAgentHead: row.expectedAgentHead } : {}) })),
-    classifications: input.classifications.map(row => ({ sense: row.sense, expectedSenseHead: row.expectedSenseHead,
+    classifications: input.classifications.map(row => ({ concept: row.concept, definition: row.definition,
       expectedDecisionHead: null, outcome: row.outcome })) };
   // Apply the same title and semantic type policy as ordinary creation.
   try { metadataWorkRequestDigest(result.title, result.semanticTypes, result.language, result, true); }
@@ -86,6 +88,7 @@ function identity(admission: string, kind: string): string {
   const digest = hash(`${admission}\0${kind}`).slice(0, 32);
   return `${ID}${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20)}`;
 }
+export { identity as catalogueImportIdentity };
 function validation(profile: keyof typeof profileRegistry, role: string, focus: string[], binding?: Record<string, string>): CommandValidation {
   const pin = profileRegistry[profile];
   const shape = `https://rezics.com/definition/${profile}/${role}-shape`;
@@ -93,7 +96,7 @@ function validation(profile: keyof typeof profileRegistry, role: string, focus: 
   return { profile, sha256: pin.sha256, shape, focus, graphs: [GRAPHS.current, GRAPHS.revisions],
     ...(binding ? { binding } : {}) };
 }
-async function prepare(env: WorkActivationEnvironment, admission: RegisteredAdmission, input: CatalogueImportInput, candidates: StagedWorkObjectCandidates[], agentHeads: Map<string, string>, files?: WorkFileStaging): Promise<CatalogueBulkEnvelope> {
+export async function prepareCatalogueImport(env: WorkActivationEnvironment, admission: RegisteredAdmission, input: CatalogueImportInput, candidates: StagedWorkObjectCandidates[], agentHeads: Map<string, string>, files?: WorkFileStaging): Promise<CatalogueBulkEnvelope> {
   const receipt = workReceiptIri(admission.id), work = input.work ?? identity(admission.id, 'work');
   const main = identity(admission.id, 'main'), revision = identity(admission.id, 'work-revision');
   const mainRevision = identity(admission.id, 'main-revision'), operation = identity(admission.id, 'operation');
@@ -104,8 +107,6 @@ async function prepare(env: WorkActivationEnvironment, admission: RegisteredAdmi
       : env.workObjects ? prepareWorkComponentWithCandidates(env.workObjects, component, state, staged, profile)
       : prepareComponentWithCandidates(env.objectDirectory, component, state, staged, profile);
   };
-  const workManifest = await manifest(work, { mainVersion: main, continuityProfile: CONTINUITY,
-    ...input });
   const mainManifest = await manifest(main, { work, hostingPolicy: 'metadata-only' });
   const validations: CommandValidation[] = [
     validation('work-metadata-v1', 'work', [work]),
@@ -134,28 +135,55 @@ async function prepare(env: WorkActivationEnvironment, admission: RegisteredAdmi
     validations.push(validation('native-agent-credit-v1', 'credit', [id]), validation('native-agent-credit-v1', 'revision', [head]));
   }
   for (const [index, row] of input.classifications.entries()) {
-    const application = identity(admission.id, `application:${index}`), decision = identity(admission.id, `decision:${index}`);
-    const slot = classificationDecisionSlotIri(main, row.sense, GLOBAL_CLASSIFICATION_CONTEXT);
-    const classificationProfile = 'https://rezics.com/definition/classification-direct-decision-v1';
-    const classificationManifest = await manifest(application, { work, mainVersion: main,
-      sense: row.sense, senseRevision: row.expectedSenseHead, context: GLOBAL_CLASSIFICATION_CONTEXT,
-      proposer: admission.actingSubject, decider: admission.actingSubject, outcome: row.outcome,
-      application, decision, slot, predecessor: null, policy: classificationProfile }, classificationProfile);
-    current.push(`${iri(application)} a rv:ClassificationApplication ; rv:targetMainVersion ${iri(main)} ; rv:sense ${iri(row.sense)} ; rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:applicationChannel rv:Curated ; rv:applicationState rv:Active ; rv:applicationKey ${iri(slot)} ; rv:proposer ${iri(admission.actingSubject)} ; rv:decisionHead ${iri(decision)} .`);
-    revisions.push(`${iri(decision)} a rv:ClassificationDecision, rv:RevisionAnchor ; rv:component ${iri(application)} ; rv:application ${iri(application)} ; rv:operation ${iri(operation)} ; rv:outcome rv:${row.outcome === 'accepted' ? 'Accepted' : 'Rejected'} ; rv:decisionBasis rv:GlobalCuratorReview ; rv:decidedBy ${iri(admission.actingSubject)} ; rv:decisionPolicy ${iri(classificationProfile)} ; rv:manifest ${iri(`urn:rezics:sha256:${classificationManifest}`)} ; rv:modelRevision ${iri(classificationProfile)} ; rv:shapeRevision ${iri(classificationProfile)} ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .`);
-    const binding = { work, main, sense: row.sense, 'sense-revision': row.expectedSenseHead,
-      context: GLOBAL_CLASSIFICATION_CONTEXT, 'context-kind': 'global', application, decision, slot,
-      proposer: admission.actingSubject, decider: admission.actingSubject, outcome: row.outcome };
-    for (const [role, focus] of Object.entries({ work, main, sense: row.sense, context: GLOBAL_CLASSIFICATION_CONTEXT, application, decision }))
-      validations.push(validation('classification-direct-decision-v1', role, [focus], binding));
-    guards.push(`GRAPH ${iri(GRAPHS.current)} { ${iri(row.sense)} a rv:ClassificationSense ; rv:senseState rv:Active ; rv:interpretationScope ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:head ${iri(row.expectedSenseHead)} .
+    const statement = identity(admission.id, `statement:${index}`);
+    const head = identity(admission.id, `statement-revision:${index}`);
+    const decision = identity(admission.id, `decision:${index}`);
+    const meaning: StatementMeaning = { subject: main, predicate: CLASSIFIED_AS,
+      relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE, interpretationDefinitions: [row.definition],
+      value: { kind: 'resource', iri: row.concept }, applicability: [] };
+    const meaningKey = statementMeaningKey(meaning);
+    const target = { kind: 'qualified-fact' as const, meaningKey };
+    const slot = decisionSlotIri(target, GLOBAL_CLASSIFICATION_CONTEXT);
+    const statementManifest = await manifest(statement, { revision: head, meaning, meaningKey,
+      speaker: admission.actingSubject, semanticContextRevision: null, state: 'active', evidence: [],
+      recordedBy: admission.actingSubject }, STATEMENT_PROFILE);
+    const decisionManifest = await manifest(slot, { decision, target, support: [statement],
+      acceptanceContext: GLOBAL_CLASSIFICATION_CONTEXT, contextRevision: null, predecessor: null,
+      outcome: row.outcome, basis: 'GlobalCuratorReview', decidedBy: admission.actingSubject,
+      targetRevision: null }, STATEMENT_DECISION_PROFILE);
+    current.push(`${iri(statement)} a rdf:Statement ; rdf:subject ${iri(main)} ; rdf:predicate <${CLASSIFIED_AS}> ;
+      rdf:object ${iri(row.concept)} ; rv:relationDefinition ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
+      rv:interpretationDefinition ${iri(row.definition)} ; rv:speaker ${iri(admission.actingSubject)} ;
+      rv:meaningKey ${iri(meaningKey)} ; rv:statementState rv:Active ; rv:head ${iri(head)} .
+      ${iri(slot)} a rv:DecisionSlot ; rv:targetKind rv:QualifiedFactTarget ; rv:decisionTarget ${iri(meaningKey)} ;
+      rv:acceptanceContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:decisionHead ${iri(decision)} .`);
+    revisions.push(`${iri(head)} a rv:StatementRevision, rv:RevisionAnchor ; rv:component ${iri(statement)} ;
+      rv:statementState rv:Active ; rv:recordedBy ${iri(admission.actingSubject)} ; rv:operation ${iri(operation)} ;
+      rv:manifest ${iri(`urn:rezics:sha256:${statementManifest}`)} ; rv:modelRevision ${iri(STATEMENT_PROFILE)} ;
+      rv:shapeRevision ${iri(STATEMENT_PROFILE)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+      ${iri(decision)} a rv:StatementDecision, rv:RevisionAnchor ; rv:component ${iri(slot)} ; rv:operation ${iri(operation)} ;
+      rv:outcome rv:${row.outcome === 'accepted' ? 'Accepted' : 'Rejected'} ; rv:decisionBasis rv:GlobalCuratorReview ;
+      rv:decidedBy ${iri(admission.actingSubject)} ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
+      rv:support ${iri(statement)} ; rv:manifest ${iri(`urn:rezics:sha256:${decisionManifest}`)} ;
+      rv:modelRevision ${iri(STATEMENT_DECISION_PROFILE)} ; rv:shapeRevision ${iri(STATEMENT_DECISION_PROFILE)} ;
+      rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .`);
+    validations.push(validation('statement-v1', 'statement', [statement]), validation('statement-v1', 'revision', [head]),
+      validation('statement-decision-v1', 'slot', [slot]), validation('statement-decision-v1', 'decision', [decision]));
+    guards.push(`GRAPH ${iri(GRAPHS.current)} { ${iri(row.concept)} a <http://www.w3.org/2004/02/skos/core#Concept> .
       ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} a rv:ClassificationContext ; rv:contextState rv:Active ; rv:contextRole rv:GlobalClassification ; rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
       FILTER NOT EXISTS { ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:realm ?realm }
       FILTER NOT EXISTS { ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:fallbackContext ?fallback } }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(row.expectedSenseHead)} a rv:RevisionAnchor ; rv:component ${iri(row.sense)} ; rv:modelRevision ?senseModel${index} . ${classificationModelRevisions(`?senseModel${index}`)} }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?occupied${index} rv:applicationKey ${iri(slot)} } }`);
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(row.definition)} a rv:RevisionAnchor . }
+      ${activeDirectDefinitionsGuard([CLASSIFICATION_PROPOSITION_PROFILE, row.definition])}
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} ?occupied${index} ?value${index} } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} ?sp${index} ?sv${index} } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} ?hp${index} ?hv${index} } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?dp${index} ?dv${index} } }`);
   }
   const expiryGuard = `FILTER(NOW() < ${lit(admission.expiresAt)}^^<http://www.w3.org/2001/XMLSchema#dateTime>)`;
+  const workManifest = await manifest(work, { mainVersion: main, continuityProfile: CONTINUITY,
+    ...input, creditHeads: Object.fromEntries(input.credits.map((credit,index) => [credit.agent,
+      credit.expectedAgentHead ?? agentHeads.get(credit.agent) ?? identity(admission.id, `absent-agent:${index}`)])) });
   const commonGuard = `GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
@@ -165,6 +193,7 @@ async function prepare(env: WorkActivationEnvironment, admission: RegisteredAdmi
   const names = [...input.aliases, ...(input.localizedTitle ? [input.localizedTitle] : [])];
   const envelope: CatalogueBulkEnvelope = { receipt, digest: admission.requestDigest, deadlineMs: CATALOGUE_IMPORT_COST.deadlineMs, validations,
     update: `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
     DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
@@ -266,7 +295,7 @@ export async function importCatalogueWorks(deps: MainWorkDependencies, request: 
   for (let start = 0; start < pendingPreparation.length; start += 4) {
     const results = await Promise.allSettled(pendingPreparation.slice(start, start + 4).map(async ({ index, admission, input }) => {
     const candidates: StagedWorkObjectCandidates[] = [];
-    try { prepared.push({ index, admission, envelope: await prepare(deps.environment, admission, input, candidates, agentHeads, files), candidates }); }
+    try { prepared.push({ index, admission, envelope: await prepareCatalogueImport(deps.environment, admission, input, candidates, agentHeads, files), candidates }); }
     catch (error) {
       // Deterministic same-key objects may be shared with another in-flight
       // writer. Only a durable cancellation makes their deletion safe.

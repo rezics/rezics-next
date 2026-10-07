@@ -10,12 +10,10 @@ import { createAdmittedClassificationProposition }
   from '../modules/classification/proposition-admitted.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../modules/classification/proposition.ts';
 import { defineAdmittedVocabularyConcept, InvalidVocabularyInput } from '../modules/classification/vocabulary.ts';
-import { setAdmittedClassificationDecision } from '../modules/classification/decision-admitted.ts';
-import { statementCutoverActive } from '../modules/statement/migrate-v1.ts';
 import { resolveClassification } from '../modules/classification/resolve.ts';
 import { pendingOperation } from '../api-contract.ts';
 import { classificationContextReadResult, classificationContextWriteResult,
-  classificationDecisionWriteResult, classificationPropositionReadResult,
+  classificationPropositionReadResult,
   classificationPropositionWriteResult, classificationResolutionResult, readProblems,
   writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -34,7 +32,6 @@ export const openApiOperations = {
   '/v1/classification-contexts': { post: { exposure: 'public' } },
   '/v1/classification-propositions/{sense}': { get: { exposure: 'public' } },
   '/v1/classification-propositions': { post: { exposure: 'public' } },
-  '/v1/classification-decisions': { post: { exposure: 'public' } },
   '/v1/classification-resolutions': { post: { exposure: 'public' } },
 } as const;
 
@@ -133,50 +130,6 @@ export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDepende
           { context: body.context, work: body.work,
             mainVersion: body.mainVersion, sense: body.sense });
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return commandError(error); }
-    })
-    .post('/v1/classification-decisions', {
-      body: t.Object({ profile: t.Literal('classification-direct-decision-v1'),
-        context: t.Union([
-          t.Object({ kind: t.Literal('global') }, { additionalProperties: false }),
-          t.Object({ kind: t.Literal('realm-classification'),
-            id: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-          }, { additionalProperties: false }),
-        ]),
-        work: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-        mainVersion: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-        sense: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-        expectedDecisionHead: t.Nullable(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' })),
-        outcome: t.Union([t.Literal('accepted'), t.Literal('rejected')]),
-        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }),
-      response: { 200: classificationDecisionWriteResult,
-        201: classificationDecisionWriteResult, 202: pendingOperation,
-        410: t.Object({ type: t.String(), status: t.Literal(410), code: t.String(), title: t.String() }),
-        ...writeProblems },
-    }, async ({ request, body }) => {
-      const idempotencyKey = request.headers.get('idempotency-key');
-      if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
-        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key header is required');
-      }
-      try {
-        if (await statementCutoverActive(work.environment)) {
-          return problem(410, 'classification_decision_retired', 'Use Statement decisions');
-        }
-        const receipt = await setAdmittedClassificationDecision(work.environment,
-          work.account, work.access, request, { context: body.context,
-            work: body.work, mainVersion: body.mainVersion, sense: body.sense,
-            expectedDecisionHead: body.expectedDecisionHead, outcome: body.outcome,
-            actingSubject: body.actingSubject, idempotencyKey });
-        return Response.json({ application: receipt.application, decision: receipt.decision,
-          decisionOutcome: receipt.decisionOutcome, context: receipt.context,
-          realm: receipt.realm ?? null, contextRevision: receipt.contextRevision ?? null,
-          work: receipt.work, mainVersion: receipt.mainVersion, sense: receipt.sense,
-          expectedDecisionHead: receipt.expectedHead, profile: 'classification-direct-decision-v1',
-          sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
-            sequence: receipt.sequence }, replayed: receipt.replayed }, {
-          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
-        });
       } catch (error) { return commandError(error); }
     })
     .post('/v1/classification-propositions', {

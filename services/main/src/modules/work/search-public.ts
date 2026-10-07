@@ -8,8 +8,6 @@ import { assertPublicTextReady, assertSameTextInstance, assertSnapshotMoved,
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { classificationModelRevisions } from '../classification/vocabulary.ts';
-import { CLASSIFICATION_DIRECT_DECISION_PROFILE, classificationDecisionSlotIri }
-  from '../classification/decision.ts';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE, decisionSlotIri,
@@ -360,7 +358,7 @@ async function assertClassificationQueryScope(env: WorkActivationEnvironment,
   position: { dataEpoch: string; sequence: string; generation: string }) {
   if (!nativeId.test(sense)) throw new InvalidPublicQuery('invalid classification Sense');
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?context
-    ?senseRevision ?concept ?cutover WHERE {
+    ?senseRevision ?concept WHERE {
     GRAPH ${iri(GRAPHS.control)} {
       ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
     FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
@@ -391,14 +389,11 @@ async function assertClassificationQueryScope(env: WorkActivationEnvironment,
         rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')}
       ${realm ? `?contextRevision a rv:RevisionAnchor ; rv:component ?context .` : ''}
     }
-    BIND(EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ?cutoverReceipt a rv:OperationReceipt ;
-      rv:commandFamily "statement-cutover-v1" ; rv:outcome rv:Succeeded ;
-      rv:decisionModel <https://rezics.com/vocab/StatementDecisions> . } } AS ?cutover)
   }`, MAX_SEARCH_RESPONSE_BYTES);
   const rows = result.results?.bindings ?? [];
   if (rows.length !== 1 || rows[0]?.epoch?.value !== position.dataEpoch
     || rows[0]?.sequence?.value !== position.sequence || !rows[0]?.context
-    || !rows[0]?.senseRevision || !rows[0]?.concept || !rows[0]?.cutover) {
+    || !rows[0]?.senseRevision || !rows[0]?.concept) {
     if (rows.length === 0) await assertSnapshotMoved(env.fuseki, position);
     if (rows.length === 1 && rows[0]?.epoch?.value === position.dataEpoch
       && rows[0]?.sequence?.value !== position.sequence) {
@@ -407,7 +402,7 @@ async function assertClassificationQueryScope(env: WorkActivationEnvironment,
     throw new PublicQueryUnavailable('classification scope is unavailable at query position');
   }
   return { context: rows[0].context.value, senseRevision: rows[0].senseRevision.value,
-    concept: rows[0].concept.value, cutover: rows[0].cutover.value === 'true' };
+    concept: rows[0].concept.value };
 }
 
 /** Bounded complete phrase results filtered by current direct classification. */
@@ -418,114 +413,10 @@ async function qualifyPublicPhrase<T extends { results: Array<{ work: string; ma
 ) {
   const scope = await assertClassificationQueryScope(env, sense, realm,
     { ...base.sourcePosition, generation: base.indexGeneration });
-  if (scope.cutover) return qualifyStatementPhrase(env, base, sense, realm, scope);
-  const context = scope.context;
-  const unique = new Map(base.results.map(match => [match.mainVersion, match.work]));
-  if (unique.size > MAX_CLASSIFICATION_CANDIDATES) {
-    throw new PublicQueryBudgetExceeded('classification candidates exceed batched decision budget');
-  }
-  const decisions = new Map<string, { state: 'accepted' | 'rejected' | 'absent';
-    decision: string | null; application: string | null;
-    source: 'local' | 'inherited-global' | 'global' | 'none'; sourceContext: string | null }>();
-  if (unique.size > 0) {
-    const values = Array.from(unique, ([main, work]) => {
-      const global = classificationDecisionSlotIri(main, sense, GLOBAL_CLASSIFICATION_CONTEXT);
-      const local = realm ? ` ${iri(classificationDecisionSlotIri(main, sense, context))}` : '';
-      return `(${iri(work)} ${iri(main)} ${iri(global)}${local})`;
-    }).join('\n');
-    const result = await env.fuseki.query(`PREFIX rv: <${RV}>
-      PREFIX schema: <https://schema.org/>
-      SELECT ?epoch ?sequence ?main ?localApplication ?localDecision ?localOutcome
-        ?globalApplication ?globalDecision ?globalOutcome WHERE {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
-        FILTER(?epoch = ${lit(base.sourcePosition.dataEpoch)})
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-        VALUES (?work ?main ?globalSlot ${realm ? '?localSlot' : ''}) { ${values} }
-        GRAPH ${iri(GRAPHS.current)} {
-          ?work a schema:CreativeWork ; rv:mainVersion ?main .
-          ?main a rv:MainVersion ; rv:work ?work .
-        }
-        ${realm ? `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
-          ?localApplication rv:applicationKey ?localSlot .
-          OPTIONAL { ?localApplication a rv:ClassificationApplication ;
-            rv:targetMainVersion ?main ; rv:sense ${iri(sense)} ;
-            rv:classificationContext ${iri(context)} ; rv:applicationChannel rv:Curated ;
-            rv:applicationState rv:Active ; rv:decisionHead ?localDecision .
-            OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
-              ?localDecision a rv:ClassificationDecision, rv:RevisionAnchor ;
-                rv:component ?localApplication ; rv:application ?localApplication ;
-                rv:outcome ?localOutcome ;
-                rv:decisionPolicy ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} .
-            } }
-          }
-        } }` : ''}
-        OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
-          ?globalApplication rv:applicationKey ?globalSlot .
-          OPTIONAL { ?globalApplication a rv:ClassificationApplication ;
-            rv:targetMainVersion ?main ; rv:sense ${iri(sense)} ;
-            rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
-            rv:applicationChannel rv:Curated ; rv:applicationState rv:Active ;
-            rv:decisionHead ?globalDecision .
-            OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
-              ?globalDecision a rv:ClassificationDecision, rv:RevisionAnchor ;
-                rv:component ?globalApplication ; rv:application ?globalApplication ;
-                rv:outcome ?globalOutcome ;
-                rv:decisionPolicy ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} .
-            } }
-          }
-        } }
-      }`, MAX_SEARCH_RESPONSE_BYTES);
-    const rows = result.results?.bindings ?? [];
-    if (rows.length > 0 && rows.every(row => row.epoch?.value === base.sourcePosition.dataEpoch
-      && row.sequence?.value === rows[0]?.sequence?.value)
-      && rows[0]?.sequence?.value !== base.sourcePosition.sequence) {
-      throw new SearchSnapshotMoved('classification batch crossed graph positions');
-    }
-    if (rows.length !== unique.size) {
-      throw new PublicQueryUnavailable('classification batch is incomplete or ambiguous');
-    }
-    for (const row of rows) {
-      const value = (key: string) => row[key]?.value;
-      const main = value('main');
-      if (!main || !unique.has(main) || decisions.has(main)
-        || value('epoch') !== base.sourcePosition.dataEpoch
-        || value('sequence') !== base.sourcePosition.sequence
-        || (value('globalApplication') && (!value('globalDecision') || !value('globalOutcome')))
-        || (value('localApplication') && (!value('localDecision') || !value('localOutcome')))
-        || [value('localOutcome'), value('globalOutcome')].some(outcome => outcome
-          && ![`${RV}Accepted`, `${RV}Rejected`].includes(outcome))) {
-        throw new PublicQueryUnavailable('classification batch changed or is incomplete');
-      }
-      const local = !!realm && !!value('localDecision');
-      const global = !!value('globalDecision');
-      const outcome = local ? value('localOutcome') : value('globalOutcome');
-      decisions.set(main, { state: outcome === `${RV}Accepted` ? 'accepted'
-        : outcome === `${RV}Rejected` ? 'rejected' : 'absent',
-      decision: local ? value('localDecision')! : value('globalDecision') ?? null,
-      application: local ? value('localApplication')! : value('globalApplication') ?? null,
-      source: local ? 'local' : realm && global ? 'inherited-global' : global ? 'global' : 'none',
-      sourceContext: local ? context : global ? GLOBAL_CLASSIFICATION_CONTEXT : null });
-    }
-  }
-  const results = base.results.flatMap(match => {
-    const effective = decisions.get(match.mainVersion);
-    if (!effective) throw new PublicQueryUnavailable('classification decision is missing');
-    return effective.state === 'accepted' ? [{ ...match, classification: {
-      sense, decision: effective.decision, application: effective.application,
-      source: effective.source, sourceContext: effective.sourceContext } }] : [];
-  });
-  const after = await assertPublicTextReady(env.fuseki, env.lineage);
-  if (after.dataEpoch !== base.sourcePosition.dataEpoch
-    || after.sequence !== base.sourcePosition.sequence
-    || after.generation !== base.indexGeneration) {
-    throw new SearchSnapshotMoved('classification changed during public query');
-  }
-  return { ...base, profile: realm ? 'public-realm-classified-phrase-v1' as const
-    : 'public-main-classified-phrase-v1' as const,
-    classificationSense: sense, total: results.length, results };
+  return qualifyStatementPhrase(env, base, sense, realm, scope);
 }
 
-/** After the receipt fence, search reads only Statement qualified-fact decisions. */
+/** Search reads only Statement qualified-fact decisions. */
 async function qualifyStatementPhrase<T extends { results: Array<{ work: string; mainVersion: string }>;
   sourcePosition: { dataEpoch: string; sequence: string };
   indexGeneration: string; total: number }>(env: WorkActivationEnvironment, base: T,
@@ -550,14 +441,19 @@ async function qualifyStatementPhrase<T extends { results: Array<{ work: string;
       return `(${iri(work)} ${iri(main)} ${iri(key)} ${iri(global)}${local})`;
     }).join('\n');
     const decisionRead = (name: 'local' | 'global', slot: string) => `OPTIONAL {
-      GRAPH ${iri(GRAPHS.current)} { ${slot} a rv:DecisionSlot ;
-        rv:targetKind rv:QualifiedFactTarget ; rv:decisionTarget ?key .
+      GRAPH ${iri(GRAPHS.current)} {
+        VALUES (?work ?main ?key ?globalSlot ${realm ? '?localSlot' : ''}) { ${values} }
+        FILTER EXISTS { ${slot} ?presentProperty ?presentValue }
         BIND(${slot} AS ?${name}Found)
         OPTIONAL { ${slot} rv:decisionHead ?${name}Decision .
           OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} {
+            VALUES (?work ?main ?key ?globalSlot ${realm ? '?localSlot' : ''}) { ${values} }
             ?${name}Decision a rv:StatementDecision, rv:RevisionAnchor ;
               rv:component ${slot} ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
               rv:outcome ?${name}Outcome .
+            FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ${slot} a rv:DecisionSlot ;
+              rv:targetKind rv:QualifiedFactTarget ; rv:decisionTarget ?key ;
+              rv:acceptanceContext ${iri(name === 'local' ? scope.context : GLOBAL_CLASSIFICATION_CONTEXT)} } }
             FILTER(?${name}Outcome = rv:Withdrawn || EXISTS {
               ?${name}Decision rv:support ?support . GRAPH ${iri(GRAPHS.current)} {
                 ?support a <http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement> ;
@@ -571,9 +467,6 @@ async function qualifyStatementPhrase<T extends { results: Array<{ work: string;
         ?globalFound ?globalDecision ?globalOutcome WHERE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
         FILTER(?epoch = ${lit(base.sourcePosition.dataEpoch)})
-        GRAPH ${iri(GRAPHS.receipts)} { ?cutover a rv:OperationReceipt ;
-          rv:commandFamily "statement-cutover-v1" ; rv:outcome rv:Succeeded ;
-          rv:decisionModel <https://rezics.com/vocab/StatementDecisions> . }
         VALUES (?work ?main ?key ?globalSlot ${realm ? '?localSlot' : ''}) { ${values} }
         GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork ; rv:mainVersion ?main .
           ?main a rv:MainVersion ; rv:work ?work . }

@@ -72,10 +72,6 @@ const EVENT_TYPES: Record<string, { committed: string; stale: string; cancelled:
     cancelled: 'StatementWithdrawalCancelledEvent' },
   'statement-decision-v1': { committed: 'StatementDecisionChangedEvent',
     stale: 'StatementDecisionStaleEvent', cancelled: 'StatementDecisionCancelledEvent' },
-  'statement-migrate-v1': { committed: 'StatementMigratedEvent',
-    stale: 'StatementMigrationStaleEvent', cancelled: 'StatementMigrationCancelledEvent' },
-  'statement-cutover-v1': { committed: 'StatementCutoverEvent',
-    stale: 'StatementCutoverStaleEvent', cancelled: 'StatementCutoverCancelledEvent' },
   'projection-create-v1': { committed: 'ProjectionCreatedEvent', stale: 'ProjectionCreateStaleEvent',
     cancelled: 'ProjectionCreateCancelledEvent' },
 };

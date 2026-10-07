@@ -80,8 +80,7 @@ export async function seedQueryCatalogue(input: {
         expectedWorkHead: null, title: `Catalogue common Work ${index}`, language: index % 20 === 0 ? 'ja' : 'en',
         evidence: 'G1032 deterministic catalogue scope fixture', aliases: [], semanticTypes: [],
         credits: [{ agent: input.actingSubject, role: 'author' as const }],
-        classifications: queryCatalogueTopics(index, input.vocabulary).map(topic => ({ sense: definitions[topic]!.sense,
-          expectedSenseHead: definitions[topic]!.definitionRevision, expectedDecisionHead: null, outcome: 'accepted' as const })) } };
+        classifications: queryCatalogueTopics(index, input.vocabulary).map(topic => ({ concept: definitions[topic]!.concept, definition: definitions[topic]!.definitionRevision, expectedDecisionHead: null, outcome: 'accepted' as const })) } };
     });
     const rows = await seedCatalogueProfileWorks(input.api, input.actingSubject, items, input.signal);
     works.push(...rows.map((row, index) => ({ ...row, language: items[index]!.input.language })));

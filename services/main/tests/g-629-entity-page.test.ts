@@ -139,7 +139,7 @@ test('G-629: read contracts expose optional bearer, fixed projection profile and
     '/v1/resources/{resource}/statements': { get: { exposure: 'public', bearer: false } },
   });
   expect(SUBJECT_STATEMENT_COST.inventoryQueriesPerBatch).toBe(2);
-  expect(Number(SUBJECT_STATEMENT_COST.candidates)).toBe(SUBJECT_STATEMENT_COST.pageSize + 1);
+  expect(Number(SUBJECT_STATEMENT_COST.candidates)).toBe(SUBJECT_STATEMENT_COST.pageSize);
   const inherited = acceptedStatementPattern(id(10), true);
   expect(inherited).toContain('rv:Withdrawn');
   expect(inherited).toContain('rv:QualifiedFactTarget');

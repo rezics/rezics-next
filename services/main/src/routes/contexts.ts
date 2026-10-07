@@ -31,8 +31,6 @@ import { recordStatement, recordStatementRequest, setStatementDecision, statemen
   statementInterpretation, STATEMENT_FAMILIES, type RecordStatementInput } from '../modules/statement/graph.ts';
 import { resolveVisibleTargets, targetRead, targetSummaries } from '../modules/target/resolve.ts';
 import { StatementNotFound, readStatement, resolveStatementAcceptance } from '../modules/statement/read.ts';
-import { CUTOVER_FAMILY, MIGRATION_FAMILY, cutoverRequest, cutoverV1Decisions,
-  migrateV1Decision, migrationRequest } from '../modules/statement/migrate-v1.ts';
 import { InvalidStatementSchemaInput } from '../modules/statement/schema.ts';
 import { GRAPHS, RV, iri } from '../modules/work/activate.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
@@ -64,9 +62,6 @@ export const openApiOperations = {
   '/v1/statements/{id}/withdrawals': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/statement-decisions': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/statement-resolutions': { post: { exposure: 'public',} },
-  '/v1/statement-migrations/v1/pending': { get: { exposure: 'platform:platform-admin', bearer: true } },
-  '/v1/statement-migrations/v1/{id}': { post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
-  '/v1/statement-migrations/v1/cutover': { post: { exposure: 'platform:platform-admin', bearer: true, idempotencyKey: true } },
 } as const;
 
 /** Main wiring supplies the Access-backed private selection store beside the shared dependencies. */
@@ -234,11 +229,6 @@ const statementReadResponse = t.Object({ profile: t.Literal('statement-v1'), sta
 const decisionWriteResponse = t.Object({ profile: t.Literal('statement-decision-v1'),
   slot: ref, decision: ref, outcome: t.Union([t.Literal('accepted'), t.Literal('rejected'),
     t.Literal('withdrawn')]), ...writtenFields });
-const migrationWriteResponse = t.Object({ profile: t.Literal('statement-migration-v1'),
-  application: ref, slot: ref, decision: ref, ...writtenFields });
-const cutoverWriteResponse = t.Object({ profile: t.Literal('statement-cutover-v1'), ...writtenFields });
-const pendingMigrationResponse = t.Object({ profile: t.Literal('statement-migration-v1'),
-  pending: t.Array(t.Object({ application: ref, decision: ref })), complete: t.Boolean() });
 const decisionTarget = t.Union([t.Object({ kind: t.Literal('statement'), statement: ref }),
   t.Object({ kind: t.Literal('qualified-fact'), meaningKey: ref })]);
 const acceptanceResult = t.Union([
@@ -806,63 +796,6 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           idempotencyKey: key, execute: admission => withdrawStatement(env, admission, input) });
         return written(receipt, { profile: 'statement-v1', statement: input.statement,
           state: 'withdrawn' });
-      } catch (error) { return contextError(error); }
-    })
-    .get('/v1/statement-migrations/v1/pending', {
-      response: { 200: pendingMigrationResponse, ...graphReadResponses },
-    }, async ({ request }) => {
-      try {
-        await work.account.verify(request, ['statement:decide']);
-        await assertGraphAdmissionOpen(fuseki, env.lineage);
-        const rows = (await fuseki.query(`PREFIX rv: <${RV}>
-          SELECT ?application ?decision WHERE { GRAPH ${iri(GRAPHS.current)} {
-            ?application a rv:ClassificationApplication ; rv:decisionHead ?decision .
-            FILTER NOT EXISTS { ?statement a <http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement> ;
-              rv:migratedFrom ?application ; rv:meaningKey ?key .
-              ?slot a rv:DecisionSlot ; rv:decisionTarget ?key .
-              GRAPH ${iri(GRAPHS.revisions)} { ?converted a rv:StatementDecision ;
-                rv:component ?slot ; rv:convertedFrom ?decision ; rv:support ?statement . } }
-          } } ORDER BY ?application LIMIT 101`)).results?.bindings ?? [];
-        return Response.json({ profile: 'statement-migration-v1',
-          pending: rows.slice(0, 100).map(row => ({ application: row.application!.value,
-            decision: row.decision!.value })), complete: rows.length === 0 }, { headers: noStore });
-      } catch (error) { return readError(error); }
-    })
-    .post('/v1/statement-migrations/v1/cutover', {
-      body: t.Object({ profile: t.Literal('statement-cutover-v1'), actingSubject: native },
-        { additionalProperties: false }),
-      response: { 200: cutoverWriteResponse, 201: cutoverWriteResponse, ...graphWriteResponses },
-    }, async ({ request, body }) => {
-      const key = idempotencyKey(request);
-      if (key instanceof Response) return key;
-      try {
-        const plan = cutoverRequest(body.actingSubject);
-        const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
-          family: CUTOVER_FAMILY, oauthScope: 'statement:decide', scope: plan.scope,
-          action: plan.action, actingSubject: body.actingSubject, digest: plan.digest,
-          input: body, idempotencyKey: key,
-          execute: admission => cutoverV1Decisions(env, admission, body.actingSubject) });
-        return written(receipt, { profile: 'statement-cutover-v1' });
-      } catch (error) { return contextError(error); }
-    })
-    .post('/v1/statement-migrations/v1/:id', {
-      params: t.Object({ id: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      body: t.Object({ profile: t.Literal('statement-migration-v1'),
-        expectedDecision: native, actingSubject: native }, { additionalProperties: false }),
-      response: { 200: migrationWriteResponse, 201: migrationWriteResponse, ...graphWriteResponses },
-    }, async ({ request, params, body }) => {
-      const key = idempotencyKey(request);
-      if (key instanceof Response) return key;
-      try {
-        const application = `https://rezics.com/id/${params.id}`;
-        const input = { application, expectedDecision: body.expectedDecision, actingSubject: body.actingSubject };
-        const plan = migrationRequest(application, body.expectedDecision, body.actingSubject);
-        const receipt = await runAdmittedCommand(env, work.account, work.access, request, {
-          family: MIGRATION_FAMILY, oauthScope: 'statement:decide', scope: plan.scope,
-          action: plan.action, actingSubject: body.actingSubject, digest: plan.digest,
-          input, idempotencyKey: key, execute: admission => migrateV1Decision(env, admission, input) });
-        return written(receipt, { profile: 'statement-migration-v1', application,
-          slot: receipt.component, decision: receipt.revision });
       } catch (error) { return contextError(error); }
     })
     .post('/v1/statement-decisions', {

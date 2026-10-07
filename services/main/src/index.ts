@@ -197,6 +197,7 @@ import { EventTemporalQueries } from './modules/event/queries.ts';
 import { PrivateContextSelections } from './modules/context/private-selection.ts';
 import { mainConfig } from './config.ts';
 import { WorkMaintainers } from './modules/work/maintainers.ts';
+import { StatementSeek, StatementSeekWorker } from './modules/statement/seek.ts';
 
 const config = mainConfig();
 const fusekiUrl = config.FUSEKI_URL;
@@ -415,6 +416,7 @@ const libraryImport = new ReaderLibraryImportStore(contentPool, {
   acquisitionsPerDay: config.MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY,
 });
 const app = createMainApp(fuseki, {
+  statementSeek: new StatementSeek(pool, environment),
   mcp: { issuer: config.ACCOUNT_ISSUER, resource: config.ACCOUNT_MAIN_RESOURCE },
   wikiQuotations: new WikiQuotationStore(contentPool),
   wikiEvidence: new WikiEvidenceStore(contentPool),
@@ -639,11 +641,14 @@ notificationDigestWorker.start();
 notificationDeliveryWorker?.start();
 
 let stopping = false;
+const statementSeekWorker = new StatementSeekWorker(new StatementSeek(pool, environment));
+statementSeekWorker.start();
 async function stop(): Promise<void> {
   if (stopping) return;
   stopping = true;
   try {
   await occurrenceLabelWorker.stop();
+  await statementSeekWorker.stop();
   await realmPolicyRecovery.stop();
   await libraryImportRetentionWorker.stop();
   await mediaScreenWorker.stop();

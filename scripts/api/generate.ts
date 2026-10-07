@@ -14,7 +14,7 @@ const commands = [
   '/v1/content-comments',
   '/v1/content-publications', '/v1/content-search-eligibility',
   '/v1/rating-observations', '/v1/rating-contexts',
-  '/v1/rating-contexts/{id}/policy-revisions', '/v1/classification-decisions',
+  '/v1/rating-contexts/{id}/policy-revisions',
   '/v1/classification-propositions', '/v1/classification-contexts', '/v1/spaces',
   '/v1/publication-selections', '/v1/publication-rejections',
   '/v1/contribution-publications', '/v1/contribution-edits', '/v1/contributions',

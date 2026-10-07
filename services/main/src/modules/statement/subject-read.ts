@@ -10,7 +10,7 @@ import { isStructuralProperty } from '../entity-page/structural-properties.ts';
 import { visibleResourceReferences } from '../entity-page/read.ts';
 import { readCurrentComponent } from '../semantic/change.ts';
 import { resolveTargets } from '../target/resolve.ts';
-import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
+import { GRAPHS, RV, iri } from '../work/activate.ts';
 import {
   decodeReadCursor,
   encodeReadCursor,
@@ -20,6 +20,8 @@ import {
   type ReadRow,
   type WorkReadSession,
 } from '../work/read-session.ts';
+import { resolveStatementAcceptancesAt } from './read.ts';
+import type { StatementSeekOrder } from './seek.ts';
 import { STATEMENT_LIMITS, type StatementValue } from './schema.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
 import { propertyRevelationRecord } from '../reading-position/store.ts';
@@ -34,20 +36,16 @@ import type { Coordinate } from '../projection/dimension.ts';
  * explicitly rather than exposing a truncated page or a hidden-row cursor. */
 export const SUBJECT_STATEMENT_COST = {
   pageSize: 20,
+  coverageQueries: 1,
   inventoryQueriesPerBatch: 2,
-  candidates: 21,
+  candidates: 20,
   componentProperties: 256,
   referencesPerCandidate: 25,
   referenceBatch: 64,
   disclosurePasses: 2,
   wikiEvidenceQueriesPerBatch: 1,
   responseBytes: 512 * 1024,
-  /** A framed page orders by specificity. Each candidate query evaluates coverage for every active accepted Statement
-   * of the subject, applies the keyset bound after it and keeps the top `candidates`, so a page costs what that
-   * subject holds and no other subject's Statements add to it. Profiled in tests/qa/integration/frame-filter.test.ts:
-   * 0.13 ms per Statement on the first page, 2.1 s at 16,000 Statements, 15 ms for a 40-Statement subject in the
-   * same graph, which reaches the 10 s read deadline near 75,000 Statements of one subject. */
-  framedOrderingMsPerThousandStatements: 130,
+  acceptanceQueriesPerBatch: 6,
 } as const;
 type Page = Static<typeof subjectStatementPage>;
 type Item = Page['groups'][number]['items'][number];
@@ -122,7 +120,8 @@ async function acceptanceScope(session: WorkReadSession, context: string) {
     if (!rows[0]!.realm) throw new WorkReadMissing('Acceptance Context is unavailable');
     await session.realm(rows[0]!.realm!.value);
   }
-  return rows[0]!.policy!.value === CLASSIFICATION_INHERIT_POLICY;
+  return { inherit: rows[0]!.policy!.value === CLASSIFICATION_INHERIT_POLICY,
+    realm: rows[0]!.realm?.value ?? null };
 }
 
 function statementValue(row: ReadRow): StatementValue {
@@ -163,13 +162,18 @@ export async function readSubjectStatements(
   await resolveTargets(session, [resource], 'discussion');
   const boundary = readingBoundary(session);
   await boundary.require(resource);
-  const inherit = await acceptanceScope(session, context);
+  const scope = await acceptanceScope(session, context);
+  const seek = session.deps.statementSeek;
+  if (!seek) throw new WorkReadUnavailable('Statement seek owner is unavailable');
+  const indexed = await seek.coverage();
+  if (!indexed?.complete || indexed.through_sequence !== session.position.sequence)
+    throw new WorkReadUnavailable('Statement seek coverage is unavailable');
   const limit = session.options.limit ?? SUBJECT_STATEMENT_COST.pageSize;
   if (!Number.isInteger(limit) || limit < 1 || limit > SUBJECT_STATEMENT_COST.pageSize) {
     throw new WorkReadInvalid('Statement page size is invalid');
   }
   const binding = [
-    'subject-statements-v1',
+    'subject-statements-seek-v2',
     resource,
     context,
     session.principal,
@@ -178,7 +182,7 @@ export async function readSubjectStatements(
     ...(frames ? [frames] : []),
   ];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  let after: { phase: 'component' | 'statement'; predicate?: string; score?: number } = { phase: frames ? 'statement' : 'component' };
+  let after: { phase: 'component' | 'statement'; predicate?: string; meaningKey?: string; score?: number } = { phase: frames ? 'statement' : 'component' };
   if (cursor) {
     try {
       after = JSON.parse(cursor.order) as typeof after;
@@ -187,7 +191,7 @@ export async function readSubjectStatements(
     }
     if (
       !['component', 'statement'].includes(after.phase) ||
-      (after.phase === 'statement' && (typeof after.predicate !== 'string'
+      (after.phase === 'statement' && (typeof after.predicate !== 'string' || typeof after.meaningKey !== 'string'
         || frames && (!Number.isInteger(after.score) || after.score! < 0 || after.score! > 136)))
     ) {
       throw new WorkReadInvalid('Statement cursor is invalid');
@@ -221,7 +225,7 @@ export async function readSubjectStatements(
   };
   const items: Item[] = [];
   const publishedEvidence = new Map<string,WikiEvidenceRow[]>();
-  const positions: { phase: 'component' | 'statement'; key: string; predicate?: string; score?: number }[] = [];
+  const positions: { phase: 'component' | 'statement'; key: string; predicate?: string; meaningKey?: string; score?: number }[] = [];
   const appendProperties = async () => {
     const component = await readCurrentComponent(session.deps.environment, resource, 'resource');
     const properties =
@@ -269,42 +273,32 @@ export async function readSubjectStatements(
   if (!frames && after.phase === 'component') await appendProperties();
   if (items.length <= limit && (!frames || after.phase === 'statement')) {
     const coverage = frames ? framePattern(frames, '?statement', GRAPHS.current) : null;
-    const pattern = inherit === null ? '' : acceptedStatementPattern(context, inherit);
-    const active = `GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rdf:subject ${iri(resource)} ;
-      rdf:predicate ?predicate ; rv:statementState rv:Active ; rv:meaningKey ?key . }`;
-    // Join acceptance or the publisher's source marker before paging. Ordinary
-    // proposals never enter hydration; the marker alone cannot authorize a read.
-    const candidates = [
-      ...(pattern ? [`${active} ${pattern}`] : []),
-      ...(session.deps.wikiEvidence ? [`${active} GRAPH ${iri(GRAPHS.current)} {
-        ?statement rv:source ?publicationWork . ?publicationWork a schema:CreativeWork . }
-        OPTIONAL { ${pattern || 'FILTER(false)'} }`] : []),
-    ];
-    let statementAfter =
+    let statementAfter: StatementSeekOrder | null =
       cursor && after.phase === 'statement'
-        ? { predicate: after.predicate!, statement: cursor.after, score: after.score ?? 0 }
+        ? { predicate: after.predicate!, meaningKey: after.meaningKey!, statementId: cursor.after, score: after.score ?? 0 }
         : null;
     while (items.length <= limit) {
+      session.checkDeadline();
       const batchSize = SUBJECT_STATEMENT_COST.candidates;
-      const rows =
-        !candidates.length
-          ? []
-          : await session.query(
-              `SELECT ?predicate ?statement ${coverage ? '?specificity' : ''}
-      (MIN(CONCAT(STR(?decision), "|", ?decisionSource)) AS ?acceptance) WHERE {
-      ${candidates.map(candidate => `{ ${candidate} }`).join(' UNION ')}
-      ${coverage ? `${coverage.filter} BIND((${coverage.score}) AS ?specificity)` : ''}
-      ${
-        statementAfter
-          ? `FILTER(${coverage ? `?specificity < ${statementAfter.score} || ?specificity = ${statementAfter.score} && (` : ''}
-        STR(?predicate) > ${lit(statementAfter.predicate)} ||
-        STR(?predicate) = ${lit(statementAfter.predicate)} && STR(?statement) > ${lit(statementAfter.statement)}${coverage ? ')' : ''})`
-          : ''
+      const sought = await seek.seek(session.position,resource,statementAfter,frames);
+      const rows: ReadRow[] = sought.candidates.map(row => ({
+        statement: {type: 'uri',value: row.statementId},predicate: {type: 'uri',value: row.predicate},
+        key: {type: 'uri',value: row.meaningKey},specificity: {type: 'literal',value: String(row.score)},
+      }));
+      if (scope && rows.length) {
+        const acceptance = scope.realm ? {kind: 'realm' as const,realm: scope.realm} : {kind: 'global' as const};
+        const exact = await resolveStatementAcceptancesAt(session.deps.environment,
+          rows.map(row => ({kind: 'statement',statement: row.statement!.value})),acceptance,session.position);
+        const qualified = await resolveStatementAcceptancesAt(session.deps.environment,
+          [...new Set(rows.map(row => row.key!.value))].map(meaningKey => ({kind: 'qualified-fact',meaningKey})),
+          acceptance,session.position);
+        for (const row of rows) {
+          const results = [exact.get(row.statement!.value)!.result,qualified.get(row.key!.value)!.result];
+          if (results.some(result => result.state === 'unavailable')) throw new WorkReadUnavailable('Statement acceptance is unavailable');
+          const result = results.find(result => result.state === 'accepted');
+          if (result?.state === 'accepted') row.acceptance = {type: 'literal',value: result.decision+'|'+result.source};
+        }
       }
-    } GROUP BY ?predicate ?statement ${coverage ? '?specificity' : ''}
-      ORDER BY ${coverage ? 'DESC(?specificity)' : ''} STR(?predicate) STR(?statement) LIMIT ${batchSize}`,
-              batchSize,
-            );
       const page = rows;
       if (page.some((row) => !row.statement || !row.predicate)) {
         throw new WorkReadUnavailable('Statement inventory is incomplete');
@@ -312,7 +306,7 @@ export async function readSubjectStatements(
       if (page.length) {
         const hydrated = await session.query(
           `SELECT ?statement ?predicate ?object ?relation ?speaker ?key ?head
-        ?pin ?ctx ?disclosure ?speakerRealm
+        ?pin ?ctx ?disclosure ?speakerRealm ?frameScore
         (GROUP_CONCAT(DISTINCT STR(?definition); separator="|") AS ?definitions)
         (GROUP_CONCAT(DISTINCT STR(?applicability); separator="|") AS ?qualifiers)
         (GROUP_CONCAT(DISTINCT STR(?evidence); separator="|") AS ?sources) WHERE {
@@ -329,7 +323,8 @@ export async function readSubjectStatements(
         OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?statement rv:semanticContextRevision ?pin }
           GRAPH ${iri(GRAPHS.revisions)} { ?pin a rv:ContextSemanticRevision ; rv:component ?ctx }
           GRAPH ${iri(GRAPHS.current)} { ?ctx rv:disclosure ?disclosure } }
-      } GROUP BY ?statement ?predicate ?object ?relation ?speaker ?key ?head ?pin ?ctx ?disclosure ?speakerRealm
+        ${coverage ? `${coverage.filter}\nBIND(${coverage.score} AS ?frameScore)` : ''}
+      } GROUP BY ?statement ?predicate ?object ?relation ?speaker ?key ?head ?pin ?ctx ?disclosure ?speakerRealm ?frameScore
       LIMIT ${page.length + 1}`,
           page.length,
         );
@@ -361,7 +356,8 @@ export async function readSubjectStatements(
             !row.relation ||
             !row.speaker ||
             !row.key ||
-            row.predicate?.value !== candidate.predicate!.value
+            row.predicate?.value !== candidate.predicate!.value || row.key?.value !== candidate.key!.value
+            || coverage && Number(row.frameScore?.value) !== Number(candidate.specificity?.value)
           ) {
             throw new WorkReadUnavailable('Statement hydration differs from its candidate');
           }
@@ -435,6 +431,7 @@ export async function readSubjectStatements(
             phase: 'statement',
             key: row.statement!.value,
             predicate: row.predicate!.value,
+            meaningKey: row.key!.value,
             ...(frames ? { score: Number(candidate.specificity?.value) } : {}),
           });
         }
@@ -447,7 +444,7 @@ export async function readSubjectStatements(
       }
       if (rows.length < batchSize) break;
       const last = rows.at(-1)!;
-      statementAfter = { predicate: last.predicate!.value, statement: last.statement!.value,
+      statementAfter = { predicate: last.predicate!.value, meaningKey: last.key!.value, statementId: last.statement!.value,
         score: Number(last.specificity?.value ?? 0) };
     }
   }
@@ -462,6 +459,7 @@ export async function readSubjectStatements(
       JSON.stringify({
         phase: last.phase,
         ...(last.predicate ? { predicate: last.predicate } : {}),
+        ...(last.meaningKey ? { meaningKey: last.meaningKey } : {}),
         ...(last.score !== undefined ? { score: last.score } : {}),
       }),
     );

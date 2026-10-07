@@ -351,6 +351,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 
 | Command | Task description |
 | --- | --- |
+| `task statement:convert` | Convert retained classifications and rebuild Statement seek coverage on a fenced populated stack. |
 | `task default` | List the available commands. |
 | `task install` | Install the pinned workspace dependencies from the lockfile. |
 | `task toolchain:install` | From a clean clone, install dependencies, check runtimes, pull images, build Fuseki and install Chromium. |

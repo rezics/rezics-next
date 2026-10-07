@@ -1,3 +1,5 @@
+import { CATALOGUE_IMPORT_SCOPE, catalogueImportInput, catalogueImportDigest, catalogueImportIdentity, prepareCatalogueImport, type CatalogueImportInput } from './catalogue-import.ts';
+import { prepareRetainedClassification, retainedClassificationConcept } from '../statement/populated-conversion.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
 import { languagePrior, readMainLanguageHeads } from './selection-heads.ts';
 import { DAILY_CONTEXT_ID, DAILY_CONTEXT_PROFILE, DAILY_OBSERVATION_ID, DAILY_OBSERVATION_PROFILE,
@@ -17,7 +19,7 @@ import { ORGANIZATION_MODERATION_ACTION, type OrganizationPublicationTarget }
 import { organizationPublicationGuard } from './organization-publication-evidence.ts';
 import { profileValidations, type ProfileId } from '../../infrastructure/profile.ts';
 import { CONTINUITY, DATASET, GRAPHS, PROFILE, RV, hash, iri, lit,
-  type WorkActivationEnvironment } from './activate.ts';
+  prepareComponent, type WorkActivationEnvironment } from './activate.ts';
 
 async function retainedCommand(env: WorkActivationEnvironment, update: string,
   receipt: { id: string; requestDigest: string }, profile: ProfileId | null,
@@ -394,7 +396,7 @@ export async function reconcileRetainedWorkCreate(
     || data.sourcePosition.dataEpoch !== coverage.dataEpoch
     || data.sourcePosition.sequence !== sequence
     || receipt.action !== 'work.create' || receipt.outcome !== 'succeeded'
-    || receipt.scope !== 'work:create:root' || !receipt.operation || !receipt.work
+    || !['work:create:root',CATALOGUE_IMPORT_SCOPE].includes(receipt.scope) || !receipt.operation || !receipt.work
     || !receipt.mainVersion || !receipt.workRevision || !receipt.mainRevision
     || !receipt.workManifest || !receipt.mainManifest || receipt.expectedHead || receipt.reason
     || receipt.id !== workReceiptIri(receipt.admissionId)
@@ -420,8 +422,8 @@ export async function reconcileRetainedWorkCreate(
     const fence = await client.query<{ open: boolean }>(
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
-    const access = await client.query<AccessEffectRow>(
-      `SELECT action, state, scope_id, request_digest, authority_epoch,
+    const access = await client.query<AccessEffectRow & {acting_subject: string;principal_id: string}>(
+      `SELECT action, state, scope_id, request_digest, authority_epoch, acting_subject, principal_id,
          graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
        FROM access.admission WHERE id = $1`, [receipt.admissionId]);
     const admitted = access.rows[0];
@@ -433,7 +435,7 @@ export async function reconcileRetainedWorkCreate(
       throw new RetainedEffectConflict('current Access admission does not prove retained create');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
-    const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+    let update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
       INSERT {
@@ -495,10 +497,93 @@ export async function reconcileRetainedWorkCreate(
           ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
       }`;
+    let catalogue: Awaited<ReturnType<typeof prepareCatalogueImport>>|null = null;
+    if (receipt.scope === CATALOGUE_IMPORT_SCOPE) {
+      const raw = await readWorkComponentState(env,receipt.workManifest,receipt.work);
+      const original = Object.fromEntries(Object.keys(catalogueImportInput.properties)
+        .filter(key => key in raw).map(key => [key,raw[key]])) as CatalogueImportInput;
+      const retainedRows = raw.classifications as {sense?: string;expectedSenseHead?: string;outcome: 'accepted'|'rejected'}[];
+      const legacy = retainedRows.some(row => 'sense' in row);
+      const input = legacy ? {...original,classifications: []} : original;
+      const digest = legacy ? hash(JSON.stringify({family: 'work-catalogue-import-v1',actingSubject: admitted.acting_subject,input: original}))
+        : catalogueImportDigest(input,admitted.acting_subject);
+      if (digest !== receipt.requestDigest)
+        throw new RetainedEffectConflict('Retained catalogue request digest differs');
+      const heads = new Map(Object.entries(raw.creditHeads && typeof raw.creditHeads === 'object'
+        ? raw.creditHeads as Record<string,string> : {}));
+      for (const credit of input.credits) if (credit.expectedAgentHead) heads.set(credit.agent,credit.expectedAgentHead);
+      if (input.credits.some(credit => !heads.has(credit.agent)))
+        throw new RetainedEffectConflict('Retained catalogue attribution is incomplete');
+      catalogue = await prepareCatalogueImport({...env,lineage: {...env.lineage,dataEpoch: coverage.dataEpoch}},
+        {id: receipt.admissionId,principalId: admitted.principal_id,actingSubject: admitted.acting_subject,
+          scope: receipt.scope,action: 'work.create',idempotencyKey: receipt.admissionId,requestDigest: receipt.requestDigest,
+          authorityEpoch: receipt.authorityEpoch,registeredAt: new Date(0).toISOString(),
+          expiresAt: new Date(8640000000000000).toISOString(),state: 'sealed',dispatchEligible: false,replayed: true},
+        input,[],heads);
+      if (legacy) {
+        if (retainedRows.length > 8) throw new RetainedEffectConflict('Retained catalogue classification bound exceeded');
+        for (const [index,row] of retainedRows.entries()) {
+          if (!row.sense || !row.expectedSenseHead || !['accepted','rejected'].includes(row.outcome))
+            throw new RetainedEffectConflict('Retained catalogue exact definition is unavailable');
+          const application = catalogueImportIdentity(receipt.admissionId,`application:${index}`);
+          const decision = catalogueImportIdentity(receipt.admissionId,`decision:${index}`);
+          const slot = classificationDecisionSlotIri(receipt.mainVersion,row.sense,GLOBAL_CLASSIFICATION_CONTEXT);
+          const state = {work: receipt.work,mainVersion: receipt.mainVersion,sense: row.sense,
+            senseRevision: row.expectedSenseHead,context: GLOBAL_CLASSIFICATION_CONTEXT,
+            proposer: admitted.acting_subject,decider: admitted.acting_subject,outcome: row.outcome,
+            application,decision,slot,predecessor: null,policy: CLASSIFICATION_DIRECT_DECISION_PROFILE};
+          const manifest = 'urn:rezics:sha256:'+prepareComponent(env.objectDirectory,application,state,CLASSIFICATION_DIRECT_DECISION_PROFILE);
+          const concept = await retainedClassificationConcept(env,state);
+          const converted = await prepareRetainedClassification(env,{application,decision,manifest,
+            main: receipt.mainVersion,concept,context: GLOBAL_CLASSIFICATION_CONTEXT,proposer: admitted.acting_subject,
+            decidedBy: admitted.acting_subject,outcome: row.outcome,contextRevision: null,
+            operation: receipt.operation,dataEpoch: coverage.dataEpoch,sequence});
+          catalogue.validations.push(...converted.validations);
+          catalogue.update = catalogue.update
+            .replace('GRAPH '+iri(GRAPHS.current)+' {','GRAPH '+iri(GRAPHS.current)+' { '+converted.current)
+            .replace('GRAPH '+iri(GRAPHS.revisions)+' {','GRAPH '+iri(GRAPHS.revisions)+' { '+converted.revisions+
+              ` ${iri(decision)} a rv:ClassificationDecision,rv:RevisionAnchor ; rv:component ${iri(application)} ;
+                rv:application ${iri(application)} ; rv:decisionBasis rv:GlobalCuratorReview ;
+                rv:decisionPolicy ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} ;
+                rv:modelRevision ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} ;
+                rv:shapeRevision ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} ;
+                rv:manifest ${iri(manifest)} ; rv:operation ${iri(receipt.operation)} ;
+                rv:outcome rv:${row.outcome === 'accepted' ? 'Accepted' : 'Rejected'} ;
+                rv:decidedBy ${iri(admitted.acting_subject)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ?next .`);
+        }
+        // Re-encoding a historical input as the new contract must not replace
+        // the retained Work's manifest or its recorded request digest.
+        const revisionStart = catalogue.update.indexOf(iri(receipt.workRevision)+' a rv:RevisionAnchor');
+        const manifestStart = catalogue.update.indexOf('rv:manifest ',revisionStart)+12;
+        const manifestEnd = catalogue.update.indexOf('>',manifestStart)+1;
+        if (revisionStart < 0 || manifestStart < 12 || manifestEnd <= manifestStart)
+          throw new RetainedEffectConflict('Retained catalogue Work manifest anchor is unavailable');
+        catalogue.update = catalogue.update.slice(0,manifestStart)+iri(receipt.workManifest)+catalogue.update.slice(manifestEnd);
+      }
+      const whereAt = catalogue.update.lastIndexOf('} WHERE {');
+      const guardsAt = catalogue.update.indexOf('FILTER NOT EXISTS { GRAPH '+iri(GRAPHS.current),whereAt);
+      if (whereAt < 0 || guardsAt < 0) throw new RetainedEffectConflict('Catalogue recovery template is incomplete');
+      const originalWhereAt = update.lastIndexOf('WHERE {');
+      if (originalWhereAt < 0) throw new RetainedEffectConflict('Catalogue recovery template is unavailable');
+      const oldWhere = update.slice(originalWhereAt+7,-1);
+      if (!oldWhere.includes('rv:restoreHold true')) throw new RetainedEffectConflict('Catalogue recovery fence is absent');
+      const prefix = catalogue.update.slice(0,whereAt)
+        .replace('DELETE { GRAPH '+iri(GRAPHS.control)+' { '+iri(DATASET)+' rv:sequence ?n } }',
+          'DELETE { GRAPH '+iri(GRAPHS.control)+' { '+iri(marker)+' rv:reconciledPriorSequence ?last } }')
+        .replace('GRAPH '+iri(GRAPHS.control)+' { '+iri(DATASET)+' rv:sequence ?next }',
+          'GRAPH '+iri(GRAPHS.control)+' { '+iri(marker)+' rv:reconciledPriorSequence '+sequence+' }');
+      update = prefix+'} WHERE { '+oldWhere+' BIND('+sequence+' AS ?next) '+catalogue.update.slice(guardsAt);
+    }
     const existing = await readWorkTerminalReceipt(env.fuseki, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await retainedCommand(env, update, receipt, 'work-metadata-v1', [
+      try { if (catalogue) {
+        const result = await env.fuseki.commandWithReceipt({receipt: receipt.id,digest: receipt.requestDigest,
+          update,validations: catalogue.validations,deadlineMs: 10_000});
+        if (result.status === 'invalid' || result.status === 'unknown-profile')
+          throw new RetainedEffectConflict('Retained catalogue validation failed',{cause: new Error(JSON.stringify(result))});
+      }
+        else await retainedCommand(env, update, receipt, 'work-metadata-v1', [
         { shape: `${PROFILE}/work-shape`, focus: receipt.work },
         { shape: `${PROFILE}/main-version-shape`, focus: receipt.mainVersion },
       ]); }
@@ -539,7 +624,8 @@ export async function reconcileRetainedWorkCreate(
       || cursor === null || cursor < BigInt(sequence)
       || graphCheck.boolean !== true || currentCheck.boolean !== true) {
       throw new RetainedEffectConflict(updateError
-        ? 'retained create update outcome is unknown' : 'retained create did not reconcile');
+        ? 'retained create update outcome is unknown' : 'retained create did not reconcile',
+      {cause: updateError});
     }
     await client.query('COMMIT');
     return { receipt: receipt.id, work: receipt.work, workRevision: receipt.workRevision,
@@ -2124,7 +2210,7 @@ async function reconcileRetainedVocabularyProposition(
   }
 }
 
-/** Rebuild one accepted or rejected curated Application head from sealed evidence. */
+/** Rebuild a Statement acceptance from sealed legacy evidence. */
 export async function reconcileRetainedClassificationDecision(
   env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
   coverage: RelayCoverage, sequence: string,
@@ -2188,6 +2274,11 @@ export async function reconcileRetainedClassificationDecision(
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(senseRevision)) {
     throw new RetainedEffectConflict('retained classification decision payload differs');
   }
+  const concept = await retainedClassificationConcept(env,state);
+  const prepared = await prepareRetainedClassification(env,{application,decision,manifest: receipt.decisionManifest,
+    main: receipt.mainVersion,concept,context,proposer,decidedBy: decider,
+    outcome: receipt.decisionOutcome!,contextRevision: receipt.contextRevision ?? null,
+    operation: receipt.operation,dataEpoch: coverage.dataEpoch,sequence});
   const client = await accessPool.connect();
   try {
     await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
@@ -2227,35 +2318,24 @@ export async function reconcileRetainedClassificationDecision(
            rv:head ${iri(receipt.contextRevision!)} .`
       : '';
     const priorGuard = predecessor
-      ? `GRAPH ${iri(GRAPHS.current)} {
-           ${iri(application)} a rv:ClassificationApplication ;
-             rv:applicationKey ${iri(receipt.slot)} ;
-             rv:targetMainVersion ${iri(receipt.mainVersion)} ;
-             rv:sense ${iri(receipt.sense)} ; rv:classificationContext ${iri(context)} ;
-             rv:proposer ${iri(proposer)} ; rv:decisionHead ${iri(predecessor)} .
-         }
-         GRAPH ${iri(GRAPHS.revisions)} {
-           ${iri(predecessor)} a rv:ClassificationDecision, rv:RevisionAnchor ;
-             rv:component ${iri(application)} ; rv:application ${iri(application)} . }`
-      : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
-           ?occupied rv:applicationKey ${iri(receipt.slot)} } }
-         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(application)} ?p ?o } }`;
-    const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+      ? `GRAPH ${iri(GRAPHS.revisions)} { ${iri(predecessor)} a rv:ClassificationDecision ; rv:component ${iri(application)} }
+        GRAPH ${iri(GRAPHS.current)} { ?priorSlot a rv:DecisionSlot ;
+          rv:acceptanceContext ${iri(context)} ; rv:decisionHead ?priorConverted }
+        GRAPH ${iri(GRAPHS.revisions)} { ?priorConverted rv:component ?priorSlot ; rv:convertedFrom ${iri(predecessor)} }`
+      : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(prepared.slot)} ?p ?o } }`;
+    const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
       DELETE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(application)} rv:decisionHead ?historicalHead }
         ${predecessor ? `GRAPH ${iri(GRAPHS.current)} {
-          ${iri(application)} rv:decisionHead ${iri(predecessor)} }` : ''}
+          ${iri(prepared.slot)} rv:decisionHead ?replacedHead }` : ''}
       }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
-        GRAPH ${iri(GRAPHS.current)} {
-          ${iri(application)} a rv:ClassificationApplication ;
-            rv:targetMainVersion ${iri(receipt.mainVersion)} ; rv:sense ${iri(receipt.sense)} ;
-            rv:classificationContext ${iri(context)} ; rv:applicationChannel rv:Curated ;
-            rv:applicationState rv:Active ; rv:applicationKey ${iri(receipt.slot)} ;
-            rv:proposer ${iri(proposer)} ; rv:decisionHead ${iri(decision)} .
-        }
+        GRAPH ${iri(GRAPHS.current)} { ${prepared.current} }
         GRAPH ${iri(GRAPHS.revisions)} {
+          ${prepared.revisions}
+          ${iri(application)} a rv:ClassificationApplication .
           ${iri(decision)} a rv:ClassificationDecision, rv:RevisionAnchor ;
             rv:component ${iri(application)} ; rv:application ${iri(application)} ;
             rv:operation ${iri(receipt.operation)} ;
@@ -2326,6 +2406,13 @@ export async function reconcileRetainedClassificationDecision(
           ${iri(senseRevision)} a rv:RevisionAnchor ; rv:component ${iri(receipt.sense)} ;
             rv:modelRevision ?senseModel . ${classificationModelRevisions('?senseModel')} }
         ${priorGuard}
+        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(prepared.slot)} rv:decisionHead ?replacedHead } }
+        ${prepared.nativePredecessor
+          ? `FILTER(?replacedHead = ${iri(prepared.nativePredecessor)})
+             FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(prepared.slot)} rv:decisionHead ?otherNativeHead .
+               FILTER(?otherNativeHead != ${iri(prepared.nativePredecessor)}) } }`
+          : `FILTER(!BOUND(?replacedHead))`}
+        OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ${iri(application)} rv:decisionHead ?historicalHead } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
@@ -2335,27 +2422,17 @@ export async function reconcileRetainedClassificationDecision(
     const existing = await readClassificationDecisionReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await retainedCommand(env, update, receipt, 'classification-direct-decision-v1', [
-        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/work-shape`, focus: receipt.work },
-        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/main-shape`, focus: receipt.mainVersion },
-        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/sense-shape`, focus: receipt.sense },
-        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/context-shape`, focus: context },
-        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/application-shape`, focus: application },
-        { shape: `${CLASSIFICATION_DIRECT_DECISION_PROFILE}/decision-shape`, focus: decision },
-      ], { work: receipt.work, main: receipt.mainVersion, sense: receipt.sense,
-        'sense-revision': senseRevision, context,
-        'context-kind': realm ? 'realm' : 'global', application, decision,
-        slot: receipt.slot, proposer, decider, outcome: receipt.decisionOutcome!,
-        ...(realm ? { realm } : {}),
-        ...(receipt.contextRevision ? { 'context-revision': receipt.contextRevision } : {}),
-        ...(predecessor ? { predecessor } : {}) }); } catch (error) { updateError = error; }
+      // Offline representation recovery preserves the sealed raw expectedHead.
+      // It differs from the native predecessor, so the live command CAS cannot
+      // describe this transition. Both fences and both predecessors are guarded
+      // in this single maintenance transaction; no new admission is created.
+      try { await env.fuseki.update(update); } catch (error) { updateError = error; }
     }
     const terminal = await readClassificationDecisionReceipt(env, receipt.admissionId);
     const cursor = await reconciledCursor(env, marker);
     const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(application)} a rv:ClassificationApplication ;
-        rv:targetMainVersion ${iri(receipt.mainVersion)} ; rv:sense ${iri(receipt.sense)} ;
-        rv:classificationContext ${iri(context)} ; rv:applicationKey ${iri(receipt.slot)} . }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(prepared.statement)} a <http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement> ;
+        <http://www.w3.org/1999/02/22-rdf-syntax-ns#subject> ${iri(receipt.mainVersion)} ; rv:meaningKey ${iri(prepared.meaningKey)} . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} a rv:ClassificationDecision, rv:RevisionAnchor ;
         rv:component ${iri(application)} ; rv:application ${iri(application)} ;
         rv:manifest ${iri(receipt.decisionManifest)} ;
@@ -2366,7 +2443,7 @@ export async function reconcileRetainedClassificationDecision(
     }`);
     const headCheck = cursor === BigInt(sequence)
       ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
-          ${iri(application)} rv:decisionHead ${iri(decision)} . } }`)
+          ${iri(prepared.slot)} rv:decisionHead ${iri(prepared.decision)} . } }`)
       : { boolean: true };
     if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
       || terminal.requestDigest !== receipt.requestDigest
@@ -2381,7 +2458,7 @@ export async function reconcileRetainedClassificationDecision(
       || graphCheck.boolean !== true || headCheck.boolean !== true) {
       throw new RetainedEffectConflict(updateError
         ? 'retained classification decision update outcome is unknown'
-        : 'retained classification decision did not reconcile');
+        : 'retained classification decision did not reconcile', { cause: updateError });
     }
     await client.query('COMMIT');
     return { receipt: receipt.id, application, decision, replayed: !!existing };

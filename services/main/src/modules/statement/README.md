@@ -12,18 +12,36 @@ decision identities; a Context or decision change never rewrites a recorded
 statement. Qualify each extension through a real write/read test and its own
 bounded cost contract.
 
-`migrate-v1.ts` copies one exact current curated v1 Application head into an
-identified Statement and qualified-fact DecisionSlot. The pending endpoint pages
-at most 100 unconverted Applications. Cutover writes one profiled revision and
-a successful receipt marker only when the graph guard finds no unconverted v1
-head. The marker retires the v1 writer and makes public search and the v1
-resolution adapter read Statement decisions. Retained v1 revisions and receipts
-stay readable history.
+Catalogue import records direct Concept and exact-definition references as
+Statements and acceptance decisions in its existing bulk transaction. Readers
+use that representation immediately; the old classification writer is retired.
+Retained Application revisions, manifests, operations and receipts remain
+historical evidence.
 
-Cost contract: one migration reads one Application/Sense/Decision tuple, validates
-four profile focuses and commits one bounded graph update. The cutover guard
-scans current v1 heads once; run it after draining pending pages. Classified
+`seek.ts` maintains reference coverage by data epoch and contiguous graph outbox
+positions. Subject reads seek ordered candidates in Access before bounded graph
+hydration and acceptance resolution. Missing, stale or incomplete coverage
+answers unavailable. Frame reference postings preserve specificity order and
+independent Statement identities, including speakers with the same meaning.
+Classified
 phrase search examines at most 256 candidate Main Versions and two exact
 DecisionSlots per candidate. The rated joined path reads at most 100 standing
 observations at the same graph position as its classified phrase relation and
 fails when either bound or position is exceeded.
+
+Before deploying this change on a populated stack, quiesce its writers and
+settle pending catalogue/classification and retired migration/cutover admissions
+with the existing release. Retain a consistent backup, close Access's recovery
+fence and hold graph admission, then deploy and apply Access migration 1300.
+With that stack's environment, run `task statement:convert -- --fenced` before
+opening readers and writers.
+`populated-conversion.ts` uses exact retained manifests, preserves the public
+proposer/decider and original operation, and writes an idempotent maintenance
+receipt per current legacy head. It keeps all old revisions and provenance.
+An interrupted run resumes from those receipts. It activates rebuilt seek
+coverage only after conversion completes; it never runs on startup.
+
+Recovery recreates Statement acceptance from retained receipts. Rebuild seek
+coverage explicitly in every restored data epoch before releasing its hold.
+The constants beside conversion and seek code carry batch and response bounds;
+an unprovable source position leaves coverage unavailable.

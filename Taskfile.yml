@@ -12,6 +12,11 @@ vars:
   ASPIRE: node {{.ROOT_DIR}}/node_modules/@microsoft/aspire-cli/bin/aspire.js
 
 tasks:
+  statement:convert:
+    desc: Convert retained classifications and rebuild Statement seek coverage on a fenced populated stack.
+    cmds:
+      - bun scripts/statement/convert.ts {{.CLI_ARGS}}
+
   default:
     desc: List the available commands.
     silent: true

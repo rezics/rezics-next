@@ -1,3 +1,4 @@
+import { acceptedStatementPattern } from '../statement/subject-read.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
@@ -22,12 +23,10 @@ export async function readWorkKindMatches(session: WorkReadSession, works: reado
     UNION {
       GRAPH ${iri(GRAPHS.current)} {
         ?work rv:mainVersion ?main .
-        ?application a rv:ClassificationApplication ; rv:targetMainVersion ?main ;
-          rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
-          rv:applicationState rv:Active ; rv:sense ?sense ; rv:decisionHead ?decision .
-        ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:expression ?expression .
-        ?expression rv:assertedConcept ?concept . ?concept skos:prefLabel ?label .
-      } GRAPH ${iri(GRAPHS.revisions)} { ?decision rv:outcome rv:Accepted . }
+        ?statement a rdf:Statement ; rdf:subject ?main ; rdf:predicate rv:classifiedAs ;
+          rdf:object ?concept ; rv:statementState rv:Active ; rv:meaningKey ?key .
+        ?concept skos:prefLabel ?label .
+      } ${acceptedStatementPattern(GLOBAL_CLASSIFICATION_CONTEXT,false)}
       BIND(LCASE(STR(?label)) AS ?term)
       FILTER(?term IN (${termValues}))
     }

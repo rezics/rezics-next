@@ -305,8 +305,7 @@ export async function projectDiscoveryBatch(
     GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ?head .
       ${iri(work)} rv:mainVersion ?main .
       OPTIONAL { ${iri(work)} a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map((type) => `<${type}>`).join(' ')} } }
-      BIND(EXISTS { { ?application a rv:ClassificationApplication ; rv:targetMainVersion ?main }
-        UNION { ?statement a rdf:Statement ; rdf:subject ?main ; rdf:predicate rv:classifiedAs } } AS ?classified)
+      BIND(EXISTS { ?statement a rdf:Statement ; rdf:subject ?main ; rdf:predicate rv:classifiedAs } AS ?classified)
       BIND(EXISTS { ?credit rv:work ${iri(work)} ; rv:creditRevision ?creditRevision } AS ?credited)
     }
     GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ; rv:component ${iri(work)} ;

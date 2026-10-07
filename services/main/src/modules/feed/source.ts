@@ -80,7 +80,7 @@ export async function feedReferences(session: WorkReadSession, cut: FeedCut): Pr
   const rows = await session.query(`SELECT DISTINCT ?id ?sequence ?kind WHERE {
     GRAPH ${iri(GRAPHS.revisions)} {
       ?id rv:dataEpoch ${lit(cut.epoch)} ; rv:sequence ?sequence ; a ?type .
-      VALUES (?type ?kind) { (rv:PublicationSelection "work") (rv:ClassificationDecision "decision")
+      VALUES (?type ?kind) { (rv:PublicationSelection "work") (rv:StatementDecision "decision")
         (rv:RealmReplyPlacement "reply") (rv:CollectionRevision "collection") (rv:ContentSearchEligibilityDecision "contribution") }
       FILTER(?sequence <= ${cut.through})
       FILTER(?sequence > ${cut.afterSequence} || (?sequence = ${cut.afterSequence} && STR(?id) > ${lit(cut.afterId)}))
@@ -152,13 +152,22 @@ export async function feedSources(session: WorkReadSession, selection: { ids: st
       ${cut}
     } UNION {
       ${anchor}
-      GRAPH ${iri(GRAPHS.current)} { ?application a rv:ClassificationApplication ; rv:decisionHead ?id ;
-        rv:targetMainVersion ?main ; rv:classificationContext ?context ; rv:applicationState rv:Active .
+      GRAPH ${iri(GRAPHS.current)} {
+        ?decisionSlot a rv:DecisionSlot ; rv:decisionHead ?id ; rv:acceptanceContext ?context ;
+          rv:targetKind ?targetKind ; rv:decisionTarget ?decisionTarget .
         ?context a rv:ClassificationContext ; rv:realm ?realm ; rv:contextState rv:Active .
-        ?main rv:work ?work . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:ClassificationDecision ; rv:component ?application ;
+        ?statement a rdf:Statement ; rv:statementState rv:Active ; rdf:subject ?main ; rv:meaningKey ?key .
+        ?main rv:work ?work .
+        FILTER(?targetKind = rv:StatementTarget && ?decisionTarget = ?statement
+          || ?targetKind = rv:QualifiedFactTarget && ?decisionTarget = ?key)
+        FILTER NOT EXISTS { ?statement rv:semanticContextRevision ?pin .
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?pin rv:component ?ctx }
+            ?ctx rv:disclosure rv:Public } }
+      }
+      GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:StatementDecision ; rv:component ?decisionSlot ;
         rv:decidedBy ?actor ; rv:outcome ?outcome ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
-        FILTER(?outcome IN (rv:Accepted, rv:Rejected)) }
+        FILTER(?outcome IN (rv:Accepted, rv:Rejected))
+        FILTER(?targetKind = rv:StatementTarget || EXISTS { ?id rv:support ?statement }) }
       ${publicRealm} ${publicWork('?work', '?main')}
       BIND("decision" AS ?kind) BIND(?work AS ?target)
       ${cut}

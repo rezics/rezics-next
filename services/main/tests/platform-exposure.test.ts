@@ -165,11 +165,11 @@ test('every served Main route, including transports, has a reviewed exposure', (
     'postV1MeLibrary-loansByIdExtend',
     'postV1MeLibrary-loansByIdReturn',
   ];
-  expect(publicOperations).toHaveLength(525);
+  expect(publicOperations).toHaveLength(524);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
-  expect(matrix.filter((entry) => entry.exposure !== 'public')).toHaveLength(247);
+  expect(matrix.filter((entry) => entry.exposure !== 'public')).toHaveLength(244);
   expect(entries.filter((entry) => entry.method === 'ws')).toHaveLength(3);
   const sdk = exposureSdkSource(app.routes);
   expect(sdk).toContain('platformOperationOpen');

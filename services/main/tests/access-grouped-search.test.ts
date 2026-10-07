@@ -154,7 +154,7 @@ function acceptanceFixture(
     query: async (query: string): Promise<SparqlResult> => {
       queries.push(query);
       if (query.includes('ASK {')) return { boolean: !options.held };
-      if (query.includes('VALUES (?statement ?wantedGlobalSlot')) {
+      if (query.includes('SELECT ?epoch ?sequence ?statement ?localSlot')) {
         return {
           results: {
             bindings: options.partial
@@ -212,6 +212,21 @@ test('Statement acceptance costs three graph reads for both one target and a ful
     expect(f.queries[2]).toContain('rv:statementState rv:Active');
     expect(f.queries[2]).toContain('?localOutcome = rv:Withdrawn');
   }
+});
+
+test('qualified-fact acceptance keeps the same bounded absent, local and inherited outcomes', async () => {
+  const f = acceptanceFixture(20);
+  const targets = f.ids.map((_,index) => ({kind: 'qualified-fact' as const,
+    meaningKey: `urn:rezics:meaning:${index.toString(16).padStart(64,'0')}`}));
+  targets.forEach((target,index) => {f.rows[index]!.statement!.value = target.meaningKey;});
+  const batch = await resolveStatementAcceptancesAt(f.env,targets,f.acceptance,position);
+  expect(f.queries).toHaveLength(3);
+  expect(batch.size).toBe(20);
+  expect(batch.get(targets[0]!.meaningKey)!.result).toEqual({state: 'absent',source: 'none'});
+  expect(batch.get(targets[1]!.meaningKey)!.result).toMatchObject({state: 'accepted',source: 'local'});
+  expect(batch.get(targets[2]!.meaningKey)!.result).toMatchObject({state: 'rejected',source: 'local'});
+  expect(batch.get(targets[3]!.meaningKey)!.result).toMatchObject({state: 'accepted',source: 'inherited-global'});
+  expect(batch.get(targets[4]!.meaningKey)!.result).toEqual({state: 'unavailable'});
 });
 
 test('Statement acceptance pages reject moved scope, incomplete or duplicate slots and held recovery without partial results', async () => {

@@ -1,20 +1,26 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { classificationDecisionDigest, classificationDecisionScope, setClassificationDecision }
+import { Pool } from 'pg';
+import { classificationDecisionSlotIri, classificationDecisionDigest, classificationDecisionReceiptIri,
+  readClassificationDecisionReceipt, CLASSIFICATION_DIRECT_DECISION_PROFILE }
   from '../../../services/main/src/modules/classification/decision.ts';
 import { classificationPropositionDigest, createClassificationProposition }
   from '../../../services/main/src/modules/classification/proposition.ts';
-import { activateTextContribution, textContributionDigest }
-  from '../../../services/main/src/modules/contribution/draft.ts';
-import { publishTextContribution, textPublicationDigest }
-  from '../../../services/main/src/modules/contribution/publish.ts';
-import { definitionStateRequest }
-  from '../../../services/main/src/modules/context/definition-state.ts';
-import { mainSelectionDigest, selectMainDefault }
-  from '../../../services/main/src/modules/work/select-main.ts';
-import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
-import { readMainOutboxEnvelope, readNextMainOutboxBatch }
+import { convertPopulatedStatements } from '../../../services/main/src/modules/statement/populated-conversion.ts';
+import { resolveClassification, ClassificationResolutionUnavailable } from '../../../services/main/src/modules/classification/resolve.ts';
+import { StatementSeek } from '../../../services/main/src/modules/statement/seek.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { CATALOGUE_IMPORT_SCOPE, catalogueImportIdentity, prepareCatalogueImport }
+  from '../../../services/main/src/modules/work/catalogue-import.ts';
+import { readWorkTerminalReceipt } from '../../../services/main/src/modules/work/receipt.ts';
+import { readStatement, resolveStatementAcceptancesAt } from '../../../services/main/src/modules/statement/read.ts';
+import { GLOBAL_CLASSIFICATION_CONTEXT } from '../../../services/main/src/modules/classification/context.ts';
+import { GRAPHS, DATASET, CONTINUITY, prepareComponent, hash, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce, relayCoverage, readMainOutboxEnvelope, readNextMainOutboxBatch }
   from '../../../services/main/src/modules/outbox/relay.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
+import { reconcileRetainedWorkCreate, reconcileRetainedClassificationDecision } from '../../../services/main/src/modules/work/reconcile-restored.ts';
+import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { contextFixture, nativeId, RV } from './context-fixture.ts';
 import { assertCommandRace } from '../support/command-race.ts';
 
@@ -25,209 +31,302 @@ type DecisionWrite = { decision: string; slot: string; replayed: boolean;
   sourcePosition: { dataEpoch: string; sequence: string } };
 type Resolution = { result: { state: string; source?: string; decision?: string } };
 
-test('CTX02/CTX09: v1 heads migrate exactly before the Statement decision fence retires the writer', async () => {
-  const f = await contextFixture(Bun.env as Record<string, string>);
-  try {
-    const work = await f.work('Migrated classification');
-    const realm = await f.realm('Migration acceptance');
-    const phrase = `migrationbeacon${randomUUID().replaceAll('-', '')}`;
-    const draftInput = { work: work.work!, language: 'en', body: `${phrase} appears here`,
-      actingSubject: f.actorA };
-    const draft = await activateTextContribution(f.env,
-      f.admission(`contribution:create:${work.work}`, 'contribution.create',
-        textContributionDigest(draftInput)), draftInput);
-    const publicationInput = { contribution: draft.contribution!, expectedDraftHead: draft.draftRevision!,
-      expectedPublicationHead: null, rightsBasis: 'original-contribution' as const,
-      disclosure: 'public' as const, actingSubject: f.actorA };
-    const publication = await publishTextContribution(f.env,
-      f.admission(`contribution:publish:${draft.contribution}`, 'contribution.publish',
-        textPublicationDigest(publicationInput)), publicationInput);
-    const selectionInput = { context: { kind: 'main-version-default' as const, id: work.mainVersion! },
-      work: work.work!, contribution: draft.contribution!,
-      publicationDecision: publication.publicationDecision!, expectedSelectionHead: null,
-      selectionBasis: 'main-maintainer' as const, actingSubject: f.actorA };
-    await selectMainDefault(f.env, f.admission(`publication:select:${work.mainVersion}`,
-      'publication.select', mainSelectionDigest(selectionInput)), selectionInput);
-    const propositionInput = { label: `Migrated ${randomUUID()}`, actingSubject: f.actorA };
-    const proposition = await createClassificationProposition(f.env,
-      f.admission('classification:define:global', 'classification.proposition.define',
-        classificationPropositionDigest(propositionInput)), propositionInput);
-    const sense = proposition.definitions!.sense;
-    await f.grant('classification:decide:global', 'statement.decide');
-    await f.json(await f.call('POST',
-      `/v1/concepts/${proposition.definitions!.concept.split('/').at(-1)}/spoiler-hints`, {
-        profile: 'concept-spoiler-hint-v1', context: { kind: 'global' },
-        hint: 'not-spoiler', expectedGeneration: '0', actingSubject: f.actorA,
-      }), 201);
-    const decisionInput = { context: { kind: 'global' as const }, work: work.work!,
-      mainVersion: work.mainVersion!, sense, expectedDecisionHead: null,
-      outcome: 'accepted' as const, actingSubject: f.actorA };
-    const old = await setClassificationDecision(f.env,
-      f.admission(classificationDecisionScope(decisionInput.context), 'classification.decision.set',
-        classificationDecisionDigest(decisionInput)), decisionInput);
-    expect(old.outcome).toBe('succeeded');
-    const legacyResolution = () => f.call('POST', '/v1/classification-resolutions', {
-      profile: 'classification-resolution-v1', context: { kind: 'global' },
-      work: work.work, mainVersion: work.mainVersion, sense });
-    expect((await f.json<{ decision: string }>(await legacyResolution(), 200)).decision).toBe(old.decision);
-    const search = async (body: object): Promise<Response> => {
-      let response: Response;
-      for (let attempt = 0; attempt < 12; attempt++) {
-        response = await f.call('POST', '/v1/queries', body);
-        if (response.status !== 503
-          || (await response.clone().json() as { code?: string }).code !== 'search_index_unavailable') {
-          return response;
-        }
-        await Bun.sleep(100);
-      }
-      return response!;
+test('CTX09: catalogue imports use exact definitions, replay and CAS; populated conversion retains provenance and rebuilds seek', async () => {
+  const f = await contextFixture(Bun.env as Record<string,string>);
+  const relay = new Pool({connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL});
+  const copies: string[] = [];
+  const graphs = [GRAPHS.current,GRAPHS.revisions,GRAPHS.receipts,GRAPHS.outbox,GRAPHS.control];
+  const snapshot = async () => {
+    const prefix = `urn:rezics:test-copy:${randomUUID()}`;
+    for (const [index,graph] of graphs.entries()) {
+      const copy = `${prefix}:${index}`;copies.push(copy);
+      await f.env.fuseki.update(`COPY GRAPH ${iri(graph)} TO GRAPH ${iri(copy)}`);
+    }
+    return async () => {
+      for (const [index,graph] of graphs.entries())
+        await f.env.fuseki.update(`COPY GRAPH ${iri(`${prefix}:${index}`)} TO GRAPH ${iri(graph)}`);
     };
-    const classified = (kind: 'main' | 'realm') => search(kind === 'main'
-      ? { profile: 'public-main-classified-phrase-v1', phrase, language: 'en', sense }
-      : { profile: 'public-realm-classified-phrase-v1', phrase, language: 'en', sense,
-        context: { kind: 'realm-local', id: realm.realm } });
-    type Search = { results: { classification: { decision: string; application: string | null;
-      meaningKey?: string; source: string } }[] };
-    expect((await f.json<Search>(await classified('main'), 200)).results[0]?.classification.decision)
-      .toBe(old.decision);
-    expect((await f.json<Search>(await classified('realm'), 200)).results[0]?.classification.decision)
-      .toBe(old.decision);
-    const ratingInput = { realm: realm.realm, question: 'Migration quality', actingSubject: f.actorA };
-    // The joined Statement reader verifies Access's sealed inventory as well
-    // as graph receipts. Synthetic graph-only admissions cannot seed it.
-    await f.grant(`rating:context:${realm.realm}`, 'rating.context.create');
-    const rating = await f.json<{ context: string }>(await f.call('POST', '/v1/rating-contexts', {
-      profile: 'realm-standing-rating-context-v1', ...ratingInput }), 201);
-    const standingInput = { context: rating.context!, work: work.work!, mainVersion: work.mainVersion!,
-      expectedRevisionHead: null, value: 9, actingSubject: f.actorA };
-    await f.grant(`rating:observe:${rating.context}`, 'rating.observation.set');
-    await f.json(await f.call('POST', '/v1/rating-observations', {
-      profile: 'realm-standing-rating-observation-v1', ...standingInput }), 201);
-    const joined = () => search({
-      profile: 'public-realm-classified-rated-phrase-v1', phrase, language: 'en', sense,
-      context: { kind: 'realm-local', id: realm.realm }, ratingContext: rating.context,
-      minimumMeanTimes10: 80 });
-    await f.json<Search>(await joined(), 200);
-    await f.grant('statement:migrate:root', 'statement.migrate');
-    await f.grant('statement:migrate:root', 'statement.cutover');
-    const pending = await f.json<{ pending: { application: string; decision: string }[] }>(
-      await f.call('GET', '/v1/statement-migrations/v1/pending'), 200);
-    expect(pending.pending).toContainEqual({ application: old.application, decision: old.decision });
-    const cutoverBody = { profile: 'statement-cutover-v1', actingSubject: f.actorA };
-    const premature = await f.call('POST', '/v1/statement-migrations/v1/cutover', cutoverBody);
-    if (premature.status !== 409) console.error('premature cutover', premature.status,
-      await premature.clone().text());
-    expect(premature.status).toBe(409);
-    const migrationPath = `/v1/statement-migrations/v1/${old.application!.split('/').at(-1)}`;
-    const migrationBody = { profile: 'statement-migration-v1', expectedDecision: old.decision,
-      actingSubject: f.actorA };
-    const migrationKey = randomUUID();
-    f.resetQueries();
-    const migrated = await f.json<{ slot: string; decision: string; replayed: boolean;
-      sourcePosition: { dataEpoch: string; sequence: string } }>(
-      await f.call('POST', migrationPath, migrationBody, migrationKey), 201);
-    expect(migrated.replayed).toBe(false);
-    expect(f.queries()).toBeLessThanOrEqual(24);
-    const migrationBatch = await readNextMainOutboxBatch(f.env.fuseki,
-      migrated.sourcePosition.dataEpoch, (BigInt(migrated.sourcePosition.sequence) - 1n).toString());
-    expect(await readMainOutboxEnvelope(f.env.fuseki, migrationBatch!, migrationBatch!.eventIds[0]!))
-      .toMatchObject({ type: 'com.rezics.statement.migrated.v1',
-        data: { receipt: { action: 'statement.migrate', component: migrated.slot,
-          revision: migrated.decision } } });
-    expect(await f.json<{ decision: string; replayed: boolean }>(
-      await f.call('POST', migrationPath, migrationBody, migrationKey), 200))
-      .toMatchObject({ decision: migrated.decision, replayed: true });
-    expect((await f.json<{ complete: boolean }>(
-      await f.call('GET', '/v1/statement-migrations/v1/pending'), 200)).complete).toBe(true);
-    const cutover = await f.json<{ revision: string; sourcePosition: { dataEpoch: string;
-      sequence: string } }>(await f.call('POST', '/v1/statement-migrations/v1/cutover', cutoverBody), 201);
-    const cutoverBatch = await readNextMainOutboxBatch(f.env.fuseki, cutover.sourcePosition.dataEpoch,
-      (BigInt(cutover.sourcePosition.sequence) - 1n).toString());
-    expect(await readMainOutboxEnvelope(f.env.fuseki, cutoverBatch!, cutoverBatch!.eventIds[0]!))
-      .toMatchObject({ type: 'com.rezics.statement.cutover.v1',
-        data: { receipt: { action: 'statement.cutover', revision: cutover.revision } } });
-    f.resetQueries();
-    const migrationReadStarted = performance.now();
-    const newMain = await f.json<Search>(await classified('main'), 200);
-    const newRealm = await f.json<Search>(await classified('realm'), 200);
-    expect(newMain.results).toHaveLength(1);
-    expect(newMain.results[0]?.classification).toMatchObject({ decision: migrated.decision,
-      application: null, source: 'global' });
-    expect(newRealm.results[0]?.classification).toMatchObject({ decision: migrated.decision,
-      application: null, source: 'inherited-global' });
-    expect(newMain.results[0]?.classification.meaningKey).toMatch(/^urn:rezics:meaning:/);
-    expect(await f.json<{ decision: string; application: string | null }>(
-      await legacyResolution(), 200)).toMatchObject({ decision: migrated.decision, application: null });
-    const newJoined = await f.json<Search>(await joined(), 200);
-    expect(newJoined.results[0]?.classification).toMatchObject({ decision: migrated.decision,
-      application: null, source: 'inherited-global' });
-    const migrationReadQueries = f.queries();
-    const migrationReadCost = { graphCalls: migrationReadQueries,
-      latencyMs: Math.round((performance.now() - migrationReadStarted) * 100) / 100 };
-    await Bun.write(`.temp/search-context-cost-${Bun.env.REZICS_QA_RUN_ID}.json`,
-      JSON.stringify(migrationReadCost));
-    expect((await f.call('POST', '/v1/classification-decisions',
-      { profile: 'classification-direct-decision-v1', ...decisionInput })).status).toBe(410);
-    const mapped = await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?statement ?revision WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ?statement rv:migratedFrom ${iri(old.application!)} ;
-        rv:head ?revision . ${iri(migrated.slot)} rv:decisionHead ${iri(migrated.decision)} . }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(migrated.decision)} rv:convertedFrom ${iri(old.decision!)} ;
-        rv:support ?statement . }
-    }`);
-    expect(mapped.results?.bindings).toHaveLength(1);
-    const statement = mapped.results!.bindings[0]!.statement!.value;
-    // G-846 regression: migrated Statements retain their main-version subject;
-    // reading it is disclosure, not a collection-member capability bind.
-    expect((await f.call('GET',`/v1/statements/${statement.split('/').at(-1)}`)).status).toBe(200);
-    const meaningKey = newMain.results[0]!.classification.meaningKey!;
-    const stateBody = (state: 'active' | 'retired', expectedHead: string | null) => ({
-      profile: 'context-definition-state-v1', definition: proposition.revision!,
-      expectedHead, state, actingSubject: f.actorA });
-    await f.grant(definitionStateRequest(stateBody('active', null)).scope, 'context.definition.state');
-    const activeDefinition = await f.json<{ revision: string }>(await f.call('POST',
-      '/v1/context-definition-states', stateBody('active', null)), 201);
-    const retiredDefinition = await f.json<{ revision: string }>(await f.call('POST',
-      '/v1/context-definition-states', stateBody('retired', activeDefinition.revision)), 201);
-    expect(retiredDefinition.revision).not.toBe(activeDefinition.revision);
-    expect(await f.json<{ decision: string; replayed: boolean }>(await f.call('POST',
-      migrationPath, migrationBody, migrationKey), 200))
-      .toMatchObject({ decision: migrated.decision, replayed: true });
-    const retained = await f.json<{ meaningKey: string; export: Record<string, unknown> }>(await f.call('GET',
-      `/v1/statements/${statement.split('/').at(-1)}`), 200);
-    expect(retained.meaningKey).toBe(meaningKey);
-    expect(retained.export[`${RV}interpretationDefinition`]).toEqual([{ '@id': proposition.revision }]);
-    expect((await f.env.fuseki.query(`PREFIX rv: <${RV}> ASK {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(sense)} a rv:ClassificationSense ; rv:senseState rv:Active ;
-        rv:head ${iri(proposition.revision!)} . }
-    }`)).boolean).toBe(true);
-    const resolved = await f.json<Resolution>(await f.call('POST', '/v1/statement-resolutions', {
-      profile: 'statement-resolution-v1', target: { kind: 'qualified-fact',
-        meaningKey }, acceptance: { kind: 'global' } }), 200);
-    expect(resolved.result).toMatchObject({ state: 'accepted', decision: migrated.decision });
-    await f.grant('classification:decide:global', 'statement.decide');
-    const revised = await f.json<{ decision: string }>(await f.call('POST', '/v1/statement-decisions', {
-      profile: 'statement-decision-v1', target: { kind: 'qualified-fact', meaningKey,
-        support: [statement] }, acceptance: { kind: 'global' },
-      expectedDecisionHead: migrated.decision, outcome: 'rejected', actingSubject: f.actorA }), 201);
-    expect(revised.decision).not.toBe(migrated.decision);
-    expect((await f.json<Search>(await classified('main'), 200)).results).toHaveLength(0);
-    expect((await f.json<Search>(await classified('realm'), 200)).results).toHaveLength(0);
-    expect((await f.json<Search>(await joined(), 200)).results).toHaveLength(0);
-    expect(await f.json<{ decision: string; state: string }>(await legacyResolution(), 200))
-      .toMatchObject({ decision: revised.decision, state: 'rejected' });
-    await f.grant(`statement:speak:${f.actorA}`, 'statement.withdraw');
-    await f.json(await f.call('POST', `/v1/statements/${statement.split('/').at(-1)}/withdrawals`, {
-      profile: 'statement-v1', speaker: { kind: 'personal' },
-      expectedHead: mapped.results!.bindings[0]!.revision!.value, actingSubject: f.actorA }), 201);
-    expect((await f.json<{ state: string }>(await f.call('GET',
-      `/v1/statements/${statement.split('/').at(-1)}`), 200)).state).toBe('withdrawn');
-    expect((await f.json<Resolution>(await f.call('POST', '/v1/statement-resolutions', {
-      profile: 'statement-resolution-v1', target: { kind: 'qualified-fact', meaningKey },
-      acceptance: { kind: 'global' } }), 200)).result.state).toBe('unavailable');
-    // Keep the existing cost assertion, after exercising all migration outcomes.
-    expect(migrationReadQueries).toBeLessThanOrEqual(36);
-  } finally { await f.close(); }
-}, 120_000);
+  };
+  let restoreLive: (() => Promise<void>)|null = null;
+  try {
+    await f.globalAcceptance();
+    await f.grant(CATALOGUE_IMPORT_SCOPE,'work.create');
+    await f.grant('classification:decide:global','classification.decision.set');
+    const platformGrant = randomUUID();
+    await f.accessPool.query(`INSERT INTO access.principal_permission_grant
+      (id,issuer_subject,principal_id,scope_id,action,valid_until)
+      VALUES ($1,$2,$3,'platform:access','platform:use:catalogue-import',now()+interval '1 hour')`,
+    [platformGrant,f.actorA,f.principalA]);
+    await f.accessPool.query(`INSERT INTO access.platform_grant_episode
+      (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+      VALUES ($1,$2,$3,'platform:use:catalogue-import','platform:access',$4,$5)`,
+    [randomUUID(),platformGrant,f.actorA,f.principalA,`urn:rezics:access-receipt:${hash(platformGrant)}`]);
+    const principal = await f.account.verifier.verify(new Request('http://main.local',{
+      headers: {authorization: `Bearer ${f.account.tokenA}`}}),['work:create']);
+    expect((await new AccessExposure(f.accessPool).summary(principal)).groups).toContain('catalogue-import');
+    const propositionInput = {label: 'Exact catalogue definition',actingSubject: f.actorA};
+    const proposition = await createClassificationProposition(f.env,f.admission('classification:define:global',
+      'classification.proposition.define',classificationPropositionDigest(propositionInput)),propositionInput);
+    const concept = proposition.definitions!.concept,definition = proposition.revision!;
+    const backupSequence = (await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence } }`)).results!.bindings[0]!.sequence!.value;
+    const restoreBackup = await snapshot();
+    const input = {profile: 'work-catalogue-import-v1',expectedWorkHead: null,title: 'Statement catalogue',language: 'en',
+      evidence: 'Catalogue source evidence',aliases: [],semanticTypes: [],credits: [],
+      classifications: [{concept,definition,expectedDecisionHead: null,outcome: 'accepted'}]};
+    const key = randomUUID();
+    const imported = await f.json<{status: string;receipt: {work: string;mainVersion: string;sequence: string}}>(
+      await f.call('POST','/v1/work-imports',{actingSubject: f.actorA,input},key),201);
+    expect(imported.status).toBe('succeeded');
+    expect((await f.json<{replayed: boolean}>(await f.call('POST','/v1/work-imports',
+      {actingSubject: f.actorA,input},key),200)).replayed).toBe(true);
+    expect((await f.call('POST','/v1/work-imports',{actingSubject: f.actorA,input: {...input,title: 'Changed'}},key)).status).toBe(409);
+    const stale = await f.json<{code: string}>(await f.call('POST','/v1/work-imports',
+      {actingSubject: f.actorA,input: {...input,work: imported.receipt.work}},randomUUID()),409);
+    expect(stale.code).toBe('catalogue_import_conflict');
+    const rows = (await f.env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+      SELECT ?statement ?decision ?slot ?key WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ?statement a rdf:Statement ; rdf:subject ${iri(imported.receipt.mainVersion)} ; rdf:object ${iri(concept)} ;
+          rv:interpretationDefinition ${iri(definition)} ; rv:meaningKey ?key .
+        ?slot a rv:DecisionSlot ; rv:decisionTarget ?key ; rv:decisionHead ?decision }
+      GRAPH ${iri(GRAPHS.revisions)} { ?decision a rv:StatementDecision ; rv:support ?statement } }`)).results!.bindings;
+    expect(rows).toHaveLength(1);
+    const position = {dataEpoch: f.env.lineage.dataEpoch,sequence: (await f.env.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?sequence WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence } }`)).results!.bindings[0]!.sequence!.value};
+    const qualified = {kind: 'qualified-fact' as const,meaningKey: rows[0]!.key!.value};
+    expect((await resolveStatementAcceptancesAt(f.env,[qualified],{kind: 'global'},position))
+      .get(qualified.meaningKey)!.result).toMatchObject({state: 'accepted',decision: rows[0]!.decision!.value});
+    const slotRef = rows[0]!.slot!.value;
+    await f.env.fuseki.update(`DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(slotRef)} <${RV}targetKind> <${RV}QualifiedFactTarget> } }`);
+    try {
+      expect((await resolveStatementAcceptancesAt(f.env,[qualified],{kind: 'global'},position))
+        .get(qualified.meaningKey)!.result).toEqual({state: 'unavailable'});
+      await expect(resolveClassification(f.env,{work: imported.receipt.work,mainVersion: imported.receipt.mainVersion,
+        sense: proposition.definitions!.sense,context: {kind: 'global'}}))
+        .rejects.toBeInstanceOf(ClassificationResolutionUnavailable);
+    } finally {await f.env.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(slotRef)} <${RV}targetKind> <${RV}QualifiedFactTarget> } }`);}
+    expect((await f.env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
+      ?application a rv:ClassificationApplication ; rv:targetMainVersion ${iri(imported.receipt.mainVersion)} } }`)).boolean).toBe(false);
+    expect((await f.call('POST','/v1/classification-decisions',{profile: 'classification-direct-decision-v1',
+      context: {kind: 'global'},work: imported.receipt.work,mainVersion: imported.receipt.mainVersion,
+      sense: proposition.definitions!.sense,expectedDecisionHead: null,outcome: 'accepted',actingSubject: f.actorA})).status).toBe(404);
+    expect((await f.call('GET','/v1/statement-migrations/v1/pending')).status).toBe(404);
+
+    // An isolated populated copy includes two immutable legacy revisions.
+    // Only this fixture reconstructs old storage; no live legacy writer remains.
+    const oldWork = await f.work('Retained catalogue copy');
+    const application = nativeId(),first = nativeId(),head = nativeId(),operation = nativeId();
+    const slot = classificationDecisionSlotIri(oldWork.mainVersion!,proposition.definitions!.sense,GLOBAL_CLASSIFICATION_CONTEXT);
+    const manifest = prepareComponent(f.env.objectDirectory,application,{work: oldWork.work,mainVersion: oldWork.mainVersion,
+      sense: proposition.definitions!.sense,senseRevision: definition,context: GLOBAL_CLASSIFICATION_CONTEXT,
+      proposer: f.actorA,decider: f.actorB,outcome: 'rejected',application,decision: head,slot,predecessor: first,
+      policy: 'https://rezics.com/definition/classification-direct-decision-v1'},
+    'https://rezics.com/definition/classification-direct-decision-v1');
+    const digest = hash(application),receipt = 'urn:rezics:receipt:bootstrap:populated-copy:'+digest;
+    await f.env.fuseki.update(`PREFIX rv: <${RV}>
+      INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(application)} a rv:ClassificationApplication ;
+        rv:targetMainVersion ${iri(oldWork.mainVersion!)} ; rv:sense ${iri(proposition.definitions!.sense)} ;
+        rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:applicationChannel rv:Curated ;
+        rv:applicationState rv:Active ; rv:proposer ${iri(f.actorA)} ; rv:decisionHead ${iri(head)} . }
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(first)} a rv:ClassificationDecision,rv:RevisionAnchor ; rv:component ${iri(application)} ; rv:outcome rv:Accepted .
+        ${iri(head)} a rv:ClassificationDecision,rv:RevisionAnchor ; rv:component ${iri(application)} ; rv:predecessor ${iri(first)} ;
+          rv:manifest ${iri('urn:rezics:sha256:'+manifest)} ; rv:outcome rv:Rejected ; rv:decidedBy ${iri(f.actorB)} ;
+          rv:operation ${iri(operation)} ; rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence 1 . }
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true . }
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
+        rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence ?sequence . }
+      } WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence } }`);
+    await f.accessPool.query('UPDATE access.recovery_fence SET open=false WHERE id=true');
+    const converted = await convertPopulatedStatements(f.env,f.accessPool);
+    expect(converted).toEqual({converted: 1,replayed: 0});
+    expect(await convertPopulatedStatements(f.env,f.accessPool)).toEqual({converted: 0,replayed: 1});
+    const retained = await f.env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} rv:predecessor ${iri(first)} ; rv:operation ${iri(operation)} .
+        ${iri(first)} a rv:ClassificationDecision .
+        ?decision a rv:StatementDecision ; rv:convertedFrom ${iri(head)} ; rv:decidedBy ${iri(f.actorB)} . }
+      GRAPH ${iri(GRAPHS.current)} { ?statement rv:migratedFrom ${iri(application)} ; rv:speaker ${iri(f.actorA)} } }`);
+    expect(retained.boolean).toBe(true);
+    const seek = new StatementSeek(f.accessPool,f.env);
+    expect((await seek.coverage())?.complete).toBe(true);
+    const restored = (await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?statement WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ?statement rv:migratedFrom ${iri(application)} } }`)).results!.bindings[0]!.statement!.value;
+    // Release only this isolated copy's fences, then verify public attribution.
+    const releaseDigest = hash(receipt+'release');
+    await f.env.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+        INSERT { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt+':release')} rv:requestDigest ${lit(releaseDigest)} ;
+          rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence ?sequence } }
+        WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence } }`);
+    await f.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id=true');
+    const exported = await readStatement(f.env,restored,async () => false);
+    expect(exported.export['http://www.w3.org/ns/prov#wasAttributedTo']).toEqual([{'@id': f.actorA}]);
+    expect(JSON.stringify(exported.export)).toContain(f.actorB);
+
+    // Restore the populated graph backup made before this import, while retaining
+    // the real Access seal, Relay envelope and immutable manifests.
+    const consumer = `catalogue-restore:${randomUUID()}`;
+    await initializeRelayCheckpoint(relay,consumer,f.env.lineage.dataEpoch);
+    while (await relayMainOutboxOnce(f.env.fuseki,relay,consumer)) { /* retain the bounded batches */ }
+    const coverage = await relayCoverage(relay,consumer);
+    restoreLive = await snapshot();
+    await f.accessPool.query('UPDATE access.recovery_fence SET open=false WHERE id=true');
+    await restoreBackup();
+    const next = {dataEpoch: randomUUID(),routingEpoch: /^\d+$/u.test(f.env.lineage.routingEpoch)
+      ? String(BigInt(f.env.lineage.routingEpoch)+1n) : randomUUID()};
+    await cutoverRestoredGraphLineage(f.env.fuseki,{prior: {...f.env.lineage,sequence: backupSequence},next});
+    const recovery = {...f.env,lineage: next};
+    const recovered = await reconcileRetainedWorkCreate(recovery,f.accessPool,relay,coverage,imported.receipt.sequence);
+    expect(recovered).toMatchObject({work: imported.receipt.work,replayed: false});
+    expect(await reconcileRetainedWorkCreate(recovery,f.accessPool,relay,coverage,imported.receipt.sequence))
+      .toMatchObject({work: imported.receipt.work,replayed: true});
+    expect((await f.env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+      ASK { GRAPH ${iri(GRAPHS.current)} { ${iri(rows[0]!.statement!.value)} a rdf:Statement ;
+        rdf:subject ${iri(imported.receipt.mainVersion)} ; rv:interpretationDefinition ${iri(definition)} .
+        ?slot a rv:DecisionSlot ; rv:decisionHead ${iri(rows[0]!.decision!.value)} }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?application a rv:ClassificationApplication ;
+          rv:targetMainVersion ${iri(imported.receipt.mainVersion)} } } }`)).boolean).toBe(true);
+    await new StatementSeek(f.accessPool,recovery).rebuild();
+    expect((await new StatementSeek(f.accessPool,recovery).coverage())?.complete).toBe(true);
+  } finally {
+    await restoreLive?.();
+    await f.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id=true');
+    await f.env.fuseki.update(`DELETE WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} <${RV}restoreHold> ?hold } }`);
+    for (const copy of copies) await f.env.fuseki.update(`DROP SILENT GRAPH ${iri(copy)}`);
+    await relay.end();
+    await f.close();
+  }
+},180_000);
+
+test('retained catalogue restore converts the exact legacy input and preserves its sealed manifest',async () => {
+  const f = await contextFixture(Bun.env as Record<string,string>);
+  const relay = new Pool({connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL});
+  const graphs = [GRAPHS.current,GRAPHS.revisions,GRAPHS.receipts,GRAPHS.outbox,GRAPHS.control];
+  const copies: string[] = [];
+  let restoreLive: (()=>Promise<void>)|null = null;
+  const snapshot = async () => {
+    const prefix = `urn:rezics:test-copy:${randomUUID()}`;
+    for (const [index,graph] of graphs.entries()) {
+      const copy = `${prefix}:${index}`;copies.push(copy);
+      await f.env.fuseki.update(`COPY GRAPH ${iri(graph)} TO GRAPH ${iri(copy)}`);
+    }
+    return async () => {for (const [index,graph] of graphs.entries())
+      await f.env.fuseki.update(`COPY GRAPH ${iri(`${prefix}:${index}`)} TO GRAPH ${iri(graph)}`);};
+  };
+  try {
+    await f.globalAcceptance();
+    await f.grant(CATALOGUE_IMPORT_SCOPE,'work.create');
+    await f.grant('classification:decide:global','classification.decision.set');
+    const propositionInput = {label: 'Retained catalogue definition',actingSubject: f.actorA};
+    const term = await createClassificationProposition(f.env,f.admission('classification:define:global',
+      'classification.proposition.define',classificationPropositionDigest(propositionInput)),propositionInput);
+    const original = {profile: 'work-catalogue-import-v1' as const,expectedWorkHead: null,title: 'Retained catalogue',
+      language: 'en',evidence: 'Retained source evidence',aliases: [],semanticTypes: [],credits: [],
+      classifications: [{sense: term.definitions!.sense,expectedSenseHead: term.revision!,
+        expectedDecisionHead: null,outcome: 'accepted' as const}]};
+    const requestDigest = hash(JSON.stringify({family: 'work-catalogue-import-v1',actingSubject: f.actorA,input: original}));
+    const principal = await f.account.verifier.verify(new Request('http://main.local',{
+      headers: {authorization: `Bearer ${f.account.tokenA}`}}),['work:create','classification:decide']);
+    const [registered] = await f.access.admitCatalogue(principal,f.actorA,[{key: randomUUID(),digest: requestDigest}]);
+    if (!registered || 'status' in registered) throw new Error('Retained catalogue fixture admission was denied');
+    const admission = registered.admission;
+    const work = catalogueImportIdentity(admission.id,'work'),main = catalogueImportIdentity(admission.id,'main');
+    const base = {...original,classifications: []};
+    const envelope = await prepareCatalogueImport(f.env,admission,base,[],new Map());
+    const baseManifest = prepareComponent(f.env.objectDirectory,work,{mainVersion: main,continuityProfile: CONTINUITY,
+      ...base,creditHeads: {}});
+    const oldManifest = prepareComponent(f.env.objectDirectory,work,{mainVersion: main,continuityProfile: CONTINUITY,...original});
+    expect(envelope.update).toContain(`urn:rezics:sha256:${baseManifest}`);
+    envelope.update = envelope.update.replaceAll(`urn:rezics:sha256:${baseManifest}`,`urn:rezics:sha256:${oldManifest}`);
+    const backupSequence = (await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence } }`)).results!.bindings[0]!.sequence!.value;
+    const restoreBackup = await snapshot();
+    // Only this isolated fixture encodes the historical input. It is backed by
+    // a real admitted graph commit, Access seal, immutable manifest and Relay.
+    await f.env.fuseki.catalogueBatch([envelope]);
+    const receipt = (await readWorkTerminalReceipt(f.env.fuseki,admission.id))!;
+    expect(receipt.outcome).toBe('succeeded');
+    await f.access.recordCatalogueOutcomes([receipt]);
+    // Emulate a subsequent sealed decision from the retained release, including
+    // its immutable predecessor, rather than invoke the retired writer.
+    const predecessor = catalogueImportIdentity(admission.id,'decision:0');
+    const application = catalogueImportIdentity(admission.id,'application:0');
+    const slot = classificationDecisionSlotIri(main,term.definitions!.sense,GLOBAL_CLASSIFICATION_CONTEXT);
+    const followingInput = {context: {kind: 'global' as const},work,mainVersion: main,sense: term.definitions!.sense,
+      expectedDecisionHead: predecessor,outcome: 'rejected' as const,actingSubject: f.actorA};
+    const followingDigest = classificationDecisionDigest(followingInput);
+    const following = await f.access.register({principal,actingSubject: f.actorA,scope: 'classification:decide:global',
+      action: 'classification.decision.set',idempotencyKey: randomUUID(),requestDigest: followingDigest});
+    await f.access.claim(following.id,followingDigest);
+    const operation = nativeId(),decision = nativeId(),followingReceipt = classificationDecisionReceiptIri(following.id);
+    const sequence = String(BigInt(receipt.sequence)+1n),event = 'urn:rezics:event:'+hash(operation);
+    const batch = 'urn:rezics:outbox:'+hash(followingReceipt);
+    const manifest = 'urn:rezics:sha256:'+prepareComponent(f.env.objectDirectory,application,{work,mainVersion: main,
+      sense: term.definitions!.sense,senseRevision: term.revision!,context: GLOBAL_CLASSIFICATION_CONTEXT,
+      realm: null,contextRevision: null,proposer: f.actorA,decider: f.actorA,outcome: 'rejected',
+      application,decision,slot,predecessor,policy: CLASSIFICATION_DIRECT_DECISION_PROFILE},CLASSIFICATION_DIRECT_DECISION_PROFILE);
+    await f.env.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} rv:sequence ?oldSequence . ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:streamSequence ?oldStreamSequence } }
+      INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ${sequence} .
+        ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:streamSequence ?nextStreamSequence }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(decision)} a rv:ClassificationDecision,rv:RevisionAnchor ;
+          rv:component ${iri(application)} ; rv:application ${iri(application)} ; rv:operation ${iri(operation)} ;
+          rv:manifest ${iri(manifest)} ; rv:outcome rv:Rejected ; rv:decisionBasis rv:GlobalCuratorReview ;
+          rv:decidedBy ${iri(f.actorA)} ; rv:decisionPolicy ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} ;
+          rv:modelRevision ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} ; rv:shapeRevision ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} ;
+          rv:predecessor ${iri(predecessor)} ; rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence ${sequence} }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(followingReceipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+          rv:admissionId ${lit(following.id)} ; rv:requestDigest ${lit(followingDigest)} ; rv:authorityEpoch ${lit(following.authorityEpoch)} ;
+          rv:admittedScope "classification:decide:global" ; rv:operation ${iri(operation)} ; rv:work ${iri(work)} ;
+          rv:mainVersion ${iri(main)} ; rv:sense ${iri(term.definitions!.sense)} ; rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
+          rv:slot ${iri(slot)} ; rv:application ${iri(application)} ; rv:decision ${iri(decision)} ; rv:decisionOutcome rv:Rejected ;
+          rv:expectedHead ${iri(predecessor)} ; rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence ${sequence} }
+        GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ;
+          rv:streamScope ${lit(MAIN_RELAY_STREAM_SCOPE)} ; rv:streamSequence ?nextStreamSequence ;
+          rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(event)} .
+          ${iri(event)} a rv:ClassificationDecisionChangedEvent ; rv:ordinal 0 ; rv:action "classification.decision.set" ;
+          rv:receipt ${iri(followingReceipt)} ; rv:operation ${iri(operation)} ; rv:work ${iri(work)} ; rv:application ${iri(application)} }
+      } WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?oldSequence }
+        GRAPH ${iri(GRAPHS.control)} { ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:streamSequence ?oldStreamSequence }
+        BIND(?oldStreamSequence+1 AS ?nextStreamSequence)
+        FILTER(STR(?oldSequence)=${lit(receipt.sequence)}) }`);
+    const followingTerminal = (await readClassificationDecisionReceipt(f.env,following.id))!;
+    await f.access.recordGraphOutcome(following.id,followingTerminal);
+    const consumer = `retained-catalogue:${randomUUID()}`;
+    await initializeRelayCheckpoint(relay,consumer,f.env.lineage.dataEpoch);
+    while (await relayMainOutboxOnce(f.env.fuseki,relay,consumer)) { /* retain real envelopes */ }
+    const coverage = await relayCoverage(relay,consumer);
+    restoreLive = await snapshot();
+    await f.accessPool.query('UPDATE access.recovery_fence SET open=false WHERE id=true');
+    await restoreBackup();
+    const next = {dataEpoch: randomUUID(),routingEpoch: /^\d+$/u.test(f.env.lineage.routingEpoch)
+      ? String(BigInt(f.env.lineage.routingEpoch)+1n) : randomUUID()};
+    await cutoverRestoredGraphLineage(f.env.fuseki,{prior: {...f.env.lineage,sequence: backupSequence},next});
+    const recovery = {...f.env,lineage: next};
+    expect(await reconcileRetainedWorkCreate(recovery,f.accessPool,relay,coverage,receipt.sequence))
+      .toMatchObject({work,replayed: false});
+    expect(await reconcileRetainedWorkCreate(recovery,f.accessPool,relay,coverage,receipt.sequence))
+      .toMatchObject({work,replayed: true});
+    expect(await reconcileRetainedClassificationDecision(recovery,f.accessPool,relay,coverage,sequence))
+      .toMatchObject({replayed: false});
+    expect(await reconcileRetainedClassificationDecision(recovery,f.accessPool,relay,coverage,sequence))
+      .toMatchObject({replayed: true});
+    expect((await f.env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+      ASK { GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rdf:subject ${iri(main)} ;
+        rdf:object ${iri(term.definitions!.concept)} ; rv:interpretationDefinition ${iri(term.revision!)} . }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(receipt.workRevision!)} rv:manifest ${iri('urn:rezics:sha256:'+oldManifest)} .
+          ${iri(decision)} rv:predecessor ${iri(predecessor)} ; rv:manifest ${iri(manifest)} .
+          ?decision a rv:StatementDecision ; rv:convertedFrom ${iri(decision)} ; rv:outcome rv:Rejected ;
+            rv:predecessor ?priorNative . ?priorNative rv:convertedFrom ${iri(predecessor)} }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ?application a rv:ClassificationApplication ;
+          rv:targetMainVersion ${iri(main)} } } }`)).boolean).toBe(true);
+  } finally {
+    await restoreLive?.();
+    await f.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id=true');
+    await f.env.fuseki.update(`DELETE WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} <${RV}restoreHold> ?hold } }`);
+    for (const copy of copies) await f.env.fuseki.update(`DROP SILENT GRAPH ${iri(copy)}`);
+    await relay.end();await f.close();
+  }
+},120_000);
 
 test('CTX01/MODEL13: shared Context selection preserves distinct Realm and personal Statement meanings', async () => {
   const f = await contextFixture(Bun.env as Record<string, string>);

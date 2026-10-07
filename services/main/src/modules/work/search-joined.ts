@@ -9,7 +9,6 @@ import { assertPublicTextReady, assertQuerySnapshotMoved, assertSameTextInstance
 import { SELECTION_POLICY } from '../space/create.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { classificationModelRevisions } from '../classification/vocabulary.ts';
-import { CLASSIFICATION_DIRECT_DECISION_PROFILE } from '../classification/decision.ts';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY,
@@ -17,7 +16,6 @@ import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY,
 import { STANDING_RATING_OBSERVATION_PROFILE } from '../rating/observation.ts';
 import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
   PublicRealmUnavailable } from './search-public.ts';
-import { statementCutoverActive } from '../statement/migrate-v1.ts';
 import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE }
   from '../statement/schema.ts';
 import { exactDecisionSupports, readSearchDecisionSupports } from './search-supports.ts';
@@ -53,7 +51,6 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   }
   const realm = input.context.id;
   const lucene = `"${phrase.replace(/[\\"]/g, '\\$&')}"`;
-  const cutover = await statementCutoverActive(env);
   const index = await assertPublicTextReady(env.fuseki, env.lineage);
   const fields = input.publicFields ? await querySearchFields(env, input, index, input.publicFields) : [];
   // Both body and current field candidates pass through the same native
@@ -81,13 +78,6 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         ${iri(DATASET)} rv:restoreHold true } }
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
         ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . }
-      ${cutover ? `GRAPH ${iri(GRAPHS.receipts)} { ?cutover a rv:OperationReceipt ;
-        rv:commandFamily "statement-cutover-v1" ; rv:outcome rv:Succeeded ;
-        rv:decisionModel <https://rezics.com/vocab/StatementDecisions> . }`
-    : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} {
-        ?cutover a rv:OperationReceipt ; rv:commandFamily "statement-cutover-v1" ;
-          rv:outcome rv:Succeeded ;
-          rv:decisionModel <https://rezics.com/vocab/StatementDecisions> . } }`}
       GRAPH ${iri(GRAPHS.current)} {
         ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
         ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
@@ -184,7 +174,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
         BIND(IF(BOUND(?localSelection), "realm-adoption", "main-fallback") AS ?reason)
         FILTER(?selection = ?effectiveSelection && ?unitContext = ?effectiveContext)
         ${input.language ? `FILTER(?language = ${lit(input.language)})` : ''}
-        ${cutover ? `GRAPH ${iri(GRAPHS.current)} {
+        GRAPH ${iri(GRAPHS.current)} {
           ${iri(realm)} rv:classificationContext ?classificationContext .
           ${iri(input.sense)} rv:expression ?expression .
           ?expression a rv:ClassificationExpression ; rv:expressionState rv:Active ;
@@ -227,44 +217,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
                 rv:outcome rv:Withdrawn . }
           } })
         BIND(IF(?sourceContext = ${iri(GLOBAL_CLASSIFICATION_CONTEXT)},
-          "inherited-global", "local") AS ?source)` : `
-        OPTIONAL {
-          GRAPH ${iri(GRAPHS.current)} {
-            ?globalApplication a rv:ClassificationApplication ;
-              rv:targetMainVersion ?main ; rv:sense ${iri(input.sense)} ;
-              rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
-              rv:applicationChannel rv:Curated ; rv:applicationState rv:Active ;
-              rv:decisionHead ?globalDecision .
-          }
-          GRAPH ${iri(GRAPHS.revisions)} {
-            ?globalDecision a rv:ClassificationDecision, rv:RevisionAnchor ;
-              rv:component ?globalApplication ; rv:application ?globalApplication ;
-              rv:outcome ?globalOutcome ;
-              rv:decisionPolicy ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} .
-          }
-        }
-        OPTIONAL {
-          GRAPH ${iri(GRAPHS.current)} {
-            ?localApplication a rv:ClassificationApplication ;
-              rv:targetMainVersion ?main ; rv:sense ${iri(input.sense)} ;
-              rv:classificationContext ?classificationContext ;
-              rv:applicationChannel rv:Curated ; rv:applicationState rv:Active ;
-              rv:decisionHead ?localDecision .
-          }
-          GRAPH ${iri(GRAPHS.revisions)} {
-            ?localDecision a rv:ClassificationDecision, rv:RevisionAnchor ;
-              rv:component ?localApplication ; rv:application ?localApplication ;
-              rv:outcome ?localOutcome ;
-              rv:decisionPolicy ${iri(CLASSIFICATION_DIRECT_DECISION_PROFILE)} .
-          }
-        }
-        BIND(COALESCE(?localDecision, ?globalDecision) AS ?decision)
-        BIND(COALESCE(?localApplication, ?globalApplication) AS ?application)
-        BIND(COALESCE(?localOutcome, ?globalOutcome) AS ?outcome)
-        BIND(IF(BOUND(?localDecision), "local", "inherited-global") AS ?source)
-        BIND(IF(BOUND(?localDecision), ?classificationContext,
-          ${iri(GLOBAL_CLASSIFICATION_CONTEXT)}) AS ?sourceContext)
-        FILTER(?outcome = rv:Accepted)`}
+          "inherited-global", "local") AS ?source)
         { SELECT ?main (COUNT(?observation) AS ?ratingTargetPopulation)
             (SUM(IF(?availability = rv:Available, 1, 0)) AS ?ratingCount)
             (SUM(IF(?availability = rv:Available, ?value, 0)) AS ?ratingSum)
@@ -324,8 +277,8 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   const matches = rows.filter(row => row.unit).map(row => {
     if (!row.unit || !row.score || !row.work || !row.main || !row.contribution
       || !row.revision || !row.selection || !row.language || !row.reason
-      || !row.decision || (!cutover && !row.application) || !row.source || !row.sourceContext
-      || (cutover && (!row.key || !row.concept))
+      || !row.decision || !row.source || !row.sourceContext
+      || (!row.key || !row.concept)
       || !row.ratingCount || !row.ratingSum || !row.ratingTargetPopulation) {
       throw new PublicQueryUnavailable('joined public query result is incomplete');
     }
@@ -346,9 +299,9 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
       revision: row.revision.value, selection: row.selection.value,
       language: row.language.value, reason: row.reason.value, score,
       classification: { sense: input.sense, decision: row.decision.value,
-        application: cutover ? null : row.application!.value, source: row.source.value,
+        application: null, source: row.source.value,
         sourceContext: row.sourceContext.value,
-        ...(cutover ? { meaningKey: row.key!.value, concept: row.concept!.value } : {}) },
+        meaningKey: row.key!.value, concept: row.concept!.value },
       rating: { context: input.ratingContext, count, sum, mean: sum / count,
         precision: { kind: 'exact-rational' as const, numerator: sum, denominator: count } } };
   });
@@ -360,17 +313,17 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
   const disclosed = await discloseSearchMatches(env, matches.map(match => ({ ...match,
     ...byUnit.get(match.matchUnit) })));
   const selected = fields.length ? rankedSearchMatches(disclosed) : mainSearchMatches(disclosed);
-  const supports = cutover ? await readSearchDecisionSupports(env,
+  const supports = await readSearchDecisionSupports(env,
     { dataEpoch: first.epoch.value, sequence: first.sequence.value },
     selected.map(match => ({ mainVersion: match.mainVersion,
       meaningKey: match.classification.meaningKey!, decision: match.classification.decision,
-      sourceContext: match.classification.sourceContext }))) : null;
-  const qualified = supports ? selected.map(match => ({ ...match,
+      sourceContext: match.classification.sourceContext })));
+  const qualified = selected.map(match => ({ ...match,
     classification: { ...match.classification,
       supportingStatements: exactDecisionSupports(supports, match.mainVersion,
         match.classification.decision),
       supportingStatementCount: exactDecisionSupports(supports, match.mainVersion,
-        match.classification.decision).length } })) : selected;
+        match.classification.decision).length } }));
   return { profile: 'public-realm-classified-rated-phrase-v1' as const,
     contractVersion: '1', resultGrain: 'mainVersion' as const,
     context: input.context, classificationSense: input.sense,

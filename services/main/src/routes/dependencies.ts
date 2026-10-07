@@ -98,6 +98,7 @@ import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
 import type { ConsumptionSessionStore } from '../modules/session/store.ts';
 
 export interface MainWorkDependencies {
+  statementSeek?: import('../modules/statement/seek.ts').StatementSeek;
   platformAccess?: import('../modules/access/exposure.ts').AccessExposure;
   discoveryAudience?: import('../modules/discovery/audience.ts').DiscoveryAudienceStore;
   libraryFiles?: import('../modules/library-import/file-store.ts').LibraryFileStore;

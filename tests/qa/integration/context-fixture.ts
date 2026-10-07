@@ -14,6 +14,8 @@ import { classificationPropositionDigest, createClassificationProposition }
   from '../../../services/main/src/modules/classification/proposition.ts';
 import { PrivateContextSelections } from '../../../services/main/src/modules/context/private-selection.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
+import { StatementSeek } from '../../../services/main/src/modules/statement/seek.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
 import { activateMetadataWork, ID, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
@@ -31,7 +33,7 @@ export const RV = 'https://rezics.com/vocab/';
 export async function contextFixture(apps: Record<string, string>) {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const account = await ratingAccount(apps,
-    'openid context:write context:select context:read statement:write statement:decide work:edit work:read rating:configure rating:submit');
+    'openid context:write context:select context:read statement:write statement:decide work:create work:edit work:read classification:decide rating:configure rating:submit');
   const accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
   const native = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
   let loseResponse: string | null = null;
@@ -87,6 +89,8 @@ export async function contextFixture(apps: Record<string, string>) {
   access.configureBaseline(fuseki);
   const selections = new PrivateContextSelections(accessPool);
   const dependencies: MainWorkDependencies & ContextRouteDependencies = { environment: env,
+    statementSeek: new StatementSeek(accessPool,env),
+    platformAccess: new AccessExposure(accessPool),
     account: account.verifier, access, accessPolicy: new AccessPolicyOwner(accessPool),
     contextSelections: selections, judgments: new AccessJudgments(accessPool) };
   const app = createMainApp(fuseki, dependencies);
@@ -157,7 +161,7 @@ export async function contextFixture(apps: Record<string, string>) {
       'classification.proposition.define', classificationPropositionDigest(input)), input);
     if (created.outcome !== 'succeeded') throw new Error('Global acceptance scope failed');
   };
-  return { account, accessPool, env, app, selections, principalA, principalB, actorA, actorB,
+  return { account, access, accessPool, env, app, selections, principalA, principalB, actorA, actorB,
     admission, grant, revoke,
     call, json, realm, work, globalAcceptance,
     queries: () => queries, resetQueries: () => { queries = 0; },

@@ -1,6 +1,5 @@
 import type { Static } from 'typebox';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
-import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { resolveClassifications } from '../classification/resolve.ts';
 import { checkJudgmentProtection } from '../judgment/protection.ts';
 import { CLASSIFIED_AS, statementMeaningKey } from '../statement/schema.ts';
@@ -93,15 +92,6 @@ export async function readWorkClassificationBatch(
               ?ctx rv:disclosure rv:Public } }
           FILTER NOT EXISTS { ?statement rv:speaker ?speaker . ?speaker a rv:Realm ; rv:space ?space .
             FILTER NOT EXISTS { ?space rv:disclosure rv:Public } }
-        } UNION {
-          ?application a rv:ClassificationApplication ; rv:targetMainVersion ${iri(target.mainVersion)} ;
-            rv:sense ?sense ; rv:classificationContext ?context ; rv:applicationState rv:Active .
-          ${
-            scope.kind === 'realm'
-              ? `{ ${iri(scope.realm!)} rv:classificationContext ?context }
-            UNION { BIND(${iri(GLOBAL_CLASSIFICATION_CONTEXT)} AS ?context) }`
-              : `VALUES ?context { ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} }`
-          }
         }
       } ${after ? `FILTER(STR(?sense) > ${lit(after)})` : ''}
     } ORDER BY STR(?sense) LIMIT ${limit + 1} }`,
@@ -155,16 +145,14 @@ export async function readWorkClassificationBatch(
         decision: result.decision,
         source: result.source === 'local' ? ('local' as const) : ('global' as const),
         sourceContext: result.sourceContext,
-        meaningKey: result.application
-          ? null
-          : statementMeaningKey({
-              subject: target.mainVersion,
-              predicate: CLASSIFIED_AS,
-              relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
-              interpretationDefinitions: [row.revision!.value],
-              value: { kind: 'resource', iri: row.concept!.value },
-              applicability: [],
-            }),
+        meaningKey: statementMeaningKey({
+          subject: target.mainVersion,
+          predicate: CLASSIFIED_AS,
+          relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+          interpretationDefinitions: [row.revision!.value],
+          value: { kind: 'resource', iri: row.concept!.value },
+          applicability: [],
+        }),
       },
     ];
   });

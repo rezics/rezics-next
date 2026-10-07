@@ -98,8 +98,6 @@ export const DISCOVERY_EFFECTS: Readonly<Record<string, DiscoveryEffect>> = {
   'statement.record': 'scope',
   'statement.withdraw': 'scope',
   'statement.decide': 'scope',
-  'statement.migrate': 'scope',
-  'statement.cutover': 'scope',
   'governance.ballot.invalidate': 'irrelevant',
   'governance.ballot.operate': 'irrelevant',
   'governance.poll.administer': 'irrelevant',

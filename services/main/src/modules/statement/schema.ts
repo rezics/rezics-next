@@ -1,22 +1,14 @@
 import { createHash } from 'node:crypto';
 import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
   GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
-import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 
 // Owner schema for Statements and their acceptance decisions
 // (docs/contracts/classification.md, model/definitions/statement-v1.ts and
 // statement-decision-v1.ts). Graph-owned; commands reuse the existing receipt,
 // outbox batch, RevisionAnchor, manifest and epoch/sequence fences.
 //
-// Transition decision: migrate v1 classification decisions at cutover; do not
-// wrap two live decision models. Each v1
-// curated Application must become one Statement (rv:migratedFrom), and each v1
-// decision slot must become one qualified-fact DecisionSlot whose first decision
-// references the exact retained v1 head (rv:convertedFrom). The v1
-// Application/Decision/Sense records remain immutable history resolvable through
-// their exact old profiles; their writers retire at cutover. The v1
-// ClassificationContext records are reused only as acceptance scopes and are
-// never relabelled as interpretation Contexts.
+// Retained legacy revisions are immutable provenance. All live propositions and
+// acceptance decisions use Statements and DecisionSlots.
 
 export const STATEMENT_PROFILE = 'https://rezics.com/definition/statement-v1';
 export const STATEMENT_DECISION_PROFILE = 'https://rezics.com/definition/statement-decision-v1';
@@ -46,10 +38,8 @@ export const STATEMENT_AUTHORITY = {
 export const STATEMENT_EVENT_TYPES = [
   'StatementRecordedEvent', 'StatementWithdrawnEvent', 'StatementChangeStaleEvent',
   'StatementChangeCancelledEvent', 'StatementDecisionChangedEvent', 'StatementDecisionStaleEvent',
-  'StatementDecisionCancelledEvent', 'StatementMigratedEvent',
+  'StatementDecisionCancelledEvent',
   'StatementWithdrawalStaleEvent', 'StatementWithdrawalCancelledEvent',
-  'StatementMigrationStaleEvent', 'StatementMigrationCancelledEvent',
-  'StatementCutoverEvent', 'StatementCutoverStaleEvent', 'StatementCutoverCancelledEvent',
 ] as const;
 
 export class InvalidStatementSchemaInput extends Error {}
@@ -185,66 +175,6 @@ export function decisionSlotIri(target: DecisionTarget, acceptanceContext: strin
   }
   return `urn:rezics:decision-slot:${sha256(JSON.stringify(['statement-decision-v1', target.kind,
     targetKey, acceptanceContext]))}`;
-}
-
-/** Retained v1 inputs for one curated Application and its current decision head. */
-export interface V1ClassificationSlot {
-  application: string;
-  mainVersion: string;
-  senseRevision: string;
-  concept: string;
-  acceptanceContext: string;
-  contextRevision: string | null;
-  proposer: string;
-  headDecision: string;
-  headOutcome: 'accepted' | 'rejected';
-  headBasis: 'global-curator-review' | 'realm-manager-review';
-  headDecidedBy: string;
-}
-
-export interface V1ConversionIds {
-  statement: string;
-  statementRevision: string;
-  decision: string;
-}
-
-/**
- * Pure, lossless mapping of one v1 slot. It infers no new definition, hair
- * colour, character or narrower relation: the exact v1 Sense revision is the
- * applied interpretation DefinitionRef and the v1 proposition profile is the
- * relation definition. Command-time fields (operation, manifest, epoch,
- * sequence) are added by the migrating command.
- */
-export function convertV1ClassificationSlot(slot: V1ClassificationSlot, ids: V1ConversionIds) {
-  for (const value of [slot.application, slot.mainVersion, slot.senseRevision, slot.concept,
-    slot.proposer, slot.headDecision, slot.headDecidedBy, ids.statement, ids.statementRevision, ids.decision]) {
-    if (!nativeId.test(value)) throw new InvalidStatementSchemaInput('invalid v1 conversion reference');
-  }
-  if ((slot.acceptanceContext === GLOBAL_CLASSIFICATION_CONTEXT) !== (slot.contextRevision === null)
-    || (slot.acceptanceContext === GLOBAL_CLASSIFICATION_CONTEXT)
-      !== (slot.headBasis === 'global-curator-review')) {
-    throw new InvalidStatementSchemaInput('v1 acceptance scope and basis disagree');
-  }
-  const meaning: StatementMeaning = { subject: slot.mainVersion, predicate: CLASSIFIED_AS,
-    relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
-    interpretationDefinitions: [slot.senseRevision],
-    value: { kind: 'resource', iri: slot.concept }, applicability: [] };
-  const meaningKey = statementMeaningKey(meaning);
-  const target: DecisionTarget = { kind: 'qualified-fact', meaningKey };
-  const slotId = decisionSlotIri(target, slot.acceptanceContext);
-  return {
-    statement: { ...meaning, id: ids.statement, speaker: slot.proposer, semanticContextRevision: null,
-      meaningKey, state: 'active', head: ids.statementRevision, source: null,
-      migratedFrom: slot.application } satisfies StatementRecord,
-    slot: { id: slotId, target, acceptanceContext: slot.acceptanceContext,
-      decisionHead: ids.decision } satisfies DecisionSlotRecord,
-    decision: { id: ids.decision, slot: slotId, predecessor: null, outcome: slot.headOutcome,
-      basis: slot.headBasis, decidedBy: slot.headDecidedBy, contextRevision: slot.contextRevision,
-      targetRevision: null, support: [ids.statement], evidence: [],
-      convertedFrom: slot.headDecision } satisfies PreparedStatementDecision,
-    policy: (slot.acceptanceContext === GLOBAL_CLASSIFICATION_CONTEXT
-      ? CLASSIFICATION_ISOLATE_POLICY : CLASSIFICATION_INHERIT_POLICY) as AcceptancePolicy,
-  };
 }
 
 /** What one complete, fenced read observed for one slot. */

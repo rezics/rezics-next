@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { startHomeStack } from './feed-read-support.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { hash } from '../../../services/main/src/modules/work/activate.ts';
 import { workProfileCorpusApi } from '../../../scripts/load/work-profile-corpus.ts';
 import { CATALOGUE_IMPORT_SCOPE } from '../../../services/main/src/modules/work/catalogue-import.ts';
 import { seedQueryCatalogue, QUERY_CATALOGUE_SCALES } from '../../../scripts/load/corpus-query.ts';
@@ -32,7 +34,7 @@ test(
       restore: null,
     };
     try {
-      const app = createMainApp(stack.fuseki, home.deps);
+      const app = createMainApp(stack.fuseki, {...home.deps,platformAccess: new AccessExposure(stack.accessPool)});
       const api = workProfileCorpusApi('http://main.local', author.token, {
         signal: deadline,
         fetch: (async (input: string | URL | Request, init?: RequestInit) => {
@@ -96,6 +98,15 @@ test(
           [crypto.randomUUID(), actor.agent, scope, action],
         );
       }
+      const platformGrant = crypto.randomUUID();
+      await stack.accessPool.query(`INSERT INTO access.principal_permission_grant
+        (id,issuer_subject,principal_id,scope_id,action,valid_until)
+        VALUES ($1,$2,$3,'platform:access','platform:use:catalogue-import',now()+interval '1 hour')`,
+      [platformGrant,actor.agent,author.principalId]);
+      await stack.accessPool.query(`INSERT INTO access.platform_grant_episode
+        (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+        VALUES ($1,$2,$3,'platform:use:catalogue-import','platform:access',$4,$5)`,
+      [crypto.randomUUID(),platformGrant,actor.agent,author.principalId,`urn:rezics:access-receipt:${hash(platformGrant)}`]);
       const first = QUERY_CATALOGUE_SCALES[0];
       const corpus = await seedQueryCatalogue({
         api,
