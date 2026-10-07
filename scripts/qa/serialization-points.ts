@@ -28,6 +28,20 @@ const content = 'services/content/migrations/';
 const main = 'services/main/src/';
 export const serializationAllowlist: SerializationAllowance[] = [
   {
+    relation: 'access.event_temporal_checkpoint',
+    class: 'projection checkpoint (background)',
+    reason: 'The background Event fold advances finite cold and journal cursors; request writers use scoped publication/window fences and never wait on this writer.',
+    writers: [access + '1769_event_temporal_projection.sql',
+      access + '1770_event_temporal_relay_backfill.sql',
+      access + '1771_event_temporal_scoped_coverage.sql', main + 'modules/event/projection.ts'],
+  },
+  {
+    key: 'event-temporal-projection',
+    class: 'projection checkpoint (background)',
+    reason: 'Only the background Event fold serializes its bounded cursor turn; request writers and readers never acquire this key.',
+    writers: [main + 'modules/event/projection.ts'],
+  },
+  {
     key: 'platform-grant-continuity',
     class: 'per-object management revision',
     reason:
