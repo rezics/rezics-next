@@ -142,7 +142,19 @@ test('summary pending probes stay local under completed dependency history and u
       evidence.push(metrics);
       console.info('summary-pending-plan', JSON.stringify(metrics));
       expect(plan['Actual Rows']).toBe(Number(pending));
-      expect(rows).toBeLessThanOrEqual(count);
+      if (history + unrelated < 4_096) {
+        // EXPLAIN rounds per-loop filter averages: 79/80 becomes 1 while
+        // returned rows remain fractional. The one-row baseline has an exact
+        // population-times-loops bound instead of summing rounded averages.
+        const population = Number(
+          (await client.query('SELECT count(*)::int AS rows FROM verification.invalidation'))
+            .rows[0].rows,
+        );
+        expect(population).toBeLessThanOrEqual(1);
+        expect(
+          scans.reduce((sum, node) => sum + population * node['Actual Loops'], 0),
+        ).toBeLessThanOrEqual(count);
+      } else expect(rows).toBeLessThanOrEqual(count);
       expect(buffers).toBeLessThanOrEqual(count * 8 + 32);
       const dependencyScans = nodes(plan).filter(
         (node) => node['Relation Name'] === 'summary_dependency',
@@ -155,6 +167,8 @@ test('summary pending probes stay local under completed dependency history and u
         if (unrelated + history >= 4_096) {
           expect(scan['Index Name']).toBe('invalidation_pending_dependency');
           expect(scan['Index Cond']).toMatch(/kind.*reference/s);
+          expect(scan['Rows Removed by Filter'] ?? 0).toBe(0);
+          expect(scan['Rows Removed by Index Recheck'] ?? 0).toBe(0);
         }
       }
     }
