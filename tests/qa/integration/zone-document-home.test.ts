@@ -10,6 +10,7 @@ import { applyContentErasure, checkContentErasureTargets, ContentErasureGraphReq
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
+import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 import { DEFAULT_ZONE_PRESENTATION } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { readZoneConfiguration, readZoneSitePublicationReceipt, ZoneUnavailable, ZonePublicationUnavailable,
@@ -148,6 +149,9 @@ async function fixture() {
       language ? { 'accept-language': language } : {}), 200);
     const exact = (revision: string, editor = false) => call('GET', `/v1/content-revisions/${revision}${editor
       ? `?actingSubject=${encodeURIComponent(f.actor)}` : ''}`, undefined, randomUUID(), editor ? f.account.tokenA : null);
+    // Earlier fixtures' raw stewardship writes invalidate native completion.
+    // Restore it during controlled preparation before this fixture's requests.
+    expect((await normalizeStoredMembership(f.env)).complete).toBe(true);
     return { ...f, ...created, zoneGrant, controlId, path, selection, initialDocument, publish, save, call, home, exact, content, initialContentPosition,
       revokeBeforeSwitch: () => { revokeBeforeSwitch = true; },
       revokeEditor,
