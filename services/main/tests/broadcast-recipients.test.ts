@@ -13,19 +13,28 @@ const principal = (n: number) => `00000000-0000-0000-0000-${n.toString(16).padSt
 test('an empty eligible batch advances the examined frontier, rather than ending a broadcast', async () => {
   const statements: { sql: string; args: unknown[] }[] = [];
   const pool = {
+    release: () => {},
     query: async (sql: string, args: unknown[]) => {
+      if (sql.includes('current_setting')) return { rows: [{ sequential: 'on', bitmap: 'on' }] };
+      if (sql.includes('set_config')) return { rows: [] };
+      if (sql.includes('identity.alias FROM targets')) return { rows: [] };
       statements.push({ sql, args });
       const after = args[5] as string | null;
       return {
         rows: Array.from({ length: after ? 12 : 257 }, (_, i) => ({
           id: principal((after ? 256 : 0) + i + 1),
           eligible: after !== null,
+          reason: 'manual',
         })),
       };
     },
   } as unknown as Pool;
   const first = await relationshipRecipientPage(pool, { targets: ['work'], highlights: true });
-  expect(first).toEqual({ items: [], nextCursor: principal(256) });
+  expect(first).toEqual({
+    items: [],
+    reasons: {},
+    nextCursor: { source: 'base', afterPrincipal: principal(256), legacyAfter: null },
+  });
   const next = await relationshipRecipientPage(
     pool,
     { targets: ['work'], highlights: true },
@@ -39,16 +48,26 @@ test('an empty eligible batch advances the examined frontier, rather than ending
 
 test('the frontier counts ineligible and absent direct principals, not only selected recipients', async () => {
   const pool = {
-    query: async () => ({
-      rows: Array.from({ length: 257 }, (_, i) => ({
-        id: principal(i + 1),
-        eligible: i % 2 === 0,
-      })),
-    }),
+    release: () => {},
+    query: async (sql: string) =>
+      sql.includes('current_setting')
+        ? { rows: [{ sequential: 'on', bitmap: 'on' }] }
+        : sql.includes('set_config')
+          ? { rows: [] }
+          : {
+              rows: Array.from({ length: 257 }, (_, i) => ({
+                id: principal(i + 1),
+                eligible: i % 2 === 0,
+              })),
+            },
   } as unknown as Pool;
   const page = await relationshipRecipientPage(pool, { targets: [], highlights: false });
   expect(page.items).toHaveLength(128);
-  expect(page.nextCursor).toBe(principal(256));
+  expect(page.nextCursor).toEqual({
+    source: 'base',
+    afterPrincipal: principal(256),
+    legacyAfter: null,
+  });
   await expect(
     relationshipRecipientPage(pool, { targets: Array(8).fill('work'), highlights: false }),
   ).rejects.toThrow('input bound exceeded');
@@ -182,4 +201,73 @@ test('safety correspondence releases the Access pool before independent intake a
   ).toBe(true);
   expect(statements).toContain('COMMIT');
   expect(held).toBe(false);
+});
+
+for (const fail of [false, true]) {
+  test(`recipient seek restores its caller's planner settings after ${fail ? 'failure' : 'success'}`, async () => {
+    const statements: { sql: string; args?: unknown[] }[] = [];
+    let released = false;
+    const client = {
+      query: async (sql: string, args?: unknown[]) => {
+        statements.push({ sql, args });
+        if (sql.includes('current_setting')) return { rows: [{ sequential: 'off', bitmap: 'on' }] };
+        if (sql.includes('raw_follows AS MATERIALIZED') && fail)
+          throw new Error('recipient source failed');
+        return { rows: [] };
+      },
+      release: () => {
+        released = true;
+      },
+    } as unknown as PoolClient;
+    const read = relationshipRecipientPage(client, { targets: [], highlights: false });
+    if (fail) await expect(read).rejects.toThrow('recipient source failed');
+    else expect((await read).nextCursor).toBeNull();
+    expect(statements.at(-1)?.args).toEqual(['off', 'on']);
+    expect(
+      statements.some((statement) => statement.sql === 'BEGIN' || statement.sql === 'COMMIT'),
+    ).toBe(false);
+    expect(released).toBe(false);
+  });
+}
+
+test('legacy principal progress remains the floor when advancing between alias identities', async () => {
+  const floor = principal(7);
+  const seeks: unknown[][] = [];
+  let discovered = 0;
+  const client = {
+    release: () => {},
+    query: async (sql: string, args?: unknown[]) => {
+      if (sql.includes('current_setting')) return { rows: [{ sequential: 'on', bitmap: 'on' }] };
+      if (sql.includes('set_config')) return { rows: [] };
+      if (sql.includes('remaining ORDER BY target'))
+        return { rows: [{ target: 'space', alias: `alias-${++discovered}` }] };
+      seeks.push(args!);
+      return { rows: [] };
+    },
+  } as unknown as PoolClient;
+  const first = await relationshipRecipientPage(
+    client,
+    { targets: ['space'], highlights: true },
+    floor,
+  );
+  expect(first.nextCursor).toEqual({
+    source: 'alias',
+    target: 'space',
+    alias: 'alias-1',
+    afterPrincipal: floor,
+    legacyAfter: floor,
+  });
+  const second = await relationshipRecipientPage(
+    client,
+    { targets: ['space'], highlights: true },
+    first.nextCursor,
+  );
+  expect(second.nextCursor).toEqual({
+    source: 'alias',
+    target: 'space',
+    alias: 'alias-2',
+    afterPrincipal: floor,
+    legacyAfter: floor,
+  });
+  expect(seeks.map((args) => args[5])).toEqual([floor, floor]);
 });

@@ -291,7 +291,7 @@ export class NotificationProducer {
         ORDER BY activity_at,target LIMIT 256)`);
     await this.access.query(`DELETE FROM access.notification_recipient_progress WHERE (source_owner,source_event,topic) IN
       (SELECT source_owner,source_event,topic FROM access.notification_recipient_progress
-        WHERE updated_at<clock_timestamp()-interval '30 days' ORDER BY updated_at LIMIT 256)`);
+        WHERE complete AND updated_at<clock_timestamp()-interval '30 days' ORDER BY updated_at LIMIT 256)`);
     let count = 0;
     for (const recover of [() => recoverSpaceFollows(this.access,this.graph),
       () => recoverLibraryFollows(this.content,this.access)]) {

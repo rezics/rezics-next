@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { EditorialEvent } from '../editorial-review/store.ts';
-import type { NotificationEvent, ProposalSubscriptionReason } from '../notification/store.ts';
+import type { NotificationEvent } from '../notification/store.ts';
 import type { NotificationSubjectReader, SubjectResolution } from '../notification/dispatcher.ts';
 import { AccessAdmissionRegistry } from '../access/admission.ts';
 import { resolveTargets, targetRead } from '../target/resolve.ts';
@@ -91,37 +91,15 @@ export async function editorialNotification(
     SELECT id,$2,'steward','participating' FROM unnest($1::uuid[]) AS id ON CONFLICT DO NOTHING`,
       [stewards.map((item) => item.id), event.proposal],
     );
-  const recipients = (
-    await access.query<{ principal_id: string; reason: ProposalSubscriptionReason }>(
-      `
-    WITH involved AS (SELECT s.principal_id,CASE
-      WHEN proposal.proposer_principal=s.principal_id THEN 'author'
-      WHEN EXISTS(SELECT 1 FROM access.editorial_review review WHERE review.proposal=s.proposal
-        AND review.principal=s.principal_id) THEN 'reviewer'
-      WHEN s.principal_id=ANY($6::uuid[]) AND s.reason<>'manual' THEN 'steward' ELSE NULL END AS reason
-      FROM access.watch s JOIN access.editorial_proposal proposal ON proposal.id=s.proposal
-      WHERE s.proposal=$1 OR ($2::uuid IS NOT NULL AND s.proposal=$2))
-    SELECT DISTINCT ON (s.principal_id) s.principal_id::text,s.reason
-    FROM involved s JOIN access.principal p ON p.id = s.principal_id AND p.active
-    WHERE s.reason IS NOT NULL
-      AND ($3 <> 'review-requested' OR s.reason <> 'author')
-      AND s.principal_id IS DISTINCT FROM $4::uuid
-      AND NOT EXISTS (SELECT 1 FROM access.representation self
-        WHERE self.principal_id = s.principal_id AND self.subject_id = $5
-          AND self.action = 'agent.control' AND self.active AND self.valid_until > clock_timestamp())
-    ORDER BY s.principal_id, CASE s.reason WHEN 'author' THEN 0 WHEN 'reviewer' THEN 1 WHEN 'steward' THEN 2 ELSE 3 END
-    LIMIT 257`,
-      [event.proposal, topic === 'proposal-reverted' ? row.reverts : null, topic, row.actor_principal, event.actor,
-        stewards.map(steward => steward.id)],
-    )
-  ).rows;
-  if (recipients.length > 256) throw new Error('editorial recipient bound exceeded');
-  const relationshipPlan: RelationshipRecipients = { targets: [row.resource===row.work ? null : row.resource,row.context].filter((id): id is string => !!id),
+  const relationshipPlan: RelationshipRecipients = {
+    targets: [row.resource===row.work ? null : row.resource,row.context].filter((id): id is string => !!id),
     highlights: ['proposal-decided','proposal-reverted'].includes(topic),
     watches: [`urn:rezics:proposal:${event.proposal}`],
-    direct: recipients.filter(item => ['author','reviewer'].includes(item.reason)).map(item => item.principal_id),
     relationships: stewards.map(item => item.id),
-    except: row.actor_principal ? [row.actor_principal] : [] };
+    except: row.actor_principal ? [row.actor_principal] : [],
+    editorial: { proposals: [event.proposal,...topic==='proposal-reverted' && row.reverts ? [row.reverts] : []],
+      actor: event.actor,skipAuthors: topic==='review-requested' },
+  };
   return {
     sourceOwner: 'access',
     sourceEvent: `editorial:${event.id}`,
@@ -133,7 +111,7 @@ export async function editorialNotification(
     proposal: {
       id: event.proposal,
       revision: event.revision,
-      reasons: Object.fromEntries(recipients.map((item) => [item.principal_id, item.reason])),
+      reasons: {},
     },
   };
 }

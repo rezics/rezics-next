@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { Pool } from 'pg';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
 import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
 import {
@@ -66,6 +67,7 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
     account: f.account.verifier,
     editorialReview: new EditorialReviewStore(f.accessPool),
     notifications: { store },
+    platformAccess: new AccessExposure(f.accessPool),
   };
   f.access.configureBaseline(f.env.fuseki);
   const app = createMainApp(f.env.fuseki, deps);
@@ -134,6 +136,16 @@ test('G-866: review journey reaches recipients, triage is independent and revoca
         VALUES ($1,$2,$3,'agent.control','infinity')`,
         [randomUUID(), principal, agent],
       );
+    }
+    for (const principal of [f.principalId,f.otherPrincipal]) {
+      const grant = randomUUID();
+      await f.accessPool.query(`INSERT INTO access.principal_permission_grant
+        (id,issuer_subject,principal_id,scope_id,action,valid_until)
+        VALUES($1,$2,$3,'platform:access','platform:use:update-subscriptions','infinity')`, [grant,f.actor,principal]);
+      await f.accessPool.query(`INSERT INTO access.platform_grant_episode
+        (id,principal_grant_id,issuer_subject,permission,scope_id,assigned_by_principal,receipt)
+        VALUES($1,$1,$2,'platform:use:update-subscriptions','platform:access',$3,$4)`,
+      [grant,f.actor,f.principalId,`urn:rezics:access-receipt:${hash(grant)}`]);
     }
     await createAgentGraph(f.env, {
       id: randomUUID(),

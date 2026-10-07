@@ -11,7 +11,7 @@ import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { discloseNotifications } from '../disclosure/notifications.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { notificationRecipientAllowed } from './recipient-policy.ts';
-import { relationshipRecipientPage, type RelationshipRecipients } from '../follows/recipients.ts';
+import { relationshipRecipientPage, type RelationshipRecipients, type RecipientFrontier } from '../follows/recipients.ts';
 
 export class NotificationInvalid extends Error {}
 export class NotificationDenied extends Error {}
@@ -312,16 +312,18 @@ export class NotificationStore {
     let recipients = [...event.recipients].sort();
     const intake = async (client: PoolClient) => {
       const results: EnqueuedItem[] & { complete?: boolean } = [];
-      let nextCursor: string | null = null;
+      let nextCursor: RecipientFrontier | null = null;
+      let proposalReasons = event.proposal?.reasons ?? {};
       if (event.relationshipPlan) {
         await client.query(`INSERT INTO access.notification_recipient_progress(source_owner,source_event,topic)
           VALUES($1,$2,$3) ON CONFLICT DO NOTHING`,[event.sourceOwner,event.sourceEvent,event.topic]);
-        const progress = (await client.query<{ after_principal: string | null; complete: boolean }>(`SELECT after_principal,complete
+        const progress = (await client.query<{ after_principal: string | null; frontier: RecipientFrontier | null; complete: boolean }>(`SELECT after_principal,frontier,complete
           FROM access.notification_recipient_progress WHERE source_owner=$1 AND source_event=$2 AND topic=$3 FOR UPDATE`,
         [event.sourceOwner,event.sourceEvent,event.topic])).rows[0]!;
         if (progress.complete) return results;
-        const page = await relationshipRecipientPage(client,event.relationshipPlan,progress.after_principal);
+        const page = await relationshipRecipientPage(client,event.relationshipPlan,progress.frontier ?? progress.after_principal);
         recipients = page.items; nextCursor = page.nextCursor;
+        if (event.relationshipPlan.editorial) proposalReasons = page.reasons;
         Object.defineProperty(results,'complete',{ value: nextCursor === null });
       }
       for (const principalId of recipients) {
@@ -329,7 +331,7 @@ export class NotificationStore {
         if (event.proposal) {
           const subscription = (await client.query<{ level: string }>(`SELECT level FROM access.watch
             WHERE principal_id = $1 AND proposal = $2 FOR SHARE`,[principalId,event.proposal.id])).rows[0];
-          if (subscription?.level === 'ignore' && ['manual','steward'].includes(event.proposal.reasons[principalId] ?? 'manual')) continue;
+          if (subscription?.level === 'ignore' && ['manual','steward'].includes(proposalReasons[principalId] ?? 'manual')) continue;
         }
         const first = await client.query(`INSERT INTO access.notification_seen
           (principal_id, source_owner, source_event, topic)
@@ -370,7 +372,7 @@ export class NotificationStore {
             ON CONFLICT DO NOTHING`, [principalId, event.sourceOwner, event.sourceEvent,
             event.purpose, event.topic, event.subject.owner, event.subject.ref,
             event.subject.revision, event.disclosureBasis, event.display?.realm ?? null, event.proposal?.id ?? null,
-            event.proposal ? event.proposal.reasons[principalId] ?? 'manual' : null,event.display?.actorAgent ?? null,event.display?.groupKey ?? null]);
+            event.proposal ? proposalReasons[principalId] ?? 'manual' : null,event.display?.actorAgent ?? null,event.display?.groupKey ?? null]);
         }
         if (active.rows[0]?.inbox !== true) continue;
         await client.query(`INSERT INTO access.notification_stream (principal_id, stream)
@@ -406,7 +408,7 @@ export class NotificationStore {
               itemId,
               event.proposal.id,
               event.proposal.revision,
-              event.proposal.reasons[principalId] ?? 'manual',
+              proposalReasons[principalId] ?? 'manual',
             ],
           );
         if (event.display) await client.query(`INSERT INTO access.notification_display_context
@@ -441,8 +443,9 @@ export class NotificationStore {
           JSON.stringify({ principalId, generation: stream.generation, head: sequence })]);
       }
       if (event.relationshipPlan) await client.query(`UPDATE access.notification_recipient_progress
-        SET after_principal=$4,complete=$5,updated_at=clock_timestamp() WHERE source_owner=$1 AND source_event=$2 AND topic=$3`,
-      [event.sourceOwner,event.sourceEvent,event.topic,nextCursor,nextCursor === null]);
+        SET after_principal=$4,frontier=$6,complete=$5,updated_at=clock_timestamp() WHERE source_owner=$1 AND source_event=$2 AND topic=$3`,
+      [event.sourceOwner,event.sourceEvent,event.topic,nextCursor?.afterPrincipal ?? null,nextCursor === null,
+        nextCursor ? JSON.stringify(nextCursor) : null]);
       return results;
     };
     return heldClient ? intake(heldClient) : this.transaction(intake);

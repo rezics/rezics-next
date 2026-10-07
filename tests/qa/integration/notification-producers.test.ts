@@ -485,8 +485,10 @@ test('broadcast batches seek raw audiences, survive an empty first batch and res
     expect((await access.query(`SELECT 1 FROM access.notification_item WHERE source_event=$1`, [notice.sourceEvent])).rowCount).toBe(1069);
 
     let selection = '', params: unknown[] = [];
-    await relationshipRecipientPage({ query: async (sql: string, values: unknown[]) => {
-      selection = sql; params = values; return { rows: [] };
+    await relationshipRecipientPage({ release: () => {},query: async (sql: string, values: unknown[]) => {
+      if (sql.includes('current_setting')) return { rows: [{ sequential: 'on',bitmap: 'on' }] };
+      if (sql.includes('raw_follows AS MATERIALIZED')) { selection = sql; params = values; }
+      return { rows: [] };
     } } as unknown as Pool, plan);
     await access.query('ANALYZE access.follow');
     await access.query('ANALYZE access.watch');
@@ -526,3 +528,141 @@ test('broadcast batches seek raw audiences, survive an empty first batch and res
     await databases.close();
   }
 }, 90_000);
+
+type RecipientPlan = { 'Relation Name'?: string; 'Actual Rows'?: number; 'Actual Loops'?: number;
+  'Rows Removed by Filter'?: number; 'Rows Removed by Index Recheck'?: number; Plans?: RecipientPlan[] };
+function examinedRows(plan: RecipientPlan, relation: string): number {
+  return (plan['Relation Name'] === relation ? ((plan['Actual Rows'] ?? 0)
+    + (plan['Rows Removed by Filter'] ?? 0) + (plan['Rows Removed by Index Recheck'] ?? 0)) * (plan['Actual Loops'] ?? 0) : 0)
+    + (plan.Plans ?? []).reduce((sum, child) => sum + examinedRows(child, relation), 0);
+}
+function measuredRecipients(access: Pool, plans: RecipientPlan[]): Pool {
+  const measuredQuery = (owner: Pick<Pool,'query'>) => async (sql: string, args?: unknown[]) => {
+    if (/^\s*(SELECT|WITH)\b/.test(sql) && !sql.includes('set_config') && !sql.includes('current_setting')) {
+      const result = await owner.query(`EXPLAIN (ANALYZE, FORMAT JSON) ${sql}`, args);
+      plans.push(result.rows[0]!['QUERY PLAN'][0].Plan as RecipientPlan);
+    }
+    return owner.query(sql,args);
+  };
+  return { query: measuredQuery(access),connect: async () => {
+    const client = await access.connect();
+    return { query: measuredQuery(client),release: () => client.release() };
+  } } as unknown as Pool;
+}
+
+test('many Space aliases have bounded discovery and independently resumable recipient seeks', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access']);
+  let access = boundedPool({ connectionString: databases.urls.access, max: 1 });
+  const id = (n: number) => `00000000-0000-0000-0000-${n.toString(16).padStart(12, '0')}`;
+  try {
+    const space = agent(), actor = agent();
+    const aliases = Array.from({ length: 512 }, (_, i) => `urn:space-alias:${String(i).padStart(6,'0')}`);
+    const principals = Array.from({ length: 601 }, (_, i) => id(i + 1));
+    await access.query(`INSERT INTO access.principal(id,account_issuer,account_subject)
+      SELECT id,'alias-audience',id::text FROM unnest($1::uuid[]) id`, [principals]);
+    await access.query(`INSERT INTO access.authority_subject(id,kind) VALUES($1,'agent')`, [actor]);
+    await access.query(`INSERT INTO access.follow_space_alias(alias,space,realm)
+      SELECT alias,$2,NULL FROM unnest($1::text[]) alias`, [[space,...aliases],space]);
+    await access.query(`INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision,level)
+      SELECT id,$2,'space',$3,true,gen_random_uuid(),'all' FROM unnest($1::uuid[]) id`, [principals.slice(1), aliases[0],actor]);
+    await access.query(`INSERT INTO access.follow(principal_id,target,kind,acting_subject,following,revision,level)
+      VALUES($1,$2,'space',$3,true,gen_random_uuid(),'all'),($4,$2,'space',$3,true,gen_random_uuid(),'all')`,
+    [id(1),aliases.at(-1),actor,id(601)]);
+    await access.query('ANALYZE access.follow_space_alias');
+    await access.query('ANALYZE access.follow');
+    const { relationshipRecipientPage } = await import('../../../services/main/src/modules/follows/recipients.ts');
+    const plan = { targets: [space], highlights: true };
+    const plans: RecipientPlan[] = [];
+    const first = await relationshipRecipientPage(measuredRecipients(access,plans),plan);
+    expect(plans.reduce((sum, node) => sum + examinedRows(node,'follow_space_alias'),0)).toBeLessThanOrEqual(8);
+    expect(first.items).toEqual([]);
+    expect(first.nextCursor).not.toBeNull();
+    const latePlans: RecipientPlan[] = [];
+    const late = await relationshipRecipientPage(measuredRecipients(access,latePlans),plan,
+      { source: 'alias', target: space, alias: aliases.at(-2)!, afterPrincipal: null, legacyAfter: null });
+    expect(latePlans.reduce((sum,node) => sum + examinedRows(node,'follow_space_alias'),0)).toBeLessThanOrEqual(8);
+    expect(late.nextCursor).toMatchObject({ source: 'alias',alias: aliases.at(-1),afterPrincipal: null });
+    const event = { sourceOwner: 'access' as const, sourceEvent: `aliases:${randomUUID()}`,
+      purpose: 'subscription' as const, topic: 'new-release', subject: { owner: 'graph' as const, ref: space, revision: null },
+      disclosureBasis: 'relationship-resource-v1', recipients: [], relationshipPlan: plan };
+    let store = new NotificationStore(access);
+    expect((await store.enqueue(event)).complete).toBe(false);
+    expect((await store.enqueue(event)).complete).toBe(false);
+    const saved = (await access.query<{ frontier: unknown }>(`SELECT frontier FROM access.notification_recipient_progress
+      WHERE source_event=$1`, [event.sourceEvent])).rows[0]!.frontier;
+    expect(saved).toMatchObject({ source: 'alias', alias: aliases[0], afterPrincipal: id(257) });
+    await access.query(`UPDATE access.notification_recipient_progress SET updated_at=clock_timestamp()-interval '31 days'
+      WHERE source_event=$1`, [event.sourceEvent]);
+    await access.query(`INSERT INTO access.notification_recipient_progress(source_owner,source_event,topic,complete,updated_at)
+      VALUES('access','completed-broadcast','new-release',true,clock_timestamp()-interval '31 days')`);
+    const recovery = new NotificationProducer(access,null,{ query: async () => ({ rows: [] }) } as unknown as Pool,
+      { query: async () => ({ results: { bindings: [] } }) } as unknown as FusekiClient,store,null);
+    await recovery.runRelationshipRecoveryOnce();
+    expect((await access.query(`SELECT frontier FROM access.notification_recipient_progress WHERE source_event=$1`,
+      [event.sourceEvent])).rows).toEqual([{ frontier: saved }]);
+    expect((await access.query(`SELECT 1 FROM access.notification_recipient_progress WHERE source_event='completed-broadcast'`)).rowCount).toBe(0);
+    const snapshot = await databases.snapshot('access', () => access.end());
+    access = boundedPool({ connectionString: snapshot, max: 1 });
+    store = new NotificationStore(access);
+    const resumedPlans: RecipientPlan[] = [];
+    await relationshipRecipientPage(measuredRecipients(access,resumedPlans),plan,
+      saved as Parameters<typeof relationshipRecipientPage>[2]);
+    expect(resumedPlans.reduce((sum,node) => sum + examinedRows(node,'follow_space_alias'),0)).toBeLessThanOrEqual(8);
+    expect(resumedPlans.reduce((sum,node) => sum + examinedRows(node,'follow'),0)).toBeLessThanOrEqual(514);
+    let batches = 2;
+    while (!(await store.enqueue(event)).complete) expect(++batches).toBeLessThan(520);
+    expect((await access.query<{ principal_id: string }>(`SELECT principal_id FROM access.notification_item
+      WHERE source_event=$1 ORDER BY principal_id`, [event.sourceEvent])).rows.map(row => row.principal_id)).toEqual(principals);
+    await store.enqueue(event);
+    expect((await access.query(`SELECT 1 FROM access.notification_item WHERE source_event=$1`, [event.sourceEvent])).rowCount).toBe(601);
+  } finally { await access.end(); await databases.close(); }
+}, 120_000);
+
+test('editorial batches examine bounded watchers and involved parties when almost everyone is uninvolved', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use the QA integration tier');
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['access']);
+  const access = boundedPool({ connectionString: databases.urls.access, max: 1 });
+  const id = (n: number) => `00000000-0000-0000-0000-${n.toString(16).padStart(12, '0')}`;
+  try {
+    const principals = Array.from({ length: 8192 }, (_,i) => id(i + 1));
+    const proposer = id(8191), reviewer = id(8192), decider = id(10000);
+    const authorAgent = agent(), reviewAgent = agent(), decisionAgent = agent(), resource = agent(), proposal = randomUUID();
+    await access.query(`INSERT INTO access.principal(id,account_issuer,account_subject)
+      SELECT id,'editorial-audience',id::text FROM unnest($1::uuid[]) id`, [[...principals,decider]]);
+    await access.query(`INSERT INTO access.authority_subject(id,kind) SELECT id,'agent' FROM unnest($1::text[]) id`,
+      [[authorAgent,reviewAgent,decisionAgent]]);
+    await access.query(`INSERT INTO access.editorial_proposal(id,kind,target,resource,context,work,
+      proposer_principal,proposer_agent,proposer_key,proposer_controllers)
+      VALUES($1,'work-metadata','{}',$2,'urn:rezics:context:global',$2,$3,$4,$5,ARRAY[$3::uuid])`,
+    [proposal,resource,proposer,authorAgent,'a'.repeat(64)]);
+    await access.query(`INSERT INTO access.editorial_revision(proposal,n,candidate,candidate_digest,before_state,base_heads,evidence,author_agent)
+      VALUES($1,1,'{}',encode(sha256(convert_to('{}','UTF8')),'hex'),'{}','[{}]','[]',$2)`, [proposal,authorAgent]);
+    await access.query(`INSERT INTO access.editorial_review(id,proposal,revision,principal,reviewer,reviewer_key,outcome,message)
+      VALUES($1,$2,1,$3,$4,$5,'comment','A bounded involved party')`, [randomUUID(),proposal,reviewer,reviewAgent,'b'.repeat(64)]);
+    await access.query(`INSERT INTO access.editorial_decision(proposal,revision,principal,actor,outcome,owner_receipt)
+      VALUES($1,1,$2,$3,'rejected',NULL)`, [proposal,decider,decisionAgent]);
+    await access.query(`INSERT INTO access.watch(principal_id,proposal,reason,level)
+      SELECT id,$2,'manual','ignore' FROM unnest($1::uuid[]) id ON CONFLICT DO NOTHING`, [principals,proposal]);
+    await access.query(`UPDATE access.watch SET level='ignore',revision=revision+1 WHERE proposal=$1 AND principal_id=ANY($2::uuid[])`,
+      [proposal,[proposer,reviewer]]);
+    await access.query('ANALYZE access.watch');
+    const { editorialNotification } = await import('../../../services/main/src/modules/notification-producers/editorial.ts');
+    const { relationshipRecipientPage } = await import('../../../services/main/src/modules/follows/recipients.ts');
+    const plans: RecipientPlan[] = [];
+    const measured = measuredRecipients(access,plans);
+    const notice = await editorialNotification(measured,{ id: randomUUID(), sequence: '1', proposal,
+      revision: 1, kind: 'rejected', actor: decisionAgent, occurredAt: new Date(Date.now()+1000).toISOString() });
+    expect(notice).not.toBeNull();
+    const page = await relationshipRecipientPage(measured,notice!.relationshipPlan!);
+    expect(plans.reduce((sum,node) => sum + examinedRows(node,'watch'),0)).toBeLessThanOrEqual(1536);
+    expect(page.items).toEqual([]);
+    const store = new NotificationStore(access);
+    let batches = 0;
+    while (!(await store.enqueue(notice!)).complete) expect(++batches).toBeLessThan(34);
+    expect((await access.query<{ principal_id: string; reason: string }>(`SELECT i.principal_id,p.reason
+      FROM access.notification_item i JOIN access.notification_proposal_context p ON p.item_id=i.id
+      WHERE i.source_event=$1 ORDER BY principal_id`, [notice!.sourceEvent])).rows)
+      .toEqual([{ principal_id: proposer, reason: 'author' },{ principal_id: reviewer, reason: 'reviewer' }]);
+  } finally { await access.end(); await databases.close(); }
+}, 120_000);
