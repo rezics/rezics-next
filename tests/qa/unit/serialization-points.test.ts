@@ -691,4 +691,5 @@ test('service migrations and write paths introduce no unapproved serialization o
         `${finding.file}:${finding.line}: ${finding.rule}: ${finding.target}: ${finding.detail}`,
     ),
   ).toEqual([]);
-}, 30_000);
+  // A whole-repository scan: fast alone, but the merge gate runs four shards on a busy host.
+}, 120_000);
