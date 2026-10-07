@@ -1,4 +1,4 @@
-import { renderProfile } from '../../../model/compiler/ir.ts';
+import { profileSource } from '../../../model/compiler/shacl.ts';
 import { structureWorkCompositionProfile } from '../../../model/definitions/structure-work-composition-v1.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
@@ -91,7 +91,7 @@ test('G-830: creation validates the owner Structure shape and pins the current p
     profile: 'structure-work-composition-v1',
     shape: 'https://rezics.com/definition/structure-work-composition-v1/structure-shape' });
   expect(String(profileRegistry['structure-work-composition-v1'].sha256))
-    .toBe(createHash('sha256').update(renderProfile(structureWorkCompositionProfile)).digest('hex'));
+    .toBe(createHash('sha256').update(profileSource(structureWorkCompositionProfile)).digest('hex'));
 });
 
 test('G-830: seals page disclosed pins only and reveal no private occurrence IDs or counts', async () => {

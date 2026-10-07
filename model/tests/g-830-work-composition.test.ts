@@ -2,11 +2,12 @@ import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { commandProfiles } from '../compiler/generate.ts';
 import { renderProfile } from '../compiler/ir.ts';
+import { profileSource } from '../compiler/shacl.ts';
 import { structureWorkCompositionProfile } from '../definitions/structure-work-composition-v1.ts';
 import { structureCompositionProfile } from '../definitions/structure-composition-v1.ts';
 
 test('G-830: Work membership has a qualified occurrence and never a top-level exclusion predicate', () => {
-  const owner = renderProfile(structureWorkCompositionProfile);
+  const owner = profileSource(structureWorkCompositionProfile);
   const kernel = renderProfile(structureCompositionProfile);
   expect(owner).toContain('rv:RequiredPart');
   expect(owner).toContain('rv:OptionalPart');
