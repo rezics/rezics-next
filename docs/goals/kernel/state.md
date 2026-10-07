@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 08:08 UTC. Manager GPT-6.1 Sol in tmux
+Checkpoint: 2026-10-07 08:23 UTC. Manager GPT-6.1 Sol in tmux
 `goal-kernel`, registered as `goal-kernel-codex`. Live truth:
 `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
 
@@ -34,15 +34,20 @@ including interrupted reconciliation/lost acknowledgement. Manager native union
 passes 39 cases; 111-file gate passes, with isolated serialization timeout reported
 on baseline under host load. Current artifacts 6e01dba9e include six target-rating
 profiles 28268ce84 and native 0.5.39. Local challenge counts 1c75b67fb landed:
-one claim-head row read, 25 integrations pass. Exactly one refresh queued in
-`.temp/kernel/dev-refresh-c6-combined.log` for Access1765/1766, Content1522 and
-model/native artifacts. No other kernel lifecycle waiter exists.
+one claim-head row read, 25 integrations pass. The initial canonical refresh refused before mutation because the old AppHost
+lacked relay custody configuration. Retained-volume repair succeeded in
+`.temp/kernel/repair-stack-slot.log`: native0.5.39, Access1765/1766, Content1522
+and exact model generation13 (2c22c54e93be) aligned; all six resources Healthy.
+Exactly one canonical refresh now queued behind launch browser QA in
+`.temp/kernel/dev-refresh-c6-restarted.log`; no other kernel lifecycle waiter.
 
 C6 legacy exact-model backfill is the next prerequisite; G-1296 reclaimed
-narrowly, native core released for G-1330. G-1300 reclaimed on Recipe in-place
-qualifier edits for launch. Their resumes and G-1330 dispatch hit the 12GiB
-admission floor, so retry when memory permits; never override it. G-1326 is
-merged and ready for reuse on another bounded profile group.
+narrowly, native core released for G-1330. G-1296/G-1300 resumed and G-1330
+dispatched on codex/high after memory recovered above12GiB. G-1300 owns
+Recipe in-place qualifier edits for launch. G-1326 resumed on three Work
+address profiles and author-credit. G-1341 finished three Turtle profiles;
+manager compiler/source-byte check passes24 cases, generated artifacts committed
+on its rebased branch, landing held through the canonical checkpoint.
 
 ## Contracts
 
@@ -82,11 +87,13 @@ keeps readable resource names and role identities. G-1243/G-1297/G-1271 closed.
   publication membership signatures staged in its worktree.
 - G-1315 closed and archived after product-layout and shared-stack acceptance.
 - G-1326 source/base/derived/target slices landed: 23 Turtle profiles. Latest
-  six target v2-v4 preserve 157 constraints/18 shapes and all 17 earlier author bytes.
-  Reuse worker on next bounded group once memory permits.
-- G-1341 running Luna/max: title-control and two derivation profiles move to
-  authored Turtle without compiler edits, preserving exact meaning and pins.
-- G-1330 dispatch-ready after C6 core release (memory admission waiting): offline classification restore must use
+  six target v2-v4 preserve157 constraints/18 shapes and all17 earlier author bytes.
+  Attempt5 running on four Work address/credit profiles, preserving earlier sources.
+- G-1341 finished Luna/max: title-control and two derivation profiles preserve
+  46 constraints/three roles. Manager accepted exact-source named exports and
+  fixed compiler fixture to compare authored bytes, not re-rendered syntax.
+  Rebased/generated branch ready; land after canonical checkpoint.
+- G-1330 running codex/high after C6 core release: offline classification restore must use
   authenticated native maintenance on the product assembler, never /update.
 
 ## Cross-Goal commitments
@@ -129,3 +136,9 @@ omitted-state preservation and explicit clearing; G-1300 holds change/format.
 Trust-ops G-1342 is lent exact privacy-log sites in Content projection worker
 and rankings, using existing logWorkerFault only. Program requests batched
 landing updates every 30 minutes; urgent blockers/approvals begin URGENT.
+
+Manager voided G-1306 scoped QA at08:20 solely to release an ordinary slot
+for urgent shared repair; rerun that case after health, no code failure implied.
+Program removed19GiB of regression checkouts from RAM-backed /tmp; use .temp.
+Trust-ops G-1343 new-custody isolated restore work and G-1333/G-1342 code-only
+landings are released; legacy exact-artifact closure remains a hard refusal.
