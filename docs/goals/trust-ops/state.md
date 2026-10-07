@@ -8,13 +8,21 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Shared-stack repair is accepted and the hold is released: kernel's native
-Statement repair `67883e853690`, regeneration `ea78e29c6`, and final refresh on
-`18a969c808a2` retained volumes, aligned generation 9 and passed readiness.
-Access 1650 and Content 1700/1701 are applied. All six services are Healthy.
-Subsequent migration/model merges use the ordinary `dev:refresh -- --wait` queue.
-Kernel C6 remains in progress; its Verification singleton debt is acknowledged
-and being removed by forward migration rather than allowlisted.
+Kernel's latest canonical native refresh succeeded at 09:34 UTC, retaining
+volumes and applying model generation 15 (`1a60542ab47b`) with native
+`0.5.39-5607e0e56a0d`. The subsequent session-fence refresh completed, applying
+Account1750/1751 and restarting writers. No trust refresh is queued. Kernel's
+next complete-name native `490ac125e519` wave waits for G-1343's corrected gate;
+coalesce inputs before the one fresh refresh process, then hold **all authored
+code** from queue through checkpoint because queued Bun imports can be cached.
+Kernel owns shared lifecycle. No duplicate waiter or volume reset.
+
+C6 owner delivery is accepted. Exact original legacy model custody is now
+accepted: 15 generations/1976 artifacts backfilled in9seconds; the independent
+reader verified 15 generations/1961 shapes in2.5seconds. Kernel's remaining
+historical retired-receipt object-root gap is being repaired in G-1330; restore
+qualification must sample those historical roots too. This evidence does not
+qualify the populated startup/restore600second budget.
 
 Closed and verified since takeover:
 
@@ -24,7 +32,7 @@ Closed and verified since takeover:
 - Zone Content authority `0e5218da741d`: server-resolved Zone, no-provision
   administrator path, immutable Zone/grant/controller proof at replay/claim.
   Kernel has `withZonePageContentTarget` and `zonePageContentAllowed`; focused
-  real owner verification passed. Access migration 1650 awaits shared repair.
+  real owner verification passed. Access migration 1650 is applied.
 - PostgreSQL preflight `cacbd6b2e`: diagnostic grants and zero prepared
   transactions; focused owner/integration passed at the merge SHA.
 - Market decision record `57e4c55d74d8`: six conditional launch markets,
@@ -39,20 +47,29 @@ Closed and verified since takeover:
   intake `3957f02adb3a`: live bearer/reservation before bounded stream/deadline.
 - H4 Account contract `07ac9df29782`: `library:write` registry/resource/consent
   support with complete eight-locale meaning and rendered consent evidence.
-  Launch G-1314 owns route/client enforcement; H4 remains open until it lands.
+  Launch G-1314 enforcement landed and passed pinned owner/integration checks below.
 - Inherited bootstrap/governance checks both passed at pinned `0658a345f`.
 
 The findings-only security review is archived; its report is preserved in
 `.temp/trust-ops/security-findings.md`. Closing that review did not qualify the
-open findings. Every completed code task passed its merge's unit/guard gate;
+open findings. Every completed code task passed the affected unit gate; merges accepted only
+acknowledged pre-existing repository guard debt where reported;
 focused worker checks are recorded in handoffs, with targeted merge-SHA checks
 above for the inherited verification gaps.
 
 | Task | State / next action |
 | --- | --- |
-| G-1321 | Sol: immediate session-only fence and bounded cleanup; Account1750–1751 reserved. The earlier synchronous drain remains unmerged. Native/embedded reads, code/consent and first-party refresh must deny immediately while unrelated offline consent survives. |
-| G-1333 | Sol: actual checkout detector/caller lifecycle. Purge's helpers already share the client; real max1 pool regressions passed, but live startup pool.query and independent scheduler failures remain to reproduce/fix. Captured hold context/release scheduling are under investigation; no disabled detector/larger pool. |
-| G-1342 | Sol: last two inherited raw projection faults; kernel lends exact sites in content-projection-worker and rankings/projection, existing safe logger only. |
+| G-1321 | Closed/verified `793d7b2e813e`: immediate session-only generation fence, bounded fair cleanup, same transaction adapter client; real max1 signup/sign-in and 21 integration tests/1329 assertions. Pinned manager integration `20261007t094427-7d5212` passed; Account1750/1751 refreshed. Offline third-party consent remains independent. |
+| G-1333 | Merged `3b12289689e1`: checkout hold context/release correction and isolated LISTEN acquisition; plain/instrumented Bun startup, true nested rejection and real max1 proofs passed. Await launch's notification ownership review before closing; manager acknowledged premature landing before loan acknowledgement. |
+| G-1342 | Closed/verified `98e679a8edc0`: two lent projection error sites use existing safe worker logger; focused privacy/runtime checks passed. |
+| G-1343 | Resumed after current Main rebase; preserve G-1289 Zone public/exact disclosure and optional actingSubject. Three old revision HTTP fixtures timeout before their rights assertion; 28 other custody/comment/page/search checks pass. Correct fixtures/local generated pins, then gate/land with kernel consumer loan. |
+| G-1344 | Campaign implementation merged `192d5e825979`, native union accepted/refreshed. Resumed for a real populated qualification fixture using retained medium backup and isolated copies. Manager owns exclusive time/space/compaction qualification. |
+
+Remaining operator gap: `OwnerOperations.reconcileRestore` and
+`scripts/ops/restore.ts` verify captured cuts then release Access without the
+retained erasure replay/custody composition. Exact kernel consumer loan requested;
+connect this before claiming backup/timed restore qualification. Keep existing
+owner authentication, holds, journal frontier and exact retained roots.
 
 Completed since the previous checkpoint:
 
@@ -76,13 +93,11 @@ Completed since the previous checkpoint:
   acting-identity parity; writer provenance must not be overwritten. Launch
   G-1335 owns bounded library-import JSON intake (M1 class follow-up).
 
-C6 remains the prerequisite for suppression/restore custody and populated
-compaction/restore qualification; kernel found and is repairing its PostgreSQL
-outbox delivery handoff before acceptance. C5 first slice landed `35c3fe3c5`
-with Access1761–1764 and model/native changes; exactly one kernel refresh is
-queued. Coalesce peer inputs before acquisition and hold material landings
-through its checkpoint. Program accepts batches about every30minutes; urgent
-blockers/approvals go immediately with `URGENT` first.
+C5 query templates and Access1761–1764 are refreshed; C6 delivery and exact
+legacy model closure are accepted as above. Program accepts contract batches
+about every30minutes; urgent blockers/approvals go immediately with `URGENT`
+first. Trust dispatch/resume keeps the maintainer's12GiB memory floor and
+host-wide24worker cap, without heavy flags for workers' own checks.
 
 Additional completed contracts:
 
