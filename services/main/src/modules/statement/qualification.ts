@@ -401,7 +401,15 @@ export async function validateStatementDefinitions(
   input: { predicate: string; relationDefinition: string; qualification?: StatementQualification },
   canReadDefinition?: (definition: string) => Promise<boolean>,
 ): Promise<{ guard: string }> {
-  // The existing authored classification relation is the sole reviewed static binding.
+  // Event aliases retain this reviewed platform profile, not an arbitrary
+  // native DefinitionRef. The exact predicate has no qualification contract.
+  if (input.relationDefinition === 'https://rezics.com/definition/event-time-v1') {
+    if (input.predicate !== `${RV}denotesEvent` || input.qualification !== undefined) {
+      throw new InvalidContextCommand('Statement relation definition does not bind this proposition');
+    }
+    return { guard: activeDirectDefinitionsGuard([input.relationDefinition]) };
+  }
+  // The existing authored classification relation retains its reviewed binding.
   if (input.relationDefinition === CLASSIFICATION_PROPOSITION_PROFILE) {
     if (input.predicate !== `${RV}classifiedAs` || input.qualification !== undefined) {
       throw new InvalidContextCommand(
