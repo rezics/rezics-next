@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { logWorkerFault } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
@@ -104,7 +105,7 @@ export class SerialStatisticsProjection {
         outcome: count ? 'worked' : 'idle', processed: count, unit: 'batch',
       }))
         .catch((error) => {
-          console.error('serial statistics projection deferred', error);
+          logWorkerFault('main.serial.projection', error);
         })
         .finally(() => {
           this.running = undefined;

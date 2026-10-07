@@ -66,8 +66,11 @@ test('Discovery refresh expires already purged superseded generations and resume
     try {
       expect(await tick()).toBe('retry');
       expect(logged).toHaveBeenCalledTimes(1);
-      expect(logged.mock.calls[0]).toEqual(['discovery refresh deferred',
-        { code: '08006', message: 'activation interrupted' }, expect.objectContaining({ cause })]);
+      expect(JSON.parse(String(logged.mock.calls[0]?.[0]))).toEqual({
+        level: 'error', event: 'worker_fault', 'rezics.worker.name': 'main.discovery.refresh',
+        'error.class': 'RecommendationUnavailable', 'error.code': '08006',
+      });
+      expect(String(logged.mock.calls[0]?.[0])).not.toContain('activation interrupted');
     } finally { projection.activate = activate; logged.mockRestore(); }
     const pending = (await f.accessPool.query(`SELECT j.generation_id,g.state FROM access.discovery_refresh j
       JOIN access.derived_generation g ON g.id=j.generation_id WHERE j.scope_key=$1`, [key])).rows[0];

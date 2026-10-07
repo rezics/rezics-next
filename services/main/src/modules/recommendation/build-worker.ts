@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
+import { logWorkerFault } from '@rezics/observability/log';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
-import { recommendationFailureCause, RecommendationNotReady, RecommendationStale, RecommendationUnavailable }
+import { RecommendationNotReady, RecommendationStale, RecommendationUnavailable }
   from './derived-generation.ts';
 import { RankingGenerations } from './ranking.ts';
 
@@ -59,7 +60,7 @@ export class RankingBuildWorker {
 
   private logDeferred(error: unknown): void {
     if (error instanceof RecommendationUnavailable || error instanceof RecommendationStale && error.cause !== undefined)
-      console.error('ranking build deferred', recommendationFailureCause(error), error);
+      logWorkerFault('main.ranking.build', error);
   }
 
   start(): void {
@@ -67,7 +68,7 @@ export class RankingBuildWorker {
     this.timer = setInterval(() => {
       if (this.running) return;
       this.running = withWorkerTelemetry('main.ranking.build', () => this.tick()).catch(error => {
-        console.error('ranking build tick failed', recommendationFailureCause(error), error);
+        logWorkerFault('main.ranking.build', error);
       }).finally(() => { this.running = undefined; });
     }, this.intervalMs);
   }

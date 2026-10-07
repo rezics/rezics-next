@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { logWorkerFault } from '@rezics/observability/log';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { RENDITION_LIMITS } from './policy.ts';
@@ -78,7 +79,7 @@ export class MediaRenditionWorker {
     this.timer = setInterval(() => {
       if (this.running) return;
       this.running = withWorkerTelemetry('main.media.rendition', () => this.tick())
-        .catch((error) => console.error('media rendition tick failed', error))
+        .catch((error) => logWorkerFault('main.media.rendition', error))
         .finally(() => {
           this.running = undefined;
         });

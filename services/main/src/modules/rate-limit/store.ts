@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
 import type { Pool } from 'pg';
+import { logWorkerFault } from '@rezics/observability/log';
 import type { VerifiedAccountAssertion } from '../account/verify-assertion.ts';
 import type { Budget, PrincipalClass, RateLimitFamily } from './budgets.ts';
 
@@ -151,7 +152,7 @@ export class PostgresRateLimitStore implements RateLimitStore {
     const tick = () => {
       if (this.expiryPending) return;
       this.expiryPending = this.sweepExpired().then(() => undefined)
-        .catch(error => { console.error('Main rate limit expiry sweep failed', error); })
+        .catch(error => { logWorkerFault('main.rate-limit.expiry', error); })
         .finally(() => { this.expiryPending = undefined; });
     };
     this.expiryTimer = setInterval(tick, RATE_LIMIT_COST_V1.expirySweepIntervalMs);

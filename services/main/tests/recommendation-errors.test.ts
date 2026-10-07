@@ -44,7 +44,7 @@ test('ranking build reports the original relay, erasure and candidate source fai
   }
 });
 
-test('ranking workers log the provider code and message once for each deferred attempt', async () => {
+test('ranking workers log the provider class and code without the message', async () => {
   const cause = Object.assign(new Error('provider connection lost'), { code: '08006' });
   const unavailable = new RecommendationUnavailable('Access owner is unavailable', { cause });
   for (const phase of ['refresh', 'batch']) {
@@ -58,8 +58,14 @@ test('ranking workers log the provider code and message once for each deferred a
     try {
       await worker.tick();
       expect(logged).toHaveBeenCalledTimes(1);
-      expect(logged.mock.calls[0]).toEqual(['ranking build deferred',
-        { code: '08006', message: cause.message }, unavailable]);
+      expect(JSON.parse(String(logged.mock.calls[0]?.[0]))).toEqual({
+        level: 'error',
+        event: 'worker_fault',
+        'rezics.worker.name': 'main.ranking.build',
+        'error.class': 'RecommendationUnavailable',
+        'error.code': '08006',
+      });
+      expect(String(logged.mock.calls[0]?.[0])).not.toContain(cause.message);
     } finally { logged.mockRestore(); }
   }
 });

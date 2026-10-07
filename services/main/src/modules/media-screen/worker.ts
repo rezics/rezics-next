@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { logWorkerFault } from '@rezics/observability/log';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import type { ImageClassifier } from './classifier.ts';
@@ -52,7 +53,7 @@ export class MediaScreenWorker {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = withWorkerTelemetry('main.media.screen', () => this.tick()).catch(error => console.error('media screen tick failed', error))
+      this.running = withWorkerTelemetry('main.media.screen', () => this.tick()).catch(error => logWorkerFault('main.media.screen', error))
         .finally(() => { this.running = undefined; });
     }, 1_000);
   }

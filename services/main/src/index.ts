@@ -9,7 +9,7 @@ import { LocalImageTransformer } from './modules/media-rendition/transform.ts';
 import { Pool } from 'pg';
 import { boundedPool } from './infrastructure/pg-pool.ts';
 import { shutdownTelemetry, withWorkerTelemetry } from '@rezics/observability/runtime';
-import { telemetryLog } from '@rezics/observability/log';
+import { logWorkerFault, telemetryLog } from '@rezics/observability/log';
 import { CatalogueIntakeStore, unverifiedWorks } from './modules/catalogue-intake/store.ts';
 import { WikiQuotationStore } from './modules/wiki/quotation.ts';
 import { WikiEvidenceStore } from './modules/wiki/evidence.ts';
@@ -596,13 +596,13 @@ new DiscoveryRefreshStore(pool), new DiscoveryProjection(pool)) : undefined;
 // A failed or partial conversion must not take Main down: unconverted chapters
 // stay legacy until a restart resumes the migration.
 await withWorkerTelemetry('main.post.backfill', () => prepareChapterPosts(environment, pool), undefined, 'startup')
-  .catch(error => console.warn('Chapter Post migration paused; restart to resume', error));
+  .catch(error => logWorkerFault('main.post.backfill', error));
 app.listen({ hostname: process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', port });
 telemetryLog('main_listening');
 const libraryBackfillController = new AbortController();
 const libraryBackfill = withWorkerTelemetry('main.library.backfill', () => prepareLibraryShelves(contentPool, pool, fuseki,
   { signal: libraryBackfillController.signal }), undefined, 'startup').catch(error => {
-  if (!libraryBackfillController.signal.aborted) console.warn('Library shelf backfill paused; restart to resume', error);
+  if (!libraryBackfillController.signal.aborted) logWorkerFault('main.library.backfill', error);
 });
 const feedWorker = relayPool ? new FeedRefreshWorker({ environment, account, access, content,
   realmReplyThreads: new RealmReplyThreadStore(contentPool, pool),

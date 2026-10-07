@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { logWorkerFault } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { NotificationStore, type EnqueuedItem } from '../notification/store.ts';
 import type { NotificationSubjectReader } from '../notification/dispatcher.ts';
@@ -53,7 +54,7 @@ export class VerificationCorrectionWorker {
       this.running = withWorkerTelemetry('main.verification.correction', () => this.publisher.runOnce(this.owner), result => ({
         outcome: result.pages ? 'worked' : 'idle', processed: result.recipients, unit: 'recipient',
       })).then(() => undefined)
-        .catch(error => { console.error('Verification correction delivery:', error); })
+        .catch(error => { logWorkerFault('main.verification.correction', error); })
         .finally(() => { this.running = null; });
     };
     poll();

@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
+import { logWorkerFault } from '@rezics/observability/log';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
 import { RequiredMediaMatchStore, REQUIRED_MATCH_COST } from './required-match-store.ts';
 import type { RequiredMatch, RequiredSafetyMatcher } from './required-matcher.ts';
@@ -69,7 +70,7 @@ export class RequiredMediaMatchWorker {
     this.timer = setInterval(() => {
       if (this.running) return;
       this.running = withWorkerTelemetry('main.media.required-match', () => this.tick())
-        .catch((error) => console.error('required media match tick failed', error))
+        .catch((error) => logWorkerFault('main.media.required-match', error))
         .finally(() => {
           this.running = undefined;
         });

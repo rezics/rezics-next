@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { logWorkerFault } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { RealmAdminInvalid, RealmAdminUnavailable } from '../realm-admin/contract.ts';
 import { deliverRealmPolicy, type RealmPolicyDelivery } from '../space/policy.ts';
@@ -56,15 +57,14 @@ export async function pendingRealmPolicies(pool: Pool, after?: string, limit: nu
 
 export async function recoverRealmPolicies(pool: Pool, env: WorkActivationEnvironment, after?: string, limit: number = REALM_POLICY_RECOVERY_COST.page) {
   const page = await pendingRealmPolicies(pool, after, limit);
-  const items: { realm: string; receiptId: string; status: 'completed' | 'pending'; error?: string }[] = [];
+  const items: { realm: string; receiptId: string; status: 'completed' | 'pending' }[] = [];
   for (const intent of page.items) {
     try {
       await settleRealmPolicy(pool, intent.realm, env);
       items.push({ realm: intent.realm, receiptId: intent.receipt_id, status: 'completed' });
     } catch (error) {
-      const cause = (error as Error).cause;
-      items.push({ realm: intent.realm, receiptId: intent.receipt_id, status: 'pending',
-        error: cause instanceof Error ? cause.message : error instanceof Error ? error.message : 'Policy recovery failed' });
+      logWorkerFault('main.realm-policy.recovery', error);
+      items.push({ realm: intent.realm, receiptId: intent.receipt_id, status: 'pending' });
     }
   }
   return { items, nextCursor: page.nextCursor };
@@ -88,8 +88,7 @@ export class RealmPolicyRecoveryWorker {
       processed: page.items.filter(item => item.status === 'completed').length, unit: 'item',
     })).then(page => {
       this.after = page.nextCursor ?? undefined;
-      for (const item of page.items) console.info('Realm policy recovery', JSON.stringify(item));
-    }).catch(error => { console.warn('Realm policy recovery paused', error); }).finally(() => {
+    }).catch(error => { logWorkerFault('main.realm-policy.recovery', error); }).finally(() => {
       if (!this.stopped) this.timer = setTimeout(() => { this.tick(); }, REALM_POLICY_RECOVERY_COST.intervalMs);
     });
   }

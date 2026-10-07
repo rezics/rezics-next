@@ -1,11 +1,11 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
+import { logWorkerFault } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { standingContextPattern } from '../rating/contexts.ts';
 import {
   digest,
   RecommendationRestart,
   RecommendationStale,
-  recommendationFailureCause,
 } from '../recommendation/derived-generation.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import {
@@ -123,16 +123,16 @@ export class DiscoveryRefreshWorker {
     await this.store.purge();
     // Reuse this scheduler for co-reader maintenance and one durable build step.
     await this.deps.alsoEnjoyed?.purge().catch((error: unknown) => {
-      console.error('co-reader purge deferred', recommendationFailureCause(error), error);
+      logWorkerFault('main.discovery.refresh', error);
     });
     if (this.deps.alsoEnjoyed && performance.now() >= this.coReaderFoldDue) {
       this.coReaderFoldDue = performance.now() + ALSO_ENJOYED_COST.foldMs;
       await this.deps.alsoEnjoyed.fold().catch((error: unknown) => {
-        console.error('co-reader fold deferred', recommendationFailureCause(error), error);
+        logWorkerFault('main.discovery.refresh', error);
       });
     }
     await this.deps.alsoEnjoyed?.refresh(this.deps, request()).catch((error: unknown) => {
-      console.error('co-reader refresh deferred', recommendationFailureCause(error), error);
+      logWorkerFault('main.discovery.refresh', error);
     });
     try {
       await this.enroll();
@@ -349,7 +349,7 @@ export class DiscoveryRefreshWorker {
           error instanceof WorkReadMoved
         )
       ) {
-        console.error('discovery refresh deferred', recommendationFailureCause(error), error);
+        logWorkerFault('main.discovery.refresh', error);
       }
     }
     await this.store.finish(
@@ -390,7 +390,7 @@ export class DiscoveryRefreshWorker {
         }),
       )
         .catch((error) => {
-          console.error('discovery refresh tick failed', recommendationFailureCause(error), error);
+          logWorkerFault('main.discovery.refresh', error);
         })
         .finally(() => {
           this.running = undefined;

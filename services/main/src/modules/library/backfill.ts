@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { logWorkerFault, telemetryLog } from '@rezics/observability/log';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { READ_PREFIX, WorkReadUnavailable } from '../work/read-session.ts';
@@ -104,8 +105,15 @@ export interface LibraryBackfillOptions {
 export async function prepareLibraryShelves(content: Pool, access: Pool, graph: FusekiClient,
   options: LibraryBackfillOptions = {}) {
   configureLibraryShelves(content, access, graph);
-  const onRowError = options.onRowError ?? ((row, error) => console.warn('Library shelf backfill skipped row', row, error));
-  const deadline = Date.now() + LIBRARY_BACKFILL_COST.deadlineMs;
+  // The row names an Agent and a Work. The log keeps counts, duration, and the error class and code.
+  const onRowError = (row: { agent: string; work: string }, error: unknown) => {
+    logWorkerFault('main.library.backfill', error);
+    options.onRowError?.(row, error);
+  };
+  const started = Date.now();
+  let examined = 0;
+  let skipped = 0;
+  const deadline = started + LIBRARY_BACKFILL_COST.deadlineMs;
   const client = await content.connect();
   let locked = false;
   try {
@@ -124,6 +132,7 @@ export async function prepareLibraryShelves(content: Pool, access: Pool, graph: 
       for (const row of batch) {
         options.signal?.throwIfAborted();
         if (Date.now() >= deadline) throw new WorkReadUnavailable('Library backfill reached its ten-minute budget; restart to resume');
+        examined += 1;
         try {
           const parent = row.work;
           await client.query('BEGIN');
@@ -142,12 +151,20 @@ export async function prepareLibraryShelves(content: Pool, access: Pool, graph: 
             [row.agent, row.work, keys.titleKey, keys.ownRating, keys.lastReadAt]);
             await client.query('COMMIT');
           } catch (error) { await client.query('ROLLBACK'); throw error; }
-        } catch (error) { onRowError(row, error); }
+        } catch (error) { skipped += 1; onRowError(row, error); }
       }
       after = batch.at(-1)!;
     }
   } finally {
-    if (locked) await client.query("SELECT pg_advisory_unlock(hashtextextended('library-shelves-602',0))");
-    client.release();
+    try {
+      if (locked && examined > 0) telemetryLog('library_backfill', skipped > 0 ? 'warn' : 'info', {
+        'rezics.backfill.examined': examined,
+        'rezics.backfill.skipped': skipped,
+        'rezics.backfill.duration_ms': Date.now() - started,
+      });
+    } finally {
+      if (locked) await client.query("SELECT pg_advisory_unlock(hashtextextended('library-shelves-602',0))");
+      client.release();
+    }
   }
 }
