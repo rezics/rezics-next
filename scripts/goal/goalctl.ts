@@ -531,15 +531,17 @@ export function launchCommand(options: { id: string; effort: string; session: st
   resume: boolean; engine?: Engine; worktree?: string; lastMessage?: string }): [string, string[]] {
   const { id, effort, session, prompt, resume } = options;
   const engine = options.engine ?? 'claude';
+  // A prompt may start with `---` (brief frontmatter) or `-`, so no engine may parse it as an option:
+  // Grok's parser takes a dash-leading value only in `--single=<prompt>` form; the others take the prompt after `--`.
   if (engine === 'grok') {
-    return ['grok', ['-p', prompt, '-m', GROK_MODEL, '--reasoning-effort', effort,
+    return ['grok', ['-m', GROK_MODEL, '--reasoning-effort', effort,
       '--permission-mode', 'bypassPermissions', '--no-subagents', '--output-format', 'json',
-      '--cwd', options.worktree ?? '.', ...(resume ? ['-r', session] : [])]];
+      '--cwd', options.worktree ?? '.', ...(resume ? ['-r', session] : []), `--single=${prompt}`]];
   }
   if (engine === 'cursor') {
-    return ['cursor-agent', ['-p', prompt, '--model', `${GROK_MODEL}-${effort}`, '--force', '--trust',
+    return ['cursor-agent', ['-p', '--model', `${GROK_MODEL}-${effort}`, '--force', '--trust',
       '--sandbox', 'disabled', '--output-format', 'json', '--workspace', options.worktree ?? '.',
-      ...(resume ? ['--resume', session] : [])]];
+      ...(resume ? ['--resume', session] : []), '--', prompt]];
   }
   if (isCodex(engine)) {
     // Maintainer, 2026-10-03: Codex workers run on the fast service tier unless GOAL_CODEX_SERVICE_TIER says otherwise.
@@ -547,13 +549,12 @@ export function launchCommand(options: { id: string; effort: string; session: st
     const common = ['-m', MODELS[engine], '-c', `model_reasoning_effort=${effort}`,
       ...(tier ? ['-c', `service_tier="${tier}"`] : []),
       '--dangerously-bypass-approvals-and-sandbox', '--json', '-o', options.lastMessage ?? '/dev/null'];
-    // `--` ends options: a prompt may start with `---` (brief frontmatter) or `-`.
     return ['codex', resume ? ['exec', 'resume', session, ...common, '--', prompt]
       : ['exec', ...common, '-C', options.worktree ?? '.', '--', prompt]];
   }
-  return ['claude', ['-p', prompt, '--model', MODELS[engine], '--effort', effort, '--dangerously-skip-permissions',
+  return ['claude', ['-p', '--model', MODELS[engine], '--effort', effort, '--dangerously-skip-permissions',
     ...(resume ? ['--resume', session] : ['--session-id', session]), '-n', id.toLowerCase(),
-    '--output-format', 'json']];
+    '--output-format', 'json', '--', prompt]];
 }
 
 /** The manager switches Codex between `fast` and `default` by writing this state file (fast when

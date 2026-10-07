@@ -579,11 +579,17 @@ describe('goalctl runtime policy', () => {
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
-  test('a prompt that starts like an option stays a prompt (brief frontmatter)', () => {
+  test('a prompt that starts like an option stays a prompt (brief frontmatter) on every engine', () => {
+    const prompt = '---\nid: G-041\n---';
     for (const resume of [false, true]) {
-      const [, args] = launchCommand({ id: 'G-041', effort: 'high', session: 's', prompt: '---\nid: G-041\n---', engine: 'codex', resume });
-      expect(args.at(-2)).toBe('--');
-      expect(args.at(-1)).toBe('---\nid: G-041\n---');
+      for (const engine of ['claude', 'sonnet', 'codex', 'luna', 'cursor'] as const) {
+        const [, args] = launchCommand({ id: 'G-041', effort: 'high', session: 's', prompt, engine, resume });
+        expect(args.slice(-2)).toEqual(['--', prompt]);
+        expect(args.filter(arg => arg === prompt)).toHaveLength(1);
+      }
+      const [, grok] = launchCommand({ id: 'G-041', effort: 'high', session: 's', prompt, engine: 'grok', resume });
+      expect(grok.at(-1)).toBe(`--single=${prompt}`);
+      expect(grok).not.toContain(prompt);
     }
   });
 
@@ -634,7 +640,7 @@ describe('goalctl runtime policy', () => {
     const [program, args] = launchCommand({ id: 'G-102', effort: 'xhigh', session: 'c', prompt: 'p', resume: true,
       engine: 'cursor', worktree: '/w' });
     expect(program).toBe('cursor-agent');
-    expect(args).toEqual(expect.arrayContaining(['-p', 'p', '--model', 'grok-4.7-xhigh', '--force', '--trust',
+    expect(args).toEqual(expect.arrayContaining(['-p', '--model', 'grok-4.7-xhigh', '--force', '--trust',
       '--output-format', 'json', '--workspace', '/w', '--resume', 'c']));
   });
 
