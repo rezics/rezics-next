@@ -99,7 +99,7 @@ async function settleAdmissions(env: WorkActivationEnvironment, pool: Pool, clie
   }
 }
 
-/** prepare-storage calls this after SQL migration 1389 and graph initialization,
+/** prepare-storage calls this after SQL migration 1499 and graph initialization,
  * while Main and Relay are stopped. Failure retains both fences; only the
  * durable marker belonging to this upgrade permits a retry to release them. */
 export async function upgradeStoredStatements(env: WorkActivationEnvironment, pool: Pool) {

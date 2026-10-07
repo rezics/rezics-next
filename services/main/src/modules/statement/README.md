@@ -31,7 +31,7 @@ fails when either bound or position is exceeded.
 
 Run `task dev:refresh` to upgrade a populated stack. Its `prepare-storage` step
 calls `prepareDevOwners` → `migrateOwnerData` → `upgradeStoredStatements`, after
-applying Access migration 1389 and while Main and Relay are stopped. The owner
+applying Access migration 1499 and while Main and Relay are stopped. The owner
 step settles legacy admissions, takes both recovery fences, converts retained
 decisions, rebuilds seek coverage and verifies the exact graph position before
 releasing its fences. Failure prevents restart; retry resumes the upgrade's
