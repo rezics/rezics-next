@@ -737,6 +737,29 @@ process.exit(await child.exited);
     } finally { r.cleanup(); }
   }, 30_000);
 
+  test('pre-merge unit gate runs without holding the ledger lock', async () => {
+    const r = repo();
+    try {
+      const file = 'lock-free.test.ts';
+      const lock = join(r.dir, '.temp/goal-orchestration/ledger.lock');
+      const task = await r.start('G-001');
+      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(file); r.save(ledger);
+      // The unit file itself fails if the gate holds the ledger: other Goals' goalctl would block meanwhile.
+      writeFileSync(join(task.worktree, file), `import { test, expect } from 'bun:test';\nimport { existsSync } from 'node:fs';\n`
+        + `test('ledger is free', () => expect(existsSync(${JSON.stringify(lock)})).toBe(false));\n`);
+      r.commit(task);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', file]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add lock probe']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const plan = join(r.dir, '.temp/unit-plan');
+      writeFileSync(plan, `  unit: ${file}\n`);
+      const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan });
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+    } finally { r.cleanup(); }
+  }, 30_000);
+
   for (const outcome of ['introduced', 'inherited', 'skipped', 'dirty-main', 'new-file'] as const) {
     test(`pre-merge unit gate handles ${outcome} failures before fast-forward`, async () => {
       const r = repo();

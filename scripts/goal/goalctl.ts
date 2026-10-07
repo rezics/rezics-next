@@ -1468,6 +1468,15 @@ function preMergeUnitGate(worktree: string, mainRoot: string, before: string, sk
   if (plan.status !== 0) throw new Error(`Affected unit selection failed:\n${plan.stderr || plan.error?.message}`);
   const files = mergeUnitFiles(worktree, plan.stdout);
   console.log(`Pre-merge unit gate: ${files.length} affected file(s) against main ${before.slice(0, 12)}`);
+  if (!files.length) return;
+  // One run for the common passing case; the per-file loop below only diagnoses a failing set.
+  const all = spawnSync('task', ['test', '--', ...files.map(file => `./${file}`)], {
+    cwd: worktree, encoding: 'utf8', env: { ...process.env, AGENT: '1' }, maxBuffer: 256 * 1024 * 1024, timeout: 1_800_000,
+  });
+  if (all.status === 0) {
+    console.log('Pre-merge unit gate: every affected unit file passes');
+    return;
+  }
   const run = (cwd: string, file: string) => {
     const result = spawnSync('task', ['test', '--', `./${file}`], {
       cwd, encoding: 'utf8', env: { ...process.env, AGENT: '1' }, maxBuffer: 64 * 1024 * 1024, timeout: 300_000,
@@ -1481,7 +1490,8 @@ function preMergeUnitGate(worktree: string, mainRoot: string, before: string, sk
   const introduced: string[] = [];
   try {
     for (const file of files) {
-      if (run(worktree, file)) continue;
+      // With one file the combined run above was that file's run.
+      if (files.length > 1 && run(worktree, file)) continue;
       if (spawnSync('git', ['cat-file', '-e', `${before}:${file}`], { cwd: mainRoot }).status !== 0) {
         introduced.push(file);
         continue;
@@ -1508,6 +1518,17 @@ function preMergeUnitGate(worktree: string, mainRoot: string, before: string, sk
 }
 
 async function mergeTask(id: string, flags: Set<string>): Promise<void> {
+  // The unit gate runs before the ledger lock: minutes of tests inside it blocked every Goal's goalctl
+  // on 2026-10-07. It checks the task's branch as handed off against main's HEAD; the rebase follows.
+  if (!flags.has('--landed')) {
+    const pending = taskOf(readLedger(), id);
+    assertOwner(pending);
+    const unitFailure = preMergeUnitGate(pending.worktree, root, git(root, ['rev-parse', 'HEAD']), flags.has('--skip-unit-gate'));
+    if (unitFailure) {
+      await withLedger(ledger => { taskOf(ledger, id).state = 'conflict'; });
+      throw new Error(`${pending.id} ${unitFailure}`);
+    }
+  }
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
   const failure = await withLedger((ledger): string | undefined => {
@@ -1612,12 +1633,6 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
     }
     const before = git(root, ['rev-parse', 'HEAD']);
     const after = git(root, ['rev-parse', task.branch]);
-    const unitFailure = preMergeUnitGate(task.worktree, root, before, flags.has('--skip-unit-gate'));
-    if (unitFailure) {
-      task.state = 'conflict';
-      return `${task.id} ${unitFailure}`;
-    }
-    if (git(root, ['rev-parse', 'HEAD']) !== before) throw new Error('Main moved during the unit gate; retry the merge');
     const merge = spawnSync('git', ['merge', '--ff-only', task.branch], { cwd: root, encoding: 'utf8' });
     if (merge.status !== 0) throw new Error(`Fast-forward failed in the main checkout:\n${merge.stderr}`);
     recordMerged(after, before);
