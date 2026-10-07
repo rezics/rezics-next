@@ -321,11 +321,16 @@ export const MoreReplies: Story = {
   },
 };
 
+const retryReadPage = fn(async (_reply: string, cursor: string) => siblingPage(cursor));
+
 /** A failed read keeps the branch and offers both retry and a fresh focused read. */
 export const ContinuationRetry: Story = {
-  args: { read: pagedThread, sort: 'new', language: 'ja',
-    readPage: fn(async (_reply: string, cursor: string) => siblingPage(cursor))
-      .mockRejectedValueOnce(new Error('Cursor expired')) },
+  args: { read: pagedThread, sort: 'new', language: 'ja', readPage: retryReadPage },
+  beforeEach() {
+    retryReadPage.mockReset();
+    retryReadPage.mockImplementation(async (_reply, cursor) => siblingPage(cursor));
+    retryReadPage.mockRejectedValueOnce(new Error('Cursor expired'));
+  },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const branch = within(reply(canvas, /Daniel Chen 陈丹尼/));

@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { fromMarkdown } from '@rezics/document';
+import { authoredDocumentBody } from '../../content/src/document-body.ts';
 import { readRealmThread } from '../src/modules/realm-reply/thread-read.ts';
 import { REALM_THREAD_COST } from '../src/modules/realm-reply/thread-contract.ts';
 import { WorkReadExpired, WorkReadInvalid, WorkReadMissing, WorkReadUnavailable }
@@ -95,6 +97,47 @@ test('a removed cursor anchor leaves no gap in a keyset seek', async () => {
   // that position moves, the same cursor gets the explicit restart above.
   const second = await readRealmThread(session, realm, reply(1), 'new', next.cursor);
   expect(second.items.map(item => item.reply)).toEqual([reply(1), reply(2)]);
+});
+
+test('large valid reply bodies continue within the unchanged response-byte budget', async () => {
+  const placed = siblings(192).map(item => ({ ...item, body: '界'.repeat(REALM_THREAD_COST.bodyChars) }));
+  const { session } = world(placed);
+  const reached: string[] = [];
+  let cursor: string | undefined;
+  for (let turn = 0; turn < 10; turn++) {
+    const page = await readRealmThread(session, realm, reply(1), 'new', cursor);
+    expect(Buffer.byteLength(JSON.stringify(page), 'utf8')).toBeLessThanOrEqual(REALM_THREAD_COST.responseBytes);
+    expect(page.items.length).toBeGreaterThan(1);
+    reached.push(...page.items.slice(1).map(item => item.reply));
+    if (page.complete) break;
+    cursor = siblingCursor(page).cursor;
+  }
+  expect(reached).toHaveLength(192);
+  expect(new Set(reached).size).toBe(192);
+});
+
+test('large document context keeps downward and upward progress within the response-byte budget', async () => {
+  const { session } = world(branch(80));
+  const snapshot = fromMarkdown(Array.from({ length: 40 }, () =>
+    `[reference](https://example.test/${'a'.repeat(5000)})`).join(' '), 'text');
+  const authored = authoredDocumentBody({ document: snapshot });
+  const batch = session.deps.content!.readExactBatch.bind(session.deps.content!);
+  Object.assign(session.deps.content!, { readExactBatch: async (ids: string[]) =>
+    (await batch(ids, async ids => new Set(ids))).map(result => result.status === 'available'
+      ? { ...result, body: { ...result.body, ...authored } } : result) });
+  const middle = await readRealmThread(session, realm, reply(49), 'new');
+  expect(Buffer.byteLength(JSON.stringify(middle), 'utf8')).toBeLessThanOrEqual(REALM_THREAD_COST.responseBytes);
+  expect(middle.items.length).toBeGreaterThan(1);
+  expect(middle.ancestors.length).toBeLessThan(REALM_THREAD_COST.ancestors);
+  const down = middle.continuations.find(item => item.kind === 'depth');
+  const up = middle.continuations.find(item => item.kind === 'ancestors');
+  expect(down?.reply).toBe(middle.items.at(-1)!.reply);
+  expect(up?.reply).toBe(middle.ancestors[0]!.reply);
+  const next = await readRealmThread(session, realm, down!.reply, 'new');
+  expect(next.items[1]!.reply).toBe(reply(Number.parseInt(down!.reply.slice(-12), 16) + 1));
+  const previous = await readRealmThread(session, realm, up!.reply, 'new');
+  expect(Number.parseInt(previous.ancestors[0]!.reply.slice(-12), 16))
+    .toBeLessThan(Number.parseInt(up!.reply.slice(-12), 16));
 });
 
 test('continuations bind the parent, Realm, sort, language and reader; recovery epochs cannot reuse them', async () => {

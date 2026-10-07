@@ -314,10 +314,13 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   await readRealmBasis(session, realm);
   const threads = store(session);
   const history = await realmHistoryOriginFilter(session, realm, 'placement', '?slot');
-  const binding = ['realm-thread-siblings-v1', realm, focus, sort, hash(history), session.displayLanguages,
+  const binding = (parent: string) => ['realm-thread-siblings-v1', realm, parent, sort, hash(history), session.displayLanguages,
     session.principal ? { issuer: session.principal.issuer, subject: session.principal.subject,
       actingSubject: session.options.actingSubject } : null];
-  const cursor = decodeReadCursor(encoded, binding, session.position);
+  const siblingContinuation = (parent: string, key: ThreadSiblingKey): Static<typeof realmThreadContinuation> =>
+    ({ kind: 'siblings', reply: parent, cursor: encodeReadCursor(binding(parent), session.position, key.placement,
+      JSON.stringify({ rank: key.rank, time: key.time })) });
+  const cursor = decodeReadCursor(encoded, binding(focus), session.position);
   let after: ThreadSiblingKey | undefined;
   if (cursor) {
     try {
@@ -331,6 +334,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   // parent uses a matching index seek; children outside this window keep a route
   // to their own bounded focus read instead of disappearing behind the budget.
   const selected = [focus];
+  const selectedKeys = new Map<string, ThreadSiblingKey>();
   const pending = [{ reply: focus, depth: 0, after }];
   const continuations: Static<typeof realmThreadContinuation>[] = [];
   for (let index = 0; index < pending.length; index++) {
@@ -345,16 +349,12 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     const children = page.slice(0, remaining);
     selected.push(...children.map(child => child.reply));
     for (const child of children) {
+      selectedKeys.set(child.reply, child);
       if (child.hasChildren) pending.push({ reply: child.reply, depth: parent.depth + 1, after: undefined });
     }
     const last = children.at(-1);
     if (page.length > remaining && last) {
-      const childBinding = ['realm-thread-siblings-v1', realm, parent.reply, sort, hash(history), session.displayLanguages,
-        session.principal ? { issuer: session.principal.issuer, subject: session.principal.subject,
-          actingSubject: session.options.actingSubject } : null];
-      continuations.push({ kind: 'siblings', reply: parent.reply,
-        cursor: encodeReadCursor(childBinding, session.position, last.placement,
-          JSON.stringify({ rank: last.rank, time: last.time })) });
+      continuations.push(siblingContinuation(parent.reply, last));
     }
   }
   const [identities, parents, thread] = await Promise.all([threads.identities(selected), threads.ancestors(focus),
@@ -453,11 +453,60 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   await readRealmBasis(session, realm);
   await threads.assertThreadProjection(session);
   if (!(await works(session, [focused])).has(focused.work)) throw new WorkReadMissing('Thread target is unavailable');
-  const response = { profile: 'realm-thread-v1' as const, realm, thread, focus, sort, work: about,
+  const response: Static<typeof realmThread> = { profile: 'realm-thread-v1' as const, realm, thread, focus, sort, work: about,
     rootRevision: focused.rootRevision, ancestors, items, continuations: visibleContinuations,
     complete: visibleContinuations.length === 0, sourcePosition: session.position };
   if (Buffer.byteLength(JSON.stringify(response), 'utf8') > REALM_THREAD_COST.responseBytes) {
-    throw new WorkReadLimit('Thread content exceeds the complete response budget');
+    // Large valid bodies must also paginate. Hydration remains the same bounded
+    // window; cursor anchors move to the last sibling actually delivered.
+    const sizes = new Map([...ancestors, ...items].map(item =>
+      [item.reply, Buffer.byteLength(JSON.stringify(item), 'utf8')]));
+    const baseBytes = Buffer.byteLength(JSON.stringify({ ...response, items: [], ancestors: [], continuations: [],
+      complete: false }), 'utf8');
+    const limitedControls = (page: Reply[], above: Reply[]): Static<typeof realmThreadContinuation>[] => {
+      const shown = new Set(page.map(item => item.reply));
+      const controls = new Map(visibleContinuations.filter(item => item.kind !== 'ancestors' && shown.has(item.reply))
+        .map(item => [`${item.kind}:${item.reply}`, item]));
+      for (const item of page) {
+        const allChildren = children.get(item.reply) ?? [];
+        if (!allChildren.some(child => !shown.has(child.reply))) continue;
+        controls.delete(`siblings:${item.reply}`);
+        controls.delete(`depth:${item.reply}`);
+        const last = allChildren.filter(child => shown.has(child.reply)).at(-1);
+        const control = last ? siblingContinuation(item.reply, selectedKeys.get(last.reply)!)
+          : { kind: 'depth' as const, reply: item.reply };
+        controls.set(`${control.kind}:${control.reply}`, control);
+      }
+      if (above.length < ancestors.length || visibleContinuations.some(item => item.kind === 'ancestors')) {
+        const parent = above[0] ?? ancestors.at(-1);
+        if (parent) controls.set(`ancestors:${parent.reply}`, { kind: 'ancestors', reply: parent.reply });
+      }
+      return [...controls.values()];
+    };
+    const fits = (page: Reply[], above: Reply[]) => {
+      const arrayBytes = (rows: Reply[]) => rows.reduce((bytes, item) => bytes + sizes.get(item.reply)!,
+        Math.max(0, rows.length - 1));
+      return baseBytes + arrayBytes(page) + arrayBytes(above)
+        + Buffer.byteLength(JSON.stringify(limitedControls(page, above)), 'utf8') - 2 <= REALM_THREAD_COST.responseBytes;
+    };
+    // Keep progress before context: the focus and first child fit under Content's
+    // per-document admission budget. Otherwise repeated focus reads could stall.
+    let page = items.slice(0, 2), above: Reply[] = [];
+    if (!fits(page, above)) throw new WorkReadLimit('Thread focus exceeds the response budget');
+    for (const parent of [...ancestors].reverse()) {
+      const next = [parent, ...above];
+      if (!fits(page, next)) break;
+      above = next;
+    }
+    for (const item of items.slice(2)) {
+      const next = [...page, item];
+      if (!fits(next, above)) break;
+      page = next;
+    }
+    response.items = page;
+    response.ancestors = above;
+    response.continuations = limitedControls(page, above);
+    response.complete = response.continuations.length === 0;
   }
   return response;
 }
