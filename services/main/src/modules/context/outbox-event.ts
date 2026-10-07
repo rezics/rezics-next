@@ -6,8 +6,8 @@ type Outcome = 'committed' | 'stale' | 'cancelled';
 
 /** The relay supplies terminal receipt fields; the owner proves its own event and revision facts. */
 export function ownerCommandEvent(action: string, kind: string, type: string,
-  outcome: Outcome, revisionClass: string): OwnerOutboxEventHandler {
-  const family = receiptFamilyFor(action);
+  outcome: Outcome, revisionClass: string, retainedFamily?: string): OwnerOutboxEventHandler {
+  const family = retainedFamily ?? receiptFamilyFor(action);
   if (!family) throw new Error(`Context event action has no receipt family: ${action}`);
   return { action, kind: `${RV}${kind}`, type, read: async ({ fuseki, batch, eventId, value, ordinal }) => {
     const receipt = value('receipt');

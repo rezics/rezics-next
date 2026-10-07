@@ -155,8 +155,10 @@ export async function installRelease(options: StackOptions,
   const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! };
   const initialized = await fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.control}> { <${DATASET}> rv:dataEpoch ?epoch } }`);
   if (!initialized.boolean) await initializeFreshGraph(fuseki, lineage);
-  await assertGraphAdmissionOpen(fuseki, lineage);
   const ownerMigrations = await migrateOwnerData(apps);
+  // A failed owner upgrade retains its own graph hold. Let that owner resume
+  // before requiring ordinary admission to be open for resource startup.
+  await assertGraphAdmissionOpen(fuseki, lineage);
   if (ownerMigrations.some(migration => migration.status === 'deferred')) {
     console.error('RELEASE OWNER MIGRATIONS INCOMPLETE: graph-name import must be retried; see release-format.json and installation evidence', ownerMigrations);
   }

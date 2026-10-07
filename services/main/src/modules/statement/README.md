@@ -29,17 +29,22 @@ DecisionSlots per candidate. The rated joined path reads at most 100 standing
 observations at the same graph position as its classified phrase relation and
 fails when either bound or position is exceeded.
 
-Before deploying this change on a populated stack, quiesce its writers and
-settle pending catalogue/classification and retired migration/cutover admissions
-with the existing release. Retain a consistent backup, close Access's recovery
-fence and hold graph admission, then deploy and apply Access migration 1300.
-With that stack's environment, run `task statement:convert -- --fenced` before
-opening readers and writers.
+Run `task dev:refresh` to upgrade a populated stack. Its `prepare-storage` step
+calls `prepareDevOwners` → `migrateOwnerData` → `upgradeStoredStatements`, after
+applying Access migration 1300 and while Main and Relay are stopped. The owner
+step settles legacy admissions, takes both recovery fences, converts retained
+decisions, rebuilds seek coverage and verifies the exact graph position before
+releasing its fences. Failure prevents restart; retry resumes the upgrade's
+own durable fence marker. It refuses unrelated recovery holds. A completed
+upgrade is a no-op in the same data epoch. Install upgrades use the same owner
+step. `task statement:convert -- --fenced` remains available to operators who
+already hold both recovery fences.
 `populated-conversion.ts` uses exact retained manifests, preserves the public
 proposer/decider and original operation, and writes an idempotent maintenance
 receipt per current legacy head. It keeps all old revisions and provenance.
 An interrupted run resumes from those receipts. It activates rebuilt seek
-coverage only after conversion completes; it never runs on startup.
+coverage only after conversion completes. Main startup performs no backfill;
+owner storage preparation completes the conversion before Main starts.
 
 Recovery recreates Statement acceptance from retained receipts. Rebuild seek
 coverage explicitly in every restored data epoch before releasing its hold.

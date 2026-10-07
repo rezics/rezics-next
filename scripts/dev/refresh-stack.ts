@@ -3,12 +3,13 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
-import { Client } from 'pg';
+import { Client, Pool } from 'pg';
 import { acquireHeavy } from '../goal/goalctl.ts';
 import { migrationDirectories, migrationRecords, type SchemaOwner } from '../ops/migrate.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { readActiveModelGeneration } from '../../services/main/src/modules/semantic/generation-guard.ts';
+import { statementUpgradeCurrent } from '../../services/main/src/modules/statement/upgrade.ts';
 import { mainSpec, relaySpec } from '../../services/main/src/config.ts';
 import { accountSpec } from '../../services/account/src/config.ts';
 import { appEnvironment, composeProcessEnvironment, readEnv, stackDirectory } from './config.ts';
@@ -287,6 +288,13 @@ export async function inspectRefresh(root: string, stackRoot = root) {
     ? await readActiveModelGeneration(new FusekiClient(env.FUSEKI_URL!, env.FUSEKI_MAINTENANCE_TOKEN, env.FUSEKI_COMMAND_TOKEN))
     : { generation: 'unavailable until storage is prepared' };
   const revision = command(root, 'git', ['rev-parse', 'HEAD']);
+  let statementCurrent = false;
+  if (serviceReady('postgres') && serviceReady('fuseki')) {
+    const pool = new Pool({connectionString: env.ACCESS_DATABASE_URL,max: 1,connectionTimeoutMillis: 5_000});
+    try { statementCurrent = await statementUpgradeCurrent(new FusekiClient(env.FUSEKI_URL!,
+      env.FUSEKI_MAINTENANCE_TOKEN,env.FUSEKI_COMMAND_TOKEN),env.MAIN_DATA_EPOCH!,pool); }
+    finally { await pool.end(); }
+  }
   // If Main is unavailable, the restart is blocked or planned first. Inspect
   // again after readiness so a recovered stack cannot miss package changes.
   const zoneApprovals = lostResources.includes('main') || resources.main.state !== 'Running'
@@ -294,7 +302,7 @@ export async function inspectRefresh(root: string, stackRoot = root) {
       path => fetch(new URL(path, env.MAIN_ORIGIN!), { signal: AbortSignal.timeout(10_000) }),
       slug => officialSourceDigest(slug, join(root, 'apps/web/zones/official')));
   const input = { revision, previousRevision: checkpoint?.revision, imagePresent, storageChanged, pendingMigrations,
-    modelCurrent: active.generation === targetGeneration,
+    modelCurrent: active.generation === targetGeneration, statementCurrent,
     unhealthyResources: refreshResources.filter(name => resources[name].state !== 'Running'
       || resources[name].healthStatus !== 'Healthy'),
     environmentChanges: [...new Set(environmentChanges)].sort(),
@@ -316,6 +324,7 @@ export function printRefreshPlan(snapshot: Awaited<ReturnType<typeof inspectRefr
   console.log(`  Storage: ${snapshot.input.storageChanged ? 'reconcile containers; keep data volumes' : 'current'}`);
   console.log(`  Pending SQL migrations: ${snapshot.input.pendingMigrations.join(', ') || 'none'}`);
   console.log(`  Model generation: ${snapshot.active.generation} -> ${snapshot.targetGeneration}`);
+  console.log(`  Catalogue Statement upgrade: ${snapshot.input.statementCurrent ? 'current' : 'prepare-storage required'}`);
   console.log(`  Resources requiring AppHost restart: ${snapshot.input.lostResources.join(', ') || 'none'}`);
   console.log(`  Official Zones to re-approve: ${snapshot.input.zoneApprovals.map(zone =>
     `${zone.slug} (${zone.approvedDigest ?? 'no active approval'} -> ${zone.digest})`).join(', ')
@@ -413,7 +422,7 @@ export async function refreshSharedStack(root: string, args: string[], preparati
         const checked = await inspectRefresh(root);
         if (command(root, 'git', ['status', '--porcelain', '--untracked-files=no'])
           || checked.input.revision !== snapshot.input.revision || checked.input.storageChanged
-          || checked.input.pendingMigrations.length || !checked.input.modelCurrent
+          || checked.input.pendingMigrations.length || !checked.input.modelCurrent || !checked.input.statementCurrent
           || checked.input.unhealthyResources.length || checked.input.zoneApprovals.length || checked.plan.blockers.length) {
           throw new Error('Shared stack changed or is not current after refresh; no success checkpoint recorded');
         }

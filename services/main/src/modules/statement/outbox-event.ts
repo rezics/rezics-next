@@ -20,4 +20,18 @@ export const outboxEventHandlers = [
     'stale', 'StatementDecision'),
   ownerCommandEvent('statement.decide', 'StatementDecisionCancelledEvent', 'com.rezics.statement.decision-cancelled.v1',
     'cancelled', 'StatementDecision'),
+  // Stopped-writer upgrades retain terminal legacy receipts and outbox batches.
+  // These readers do not register an admission family or restore dispatch.
+  ownerCommandEvent('statement.migrate', 'StatementMigratedEvent', 'com.rezics.statement.migrated.v1',
+    'committed', 'StatementDecision', 'statement-migrate-v1'),
+  ownerCommandEvent('statement.migrate', 'StatementMigrationStaleEvent', 'com.rezics.statement.migrate-stale.v1',
+    'stale', 'StatementDecision', 'statement-migrate-v1'),
+  ownerCommandEvent('statement.migrate', 'StatementMigrationCancelledEvent', 'com.rezics.statement.migrate-cancelled.v1',
+    'cancelled', 'StatementDecision', 'statement-migrate-v1'),
+  ownerCommandEvent('statement.cutover', 'StatementCutoverEvent', 'com.rezics.statement.cutover.v1',
+    'committed', 'StatementCutover', 'statement-cutover-v1'),
+  ownerCommandEvent('statement.cutover', 'StatementCutoverStaleEvent', 'com.rezics.statement.cutover-stale.v1',
+    'stale', 'StatementCutover', 'statement-cutover-v1'),
+  ownerCommandEvent('statement.cutover', 'StatementCutoverCancelledEvent', 'com.rezics.statement.cutover-cancelled.v1',
+    'cancelled', 'StatementCutover', 'statement-cutover-v1'),
 ] satisfies OwnerOutboxEventHandler[];

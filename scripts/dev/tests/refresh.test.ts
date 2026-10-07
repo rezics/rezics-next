@@ -17,7 +17,7 @@ import { stableId } from '../seed/state.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const current: RefreshInputs = { revision: 'committed-main', previousRevision: 'committed-main',
-  imagePresent: true, storageChanged: false, pendingMigrations: [], modelCurrent: true,
+  imagePresent: true, storageChanged: false, pendingMigrations: [], modelCurrent: true, statementCurrent: true,
   unhealthyResources: [], environmentChanges: [], appHostChanged: false, lostResources: [], zoneApprovals: [] };
 
 describe('shared stack refresh planning', () => {
@@ -74,6 +74,7 @@ describe('shared stack refresh planning', () => {
     ['new committed main', { revision: 'merged-main' }],
     ['container drift', { storageChanged: true }],
     ['pending Access migration', { pendingMigrations: ['access/new.sql'] }],
+    ['incomplete catalogue Statement upgrade', { statementCurrent: false }],
   ] as const) {
     test(`${reason} prepares storage and aligns the model before restarting`, () => {
       expect(refreshPlan({ ...current, ...changes }).steps).toEqual([
@@ -135,6 +136,12 @@ function actions(events: string[], fail?: keyof RefreshActions): RefreshActions 
 }
 
 describe('shared stack refresh execution and guards', () => {
+  test('an incomplete Statement upgrade prepares stopped storage and cannot restart on conversion failure', async () => {
+    const events: string[] = [];
+    await expect(executeRefresh(refreshPlan({...current,statementCurrent: false}),actions(events,'prepareStorage')))
+      .rejects.toThrow('failed prepareStorage');
+    expect(events).toEqual(['stopWriters','prepareStorage']);
+  });
   test('worktrees, other branches and tracked edits are refused', () => {
     expect(() => assertRefreshCheckout(true, 'main', false)).toThrow('never in a worktree');
     expect(() => assertRefreshCheckout(false, 'feature', false)).toThrow('committed main');

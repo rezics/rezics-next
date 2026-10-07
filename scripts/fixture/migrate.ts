@@ -4,6 +4,7 @@ import { AliasRegistry } from '../../services/main/src/modules/address/registry.
 import { migrateGraphAliases } from '../../services/main/src/modules/address/migrate.ts';
 import { migrateOwners } from '../ops/migrate.ts';
 import { S3ImmutableObjects } from '../../services/main/src/infrastructure/immutable-objects.ts';
+import { upgradeStoredStatements } from '../../services/main/src/modules/statement/upgrade.ts';
 
 /** Dev, fixture restore and release share the same locked, idempotent SQL runner.
  * A release artifact supplies its own root to this runner through installRelease. */
@@ -15,9 +16,12 @@ export async function migrateFixtureOwners(apps: Record<string, string>): Promis
 }
 
 export interface OwnerMigrationEvidence {
-  owner: 'graph-aliases';
+  owner: 'graph-aliases' | 'catalogue-statements';
   status: 'complete' | 'deferred';
   reason?: string;
+  converted?: number;
+  replayed?: number;
+  noop?: boolean;
 }
 
 /** Data migrations run after SQL and graph initialization in both entrypoints.
@@ -42,7 +46,7 @@ export async function migrateOwnerData(
         })
       : undefined;
     if (workObjects) await workObjects.initialize();
-    const result = await migrateGraphAliases({
+    const environment = {
       fuseki: new FusekiClient(
         apps.FUSEKI_URL!,
         apps.FUSEKI_MAINTENANCE_TOKEN,
@@ -52,8 +56,11 @@ export async function migrateOwnerData(
       addresses: new AliasRegistry(pool),
       objectDirectory: apps.MAIN_OBJECT_DIRECTORY!,
       ...(workObjects ? { workObjects } : {}),
-    });
+    };
+    const statements = await upgradeStoredStatements(environment,pool);
+    const result = await migrateGraphAliases(environment);
     return [
+      { owner: 'catalogue-statements', ...statements },
       {
         owner: 'graph-aliases',
         status: result.status,

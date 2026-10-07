@@ -23,6 +23,11 @@ import { reconcileRetainedWorkCreate, reconcileRetainedClassificationDecision } 
 import { cutoverRestoredGraphLineage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { contextFixture, nativeId, RV } from './context-fixture.ts';
 import { assertCommandRace } from '../support/command-race.ts';
+import { migrateOwnerData, assertOwnerMigrationsComplete } from '../../../scripts/fixture/migrate.ts';
+import { migrateTracked, migrationRecords, repositoryRoot, migrationDirectories } from '../../../scripts/ops/migrate.ts';
+import { executeRefresh, refreshPlan, type RefreshInputs, type RefreshActions } from '../../../scripts/dev/refresh.ts';
+import { statementUpgradeCurrent } from '../../../services/main/src/modules/statement/upgrade.ts';
+import { commandReceiptIri, readCommandReceipt } from '../../../services/main/src/modules/context/command.ts';
 
 type ContextWrite = { context: string; semanticRevision: string; replayed: boolean };
 type SelectionWrite = { selection: string; selectionRevision: string; replayed: boolean };
@@ -30,6 +35,153 @@ type StatementWrite = { statement: string; meaningKey: string; revision: string;
 type DecisionWrite = { decision: string; slot: string; replayed: boolean;
   sourcePosition: { dataEpoch: string; sequence: string } };
 type Resolution = { result: { state: string; source?: string; decision?: string } };
+
+test('refresh alone converts populated catalogue decisions, resumes fenced failures and then is a no-op with seek reads',async () => {
+  const f = await contextFixture(Bun.env as Record<string,string>);
+  const graphs = [GRAPHS.current,GRAPHS.revisions,GRAPHS.receipts,GRAPHS.outbox,GRAPHS.control];
+  const prefix = `urn:rezics:test-copy:${randomUUID()}`;
+  for (const [index,graph] of graphs.entries())
+    await f.env.fuseki.update(`ADD SILENT GRAPH ${iri(graph)} TO GRAPH ${iri(`${prefix}:${index}`)}`);
+  try {
+    await f.globalAcceptance();
+    const input = {label: 'Refresh retained definition',actingSubject: f.actorA};
+    const term = await createClassificationProposition(f.env,f.admission('classification:define:global',
+      'classification.proposition.define',classificationPropositionDigest(input)),input);
+    const work = await f.work('Refresh legacy catalogue');
+    const application = nativeId(),head = nativeId(),operation = nativeId();
+    const slot = classificationDecisionSlotIri(work.mainVersion!,term.definitions!.sense,GLOBAL_CLASSIFICATION_CONTEXT);
+    const manifest = prepareComponent(f.env.objectDirectory,application,{work: work.work,mainVersion: work.mainVersion,
+      sense: term.definitions!.sense,senseRevision: term.revision,context: GLOBAL_CLASSIFICATION_CONTEXT,
+      proposer: f.actorA,decider: f.actorB,outcome: 'accepted',application,decision: head,slot,
+      policy: CLASSIFICATION_DIRECT_DECISION_PROFILE},CLASSIFICATION_DIRECT_DECISION_PROFILE);
+    // Retained data predates migration 1300. No operator conversion or fence
+    // command is called; refresh's real owner-preparation pipeline owns both.
+    await f.accessPool.query('DROP TABLE access.statement_seek,access.statement_seek_coverage');
+    // QA installs owner DDL directly. Reconstruct the pre-upgrade Access
+    // tracker so refresh exercises the same locked migration runner as dev.
+    await f.accessPool.query(`CREATE TABLE IF NOT EXISTS public.rezics_local_migration
+      (name text PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now())`);
+    await f.accessPool.query(`INSERT INTO public.rezics_local_migration(name)
+      SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`,
+    [migrationRecords(repositoryRoot,'access').filter(value => value.version !== 1300).map(value => value.name)]);
+    await f.accessPool.query("DELETE FROM public.rezics_local_migration WHERE name LIKE '%1300%'");
+    const missing = `urn:rezics:sha256:${'0'.repeat(64)}`;
+    await f.env.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(application)} a rv:ClassificationApplication ;
+        rv:targetMainVersion ${iri(work.mainVersion!)} ; rv:sense ${iri(term.definitions!.sense)} ;
+        rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:applicationChannel rv:Curated ;
+        rv:applicationState rv:Active ; rv:proposer ${iri(f.actorA)} ; rv:decisionHead ${iri(head)} }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} a rv:ClassificationDecision,rv:RevisionAnchor ;
+        rv:component ${iri(application)} ; rv:manifest ${iri(missing)} ; rv:outcome rv:Accepted ;
+        rv:decidedBy ${iri(f.actorB)} ; rv:operation ${iri(operation)} ;
+        rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence 1 }
+    }`);
+    await f.grant('work:create:root','work.create');
+    await f.grant('classification:decide:global','classification.decision.set');
+    const principal = await f.account.verifier.verify(new Request('http://main.local',{
+      headers: {authorization: `Bearer ${f.account.tokenA}`}}),['work:create','classification:decide']);
+    const pending = [];
+    const legacyEvent = `urn:rezics:event:retained-cutover:${randomUUID()}`;
+    let retainedPosition = '';
+    for (const action of ['work.create','classification.decision.set','statement.migrate','statement.cutover']) {
+      const scope = action === 'work.create' ? 'work:create:root' : 'classification:decide:global';
+      const admission = await f.access.register({principal,actingSubject: f.actorA,scope,
+        action: action.startsWith('statement.') ? 'classification.decision.set' : action,idempotencyKey: randomUUID(),requestDigest: hash(randomUUID())});
+      if (action.startsWith('statement.')) await f.accessPool.query('UPDATE access.admission SET action=$2 WHERE id=$1',[admission.id,action]);
+      pending.push(admission.id);
+      if (action === 'statement.cutover') {
+        const receipt = commandReceiptIri(admission.id,'statement-cutover-v1');
+        retainedPosition = (await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
+          GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence } }`)).results!.bindings[0]!.sequence!.value;
+        // Reconstruct an already-terminal, undelivered legacy cancellation in
+        // its original batch. Upgrade must preserve that receipt and Relay read.
+        await f.env.fuseki.update(`PREFIX rv: <${RV}>
+          DELETE { GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:eventCount ?count } }
+          INSERT { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+            rv:commandFamily "statement-cutover-v1" ; rv:requestDigest ${lit(admission.requestDigest)} ;
+            rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
+            rv:admittedScope ${lit(admission.scope)} ; rv:outcome rv:Cancelled ; rv:reason rv:Unavailable ;
+            rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence ${retainedPosition} }
+          GRAPH ${iri(GRAPHS.outbox)} { ?batch rv:eventCount ?next ; rv:event ${iri(legacyEvent)} .
+            ${iri(legacyEvent)} a rv:StatementCutoverCancelledEvent ; rv:ordinal ?count ;
+              rv:action "statement.cutover" ; rv:receipt ${iri(receipt)} } }
+          WHERE { GRAPH ${iri(GRAPHS.outbox)} { ?batch a rv:OutboxBatch ;
+            rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence ${retainedPosition} ; rv:eventCount ?count }
+            BIND(?count+1 AS ?next) }`);
+      }
+    }
+    const apps = {...Bun.env,MAIN_OBJECT_DIRECTORY: f.env.objectDirectory,MAIN_S3_ENDPOINT: ''} as Record<string,string>;
+    const events: string[] = [];
+    let stopped = false;
+    const actions: RefreshActions = {
+      buildImage: async () => {},rehearseMigrations: async () => {},
+      stopWriters: async () => {stopped = true;events.push('stop-writers');},
+      prepareStorage: async () => {
+        expect(stopped).toBe(true);events.push('prepare-storage');
+        await migrateTracked(apps.ACCESS_DATABASE_URL!,repositoryRoot,migrationDirectories.access);
+        assertOwnerMigrationsComplete(await migrateOwnerData(apps));
+      },alignModel: async () => {},
+      restartResources: async () => {
+        expect(await statementUpgradeCurrent(f.env.fuseki,f.env.lineage.dataEpoch,f.accessPool)).toBe(true);
+        events.push('restart-resources');stopped = false;
+      },waitReady: async () => {},approveZones: async () => {},stopAppHost: async () => {},
+      recordSuccess: async () => {events.push('record-success');},
+    };
+    const current: RefreshInputs = {revision: 'current',previousRevision: 'current',imagePresent: true,
+      storageChanged: false,pendingMigrations: [],modelCurrent: true,statementCurrent: false,
+      unhealthyResources: [],environmentChanges: [],appHostChanged: false,lostResources: [],zoneApprovals: []};
+    await expect(executeRefresh(refreshPlan(current),actions)).rejects.toThrow();
+    expect(events).toEqual(['stop-writers','prepare-storage']);
+    expect((await f.accessPool.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open).toBe(false);
+    expect((await new StatementSeek(f.accessPool,f.env).coverage())?.complete).toBe(false);
+    expect((await f.env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.control)} {
+      ${iri(DATASET)} rv:restoreHold true } }`)).boolean).toBe(true);
+    expect((await f.accessPool.query('SELECT state,graph_outcome FROM access.admission WHERE id=ANY($1::uuid[])',[pending])).rows)
+      .toEqual(pending.map(() => ({state: 'sealed',graph_outcome: 'cancelled'})));
+    await f.env.fuseki.update(`DELETE DATA { GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} <${RV}manifest> ${iri(missing)} } };
+      INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} <${RV}manifest> ${iri(`urn:rezics:sha256:${manifest}`)} } }`);
+    events.length = 0;
+    await executeRefresh(refreshPlan(current),actions);
+    expect(events).toEqual(['stop-writers','prepare-storage','restart-resources','record-success']);
+    const coverage = await new StatementSeek(f.accessPool,f.env).coverage();
+    const references = await new StatementSeek(f.accessPool,f.env).seek(
+      {dataEpoch: f.env.lineage.dataEpoch,sequence: coverage!.through_sequence},work.mainVersion!,null);
+    expect(references.candidates).toHaveLength(1);
+    const statement = references.candidates[0]!.statementId;
+    expect((await readStatement(f.env,statement,async () => false)).export['http://www.w3.org/ns/prov#wasAttributedTo'])
+      .toEqual([{'@id': f.actorA}]);
+    await f.json(await f.call('GET',`/v1/statements/${statement.slice(-36)}`),200);
+    const qualified = {kind: 'qualified-fact' as const,meaningKey: references.candidates[0]!.meaningKey};
+    expect((await resolveStatementAcceptancesAt(f.env,[qualified],{kind: 'global'},
+      {dataEpoch: f.env.lineage.dataEpoch,sequence: coverage!.through_sequence})).get(qualified.meaningKey)?.result)
+      .toMatchObject({state: 'accepted'});
+    const batch = await readNextMainOutboxBatch(f.env.fuseki,f.env.lineage.dataEpoch,String(BigInt(retainedPosition)-1n));
+    expect(batch).not.toBeNull();
+    expect((await readMainOutboxEnvelope(f.env.fuseki,batch!,legacyEvent)).data.receipt)
+      .toMatchObject({action: 'statement.cutover',outcome: 'cancelled',admissionId: pending.at(-1)});
+    expect((await readCommandReceipt(f.env,pending.at(-1)!,'statement-cutover-v1'))?.sequence).toBe(retainedPosition);
+    const receipts = (await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:convertedApplication ${iri(application)} } }`)).results!.bindings;
+    expect(receipts).toHaveLength(1);
+    events.length = 0;
+    await executeRefresh(refreshPlan({...current,statementCurrent: await statementUpgradeCurrent(
+      f.env.fuseki,f.env.lineage.dataEpoch,f.accessPool)}),actions);
+    expect(events).toEqual([]);
+    expect((await migrateOwnerData(apps)).find(value => value.owner === 'catalogue-statements'))
+      .toMatchObject({status: 'complete',converted: 0,replayed: 0,noop: true});
+    expect(await new StatementSeek(f.accessPool,f.env).coverage()).toEqual(coverage);
+  } finally {
+    await migrateTracked(Bun.env.ACCESS_DATABASE_URL!,repositoryRoot,migrationDirectories.access);
+    await f.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id');
+    for (const [index,graph] of graphs.entries()) {
+      await f.env.fuseki.update(`CLEAR SILENT GRAPH ${iri(graph)};
+        ADD SILENT GRAPH ${iri(`${prefix}:${index}`)} TO GRAPH ${iri(graph)}`);
+      await f.env.fuseki.update(`DROP SILENT GRAPH ${iri(`${prefix}:${index}`)}`);
+    }
+    await new StatementSeek(f.accessPool,f.env).rebuild();
+    await f.close();
+  }
+},180_000);
 
 test('CTX09: catalogue imports use exact definitions, replay and CAS; populated conversion retains provenance and rebuilds seek', async () => {
   const f = await contextFixture(Bun.env as Record<string,string>);
