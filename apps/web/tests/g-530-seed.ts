@@ -4,9 +4,10 @@
 // journey needs (the writer, the book, the chapter and the cover) the browser creates through Main as a person would.
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
-import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantPlatformUse, platformAdministratorSession } from '../../../tests/qa/fixtures/platform-grant.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
@@ -99,6 +100,9 @@ try {
   await accept(works[1]!, fantasy); await accept(works[1]!, romance);
   await accept(works[2]!, magic);
   await accept(works[3]!, fantasy);
+  // Discovery generation is closed under platform-admin. The author's own principal opens it.
+  const administrator = await platformAdministratorSession();
+  await grantPlatformUse(administrator, author.principalId, 'platform-admin');
   type Generation = { generation: string; checkpoint: string; complete: boolean; state: string };
   let row = await json<Generation>(await call('POST', '/v1/discovery/generation-builds', {
     profile: 'discovery-generation-build-v1', actingSubject: author.actor,

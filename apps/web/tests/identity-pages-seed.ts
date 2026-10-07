@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { TargetRatingInventoryStore } from '../../../services/main/src/modules/rating/target-inventory.ts';
 import { GLOBAL_RATING_POPULATION_OWNER } from '../../../services/main/src/modules/rating/global.ts';
-import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
+import { grantPlatformUse, platformAdministratorSession } from '../../../tests/qa/fixtures/platform-grant.ts';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
@@ -49,6 +50,7 @@ const app = createMainApp(stack.fuseki, {
   access: stack.access,
   targetRatingInventory: new TargetRatingInventoryStore(stack.accessPool),
   agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
+  platformAccess: new AccessExposure(stack.accessPool),
   account: {
     verify: async (request) => {
       const person = people.find(
@@ -107,7 +109,7 @@ const grantReader = async (ref: string) => {
 };
 
 try {
-  // The same real QA operator signs in for Direction 9's administrator-only Space setup.
+  // Direction 9 signs in as this stack's operator, so the editor's principal is that account.
   const publicConfig = JSON.parse(
     readFileSync(process.env.REZICS_WEB_AUTH_PUBLIC_PATH!, 'utf8'),
   ) as { issuer: string };
@@ -131,11 +133,10 @@ try {
       displayName: 'Identity fixture editor',
     })
   ).agent;
-  await new AccessPlatformAdministrators(stack.accessPool).designateFirst(
-    editor.principal.issuer,
-    editor.principal.subject,
-    () => {},
-  );
+  // Lexicon presentation writes are closed under platform-admin. The stack's first
+  // administrator opens that group for this editor; resource grants stay below.
+  const administrator = await platformAdministratorSession();
+  await grantPlatformUse(administrator, editor.principalId, 'platform-admin');
   await editor.grant('semantic:create:root', 'semantic.change');
   await editor.grant('relation:create:root', 'relation.change');
   await editor.grant('classification:define:global', 'classification.proposition.define');

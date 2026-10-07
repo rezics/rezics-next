@@ -24,11 +24,13 @@ test('G428: Daniel imports a Goodreads file, then a 200-row export, and Main rep
   test.setTimeout(600_000);
   await signInAtAccounts(page, '/en/library', member);
   await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
-  // Reader writes go through Main's authenticated routes: the Open Library source acquisition is not one of them.
+  // Catalogue import is closed at launch. The exposure gate answers before authentication,
+  // so an ungranted caller is refused with platform_closed and is not given the importer group.
   const directSource = await page.request.post('/api/main/v1/sources/acquisitions/open-library/works', {
     data: { profile: 'open-library-work-acquisition-v1', workId: 'OL66554W' },
     headers: { 'idempotency-key': 'g428-reader-direct-source-denied' } });
-  expect(directSource.status()).toBe(401);
+  expect(directSource.status()).toBe(403);
+  expect(await directSource.json()).toMatchObject({ status: 403, code: 'platform_closed' });
   await page.getByRole('heading', { name: t.importTitle }).click();
   await page.locator('#library-import-file').setInputFiles({ name: 'goodreads.csv', mimeType: 'text/csv', buffer: sample });
   const group = (label: string) => page.getByRole('button', { name: new RegExp(`^${label} \\d+$`) });

@@ -7,6 +7,9 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { packageDigest } from '@rezics/zone-sdk';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
+import { grantPlatformUse, platformAdministratorSession, type PlatformGrantSession }
+  from '../../../tests/qa/fixtures/platform-grant.ts';
 import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
 import type { OwnerReceipt } from '../../../services/main/src/modules/editorial-review/contract.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
@@ -32,6 +35,20 @@ function fixtureUuid(name: string): string {
 const fixtureId = (name: string) => `${ID}${fixtureUuid(name)}`;
 const fixtureKey = (name: string) => `wiki-fixture:${name}`;
 const root = resolve(import.meta.dir, '../../..');
+
+let administratorSession: Promise<PlatformGrantSession> | undefined;
+const openedGroups = new Set<string>();
+
+/** The stack's first platform administrator opens one exposure group for a fixture
+ * principal. A process that has no web-auth fixture leaves the group closed. */
+async function openFixturePlatformGroup(principalId: string, group: string): Promise<void> {
+  if (!process.env.REZICS_WEB_AUTH_PRIVATE_PATH) return;
+  const key = `${principalId}:${group}`;
+  if (openedGroups.has(key)) return;
+  administratorSession ??= platformAdministratorSession();
+  await grantPlatformUse(await administratorSession, principalId, group);
+  openedGroups.add(key);
+}
 
 interface Manifest {
   id: string; name: string; language: string; routeSegment: string; preset: 'editorial';
@@ -78,6 +95,7 @@ function wikiApp(stack: Stack, tokens: Map<string, { issuer: string; subject: st
     wikiQuotations: new WikiQuotationStore(stack.contentPool), media: stack.media, mediaAccess: stack.mediaAccess,
     readingPositions: new ReadingPositionStore(stack.contentPool), editorialReview: new EditorialReviewStore(stack.accessPool),
     progress: new StructureProgressStore(stack.contentPool),
+    platformAccess: new AccessExposure(stack.accessPool),
     rights: { store: new RightsStore(stack.contentPool, stack.accessPool) } };
   return { objects, app: createMainApp(stack.fuseki, deps) };
 }
@@ -121,7 +139,8 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   const holder = await stack.member('wiki-holder', { stable: true });
   const steward = await stack.member('wiki-steward', { stable: true });
   const reviewer = await stack.member('wiki-theme-reviewer', { stable: true });
-  const tokens = new Map([[holder.token, holder.principal], [steward.token, steward.principal]]);
+  const tokens = new Map([[holder.token, holder.principal], [steward.token, steward.principal],
+    [reviewer.token, reviewer.principal]]);
   const { objects, app } = wikiApp(stack, tokens);
   await objects.initialize();
   const json = async <T>(response: Response, status = 200, label = response.url): Promise<T> => {
@@ -217,6 +236,8 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   }
 
   // Definitions the bundle's claims use: a property, and two relations with labels in English and Japanese.
+  // Lexicon presentation writes are closed under platform-admin.
+  await openFixturePlatformGroup(holder.principalId, 'platform-admin');
   await holder.grant('semantic:create:root', 'semantic.change'); await steward.grant('semantic:create:root', 'semantic.change');
   await steward.grant('relation:create:root', 'relation.change');
   await steward.grant(`statement:speak:${steward.actor}`, 'statement.record');
@@ -303,7 +324,16 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   for (const [scope, action] of [['theme:create:root', 'theme.create'], [`theme:revise:${short(theme)}`, 'theme.revise'],
     [`theme:activate:${short(theme)}`, 'theme.activate']] as const) await holder.grant(scope, action);
   await reviewer.grant(`theme:review:${short(theme)}`, 'theme.review');
-  const post = <T>(path: string, body: object, status = 201, method = 'POST', keyInBody = true) => settle<T>(key => stack.call(method,
+  // Theme routes on the stack app have no exposure reader, so a grant there never opens them.
+  // This app does, and it accepts the reviewer's bearer as well as the holder's.
+  const themeCall = (method: string, path: string, options: { token: string; body?: unknown; key?: string }) => app.handle(
+    new Request(`http://main.local${path}`, { method, headers: { authorization: `Bearer ${options.token}`,
+      ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
+      ...(options.key ? { 'idempotency-key': options.key } : {}) },
+    ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}) }));
+  await openFixturePlatformGroup(holder.principalId, 'executable-themes');
+  await openFixturePlatformGroup(reviewer.principalId, 'executable-themes');
+  const post = <T>(path: string, body: object, status = 201, method = 'POST', keyInBody = true) => settle<T>(key => themeCall(method,
     path, { token: holder.token, body: keyInBody ? { ...body, idempotencyKey: key } : body, key }), status, `${method} ${path}`);
   await post('/v1/themes', { theme: short(theme), owner: holder.actor, hostZone: zone, actingSubject: holder.actor });
   const entry = `assets/${spec.routeSegment}/main.js`;
@@ -311,7 +341,7 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
     bundle: { profile: 'first-party-bundle-v1', hostZone: zone, packageDigest: digest, entry,
       files: [{ path: entry, digest: sha(`${spec.routeSegment}:${digest}`), gzipBytes: 1000 }], slots: ['home', 'entity', 'memberIndex'],
       connectOrigins: [], imageOrigins: [], fontOrigins: [] }, actingSubject: holder.actor });
-  await settle(key => stack.call('POST', `/v1/themes/${short(theme)}/revisions/${short(revision.operation)}/reviews`, {
+  await settle(key => themeCall('POST', `/v1/themes/${short(theme)}/revisions/${short(revision.operation)}/reviews`, {
     token: reviewer.token, key, body: { decision: 'approved', reviewEvidenceDigest: sha(`reviewed ${digest}`),
       actingSubject: reviewer.actor, idempotencyKey: key } }), 201, 'theme review');
   const activationKey = fixtureKey('theme-activation');
@@ -321,7 +351,7 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   const activationBody = { revision: revision.operation, expectedActivation: null,
     approvalExpiresAt: new Date(noon.getTime() + 30 * 86_400_000).toISOString(),
     actingSubject: holder.actor, idempotencyKey: activationKey };
-  const activation = await stack.call('POST', `/v1/themes/${short(theme)}/first-party-activations`, {
+  const activation = await themeCall('POST', `/v1/themes/${short(theme)}/first-party-activations`, {
     token: holder.token, body: activationBody, key: activationKey });
   const activationText = await activation.text();
   const replayedActivation = activation.status === 200 && activationText.includes('"replayed":true');

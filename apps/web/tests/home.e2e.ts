@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, type Page, test } from '@playwright/test';
+import { grantPlatformUse, platformAdministratorSession } from '../../../tests/qa/fixtures/platform-grant.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
-import { openPlatformGroup } from './platform-grant.ts';
 
 // Home in a real browser against a fresh QA stack. The stack's feed may be
 // empty or full, so these check the frame and the rules that hold either way:
@@ -109,7 +109,8 @@ test('G-431: a new person is invited to set up Home, can put it off, and pins th
   await expect(posts(page).getByRole('heading', { name: 'This tab isn’t on your Home any more' })).toBeVisible();
   await expect(posts(page).getByRole('link', { name: 'Browse All' })).toBeVisible();
 
-  await openPlatformGroup('saved-views');
+  const administrator = await platformAdministratorSession();
+  await grantPlatformUse(administrator, administrator.principalId, 'saved-views');
 
   // The Filters Home shows now become a named tab after Following and All, with its own address.
   await page.goto('/en?tab=all&lang=ja');
