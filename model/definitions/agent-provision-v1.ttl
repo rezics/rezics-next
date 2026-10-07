@@ -1,0 +1,20 @@
+# A public Agent has an explicit native identity and one bounded display name.
+# Private principal mapping and representation are Access-owned and absent from this graph.
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rv: <https://rezics.com/vocab/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<https://rezics.com/definition/agent-provision-v1/agent-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Agent ] ;
+    sh:property [ sh:path rv:agentKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:PersonAgent rv:OrganizationAgent rv:ServiceAgent ) ] ;
+    sh:property [ sh:path rdfs:label ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:profileHandle ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^agent-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:profileDisclosure ; sh:maxCount 1 ; sh:in ( rv:Public rv:Private ) ] .
+
+<https://rezics.com/definition/agent-provision-v1/tombstone-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:AgentTombstone ] ;
+    sh:property [ sh:path rv:compensatedFrom ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
