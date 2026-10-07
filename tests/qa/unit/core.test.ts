@@ -16,6 +16,14 @@ import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructur
 const scratch = join(import.meta.dir, '../../../.temp');
 mkdirSync(scratch, { recursive: true });
 
+test('storybook selection remains e2e-only alongside the owner tier', () => {
+  expect(parseArgs(['--tier', 'e2e', '--storybook']).storybook).toBe(true);
+  expect(parseArgs(['--tier', 'owner', '--file', 'services/main/tests/preferences-settings.test.ts']))
+    .toMatchObject({ tier: 'owner', files: ['services/main/tests/preferences-settings.test.ts'] });
+  expect(() => parseArgs(['--tier', 'owner', '--storybook'])).toThrow('--storybook requires the e2e tier');
+  expect(() => parseArgs(['--tier', 'unit', '--storybook'])).toThrow('--storybook requires the e2e tier');
+});
+
 test('a handled SIGTERM cannot extend the Bun tier wall deadline', async () => {
   const directory = mkdtempSync(join(scratch, 'qa-deadline-'));
   const pidFile = join(directory, 'pid');

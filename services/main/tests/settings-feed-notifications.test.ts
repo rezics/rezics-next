@@ -8,6 +8,16 @@ import type { NotificationEvent } from '../src/modules/notification/store.ts';
 const id = (last: number) => `00000000-0000-4000-8000-${String(last).padStart(12, '0')}`;
 const native = (last: number) => `https://rezics.com/id/${id(last)}`;
 
+function recipientPool(read: (sql: string) => Promise<{ rows: unknown[]; rowCount?: number }>): Pool {
+  const client = { release() {}, query: async (sql: string) => {
+    if (sql.includes('current_setting')) return { rows: [{ sequential: 'on', bitmap: 'on' }] };
+    if (sql.startsWith('BEGIN') || sql.startsWith('SET LOCAL') || sql === 'COMMIT'
+      || sql === 'ROLLBACK' || sql.includes('set_config')) return { rows: [] };
+    return read(sql);
+  } };
+  return { query: client.query, connect: async () => client } as unknown as Pool;
+}
+
 async function produced(kind: 'chapter_published' | 'feed_post_vote', stale = false) {
   const events: NotificationEvent[] = [];
   const client = { query: async (sql: string) => {
@@ -54,12 +64,12 @@ test('a current nonzero vote notifies the post author; a superseded vote emits n
 
 test('a former Work follower cannot read a queued chapter notification', async () => {
   let graphReads = 0;
-  const access = { query: async (sql: string) => {
+  const access = recipientPool(async (sql: string) => {
     if (sql.includes('FROM access.chapter_notification_event')) return { rows: [{ work: native(3),
       author: native(4), content_revision: `urn:rezics:content:revision:${id(5)}` }] };
-    if (sql.includes('FROM access.follow f')) return { rowCount: 0, rows: [] };
+    if (sql.includes('WITH targets AS MATERIALIZED')) return { rowCount: 0, rows: [] };
     throw new Error(`Unexpected Access read: ${sql}`);
-  } } as unknown as Pool;
+  });
   const env = { fuseki: { query: async () => { graphReads++; return { results: { bindings: [] } }; } } } as never;
   const reader = feedNotificationSubjectReader(access, env, {} as never, {} as never);
   expect(await reader.resolve({ owner: 'graph', ref: native(2),
@@ -70,13 +80,13 @@ test('a former Work follower cannot read a queued chapter notification', async (
 
 test('a current follower sees only a chapter whose exact Content revision remains public', async () => {
   const revision = `urn:rezics:content:revision:${id(5)}`;
-  const access = { query: async (sql: string) => {
+  const access = recipientPool(async (sql: string) => {
     if (sql.includes('FROM access.chapter_notification_event')) return { rows: [{ work: native(3),
       author: native(4), content_revision: revision }] };
-    if (sql.includes('FROM access.follow f')) return { rowCount: 1, rows: [{ '?column?': 1 }] };
+    if (sql.includes('WITH targets AS MATERIALIZED')) return { rowCount: 1, rows: [{ '?column?': 1 }] };
     if (sql.includes('FROM access.reader_review')) return { rows: [] };
     throw new Error(`Unexpected Access read: ${sql}`);
-  } } as unknown as Pool;
+  });
   const bind = (value: string) => ({ type: 'literal', value });
   let sourceReads = 0;
   const env = { lineage: { dataEpoch: id(21), routingEpoch: '0' }, fuseki: {
