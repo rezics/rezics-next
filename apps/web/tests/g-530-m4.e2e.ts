@@ -1,5 +1,6 @@
 import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
+import { deriveAddressSuffix } from '@rezics/model/address';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -86,25 +87,21 @@ const member = () =>
   fixture<{ member: { email: string; password: string } }>('REZICS_WEB_AUTH_PRIVATE_PATH').member;
 
 /**
- * The sign-in journey of `account-sign-in.ts`, bounded and retried. The Accounts origin is whatever the web app
+ * The sign-in journey of `account-sign-in.ts`, from a fresh signed-out context. The Accounts origin is whatever the web app
  * redirects to, so it is not compared with the environment (the QA stack may give Accounts a free port).
  */
-async function signIn(page: Page, next: string): Promise<void> {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      await page.goto(`/auth/start?next=${encodeURIComponent(next)}`);
-      await page.waitForURL((url) => url.pathname === '/sign-in', { timeout: 40_000 });
-      await page.locator('html[data-hydrated]').waitFor({ timeout: 40_000 });
-      await page.getByRole('textbox', { name: 'Email' }).fill(member().email);
-      await page.getByRole('button', { name: 'Next' }).click();
-      await page.getByLabel('Enter your password').fill(member().password);
-      await page.getByRole('button', { name: 'Next' }).click();
-      await expect(page).toHaveURL(next, { timeout: 40_000 });
-      return;
-    } catch (error) {
-      if (attempt === 2) throw error;
-    }
-  }
+async function signIn(page: Page, next: string, destination = next): Promise<void> {
+  expect(await page.context().cookies()).toEqual([]);
+  await page.goto(`/auth/start?next=${encodeURIComponent(next)}`);
+  await page.waitForURL((url) => url.pathname === '/sign-in', { timeout: 40_000 });
+  await page.locator('html[data-hydrated]').waitFor({ timeout: 40_000 });
+  const email = page.getByRole('textbox', { name: 'Email' });
+  await email.pressSequentially(member().email);
+  await expect(email).toHaveValue(member().email);
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByLabel('Enter your password').fill(member().password);
+  await page.getByRole('button', { name: 'Next' }).click();
+  await expect(page).toHaveURL(destination, { timeout: 40_000 });
 }
 
 /** A device: its own browser context, signed in as the QA member, at the first page it is asked for. */
@@ -113,6 +110,7 @@ async function device(
   info: TestInfo,
   viewport: { width: number; height: number },
   first: string,
+  destination = first,
 ): Promise<{ page: Page; context: BrowserContext }> {
   const context = await browser.newContext({
     baseURL: info.project.use.baseURL,
@@ -121,7 +119,7 @@ async function device(
     isMobile: viewport.width < 600,
   });
   const page = await context.newPage();
-  await signIn(page, first);
+  await signIn(page, first, destination);
   return { page, context };
 }
 
@@ -185,6 +183,8 @@ for (const [name, viewport, index] of [
       info,
       viewport,
       localizedPath(resourceHref('/w/', uuid(book.work)), 'en'),
+      // Main keeps the Work identity and decorates its address with the displayed title.
+      localizedPath(`${resourceHref('/w/', uuid(book.work))}-${deriveAddressSuffix(book.title)}`, 'en'),
     );
     try {
       // Shelved as Read on its page, with dates recorded in Library.
@@ -344,7 +344,7 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
   await editor.fill('');
   await expect.poll(revision, { timeout: 30_000 }).not.toBe(written);
   await expect(status).toHaveText(/^Saved · /, { timeout: 30_000 });
-  await expect(editor).toHaveValue('');
+  await expect(editor).toHaveText('');
   await expect(page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
   const emptied = revision()!;
   await shot(page, info, 'chapter-emptied-phone');
@@ -364,7 +364,7 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
     const reopened = other.page.getByRole('textbox', { name: 'Chapter text' });
     await expect(reopened).toBeVisible();
     await other.page.waitForLoadState('networkidle');
-    await expect(reopened).toHaveValue('');
+    await expect(reopened).toHaveText('');
     await expect(other.page.getByRole('button', { name: 'Publish', exact: true })).toBeDisabled();
     await shot(other.page, info, 'chapter-reopened-desktop');
   } finally {
