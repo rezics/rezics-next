@@ -322,14 +322,23 @@ export async function readReferenceDisclosure(
       ? await referenceReceipts(graph, semantic, definitionReceiptPattern, true)
       : [];
     if (definitions.length) {
+      // Creation fixes the steward Agent, not its controller principal. Keep
+      // the sealed provenance exact and lock that Agent's current controller.
       const rows = (
         await access.query<{ resource: string }>(
           `SELECT proof.resource
         FROM jsonb_to_recordset($1::jsonb) AS proof(resource text, admission uuid, receipt text, digest text)
-        JOIN access.admission a ON a.id = proof.admission AND a.principal_id = $2 AND a.acting_subject = $3
+        JOIN access.admission a ON a.id = proof.admission AND a.acting_subject = $3
           AND a.action = 'semantic.change' AND a.scope_id = 'semantic:create:root'
           AND a.state = 'sealed' AND a.graph_outcome = 'succeeded'
-          AND a.graph_receipt = proof.receipt AND a.request_digest = proof.digest FOR SHARE OF a`,
+          AND a.graph_receipt = proof.receipt AND a.request_digest = proof.digest
+        JOIN LATERAL (SELECT r.id FROM access.representation r
+          JOIN access.principal p ON p.id = r.principal_id AND p.active
+          JOIN access.authority_subject s ON s.id = r.subject_id AND s.active AND s.kind = 'agent'
+          WHERE r.principal_id = $2 AND r.subject_id = a.acting_subject
+            AND r.action = 'agent.control' AND r.active AND r.valid_until > clock_timestamp()
+          ORDER BY r.id LIMIT 1 FOR SHARE OF r, p, s) controlled ON true
+        FOR SHARE OF a`,
           [JSON.stringify(definitions), identity.id, actor],
         )
       ).rows;
