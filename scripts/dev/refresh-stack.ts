@@ -315,6 +315,17 @@ export async function inspectRefresh(root: string, stackRoot = root) {
     checkpointPath, checkpoint: { revision, appHostHash, appHostSession } satisfies Checkpoint };
 }
 
+/** The stack is current when nothing is left to do at the current HEAD. A HEAD that moved during the refresh
+ * (a brief or archive commit) does not make a current stack stale; material inputs are judged directly. */
+export function refreshIsCurrent(checked: { input: { storageChanged: boolean; pendingMigrations: readonly string[];
+  modelCurrent: boolean; statementCurrent: boolean; membershipCurrent: boolean; unhealthyResources: readonly string[];
+  zoneApprovals: readonly unknown[] }; plan: { steps: readonly string[]; blockers: readonly string[] } }): boolean {
+  const { input, plan } = checked;
+  return !input.storageChanged && !input.pendingMigrations.length && input.modelCurrent && input.statementCurrent
+    && input.membershipCurrent && !input.unhealthyResources.length && !input.zoneApprovals.length
+    && !plan.blockers.length && !plan.steps.length;
+}
+
 export interface RefreshPreparation {
   prepare(onMigrations: (applied: string[]) => void): Promise<Record<string, string>>;
 }
@@ -430,10 +441,7 @@ export async function refreshSharedStack(root: string, args: string[], preparati
       },
       recordSuccess: async () => {
         const checked = await inspectRefresh(root);
-        if (command(root, 'git', ['status', '--porcelain', '--untracked-files=no'])
-          || checked.input.revision !== snapshot.input.revision || checked.input.storageChanged
-          || checked.input.pendingMigrations.length || !checked.input.modelCurrent || !checked.input.statementCurrent || !checked.input.membershipCurrent
-          || checked.input.unhealthyResources.length || checked.input.zoneApprovals.length || checked.plan.blockers.length) {
+        if (command(root, 'git', ['status', '--porcelain', '--untracked-files=no']) || !refreshIsCurrent(checked)) {
           throw new Error('Shared stack changed or is not current after refresh; no success checkpoint recorded');
         }
         writeFileSync(`${snapshot.checkpointPath}.tmp`, `${JSON.stringify(checked.checkpoint)}\n`, { mode: 0o600 });

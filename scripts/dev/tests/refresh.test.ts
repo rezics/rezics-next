@@ -8,7 +8,7 @@ import { readEnv } from '../config.ts';
 import { AppHostResourceLost, assertRefreshCheckout, changedEnvironment, executeRefresh, refreshPlan,
   type RefreshActions, type RefreshInputs } from '../refresh.ts';
 import { inspectRefresh, lostRefreshResources, printRefreshPlan, refreshAspireOutput,
-  refreshHeavyLockHeld, refreshProcessAlive, rehearseRefreshMigrations } from '../refresh-stack.ts';
+  refreshHeavyLockHeld, refreshIsCurrent, refreshProcessAlive, rehearseRefreshMigrations } from '../refresh-stack.ts';
 import { inspectOfficialZoneApprovals } from '../seed/official-zones-step.ts';
 import { officialPackageSlugs, officialSourceDigest } from '../seed/official-theme-step.ts';
 import { officialTheme } from '../seed/official-plan.ts';
@@ -488,4 +488,18 @@ describe('official Zone approval refresh', () => {
     expect(command.status).toBe(0);
     expect(await officialSourceDigest('franchise-wiki')).toBe(command.stdout.trim());
   });
+});
+
+test('a refresh is current when nothing is left to do, even if HEAD moved meanwhile', () => {
+  const current = {
+    input: { storageChanged: false, pendingMigrations: [], modelCurrent: true, statementCurrent: true,
+      membershipCurrent: true, unhealthyResources: [], zoneApprovals: [] },
+    plan: { steps: [], blockers: [] },
+  };
+  // A brief or archive commit moves HEAD without changing any material input.
+  expect(refreshIsCurrent(current)).toBe(true);
+  expect(refreshIsCurrent({ ...current, input: { ...current.input, pendingMigrations: ['1700_x.sql'] } })).toBe(false);
+  expect(refreshIsCurrent({ ...current, input: { ...current.input, modelCurrent: false } })).toBe(false);
+  expect(refreshIsCurrent({ ...current, plan: { steps: ['build-image'], blockers: [] } })).toBe(false);
+  expect(refreshIsCurrent({ ...current, plan: { steps: [], blockers: ['apphost restart'] } })).toBe(false);
 });
