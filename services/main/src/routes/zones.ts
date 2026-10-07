@@ -24,7 +24,7 @@ import { InvalidZoneConfiguration, ZoneSitePublicationSelection, ZoneSitePublish
 import { DEFAULT_ZONE_PRESENTATION, ZoneCampaignArt, ZonePresentation, zoneRenderTokens }
   from '../modules/zone/presentation-format.ts';
 import { listOfficialZones, readZoneModuleData,
-  readZoneCampaignArt, readZoneHomeDocument, ZonePublicPage }
+  readZoneCampaignArt, readZoneHomeDocument, readZonePublication, ZonePublicPage }
   from '../modules/zone/publication.ts';
 import { zonePackageExecution, readFirstPartyTheme }
   from '../modules/theme/first-party-lifecycle.ts';
@@ -39,7 +39,7 @@ import { MAX_SEARCH_REQUEST_MS, SearchIndexUnavailable, withStableSearchSnapshot
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { GRAPHS, hash, iri } from '../modules/work/activate.ts';
 import { problemResult, pendingOperation } from '../api-contract.ts';
-import { authorizedReadProblems } from '../api-responses.ts';
+import { authorizedReadProblems, exactContentRevision } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
@@ -53,6 +53,11 @@ import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/vi
 import { ZONE_CAMPAIGN_ART_COST } from '../modules/zone/campaign-art.ts';
 import { EmptyContentPublicationBody } from '../modules/content-publication/publish.ts';
 import { readZoneThemeExecution } from '../modules/presentation/zone-theme.ts';
+import { zoneDocumentShowcase, zonePagePresentation, ZONE_SHOWCASE_BLOCK_DEFINITION } from '../modules/presentation/zone-document.ts';
+import { withZoneContentAuthority } from '../modules/content-publication/draft.ts';
+import { documentSnapshotSchema } from '../api-document.ts';
+import { parseDocument } from '@rezics/document';
+import { discloseContent } from '../modules/disclosure/assembly.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const disclosure = t.Union([t.Literal('public'), t.Literal('private')]);
@@ -184,8 +189,18 @@ const publicationRead = t.Object({ profile: t.Literal('zone-presentation-respons
     maxCollectionPlacements: t.Integer(), maxModuleGraphReads: t.Integer(),
     maxNavigation: t.Integer(), maxNavigationGraphReads: t.Integer() }),
 });
-const showcaseEditorCost = { ...ZONE_CAMPAIGN_ART_COST, authorityProbes: 1 } as const;
+const showcaseEditorCost = { ...ZONE_CAMPAIGN_ART_COST, authorityProbes: 2 } as const;
+const showcaseDraftRead = t.Object({ variantId: t.String(), revisionId: t.Nullable(t.String()),
+  language: exactContentRevision.properties.reference.properties.language,
+  direction: exactContentRevision.properties.reference.properties.direction,
+  document: t.Nullable(documentSnapshotSchema), byteDigest: t.Nullable(t.String()),
+  editable: t.Boolean(), notes: t.Optional(t.Any()),
+  embeds: t.Optional(t.Array(t.String(), { maxItems: 16 })),
+  sourcePosition: t.Object({ owner: t.Literal('content'), dataEpoch: t.String(), sequence: t.String() }) });
 const showcaseEditorRead = t.Object({ ...configRead.properties,
+  draft: showcaseDraftRead,
+  publishedPage: t.Nullable(t.Object({ page: ref, variantId: t.String(), revisionId: t.String(),
+    language: t.Optional(t.String()) })),
   slideMedia: publicationRead.properties.slideMedia,
   cost: t.Object({ ...configRead.properties.cost.properties,
     ...Object.fromEntries(Object.entries(showcaseEditorCost).map(([name, value]) => [name, t.Literal(value)])) }),
@@ -292,10 +307,17 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       try {
         const zone = `https://rezics.com/id/${params.id}`;
         return await readZonePresentation(work, request, zone, query.actingSubject, async (state, navigation, viewer) => {
-          const moduleData = await readZoneModuleData(work.environment, state.configuration);
-          const slideMedia = await readZoneCampaignArt(work.media?.store, state.realm,
+          let moduleData = await readZoneModuleData(work.environment, state.configuration);
+          let slideMedia = await readZoneCampaignArt(work.media?.store, state.realm,
             state.presentation.slides, { environment: work.environment, zone });
           const home = await readZoneHomeDocument(work, request, state, moduleData, slideMedia);
+          const presentation = zonePagePresentation(home, state.presentation);
+          const local = home?.showcases.find(showcase => showcase.slides !== undefined);
+          if (local?.module) {
+            moduleData = [{ id: local.module.id, sources: local.sources },
+              ...moduleData.filter(module => module.id !== local.module!.id)];
+            slideMedia = local.slideMedia ?? [];
+          }
           const theme = state.presentation.official?.theme;
           const forced = query.safeTheme || query['safe-theme']
             ? { state: 'fallback' as const, reason: 'safe_mode' as const }
@@ -318,12 +340,20 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             listing: state.listing, discovery: state.discovery,
             address: state.address,
             name: state.name, language: state.language, direction: state.direction,
-            official: state.official, revision: state.revision, presentation: state.presentation,
+            official: state.official, revision: state.revision, presentation,
             navigation, moduleData, slideMedia, ...(home ? { home } : {}), renderTokens: zoneRenderTokens(execution.state === 'active'
               || execution.state === 'package'
               || execution.reason === 'none_approved'
-              ? state.presentation.tokens : DEFAULT_ZONE_PRESENTATION.tokens),
-            execution, cost: state.cost }, { headers });
+              ? presentation.tokens : DEFAULT_ZONE_PRESENTATION.tokens),
+            execution, cost: local ? { ...state.cost,
+              // The single local producer has its own bounded owner reads;
+              // retained Zone modules remain independently disclosure filtered.
+              maxCampaignUses: state.cost.maxCampaignUses * 2,
+              maxCampaignMediaReads: state.cost.maxCampaignMediaReads * 2,
+              maxResolvedBlocks: state.cost.maxResolvedBlocks * 2,
+              maxResolvedCollections: state.cost.maxResolvedCollections * 2,
+              maxModuleGraphReads: state.cost.maxModuleGraphReads * 2,
+            } : state.cost }, { headers });
         });
       } catch (error) {
         if (error instanceof ZoneRouteMissing) return problem(404, 'zone_unavailable', 'Zone is unavailable');
@@ -338,14 +368,63 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const zone = `https://rezics.com/id/${params.id}`;
         const principal = await requireZoneEditor(work, request, zone, query.actingSubject);
         const state = await readZoneConfiguration(work.environment, zone);
-        const presentation = typeof state.configuration.presentation === 'object'
-          ? state.configuration.presentation : DEFAULT_ZONE_PRESENTATION;
-        const slideMedia = await withDisclosureViewer(disclosureViewer(principal), () =>
-          readZoneCampaignArt(work.media?.store, state.configuration.defaultRealm ?? null,
-            presentation.slides, { environment: work.environment, zone }));
-        return Response.json({ zone, revision: state.revision, configuration: state.configuration,
-          name: state.name, language: state.language, direction: state.direction, slideMedia,
-          cost: { ...state.cost, ...showcaseEditorCost } }, { headers: { 'cache-control': 'no-store' } });
+        const content = work.contentAuthoring;
+        if (!content) throw new ZonePublicationUnavailable('Content owner is unavailable');
+        return await withZoneContentAuthority(work.environment, work.access, principal, query.actingSubject,
+          zone, 'content.draft', async () => {
+            const publication = await readZonePublication(work.environment, zone);
+            const publishedPage = publication.bundle?.pages.find(page => page.page === zone) ?? null;
+            const variant = publishedPage ? null : (await content.listVariantHeads(zone, '', 1)).items[0];
+            const hex = hash(`rezics:zone:showcase-variant:v1\0${zone}`).slice(0, 32);
+            const variantBits = ((Number.parseInt(hex[16]!, 16) & 3) | 8).toString(16);
+            const variantId = publishedPage?.variantId ?? variant?.id
+              ?? `urn:rezics:variant:${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variantBits}${hex.slice(17, 20)}-${hex.slice(20)}`;
+            const head = await content.readDraftHead(zone, variantId);
+            const viewer = disclosureViewer(principal, query.actingSubject);
+            const exact = head && (await discloseContent(work.environment,
+              await withDisclosureViewer(viewer, () => content.readExactBatch([head.revisionId],
+                async ids => new Set(ids))), viewer))[0];
+            if (head && (exact?.status !== 'available' || exact.reference.resourceId !== zone
+              || exact.reference.variantId !== variantId)) throw new ZoneUnavailable('Content draft is unavailable');
+            const reference = exact?.status === 'available' ? exact.reference : null;
+            const document = exact?.status === 'available' && exact.body.document !== undefined
+              ? parseDocument(exact.body.document) : null;
+            const shell = typeof state.configuration.presentation === 'object'
+              ? state.configuration.presentation : DEFAULT_ZONE_PRESENTATION;
+            const local = document && zoneDocumentShowcase(document);
+            let editable = !head || document?.profile === 'blocks';
+            if (document) {
+              const pending = [document.doc];
+              while (pending.length) {
+                const node = pending.pop()!;
+                if (node.type === 'extensionBlock' && node.attrs?.definition === ZONE_SHOWCASE_BLOCK_DEFINITION
+                  && node.attrs.version === '2' && String(node.attrs.id) !== local?.id) editable = false;
+                pending.push(...node.content ?? []);
+              }
+            }
+            const slides = local ? local.payload['rv:slides'] : shell.slides;
+            const slideMedia = await withDisclosureViewer(viewer, () =>
+              readZoneCampaignArt(work.media?.store, state.configuration.defaultRealm ?? null,
+                slides, { environment: work.environment, zone }));
+            const language = reference?.language ?? (variant
+              ? variant.languageKind === 'tag' ? { kind: 'tag' as const, tag: variant.languageTag!, originalTag: variant.originalLanguageTag! }
+                : { kind: variant.languageKind }
+              : { kind: 'tag' as const, tag: state.language, originalTag: state.language });
+            const again = await content.readDraftHead(zone, variantId);
+            if (again?.revisionId !== head?.revisionId) throw new WorkReadMoved('Content draft changed');
+            if (exact && (await discloseContent(work.environment, [exact], viewer))[0]?.status !== 'available') {
+              throw new ZoneUnavailable('Content draft is unavailable');
+            }
+            return Response.json({ zone, revision: state.revision, configuration: state.configuration,
+              name: state.name, language: state.language, direction: state.direction, slideMedia,
+              draft: { variantId, revisionId: head?.revisionId ?? null, language,
+                direction: reference?.direction ?? variant?.direction ?? state.direction,
+                document, byteDigest: reference?.byteDigest ?? null, editable,
+                ...(exact?.status === 'available' && Array.isArray(exact.body.embeds) ? { embeds: exact.body.embeds } : {}),
+                ...(exact?.status === 'available' && exact.body.notes !== undefined ? { notes: exact.body.notes } : {}),
+                sourcePosition: head?.position ?? await content.ownerPosition() }, publishedPage,
+              cost: { ...state.cost, ...showcaseEditorCost } }, { headers: { 'cache-control': 'no-store' } });
+          });
       } catch (error) { return routeError(error); }
     })
     .get('/v1/zones/:id/routes', { params: t.Object({ id: groupUuid }),

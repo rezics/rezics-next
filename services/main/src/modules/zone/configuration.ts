@@ -27,6 +27,8 @@ import { ContentPublicationConflict, settleZonePageContentPublication,
 import { RevisionNotFound } from '../work/history.ts';
 import { checkZoneSitePublishSelection, type ZoneSitePublishSelection } from './config-format.ts';
 import { readZoneThemeExecution, type ZoneThemeSelection } from '../presentation/zone-theme.ts';
+import { zoneDocumentShowcase, zonePagePresentation, resolveZonePageDocument } from '../presentation/zone-document.ts';
+import { WorkReadLimit } from '../work/read-session.ts';
 
 export class ZoneUnavailable extends Error {}
 export class ZoneStale extends Error {}
@@ -379,6 +381,19 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
         }
         if (exact.body.document === undefined || parseDocument(exact.body.document).profile !== 'blocks') {
           throw new InvalidZoneConfiguration('A site home requires a Blocks document');
+        }
+        // Refuse an unsupported producer count or layout before creating a pin.
+        // Unknown/invalid Blocks remain valid opaque Content and render fallbacks.
+        const document = parseDocument(exact.body.document);
+        try {
+          if (zoneDocumentShowcase(document)) {
+            const presentation = typeof head.configuration.presentation === 'object'
+              ? head.configuration.presentation : undefined;
+            if (presentation) zonePagePresentation(resolveZonePageDocument(document, presentation, [], []), presentation);
+          }
+        } catch (error) {
+          if (error instanceof WorkReadLimit) throw new InvalidZoneConfiguration(error.message);
+          throw error;
         }
       }
       for (const page of input.publication.pages) {

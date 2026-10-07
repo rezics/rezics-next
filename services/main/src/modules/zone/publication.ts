@@ -19,7 +19,7 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { parseDocument } from '@rezics/document';
 import { Type, type Static } from 'typebox';
 import { exactContentRevision } from '../../api-responses.ts';
-import { ZonePageDocument, resolveZonePageDocument } from '../presentation/zone-document.ts';
+import { ZonePageDocument, resolveZonePageDocument, zoneDocumentShowcase } from '../presentation/zone-document.ts';
 import { readerLanguages, selectDisplayName } from '../display-language/select.ts';
 import { discloseContent } from '../disclosure/assembly.ts';
 import { disclosureViewer, withDisclosureViewer } from '../disclosure/viewer.ts';
@@ -150,10 +150,24 @@ export async function readZoneHomeDocument(work: MainWorkDependencies, request: 
   }
   const document = parseDocument(exact.body.document);
   if (document.profile !== 'blocks') throw new ZoneUnavailable('Published Zone home is not a Blocks document');
+  const local = zoneDocumentShowcase(document);
+  let localData: Parameters<typeof resolveZonePageDocument>[4];
+  if (local) {
+    // The payload owns curated choices. Live definitions, collection members and
+    // media still pass through the same bounded disclosure owners as legacy Zones.
+    const presentation = { ...state.presentation, modules: local.payload['rv:module'],
+      slides: local.payload['rv:slides'] };
+    const [modules, media] = await Promise.all([
+      readZoneModuleData(work.environment, { ...state.configuration, presentation }),
+      readZoneCampaignArt(work.media?.store, state.realm, presentation.slides,
+        { environment: work.environment, zone: state.zone }),
+    ]);
+    localData = { sources: modules[0]?.sources ?? [], slideMedia: media };
+  }
   const resolved = resolveZonePageDocument(document, state.presentation,
     moduleData ?? await readZoneModuleData(work.environment, state.configuration),
     slideMedia ?? await readZoneCampaignArt(work.media?.store, state.realm, state.presentation.slides,
-      { environment: work.environment, zone: state.zone }));
+      { environment: work.environment, zone: state.zone }), localData);
   const metadata = work.contentAuthoring && await work.contentAuthoring.readExactMetadataBatch([page.revisionId],
     async ids => new Set(ids));
   if (metadata && (metadata.get(page.revisionId)?.availability !== 'available'

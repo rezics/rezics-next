@@ -9,7 +9,8 @@ import { writeKey } from '../work-levels-edit/write.ts';
 import { type ConfigurationSave, configurationSaveOf } from './refusal.ts';
 import { loadSlideWorks, readCampaignRegistry, readZoneShowcase, type ZoneShowcaseState } from './server.ts';
 import type { Registry } from './art.ts';
-import type { PresentationDocument } from './slides.ts';
+import { showcaseContentDocument, type PresentationDocument } from './slides.ts';
+import { serializeDocument } from '@rezics/document';
 
 // The showcase editor's writes and its reads after the page loaded. Each write goes to Main as the
 // session's Agent with a key derived from what it says, so a retried save replays and a changed one
@@ -25,17 +26,36 @@ const signIn: ConfigurationSave = { status: 'refused', refusal: 'sign-in', code:
 const unavailable: ConfigurationSave = { status: 'refused', refusal: 'unavailable', code: null, detail: null };
 const invalid: ConfigurationSave = { status: 'refused', refusal: 'invalid', code: null, detail: null };
 
-/** Replaces the Zone's presentation document with the edited one, naming the revision the person started from. */
+/** Saves this Showcase in the owner's Blocks draft, naming its original Content head. */
 export async function saveShowcase(input: { zone: string; expectedHead: string; presentation: PresentationDocument }): Promise<ConfigurationSave> {
   if (!uuid.test(input.zone) || !iri.test(input.expectedHead) || typeof input.presentation !== 'object' || input.presentation === null
     || input.presentation.profile !== 'zone-presentation-v2') return invalid;
   const { main, actingSubject } = await reader();
   if (!actingSubject) return signIn;
-  const body = { expectedHead: input.expectedHead, actingSubject, presentation: input.presentation };
+  const context = input.presentation.contentDraft;
+  if (!context || !/^urn:rezics:variant:[0-9a-f-]{36}$/.test(context.variantId)) return invalid;
+  const expectedHead = context.revisionId === null && input.expectedHead === context.zoneHead ? null : input.expectedHead.slice(-36);
+  if (expectedHead !== null && !uuid.test(expectedHead)) return invalid;
+  let document;
+  try { document = JSON.parse(serializeDocument(showcaseContentDocument(input.presentation))); }
+  catch { return invalid; }
+  const body = { profile: 'content-text-v1' as const, resourceId: `https://rezics.com/id/${input.zone}`,
+    variantId: context.variantId, language: context.language, direction: context.direction,
+    expectedHead, actingSubject, document, ...(context.embeds ? { embeds: context.embeds } : {}),
+    ...(context.notes ? { notes: Object.fromEntries(Object.entries(context.notes).map(([part, note]) =>
+      [part, note.document ? { document: note.document } : { body: note.body }])) } : {}) };
   try {
-    const key = await writeKey(['zone-showcase', input.zone, actingSubject, input.expectedHead, JSON.stringify(input.presentation)]);
-    const answer = await main.v1.zones({ id: input.zone }).configuration.put(body as never, { headers: { 'idempotency-key': key } });
-    return configurationSaveOf(answer as Parameters<typeof configurationSaveOf>[0]);
+    const key = await writeKey(['zone-showcase-content', JSON.stringify(body)]);
+    const answer = await main.v1['content-drafts'].post(body, { headers: { 'idempotency-key': key } });
+    if (answer.error) {
+      const refused = configurationSaveOf(answer);
+      return answer.error.status === 409 && refused.status === 'refused' && refused.code === 'stale_head'
+        ? { ...refused, refusal: 'conflict' } : refused;
+    }
+    if (answer.data && 'revisionId' in answer.data && typeof answer.data.revisionId === 'string'
+      && uuid.test(answer.data.revisionId)) return { status: 'done',
+        revision: `https://rezics.com/id/${answer.data.revisionId}`, replayed: answer.data.replayed === true };
+    return configurationSaveOf(answer);
   } catch {
     return unavailable;
   }

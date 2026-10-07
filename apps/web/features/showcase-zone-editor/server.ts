@@ -5,7 +5,7 @@ import { mainApi, mainApiWithToken } from '../api/main.ts';
 import { workShowcaseArt, zoneWork } from '../realm/adapt.ts';
 import type { MainClient } from '../manage/types.ts';
 import { registryOf } from './art.ts';
-import { MAX_SLIDES, readStoredPresentation, type StoredPresentation } from './slides.ts';
+import { MAX_SLIDES, readShowcaseContent, type StoredPresentation, type ShowcaseContentDraft } from './slides.ts';
 
 // The reads behind the showcase editor, for the page and for the actions that refresh it. Each
 // answers with data instead of throwing, so a Work or the Zone being unavailable shows in words.
@@ -46,8 +46,9 @@ export async function loadSlideWorks(input: { realm: string; locale: UiLocale; w
 /** What the editor needs of a Zone's current configuration. */
 export interface ZoneShowcaseState {
   zone: string;
-  /** The Zone revision a save must name: Main refuses the save if the Zone has moved since. */
+  /** The current Content head, in the editor's existing revision facade. */
   revision: string;
+  publishedPage?: { page: string; variantId: string; revisionId: string; language?: string } | null;
   /** The Realm campaign art belongs to; null for a Zone with no default Realm. */
   realm: string | null;
   presentation: StoredPresentation;
@@ -67,7 +68,17 @@ export async function readZoneShowcase(main: MainClient, zone: string, actingSub
     }
     const configuration = data.configuration as { defaultRealm?: unknown } | null;
     const realm = typeof configuration?.defaultRealm === 'string' && iri.test(configuration.defaultRealm) ? configuration.defaultRealm : null;
-    return { ok: true, state: { zone: data.zone, revision: data.revision, realm, presentation: readStoredPresentation(data.configuration) } };
+    const draft = data.draft;
+    if (!draft) return { ok: false, failure: 'unavailable' };
+    const presentation: StoredPresentation = draft.editable === false || draft.language.kind !== 'tag'
+      || draft.revisionId !== null && draft.document === null
+      ? { kind: 'reference' }
+      : readShowcaseContent(data.configuration, { variantId: draft.variantId, revisionId: draft.revisionId,
+        language: draft.language, direction: draft.direction, document: draft.document,
+        embeds: draft.embeds, notes: draft.notes, zoneHead: data.revision } satisfies ShowcaseContentDraft);
+    return { ok: true, state: { zone: data.zone,
+      revision: draft.revisionId ? `https://rezics.com/id/${draft.revisionId}` : data.revision,
+      publishedPage: data.publishedPage, realm, presentation } };
   } catch {
     return { ok: false, failure: 'unavailable' };
   }

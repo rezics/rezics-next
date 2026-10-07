@@ -63,7 +63,8 @@ import { documentVersion, parseDocument, type DocumentNode, type JsonValue } fro
 import { checkZoneSitePublishSelection } from '../src/modules/zone/config-format.ts';
 import { DEFAULT_ZONE_PRESENTATION, type ZonePresentation } from '../src/modules/zone/presentation-format.ts';
 import { resolveZonePageDocument, ZonePageDocument, ZoneShowcasePayload, ZONE_SHOWCASE_BLOCK, ZONE_DOCUMENT_COST,
-  ZONE_SHOWCASE_BLOCK_DEFINITION, ZONE_SHOWCASE_BLOCK_VERSION }
+  ZONE_SHOWCASE_BLOCK_DEFINITION, ZONE_SHOWCASE_BLOCK_VERSION, ZoneLocalShowcasePayload,
+  ZONE_LOCAL_SHOWCASE_BLOCK, zoneDocumentShowcase, zonePagePresentation }
   from '../src/modules/presentation/zone-document.ts';
 import { WorkReadLimit } from '../src/modules/work/read-session.ts';
 
@@ -106,7 +107,7 @@ test('unknown definitions, future versions and inline extensions are opaque preo
     retained: [null, false, { extra: 'original payload' }] };
   const document = documentOf(extension('unknown', opaque, 'https://example.test/unknown', '99'),
     { type: 'blockquote', attrs: { id: 'quoted' }, content: [extension('future', opaque,
-      ZONE_SHOWCASE_BLOCK_DEFINITION, '2')] },
+      ZONE_SHOWCASE_BLOCK_DEFINITION, '99')] },
     { type: 'paragraph', attrs: { id: 'inline-parent' },
       content: [extension('inline', opaque, ZONE_SHOWCASE_BLOCK_DEFINITION, '1', 'extensionInline')] });
   const bytes = JSON.stringify(document);
@@ -220,6 +221,73 @@ test('oversized resolved module source data fails the document response byte bou
   const document = documentOf(extension('hero', { 'rv:module': ['hero'] }));
   expect(() => resolveZonePageDocument(document, presentation, moduleData, []))
     .toThrow(WorkReadLimit);
+});
+
+const localShowcase = () => ({
+  'rv:module': [{ id: 'hero', type: 'hero-carousel' as const, title: 'Curated Content highlight',
+    source: { kind: 'query-block' as const, block: 'new-adoptions' } }],
+  'rv:slides': [{ id: 'curated', href: '/curated', title: 'Original Content slide' }],
+  'rv:titleEffect': ['outline' as const],
+});
+
+test('version 2 Showcase resolves its own module, slides and effect without following Zone configuration', () => {
+  const payload = localShowcase();
+  const document = documentOf(extension('curated', payload, ZONE_SHOWCASE_BLOCK_DEFINITION, '2'));
+  const original = JSON.stringify(document);
+  const shell: ZonePresentation = { ...DEFAULT_ZONE_PRESENTATION,
+    modules: [{ ...payload['rv:module'][0]!, title: 'Conflicting Zone module', source: { kind: 'context', context: ref() } }],
+    slides: [{ id: 'zone-slide', href: '/zone' }] };
+  const data: NonNullable<Parameters<typeof resolveZonePageDocument>[4]> = { sources: [{
+    source: payload['rv:module'][0]!.source, state: 'public-read', members: [],
+  }], slideMedia: [{ id: 'curated', art: { landscape: null, portrait: null, cutout: null, logos: [] } }] };
+  const result = resolveZonePageDocument(document, shell, [], [], data);
+  expect(Value.Check(ZoneLocalShowcasePayload, payload)).toBe(true);
+  expect(result.definitions).toEqual([ZONE_SHOWCASE_BLOCK, ZONE_LOCAL_SHOWCASE_BLOCK]);
+  expect(result.showcases).toEqual([{ id: 'block:curated', module: payload['rv:module'][0],
+    slides: payload['rv:slides'], titleEffect: 'outline', ...data }]);
+  expect(result.blocks).toEqual([expect.objectContaining({ status: 'resolved', showcase: 'block:curated' })]);
+  expect(zonePagePresentation(result, shell)).toEqual({ ...shell, modules: payload['rv:module'],
+    slides: payload['rv:slides'], tokens: { ...shell.tokens, titleEffect: 'outline' } });
+  expect(zonePagePresentation(result, shell).official).toBe(shell.official);
+  expect(JSON.stringify(result.document)).toBe(original);
+  expect(Value.Check(ZonePageDocument, result)).toBe(true);
+  expect(result.cost.responseBytes).toBe(Buffer.byteLength(JSON.stringify(result), 'utf8'));
+});
+
+test('local payload cardinality and slide meaning fail to opaque placeholders with unchanged exports', () => {
+  const valid = localShowcase();
+  const invalid: JsonValue[] = [
+    { 'rv:module': ['hero'] }, { ...valid, 'rv:module': [] }, { ...valid, 'rv:module': [valid['rv:module'][0]!, valid['rv:module'][0]!] },
+    { ...valid, 'rv:module': [{ ...valid['rv:module'][0]!, type: 'shelf' }] },
+    { ...valid, 'rv:titleEffect': [] }, { ...valid, 'rv:slides': [{ id: 'curated', href: '//external' }] },
+    { ...valid, 'rv:slides': [valid['rv:slides'][0]!, valid['rv:slides'][0]!] },
+    { ...valid, 'rv:slides': [{ id: 'scheduled', href: '/scheduled', startsAt: '2026-01-02T00:00:00.000Z',
+      endsAt: '2026-01-01T00:00:00.000Z' }] },
+    { ...valid, execute: 'https://example.test/never.js' },
+  ];
+  const document = documentOf(...invalid.map((payload, index) =>
+    extension(`invalid-local-${index}`, payload, ZONE_SHOWCASE_BLOCK_DEFINITION, '2')));
+  const bytes = JSON.stringify(document);
+  expect(zoneDocumentShowcase(document)).toBeNull();
+  const result = resolveZonePageDocument(document, DEFAULT_ZONE_PRESENTATION, [], []);
+  expect(result.blocks.every(block => block.status === 'placeholder' && block.reason === 'invalid_payload')).toBe(true);
+  expect(result.showcases).toEqual([]);
+  expect(JSON.stringify(result.document)).toBe(bytes);
+});
+
+test('one local producer is bounded while legacy references retain their original selected presentation', () => {
+  const payload = localShowcase();
+  const local = extension('local', payload, ZONE_SHOWCASE_BLOCK_DEFINITION, '2');
+  const legacy = extension('legacy', { 'rv:module': ['hero'] });
+  const shell: ZonePresentation = { ...DEFAULT_ZONE_PRESENTATION,
+    modules: [{ ...payload['rv:module'][0]!, title: 'Retained legacy hero' }],
+    slides: [{ id: 'legacy-slide', href: '/legacy' }] };
+  const result = resolveZonePageDocument(documentOf(legacy, local), shell, [], []);
+  expect(result.showcases.find(showcase => showcase.id === 'hero')?.module?.title).toBe('Retained legacy hero');
+  expect(result.showcaseData.slides).toBe(shell.slides);
+  expect(result.showcases.find(showcase => showcase.id === 'block:local')?.slides).toEqual(payload['rv:slides']);
+  expect(() => zoneDocumentShowcase(documentOf(local,
+    extension('second', payload, ZONE_SHOWCASE_BLOCK_DEFINITION, '2')))).toThrow(WorkReadLimit);
 });
 
 test('site publish requires exact digest and Content owner epoch while retained receipt bindings remain minimal', () => {

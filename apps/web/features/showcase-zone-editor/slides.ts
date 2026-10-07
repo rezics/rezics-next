@@ -1,4 +1,5 @@
 import type { ZoneTitleEffect } from '@rezics/zone-sdk';
+import { parseDocument, type DocumentNode, type DocumentSnapshot, type JsonValue } from '@rezics/document';
 import { type UiLocale, uiLocales } from '../../i18n/define.ts';
 import { droppedOn, moved } from '../saved-filter/tabs.ts';
 import { type LogoAnchor, logoKey, logoSlot, type LogoTone, type SlotKey } from '../showcase-editor/art.ts';
@@ -57,7 +58,106 @@ export type PresentationDocument = Record<string, unknown> & {
   slides: StoredSlide[];
   tokens: Record<string, unknown> & { titleEffect: ZoneTitleEffect };
   modules: ({ id: string; type: string } & Record<string, unknown>)[];
+  /** The editor facade carries the owner's original Blocks snapshot through edits. */
+  contentDraft?: ShowcaseContentDraft;
 };
+
+export interface ShowcaseContentDraft {
+  variantId: string;
+  revisionId: string | null;
+  language: { kind: 'tag'; tag: string; originalTag: string };
+  direction: 'ltr' | 'rtl' | 'none';
+  zoneHead: string;
+  document: DocumentSnapshot | null;
+  embeds?: string[];
+  notes?: { before?: { body: string; document?: DocumentSnapshot }; after?: { body: string; document?: DocumentSnapshot } };
+  module?: PresentationDocument['modules'][number];
+}
+
+const showcaseDefinition = 'https://rezics.com/definition/showcase-block-v1';
+
+function showcaseNodes(document: DocumentSnapshot): DocumentNode[] {
+  const nodes: DocumentNode[] = [];
+  const pending = [...(document.doc.content ?? [])].reverse();
+  while (pending.length) {
+    const node = pending.pop()!;
+    if (node.type === 'extensionBlock' && node.attrs?.definition === showcaseDefinition) nodes.push(node);
+    pending.push(...[...(node.content ?? [])].reverse());
+  }
+  return nodes;
+}
+
+function knownLocalPayload(value: unknown): value is { 'rv:module': PresentationDocument['modules'];
+  'rv:slides': StoredSlide[]; 'rv:titleEffect': [ZoneTitleEffect] } {
+  return isRecord(value) && Object.keys(value).every(key => ['rv:module', 'rv:slides', 'rv:titleEffect'].includes(key))
+    && Array.isArray(value['rv:module']) && value['rv:module'].length === 1
+    && isRecord(value['rv:module'][0]) && typeof value['rv:module'][0].id === 'string'
+    && value['rv:module'][0].type === 'hero-carousel'
+    && Array.isArray(value['rv:slides']) && value['rv:slides'].length <= MAX_SLIDES
+    && Array.isArray(value['rv:titleEffect']) && value['rv:titleEffect'].length === 1
+    && titleEffects.includes(value['rv:titleEffect'][0] as ZoneTitleEffect);
+}
+
+/** Only this known block is edited; all other nodes and opaque payloads survive. */
+export function showcaseContentDocument(presentation: PresentationDocument): DocumentSnapshot {
+  const context = presentation.contentDraft;
+  if (!context) throw new Error('Content draft identity is unavailable');
+  const document: DocumentSnapshot = context.document
+    ? structuredClone(parseDocument(context.document))
+    : { version: 'rezics-document-v1', profile: 'blocks', doc: { type: 'doc', content: [] } };
+  if (document.profile !== 'blocks') throw new Error('Showcase requires a Blocks document');
+  const hero = context.module ?? presentation.modules.find(module => module.type === 'hero-carousel');
+  if (!hero) throw new Error('Curated Showcase module is unavailable');
+  const payload = { 'rv:module': [hero],
+    'rv:slides': presentation.slides, 'rv:titleEffect': [presentation.tokens.titleEffect] } as unknown as JsonValue;
+  const nodes = showcaseNodes(document);
+  if (nodes.some(node => node.attrs?.version === '2' && !knownLocalPayload(node.attrs.payload))) {
+    throw new Error('Stored Showcase payload cannot be edited');
+  }
+  const existing = nodes.find(node => node.attrs?.version === '2')
+    ?? showcaseNodes(document).find(node => node.attrs?.version === '1'
+      && isRecord(node.attrs.payload)
+      && Object.keys(node.attrs.payload).every(key => key === 'rv:module')
+      && (node.attrs.payload['rv:module'] === undefined
+        || Array.isArray(node.attrs.payload['rv:module']) && node.attrs.payload['rv:module'].length === 1
+          && node.attrs.payload['rv:module'][0] === hero.id));
+  if (existing) existing.attrs = { ...existing.attrs, version: '2', payload };
+  else {
+    const ids = new Set<string>();
+    const pending = [document.doc];
+    while (pending.length) {
+      const node = pending.pop()!;
+      if (typeof node.attrs?.id === 'string') ids.add(node.attrs.id);
+      pending.push(...node.content ?? []);
+    }
+    let id = 'showcase';
+    for (let index = 2; ids.has(id); index++) id = `showcase-${index}`;
+    document.doc.content!.push({ type: 'extensionBlock', attrs: { id, definition: showcaseDefinition,
+      version: '2', payload, fallback: typeof hero?.title === 'string' ? hero.title : '' } });
+  }
+  return parseDocument(document);
+}
+
+/** The current Content body supplies the curated slides, independently of the Zone draft. */
+export function readShowcaseContent(configuration: unknown, context: ShowcaseContentDraft): StoredPresentation {
+  const stored = readStoredPresentation(configuration);
+  if (context.document && context.document.profile !== 'blocks') return { kind: 'reference' };
+  const base = documentOf(stored);
+  const block = context.document && showcaseNodes(context.document).find(node => node.attrs?.version === '2');
+  if (block) {
+    const payload = block.attrs?.payload;
+    if (!knownLocalPayload(payload)) return { kind: 'reference' };
+    const hero = payload['rv:module'][0]!;
+    const modules = base.modules.some(module => module.id === hero.id)
+      ? base.modules.map(module => module.id === hero.id ? hero : module) : [...base.modules, hero];
+    return { kind: 'document', document: { ...base, contentDraft: { ...context, module: hero },
+      modules,
+      slides: payload['rv:slides'],
+      tokens: { ...base.tokens, titleEffect: payload['rv:titleEffect'][0] } } };
+  }
+  if (stored.kind === 'reference') return stored;
+  return { kind: 'document', document: { ...base, contentDraft: context } };
+}
 
 /** How a Zone keeps its presentation: a document the editor changes, one it cannot (an external reference, or a format it does not read), or none yet. */
 export type StoredPresentation =
@@ -170,6 +270,13 @@ export function documentFor(base: PresentationDocument, slides: readonly SlideDr
     const ids = new Set(next.modules.map(module => module.id));
     const id = ['picks', 'showcase'].find(candidate => !ids.has(candidate)) ?? newSlideId(ids);
     next.modules = [{ id, type: 'hero-carousel', title: hero.title, source: { kind: 'query-block', block: 'new-adoptions' } }, ...next.modules];
+  }
+  if (base.contentDraft) {
+    const ids = new Set(next.modules.map(module => module.id));
+    let id = 'picks';
+    for (let index = 2; ids.has(id); index++) id = `picks-${index}`;
+    next.contentDraft = { ...base.contentDraft, module: base.contentDraft.module ?? next.modules.find(module => module.type === 'hero-carousel')
+      ?? { id, type: 'hero-carousel', title: hero.title, source: { kind: 'query-block', block: 'new-adoptions' } } };
   }
   return next;
 }

@@ -1,5 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { ZoneWork } from '@rezics/zone-sdk';
+import { fromPlainText, type DocumentSnapshot, type JsonValue } from '@rezics/document';
 import { materializeData } from 'native-i18n';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -15,7 +16,8 @@ import { configurationRefusalOf, configurationSaveOf } from '../features/showcas
 import { englishMessages, messages } from '../features/showcase-zone-editor/messages.ts';
 import {
   blankSlide, documentFor, draftOf, dropSlide, emptyDocument, fingerprint, localInput, moveSlide, needsShowcaseModule,
-  readStoredPresentation, scheduleState, type SlideDraft, slideProblems, type StoredSlide, storedSlideOf, utcFromInput,
+  readStoredPresentation, readShowcaseContent, showcaseContentDocument, scheduleState, type SlideDraft, slideProblems, type StoredSlide, storedSlideOf, utcFromInput,
+  type ShowcaseContentDraft,
 } from '../features/showcase-zone-editor/slides.ts';
 
 const work = (n: number) => `https://rezics.com/id/01a0e3d1-0000-7000-8000-${String(n).padStart(12, '0')}`;
@@ -309,6 +311,91 @@ describe('interface copy', () => {
   });
 });
 
+const contentContext = (): ShowcaseContentDraft => ({
+  variantId: 'urn:rezics:variant:5a1d0000-0000-4000-8000-0000000000d1',
+  revisionId: '5a1d0000-0000-4000-8000-0000000000e1',
+  zoneHead: 'https://rezics.com/id/5a1d0000-0000-4000-8000-0000000000f1',
+  language: { kind: 'tag', tag: 'ja', originalTag: 'ja' }, direction: 'ltr',
+  document: structuredClone(fromPlainText('Opening text', 'blocks')),
+  embeds: ['5a1d0000-0000-4000-8000-0000000000b1'],
+});
+const contentPresentation = (effect: 'plain' | 'glow' = 'plain') => documentFor(
+  { ...document(), contentDraft: contentContext() }, stored.map(slide => draftOf(slide)), effect, { title: 'Featured' });
+
+describe('the block-local Showcase Content draft', () => {
+  const extension = (id: string, version: string, payload: JsonValue, definition = 'https://rezics.com/definition/showcase-block-v1') =>
+    ({ type: 'extensionBlock', attrs: { id, definition, version, payload, fallback: `Fallback for ${id}`, dir: null, lang: null } });
+
+  test('one known block changes; historical, future and unknown nodes retain exact payload and fallback', () => {
+    const presentation = contentPresentation('glow');
+    const source = presentation.contentDraft!.document!;
+    const opaque = { nested: [null, { ordered: ['雨夜', false, 17] }], extra: { unchanged: true } };
+    source.doc.content!.push(extension('legacy', '1', { 'rv:module': ['picks'] }),
+      extension('future', '99', opaque), extension('unknown', '1', opaque, 'https://example.test/map'),
+      extension('invalid-legacy', '1', { unknown: opaque }));
+    const bytes = JSON.stringify(source);
+    const result = showcaseContentDocument(presentation);
+    expect(result.doc.content![1]!.attrs).toMatchObject({ id: 'legacy', version: '2', fallback: 'Fallback for legacy',
+      payload: { 'rv:module': [presentation.modules[0]], 'rv:slides': stored, 'rv:titleEffect': ['glow'] } });
+    expect(JSON.stringify(result.doc.content!.slice(2))).toBe(JSON.stringify(source.doc.content!.slice(2)));
+    expect(JSON.stringify(source)).toBe(bytes);
+    expect(result.doc.content![0]).toEqual(source.doc.content![0]);
+  });
+
+  test('a local block reads independently of changed Zone slides while retaining layout, other heroes and theme', () => {
+    const original = contentPresentation('glow');
+    const snapshot = showcaseContentDocument(original);
+    const local = original.modules[0]!;
+    const other = { id: 'other', type: 'hero-carousel', title: 'Another producer' };
+    const shell = { ...document(), modules: [other, { ...local, title: 'Changed Zone module' }, document().modules[0]!],
+      slides: [{ id: 'draft-zone', href: '/unpublished' }], tokens: { ...document().tokens, titleEffect: 'outline' } };
+    const read = readShowcaseContent({ presentation: shell }, { ...contentContext(), document: snapshot });
+    expect(read.kind).toBe('document');
+    if (read.kind !== 'document') throw new Error('expected editable Content');
+    expect(read.document.slides).toEqual(stored);
+    expect(read.document.tokens.titleEffect).toBe('glow');
+    expect(read.document.modules).toEqual([other, local, document().modules[0]]);
+    expect(read.document.official).toEqual(shell.official);
+    expect(read.document.navigation).toEqual(shell.navigation);
+    const edited = documentFor(read.document, [draftOf(stored[0]!)], 'plain', { title: 'Featured' });
+    expect(showcaseContentDocument(edited).doc.content!.at(-1)!.attrs!.payload)
+      .toMatchObject({ 'rv:module': [local], 'rv:slides': [stored[0]], 'rv:titleEffect': ['plain'] });
+  });
+
+  test('malformed local versions are left opaque, and an empty showcase still saves its own module', () => {
+    const presentation = contentPresentation();
+    presentation.contentDraft!.document!.doc.content!.push(extension('invalid', '2', { 'rv:module': ['picks'] }));
+    const bytes = JSON.stringify(presentation.contentDraft!.document);
+    expect(readShowcaseContent({ presentation }, presentation.contentDraft!).kind).toBe('reference');
+    expect(() => showcaseContentDocument(presentation)).toThrow('cannot be edited');
+    expect(JSON.stringify(presentation.contentDraft!.document)).toBe(bytes);
+    const empty = documentFor({ ...emptyDocument(), contentDraft: { ...contentContext(), document: null, revisionId: null } },
+      [], 'outline', { title: 'Featured' });
+    expect(empty.modules).toEqual([]);
+    expect(showcaseContentDocument(empty).doc.content![0]!.attrs!.payload).toEqual({
+      'rv:module': [{ id: 'picks', type: 'hero-carousel', title: 'Featured', source: { kind: 'query-block', block: 'new-adoptions' } }],
+      'rv:slides': [], 'rv:titleEffect': ['outline'],
+    });
+  });
+
+  test('the existing owner read exposes draft and published page independently without changing language identity', async () => {
+    const { readZoneShowcase } = await import('../features/showcase-zone-editor/server.ts');
+    const presentation = contentPresentation('glow');
+    const snapshot = showcaseContentDocument(presentation);
+    const context = contentContext();
+    const publishedPage = { page: work(1), variantId: context.variantId, revisionId: '5a1d0000-0000-4000-8000-0000000000e0' };
+    const response = { zone: work(1), revision: context.zoneHead, configuration: { presentation: document() },
+      draft: { ...context, document: snapshot, editable: true }, publishedPage, slideMedia: [] };
+    const main = { v1: { zones: () => ({ 'showcase-editor': { get: async () => ({ data: response, error: null }) } }) } };
+    const read = await readZoneShowcase(main as never, work(1), work(2));
+    expect(read).toMatchObject({ ok: true, state: { revision: `https://rezics.com/id/${context.revisionId}`, publishedPage,
+      presentation: { kind: 'document', document: { contentDraft: { language: context.language, document: snapshot,
+        zoneHead: context.zoneHead }, slides: stored } } } });
+    response.draft.editable = false;
+    expect(await readZoneShowcase(main as never, work(1), work(2))).toMatchObject({ ok: true, state: { presentation: { kind: 'reference' } } });
+  });
+});
+
 const workPageRead = { ...(await import('../features/work-page/read.ts')) };
 
 describe('the writes the editor asks Main for', () => {
@@ -317,8 +404,12 @@ describe('the writes the editor asks Main for', () => {
   let answer: { data: unknown; error: { status: number; value?: unknown } | null; headers?: unknown } = { data: null, error: null };
   const agent = 'https://rezics.com/id/01a0e3d1-0000-7000-8000-0000000000aa';
   let acting: string | undefined = agent;
-  const main = { v1: { zones: ({ id }: { id: string }) => ({
-    configuration: { put: async (body: Record<string, unknown>, init: { headers: Record<string, string> }) => { calls.push({ path: `${id}/configuration`, body, key: init.headers['idempotency-key'] }); return answer; } },
+  let loseResponse = false;
+  const main = { v1: { 'content-drafts': { post: async (body: Record<string, unknown>, init: { headers: Record<string, string> }) => {
+    calls.push({ path: 'content-drafts', body, key: init.headers['idempotency-key'] });
+    if (loseResponse) { loseResponse = false; throw new Error('lost response after save'); }
+    return answer;
+  } }, zones: ({ id }: { id: string }) => ({
     'campaign-art': { post: async (body: Record<string, unknown>, init: { headers: Record<string, string> }) => { calls.push({ path: `${id}/campaign-art`, body, key: init.headers['idempotency-key'] }); return answer; } },
   }) } };
   // Installed only while these tests run, then put back, so a later file in the same process still reads wiki data.
@@ -333,41 +424,79 @@ describe('the writes the editor asks Main for', () => {
   const head = 'https://rezics.com/id/5a1d0000-0000-4000-8000-0000000000e1';
   const realm = 'https://rezics.com/id/5a1d0000-0000-4000-8000-0000000000aa';
   const asset = '01a0e3d1-0000-7000-8000-0000000000bb';
-  const reset = (next: typeof answer = { data: null, error: null }) => { calls.length = 0; answer = next; acting = agent; };
+  const reset = (next: typeof answer = { data: null, error: null }) => { calls.length = 0; answer = next; acting = agent; loseResponse = false; };
 
-  test('saving names the revision the person started from, signs the write by what it says and never sends a malformed document', async () => {
+  test('saving names the Content head and signs only the self-contained block-local draft', async () => {
     const { saveShowcase } = await import('../features/showcase-zone-editor/actions.ts');
-    const presentation = { ...document(), tokens: { ...document().tokens, titleEffect: 'glow' } } as never;
-    reset({ data: { zone, revision: 'https://rezics.com/id/new', receipt: 'r', replayed: false }, error: null });
-    expect(await saveShowcase({ zone, expectedHead: head, presentation })).toEqual({ status: 'done', revision: 'https://rezics.com/id/new', replayed: false });
+    const presentation = contentPresentation('glow');
+    const revisionId = '5a1d0000-0000-4000-8000-0000000000e2';
+    reset({ data: { revisionId, replayed: false }, error: null });
+    expect(await saveShowcase({ zone, expectedHead: head, presentation }))
+      .toEqual({ status: 'done', revision: `https://rezics.com/id/${revisionId}`, replayed: false });
     expect(calls).toHaveLength(1);
-    expect(calls[0]!.path).toBe(`${zone}/configuration`);
-    expect(calls[0]!.body).toEqual({ expectedHead: head, actingSubject: agent, presentation });
-    // The same save again replays; another document, or another revision, is another write.
+    expect(calls[0]!.path).toBe('content-drafts');
+    expect(calls[0]!.body).toMatchObject({ profile: 'content-text-v1', resourceId: `https://rezics.com/id/${zone}`,
+      variantId: presentation.contentDraft!.variantId, language: presentation.contentDraft!.language,
+      direction: 'ltr', expectedHead: head.slice(-36), actingSubject: agent, embeds: presentation.contentDraft!.embeds });
+    expect(calls[0]!.body).not.toHaveProperty('presentation');
+    const snapshot = calls[0]!.body.document as DocumentSnapshot;
+    expect(snapshot.doc.content!.at(-1)!.attrs).toMatchObject({ version: '2', payload: {
+      'rv:module': [presentation.modules[0]], 'rv:slides': presentation.slides, 'rv:titleEffect': ['glow'],
+    } });
+    // Shell edits do not change this producer's intent or its retry key.
     await saveShowcase({ zone, expectedHead: head, presentation });
-    await saveShowcase({ zone, expectedHead: head, presentation: { ...(presentation as object), preset: 'clean' } as never });
+    await saveShowcase({ zone, expectedHead: head, presentation: { ...presentation, preset: 'clean' } });
     await saveShowcase({ zone, expectedHead: 'https://rezics.com/id/5a1d0000-0000-4000-8000-0000000000e9', presentation });
     expect(calls[1]!.key).toBe(calls[0]!.key!);
-    expect(calls[2]!.key).not.toBe(calls[0]!.key!);
+    expect(calls[2]!.key).toBe(calls[0]!.key!);
     expect(calls[3]!.key).not.toBe(calls[0]!.key!);
     expect(calls[0]!.key).toMatch(/^[A-Za-z0-9:_./-]{1,128}$/);
     reset();
     for (const bad of [{ zone: 'zone', expectedHead: head, presentation }, { zone, expectedHead: 'head', presentation },
-      { zone, expectedHead: head, presentation: { ...(presentation as object), profile: 'zone-presentation-v1' } as never }, { zone, expectedHead: head, presentation: null as never }]) {
+      { zone, expectedHead: head, presentation: { ...presentation, profile: 'zone-presentation-v1' } },
+      { zone, expectedHead: head, presentation: null as never }, { zone, expectedHead: head, presentation: document() }]) {
       expect(await saveShowcase(bad)).toMatchObject({ status: 'refused', refusal: 'invalid' });
     }
     expect(calls).toHaveLength(0);
   });
 
+  test('lost responses retry the original Content CAS and first saves use null rather than the Zone head', async () => {
+    const { saveShowcase } = await import('../features/showcase-zone-editor/actions.ts');
+    const presentation = contentPresentation();
+    reset({ data: { revisionId: '5a1d0000-0000-4000-8000-0000000000e2', replayed: true }, error: null });
+    loseResponse = true;
+    expect(await saveShowcase({ zone, expectedHead: head, presentation })).toMatchObject({ refusal: 'unavailable' });
+    expect(await saveShowcase({ zone, expectedHead: head, presentation })).toMatchObject({ status: 'done', replayed: true });
+    expect(calls[1]).toEqual(calls[0]);
+    expect(calls[0]!.body.expectedHead).toBe(head.slice(-36));
+    const first = { ...presentation, contentDraft: { ...presentation.contentDraft!, revisionId: null, document: null } };
+    await saveShowcase({ zone, expectedHead: first.contentDraft.zoneHead, presentation: first });
+    expect(calls[2]!.body.expectedHead).toBeNull();
+    await saveShowcase({ zone, expectedHead: 'https://rezics.com/id/5a1d0000-0000-4000-8000-0000000000e2', presentation: first });
+    expect(calls[3]!.body.expectedHead).toBe('5a1d0000-0000-4000-8000-0000000000e2');
+  });
+
+  test('the Content envelope retains embeds and notes around a Showcase edit', async () => {
+    const { saveShowcase } = await import('../features/showcase-zone-editor/actions.ts');
+    const presentation = contentPresentation();
+    presentation.contentDraft!.notes = { before: { body: 'Before' }, after: {
+      body: 'After', document: fromPlainText('After') } };
+    reset();
+    await saveShowcase({ zone, expectedHead: head, presentation });
+    expect(calls[0]!.body).toMatchObject({ embeds: presentation.contentDraft!.embeds,
+      notes: { before: { body: 'Before' }, after: { document: presentation.contentDraft!.notes.after!.document } } });
+    expect((calls[0]!.body.notes as { after: object }).after).not.toHaveProperty('body');
+  });
+
   test('saving without an eligible Agent asks to sign in, and Main\'s refusals come back typed', async () => {
     const { saveShowcase } = await import('../features/showcase-zone-editor/actions.ts');
-    const presentation = document() as never;
+    const presentation = contentPresentation();
     reset();
     acting = undefined;
     expect(await saveShowcase({ zone, expectedHead: head, presentation })).toMatchObject({ refusal: 'sign-in' });
     expect(calls).toHaveLength(0);
-    reset({ data: null, error: { status: 409, value: { code: 'stale_zone_head', detail: 'Zone head changed' } } });
-    expect(await saveShowcase({ zone, expectedHead: head, presentation })).toMatchObject({ refusal: 'conflict', detail: 'Zone head changed' });
+    reset({ data: null, error: { status: 409, value: { code: 'stale_head', detail: 'Content head changed' } } });
+    expect(await saveShowcase({ zone, expectedHead: head, presentation })).toMatchObject({ refusal: 'conflict', detail: 'Content head changed' });
     reset({ data: { operationId: 'op' }, error: null });
     expect(await saveShowcase({ zone, expectedHead: head, presentation })).toMatchObject({ refusal: 'pending' });
   });
