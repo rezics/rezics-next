@@ -1,18 +1,29 @@
 # State
 
 The manager's checkpoint for [this Goal](GOAL.md); live tasks:
-`task goal -- status`. Handover written 2026-10-07 by the Claude manager
-(`rezics-next-9b`) for the next manager (GPT-6.1 Sol, tmux `goal-trust-ops`).
-Program manager: `rezics-next-7b`.
+`task goal -- status`. Taken over on 2026-10-07 by GPT-6.1 Sol in tmux
+`goal-trust-ops`, registered as `goal-trust-ops-codex`. Program manager:
+`rezics-next-7b`. The prior handover's contracts and remaining inventory below
+remain authoritative except where this checkpoint records new evidence.
 
 ## Open tasks: next action for each
 
 | Task | State | Next action |
 | --- | --- | --- |
-| G-1275 (rights counter-notices, `codex-1`) | Exited after attempt 3. The worker renamed its migrations by hand to access 1442–1443, because merge normalization had refused on a false positive, the integer 1425 in `packages/model/src/address/unicode-data.ts`. Program G-1298 fixes that. | Read the handoff (`task goal -- wait G-1275`). Merge with `--allow-scope`; it touches `apps/web/features/safety/case-view.stories.tsx` for fixtures only, and launch knows. Then verify its counter-notice unit and integration tests at the merge commit by exit code. Close, then `task dev:refresh -- --wait`. Content of attempts 2 and 3: the 10–14 business-day window starts at REZICS's **receipt** of the counter-notice (17 U.S.C. §512(g)(2)(C)); claimant delivery is prompt and recorded but is not the clock; unconfirmed delivery holds restoration at day 10 and surfaces the case to staff; case status follows the list convention. |
-| G-1294 (security review, `codex` high) | Exited after 14 minutes; handoff not yet read. A short run, so check whether it is complete or partial. | Read the handoff. It is a findings-only review: brief one fix task per High finding, in its owner's area, so the qualification exit's "no open High finding" holds. Proof tests merge only together with their fix. If it is partial, resume it with the uncovered surfaces from its brief. |
-| G-1288 (Zone-page Content authority, `cursor` xhigh) | Running. It judges Content admissions on a server-resolved Zone page by the Zone's `zone.edit` (via `zoneSpaceCreatorAllowed` or the administrator resource grant), rechecked at claim. | Merge, verify, then **send kernel (`rezics-next-7e`) the exact function name** Content should call. It is on the critical path for launch's L4: trust-ops G-1288, launch G-1284 phase 1 (page revision bound to the site receipt, bundle membership), then kernel's Content target widening. |
-| Verification of G-1287 on main | Background run in this session: `platform-governance.integration` and `g-724-bootstrap` on current main. Its result may be lost in the swap. | Rerun both from a pinned worktree and judge them by exit code. `g-724-bootstrap` failed on main (rc 201) after G-1273 merged; G-1287 fixed the governance pool error, which may also have been its cause. If it still fails, brief a fix. |
+| G-1275 (rights counter-notices) | Reviewed; two merges refused a spurious unit attribution. `dev-seed-plan.test.ts` passes alone (18 tests, exit 0), but the parser marks its emitted header after the real list-convention failure as another failure. Program owns the parser fix; evidence in `.temp/trust-ops/merge-G-1275.log`. | Retry the complete gate after the fix, with `--allow-scope`. Web edits adapt the case collection to `items` and fixtures; launch was asked to verify its safety view. Migrations are 1442–1444. Refresh immediately after merge, verify rights unit/integration by exit code at the merge commit, then close. Receipt starts the 10–14 business-day window; unconfirmed claimant delivery holds restoration without resetting the clock. |
+| G-1294 (security review) | First attempt failed with an engine error, no handoff or commit. Resumed fresh on `codex-1` high. | Review ranked evidence, dispatch each verified High finding to its owner and resume uncovered surfaces if partial. No proof-test-only merge. |
+| G-1288 (Zone-page Content authority) | First handoff required `access.agent_provision` for administrator admissions, unlike ordinary `zone.edit`. Returned to Sol (`codex` xhigh) to finish the pinned administrator path; migrations 1650–1651 authorized. | Review and merge the complete register/replay/claim contract, refresh for a migration, verify then send kernel the exact accepted hooks. Preliminary hooks already sent: `withZonePageContentTarget` and `zonePageContentAllowed`. L4 remains the critical path. |
+| G-1301 | Sol: route-owned rate-limit families. | Review preservation of current budgets and resolve held-route declarations with their owners. No new registry. |
+| G-1302 | Sol: production Account/security/safety preflight. | Review role isolation, real configuration validation and exact missing operator inputs. |
+| G-1303 | Sol: offline TDB2 compaction procedure and refusal/recovery tests. | Review actual Jena semantics, disk assumptions, retained recovery generation and explicit retirement. Manager runs the populated timed drill. |
+| G-1307 | Sol: production PostgreSQL provisioning/preflight. | Review least privilege, existing owner roles, `pg_read_all_stats` and `max_prepared_transactions=0`. |
+| G-1308 | Sol: six-market zero-budget qualification. | Review official source evidence, implemented controls, accepted risk and external conditions; no invented readiness or geographic exclusions. |
+| Verification of G-1287 | Preparing `.temp/worktrees/trust-ops-verify`, pinned to `0658a345f`. | Run `platform-governance.integration` and `g-724-bootstrap` and judge exit codes; fix any remaining regression. |
+
+Next local checkpoint follows the next completed handoff or inbox event. Local
+implementation and verification need several further waves; deployment
+qualification has no defensible completion date until the existing external
+operator inputs are supplied. No production action is authorized.
 
 ## Contracts and promises to other Goals
 
