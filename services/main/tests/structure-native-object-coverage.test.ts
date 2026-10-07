@@ -658,8 +658,81 @@ test('Opt-in original association bounds probes, bytes, whole deadline and calle
     'probe budget',
   );
   expect(f.probes).toHaveLength(0);
+  const tinyGet = f.objects.get;
+  f.objects.get = async (digest, maxBytes, signal) => {
+    const left = fusekiReadBudget.getStore()?.bytesLeft;
+    expect(maxBytes).toBe(Math.min(STRUCTURE_LIMITS.pageBytes, left ?? -1));
+    return tinyGet(digest, maxBytes, signal);
+  };
   await expect(f.capture({ ...f.qualification(), maxBytes: 1 })).rejects.toThrow('byte budget');
   expect(f.probes).toHaveLength(0);
+  expect(f.reads.at(-1)!.maxBytes).toBe(1);
+  f.objects.get = tinyGet;
+  const exhausted = await associationFixture(2);
+  const manifestBytes = exhausted.values.get(exhausted.digest)!.length;
+  expect(manifestBytes).toBeGreaterThan(1);
+  expect(manifestBytes).toBeLessThan(STRUCTURE_LIMITS.pageBytes);
+  const exhaustedGet = exhausted.objects.get;
+  const exhaustedCaps: number[] = [];
+  exhausted.objects.get = async (digest, maxBytes, signal) => {
+    const left = fusekiReadBudget.getStore()!.bytesLeft;
+    expect(maxBytes).toBe(Math.min(STRUCTURE_LIMITS.pageBytes, left));
+    exhaustedCaps.push(maxBytes!);
+    return exhaustedGet(digest, maxBytes, signal);
+  };
+  await expect(
+    exhausted.capture({ ...exhausted.qualification(), maxBytes: manifestBytes }),
+  ).rejects.toThrow('byte budget');
+  expect(exhaustedCaps).toEqual([manifestBytes]);
+  expect(exhausted.reads.map((read) => read.digest)).toEqual([exhausted.digest]);
+  expect(exhausted.probes).toHaveLength(0);
+  expect(
+    exhausted.reads.some((read) => read.digest === exhausted.source.records.page.slice(7)),
+  ).toBe(false);
+  const shared = await associationFixture(2);
+  const previous = shared.source;
+  const historical = shared.addAnchor('urn:rezics:retained:retired', id(8));
+  const oldAnchor = { ...historical };
+  const oldDescriptor = shared.descriptors.get(shared.key(historical.graph, historical.subject))!;
+  const next = { ...previous, generation: id(11) };
+  await shared.replaceSource(next);
+  Object.assign(historical, oldAnchor);
+  shared.descriptors.set(shared.key(historical.graph, historical.subject), oldDescriptor);
+  shared.project(next, shared.records);
+  const ordinaryShared = await captureObjectRecoveryCoverage(shared.graph, shared.store);
+  const meter = {
+    signal: new AbortController().signal,
+    callsLeft: 1_000_000,
+    bytesLeft: 16 * 1024 * 1024,
+  };
+  await fusekiReadBudget.run(meter, () => shared.capture());
+  const spent = 16 * 1024 * 1024 - meter.bytesLeft;
+  expect(spent).toBeGreaterThan(manifestBytes);
+  expect(spent).toBeLessThan(STRUCTURE_LIMITS.pageBytes);
+  const sharedGet = shared.objects.get;
+  const requested: Array<{ digest: string; maxBytes?: number; bytesLeft: number }> = [];
+  shared.objects.get = async (digest, maxBytes, signal) => {
+    const bytesLeft = fusekiReadBudget.getStore()!.bytesLeft;
+    requested.push({ digest, maxBytes, bytesLeft });
+    return sharedGet(digest, maxBytes, signal);
+  };
+  shared.probes.length = 0;
+  expect(await shared.capture({ ...shared.qualification(), maxBytes: spent })).toEqual(
+    ordinaryShared,
+  );
+  expect(requested.length).toBeGreaterThan(2);
+  expect(requested[0]!.maxBytes).toBe(spent);
+  expect(requested[0]!.maxBytes).toBeGreaterThan(requested.at(-1)!.maxBytes!);
+  for (const read of requested) {
+    expect(read.maxBytes).toBe(Math.min(STRUCTURE_LIMITS.pageBytes, read.bytesLeft));
+    expect(read.maxBytes).toBeLessThan(STRUCTURE_LIMITS.pageBytes);
+  }
+  const manifests = new Set([shared.digest, oldAnchor.digest]);
+  const pages = requested.filter((read) => !manifests.has(read.digest));
+  expect(pages.length).toBeGreaterThan(1);
+  expect(new Set(pages.map((read) => read.digest)).size).toBe(pages.length);
+  expect(shared.probes).toHaveLength(shared.records.length * 3 * 2);
+  shared.objects.get = sharedGet;
   await expect(f.capture({ ...f.qualification(), deadline: Date.now() - 1 })).rejects.toThrow(
     'deadline',
   );

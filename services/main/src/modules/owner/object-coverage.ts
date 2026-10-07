@@ -167,6 +167,7 @@ async function exactBytes(
   store: ObjectRecoveryStore,
   digest: string,
   kind: 'work' | 'structure' = 'work',
+  structureByteCap: number = STRUCTURE_LIMITS.pageBytes,
 ): Promise<Buffer> {
   if (!SHA.test(digest)) throw new ObjectRecoveryConflict('immutable object digest is malformed');
   if (kind === 'structure') {
@@ -180,9 +181,10 @@ async function exactBytes(
     signal?.throwIfAborted();
     try {
       // Undefined retains the object's configured maintenance deadline signal.
-      const bytes = await store.structureObjects.get(digest, STRUCTURE_LIMITS.pageBytes, signal);
+      // Association turns pass the bytes still left; ordinary capture keeps one page.
+      const bytes = await store.structureObjects.get(digest, structureByteCap, signal);
       signal?.throwIfAborted();
-      if (bytes.length > STRUCTURE_LIMITS.pageBytes)
+      if (bytes.length > structureByteCap || bytes.length > STRUCTURE_LIMITS.pageBytes)
         throw new ObjectReadBudgetExceeded('Structure object exceeds its byte bound');
       return Buffer.from(bytes);
     } catch (error) {
@@ -365,18 +367,45 @@ async function captureCoverage(
     return pending;
   };
   const structureObject = async (digest: string): Promise<Uint8Array> => {
-    const bytes = await exactBytes(store, digest, 'structure');
+    let bytes: Buffer;
     if (qualification) {
       if (Date.now() >= qualification.deadline)
         throw new ObjectRecoveryConflict('Structure association deadline expired', 'unavailable');
       const budget = fusekiReadBudget.getStore()!;
+      const remaining = budget.bytesLeft;
+      // Stop before the store read once this turn has nothing left to spend.
+      if (!Number.isSafeInteger(remaining) || remaining < 1)
+        throw new ObjectRecoveryConflict(
+          'Structure association byte budget exceeded',
+          'unavailable',
+        );
+      const cap = Math.min(STRUCTURE_LIMITS.pageBytes, remaining);
+      try {
+        bytes = await exactBytes(store, digest, 'structure', cap);
+      } catch (error) {
+        // A short cap is the turn remainder, not proof the object exceeds one page.
+        if (
+          cap < STRUCTURE_LIMITS.pageBytes &&
+          error instanceof ObjectRecoveryConflict &&
+          error.kind === 'corrupt' &&
+          error.message === 'Structure immutable object exceeds its byte bound'
+        ) {
+          throw new ObjectRecoveryConflict(
+            'Structure association byte budget exceeded',
+            'unavailable',
+          );
+        }
+        throw error;
+      }
+      if (Date.now() >= qualification.deadline)
+        throw new ObjectRecoveryConflict('Structure association deadline expired', 'unavailable');
       if (bytes.length > budget.bytesLeft)
         throw new ObjectRecoveryConflict(
           'Structure association byte budget exceeded',
           'unavailable',
         );
       budget.bytesLeft -= bytes.length;
-    }
+    } else bytes = await exactBytes(store, digest, 'structure');
     objects.set(digest, bytes.length);
     retainedDigests?.add(digest);
     return bytes;
