@@ -12,10 +12,11 @@ import {
   statSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { hostname } from 'node:os';
 import { acceptanceStatuses, parseJUnit, titleIds, type Case, type TestResult } from './acceptance.ts';
+import { reapOwnerEnvironment, removeOwnedContainers, sweepOrphanContainers } from './container-reaper.ts';
 import { isolatedIntegrationFileList } from './isolated-integration-files.ts';
 import { waitForMemory, type MemoryNeed, type MemoryWaitOptions } from './memory-admission.ts';
 
@@ -67,12 +68,25 @@ export function testLogEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return Object.fromEntries(Object.entries(env).filter(([key]) => !agentOutputVariables.includes(key)));
 }
 
+function spawnEnvironment(name: string, args: readonly string[], env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const logged = name === 'bun' && args[0] === 'test' ? testLogEnvironment(env) : env;
+  return name === 'bun' && args[0] === 'test' ? reapOwnerEnvironment(logged) : logged;
+}
+
+function reapTimedOutTest(name: string, args: readonly string[], timedOut: boolean, env: NodeJS.ProcessEnv): void {
+  if (!timedOut || name !== 'bun' || args[0] !== 'test' || !env.REZICS_REAP_OWNER) return;
+  try { removeOwnedContainers(env.REZICS_REAP_OWNER); } catch { /* a timed-out test must still report */ }
+}
+
 export function command(root: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = process.env, maxBuffer?:number): { ok: boolean; output: string; elapsedMs: number } {
   const start = Date.now();
+  const environment = spawnEnvironment(name, args, env);
   const result = spawnSync(name, args, { cwd: root,
-    env: name === 'bun' && args[0] === 'test' ? testLogEnvironment(env) : env, encoding: 'utf8',
+    env: environment, encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs,...(maxBuffer===undefined?{}:{maxBuffer}) });
+  const timedOut = (result.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT';
+  if (timedOut) reapTimedOutTest(name, args, true, environment);
   return { ok: result.status === 0 && !result.error,
     output: [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n'),
     elapsedMs: Date.now() - start };
@@ -341,8 +355,9 @@ export async function commandAsync(root: string, name: string, args: string[], t
   options: { runDeadline?: number } = {}): Promise<{ ok: boolean; output: string; elapsedMs: number;
   activeElapsedMs: number; admissionWaitMs: number; timedOut: boolean }> {
   const start = Date.now();
+  const environment = spawnEnvironment(name, args, env);
   const child = spawn(name, args, { cwd: root, detached: true,
-    env: name === 'bun' && args[0] === 'test' ? testLogEnvironment(env) : env,
+    env: environment,
     stdio: ['ignore', 'pipe', 'pipe'] });
   if (child.pid) {
     commandProcessGroups.add(child.pid);
@@ -425,6 +440,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
     if (timedOut) terminate('SIGKILL');
     if (child.pid) commandProcessGroups.delete(child.pid);
     releaseAsyncCommandCleanup();
+    if (timedOut) reapTimedOutTest(name, args, true, environment);
   }
   const elapsedMs = Date.now() - start;
   if (waiting.size) admissionWaitMs += Date.now() - admissionStarted;
@@ -1006,3 +1022,27 @@ export async function acquireQaSlots(
     throw error;
   }
 }
+
+const qaRunnerEntries = new Set([
+  resolve(import.meta.dir, 'cli.ts'),
+  resolve(import.meta.dir, 'test.ts'),
+]);
+
+// A runner that is killed cannot run this itself. The next runner sweeps those containers at start.
+function installQaRunnerReaper(): void {
+  const entry = process.argv[1];
+  if (!entry || !qaRunnerEntries.has(resolve(entry))) return;
+  try { sweepOrphanContainers(); }
+  catch (error) { console.error(`QA container sweep failed: ${error instanceof Error ? error.message : error}`); }
+  const environment = reapOwnerEnvironment(process.env);
+  if (environment.PATH) process.env.PATH = environment.PATH;
+  if (environment.REZICS_REAL_DOCKER) process.env.REZICS_REAL_DOCKER = environment.REZICS_REAL_DOCKER;
+  if (environment.REZICS_REAP_OWNER) process.env.REZICS_REAP_OWNER = environment.REZICS_REAP_OWNER;
+  const owner = process.env.REZICS_REAP_OWNER;
+  if (!owner) return;
+  process.on('exit', () => {
+    try { removeOwnedContainers(owner); } catch { /* the process is already leaving */ }
+  });
+}
+
+installQaRunnerReaper();

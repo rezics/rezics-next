@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# QA puts this directory first on PATH. run and create gain a reap-owner label;
+# every other docker command, including compose, is executed unchanged.
+set -euo pipefail
+
+real=${REZICS_REAL_DOCKER:-}
+if [[ -z $real ]]; then
+  printf '%s\n' 'docker shim: REZICS_REAL_DOCKER is unset' >&2
+  exit 127
+fi
+if [[ -z ${REZICS_REAP_OWNER:-} ]]; then
+  exec "$real" "$@"
+fi
+
+takes_value() {
+  case $1 in
+    --config|--context|--host|--log-level|--tlscacert|--tlscert|--tlskey|-c|-H|-l) return 0 ;;
+  esac
+  return 1
+}
+
+args=("$@")
+index=-1
+word=0
+skip=0
+after_container=0
+for i in "${!args[@]}"; do
+  arg=${args[$i]}
+  if (( skip )); then
+    skip=0
+    continue
+  fi
+  case $arg in
+    --config=*|--context=*|--host=*|--log-level=*|--tlscacert=*|--tlscert=*|--tlskey=*)
+      continue ;;
+    -c?*|-H?*|-l?*)
+      continue ;;
+    --)
+      continue ;;
+    -*)
+      if takes_value "$arg"; then skip=1; fi
+      continue ;;
+  esac
+  word=$((word + 1))
+  if (( word == 1 )) && [[ $arg == container ]]; then
+    after_container=1
+    continue
+  fi
+  if [[ $arg == run || $arg == create ]] && { (( word == 1 )) || (( after_container )); }; then
+    index=$i
+  fi
+  break
+done
+
+if (( index < 0 )); then
+  exec "$real" "$@"
+fi
+
+label="rezics.reap-owner=${REZICS_REAP_OWNER}"
+head=("${args[@]:0:index+1}")
+if (( index + 1 < ${#args[@]} )); then
+  exec "$real" "${head[@]}" --label "$label" "${args[@]:index+1}"
+fi
+exec "$real" "${head[@]}" --label "$label"

@@ -7,6 +7,7 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtemp
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
+import { sweepOrphanContainers } from '../qa/container-reaper.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { parseAffectedArgs, selectTestCommand } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
@@ -1917,6 +1918,12 @@ async function stopProcessGroup(child: ChildProcess): Promise<void> {
   await within(5_000, closed);
 }
 
+/** The preload names the bun process that is about to die, so the sweep can remove only that shard's containers. */
+async function stopGateShard(child: ChildProcess): Promise<void> {
+  try { await stopProcessGroup(child); }
+  finally { sweepOrphanContainers(); }
+}
+
 export interface UnitShardResult {
   done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[]; fileErrors: UnitFileErrorDetail[];
   runnerErrors: UnitRunnerError[]; files: string[]; output: string; ms: number;
@@ -2147,8 +2154,10 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
       runnerErrors: [], files: [...files], output, ms: Date.now() - startedAt });
   // Inventory guards include owner files. Run the selected Bun files directly
   // through Task so the public selector's tier-mixing refusal cannot mask them.
-  const child = spawn('task', ['goal:unit-files', '--', ...files.map(file => `./${file}`)], {
-    cwd, env: { ...process.env, AGENT: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
+  // The gate's cwd is the tree under test, which may not contain this checkout's reaper.
+  const child = spawn('task', ['goal:unit-files', '--', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
+    ...files.map(file => `./${file}`)], {
+    cwd, env: { ...process.env, AGENT: '1', REZICS_REAP_PRELOAD: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
   });
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -2179,7 +2188,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   try {
     const outcome = await Promise.race([closed.then(result => ({ kind: 'close' as const, ...result })), timeout]);
     if (outcome === 'timeout' || truncated || outcome.code === null) {
-      await stopProcessGroup(child);
+      await stopGateShard(child);
       const text = output();
       if (outcome !== 'timeout' && !truncated && outcome.code === null) {
         return { ...unfinished(text), runnerErrors: [{ files: [...files], diagnostic: launchError ?? (text.trim() || 'Unit runner could not be started') }] };
@@ -2205,7 +2214,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
       ms: Date.now() - startedAt };
   } catch {
     // A shard that cannot be reaped is unfinished, not a merge-blocking failure.
-    try { await stopProcessGroup(child); } catch { /* already unfinished */ }
+    try { await stopGateShard(child); } catch { /* already unfinished */ }
     return unfinished(output());
   } finally {
     if (timer) clearTimeout(timer);
@@ -3439,6 +3448,8 @@ async function runQaCommand(command: readonly string[], env: NodeJS.ProcessEnv, 
     process.off('SIGINT', forward);
     process.off('SIGTERM', forward);
     restoreOwner?.();
+    // The child's exit hook can run before dockerd finishes creating its container.
+    try { sweepOrphanContainers(); } catch { /* the command's exit status still stands */ }
   }
 }
 
