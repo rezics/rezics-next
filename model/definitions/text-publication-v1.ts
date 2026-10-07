@@ -3,6 +3,9 @@ import { parseTurtleProfile, type TurtleDeclaration } from '../compiler/shacl.ts
 
 export const textPublicationDeclaration = {
   id: 'text-publication-v1',
+  canonical: {
+    decision: { types: ['rv:PublicationDecision'] },
+  },
 } as const satisfies TurtleDeclaration;
 
 export const textPublicationProfile = parseTurtleProfile(

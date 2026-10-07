@@ -3,6 +3,9 @@ import { parseTurtleProfile, type TurtleDeclaration } from '../compiler/shacl.ts
 
 export const textContributionDeclaration = {
   id: 'text-contribution-v1',
+  canonical: {
+    contribution: { types: ['rv:TextContribution'] },
+  },
 } as const satisfies TurtleDeclaration;
 
 export const textContributionProfile = parseTurtleProfile(

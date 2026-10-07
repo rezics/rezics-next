@@ -66,6 +66,7 @@ const original = {
       count: 17,
       hash: '55ebf17e8edc8186fd8011e5e8ee015e45f66cefb81d32cd9a297fd56ac872cb',
       alternatives: [],
+      canonical: { types: ['rv:FixedRelease'] },
     }],
   },
   'rights-offering-v1': {

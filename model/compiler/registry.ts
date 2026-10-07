@@ -58,15 +58,6 @@ const ratingObservationKeys = ['realm', 'context', 'work', 'main', 'slot', 'obse
  * and delete it here, because declaring both is an error.
  */
 export const establishedDeclarations: Readonly<Record<string, EstablishedDeclaration>> = {
-  'content-publication-v1': {
-    canonical: { variant: only(rv('ContentVariant')), decision: only(rv('ContentPublicationDecision')) },
-  },
-  'content-search-eligibility-v1': { canonical: { decision: {
-    types: [rv('ContentSearchEligibilityDecision')],
-    when: [{ path: rv('modelRevision'),
-      value: '<https://rezics.com/definition/content-search-eligibility-v1>' }],
-  } } },
-  'content-match-unit-v1': { canonical: { projection: only(rv('ContentProjection')) } },
   'realm-experience-rating-context-v1': {
     canonical: { context: only(rv('ExperienceRatingContext')) },
     binding: { required: ['realm', 'context', 'question'], roles: ['realm', 'context'],
@@ -114,16 +105,6 @@ export const establishedDeclarations: Readonly<Record<string, EstablishedDeclara
       optional: ['source-revision'], roles: ['link'], demandedBy: [rv('TranslationLink')],
     },
   },
-  'fixed-native-text-release-v1': {
-    canonical: { release: only(rv('FixedRelease')) },
-    binding: {
-      required: ['release', 'work', 'main', 'revision', 'selection', 'contribution', 'decision', 'draft',
-        'language', 'digest', 'manifest', 'actor', 'receipt', 'scope', 'epoch'],
-      roles: ['release'], demandedBy: [rv('FixedRelease')],
-    },
-  },
-  'text-contribution-v1': { canonical: { contribution: only(rv('TextContribution')) } },
-  'text-publication-v1': { canonical: { decision: only(rv('PublicationDecision')) } },
   'classification-direct-decision-v1': {
     canonical: { application: only(rv('ClassificationApplication')),
       decision: only(rv('ClassificationDecision')) },

@@ -3,6 +3,9 @@ import { parseTurtleProfile, type TurtleDeclaration } from '../compiler/shacl.ts
 
 export const contentMatchUnitDeclaration = {
   id: 'content-match-unit-v1',
+  canonical: {
+    projection: { types: ['rv:ContentProjection'] },
+  },
 } as const satisfies TurtleDeclaration;
 
 export const contentMatchUnitProfile = parseTurtleProfile(
