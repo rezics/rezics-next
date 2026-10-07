@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
-import { acquireHeavy, archiveFiles, areaConflicts, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
+import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, SONNET_MODEL,
   failingTestFiles, type Ledger, type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
@@ -555,6 +555,21 @@ describe('pre-merge unit selection', () => {
       expect(() => mergeUnitFiles(dir, 'Affected since HEAD: fixture\n  unit: ../outside.test.ts')).toThrow('outside worktree');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
+
+  test('shard sizes differ by at most one and empty shards are omitted', () => {
+    const files = ['a.test.ts', 'b.test.ts', 'c.test.ts', 'd.test.ts', 'e.test.ts', 'f.test.ts', 'g.test.ts', 'h.test.ts'];
+    const even = balanceUnitShards(files, 4);
+    expect(even).toHaveLength(4);
+    expect(even.every(group => group.length === 2)).toBe(true);
+    expect(even.flat().sort()).toEqual(files);
+    expect(new Set(even.flat()).size).toBe(files.length);
+    const odd = balanceUnitShards(files.slice(0, 5), 4);
+    expect(odd.map(group => group.length).sort()).toEqual([1, 1, 1, 2]);
+    expect(odd.flat().sort()).toEqual(files.slice(0, 5));
+    expect(balanceUnitShards(files, 1)).toEqual([files]);
+    expect(balanceUnitShards(files.slice(0, 2), 8)).toHaveLength(2);
+    expect(balanceUnitShards([], 4)).toEqual([]);
+  });
 });
 
 describe('goalctl shared lifecycle and launch gates', () => {
@@ -609,8 +624,8 @@ process.exit(await child.exited);
     const ledgerPath = join(dir, '.temp/goal-orchestration/ledger.json');
     const ledger = (): Ledger => JSON.parse(readFileSync(ledgerPath, 'utf8')) as Ledger;
     const save = (value: Ledger) => writeFileSync(ledgerPath, JSON.stringify(value));
-    const run = (args: string[], overrides: NodeJS.ProcessEnv = {}) => spawnSync('bun',
-      [join(import.meta.dir, 'goalctl.ts'), ...args], { cwd: dir, encoding: 'utf8', env: { ...env, ...overrides }, timeout: 45_000 });
+    const run = (args: string[], overrides: NodeJS.ProcessEnv = {}, timeout = 45_000) => spawnSync('bun',
+      [join(import.meta.dir, 'goalctl.ts'), ...args], { cwd: dir, encoding: 'utf8', env: { ...env, ...overrides }, timeout });
     for (const goal of ['alpha', 'beta']) {
       mkdirSync(join(dir, 'docs/goals', goal), { recursive: true });
       writeFileSync(join(dir, 'docs/goals', goal, 'GOAL.md'), '---\nareas: []\n---\n');
@@ -822,6 +837,92 @@ process.exit(await child.exited);
       } finally { r.cleanup(); }
     }, 30_000);
   }
+
+  test('eight affected files run as four shards and the union of their failures is reported', async () => {
+    const r = repo();
+    try {
+      const files = Array.from({ length: 8 }, (_, index) => `gate-shard-${index}.test.ts`);
+      const failing = new Set([files[0]!, files[7]!]);
+      const source = (fails: boolean) => `import { test, expect } from 'bun:test';\n`
+        + `test('stays valid', () => expect(${fails}).toBe(false));\n`;
+      const task = await r.start('G-001');
+      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(...files); r.save(ledger);
+      for (const file of files) writeFileSync(join(task.worktree, file), source(failing.has(file)));
+      r.commit(task);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', ...files]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add sharded units']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const plan = join(r.dir, '.temp/unit-plan');
+      writeFileSync(plan, files.map(file => `  unit: ${file}`).join('\n') + '\n');
+      const log = join(r.dir, '.temp/unit-log');
+      const before = r.git('rev-parse', 'main');
+      const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '4' });
+      expect(result.status).toBe(1);
+      expect(r.git('rev-parse', 'main')).toBe(before);
+      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+      const reported = result.stderr.split('introduced unit failures')[1] ?? '';
+      expect(reported).toContain(files[0]!);
+      expect(reported).toContain(files[7]!);
+      for (const file of files) if (!failing.has(file)) expect(reported).not.toContain(file);
+      const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { cwd: string; args: string[] });
+      expect(runs).toHaveLength(4);
+      expect(runs.every(run => run.cwd === task.worktree)).toBe(true);
+      const groups = runs.map(run => run.args.filter(arg => arg.endsWith('.test.ts')).sort());
+      expect(groups.every(group => group.length === 2)).toBe(true);
+      expect(groups.flat().sort()).toEqual(files.map(file => `./${file}`).sort());
+      expect(new Set(groups.flat()).size).toBe(files.length);
+    } finally { r.cleanup(); }
+  }, 45_000);
+
+  test('a unit gate shard that exceeds the budget is inconclusive and the merge proceeds', async () => {
+    const r = repo();
+    try {
+      const fast = 'gate-fast.test.ts';
+      const slow = 'gate-slow.test.ts';
+      const task = await r.start('G-001');
+      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(fast, slow); r.save(ledger);
+      writeFileSync(join(task.worktree, fast), `import { test, expect } from 'bun:test';\n`
+        + `test('finishes', () => expect(true).toBe(true));\n`);
+      writeFileSync(join(task.worktree, slow), `import { setDefaultTimeout, test } from 'bun:test';\n`
+        + `setDefaultTimeout(120_000);\ntest('runs past the gate budget', async () => { await Bun.sleep(90_000); });\n`);
+      r.commit(task);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', fast, slow]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add budget probes']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const plan = join(r.dir, '.temp/unit-plan');
+      writeFileSync(plan, `  unit: ${fast}\n  unit: ${slow}\n`);
+      const log = join(r.dir, '.temp/unit-log');
+      const before = r.git('rev-parse', 'main');
+      const started = Date.now();
+      const result = r.run(['merge', task.id], {
+        GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '2', GOAL_UNIT_GATE_BUDGET_MS: '8000',
+      }, 40_000);
+      const elapsed = Date.now() - started;
+      expect(elapsed).toBeLessThan(30_000);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('inconclusive');
+      expect(result.stdout).toContain('not blocking');
+      const named: string[] = [];
+      for (const line of (result.stdout.split('reported, not blocking\n')[1] ?? '').split('\n')) {
+        if (!line.startsWith('  ')) break;
+        named.push(line.trim());
+      }
+      expect(named).toEqual([slow]);
+      expect(r.git('rev-parse', 'main')).toBe(r.git('rev-parse', task.branch));
+      expect(r.git('rev-parse', 'main')).not.toBe(before);
+      expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+      const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] });
+      expect(runs).toHaveLength(2);
+      expect(runs.map(run => run.args.filter(arg => arg.endsWith('.test.ts')).join(' ')).sort())
+        .toEqual([`./${fast}`, `./${slow}`]);
+      const hanging = readdirSync('/proc').some(entry => {
+        if (!/^\d+$/.test(entry)) return false;
+        try { return readFileSync(`/proc/${entry}/cmdline`, 'utf8').includes(slow); }
+        catch { return false; }
+      });
+      expect(hanging).toBe(false);
+    } finally { r.cleanup(); }
+  }, 60_000);
 
   test('a manually landed cherry-pick records its boundary and preserves intervening maintainer commits', async () => {
     const r = repo();

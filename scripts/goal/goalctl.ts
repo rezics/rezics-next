@@ -1,6 +1,6 @@
 // Goal worker-process control: exclusive claims, dispatch, waits, QA slots, scope and merge.
 // The manager is the only caller of the state-changing commands; see docs/goals/README.md.
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, readSync,
   renameSync, readlinkSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -1457,7 +1457,6 @@ export function mergeUnitFiles(worktree: string, plan: string): string[] {
   return [...selected].sort();
 }
 
-/** A branch failure is blocking only when that file passes at main's committed boundary. */
 /** Files a failing bun run names: in AGENT mode bun prints a `path:` header only for files with failures or errors. */
 export function failingTestFiles(output: string, candidates: readonly string[], root?: string): string[] {
   const known = new Set(candidates);
@@ -1470,7 +1469,141 @@ export function failingTestFiles(output: string, candidates: readonly string[], 
   return [...found].sort();
 }
 
-function preMergeUnitGate(worktree: string, mainRoot: string, before: string, skip: boolean): string | undefined {
+function positiveInteger(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  if (!/^[1-9]\d*$/.test(raw)) throw new Error(`${name} must be a positive integer`);
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) throw new Error(`${name} must be a positive integer`);
+  return value;
+}
+
+/** Deal files so shard sizes differ by at most one. Fewer files than shards leaves no empty shard. */
+export function balanceUnitShards(files: readonly string[], shards: number): string[][] {
+  if (!files.length) return [];
+  const count = Math.min(files.length, Math.max(1, Math.floor(shards)));
+  const groups = Array.from({ length: count }, () => [] as string[]);
+  for (let index = 0; index < files.length; index++) groups[index % count]!.push(files[index]!);
+  return groups;
+}
+
+function unitGateShards(): number {
+  return positiveInteger('GOAL_UNIT_GATE_SHARDS', 4);
+}
+
+/** Wall clock for every shard of one side. Twelve minutes: one Access-sized run previously waited past 25. */
+function unitGateBudgetMs(): number {
+  return positiveInteger('GOAL_UNIT_GATE_BUDGET_MS', 12 * 60 * 1000);
+}
+
+const UNIT_GATE_OUTPUT_CAP = 256 * 1024 * 1024;
+
+async function within(limitMs: number, done: Promise<void>): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<false>(resolve => { timer = setTimeout(() => resolve(false), limitMs); });
+  const finished = await Promise.race([done.then(() => true as const), timeout]);
+  if (timer) clearTimeout(timer);
+  return finished;
+}
+
+/** `task` is not the test process. A new session lets the budget signal reach bun underneath it. */
+async function stopProcessGroup(child: ChildProcess): Promise<void> {
+  const pid = child.pid;
+  if (!pid) return;
+  const closed = new Promise<void>(resolve => {
+    if (child.exitCode !== null || child.signalCode !== null) { resolve(); return; }
+    child.once('close', () => resolve());
+  });
+  const signal = (name: NodeJS.Signals) => {
+    try { process.kill(-pid, name); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+  };
+  if (child.exitCode === null && child.signalCode === null) signal('SIGTERM');
+  if (!(await within(2_000, closed)) && child.exitCode === null && child.signalCode === null) signal('SIGKILL');
+  await within(5_000, closed);
+}
+
+interface UnitShardResult { done: boolean; failing: string[]; files: string[]; output: string; ms: number }
+
+async function runUnitShard(cwd: string, files: readonly string[], deadline: number): Promise<UnitShardResult> {
+  const startedAt = Date.now();
+  const unfinished = (output: string): UnitShardResult =>
+    ({ done: false, failing: [], files: [...files], output, ms: Date.now() - startedAt });
+  const child = spawn('task', ['test', '--', ...files.map(file => `./${file}`)], {
+    cwd, env: { ...process.env, AGENT: '1' }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
+  });
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  let bytes = 0;
+  let truncated = false;
+  const take = (bucket: string[]) => (chunk: string) => {
+    bytes += chunk.length;
+    if (truncated || bytes > UNIT_GATE_OUTPUT_CAP) { truncated = true; return; }
+    bucket.push(chunk);
+  };
+  child.stdout?.setEncoding('utf8');
+  child.stderr?.setEncoding('utf8');
+  child.stdout?.on('data', take(stdout));
+  child.stderr?.on('data', take(stderr));
+  const output = () => `${stdout.join('')}\n${stderr.join('')}`;
+  const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
+    child.once('error', () => resolve({ code: null, signal: null }));
+    child.once('close', (code, signal) => resolve({ code, signal }));
+  });
+  // Node fires a delay above 2^31-1 immediately; the budget is a deadline, not an overflow.
+  const delay = Math.min(Math.max(0, deadline - Date.now()), 2_147_483_647);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<'timeout'>(resolve => { timer = setTimeout(() => resolve('timeout'), delay); });
+  try {
+    const outcome = await Promise.race([closed.then(result => ({ kind: 'close' as const, ...result })), timeout]);
+    if (outcome === 'timeout' || truncated || outcome.code === null) {
+      await stopProcessGroup(child);
+      return unfinished(output());
+    }
+    const text = output();
+    const failing = outcome.code === 0 ? [] : failingTestFiles(text, files, cwd);
+    // A failure bun did not attribute to a file counts against that shard.
+    return { done: true, failing: outcome.code !== 0 && !failing.length ? [...files] : failing, files: [...files], output: text,
+      ms: Date.now() - startedAt };
+  } catch {
+    // A shard that cannot be reaped is unfinished, not a merge-blocking failure.
+    try { await stopProcessGroup(child); } catch { /* already unfinished */ }
+    return unfinished(output());
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** Parallel `task test` shards under one wall-clock budget. An unfinished shard makes the side inconclusive:
+ * failures from shards that did finish are not a verdict, because the set was not fully run. */
+export async function runUnitGate(cwd: string, files: readonly string[]): Promise<{
+  done: boolean; failing: string[]; unfinished: string[]; output: string;
+}> {
+  if (!files.length) return { done: true, failing: [], unfinished: [], output: '' };
+  const groups = balanceUnitShards(files, unitGateShards());
+  const budget = unitGateBudgetMs();
+  console.log(`Unit gate: ${files.length} file(s) in ${groups.length} shard(s), budget ${budget}ms`);
+  const deadline = Date.now() + budget;
+  const results = await Promise.all(groups.map(group => runUnitShard(cwd, group, deadline)));
+  for (const result of results) {
+    console.log(`Unit gate shard: ${result.files.length} file(s), ${result.done ? `${result.failing.length} failing` : 'unfinished'} in ${result.ms}ms`);
+  }
+  const output = results.map(result => result.output).join('\n');
+  const unfinished = results.filter(result => !result.done).flatMap(result => result.files).sort();
+  if (unfinished.length) return { done: false, failing: [], unfinished, output };
+  return { done: true, failing: [...new Set(results.flatMap(result => result.failing))].sort(), unfinished: [], output };
+}
+
+function reportUnfinished(side: 'affected' | 'main', unfinished: readonly string[]): void {
+  const count = `${unfinished.length} file${unfinished.length === 1 ? '' : 's'}`;
+  const lead = side === 'main'
+    ? `Unit gate inconclusive: main's run of ${count} did not finish; reported, not blocking`
+    : `Unit gate inconclusive: the affected run did not finish (${count}); reported, not blocking`;
+  console.log(`${lead}\n  ${unfinished.join('\n  ')}`);
+}
+
+/** A branch failure is blocking only when that file passes at main's committed boundary. */
+async function preMergeUnitGate(worktree: string, mainRoot: string, before: string, skip: boolean): Promise<string | undefined> {
   if (skip) {
     console.log('Unit gate skipped: --skip-unit-gate explicitly requested by the manager');
     return;
@@ -1481,22 +1614,12 @@ function preMergeUnitGate(worktree: string, mainRoot: string, before: string, sk
   const files = mergeUnitFiles(worktree, plan.stdout);
   console.log(`Pre-merge unit gate: ${files.length} affected file(s) against main ${before.slice(0, 12)}`);
   if (!files.length) return;
-  // One run per side: the branch's affected files, then only its failing files at main's committed boundary.
-  // A run that cannot finish is inconclusive and reported, never a refusal: the wave and the regression tier
+  // One budget per side: the branch's affected files, then only its failing files at main's committed boundary.
+  // A side that does not finish is inconclusive and reported, never a refusal: the wave and the regression tier
   // still run those files (a per-file timeout once aborted every launch merge).
-  const runSet = (cwd: string, set: readonly string[]) => {
-    const result = spawnSync('task', ['test', '--', ...set.map(file => `./${file}`)], {
-      cwd, encoding: 'utf8', env: { ...process.env, AGENT: '1' }, maxBuffer: 256 * 1024 * 1024, timeout: 1_800_000,
-    });
-    const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
-    if (result.status === null) return { done: false as const, failing: [] as string[], output };
-    const failing = result.status === 0 ? [] : failingTestFiles(output, set, cwd);
-    // A failure bun did not attribute to a file counts against the whole set.
-    return { done: true as const, failing: result.status !== 0 && !failing.length ? [...set] : failing, output };
-  };
-  const branch = runSet(worktree, files);
+  const branch = await runUnitGate(worktree, files);
   if (!branch.done) {
-    console.log(`Unit gate inconclusive: the affected run did not finish (${files.length} files); reported, not blocking`);
+    reportUnfinished('affected', branch.unfinished);
     return;
   }
   if (!branch.failing.length) {
@@ -1517,10 +1640,9 @@ function preMergeUnitGate(worktree: string, mainRoot: string, before: string, sk
       // Own workspace links keep the baseline on HEAD even when main has local source edits.
       const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
       if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
-      const main = runSet(directory, existing);
-      if (!main.done) {
-        console.log(`Unit gate inconclusive: main's run of ${existing.length} file(s) did not finish; reported, not blocking`);
-      } else {
+      const main = await runUnitGate(directory, existing);
+      if (!main.done) reportUnfinished('main', main.unfinished);
+      else {
         for (const file of existing) {
           if (main.failing.includes(file)) console.log(`Unit gate: ${file} also fails on main ${before.slice(0, 12)}; reported, not blocking`);
           else introduced.push(file);
@@ -1542,7 +1664,7 @@ async function mergeTask(id: string, flags: Set<string>): Promise<void> {
   if (!flags.has('--landed')) {
     const pending = taskOf(readLedger(), id);
     assertOwner(pending);
-    const unitFailure = preMergeUnitGate(pending.worktree, root, git(root, ['rev-parse', 'HEAD']), flags.has('--skip-unit-gate'));
+    const unitFailure = await preMergeUnitGate(pending.worktree, root, git(root, ['rev-parse', 'HEAD']), flags.has('--skip-unit-gate'));
     if (unitFailure) {
       await withLedger(ledger => { taskOf(ledger, id).state = 'conflict'; });
       throw new Error(`${pending.id} ${unitFailure}`);
