@@ -503,3 +503,13 @@ mutate/rebase the frozen539/fa tree or restart a live job. Original backup and
 both restore SHA values are unchanged. No campaign pass or current-native
 qualification is inferred. Kernel package repairs/ProgramG1404/G1406 remain
 separate; no Trustshared refresh ticket is queued.
+
+100k campaign retryQA222218-a943dc is terminalFAIL,84.9active/114wall. Both
+startup/pin/100000count and all24sample reads passed; offline seeding then failed
+with missing subprocess status/error/signal, and copyB cleanup exceeded120ACTIVE.
+The backup remains unchanged, but writablecopies are not pristine after journal
+seeding; restore fresh isolated copies before requalification. G-1344 Cursor13
+now owns mechanical diagnostics/cleanup/preparation only, all assertions/filters/
+clocks/budgets frozen. Initial Sonnet resume was quota-refused; no force-usage.
+Only the two current correctness-critical Sonnet workers continue, while new
+mechanical slices use Cursor/Grok per Program. No live campaign or Trustrefresh.
