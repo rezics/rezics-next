@@ -213,7 +213,7 @@ export default {
   recipeYield: "Rinde",
   servings: "Porciones",
   totalTime: "Tiempo total",
-  activeTime: "Tiempo activo",
+  prepTime: "Preparación", cookTime: "Cocción",
   ingredients: "Ingredientes",
   method: "Preparación",
   scaleRecipe: "Ajustar cantidades",

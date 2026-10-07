@@ -1,9 +1,7 @@
 'use client';
 
-import { Input } from '@rezics/ui/input';
-import { Textarea } from '@rezics/ui/textarea';
 import { type RefObject, useRef } from 'react';
-import { useSnapshot } from './controls.tsx';
+import { SyncedInput, SyncedTextarea, useSnapshot } from './controls.tsx';
 import type { Copy } from './messages.ts';
 import { type DetailsSaver, entryOf, type NotesWriter } from './saves.ts';
 import { directionOf } from '../studio/types.ts';
@@ -24,17 +22,18 @@ export function DetailsSection({ details, notes, notesField, language, t }: { de
   const lang = { lang: language, dir: directionOf(language) } as const;
   return <section aria-labelledby="recipe-details" className="grid gap-4">
     <h2 id="recipe-details" className="font-semibold text-xl">{t.detailsHeading}</h2>
-    <label className="grid gap-1 text-sm"><span className="font-medium">{t.title}</span>
-      <Input key={`title:${current.title}`} ref={title} defaultValue={current.title} maxLength={200} autoComplete="off" size="lg"
+    <div className="grid gap-1 text-sm"><label htmlFor="recipe-title" className="font-medium">{t.title}</label>
+      <SyncedInput id="recipe-title" ref={title} value={current.title} maxLength={200} autoComplete="off" size="lg"
         className="font-work-title text-lg" onBlur={commit} {...lang}
-        onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} /></label>
-    <label className="grid gap-1 text-sm"><span className="font-medium">{t.description}</span>
-      <Textarea key={`description:${current.description}`} ref={description} defaultValue={current.description} onBlur={commit}
-        maxLength={5000} className="min-h-20" {...lang} />
-      <span className="text-muted-foreground text-xs">{t.descriptionHelp}</span></label>
-    <label className="grid gap-1 text-sm"><span className="font-medium">{t.notes}</span>
-      <Textarea key={`notes:${written.notes.body}`} ref={notesField} defaultValue={written.notes.body} maxLength={20000} className="min-h-28" {...lang}
+        onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} /></div>
+    <div className="grid gap-1 text-sm"><label htmlFor="recipe-description" className="font-medium">{t.description}</label>
+      <SyncedTextarea id="recipe-description" ref={description} value={current.description}
+        onBlur={commit} maxLength={5000} className="min-h-20" aria-describedby="recipe-description-help" {...lang} />
+      <span id="recipe-description-help" className="text-muted-foreground text-xs">{t.descriptionHelp}</span></div>
+    <div className="grid gap-1 text-sm"><label htmlFor="recipe-notes" className="font-medium">{t.notes}</label>
+      <SyncedTextarea id="recipe-notes" ref={notesField} value={written.notes.body} maxLength={20000}
+        className="min-h-28" aria-describedby="recipe-notes-help" {...lang}
         onBlur={event => void notes.save(event.currentTarget.value.trim())} />
-      <span className="text-muted-foreground text-xs">{t.notesHelp}</span></label>
+      <span id="recipe-notes-help" className="text-muted-foreground text-xs">{t.notesHelp}</span></div>
   </section>;
 }

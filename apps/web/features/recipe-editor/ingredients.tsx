@@ -8,7 +8,7 @@ import { ArrowDownIcon, ArrowUpIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lu
 import { type FormEvent, type KeyboardEvent, useId, useRef, useState } from 'react';
 import { composeLine, emptyParts, type IngredientParts, knownUnits, parseLine, partsOf, partsProblem, qualifierOf }
   from './ingredient-line.ts';
-import { IconAction } from './controls.tsx';
+import { IconAction, SyncedInput } from './controls.tsx';
 import type { Copy } from './messages.ts';
 import { groups, type GroupNode, type IngredientNode, linesOf, type RecipeState } from './model.ts';
 import type { RecipeStore } from './store.ts';
@@ -149,7 +149,7 @@ function SectionHeader({ group, index, count, store, state, t, busy, language }:
   const remove = () => void store.submit({ kind: 'removeSection', occurrence: group.occurrence }).then(() => setConfirming(false));
   return <div className="grid gap-2">
     <div className="flex items-center gap-1">
-      <Input key={name} defaultValue={name} aria-label={t.sectionName} maxLength={500} lang={language} dir={directionOf(language)}
+      <SyncedInput value={name} aria-label={t.sectionName} maxLength={500} lang={language} dir={directionOf(language)}
         className="font-semibold" autoComplete="off"
         onBlur={event => rename(event.target.value)}
         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} />

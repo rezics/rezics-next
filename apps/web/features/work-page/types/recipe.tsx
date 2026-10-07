@@ -201,7 +201,8 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
   const base = initial?.measures.find(item => item.kind === 'servings');
   const measures = page?.measures ?? [];
   const total = measures.find(item => item.kind === 'total-duration');
-  const active = measures.find(item => item.kind === 'preparation-duration');
+  const prep = measures.find(item => item.kind === 'preparation-duration');
+  const cook = measures.find(item => item.kind === 'cooking-duration');
   const yieldMeasure = measures.find(item => item.kind === 'yield');
   const scale = async (event: FormEvent) => {
     event.preventDefault();
@@ -219,8 +220,9 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
     {page ? <>
       <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
         {yieldMeasure ? <span><strong>{t.recipeYield}</strong> {duration(yieldMeasure.value, yieldMeasure.unitText)}</span> : null}
+        {prep ? <span><strong>{t.prepTime}</strong> {duration(prep.value, prep.unitText)}</span> : null}
+        {cook ? <span><strong>{t.cookTime}</strong> {duration(cook.value, cook.unitText)}</span> : null}
         {total ? <span><strong>{t.totalTime}</strong> {duration(total.value, total.unitText)}</span> : null}
-        {active ? <span><strong>{t.activeTime}</strong> {duration(active.value, active.unitText)}</span> : null}
       </div>
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="flex flex-wrap items-end gap-4">

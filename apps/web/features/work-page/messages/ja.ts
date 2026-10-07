@@ -207,7 +207,7 @@ export default {
   textNotFoundBody: 'この作品はこの言語ではまだ本文が公開されていないか、章ごとに読む形式です。',
   textUnavailableTitle: '現在、この本文を表示できません', textFormat: 'この本文の形式は、まだリーダーで表示できません。',
   recipeMethod: 'レシピ', viewRecipe: 'レシピを見る',
-  recipeYield: 'できあがり量', servings: '人分', totalTime: '合計時間', activeTime: '作業時間',
+  recipeYield: 'できあがり量', servings: '人分', totalTime: '合計時間', prepTime: '下準備', cookTime: '調理',
   ingredients: '材料', method: '作り方', scaleRecipe: '分量を換算', scaling: '換算中…',
   scaleFailed: '分量を換算できませんでした。もう一度お試しください。',
   scaleByTaste: 'この分量は記載どおりです。仕上がり量を倍以上変える場合は、塩、香辛料、膨張剤を味見して調整してください。',

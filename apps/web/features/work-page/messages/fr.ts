@@ -213,7 +213,7 @@ export default {
   recipeYield: "Pour",
   servings: "Portions",
   totalTime: "Temps total",
-  activeTime: "Temps actif",
+  prepTime: "Préparation", cookTime: "Cuisson",
   ingredients: "Ingrédients",
   method: "Préparation",
   scaleRecipe: "Ajuster les quantités",

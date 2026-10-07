@@ -5,7 +5,7 @@ import { Checkbox } from '@rezics/ui/checkbox';
 import { Textarea } from '@rezics/ui/textarea';
 import { ArrowDownIcon, ArrowUpIcon, LinkIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type KeyboardEvent, useRef, useState } from 'react';
-import { IconAction } from './controls.tsx';
+import { IconAction, SyncedTextarea } from './controls.tsx';
 import type { Copy } from './messages.ts';
 import { groups, ingredients, type IngredientNode, type RecipeState, steps, type StepNode } from './model.ts';
 import type { RecipeStore } from './store.ts';
@@ -58,7 +58,7 @@ function StepRow({ node, index, count, store, state, language, t, busy }: Common
       <span aria-hidden="true" className="mt-2 flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-sm">{number}</span>
       <div className="grid min-w-0 flex-1 gap-1">
         {section ? <span className="text-muted-foreground text-xs">{t.stepSection({ section: section })}</span> : null}
-        <Textarea key={stored} ref={text} defaultValue={stored} aria-label={t.stepText({ number: String(number) })} maxLength={4000}
+        <SyncedTextarea ref={text} value={stored} aria-label={t.stepText({ number: String(number) })} maxLength={4000}
           lang={language} dir={directionOf(language)} onBlur={() => commit()} className="min-h-16" />
       </div>
     </div>

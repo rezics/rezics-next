@@ -214,7 +214,7 @@ export default {
   recipeYield: "Ergibt",
   servings: "Portionen",
   totalTime: "Gesamtzeit",
-  activeTime: "Arbeitszeit",
+  prepTime: "Zubereitung", cookTime: "Garzeit",
   ingredients: "Zutaten",
   method: "Zubereitung",
   scaleRecipe: "Menge anpassen",

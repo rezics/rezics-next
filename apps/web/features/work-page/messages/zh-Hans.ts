@@ -14,7 +14,7 @@ export default {
   regionDenied: '请使用有权访问此作品的账户登录后查看此部分。',
 
   recipeMethod: '食谱', viewRecipe: '查看食谱', recipeYield: '产量', servings: '份数',
-  totalTime: '总用时', activeTime: '动手时间', ingredients: '食材', method: '做法',
+  totalTime: '总用时', prepTime: '准备', cookTime: '烹煮', ingredients: '食材', method: '做法',
   scaleRecipe: '换算', scaling: '正在换算…', scaleFailed: '用量换算失败，请重试。',
   scaleByTaste: '份数变化超过一倍时，盐、香料和发酵剂不宜按比例照加。此用量保持原文，请试味。',
   scaleUnparsed: '这一行读不出用量，因此保持原文。',

@@ -207,7 +207,7 @@ export default {
   textNotFoundBody: '這部作品尚未以此語言發布正文，或正文是按章節閱讀。',
   textUnavailableTitle: '目前無法顯示這篇正文', textFormat: '閱讀器尚無法顯示此正文使用的格式。',
   recipeMethod: '食譜', viewRecipe: '查看食譜',
-  recipeYield: '成品份量', servings: '份數', totalTime: '總時間', activeTime: '動手時間',
+  recipeYield: '成品份量', servings: '份數', totalTime: '總時間', prepTime: '準備', cookTime: '烹煮',
   ingredients: '食材', method: '做法', scaleRecipe: '換算份量', scaling: '正在換算…',
   scaleFailed: '無法換算用量，請再試一次。',
   scaleByTaste: '此用量維持原樣。份量變動超過一倍時，鹽、香料和膨鬆劑需試味調整。',

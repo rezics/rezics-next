@@ -2,10 +2,12 @@
 
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
+import { Input } from '@rezics/ui/input';
+import { Textarea } from '@rezics/ui/textarea';
 import { cn } from '@rezics/ui/utils';
 import { TriangleAlertIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
-import { useSyncExternalStore } from 'react';
+import { type Ref, useEffect, useImperativeHandle, useRef, useSyncExternalStore } from 'react';
 import type { Copy } from './messages.ts';
 import type { Refusal } from './store.ts';
 import type { SaveRefusal } from './saves.ts';
@@ -52,4 +54,28 @@ export function FailureAlert({ t, refusal, detail, onRetry, onDismiss }: {
       <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>{t.dismiss}</Button>
     </div>
   </Alert>;
+}
+
+/**
+ * A field the person types in, showing what Main holds. A newer value from Main replaces the text
+ * only while the field is not being typed in, so a write that finishes late never takes typing away.
+ */
+function useSynced<E extends HTMLInputElement | HTMLTextAreaElement>(value: string, ref: Ref<E> | undefined) {
+  const own = useRef<E>(null);
+  useImperativeHandle(ref, () => own.current as E);
+  useEffect(() => {
+    const element = own.current;
+    if (element && document.activeElement !== element && element.value !== value) element.value = value;
+  }, [value]);
+  return own;
+}
+
+export function SyncedInput({ value, ref, ...props }: Omit<ComponentProps<typeof Input>, 'value' | 'defaultValue'> & { value: string }) {
+  const own = useSynced<HTMLInputElement>(value, ref as Ref<HTMLInputElement> | undefined);
+  return <Input ref={own} defaultValue={value} {...props} />;
+}
+
+export function SyncedTextarea({ value, ref, ...props }: Omit<ComponentProps<typeof Textarea>, 'value' | 'defaultValue'> & { value: string }) {
+  const own = useSynced<HTMLTextAreaElement>(value, ref as Ref<HTMLTextAreaElement> | undefined);
+  return <Textarea ref={own} defaultValue={value} {...props} />;
 }
