@@ -139,6 +139,7 @@ export const testExclusions: readonly { file: string; reason: string; category?:
   { file: 'apps/about/tests/build.test.ts', reason: 'The about site runs its tests through task about:check.' },
   { file: 'apps/about/tests/catalogs.test.ts', reason: 'The about site runs its tests through task about:check.' },
   { file: 'apps/about/tests/g-736-legal.test.ts', reason: 'The about site runs its tests through task about:check.' },
+  { file: 'apps/about/tests/image-safety-copy.test.ts', reason: 'The about site runs its tests through task about:check.' },
   { file: 'apps/about/tests/status-badge.test.ts', reason: 'The about site runs its tests through task about:check.' },
   { file: 'apps/about/tests/ui-sources.test.ts', reason: 'The about site runs its tests through task about:check.' },
   { file: 'apps/about/tests/worker.test.ts', reason: 'The about site runs its tests through task about:check.' },
