@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { VOCABULARY_COST } from '../../../services/main/src/modules/classification/vocabulary.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
 import { CLASSIFIED_AS } from '../../../services/main/src/modules/statement/schema.ts';
@@ -29,7 +30,8 @@ test('G-426 vocabulary shares a revisioned scheme and resolves bilingual hierarc
   const home = await startHomeStack('classification-vocabulary');
   try {
     const { stack, author } = home;
-    const app = createMainApp(stack.fuseki, home.deps);
+    const deps = { ...home.deps, judgments: new AccessJudgments(stack.accessPool) };
+    const app = createMainApp(stack.fuseki, deps);
     const call = (path: string, body?: object, key?: string, token?: string) =>
       app.handle(
         new Request(`http://main.local${path}`, {
@@ -221,7 +223,7 @@ test('G-426 vocabulary shares a revisioned scheme and resolves bilingual hierarc
       // Preserve the HTTP assertion and surface the concrete reader failure
       // when its public problem response intentionally omits owner details.
       await workRead(
-        home.deps,
+        deps,
         new Request(`http://main.local${chipsPath}`),
         { language: 'zh-Hans' },
         (session) => readWorkClassifications(session, work.work),
