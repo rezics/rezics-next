@@ -51,6 +51,36 @@ type Status = {
   complete: boolean;
 };
 
+async function affectedCredential(
+  f: Awaited<ReturnType<typeof safetyFixture>>,
+  caseId: string,
+  decisionId: string,
+): Promise<string> {
+  let cursor: string | null = null;
+  do {
+    const page: {
+      items: { caseId: string; decisionId: string; credential: string }[];
+      nextCursor: string | null;
+    } = await json(
+      await f.call(
+        'GET',
+        `/v1/safety-notices${cursor ? `?cursor=${cursor}` : ''}`,
+        undefined,
+        f.author.token,
+      ),
+    );
+    const notice = page.items.find(
+      (item) => item.caseId === caseId && item.decisionId === decisionId,
+    );
+    if (notice) {
+      expect(notice.credential).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      return notice.credential;
+    }
+    cursor = page.nextCursor;
+  } while (cursor);
+  throw new Error('The affected uploader did not receive the decision notice through the API');
+}
+
 test('Copyright counter-notices reach the claimant once; receipt deadlines restore real content, filings and parallel restrictions keep it down', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with the integration tier');
   const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, [
@@ -204,13 +234,7 @@ test('Copyright counter-notices reach the claimant once; receipt deadlines resto
       });
     const other = parallel ? await f.report(image, 'harassment') : null;
     const restricted = await f.complete(await f.input(receipt, image, 'interim_restrict'));
-    const affected = (
-      await f.stack.accessPool.query<{ credential: string }>(
-        `SELECT credential
-      FROM access.safety_party_notice WHERE case_id = $1 AND principal_id = $2 AND decision_id = $3`,
-        [receipt.caseId, f.author.principalId, restricted.decisionId],
-      )
-    ).rows[0]!.credential;
+    const affected = await affectedCredential(f, receipt.caseId, restricted.decisionId);
     return { image, receipt, restricted, affected, other };
   };
   try {
@@ -861,13 +885,7 @@ test('Deadline restoration resumes a lost owner acknowledgement without duplicat
       },
     });
     const restriction = await f.complete(await f.input(receipt, image, 'interim_restrict'));
-    const credential = (
-      await f.stack.accessPool.query<{ credential: string }>(
-        `SELECT credential
-      FROM access.safety_party_notice WHERE decision_id = $1 AND principal_id = $2`,
-        [restriction.decisionId, f.author.principalId],
-      )
-    ).rows[0]!.credential;
+    const credential = await affectedCredential(f, receipt.caseId, restriction.decisionId);
     const counter = await json<{ stepId: string }>(
       await f.call(
         'POST',

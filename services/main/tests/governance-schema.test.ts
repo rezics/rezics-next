@@ -8,6 +8,7 @@ import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core';
 import { Pool, type PoolClient } from 'pg';
 import { migrateContent } from '../../content/src/migrate.ts';
 import { governanceTables } from '../src/modules/governance/schema.ts';
+import type { DecisionInput, StatementOfReasons } from '../src/modules/governance/store.ts';
 import { notificationTables } from '../src/modules/notification/schema.ts';
 import { rightsTables } from '../src/modules/rights/schema.ts';
 
@@ -19,6 +20,12 @@ const CONTENT_HEAD = 21;
 const id = () => Bun.randomUUIDv7();
 const iri = () => `https://rezics.com/id/${id()}`;
 const digest = (char: string) => char.repeat(64);
+const decisionReasons = (outcome: string, scope: string, rule: DecisionInput['rule']):
+  StatementOfReasons & { rule: DecisionInput['rule'] } => ({
+    facts: `Review of the recorded evidence concluded ${outcome}.`, scope,
+    duration: 'Until superseded by an attributable decision.', automation: false,
+    appealRoute: '/v1/public-reports/{caseId}/correspondence', contentLanguage: 'en', rule,
+  });
 
 const state = join(root, '.temp', `governance-schema-${id()}`);
 let port = 0;
@@ -283,11 +290,12 @@ test('GOV01-GOV03 schema foundation: upgrade generalizes 027 and enforces exact 
     reverses: string | null = null, decisionScope = scope) => pool.query(`INSERT INTO access.moderation_decision
     (id, kind, outcome, context, case_id, case_sequence, reverses_decision_id, principal_id, acting_subject,
      authority_kind, authority_scope_id, authority_epoch, authority_proof_digest, idempotency_key,
-     request_digest, rule_ref, rule_revision, rule_digest, evidence_digest, disclosure)
+     request_digest, rule_ref, rule_revision, rule_digest, evidence_digest, disclosure, statement_of_reasons)
     VALUES ($1, 'content_moderation', $2, 'urn:rezics:context:global', $3, $4, $5, $6, $7, 'platform', $8, 0,
-     $9, $10, $11, 'https://rezics.com/id/rule', 'r1', $12, $13, 'parties')`,
+     $9, $10, $11, 'https://rezics.com/id/rule', 'r1', $12, $13, 'parties', $14)`,
   [decisionId, outcome, caseId, sequence, reverses, principal, subject, decisionScope, digest('1'), key,
-    digest('2'), digest('3'), digest('4')]);
+    digest('2'), digest('3'), digest('4'), decisionReasons(outcome, 'The reported title revision.',
+      { ref: 'https://rezics.com/id/rule', revision: 'r1', digest: digest('3') })]);
   const advance = (head: string, generation: number) => pool.query(
     'UPDATE access.governance_case SET decision_head = $2, generation = $3 WHERE id = $1', [caseId, head, generation]);
   const first = id();
@@ -351,10 +359,11 @@ test('GOV24-GOV25 schema foundation: complaint notice, process deadlines and att
     pool.query(`INSERT INTO access.moderation_decision (id, kind, outcome, context, case_id, case_sequence,
       principal_id, acting_subject, authority_kind, authority_scope_id, authority_epoch, authority_proof_digest,
       idempotency_key, request_digest, rule_ref, rule_revision, rule_digest, evidence_digest, disclosure,
-      answers_step_id) VALUES ($1, 'rights_disposition', $2, 'urn:rezics:context:global', $3, $4, $5, $6,
-      'platform', $7, 0, $8, $9, $10, 'https://rezics.com/id/dmca-policy', 'p1', $11, $12, 'parties', $13)`,
+      answers_step_id, statement_of_reasons) VALUES ($1, 'rights_disposition', $2, 'urn:rezics:context:global', $3, $4, $5, $6,
+      'platform', $7, 0, $8, $9, $10, 'https://rezics.com/id/dmca-policy', 'p1', $11, $12, 'parties', $13, $14)`,
     [decisionId, outcome, caseId, sequence, principal, subject, scope, digest('8'), key, digest('9'),
-      digest('a'), digest('b'), step]);
+      digest('a'), digest('b'), step, decisionReasons(outcome, 'The complained-of synopsis.',
+        { ref: 'https://rezics.com/id/dmca-policy', revision: 'p1', digest: digest('a') })]);
   const interim = id();
   await decide(interim, 1, 'interim_restrict', 'interim-1');
   await pool.query('UPDATE access.governance_case SET decision_head = $2, generation = 1 WHERE id = $1',

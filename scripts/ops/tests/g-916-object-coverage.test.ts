@@ -331,8 +331,8 @@ test('G-916: recovery failures identify their phase and retain the original caus
 });
 
 test('G-916: an object error after the command deadline reports budget exhaustion', async () => {
+  const clock = spyOn(Date, 'now').mockReturnValue(0);
   const budget = new RecoveryBudget();
-  const clock = spyOn(Date, 'now');
   const cause = new Error('committed immutable object is unavailable');
   try {
     await budget.phase('coverage', () => {
@@ -344,6 +344,9 @@ test('G-916: an object error after the command deadline reports budget exhaustio
     expect((error as Error).message).toContain('600-second budget');
     expect((error as Error).message).toContain('coverage');
     expect((error as Error).cause).toBe(cause);
+    expect(budget.elapsed()).toBe(600_001);
+    expect(budget.phases.coverage).toBe(600_001);
+    expect(() => budget.remaining()).toThrow('600-second budget');
   } finally {
     clock.mockRestore();
   }
