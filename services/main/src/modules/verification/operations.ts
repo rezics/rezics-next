@@ -529,8 +529,9 @@ export async function assessAdmittedClaim(deps: VerificationDependencies, reques
       || error instanceof VerificationGraphStale,
       false,
       async (admission) => {
-        if (admission.state === 'sealed' && !(await deps.store.readAssessmentProducer(admission.id))) {
-          // A terminal alone cannot backfill the historically missing original Content intent.
+        if (admission.state !== 'registered' && !(await deps.store.readAssessmentProducer(admission.id))) {
+          // Claim precedes graph dispatch. A caller retry cannot backfill custody after that boundary,
+          // including a committed graph assessment whose Access acknowledgement was lost.
           throw new VerificationMissing('original assessment producer intent is unavailable');
         }
         const { lineageContinuation: _continuation, ...originalIntent } = intent;

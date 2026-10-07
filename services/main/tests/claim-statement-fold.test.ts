@@ -43,6 +43,7 @@ import {
   graphHeads,
   readClaimHead,
   readClaimRevisions,
+  readReceipt,
   receiptIri,
 } from '../src/modules/verification/graph.ts';
 import {
@@ -1818,7 +1819,7 @@ function assessmentProducerOperationsFixture() {
       activePrincipalId: async () => principal,
       register: async request => {
         events.push('register');
-        if (state.registered?.state === 'sealed') {
+        if (state.registered) {
           expect(request.requestDigest).toBe(state.registered.requestDigest);
           expect(request.idempotencyKey).toBe(state.registered.idempotencyKey);
           return { ...state.registered, replayed: true };
@@ -1897,6 +1898,17 @@ test('a failed original intent stage cannot claim, dispatch, cancel or acknowled
   expect(f.events).not.toContain('access-ack');
   expect(f.commands).toEqual([]);
   expect(f.state.producer).toBeUndefined();
+  const beforeRetry = [...f.events];
+  f.state.failStage = false;
+  f.state.failEffects = false;
+  const recovered = await assessAdmittedClaim(f.deps, new Request('https://main.example/assessments'), f.claim, f.intent);
+  expect(recovered.activation.status).toBe('activated');
+  expect(recovered.replayed).toBe(true);
+  expect(f.state.producer?.admission).toBe(f.admissionId);
+  expect(f.events.slice(beforeRetry.length)).toContain('stage');
+  expect(f.events.slice(beforeRetry.length)).toContain('graph-dispatch');
+  expect(f.events.slice(beforeRetry.length)).toContain('access-ack');
+  expect(f.commands).toHaveLength(1);
 });
 
 test('effect reconciliation refuses mismatched native assessment position, representation and stored terminal result', async () => {
@@ -1971,4 +1983,51 @@ test('a sealed historical assessment cannot backfill missing original producer i
   expect(f.commands).toHaveLength(1);
   expect(f.resolutions).toHaveLength(1);
   expect(f.activations).toHaveLength(1);
+});
+
+test('a claimed historical admission with a committed graph assessment cannot recreate missing original custody', async () => {
+  const f = assessmentProducerOperationsFixture();
+  const { idempotencyKey, ...intent } = f.intent;
+  const retained: RegisteredAdmission = {
+    id: f.admissionId, principalId: '00000000-0000-4000-8000-000000000205',
+    actingSubject: intent.actingSubject, scope: ADMISSIONS['claim-assess'].scope,
+    action: ADMISSIONS['claim-assess'].action, requestDigest: assessmentDigest(f.claim, intent),
+    idempotencyKey, authorityEpoch: '1', expiresAt: '2099-01-01T00:00:00.000Z',
+    state: 'claimed', dispatchEligible: true, replayed: true,
+  };
+  // Pre-producer custody: the graph committed, but Access never received its acknowledgement.
+  f.state.registered = retained;
+  f.state.assessment = id(216);
+  const graphTerminal = await readReceipt(f.env, f.admissionId, 'claim-assess', ['assessment']);
+  expect(graphTerminal).toMatchObject({ outcome: 'succeeded', admissionId: f.admissionId,
+    requestDigest: retained.requestDigest, result: { assessment: id(216) } });
+  expect(f.state.producer).toBeUndefined();
+  const forbidden = (event: string) => async (): Promise<never> => {
+    f.events.push(event);
+    throw new Error(`Missing original custody reached ${event}`);
+  };
+  f.deps.access.register = async request => {
+    expect(request.requestDigest).toBe(retained.requestDigest);
+    expect(request.idempotencyKey).toBe(retained.idempotencyKey);
+    f.events.push('register');
+    return retained;
+  };
+  f.deps.access.claim = forbidden('access-claim');
+  f.deps.access.recordGraphOutcome = forbidden('access-ack');
+  f.deps.store.stageAssessmentProducer = forbidden('stage');
+  f.deps.store.withAssessmentProducerEffects = forbidden('effects');
+  f.deps.store.analysisSnapshot = forbidden('basis');
+  f.env.fuseki.commandWithReceipt = forbidden('graph-dispatch');
+  await expect(assessAdmittedClaim(f.deps, new Request('https://main.example/assessments'), f.claim, f.intent))
+    .rejects.toBeInstanceOf(VerificationMissing);
+  expect(f.events).toContain('register');
+  for (const event of ['stage', 'access-claim', 'access-ack', 'effects', 'basis', 'graph-dispatch']) {
+    expect(f.events).not.toContain(event);
+  }
+  expect(f.state.producer).toBeUndefined();
+  expect(f.state.registered).toEqual(retained);
+  expect(f.commands).toEqual([]);
+  expect(f.resolutions).toEqual([]);
+  expect(f.activations).toEqual([]);
+  expect(await readReceipt(f.env, f.admissionId, 'claim-assess', ['assessment'])).toEqual(graphTerminal);
 });

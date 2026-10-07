@@ -6,7 +6,7 @@ import { AdmissionDenied, type AdmissionRequest,
   type RegisteredAdmission } from '../src/modules/access/admission.ts';
 import { analyzeClaimSupport, LINEAGE_BUDGET, type AnalysisInput, type EvidenceItem,
   type LineageLink, type LineageProof } from '../src/modules/verification/analysis.ts';
-import { assessAdmittedClaim, type AssessClaimInput,
+import { assessAdmittedClaim, assessmentDigest, type AssessClaimInput,
   type VerificationDependencies } from '../src/modules/verification/operations.ts';
 import { VerificationDenied, type AnalysisSnapshot, type AssessmentProducerRecord, type AssessmentProducerStage,
   type VerificationStore } from '../src/modules/verification/store.ts';
@@ -141,7 +141,7 @@ test('an Account-denied assessor cannot reach Access or lineage continuation sta
   expect(forbidden).not.toHaveBeenCalled();
 });
 
-function admittedDependencies() {
+function admittedDependencies(originalInput: AssessClaimInput & { idempotencyKey: string } = deniedIntent) {
   const forbidden = mock(async (): Promise<never> => { throw new Error('partial analysis reached a write'); });
   const bind = (value: string) => ({ type: 'uri', value });
   const query = mock(async (sparql: string) => {
@@ -177,9 +177,19 @@ function admittedDependencies() {
     lineageProof: { dependence: 'over-budget', independentOrigins: null, origins: [] },
   };
   const analysisSnapshot = mock(async (..._args: Parameters<VerificationStore['analysisSnapshot']>) => snapshot);
-  let producer: AssessmentProducerRecord | null = null;
+  const { idempotencyKey, ...originalAssessment } = originalInput;
+  const { lineageContinuation: _continuation, ...originalIntent } = originalAssessment;
+  const producer: AssessmentProducerRecord = {
+    admission: '00000000-0000-0000-0000-000000000006',
+    requestDigest: assessmentDigest(claimId, originalAssessment), principal: 'assessor',
+    actingSubject: originalIntent.actingSubject, scope: 'verification:assess:global',
+    authorityEpoch: 'authority:1', idempotencyKey, claim: claimId,
+    claimRevision: originalIntent.claimRevision, intent: originalIntent,
+    stageGeneration: '0', restoreEpoch: '1', terminal: null,
+  };
   const stageAssessmentProducer = mock(async (input: AssessmentProducerStage) => {
-    producer = { ...input, stageGeneration: '0', restoreEpoch: '1', terminal: null };
+    const { stageGeneration: _generation, restoreEpoch: _epoch, terminal: _terminal, ...retained } = producer;
+    expect(input).toEqual(retained);
     return { row: producer, permit: { mode: 'ordinary' as const, job: null, generation: '0', restoreEpoch: '1' } };
   });
   const deps: VerificationDependencies = {
@@ -187,17 +197,19 @@ function admittedDependencies() {
     access: { activePrincipalId: async () => 'assessor', register, claim: claimAdmission,
       recordGraphOutcome: forbidden },
     env: { fuseki: { query, update: forbidden }, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as unknown as VerificationDependencies['env'],
-    store: { analysisSnapshot, stageAssessmentProducer, readAssessmentProducer: async () => producer,
+    store: { analysisSnapshot, stageAssessmentProducer,
+      readAssessmentProducer: async (id: string) => id === producer.admission ? producer : null,
       activateSummary: forbidden, resolveChallenges: forbidden } as unknown as VerificationStore,
   };
   return { deps, forbidden, query, analysisSnapshot, snapshot };
 }
 
 test('a partial human review never records or activates its requested supported judgment', async () => {
-  const { deps, forbidden, analysisSnapshot, snapshot } = admittedDependencies();
+  const requested: AssessClaimInput & { idempotencyKey: string } = { ...deniedIntent, method: 'human-review', judgment: 'supported' };
+  const { deps, forbidden, analysisSnapshot, snapshot } = admittedDependencies(requested);
   const result = await assessAdmittedClaim(deps,
     new Request('https://main.example/v1/claims/claim/assessments'), claimId,
-    { ...deniedIntent, method: 'human-review', judgment: 'supported' });
+    requested);
   expect(result).toMatchObject({ status: 'analysis-partial', assessment: null,
     activation: { status: 'analysis-partial' }, analysis: { support: 'abstained', dependence: 'over-budget',
       independentOrigins: null, coverage: 'incomplete', origins: [], lineageComplete: false,
@@ -219,10 +231,11 @@ test('a refused Access claim cannot advance a previously claimed continuation', 
 
 
 test('the assessment API returns an explicit 202 continuation with incomplete support', async () => {
-  const { deps, snapshot, forbidden } = admittedDependencies();
+  const requested: AssessClaimInput & { idempotencyKey: string } = { ...deniedIntent, method: 'human-review', judgment: 'supported' };
+  const { deps, snapshot, forbidden } = admittedDependencies(requested);
   const app = claimRoutes({ environment: deps.env, account: deps.account, access: deps.access,
     verification: deps.store } as unknown as MainWorkDependencies);
-  const { idempotencyKey, ...intent } = deniedIntent;
+  const { idempotencyKey, ...intent } = requested;
   const response = await app.handle(new Request(
     'http://localhost/v1/claims/00000000-0000-0000-0000-000000000001/assessments', {
       method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
