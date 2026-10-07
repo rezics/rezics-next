@@ -137,7 +137,8 @@ export function reserveAdmittedUpload(env: WorkActivationEnvironment, media: Med
 /** Verify quarantined bytes, copy them into the asset namespace, activate the original
  * and record the asset revision. Every stage is idempotent for one upload. */
 export async function activateUploadedBytes(env: WorkActivationEnvironment, media: MediaDependencies,
-  account: Account, access: Access, request: Request, uploadId: string, bytes: Uint8Array) {
+  account: Account, access: Access, request: Request, uploadId: string,
+  intake: Uint8Array | ((maximumBytes: number) => Promise<Uint8Array>)) {
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);
   const principalId = await access.activePrincipalId(principal);
@@ -148,6 +149,20 @@ export async function activateUploadedBytes(env: WorkActivationEnvironment, medi
   // A retried transfer after settlement replays the durable outcome.
   if (upload.status === 'activated' || upload.status === 'rejected') return finish(media, uploadId, null);
   if (upload.status !== 'reserved' || upload.expired) throw new MediaStale('media upload reservation has lapsed');
+  // HTTP intake is deferred until the live owner reservation has admitted its body.
+  const bytes = typeof intake === 'function' ? await intake(upload.byteLength) : intake;
+  if (typeof intake === 'function') {
+    // A slow transfer can outlive its reservation or race another settlement.
+    await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+    const livePrincipal = await account.verify(request, ['work:edit']);
+    const livePrincipalId = await access.activePrincipalId(livePrincipal);
+    const current = await media.store.readUpload(uploadId);
+    if (!current || !livePrincipalId || current.principal !== livePrincipalId) {
+      throw new MediaMissing('media upload is unavailable');
+    }
+    if (current.status === 'activated' || current.status === 'rejected') return finish(media, uploadId, null);
+    if (current.status !== 'reserved' || current.expired) throw new MediaStale('media upload reservation has lapsed');
+  }
   const digest = sha256(bytes);
   let verdict: Parameters<MediaStore['settleUpload']>[1];
   if (bytes.length !== upload.byteLength) verdict = { status: 'rejected', reason: 'size-mismatch' };

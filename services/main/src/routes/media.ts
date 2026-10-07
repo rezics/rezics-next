@@ -98,6 +98,68 @@ export const openApiOperations = {
 } as const;
 
 const DOWNLOAD_CHUNK_BYTES = 64 * 1024;
+const UPLOAD_TRANSFER_MS = 30_000;
+
+class UploadTooLarge extends Error {}
+class UploadTimedOut extends Error {}
+
+/** Cancel without waiting for an untrusted source's cancellation hook to finish. */
+function cancelUploadBody(request: Request) {
+  if (request.body && !request.body.locked) void request.body.cancel().catch(() => undefined);
+}
+
+/** Only called after bearer and live reservation admission. Retain at most the
+ * reservation's byte budget, even when Content-Length is absent or inaccurate. */
+export async function readMediaUploadBytes(request: Request, reservedBytes: number,
+  transferMs = UPLOAD_TRANSFER_MS): Promise<Uint8Array> {
+  const maximum = Math.min(reservedBytes, MAX_UPLOAD_BYTES);
+  const declared = request.headers.get('content-length');
+  if (declared !== null && (!/^\d+$/.test(declared) || !Number.isSafeInteger(Number(declared)))) {
+    throw new MediaInvalid('invalid upload content length');
+  }
+  if (declared !== null && Number(declared) > maximum) throw new UploadTooLarge();
+  if (!request.body) return new Uint8Array();
+  const reader = request.body.getReader();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stop: (error: Error) => void = () => undefined;
+  const interrupted = new Promise<never>((_resolve, reject) => {
+    stop = error => {
+      reject(error);
+      void reader.cancel(error).catch(() => undefined);
+    };
+    timer = setTimeout(() => stop(new UploadTimedOut()), transferMs);
+  });
+  const abort = () => stop(new MediaInvalid('upload transfer aborted'));
+  request.signal.addEventListener('abort', abort, { once: true });
+  const deadline = performance.now() + transferMs;
+  const transfer = async () => {
+    if (request.signal.aborted) throw new MediaInvalid('upload transfer aborted');
+    const bytes = new Uint8Array(maximum);
+    let length = 0;
+    for (;;) {
+      if (performance.now() >= deadline) throw new UploadTimedOut();
+      const { done, value } = await reader.read();
+      if (performance.now() >= deadline) throw new UploadTimedOut();
+      if (request.signal.aborted) throw new MediaInvalid('upload transfer aborted');
+      if (done) return bytes.subarray(0, length);
+      if (value.byteLength > maximum - length) throw new UploadTooLarge();
+      bytes.set(value, length);
+      length += value.byteLength;
+    }
+  };
+  try {
+    // Race once: attaching a deadline handler for every tiny chunk would itself
+    // retain unbounded promise reactions until the deadline.
+    return await Promise.race([transfer(), interrupted]);
+  } catch (error) {
+    void reader.cancel(error).catch(() => undefined);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    request.signal.removeEventListener('abort', abort);
+    reader.releaseLock();
+  }
+}
 
 function downloadBody(bytes: Uint8Array, lease: DownloadReadLease, leases: AccessDownloadLeases) {
   let offset = 0;
@@ -405,22 +467,22 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       params: t.Object({ upload: uuid }),
       parse: 'none',
       response: { 200: uploadResult, 201: uploadResult, ...writeProblems, 404: problemResult(404),
-        413: problemResult(413), 422: uploadResult },
+        408: problemResult(408), 413: problemResult(413), 422: uploadResult },
     }, async ({ request, params }) => {
-      if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
-      const declared = Number(request.headers.get('content-length') ?? '0');
-      if (declared > MAX_UPLOAD_BYTES) return problem(413, 'media_too_large', 'Upload exceeds the admitted size');
       try {
-        const bytes = new Uint8Array(await request.arrayBuffer());
-        if (bytes.length > MAX_UPLOAD_BYTES) return problem(413, 'media_too_large', 'Upload exceeds the admitted size');
+        if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
         const result = await activateUploadedBytes(work.environment, work.media, work.account, work.access,
-          request, params.upload, bytes);
+          request, params.upload, maximum => readMediaUploadBytes(request, maximum));
         if (result.status === 'rejected' && result.representation === null) {
           return Response.json({ ...result }, { status: 422, headers: { 'cache-control': 'no-store' } });
         }
         return Response.json(result, { status: result.replayed ? 200 : 201,
           headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return mediaError(error); }
+      } catch (error) {
+        if (error instanceof UploadTooLarge) return problem(413, 'media_too_large', 'Upload exceeds the admitted size');
+        if (error instanceof UploadTimedOut) return problem(408, 'media_upload_timeout', 'Upload transfer timed out');
+        return mediaError(error);
+      } finally { cancelUploadBody(request); }
     })
     .post('/v1/media/assets/:asset/state', {
       params: t.Object({ asset: uuid }),
