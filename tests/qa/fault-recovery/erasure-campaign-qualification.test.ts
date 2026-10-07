@@ -397,13 +397,19 @@ test(
         }
         // Only bounded target/counterexample quads are loaded; existing corpus,
         // model generations, command payloads and immutable objects are never replayed.
-        stack.runner.offline(`test -f /fuseki/databases/rezics/clean-stop
+        // Name the seed before the Compose run. Private N-Quads travel on stdin:
+        // one argv longer than 131072 bytes is E2BIG and Compose never starts.
+        const privateSeed = await phase(`copy-${index}-seed`, () => `${nq.join('\n')}\n`);
+        await phase(`copy-${index}-run`, () =>
+          stack.runner.offline(
+            `test -f /fuseki/databases/rezics/clean-stop
 exec 9>>/fuseki/databases/rezics/owner.lock
 flock -n 9
-cat > /fuseki/databases/campaign-seed.nq <<'NQ'
-${nq.join('\n')}
-NQ
-java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader --loader=phased --loc=/fuseki/databases/rezics/tdb2 /fuseki/databases/campaign-seed.nq`);
+cat > /fuseki/databases/campaign-seed.nq
+java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader --loader=phased --loc=/fuseki/databases/rezics/tdb2 /fuseki/databases/campaign-seed.nq`,
+            privateSeed,
+          ),
+        );
         await stack.runner.start();
         const bodies = await stack.fuseki
           .query(`PREFIX rv: <${RV}> SELECT (COUNT(?body) AS ?n) WHERE {

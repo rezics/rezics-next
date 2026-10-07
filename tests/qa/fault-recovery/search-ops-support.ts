@@ -73,8 +73,30 @@ export interface QaStack {
   project: string;
   stateVolume: string;
   compose(args: string[], timeout?: number): { status: number | null; output: string };
-  runner: FusekiStateRunner;
+  /** Same runner. Private stdin stays off argv so one argument cannot exceed the spawn limit. */
+  runner: FusekiStateRunner & {
+    offline(script: string, privateInput?: string): string;
+  };
   fuseki: FusekiClient;
+}
+
+/** Spawn evidence only: no environment, no private command bytes. */
+export function boundedComposeFailure(command: string, result: {
+  status?: number | null; signal?: NodeJS.Signals | null;
+  error?: NodeJS.ErrnoException | null; output?: string | null;
+}, privateBytes?: number): string {
+  const status = result.status ?? null;
+  const signal = result.signal ?? null;
+  const code = result.error?.code ?? null;
+  const detail = redactCommandSecrets(result.error?.message ?? '').slice(0, 200);
+  const output = redactCommandSecrets(result.output ?? '').slice(-2000);
+  const bytes = privateBytes === undefined ? '' : ` privateBytes=${privateBytes}`;
+  const tail = [detail, output].filter(part => part.length > 0).join(': ');
+  return `docker compose ${command} failed: status=${status === null ? 'null' : status} signal=${signal ?? 'null'} error=${code ?? 'null'}${bytes}${tail ? ` ${tail}` : ''}`;
+}
+
+function redactCommandSecrets(text: string): string {
+  return text.replace(/\b([A-Z][A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|KEY))\s*=\s*\S+/g, '$1=[redacted]');
 }
 
 export function qaStack(runId: string): QaStack {
@@ -83,23 +105,36 @@ export function qaStack(runId: string): QaStack {
   const directory = stackDirectory(root, options);
   const dockerEnv = loadDockerEnvironment();
   const project = projectName(options);
-  const compose = (commandArgs: string[], timeout = 180_000) => {
+  const compose = (commandArgs: string[], timeout = 180_000, privateInput?: string) => {
     const saved = readEnv(join(directory, 'compose.env'));
     const result = spawnSync('docker', ['compose', '--env-file', join(directory, 'compose.env'),
       '-f', join(root, 'infra/dev/compose.yaml'), '--project-name', project, ...commandArgs],
     { cwd: root, env: composeProcessEnvironment(dockerEnv, saved), encoding: 'utf8', timeout,
-      maxBuffer: 10_000_000 });
-    return { status: result.status, output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
+      maxBuffer: 10_000_000, ...(privateInput !== undefined ? { input: privateInput } : {}) });
+    return { status: result.status, signal: result.signal,
+      error: result.error as NodeJS.ErrnoException | undefined,
+      output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
   };
-  const ok = (commandArgs: string[], timeout?: number) => {
-    const result = compose(commandArgs, timeout);
-    if (result.status !== 0) throw new Error(`docker compose ${commandArgs[0]} failed: ${result.output.slice(-2000)}`);
+  const ok = (commandArgs: string[], timeout?: number, privateInput?: string) => {
+    const result = compose(commandArgs, timeout, privateInput);
+    if (result.error || result.status !== 0) {
+      throw new Error(boundedComposeFailure(commandArgs[0] ?? 'compose', result,
+        privateInput === undefined ? undefined : Buffer.byteLength(privateInput)));
+    }
     return result.output;
   };
-  const stack = { options, args, directory, dockerEnv, project, stateVolume: `${project}_fuseki_data`, compose,
+  const stack = { options, args, directory, dockerEnv, project, stateVolume: `${project}_fuseki_data`,
+    compose: (commandArgs: string[], timeout?: number) => {
+      const result = compose(commandArgs, timeout);
+      return { status: result.status ?? null, output: result.output };
+    },
     runner: {
       exec: script => ok(['exec', '-T', 'fuseki', 'sh', '-ec', script]),
-      offline: script => ok(['run', '--rm', '--no-deps', '-T', '--entrypoint', 'sh', 'fuseki', '-ec', script], 300_000),
+      // -i is only for private stdin. One argv above 131072 bytes is E2BIG
+      // before Compose creates a container, with empty stdout and stderr.
+      offline: (script: string, privateInput?: string) => ok(['run', '--rm', '--no-deps',
+        ...(privateInput !== undefined ? ['-i'] : []),
+        '-T', '--entrypoint', 'sh', 'fuseki', '-ec', script], 300_000, privateInput),
       stop: () => { ok(['stop', 'fuseki']); },
       start: () => { ok(['up', '-d', '--wait', 'fuseki']); },
       container: () => ok(['ps', '-q', '--no-trunc', 'fuseki']).trim(),
