@@ -152,8 +152,16 @@ test('exact Zone delivery refuses actual bundle, controller and owner withdrawal
         // Editor withdrawal does not withdraw the distinct live public bundle.
         expect((await f.read(f.later)).status).toBe(200);
       } finally {
-        if (revokedIds.length) await f.accessPool.query(`UPDATE access.representation
-          SET active = true WHERE id = ANY($1::uuid[])`, [revokedIds]);
+        if (revokedIds.length) {
+          // Revoked mandates are immutable; recovery installs a fresh controller proof.
+          await f.accessPool.query(`INSERT INTO access.representation
+            (id, principal_id, subject_id, action, valid_until)
+            VALUES ($1,$2,$3,'agent.control','infinity'::timestamptz)`,
+          [randomUUID(), f.editorPrincipalId, f.actor]);
+          expect((await f.accessPool.query<{ active: boolean }>(`SELECT active FROM access.representation
+            WHERE id = ANY($1::uuid[])`, [revokedIds])).rows.map(row => row.active))
+            .toEqual(revokedIds.map(() => false));
+        }
         if (changedOwner) await f.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
           DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(f.space)} rv:owner ${iri(f.otherActor)} } }
           INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(f.space)} rv:owner ${iri(f.actor)} } }
