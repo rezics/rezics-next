@@ -1441,7 +1441,7 @@ describe('refresh image build', () => {
   }
 
   test('budget covers the measured native build', () => {
-    expect(imageBuildBudgetMs).toBe(30 * 60_000);
+    expect(imageBuildBudgetMs).toBe(45 * 60_000);
   });
 
   test('a build that outlives the budget reports a timeout', async () => {
@@ -1458,7 +1458,9 @@ describe('refresh image build', () => {
   test('a failing build names its private log, which holds the output', async () => {
     const { dir, docker, log } = stack('echo "step 3/9 mvn package"; echo "BUILD FAILURE" >&2; exit 255');
     try {
-      const error = await buildRefreshImage(dir, dir, { executable: docker }).catch(failure => failure as Error);
+      const error = await buildRefreshImage(dir, dir, { executable: docker }).catch((failure: unknown) => failure);
+      expect(error).toBeInstanceOf(Error);
+      if (!(error instanceof Error)) return;
       expect(error.message).toContain('exit 255');
       expect(error.message).toContain(log);
       expect(readFileSync(log, 'utf8')).toContain('step 3/9 mvn package');

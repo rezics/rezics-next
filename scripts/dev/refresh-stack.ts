@@ -118,11 +118,12 @@ function compose(root: string, args: string[], timeout = 180_000, stackRoot = ro
     '--project-name', 'rezics-dev', ...args], composeProcessEnvironment(process.env, readEnv(file)), timeout);
 }
 
-/** `infra/jena/Dockerfile` runs `mvn package` with the native unit tests; one
- * qualified run took 656 s. Thirty minutes is about three times that. Host
+/** `infra/jena/Dockerfile` runs `mvn package` with the native unit tests; the
+ * cold build measured 1090 s with 346 native tests (an earlier run took 656 s). Forty-five
+ * minutes is about two and a half times the cold run. Host
  * admission already bounds memory and the build runs before any writer stops,
  * so a long budget costs nothing but waiting. */
-export const imageBuildBudgetMs = 30 * 60_000;
+export const imageBuildBudgetMs = 45 * 60_000;
 const imageBuildLog = 'image-build.log';
 
 /** Build the Jena image with its output streamed to a private log beside the
