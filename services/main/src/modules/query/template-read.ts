@@ -114,9 +114,10 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
     if(template.sourceCredits) {
       const cutoff=candidates.at(-1)?.key;
       const added=source.map(ref=>({...ref,sort:`${String(ref.ordinal).padStart(3,'0')}:${ref.id}`}))
-        .filter(ref=>!ref.confirmed && (!after || ref.sort>after.key) && (!cutoff || ref.sort<=cutoff))
+        .filter(ref=>!ref.confirmed && (!after || ref.sort>after.key) && (!physicalMore || !cutoff || ref.sort<=cutoff))
         .map(ref=>({id:ref.id,key:ref.sort,root:ref.work,terms:{}}));
-      // Include source-only tails when the graph seek is empty. Both sets are bounded before names.
+      // An exhausted graph window has no later ordering boundary; include its source tail.
+      // Both sets remain bounded before names.
       candidates=[...candidates,...added].sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:a.id<b.id?-1:1);
     }
     if(candidates.length+admission.rows.length+source.length>TEMPLATE_COST.candidates) throw new WorkReadLimit('Template candidate budget exceeded');

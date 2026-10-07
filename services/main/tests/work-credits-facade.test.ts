@@ -34,7 +34,8 @@ function fixture() {
     title: 'Work title', name: 'Source author', digest: 'a'.repeat(64), membership: 1,
     refs: [{ id: id(80), key: '/authors/OL1A', ordinal: 0 },
       { id: id(13), key: '/authors/OL3A', ordinal: 1 }],
-    oversize: false, queries: [] as string[], envelopes: [] as TemplateQueryEnvelope[],
+    oversize: false, emptyGraph: false, nativeCount: 2, seekWindow: undefined as number | undefined,
+    queries: [] as string[], envelopes: [] as TemplateQueryEnvelope[],
     afterTemplate: undefined as (() => void) | undefined,
     afterNames: undefined as (() => void) | undefined,
   };
@@ -106,8 +107,11 @@ function fixture() {
       candidates: async (_epoch: string, keys: unknown[], after: { key: string; id: string } | null, limit: number) => {
         expect(keys).toHaveLength(1);
         expect(limit).toBeLessThanOrEqual(21);
-        const rows = candidates.filter(row => !after || row.key > after.key).slice(0, limit);
-        return { rows: state.oversize ? Array.from({ length: 257 }, () => candidates[0]!) : rows, more: false };
+        const remaining = state.emptyGraph ? [] : candidates.slice(0, state.nativeCount)
+          .filter(row => !after || row.key > after.key);
+        const rows = remaining.slice(0, Math.min(limit, state.seekWindow ?? limit));
+        return { rows: state.oversize ? Array.from({ length: 257 }, () => candidates[0]!) : rows,
+          more: remaining.length > rows.length };
       },
       confirmed: async () => new Set([`${work}\0/authors/OL1A`]),
     },
@@ -159,6 +163,57 @@ async function problem(response: Response, status: number, code: string) {
   expect(response.status).toBe(status);
   expect((await response.json() as { code: string }).code).toBe(code);
 }
+
+test('Work credits exhausted nonempty graph windows retain trailing source tuples and bounded continuation', async () => {
+  const { call, state } = fixture(); state.nativeCount = 1;
+  const getResponse = await call('GET'), postResponse = await call('POST');
+  const get = await page(getResponse), post = await page(postResponse, 'POST');
+  expect(get).toEqual(post);
+  expect(getResponse.headers.get('etag')).toBe(postResponse.headers.get('etag'));
+  expect(get.items.map(item => item.id)).toEqual([id(11), id(13)]);
+  expect(get.items[1]).toMatchObject({ key: '/authors/OL3A', ordinal: 1, confirmation: 'source-reported' });
+  expect(get.count).toEqual({ value: 2, kind: 'exact-page', total: null });
+  expect(get.complete).toBe(true); expect(get.nextCursor).toBeNull();
+  for (const method of ['GET', 'POST'] as const) {
+    const first = await page(await call(method, { limit: 1 }), method);
+    expect(first.items.map(item => item.id)).toEqual([id(11)]);
+    expect(first.complete).toBe(false); expect(first.nextCursor).toBeString();
+    const tail = await page(await call(method === 'GET' ? 'POST' : 'GET',
+      { limit: 1, cursor: first.nextCursor! }), method === 'GET' ? 'POST' : 'GET');
+    expect(tail.items.map(item => item.id)).toEqual([id(13)]);
+    expect(tail.count).toEqual({ value: 1, kind: 'exact-page', total: null });
+    expect(tail.complete).toBe(true); expect(tail.nextCursor).toBeNull();
+  }
+});
+
+test('Work credits empty and source-only windows preserve exact page counts on both routes', async () => {
+  const { call, state } = fixture(); state.emptyGraph = true; state.refs = [];
+  const emptyGet = await page(await call('GET')), emptyPost = await page(await call('POST'), 'POST');
+  expect(emptyGet).toEqual(emptyPost);
+  expect(emptyGet.items).toEqual([]);
+  expect(emptyGet.count).toEqual({ value: 0, kind: 'exact-page', total: null });
+  expect(emptyGet.complete).toBe(true); expect(emptyGet.nextCursor).toBeNull();
+  state.refs = [{ id: id(13), key: '/authors/OL3A', ordinal: 1 }];
+  const sourceGet = await page(await call('GET')), sourcePost = await page(await call('POST'), 'POST');
+  expect(sourceGet).toEqual(sourcePost);
+  expect(sourceGet.items).toHaveLength(1);
+  expect(sourceGet.items[0]).toMatchObject({ id: id(13), ordinal: 1, confirmation: 'source-reported' });
+  expect(sourceGet.count).toEqual({ value: 1, kind: 'exact-page', total: null });
+  expect(sourceGet.complete).toBe(true); expect(sourceGet.nextCursor).toBeNull();
+});
+
+test('Work credits unfinished graph windows defer later source tuples until their ordering horizon', async () => {
+  const { call, state } = fixture(); state.seekWindow = 1;
+  state.refs = [{ id: id(13), key: '/authors/OL3A', ordinal: 3 }];
+  const first = await page(await call('GET'));
+  expect(first.items.map(item => item.id)).toEqual([id(11)]);
+  expect(first.complete).toBe(false); expect(first.nextCursor).toBeString();
+  const tail = await page(await call('POST', { cursor: first.nextCursor! }), 'POST');
+  expect(tail.items.map(item => item.id)).toEqual([id(12), id(13)]);
+  expect(tail.count).toEqual({ value: 2, kind: 'exact-page', total: null });
+  expect(tail.complete).toBe(true); expect(tail.nextCursor).toBeNull();
+  expect([...first.items, ...tail.items].map(item => item.id)).toEqual([id(11), id(12), id(13)]);
+});
 
 test('Work credits GET and reviewed POST share exact fields, count, local basis and interchangeable continuations', async () => {
   const { call, state } = fixture();
@@ -276,5 +331,19 @@ test('Work credits continuations recheck source and membership, and conditional 
       404, 'work_unavailable');
     state.granted = true; state.active = false;
     await problem(await call(method, { authenticated: true, actor, etag: tag }), 401, 'account_assertion_denied');
+  }
+});
+
+test('Work credits conditional hydration rejects rights revoked during either execution', async () => {
+  for (const method of ['GET', 'POST'] as const) {
+    const { call, state } = fixture(); state.public = false;
+    const options = { authenticated: true, actor };
+    const initial = await call(method, options), etag = initial.headers.get('etag')!;
+    await page(initial, method);
+    state.afterTemplate = () => { state.granted = false; };
+    await problem(await call(method, { ...options, etag }), 404, 'work_unavailable');
+    state.granted = true;
+    state.afterTemplate = () => { state.active = false; };
+    await problem(await call(method, { ...options, etag }), 401, 'account_assertion_denied');
   }
 });

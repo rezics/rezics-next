@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { Value } from 'typebox/value';
+import type { Static } from 'typebox';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { authorCreditFixture, author } from '../../../tests/qa/fixtures/author-credit.ts';
 import { createMainApp } from '../src/app.ts';
 import { GRAPHS, RV, iri, lit } from '../src/modules/work/activate.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../src/modules/rating/global.ts';
@@ -9,6 +14,9 @@ import { AccessJudgments } from '../src/modules/judgment/access.ts';
 import { DiscoveryProjection } from '../src/modules/discovery/store.ts';
 import { AccessExposure } from '../src/modules/access/exposure.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../src/modules/recommendation/derived-generation.ts';
+import { mainSelectionDigest, selectMainDefault } from '../src/modules/work/select-main.ts';
+import type { TemplateQueryEnvelope } from '../src/infrastructure/fuseki.ts';
+import { template as creditsTemplate } from '../src/modules/query/templates/work-credits.schema.ts';
 
 const short = (id: string) => id.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -19,6 +27,185 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 interface Page<T> { items: T[]; nextCursor: string | null; count: { value: number; total: null; kind: string } }
 interface Rating { scope: { kind: string }; scale: { max: number }; count: number; mean: number | null;
   distribution: { value: number; count: number }[] }
+
+test('WORKCREDITS01: native GET and POST credits retain empty, source-only and exhausted source tails with source and rights fences', async () => {
+  const stack = await startMediaStack('work-credits');
+  const directory = join(resolve('.temp'), `work-credits-source-${randomUUID()}`);
+  mkdirSync(directory, { recursive: true });
+  let source: Awaited<ReturnType<typeof authorCreditFixture>> | undefined;
+  type Credit = Static<typeof creditsTemplate.response>['items'][number];
+  interface Credits extends Page<Credit> {
+    profile: 'template-result-v1'; query: string; revision: number; complete: boolean;
+    sourcePosition: { dataEpoch: string; sequence: string; dependencyToken: string };
+  }
+  try {
+    const writer = await stack.member('credits-reader');
+    const empty = await stack.publicWork(writer.actor, ['en'], 'Empty credits integration');
+    const emptyRoot = `/v1/works/${short(empty.work)}`;
+    const emptyResponse = await stack.call('GET', `${emptyRoot}/credits`);
+    expect(emptyResponse.headers.get('cache-control')).toBe('private, no-store');
+    const emptyGet = await json<Credits>(emptyResponse);
+    expect(Value.Check(creditsTemplate.response, emptyGet)).toBe(true);
+    const emptyPost = await json<{ result: Credits }>(await stack.call('POST', '/v1/query', {
+      body: { profile: 'template-query-v1', query: 'https://rezics.com/query/work-credits', revision: 1,
+        parameters: { roots: [empty.work] }, limit: 20 },
+    }));
+    expect(emptyGet).toEqual(emptyPost.result);
+    expect(emptyGet).toMatchObject({ profile: 'template-result-v1', revision: 1,
+      query: 'https://rezics.com/query/work-credits', items: [], complete: true,
+      nextCursor: null, count: { value: 0, kind: 'exact-page', total: null } });
+    const emptyHeader = await json<{ links: { credits: string } }>(await stack.call('GET', emptyRoot));
+    expect(emptyHeader.links.credits).toBe(`${emptyRoot}/credits`);
+
+    // Reuse the source owner's acquisition/conversion/adoption fixture, retaining real SQL tuples.
+    source = await authorCreditFixture(Bun.env as Record<string, string>, directory);
+    const base = Number(String(Date.now()).slice(-9));
+    const keys = [0, 1, 2].map(offset => `/authors/OL${base + offset}A`);
+    const proposal = await source.propose(`OL${base}W`, keys.map(key => author(key)), 'Source credits integration');
+    const adopted = await source.adoptWork(proposal);
+    const body = await stack.contribution(adopted.work, writer.actor, 'en', `Credits body ${randomUUID()}`);
+    const selection = { context: { kind: 'main-version-default' as const, id: adopted.mainVersion },
+      work: adopted.work, contribution: body.contribution, publicationDecision: body.decision,
+      expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: writer.actor };
+    expect((await selectMainDefault(stack.env, stack.admission(writer.actor,
+      `publication:select:${adopted.mainVersion}`, 'publication.select', mainSelectionDigest(selection)), selection)).outcome)
+      .toBe('succeeded');
+    const sourceReferences = (await source.adoptions.authorReferences([adopted.work])).get(adopted.work)!;
+    expect(sourceReferences.map(ref => ref.key)).toEqual(keys);
+    const dependencies = { environment: stack.env, access: stack.access, templateSeek: stack.templateSeek,
+      sourceAdoptions: source.adoptions, sourceAuthorNames: source.sourceAuthorNames,
+      account: { verify: async () => writer.principal } };
+    const app = createMainApp(stack.fuseki, dependencies);
+    const root = `/v1/works/${short(adopted.work)}/credits`;
+    const request = async (method: 'GET' | 'POST', limit = 20, cursor?: string, etag?: string) => {
+      const headers = { ...(etag ? { 'if-none-match': etag } : {}) };
+      return method === 'GET'
+        ? await app.handle(new Request(`http://main.local${root}?${new URLSearchParams({ limit: String(limit),
+          ...(cursor ? { cursor } : {}) })}`, { headers }))
+        : await app.handle(new Request('http://main.local/v1/query', { method, headers: { ...headers, 'content-type': 'application/json' },
+          body: JSON.stringify({ profile: 'template-query-v1', query: 'https://rezics.com/query/work-credits', revision: 1,
+            parameters: { roots: [adopted.work] }, limit, cursor }) }));
+    };
+    const read = async (method: 'GET' | 'POST', limit = 20, cursor?: string) => {
+      const response = await request(method, limit, cursor);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      const result = method === 'GET' ? await json<Credits>(response) : (await json<{ result: Credits }>(response)).result;
+      expect(Value.Check(creditsTemplate.response, result)).toBe(true);
+      return result;
+    };
+    const sourceOnly = await read('GET');
+    expect(sourceOnly).toEqual(await read('POST'));
+    expect(sourceOnly.items).toEqual(sourceReferences.map(ref => ({ ...ref, role: 'author',
+      participantKind: 'external-reference', provider: 'open-library', agent: null, handle: null,
+      displayName: null, confirmation: 'source-reported' })));
+    expect(sourceOnly.items.map(item => [item.id, item.key, item.ordinal, item.confirmation])).toEqual(
+      sourceReferences.map(ref => [ref.id, ref.key, ref.ordinal, 'source-reported']));
+    expect(sourceOnly).toMatchObject({ complete: true, nextCursor: null,
+      count: { value: 3, kind: 'exact-page', total: null } });
+    const sourceTag = (await request('GET')).headers.get('etag')!;
+    expect(sourceTag).toMatch(/^W\/"[a-f0-9]{64}"$/);
+    for (const method of ['GET', 'POST'] as const) {
+      const unchanged = await request(method, 20, undefined, sourceTag);
+      expect(unchanged.status).toBe(304);
+      expect(unchanged.headers.get('etag')).toBe(sourceTag);
+      expect(unchanged.headers.get('cache-control')).toBe('private, no-store');
+      expect(await unchanged.text()).toBe('');
+    }
+
+    const credit = `https://rezics.com/id/${randomUUID()}`;
+    const triples = authorCreditTriples({ work: adopted.work, credit, revision: `https://rezics.com/id/${randomUUID()}`,
+      expectedHead: adopted.workRevision, sourceKey: keys[0]!, sourceRoleKey: null, nativeOrdinal: 0,
+      actingSubject: writer.actor }, stack.env.lineage.dataEpoch, '0');
+    await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${triples.current} } GRAPH ${iri(GRAPHS.revisions)} { ${triples.revision} } }`);
+    // Raw QA writes require the same disposable seek backfill used by the original integration case.
+    await stack.templateSeek.backfill(stack.env.lineage.dataEpoch, true);
+    const expectedIds = [credit, sourceReferences[1]!.id, sourceReferences[2]!.id];
+    const complete = await read('GET');
+    expect(complete).toEqual(await read('POST'));
+    expect(complete.items.map(item => item.id)).toEqual(expectedIds);
+    expect(complete.items.map(item => item.key)).toEqual(keys);
+    expect(complete.items[0]).toEqual({ id: credit, key: keys[0], ordinal: 0, role: 'author',
+      participantKind: 'external-reference', provider: 'open-library', agent: null, handle: null, displayName: null });
+    expect(complete.items[0]!.confirmation).toBeUndefined();
+    expect(complete).toMatchObject({ complete: true, nextCursor: null,
+      count: { value: 3, kind: 'exact-page', total: null } });
+    const first = await read('GET', 1);
+    const second = await read('POST', 1, first.nextCursor!);
+    const last = await read('GET', 1, second.nextCursor!);
+    expect([first.items[0]!.id, second.items[0]!.id, last.items[0]!.id]).toEqual(expectedIds);
+    expect(first.complete).toBe(false); expect(second.complete).toBe(false);
+    expect(last.complete).toBe(true); expect(last.nextCursor).toBeNull();
+
+    // Withdraw retained support during actual native hydration; the continuation must refuse mixed source tuples.
+    const support = await source.adoptions.readSupport(source.principalId, adopted.work);
+    expect(support).not.toBeNull();
+    let withdrawn = false;
+    const nativeTemplate = stack.fuseki.templateQuery.bind(stack.fuseki);
+    const sourceOwner = source;
+    const sourceRaceGraph = new Proxy(stack.fuseki, { get(target, property) {
+      if (property === 'templateQuery') return async (envelope: TemplateQueryEnvelope) => {
+        const result = await nativeTemplate(envelope);
+        if (!withdrawn) {
+          withdrawn = true;
+          const outcome = await sourceOwner.adoptions.withdrawSupport(sourceOwner.principalId, adopted.work,
+            randomUUID(), { binding: support!.binding, expectedSupport: support!.supportIdentity,
+              reason: 'Integration source fence' });
+          expect(outcome?.withdrawal.state).toBe('withdrawn');
+        }
+        return result;
+      };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const sourceRaceApp = createMainApp(sourceRaceGraph, { ...dependencies,
+      environment: { ...stack.env, fuseki: sourceRaceGraph } });
+    const sourceRace = await sourceRaceApp.handle(new Request(`http://main.local${root}?${new URLSearchParams({
+      limit: '1', cursor: first.nextCursor! })}`));
+    expect(sourceRace.status).toBe(409);
+    expect((await sourceRace.json() as { code: string }).code).toBe('read_basis_changed');
+    expect(withdrawn).toBe(true);
+
+    const privateWork = await stack.privateWork(writer.actor, 'Private credits integration');
+    await writer.grant(`work:read:${privateWork.work}`, 'work.read');
+    const privateRoot = `/v1/works/${short(privateWork.work)}`;
+    expect((await stack.call('GET', `${privateRoot}/credits`)).status).toBe(404);
+    const privateHeader = await json<{ revision: string }>(await writer.read(privateRoot));
+    const privateTriples = authorCreditTriples({ work: privateWork.work, credit: `https://rezics.com/id/${randomUUID()}`,
+      revision: `https://rezics.com/id/${randomUUID()}`, expectedHead: privateHeader.revision,
+      sourceKey: keys[0]!, sourceRoleKey: null, nativeOrdinal: 0, actingSubject: writer.actor }, stack.env.lineage.dataEpoch, '0');
+    await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${privateTriples.current} } GRAPH ${iri(GRAPHS.revisions)} { ${privateTriples.revision} } }`);
+    await stack.templateSeek.backfill(stack.env.lineage.dataEpoch, true);
+    const authorized = await writer.read(`${privateRoot}/credits`);
+    expect(authorized.status).toBe(200);
+    const tag = authorized.headers.get('etag')!;
+    expect(tag).toMatch(/^W\/"[a-f0-9]{64}"$/);
+    let revoked = false;
+    const rightsRaceGraph = new Proxy(stack.fuseki, { get(target, property) {
+      if (property === 'templateQuery') return async (envelope: TemplateQueryEnvelope) => {
+        const result = await nativeTemplate(envelope);
+        if (!revoked) {
+          revoked = true;
+          await stack.accessPool.query(`UPDATE access.permission_grant SET active = false
+            WHERE scope_id = $1 AND recipient_subject = $2`, [`work:read:${privateWork.work}`, writer.actor]);
+        }
+        return result;
+      };
+      const value = Reflect.get(target, property, target);
+      return typeof value === 'function' ? value.bind(target) : value;
+    } });
+    const rightsRaceApp = createMainApp(rightsRaceGraph, { environment: { ...stack.env, fuseki: rightsRaceGraph },
+      access: stack.access, templateSeek: stack.templateSeek, account: { verify: async () => writer.principal } });
+    const denied = await rightsRaceApp.handle(new Request(`http://main.local${privateRoot}/credits?actingSubject=${encodeURIComponent(writer.actor)}`,
+      { headers: { authorization: `Bearer ${writer.token}`, 'if-none-match': tag } }));
+    expect(denied.status).toBe(404);
+    expect((await denied.json() as { code: string }).code).toBe('work_unavailable');
+    expect(revoked).toBe(true);
+  } finally {
+    try { await source?.close(); } finally { await stack.stop(); rmSync(directory, { recursive: true, force: true }); }
+  }
+}, 120_000);
 
 test('Work reads: native public/private/erased disclosure, fallback, scoped ratings and cursor pages', async () => {
   const stack = await startMediaStack('work-read');
@@ -47,14 +234,15 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
       account: { verify: async () => a.principal } });
     const get = async (path: string) => {
       const url=new URL(path,'http://main.local');
-      const view=/^\/v1\/works\/([^/]+)\/(versions|adoptions|credits)$/.exec(url.pathname);
+      const view=/^\/v1\/works\/([^/]+)\/(versions|adoptions)$/.exec(url.pathname);
       if(view) {
         const parameters={roots:[`https://rezics.com/id/${view[1]}`],
           ...(view[2]==='versions'?{contentLanguage:url.searchParams.get('contentLanguage') ?? undefined,kind:url.searchParams.get('kind') ?? undefined}:{})};
         const response=await stack.call('POST','/v1/query',{body:{profile:'template-query-v1',
           query:`https://rezics.com/query/work-${view[2]}`,revision:1,parameters,
           presentation:{language:url.searchParams.get('language') ?? undefined},
-          page:{size:url.searchParams.has('limit')?Number(url.searchParams.get('limit')):undefined,cursor:url.searchParams.get('cursor') ?? undefined}}});
+          limit:url.searchParams.has('limit')?Number(url.searchParams.get('limit')):undefined,
+          cursor:url.searchParams.get('cursor') ?? undefined}});
         if(!response.ok) return response;
         return Response.json((await response.json() as {result:unknown}).result,{headers:response.headers});
       }
@@ -79,9 +267,11 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     };
     const before = stack.fuseki.queries;
     const header = await json<{ id: string; revision: string; title: { value: string; language: string; basis: string };
-      originalTitle: null; mainVersion: string; selectedLanguage: string | null }>(await get(`${root}?language=fr`));
+      originalTitle: null; mainVersion: string; selectedLanguage: string | null;
+      links: { credits: string } }>(await get(`${root}?language=fr`));
     expect(header).toMatchObject({ id: first.work, mainVersion: first.mainVersion,
       title: { value: first.title, language: 'en', basis: 'fallback' }, originalTitle: null, selectedLanguage: null });
+    expect(header.links.credits).toBe(`${root}/credits`);
     expect(stack.fuseki.queries - before).toBe(9);
     expect((await get(`/v1/works/${short(restricted.work)}`)).status).toBe(404);
     expect((await get(`/v1/works/${short(unreviewed.work)}`)).status).toBe(404);
@@ -166,7 +356,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     const feedPage=async(cursor?:string)=>json<{result:Page<{id:string}>}>(await discoveryApp.handle(
       new Request('http://main.local/v1/query',{method:'POST',headers:{'content-type':'application/json'},
         body:JSON.stringify({profile:'template-query-v1',query:'https://rezics.com/query/followed-concept-feed',revision:1,
-          parameters:{roots:[proposition.concept]},page:{size:1,cursor}})})));
+          parameters:{roots:[proposition.concept]},limit:1,cursor})})));
     const newest=await feedPage();
     expect(newest.result.items.map(item=>item.id)).toEqual([second.work]);
     expect(newest.result.nextCursor).toBeString();
