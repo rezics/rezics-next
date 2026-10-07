@@ -176,7 +176,8 @@ final class TemplateIndexService {
             } finally { Iter.close(iter); }
         } finally { data.end(); }
     }
-    private static final String SCHEMA = "https://schema.org/", PREPARATION = "urn:rezics:membership-preparation";
+    private static final String SCHEMA = "https://schema.org/", PREPARATION = "urn:rezics:membership-preparation",
+        NORMAL_FORM = "ordered-membership-v1", COMPLETED = RV+"membershipCompletedForm";
     private static final String PROCESS = UUID.randomUUID().toString();
     private static final Map<org.apache.jena.tdb2.store.DatasetGraphTDB,String> STORES = new WeakHashMap<>();
     private static class MembershipProfiles {
@@ -231,12 +232,37 @@ final class TemplateIndexService {
         return checkpoint!=null && checkpoint.storage().equals(membershipIncarnation(tdb))
             && checkpoint.version()==tdb.getTxnSystem().getThreadTransaction().getDataVersion();
     }
+    /** Semantic proof survives physical storage changes. Only the exhaustive
+     * preparer creates it; native primary deltas preserve it and raw mutation
+     * admission removes it. Restore cutover makes its old epoch ineligible. */
+    static boolean membershipCompleted(DatasetGraph data) {
+        var control=CommandInvariant.readControl(data);
+        if(control==null || control.held() || unsupportedMembershipStorage(data)) return false;
+        Node stored=membershipOne(data,STATE,uri(PREPARATION),COMPLETED,false);
+        if(stored==null || !stored.isLiteral()) return false;
+        try {
+            JsonObject proof=org.apache.jena.atlas.json.JSON.parse(stored.getLiteralLexicalForm());
+            return NORMAL_FORM.equals(ProfileRegistry.required(proof,"revision"))
+                && control.epoch().getLiteralLexicalForm().equals(ProfileRegistry.required(proof,"dataEpoch"));
+        } catch(RuntimeException invalid) { return false; }
+    }
+    private static boolean unsupportedMembershipStorage(DatasetGraph data) {
+        // C6 default storage belongs to slim metadata. Ordered membership uses
+        // the named current graph; an unsafe restored default placement must
+        // never hide outside the preparer's native named-graph seek.
+        for(String type:List.of(RV+"OccurrencePlacement",RV+"RemovedPlacement",SCHEMA+"ItemList",SCHEMA+"ListItem"))
+            if(data.contains(org.apache.jena.sparql.core.Quad.defaultGraphNodeGenerated,Node.ANY,RDF.type.asNode(),uri(type))) return true;
+        return data.contains(org.apache.jena.sparql.core.Quad.defaultGraphNodeGenerated,Node.ANY,uri(SCHEMA+"itemListElement"),Node.ANY);
+    }
+    static void invalidateMembershipCompletion(DatasetGraph data) {
+        if(!data.isInTransaction() || data.transactionMode()!=ReadWrite.WRITE)
+            throw new IllegalStateException("unsafe membership mutation must be fenced inside its write transaction");
+        data.deleteAny(uri(STATE),uri(PREPARATION),uri(COMPLETED),Node.ANY);
+    }
     private static Map<String,Object> membershipStatus(DatasetGraph data) {
         data.begin(ReadWrite.READ);
-        try {
-            var checkpoint=membershipCheckpoint(data);
-            return Map.of("needsPreparation",!membershipCurrent(checkpoint,membershipStorage(data)) || checkpoint.phase()!=4);
-        } finally { data.end(); }
+        try { return Map.of("needsPreparation",!membershipCompleted(data)); }
+        finally { data.end(); }
     }
     /** Closed owner repair, authenticated by the existing native command envelope.
      * No query, graph, focus or update language is supplied by the caller. Each
@@ -264,10 +290,14 @@ final class TemplateIndexService {
                     return Map.of("status","conflict");
                 return membershipMap(org.apache.jena.atlas.json.JSON.parse(membershipText(retained)));
             }
+            if(unsupportedMembershipStorage(data)) return CommandService.invalid("ordered membership requires named current storage; unsafe default restore must be fenced");
             var tdb=membershipStorage(data); var checkpoint=membershipCheckpoint(data);
             boolean restarted=checkpoint!=null && !membershipCurrent(checkpoint,tdb);
-            int phase=checkpoint==null || restarted?0:checkpoint.phase();
-            String after=checkpoint==null || restarted?"":checkpoint.after();
+            boolean completed=membershipCompleted(data);
+            // A physical phase-4 checkpoint cannot replace a missing/old proof.
+            // Only unfinished cursors may resume under physical validity.
+            int phase=completed?4:checkpoint==null || restarted || checkpoint.phase()==4?0:checkpoint.phase();
+            String after=phase==4 || checkpoint==null || restarted || checkpoint.phase()==4?"":checkpoint.after();
             int examined=0,placements=0;
             while (phase<4 && examined<256 && placements<24) {
                 membershipDeadline(deadline);
@@ -313,6 +343,11 @@ final class TemplateIndexService {
                     exhausted=!iter.hasNext();
                 } finally { Iter.close(iter); }
                 if (exhausted) { phase++;after=""; }
+            }
+            if(phase==4 && !completed) {
+                invalidateMembershipCompletion(data);
+                data.add(uri(STATE),uri(PREPARATION),uri(COMPLETED),NodeFactory.createLiteralString(
+                    CommandService.jsonObject(Map.of("revision",NORMAL_FORM,"dataEpoch",epoch)).toString()));
             }
             List<String> receipts=new ArrayList<>();
             if (placements>0) {
@@ -445,7 +480,7 @@ final class TemplateIndexService {
             throw new IllegalArgumentException("unknown membership owner profile");
         } finally { focus.close(); }
     }
-    private static Map<String,Object> membershipValidatePlacement(DatasetGraph data, Node subject, ProfileRegistry profiles) {
+    static Map<String,Object> membershipValidatePlacement(DatasetGraph data, Node subject, ProfileRegistry profiles) {
         var focused=org.apache.jena.sparql.core.DatasetGraphFactory.create();
         try {
             // The Structure protocol admits at most 16 translated labels. Read
@@ -470,14 +505,14 @@ final class TemplateIndexService {
                 "https://rezics.com/definition/"+ownerProfile+"/"+shape+"-shape",List.of(subject.getURI()),List.of(CURRENT,REVISIONS),Map.of()));
         } finally { focused.close(); }
     }
-    private static Map<String,Object> membershipValidateList(DatasetGraph data, Node list, Node member, ProfileRegistry profiles) {
+    static Map<String,Object> membershipValidateList(DatasetGraph data, Node list, Node member, ProfileRegistry profiles) {
         membershipUri(list);
         var focused=org.apache.jena.sparql.core.DatasetGraphFactory.create();
         try {
             for (Node predicate:List.of(RDF.type.asNode(),uri(RV+"generation"),uri(RV+"parent"))) membershipCopy(data,focused,CURRENT,list,predicate,16);
             Node generation=membershipOne(data,CURRENT,list,RV+"generation",true);membershipTypes(data,focused,generation);
             if(member!=null) { focused.add(uri(CURRENT),list,uri(SCHEMA+"itemListElement"),member);membershipTypes(data,focused,member); }
-            return CommandService.validateOne(focused,new CommandService.Validation("structure-composition-v1",profiles.get("structure-composition-v1"),
+            return CommandService.validateFocused(focused,new CommandService.Validation("structure-composition-v1",profiles.get("structure-composition-v1"),
                 "https://rezics.com/definition/structure-composition-v1/item-list-shape",List.of(list.getURI()),List.of(CURRENT,REVISIONS),Map.of()));
         } finally { focused.close(); }
     }
@@ -502,6 +537,51 @@ final class TemplateIndexService {
         var plan=CommandPolicy.parse("INSERT { GRAPH <"+CommandPolicy.OUTBOX+"> { <"+batch.getURI()+"> a <"+RV+"OutboxBatch> } GRAPH <"+CommandPolicy.RECEIPTS+"> { <"+receipt+"> a <"+RV+"OperationReceipt> } } WHERE {}",receipt);
         String failure=CommandInvariant.advanceRelayStream(data,receipt,plan,before);
         if (failure!=null) throw new IllegalArgumentException(failure);
+    }
+
+    /** Only isolated fixture assemblers expose SPARQL Update. Its existing
+     * transaction must remove completion after the unsafe write, including an
+     * imported/forged marker. The production assembler exposes no such route. */
+    static final class RawMembershipUpdate extends org.apache.jena.fuseki.servlets.SPARQL_Update {
+        @Override protected void execute(org.apache.jena.fuseki.servlets.HttpAction action, java.io.InputStream input) {
+            try {
+                if(action.getRequestParameter("using-graph-uri")!=null || action.getRequestParameter("using-named-graph-uri")!=null)
+                    throw new IllegalArgumentException("raw USING dataset cannot certify membership invalidation");
+                byte[] bytes=input.readNBytes(2_000_001);
+                if(bytes.length>2_000_000) throw new IllegalArgumentException("raw maintenance update exceeds byte bound");
+                var request=org.apache.jena.update.UpdateFactory.create(new String(bytes,StandardCharsets.UTF_8));
+                for(var operation:request.getOperations()) {
+                    List<org.apache.jena.sparql.core.Quad> insert;
+                    if(operation instanceof org.apache.jena.sparql.modify.request.UpdateModify modify) {
+                        if(modify.getWithIRI()!=null || !modify.getUsing().isEmpty() || !modify.getUsingNamed().isEmpty())
+                            throw new IllegalArgumentException("raw WITH/USING cannot certify membership invalidation");
+                        insert=modify.getInsertQuads();
+                    }
+                    else if(operation instanceof org.apache.jena.sparql.modify.request.UpdateDataInsert data) insert=data.getQuads();
+                    else if(operation instanceof org.apache.jena.sparql.modify.request.UpdateDataDelete
+                        || operation instanceof org.apache.jena.sparql.modify.request.UpdateDeleteWhere
+                        || operation instanceof org.apache.jena.sparql.modify.request.UpdateClear
+                        || operation instanceof org.apache.jena.sparql.modify.request.UpdateDrop) continue;
+                    else throw new IllegalArgumentException("raw maintenance operation cannot certify membership invalidation");
+                    if(insert.stream().anyMatch(quad->!quad.getGraph().isURI() || org.apache.jena.sparql.core.Quad.isDefaultGraph(quad.getGraph()) || quad.getGraph().getURI().equals(STATE)))
+                        throw new IllegalArgumentException("raw update requires an explicit named graph and cannot write the server-owned membership proof graph");
+                }
+                // Appending through Jena's parser keeps trailing separators and
+                // comments valid; super executes all operations in one write txn.
+                request.add(org.apache.jena.update.UpdateFactory.create("DELETE WHERE { GRAPH <"+STATE+"> { <"+PREPARATION+"> <"+COMPLETED+"> ?membershipProof } }")
+                    .getOperations().getFirst());
+                super.execute(action,new java.io.ByteArrayInputStream(request.toString().getBytes(StandardCharsets.UTF_8)));
+            } catch(java.io.IOException | IllegalArgumentException | org.apache.jena.query.QueryException | org.apache.jena.update.UpdateException invalid) {
+                org.apache.jena.fuseki.servlets.ServletOps.errorBadRequest(invalid.getMessage());
+            }
+        }
+    }
+    /** Other bypass mutation protocols have no transactional membership fence. */
+    static final class RefuseRawMembershipWrite extends org.apache.jena.fuseki.servlets.ActionService {
+        @Override public void validate(org.apache.jena.fuseki.servlets.HttpAction action) {}
+        @Override public void execute(org.apache.jena.fuseki.servlets.HttpAction action) {
+            org.apache.jena.fuseki.servlets.ServletOps.errorForbidden("raw graph mutation requires a fenced maintenance operation");
+        }
     }
 
     private TemplateIndexService() {}

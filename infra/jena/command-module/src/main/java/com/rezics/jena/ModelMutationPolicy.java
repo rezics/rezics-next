@@ -75,6 +75,13 @@ final class ModelMutationPolicy {
 
     static Map<String, Object> check(ProfileRegistry profiles, DatasetGraph data, CommandPolicy.Plan plan,
                                      String receipt, Snapshot before) {
+        return check(profiles,data,plan,receipt,before,null);
+    }
+    /** The native writer supplies lists certified from its bounded actual delta.
+     * Keep selector/type guards intact; the ItemList owner discharges member
+     * classes without revisiting the entire parent adjacency. */
+    static Map<String, Object> check(ProfileRegistry profiles, DatasetGraph data, CommandPolicy.Plan plan,
+                                     String receipt, Snapshot before, Set<Node> membershipLists) {
         Set<String> chapterPosts = ChapterPostMigrationPolicy.retired(data, receipt, before);
         for (var entry : before.current().entrySet()) {
             if (chapterPosts.contains(entry.getKey())) {
@@ -84,11 +91,11 @@ final class ModelMutationPolicy {
                 }
                 continue;
             }
-            Map<String, Object> invalid = checkSubject(profiles, data, receipt, entry.getKey(), entry.getValue());
+            Map<String, Object> invalid = checkSubject(profiles, data, receipt, entry.getKey(), entry.getValue(), membershipLists);
             if (invalid != null) return invalid;
         }
         for (var entry : before.revisions().entrySet()) {
-            Map<String, Object> invalid = checkSubject(profiles, data, receipt, entry.getKey(), entry.getValue());
+            Map<String, Object> invalid = checkSubject(profiles, data, receipt, entry.getKey(), entry.getValue(), membershipLists);
             if (invalid != null) return invalid;
         }
         Set<String> dependentCurrent = new HashSet<>();
@@ -119,7 +126,9 @@ final class ModelMutationPolicy {
             if (overflow != null) return CommandService.invalid(overflow);
         }
         for (String subject : dependentCurrent) {
-            Map<String, Object> invalid = CanonicalPolicy.validate(profiles, data, subject, false);
+            Map<String, Object> invalid = membershipLists!=null && data.contains(CURRENT,NodeFactory.createURI(subject),RDF.type.asNode(),NodeFactory.createURI("https://schema.org/ItemList"))
+                ? MembershipNormalFormPolicy.validateList(data,profiles,subject,membershipLists)
+                : CanonicalPolicy.validate(profiles, data, subject, false);
             if (invalid != null) return invalid;
         }
         for (String subject : dependentRevisions) {
@@ -130,7 +139,7 @@ final class ModelMutationPolicy {
     }
 
     private static Map<String, Object> checkSubject(ProfileRegistry profiles, DatasetGraph data,
-                                                    String receipt, String name, Subject before) {
+                                                    String receipt, String name, Subject before, Set<Node> membershipLists) {
         CanonicalPolicy.Selection selected = before.selection();
         if (selected == null) return null;
         Node node = NodeFactory.createURI(name);
@@ -154,6 +163,8 @@ final class ModelMutationPolicy {
                 return CommandService.invalid("prestate canonical selector changed: " + name);
             return null;
         }
+        if(membershipLists!=null && before.graph().equals(CURRENT) && selected.type().equals("https://schema.org/ItemList"))
+            return MembershipNormalFormPolicy.validateList(data,profiles,name,membershipLists);
         return CanonicalPolicy.validateSelected(profiles, data, name, selected);
     }
 

@@ -61,6 +61,11 @@ public final class CommandModule implements FusekiAutoModule {
 
     @Override public void prepare(FusekiServer.Builder builder, Set<String> datasetNames, Model configModel) {
         builder.registerOperation(COMMAND, new CommandService(profiles));
+        builder.registerOperation(Operation.Update, new TemplateIndexService.RawMembershipUpdate());
+        // No endpoint is added. Product assemblers remain command-only; unsafe
+        // fixture/maintenance writers must participate in the owner fence.
+        for(Operation operation : java.util.List.of(Operation.GSP_RW, Operation.GSP_Direct_RW, Operation.Upload, Operation.Patch))
+            builder.registerOperation(operation, new TemplateIndexService.RefuseRawMembershipWrite());
     }
 
     @Override public void configDataAccessPoint(org.apache.jena.fuseki.server.DataAccessPoint point, Model configModel) {

@@ -153,8 +153,10 @@ test('ordered membership preparation exhausts native seeks, resumes and replays 
   expect(turns.every(turn => turn.examined <= 256 && turn.placements <= 24)).toBe(true);
   expect(turns.some(turn => turn.phase >= 3)).toBe(true);
   const preparationMs = Date.now() - (deadline - 540_000);
+  const preparationTotalMs = Date.now() - started;
+  const preparationTurnCount = turns.length;
   expect(preparationMs).toBeLessThan(540_000);
-  expect(Date.now() - started).toBeLessThan(600_000);
+  expect(preparationTotalMs).toBeLessThan(600_000);
   expect(await pinned()).toEqual(before);
   const rows = await fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <${SCHEMA}>
     SELECT (COUNT(?placement) AS ?count) WHERE { GRAPH ${iri(GRAPHS.current)} {
@@ -180,21 +182,95 @@ test('ordered membership preparation exhausts native seeks, resumes and replays 
   expect(turns.at(-1)?.examined).toBe(0);
   for (let attempt = 0; attempt < 3; attempt++) expect(await hasUnnormalizedMembership(fuseki)).toBe(false);
 
-  // Raw fixture mutation does not advance the command sequence. Its storage
-  // version still invalidates the proof, preventing false completion.
+  const probesStarted = Date.now();
+  const proofState = () => fuseki.query(`PREFIX rv: <${RV}> SELECT ?proof WHERE {
+    GRAPH <urn:rezics:graph:template-index> {
+      <urn:rezics:membership-preparation> rv:membershipCompletedForm ?proof }
+  }`);
+  const completedProof = await proofState();
+  expect(completedProof.results?.bindings).toHaveLength(1);
+  expect(JSON.parse(completedProof.results!.bindings[0]!.proof!.value)).toMatchObject({
+    dataEpoch: lineage.dataEpoch, revision: 'ordered-membership-v1',
+  });
+  // Ordinary native control writes preserve semantic completion. Neither a new
+  // sequence nor a new storage version requires another population seek.
+  const cancelReceipt = `${scope}:cancel:${randomUUID()}`, cancelDigest = randomUUID();
+  const cancelBatch = `${scope}:cancel-batch:${randomUUID()}`;
+  const cancelled = await fuseki.command({ receipt: cancelReceipt, digest: cancelDigest,
+    deadlineMs: 10_000, validations: [], update: `PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:sequence ?n } }
+      INSERT { GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:sequence ?next }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(cancelReceipt)} a rv:OperationReceipt ;
+          rv:requestDigest ${JSON.stringify(cancelDigest)} ; rv:datasetId <urn:rezics:dataset:product> ;
+          rv:dataEpoch ${JSON.stringify(lineage.dataEpoch)} ; rv:sequence ?next ; rv:outcome rv:Cancelled . }
+        GRAPH ${iri(GRAPHS.outbox)} { ${iri(cancelBatch)} a rv:OutboxBatch ;
+          rv:dataEpoch ${JSON.stringify(lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 . } }
+      WHERE { GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product>
+          rv:dataEpoch ${JSON.stringify(lineage.dataEpoch)} ; rv:routingEpoch ${JSON.stringify(lineage.routingEpoch)} ; rv:sequence ?n }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(cancelReceipt)} ?p ?o } }
+        BIND(?n + 1 AS ?next) }` });
+  expect(cancelled.status).toBe('committed');
+  expect(await proofState()).toEqual(completedProof);
+  expect(await hasUnnormalizedMembership(fuseki)).toBe(false);
+  expect(await normalizeStoredMembership(env(), 1, deadline)).toEqual({ complete: true, placements: 0, receipts: [] });
+  expect(turns.at(-1)?.examined).toBe(0);
+  const afterCancellation = await sequence();
+  expect(BigInt(afterCancellation![0]!.n!.value)).toBe(BigInt(finishedSequence![0]!.n!.value) + 1n);
+
+  const raw = (body: string) => fetch(`${Bun.env.FUSEKI_URL!.replace(/\/$/u, '')}/update`, {
+    method: 'POST', headers: { 'content-type': 'application/sparql-update' }, body,
+  });
+  // The registered fixture Update route must reject the entire request before
+  // invalidating or replacing a server-owned proof, including a mixed request.
+  for (const body of [
+    'INSERT DATA { GRAPH <urn:rezics:malformed> {',
+    `INSERT DATA { GRAPH <urn:rezics:graph:template-index> {
+      <urn:rezics:membership-preparation> <${RV}membershipCompletedForm> "forged" } }`,
+    `DELETE WHERE { GRAPH <urn:rezics:graph:template-index> {
+      <urn:rezics:membership-preparation> <${RV}membershipCompletedForm> ?proof } } ;
+      INSERT DATA { GRAPH <urn:rezics:graph:template-index> {
+        <urn:rezics:membership-preparation> <${RV}membershipCompletedForm> "forged" } }`,
+  ]) {
+    const response = await raw(body);
+    expect(response.status).toBe(400);
+    await response.body?.cancel();
+    expect(await proofState()).toEqual(completedProof);
+    expect(await hasUnnormalizedMembership(fuseki)).toBe(false);
+  }
+  const damaged = await raw(`DELETE WHERE { GRAPH ${iri(GRAPHS.current)} {
+    <${scope}:placement:0> <${SCHEMA}position> ?position } }`);
+  expect(damaged.ok).toBe(true);
+  await damaged.body?.cancel();
+  expect((await proofState()).results?.bindings).toHaveLength(0);
+  expect(await sequence()).toEqual(afterCancellation);
+  expect(await hasUnnormalizedMembership(fuseki)).toBe(true);
+  const repaired = await normalizeStoredMembership(env(), 256, deadline);
+  expect(repaired).toMatchObject({ complete: true, placements: 1, receipts: [expect.any(String)] });
+  expect(await hasUnnormalizedMembership(fuseki)).toBe(false);
+  expect(await proofState()).toEqual(completedProof);
+  expect((await fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} {
+    <${scope}:placement:0> <${SCHEMA}position> "0-0" } }`)).boolean).toBe(true);
+  const afterRepair = await sequence();
+  expect(BigInt(afterRepair![0]!.n!.value)).toBe(BigInt(afterCancellation![0]!.n!.value) + 1n);
+
+  // Even unrelated raw fixture writes lack native policy admission and remove
+  // completion in their own transaction; the following exhaustive scan is dry.
   await update(`<${scope}:late-unrelated> <${scope}:unrelated-predicate> "late" .`);
+  expect((await proofState()).results?.bindings).toHaveLength(0);
   expect(await hasUnnormalizedMembership(fuseki)).toBe(true);
   const rescanned = await normalizeStoredMembership(env(), 256, deadline);
   expect(rescanned).toEqual({ complete: true, placements: 0, receipts: [] });
   expect(await hasUnnormalizedMembership(fuseki)).toBe(false);
-  expect(await sequence()).toEqual(finishedSequence);
+  expect(await sequence()).toEqual(afterRepair);
   const product = await Bun.file(new URL('../../../infra/jena/fuseki-text.ttl', import.meta.url)).text();
   expect(product).not.toContain('fuseki:serviceUpdate');
   expect(product).not.toContain('fuseki:serviceReadWriteGraphStore');
   const artifact = Bun.env.REZICS_QA_ARTIFACT_DIR;
   if (artifact) writeFileSync(join(artifact, 'membership-seek-cost.json'), JSON.stringify({
-    live, removed, unrelated, seedMs, preparationMs, totalMs: Date.now() - started,
-    turns: turns.map(({ placements, examined, phase, complete, restarted }) => ({ placements, examined, phase, complete, restarted })),
+    live, removed, unrelated, seedMs, preparationMs, totalMs: preparationTotalMs,
+    probeMs: Date.now() - probesStarted,
+    turns: turns.slice(0, preparationTurnCount).map(({ placements, examined, phase, complete, restarted }) => ({ placements, examined, phase, complete, restarted })),
+    probeTurns: turns.slice(preparationTurnCount).map(({ placements, examined, phase, complete, restarted }) => ({ placements, examined, phase, complete, restarted })),
     qualification: 'Populated HTTP owner preparation; QA assembler permits fixture seeding. Full stack startup, restore and corpus capacity are not measured.',
   }, null, 2));
 }, 600_000);

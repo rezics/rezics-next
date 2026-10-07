@@ -809,7 +809,14 @@ final class CommandService extends ActionService {
             OccurrenceLabelIndex.Capture occurrenceLabels = new OccurrenceLabelIndex.Capture(dataset);
             List<TemplateIndexService.Entity> templateBefore = slim ? List.of() : TemplateIndexService.capture(dataset,plan);
             CommandWork.enter("update");
-            UpdateAction.execute(plan.request(), DatasetFactory.wrap(CommandWork.observe(occurrenceLabels.observed(dataset))));
+            // Inspect the bounded actual primary delta, not the declared
+            // template size. Apply through the existing observation chain so
+            // text/search captures and native projections retain their order.
+            CommandOverlay primary = new CommandOverlay(CommandWork.observe(occurrenceLabels.observed(dataset)));
+            UpdateAction.execute(plan.request(), DatasetFactory.wrap(primary));
+            MembershipNormalFormPolicy.Result membership = MembershipNormalFormPolicy.check(primary, profiles, deadline);
+            if (membership.error() != null) return invalid(membership.error());
+            primary.apply();
             CommandWork.enter("invariants");
             String stored = receiptValue(dataset, receipt, "requestDigest");
             if (stored == null) return Map.of("status", "guard-unmatched");
@@ -832,7 +839,7 @@ final class CommandService extends ActionService {
             if (rebuildInvariant != null) return invalid(rebuildInvariant);
             Set<String> retiredCoverage = ReleaseCoveragePolicy.retired(dataset, receipt, model, releaseCoverage);
             Map<String, Object> modelInvariant = ModelMutationPolicy.check(profiles, dataset, plan, receipt,
-                ReleaseCoveragePolicy.remaining(model, retiredCoverage));
+                ReleaseCoveragePolicy.remaining(model, retiredCoverage), membership.validatedLists());
             if (modelInvariant != null) return modelInvariant;
             String releaseInvariant = ReleasePolicy.check(dataset, plan, receipt, releases);
             if (releaseInvariant != null) return invalid(releaseInvariant);
@@ -841,7 +848,7 @@ final class CommandService extends ActionService {
                 if (!dataset.find(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(subject),
                     Node.ANY, Node.ANY).hasNext()) retiredCurrent.add(subject);
             }
-            Map<String, Object> scope = validateScope(dataset, receipt, plan, validations, retiredCurrent);
+            Map<String, Object> scope = validateScope(dataset, receipt, plan, validations, retiredCurrent, membership.validatedLists());
             if (scope != null) return scope;
             String sourceBinding = SourceProjectionPolicy.check(dataset, receipt, plan);
             if (sourceBinding != null) return invalid(sourceBinding);
@@ -858,7 +865,7 @@ final class CommandService extends ActionService {
                 if (report != null) return invalid(report);
             }
             for (Validation validation : validations) {
-                Map<String, Object> invalid = validateOne(dataset, validation);
+                Map<String, Object> invalid = validateNativeFocus(dataset, validation, membership.validatedLists());
                 if (invalid != null) return invalid;
                 if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
             }
@@ -908,7 +915,11 @@ final class CommandService extends ActionService {
         if (before.error() != null) return invalid(before.error());
         if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
         CommandWork.enter("update");
-        UpdateAction.execute(plan.request(), DatasetFactory.wrap(CommandWork.observe(delta == null ? dataset : delta.observed())));
+        CommandOverlay primary = new CommandOverlay(CommandWork.observe(delta == null ? dataset : delta.observed()));
+        UpdateAction.execute(plan.request(), DatasetFactory.wrap(primary));
+        MembershipNormalFormPolicy.Result membership = MembershipNormalFormPolicy.check(primary, profiles, deadline);
+        if (membership.error() != null) return invalid(membership.error());
+        primary.apply();
         String stored = receiptValue(dataset, receipt, "requestDigest");
         if (stored == null) return Map.of("status", "guard-unmatched");
         if (!digest.equals(stored)) return Map.of("status", "conflict");
@@ -921,7 +932,7 @@ final class CommandService extends ActionService {
         CommandPolicy.Plan validationPlan = restoring ? StatementRestorePolicy.nativePlan(plan, receipt) : plan;
         if (restoring && validations.stream().anyMatch(entry -> !Set.of("statement-v1", "statement-decision-v1")
             .contains(entry.profileId()))) return invalid("classification restore validates only native representation profiles");
-        Map<String, Object> scope = validateScope(dataset, receipt, validationPlan, validations, Set.of());
+        Map<String, Object> scope = validateScope(dataset, receipt, validationPlan, validations, Set.of(), membership.validatedLists());
         if (scope != null) return scope;
         record Instance(String profile, Map<String, String> binding) {}
         Map<Instance, List<Validation>> grouped = new LinkedHashMap<>();
@@ -933,7 +944,7 @@ final class CommandService extends ActionService {
             if (report != null) return invalid(report);
         }
         for (Validation validation : validations) {
-            Map<String, Object> invalid = validateOne(dataset, validation);
+            Map<String, Object> invalid = validateNativeFocus(dataset, validation, membership.validatedLists());
             if (invalid != null) return invalid;
             if (System.nanoTime() >= deadline) return Map.of("status", "deadline");
         }
@@ -952,7 +963,7 @@ final class CommandService extends ActionService {
     }
 
     private Map<String, Object> validateScope(DatasetGraph dataset, String receipt, CommandPolicy.Plan plan,
-                                              List<Validation> validations, Set<String> retiredCoverage) {
+                                              List<Validation> validations, Set<String> retiredCoverage, Set<Node> membershipLists) {
         boolean productData = !plan.current().isEmpty() || !plan.revisions().isEmpty()
             || !plan.source().isEmpty()
             || plan.graphs().contains(CommandPolicy.PUBLIC_SEARCH) && !plan.bootstrap();
@@ -993,7 +1004,10 @@ final class CommandService extends ActionService {
                 }
             }
             if (!covered) return invalid("current graph focus omitted: " + subject);
-            Map<String, Object> canonical = CanonicalPolicy.validate(profiles, dataset, subject, false);
+            Map<String, Object> canonical = dataset.contains(NodeFactory.createURI(CommandPolicy.CURRENT),NodeFactory.createURI(subject),
+                org.apache.jena.vocabulary.RDF.type.asNode(),NodeFactory.createURI("https://schema.org/ItemList"))
+                ? validateMembershipList(dataset,subject,membershipLists)
+                : CanonicalPolicy.validate(profiles, dataset, subject, false);
             if (canonical != null) return canonical;
             if (hasType(dataset, CommandPolicy.CURRENT, subject, "ContentVariant")) {
                 if (!hasContentFocus(validations, subject, "variant-shape", CommandPolicy.CURRENT))
@@ -1295,13 +1309,28 @@ final class CommandService extends ActionService {
             return invalid("Content projection receipt variant mismatch: " + subject);
         return null;
     }
+    private Map<String,Object> validateMembershipList(DatasetGraph data,String subject,Set<Node> validatedLists) {
+        return MembershipNormalFormPolicy.validateList(data,profiles,subject,validatedLists);
+    }
+    private Map<String,Object> validateNativeFocus(DatasetGraph data,Validation validation,Set<Node> validatedLists) {
+        if(!validation.profileId().equals("structure-composition-v1")
+            || !validation.shape().equals("https://rezics.com/definition/structure-composition-v1/item-list-shape"))
+            return validateOne(data,validation);
+        if(!new java.util.HashSet<>(validation.graphs()).equals(Set.of(CommandPolicy.CURRENT,CommandPolicy.REVISIONS)))
+            return invalid("bounded ItemList validation requires the owner current/revisions scope");
+        for(String subject:validation.focus()) {
+            Map<String,Object> invalid=validateMembershipList(data,subject,validatedLists);
+            if(invalid!=null) return invalid;
+        }
+        return null;
+    }
     static Map<String, Object> invalid(String report) {
         return Map.of("status", "invalid", "report", report);
     }
     static Map<String, Object> validateOne(DatasetGraph dataset, Validation validation) {
         return CommandWork.timed("validation", () -> validateFocused(dataset, validation));
     }
-    private static Map<String, Object> validateFocused(DatasetGraph dataset, Validation validation) {
+    static Map<String, Object> validateFocused(DatasetGraph dataset, Validation validation) {
         CommandWork.count("validation_focuses", validation.focus().size());
         Graph union = SelectedGraphUnion.readOnly(dataset, validation.graphs());
         Shapes shapes = validation.profile().compiled();

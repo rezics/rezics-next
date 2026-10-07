@@ -38,7 +38,7 @@ public class MembershipSeekTest {
     private static String hash(String value) { return StatementUpgradePolicy.templateDigest(value); }
     private static void write(DatasetGraph data, Runnable action) {
         data.begin(ReadWrite.WRITE);
-        try { action.run(); data.commit(); } finally { data.end(); }
+        try { MembershipNormalFormPolicy.invalidate(data); action.run(); data.commit(); } finally { data.end(); }
     }
     private static DatasetGraph fixture(int legacy, int normalized, int removed, int unrelated) {
         var data = TDB2Factory.createDataset().asDatasetGraph();
@@ -106,6 +106,11 @@ public class MembershipSeekTest {
     private static Set<Quad> snapshot(DatasetGraph data) {
         data.begin(ReadWrite.READ);
         try { return new HashSet<>(Iter.toList(data.find())); } finally { data.end(); }
+    }
+    private static Set<Quad> completedProof(DatasetGraph data) {
+        return snapshot(data).stream().filter(quad -> quad.getGraph().equals(uri(TemplateIndexService.STATE))
+            && quad.getSubject().equals(uri("urn:rezics:membership-preparation"))
+            && quad.getPredicate().equals(p("membershipCompletedForm"))).collect(java.util.stream.Collectors.toSet());
     }
     private static boolean needsPreparation(DatasetGraph data) {
         var request = new JsonObject(); request.put("operation", "membership-status");
@@ -413,11 +418,50 @@ public class MembershipSeekTest {
             }
             """.formatted(receipt, SlimCommandTest.DIGEST, receipt, receipt);
     }
+    private static Map<String,Object> activateInitialModel(CommandService service, DatasetGraph data) {
+        String generation = "urn:rezics:model-generation:" + "e".repeat(64), head = "urn:rezics:model:product";
+        String receipt = "urn:rezics:receipt:" + hash(generation + '\0' + "model-generation");
+        String profile = "https://rezics.com/definition/semantic-model-generation-v1", operation = id(900).getURI();
+        String digest = hash("{\"family\":\"model-generation-v1\",\"manifest\":\"" + "e".repeat(64) + "\"}");
+        String update = """
+            PREFIX rv: <https://rezics.com/vocab/>
+            DELETE { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?n } }
+            INSERT {
+              GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?next }
+              GRAPH <urn:rezics:graph:current> { <%s> a rv:ModelComponent ; rv:generationHead <%s> . }
+              GRAPH <urn:rezics:graph:revisions> { <%s> a rv:ModelGeneration, rv:RevisionAnchor ;
+                rv:component <%s> ; rv:generationNumber 1 ; rv:manifest <urn:rezics:sha256:%s> ;
+                rv:commandModuleVersion "%s" ; rv:entailmentProfile rv:NoEntailment ; rv:identityInference rv:Excluded ;
+                rv:validationPosture rv:RejectOnViolation ; rv:operation <%s> ; rv:modelRevision <%s> ; rv:shapeRevision <%s> ;
+                rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch "test" ; rv:sequence ?next . }
+              GRAPH <urn:rezics:graph:receipts> { <%s> a rv:OperationReceipt ; rv:operation <%s> ; rv:requestDigest "%s" ;
+                rv:outcome rv:Succeeded ; rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch "test" ; rv:sequence ?next . }
+              GRAPH <urn:rezics:graph:outbox> { <%s:batch> a rv:OutboxBatch ; rv:dataEpoch "test" ; rv:sequence ?next ;
+                rv:eventCount 1 ; rv:event <%s:event> . <%s:event> a rv:ModelGenerationRecordedEvent ;
+                rv:ordinal 0 ; rv:action "model.generation.record" ; rv:receipt <%s> . }
+            } WHERE {
+              GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch "test" ; rv:routingEpoch "0" ; rv:sequence ?n }
+              FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <%s> ?p ?o } }
+              FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <%s> ?p ?o } }
+              FILTER NOT EXISTS { GRAPH <urn:rezics:graph:receipts> { <%s> ?p ?o } }
+              BIND(?n + 1 AS ?next)
+            }
+            """.formatted(head, generation, generation, head, "f".repeat(64), PROFILES.commandModule(), operation, profile, profile,
+                receipt, operation, digest, receipt, receipt, receipt, receipt, head, generation, receipt);
+        List<String> graphs = List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS);
+        List<CommandService.Validation> checks = List.of(
+            new CommandService.Validation("semantic-model-generation-v1", PROFILES.get("semantic-model-generation-v1"),
+                profile + "/generation-shape", List.of(generation), graphs, Map.of()),
+            new CommandService.Validation("semantic-model-generation-v1", PROFILES.get("semantic-model-generation-v1"),
+                profile + "/head-shape", List.of(head), graphs, Map.of()));
+        return service.runCommand(data, receipt, digest, update, checks, System.nanoTime() + 30_000_000_000L);
+    }
     /** A completed representation proof belongs to its owner facts, not every unrelated native transaction. */
     @Test public void completedPreparationRemainsCurrentAfterNormalProductAndSameEpochControlCommands() {
         var data = metadataFixture();
         try {
-            completedMetadataFixture(data); long[] physical = countPhysicalRows(data);
+            completedMetadataFixture(data); long[] physical = countPhysicalRows(data); Set<Quad> completion = completedProof(data);
+            assertEquals(1, completion.size());
             var service = SlimCommandTest.service(PROFILES);
             var product = service.runCommand(data, SlimCommandTest.RECEIPT, SlimCommandTest.DIGEST,
                 SlimCommandTest.update(SlimCommandTest.RECEIPT, SlimCommandTest.OLD, SlimCommandTest.NEW, 0),
@@ -427,12 +471,15 @@ public class MembershipSeekTest {
             var control = service.runCommand(data, receipt, SlimCommandTest.DIGEST, controlCommand(receipt),
                 List.of(), System.nanoTime() + 30_000_000_000L);
             assertEquals(control.toString(), "committed", control.get("status"));
+            var model = activateInitialModel(service, data);
+            assertEquals(model.toString(), "committed", model.get("status"));
+            assertEquals("unrelated native commands must not rewrite the owner completion marker", completion, completedProof(data));
             data.begin(ReadWrite.READ);
             try {
                 assertTrue(data.contains(CURRENT, uri(SlimCommandTest.COMPONENT), p("metadataHead"), uri(SlimCommandTest.NEW)));
-                assertEquals("2", CommandInvariant.readControl(data).sequence().toString());
+                assertEquals("3", CommandInvariant.readControl(data).sequence().toString());
             } finally { data.end(); }
-            System.out.println("membership completed proof: normal product=committed same-epoch control=committed");
+            System.out.println("membership completed proof: normal product=committed same-epoch control=committed model activation=committed");
             Set<Quad> before = snapshot(data); long beforeSeek = physical[0];
             boolean needs = needsPreparation(data);
             assertEquals("readiness must not scan membership after unrelated native commands", beforeSeek, physical[0]);
@@ -443,7 +490,8 @@ public class MembershipSeekTest {
     @Test public void completedPreparationRemainsCurrentAfterSlimProductAndSignedCommitProofRetirement() throws Exception {
         var data = metadataFixture();
         try {
-            completedMetadataFixture(data); long[] physical = countPhysicalRows(data);
+            completedMetadataFixture(data); long[] physical = countPhysicalRows(data); Set<Quad> completion = completedProof(data);
+            assertEquals(1, completion.size());
             var service = SlimCommandTest.service(PROFILES);
             var slim = SlimCommandTest.run(service, data, PROFILES, SlimCommandTest.RECEIPT, SlimCommandTest.OLD, SlimCommandTest.NEW, 0);
             assertEquals(slim.toString(), "committed", slim.get("status"));
@@ -456,6 +504,7 @@ public class MembershipSeekTest {
                 HexFormat.of().formatHex(mac.doFinal(CommandService.retirementPayload(unsigned).getBytes(java.nio.charset.StandardCharsets.UTF_8))));
             var retired = service.retireProof(data, evidence);
             assertEquals(retired.toString(), "retired", retired.get("status"));
+            assertEquals("slim/proof-only commits must not rewrite the owner completion marker", completion, completedProof(data));
             data.begin(ReadWrite.READ);
             try {
                 assertNull(CommandInvariant.commitProof(data, SlimCommandTest.RECEIPT));
@@ -476,6 +525,367 @@ public class MembershipSeekTest {
         String output = probe(directory, "resume-complete");
         assertTrue(output, output.contains("membership completed restart: current=true physicalRows=0"));
         System.out.print(output);
+    }
+    private static String membershipCommand(String receipt, String deletes, String inserts, String guard) {
+        return """
+            PREFIX rv: <https://rezics.com/vocab/> PREFIX schema: <https://schema.org/>
+            DELETE {
+              GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?n }
+              GRAPH <urn:rezics:graph:current> { %s }
+            }
+            INSERT {
+              GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?next }
+              GRAPH <urn:rezics:graph:current> { %s }
+              GRAPH <urn:rezics:graph:receipts> { <%s> a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+                rv:requestDigest "%s" ; rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch "epoch" ; rv:sequence ?next }
+              GRAPH <urn:rezics:graph:outbox> { <%s:batch> a rv:OutboxBatch ; rv:dataEpoch "epoch" ; rv:sequence ?next ;
+                rv:eventCount 1 ; rv:event <%s:event> . <%s:event> a rv:StructureCommandEvent ; rv:ordinal 0 ;
+                rv:action "structure.command" ; rv:receipt <%s> . }
+            } WHERE {
+              GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch "epoch" ; rv:routingEpoch "routing" ; rv:sequence ?n }
+              GRAPH <urn:rezics:graph:current> { %s }
+              FILTER NOT EXISTS { GRAPH <urn:rezics:graph:receipts> { <%s> ?p ?o } }
+              BIND(?n + 1 AS ?next)
+            }
+            """.formatted(deletes, inserts, receipt, SlimCommandTest.DIGEST, receipt, receipt, receipt, receipt, guard, receipt);
+    }
+    private static Map<String,Object> nativeMembershipWrite(DatasetGraph data, String receipt, String deletes, String inserts, String guard) {
+        String facts = deletes + inserts;
+        List<CommandService.Validation> validations = new ArrayList<>();
+        Map<String,Node> focuses = Map.of("placement", id(10000), "item-list", LIST, "segment", SEGMENT);
+        for (var focus : focuses.entrySet()) if (facts.contains("<" + focus.getValue().getURI() + ">"))
+            validations.add(new CommandService.Validation("structure-composition-v1", PROFILES.get("structure-composition-v1"),
+                "https://rezics.com/definition/structure-composition-v1/" + focus.getKey() + "-shape",
+                List.of(focus.getValue().getURI()), List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()));
+        return SlimCommandTest.service(PROFILES).runCommand(data, receipt, SlimCommandTest.DIGEST,
+            membershipCommand(receipt, deletes, inserts, guard), validations, System.nanoTime() + 30_000_000_000L);
+    }
+    @Test public void malformedNativeMembershipWritesRefuseAtomicallyAndPreserveCompletedProof() {
+        for (String defect : List.of("legacy-target", "position", "missing-parent-edge", "list-skeleton")) {
+            var data = fixture(1, 0, 0, 0);
+            try {
+                assertEquals(1, drain(data, countPhysicalRows(data), 10));
+                Set<Quad> before = snapshot(data); assertEquals(1, completedProof(data).size());
+                String deletes = "", inserts = "", guard = "<" + id(10000).getURI() + "> rv:orderKey \"1\" .";
+                if (defect.equals("legacy-target")) inserts = "<" + id(10000).getURI() + "> rv:target <" + id(200000).getURI() + "> .";
+                else if (defect.equals("position")) {
+                    deletes = "<" + id(10000).getURI() + "> schema:position \"0-1\" .";
+                    inserts = "<" + id(10000).getURI() + "> schema:position \"0-2\" .";
+                } else if (defect.equals("missing-parent-edge")) deletes = "<" + LIST.getURI() + "> schema:itemListElement <" + id(10000).getURI() + "> .";
+                else {
+                    deletes = "<" + LIST.getURI() + "> rv:parent <" + STRUCTURE.getURI() + "> .";
+                    inserts = "<" + LIST.getURI() + "> rv:parent <" + id(999).getURI() + "> .";
+                }
+                var result = nativeMembershipWrite(data, "urn:rezics:receipt:membership-invalid:" + defect, deletes, inserts, guard);
+                assertEquals(result.toString(), "invalid", result.get("status"));
+                String reason = Map.of("legacy-target", "legacy rv:target", "position", "position differs",
+                    "missing-parent-edge", "deterministic ItemList", "list-skeleton", "skeleton is immutable").get(defect);
+                assertTrue(result.toString(), result.get("report").toString().contains(reason));
+                assertEquals("rejected membership mutation must roll back all facts and native bookkeeping", before, snapshot(data));
+                assertFalse(needsPreparation(data));
+            } finally { data.close(); }
+        }
+    }
+    @Test public void legalNativePlacementReorderPreservesTheCompletedMarkerByteForByte() {
+        var data = fixture(1, 0, 0, 0);
+        try {
+            assertEquals(1, drain(data, countPhysicalRows(data), 10)); Set<Quad> proof = completedProof(data);
+            String placement = "<" + id(10000).getURI() + ">";
+            var result = nativeMembershipWrite(data, "urn:rezics:receipt:membership-reorder",
+                placement + " rv:orderKey \"1\" ; schema:position \"0-1\" .",
+                placement + " rv:orderKey \"2\" ; schema:position \"0-2\" .",
+                placement + " rv:orderKey \"1\" ; schema:position \"0-1\" .");
+            assertEquals(result.toString(), "committed", result.get("status"));
+            assertEquals(proof, completedProof(data)); assertFalse(needsPreparation(data));
+            data.begin(ReadWrite.READ);
+            try {
+                assertTrue(data.contains(CURRENT, id(10000), p("orderKey"), text("2")));
+                assertTrue(data.contains(CURRENT, id(10000), s("position"), text("0-2")));
+                assertTrue(data.contains(CURRENT, LIST, s("itemListElement"), id(10000)));
+            } finally { data.end(); }
+        } finally { data.close(); }
+    }
+    private static final Node NEW_PLACEMENT = id(90000), NEW_OCCURRENCE = id(400000);
+    private static DatasetGraph populatedParent(int population) {
+        var data = fixture(0, population, 0, 0);
+        write(data, () -> {
+            data.add(CURRENT, NEW_OCCURRENCE, RDF.type.asNode(), s("ListItem"));
+            data.add(CURRENT, NEW_OCCURRENCE, p("structure"), STRUCTURE);
+            data.add(CURRENT, NEW_OCCURRENCE, p("introducedBy"), HEAD);
+        });
+        assertEquals(0, drain(data, countPhysicalRows(data), 40)); assertFalse(needsPreparation(data));
+        return data;
+    }
+    private static Map<String,Object> insertIntoPopulatedParent(DatasetGraph data, String suffix) {
+        return insertIntoPopulatedParent(data, suffix, List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS));
+    }
+    private static Map<String,Object> insertIntoPopulatedParent(DatasetGraph data, String suffix, List<String> listGraphs) {
+        String placement = "<" + NEW_PLACEMENT.getURI() + ">";
+        String insert = placement + " a rv:OccurrencePlacement, schema:ListItem ; rv:generation <" + GENERATION.getURI()
+            + "> ; rv:occurrence <" + NEW_OCCURRENCE.getURI() + "> ; rv:occurrenceRole rv:ChapterRole ; rv:orderSegment <"
+            + SEGMENT.getURI() + "> ; rv:orderKey \"zzz\" ; schema:item <" + id(200000).getURI()
+            + "> ; schema:position \"0-zzz\" . <" + LIST.getURI() + "> schema:itemListElement " + placement + " .";
+        String receipt = "urn:rezics:receipt:membership-parent-insertion:" + suffix;
+        List<CommandService.Validation> checks = List.of(
+            new CommandService.Validation("structure-composition-v1", PROFILES.get("structure-composition-v1"),
+                "https://rezics.com/definition/structure-composition-v1/placement-shape", List.of(NEW_PLACEMENT.getURI()),
+                List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Map.of()),
+            new CommandService.Validation("structure-composition-v1", PROFILES.get("structure-composition-v1"),
+                "https://rezics.com/definition/structure-composition-v1/item-list-shape", List.of(LIST.getURI()),
+                listGraphs, Map.of()));
+        return SlimCommandTest.service(PROFILES).runCommand(data, receipt, SlimCommandTest.DIGEST,
+            membershipCommand(receipt, "", insert, "<" + LIST.getURI() + "> a schema:ItemList ."), checks,
+            System.nanoTime() + 30_000_000_000L);
+    }
+    /** Watches the whole command pipeline, including canonical and explicit SHACL. */
+    private static final class ParentReads extends DatasetGraphWrapper {
+        final boolean allowWitness;
+        long returnedRows;
+        int populationProbes, populationHasNext, populationNext;
+        ParentReads(DatasetGraph data, boolean allowWitness) { super(data); this.allowWitness = allowWitness; }
+        @Override public Iterator<Quad> find(Node graph, Node subject, Node predicate, Node object) {
+            boolean population = (graph.equals(CURRENT) || graph.equals(Node.ANY) || Quad.isUnionGraph(graph)) && subject.equals(LIST)
+                && predicate.equals(s("itemListElement")) && object.equals(Node.ANY);
+            if (population) {
+                populationProbes++;
+                assertTrue("completed parent insertion must not open ANY-member population reads anywhere in the native pipeline", allowWitness);
+            }
+            var rows = super.find(graph, subject, predicate, object);
+            return new org.apache.jena.util.iterator.NiceIterator<Quad>() {
+                @Override public boolean hasNext() {
+                    if (population) populationHasNext++;
+                    return rows.hasNext();
+                }
+                @Override public Quad next() {
+                    Quad quad = rows.next(); returnedRows++;
+                    if (population) { populationNext++; assertTrue("prestate witness must not iterate a parent population", populationNext <= 1); }
+                    if (!population && quad.getGraph().equals(CURRENT) && quad.getSubject().equals(LIST)
+                        && quad.getPredicate().equals(s("itemListElement")) && object.equals(Node.ANY))
+                        fail("broad subject reads must not enumerate membership edges before filtering");
+                    return quad;
+                }
+                @Override public void close() { Iter.close(rows); }
+            };
+        }
+        @Override public boolean contains(Node graph, Node subject, Node predicate, Node object) {
+            var rows = find(graph, subject, predicate, object);
+            try { return rows.hasNext(); } finally { Iter.close(rows); }
+        }
+        @Override public boolean contains(Quad quad) {
+            return contains(quad.getGraph(), quad.getSubject(), quad.getPredicate(), quad.getObject());
+        }
+        @Override public Iterator<Quad> find(Quad quad) {
+            return find(quad.getGraph(), quad.getSubject(), quad.getPredicate(), quad.getObject());
+        }
+        @Override public Iterator<Quad> findNG(Node graph, Node subject, Node predicate, Node object) {
+            return Iter.filter(find(graph, subject, predicate, object), quad -> !quad.isDefaultGraph());
+        }
+        @Override public org.apache.jena.graph.Graph getGraph(Node graph) {
+            return org.apache.jena.sparql.core.GraphView.createNamedGraph(this, graph);
+        }
+        @Override public org.apache.jena.graph.Graph getDefaultGraph() {
+            return org.apache.jena.sparql.core.GraphView.createDefaultGraph(this);
+        }
+        @Override public org.apache.jena.graph.Graph getUnionGraph() {
+            return org.apache.jena.sparql.core.GraphView.createUnionGraph(this);
+        }
+    }
+    @Test public void nativeInsertionIntoACompletedHighDegreeParentNeverWalksItsPopulationForAnyValidation() {
+        Long baseline = null;
+        for (int population : List.of(130, 500, 3500)) {
+            var data = populatedParent(population);
+            try {
+                Set<Quad> proof = completedProof(data); var counted = new ParentReads(data, false);
+                var result = insertIntoPopulatedParent(counted, "complete-" + population);
+                assertEquals(result.toString(), "committed", result.get("status"));
+                assertEquals(0, counted.populationProbes);
+                assertEquals(proof, completedProof(data)); assertFalse(needsPreparation(data));
+                assertTrue("parent insertion exceeded its fixed observed field work: " + counted.returnedRows, counted.returnedRows <= 2000);
+                if (baseline == null) baseline = counted.returnedRows;
+                else assertEquals("native insertion work grew with unrelated existing members", baseline.longValue(), counted.returnedRows);
+                data.begin(ReadWrite.READ);
+                try {
+                    assertTrue(data.contains(CURRENT, LIST, s("itemListElement"), NEW_PLACEMENT));
+                    assertTrue(data.contains(CURRENT, NEW_PLACEMENT, s("position"), text("0-zzz")));
+                    assertEquals(population + 1, Iter.count(data.find(CURRENT, LIST, s("itemListElement"), Node.ANY)));
+                } finally { data.end(); }
+                System.out.println("membership native parent insertion population=" + population + " focusedRows=" + counted.returnedRows + " populationProbes=0");
+            } finally { data.close(); }
+        }
+    }
+    @Test public void populatedParentWithoutAnExhaustiveProofRefusesAtOnePrestateWitness() {
+        for (int population : List.of(130, 3500)) {
+            var data = populatedParent(population);
+            try {
+                write(data, () -> {}); assertTrue(needsPreparation(data));
+                Set<Quad> before = snapshot(data); var counted = new ParentReads(data, true);
+                var result = insertIntoPopulatedParent(counted, "uncertified-" + population);
+                assertEquals(result.toString(), "invalid", result.get("status"));
+                assertTrue(result.toString(), result.get("report").toString().contains("populated ItemList requires completed membership preparation"));
+                assertEquals(1, counted.populationProbes);
+                // CurrentScope's concat/distinct checks availability twice and
+                // prefetches one physical row for the outer hasNext witness.
+                // That witness must never advance into the remaining population.
+                assertTrue("prestate witness availability was repeatedly reprobed", counted.populationHasNext > 0 && counted.populationHasNext <= 2);
+                assertTrue("prestate witness iterated beyond its first member", counted.populationNext <= 1);
+                assertEquals(before, snapshot(data)); assertTrue(needsPreparation(data));
+                System.out.println("membership uncertified parent insertion population=" + population + " populationProbes="
+                    + counted.populationProbes + " hasNext=" + counted.populationHasNext + " iteratedMembers=" + counted.populationNext);
+            } finally { data.close(); }
+        }
+    }
+    @Test public void boundedParentValidationRejectsNonstandardGraphScopesWithoutChangingFacts() {
+        var data = populatedParent(130);
+        try {
+            Set<Quad> before = snapshot(data);
+            for (List<String> scope : List.of(List.of(CommandPolicy.CURRENT),
+                List.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS, CommandPolicy.PUBLIC_SEARCH))) {
+                var counted = new ParentReads(data, false);
+                var result = insertIntoPopulatedParent(counted, "unsupported-scope-" + scope.size(), scope);
+                assertEquals(result.toString(), "invalid", result.get("status"));
+                assertTrue(result.toString(), result.get("report").toString().contains("requires the owner current/revisions scope"));
+                assertEquals(0, counted.populationProbes); assertEquals(before, snapshot(data)); assertFalse(needsPreparation(data));
+            }
+        } finally { data.close(); }
+    }
+    @Test public void unsafeHighDegreeSegmentRewriteStopsAtTheBoundedDependentClosure() {
+        for (int population : List.of(130, 500)) {
+            var data = fixture(0, population, 0, 0);
+            try {
+                write(data, () -> data.add(CURRENT, SEGMENT, p("memberCount"),
+                    NodeFactory.createLiteralByValue(population, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger)));
+                assertEquals(0, drain(data, countPhysicalRows(data), 20)); Set<Quad> before = snapshot(data);
+                var counted = new DatasetGraphWrapper(data) {
+                    int dependentRows;
+                    @Override public Iterator<Quad> find(Node graph, Node subject, Node predicate, Node object) {
+                        if (graph.equals(CURRENT) && predicate.equals(s("itemListElement")) && object.equals(Node.ANY))
+                            fail("segment mutation must not enumerate parent membership adjacency");
+                        var rows = super.find(graph, subject, predicate, object);
+                        if (graph.equals(CURRENT) && subject.equals(Node.ANY) && predicate.equals(p("orderSegment")) && object.equals(SEGMENT))
+                            return Iter.map(rows, row -> { dependentRows++; return row; });
+                        return rows;
+                    }
+                };
+                String segment = "<" + SEGMENT.getURI() + ">";
+                var result = nativeMembershipWrite(counted, "urn:rezics:receipt:membership-segment-rewrite:" + population,
+                    segment + " rv:segmentKey \"0\" .", segment + " rv:segmentKey \"1\" .", segment + " rv:segmentKey \"0\" .");
+                assertEquals(result.toString(), "invalid", result.get("status"));
+                assertTrue(result.toString(), result.get("report").toString().contains("membership dependent"));
+                assertTrue("dependent closure was never consulted", counted.dependentRows > 0);
+                assertTrue("dependent closure exceeded its bounded refusal probe: " + counted.dependentRows, counted.dependentRows <= 129);
+                assertEquals(before, snapshot(data)); assertFalse(needsPreparation(data));
+                System.out.println("membership unsafe segment population=" + population + " dependentRows=" + counted.dependentRows);
+            } finally { data.close(); }
+        }
+    }
+    @Test public void restoredEpochAndHoldInvalidateCompletionAndCannotReuseAnOldExhaustedCursor() {
+        var data = fixture(1, 0, 0, 0);
+        try {
+            assertEquals(1, drain(data, countPhysicalRows(data), 10)); assertFalse(needsPreparation(data));
+            write(data, () -> {
+                data.deleteAny(CONTROL, PRODUCT, p("dataEpoch"), Node.ANY);
+                data.add(CONTROL, PRODUCT, p("dataEpoch"), text("restored-epoch"));
+                data.deleteAny(CONTROL, PRODUCT, p("sequence"), Node.ANY);
+                data.add(CONTROL, PRODUCT, p("sequence"), NodeFactory.createLiteralByValue(0, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+                Node stream = uri(CommandInvariant.MAIN_STREAM_SCOPE);
+                data.deleteAny(CONTROL, stream, Node.ANY, Node.ANY);
+                data.add(CONTROL, stream, p("dataEpoch"), text("restored-epoch"));
+                data.add(CONTROL, stream, p("streamSequence"), NodeFactory.createLiteralByValue(0, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+                data.add(CONTROL, stream, p("legacyThroughSequence"), NodeFactory.createLiteralByValue(0, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+                data.add(CONTROL, PRODUCT, p("restoreHold"), NodeFactory.createLiteralByValue(true, org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean));
+                data.deleteAny(CURRENT, id(10000), s("position"), Node.ANY);
+            });
+            assertTrue(needsPreparation(data)); Set<Quad> held = snapshot(data);
+            assertEquals("guard-unmatched", prepare(data, request("restored-epoch", "routing")).get("status"));
+            assertEquals(held, snapshot(data));
+            write(data, () -> data.deleteAny(CONTROL, PRODUCT, p("restoreHold"), Node.ANY));
+            var repaired = prepare(data, request("restored-epoch", "routing"));
+            assertEquals(repaired.toString(), "committed", repaired.get("status")); assertEquals(1, repaired.get("placements"));
+            assertTrue(Boolean.TRUE.equals(repaired.get("complete"))); assertFalse(needsPreparation(data));
+        } finally { data.close(); }
+    }
+    private static java.net.http.HttpResponse<String> rawUpdate(int port, String queryString, String update) throws Exception {
+        var request = java.net.http.HttpRequest.newBuilder(java.net.URI.create("http://127.0.0.1:" + port + "/data/update" + queryString))
+            .header("Content-Type", "application/sparql-update").timeout(java.time.Duration.ofSeconds(10))
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(update)).build();
+        return java.net.http.HttpClient.newHttpClient().send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
+    }
+    @Test public void guardedRawUpdateInvalidatesCompletionInItsTransactionAndRejectsProofForgery() throws Exception {
+        var data = fixture(1, 0, 0, 0);
+        var server = org.apache.jena.fuseki.main.FusekiServer.create().port(0).add("/data", data)
+            .registerOperation(org.apache.jena.fuseki.server.Operation.Update, new TemplateIndexService.RawMembershipUpdate()).build().start();
+        try {
+            assertEquals(1, drain(data, countPhysicalRows(data), 10)); assertFalse(needsPreparation(data));
+            Set<Quad> before = snapshot(data);
+            List<String> rejected = List.of(
+                "INSERT DATA { GRAPH <" + TemplateIndexService.STATE + "> { <urn:rezics:membership-preparation> <" + RV + "membershipCompletedForm> \"forged\" } }",
+                "WITH <" + TemplateIndexService.STATE + "> INSERT { <urn:rezics:membership-preparation> <" + RV
+                    + "membershipCompletedForm> \"forged\" ; <" + RV + "membershipCheckpoint> \"{}\" } WHERE {}",
+                "INSERT DATA { <" + NEW_PLACEMENT.getURI() + "> a <" + RV + "OccurrencePlacement> }",
+                "INSERT { GRAPH ?g { <" + id(10000).getURI() + "> <" + SCHEMA + "position> \"0-2\" } } WHERE { BIND(<" + CommandPolicy.CURRENT + "> AS ?g) }");
+            for (String update : rejected) {
+                var response = rawUpdate(server.getPort(), "", update);
+                assertEquals(response.body(), 400, response.statusCode()); assertEquals(before, snapshot(data));
+                assertFalse(needsPreparation(data));
+            }
+            var using = rawUpdate(server.getPort(), "?using-graph-uri=" + java.net.URLEncoder.encode(CommandPolicy.CURRENT, java.nio.charset.StandardCharsets.UTF_8),
+                "INSERT DATA { GRAPH <" + CommandPolicy.CURRENT + "> { <urn:rezics:test:raw> <urn:test:value> \"value\" } }");
+            assertEquals(using.body(), 400, using.statusCode()); assertEquals(before, snapshot(data));
+            String delete = "DELETE WHERE { GRAPH <" + CommandPolicy.CURRENT + "> { <" + id(10000).getURI()
+                + "> <" + SCHEMA + "position> ?position } }; # a trailing maintenance comment\n";
+            var deleted = rawUpdate(server.getPort(), "", delete);
+            assertTrue(deleted.body(), deleted.statusCode() == 200 || deleted.statusCode() == 204);
+            assertTrue(needsPreparation(data)); assertTrue(completedProof(data).isEmpty());
+            data.begin(ReadWrite.READ);
+            try { assertFalse(data.contains(CURRENT, id(10000), s("position"), Node.ANY)); }
+            finally { data.end(); }
+            assertEquals(1, drain(data, countPhysicalRows(data), 10)); assertFalse(needsPreparation(data));
+        } finally { server.stop(); data.close(); }
+    }
+    @Test public void defaultGraphLegacyMembershipCannotHideBehindNamedSeekExhaustionOrARetainedProof() {
+        for (boolean retainProof : List.of(false, true)) {
+            var data = fixture(1, 0, 0, 0);
+            try {
+                assertEquals(1, drain(data, countPhysicalRows(data), 10)); Set<Quad> proof = completedProof(data);
+                Runnable restore = () -> {
+                    data.add(Quad.defaultGraphNodeGenerated, id(600000), RDF.type.asNode(), p("OccurrencePlacement"));
+                    data.add(Quad.defaultGraphNodeGenerated, id(600000), p("target"), id(200000));
+                };
+                if (retainProof) {
+                    // Simulate stopped-store tampering which bypasses even the
+                    // registered raw writer's transaction-local invalidation.
+                    data.begin(ReadWrite.WRITE);
+                    try { restore.run(); data.commit(); } finally { data.end(); }
+                    assertEquals(proof, completedProof(data));
+                } else write(data, restore);
+                Set<Quad> before = snapshot(data); long[] physical = countPhysicalRows(data);
+                assertTrue(needsPreparation(data));
+                var result = prepare(data, request());
+                assertEquals(result.toString(), "invalid", result.get("status"));
+                assertTrue(result.toString(), result.get("report").toString().contains("ordered membership requires named current storage"));
+                assertEquals("default storage witness must refuse before opening named membership seeks", 0, physical[0]);
+                assertEquals(before, snapshot(data));
+            } finally { data.close(); }
+        }
+    }
+    @Test public void nativeMembershipCannotRedirectAQualifiedParentInsertionIntoDefaultMetadataStorage() {
+        var data = fixture(0, 3500, 0, 0);
+        try {
+            write(data, () -> {
+                data.add(CURRENT, NEW_OCCURRENCE, RDF.type.asNode(), s("ListItem"));
+                data.add(CURRENT, NEW_OCCURRENCE, p("structure"), STRUCTURE);
+                data.add(CURRENT, NEW_OCCURRENCE, p("introducedBy"), HEAD);
+                data.add(Quad.defaultGraphNodeGenerated, NEW_PLACEMENT, uri("urn:rezics:test:untyped-metadata"), text("existing default metadata"));
+            });
+            // Untyped default metadata is valid C6 storage and must not turn
+            // named membership preparation into an unrelated default scan.
+            assertEquals(0, drain(data, countPhysicalRows(data), 40)); assertFalse(needsPreparation(data));
+            Set<Quad> before = snapshot(data); var counted = new ParentReads(data, false);
+            var result = insertIntoPopulatedParent(counted, "default-redirect");
+            assertEquals(result.toString(), "invalid", result.get("status"));
+            assertTrue(result.toString(), result.get("report").toString().contains("ordered membership cannot be redirected into default metadata storage"));
+            assertEquals(0, counted.populationProbes); assertEquals(before, snapshot(data)); assertFalse(needsPreparation(data));
+        } finally { data.close(); }
     }
     private static String probe(Path directory, String mode) throws Exception {
         String classpath = System.getProperty("surefire.test.class.path", System.getProperty("java.class.path"));
@@ -504,10 +914,15 @@ public class MembershipSeekTest {
                 return;
             }
             if (args[1].equals("resume-complete")) {
-                long[] physical = countPhysicalRows(disk); Set<Quad> before = snapshot(disk);
+                long[] physical = countPhysicalRows(disk); Set<Quad> before = snapshot(disk); Set<Quad> proof = completedProof(disk);
                 boolean needs = needsPreparation(disk);
                 assertEquals(0, physical[0]); assertEquals(before, snapshot(disk));
                 assertFalse("a new JVM must not dirty an exhaustive durable membership proof", needs);
+                org.apache.jena.tdb2.DatabaseMgr.compact(disk, true);
+                long[] compacted = countPhysicalRows(disk); Set<Quad> afterCompaction = snapshot(disk);
+                assertFalse("physical compaction must preserve an exhaustive semantic owner proof", needsPreparation(disk));
+                assertEquals(0, compacted[0]); assertEquals(proof, completedProof(disk));
+                assertEquals(afterCompaction, snapshot(disk));
                 System.out.println("membership completed restart: current=true physicalRows=" + physical[0]);
                 return;
             }

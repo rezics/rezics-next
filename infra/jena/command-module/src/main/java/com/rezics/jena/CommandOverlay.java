@@ -82,6 +82,10 @@ final class CommandOverlay extends DatasetGraphWrapper implements DatasetGraphWr
     @Override public void clear() { throw new IllegalArgumentException("bulk clear not admitted"); }
     @Override public void addGraph(Node name, Graph graph) { throw new IllegalArgumentException("bulk graph replacement not admitted"); }
     @Override public void removeGraph(Node name) { throw new IllegalArgumentException("bulk graph removal not admitted"); }
+    /** Exact net primary mutation, capped together at 16,384 quads. The
+     * membership owner checks this before any RDF/Lucene mutation escapes. */
+    Set<Quad> additions() { return java.util.Collections.unmodifiableSet(adds); }
+    Set<Quad> removals() { return java.util.Collections.unmodifiableSet(deletes); }
     boolean changed() { return !adds.isEmpty() || !deletes.isEmpty(); }
     void apply() {
         // Preserve delete-before-add semantics for the text wrapper, too.
