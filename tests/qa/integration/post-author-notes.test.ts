@@ -255,6 +255,15 @@ test('Post spoiler publication and reply draft declarations survive exact storag
       head = draft.revisionId;
       publicationHead = published.decision;
     }
+    // The current head is active text. Without public search eligibility the
+    // shared projection consumer defers it and never reaches the owner head.
+    if (!publicationHead) throw new Error('spoiler publication missing');
+    await author.grant(`content:search-eligibility:${chapter.post}`, 'content.search-eligibility');
+    await json(await author.send('POST', '/v1/content-search-eligibility', {
+      profile: 'content-search-eligibility-v1', resourceId: chapter.post, variantId: chapter.variantId,
+      publicationDecision: publicationHead, expectedEligibilityHead: null, actingSubject: author.actor,
+      rightsBasis: 'original-contribution', disclosure: 'public',
+    }), 201);
     const command = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN!, Bun.env.FUSEKI_COMMAND_TOKEN!);
     const receipt = `urn:rezics:receipt:${randomUUID()}`;
     await expect(command.command({ receipt, digest: 'a'.repeat(64),
