@@ -90,6 +90,7 @@ import { readTranslationLinkTerminal, readTranslationLinks, translationLinkDiges
 export class RetainedEffectConflict extends Error {}
 
 interface AccessEffectRow {
+  acting_subject?: string;
   action: string;
   state: string;
   scope_id: string;
@@ -271,7 +272,7 @@ export async function reconcileRetainedWorkEdit(
       'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
     if (fence.rows[0]?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
     const access = await client.query<AccessEffectRow>(
-      `SELECT action, state, scope_id, request_digest, authority_epoch,
+      `SELECT acting_subject, action, state, scope_id, request_digest, authority_epoch,
          graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
        FROM access.admission WHERE id = $1 FOR UPDATE`, [receipt.admissionId]);
     const admitted = access.rows[0];
@@ -299,6 +300,9 @@ export async function reconcileRetainedWorkEdit(
       throw new RetainedEffectConflict('held raw edit cut or paired source cursors differ');
     }
     const paired = Boolean(control.savedMain);
+    if (paired && !/^https:\/\/rezics\.com\/id\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(admitted.acting_subject ?? '')) {
+      throw new RetainedEffectConflict('scoped retained raw edit has no sealed actor');
+    }
     const update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
       DELETE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last .
@@ -315,6 +319,7 @@ export async function reconcileRetainedWorkEdit(
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(receipt.workRevision)} a rv:RevisionAnchor ; rv:component ${iri(receipt.work)} ;
             rv:predecessor ${iri(receipt.expectedHead)} ; rv:operation ${iri(receipt.operation)} ;
+            ${paired ? `rv:actor ${iri(admitted.acting_subject!)} ;` : ''}
             rv:manifest ${iri(receipt.workManifest)} ; rv:modelRevision ${iri(PROFILE)} ;
             rv:shapeRevision ${iri(PROFILE)} ; rv:datasetId ${iri(DATASET)} ;
             rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} .
@@ -380,6 +385,7 @@ export async function reconcileRetainedWorkEdit(
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(receipt.workRevision)} a rv:RevisionAnchor ;
         rv:component ${iri(receipt.work)} ; rv:predecessor ${iri(receipt.expectedHead)} ;
         rv:operation ${iri(receipt.operation)} ; rv:manifest ${iri(receipt.workManifest)} ;
+        ${paired ? `rv:actor ${iri(admitted.acting_subject!)} ;` : ''}
         rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} . }
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(data.batchId)} a rv:OutboxBatch ;
         rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} ;

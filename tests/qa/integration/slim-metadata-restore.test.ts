@@ -1,20 +1,29 @@
-import { expect, spyOn, test } from 'bun:test';
+import { expect, mock, spyOn, test } from 'bun:test';
 import { AwsClient } from 'aws4fetch';
 import { randomUUID } from 'node:crypto';
-import { readFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
+import { migrateAccount } from '../../../scripts/ops/migrate.ts';
+import { docker } from '../../../scripts/operations/search-state.ts';
+import { migrateContent } from '../../../services/content/src/migrate.ts';
+import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
+import { accountRecoveryCoverage } from '../../../services/account/src/recovery-coverage.ts';
 import { CommandOutcomeUnknown, CommandRejected, FusekiClient, type CommandEnvelope, type CommandResult }
   from '../../../services/main/src/infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
-import { AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal }
+import { AccessAdmissionRegistry, engageAccessRecoveryFence, type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
 import { proofRetirementSender } from '../../../services/main/src/modules/graph/slim-command.ts';
 import { PostgresReceiptCustodyStore, ReceiptCustody, type CustodiedReceipt, type HistoricalReceiptSource, type PreparedCommand }
   from '../../../services/main/src/modules/outbox/receipt-custody.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
-import { relayCoverage, type CustodiedOutbox, type MainCloudEvent } from '../../../services/main/src/modules/outbox/relay.ts';
+import { readMainOutboxEnvelope, readNextMainOutboxBatch, relayCoverage, type CustodiedOutbox, type MainCloudEvent }
+  from '../../../services/main/src/modules/outbox/relay.ts';
+import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
+import { retainErasureCoverage } from '../../../services/main/src/modules/erasure/reconcile.ts';
 import { ACTIVE_GENERATION, ensureModelGeneration }
   from '../../../services/main/src/modules/semantic/command.ts';
 import { custodyModelGenerationArtifacts, readExactModelGeneration }
@@ -28,9 +37,14 @@ import { checkedEditionV2, checkedMetadataState, METADATA_DETAILS_V2, METADATA_P
   type MetadataEditionState, type MetadataEditionStateV2 }
   from '../../../services/main/src/modules/work/metadata-schema.ts';
 import { readWorkComponentState } from '../../../services/main/src/modules/work/history.ts';
-import { reconcileRetainedSlimMetadata }
+import { setAdmittedWorkScalar } from '../../../services/main/src/modules/work/edit-admitted.ts';
+import { SCALAR_PREDICATE } from '../../../services/main/src/modules/work/scalar-value.ts';
+import { captureGraphRecoveryCoverage, cutoverRestoredGraphLineage, readGraphRecoverySource, releaseRestoredGraphHold }
+  from '../../../services/main/src/modules/work/restore-lineage.ts';
+import { reconcileRetainedSlimMetadata, reconcileRetainedWorkEdit }
   from '../../../services/main/src/modules/work/reconcile-restored.ts';
-import { migrateAccess, qaStack, rootCommand, waitForFuseki, type QaStack }
+import { freePort, fusekiSecrets, migrateAccess, pinnedImage, qaStack, rootCommand, standaloneFuseki,
+  waitForFuseki, type QaStack, type StandaloneFuseki }
   from '../fault-recovery/search-ops-support.ts';
 import { nativeId } from './context-fixture.ts';
 
@@ -49,6 +63,60 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \\
   tdb2.tdbupdate --loc=/fuseki/databases/rezics/tdb2 --update=/tmp/slim-metadata-restore.ru`);
   await stack.runner.start();
   await waitForFuseki(stack.apps.FUSEKI_URL!);
+}
+
+/** Use the same physical PostgreSQL recovery path as the owner restore tests.
+ * A promoted copy has replayed the original signed Account WAL floor. */
+async function promotedPostgres(stack: QaStack, directory: string) {
+  mkdirSync(directory, { recursive: true });
+  const data = resolve(directory, 'data');
+  const container = stack.compose(['ps', '-q', 'postgres']).output.trim();
+  if (!/^[0-9a-f]{12,64}$/.test(container)) throw new Error('Isolated PostgreSQL container is unavailable');
+  const remote = `/var/lib/postgresql/.temp/metadata-restore-${randomUUID()}`;
+  try {
+    execFileSync('docker', ['exec', '-u', 'postgres', container, 'sh', '-ec',
+      `mkdir -p /var/lib/postgresql/.temp
+PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast`],
+    { cwd: root, env: stack.dockerEnv, timeout: 65_000 });
+    execFileSync('docker', ['cp', `${container}:${remote}`, data], { cwd: root, env: stack.dockerEnv, timeout: 20_000 });
+  } finally {
+    execFileSync('docker', ['exec', '-u', 'postgres', container, 'rm', '-rf', remote],
+      { cwd: root, env: stack.dockerEnv, timeout: 10_000 });
+  }
+  execFileSync('pg_verifybackup', ['--no-parse-wal', data], { cwd: root, timeout: 15_000 });
+  appendFileSync(resolve(data, 'postgresql.auto.conf'), "\narchive_mode = off\nrestore_command = 'false'\n");
+  writeFileSync(resolve(data, 'recovery.signal'), '');
+  const port = await freePort();
+  try {
+    // TCP avoids PostgreSQL's short Unix-socket path limit in a nested worktree.
+    execFileSync('pg_ctl', ['-D', data, '-l', resolve(directory, 'postgres.log'), '-o',
+      `-h 127.0.0.1 -p ${port} -k ""`, '-t', '60', '-w', 'start'], { cwd: root, timeout: 65_000 });
+  } catch (error) {
+    const diagnosis = readFileSync(resolve(directory,'postgres.log'),'utf8').slice(-4000);
+    try { execFileSync('pg_ctl', ['-D',data,'-m','immediate','-w','stop'], { cwd: root,timeout: 25_000,stdio: 'pipe' }); }
+    catch { /* Retain the original startup diagnosis. */ }
+    throw new Error(`Promoted isolated PostgreSQL startup failed: ${diagnosis}`,
+      { cause: error });
+  }
+  const connection = (original: string) => {
+    const url = new URL(original); url.hostname = '127.0.0.1'; url.port = String(port);
+    return url.toString();
+  };
+  return { connection, stop: () => execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'],
+    { cwd: root, timeout: 25_000 }) };
+}
+
+/** Keep a separately running original graph for the retained erasure owner.
+ * Both copies use the product assembler; the copy occurs with its writer stopped. */
+async function originalGraphCopy(stack: QaStack, volume: string) {
+  docker(['volume', 'create', volume], stack.dockerEnv);
+  stack.runner.stop();
+  try {
+    docker(['run', '--rm', '--user', '0', '--network', 'none', '--volume', `${stack.stateVolume}:/from:ro`,
+      '--volume', `${volume}:/to`, '--entrypoint', 'sh', pinnedImage(), '-ec', 'cp -a /from/rezics /to/rezics'], stack.dockerEnv);
+  } finally { await stack.runner.start(); }
+  return standaloneFuseki(stack.dockerEnv, { name: `${volume}-server`, image: pinnedImage(), volume,
+    secrets: fusekiSecrets(stack.composeEnv) });
 }
 
 async function facts(fuseki: FusekiClient, subjects?: readonly string[]) {
@@ -78,6 +146,11 @@ test('held product slim metadata restore preserves retired owner custody, exact 
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through selected QA integration');
   const stack = qaStack(`metadata-restore-${randomUUID().slice(0, 12)}`);
   let accessPool: Pool | undefined, relayPool: Pool | undefined, historicalPool: Pool | undefined;
+  let accountPool: Pool | undefined, contentPool: Pool | undefined;
+  let postgres: Awaited<ReturnType<typeof promotedPostgres>> | undefined;
+  let originalGraph: StandaloneFuseki | undefined;
+  const originalVolume = `rezics-metadata-original-${randomUUID().slice(0, 12)}`;
+  const recoveryDirectory = resolve(root, `.temp/pg-metadata-${randomUUID().slice(0, 8)}`);
   let env: WorkActivationEnvironment | undefined;
   try {
     await rootCommand(['stack:up', ...stack.args], 180_000);
@@ -94,8 +167,16 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     };
     await rawUpdateClosed();
     await migrateAccess(apps.ACCESS_DATABASE_URL!);
+    await migrateAccount(apps, root);
     accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
-    historicalPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL, max: 1, connectionTimeoutMillis: 1_000 });
+    historicalPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL, max: 1, connectionTimeoutMillis: 30_000 });
+    accountPool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
+    contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
+    await migrateContent(contentPool);
+    // The independent stack starts empty: install the real Account provider and
+    // owner migrations before capturing the original recovery profile.
+    await accountRecoveryCoverage(accountPool);
+    expect((await contentPool.query('SELECT data_epoch,sequence FROM content.owner_control')).rows).toHaveLength(1);
     relayPool = new Pool({ connectionString: apps.MAIN_RELAY_DATABASE_URL });
     for (const file of schemaFiles(root, 'relay')) {
       await relayPool.query(readFileSync(resolve(root, 'services/main/migrations/relay', file), 'utf8'));
@@ -106,7 +187,7 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     await objects.initialize();
     const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
     access.configureBaseline(fuseki);
-    const custody = new ReceiptCustody(new PostgresReceiptCustodyStore(accessPool), objects, fuseki,
+    let custody = new ReceiptCustody(new PostgresReceiptCustodyStore(accessPool), objects, fuseki,
       apps.FUSEKI_TITLE_ADMISSION_KEY!, proofRetirementSender(apps.FUSEKI_URL!, apps.FUSEKI_COMMAND_TOKEN!));
     env = { fuseki, workObjects: objects, receiptCustody: custody, objectDirectory: apps.MAIN_OBJECT_DIRECTORY!,
       lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! } };
@@ -147,13 +228,13 @@ test('held product slim metadata restore preserves retired owner custody, exact 
       state: checkedMetadataState({ kind: 'header', originalTitle: { value: title, language: 'en' }, localized: [] }),
       actingSubject: actor, idempotencyKey: randomUUID() });
     const sourceEpoch = env.lineage.dataEpoch;
-    // Allocate real native edition commits at diagnostic 897..900 and Main 1..4.
+    // Allocate mixed native raw/slim commits at diagnostic 877,878,899,900 and Main 1..4.
     // Only this stopped disposable copy replaces its setup's older source cut.
     await loadStoppedCopy(stack, `PREFIX rv: <${RV}>
       CLEAR GRAPH ${iri(GRAPHS.outbox)} ;
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?old .
         ${iri(MAIN_RELAY_STREAM_SCOPE)} ?p ?o } }
-      INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence 896 .
+      INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence 876 .
         ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:dataEpoch ${lit(sourceEpoch)} ;
           rv:streamSequence 0 ; rv:legacyThroughSequence 0 } }
       WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?old .
@@ -183,7 +264,7 @@ test('held product slim metadata restore preserves retired owner custody, exact 
       const prepared = JSON.parse(found.payload.toString('utf8')) as PreparedCommand;
       expect(prepared.state).toEqual(state);
       expect(found.terminal).toMatchObject({ receipt: result.receipt, revision: result.revision,
-        sequence: String(897 + sources.length), streamSequence: String(1 + sources.length) });
+        sequence: ['877', '878', '900'][sources.length], streamSequence: ['1', '2', '4'][sources.length] });
       const source = { payloadSha256: found.payload_sha256, payload: found.payload, prepared,
         terminal: found.terminal, outbox: found.outbox };
       sources.push(source);
@@ -191,29 +272,41 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     };
     const first = await write(v1, null, 'work-metadata-details-v1');
     await write({ ...v1, status: 'withdrawn' }, first.terminal.revision, 'work-metadata-details-v1');
+    await loadStoppedCopy(stack, `PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.control)} {
+      ${iri(DATASET)} rv:sequence 878 } }; INSERT DATA { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence 898 } }`);
+    const raw = await setAdmittedWorkScalar(env, deps.account, access, request, { work,
+      expectedHead: created.workRevision!, scalarValue: { kind: 'integer', lexical: '0' },
+      actingSubject: actor, idempotencyKey: randomUUID() });
+    expect(raw.sequence).toBe('899');
+    const rawBatch = await readNextMainOutboxBatch(fuseki, sourceEpoch, '2', custody);
+    expect(rawBatch).toMatchObject({ graphSequence: '899', sequence: '3' });
+    const rawEvent = await readMainOutboxEnvelope(fuseki, rawBatch!, rawBatch!.eventIds[0]!, undefined, custody);
+    expect(rawEvent.type).toBe('com.rezics.work.edited.v1');
     const third = await write(v2, null, 'work-metadata-details-v2');
-    await write(checkedEditionV2({ ...v2, title: { value: 'Last exact retained V2', language: 'en-us' },
-      publisher: 'Later retained publisher' }), third.terminal.revision, 'work-metadata-details-v2');
     fuseki.commandWithReceipt = nativeCommand;
     const sourceGraph = await componentFacts(fuseki, [v1.id, v2.id]);
+    const rawSubjects = [raw.revision, raw.receipt, rawBatch!.batchId, rawEvent.id];
+    const sourceRawGraph = await facts(fuseki, rawSubjects);
     const originalSql = (await accessPool.query(`SELECT receipt,request_digest,payload_sha256,payload,revision,
       terminal,outbox,reconciled_at,retired_at,data_epoch,stream_sequence::text
       FROM access.command_custody ORDER BY receipt`)).rows;
-    const sourceAdmissionIds = sources.map(source => source.terminal.admissionId);
+    const sourceAdmissionIds = [...sources.map(source => source.terminal.admissionId), raw.admissionId];
     const originalAdmissions = (await accessPool.query(`SELECT id,acting_subject,scope_id,request_digest,authority_epoch,
       state,graph_receipt,graph_outcome,graph_data_epoch,graph_sequence FROM access.admission
       WHERE id=ANY($1::uuid[]) ORDER BY id`, [sourceAdmissionIds])).rows;
     expect(originalAdmissions).toHaveLength(4);
     expect(originalAdmissions.every(admission => admission.state === 'sealed')).toBe(true);
     const consumer = 'slim-metadata-restore';
-    for (const source of sources) {
-      const event = source.outbox.events[0]!;
-      expect(event.data.sourcePosition.sequence).toBe(source.terminal.sequence);
-      expect(event.data.relayPosition?.sequence).toBe(source.terminal.streamSequence);
+    const events = [...sources.map(source => ({ event: source.outbox.events[0]!, batchId: source.outbox.batchId,
+      sequence: source.terminal.streamSequence, diagnostic: source.terminal.sequence })),
+    { event: rawEvent, batchId: rawBatch!.batchId, sequence: '3', diagnostic: '899' }];
+    for (const { event, batchId, sequence, diagnostic } of events) {
+      expect(event.data.sourcePosition.sequence).toBe(diagnostic);
+      expect(event.data.relayPosition?.sequence).toBe(sequence);
       await relayPool.query(`INSERT INTO relay.delivered_batch (data_epoch,sequence,batch_id,routing_epoch,event_count)
-        VALUES ($1,$2,$3,$4,1)`, [sourceEpoch, source.terminal.streamSequence, source.outbox.batchId, env.lineage.routingEpoch]);
+        VALUES ($1,$2,$3,$4,1)`, [sourceEpoch, sequence, batchId, env.lineage.routingEpoch]);
       await relayPool.query(`INSERT INTO relay.delivered_event (source,event_id,data_epoch,sequence,envelope)
-        VALUES ($1,$2,$3,$4,$5::jsonb)`, [event.source,event.id,sourceEpoch,source.terminal.streamSequence,JSON.stringify(event)]);
+        VALUES ($1,$2,$3,$4,$5::jsonb)`, [event.source,event.id,sourceEpoch,sequence,JSON.stringify(event)]);
     }
     await relayPool.query('INSERT INTO relay.checkpoint (consumer,data_epoch,sequence) VALUES ($1,$2,4)', [consumer,sourceEpoch]);
     const coverage = await relayCoverage(relayPool,consumer);
@@ -223,6 +316,7 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     const model = JSON.parse(readFileSync(resolve(modelDirectory, 'manifest.json'), 'utf8')) as {
       commandModule: string; profiles: { id: string; file: string; sha256: string }[] };
     const selectedProfiles = new Set(sources.flatMap(source => source.prepared.envelope.validations.map(pin => pin.profile)));
+    selectedProfiles.add('work-metadata-v1');
     const unrelated = model.profiles.find(profile => !selectedProfiles.has(profile.id))!;
     const unrelatedShape = Buffer.concat([readFileSync(resolve(modelDirectory,unrelated.file)),
       Buffer.from('\n# An unrelated profile artifact changed between source and restore.\n')]);
@@ -234,31 +328,64 @@ test('held product slim metadata restore preserves retired owner custody, exact 
       file => file === unrelated.file ? unrelatedShape : readFileSync(resolve(modelDirectory,file)));
     const rootManifest = await prepareWorkComponent(objects,unrelatedRoot,
       { modelManifestSha256: unrelatedRoot.slice(-64),commandModule: model.commandModule,entailment: 'none' }, PROFILES.generation);
-    const restoredEpoch = randomUUID(), restoredRouting = randomUUID(), marker = `urn:rezics:restore:${restoredEpoch}`;
     await loadStoppedCopy(stack, `PREFIX rv: <${RV}>
-      DELETE { ${iri(v1.id)} ?v1p ?v1o . ${iri(v2.id)} ?v2p ?v2o .
-        GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:editionsRevision ?oldEdition .
-          ${iri(MODEL_COMPONENT)} rv:generationHead ?oldModel }
-        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?oldEpoch ; rv:routingEpoch ?oldRouting ; rv:sequence ?oldSequence .
-          ${iri(MAIN_RELAY_STREAM_SCOPE)} ?streamP ?streamO } }
+      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ?oldModel } }
       INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ${iri(unrelatedRoot)} }
         GRAPH ${iri(GRAPHS.revisions)} { ${iri(unrelatedRoot)} a rv:ModelGeneration, rv:RevisionAnchor ;
           rv:component ${iri(MODEL_COMPONENT)} ; rv:predecessor ${iri(ACTIVE_GENERATION)} ; rv:generationNumber 2 ;
           rv:manifest ${iri(`urn:rezics:sha256:${rootManifest}`)} ; rv:commandModuleVersion ${lit(model.commandModule)} ;
           rv:entailmentProfile rv:NoEntailment ; rv:identityInference rv:Excluded ; rv:validationPosture rv:RejectOnViolation ;
           rv:operation ${iri(nativeId())} ; rv:modelRevision ${iri(PROFILES.generation)} ; rv:shapeRevision ${iri(PROFILES.generation)} ;
-          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(sourceEpoch)} ; rv:sequence 896 }
-        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(restoredEpoch)} ; rv:routingEpoch ${lit(restoredRouting)} ;
-          rv:sequence 0 ; rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
-          ${iri(marker)} a rv:RestoreCutover ; rv:priorDataEpoch ${lit(sourceEpoch)} ; rv:priorSequence 896 ;
-            rv:priorMainSequence 0 ; rv:dataEpoch ${lit(restoredEpoch)} .
-          ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:dataEpoch ${lit(restoredEpoch)} ; rv:streamSequence 0 ; rv:legacyThroughSequence 0 } }
-      WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?oldEpoch ; rv:routingEpoch ?oldRouting ; rv:sequence ?oldSequence .
-        OPTIONAL { ${iri(MAIN_RELAY_STREAM_SCOPE)} ?streamP ?streamO } }
-        OPTIONAL { ${iri(v1.id)} ?v1p ?v1o }
-        OPTIONAL { ${iri(v2.id)} ?v2p ?v2o }
-        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:editionsRevision ?oldEdition } }
-        OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ?oldModel } } }`);
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(sourceEpoch)} ; rv:sequence 876 } }
+      WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(MODEL_COMPONENT)} rv:generationHead ?oldModel } }`);
+    const sourceLineage = { ...env.lineage };
+    const recoveryKey = hash(randomUUID());
+    const fenceGeneration = await engageAccessRecoveryFence(accessPool);
+    expect((await accessPool.query('SELECT open,generation::text FROM access.recovery_fence WHERE id')).rows)
+      .toEqual([{ open: false,generation: fenceGeneration }]);
+    const signedCut = await captureGraphRecoveryCoverage(fuseki, accountPool, accessPool, relayPool,
+      consumer, contentPool, { directory: env.objectDirectory, workObjects: objects });
+    expect(signedCut).toMatchObject({ priorDataEpoch: sourceEpoch, priorSequence: '900',
+      relay: { sequence: '4', batchCount: '4', eventCount: '4' } });
+    const sealedCoverage = JSON.stringify(sealRecoveryPayload(signedCut, recoveryKey, 'graph-recovery-coverage'));
+    await retainRecoveryCoverageHead(relayPool, sealedCoverage, recoveryKey);
+    await retainErasureCoverage(relayPool, consumer);
+    originalGraph = await originalGraphCopy(stack, originalVolume);
+    const originalFuseki = new FusekiClient(originalGraph.url, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
+    expect(await readGraphRecoverySource(originalFuseki)).toMatchObject({ ...sourceLineage, sequence: '900',
+      relay: { sequence: '4' } });
+    expect(await facts(originalFuseki, rawSubjects)).toEqual(sourceRawGraph);
+    postgres = await promotedPostgres(stack, recoveryDirectory);
+    await Promise.all([accessPool.end(), historicalPool.end(), accountPool.end(), contentPool.end()]);
+    accessPool = new Pool({ connectionString: postgres.connection(apps.ACCESS_DATABASE_URL!), max: 1, connectionTimeoutMillis: 30_000 });
+    historicalPool = new Pool({ connectionString: postgres.connection(apps.ACCESS_DATABASE_URL!), max: 1, connectionTimeoutMillis: 30_000 });
+    accountPool = new Pool({ connectionString: postgres.connection(apps.ACCOUNT_DATABASE_URL!) });
+    contentPool = new Pool({ connectionString: postgres.connection(apps.CONTENT_DATABASE_URL!) });
+    custody = new ReceiptCustody(new PostgresReceiptCustodyStore(accessPool), objects, fuseki,
+      apps.FUSEKI_TITLE_ADMISSION_KEY!, proofRetirementSender(apps.FUSEKI_URL!, apps.FUSEKI_COMMAND_TOKEN!));
+    env.receiptCustody = custody;
+    // Restore only an older saved physical graph. Production cutover creates
+    // the lineage, hold and both recorded cut cursors from this real source cut.
+    await loadStoppedCopy(stack, `PREFIX rv: <${RV}>
+      DELETE WHERE { ${iri(v1.id)} ?p ?o };
+      DELETE WHERE { ${iri(v2.id)} ?p ?o };
+      DELETE WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:editionsRevision ?head } };
+      DELETE WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} <${SCALAR_PREDICATE}> ?value } };
+      DELETE WHERE { GRAPH ${iri(GRAPHS.revisions)} { ${iri(raw.revision)} ?p ?o } };
+      DELETE WHERE { GRAPH ${iri(GRAPHS.receipts)} { ${iri(raw.receipt)} ?p ?o } };
+      DELETE WHERE { GRAPH ${iri(GRAPHS.outbox)} { ${iri(rawBatch!.batchId)} ?p ?o } };
+      DELETE WHERE { GRAPH ${iri(GRAPHS.outbox)} { ${iri(rawEvent.id)} ?p ?o } };
+      DELETE DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ${iri(raw.revision)} }
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence 900 . ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:streamSequence 4 } };
+      INSERT DATA { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ${iri(created.workRevision!)} }
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence 876 . ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:streamSequence 0 } }`);
+    const savedSource = await readGraphRecoverySource(fuseki);
+    expect(savedSource).toMatchObject({ sequence: '876', relay: { sequence: '0' } });
+    const restoredEpoch = randomUUID(), restoredRouting = randomUUID(), marker = `urn:rezics:restore:${restoredEpoch}`;
+    const cutover = { prior: { ...sourceLineage, sequence: savedSource.sequence },
+      next: { dataEpoch: restoredEpoch, routingEpoch: restoredRouting } };
+    expect(await cutoverRestoredGraphLineage(fuseki, cutover)).toEqual({ lineage: cutover.next, sequence: '0', replayed: false });
+    expect(await cutoverRestoredGraphLineage(fuseki, cutover)).toEqual({ lineage: cutover.next, sequence: '0', replayed: true });
     env.lineage = { dataEpoch: restoredEpoch,routingEpoch: restoredRouting };
     expect(await componentFacts(fuseki,[v1.id,v2.id])).toEqual([]);
     const retainedModel = await readExactModelGeneration(env,unrelatedRoot);
@@ -267,11 +394,57 @@ test('held product slim metadata restore preserves retired owner custody, exact 
       expect(health.profiles[pin.profile]).toBe(pin.sha256);
       expect(retainedModel.shapes.find(shape => shape.profile === pin.profile)?.sha256).toBe(pin.sha256);
     }
-    const reconcile = (sequence: string) => reconcileRetainedSlimMetadata(env!,accessPool!,relayPool!,coverage,sequence);
+    const checkoutAccess = accessPool.connect.bind(accessPool), checkoutRelay = relayPool.connect.bind(relayPool);
+    const repair = async (sequence: string, rawSource = false) => {
+      const relayClient = await checkoutRelay();
+      let accessClient: PoolClient | undefined;
+      try {
+        await relayClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        accessClient = await checkoutAccess();
+        await accessClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        const forbidden = () => { throw new Error('Held repair must use the supplied owner clients without live custody reconciliation'); };
+        const accessQueries = spyOn(accessClient, 'query'), relayQueries = spyOn(relayClient, 'query');
+        const guards = [spyOn(accessPool!, 'connect').mockImplementation(forbidden),
+          spyOn(accessPool!, 'query').mockImplementation(forbidden), spyOn(relayPool!, 'connect').mockImplementation(forbidden),
+          spyOn(relayPool!, 'query').mockImplementation(forbidden), spyOn(accessClient, 'release').mockImplementation(forbidden),
+          spyOn(relayClient, 'release').mockImplementation(forbidden), spyOn(custody, 'resolve').mockImplementation(forbidden),
+          spyOn(custody, 'readCommitted').mockImplementation(forbidden), spyOn(custody, 'commit').mockImplementation(forbidden),
+          spyOn(custody, 'retire').mockImplementation(forbidden)];
+        try {
+          return rawSource
+            ? await reconcileRetainedWorkEdit(env!,accessPool!,relayPool!,signedCut.relay,sequence,accessClient,relayClient)
+            : await reconcileRetainedSlimMetadata(env!,accessPool!,relayPool!,signedCut.relay,sequence,accessClient,relayClient);
+        } finally {
+          try {
+            for (const queries of [accessQueries, relayQueries]) for (const call of queries.mock.calls) {
+              expect(String(call[0]).trim()).toMatch(/^SELECT\b/i);
+              expect(String(call[0])).not.toMatch(/(?:^|;)\s*(?:BEGIN|COMMIT|ROLLBACK|INSERT|UPDATE|DELETE)\b/i);
+            }
+            for (const guard of guards) expect(guard).not.toHaveBeenCalled();
+          } finally {
+            for (const guard of guards.reverse()) guard.mockRestore();
+            accessQueries.mockRestore(); relayQueries.mockRestore();
+          }
+        }
+      } finally {
+        if (accessClient) { try { await accessClient.query('ROLLBACK'); } finally { accessClient.release(); } }
+        try { await relayClient.query('ROLLBACK'); } finally { relayClient.release(); }
+      }
+    };
+    const reconcile = (sequence: string) => repair(sequence);
+    const reconcileRaw = () => repair('3', true);
     const held = await facts(fuseki);
+    await accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id');
     await expect(reconcile('1')).rejects.toThrow();
     expect(await facts(fuseki)).toEqual(held);
     await accessPool.query('UPDATE access.recovery_fence SET open=false WHERE id');
+    const prematureErasures = mock(async () => { throw new Error('An incomplete signed restore cannot enter erasure release'); });
+    await expect(releaseRestoredGraphHold(fuseki,accessPool,relayPool,env.lineage,{
+      sealedCoverage,hmacKey:recoveryKey,accountPool,contentPool,
+      objectStore:{directory:env.objectDirectory,workObjects:objects},releaseErasures:prematureErasures,
+    })).rejects.toThrow();
+    expect(prematureErasures).not.toHaveBeenCalled();
+    expect(await facts(fuseki)).toEqual(held);
     await expect(reconcile('900')).rejects.toThrow();
     await expect(reconcile('4')).rejects.toThrow();
     expect(await facts(fuseki)).toEqual(held);
@@ -356,6 +529,7 @@ test('held product slim metadata restore preserves retired owner custody, exact 
       }
       const last = await read('4');
       expect(last?.outbox.batch).toMatchObject({ graphSequence: '900', sequence: '4' });
+      expect(await read('3')).toBeNull();
       expect(await read('900')).toBeNull();
       const shapeDigest = first.prepared.envelope.validations[0]!.sha256;
       const shapeBytes = await objects.get(shapeDigest);
@@ -431,19 +605,23 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     expect(withdrawn.some(fact => fact.object!.value === v1.title.value)).toBe(false);
     let lost: CommandEnvelope | undefined;
     fuseki.commandWithReceipt = async envelope => {
-      expect(envelope.receipt).toStartWith('urn:rezics:name-migration:metadata-restore:');
+      expect(envelope.receipt).toBe(raw.receipt);
       const result = await nativeCommand(envelope);
       expect(result.status).toBe('committed');
       lost = envelope;
       throw new CommandOutcomeUnknown('Lost committed held metadata restore acknowledgment');
     };
-    const recovered = await reconcile('3');
+    const recovered = await reconcileRaw();
     fuseki.commandWithReceipt = nativeCommand;
-    expect(recovered).toEqual({receipt:third.terminal.receipt,component:v2.id,revision:third.terminal.revision,replayed:false});
+    expect(recovered).toEqual({receipt:raw.receipt,revision:raw.revision,replayed:false});
     expect(lost).toBeDefined();
-    expect(await reconcile('4')).toEqual({receipt:sources[3]!.terminal.receipt,component:v2.id,
-      revision:sources[3]!.terminal.revision,replayed:false});
+    expect(await reconcile('4')).toEqual({receipt:third.terminal.receipt,component:v2.id,
+      revision:third.terminal.revision,replayed:false});
     expect(await componentFacts(fuseki,[v1.id,v2.id])).toEqual(sourceGraph);
+    // Template-index payloads are new-lineage cache derivations; the retained
+    // raw receipt, revision, actor, pins and original event remain exact.
+    expect((await facts(fuseki,rawSubjects)).filter(fact => fact.graph!.value !== 'urn:rezics:graph:template-index'))
+      .toEqual(sourceRawGraph.filter(fact => fact.graph!.value !== 'urn:rezics:graph:template-index'));
     for (const component of [v1.id,v2.id]) expect((await componentFacts(fuseki,[component])).length).toBeLessThanOrEqual(64);
     for (const source of sources) {
       expect(await facts(fuseki,[source.terminal.receipt,source.terminal.revision])).toEqual([]);
@@ -457,12 +635,15 @@ test('held product slim metadata restore preserves retired owner custody, exact 
       ${iri(marker)} rv:reconciledPriorSequence 900 ; rv:reconciledPriorMainSequence 4 .
       ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:streamSequence 0 } }`)).boolean).toBe(true);
     const finished = await facts(fuseki);
-    for (const envelope of [interrupted!,lost!]) expect(await fuseki.command(envelope)).toMatchObject({status:'committed',
+    expect(await fuseki.command(interrupted!)).toMatchObject({status:'committed',
       position:{datasetId:DATASET,dataEpoch:restoredEpoch,sequence:'0'}});
+    expect(await fuseki.command(lost!)).toMatchObject({status:'committed',
+      position:{datasetId:DATASET,dataEpoch:sourceEpoch,sequence:'899'}});
     expect(await fuseki.command({...lost!,digest:hash('changed original restore source')})).toEqual({status:'conflict'});
-    expect(await fuseki.command({...lost!,update:`${lost!.update}\n# altered source template`})).toEqual({status:'conflict'});
+    expect(await fuseki.command({...interrupted!,update:`${interrupted!.update}\n# altered source template`})).toEqual({status:'conflict'});
     for (const source of sources) expect(await reconcile(source.terminal.streamSequence)).toEqual({
       receipt:source.terminal.receipt,component:source.terminal.component,revision:source.terminal.revision,replayed:true});
+    expect(await reconcileRaw()).toEqual({receipt:raw.receipt,revision:raw.revision,replayed:true});
     expect(await facts(fuseki)).toEqual(finished);
     expect((await accessPool.query(`SELECT receipt,request_digest,payload_sha256,payload,revision,
       terminal,outbox,reconciled_at,retired_at,data_epoch,stream_sequence::text
@@ -477,7 +658,14 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     await accessPool?.end();
     await relayPool?.end();
     await historicalPool?.end();
+    await accountPool?.end();
+    await contentPool?.end();
+    postgres?.stop();
+    originalGraph?.remove();
+    try { execFileSync('docker', ['volume', 'rm', originalVolume], { cwd: root, env: stack.dockerEnv, timeout: 20_000, stdio:'pipe' }); }
+    catch (error) { if (originalGraph) throw error; }
+    rmSync(recoveryDirectory,{recursive:true,force:true});
     if (env) rmSync(env.objectDirectory,{recursive:true,force:true});
     await rootCommand(['stack:reset',...stack.args],120_000);
   }
-},360_000);
+},600_000);
