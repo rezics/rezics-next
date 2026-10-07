@@ -229,9 +229,16 @@ async function linkedHistoricalPin(ref: GraphContentReference,
           OPTIONAL { ?anchor rv:ownerDataEpoch ?epoch ; rv:ownerSequence ?sequence } } }
     } LIMIT 2`, 16_384)).results?.bindings ?? [];
   const row = rows[0];
+  const anchor = { preparationId: row?.preparation?.value ?? null,
+    ownerEpoch: row?.epoch?.value ?? null, ownerSequence: row?.sequence?.value ?? null };
+  for (const field of ['preparationId','ownerEpoch','ownerSequence'] as const) {
+    if (ref[field] !== null && ref[field] !== anchor[field]) {
+      throw new ContentRecoveryConflict(`retained graph Content pin ${field} conflicts: ${ref.object}`);
+    }
+  }
   const pin = { ...ref, byteDigest: row?.digest?.value ?? null,
-    preparationId: row?.preparation?.value ?? ref.preparationId,
-    ownerEpoch: row?.epoch?.value ?? ref.ownerEpoch, ownerSequence: row?.sequence?.value ?? ref.ownerSequence };
+    preparationId: ref.preparationId ?? anchor.preparationId,
+    ownerEpoch: ref.ownerEpoch ?? anchor.ownerEpoch, ownerSequence: ref.ownerSequence ?? anchor.ownerSequence };
   if (rows.length !== 1 || !wellFormed(pin) || !pin.byteDigest) {
     throw new ContentRecoveryConflict(`retained graph Content digest is unavailable or ambiguous: ${ref.object}`);
   }

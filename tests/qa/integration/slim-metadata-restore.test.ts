@@ -1197,6 +1197,23 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
       expect(await captureContentRecoveryCoverage(contentPool!, references, context)).toEqual(signedCut.content);
     });
     await borrowed(async context => {
+      const nativePin = pins.find(pin => pin.graph === GRAPHS.outbox && pin.byteDigest === null);
+      expect(nativePin).toBeDefined();
+      const position = (await context.contentClient.query<{ epoch: string; sequence: string }>(
+        'SELECT data_epoch::text AS epoch, sequence::text FROM content.receipt WHERE operation_id=$1',
+        [input.preparationId])).rows[0]!;
+      const conflictingPins = [
+        { field:'preparationId', pin:{ ...nativePin!, preparationId:secondPreparation } },
+        { field:'ownerEpoch', pin:{ ...nativePin!, ownerEpoch:randomUUID(), ownerSequence:position.sequence } },
+        { field:'ownerSequence', pin:{ ...nativePin!, ownerEpoch:position.epoch,
+          ownerSequence:(BigInt(position.sequence)+1n).toString() } },
+      ];
+      for (const conflict of conflictingPins) {
+        await expect(captureContentRecoveryCoverage(contentPool!, references.map(ref =>
+          ref.subject === nativePin!.subject && ref.graph === nativePin!.graph ? conflict.pin : ref), context))
+          .rejects.toThrow(`retained graph Content pin ${conflict.field} conflicts`);
+        expect(await captureContentRecoveryCoverage(contentPool!, references, context)).toEqual(signedCut.content);
+      }
       await expect(captureContentRecoveryCoverage(contentPool!, pins.map(pin => ({ ...pin, byteDigest: null })), context))
         .rejects.toBeInstanceOf(ContentRecoveryConflict);
       await expect(captureContentRecoveryCoverage(contentPool!, pins.map(pin => ({ ...pin, byteDigest: '0'.repeat(64) })), context))
