@@ -14,8 +14,8 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, withRecovery, withSlot,
   mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
-import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces,
-  type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
+import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, unclassifiedTypecheckLines,
+  type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -3119,7 +3119,7 @@ describe('pre-merge type check', () => {
 
   test('a diagnostic only on the branch blocks the merge', async () => {
     const { run, calls } = stub({ main: { branch: fail(error('tests/a.test.ts', 3, 'bad call')), main: pass }, web: { branch: pass } });
-    const refusal = await typecheckGate(['main', 'web'], run);
+    const refusal = await typecheckGate(['main', 'web'], run, 1000);
     expect(refusal).toContain('introduced type errors');
     expect(refusal).toContain('main: tests/a.test.ts: error TS2769: bad call');
     expect(calls.sort()).toEqual(['main:branch', 'main:main', 'web:branch']);
@@ -3128,7 +3128,7 @@ describe('pre-merge type check', () => {
   test('a diagnostic already on main is reported and does not block', async () => {
     const old = error('src/old.ts', 7, 'old problem');
     const { run } = stub({ main: { branch: fail(error('src/old.ts', 9, 'old problem')), main: fail(old) } });
-    expect(await typecheckGate(['main'], run)).toBeUndefined();
+    expect(await typecheckGate(['main'], run, 1000)).toBeUndefined();
   });
 
   test('only the diagnostics beyond main block, and a clean branch never type-checks main', async () => {
@@ -3136,27 +3136,66 @@ describe('pre-merge type check', () => {
       main: { branch: fail(error('src/old.ts', 9, 'old problem'), error('src/new.ts', 1, 'new problem')), main: fail(error('src/old.ts', 7, 'old problem')) },
       model: { branch: pass },
     });
-    const refusal = await typecheckGate(['main', 'model'], run);
+    const refusal = await typecheckGate(['main', 'model'], run, 1000);
     expect(refusal).toContain('src/new.ts: error TS2769: new problem');
     expect(refusal).not.toContain('old problem');
     expect(calls).not.toContain('model:main');
   });
 
   test('an unfinished run or a failure without diagnostics is inconclusive', async () => {
-    expect(await typecheckGate(['main'], stub({ main: { branch: { done: false, status: null, output: '' } } }).run))
+    expect(await typecheckGate(['main'], stub({ main: { branch: { done: false, status: null, output: '' } } }).run, 1000))
       .toContain('type check inconclusive');
-    expect(await typecheckGate(['main'], stub({ main: { branch: fail('tsc: command not found') } }).run))
+    expect(await typecheckGate(['main'], stub({ main: { branch: fail('tsc: command not found') } }).run, 1000))
       .toContain('failed without diagnostics');
-    expect(await typecheckGate(['main'], stub({ main: { branch: fail(error('a.ts', 1, 'x')), main: { done: false, status: null, output: '' } } }).run))
+    expect(await typecheckGate(['main'], stub({ main: { branch: fail(error('a.ts', 1, 'x')), main: { done: false, status: null, output: '' } } }).run, 1000))
       .toContain('inconclusive');
   });
 
+  test('a location-free diagnostic only on the branch blocks even when main has other diagnostics', async () => {
+    const missing = "error TS6053: File 'tests/gone.ts' not found.";
+    expect(typecheckDiagnostics(`${missing}\n${error('src/old.ts', 7, 'old problem')}`))
+      .toEqual([missing, 'src/old.ts: error TS2769: old problem']);
+    const { run } = stub({ main: { branch: fail(missing, error('src/old.ts', 9, 'old problem')), main: fail(error('src/old.ts', 7, 'old problem')) } });
+    const refusal = await typecheckGate(['main'], run, 1000);
+    expect(refusal).toContain('introduced type errors');
+    expect(refusal).toContain(`main: ${missing}`);
+    const inherited = stub({ main: { branch: fail(missing), main: fail(missing, error('src/old.ts', 7, 'old problem')) } });
+    expect(await typecheckGate(['main'], inherited.run, 1000)).toBeUndefined();
+  });
+
+  test('an error line the parser cannot classify is inconclusive on either side', async () => {
+    const pretty = "src/a.ts:3:5 - error TS2322: Type 'string' is not assignable to type 'number'.";
+    expect(unclassifiedTypecheckLines(`${pretty}\n${error('a.ts', 1, 'x')}\n  continued error TS1`)).toEqual([pretty]);
+    const branch = await typecheckGate(['main'], stub({ main: { branch: fail(pretty, error('src/old.ts', 9, 'old problem')) } }).run, 1000);
+    expect(branch).toContain('type check inconclusive');
+    expect(branch).toContain('unrecognised');
+    const main = await typecheckGate(['main'], stub({ main: { branch: fail(error('a.ts', 1, 'x')), main: fail(pretty, error('a.ts', 1, 'x')) } }).run, 1000);
+    expect(main).toContain('type check on main is inconclusive');
+  });
+
+  test('every main-side comparison shares one deadline, as every branch run does', async () => {
+    let clock = 0;
+    const deadlines: string[] = [];
+    const run = async (workspace: string, side: 'branch' | 'main', deadline: number): Promise<TypecheckRun> => {
+      deadlines.push(`${workspace}:${side}:${deadline}`);
+      clock += 100;
+      return side === 'branch' ? fail(error(`${workspace}.ts`, 1, 'x')) : fail(error(`${workspace}.ts`, 1, 'x'));
+    };
+    expect(await typecheckGate(['main', 'web', 'model'], run, 500, () => clock)).toBeUndefined();
+    // Branch runs start together at 0; the first main run starts at 300 and the next two inherit its deadline.
+    expect(deadlines).toEqual(['main:branch:500', 'web:branch:500', 'model:branch:500',
+      'main:main:800', 'web:main:800', 'model:main:800']);
+  });
+
   test('no touched workspace runs nothing', async () => {
-    expect(await typecheckGate([], stub({}).run)).toBeUndefined();
+    expect(await typecheckGate([], stub({}).run, 1000)).toBeUndefined();
   });
 });
 
 describe('main fast-forward', () => {
+  const gates = (files: string[] = [], over: Partial<FastForwardGates> = {}): FastForwardGates =>
+    ({ gatedFiles: new Set(files), regated: false, typechecked: [], retyped: false, ...over });
+
   const prepared = (before: string, after: string): PreparedMerge =>
     ({ before, baseline: before, after, worktree: '/w', branch: 'goal/g', sharers: ['G-1'], committed: ['a.ts'] });
 
@@ -3192,7 +3231,7 @@ describe('main fast-forward', () => {
 
   test('a main that already sits under the branch fast-forwards without a rebase', () => {
     const h = history({ t1: 'm1', m1: 'm0' }, {}, ['m1'], {});
-    expect(fastForwardMain(h.sync, prepared('m1', 't1'), new Set(), false, () => {})).toEqual({ kind: 'merged', prepared: prepared('m1', 't1') });
+    expect(fastForwardMain(h.sync, prepared('m1', 't1'), gates(), () => {})).toEqual({ kind: 'merged', prepared: prepared('m1', 't1') });
     expect(h.log).toEqual(['ff t1']);
   });
 
@@ -3201,7 +3240,7 @@ describe('main fast-forward', () => {
     const rebased = prepared('m2', 't2');
     const h = history({ t1: 'm1', t2: 'm2', m2: 'm1', m1: 'm0' }, { m2: ['c.ts'], t1: ['a.ts'] }, ['m2'], { m2: rebased });
     const notes: string[] = [];
-    expect(fastForwardMain(h.sync, prepared('m1', 't1'), new Set(['b.ts']), false, text => notes.push(text)))
+    expect(fastForwardMain(h.sync, prepared('m1', 't1'), gates(['b.ts']), text => notes.push(text)))
       .toEqual({ kind: 'merged', prepared: rebased });
     expect(h.log).toEqual(['rebase', 'ff t2']);
     expect(h.forwarded()).toBe('t2');
@@ -3211,10 +3250,10 @@ describe('main fast-forward', () => {
   test('new commits that touch gated files rerun the gate once, then refuse the second overlap', () => {
     const rebased = prepared('m2', 't2');
     const h = history({ t1: 'm1', t2: 'm2', m2: 'm1', m1: 'm0' }, { m2: ['b.ts'] }, ['m2'], { m2: rebased });
-    expect(fastForwardMain(h.sync, prepared('m1', 't1'), new Set(['b.ts']), false, () => {})).toEqual({ kind: 'regate', prepared: rebased });
+    expect(fastForwardMain(h.sync, prepared('m1', 't1'), gates(['b.ts']), () => {})).toEqual({ kind: 'regate', prepared: rebased });
     expect(h.log).toEqual(['rebase']);
     const again = history({ t1: 'm1', m2: 'm1', m1: 'm0' }, { m2: ['b.ts'] }, ['m2'], {});
-    const stopped = fastForwardMain(again.sync, prepared('m1', 't1'), new Set(['b.ts']), true, () => {});
+    const stopped = fastForwardMain(again.sync, prepared('m1', 't1'), gates(['b.ts'], { regated: true }), () => {});
     expect(stopped).toMatchObject({ kind: 'stopped', conflict: true });
     expect((stopped as { message: string }).message).toContain('b.ts');
     expect(again.log).toEqual([]);
@@ -3226,13 +3265,49 @@ describe('main fast-forward', () => {
     // Main moves to m3 between the first rebase and the fast-forward.
     const refresh = h.sync.refresh;
     h.sync.refresh = () => { const next = refresh(); h.advance(); return next; };
-    expect(fastForwardMain(h.sync, prepared('m1', 't1'), new Set(), false, () => {})).toEqual({ kind: 'merged', prepared: second });
+    expect(fastForwardMain(h.sync, prepared('m1', 't1'), gates(), () => {})).toEqual({ kind: 'merged', prepared: second });
     expect(h.log).toEqual(['rebase', 'rebase', 'ff t3']);
+  });
+
+  describe('type check after the retry rebase', () => {
+    const rebased = prepared('m2', 't2');
+    const move = (file: string) => history({ t1: 'm1', t2: 'm2', m2: 'm1', m1: 'm0' }, { m2: [file] }, ['m2'], { m2: rebased });
+
+    test('main changing another source of a checked workspace reruns that workspace only', () => {
+      const h = move('services/main/src/exported-type.ts');
+      expect(fastForwardMain(h.sync, prepared('m1', 't1'), gates([], { typechecked: ['main', 'web'] }), () => {}))
+        .toEqual({ kind: 'retypecheck', prepared: rebased, workspaces: ['main'] });
+      expect(h.log).toEqual(['rebase']);
+      expect(h.forwarded()).toBeUndefined();
+    });
+
+    test('a second such change after the retry type check refuses', () => {
+      const h = move('services/main/src/exported-type.ts');
+      const stopped = fastForwardMain(h.sync, prepared('m1', 't1'), gates([], { typechecked: ['main'], retyped: true }), () => {});
+      expect(stopped).toMatchObject({ kind: 'stopped', conflict: true });
+      expect((stopped as { message: string }).message).toContain('main');
+      expect(h.log).toEqual([]);
+    });
+
+    test('changes outside the checked workspaces, or with the type check skipped, fast-forward', () => {
+      const other = move('apps/web/src/a.tsx');
+      expect(fastForwardMain(other.sync, prepared('m1', 't1'), gates([], { typechecked: ['main'] }), () => {})).toMatchObject({ kind: 'merged' });
+      const docs = move('services/main/README.md');
+      expect(fastForwardMain(docs.sync, prepared('m1', 't1'), gates([], { typechecked: ['main'] }), () => {})).toMatchObject({ kind: 'merged' });
+      const skipped = move('services/main/src/exported-type.ts');
+      expect(fastForwardMain(skipped.sync, prepared('m1', 't1'), gates(), () => {})).toMatchObject({ kind: 'merged' });
+    });
+
+    test('a unit overlap reruns both gates instead', () => {
+      const h = move('services/main/src/exported-type.ts');
+      expect(fastForwardMain(h.sync, prepared('m1', 't1'), gates(['services/main/src/exported-type.ts'], { typechecked: ['main'] }), () => {}))
+        .toEqual({ kind: 'regate', prepared: rebased });
+    });
   });
 
   test('a conflicting second rebase stops before touching main', () => {
     const h = history({ t1: 'm1', m2: 'm1', m1: 'm0' }, {}, ['m2'], {});
-    expect(() => fastForwardMain(h.sync, prepared('m1', 't1'), new Set(), false, () => {})).toThrow('does not rebase onto main');
+    expect(() => fastForwardMain(h.sync, prepared('m1', 't1'), gates(), () => {})).toThrow('does not rebase onto main');
     expect(h.log).toEqual(['rebase']);
     expect(h.forwarded()).toBeUndefined();
   });
@@ -3240,13 +3315,13 @@ describe('main fast-forward', () => {
   test('a rebase that returns a refusal is passed through without a conflict mark', () => {
     const h = history({ t1: 'm1', m2: 'm1', m1: 'm0' }, {}, ['m2'], {});
     h.sync.refresh = () => 'G-1 composition root does not parse';
-    expect(fastForwardMain(h.sync, prepared('m1', 't1'), new Set(), false, () => {}))
+    expect(fastForwardMain(h.sync, prepared('m1', 't1'), gates(), () => {}))
       .toEqual({ kind: 'stopped', message: 'G-1 composition root does not parse', conflict: false });
   });
 
   test('a main that was rewritten refuses instead of rebasing', () => {
     const h = history({ t1: 'm1', x2: 'x1' }, {}, ['x2'], {});
-    expect(fastForwardMain(h.sync, prepared('m1', 't1'), new Set(), false, () => {})).toMatchObject({ kind: 'stopped', conflict: true });
+    expect(fastForwardMain(h.sync, prepared('m1', 't1'), gates(), () => {})).toMatchObject({ kind: 'stopped', conflict: true });
     expect(h.log).toEqual([]);
   });
 });

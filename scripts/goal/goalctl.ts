@@ -2311,15 +2311,25 @@ export function typecheckWorkspaces(files: readonly string[]): string[] {
     .map(([workspace]) => workspace);
 }
 
-/** `tsc` diagnostics keyed without line and column, so an edit above an old error does not make it new. */
+/** `tsc` diagnostics keyed without line and column, so an edit above an old error does not make it new.
+ * A diagnostic with no location (`error TS6053: File not found`) is keyed by its code and message. */
 export function typecheckDiagnostics(output: string): string[] {
   const diagnostics: string[] = [];
   for (const line of output.split('\n')) {
-    const match = /^(\S.*?)\(\d+,\d+\): (error TS\d+: .*)$/.exec(line.trimEnd());
-    if (match) diagnostics.push(`${match[1]}: ${match[2]}`);
+    const located = /^(\S.*?)\(\d+,\d+\): (error TS\d+: .*)$/.exec(line.trimEnd());
+    const bare = /^(error TS\d+: .*)$/.exec(line.trimEnd());
+    if (located) diagnostics.push(`${located[1]}: ${located[2]}`);
+    else if (bare) diagnostics.push(bare[1]!);
     else if (/^\s+\S/.test(line) && diagnostics.length) diagnostics[diagnostics.length - 1] += ` ${line.trim()}`;
   }
   return diagnostics.sort();
+}
+
+/** Lines that name a TypeScript error in a shape the parser does not know (for example `tsc --pretty`).
+ * Comparing around them would let a branch-only error pass, so the run is inconclusive instead. */
+export function unclassifiedTypecheckLines(output: string): string[] {
+  const known = (line: string) => /^(\S.*?)\(\d+,\d+\): error TS\d+: /.test(line) || /^error TS\d+: /.test(line);
+  return output.split('\n').filter(line => /error TS\d+/.test(line) && !/^\s/.test(line) && !known(line.trimEnd()));
 }
 
 /** Branch diagnostics beyond those `main` already has, counting repeats. */
@@ -2336,26 +2346,33 @@ export function introducedTypecheckDiagnostics(branch: readonly string[], main: 
 export interface TypecheckRun { done: boolean; status: number | null; output: string }
 export type TypecheckSide = 'branch' | 'main';
 
-/** Branch type checks run together; main is checked only for workspaces whose branch run has diagnostics.
- * An unfinished run, or a failure with no parsed diagnostic, is inconclusive and refuses the merge. */
+/** Branch type checks run together under one deadline; main is checked only for workspaces whose branch run has
+ * diagnostics, under a second deadline shared by every comparison so that side stays within the budget in total.
+ * An unfinished run, a failure with no parsed diagnostic, or an unrecognised error line is inconclusive and refuses the merge. */
 export async function typecheckGate(workspaces: readonly string[],
-  run: (workspace: string, side: TypecheckSide) => Promise<TypecheckRun>): Promise<string | undefined> {
+  run: (workspace: string, side: TypecheckSide, deadline: number) => Promise<TypecheckRun>,
+  budgetMs: number, now: () => number = Date.now): Promise<string | undefined> {
   if (!workspaces.length) return;
-  const branch = await Promise.all(workspaces.map(async workspace => ({ workspace, result: await run(workspace, 'branch') })));
+  const branchDeadline = now() + budgetMs;
+  const branch = await Promise.all(workspaces.map(async workspace => ({ workspace, result: await run(workspace, 'branch', branchDeadline) })));
   const inconclusive: string[] = [];
   const failing: { workspace: string; diagnostics: string[] }[] = [];
   for (const { workspace, result } of branch) {
     const diagnostics = typecheckDiagnostics(result.output);
+    const unknown = unclassifiedTypecheckLines(result.output);
     if (!result.done) inconclusive.push(`${workspace}: the branch type check did not finish`);
+    else if (unknown.length) inconclusive.push(`${workspace}: unrecognised type error output:\n    ${unknown.join('\n    ')}`);
     else if (result.status === 0) console.log(`Type check ${workspace}: passes`);
     else if (!diagnostics.length) inconclusive.push(`${workspace}: the type check failed without diagnostics:\n${result.output.slice(-2000)}`);
     else failing.push({ workspace, diagnostics });
   }
   const introduced: string[] = [];
+  let mainDeadline: number | undefined;
   for (const { workspace, diagnostics } of failing) {
-    const main = await run(workspace, 'main');
+    mainDeadline ??= now() + budgetMs;
+    const main = await run(workspace, 'main', mainDeadline);
     const inherited = typecheckDiagnostics(main.output);
-    if (!main.done || (main.status !== 0 && !inherited.length)) {
+    if (!main.done || unclassifiedTypecheckLines(main.output).length || (main.status !== 0 && !inherited.length)) {
       inconclusive.push(`${workspace}: the type check on main is inconclusive`);
       continue;
     }
@@ -2395,19 +2412,19 @@ async function runTypecheck(cwd: string, workspace: string, deadline: number): P
   }
 }
 
-/** Type-checks the workspaces the branch touched before the unit gate, within the unit gate's per-side budget. */
+/** Type-checks the workspaces the branch touched before the unit gate, within the unit gate's per-side budget.
+ * `only` narrows a rerun to workspaces whose `main` sources changed under the branch. */
 async function preMergeTypecheckGate(worktree: string, mainRoot: string, before: string, files: readonly string[],
-  skip: boolean): Promise<string | undefined> {
+  skip: boolean, only?: readonly string[]): Promise<string | undefined> {
   if (skip) {
     console.log('Type check skipped: --skip-type-gate explicitly requested by the manager');
     return;
   }
-  const workspaces = typecheckWorkspaces(files);
+  const workspaces = typecheckWorkspaces(files).filter(workspace => !only || only.includes(workspace));
   console.log(`Pre-merge type check: ${workspaces.length ? workspaces.join(', ') : 'no TypeScript workspace touched'} against main ${before.slice(0, 12)}`);
   let baseline: string | undefined;
   try {
-    return await typecheckGate(workspaces, async (workspace, side) => {
-      const deadline = Date.now() + unitGateBudgetMs();
+    return await typecheckGate(workspaces, async (workspace, side, deadline) => {
       if (side === 'branch') return runTypecheck(worktree, workspace, deadline);
       if (!baseline) {
         mkdirSync(join(mainRoot, '.temp'), { recursive: true });
@@ -2417,7 +2434,7 @@ async function preMergeTypecheckGate(worktree: string, mainRoot: string, before:
         if (install.status !== 0) throw new Error(`Type check baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
       }
       return runTypecheck(baseline, workspace, deadline);
-    });
+    }, unitGateBudgetMs());
   } finally {
     if (baseline) {
       git(mainRoot, ['worktree', 'remove', '--force', baseline], true);
@@ -2575,14 +2592,21 @@ export interface MainSync {
 
 export type FastForward =
   | { kind: 'merged'; prepared: PreparedMerge }
+  /** The unit gate and the type check both rerun on the rebased branch. */
   | { kind: 'regate'; prepared: PreparedMerge }
+  /** Only the type check of these workspaces reruns: main changed their sources but none the unit gate selected. */
+  | { kind: 'retypecheck'; prepared: PreparedMerge; workspaces: string[] }
   | { kind: 'stopped'; message?: string; conflict: boolean };
 
+/** What the gates already covered, and how often each may rerun. `typechecked` is empty when the type check was skipped. */
+export interface FastForwardGates { gatedFiles: ReadonlySet<string>; regated: boolean; typechecked: readonly string[]; retyped: boolean }
+
 /** Fast-forwards `main` to the task. A `main` that moved past the gated rebase is rebased onto again and, if that
- * second rebase conflicts, the merge stops with the conflict. The gate reruns once, and only when the new commits
- * touch the task's files or the files the gate selected. */
-export function fastForwardMain(sync: MainSync, current: PreparedMerge, gatedFiles: ReadonlySet<string>,
-  regated: boolean, note: (text: string) => void = console.log): FastForward {
+ * second rebase conflicts, the merge stops with the conflict. The unit gate reruns once, and only when the new commits
+ * touch the task's files or the files the gate selected. The type check reruns once, separately, when they touch any
+ * source of a workspace it checked: a widened exported type breaks callers in files the branch never changed. */
+export function fastForwardMain(sync: MainSync, current: PreparedMerge, gates: FastForwardGates,
+  note: (text: string) => void = console.log): FastForward {
   let prepared = current;
   // The first rebase answers a moved main; the second answers one that moves again before the fast-forward lands.
   for (let rebases = 0; ; ) {
@@ -2595,18 +2619,25 @@ export function fastForwardMain(sync: MainSync, current: PreparedMerge, gatedFil
       if (rebases === 2) throw new Error(`Fast-forward failed in the main checkout: main moved again after ${rebases} rebases`);
       // Inspect every intervening commit: a change reverted later still touched the gated set.
       const base = sync.mergeBase(head, prepared.after);
-      const protectedFiles = new Set([...sync.changed(base, prepared.after), ...gatedFiles]);
-      const overlap = [...new Set(sync.touched(base, head).filter(file => protectedFiles.has(file)))];
-      if (overlap.length && regated) {
+      const touched = sync.touched(base, head);
+      const protectedFiles = new Set([...sync.changed(base, prepared.after), ...gates.gatedFiles]);
+      const overlap = [...new Set(touched.filter(file => protectedFiles.has(file)))];
+      if (overlap.length && gates.regated) {
         return { kind: 'stopped', conflict: true,
           message: `main touched task or gated files again after the retry unit gate; retry merge:\n  ${overlap.join('\n  ')}` };
+      }
+      const retype = typecheckWorkspaces(touched).filter(workspace => gates.typechecked.includes(workspace));
+      if (!overlap.length && retype.length && gates.retyped) {
+        return { kind: 'stopped', conflict: true,
+          message: `main changed type-checked workspaces again after the retry type check; retry merge:\n  ${retype.join('\n  ')}` };
       }
       const refreshed = sync.refresh();
       rebases++;
       if (typeof refreshed === 'string' || !refreshed) return { kind: 'stopped', message: refreshed, conflict: false };
       prepared = refreshed;
-      note(`Main advanced during the unit gate; rebased onto it${overlap.length ? ', re-running the gate once' : ', existing gate remains valid'}`);
+      note(`Main advanced during the unit gate; rebased onto it${overlap.length ? ', re-running the gate once' : retype.length ? `, re-running the type check of ${retype.join(', ')} once` : ', existing gate remains valid'}`);
       if (overlap.length) return { kind: 'regate', prepared };
+      if (retype.length) return { kind: 'retypecheck', prepared, workspaces: retype };
       continue;
     }
     const merge = sync.fastForward(prepared.after);
@@ -2760,12 +2791,16 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   // do not touch the task's changes or selected tests; only an overlap consumes the one re-gate.
   const gatedFiles = new Set<string>();
   let regated = false;
-  const gate = (merge: PreparedMerge) => preMergeTypecheckGate(merge.worktree, root, merge.baseline, merge.committed, flags.has('--skip-type-gate'))
+  let retyped = false;
+  const skipTypes = flags.has('--skip-type-gate');
+  const typecheck = (merge: PreparedMerge, only?: readonly string[]) =>
+    preMergeTypecheckGate(merge.worktree, root, merge.baseline, merge.committed, skipTypes, only);
+  const gate = (merge: PreparedMerge) => typecheck(merge)
     .then(refusal => refusal ?? preMergeUnitGate(merge.worktree, root, merge.baseline, flags.has('--skip-unit-gate'), gatedFiles));
   let gateFailure = await gate(preparedMerge);
   for (;;) {
     const current: PreparedMerge = preparedMerge;
-    const outcome = await withLedger((ledger): string | PreparedMerge | undefined => {
+    const outcome = await withLedger((ledger): string | { rerun: PreparedMerge; workspaces?: string[] } | undefined => {
       const task = taskOf(ledger, id);
       assertOwner(task);
       reviewGuard?.(task);
@@ -2800,13 +2835,14 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
         changed: (from, to) => git(root, ['diff', '--name-only', '--no-renames', `${from}..${to}`]).split('\n').filter(Boolean),
         refresh: () => prepareMerge(ledger),
         fastForward: after => retryGitIndexLock(() => spawnSync('git', ['merge', '--ff-only', after], { cwd: root, encoding: 'utf8' })),
-      }, current, gatedFiles, regated);
+      }, current, { gatedFiles, regated, retyped, typechecked: skipTypes ? [] : typecheckWorkspaces(current.committed) });
       if (advance.kind === 'stopped') {
         if (advance.conflict) task.state = 'conflict';
         return advance.message && advance.conflict ? `${task.id} ${advance.message}` : advance.message;
       }
       const prepared = advance.prepared;
-      if (advance.kind === 'regate') return prepared;
+      if (advance.kind === 'regate') return { rerun: prepared };
+      if (advance.kind === 'retypecheck') return { rerun: prepared, workspaces: advance.workspaces };
       const event: MergeEvent = { before: prepared.before, after: prepared.after, goal: task.goal ?? 'program',
         taskIds: prepared.sharers, at: new Date().toISOString() };
       appendFileSync(join(stateDir, 'merges.jsonl'), `${JSON.stringify(event)}\n`);
@@ -2817,9 +2853,13 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     });
     if (typeof outcome === 'string') throw new Error(outcome);
     if (!outcome) return;
-    preparedMerge = outcome;
-    regated = true;
-    gateFailure = await gate(outcome);
+    preparedMerge = outcome.rerun;
+    retyped = true;
+    if (outcome.workspaces) gateFailure = await typecheck(outcome.rerun, outcome.workspaces);
+    else {
+      regated = true;
+      gateFailure = await gate(outcome.rerun);
+    }
   }
 }
 
