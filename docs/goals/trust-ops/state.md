@@ -28,7 +28,13 @@ committed graph release before Access CAS, and committed owner releases before
 outer outcome recording. Prior reconciliation/remaining closure must authenticate
 the mutated copy; no optional hold bypass. G-1351 keeps these exclusions until
 real positive retry evidence exists.
-Private historical command payload erasure remains a separate open contract.
+Private historical command payload erasure remains a separate open contract. A distinct
+verified post-erasure capture gap is now assigned to kernel: historical graph
+Content pins survive SQL sanitization, while the existing recovery-pin reader
+unconditionally requires available bytes. It needs exact journal/native/
+supersession-bound erased closure, preserving original identities/digests.
+G-1351's genuine pre-erasure restore positive remains independent; neither
+post-erasure recapture nor physical PostgreSQL/WAL/backups destruction is proved.
 
 The compatible small fixture `fx-small-95570bd9906b` remains frozen at application
 `683697792`. Repaired campaign run `20261007t172124-39499f` passed in237.9seconds:
