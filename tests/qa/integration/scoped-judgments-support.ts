@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { GLOBAL_TARGET_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/target-context-authority.ts';
 import { ProjectionStore } from '../../../services/main/src/modules/projection/store.ts';
@@ -11,6 +12,7 @@ import { TargetRatingInventoryStore } from '../../../services/main/src/modules/r
 import { SEMANTIC_TERMS } from '../../../services/main/src/modules/semantic/schema.ts';
 import { startMediaStack } from './media-support.ts';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
 export const short = (value: string) => value.slice(-36);
 export const RV = 'https://rezics.com/vocab/';
@@ -63,6 +65,7 @@ export async function scopedJudgmentsFixture() {
   const app = createMainApp(stack.fuseki, {
     environment: stack.env,
     access: stack.access,
+    platformAccess: new AccessExposure(stack.accessPool),
     account,
     content: stack.content,
     contentAuthoring: stack.content,
@@ -147,6 +150,8 @@ export async function scopedJudgmentsFixture() {
   // account another file designated as the project's first administrator.
   await grant(owner, 'semantic:create:root', 'semantic.change');
   await grant(owner, GLOBAL_TARGET_CONTEXT_SCOPE, 'rating.context.create');
+  // The Event used as a projection frame selects the closed events capability.
+  await grantRecordedPlatformUse(stack.accessPool, owner.principalId, ['events'], owner.actor);
   const work = await stack.publicWork(owner.actor);
   const realm = (
     await json<{ realm: string }>(
