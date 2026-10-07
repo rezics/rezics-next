@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { Pool } from 'pg';
@@ -20,6 +20,7 @@ import type { MainWorkDependencies } from '../../../services/main/src/routes/dep
 import type { PlatformGrantResult } from '../../../services/main/src/modules/access/platform-grants.ts';
 import { mainSchemaReady } from '../../../services/main/src/schema-ready.ts';
 import { checkPlatformGovernance } from '../platform-governance.ts';
+import { schemaFiles } from '../../qa/schema-files.ts';
 import {
   migrateContentFromArtifact,
   migrateTracked,
@@ -427,6 +428,227 @@ test('first governance designation is atomic, ordinary grants add backups and op
       if (previous[name] === undefined) delete process.env[name];
       else process.env[name] = previous[name];
     }
+    await pool?.end();
+    if (started)
+      execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], {
+        cwd: state,
+        stdio: 'pipe',
+      });
+    rmSync(state, { recursive: true, force: true });
+  }
+}, 120_000);
+
+test('revoking the designated holder ends the seeded assignment ceiling', async () => {
+  const state = join(repositoryRoot, '.temp', `platform-governance-${randomUUID()}`);
+  const data = join(state, 'pgdata');
+  mkdirSync(state, { recursive: true, mode: 0o700 });
+  let started = false;
+  let pool: Pool | undefined;
+  try {
+    execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], {
+      cwd: state,
+      stdio: 'pipe',
+    });
+    const port = await new Promise<number>((resolve, reject) => {
+      const server = createServer();
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address();
+        if (!address || typeof address === 'string')
+          return reject(new Error('No PostgreSQL test port'));
+        server.close(() => resolve(address.port));
+      });
+    });
+    execFileSync(
+      'pg_ctl',
+      [
+        '-D',
+        data,
+        '-l',
+        join(state, 'postgres.log'),
+        '-o',
+        `-h 127.0.0.1 -p ${port} -k /tmp`,
+        '-w',
+        'start',
+      ],
+      { cwd: state, stdio: 'pipe' },
+    );
+    started = true;
+    const url = `postgres://127.0.0.1:${port}/postgres?user=${encodeURIComponent(process.env.USER!)}`;
+    pool = new Pool({ connectionString: url, max: 4 });
+    const owner = pool;
+    for (const file of schemaFiles(repositoryRoot, 'access')) {
+      if (file === '1298_platform_grant_seed_ceiling.sql') continue;
+      await owner.query(
+        readFileSync(join(repositoryRoot, 'services/main/migrations/access', file), 'utf8'),
+      );
+    }
+    const principal = async () => {
+      const id = randomUUID(),
+        actor = `https://rezics.com/id/${randomUUID()}`;
+      const identity = {
+        issuer: 'https://accounts.platform.test',
+        subject: randomUUID(),
+        emailVerified: true,
+      };
+      await owner.query(
+        'INSERT INTO access.principal(id,account_issuer,account_subject) VALUES ($1,$2,$3)',
+        [id, identity.issuer, identity.subject],
+      );
+      await owner.query("INSERT INTO access.authority_subject(id,kind) VALUES ($1,'agent')", [
+        actor,
+      ]);
+      await owner.query(
+        "INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until) VALUES ($1,$2,$3,'agent.control','infinity')",
+        [randomUUID(), id, actor],
+      );
+      return { id, actor, identity };
+    };
+    const first = await principal(),
+      second = await principal(),
+      third = await principal();
+    expect(
+      (
+        await new AccessPlatformAdministrators(owner).designateFirst(
+          first.identity.issuer,
+          first.identity.subject,
+          () => undefined,
+        )
+      ).status,
+    ).toBe('granted');
+    const seeded = (
+      await owner.query<{ id: string; generation: string }>(
+        `SELECT g.id, g.generation FROM access.principal_permission_grant g
+        JOIN access.platform_grant_episode e ON e.principal_grant_id = g.id
+        WHERE g.principal_id = $1 AND g.action = 'platform:grant'
+        ORDER BY e.created_at, e.id LIMIT 1`,
+        [first.id],
+      )
+    ).rows[0]!;
+    const ceiling = async () =>
+      (
+        await owner.query<{ active: boolean }>(
+          `SELECT g.active FROM access.platform_assignment_ceiling c
+          JOIN access.permission_grant g ON g.id = c.ceiling_id WHERE c.grant_id = $1`,
+          [seeded.id],
+        )
+      ).rows;
+    expect(
+      (
+        await owner.query(
+          `SELECT id FROM access.permission_grant
+          WHERE recipient_subject = $1 AND action = 'access.grant.assign.platform'`,
+          [first.actor],
+        )
+      ).rows,
+    ).toHaveLength(1);
+    expect(await ceiling()).toEqual([]);
+    await owner.query(
+      readFileSync(
+        join(
+          repositoryRoot,
+          'services/main/migrations/access/1298_platform_grant_seed_ceiling.sql',
+        ),
+        'utf8',
+      ),
+    );
+    expect(await ceiling()).toEqual([{ active: true }]);
+    await owner.query('SELECT access.link_seeded_platform_assignment_ceiling($1)', [first.id]);
+    expect(await ceiling()).toEqual([{ active: true }]);
+    expect(
+      (
+        await new AccessPlatformAdministrators(owner).designateFirst(
+          first.identity.issuer,
+          first.identity.subject,
+          () => undefined,
+        )
+      ).status,
+    ).toBe('ignored');
+    expect(
+      (
+        await owner.query(
+          `SELECT id FROM access.permission_grant
+          WHERE recipient_subject = $1 AND action = 'access.grant.assign.platform'`,
+          [first.actor],
+        )
+      ).rows,
+    ).toHaveLength(1);
+    const holders = new Map([
+      ['first', first],
+      ['second', second],
+    ]);
+    const grantApp = new Elysia().use(
+      accessAuthorityRoutes({
+        grants: new AccessGrants(owner),
+        account: {
+          verify: async (request: Request) => holders.get(request.headers.get('authorization')!)!.identity,
+        },
+      } as unknown as MainWorkDependencies),
+    );
+    const epoch = async () =>
+      (
+        await owner.query<{ authority_epoch: string }>(
+          "SELECT authority_epoch FROM access.scope_gate WHERE id = 'platform:access'",
+        )
+      ).rows[0]!.authority_epoch;
+    const change = (token: 'first' | 'second', body: Record<string, unknown>) =>
+      grantApp.handle(
+        new Request('http://main.test/v1/access/grant-changes', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'idempotency-key': randomUUID(),
+            authorization: token,
+          },
+          body: JSON.stringify({
+            profile: 'platform-grant-change-v1',
+            issuerSubject: holders.get(token)!.actor,
+            expectedAuthorityEpoch: body.expectedAuthorityEpoch,
+            ...body,
+          }),
+        }),
+      );
+    const appointed = await change('first', {
+      action: 'create',
+      expectedAuthorityEpoch: await epoch(),
+      grantId: randomUUID(),
+      permission: 'platform:grant',
+      scopeId: 'platform:access',
+      recipient: { principalId: second.id },
+      validUntil: null,
+    });
+    expect(appointed.status).toBe(200);
+    const removed = await change('second', {
+      action: 'revoke',
+      expectedAuthorityEpoch: await epoch(),
+      grantId: seeded.id,
+      expectedObjectGeneration: seeded.generation,
+    });
+    expect(removed.status).toBe(200);
+    expect(await ceiling()).toEqual([{ active: false }]);
+    await owner.query('SELECT access.link_seeded_platform_assignment_ceiling($1)', [first.id]);
+    expect(await ceiling()).toEqual([{ active: false }]);
+    const denied = await change('first', {
+      action: 'create',
+      expectedAuthorityEpoch: await epoch(),
+      grantId: randomUUID(),
+      permission: 'platform:use:saved-views',
+      scopeId: 'platform:access',
+      recipient: { principalId: third.id },
+      validUntil: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(denied.status).toBe(403);
+    const continued = await change('second', {
+      action: 'create',
+      expectedAuthorityEpoch: await epoch(),
+      grantId: randomUUID(),
+      permission: 'platform:use:saved-views',
+      scopeId: 'platform:access',
+      recipient: { principalId: third.id },
+      validUntil: new Date(Date.now() + 60_000).toISOString(),
+    });
+    expect(continued.status).toBe(200);
+  } finally {
     await pool?.end();
     if (started)
       execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], {
