@@ -194,7 +194,7 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
   }
 },180_000);
 
-test('CTX09: catalogue imports use exact definitions, replay and CAS; populated conversion retains provenance and rebuilds seek', async () => {
+test('CTX02/CTX09: catalogue imports use exact definitions, replay and CAS; populated conversion retains provenance and rebuilds seek', async () => {
   const f = await contextFixture(Bun.env as Record<string,string>);
   const relay = new Pool({connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL});
   const copies: string[] = [];
