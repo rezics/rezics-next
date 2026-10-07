@@ -30,8 +30,16 @@ export interface DisclosureTarget {
   nameOwner?: string;
 }
 export type DisclosureDecision = 'visible' | 'tombstone' | 'hidden';
+export interface DisclosureWithAnonymousNames {
+  decisions: DisclosureDecision[];
+  /** Same exact targets, revisions, context and channel at the same owner cut.
+   * Only graph names/titles receive an anonymous classification. */
+  anonymousNames: DisclosureDecision[];
+}
 export interface DisclosureReader {
   read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel): Promise<DisclosureDecision[]>;
+  readWithAnonymousNames?(targets: readonly DisclosureTarget[], viewer: Viewer,
+    channel: DisclosureChannel): Promise<DisclosureWithAnonymousNames>;
 }
 export class DisclosureUnavailable extends MediaUnavailable {}
 export const DISCLOSURE_COST = { batch: 64, ownerStatements: 1, recoveryStatements: 1,
@@ -70,6 +78,15 @@ export class DisclosureStore implements DisclosureReader {
   }
 
   async read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel) {
+    return (await this.readDecisions(targets, viewer, channel, false)).decisions;
+  }
+
+  readWithAnonymousNames(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel) {
+    return this.readDecisions(targets, viewer, channel, true);
+  }
+
+  private async readDecisions(targets: readonly DisclosureTarget[], viewer: Viewer,
+    channel: DisclosureChannel, anonymousNames: boolean): Promise<DisclosureWithAnonymousNames> {
     if (targets.length > DISCLOSURE_COST.batch || !DISCLOSURE_CHANNELS.includes(channel)
       || targets.some(target => !ownerReference.test(target.resource)
         || !governanceOwners.includes(target.owner) || !governanceComponents.includes(target.component)
@@ -81,7 +98,7 @@ export class DisclosureStore implements DisclosureReader {
       || typeof viewer.optIns.sexual !== 'boolean' || typeof viewer.optIns.grotesque !== 'boolean') {
       throw new DisclosureUnavailable('Disclosure batch is invalid');
     }
-    if (!targets.length) return [];
+    if (!targets.length) return { decisions: [], anonymousNames: [] };
     const suitabilityDefault = usesSuitabilityDefault(channel);
     try {
       const nameOwners = new Map<string, string>();
@@ -119,7 +136,7 @@ export class DisclosureStore implements DisclosureReader {
       // The recovery lock lives until this autocommit statement finishes;
       // policy and the fence share one snapshot, without six protocol calls.
       const rows = (await this.pool.query<{ ordinal: number;
-          open: boolean; restricted: boolean; assessments: Labels[]; nameVisible: boolean
+          open: boolean; restricted: boolean; assessments: Labels[]; nameVisible: boolean; publicNameVisible: boolean
         }>(`
           -- The boolean primary key/check makes this a singleton. Spell out its
           -- bound before joining the batch: fresh owner statistics otherwise
@@ -132,6 +149,8 @@ export class DisclosureStore implements DisclosureReader {
           SELECT wanted.ordinal, fence.open,
             CASE WHEN wanted."nameOwner" IS NULL THEN true
               ELSE COALESCE(n.visible AND n.open, false) END AS "nameVisible",
+            CASE WHEN wanted."nameOwner" IS NULL THEN true
+              ELSE COALESCE(n."publicVisible" AND n.open, false) END AS "publicNameVisible",
             EXISTS (SELECT 1 FROM access.governance_enforcement e
               WHERE e.state = 'restricted' AND e.effect = ANY($2::text[])
                 AND e.context = ANY(ARRAY[$3::text, wanted.context])
@@ -168,18 +187,26 @@ export class DisclosureStore implements DisclosureReader {
             !row.open ||
             row.ordinal !== index
           || typeof row.restricted !== 'boolean' || !Array.isArray(row.assessments)
+          || anonymousNames && owners[index] !== undefined && typeof row.publicNameVisible !== 'boolean'
           || row.assessments.some(labels => !validLabels(labels)))) {
           throw new DisclosureUnavailable('Disclosure result is incomplete');
         }
-        return rows.map((row, index): DisclosureDecision => {
+        const decision = (row: typeof rows[number], index: number, audience: Viewer,
+          nameVisible: boolean): DisclosureDecision => {
           // A private name uses the existing indistinct unavailable outcome;
           // a tombstone would confirm the identity the policy withholds.
-          if (owners[index] && row.nameVisible !== true) return 'hidden';
+          if (owners[index] && nameVisible !== true) return 'hidden';
           if (!row.restricted && (!suitabilityDefault || row.assessments.every(labels => eligible({
-            assessment: { status: 'assessed', labels }, viewer, channel: suitabilityChannel(channel),
+            assessment: { status: 'assessed', labels }, viewer: audience, channel: suitabilityChannel(channel),
           }).eligible))) return 'visible';
           return ['read', 'summary', 'thread', 'feed', 'inbox'].includes(channel) ? 'tombstone' : 'hidden';
-        });
+        };
+        return {
+          decisions: rows.map((row, index) => decision(row, index, viewer, row.nameVisible)),
+          anonymousNames: anonymousNames ? rows.map((row, index) =>
+            targets[index]!.owner === 'graph' && ['name', 'title'].includes(targets[index]!.component)
+              ? decision(row, index, ANONYMOUS_VIEWER, row.publicNameVisible) : 'hidden') : [],
+        };
     } catch (cause) {
       if (cause instanceof DisclosureUnavailable) throw cause;
       throw new DisclosureUnavailable('Disclosure owner is unavailable', { cause });
@@ -227,9 +254,27 @@ export function disclose(env: WorkActivationEnvironment, targets: readonly Discl
 /** Bounded inventories may exceed the transport batch, never the owner's query bound. */
 export async function discloseInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
   viewer: Viewer, channel: DisclosureChannel): Promise<DisclosureDecision[]> {
+  return (await readInventory(env, targets, viewer, channel, false)).decisions;
+}
+
+/** Summary publicness shares the final owner's exact-target policy statement.
+ * No decision survives this batch; adapters without the paired owner still
+ * perform the required anonymous name probe. Media keeps its viewer audience. */
+export function discloseInventoryWithAnonymousNames(env: WorkActivationEnvironment,
+  targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel) {
+  return readInventory(env, targets, viewer, channel, true);
+}
+
+async function readInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
+  viewer: Viewer, channel: DisclosureChannel, anonymousNames: boolean):
+  Promise<DisclosureWithAnonymousNames & { anonymousNameProbes: number }> {
   const result: DisclosureDecision[] = [];
+  const anonymous: DisclosureDecision[] = [];
+  let anonymousNameProbes = 0;
   const mediaAllowed = await mediaVisibility(env, targets, viewer);
-  if (!(env as ComposedEnvironment)[owner]) return mediaAllowed.map(allowed => allowed ? 'visible' : 'hidden');
+  const reader = (env as ComposedEnvironment)[owner];
+  if (!reader) return { decisions: mediaAllowed.map(allowed => allowed ? 'visible' : 'hidden'),
+    anonymousNames: [], anonymousNameProbes };
   // Exact title fences apply to today's Work head. Derivative callers may
   // supply only a target identity; resolve structural ownership here, never
   // let a missing parent descriptor weaken its assessment or removal gate.
@@ -290,7 +335,28 @@ export async function discloseInventory(env: WorkActivationEnvironment, targets:
         && target.revision == null ? { revision: heads.get(target.resource) } : {}) };
   });
   for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
-    result.push(...await disclose(env, current.slice(offset, offset + DISCLOSURE_COST.batch), viewer, channel));
+    const batch = current.slice(offset, offset + DISCLOSURE_COST.batch);
+    if (anonymousNames && reader.readWithAnonymousNames) {
+      const evaluated = await reader.readWithAnonymousNames(batch, viewer, channel);
+      if (evaluated.decisions.length !== batch.length || evaluated.anonymousNames.length !== batch.length) {
+        throw new DisclosureUnavailable('Paired disclosure result is incomplete');
+      }
+      result.push(...evaluated.decisions);
+      anonymous.push(...evaluated.anonymousNames);
+    } else {
+      result.push(...await reader.read(batch, viewer, channel));
+      if (anonymousNames) {
+        const indexes = batch.flatMap((target, index) => target.owner === 'graph'
+          && ['name', 'title'].includes(target.component) ? [index] : []);
+        const probe = indexes.length
+          ? await reader.read(indexes.map(index => batch[index]!), ANONYMOUS_VIEWER, channel) : [];
+        if (indexes.length) anonymousNameProbes++;
+        const names: DisclosureDecision[] = batch.map(() => 'hidden');
+        indexes.forEach((index, ordinal) => { names[index] = probe[ordinal]!; });
+        anonymous.push(...names);
+      }
+    }
   }
-  return result.map((decision, index) => mediaAllowed[index] ? decision : 'hidden');
+  return { decisions: result.map((decision, index) => mediaAllowed[index] ? decision : 'hidden'),
+    anonymousNames: anonymous, anonymousNameProbes };
 }

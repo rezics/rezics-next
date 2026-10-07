@@ -57,7 +57,8 @@ export function nameOwnerPolicySql(agents: number, issuer: number, subject: numb
         WHERE a.agent_id = s.id AND a.agent_kind = 'person' AND a.state = 'active'
           AND r.principal_id = (SELECT id FROM reader) AND r.action = 'agent.control'
           AND r.active AND r.valid_until > clock_timestamp()
-      ))) AS visible
+      ))) AS visible,
+      (s.id IS NOT NULL AND COALESCE(p.profile_visibility, 'public') = 'public') AS "publicVisible"
     FROM unnest($${agents}::text[]) AS wanted(agent) CROSS JOIN fence
     LEFT JOIN access.authority_subject s ON s.id = wanted.agent AND s.kind = 'agent' AND s.active
     LEFT JOIN access.person_preferences p ON p.agent_id = s.id`;
