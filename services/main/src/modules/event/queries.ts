@@ -137,7 +137,8 @@ async function acceptedTopics(env: WorkActivationEnvironment, input: EventQueryI
 
 interface Checkpoint {
   generation: string; data_epoch: string; relay_sequence: string; backfill_complete: boolean;
-  processed: string; actual_revision: string; planned_revision: string;
+  processed: string; actual_revision: string; planned_revision: string; actual_prefix: string; planned_prefix: string;
+  initial_sequence: string | null;
 }
 interface Window extends EventEffectWindow {
   state: string; processed: string; revision: string; created_at: string;
@@ -205,7 +206,7 @@ export class EventTemporalQueries {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
       await recoveryOpen(client);
       checkpoint = (await client.query<Checkpoint>(`SELECT generation::text,data_epoch,relay_sequence::text,
-        backfill_complete,processed::text,actual_revision,planned_revision
+        backfill_complete,processed::text,actual_revision,planned_revision,actual_prefix::text,planned_prefix::text,initial_sequence::text
         FROM access.event_temporal_checkpoint WHERE singleton`)).rows[0];
       if (checkpoint && checkpoint.data_epoch !== dependencies.dataEpoch) {
         throw new EventQueryUnavailable('Event projection lineage requires recovery');
@@ -233,23 +234,31 @@ export class EventTemporalQueries {
       [input.timeStatus ?? null, selectedTopics ? [...topics.byEvent.keys()] : null])).rows[0]!;
       const updates = await hasEventEffects(client, window, input.timeStatus,
         selectedTopics ? [...topics.byEvent.keys()] : undefined);
-      let covered = Boolean(checkpoint?.backfill_complete);
+      let covered = Boolean(checkpoint);
       if (selectedTopics && covered) {
-        const indexed = heads.length ? (await client.query<{ event: string; time_status: string; time_revision: string | null }>(
-          `SELECT event,time_status,time_revision FROM access.event_temporal_applied WHERE event=ANY($1::text[])
+        const indexed = heads.length ? (await client.query<{ event: string; time_status: string; time_revision: string | null; journal_sequence: string | null }>(
+          `SELECT event,time_status,time_revision,journal_sequence::text FROM access.event_temporal_applied WHERE event=ANY($1::text[])
           AND ($2::text IS NULL OR time_status=$2)`, [[...topics.byEvent.keys()], input.timeStatus ?? null])).rows : [];
         covered = heads.every(head => head.head === null
           ? !indexed.some(row => row.event === head.event && row.time_status === head.status && row.time_revision !== null)
-          : indexed.some(row => row.event === head.event && row.time_status === head.status && row.time_revision === head.head));
+          : indexed.some(row => row.event === head.event && row.time_status === head.status && row.time_revision === head.head
+            && row.journal_sequence !== null && BigInt(row.journal_sequence) <= BigInt(checkpoint![`${head.status}_prefix`])));
       } else if (covered) {
         covered = (input.timeStatus === 'planned' || checkpoint!.actual_revision === dependencies.actual)
           && (input.timeStatus === 'actual' || checkpoint!.planned_revision === dependencies.planned);
+        // Older admitted slots predate collection heads. An absent head only
+        // proves coverage after the local index closes the captured prefix.
+        for (const status of input.timeStatus ? [input.timeStatus] : ['actual', 'planned'] as const) {
+          if (dependencies[status] === 'none') covered &&= checkpoint!.initial_sequence !== null
+            && BigInt(checkpoint![`${status}_prefix`]) >= BigInt(checkpoint!.initial_sequence!);
+        }
       }
       if (!covered || pending.pending || updates || window.state !== 'ready') {
         await client.query('COMMIT');
         return { profile: 'event-query-v1' as const,
-          state: checkpoint && BigInt(checkpoint.processed) > 0n ? 'partial' as const : 'unavailable' as const,
-          progress: { phase: !checkpoint?.backfill_complete ? 'backfill' as const
+          state: checkpoint ? 'partial' as const : 'unavailable' as const,
+          progress: { phase: !checkpoint || (!covered && (input.timeStatus !== 'planned' && checkpoint.actual_revision === ''
+            || input.timeStatus !== 'actual' && checkpoint.planned_revision === '')) ? 'backfill' as const
             : !covered || pending.pending || updates ? 'targets' as const : 'buckets' as const,
           processed: checkpoint?.processed ?? '0', windowProcessed: window.processed, failed: pending.failed },
           items: [], histogram: [], continuation: null };

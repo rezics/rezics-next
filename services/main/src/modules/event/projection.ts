@@ -162,31 +162,33 @@ export class EventTemporalProjection {
         checkpoint.initial_sequence = boundary.relaySequence;
         await client.query('UPDATE access.event_temporal_checkpoint SET initial_sequence=$1 WHERE singleton', [boundary.relaySequence]);
       }
-      let worked = await this.ingestRelay(client, checkpoint);
+      let worked = await this.ingestCollections(client, checkpoint);
+      worked += await this.ingestRelay(client, checkpoint);
       const source = await readEventDependencies(this.env);
-      if (BigInt(checkpoint.relay_sequence) > BigInt(source.relaySequence)) {
+      if ([checkpoint.relay_sequence, checkpoint.actual_prefix, checkpoint.planned_prefix]
+        .some(sequence => BigInt(sequence) > BigInt(source.relaySequence))) {
         throw new EventProjectionUnavailable('Event journal checkpoint exceeds its source');
       }
-      // Completion is a retained finite prefix, independent of later Main writes.
+      // Diagnostic recovery progress only; local qualification and window work
+      // never wait for ordinary Main replay to reach this finite boundary.
       if (!checkpoint.backfill_complete && BigInt(checkpoint.relay_sequence) >= BigInt(checkpoint.initial_sequence)) {
         checkpoint.backfill_complete = true;
         await client.query('UPDATE access.event_temporal_checkpoint SET backfill_complete=true WHERE singleton');
       }
-      worked += await this.ingestCollections(client, checkpoint);
       worked += await this.projectTargets(client);
       worked += await this.updateWindows(client);
-      worked += await this.buildWindow(client, checkpoint);
-      if (checkpoint.backfill_complete) {
+      worked += await this.buildWindow(client);
+      {
         const dependencies = await readEventDependencies(this.env);
         if (dependencies.dataEpoch !== checkpoint.data_epoch) throw new EventProjectionUnavailable('Event owner epoch changed');
         // Exact applied heads qualify only after their own owner batch was
         // consumed. Other targets and bucket jobs fence their own read scopes.
         await client.query(`UPDATE access.event_temporal_checkpoint SET
-          actual_revision = CASE WHEN $1='none' OR EXISTS(
+          actual_revision = CASE WHEN ($1='none' AND $3::numeric>=initial_sequence) OR EXISTS(
             SELECT 1 FROM access.event_temporal_applied WHERE time_status='actual'
               AND time_revision=$1 AND journal_sequence<= $3::numeric)
             THEN $1 ELSE actual_revision END,
-          planned_revision = CASE WHEN $2='none' OR EXISTS(
+          planned_revision = CASE WHEN ($2='none' AND $4::numeric>=initial_sequence) OR EXISTS(
             SELECT 1 FROM access.event_temporal_applied WHERE time_status='planned'
               AND time_revision=$2 AND journal_sequence<= $4::numeric)
             THEN $2 ELSE planned_revision END WHERE singleton`,
@@ -224,7 +226,11 @@ export class EventTemporalProjection {
     const source = await readEventSourceKeys(this.relay, {
       dataEpoch: checkpoint.data_epoch, afterSequence: checkpoint.relay_sequence });
     if (!source) return 0;
-    for (const key of source.keys) await this.enqueue(client, key);
+    for (const key of source.keys) {
+      // Local replay has already consumed this immutable prefix. Revalidating
+      // its old receipts must not enqueue stale revisions over current work.
+      if (BigInt(key.sequence) > BigInt(checkpoint[`${key.status}_prefix`])) await this.enqueue(client, key);
+    }
     await client.query(`UPDATE access.event_temporal_checkpoint SET relay_sequence=$1,
       processed=processed+$2 WHERE singleton`, [source.sequence, source.members]);
     checkpoint.relay_sequence = source.sequence;
@@ -357,8 +363,7 @@ export class EventTemporalProjection {
     return worked;
   }
 
-  private async buildWindow(client: PoolClient, checkpoint: Checkpoint): Promise<number> {
-    if (!checkpoint.backfill_complete) return 0;
+  private async buildWindow(client: PoolClient): Promise<number> {
     const candidates = (await client.query<Window>(`SELECT id::text,interpretation,grain,bucket_start::text,
       bucket_end::text,query_start,query_end,state,after_event,after_status,scan_started_at::text
       FROM access.event_temporal_window WHERE state IN ('queued','building')

@@ -312,7 +312,8 @@ function indexedFixture() {
   const { env, fuseki } = sourceFixture();
   const sql: { text: string; values: unknown[] }[] = [];
   const checkpoint = { generation: '11111111-1111-4111-8111-111111111111', data_epoch: 'epoch-event',
-    relay_sequence: '3', backfill_complete: true, processed: '2', actual_revision: id(101), planned_revision: id(102) };
+    relay_sequence: '3', backfill_complete: true, processed: '2', actual_prefix: '3', planned_prefix: '3', initial_sequence: '3' as string | null,
+    actual_revision: id(101), planned_revision: id(102) };
   const window = { id: '22222222-2222-4222-8222-222222222222', state: 'ready', processed: '2',
     revision: '1', created_at: '2026-05-01T00:00:00Z',
     interpretation: 'civil-date',grain: 'day',bucket_start: '2026-05-15',bucket_end: '2026-05-15',
@@ -324,12 +325,12 @@ function indexedFixture() {
     return { event: retained.event, time_status: 'actual' as const, revision: retained.revision, definite: true };
   });
   let connects = 0, released = 0;
-  let recovery = true;
+  let recovery = true, checkpointPresent = true;
   const client = {
     async query(text: string, values: unknown[] = []) {
       sql.push({ text, values });
       if (text.includes('SELECT open FROM')) return { rows: [{ open: recovery }] };
-      if (text.includes('FROM access.event_temporal_checkpoint')) return { rows: [checkpoint] };
+      if (text.includes('FROM access.event_temporal_checkpoint')) return { rows: checkpointPresent ? [checkpoint] : [] };
       if (text.includes('SELECT id::text,state')) return { rows: [window] };
       if (text.includes('FROM access.event_temporal_window_update')) return { rows: [{ pending: pending.updates }] };
       if (text.includes('AS pending')) return { rows: [pending] };
@@ -350,7 +351,7 @@ function indexedFixture() {
   const pool = { async connect() { connects++; return client; } } as unknown as Pool;
   const facade = new EventTemporalQueries(pool, env, new Uint8Array(32).fill(7));
   return { facade, fuseki, checkpoint, window, pending, sql, members,
-    connects: () => connects, released: () => released, hold: () => { recovery = false; } };
+    connects: () => connects, released: () => released, hold: () => { recovery = false; }, cold: () => { checkpointPresent = false; } };
 }
 
 test('RATE07: cold, interrupted, failed and bucket-building coverage report progress without a source scan', async () => {
@@ -358,6 +359,8 @@ test('RATE07: cold, interrupted, failed and bucket-building coverage report prog
     const fixture = indexedFixture();
     fixture.checkpoint.backfill_complete = state === 'failed' || state === 'buckets';
     fixture.checkpoint.processed = state === 'cold' ? '0' : '2';
+    if (state === 'cold') fixture.cold();
+    if (state === 'cold' || state === 'interrupted') fixture.checkpoint.actual_revision = '';
     fixture.pending.pending = state === 'failed';
     fixture.pending.failed = state === 'failed';
     fixture.window.state = state === 'buckets' ? 'building' : 'ready';
@@ -523,4 +526,46 @@ test('RATE07: typed effects fence only unvisited intersecting scans and selected
   expect(effectInsertSql).toContain("CASE WHEN $3::jsonb IS NULL THEN 'empty'::daterange");
   expect(effectInsertSql).toContain('ready,civil_effect');
   expect(effectInsertValues(id(1),'actual',null,null,window.id,false).at(-1)).toBe(false);
+});
+
+// A complete retained local prefix is usable before ordinary Main replay.
+test('RATE07: local current and continuation reads ignore an unrelated global replay backlog', async () => {
+  const fixture = indexedFixture();
+  fixture.checkpoint.backfill_complete = false;
+  fixture.checkpoint.relay_sequence = '0';
+  fixture.fuseki.dependencies = [{ epoch: value('epoch-event'), sequence: value('1000000'),
+    actual: value(fixture.fuseki.actual), planned: value(fixture.fuseki.planned), relaySequence: value('1000000') }];
+  const first = await fixture.facade.query(queryInput);
+  expect(first.state).toBe('ready');
+  expect(first.continuation).not.toBeNull();
+  const next = await fixture.facade.query({ ...queryInput, continuation: first.continuation! });
+  expect(next.state).toBe('ready');
+  expect(next.items[0]!.event).toBe(id(2));
+});
+
+test('RATE07: local backfill reports partial progress before global replay finds any Event members', async () => {
+  const fixture = indexedFixture();
+  fixture.checkpoint.processed = '0';
+  fixture.checkpoint.actual_revision = '';
+  fixture.checkpoint.backfill_complete = false;
+  expect(await fixture.facade.query(queryInput)).toMatchObject({ state: 'partial',
+    progress: { phase: 'backfill', processed: '0', windowProcessed: '2' }, items: [] });
+});
+
+test('RATE07: legacy slots without a collection head wait for their local initial prefix', async () => {
+  const fixture = indexedFixture();
+  fixture.fuseki.dependencies = [{ epoch: value('epoch-event'), sequence: value('1000000'),
+    planned: value(fixture.fuseki.planned), relaySequence: value('1000000') }];
+  fixture.checkpoint.actual_revision = 'none';
+  fixture.checkpoint.initial_sequence = '1000000';
+  fixture.checkpoint.actual_prefix = '31';
+  fixture.checkpoint.relay_sequence = '0';
+  fixture.checkpoint.backfill_complete = false;
+  expect(await fixture.facade.query(queryInput)).toMatchObject({ state: 'partial', items: [], histogram: [] });
+  fixture.checkpoint.actual_prefix = '1000000';
+  fixture.fuseki.dependencies[0]!.relaySequence = value('2000000');
+  const ready = await fixture.facade.query(queryInput);
+  expect(ready.state).toBe('ready');
+  expect(ready.items).toHaveLength(1);
+  expect(ready.continuation).not.toBeNull();
 });
