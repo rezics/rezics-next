@@ -128,6 +128,8 @@ export async function startMediaStack(label: string, options: { contentProjectio
   const statementSeek = new StatementSeek(accessPool,env);
   const templateSeek = new TemplateSeekIndex(accessPool,fuseki);
   await templateSeek.backfill(env.lineage.dataEpoch);
+  // Closed routes refuse every caller when this is absent, before any grant is read.
+  // The running Main carries the same exposure, so a fixture principal's grant is visible here.
   const main = createMainApp(fuseki, { environment: env, access, grants, downloadLeases, accessPolicy,
     platformAccess: new AccessExposure(accessPool),
     statementSeek, templateSeek,

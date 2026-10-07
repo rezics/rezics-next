@@ -11,7 +11,7 @@ import type { SeedPort } from '../../../scripts/dev/seed/vn-catalogue-step.ts';
 import type { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import type { ReleaseV2Write } from '../../../services/main/src/modules/release/schema.ts';
 import type { RealizationWrite } from '../../../services/main/src/modules/realization/schema.ts';
-import { type Catalogue, seedCatalogue } from './g-838-catalogue.ts';
+import { type Catalogue, openActorPlatformGroup, seedCatalogue } from './g-838-catalogue.ts';
 
 type Stack = Awaited<ReturnType<typeof startMediaStack>>;
 
@@ -179,7 +179,10 @@ export async function seedZones(stack: Stack, reader: { principalId: string; act
   }
 
   // Each package is approved for exactly the source this build carries, reviewed by another account.
+  // Theme writes are closed to executable-themes. The editor posts them and the reviewer records the review.
   const reviewer = await stack.member('theme-reviewer');
+  await openActorPlatformGroup(editor.principalId, 'executable-themes');
+  await openActorPlatformGroup(reviewer.principalId, 'executable-themes');
   const presentationOf = async (zone: string) => {
     const read = await request('GET', `/v1/zones/${short(zone)}/configuration?actingSubject=${encodeURIComponent(zoneActor)}`);
     if (read.status !== 200) throw new Error(`zone configuration: ${read.status} ${JSON.stringify(read.body)}`);

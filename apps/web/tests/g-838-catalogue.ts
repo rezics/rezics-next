@@ -6,6 +6,8 @@
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { grantPlatformUse, platformAdministratorSession, type PlatformGrantSession }
+  from '../../../tests/qa/fixtures/platform-grant.ts';
 import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { readDefinitionByKey } from '../../../services/main/src/modules/relation/change.ts';
 import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
@@ -18,6 +20,28 @@ const ID = 'https://rezics.com/id/';
 const id = () => `${ID}${randomUUID()}`;
 const short = (iri: string) => iri.slice(-36);
 const types = ['https://schema.org/Book'];
+
+let administrator: Promise<PlatformGrantSession> | undefined;
+
+function administratorSession(): Promise<PlatformGrantSession> {
+  administrator ??= platformAdministratorSession().catch(error => {
+    administrator = undefined;
+    throw error;
+  });
+  return administrator;
+}
+
+/** Open one exposure group for a seed actor's own principal. A stale authority
+ * epoch is read again once; the grant is never given to the shared reader. */
+export async function openActorPlatformGroup(principalId: string, group: string): Promise<void> {
+  const session = await administratorSession();
+  try {
+    await grantPlatformUse(session, principalId, group);
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes('grant_stale')) throw error;
+    await grantPlatformUse(session, principalId, group);
+  }
+}
 
 export interface SeedReader { principalId: string; actor: string }
 interface Work { work: string; mainVersion: string; mainRevision: string; title: string }
@@ -100,6 +124,8 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   mkdirSync(scratch, { recursive: true });
   const current = await readDefinitionByKey(stack.env,'correspondence-equivalent',systemDisclosure);
   // Other launch fixtures may already have admitted this stable meaning.
+  // Presentation writes are closed to platform-admin; only this editor posts them.
+  if (!current) await openActorPlatformGroup(editor.principalId, 'platform-admin');
   if (current) {
     await editor.grant(`semantic:read:${current.definition}`,'semantic.read');
     await grantReader(`semantic:read:${current.definition}`,'semantic.read');

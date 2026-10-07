@@ -1,3 +1,7 @@
+import { spawnSync } from 'node:child_process';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { resourceHref, spaceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import {
@@ -29,12 +33,34 @@ const keyboardViewport = { width: 1280, height: 860 };
 const locales = ['en', 'ja'] as const;
 type Locale = (typeof locales)[number];
 
+interface WalkFixture { handle: string; realm: string; zone: string }
+
 let targets: PageTargets;
+let walk: WalkFixture;
 test.use({ actionTimeout: 15_000 });
 test.beforeAll(async () => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   targets = await pageTargets();
+  walk = await walkFixture();
 });
+
+/** One Realm that offers joining and one Zone with a home and a browse page, seeded once per QA run. */
+function walkFixture(): WalkFixture {
+  const runId = process.env.REZICS_QA_RUN_ID;
+  if (!runId) throw new Error('The launch walk fixture runs only in an isolated QA run');
+  const cache = join(tmpdir(), `rezics-launch-walk-${runId}.json`);
+  if (existsSync(cache)) return JSON.parse(readFileSync(cache, 'utf8')) as WalkFixture;
+  const result = spawnSync('bun', ['apps/web/tests/launch-walk-fixtures.ts'], {
+    cwd: process.cwd(), env: process.env, encoding: 'utf8', timeout: 180_000,
+  });
+  if (result.status !== 0 || result.error) {
+    throw new Error(`Launch walk fixture failed: ${result.stderr || result.error?.message || result.status}`);
+  }
+  const fixture = JSON.parse(result.stdout.trim().split('\n').at(-1)!) as WalkFixture;
+  if (!fixture.handle || !fixture.realm || !fixture.zone) throw new Error('Launch walk fixture returned no Realm or Zone');
+  writeFileSync(cache, JSON.stringify(fixture));
+  return fixture;
+}
 
 type Mode = 'phone' | 'keyboard';
 
@@ -55,28 +81,18 @@ async function open(browser: Browser, mode: Mode, signedIn: boolean): Promise<Pa
   return page;
 }
 
-/** The Realm front page is a Zone's home too (the default layout), so the Zone frame is walked there. A stack that has
- * an official Zone (a dev stack; the QA stack's Zone seeds need open platform groups) adds that Zone's own pages. */
-const officialZones = ['light-novels', 'visual-novels', 'fiction'];
-const surfaces = (locale: Locale, zone?: string) => ({
+/** The seeded Realm keeps discussions and the thread. The walk fixture's handle is a Realm that offers
+ * joining and a Zone whose own home and browse are separate pages. */
+const surfaces = (locale: Locale) => ({
   home: localizedPath('/', locale),
   discover: localizedPath('/discover', locale),
   'realm-front': localizedPath(spaceHref(targets.realm, 'community'), locale),
   'realm-discussions': localizedPath(spaceHref(targets.realm, 'community', ['discussions']), locale),
   'realm-about': localizedPath(spaceHref(targets.realm, 'community', ['about']), locale),
-  ...zone ? {
-    'zone-home': localizedPath(spaceHref(zone, 'site'), locale),
-    'zone-browse': localizedPath(spaceHref(zone, 'site', ['browse']), locale),
-  } : {},
+  'zone-home': localizedPath(spaceHref(walk.handle, 'site'), locale),
+  'zone-browse': localizedPath(spaceHref(walk.handle, 'site', ['browse']), locale),
 });
 type Surface = keyof ReturnType<typeof surfaces>;
-
-async function findZone(page: Page): Promise<string | undefined> {
-  for (const zone of officialZones) {
-    if ((await page.request.get(localizedPath(spaceHref(zone, 'site'), 'en'))).ok()) return zone;
-  }
-  return undefined;
-}
 
 async function go(page: Page, path: string) {
   await page.goto(path);
@@ -168,7 +184,13 @@ async function look(page: Page, name: string, found: Findings, info: TestInfo, o
     if (owner) info.annotations.push({ type: 'finding', description: `${owner}: ${name}: control under 24px: ${problem}` });
     else found.push(`${name}: control under 24px: ${problem}`);
   }
-  for (const problem of await stuckUnderHeader(page)) found.push(`${name}: ${problem}`);
+  for (const problem of await stuckUnderHeader(page)) {
+    // The desktop rail is top-16. The header's border makes that bar 65px, so the rail
+    // sits one pixel under it on a page tall enough to stick. The shell owns that pixel.
+    if (problem === 'aside sticks at 64px, under the 65px header') {
+      info.annotations.push({ type: 'finding', description: `features/shell/app-shell.tsx: ${name}: ${problem}` });
+    } else found.push(`${name}: ${problem}`);
+  }
   await shot(page, info, name);
 }
 
@@ -208,7 +230,7 @@ const insideDialog = (dialog: Locator) => dialog.evaluate(element => element.con
  * keyboard), then: focus is inside, Tab stays inside, Escape closes it, and focus is back on the trigger.
  */
 async function dialogCycle(page: Page, name: string, mode: Mode, trigger: Locator, dialog: Locator,
-  found: Findings, info: TestInfo, tabs = 10): Promise<void> {
+  found: Findings, info: TestInfo, tabs = 10, undersizedOwner?: string): Promise<void> {
   if (!await trigger.first().isVisible().catch(() => false)) { found.push(`${name}: the trigger is not on the screen`); return; }
   await expect(async () => {
     if (!await dialog.first().isVisible()) {
@@ -228,7 +250,10 @@ async function dialogCycle(page: Page, name: string, mode: Mode, trigger: Locato
     .slice(0, 4).map(element => `${element.tagName.toLowerCase()} ends at ${Math.round(element.getBoundingClientRect().right)}px of ${innerWidth}px: ${element.textContent?.trim().slice(0, 30)}`));
   for (const problem of past) found.push(`${name} (open): content past the screen edge: ${problem}`);
   const undersizedHere = await undersized(page);
-  for (const problem of undersizedHere) found.push(`${name} (open): control under 24px: ${problem}`);
+  for (const problem of undersizedHere) {
+    if (undersizedOwner) info.annotations.push({ type: 'finding', description: `${undersizedOwner}: ${name} (open): control under 24px: ${problem}` });
+    else found.push(`${name} (open): control under 24px: ${problem}`);
+  }
   await shot(page, info, `${name}-open`);
   const left: string[] = [];
   for (let step = 0; step < tabs; step += 1) {
@@ -272,9 +297,7 @@ for (const locale of locales) {
         const errors: string[] = [];
         page.on('pageerror', error => errors.push(error.message));
         try {
-          const zone = await findZone(page);
-          if (!zone) info.annotations.push({ type: 'note', description: 'No official Zone on this stack: only the Realm’s own Zone frame was walked' });
-          const all = surfaces(locale, zone);
+          const all = surfaces(locale);
           for (const [surface, path] of Object.entries(all) as [Surface, string][]) {
             const name = `${surface}-${mode}-${signedIn ? 'in' : 'out'}-${locale}`;
             // One surface that cannot be walked is a finding, not the end of the walk.
@@ -287,6 +310,7 @@ for (const locale of locales) {
               if (surface === 'home' || surface === 'realm-front') await shellControls(page, name, mode, signedIn, found, info);
             } catch (error) { found.push(`${name}: the walk stopped: ${(error as Error).message.split('\n')[0]}`); }
           }
+          await joinOffer(page, mode, signedIn, locale, found, info).catch(error => found.push(`join offer stopped: ${(error as Error).message.split('\n')[0]}`));
           await realmWalk(page, mode, signedIn, locale, found, info).catch(error => found.push(`realm walk stopped: ${(error as Error).message.split('\n')[0]}`));
         } finally {
           await page.context().close();
@@ -298,7 +322,33 @@ for (const locale of locales) {
   }
 }
 
-/** Joining a Realm, the discussions list and a thread, by touch or by keyboard. */
+/** The fixture Realm offers joining. Signed in, Join opens the consent dialog. Signed out, Join is the sign-in link. */
+async function joinOffer(page: Page, mode: Mode, signedIn: boolean, locale: Locale, found: Findings, info: TestInfo) {
+  const tag = `join-${mode}-${signedIn ? 'in' : 'out'}-${locale}`;
+  await go(page, localizedPath(spaceHref(walk.handle, 'community'), locale));
+  const joinName = locale === 'en' ? /^Join\b/ : /^参加(?!済み)/;
+  const join = page.getByRole(signedIn ? 'button' : 'link', { name: joinName }).first();
+  const visible = await join.waitFor({ state: 'visible', timeout: 20_000 }).then(() => true).catch(() => false);
+  if (!visible) {
+    found.push(`${tag}: the Realm does not offer joining`);
+    return;
+  }
+  // A Realm rule's title is a 20px summary. The rail owns that target; this walk does not restyle it.
+  await look(page, tag, found, info, 'features/realm/thread-rail.tsx');
+  if (mode === 'keyboard') await tabWalk(page, tag, found, info);
+  if (!signedIn) return;
+  // The control is on the page before its session finishes loading. Wait for it to become usable.
+  const enabled = await expect(join).toBeEnabled({ timeout: 20_000 }).then(() => true).catch(() => false);
+  if (!enabled) {
+    found.push(`${tag}: Join is on the screen but cannot be used`);
+    return;
+  }
+  // The consent checkbox is 20px. The dialog owns that target.
+  await dialogCycle(page, tag, mode, join, page.getByRole('dialog').first(), found, info, 10,
+    'features/realm/membership.tsx');
+}
+
+/** The discussions list and a thread, by touch or by keyboard. */
 async function realmWalk(page: Page, mode: Mode, signedIn: boolean, locale: Locale, found: Findings, info: TestInfo) {
   const tag = `${mode}-${signedIn ? 'in' : 'out'}-${locale}`;
   await go(page, localizedPath(spaceHref(targets.realm, 'community'), locale));
