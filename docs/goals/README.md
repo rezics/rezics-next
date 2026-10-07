@@ -89,11 +89,13 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
   not claim them; paths in no Goal's areas belong to whoever claims them first.
   When a Goal needs a path in another's area, its manager asks the owner to do
   the work, to narrow its areas, or to agree to one `dispatch --allow-area`.
-  A disagreement goes to the maintainer.
+  A disagreement goes to the program manager. A path that
+  `task goal -- owner` reports unclaimed needs no request: a worker changes it
+  minimally and lists it under OWNER CHANGES.
 - **Shared host.** Claims, QA slots, the heavy QA lock, the live-worker limit,
   usage gates and host memory are one pool for all Goals. Writing code in
   parallel is cheap; heavy QA is not, and the lock keeps it to one run at a time.
-  After merges, bring the shared stack to committed main with `task dev:refresh` in the main checkout (`-- --dry-run` previews it); it preserves data and refuses a held heavy QA lock unless `-- --wait` queues it ahead of ordinary heavy waiters, after the current holder. A second waiting refresh joins a queued refresh and exits immediately; that refresh inspects main when it starts and includes the newer merge. Ordinary heavy waiters rotate between Goals, keeping arrival order within each Goal. The manager whose merge needs it (model artifacts, migrations, official Zone packages) runs it right after that merge; exit 201 only means `main` moved meanwhile. Restoring a down shared stack outranks QA: if the refresh waits behind a long heavy run, the manager restoring the stack may stop that run, whose result is then void, and tells its owner to rerun it.
+  The shared backend (Account, Main, relay) runs the last refreshed revision from a pinned checkout; web, Accounts and Storybook hot-reload from the main checkout. A merge reaches the shared backend only through `task dev:refresh -- --wait`, which the merging manager runs in the main checkout (`-- --dry-run` previews it). It waits behind the current heavy holder, ahead of ordinary heavy waiters; a second waiting refresh joins the queued one, which stages `main` when it starts. A refresh that fails before changing storage or the model keeps the previous revision serving; one that fails after leaves writers stopped and prints the step, error and retry command, because migrations and model alignment are forward-only. Ordinary heavy waiters rotate between Goals, keeping arrival order within each Goal. Restoring a down shared stack outranks QA: the manager restoring it may stop a heavy run, whose result is then void, and tells its owner to rerun it.
 - **One main branch.** Each manager merges its own tasks and runs its wave QA
   from a worktree pinned at its wave commit, so another Goal's merges cannot
   change a run under way. A failure in another Goal's area goes to its manager.
