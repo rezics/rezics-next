@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 23:32 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 23:59 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
@@ -9,6 +9,44 @@ qualification and the physical locality/restore chains converge.
 
 This section supersedes the older per-slice status below; historical proof counts
 remain attached to their original inputs. Whole Goal remains active.
+
+- Latest build-policy refresh38317 finished exit201 before writer stop: all351
+  original package tests ran, failures0/errors4/skips0, Maven37:24. Four unchanged
+  SearchDelta90s deadlines; several stacks blocked in FileChannel/MappedByteBuffer
+  force. Full retained evidence `.temp/kernel/native-build-policy-351-four-timeouts.log`.
+  Servingcb2446/25ce remains unchanged; no current image or activation claimed.
+- Root G1330 disk-backed MODULE fixture mount repair022014948 is in normal164
+  affected/guard gate19975, parent960s/native900s and all original per-case caps
+  unchanged. Log `.temp/kernel/native-filesystem-merge-2359.log`; PID3113634,
+  child3113687. BuildKit locked cache `/build/tmp` and identical gate tmpdir ENV;
+  no RAM filesystem or test skips. Mandatory refresh follows accepted landing.
+- G1373 ac99ca0d1 source review ACCEPT, actual17/130 QA234220-76abd4. Ordinary
+  draft uses one authorization ASK plus two owner reads under one deadline;
+  unfiltered receipt/revision terms refuse conflicts and original en-us stays exact.
+  8MiB is the default object budget; an explicit caller budget supplies its bound.
+  Original disclosure4/10 is worker-reported, not independently evidenced.
+  Exact four files selected onto currentMain as698915d09+dfaeda47a; no whole old
+  branch. Physical private delivery/recovery/erasure remains pending.
+- G1379 prior105-file gate83575 finished inconclusively at default720s, no actual
+  failing assertion verdict. Accepted association source and actual16/9414 unchanged;
+  retry after ProgramG1412 removes unrelated native-union selection (or supported
+  parent960s if truly selected). Exact current branch330cad7d8+0a24d8e64.
+- G1397 startup121946d58 source ACCEPT: bounded ANY-hold check keeps admission
+  closed. Actual focused startup4 cases passed, but TDB2/Lucene fixtures are in-memory,
+  not persisted/listening-server restart proof. Sonnet7 now prepares exact composition
+  over Root's disk mount landing, then ALL355 package tests, separate-JVM integer
+  physical21/60 and unchanged original3 release cases within480s. No temporary
+  skips permitted in final matching image. Brief `.temp/kernel/g1397-resume7.txt`.
+- Generated Main API artifacts43b19faa8 landed for existing LaunchG1387 public
+  apply route, taskgen/gen:check/diffcheck passed; no native/model/migration change.
+- Trust G1411 is sole Verification source-selector repair owner. Kernel released
+  store.ts/schema.ts from mergedG1345 claim and granted Content1709/focused test loans;
+  preserve original manifest/custody/digest/author notes and all audit assertions.
+  Legacy unclassified non-coordinate strings count as source under Program direction.
+  Erasure caller file is exclusively TrustG1408; stage exact later caller delta.
+
+The bullets below describe earlier checkpoints; the latest corrections above
+supersede their pending worker/build status.
 
 - Native union LANDED74298b7cf96c: actual current-fa396 225 cases/16 suites,
   zero failures/errors/skips, run-dgkP3d. Original208 plus Body2/Zone8/Retirement7
