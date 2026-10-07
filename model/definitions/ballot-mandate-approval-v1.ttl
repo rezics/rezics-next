@@ -1,0 +1,22 @@
+# One immutable k-of-n approval for one exact candidate ballot digest, which binds
+# poll, seat, opening snapshot, holder charter, choice/distribution, expected ballot
+# revision and mandate policy revision. The opaque approver slot derives from the
+# private Access principal, so personas of one principal cannot approve twice.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/ballot-mandate-approval-v1/approval-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:MandateApproval ] ;
+    sh:property [ sh:path rv:poll ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Poll ] ;
+    sh:property [ sh:path rv:seat ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:VotingSeat ] ;
+    sh:property [ sh:path rv:pollOpening ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollOpening ] ;
+    sh:property [ sh:path rv:holderCharter ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:HolderCharterRevision ] ;
+    sh:property [ sh:path rv:mandatePolicyRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:candidateDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:expectedBallotRevision ; sh:maxCount 1 ; sh:class rv:BallotRevision ] ;
+    sh:property [ sh:path rv:approverSlot ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:approvedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .

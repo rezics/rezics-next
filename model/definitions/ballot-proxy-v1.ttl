@@ -1,0 +1,29 @@
+# Ordinary proxy voting: one explicit hop per seat, designated while the poll is a
+# draft and frozen by its opening. Received units are never redelegable; a revoked
+# route blocks new use but keeps its frozen history. Live rerouting and liquid
+# delegation are separate profiles and are rejected here.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/ballot-proxy-v1/route-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ProxyRoute ] ;
+    sh:property [ sh:path rv:poll ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Poll ] ;
+    sh:property [ sh:path rv:seat ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:VotingSeat ] ;
+    sh:property [ sh:path rv:sourceEntitlement ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SourceEntitlement ] ;
+    sh:property [ sh:path rv:proxyHolder ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:routeHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ProxyRouteRevision ] .
+
+<https://rezics.com/definition/ballot-proxy-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ProxyRouteRevision ] ;
+    sh:property [ sh:path rv:proxyRoute ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ProxyRoute ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:ProxyRouteRevision ] ;
+    sh:property [ sh:path rv:routeState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:RouteActive rv:RouteRevoked ) ] ;
+    sh:property [ sh:path rv:proxyHopLimit ; sh:hasValue 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ] ;
+    sh:property [ sh:path rv:redelegation ; sh:hasValue rv:RedelegationForbidden ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:electorateCharter ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ElectorateCharterRevision ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:revisedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .

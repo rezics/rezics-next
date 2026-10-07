@@ -1,0 +1,55 @@
+# One Ballot component per poll and frozen seat (root entitlement or active leaf);
+# every representative, proxy and authority path operates the same component through
+# its expected head. Revisions are immutable: cast, withdrawn or invalidated. Shares
+# conserve exactly the seat units under the holder charter aggregation mode.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/ballot-v1/ballot-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Ballot ] ;
+    sh:property [ sh:path rv:poll ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Poll ] ;
+    sh:property [ sh:path rv:seat ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:VotingSeat ] ;
+    sh:property [ sh:path rv:sourceEntitlement ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SourceEntitlement ] ;
+    sh:property [ sh:path rv:ballotHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:BallotRevision ] .
+
+<https://rezics.com/definition/ballot-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:BallotRevision ] ;
+    sh:property [ sh:path rv:ballot ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Ballot ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:BallotRevision ] ;
+    sh:property [ sh:path rv:pollOpening ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollOpening ] ;
+    sh:property [ sh:path rv:holderCharter ; sh:maxCount 1 ; sh:class rv:HolderCharterRevision ] ;
+    sh:property [ sh:path rv:ballotAvailability ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:BallotCast rv:BallotWithdrawn rv:BallotInvalidated ) ] ;
+    sh:property [ sh:path rv:castRoute ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:HolderCast rv:ProxyCast rv:HolderOverride ) ] ;
+    sh:property [ sh:path rv:proxyRoute ; sh:maxCount 1 ; sh:class rv:ProxyRouteRevision ] ;
+    sh:property [ sh:path rv:mandateApproval ; sh:class rv:MandateApproval ] ;
+    sh:property [ sh:path rv:internalResolution ; sh:maxCount 1 ; sh:class rv:PollResolution ] ;
+    sh:property [ sh:path rv:internalPoll ; sh:maxCount 1 ; sh:class rv:Poll ] ;
+    sh:property [ sh:path rv:ballotDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:countedUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 1000000 ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:submittedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:ballotAvailability ; sh:hasValue rv:BallotCast ] ;
+          sh:property [ sh:path rv:ballotShare ; sh:minCount 1 ; sh:class rv:BallotShare ] ;
+          sh:property [ sh:path rv:countedUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 1000000 ] ;
+          sh:property [ sh:path rv:invalidationDecision ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:ballotAvailability ; sh:hasValue rv:BallotWithdrawn ] ;
+          sh:property [ sh:path rv:ballotShare ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:countedUnits ; sh:maxCount 1 ; sh:hasValue 0 ] ;
+          sh:property [ sh:path rv:invalidationDecision ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:ballotAvailability ; sh:hasValue rv:BallotInvalidated ] ;
+          sh:property [ sh:path rv:ballotShare ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:countedUnits ; sh:maxCount 1 ; sh:hasValue 0 ] ;
+          sh:property [ sh:path rv:invalidationDecision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:BallotInvalidation ] ]
+    ) .
+
+<https://rezics.com/definition/ballot-v1/share-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:BallotShare ] ;
+    sh:property [ sh:path rv:ballotRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:BallotRevision ] ;
+    sh:property [ sh:path rv:option ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollOption ] ;
+    sh:property [ sh:path rv:shareUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 1000000 ] .

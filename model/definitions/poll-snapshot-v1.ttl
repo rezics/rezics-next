@@ -1,0 +1,95 @@
+# Governance poll identity, exact question/options, electorate snapshot and opening.
+# Source entitlements are issuance roots with an opaque per-electorate counting slot;
+# Access keeps the private counting identity. Opening freezes question, charter,
+# entitlements, activated allocation plans and proxy routes for the whole poll.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/poll-snapshot-v1/poll-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:Poll ] ;
+    sh:property [ sh:path rv:governingBody ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:electorateCharter ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ElectorateCharterRevision ] ;
+    sh:property [ sh:path rv:questionHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollQuestionRevision ] ;
+    sh:property [ sh:path rv:proposalRevision ; sh:maxCount 1 ; sh:class rv:ProposalRevision ] ;
+    sh:property [ sh:path rv:pollState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:PollDraft rv:PollOpen rv:PollClosed rv:PollFinalized ) ] ;
+    sh:property [ sh:path rv:electorateSnapshot ; sh:maxCount 1 ; sh:class rv:ElectorateSnapshot ] ;
+    sh:property [ sh:path rv:pollOpening ; sh:maxCount 1 ; sh:class rv:PollOpening ] ;
+    sh:property [ sh:path rv:pollResolution ; sh:maxCount 1 ; sh:class rv:PollResolution ] ;
+    sh:property [ sh:path rv:closedAt ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:pollState ; sh:hasValue rv:PollDraft ] ;
+          sh:property [ sh:path rv:pollOpening ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:pollResolution ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:pollState ; sh:hasValue rv:PollOpen ] ;
+          sh:property [ sh:path rv:pollOpening ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollOpening ] ;
+          sh:property [ sh:path rv:pollResolution ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:pollState ; sh:hasValue rv:PollClosed ] ;
+          sh:property [ sh:path rv:pollOpening ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollOpening ] ;
+          sh:property [ sh:path rv:pollResolution ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:pollState ; sh:hasValue rv:PollFinalized ] ;
+          sh:property [ sh:path rv:pollOpening ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollOpening ] ;
+          sh:property [ sh:path rv:pollResolution ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollResolution ] ]
+    ) .
+
+<https://rezics.com/definition/poll-snapshot-v1/question-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:PollQuestionRevision ] ;
+    sh:property [ sh:path rv:poll ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Poll ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:PollQuestionRevision ] ;
+    sh:property [ sh:path rv:question ; sh:minCount 1 ; sh:datatype rdf:langString ; sh:minLength 1 ; sh:maxLength 500 ] ;
+    sh:property [ sh:path rv:questionDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:optionCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 2 ; sh:maxInclusive 64 ] ;
+    sh:property [ sh:path rv:proposalRevision ; sh:maxCount 1 ; sh:class rv:ProposalRevision ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:revisedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .
+
+<https://rezics.com/definition/poll-snapshot-v1/option-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:PollOption ] ;
+    sh:property [ sh:path rv:questionRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollQuestionRevision ] ;
+    sh:property [ sh:path rv:optionKey ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ] ;
+    sh:property [ sh:path rv:optionRole ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:ApproveOption rv:RejectOption rv:AbstainOption rv:ChoiceOption ) ] ;
+    sh:property [ sh:path rv:label ; sh:minCount 1 ; sh:datatype rdf:langString ; sh:minLength 1 ; sh:maxLength 200 ] .
+
+<https://rezics.com/definition/poll-snapshot-v1/snapshot-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ElectorateSnapshot ] ;
+    sh:property [ sh:path rv:poll ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Poll ] ;
+    sh:property [ sh:path rv:electorateCharter ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ElectorateCharterRevision ] ;
+    sh:property [ sh:path rv:entitlementCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 1000000 ] ;
+    sh:property [ sh:path rv:issuedUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 2000000000 ] ;
+    sh:property [ sh:path rv:snapshotDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:preparedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .
+
+<https://rezics.com/definition/poll-snapshot-v1/entitlement-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:SourceEntitlement ] ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:VotingSeat ] ;
+    sh:property [ sh:path rv:electorateSnapshot ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ElectorateSnapshot ] ;
+    sh:property [ sh:path rv:poll ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Poll ] ;
+    sh:property [ sh:path rv:holder ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:seatClass ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:PersonSeat rv:OrganizationSeat rv:CollectiveMemberSeat ) ] ;
+    sh:property [ sh:path rv:countingSlot ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:issuedUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 1000000 ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] .
+
+<https://rezics.com/definition/poll-snapshot-v1/opening-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:PollOpening ] ;
+    sh:property [ sh:path rv:poll ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Poll ] ;
+    sh:property [ sh:path rv:questionRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollQuestionRevision ] ;
+    sh:property [ sh:path rv:electorateCharter ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ElectorateCharterRevision ] ;
+    sh:property [ sh:path rv:electorateSnapshot ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ElectorateSnapshot ] ;
+    sh:property [ sh:path rv:allocationManifestDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:proxyRouteManifestDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:frozenProxyRoute ; sh:class rv:ProxyRouteRevision ] ;
+    sh:property [ sh:path rv:seatCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 2000000 ] ;
+    sh:property [ sh:path rv:countedUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 2000000000 ] ;
+    sh:property [ sh:path rv:openingDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:closesAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:openedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] .

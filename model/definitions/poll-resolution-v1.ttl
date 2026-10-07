@@ -1,0 +1,59 @@
+# Finalized poll resolutions and declared ballot invalidation decisions.
+# Tallies count frozen seats and units of current ballot heads; mandate approval
+# signatures are never seats. Uncast weight is reported but not counted.
+# An invalidation cites its rule and evidence; it never rewrites ballot history.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/poll-resolution-v1/resolution-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:PollResolution ] ;
+    sh:property [ sh:path rv:poll ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Poll ] ;
+    sh:property [ sh:path rv:pollOpening ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollOpening ] ;
+    sh:property [ sh:path rv:electorateCharter ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ElectorateCharterRevision ] ;
+    sh:property [ sh:path rv:electorateSnapshot ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ElectorateSnapshot ] ;
+    sh:property [ sh:path rv:tallyDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:countedSeats ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 2000000 ] ;
+    sh:property [ sh:path rv:castUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 2000000000 ] ;
+    sh:property [ sh:path rv:abstainUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 2000000000 ] ;
+    sh:property [ sh:path rv:uncastUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 2000000000 ] ;
+    sh:property [ sh:path rv:quorumOutcome ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:QuorumMet rv:QuorumNotMet ) ] ;
+    sh:property [ sh:path rv:resolutionOutcome ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:ResolutionAdopted rv:ResolutionRejected rv:ResolutionNoQuorum ) ] ;
+    sh:property [ sh:path rv:winningOption ; sh:maxCount 1 ; sh:class rv:PollOption ] ;
+    sh:property [ sh:path rv:proposalRevision ; sh:maxCount 1 ; sh:class rv:ProposalRevision ] ;
+    sh:property [ sh:path rv:effectDigest ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:finalizedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:resolutionOutcome ; sh:hasValue rv:ResolutionAdopted ] ;
+          sh:property [ sh:path rv:quorumOutcome ; sh:hasValue rv:QuorumMet ] ;
+          sh:property [ sh:path rv:winningOption ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollOption ] ]
+        [ sh:property [ sh:path rv:resolutionOutcome ; sh:hasValue rv:ResolutionRejected ] ;
+          sh:property [ sh:path rv:quorumOutcome ; sh:hasValue rv:QuorumMet ] ;
+          sh:property [ sh:path rv:winningOption ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:resolutionOutcome ; sh:hasValue rv:ResolutionNoQuorum ] ;
+          sh:property [ sh:path rv:quorumOutcome ; sh:hasValue rv:QuorumNotMet ] ;
+          sh:property [ sh:path rv:winningOption ; sh:maxCount 0 ] ]
+    ) .
+
+<https://rezics.com/definition/poll-resolution-v1/tally-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:OptionTally ] ;
+    sh:property [ sh:path rv:pollResolution ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollResolution ] ;
+    sh:property [ sh:path rv:option ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:PollOption ] ;
+    sh:property [ sh:path rv:tallyUnits ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 2000000000 ] ;
+    sh:property [ sh:path rv:tallySeats ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 2000000 ] .
+
+<https://rezics.com/definition/poll-resolution-v1/invalidation-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:BallotInvalidation ] ;
+    sh:property [ sh:path rv:poll ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Poll ] ;
+    sh:property [ sh:path rv:ballot ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Ballot ] ;
+    sh:property [ sh:path rv:invalidatedRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:BallotRevision ] ;
+    sh:property [ sh:path rv:electorateCharter ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ElectorateCharterRevision ] ;
+    sh:property [ sh:path rv:ruleRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:evidenceDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:pattern "^urn:rezics:operation:[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:decidedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] .
