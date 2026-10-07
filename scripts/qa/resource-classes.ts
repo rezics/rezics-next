@@ -35,6 +35,7 @@ export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = 
   // Container restart must retain legacy RDF, and the terminal gap needs its own project.
   ['tests/qa/integration/local-read-basis.test.ts', 'catalogue-disk'],
   ...[
+    'event-query-bounds',
     'g-1021-reading-cost',
     'g-1022-reading-cost',
     'g-1025-home-cost',

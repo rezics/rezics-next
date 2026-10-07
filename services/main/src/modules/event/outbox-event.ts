@@ -9,24 +9,33 @@ const cancelled = 'https://rezics.com/vocab/EventTimeCancelledEvent';
 function handler(kind: string, type: string): OwnerOutboxEventHandler {
   return { kind, action: 'event.observation.set', type,
     async read({ fuseki, batch, eventId, ordinal }) {
+      // Resolve the immutable event's receipt first. A cross-graph variable
+      // join lets ARQ drive hydration from the entire retained receipt history.
+      const receiptRows = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt WHERE {
+        GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} rv:receipt ?receipt }
+      } LIMIT 2`)).results?.bindings ?? [];
+      const sourceReceipt = receiptRows[0]?.receipt?.value;
+      if (receiptRows.length !== 1 || !sourceReceipt) throw new Error('event-time outbox receipt is ambiguous');
+      const receiptIri = iri(sourceReceipt);
       const rows = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?storedKind ?storedOrdinal ?action ?receipt
         ?outcome ?admissionId ?digest ?authorityEpoch ?scope ?epoch ?sequence ?reason
         ?operation ?event ?eventTime ?status ?revision ?predecessor WHERE {
+        BIND(${receiptIri} AS ?receipt)
         GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} a ?storedKind ; rv:ordinal ?storedOrdinal ;
-          rv:action ?action ; rv:receipt ?receipt .
+          rv:action ?action ; rv:receipt ${receiptIri} .
           OPTIONAL { ${iri(eventId)} rv:operation ?operation }
           OPTIONAL { ${iri(eventId)} rv:event ?event }
           OPTIONAL { ${iri(eventId)} rv:eventTime ?eventTime }
         }
-        GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:outcome ?outcome ;
+        GRAPH ${iri(GRAPHS.receipts)} { ${receiptIri} a rv:OperationReceipt ; rv:outcome ?outcome ;
           rv:admissionId ?admissionId ; rv:requestDigest ?digest ; rv:authorityEpoch ?authorityEpoch ;
           rv:admittedScope ?scope ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
-          OPTIONAL { ?receipt rv:reason ?reason }
-          OPTIONAL { ?receipt rv:event ?event ; rv:eventTime ?eventTime ; rv:timeStatus ?status ;
+          OPTIONAL { ${receiptIri} rv:reason ?reason }
+          OPTIONAL { ${receiptIri} rv:event ?event ; rv:eventTime ?eventTime ; rv:timeStatus ?status ;
             rv:observationRevision ?revision .
-            OPTIONAL { ?receipt rv:expectedHead ?predecessor } }
+            OPTIONAL { ${receiptIri} rv:expectedHead ?predecessor } }
         }
-      }`)).results?.bindings ?? [];
+      } LIMIT 2`)).results?.bindings ?? [];
       const row = rows[0];
       const get = (name: string) => row?.[name]?.value;
       const outcome = kind === changed ? 'succeeded' : 'cancelled';

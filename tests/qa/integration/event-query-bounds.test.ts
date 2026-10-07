@@ -9,12 +9,13 @@ import { EventQueryRestart, EventTemporalQueries, type EventQueryInput }
   from '../../../services/main/src/modules/event/queries.ts';
 import { eventObservationDigest, eventTimeSlotIri, setEventObservation }
   from '../../../services/main/src/modules/event/observation.ts';
-import { checkedEventObservation, eventPointRdf, type EventPoint }
+import { checkedEventObservation, type EventPoint }
   from '../../../services/main/src/modules/event/time.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { DATASET, GRAPHS, ID, RV, iri, lit, prepareComponent, type WorkActivationEnvironment }
   from '../../../services/main/src/modules/work/activate.ts';
+import { EVENT_SOURCE_COST, readEventSourceKeys } from '../../../services/main/src/modules/event/source.ts';
 import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
 const native = () => `${ID}${randomUUID()}`;
@@ -23,6 +24,11 @@ const point = (lexical: string): EventPoint => ({ state: 'known', value: {
   kind: 'temporal', lexical, precision: 'day', calendar: 'gregorian' } });
 
 interface QueryPlan {
+  'Node Type': string;
+  'Relation Name'?: string;
+  'Index Cond'?: string;
+  'Shared Hit Blocks'?: number;
+  'Shared Read Blocks'?: number;
   'Actual Rows': number;
   'Actual Loops': number;
   'Rows Removed by Filter'?: number;
@@ -31,28 +37,6 @@ interface QueryPlan {
 const filteredRows = (plan: QueryPlan): number =>
   (plan['Rows Removed by Filter'] ?? 0) * plan['Actual Loops']
   + (plan.Plans ?? []).reduce((sum, child) => sum + filteredRows(child), 0);
-
-function fixture(env: WorkActivationEnvironment, event: string, lexical: string) {
-  const eventTime = eventTimeSlotIri(event, 'actual'), revision = native();
-  const start = point(lexical), encoded = eventPointRdf(start, native);
-  const recordedAt = '2026-10-01T00:00:00.000Z';
-  const state = { event, eventTime, timeStatus: 'actual', temporalKind: 'instant', start,
-    timeEvidence: null, startPoint: encoded.iri, startValue: encoded.temporalNode,
-    revision, predecessor: null, recordedAt };
-  const manifest = prepareComponent(env.objectDirectory, eventTime, state, PROFILE);
-  return { event, eventTime, revision, manifest,
-    current: `${iri(event)} a rv:Event ; rv:eventTime ${iri(eventTime)} .
-      ${iri(eventTime)} a rv:EventTime ; rv:event ${iri(event)} ; rv:timeStatus rv:ActualTime ;
-        rv:eventTimeHead ${iri(revision)} .`,
-    revisions: `${iri(revision)} a rv:EventTimeRevision, rv:RevisionAnchor ; rv:component ${iri(eventTime)} ;
-      rv:eventTime ${iri(eventTime)} ; rv:timeAvailability rv:Available ; rv:temporalKind rv:InstantTime ;
-      rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ; rv:eventStart ${iri(encoded.iri)} ;
-      rv:recordedAt ${lit(recordedAt)}^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
-      rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} ;
-      rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence 0 .
-      ${iri(encoded.iri)} a rv:EventTimePoint ; rv:pointState rv:KnownPoint ;
-        rv:temporalValue ${iri(encoded.temporalNode!)} . ${encoded.temporalTriples.join(' .\n')} .` };
-}
 
 test('Event buckets: over 2,000 slots page after interrupted bounded backfill; target failure and replay preserve counts', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL || !Bun.env.MAIN_DATA_EPOCH
@@ -115,7 +99,7 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
     return setEventObservation(env, admission, intent);
   };
   const drain = async () => {
-    for (let batch = 0; batch < 1000; batch++) {
+    for (let batch = 0; batch < 10000; batch++) {
       if (!await relayMainOutboxOnce(fuseki, relay, consumer)) return;
     }
     throw new Error('Event fixture relay exceeded its batch bound');
@@ -130,22 +114,60 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
     }
     throw new Error('Event fixture did not become ready within its bounded ticks');
   };
-  const fixtures = Array.from({ length: 2050 }, () => fixture(env, native(), input.start))
-    .sort((a, b) => a.event.localeCompare(b.event));
-  const works = Array.from({ length: 5000 }, native);
-  const broken = fixtures[0]!;
-  const manifestPath = join(env.objectDirectory, broken.manifest);
-  let hidden = false;
+  const fixtures: { event: string; eventTime: string; revision: string; manifest: string }[] = [];
+  const unrelated: string[] = [];
+  let broken: (typeof fixtures)[number] | undefined;
+  let manifestPath = '';
+  let hidden = false, failed = false;
   try {
     const initial = await write(target, input.start, null);
+    // Every inventory identity is admitted by the real Event owner and has a
+    // retained receipt/outbox handoff; no graph-wide inventory is assumed.
+    for (let index = 0; index < 2050; index++) {
+      const event = native(), result = await write(event, input.start, null);
+      fixtures.push({ event, eventTime: eventTimeSlotIri(event, 'actual'), revision: result.revision!, manifest: '' });
+      if (fixtures.length % 500 === 0) console.info('Owner-admitted Event fixtures', fixtures.length);
+    }
+    broken = fixtures[0]!;
+    const manifest = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(broken.revision)} rv:manifest ?manifest } }`)).results!.bindings[0]!.manifest!.value;
+    broken.manifest = manifest.replace('urn:rezics:sha256:', '');
+    manifestPath = join(env.objectDirectory, broken.manifest);
     await initializeRelayCheckpoint(relay, consumer, env.lineage.dataEpoch);
     await drain();
-    for (let offset = 0; offset < fixtures.length; offset += 100) {
-      const batch = fixtures.slice(offset, offset + 100);
-      await fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
-        GRAPH ${iri(GRAPHS.current)} { ${batch.map(row => row.current).join('\n')} }
-        GRAPH ${iri(GRAPHS.revisions)} { ${batch.map(row => row.revisions).join('\n')} } }`);
-    }
+    const sourceCut = (await relay.query<{ sequence: string }>(`SELECT max(sequence)::text AS sequence
+      FROM relay.delivered_batch WHERE stream_scope=$1 AND data_epoch=$2`,
+    ['urn:rezics:stream:main-rdf', env.lineage.dataEpoch])).rows[0]!.sequence;
+    const planWork = async () => {
+      const captured: { text: string; values: unknown[] }[] = [];
+      const measuredRelay = { query: async (text: string, values: unknown[]) => {
+        captured.push({ text, values }); return relay.query(text, values);
+      } } as unknown as Pool;
+      await relay.query('ANALYZE relay.delivered_batch');
+      await relay.query('ANALYZE relay.delivered_event');
+      const inventory = await readEventSourceKeys(measuredRelay, {
+        dataEpoch: env.lineage.dataEpoch, afterSequence: (BigInt(sourceCut) - 200n).toString() });
+      expect(inventory!.keys).toHaveLength(EVENT_SOURCE_COST.batches);
+      let touched = 0;
+      for (const query of captured) {
+        const plan = (await relay.query<{ 'QUERY PLAN': { Plan: QueryPlan }[] }>(
+          `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${query.text}`, query.values)).rows[0]!['QUERY PLAN'][0]!.Plan;
+        const visit = (node: QueryPlan) => {
+          if (node['Relation Name'] === 'delivered_batch' || node['Relation Name'] === 'delivered_event') {
+            expect(node['Node Type']).toMatch(/Index (Only )?Scan|Bitmap Heap Scan/);
+            touched += node['Actual Rows'] * node['Actual Loops']
+              + (node['Rows Removed by Filter'] ?? 0) * node['Actual Loops'];
+          }
+          if (node['Node Type'] === 'Sort') expect(node['Actual Rows']).toBeLessThanOrEqual(EVENT_SOURCE_COST.members);
+          for (const child of node.Plans ?? []) visit(child);
+        };
+        visit(plan);
+        expect((plan['Shared Hit Blocks'] ?? 0) + (plan['Shared Read Blocks'] ?? 0)).toBeLessThanOrEqual(256);
+      }
+      expect(touched).toBeLessThanOrEqual(EVENT_SOURCE_COST.batches + EVENT_SOURCE_COST.members);
+      return touched;
+    };
+    const initialWork = await planWork();
     // A missing immutable object belongs to one target; the seek checkpoint
     // still advances past it and valid targets retain their indexed rows.
     renameSync(manifestPath, `${manifestPath}.held`); hidden = true;
@@ -162,18 +184,21 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
     const retained = (await access.query(`SELECT
       (SELECT count(*)::int FROM access.event_temporal_interval) AS healthy,
       (SELECT attempts FROM access.event_temporal_pending WHERE event=$1 AND time_status='actual') AS attempts,
-      backfill_event,processed::text FROM access.event_temporal_checkpoint WHERE singleton`, [broken.event])).rows[0]!;
+      relay_sequence::text,processed::text FROM access.event_temporal_checkpoint WHERE singleton`, [broken.event])).rows[0]!;
     expect(retained.healthy).toBeGreaterThan(0);
     expect(retained.attempts).toBeGreaterThan(0);
-    expect(retained.backfill_event).toBe([target, ...fixtures.map(row => row.event)].sort()[599]);
-    expect(retained.processed).toBe('600');
+    expect(BigInt(retained.relay_sequence)).toBeLessThan(BigInt(sourceCut));
+    expect(Number(retained.processed)).toBeLessThanOrEqual(6 * EVENT_SOURCE_COST.members);
+    const resumedAfter = retained.relay_sequence;
     renameSync(`${manifestPath}.held`, manifestPath); hidden = false;
     await access.query(`UPDATE access.event_temporal_pending SET retry_at=clock_timestamp()-interval '1 second'
       WHERE event=$1 AND time_status='actual'`, [broken.event]);
     const complete = await ready();
     expect(complete.histogram.find(bucket => bucket.timeStatus === 'actual'))
       .toMatchObject({ definite: 2051, possible: 2051 });
-    expect(observed.maxBatchRows).toBeLessThanOrEqual(EVENT_PROJECTION_COST.sourceKeys);
+    expect(observed.maxBatchRows).toBeLessThanOrEqual(2);
+    expect(BigInt((await access.query('SELECT relay_sequence::text FROM access.event_temporal_checkpoint WHERE singleton')).rows[0]!.relay_sequence))
+      .toBeGreaterThan(BigInt(resumedAfter));
 
     const window = (await access.query<{ id: string }>(`SELECT id::text FROM access.event_temporal_window
       WHERE interpretation='civil-date' AND grain='day' AND query_start=$1 AND query_end=$1`, [input.start])).rows;
@@ -214,19 +239,42 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
 
     const firstPage = await queries.query(input);
     if (firstPage.state !== 'ready' || !firstPage.continuation) throw new Error('Missing Event page cursor');
-    // A large unrelated population changes neither this basis nor read work.
-    for (let offset = 0; offset < works.length; offset += 250) {
-      await fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-        ${works.slice(offset, offset + 250).map(work => `${iri(work)} a <https://schema.org/CreativeWork> .`).join('\n')}
-      } }`);
+    // Unrelated Events have owner journal members too. Measure the same deep
+    // inventory seek before and after growth, including filtered/operator work.
+    for (let index = 0; index < 1200; index++) {
+      const event = native(); unrelated.push(event);
+      await write(event, '2099-01-01', null, 'planned');
     }
+    await drain();
+    const growthWork = await planWork();
+    expect(growthWork).toBe(initialWork);
+    console.info('Event inventory work before/after unrelated Event growth', { initialWork, growthWork,
+      initialEvents: 2051, addedEvents: unrelated.length });
+    const growthCut = (await relay.query<{ sequence: string }>(`SELECT max(sequence)::text AS sequence
+      FROM relay.delivered_batch WHERE stream_scope=$1 AND data_epoch=$2`,
+    ['urn:rezics:stream:main-rdf', env.lineage.dataEpoch])).rows[0]!.sequence;
+    // Actual-only reads may already be ready while planned deltas still await
+    // the consumer. Drain that independent work before measuring the next edit.
+    for (let tick = 0; tick < 500; tick++) {
+      const checkpoint = (await access.query<{ sequence: string; pending: boolean; updates: boolean }>(`
+        SELECT relay_sequence::text AS sequence,
+          EXISTS(SELECT 1 FROM access.event_temporal_pending LIMIT 1) AS pending,
+          EXISTS(SELECT 1 FROM access.event_temporal_window_update LIMIT 1) AS updates
+        FROM access.event_temporal_checkpoint WHERE singleton`)).rows[0]!;
+      if (checkpoint.sequence === growthCut && !checkpoint.pending && !checkpoint.updates) break;
+      await projection.tick();
+      if (tick === 499) throw new Error('Unrelated Event journal did not drain');
+    }
+    await ready();
     resetObserved();
     expect((await queries.query({ ...input, continuation: firstPage.continuation })).state).toBe('ready');
     expect(observed.sourceRows).toBeLessThanOrEqual(input.pageSize + 2);
     expect(observed.bucketRows).toBe(1);
     expect(observed.pageRows).toBeLessThanOrEqual(51);
+    const afterGrowthPage = await queries.query(input);
+    if (afterGrowthPage.state !== 'ready' || !afterGrowthPage.continuation) throw new Error('Missing post-growth cursor');
     await write(target, '2099-01-01', null, 'planned');
-    expect((await queries.query({ ...input, continuation: firstPage.continuation })).state).toBe('ready');
+    expect((await queries.query({ ...input, continuation: afterGrowthPage.continuation })).state).toBe('ready');
     await write(target, '2077-06-15', initial.revision!);
     await expect(queries.query({ ...input, continuation: firstPage.continuation })).rejects.toBeInstanceOf(EventQueryRestart);
     await expect(relayMainOutboxOnce(fuseki, relay, consumer, {
@@ -291,20 +339,28 @@ test('Event buckets: over 2,000 slots page after interrupted bounded backfill; t
     await enqueueWithdrawn();
     await projection.tick();
     expect((await ready()).histogram).toEqual(withdrawn.histogram);
+  } catch (error) {
+    failed = true;
+    throw error;
   } finally {
     fuseki.query = sourceQuery;
     if (hidden) renameSync(`${manifestPath}.held`, manifestPath);
     // QA owns the disposable graph; remove fixture current subjects so this
     // large population cannot contaminate a later file's source backfill.
     const subjects = [target, eventTimeSlotIri(target, 'actual'), eventTimeSlotIri(target, 'planned'),
-      ...fixtures.flatMap(row => [row.event, row.eventTime]), ...works];
-    for (let offset = 0; offset < subjects.length; offset += 200) {
-      await fuseki.update(`DELETE { GRAPH ${iri(GRAPHS.current)} { ?subject ?p ?o } }
-        WHERE { VALUES ?subject { ${subjects.slice(offset, offset + 200).map(iri).join(' ')} }
-          GRAPH ${iri(GRAPHS.current)} { ?subject ?p ?o } }`);
-    }
+      ...fixtures.flatMap(row => [row.event, row.eventTime]), ...unrelated.flatMap(event => [event, eventTimeSlotIri(event, 'planned')])];
+    let cleanupFailure: unknown;
+    try {
+      for (let offset = 0; offset < subjects.length; offset += 200) {
+        await fuseki.update(`DELETE { GRAPH ${iri(GRAPHS.current)} { ?subject ?p ?o } }
+          WHERE { VALUES ?subject { ${subjects.slice(offset, offset + 200).map(iri).join(' ')} }
+            GRAPH ${iri(GRAPHS.current)} { ?subject ?p ?o } }`);
+      }
+    } catch (error) { cleanupFailure = error; }
     await Promise.all([access.end(), relay.end()]);
     await databases.close();
     rmSync(directory, { recursive: true, force: true });
+    if (cleanupFailure && !failed) throw cleanupFailure;
+    if (cleanupFailure) console.warn('Disposable Event fixture cleanup failed after the test failure', cleanupFailure);
   }
-}, 420_000);
+}, 600_000);

@@ -9,6 +9,8 @@ import { EventTemporalQueries, EventQueryDenied, EventQueryRestart, EventQueryUn
   type EventQueryInput } from '../src/modules/event/queries.ts';
 import { readEventDependencies, readEventSource, readEventSourceKeys,
   EventSourceUnavailable } from '../src/modules/event/source.ts';
+import { outboxEventHandlers } from '../src/modules/event/outbox-event.ts';
+import { GRAPHS } from '../src/modules/work/activate.ts';
 import { UnsupportedEventTime, type EventPoint } from '../src/modules/event/time.ts';
 
 type Binding = NonNullable<SparqlResult['results']>['bindings'][number];
@@ -23,7 +25,6 @@ class EventSourceFuseki extends FusekiClient {
   actual = id(101);
   planned = id(102);
   dependencies?: Binding[];
-  inventory?: Binding[];
   targets = new Map<string, Binding[]>();
   afterTarget?: () => void;
   constructor() { super('http://localhost:1/rezics'); }
@@ -32,10 +33,6 @@ class EventSourceFuseki extends FusekiClient {
     if (sparql.includes('SELECT ?epoch ?sequence ?actual')) {
       return { results: { bindings: this.dependencies ?? [{ epoch: value('epoch-event'), sequence: value(this.sequence),
         actual: value(this.actual), planned: value(this.planned), relaySequence: value('3') }] } };
-    }
-    if (sparql.includes('SELECT ?epoch ?sequence ?event ?status')) {
-      if (!this.inventory) throw new Error('request attempted an Event inventory scan');
-      return { results: { bindings: this.inventory } };
     }
     const target = /VALUES \(\?event \?status\) \{ \(<([^>]+)> <[^>]+\/(ActualTime|PlannedTime)>\)/.exec(sparql);
     if (!target) throw new Error('unexpected Event source query');
@@ -234,20 +231,61 @@ test('RATE09: unknown and open preserve explanations; coarse precision cannot po
     .rejects.toBeInstanceOf(EventSourceUnavailable);
 });
 
-test('RATE07: backfill key reads seek by event and status with a bounded batch', async () => {
-  const { env, fuseki } = sourceFixture();
-  fuseki.inventory = [{ epoch: value('epoch-event'), sequence: value('10'), event: value(id(2)), status: value(`${RV}PlannedTime`) }];
-  expect(await readEventSourceKeys(env, { after: { event: id(2), status: 'actual' }, limit: 32 }))
-    .toEqual({ position: { dataEpoch: 'epoch-event', sequence: '10' }, keys: [{ event: id(2), status: 'planned' }] });
-  expect(fuseki.queries[0]).toContain('LIMIT 32');
-  expect(fuseki.queries[0]).toContain('ORDER BY ?event ?status');
-  expect(fuseki.queries[0]).toContain(`STR(?event) > "${id(2)}"`);
-  expect(fuseki.queries[0]).toContain(`STR(?status) > "${RV}ActualTime"`);
-  for (const limit of [0, 101, 1.5]) await expect(readEventSourceKeys(env, { limit })).rejects.toBeInstanceOf(EventSourceUnavailable);
-  await expect(readEventSourceKeys(env, { after: { event: 'bad', status: 'actual' } })).rejects.toBeInstanceOf(EventSourceUnavailable);
-  expect(fuseki.queries).toHaveLength(1);
-  fuseki.inventory = [{ epoch: value('epoch-event'), sequence: value('11') }];
-  expect((await readEventSourceKeys(env)).keys).toEqual([]);
+function journalFixture() {
+  const calls: { text: string; values: unknown[] }[] = [];
+  const data = { headers: [] as { sequence: string; event_count: number }[],
+    members: [] as { sequence: string; envelope: object }[] };
+  const relay = { query: async (text: string, values: unknown[]) => {
+    calls.push({ text, values });
+    return { rows: text.includes('relay.delivered_batch') ? data.headers : data.members };
+  } } as unknown as Pool;
+  const read = (afterSequence = '0') => readEventSourceKeys(relay, { dataEpoch: 'epoch-event', afterSequence });
+  const member = (sequence: string, event = id(1)) => ({ sequence, envelope: {
+    type: 'com.rezics.event.time-changed.v1', data: { receipt: { outcome: 'succeeded', event, timeStatus: 'actual' } } } });
+  return { data, calls, read, member };
+}
+
+test('RATE07: populated backfill seeks retained owner batches and counts unrelated members', async () => {
+  const { data, calls, read, member } = journalFixture();
+  data.headers = [{ sequence: '1', event_count: 0 }, { sequence: '2', event_count: 2 }];
+  data.members = [member('2'), { sequence: '2', envelope: { type: 'com.rezics.work.created.v1' } }];
+  expect(await read()).toEqual({ sequence: '2', keys: [{ event: id(1), status: 'actual' }], members: 2, batches: 2 });
+  expect(calls[0]!.values).toEqual(['urn:rezics:stream:main-rdf', 'epoch-event', '0', 32]);
+  expect(calls[0]!.text).toContain('sequence>$3::numeric');
+  expect(calls[1]!.values).toEqual(['urn:rezics:stream:main-rdf', 'epoch-event', ['1', '2'], 101]);
+  expect(calls[1]!.text).toContain('sequence=ANY($3::numeric[])');
+  data.headers = [{ sequence: '3', event_count: 0 }]; data.members = [];
+  expect(await read('2')).toEqual({ sequence: '3', keys: [], members: 0, batches: 1 });
+  data.headers = [];
+  expect(await read('3')).toBeNull();
+});
+
+test('RATE07: a backfill tick stops before its admitted member budget even when no Event keys match', async () => {
+  const { data, read } = journalFixture();
+  data.headers = [{ sequence: '1', event_count: 100 }, { sequence: '2', event_count: 1 }];
+  data.members = Array.from({ length: 100 }, () => ({ sequence: '1', envelope: { type: 'unrelated' } }));
+  expect(await read()).toEqual({ sequence: '1', keys: [], members: 100, batches: 1 });
+});
+
+test('RATE07: incomplete, denied, malformed and gapped journal reads cannot advance backfill', async () => {
+  const { data, read, member } = journalFixture();
+  for (const after of ['-1', '1.5', 'bad']) await expect(read(after)).rejects.toBeInstanceOf(EventSourceUnavailable);
+  data.headers = [{ sequence: '2', event_count: 1 }];
+  await expect(read()).rejects.toThrow('batch gap');
+  for (const event_count of [-1, 101, 1.5]) {
+    data.headers = [{ sequence: '1', event_count }];
+    await expect(read()).rejects.toThrow('admitted member bound');
+  }
+  data.headers = [{ sequence: '1', event_count: 1 }];
+  await expect(read()).rejects.toThrow('incomplete');
+  data.members = [member('2')];
+  await expect(read()).rejects.toThrow('outside its batch');
+  data.members = [member('1', 'bad')];
+  await expect(read()).rejects.toThrow('proof is incomplete');
+  data.members = [member('1'), member('1')];
+  await expect(read()).rejects.toThrow('members are incomplete');
+  const denied = { query: async () => { throw new Error('relay unavailable'); } } as unknown as Pool;
+  await expect(readEventSourceKeys(denied, { dataEpoch: 'epoch-event', afterSequence: '0' })).rejects.toThrow('relay unavailable');
 });
 
 test('RATE07: dependencies read only local collection revisions and enforce owner availability', async () => {
@@ -262,6 +300,8 @@ test('RATE07: dependencies read only local collection revisions and enforce owne
     fuseki.dependencies = dependencies;
     await expect(readEventDependencies(env)).rejects.toBeInstanceOf(EventSourceUnavailable);
   }
+  fuseki.dependencies = [{ epoch: value('epoch-event'), sequence: value('10') }];
+  await expect(readEventDependencies(env)).rejects.toBeInstanceOf(EventSourceUnavailable);
 });
 
 const queryInput: EventQueryInput = { interpretation: 'civil-date', match: 'possible',
@@ -412,4 +452,32 @@ test('RATE07: recovery holds and stale hydrated heads cannot return a cached rea
   const changed = indexedFixture();
   changed.fuseki.afterTarget = () => { changed.fuseki.actual = id(999); };
   await expect(changed.facade.query(queryInput)).rejects.toBeInstanceOf(EventQueryRestart);
+});
+
+
+test('RATE07: Event outbox hydration binds its exact receipt before reading retained fields', async () => {
+  const fuseki = new FusekiClient('http://localhost:1/rezics'), calls: string[] = [];
+  const eventId = 'urn:rezics:event:one', receipt = 'urn:rezics:receipt:one';
+  let receiptRows: Binding[] = [{ receipt: value(receipt) }];
+  fuseki.query = async sparql => {
+    calls.push(sparql);
+    return { results: { bindings: sparql.includes('SELECT ?receipt WHERE') ? receiptRows : [{
+      receipt: value(receipt), storedKind: value(`${RV}EventTimeChangedEvent`), storedOrdinal: value('0'),
+      action: value('event.observation.set'), outcome: value(`${RV}Succeeded`), admissionId: value(id(8)),
+      digest: value('a'.repeat(64)), authorityEpoch: value('0'), scope: value(`event:observe:${id(1)}`),
+      epoch: value('epoch-event'), sequence: value('1'), operation: value(id(9)), event: value(id(1)),
+      eventTime: value(eventTimeSlotIri(id(1), 'actual')), status: value(`${RV}ActualTime`), revision: value(id(10)),
+    }] } };
+  };
+  const input = { fuseki, eventId, ordinal: 0, value: () => undefined, batch: { streamScope: 'urn:rezics:stream:main-rdf' as const,
+    batchId: 'urn:rezics:batch:one', dataEpoch: 'epoch-event', sequence: '1', graphSequence: '1',
+    routingEpoch: '1', eventIds: [eventId] } };
+  expect((await outboxEventHandlers[0].read(input)).data.receipt).toMatchObject({ event: id(1), timeStatus: 'actual' });
+  expect(calls[0]).toContain(`<${eventId}> rv:receipt ?receipt`);
+  expect(calls[1]).toContain(`GRAPH <${GRAPHS.receipts}> { <${receipt}> a rv:OperationReceipt`);
+  expect(calls[1]).not.toContain('?receipt a rv:OperationReceipt');
+  receiptRows = [];
+  await expect(outboxEventHandlers[0].read(input)).rejects.toThrow('ambiguous');
+  receiptRows = [{ receipt: value(receipt) }, { receipt: value('urn:rezics:receipt:other') }];
+  await expect(outboxEventHandlers[0].read(input)).rejects.toThrow('ambiguous');
 });

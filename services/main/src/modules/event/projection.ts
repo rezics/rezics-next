@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
-import { readEventDependencies, readEventSource, readEventSourceKeys } from './source.ts';
+import { EVENT_SOURCE_COST, readEventDependencies, readEventSource, readEventSourceKeys } from './source.ts';
 
 export const EVENT_PROJECTION_COST = {
-  sourceKeys: 100, targets: 32, relayEvents: 100, windowRows: 100,
+  sourceKeys: EVENT_SOURCE_COST.members, relayBatches: EVENT_SOURCE_COST.batches, targets: 32, relayEvents: EVENT_SOURCE_COST.members, windowRows: 100,
   windowUpdates: 8, windowsPerUpdate: 8,
 } as const;
 
@@ -14,7 +13,6 @@ export class EventProjectionUnavailable extends Error {}
 interface Key { event: string; status: 'actual' | 'planned' }
 interface Checkpoint {
   generation: string; data_epoch: string; relay_sequence: string;
-  backfill_event: string | null; backfill_status: Key['status'] | null;
   backfill_complete: boolean;
 }
 interface Interval {
@@ -138,24 +136,30 @@ export class EventTemporalProjection {
         'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE')).rows[0];
       if (recovery?.open !== true) throw new EventProjectionUnavailable('Access is held for recovery');
       let checkpoint = (await client.query<Checkpoint>(`SELECT generation::text,data_epoch,relay_sequence::text,
-        backfill_event,backfill_status,backfill_complete FROM access.event_temporal_checkpoint
+        backfill_complete FROM access.event_temporal_checkpoint
         WHERE singleton FOR UPDATE`)).rows[0];
       if (!checkpoint) {
-        const cut = (await this.relay.query<{ sequence: string }>(`SELECT coalesce(max(sequence),0)::text AS sequence
-          FROM relay.delivered_batch WHERE stream_scope = $1 AND data_epoch = $2`,
-        [MAIN_RELAY_STREAM_SCOPE, this.env.lineage.dataEpoch])).rows[0]!.sequence;
         const generation = randomUUID();
         await client.query(`INSERT INTO access.event_temporal_checkpoint
           (singleton,generation,data_epoch,relay_sequence,actual_revision,planned_revision)
-          VALUES (true,$1,$2,$3,'','')`, [generation, this.env.lineage.dataEpoch, cut]);
-        checkpoint = { generation, data_epoch: this.env.lineage.dataEpoch, relay_sequence: cut,
-          backfill_event: null, backfill_status: null, backfill_complete: false };
+          VALUES (true,$1,$2,0,'','')`, [generation, this.env.lineage.dataEpoch]);
+        checkpoint = { generation, data_epoch: this.env.lineage.dataEpoch, relay_sequence: '0',
+          backfill_complete: false };
       }
       if (checkpoint.data_epoch !== this.env.lineage.dataEpoch) {
         throw new EventProjectionUnavailable('Event projection epoch requires recovery');
       }
       let worked = await this.ingestRelay(client, checkpoint);
-      if (!checkpoint.backfill_complete) worked += await this.backfill(client, checkpoint);
+      const source = await readEventDependencies(this.env);
+      if (BigInt(checkpoint.relay_sequence) > BigInt(source.relaySequence)) {
+        throw new EventProjectionUnavailable('Event journal checkpoint exceeds its source');
+      }
+      // A delayed relay tail keeps initial coverage incomplete, while already
+      // covered Event collections and target retries can still make progress.
+      if (!checkpoint.backfill_complete && checkpoint.relay_sequence === source.relaySequence) {
+        checkpoint.backfill_complete = true;
+        await client.query('UPDATE access.event_temporal_checkpoint SET backfill_complete=true WHERE singleton');
+      }
       worked += await this.projectTargets(client);
       worked += await this.updateWindows(client);
       const updates = (await client.query<{ pending: boolean }>(
@@ -202,51 +206,14 @@ export class EventTemporalProjection {
   }
 
   private async ingestRelay(client: PoolClient, checkpoint: Checkpoint): Promise<number> {
-    const batch = (await this.relay.query<{ sequence: string; event_count: number }>(
-      `SELECT sequence::text,event_count FROM relay.delivered_batch
-       WHERE stream_scope=$1 AND data_epoch=$2 AND sequence>$3::numeric ORDER BY relay.delivered_batch.sequence LIMIT 1`,
-    [MAIN_RELAY_STREAM_SCOPE, checkpoint.data_epoch, checkpoint.relay_sequence])).rows[0];
-    if (!batch) return 0;
-    if (BigInt(batch.sequence) !== BigInt(checkpoint.relay_sequence) + 1n) {
-      throw new EventProjectionUnavailable(`Event relay coverage has a gap after ${checkpoint.relay_sequence}: next ${batch.sequence}`);
-    }
-    const events = (await this.relay.query<{ envelope: { type?: string;
-      data?: { receipt?: { outcome?: string; event?: string; timeStatus?: Key['status'] } } } }>(
-      `SELECT envelope FROM relay.delivered_event WHERE stream_scope=$1 AND data_epoch=$2
-       AND sequence=$3::numeric ORDER BY event_id LIMIT $4`,
-    [MAIN_RELAY_STREAM_SCOPE, checkpoint.data_epoch, batch.sequence, EVENT_PROJECTION_COST.relayEvents + 1])).rows;
-    if (events.length !== batch.event_count || events.length > EVENT_PROJECTION_COST.relayEvents) {
-      throw new EventProjectionUnavailable('Event relay batch exceeds coverage budget or is incomplete');
-    }
-    for (const { envelope } of events) {
-      if (envelope.type !== 'com.rezics.event.time-changed.v1') continue;
-      const receipt = envelope.data?.receipt;
-      if (receipt?.outcome !== 'succeeded' || !receipt.event || !receipt.timeStatus) {
-        throw new EventProjectionUnavailable('Event relay proof is incomplete');
-      }
-      await this.enqueue(client, { event: receipt.event, status: receipt.timeStatus }, batch.sequence);
-    }
-    await client.query('UPDATE access.event_temporal_checkpoint SET relay_sequence=$1 WHERE singleton', [batch.sequence]);
-    checkpoint.relay_sequence = batch.sequence;
-    return 1;
-  }
-
-  private async backfill(client: PoolClient, checkpoint: Checkpoint): Promise<number> {
-    const source = await readEventSourceKeys(this.env, {
-      ...(checkpoint.backfill_event && checkpoint.backfill_status
-        ? { after: { event: checkpoint.backfill_event, status: checkpoint.backfill_status } } : {}),
-      limit: EVENT_PROJECTION_COST.sourceKeys });
-    if (source.position.dataEpoch !== checkpoint.data_epoch) throw new EventProjectionUnavailable('Event backfill epoch changed');
-    // Pending positions all belong to the relay stream. The inventory's graph
-    // diagnostic sequence must never be compared with those positions.
-    for (const key of source.keys) await this.enqueue(client, key, checkpoint.relay_sequence);
-    const last = source.keys.at(-1);
-    checkpoint.backfill_complete = source.keys.length < EVENT_PROJECTION_COST.sourceKeys;
-    if (last) { checkpoint.backfill_event = last.event; checkpoint.backfill_status = last.status; }
-    await client.query(`UPDATE access.event_temporal_checkpoint SET backfill_event=$1,backfill_status=$2,
-      backfill_complete=$3,processed=processed+$4 WHERE singleton`,
-    [checkpoint.backfill_event, checkpoint.backfill_status, checkpoint.backfill_complete, source.keys.length]);
-    return source.keys.length || 1;
+    const source = await readEventSourceKeys(this.relay, {
+      dataEpoch: checkpoint.data_epoch, afterSequence: checkpoint.relay_sequence });
+    if (!source) return 0;
+    for (const key of source.keys) await this.enqueue(client, key, source.sequence);
+    await client.query(`UPDATE access.event_temporal_checkpoint SET relay_sequence=$1,
+      processed=processed+$2 WHERE singleton`, [source.sequence, source.members]);
+    checkpoint.relay_sequence = source.sequence;
+    return source.batches;
   }
 
   private async projectTargets(client: PoolClient): Promise<number> {

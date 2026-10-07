@@ -1,3 +1,4 @@
+import type { Pool } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { Temporal } from '@js-temporal/polyfill';
 import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
@@ -23,42 +24,70 @@ export async function readEventDependencies(env: WorkActivationEnvironment) {
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
     } LIMIT 2`)).results?.bindings ?? [];
   const row = rows[0];
-  if (rows.length !== 1 || !row?.epoch || !row.sequence || !/^(0|[1-9][0-9]*)$/.test(row.sequence.value)) {
+  if (rows.length !== 1 || !row?.epoch || !row.sequence || !row.relaySequence
+    || !/^(0|[1-9][0-9]{0,99})$/.test(row.relaySequence.value) || !/^(0|[1-9][0-9]*)$/.test(row.sequence.value)) {
     throw new EventSourceUnavailable('event owner lineage is unavailable or held');
   }
   return { dataEpoch: row.epoch.value, sequence: row.sequence.value,
     actual: row.actual?.value ?? 'none', planned: row.planned?.value ?? 'none',
-    relaySequence: row.relaySequence?.value ?? row.sequence.value };
+    relaySequence: row.relaySequence.value };
 }
 
-/** Inventory admission is independent of exact-manifest validation for each target. */
-export async function readEventSourceKeys(env: WorkActivationEnvironment,
-  options: { after?: EventSourceKey; limit?: number } = {}) {
-  const limit = options.limit ?? 100;
-  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new EventSourceUnavailable('event source batch is invalid');
-  const after = options.after;
-  if (after && (!nativeId.test(after.event) || !['actual', 'planned'].includes(after.status))) {
+/** Replay the retained owner journal, never a sorted graph inventory. Each tick
+ * reads at most 32 indexed batch headers and 100 admitted members, including
+ * unrelated members. Empty/non-Event batches still advance the durable seek. */
+export const EVENT_SOURCE_COST = { batches: 32, members: 100 } as const;
+export const EVENT_SOURCE_BATCH_SQL = `SELECT sequence::text,event_count FROM relay.delivered_batch
+  WHERE stream_scope=$1 AND data_epoch=$2 AND sequence>$3::numeric
+  ORDER BY relay.delivered_batch.sequence LIMIT $4`;
+export const EVENT_SOURCE_MEMBERS_SQL = `SELECT sequence::text,envelope FROM relay.delivered_event
+  WHERE stream_scope=$1 AND data_epoch=$2 AND sequence=ANY($3::numeric[])
+  LIMIT $4`;
+
+export async function readEventSourceKeys(relay: Pick<Pool, 'query'>,
+  options: { dataEpoch: string; afterSequence: string }) {
+  if (!/^(0|[1-9][0-9]{0,99})$/.test(options.afterSequence)) {
     throw new EventSourceUnavailable('event source seek is invalid');
   }
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?epoch ?sequence ?event ?status WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?sequence .
-        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
-      FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
-      OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?event a rv:Event .
-        ?slot a rv:EventTime ; rv:event ?event ; rv:timeStatus ?status . }
-        ${after ? `FILTER(STR(?event) > ${lit(after.event)} ||
-          (STR(?event) = ${lit(after.event)} && STR(?status) > ${lit(`${RV}${after.status === 'actual' ? 'ActualTime' : 'PlannedTime'}`)}))` : ''}
-      }
-    } ORDER BY ?event ?status LIMIT ${limit}`)).results?.bindings ?? [];
-  const first = rows[0];
-  if (!first?.epoch || !first.sequence) throw new EventSourceUnavailable('event source inventory is held');
-  const keys = rows.filter(row => row.event).map(row => {
-    if (!nativeId.test(row.event!.value)) throw new EventSourceUnavailable('event source identity is invalid');
-    return { event: row.event!.value, status: statusValue(row.status?.value ?? '') };
-  });
-  return { position: { dataEpoch: first.epoch.value, sequence: first.sequence.value }, keys };
+  const headers = (await relay.query<{ sequence: string; event_count: number }>(
+    EVENT_SOURCE_BATCH_SQL, [MAIN_RELAY_STREAM_SCOPE, options.dataEpoch,
+      options.afterSequence, EVENT_SOURCE_COST.batches])).rows;
+  let sequence = BigInt(options.afterSequence), members = 0;
+  const batches: typeof headers = [];
+  for (const header of headers) {
+    if (!/^(0|[1-9][0-9]{0,99})$/.test(header.sequence)
+      || BigInt(header.sequence) !== sequence + 1n) {
+      throw new EventSourceUnavailable('Event retained journal has a batch gap');
+    }
+    if (!Number.isInteger(header.event_count) || header.event_count < 0
+      || header.event_count > EVENT_SOURCE_COST.members) {
+      throw new EventSourceUnavailable('Event retained batch exceeds its admitted member bound');
+    }
+    if (members + header.event_count > EVENT_SOURCE_COST.members) break;
+    batches.push(header); members += header.event_count; sequence++;
+  }
+  if (!batches.length) return null;
+  const rows = (await relay.query<{ sequence: string; envelope: { type?: string;
+    data?: { receipt?: { outcome?: string; event?: string; timeStatus?: 'actual' | 'planned' } } } }>(
+    EVENT_SOURCE_MEMBERS_SQL, [MAIN_RELAY_STREAM_SCOPE, options.dataEpoch,
+      batches.map(batch => batch.sequence), EVENT_SOURCE_COST.members + 1])).rows;
+  const counts = new Map(batches.map(batch => [batch.sequence, 0]));
+  const keys: EventSourceKey[] = [];
+  for (const row of rows) {
+    if (!counts.has(row.sequence)) throw new EventSourceUnavailable('Event journal member is outside its batch');
+    counts.set(row.sequence, counts.get(row.sequence)! + 1);
+    if (row.envelope.type !== 'com.rezics.event.time-changed.v1') continue;
+    const receipt = row.envelope.data?.receipt;
+    if (receipt?.outcome !== 'succeeded' || !nativeId.test(receipt.event ?? '')
+      || !['actual', 'planned'].includes(receipt.timeStatus ?? '')) {
+      throw new EventSourceUnavailable('Event relay proof is incomplete');
+    }
+    keys.push({ event: receipt.event!, status: receipt.timeStatus! });
+  }
+  if (rows.length !== members || batches.some(batch => counts.get(batch.sequence) !== batch.event_count)) {
+    throw new EventSourceUnavailable('Event retained batch members are incomplete');
+  }
+  return { sequence: sequence.toString(), keys, members, batches: batches.length };
 }
 interface GraphRow {
   slotPresent?: { value: string };
