@@ -30,5 +30,15 @@ export type Realization = Ok<Work['realizations']['get']>['items'][number];
 export type Release = Ok<Work['releases']['get']>['items'][number];
 export type Relations = Ok<ReturnType<MainClient['v1']['resources']>['relations']['get']>;
 
-/** The Work's own realizations and releases: what an attempt can name besides the Work itself. */
-export interface Editions { realizations: Realization[]; releases: Release[]; more: boolean }
+/**
+ * The Work's own realizations and releases: what an attempt can name besides the Work itself.
+ * Each list is one page; its cursor continues that list, and is null when the list is finished.
+ */
+export interface Editions {
+  realizations: Realization[];
+  releases: Release[];
+  /** True when either list still has a cursor. */
+  more: boolean;
+  realizationsCursor?: string | null;
+  releasesCursor?: string | null;
+}

@@ -32,7 +32,11 @@ export interface TrackingApi {
   sessions(work: string, cursor?: string): Promise<Loaded<{ items: Session[]; next: string | null }>>;
   start(work: string, input: StartInput): Promise<AttemptWrite>;
   change(session: string, expectedVersion: number, changes: SessionChanges): Promise<AttemptWrite>;
-  editions(work: string): Promise<Loaded<Editions>>;
+  /**
+   * One page of the Work's realizations and releases. A continuation reads only the lists whose
+   * cursors it carries, so a finished list is not fetched again.
+   */
+  editions(work: string, page?: EditionPageQuery): Promise<Loaded<Editions>>;
   /** Main's series progress for a Work's composition, in the chosen language (the preference's when unset). */
   series(resource: string, language?: string): Promise<Loaded<ProgressSummary>>;
   relations(resource: string): Promise<Loaded<Relations>>;
@@ -40,6 +44,30 @@ export interface TrackingApi {
   definition(key: string): Promise<Loaded<{ definition: string }>>;
   preference(work: string): Promise<Loaded<EditionPreference | null>>;
   setPreference(work: string, expectedVersion: number, choice: EditionChoice): Promise<PreferenceWrite>;
+}
+
+/** The page size Main allows for a Work's realizations and releases. */
+const EDITION_PAGE = 20;
+
+/** Cursors for the next page of each list. Omit a list to leave it unread. */
+export interface EditionPageQuery { realizations?: string; releases?: string }
+
+/** Which lists a continuation read, so an unread list keeps the editions and cursor it already has. */
+export interface EditionPageRequest { realizations: boolean; releases: boolean }
+
+function mergeById<T extends { id: string }>(current: readonly T[], page: readonly T[]): T[] {
+  const seen = new Set(current.map(item => item.id));
+  // Keep the order already shown, then the new page's order, dropping an identity that was already listed.
+  return [...current, ...page.filter(item => !seen.has(item.id))];
+}
+
+/** Append one page of each requested list. An unrequested list stays as it was, including its cursor. */
+export function appendEditionPage(current: Editions, page: Editions, requested: EditionPageRequest): Editions {
+  const realizations = requested.realizations ? mergeById(current.realizations, page.realizations) : current.realizations;
+  const releases = requested.releases ? mergeById(current.releases, page.releases) : current.releases;
+  const realizationsCursor = requested.realizations ? page.realizationsCursor ?? null : current.realizationsCursor ?? null;
+  const releasesCursor = requested.releases ? page.releasesCursor ?? null : current.releasesCursor ?? null;
+  return { realizations, releases, realizationsCursor, releasesCursor, more: Boolean(realizationsCursor || releasesCursor) };
 }
 
 const RELATION_PAGES = 5;
@@ -94,15 +122,26 @@ export function mainTrackingApi(actingSubject: string, main: () => MainClient = 
       ...input }, headers())),
     change: (session, expectedVersion, changes) => attempt(() => main().v1.me.sessions({ id: uuidOf(session) }).patch({
       actingSubject, expectedVersion, ...changes }, headers())),
-    async editions(work) {
+    async editions(work, page) {
       const id = uuidOf(work);
+      // The first read asks for both lists. A continuation asks only for the lists that still have a cursor.
+      const first = page === undefined;
+      const readRealizations = first || Boolean(page.realizations);
+      const readReleases = first || Boolean(page.releases);
       const [realizations, releases] = await Promise.all([
-        settle(() => main().v1.works({ id }).realizations.get({ query: { actingSubject, limit: 20 } })),
-        settle(() => main().v1.works({ id }).releases.get({ query: { actingSubject, limit: 20 } }))]);
+        readRealizations ? settle(() => main().v1.works({ id }).realizations.get({ query: { actingSubject, limit: EDITION_PAGE,
+          ...(page?.realizations ? { cursor: page.realizations } : {}) } }))
+          : Promise.resolve({ ok: true as const, data: { items: [], nextCursor: null } }),
+        readReleases ? settle(() => main().v1.works({ id }).releases.get({ query: { actingSubject, limit: EDITION_PAGE,
+          ...(page?.releases ? { cursor: page.releases } : {}) } }))
+          : Promise.resolve({ ok: true as const, data: { items: [], nextCursor: null } }),
+      ]);
       if (!realizations.ok) return realizations;
       if (!releases.ok) return releases;
+      const realizationsCursor = readRealizations ? realizations.data.nextCursor : null;
+      const releasesCursor = readReleases ? releases.data.nextCursor : null;
       return { ok: true, data: { realizations: realizations.data.items, releases: releases.data.items,
-        more: Boolean(realizations.data.nextCursor || releases.data.nextCursor) } };
+        realizationsCursor, releasesCursor, more: Boolean(realizationsCursor || releasesCursor) } };
     },
     series: (resource, language) => settle(() => main().v1.me['progress-summaries']({ resource: uuidOf(resource) }).get({
       query: { actingSubject, ...(language ? { language } : {}) } })),

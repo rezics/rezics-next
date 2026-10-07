@@ -98,6 +98,12 @@ export const locatorOf = (session: Session, selection: Selection): Locator | und
 /** What an attempt can add: its Work in general, or one of the Work's realizations or releases, each once. */
 export interface EditionOption { resource: string; kind: 'work' | 'realization' | 'release'; revision?: string; language: string | null }
 
+/** Whether a listed edition's name should stay in the sheet's filter. An empty filter keeps every name. */
+export function editionListed(name: string, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  return needle === '' || name.toLowerCase().includes(needle);
+}
+
 export function editionOptions(work: string, editions: Editions | null, session: Session | null): EditionOption[] {
   const taken = new Set(session?.selections.map(selection => selection.target.resource));
   const options: EditionOption[] = [{ resource: work, kind: 'work', language: null },

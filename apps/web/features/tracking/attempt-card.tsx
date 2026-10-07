@@ -9,7 +9,7 @@ import { DateField, EditionPicker, PositionEditor } from './attempt-fields.tsx';
 import { ConflictPanel } from './conflict-panel.tsx';
 import { editionName, formatLabel, moveLabel, stateLabel } from './display.ts';
 import type { Copy } from './messages.ts';
-import { conflictRows, editionOptions, hasEnded, movesFrom, selectionInput, takesPosition, withoutVersion } from './model.ts';
+import { conflictRows, editionListed, editionOptions, hasEnded, movesFrom, selectionInput, takesPosition, withoutVersion } from './model.ts';
 import type { Editions, LocatorUnit, Session, SessionChanges } from './types.ts';
 
 type Conflict = { current: Session; submitted: StaleChange };
@@ -19,8 +19,8 @@ type Conflict = { current: Session; submitted: StaleChange };
  * is sent on the version the card last saw; if another device got there first, the card shows both
  * sides and waits for the reader's choice.
  */
-export function AttemptCard({ session, title, work, editions, api, locale, t, onChange }: {
-  session: Session; title: string; work: string; editions: Editions | null; api: TrackingApi; locale: UiLocale; t: Copy;
+export function AttemptCard({ session, title, work, editions, editionQuery = '', api, locale, t, onChange }: {
+  session: Session; title: string; work: string; editions: Editions | null; editionQuery?: string; api: TrackingApi; locale: UiLocale; t: Copy;
   onChange: (session: Session) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -48,9 +48,10 @@ export function AttemptCard({ session, title, work, editions, api, locale, t, on
     return false;
   }
 
-  const options = editionOptions(work, editions, session);
   const nameOf = (option: { resource: string; kind: 'work' | 'realization' | 'release' }) =>
     editionName(option.resource, option.kind, editions, locale, t);
+  const options = editionOptions(work, editions, session);
+  const visible = options.filter(option => editionListed(nameOf(option), editionQuery));
 
   return <article aria-label={title} data-session={session.id} data-state={session.state} className="grid gap-4 rounded-2xl border border-border/60 p-4">
     <header className="flex flex-wrap items-center justify-between gap-2">
@@ -93,11 +94,11 @@ export function AttemptCard({ session, title, work, editions, api, locale, t, on
           </li>;
         })}
       </ul>
-      {options.length ? <>
-        <EditionPicker options={options} nameOf={nameOf} t={t} busy={busy} submit={t.addEdition} allowWork={false}
+      {visible.length ? <>
+        <EditionPicker options={visible} nameOf={nameOf} t={t} busy={busy} submit={t.addEdition} allowWork={false}
           onSubmit={(option, format) => option ? apply({ addSelections: [selectionInput(option, format)] }) : Promise.resolve(false)} />
         <p className="text-muted-foreground text-xs">{t.editionsNote}</p>
-      </> : editions ? <p className="text-muted-foreground text-xs">{t.noEditionsLeft}</p> : null}
+      </> : options.length ? null : editions ? <p className="text-muted-foreground text-xs">{t.noEditionsLeft}</p> : null}
       {failed ? <p role="status" className="text-destructive-foreground text-xs">{t.saveFailed}</p> : null}
     </div>
   </article>;
