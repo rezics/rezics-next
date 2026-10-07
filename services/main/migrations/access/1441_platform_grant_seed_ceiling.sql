@@ -1,6 +1,6 @@
 -- The designation ceiling is the same consequence as an API platform:grant.
 -- Link the seeded access.grant.assign.platform row to that grant. Stacks that
--- already ran 1290 and 1420 get the link here; later seed calls repeat it safely.
+-- already ran 1290 and 1440 get the link here; later seed calls repeat it safely.
 CREATE FUNCTION access.link_seeded_platform_assignment_ceiling(subject_principal uuid)
 RETURNS void LANGUAGE plpgsql AS $$
 DECLARE seeded_grant uuid; episode_principal uuid; grant_issuer text;
