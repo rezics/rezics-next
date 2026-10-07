@@ -72,7 +72,8 @@ export function LinkMenu<V extends string>({ label, value, options, icon, classN
  * keeps only the sort. Home has one view of posts, so there is no card/compact
  * switch. Every choice has its own address; filters survive tab and sort changes.
  */
-export function FeedControls({ state, defaults, signedIn, locale, messages, realms, tabs, readingLanguages = null }: {
+export function FeedControls({ state, defaults, signedIn, locale, messages, realms, tabs, readingLanguages = null,
+  orderFixed = false }: {
   state: FeedState; defaults: FeedDefaults; signedIn: boolean; locale: UiLocale; messages: FeedMessages;
   /** Realms the reader can narrow to: those they follow. */
   realms: readonly RealmChoice[];
@@ -80,6 +81,8 @@ export function FeedControls({ state, defaults, signedIn, locale, messages, real
   tabs?: ReactNode;
   /** The signed-in reader's languages from Main, in their order. Null when signed out or still unknown. */
   readingLanguages?: readonly string[] | null;
+  /** A followed topic's works are newest first; the sort menu would not change them. */
+  orderFixed?: boolean;
 }) {
   const t = materializeData(messages, { locale });
   const href = (change: Partial<FeedState>) => localizedPath(`/${feedSearch(withChange(state, change), defaults)}`, locale);
@@ -100,9 +103,10 @@ export function FeedControls({ state, defaults, signedIn, locale, messages, real
         {tab === 'following' ? t.following : t.all}</Link>)}
     </nav> : null}
     <div className="flex min-h-12 items-center gap-1 px-2 py-1.5 sm:px-3">
-      <LinkMenu label={t.sortLabel} value={state.sort} icon={<SortIcon aria-hidden="true" className="size-4" />}
-        options={sorts.map(sort => ({ value: sort, label: t[sort], help: sortHelp[sort], href: href({ sort }) }))} />
-      {state.sort === 'top' ? <LinkMenu label={t.period} value={state.window} options={topWindows.map(window =>
+      {orderFixed ? <p className="px-2.5 font-semibold text-sm">{t.new}</p> : <LinkMenu label={t.sortLabel} value={state.sort}
+        icon={<SortIcon aria-hidden="true" className="size-4" />}
+        options={sorts.map(sort => ({ value: sort, label: t[sort], help: sortHelp[sort], href: href({ sort }) }))} />}
+      {!orderFixed && state.sort === 'top' ? <LinkMenu label={t.period} value={state.window} options={topWindows.map(window =>
         ({ value: window, label: window === 'week' ? t.week : window === 'month' ? t.month : t.allTime,
           href: href({ window }) }))} /> : null}
       {state.tab === 'pinned' ? null : <Filters state={state} defaults={defaults} locale={locale} t={t} realms={realms}

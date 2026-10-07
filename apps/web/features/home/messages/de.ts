@@ -75,5 +75,5 @@ export default {
   suggestionsOff: 'Vorschläge sind unter „Abonniert“ ausgeschaltet.', turnOn: 'Einschalten',
   suggestionsFailed: 'Das ließ sich nicht speichern. Versuch es noch einmal.',
   reasonConcept: insert('Für {{concept}}', { concept: String }),
-  howPinned: 'Ein angehefteter Tab zeigt die Beiträge aus „Alle“, die zu seinem Thema oder Filter passen, gleich sortiert.',
+  howPinned: 'Ein Thema, dem du folgst, listet hier seine Werke, die neuesten zuerst. Ein angehefteter Filter zeigt die Beiträge aus „Alle“, die dazu passen.',
 } satisfies Partial<HomeMessages>;

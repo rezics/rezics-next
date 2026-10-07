@@ -1,26 +1,38 @@
 'use client';
 
-import { Button } from '@rezics/ui/button';
+import { Button, buttonVariants } from '@rezics/ui/button';
 import { Dialog, DialogBody, DialogClose, DialogContent, DialogFooter, DialogHeader } from '@rezics/ui/dialog';
 import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@rezics/ui/menu';
 import { cn } from '@rezics/ui/utils';
-import { ArrowLeftIcon, ArrowRightIcon, EllipsisIcon, PencilIcon, PinOffIcon, Trash2Icon, UserMinusIcon } from 'lucide-react';
+import { ArrowLeftIcon, ArrowRightIcon, EllipsisIcon, PencilIcon, PinOffIcon, RefreshCwIcon, RotateCwIcon,
+  TagIcon, Trash2Icon, TriangleAlertIcon, UserMinusIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
+import { browserMainApi } from '../api/browser.ts';
+import { resourceHref } from '../address/path.ts';
 import { useOperationGate } from '../shell/shell-provider.tsx';
 import { tabLink } from '../feed/controls.tsx';
+import { useFeed } from '../feed/feed-context.tsx';
 import type { FeedMessages } from '../feed/messages.ts';
+import { postRhythm } from '../feed/post-row.tsx';
 import { type FeedDefaults, feedSearch, type FeedState, pinnedTab, withChange } from '../feed/state.ts';
+import { failureText, type Loaded, type ReadFailure } from '../feed/types.ts';
 import type { OperationGate } from '../api/platform-access.ts';
+import { conceptPath } from '../concept/state.ts';
 import { mainSavedFilterApi, type SavedFilterApi } from '../saved-filter/api.ts';
 import { droppedOn, filterTitle, moved } from '../saved-filter/tabs.ts';
 import type { CommandResult, SavedFilter, SavedFilters } from '../saved-filter/types.ts';
+import { EmptyState, failureDetail } from '../shell/empty-state.tsx';
+import {
+  appendConceptWorks, type ConceptFeedPage, type ConceptWork, type FollowedConceptTab, filtersBesideTopics,
+  readConceptFeed,
+} from './followed-concept-feed.ts';
 import type { HomeMessages } from './messages.ts';
 
 type T = ReturnType<typeof materializeData<HomeMessages>>;
@@ -33,6 +45,8 @@ export interface HomeTabsProps {
   actingSubject: string;
   /** The reader's filters; null when Main could not read them, so only Following and All show. */
   filters: SavedFilters | null;
+  /** Topics the reader follows. Each is a tab whether or not Saved Filters are open. */
+  concepts?: readonly FollowedConceptTab[];
   /** The `+` picker, drawn after the tabs. */
   picker?: ReactNode;
   /** Stories: an in-memory Main. */
@@ -47,7 +61,7 @@ export interface HomeTabsProps {
  * desktop a pinned tab is dragged to a new place, and every tab's menu moves,
  * renames or removes it with the keyboard too. Each tab has its own address.
  */
-export function HomeTabs({ state, defaults, locale, messages, actingSubject, filters, picker, api: given,
+export function HomeTabs({ state, defaults, locale, messages, actingSubject, filters, concepts = [], picker, api: given,
   gate: givenGate }: HomeTabsProps) {
   const t = materializeData(messages.home, { locale });
   const feed = materializeData(messages.feed, { locale });
@@ -69,7 +83,9 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
   const [dragging, setDragging] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<SavedFilter | null>(null);
   const strip = useRef<HTMLUListElement>(null);
-  const shown = (order ?? server).flatMap(id => filters?.pinned.find(filter => filter.id === id) ?? []);
+  // A followed topic has its own tab. The saved filter that only named that topic is not shown beside it.
+  const shown = filtersBesideTopics((order ?? server).flatMap(id => filters?.pinned.find(filter => filter.id === id) ?? []),
+    concepts);
   const href = (next: FeedState) => localizedPath(`/${feedSearch(next, defaults)}`, locale);
   const serverKey = server.join();
 
@@ -97,7 +113,7 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
     resized.observe(list);
     list.addEventListener('scroll', mark, { passive: true });
     return () => { resized.disconnect(); list.removeEventListener('scroll', mark); };
-  }, [state.tab, state.filter, shown.length]);
+  }, [state.tab, state.filter, shown.length, concepts.length]);
 
   async function settle<R>(result: Promise<CommandResult<R>>, after?: () => void) {
     const done = await result;
@@ -121,6 +137,12 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
     if (state.tab === 'pinned' && state.filter === filter.id) router.push(href(withChange(state, { tab: 'all' })));
   };
 
+  function unfollow(concept: FollowedConceptTab) {
+    const leave = state.tab === 'pinned' && state.filter === concept.tab
+      ? () => router.push(href(withChange(state, { tab: 'all' }))) : undefined;
+    void settle(client().followConcept(concept.id, false), leave);
+  }
+
   function remove(filter: SavedFilter, action: 'unpin' | 'unfollow' | 'delete') {
     void settle(action === 'unpin' ? client().update(filter, { pinned: false })
       : action === 'unfollow' ? client().followConcept(filter.concept!.id, false) : client().remove(filter), leave(filter));
@@ -137,6 +159,22 @@ export function HomeTabs({ state, defaults, locale, messages, actingSubject, fil
         <Link href={href(withChange(state, { tab }))} aria-current={state.tab === tab ? 'page' : undefined}
           className={tabLink}>{tab === 'following' ? feed.following : feed.all}</Link>
       </li>)}
+      {concepts.map(concept => {
+        const title = concept.name;
+        const name = title?.value ?? t.untitledTab;
+        const current = state.tab === 'pinned' && state.filter === concept.tab;
+        return <li key={concept.id} className="group/tab relative flex shrink-0 snap-start items-stretch">
+          <Link href={href(pinnedTab(state, concept.tab))} aria-current={current ? 'page' : undefined}
+            lang={title?.language} dir={title?.direction} draggable={false}
+            className={cn(tabLink, 'max-w-56', current && 'pe-9 sm:pe-10')}>
+            <span className="truncate">{name}</span></Link>
+          {current ? <button type="button" aria-label={t.unfollowTopic({ topic: name })}
+            className="absolute end-1.5 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full
+              text-muted-foreground outline-none hover:bg-foreground/[0.06] hover:text-foreground
+              focus-visible:ring-2 focus-visible:ring-ring sm:end-2"
+            onClick={() => unfollow(concept)}><UserMinusIcon aria-hidden="true" className="size-4" /></button> : null}
+        </li>;
+      })}
       {shown.map((filter, index) => {
         const title = filterTitle(filter);
         const name = title?.value ?? t.untitledTab;
@@ -239,4 +277,79 @@ function RenameDialog({ t, filter, onClose, onSave }: { t: T; filter: SavedFilte
       </form>
     </DialogContent>
   </Dialog>;
+}
+
+type ConceptLoader = (cursor: string) => Promise<Loaded<ConceptFeedPage>>;
+
+/** The first page failed: say what failed, and offer the one next step. */
+function TopicFailure({ failure, reference }: { failure: ReadFailure; reference?: string }) {
+  const { t, signInHref } = useFeed();
+  const router = useRouter();
+  const text = failureText(failure, { failedTitle: t.failed, offline: t.failedBody, server: t.serverBody,
+    missingTitle: t.feedMissing, missingBody: t.missingBody, deniedTitle: t.deniedTitle, deniedBody: t.deniedBody,
+    movedTitle: t.moved, movedBody: t.movedBody, budget: t.budgetBody });
+  if (text.kind === 'absent') return null;
+  const moved = text.action === 'restart';
+  const quiet = text.action === 'none' || text.action === 'sign-in';
+  return <EmptyState icon={moved ? RefreshCwIcon : TriangleAlertIcon} tone={quiet || moved ? 'default' : 'destructive'}
+    role={quiet ? 'status' : 'alert'} title={text.title}
+    description={failureDetail(text.description, reference, t.errorReference, text.reference)} className="m-3 sm:m-4">
+    {text.action === 'none' ? null : text.action === 'sign-in'
+      ? <Link href={signInHref} className={buttonVariants()}>{t.signIn}</Link>
+      : <Button onClick={() => router.refresh()}><RotateCwIcon aria-hidden="true" />{moved ? t.refresh : t.retry}</Button>}
+  </EmptyState>;
+}
+
+/**
+ * One followed topic's public works, newest first. The server renders the first
+ * seek page; Show more asks for the next cursor and keeps what is already listed.
+ */
+export function ConceptTopicFeed({ topic, initial, locale, messages, load }: {
+  topic: FollowedConceptTab | null; initial: Loaded<ConceptFeedPage>; locale: UiLocale;
+  messages: { home: HomeMessages }; load?: ConceptLoader;
+}) {
+  const home = materializeData(messages.home, { locale });
+  const [items, setItems] = useState<ConceptWork[]>(initial.ok ? initial.data.items : []);
+  const [cursor, setCursor] = useState<string | null>(initial.ok ? initial.data.nextCursor : null);
+  const [loading, setLoading] = useState(false);
+  const [moreFailed, setMoreFailed] = useState(false);
+  const busy = useRef(false);
+  const label = topic?.name?.value ?? home.untitledTab;
+  async function more() {
+    if (!topic || !cursor || busy.current) return;
+    busy.current = true;
+    setLoading(true);
+    const requested = cursor;
+    const read = await (load ?? (next => readConceptFeed(browserMainApi(), topic.id, locale, next)))(requested);
+    busy.current = false;
+    setLoading(false);
+    if (!read.ok) { setMoreFailed(true); return; }
+    const appended = appendConceptWorks(items, read.data, requested);
+    setItems(appended.items);
+    setCursor(appended.cursor);
+    setMoreFailed(false);
+  }
+  if (!initial.ok) return <TopicFailure failure={initial.failure} reference={initial.reference} />;
+  if (!items.length) {
+    return <EmptyState icon={TagIcon} title={home.emptyPinned({ topic: label })} description={home.emptyTopicBody}
+      className="m-3 sm:m-4">
+      {topic ? <Link href={localizedPath(conceptPath(topic.id), locale)}
+        className={buttonVariants({ size: 'sm' })}>{home.openTopic({ topic: label })}</Link> : null}
+    </EmptyState>;
+  }
+  return <div>
+    <ul>
+      {items.map(item => <li key={item.id} className="border-border/60 border-b">
+        <Link href={localizedPath(resourceHref('/w/', item.id), locale)} lang={item.name.language}
+          dir={item.name.direction} className={cn(postRhythm.row, postRhythm.title, 'block text-balance outline-none',
+            'hover:bg-foreground/[0.03] focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset')}>
+          {item.name.value}</Link>
+      </li>)}
+    </ul>
+    {cursor ? <div className="grid justify-items-center gap-2 px-4 py-3">
+      {moreFailed ? <p role="status" className="text-destructive-foreground text-sm">{home.topicMoreFailed}</p> : null}
+      <Button type="button" variant="outline" size="sm" isLoading={loading} onClick={() => void more()}>
+        {loading ? home.loadingMoreWorks : home.showMoreWorks}</Button>
+    </div> : null}
+  </div>;
 }

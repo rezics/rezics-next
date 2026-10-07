@@ -71,5 +71,5 @@ export default {
   howCap: insert('任意连续 {{window}} 条动态中，同一领域最多占 {{cap}} 条。', { cap: String, window: String }),
   howNew: '“最新”严格按时间排序。“最高”统计你所选时间范围内的得票。',
   howFollowing: '“关注”显示你关注的领域、专区和作品。只有在内容较少时才会加入推荐，并会标明。',
-  howPinned: '固定的标签页显示“全部”中符合其主题或筛选的动态，排序方式相同。',
+  howPinned: '你关注的主题在这里列出它的作品，最新的在前。固定的筛选则显示“全部”中符合该筛选的动态。',
 } satisfies Partial<HomeMessages>;

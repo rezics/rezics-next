@@ -27,6 +27,7 @@ import { SetupInvite } from './invite.tsx';
 import type { HomeMessages } from './messages.ts';
 import { PinPicker } from './pin-picker.tsx';
 import { SuggestionsNote } from './suggestions-note.tsx';
+import type { FollowedConceptTab } from './followed-concept-feed.ts';
 import { HomeTabs } from './tabs.tsx';
 import { WelcomeCard } from './welcome.tsx';
 
@@ -50,6 +51,8 @@ export interface HomePageProps {
   official: readonly Community[];
   /** The reader's Saved Filters: pinned tabs and the rest. Null signed out or when Main could not read them. */
   savedFilters: SavedFilters | null;
+  /** Topics the reader follows, each a Home tab of that topic's public works. */
+  concepts?: readonly FollowedConceptTab[];
   /** The first-minute setup, returning here. */
   setupHref: string;
   /** The new person put the setup invitation off before. */
@@ -180,8 +183,10 @@ export function HomePage(props: HomePageProps) {
   const document = currentFiltersDocument(state);
   const current = document ? { document, labels: [...state.languages.map(language => names.of(language) ?? language),
     ...state.realms.map(realm => realms.find(item => item.id === realm)?.name ?? feed.realms)] } : null;
+  const concepts = props.concepts ?? [];
+  const topicOpen = state.tab === 'pinned' && concepts.some(concept => concept.tab === state.filter);
   const tabs = actingSubject ? <HomeTabs state={state} defaults={defaults} locale={locale} messages={messages}
-    actingSubject={actingSubject} filters={props.savedFilters} api={props.filtersApi}
+    actingSubject={actingSubject} filters={props.savedFilters} concepts={concepts} api={props.filtersApi}
     gate={props.operationGate}
     picker={props.savedFilters ? <PinPicker state={state} defaults={defaults} locale={locale} messages={messages.home}
       actingSubject={actingSubject} filters={props.savedFilters} current={current} api={props.filtersApi}
@@ -204,7 +209,8 @@ export function HomePage(props: HomePageProps) {
         <section aria-labelledby="home-posts" className="min-w-0">
           <h2 id="home-posts" className="sr-only">{feed.posts}</h2>
           <FeedControls state={state} defaults={defaults} signedIn={Boolean(actingSubject)} locale={locale}
-            messages={messages.feed} realms={realms} tabs={tabs} readingLanguages={props.readingLanguages ?? null} />
+            messages={messages.feed} realms={realms} tabs={tabs} readingLanguages={props.readingLanguages ?? null}
+            orderFixed={topicOpen} />
           {props.posts}
         </section>
       </div>

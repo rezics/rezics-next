@@ -75,5 +75,5 @@ export default {
   suggestionsOff: '‘팔로잉’의 추천이 꺼져 있어요.', turnOn: '켜기',
   suggestionsFailed: '저장하지 못했어요. 다시 시도해 주세요.',
   reasonConcept: insert('{{concept}} 추천', { concept: String }),
-  howPinned: '고정한 탭은 ‘전체’ 중 그 주제나 필터에 맞는 글을 같은 순서로 보여 줘요.',
+  howPinned: '팔로우한 주제 탭에는 그 작품이 최신순으로 나와요. 고정한 필터는 ‘전체’ 중 조건에 맞는 글을 보여 줘요.',
 } satisfies Partial<HomeMessages>;

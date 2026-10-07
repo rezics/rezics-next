@@ -70,5 +70,5 @@ export default {
   suggestionsOff: '「フォロー中」のおすすめはオフです。', turnOn: 'オンにする',
   suggestionsFailed: '保存できませんでした。もう一度お試しください。',
   reasonConcept: insert('{{concept}}向け', { concept: String }),
-  howPinned: '固定したタブには、「すべて」のうちそのトピックやフィルターに合う投稿が同じ並び順で表示されます。',
+  howPinned: 'フォローしたトピックのタブには、その作品が新しい順に並びます。固定したフィルターは、「すべて」のうち条件に合う投稿を表示します。',
 } satisfies Partial<HomeMessages>;

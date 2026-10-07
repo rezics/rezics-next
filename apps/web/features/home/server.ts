@@ -6,6 +6,10 @@ import { type ContinueItem, type FeedPage, type FeedQuery, type Loaded, settle, 
   type TrendingItem } from '../feed/types.ts';
 import { readFollowed, readModerated, readOfficialZones, shellReader } from '../shell/communities-read.ts';
 import type { Community, Moderated } from '../shell/communities.ts';
+import {
+  addressConceptTab, collectConceptTabs, type ConceptAddress, type ConceptFeedPage, type FollowedConceptTab,
+  readConceptFeed, tabFromFollowState, withOpenedConcept,
+} from './followed-concept-feed.ts';
 
 // Server reads for home. Each returns its own outcome, so one region's
 // failure never takes down another; the rail streams in after the feed.
@@ -89,6 +93,56 @@ export async function readHomeView(params: Record<string, string | string[] | un
     followed: realms && zones ? { realms: realms.items, zones: zones.items, complete: realms.complete && zones.complete }
       : null };
 }
+
+/**
+ * The topics the reader follows, as Home tabs. Null when Home could not read
+ * the follows list. Saved Filters are not consulted: a topic tab needs no platform grant.
+ */
+export async function readFollowedConceptTabs(): Promise<{ tabs: FollowedConceptTab[]; complete: boolean } | null> {
+  const reader = await shellReader();
+  if (!reader.actingSubject) return null;
+  const actingSubject = reader.actingSubject;
+  return collectConceptTabs(async cursor => {
+    const read = await settle(() => reader.main.v1.me.follows.get({ query: {
+      actingSubject, kind: 'concept', limit: 20, ...(cursor ? { cursor } : {}) } }));
+    if (!read.ok) return read;
+    return { ok: true, data: { items: read.data.items, nextCursor: read.data.nextCursor, complete: read.data.complete } };
+  });
+}
+
+/**
+ * The topic `?tab=` names. A complete follows list answers on its own. An
+ * unfinished or unread list asks follow state for that one Concept, so a
+ * bookmarked topic still opens and a saved-filter address does not become one.
+ */
+export async function resolveConceptTab(tabUuid: string | null,
+  listed: { tabs: readonly FollowedConceptTab[]; complete: boolean } | null): Promise<
+  { kind: 'selected'; tab: FollowedConceptTab; tabs: FollowedConceptTab[] }
+  | { kind: 'absent'; tabs: FollowedConceptTab[] }
+  | { kind: 'unread'; tabs: FollowedConceptTab[] }> {
+  const tabs = [...(listed?.tabs ?? [])];
+  if (!tabUuid) return { kind: 'absent', tabs };
+  const addressed: ConceptAddress = addressConceptTab(listed, tabUuid);
+  if (addressed.kind === 'selected') return { kind: 'selected', tab: addressed.tab, tabs };
+  if (addressed.kind === 'absent') return { kind: 'absent', tabs };
+  const reader = await shellReader();
+  if (!reader.actingSubject) return { kind: 'absent', tabs };
+  const read = await settle(() => reader.main.v1.follows({ id: tabUuid }).get({ query: {
+    kind: 'concept', actingSubject: reader.actingSubject! } }));
+  if (!read.ok) return read.failure === 'missing' || read.failure === 'invalid'
+    ? { kind: 'absent', tabs } : { kind: 'unread', tabs };
+  const tab = tabFromFollowState(read.data, tabUuid);
+  return tab ? { kind: 'selected', tab, tabs: withOpenedConcept(tabs, tab) } : { kind: 'absent', tabs };
+}
+
+/** One seek page of a followed topic's public works, newest first. */
+export async function readConceptTopicFeed(conceptId: string, locale: UiLocale, cursor?: string):
+  Promise<Loaded<ConceptFeedPage>> {
+  const reader = await shellReader();
+  return readConceptFeed(reader.actingSubject ? reader.main : reader.anonymous, conceptId, locale, cursor);
+}
+
+export type { ConceptFeedPage, FollowedConceptTab };
 
 export async function readHomePosts(view: HomeView, locale: UiLocale): Promise<HomePosts> {
   const reader = await shellReader();

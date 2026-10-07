@@ -70,5 +70,5 @@ export default {
   suggestionsOff: '「追蹤中」的推薦已關閉。', turnOn: '開啟',
   suggestionsFailed: '無法儲存，請重試。',
   reasonConcept: insert('為喜歡{{concept}}的你推薦', { concept: String }),
-  howPinned: '釘選的分頁顯示「全部」中符合其主題或篩選的動態，排序方式相同。',
+  howPinned: '你關注的主題在這裡列出它的作品，最新的在前。釘選的篩選則顯示「全部」中符合該篩選的動態。',
 } satisfies Partial<HomeMessages>;

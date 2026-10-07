@@ -10,12 +10,15 @@ import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import { everyKind, memoryFeed, NOW, page, post, realms, storyId, suggestion } from '../feed/fixtures.ts';
 import { messages as feed } from '../feed/messages.ts';
 import feedZhHans from '../feed/messages/zh-Hans.ts';
+import { idOf } from '../discover/scope.ts';
 import { type FeedDefaults, type FeedState, feedQuery } from '../feed/state.ts';
 import type { FeedPage, Loaded } from '../feed/types.ts';
 import { memorySavedFilters, noFilters, readerFilters, topics } from '../saved-filter/fixtures.ts';
 import type { SavedFilter, SavedFilters } from '../saved-filter/types.ts';
 import { continueItems, followedCommunities, officialZones, railData, suggestions } from './fixtures.ts';
+import type { ConceptWork } from './followed-concept-feed.ts';
 import { HomePage, type HomePageProps, HomePosts } from './home-page.tsx';
+import { ConceptTopicFeed } from './tabs.tsx';
 import { messages as home } from './messages.ts';
 import homeZhHans from './messages/zh-Hans.ts';
 import { Rail } from './rail.tsx';
@@ -394,6 +397,60 @@ export const TabsFull: Story = {
     await userEvent.click(within(canvasElement).getByRole('button', { name: 'Pin a topic or filter' }));
     const dialog = within(await screen.findByRole('dialog', { name: 'Pin to Home' }));
     await expect(dialog.getByRole('status')).toHaveTextContent('Home has room for eight tabs');
+  },
+};
+
+const fantasyTopic = topics.fantasy.id;
+const fantasyTab = idOf(fantasyTopic)!;
+const conceptWork = (n: number, title: string): ConceptWork => ({
+  id: storyId(n, 'cccc'), concept: fantasyTopic, name: { value: title, language: 'en', direction: 'ltr' },
+});
+const followedTopic = { id: fantasyTopic, tab: fantasyTab, name: { value: 'Fantasy', language: 'en' },
+  revision: storyId(90, 'aaaa') };
+
+function followedTopicProps(): Args {
+  return props({
+    savedFilters: null,
+    state: state({ tab: 'pinned', filter: fantasyTab }),
+    concepts: [followedTopic],
+    posts: <ConceptTopicFeed topic={followedTopic} locale="en" messages={{ home }}
+      initial={{ ok: true, data: { items: [conceptWork(1, 'Lantern Market')], nextCursor: 'older', complete: false } }}
+      load={async () => ({ ok: true, data: { items: [conceptWork(2, 'Older Tale')], nextCursor: null, complete: true } })} />,
+  });
+}
+
+/** A followed topic is its own tab of that topic's public works, with Saved Filters still closed. */
+export const FollowedTopic: Story = {
+  args: followedTopicProps(),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const tabs = canvas.getByRole('navigation', { name: 'Feed' });
+    await expect(within(tabs).getAllByRole('link').map(link => link.textContent)).toEqual(['Following', 'All', 'Fantasy']);
+    const topic = within(tabs).getByRole('link', { name: 'Fantasy' });
+    await expect(topic).toHaveAttribute('aria-current', 'page');
+    await expect(topic).toHaveAttribute('href', `/en?tab=${fantasyTab}`);
+    await expect(within(tabs).queryByRole('button', { name: /Pin a topic/ })).toBeNull();
+    await expect(within(tabs).queryByRole('button', { name: /^Options for / })).toBeNull();
+    await expect(within(tabs).getByRole('button', { name: 'Unfollow Fantasy' })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: /^Sort:/ })).toBeNull();
+    await expect(canvas.getByText('New')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Lantern Market' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+    await expect(canvas.getByRole('link', { name: 'Older Tale' })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Lantern Market' })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
+    await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
+  },
+};
+
+export const FollowedTopicPhone: Story = {
+  args: followedTopicProps(),
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Fantasy' })).toHaveAttribute('aria-current', 'page');
+    await expect(canvas.getByRole('link', { name: 'Lantern Market' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
 

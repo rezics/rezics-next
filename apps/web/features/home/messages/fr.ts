@@ -75,5 +75,5 @@ export default {
   suggestionsOff: 'Les suggestions sont désactivées dans « Suivi ».', turnOn: 'Activer',
   suggestionsFailed: 'Impossible d’enregistrer. Réessayez.',
   reasonConcept: insert('Pour {{concept}}', { concept: String }),
-  howPinned: 'Un onglet épinglé montre les publications de « Tout » qui correspondent à son thème ou à ses filtres, triées de la même façon.',
+  howPinned: 'Un thème que vous suivez liste ici ses œuvres, les plus récentes d’abord. Un filtre épinglé montre les publications de « Tout » qui lui correspondent.',
 } satisfies Partial<HomeMessages>;

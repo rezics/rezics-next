@@ -75,5 +75,5 @@ export default {
   suggestionsOff: 'Las sugerencias están desactivadas en «Siguiendo».', turnOn: 'Activar',
   suggestionsFailed: 'No se pudo guardar. Inténtalo de nuevo.',
   reasonConcept: insert('Para {{concept}}', { concept: String }),
-  howPinned: 'Una pestaña fijada muestra las publicaciones de «Todo» que coinciden con su tema o filtros, con el mismo orden.',
+  howPinned: 'Un tema que sigues lista aquí sus obras, las más recientes primero. Un filtro fijado muestra las publicaciones de «Todo» que coinciden con él.',
 } satisfies Partial<HomeMessages>;

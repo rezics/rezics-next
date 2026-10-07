@@ -39,6 +39,10 @@ export const messages = {
   tabMissing: 'This tab isn’t on your Home any more', tabMissingBody: 'It may have been removed in another window.',
   emptyPinned: insert('Nothing about {{topic}} yet', { topic: String }),
   emptyPinnedBody: 'Posts appear here when people share, review or discuss works with this topic.',
+  emptyTopicBody: 'Works with this topic are listed here, newest first.',
+  showMoreWorks: 'Show more',
+  loadingMoreWorks: 'Loading more works…',
+  topicMoreFailed: 'Couldn’t load more works. Try again.',
   emptyPinnedFilter: 'Nothing matches this tab yet',
   openTopic: insert('Open {{topic}}', { topic: String }),
   tabUnsupported: 'Home can’t show this filter’s posts yet.',
@@ -81,7 +85,7 @@ export const messages = {
   howCap: insert('No Realm fills more than {{cap}} of any {{window}} posts in a row.', { cap: String, window: String }),
   howNew: 'New is strictly newest first. Top counts votes in the period you choose.',
   howFollowing: 'Following shows the Realms, Zones and works you follow. Suggestions appear there only when it is quiet, and are marked.',
-  howPinned: 'A pinned tab shows the posts from All that match its topic or filters, sorted the same way.',
+  howPinned: 'A topic you follow lists its works here, newest first. A pinned filter shows the posts from All that match it.',
 };
 
 export type HomeMessages = typeof messages;
