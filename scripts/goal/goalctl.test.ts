@@ -9,7 +9,7 @@ import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile
   goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   codexHoursUntil100, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, memoryFloorRefusal,
-  shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, unitFailureDetails,
+  shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, unitFailureDetails, unitFileErrorDetails,
   type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief } from './goalctl.ts';
 
 const brief = `---
@@ -266,6 +266,24 @@ describe('goalctl runtime policy', () => {
     expect(introducedUnitFailureFiles([file], report(baseline), main)).toEqual([]);
     expect(introducedUnitFailureFiles([file], report(shifted), report(baseline))).toEqual([]);
     expect(introducedUnitFailureFiles([file], report(baseline), [])).toEqual([file]);
+  });
+
+  test('file-level load errors inherit only when normalized error text matches', () => {
+    const file = 'tests/qa/unit/load-failure.test.ts';
+    const branchRoot = '/tmp/worktrees/worker';
+    const mainRoot = '/tmp/unit-gate-baseline';
+    const output = (root: string, missing: string, line: number, column: number, duration: number) => [
+      `${file}:`, '# Unhandled error between tests',
+      `error: Cannot find module '${root}/modules/${missing}.js' from '${root}/${file}'`,
+      `    at load (${root}/runtime/loader.js:${line}:${column})`, `completed in ${duration}ms`,
+    ].join('\n');
+    const branch = unitFileErrorDetails(output(branchRoot, 'shared-module', 394, 7, 12), [file], branchRoot);
+    const same = unitFileErrorDetails(output(mainRoot, 'shared-module', 398, 21, 31), [file], mainRoot);
+    const different = unitFileErrorDetails(output(mainRoot, 'main-module', 398, 21, 31), [file], mainRoot);
+    expect(branch).toHaveLength(1);
+    expect(branch[0]!.detail).toBe(same[0]!.detail);
+    expect(introducedUnitFailureFiles([file], [], [], branch, same)).toEqual([]);
+    expect(introducedUnitFailureFiles([file], [], [], branch, different)).toEqual([file]);
   });
 
   test('loads reset status by GET, caches it, and projects account runway from the later reset boundary', async () => {

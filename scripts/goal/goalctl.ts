@@ -1904,7 +1904,8 @@ async function stopProcessGroup(child: ChildProcess): Promise<void> {
 }
 
 interface UnitShardResult {
-  done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[]; files: string[]; output: string; ms: number;
+  done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[]; fileErrors: UnitFileErrorDetail[];
+  files: string[]; output: string; ms: number;
 }
 
 function unitFileFromHeader(output: string, files: readonly string[], cwd: string): string | undefined {
@@ -1942,6 +1943,7 @@ export function shardTimeoutFiles(output: string, candidates: readonly string[],
 }
 
 export interface UnitFailureDetail { file: string; test: string; detail?: string }
+export interface UnitFileErrorDetail { file: string; detail: string }
 
 /** Capture each failed test's assertion detail without file-specific stack locations. */
 export function unitFailureDetails(output: string, candidates: readonly string[], root?: string): UnitFailureDetail[] {
@@ -1978,6 +1980,47 @@ export function unitFailureDetails(output: string, candidates: readonly string[]
   return found;
 }
 
+export function normalizeUnitFileError(error: string, root?: string): string {
+  let normalized = error.replace(/\u001b\[[\d;]*m/g, '').replace(/\r/g, '');
+  if (root) normalized = normalized.split(root).join('<worktree>');
+  return normalized
+    .replace(/((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:tsx?|jsx?|sql|json|mjs|cjs)):\d+:\d+/g,
+      '$1:<line>:<column>')
+    .replace(/\b\d+(?:\.\d+)?\s*(?:ms|msec|milliseconds?|s|sec|seconds?)\b/gi, '<duration>')
+    .trim();
+}
+
+/** Load errors have no failing test name, so retain the file-scoped error block for baseline comparison. */
+export function unitFileErrorDetails(output: string, candidates: readonly string[], root?: string): UnitFileErrorDetail[] {
+  const known = new Set(candidates);
+  const errors = new Map<string, string[]>();
+  const plain = output.replace(/\u001b\[[\d;]*m/g, '');
+  let current: string | undefined;
+  let collecting = false;
+  for (const line of plain.split('\n')) {
+    const header = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/.exec(line);
+    if (header) {
+      current = header[1]!.replace(/^\.\//, '');
+      if (root && isAbsolute(current)) current = relative(root, current);
+      if (!known.has(current)) current = undefined;
+      collecting = false;
+      continue;
+    }
+    if (!current) continue;
+    if (/^(?:# Unhandled error|error:)/i.test(line)) {
+      const bucket = errors.get(current) ?? [];
+      bucket.push(line.trim());
+      errors.set(current, bucket);
+      collecting = true;
+    } else if (collecting && /^\s*at\s/.test(line)) {
+      const bucket = errors.get(current)!;
+      bucket.push(line.trimEnd());
+    } else if (collecting && /^\(fail\)/.test(line)) collecting = false;
+    else if (collecting) errors.get(current)!.push(line.trimEnd());
+  }
+  return [...errors].map(([file, lines]) => ({ file, detail: normalizeUnitFileError(lines.join('\n'), root) }));
+}
+
 function normalizedFindingLines(detail: string | undefined): string[] {
   if (!detail) return [];
   return detail.split('\n').flatMap(line => {
@@ -1990,21 +2033,31 @@ function normalizedFindingLines(detail: string | undefined): string[] {
 }
 
 export function introducedUnitFailureFiles(branchFiles: readonly string[], branch: readonly UnitFailureDetail[],
-  main: readonly UnitFailureDetail[]): string[] {
+  main: readonly UnitFailureDetail[], branchErrors: readonly UnitFileErrorDetail[] = [],
+  mainErrors: readonly UnitFileErrorDetail[] = []): string[] {
   const introduced: string[] = [];
   for (const file of branchFiles) {
     const branchFailures = branch.filter(failure => failure.file === file);
-    if (!branchFailures.length) {
+    const mainFailures = main.filter(failure => failure.file === file);
+    if (!branchFailures.length && !mainFailures.length) {
+      const branchFileErrors = branchErrors.filter(error => error.file === file);
+      const mainFileErrors = mainErrors.filter(error => error.file === file);
+      if (!branchFileErrors.length || !mainFileErrors.some(error => branchFileErrors.some(branchError => branchError.detail === error.detail))) {
+        introduced.push(file);
+      }
+      continue;
+    }
+    if (!branchFailures.length || !mainFailures.length) {
       introduced.push(file);
       continue;
     }
     for (const branchFailure of branchFailures) {
-      const mainFailures = main.filter(failure => failure.file === file && failure.test === branchFailure.test);
-      if (!mainFailures.length) {
+      const sameTest = mainFailures.filter(failure => failure.test === branchFailure.test);
+      if (!sameTest.length) {
         introduced.push(file);
         break;
       }
-      const mainFindings = new Set(mainFailures.flatMap(failure => normalizedFindingLines(failure.detail)));
+      const mainFindings = new Set(sameTest.flatMap(failure => normalizedFindingLines(failure.detail)));
       if (normalizedFindingLines(branchFailure.detail).some(finding => !mainFindings.has(finding))) {
         introduced.push(file);
         break;
@@ -2018,6 +2071,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   const startedAt = Date.now();
   const unfinished = (output: string, timedOut: string[] = timedOutTestFiles(output, files, cwd)): UnitShardResult =>
     ({ done: false, failing: [], timedOut, failures: unitFailureDetails(output, files, cwd),
+      fileErrors: unitFileErrorDetails(output, files, cwd),
       files: [...files], output, ms: Date.now() - startedAt });
   // Inventory guards include owner files. Run the selected Bun files directly
   // through Task so the public selector's tier-mixing refusal cannot mask them.
@@ -2059,10 +2113,11 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     const text = output();
     const timedOut = timedOutTestFiles(text, files, cwd);
     const failures = unitFailureDetails(text, files, cwd);
+    const fileErrors = unitFileErrorDetails(text, files, cwd);
     const failing = [...new Set([...(outcome.code === 0 ? [] : failingTestFiles(text, files, cwd)), ...timedOut,
       ...failures.map(failure => failure.file)])];
     // A failure bun did not attribute to a file counts against that shard.
-    return { done: true, failing: outcome.code !== 0 && !failing.length ? [...files] : failing, timedOut, failures,
+    return { done: true, failing: outcome.code !== 0 && !failing.length ? [...files] : failing, timedOut, failures, fileErrors,
       files: [...files], output: text,
       ms: Date.now() - startedAt };
   } catch {
@@ -2077,9 +2132,10 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
 /** Parallel `task test` shards under one wall-clock budget. An unfinished shard makes the side inconclusive:
  * failures from shards that did finish are not a verdict, because the set was not fully run. */
 export async function runUnitGate(cwd: string, files: readonly string[], shards?: number): Promise<{
-  done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[]; unfinished: string[]; output: string;
+  done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[];
+  fileErrors: UnitFileErrorDetail[]; unfinished: string[]; output: string;
 }> {
-  if (!files.length) return { done: true, failing: [], timedOut: [], failures: [], unfinished: [], output: '' };
+  if (!files.length) return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], unfinished: [], output: '' };
   const groups = balanceUnitShards(files, shards ?? unitGateShards());
   const budget = unitGateBudgetMs();
   console.log(`Unit gate: ${files.length} file(s) in ${groups.length} shard(s), budget ${budget}ms`);
@@ -2094,8 +2150,9 @@ export async function runUnitGate(cwd: string, files: readonly string[], shards?
   const completed = results.filter(result => result.done);
   const failing = [...new Set(completed.flatMap(result => result.failing))].sort();
   const failures = completed.flatMap(result => result.failures);
-  if (unfinished.length) return { done: false, failing, timedOut, failures, unfinished, output };
-  return { done: true, failing, timedOut, failures, unfinished: [], output };
+  const fileErrors = completed.flatMap(result => result.fileErrors);
+  if (unfinished.length) return { done: false, failing, timedOut, failures, fileErrors, unfinished, output };
+  return { done: true, failing, timedOut, failures, fileErrors, unfinished: [], output };
 }
 
 function reportUnfinished(side: 'affected' | 'main', unfinished: readonly string[]): void {
@@ -2106,10 +2163,13 @@ function reportUnfinished(side: 'affected' | 'main', unfinished: readonly string
   console.log(`${lead}\n  ${unfinished.join('\n  ')}`);
 }
 
-interface TimeoutRetryResult { failing: string[]; passing: string[]; unfinished: string[]; inconclusive: string[]; failures: UnitFailureDetail[] }
+interface TimeoutRetryResult {
+  failing: string[]; passing: string[]; unfinished: string[]; inconclusive: string[];
+  failures: UnitFailureDetail[]; fileErrors: UnitFileErrorDetail[];
+}
 
 async function retryTimedOutFiles(cwd: string, files: readonly string[], side: 'affected' | 'main'): Promise<TimeoutRetryResult> {
-  const result: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [] };
+  const result: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [] };
   for (const file of [...new Set(files)].sort()) {
     console.log(`Unit gate: ${file} timed out on ${side}; rerunning alone`);
     const retry = await runUnitGate(cwd, [file], 1);
@@ -2123,6 +2183,7 @@ async function retryTimedOutFiles(cwd: string, files: readonly string[], side: '
     } else if (retry.failing.includes(file)) {
       result.failing.push(file);
       result.failures.push(...retry.failures.filter(failure => failure.file === file));
+      result.fileErrors.push(...retry.fileErrors.filter(error => error.file === file));
     } else result.passing.push(file);
   }
   return result;
@@ -2153,7 +2214,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
   const branch = await runUnitGate(worktree, files);
   let branchFailureFiles = branch.failing;
   let branchTimedOut = branch.timedOut;
-  let branchTimeoutRetry: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [] };
+  let branchTimeoutRetry: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [] };
   if (!branch.done) {
     branchTimeoutRetry = await retryTimedOutFiles(worktree, branch.timedOut, 'affected');
     branchFailureFiles = [...new Set([...branch.failing, ...branchTimeoutRetry.failing])].sort();
@@ -2176,7 +2237,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
   // then retry every timeout alone so the side's decision comes from its isolated run.
   const together = branchFailureFiles.filter(file => !branchTimedOut.includes(file));
   const confirmed = together.length ? await runUnitGate(worktree, together, 1)
-    : { done: true, failing: [], timedOut: [], failures: [], unfinished: [], output: '' };
+    : { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], unfinished: [], output: '' };
   const alreadyRetried = new Set(branch.done ? [] : branch.timedOut);
   const retryNewTimeouts = (files: readonly string[]) => files.filter(file => !alreadyRetried.has(file));
   let retry: TimeoutRetryResult;
@@ -2200,6 +2261,11 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
     ...(!branch.done ? branchTimeoutRetry.failures : []),
     ...(confirmed.done ? confirmed.failures.filter(failure => !confirmed.timedOut.includes(failure.file)) : []),
     ...retry.failures,
+  ];
+  const confirmedFileErrors = [
+    ...(!branch.done ? branchTimeoutRetry.fileErrors : []),
+    ...confirmed.fileErrors.filter(error => !confirmed.timedOut.includes(error.file)),
+    ...retry.fileErrors,
   ];
   const orderDependent = branch.done && confirmed.done ? together.filter(file => !confirmed.failing.includes(file)) : [];
   if (orderDependent.length) {
@@ -2235,7 +2301,12 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
           ? mainRetry.failures.filter(failure => failure.file === file)
           : mainRetry.passing.includes(file) ? []
           : main.failures.filter(failure => failure.file === file && !main.timedOut.includes(failure.file));
-        if (introducedUnitFailureFiles([file], confirmedDetails, mainDetails).includes(file)) introduced.push(file);
+        const mainFileErrors = mainRetry.failing.includes(file)
+          ? mainRetry.fileErrors.filter(error => error.file === file)
+          : mainRetry.passing.includes(file) ? []
+          : main.fileErrors.filter(error => error.file === file && !main.timedOut.includes(error.file));
+        if (introducedUnitFailureFiles([file], confirmedDetails.filter(failure => failure.file === file),
+          mainDetails, confirmedFileErrors.filter(error => error.file === file), mainFileErrors).includes(file)) introduced.push(file);
         else console.log(`Unit gate: ${file} also fails on main ${before.slice(0, 12)} with identical failure details; reported, not blocking`);
       }
     }
