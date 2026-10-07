@@ -1,10 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { parseTurtleProfile, type TurtleDeclaration } from '../compiler/shacl.ts';
 
-// Canonical routing and the command binding stay in the established registry.
-// Repeating them here declares the same route twice.
 export const ratingAggregateDefaultPolicyDeclaration = {
   id: 'rating-aggregate-default-policy-v1',
+  canonical: {
+    revision: { types: ['rv:RatingPolicyRevision'] },
+  },
+  binding: {
+    required: ['context', 'revision', 'contextRevision', 'predecessor', 'aggregationPolicy'],
+    roles: ['context', 'revision'],
+    demandedBy: ['rv:RatingPolicyRevision'],
+  },
 } as const satisfies TurtleDeclaration;
 
 export const ratingAggregateDefaultPolicyProfile = parseTurtleProfile(

@@ -167,7 +167,14 @@ test('rating and release Turtle preserves source pins, focus, routes and command
     expect(profileSource(profile)).toBe(source);
     expect(command.shapes.get(`shapes/${id}.ttl`)).toBe(source);
   }
-  expect(ratingAggregateDefaultPolicyProfile.binding).toBeUndefined();
+  expect(ratingAggregateDefaultPolicyProfile.binding).toEqual({
+    required: ['context', 'revision', 'contextRevision', 'predecessor', 'aggregationPolicy'],
+    roles: ['context', 'revision'],
+    demandedBy: ['rv:RatingPolicyRevision'],
+  });
+  expect(ratingAggregateDefaultPolicyProfile.shapes[1]!.canonical).toEqual({
+    types: ['rv:RatingPolicyRevision'],
+  });
   expect(releaseProfile.binding).toBeUndefined();
   expect(releaseV2Profile.binding).toBeUndefined();
   expect(releaseV3Profile.binding).toBeUndefined();

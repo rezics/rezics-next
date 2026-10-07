@@ -11,6 +11,12 @@ import { establishedDeclarations } from '../compiler/registry.ts';
 import { parseTurtleProfile, profileSource } from '../compiler/shacl.ts';
 import * as globalContext from '../definitions/global-rating-standing-context-v1.ts';
 import * as globalObservation from '../definitions/global-rating-standing-observation-v1.ts';
+import * as dailyContextDeclaration from '../definitions/realm-daily-rating-context-v1.ts';
+import * as dailyObservationDeclaration from '../definitions/realm-daily-rating-observation-v1.ts';
+import * as experienceContextDeclaration from '../definitions/realm-experience-rating-context-v1.ts';
+import * as experienceObservationDeclaration from '../definitions/realm-experience-rating-observation-v1.ts';
+import * as standingContextDeclaration from '../definitions/realm-standing-rating-context-v1.ts';
+import * as standingObservationDeclaration from '../definitions/realm-standing-rating-observation-v1.ts';
 import * as targetContextDeclaration from '../definitions/realm-target-rating-context-v1.ts';
 import * as targetObservationDeclaration from '../definitions/realm-target-rating-observation-v1.ts';
 import * as releaseContextDeclaration from '../definitions/realm-release-rating-context-v1.ts';
@@ -40,6 +46,10 @@ const profiles = authoredProfiles.filter((profile) => ids.includes(profile.id));
 const modules = [
   ['global-rating-standing-context-v1.ts', globalContext],
   ['global-rating-standing-observation-v1.ts', globalObservation],
+  ['realm-daily-rating-context-v1.ts', dailyContextDeclaration],
+  ['realm-daily-rating-observation-v1.ts', dailyObservationDeclaration],
+  ['realm-standing-rating-context-v1.ts', standingContextDeclaration],
+  ['realm-standing-rating-observation-v1.ts', standingObservationDeclaration],
 ] as const;
 const options = {
   established: Object.fromEntries(
@@ -134,6 +144,93 @@ const roles = (id: string) =>
     : id.startsWith('global-')
       ? ['context', 'work', 'main', 'observation', 'revision']
       : ['realm', 'context', 'work', 'main', 'observation', 'revision'];
+const expectedRatingMetadata = {
+  'global-rating-standing-context-v1': {
+    canonical: { context: { types: ['rv:GlobalRatingContext'] } },
+    binding: {
+      required: ['context', 'question'],
+      roles: ['context'],
+      demandedBy: ['rv:GlobalRatingContext'],
+    },
+  },
+  'global-rating-standing-observation-v1': {
+    canonical: {
+      observation: { types: ['rv:GlobalRatingObservation'] },
+      revision: { types: ['rv:GlobalRatingObservationRevision'] },
+    },
+    binding: {
+      required: ['context', 'work', 'main', 'slot', 'observation', 'revision', 'availability'],
+      optional: ['value', 'predecessor'],
+      roles: ['context', 'work', 'main', 'observation', 'revision'],
+      demandedBy: ['rv:GlobalRatingObservation', 'rv:GlobalRatingObservationRevision'],
+    },
+  },
+  'realm-experience-rating-context-v1': {
+    canonical: { context: { types: ['rv:ExperienceRatingContext'] } },
+    binding: {
+      required: ['realm', 'context', 'question'],
+      roles: ['realm', 'context'],
+      demandedBy: ['rv:ExperienceRatingContext'],
+    },
+  },
+  'realm-experience-rating-observation-v1': {
+    canonical: {
+      observation: { types: ['rv:ExperienceRatingObservation'] },
+      revision: { types: ['rv:ExperienceRatingObservationRevision'] },
+    },
+    binding: {
+      required: [
+        'realm', 'context', 'work', 'main', 'slot', 'observation', 'revision', 'availability', 'occasion',
+      ],
+      optional: ['value', 'predecessor'],
+      roles: ['realm', 'context', 'work', 'main', 'observation', 'revision'],
+      demandedBy: ['rv:ExperienceRatingObservation', 'rv:ExperienceRatingObservationRevision'],
+    },
+  },
+  'realm-daily-rating-context-v1': {
+    canonical: { context: { types: ['rv:DailyRatingContext'] } },
+    binding: {
+      required: ['realm', 'context', 'question', 'timeZone'],
+      roles: ['realm', 'context'],
+      demandedBy: ['rv:DailyRatingContext'],
+    },
+  },
+  'realm-daily-rating-observation-v1': {
+    canonical: {
+      observation: { types: ['rv:DailyRatingObservation'] },
+      revision: { types: ['rv:DailyRatingObservationRevision'] },
+    },
+    binding: {
+      required: [
+        'realm', 'context', 'work', 'main', 'slot', 'observation', 'revision', 'availability',
+        'day', 'timeZone', 'periodStart', 'periodEnd',
+      ],
+      optional: ['value', 'predecessor'],
+      roles: ['realm', 'context', 'work', 'main', 'observation', 'revision'],
+      demandedBy: ['rv:DailyRatingObservation', 'rv:DailyRatingObservationRevision'],
+    },
+  },
+  'realm-standing-rating-context-v1': {
+    canonical: { context: { types: ['rv:RatingContext'] } },
+    binding: {
+      required: ['realm', 'context', 'question'],
+      roles: ['realm', 'context'],
+      demandedBy: ['rv:RatingContext'],
+    },
+  },
+  'realm-standing-rating-observation-v1': {
+    canonical: {
+      observation: { types: ['rv:RatingObservation'] },
+      revision: { types: ['rv:RatingObservationRevision'] },
+    },
+    binding: {
+      required: ['realm', 'context', 'work', 'main', 'slot', 'observation', 'revision', 'availability'],
+      optional: ['value', 'predecessor'],
+      roles: ['realm', 'context', 'work', 'main', 'observation', 'revision'],
+      demandedBy: ['rv:RatingObservation', 'rv:RatingObservationRevision'],
+    },
+  },
+} as const;
 const outputs = buildModelOutputs(profiles);
 let schemaPromise: Promise<Record<string, TSchema>> | undefined;
 function schemas(): Promise<Record<string, TSchema>> {
@@ -146,6 +243,60 @@ function schemas(): Promise<Record<string, TSchema>> {
 }
 async function accepts(id: string, role: string, node: Record<string, unknown>): Promise<boolean> {
   return Value.Check((await schemas())[`${definition}${id}/${role}-shape`]!, node);
+}
+function assertRatingCommandMetadata(
+  authored: readonly ProfileDefinition[],
+  manifest: {
+    profiles: { id: string; binding?: { required: string[]; optional: string[]; roles: string[] } }[];
+    canonical: { type: string; routes: { profile: string; shape: string; when: { path: string; value: string }[] }[] }[];
+    bindingDemands: { type: string; profile: string }[];
+  },
+  idsToCheck: readonly string[],
+): void {
+  const selected = authored.filter((profile) => idsToCheck.includes(profile.id));
+  const selectedIds = new Set(selected.map((profile) => profile.id));
+  for (const profile of selected) {
+    const expected = expectedRatingMetadata[profile.id as keyof typeof expectedRatingMetadata];
+    expect(ownMetadata(profile)).toEqual(expected);
+    expect(manifest.profiles.find((entry) => entry.id === profile.id)?.binding).toEqual({
+      required: [...expected.binding.required],
+      optional: [...expected.binding.optional ?? []],
+      roles: [...expected.binding.roles],
+    });
+  }
+
+  const actualRoutes = manifest.canonical.flatMap(({ type, routes }) =>
+    routes.filter((route) => selectedIds.has(route.profile))
+      .map(({ profile, shape, when }) => ({ type, profile, shape, when })),
+  );
+  const expectedRoutes = selected.flatMap((profile) => {
+    const expected = expectedRatingMetadata[profile.id as keyof typeof expectedRatingMetadata];
+    return Object.entries(expected.canonical).flatMap(([role, focus]) =>
+      focus.types.map((type) => ({
+        type: `${rv}${type.slice('rv:'.length)}`,
+        profile: profile.id,
+        shape: `${definition}${profile.id}/${role}-shape`,
+        when: [],
+      })),
+    );
+  });
+  const sorted = <T>(values: readonly T[]) =>
+    [...values].sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  expect(sorted(actualRoutes)).toEqual(sorted(expectedRoutes));
+  expect(manifest.canonical.filter((entry) => entry.routes.some((route) => selectedIds.has(route.profile)))
+    .map((entry) => entry.type)).toEqual(
+    [...new Set(expectedRoutes.map((route) => route.type))].sort(),
+  );
+
+  const actualDemands = manifest.bindingDemands.filter((entry) => selectedIds.has(entry.profile));
+  const expectedDemands = selected.flatMap((profile) => {
+    const expected = expectedRatingMetadata[profile.id as keyof typeof expectedRatingMetadata];
+    return expected.binding.demandedBy.map((type) => ({
+      type: `${rv}${type.slice('rv:'.length)}`,
+      profile: profile.id,
+    }));
+  });
+  expect(sorted(actualDemands)).toEqual(sorted(expectedDemands));
 }
 function context(id: string): Record<string, unknown> {
   const global = id.startsWith('global-');
@@ -249,23 +400,11 @@ test('six discovered rating Turtle profiles preserve all constraints, focus role
       expect(Object.keys(declaration).sort()).toEqual(['binding', 'canonical', 'id']);
     }
   }
-  const global = discovered.filter((profile) => profile.id.startsWith('global-'));
-  expect(global[0]!.binding).toEqual({
-    required: ['context', 'question'],
-    roles: ['context'],
-    demandedBy: ['rv:GlobalRatingContext'],
-  });
-  expect(global[0]!.shapes[0]!.canonical).toEqual({ types: ['rv:GlobalRatingContext'] });
-  expect(global[1]!.binding).toEqual({
-    required: ['context', 'work', 'main', 'slot', 'observation', 'revision', 'availability'],
-    optional: ['value', 'predecessor'],
-    roles: ['context', 'work', 'main', 'observation', 'revision'],
-    demandedBy: ['rv:GlobalRatingObservation', 'rv:GlobalRatingObservationRevision'],
-  });
-  expect(global[1]!.shapes[3]!.canonical).toEqual({ types: ['rv:GlobalRatingObservation'] });
-  expect(global[1]!.shapes[4]!.canonical).toEqual({
-    types: ['rv:GlobalRatingObservationRevision'],
-  });
+  assertRatingCommandMetadata(
+    discovered,
+    published.manifest as unknown as Parameters<typeof assertRatingCommandMetadata>[1],
+    ids,
+  );
 });
 
 test('rating author reload changes current digests while historical pinned bytes and records remain exact', () => {
@@ -454,6 +593,8 @@ const derivedModules = [
   ['realm-target-rating-observation-v1.ts', targetObservationDeclaration],
   ['realm-release-rating-context-v1.ts', releaseContextDeclaration],
   ['realm-release-rating-observation-v1.ts', releaseObservationDeclaration],
+  ['realm-experience-rating-context-v1.ts', experienceContextDeclaration],
+  ['realm-experience-rating-observation-v1.ts', experienceObservationDeclaration],
 ] as const;
 const derivedOptions = {
   established: Object.fromEntries(
@@ -463,7 +604,8 @@ const derivedOptions = {
   demandOrder: [],
 };
 const derivedAuthorComment = '\n# Authored SHACL constraints for derived rating evidence.\n';
-// Captured after the base rating authors landed, before the derived conversion.
+// Source pins preserve historical Turtle bytes; metadata hashes track their
+// current declaration representation.
 const derivedPins = {
   'realm-target-rating-context-v1': [
     '8ac2f366d615a08d072e4bca245ced3fa445ee88e38a946029649e32937e175f',
@@ -483,11 +625,11 @@ const derivedPins = {
   ],
   'realm-experience-rating-context-v1': [
     '61fdb372946dbf322cae0df072e56cfed72826e89746f4856fe4f33c4035dc48',
-    '9fe38755fa951cd3e4d746c43504c04122c2b46e6d679fce86292fd9012ae3c9',
+    '32cf8b41ddeb68ebd6fcf895b90a8d9d347f63cbe567b6645c77b0eaa5a986de',
   ],
   'realm-experience-rating-observation-v1': [
     'bc1075b4e362349ffeeb01138015284f02226995ea3b210436497f86f5685bc8',
-    'dc77fc5fe2d747753718ded8d069e7f3b0eb651209c952539d5f5581c4ec4ca2',
+    'dc7e2e0b3933e3b55c76651469601c32415e60cdf7e7dfe7d5b8c550bd382907',
   ],
 } as const;
 const targetDescendants = {
@@ -633,6 +775,11 @@ test('derived rating Turtle discovery preserves six v1 constraints, focus roles 
   expect(derivedProfiles.map((profile) => profile.id)).toEqual(derivedIds);
   const published = commandProfiles(discovered, derivedOptions);
   expect(published.manifest).toEqual(commandProfiles(derivedProfiles, derivedOptions).manifest);
+  assertRatingCommandMetadata(
+    discovered,
+    published.manifest as unknown as Parameters<typeof assertRatingCommandMetadata>[1],
+    ['realm-experience-rating-context-v1', 'realm-experience-rating-observation-v1'],
+  );
   for (const profile of discovered) {
     expect(digest(constraints(profile))).toBe(derived[profile.id as keyof typeof derived]);
     expect(metadataDigest(profile)).toBe(derivedPins[profile.id as keyof typeof derivedPins][1]);

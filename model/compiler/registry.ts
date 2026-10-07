@@ -48,9 +48,6 @@ export interface EstablishedDeclaration {
 }
 
 const only = (...types: Term[]): CanonicalFocus => ({ types });
-const ratingObservationRoles = ['realm', 'context', 'work', 'main', 'observation', 'revision'];
-const ratingObservationKeys = ['realm', 'context', 'work', 'main', 'slot', 'observation', 'revision',
-  'availability'];
 
 /**
  * Registry declarations of the profiles admitted before definitions carried them.
@@ -58,45 +55,6 @@ const ratingObservationKeys = ['realm', 'context', 'work', 'main', 'slot', 'obse
  * and delete it here, because declaring both is an error.
  */
 export const establishedDeclarations: Readonly<Record<string, EstablishedDeclaration>> = {
-  'realm-experience-rating-context-v1': {
-    canonical: { context: only(rv('ExperienceRatingContext')) },
-    binding: { required: ['realm', 'context', 'question'], roles: ['realm', 'context'],
-      demandedBy: [rv('ExperienceRatingContext')] },
-  },
-  'realm-experience-rating-observation-v1': {
-    canonical: { observation: only(rv('ExperienceRatingObservation')),
-      revision: only(rv('ExperienceRatingObservationRevision')) },
-    binding: { required: [...ratingObservationKeys, 'occasion'], optional: ['value', 'predecessor'],
-      roles: ratingObservationRoles,
-      demandedBy: [rv('ExperienceRatingObservation'), rv('ExperienceRatingObservationRevision')] },
-  },
-  'rating-aggregate-default-policy-v1': {
-    canonical: { revision: only(rv('RatingPolicyRevision')) },
-    binding: { required: ['context', 'revision', 'contextRevision', 'predecessor', 'aggregationPolicy'],
-      roles: ['context', 'revision'], demandedBy: [rv('RatingPolicyRevision')] },
-  },
-  'realm-daily-rating-context-v1': {
-    canonical: { context: only(rv('DailyRatingContext')) },
-    binding: { required: ['realm', 'context', 'question', 'timeZone'], roles: ['realm', 'context'],
-      demandedBy: [rv('DailyRatingContext')] },
-  },
-  'realm-daily-rating-observation-v1': {
-    canonical: { observation: only(rv('DailyRatingObservation')),
-      revision: only(rv('DailyRatingObservationRevision')) },
-    binding: { required: [...ratingObservationKeys, 'day', 'timeZone', 'periodStart', 'periodEnd'],
-      optional: ['value', 'predecessor'], roles: ratingObservationRoles,
-      demandedBy: [rv('DailyRatingObservation'), rv('DailyRatingObservationRevision')] },
-  },
-  'realm-standing-rating-context-v1': {
-    canonical: { context: only(rv('RatingContext')) },
-    binding: { required: ['realm', 'context', 'question'], roles: ['realm', 'context'],
-      demandedBy: [rv('RatingContext')] },
-  },
-  'realm-standing-rating-observation-v1': {
-    canonical: { observation: only(rv('RatingObservation')), revision: only(rv('RatingObservationRevision')) },
-    binding: { required: ratingObservationKeys, optional: ['value', 'predecessor'],
-      roles: ratingObservationRoles, demandedBy: [rv('RatingObservation'), rv('RatingObservationRevision')] },
-  },
   'translation-link-v1': {
     canonical: { link: only(rv('TranslationLink')) },
     binding: {
