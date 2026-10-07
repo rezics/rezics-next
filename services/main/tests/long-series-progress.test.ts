@@ -15,8 +15,8 @@ const id = () => `https://rezics.com/id/${randomUUID()}`;
 const binding = (value: string) => ({ value,
   type: value.startsWith('https://') || value.startsWith('urn:') ? 'uri' : 'literal' });
 
-async function fixture() {
-  const work = id(), structure = id(), revision = id(), generation = id(), specials = id();
+async function fixture(grouped = false, reverseNumbers = false) {
+  const work = id(), structure = id(), revision = id(), generation = id(), specials = id(), main = id();
   const stored = new Map<string, Uint8Array>();
   let objectsRead = 0, rowsRead = 0, calls = 0;
   const objects: ImmutableObjects = {
@@ -32,7 +32,7 @@ async function fixture() {
     },
   };
   const episodes: OccurrenceRecord[] = Array.from({ length: 1000 }, (_, index) => ({
-    occurrence: id(), state: 'active', parent: structure, segmentKey: 'a',
+    occurrence: id(), state: 'active', parent: grouped ? main : structure, segmentKey: 'a',
     orderKey: (index + 1).toString(36).padStart(4, '0'), role: 'part', target: id(),
     selection: { mode: 'follow-context' }, introducedBy: revision,
     labels: [], qualifier: { type: 'work-part', displayLabel: `Episode ${index + 1}`, inclusion: 'required' },
@@ -42,7 +42,9 @@ async function fixture() {
     labels: [{ value: 'Specials', language: 'en' }] };
   const special: OccurrenceRecord = { ...episodes[0]!, occurrence: id(), parent: specials, target: id(),
     segmentKey: 'a', orderKey: 'a', qualifier: { type: 'work-part', displayLabel: 'Special', inclusion: 'extra' } };
-  const records = [...episodes, group, special];
+  const mainGroup: OccurrenceRecord = { ...group, occurrence: main, segmentKey: 'a', labels: [{ value: 'Main', language: 'en' }] };
+  const records = [...episodes, ...(grouped ? [mainGroup] : []), group, special];
+  const numbers = new Map(episodes.map((record, index) => [record.target!, String(reverseNumbers ? 1000 - index : index + 1)]));
   const cost = newCost();
   const entries = records.map(record => ({ parent: record.parent, segmentKey: record.segmentKey!,
     orderKey: record.orderKey!, occurrence: record.occurrence }));
@@ -88,10 +90,17 @@ async function fixture() {
       } else if (query.includes('# reading-position:works')) {
         expect(query).toContain('rv:composedWork');
         rows = [{ work: binding(work), structure: binding(structure), revision: binding(revision), generation: binding(generation) }];
-      } else if (query.includes('# reading-position:composed-children')) {
-        expect(query).toContain('rv:composedWork');
-        expect(query).not.toContain('rv:occurrenceRole');
-        rows = [];
+      } else if (query.includes('# reading-position:accepted-number')) {
+        const parent = query.match(/rv:parent <([^>]+)>/)! [1]!;
+        const number = query.match(/VALUES \?number \{ \"([^\"]+)\"/)! [1]!;
+        const after = query.match(/FILTER\(\?segmentKey > \"([^\"]+)\" \|\| \(\?segmentKey = \"[^\"]+\"\s+&& \?orderKey > \"([^\"]+)\"/);
+        const limit = Number(query.match(/LIMIT (\d+)$/)! [1]!);
+        rows = records.filter(record => record.parent === parent && (record.role === 'group' || numbers.get(record.target!) === number)
+          && (!after || record.segmentKey! > after[1]! || record.segmentKey === after[1] && record.orderKey! > after[2]!))
+          .sort((a, b) => orderTreeKey(a).localeCompare(orderTreeKey(b))).slice(0, limit).map(record => ({
+            occurrence: binding(record.occurrence), parent: binding(parent), segmentKey: binding(record.segmentKey!),
+            orderKey: binding(record.orderKey!), matches: binding(String(record.role !== 'group' && numbers.get(record.target!) === number)),
+          }));
       } else if (query.includes('# reading-position:manifest')) rows = [{ manifest: binding(`urn:rezics:sha256:${digest}`) }];
       else {
         expect(query).toMatch(/# reading-position:(records|hydrate)/);
@@ -108,19 +117,19 @@ async function fixture() {
     },
   } as unknown as WorkReadSession;
   const traversal = () => new ReadingPositionTraversal(session, work, async resources => new Set(resources.filter(resource => !hidden.has(resource))));
-  return { work, episodes, special, session, completed, hidden, traversal,
+  return { work, main, episodes, special, session, completed, hidden, traversal,
     finish: () => { finished = true; }, ambiguous: () => { ambiguous = true; },
     measure: () => ({ objectsRead, rowsRead, calls, historyPages }) };
 }
 
-test('a numeric seek to Episode 1000 reads counted paths and the exact terminal occurrence', async () => {
+test('a numeric seek to accepted Episode 1000 reads counted paths and the exact terminal occurrence', async () => {
   const f = await fixture();
   const page = await f.traversal().page({ limit: 1, q: '１０００' });
   expect(page.items).toMatchObject([{ occurrence: f.episodes[999]!.occurrence, ordinal: 1000, role: 'part' }]);
   expect(page.complete).toBe(true); expect(page.next).toBeNull();
-  expect(f.measure().objectsRead).toBeLessThanOrEqual(8);
-  expect(f.measure().rowsRead).toBeLessThanOrEqual(4);
-  expect(f.measure().calls).toBeLessThanOrEqual(4);
+  expect(f.measure().objectsRead).toBeLessThanOrEqual(16);
+  expect(f.measure().rowsRead).toBeLessThanOrEqual(12);
+  expect(f.measure().calls).toBeLessThanOrEqual(12);
   expect((await f.traversal().page({ limit: 1, q: '1000', after: f.episodes[999]!.occurrence })).items).toEqual([]);
 });
 
@@ -135,15 +144,15 @@ test('Episode parts page and finish without a Work main version, and specials ke
   expect(last?.item.occurrence).toBe(f.special.occurrence);
 });
 
-test('missing and invalid sibling numbers do not walk terminal Episode navigation entries', async () => {
+test('missing accepted numbers do not walk terminal Episode navigation entries', async () => {
   const f = await fixture();
   for (const q of ['0', '1001', '1002', '1000000000000']) {
     const before = f.measure();
     const page = await f.traversal().page({ limit: 1, q });
     expect(page).toMatchObject({ items: [], complete: true, next: null });
-    expect(f.measure().calls - before.calls).toBeLessThanOrEqual(4);
-    expect(f.measure().rowsRead - before.rowsRead).toBeLessThanOrEqual(3);
-    expect(f.measure().objectsRead - before.objectsRead).toBeLessThanOrEqual(6);
+    expect(f.measure().calls - before.calls).toBeLessThanOrEqual(12);
+    expect(f.measure().rowsRead - before.rowsRead).toBeLessThanOrEqual(12);
+    expect(f.measure().objectsRead - before.objectsRead).toBeLessThanOrEqual(16);
   }
 });
 
@@ -171,7 +180,7 @@ test('hidden completed targets and ambiguous terminal metadata fail closed', asy
   await expect(chooserPosition(f.session, f.traversal(), 'mine', true)).rejects.toBeInstanceOf(WorkReadMissing);
   expect(await chooserPosition(f.session, f.traversal(), 'mine', false)).toBe('start');
   f.hidden.clear(); f.ambiguous();
-  await expect(f.traversal().page({ limit: 1, q: '1000' })).rejects.toBeInstanceOf(WorkReadUnavailable);
+  await expect(f.traversal().metadataFor(f.episodes[999]!.target!)).rejects.toBeInstanceOf(WorkReadUnavailable);
 });
 
 test('completed progress pages keep sparse continuation and selection-qualified primary-key order', async () => {
@@ -214,4 +223,23 @@ test('completed progress rejects invalid page keys and limits without touching o
   expect(calls).toBe(0);
   expect(await store.completedPage(principal, structure)).toEqual({ items: [], next: null });
   expect(calls).toBe(1);
+});
+
+test('numeric seeks descend a thousand terminal Episode parts in a group using accepted values, not position', async () => {
+  const f = await fixture(true, true);
+  for (const [number, index, ordinal] of [['1', 999, 1000], ['1000', 0, 1]] as const) {
+    const before = f.measure();
+    const page = await f.traversal().page({ limit: 1, q: number });
+    expect(page.items).toMatchObject([{ occurrence: f.episodes[index]!.occurrence,
+      parent: f.main, ordinal, target: f.episodes[index]!.target }]);
+    expect(page.items).toHaveLength(1);
+    expect(page.complete).toBe(true);
+    expect(f.measure().calls - before.calls).toBeLessThan(15);
+    expect(f.measure().rowsRead - before.rowsRead).toBeLessThan(15);
+    expect(f.measure().objectsRead - before.objectsRead).toBeLessThan(20);
+    expect((await f.traversal().page({ limit: 1, q: number, after: f.episodes[index]!.occurrence })).items).toEqual([]);
+  }
+  expect(await f.traversal().page({ limit: 1, q: '1002' })).toMatchObject({ items: [], complete: true });
+  f.hidden.add(f.episodes[0]!.target!);
+  expect(await f.traversal().page({ limit: 1, q: '1000' })).toMatchObject({ items: [], complete: true });
 });

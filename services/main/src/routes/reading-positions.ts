@@ -13,7 +13,7 @@ export function readingPositionsRoutes(work: MainWorkDependencies) {
   return new Elysia().get('/v1/reading-positions/:work', { params: t.Object({ work: readUuid }),
     query: t.Object({ ...readQuery, position: readingPositionQuery,
       q: t.Optional(t.String({ maxLength: READING_POSITION_COST.chooserQueryChars,
-        description: 'Analyzed title phrase in any carried language, display label, or one-based sibling number.' })),
+        description: 'Analyzed title phrase in any carried language, display label, accepted episodeNumber for Work parts, or one-based chapter sibling number.' })),
       cursor: t.Optional(t.String({ maxLength: 2048 })),
       limit: t.Optional(t.Numeric({ minimum: 1, maximum: READING_POSITION_COST.chooserPage, multipleOf: 1 })) }, { additionalProperties: false }),
     response: { 200: readingPositionPage, ...workReadProblems } }, async ({ request, params, query }: {

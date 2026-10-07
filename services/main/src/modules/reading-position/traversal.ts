@@ -61,7 +61,6 @@ export class ReadingPositionTraversal {
   private readonly metadata = new Map<string, Promise<ReadingWork>>();
   private readonly records = new Map<string, ReadingOccurrence | null>();
   private readonly paths = new Map<string, Promise<ReadingFrame[] | null>>();
-  private readonly composedChildren = new Map<string, Promise<boolean>>();
   private readonly order: ReadingOrderIndex | null;
   private labelsIndexing = false;
   constructor(readonly session: WorkReadSession, readonly root: string, private readonly disclose: Disclose) {
@@ -131,22 +130,60 @@ export class ReadingPositionTraversal {
     return rows[0]?.occurrence?.value ?? null;
   }
 
-  private hasComposedChildren(meta: ReadingWork): Promise<boolean> {
-    if (!this.composedChildren.has(meta.generation!)) this.composedChildren.set(meta.generation!, (async () => {
-      // The projection's composedWork key contains Works only. Terminal Part
-      // inventories never participate in discovering child compositions.
-      const rows = await this.session.query(`# reading-position:composed-children
-        SELECT ?work WHERE { GRAPH ${current} {
-          ?placement rv:composedWork ?work ; rv:generation ${iri(meta.generation!)} .
-          FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
-          ?work rv:mainVersion ?main .
-          ?structure rv:structureOf ?main ; rv:structureProfile ?profile ; rv:selectedGeneration ?generation .
-          FILTER(?profile IN (rv:WorkComposition, rv:BookComposition))
-          ?generation rv:generationState rv:Active .
-        } } LIMIT 1`, 1);
-      return rows.length > 0;
-    })());
-    return this.composedChildren.get(meta.generation!)!;
+  /** Accepted scalar numbers address parts; physical sibling rank addresses
+   * navigation only. Each branch seeks a fixed predicate/object or owner key,
+   * never the unfiltered PartRole inventory. Groups must remain traversable. */
+  private async acceptedNumberRange(meta: ReadingWork, parent: string,
+    after: ReadingOccurrence | undefined, q: string, probe: number): Promise<Candidate[]> {
+    const placement = `?placement rv:generation ${iri(meta.generation!)} ; rv:occurrence ?occurrence ;
+      rv:orderSegment ?segment ; rv:orderKey ?orderKey .
+      ?segment rv:parent ${iri(parent)} ; rv:segmentKey ?segmentKey .
+      FILTER NOT EXISTS { ?placement rv:removedBy ?removed }`;
+    // Keep each seek's owner constraints in its BGP, so the engine need not
+    // materialize all generation placements to join a small matching branch.
+    // https://jena.apache.org/documentation/tdb/optimizer.html
+    const rows = await this.session.query(`# reading-position:accepted-number
+      SELECT DISTINCT ?occurrence ?parent ?segmentKey ?orderKey ?matches WHERE {
+        GRAPH ${current} {
+          { VALUES ?number { ${lit(BigInt(q).toString())}^^<http://www.w3.org/2001/XMLSchema#integer> ${lit(q)} }
+            ?target schema:episodeNumber ?number .
+            ?placement schema:item ?target ; rv:occurrenceRole rv:PartRole .
+            ${placement}
+          } UNION {
+            ?placement rv:occurrenceRole rv:GroupRole .
+            ${placement}
+          } UNION {
+            ?placement rv:composedWork ?childWork .
+            ?childWork rv:mainVersion ?main .
+            ?childStructure rv:structureOf ?main ; rv:structureProfile ?profile ; rv:selectedGeneration ?childGeneration .
+            FILTER(?profile IN (rv:WorkComposition, rv:BookComposition))
+            ?childGeneration rv:generationState rv:Active .
+            ${placement}
+          }
+          BIND(EXISTS { ?placement schema:item ?numberedTarget .
+            VALUES ?acceptedNumber { ${lit(BigInt(q).toString())}^^<http://www.w3.org/2001/XMLSchema#integer> ${lit(q)} }
+            ?numberedTarget schema:episodeNumber ?acceptedNumber . } AS ?matches)
+        }
+        BIND(${iri(parent)} AS ?parent)
+        ${after ? `FILTER(?segmentKey > ${lit(after.segmentKey)} || (?segmentKey = ${lit(after.segmentKey)}
+          && ?orderKey > ${lit(after.orderKey)}))` : ''}
+      } ORDER BY ?segmentKey ?orderKey ?occurrence LIMIT ${probe}`, probe);
+    const entries = new Map<string, { parent: string; occurrence: string; segmentKey: string; orderKey: string; matches: boolean }>();
+    for (const row of rows) {
+      const occurrence = row.occurrence?.value, segmentKey = row.segmentKey?.value, orderKey = row.orderKey?.value;
+      if (!occurrence || !NATIVE_ID.test(occurrence) || row.parent?.value !== parent
+        || !segmentKey || !orderKey || !['true', 'false'].includes(row.matches?.value ?? '')) {
+        throw new WorkReadUnavailable('Numbered placement is unavailable');
+      }
+      const previous = entries.get(occurrence);
+      if (previous && (previous.segmentKey !== segmentKey || previous.orderKey !== orderKey)) {
+        throw new WorkReadUnavailable('Numbered placement is ambiguous');
+      }
+      entries.set(occurrence, { parent, occurrence, segmentKey, orderKey,
+        matches: previous?.matches || row.matches!.value === 'true' });
+    }
+    const items = await readingOrderRead(() => this.order!.hydrate(meta, [...entries.values()], true));
+    return items.map(item => ({ item, matches: entries.get(item.occurrence)!.matches }));
   }
 
   private async range(meta: ReadingWork, parent: string, after: ReadingOccurrence | undefined,
@@ -156,29 +193,12 @@ export class ReadingPositionTraversal {
       const items = await readingOrderRead(() => this.order!.range(meta, parent, after, reverse, probe));
       return items.map(item => ({ item, matches: true }));
     }
+    if (/^\d+$/.test(q) && this.order
+      && (await readingOrderRead(() => this.order!.manifest(meta))).profile === 'work-composition') {
+      return this.acceptedNumberRange(meta, parent, after, q, probe);
+    }
     const numbered = q ? await this.numbered(meta, parent, q) : null;
     if (q && this.order) {
-      let groupNumber = false;
-      if (numbered) {
-        const entry = await readingOrderRead(() => this.order!.numberedEntry(meta, parent, Number(q)));
-        if (!entry || entry.occurrence !== numbered) throw new WorkReadUnavailable('Reading number differs from immutable order');
-        const [item] = await readingOrderRead(() => this.order!.hydrate(meta, [entry], true));
-        // Terminal parts (Episodes and other admitted targets) have no child
-        // composition to search. Their exact numeric rank must not walk the
-        // label index's PartRole navigation entries before reaching the match.
-        if (item?.role === 'part' && item.target && !(await this.metadataFor(item.target)).structure) {
-          return !after || tuple(item) > tuple(after) ? [{ item, matches: true }] : [];
-        }
-        groupNumber = item?.role === 'group';
-      }
-      if (/^\d+$/.test(q) && (!numbered || groupNumber)
-        && (await readingOrderRead(() => this.order!.manifest(meta))).profile === 'work-composition'
-        && !await this.hasComposedChildren(meta)) {
-        // Missing sibling numbers (and a group rather than a readable part)
-        // are exact empty results in a terminal Work composition. Books keep
-        // their group/chapter search; nested Works retain their numeric seeks.
-        return [];
-      }
       const page = await readingOrderRead(() => searchOccurrenceLabels(this.session,
         this.order!, meta, parent, q, after, probe, numbered));
       this.labelsIndexing ||= !page.current;
