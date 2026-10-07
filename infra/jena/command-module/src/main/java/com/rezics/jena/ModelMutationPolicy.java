@@ -112,7 +112,8 @@ final class ModelMutationPolicy {
             // resource type. Inbound links constrain that type, not the scalar fields;
             // validating each one would turn a bounded edit into a whole-graph scan.
             if (stableStructureType(data, entry.getKey(), entry.getValue())
-                || stableAgentIdentity(data, entry.getKey(), entry.getValue())) continue;
+                || stableAgentIdentity(data, entry.getKey(), entry.getValue())
+                || stableZoneIdentity(data, entry.getKey(), entry.getValue())) continue;
             boolean agentTombstone = agentCompensation(data, receipt, entry.getKey(), entry.getValue());
             String overflow = dependents(profiles, data, entry.getKey(), plan,
                 dependentCurrent, dependentRevisions, inboundQuads,
@@ -350,6 +351,15 @@ final class ModelMutationPolicy {
     private static boolean stableAgentIdentity(DatasetGraph data, String name, Subject before) {
         if (before.selection() == null || typeChanged(data, name, before)) return false;
         return before.selection().type().equals(RV + "Agent");
+    }
+
+    /** Every authored inbound rv:Zone constraint (Space rv:zoneCapability, mount rv:zone,
+     * revision rv:component) is sh:class rv:Zone, so it reads only the type set. A Zone edit
+     * that leaves that set unchanged cannot invalidate any mount, Space or historical revision,
+     * however many exist. Retirement or retyping still scans. */
+    private static boolean stableZoneIdentity(DatasetGraph data, String name, Subject before) {
+        if (before.selection() == null || typeChanged(data, name, before)) return false;
+        return before.selection().type().equals(RV + "Zone");
     }
 
     private static String dependents(ProfileRegistry profiles, DatasetGraph data, String child,

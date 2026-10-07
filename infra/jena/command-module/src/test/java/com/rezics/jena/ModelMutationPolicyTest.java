@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
@@ -159,6 +160,107 @@ public class ModelMutationPolicyTest {
             data.delete(current, node, uri(RV + "profileNameFormat"), uri(RV + "PlainNameAddressV1"));
             data.add(current, node, uri(RV + "profileNameFormat"), uri(RV + "LocalizedNameAddressV1"));
             assertTrue(ModelMutationPolicy.agentAddressProfileUpgrade(data, receipt, agent, translated));
+        } finally { data.abort(); data.end(); }
+    }
+
+    private static final String ZONE = "https://rezics.com/id/00000000-0000-4000-8000-0000000000b1";
+
+    /** The generated registry, so Zone routing and shapes are the authored ones. */
+    private static ProfileRegistry zoneProfiles() {
+        return ProfileRegistry.load(Files.isDirectory(Path.of("profiles"))
+            ? Path.of("profiles") : Path.of("../../../generated/model"));
+    }
+
+    private static Node zoneRevision(DatasetGraph data, String id, Node zone, Node predecessor) {
+        Node revision = uri("urn:probe:zone-revision:" + id);
+        Node revisions = uri(CommandPolicy.REVISIONS);
+        data.add(revisions, revision, RDF.type.asNode(), uri(RV + "ZoneRevision"));
+        data.add(revisions, revision, RDF.type.asNode(), uri(RV + "RevisionAnchor"));
+        data.add(revisions, revision, uri(RV + "component"), zone);
+        if (predecessor != null) data.add(revisions, revision, uri(RV + "predecessor"), predecessor);
+        return revision;
+    }
+
+    /** A Zone with a navigation, 1,000 canonical mounts and 1,000 historical revisions. */
+    private static Node zoneWithHistory(DatasetGraph data, int mounts) {
+        Node current = uri(CommandPolicy.CURRENT);
+        Node zone = uri(ZONE), space = uri("urn:probe:space"), head = zoneRevision(data, "head", zone, null);
+        data.add(current, space, RDF.type.asNode(), uri(RV + "Space"));
+        data.add(current, zone, RDF.type.asNode(), uri(RV + "Zone"));
+        data.add(current, zone, uri(RV + "space"), space);
+        data.add(current, zone, uri(RV + "zoneState"), uri(RV + "Active"));
+        data.add(current, zone, uri(RV + "zoneHead"), head);
+        data.add(current, zone, uri(RV + "disclosure"), uri(RV + "Public"));
+        for (int i = 0; i < mounts; i++) {
+            Node mount = uri("urn:probe:zone-mount:" + i);
+            data.add(current, mount, RDF.type.asNode(), uri(RV + "ZoneMount"));
+            data.add(current, mount, uri(RV + "zone"), zone);
+            data.add(current, mount, uri(RV + "routeSegment"), NodeFactory.createLiteralString("m" + i));
+            data.add(current, mount, uri(RV + "disclosure"), uri(RV + "Public"));
+            zoneRevision(data, "history:" + i, zone, head);
+        }
+        return zone;
+    }
+
+    private static CommandPolicy.Plan zonePlan(String... names) {
+        return new CommandPolicy.Plan(null, Set.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS), Set.of(names),
+            Set.of(), Set.of(), false, false, true);
+    }
+
+    @Test public void zoneConfigurationEditWithUnchangedTypeNeverScansMountsOrRevisions() {
+        ProfileRegistry profiles = zoneProfiles();
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(ReadWrite.WRITE);
+        try {
+            Node current = uri(CommandPolicy.CURRENT), zone = zoneWithHistory(data, 1_100);
+            CommandPolicy.Plan plan = zonePlan(ZONE);
+            ModelMutationPolicy.Snapshot before = ModelMutationPolicy.capture(profiles, data, plan);
+            Node old = zoneRevision(data, "head", zone, null), next = zoneRevision(data, "next", zone, old);
+            data.delete(current, zone, uri(RV + "zoneHead"), old);
+            data.add(current, zone, uri(RV + "zoneHead"), next);
+            data.add(current, zone, uri(RV + "presentation"), uri("https://rezics.com/definition/zone-presentation-v2"));
+            data.delete(current, zone, uri(RV + "disclosure"), uri(RV + "Public"));
+            data.add(current, zone, uri(RV + "disclosure"), uri(RV + "Private"));
+            assertNull(ModelMutationPolicy.check(profiles, data, plan, "urn:rezics:receipt:zone:probe", before));
+        } finally { data.abort(); data.end(); }
+    }
+
+    @Test public void zoneEditStillRefusesInvalidDirectFieldsAndTypeRemoval() {
+        ProfileRegistry profiles = zoneProfiles();
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(ReadWrite.WRITE);
+        try {
+            Node current = uri(CommandPolicy.CURRENT), zone = zoneWithHistory(data, 1_100);
+            CommandPolicy.Plan plan = zonePlan(ZONE);
+            ModelMutationPolicy.Snapshot before = ModelMutationPolicy.capture(profiles, data, plan);
+            data.delete(current, zone, uri(RV + "space"), uri("urn:probe:space"));
+            String missing = report(ModelMutationPolicy.check(profiles, data, plan, "urn:rezics:receipt:zone:probe", before));
+            assertTrue(missing, missing.contains(RV + "space") && !missing.contains("reverse dependency"));
+            data.add(current, zone, uri(RV + "space"), uri("urn:probe:space"));
+            data.add(current, zone, uri(RV + "zoneState"), uri(RV + "Archived"));
+            String state = report(ModelMutationPolicy.check(profiles, data, plan, "urn:rezics:receipt:zone:probe", before));
+            assertTrue(state, state.contains(RV + "zoneState"));
+            data.delete(current, zone, uri(RV + "zoneState"), uri(RV + "Archived"));
+            data.delete(current, zone, RDF.type.asNode(), uri(RV + "Zone"));
+            assertEquals("prestate canonical type removed: " + ZONE,
+                report(ModelMutationPolicy.check(profiles, data, plan, "urn:rezics:receipt:zone:probe", before)));
+        } finally { data.abort(); data.end(); }
+    }
+
+    @Test public void touchedZoneMountStillValidatesAndRefusesAnInvalidMount() {
+        ProfileRegistry profiles = zoneProfiles();
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(ReadWrite.WRITE);
+        try {
+            Node current = uri(CommandPolicy.CURRENT), zone = zoneWithHistory(data, 3);
+            String mount = "urn:probe:zone-mount:1";
+            CommandPolicy.Plan plan = zonePlan(ZONE, mount);
+            ModelMutationPolicy.Snapshot before = ModelMutationPolicy.capture(profiles, data, plan);
+            assertNull(ModelMutationPolicy.check(profiles, data, plan, "urn:rezics:receipt:zone:probe", before));
+            data.delete(current, uri(mount), uri(RV + "zone"), zone);
+            data.add(current, uri(mount), uri(RV + "zone"), uri("urn:probe:not-a-zone"));
+            String report = report(ModelMutationPolicy.check(profiles, data, plan, "urn:rezics:receipt:zone:probe", before));
+            assertTrue(report, report.contains(RV + "zone"));
         } finally { data.abort(); data.end(); }
     }
 
