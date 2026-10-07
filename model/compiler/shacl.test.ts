@@ -158,6 +158,31 @@ test('Turtle supports IRI node kind, class, closed shapes and the explicit datat
   }
 });
 
+test('Turtle lowers IRIOrLiteral as a mixed value and keeps incompatible facets refused', async () => {
+  const source = turtle(
+    'sh:path rv:value ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRIOrLiteral',
+  );
+  const profile = parseTurtleProfile('probe-v1', source);
+  expect(profile.shapes[0]!.properties[0]!.nodeKind).toBe('sh:IRIOrLiteral');
+  expect(profileSource(profile)).toBe(source);
+
+  const shape = (await schemas(profile))[profile.shapes[0]!.iri]!;
+  expect(Value.Check(shape, node({ 'rv:value': ['urn:resource'] }))).toBe(true);
+  expect(Value.Check(shape, node({ 'rv:value': ['plain literal'] }))).toBe(true);
+  expect(Value.Check(shape, node({ 'rv:value': [] }))).toBe(false);
+  expect(Value.Check(shape, node({ 'rv:value': ['urn:resource', 'plain literal'] }))).toBe(false);
+  expect(Value.Check(shape, node({ 'rv:value': 'plain literal' }))).toBe(false);
+
+  const context = JSON.parse(
+    buildModelOutputs([profile]).get('generated/model/contexts/probe-v1.jsonld')!,
+  ) as { '@context': Record<string, { '@type'?: string }> };
+  expect(context['@context']['rv:value']?.['@type']).toBeUndefined();
+  expect(() => parseTurtleProfile(
+    'probe-v1',
+    turtle('sh:path rv:value ; sh:nodeKind sh:IRIOrLiteral ; sh:datatype xsd:string'),
+  )).toThrow('Cannot lower sh:nodeKind with sh:datatype');
+});
+
 test('Unsupported SHACL and RDF term kinds fail by name rather than losing constraints', () => {
   for (const name of ['or', 'node', 'flags']) {
     expect(() =>

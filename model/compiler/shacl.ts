@@ -202,7 +202,8 @@ export function parseTurtleProfile(
       const value = one(values, `${sh}${name}`);
       if (value) result[name] = integer(value, `${sh}${name}`);
     }
-    if (result.nodeKind && named(one(values, `${sh}nodeKind`)!, 'sh:nodeKind') !== `${sh}IRI`) {
+    const nodeKind = result.nodeKind && named(one(values, `${sh}nodeKind`)!, 'sh:nodeKind');
+    if (nodeKind && nodeKind !== `${sh}IRI` && nodeKind !== `${sh}IRIOrLiteral`) {
       throw new Error(`Unsupported sh:nodeKind ${result.nodeKind}`);
     }
     if (result.datatype) {
@@ -219,7 +220,7 @@ export function parseTurtleProfile(
         throw new Error(`Unsupported sh:datatype ${result.datatype}`);
       }
       if (result.nodeKind || result.class || hasValue?.termType === 'NamedNode')
-        throw new Error('Cannot lower an IRI constraint with sh:datatype');
+        throw new Error('Cannot lower sh:nodeKind with sh:datatype');
     }
     const datatype = result.datatype && named(one(values, `${sh}datatype`)!, 'sh:datatype');
     const fixedValues = [...(result.in ?? []), ...(result.hasValue ? [result.hasValue] : [])];

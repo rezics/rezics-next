@@ -13,7 +13,9 @@ const converted = [
   'semantic-model-generation-v1',
   'semantic-definition-v1',
   'semantic-rule-v1',
+  'semantic-annotation-v1',
   'definition-presentation-v1',
+  'value-exact-v1',
   'native-agent-credit-v1',
 ] as const;
 
@@ -132,4 +134,34 @@ test('semantic resource and definition fixtures retain useful local validation',
     ...definitionNode,
     'rv:definitionKind': ['https://rezics.com/vocab/UnadmittedDefinitionKind'],
   })).toBe(false);
+});
+
+test('semantic annotation and exact quantity fixtures preserve mixed IRI and literal values', () => {
+  const annotation = {
+    '@id': 'urn:semantic:annotation:1',
+    'rdf:type': ['http://www.w3.org/ns/oa#Annotation'],
+    'oa:hasTarget': ['urn:semantic:resource:1'],
+    'oa:hasBody': ['urn:semantic:value:1', 'supporting note'],
+    'oa:motivatedBy': ['http://www.w3.org/ns/oa#commenting'],
+  };
+  const quantity = {
+    '@id': 'urn:semantic:quantity:1',
+    'rdf:type': ['https://schema.org/QuantitativeValue'],
+    'schema:value': ['12.50'],
+    'schema:unitCode': ['urn:semantic:unit:meter'],
+    'rv:lexicalForm': ['12.50'],
+    'rv:uncertainty': ['urn:semantic:uncertainty:1'],
+  };
+  const annotationShape = shapeSchemas[`${definition}semantic-annotation-v1/annotation-shape`];
+  const quantityShape = shapeSchemas[`${definition}value-exact-v1/quantity-shape`];
+
+  expect(Value.Check(annotationShape, annotation)).toBe(true);
+  expect(Value.Check(annotationShape, { ...annotation, 'oa:hasBody': 'supporting note' })).toBe(false);
+  expect(Value.Check(quantityShape, quantity)).toBe(true);
+  expect(Value.Check(quantityShape, { ...quantity, 'schema:value': ['12.50', '13.00'] })).toBe(false);
+  expect(Value.Check(quantityShape, {
+    ...quantity,
+    'schema:value': ['urn:semantic:exact-value:1'],
+    'rv:uncertainty': ['about 0.2'],
+  })).toBe(true);
 });
