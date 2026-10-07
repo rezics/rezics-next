@@ -86,7 +86,7 @@ export default {
   effectSample: 'Exemple', effectSampleText: 'Le titre d’une diapositive',
 
   previewHint: 'Les diapositives hors de leur calendrier sont aussi affichées ici. Les lecteurs ne voient chacune que dans son calendrier, et cinq au plus à la fois. L’aperçu ne défile pas, pour que la diapositive que vous modifiez reste visible.',
-  previewNothing: 'Ajoutez une diapositive pour voir la scène.',
+  previewNothing: 'Ajoutez une diapositive pour voir le rendu de la vitrine.',
   previewMasked: 'Une image dont le contenu n’a pas été classé apparaît sous la forme d’une icône d’image masquée, ici comme pour les lecteurs.',
 
   unsaved: 'Modifications non enregistrées', allSaved: 'Tout est enregistré',

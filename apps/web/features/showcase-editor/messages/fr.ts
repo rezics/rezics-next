@@ -28,7 +28,7 @@ export default {
   frameSize: 'Taille du cadre',
   pixels: insert('{{width}} × {{height}} px', { width: String, height: String }),
   markFocal: 'Indiquer la zone de mise au point', clearFocal: 'Supprimer la zone de mise au point',
-  focalHelp: 'Le cadre est ce que montrent les fenêtres larges. La zone de mise au point est la partie qui doit rester visible quand un cadre plus étroit recadre le visuel.',
+  focalHelp: 'Le cadre délimite la partie affichée dans les grandes fenêtres. La zone de mise au point est celle qui doit rester visible lorsque le visuel est recadré dans un cadre plus étroit.',
   phoneWindow: 'Téléphones',
 
   logosHeading: 'Logos',

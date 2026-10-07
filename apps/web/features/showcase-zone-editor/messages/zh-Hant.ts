@@ -12,7 +12,7 @@ export default {
   slidesHeading: '投影片',
   slidesHelp: '讀者會依這個順序看到投影片。多數讀者會點第一張，所以請把最重要的放在最前面。',
   slideCount: insert('{{count}} / {{max}} 張投影片', { count: String, max: String }),
-  slidesRecommend: '建議最多五張。舞台同時最多呈現五張正在顯示的投影片，所以第六張只會在前面某張不在排程時間內時出現。',
+  slidesRecommend: '建議不超過五張。展示區最多同時顯示五張排程中的投影片；只有當前面的投影片不在排程時間內時，第六張才會顯示。',
   emptyTitle: '還沒有投影片',
   emptyBody: '在你加入之前，首頁最上方會顯示社群最新的推薦。',
   addWork: '加入作品', addLink: '加入連結',
@@ -37,7 +37,7 @@ export default {
   scheduleLiveUntil: insert('至 {{time}}', { time: String }),
   scheduleLiveSince: insert('自 {{time}}', { time: String }),
   scheduleEnded: insert('{{time}} 已結束', { time: String }),
-  artOwn: '此 Zone 專用美術', artWork: '作品本身的美術', artCover: '由封面組成', artNone: '沒有美術',
+  artOwn: '此 Zone 專用美術', artWork: '作品本身的美術', artCover: '由封面生成', artNone: '沒有美術',
   slideNeedsAttention: '需要處理',
 
   targetHeading: '投影片通往何處',
@@ -67,7 +67,7 @@ export default {
   artIntro: '在這裡加入的美術只用於這個 Zone 的投影片，並會取代作品本身的展示美術。留空就使用作品的美術。美術裡請不要放文字：標題與操作按鈕會即時繪製在上方。',
   sourceOwn: '這張投影片使用此 Zone 專用的美術。',
   sourceWork: '這張投影片使用作品本身的展示美術。在下方加入背景美術，即可在這個 Zone 取代它。',
-  sourceCover: '這張投影片由作品封面組成：封面放在即時標題旁，背後是以封面模糊而成的背景。',
+  sourceCover: '這張投影片根據作品封面生成：封面顯示在標題旁，背景則是模糊後的封面。',
   sourceNone: '這張投影片沒有美術，讀者會在素色背景上看到它的文字。請在下方加入背景美術。',
   noRealm: '這個 Zone 沒有預設社群，所以還不能放活動美術。',
   slotAdd: '用於這張投影片', slotAdding: '加入中…',
@@ -86,7 +86,7 @@ export default {
   effectSample: '範例', effectSampleText: '投影片的標題',
 
   previewHint: '不在排程內的投影片也會顯示在這裡。讀者只會在排程時間內看到各張投影片，且同時最多五張。預覽不會自動輪播，讓你正在編輯的投影片保持在視野中。',
-  previewNothing: '加入投影片即可看到舞台。',
+  previewNothing: '加入投影片即可預覽展示效果。',
   previewMasked: '尚未標示內容分級的圖片會顯示為「已隱藏」圖示，這裡和讀者看到的一樣。',
 
   unsaved: '尚有未儲存的變更', allSaved: '所有內容都已儲存',

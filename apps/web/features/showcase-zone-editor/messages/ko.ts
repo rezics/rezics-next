@@ -12,7 +12,7 @@ export default {
   slidesHeading: '슬라이드',
   slidesHelp: '독자에게는 이 순서대로 슬라이드가 보입니다. 대부분의 독자는 첫 슬라이드를 누르므로 가장 중요한 것을 맨 앞에 두세요.',
   slideCount: insert('슬라이드 {{count}} / {{max}}개', { count: String, max: String }),
-  slidesRecommend: '다섯 개 이하를 권장합니다. 무대에는 표시 중인 슬라이드가 한 번에 다섯 개까지만 그려지므로, 여섯 번째는 앞의 슬라이드가 일정에서 벗어나 있을 때만 나타납니다.',
+  slidesRecommend: '슬라이드는 다섯 개 이하를 권장합니다. 쇼케이스에는 일정에 따라 표시되는 슬라이드가 한 번에 최대 다섯 개까지 표시되므로, 여섯 번째 슬라이드는 앞선 슬라이드가 일정에 따라 표시되지 않을 때만 나타납니다.',
   emptyTitle: '아직 슬라이드가 없습니다',
   emptyBody: '추가하기 전까지는 홈 맨 위에 커뮤니티의 최신 추천이 표시됩니다.',
   addWork: '작품 추가', addLink: '링크 추가',
@@ -86,7 +86,7 @@ export default {
   effectSample: '예시', effectSampleText: '슬라이드의 제목',
 
   previewHint: '일정 밖의 슬라이드도 여기에는 표시됩니다. 독자는 각 슬라이드를 일정 안에서만, 한 번에 최대 다섯 개까지 봅니다. 미리 보기는 자동으로 넘어가지 않아 편집 중인 슬라이드가 계속 보입니다.',
-  previewNothing: '슬라이드를 추가하면 무대가 보입니다.',
+  previewNothing: '슬라이드를 추가하면 쇼케이스를 미리 볼 수 있습니다.',
   previewMasked: '콘텐츠 등급이 지정되지 않은 이미지는 여기서도, 독자에게도 숨김 아이콘으로 표시됩니다.',
 
   unsaved: '저장하지 않은 변경 사항', allSaved: '모두 저장했습니다',

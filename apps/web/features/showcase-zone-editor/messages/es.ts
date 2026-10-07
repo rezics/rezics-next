@@ -12,7 +12,7 @@ export default {
   slidesHeading: 'Diapositivas',
   slidesHelp: 'Los lectores ven las diapositivas en este orden. La mayoría pulsa la primera, así que pon al principio la más importante.',
   slideCount: insert('{{count}} de {{max}} diapositivas', { count: String, max: String }),
-  slidesRecommend: 'Recomendamos cinco o menos. El escenario dibuja como mucho cinco diapositivas activas a la vez, así que una sexta solo aparece mientras otra anterior está fuera de su calendario.',
+  slidesRecommend: 'Recomendamos cinco o menos. El escaparate muestra como máximo cinco diapositivas activas a la vez; una sexta solo aparece mientras alguna anterior está fuera del horario programado.',
   emptyTitle: 'Todavía no hay diapositivas',
   emptyBody: 'Hasta que añadas una, la parte superior de la página de inicio muestra las últimas selecciones de la comunidad.',
   addWork: 'Añadir una obra', addLink: 'Añadir un enlace',
@@ -85,8 +85,8 @@ export default {
   effectPlain: 'Sencillo', effectOutline: 'Contorno', effectGradient: 'Degradado', effectGlow: 'Resplandor',
   effectSample: 'Ejemplo', effectSampleText: 'El título de una diapositiva',
 
-  previewHint: 'Aquí también se muestran las diapositivas fuera de su calendario. Los lectores ven cada una solo dentro de su calendario, y como mucho cinco a la vez. La vista previa no rota, para que la diapositiva que editas siga a la vista.',
-  previewNothing: 'Añade una diapositiva para ver el escenario.',
+  previewHint: 'Aquí también se muestran las diapositivas fuera de su horario programado. Los lectores solo ven cada una dentro del horario establecido, y como mucho cinco a la vez. La vista previa no rota, para que la diapositiva que editas siga a la vista.',
+  previewNothing: 'Añade una diapositiva para ver cómo queda el escaparate.',
   previewMasked: 'Una imagen cuyo contenido no se ha etiquetado aparece como un icono de imagen oculta, aquí y para los lectores.',
 
   unsaved: 'Cambios sin guardar', allSaved: 'Todo está guardado',

@@ -9,7 +9,7 @@ export default {
   ownRating: insert('你的评分：{{value}}（满分 {{max}}）', { value: String, max: String }),
   yourRating: '你的评分',
   noRatings: '暂无评分',
-  previous: '上一组', next: '下一组', seeAll: '查看全部',
+  previous: '上一项', next: '下一项', seeAll: '查看全部',
   wantToRead: '想读', reading: '在读', read: '读过',
   removeFromShelf: '从我的书架移除',
   shelve: insert('将《{{title}}》加入书架', { title: String }),

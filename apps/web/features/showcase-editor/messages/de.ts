@@ -28,7 +28,7 @@ export default {
   frameSize: 'Rahmengröße',
   pixels: insert('{{width}} × {{height}} px', { width: String, height: String }),
   markFocal: 'Fokusbereich markieren', clearFocal: 'Fokusbereich entfernen',
-  focalHelp: 'Der Rahmen ist das, was breite Fenster zeigen. Der Fokusbereich ist der Teil, der sichtbar bleiben muss, wenn ein schmalerer Ausschnitt das Artwork beschneidet.',
+  focalHelp: 'Der Rahmen entspricht dem Ausschnitt, der in breiten Fenstern angezeigt wird. Der Fokusbereich muss sichtbar bleiben, wenn ein schmalerer Ausschnitt das Artwork zuschneidet.',
   phoneWindow: 'Smartphones',
 
   logosHeading: 'Logos',

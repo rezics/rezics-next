@@ -28,7 +28,7 @@ export default {
   frameSize: 'Tamaño del marco',
   pixels: insert('{{width}} × {{height}} px', { width: String, height: String }),
   markFocal: 'Marcar el área de enfoque', clearFocal: 'Quitar el área de enfoque',
-  focalHelp: 'El marco es lo que muestran las ventanas anchas. El área de enfoque es la parte que debe seguir visible cuando un marco más estrecho recorta la imagen.',
+  focalHelp: 'El marco delimita lo que se muestra en las ventanas anchas. El área de enfoque es la parte que debe seguir visible cuando se recorta la imagen para encajar en un marco más estrecho.',
   phoneWindow: 'Teléfonos',
 
   logosHeading: 'Logotipos',
