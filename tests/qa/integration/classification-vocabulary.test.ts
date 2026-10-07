@@ -161,13 +161,28 @@ test('G-426 vocabulary shares a revisioned scheme and resolves bilingual hierarc
       meaningKey: string;
       revision: string;
       replayed: boolean;
+      meaningBasis: unknown;
+      sourcePosition: { datasetId: string; dataEpoch: string; sequence: string };
     }>(await call('/v1/statements', statementBody, 'vocabulary-statement', author.token), 201);
+    expect(statement.meaningBasis).toMatchObject({
+      state: 'readable',
+      context: interpretation.context,
+      semanticRevision: interpretation.semanticRevision,
+      interpretationDefinitions: [child.definitionRevision],
+    });
     expect(
       await home.json<typeof statement>(
         await call('/v1/statements', statementBody, 'vocabulary-statement', author.token),
         200,
       ),
-    ).toMatchObject({ ...statement, replayed: true });
+    ).toMatchObject({
+      statement: statement.statement,
+      meaningKey: statement.meaningKey,
+      revision: statement.revision,
+      sourcePosition: statement.sourcePosition,
+      meaningBasis: statement.meaningBasis,
+      replayed: true,
+    });
     const decisionBody = {
       profile: 'statement-decision-v1',
       target: {
