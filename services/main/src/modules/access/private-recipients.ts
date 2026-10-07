@@ -114,8 +114,11 @@ export class AccessPrivateRecipients {
       if (!gate.rows[0]?.open || !gate.rows[0].dispatch_open) {
         throw new PrivateRecipientDenied('private recipient scope is closed');
       }
+      // Addition's protection guard takes inventory exclusively; select that
+      // mode before membership, authority and receipt locks rather than upgrade.
       const inventory = (await client.query<{ group_generation: string }>(
-        "SELECT group_generation FROM access.scope_gate WHERE id = 'access:group-inventory' FOR SHARE")).rows[0]!;
+        `SELECT group_generation FROM access.scope_gate WHERE id = 'access:group-inventory'
+         ${input.action === 'add-group-member' ? 'FOR UPDATE' : 'FOR SHARE'}`)).rows[0]!;
       if ('membershipId' in input) await lockAccessKey(client, `private-membership-row:${input.membershipId}`);
       const managerId = await this.authorize(client, input);
       await lockAccessKey(client, `private-recipient:${managerId}:${input.idempotencyKey}`);

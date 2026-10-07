@@ -9,6 +9,13 @@ import {
   GroupConflict,
 } from '../../../services/main/src/modules/access/groups.ts';
 import { AccessProtectedChanges } from '../../../services/main/src/modules/access/protected-set.ts';
+import { AccessMemberships } from '../../../services/main/src/modules/access/memberships.ts';
+import { changeRealmMember } from '../../../services/main/src/modules/access/realm-management-members.ts';
+import {
+  AccessPrivateRecipients,
+  PrivateRecipientDenied,
+} from '../../../services/main/src/modules/access/private-recipients.ts';
+import { AccessPlatformGrants } from '../../../services/main/src/modules/access/platform-grants.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { receiptFamilyFor } from '../../../services/main/src/modules/access/receipt-families.ts';
 import {
@@ -757,6 +764,462 @@ test('approved activation preserves an independent selected authority witness th
     expect(await f.epoch()).toBe(before.authority_epoch);
     expect(f.sqlstates).not.toContain('40P01');
   } finally {
+    await f.close();
+  }
+}, 30_000);
+
+const digest = () => 'e'.repeat(64);
+
+/** Either the rival reached the same owner call (no earlier fence) or PostgreSQL parked it behind the holder. */
+async function reachedOrBlocked(
+  monitor: Pool,
+  reached: Promise<void>,
+  waiting: number,
+  holder: number,
+) {
+  let met = false;
+  void reached.then(() => {
+    met = true;
+  });
+  const deadline = performance.now() + 1_500;
+  while (performance.now() < deadline) {
+    if (met) return;
+    if (
+      (await monitor.query('SELECT $1 = ANY(pg_blocking_pids($2)) AS blocked', [holder, waiting]))
+        .rows[0].blocked
+    )
+      return;
+    await Bun.sleep(10);
+  }
+  throw new Error('The rival owner neither reached the shared point nor waited on the holder');
+}
+
+const settle = <T>(promise: Promise<T>) =>
+  promise.then(
+    (value) => ({ value }),
+    (error) => ({ error }) as { error: unknown },
+  );
+
+/** Private recipients, a Realm membership with a dependent group grant, and a platform:grant holder. */
+async function ownerFixture() {
+  const f = await fixture();
+  try {
+    const realm = native(),
+      dependent = native(),
+      recipient = [randomUUID(), randomUUID()],
+      membership = [randomUUID(), randomUUID()],
+      realmMembership = randomUUID(),
+      dependentGrant = randomUUID();
+    for (const subject of [realm, dependent]) {
+      await f.monitor.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [
+        subject,
+      ]);
+    }
+    await f.monitor.query(
+      "INSERT INTO access.membership_policy (kind, owner_subject, revision, terms_revision) VALUES ('realm',$1,1,'terms'),('org',$2,1,'terms')",
+      [realm, f.owner],
+    );
+    for (const [index, principal] of recipient.entries()) {
+      await f.monitor.query(
+        'INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
+        [principal, f.manager.issuer, randomUUID()],
+      );
+      const consent = randomUUID();
+      await f.monitor.query(
+        `INSERT INTO access.private_membership_consent
+        (id, principal_id, principal_epoch, kind, owner_subject, policy_revision, terms_revision, next_generation, expires_at)
+        VALUES ($1,$2,0,'org',$3,1,'terms',1,clock_timestamp() + interval '5 minutes')`,
+        [consent, principal, f.owner],
+      );
+      await f.monitor.query(
+        `INSERT INTO access.private_membership
+        (id, kind, owner_subject, principal_id, state, generation, policy_revision, terms_revision, consent_reference)
+        VALUES ($1,'org',$2,$3,'joined',1,1,'terms',$4)`,
+        [membership[index], f.owner, principal, consent],
+      );
+    }
+    await f.monitor.query(
+      `INSERT INTO access.membership
+      (id, kind, owner_subject, member_subject, state, generation, policy_revision, terms_revision, consent_reference)
+      VALUES ($1,'realm',$2,$3,'joined',1,1,'terms','consent')`,
+      [realmMembership, realm, dependent],
+    );
+    await f.monitor.query(
+      `INSERT INTO access.group_permission_grant
+      (id, group_id, issuer_subject, scope_id, action, valid_until, membership_id, membership_generation)
+      VALUES ($1,$2,$3,$4,'work.create',clock_timestamp() + interval '30 minutes',$5,1)`,
+      [dependentGrant, f.otherGroup, f.owner, work, realmMembership],
+    );
+    await f.monitor.query(
+      `INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'access.membership.manage.realm',clock_timestamp() + interval '1 hour')`,
+      [randomUUID(), f.managerId, realm],
+    );
+    await f.monitor.query(
+      `INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,$3,'access.membership.manage.realm',clock_timestamp() + interval '1 hour')`,
+      [randomUUID(), realm, work],
+    );
+    // Platform issuer: the manager controls the owner Agent, which holds the ceiling.
+    await f.monitor.query(
+      `INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
+      VALUES ($1,$2,$3,'agent.control','infinity')`,
+      [randomUUID(), f.managerId, f.owner],
+    );
+    await f.monitor.query(
+      `INSERT INTO access.permission_grant
+      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+      VALUES ($1,$2,$2,'platform:access','access.grant.assign.platform',clock_timestamp() + interval '1 hour')`,
+      [randomUUID(), f.owner],
+    );
+    const holderGrant = randomUUID();
+    await f.monitor.query(
+      `INSERT INTO access.principal_permission_grant
+      (id, issuer_subject, principal_id, scope_id, action, valid_until)
+      VALUES ($1,$2,$3,'platform:access','platform:grant',clock_timestamp() + interval '1 hour')`,
+      [holderGrant, f.owner, f.managerId],
+    );
+    await f.monitor.query(
+      `INSERT INTO access.platform_grant_episode
+      (id, principal_grant_id, issuer_subject, permission, scope_id, assigned_by_principal, receipt)
+      VALUES ($1,$1,$2,'platform:grant','platform:access',$3,$4)`,
+      [holderGrant, f.owner, f.managerId, `urn:rezics:access-receipt:${'f'.repeat(64)}`],
+    );
+    const addInput = (index: number) => ({
+      principal: f.manager,
+      issuerSubject: f.owner,
+      action: 'add-group-member' as const,
+      expectedAuthorityEpoch: '0',
+      expectedGroupGeneration: '0',
+      idempotencyKey: randomUUID(),
+      requestDigest: digest(),
+      memberId: randomUUID(),
+      groupId: f.group,
+      membershipId: membership[index]!,
+      membershipGeneration: '1',
+    });
+    const privateAdd = async (pool: Pool, index: number, groupId = f.group) =>
+      new AccessPrivateRecipients(pool).change({
+        ...addInput(index),
+        groupId,
+        expectedAuthorityEpoch: await f.epoch(),
+        expectedGroupGeneration: await f.generation(),
+      });
+    const leave = (pool: Pool) =>
+      new AccessMemberships(pool).change({
+        principal: f.manager,
+        kind: 'realm',
+        ownerSubject: realm,
+        memberSubject: dependent,
+        action: 'leave',
+        expectedGeneration: '1',
+        expectedPolicyRevision: '1',
+        idempotencyKey: randomUUID(),
+        requestDigest: digest(),
+      });
+    const realmChange = async (pool: Pool, action: 'remove' | 'ban') => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        const result = await changeRealmMember(
+          client,
+          realm,
+          {
+            action,
+            member: dependent,
+            expectedMembershipGeneration: '1',
+            consent: null,
+            durationSeconds: null,
+          },
+          f.managerId,
+          randomUUID(),
+        );
+        await client.query('COMMIT');
+        return result;
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
+    };
+    const dependentGrantRequest = async (pool: Pool) =>
+      new AccessGroups(pool).grant(
+        f.context(await f.generation()),
+        randomUUID(),
+        f.group,
+        new Date(Date.now() + 20 * 60_000),
+        receipt(),
+        { membershipId: realmMembership, generation: '1' },
+      );
+    const platformContext = async () => ({
+      principal: f.manager,
+      issuerSubject: f.owner,
+      expectedAuthorityEpoch: await f.epoch('platform:access'),
+    });
+    const platformIssue = async (pool: Pool, grantId = randomUUID()) =>
+      new AccessPlatformGrants(pool).create(
+        await platformContext(),
+        grantId,
+        'platform:use:platform-admin',
+        { groupId: f.group },
+        new Date(Date.now() + 20 * 60_000),
+        receipt(),
+      );
+    return {
+      ...f,
+      realmMembership,
+      dependentGrant,
+      recipient,
+      privateAdd,
+      leave,
+      realmChange,
+      dependentGrantRequest,
+      platformContext,
+      platformIssue,
+    };
+  } catch (error) {
+    await f.close();
+    throw error;
+  }
+}
+
+test('two private-recipient additions fence inventory exclusively and both commit without 40P01', async () => {
+  const f = await ownerFixture();
+  const matchInsert = (sql: string) => sql.includes('INSERT INTO access.private_group_member');
+  const first = pausedPool(f.left, matchInsert, true),
+    second = pausedPool(f.right, matchInsert, true);
+  const pending: Promise<unknown>[] = [];
+  try {
+    const left = settle(f.privateAdd(first.pool, 0));
+    pending.push(left);
+    await first.reached;
+    const right = settle(f.privateAdd(second.pool, 1));
+    pending.push(right);
+    await reachedOrBlocked(f.monitor, second.reached, f.rightPid, f.leftPid);
+    first.resume();
+    second.resume();
+    const outcomes = [await left, await right];
+    expect(f.sqlstates).not.toContain('40P01');
+    expect(outcomes.map((outcome) => 'value' in outcome)).toEqual([true, true]);
+    expect(
+      (
+        await f.monitor.query(
+          'SELECT count(*)::int AS count FROM access.private_group_member WHERE group_id = $1 AND active',
+          [f.group],
+        )
+      ).rows[0].count,
+    ).toBe(2);
+  } finally {
+    first.resume();
+    second.resume();
+    await Promise.allSettled(pending);
+    await f.close();
+  }
+}, 30_000);
+
+test('a private-recipient addition queued behind committed protection is refused without an effect or receipt', async () => {
+  const f = await ownerFixture();
+  const paused = pausedPool(
+    f.left,
+    (sql) => sql.includes('INSERT INTO access.protected_set'),
+    true,
+  );
+  const pending: Promise<unknown>[] = [];
+  try {
+    const protection = settle(f.protect(paused.pool));
+    pending.push(protection);
+    await paused.reached;
+    const addition = settle(f.privateAdd(f.right, 0));
+    pending.push(addition);
+    await blockedBy(f.monitor, f.rightPid, f.leftPid);
+    paused.resume();
+    expect(await protection).toHaveProperty('value.objectId', f.group);
+    const denied = (await addition) as { error: unknown };
+    expect(denied.error).toBeInstanceOf(PrivateRecipientDenied);
+    expect(
+      (
+        await f.monitor.query('SELECT 1 FROM access.private_group_member WHERE group_id = $1', [
+          f.group,
+        ])
+      ).rows,
+    ).toEqual([]);
+    expect(
+      (await f.monitor.query('SELECT 1 FROM access.private_recipient_change_receipt')).rows,
+    ).toEqual([]);
+    expect(f.sqlstates).not.toContain('40P01');
+  } finally {
+    paused.resume();
+    await Promise.allSettled(pending);
+    await f.close();
+  }
+}, 30_000);
+
+test('a private-recipient addition committed first is retained when queued protection follows', async () => {
+  const f = await ownerFixture();
+  const paused = pausedPool(
+    f.left,
+    (sql) => sql.includes('INSERT INTO access.private_group_member'),
+    true,
+  );
+  const pending: Promise<unknown>[] = [];
+  try {
+    const addition = settle(f.privateAdd(paused.pool, 0));
+    pending.push(addition);
+    await paused.reached;
+    const protection = settle(f.protect(f.right));
+    pending.push(protection);
+    await blockedBy(f.monitor, f.rightPid, f.leftPid);
+    paused.resume();
+    expect(await addition).toHaveProperty('value.action', 'add-group-member');
+    expect(await protection).toHaveProperty('value.objectId', f.group);
+    expect(
+      (
+        await f.monitor.query(
+          'SELECT count(*)::int AS count FROM access.private_group_member WHERE group_id = $1 AND active',
+          [f.group],
+        )
+      ).rows[0].count,
+    ).toBe(1);
+    expect(f.sqlstates).not.toContain('40P01');
+  } finally {
+    paused.resume();
+    await Promise.allSettled(pending);
+    await f.close();
+  }
+}, 30_000);
+
+test('membership departure fences inventory before its membership row, so a competing dependent group grant is refused stale', async () => {
+  const f = await ownerFixture();
+  const paused = pausedPool(
+    f.left,
+    (sql) => sql.includes('FROM access.membership WHERE kind') && sql.includes('FOR UPDATE'),
+  );
+  const pending: Promise<unknown>[] = [];
+  try {
+    const generation = await f.generation(),
+      epoch = await f.epoch();
+    const departure = settle(f.leave(paused.pool));
+    pending.push(departure);
+    await paused.reached;
+    const grant = settle(f.dependentGrantRequest(f.right));
+    pending.push(grant);
+    await blockedBy(f.monitor, f.rightPid, f.leftPid);
+    paused.resume();
+    expect(await departure).toHaveProperty('value.state', 'left');
+    expect(((await grant) as { error: unknown }).error).toBeInstanceOf(GroupStale);
+    expect(f.sqlstates).not.toContain('40P01');
+    expect(await f.epoch()).toBe(epoch);
+    expect(await f.generation()).toBe(String(BigInt(generation) + 1n));
+    expect(
+      (
+        await f.monitor.query('SELECT active FROM access.group_permission_grant WHERE id = $1', [
+          f.dependentGrant,
+        ])
+      ).rows,
+    ).toEqual([{ active: false }]);
+    expect(
+      (
+        await f.monitor.query(
+          'SELECT count(*)::int AS count FROM access.group_permission_grant WHERE membership_id = $1',
+          [f.realmMembership],
+        )
+      ).rows[0].count,
+    ).toBe(1);
+  } finally {
+    paused.resume();
+    await Promise.allSettled(pending);
+    await f.close();
+  }
+}, 30_000);
+
+for (const action of ['remove', 'ban'] as const) {
+  test(`Realm ${action} cleanup fences inventory before the membership row, so a competing dependent group grant is refused stale`, async () => {
+    const f = await ownerFixture();
+    const paused = pausedPool(
+      f.left,
+      (sql) =>
+        sql.includes("FROM access.membership WHERE kind = 'realm'") && sql.includes('FOR UPDATE'),
+    );
+    const pending: Promise<unknown>[] = [];
+    try {
+      const generation = await f.generation(),
+        epoch = await f.epoch();
+      const change = settle(f.realmChange(paused.pool, action));
+      pending.push(change);
+      await paused.reached;
+      const grant = settle(f.dependentGrantRequest(f.right));
+      pending.push(grant);
+      await blockedBy(f.monitor, f.rightPid, f.leftPid);
+      paused.resume();
+      expect(await change).toHaveProperty('value.member');
+      expect(((await grant) as { error: unknown }).error).toBeInstanceOf(GroupStale);
+      expect(f.sqlstates).not.toContain('40P01');
+      expect(await f.epoch()).toBe(epoch);
+      expect(await f.generation()).toBe(String(BigInt(generation) + 1n));
+      expect(
+        (
+          await f.monitor.query('SELECT active FROM access.group_permission_grant WHERE id = $1', [
+            f.dependentGrant,
+          ])
+        ).rows,
+      ).toEqual([{ active: false }]);
+    } finally {
+      paused.resume();
+      await Promise.allSettled(pending);
+      await f.close();
+    }
+  }, 30_000);
+}
+
+test('platform group-grant issuance fences inventory before group row locks, so a competing reparent is refused stale', async () => {
+  const f = await ownerFixture();
+  const paused = pausedPool(
+    f.left,
+    (sql) => sql.includes('INSERT INTO access.group_permission_grant'),
+    true,
+  );
+  const pending: Promise<unknown>[] = [];
+  try {
+    const generation = await f.generation(),
+      grantId = randomUUID();
+    const issue = settle(f.platformIssue(paused.pool, grantId));
+    pending.push(issue);
+    await Promise.race([
+      paused.reached,
+      issue.then((outcome) => {
+        throw new Error(
+          `issuance ended before the forced point: ${String((outcome as any).error?.stack ?? outcome)}`,
+        );
+      }),
+    ]);
+    const reparent = settle(
+      new AccessGroups(f.right).reparent(
+        f.context(generation),
+        f.group,
+        '0',
+        f.otherGroup,
+        receipt(),
+      ),
+    );
+    pending.push(reparent);
+    await blockedBy(f.monitor, f.rightPid, f.leftPid);
+    paused.resume();
+    expect(await issue).toHaveProperty('value.grant.id', grantId);
+    expect(((await reparent) as { error: unknown }).error).toBeInstanceOf(GroupStale);
+    expect(f.sqlstates).not.toContain('40P01');
+    expect(
+      (
+        await f.monitor.query('SELECT active FROM access.group_permission_grant WHERE id = $1', [
+          grantId,
+        ])
+      ).rows,
+    ).toEqual([{ active: true }]);
+  } finally {
+    paused.resume();
+    await Promise.allSettled(pending);
     await f.close();
   }
 }, 30_000);

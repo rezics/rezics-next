@@ -314,6 +314,10 @@ export class AccessMemberships {
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
       const currentEpoch = await this.gate(client);
+      // Departure revokes dependent group grants; fence inventory before the
+      // membership and source rows that their generation trigger also touches.
+      if (input.action === 'leave') await client.query(
+        "SELECT 1 FROM access.scope_gate WHERE id = 'access:group-inventory' FOR UPDATE");
       const principal = await client.query<{ id: string }>(`SELECT id FROM access.principal
         WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
       [input.principal.issuer, input.principal.subject]);

@@ -211,6 +211,7 @@ export class AccessPlatformGrants {
     ) => Promise<void>,
     validUntil?: Date | null,
     resource?: { permission: string; scope: string },
+    groupEffect = false,
   ): Promise<PlatformGrantResult> {
     if (
       !agent.test(context.issuerSubject) ||
@@ -241,6 +242,16 @@ export class AccessPlatformGrants {
       ).rows[0];
       if (!gate?.open || !gate.dispatch_open)
         throw new PlatformGrantUnavailable('Platform grant scope is held');
+      // Group issuance inserts a group grant, whose protection guard takes the
+      // inventory fence exclusively; take it before the group row and authority locks.
+      if (groupEffect) {
+        await client.query(
+          "SELECT 1 FROM access.scope_gate WHERE id = 'work:create:root' FOR SHARE",
+        );
+        await client.query(
+          "SELECT 1 FROM access.scope_gate WHERE id = 'access:group-inventory' FOR UPDATE",
+        );
+      }
       const issuer = await this.authorize(
         client,
         context.principal,
@@ -459,6 +470,7 @@ export class AccessPlatformGrants {
       },
       validUntil,
       action.startsWith('platform:resource:') ? { permission: action, scope } : undefined,
+      !!recipient.groupId,
     );
   }
 
