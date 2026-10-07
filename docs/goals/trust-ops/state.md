@@ -8,7 +8,7 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 20:27 UTC. Serving roots/membership remains healthy at
+Checkpoint 2026-10-07 20:47 UTC. Serving roots/membership remains healthy at
 native25ce9fb19154/model fa39610, with Content1705/1706 applied and the Main
 hold released. No Trust refresh is queued. G-1398 attempt2 is qualifying its
 new private Access history reader and migration1774 in isolated PG/native tests.
@@ -31,9 +31,14 @@ attempt11 diagnoses the exact failing call/liveness and bounded fixture repair;
 no budget increase, dropped cardinality or rewritten source evidence is allowed.
 The failed artifact is .temp/worktrees/g-1344/.artifacts/qa/20261007t203250-42388e.
 
-G-1401 is dispatched for the inherited privacy-safe PostgreSQL deadlock signal
-through the existing shared pool and logger; production alert delivery remains
-unqualified. Launch's unchanged signed-in browser regression remains the closure
+G-1401 deadlock signal landed36f887e933a8: real2cases/63assertions,
+owner6 and19selected affected/guard files passed. It observes direct40P01 once
+before owner translation via the existing safe logger, preserving every query
+form and client lifecycle. Production alert delivery remains unqualified and
+runtime activation awaits the next frozen checkpoint. Attempt3 now owns the
+remaining group-protection Work shared-to-exclusive lock cycle; Access1775 is
+reserved, no global Work serialization or guard removal is allowed. Claims were
+explicitly reclaimed before the resumed implementation. Launch's unchanged signed-in browser regression remains the closure
 check for activated G-1394. Kernel has the narrow original-descriptor fixture loan
 in unclaimed scripts/ops/tests/g-916-object-coverage.test.ts, and the additive
 private candidate title issuer loan in title-admission.ts. Both retain existing
@@ -382,3 +387,11 @@ table, global frontier or inferred C/R/challenge tail is permitted.
 - Pacing (program): one cap of 24 live workers; no dispatch below 12 GiB
   available; keep a Sol worker on its area across slices (resume it rather
   than dispatching fresh); short briefs.
+
+Program G-1346 lifecycle change9c9c563e7 is live: refreshes own a separate
+lifecycle lock and re-execute from their frozen staged revision, while builds
+retain memory admission. Main merges need no blanket code hold during a queued
+refresh. Announce behavior activations; mandatory migration/model refreshes still
+apply. Kernel erased-pin repair45181d8fd39d is landed and source-qualified with
+10143actual assertions; no source/native/schema change is conflated with serving
+activation or complete operator retry/private payload/WAL destruction.
