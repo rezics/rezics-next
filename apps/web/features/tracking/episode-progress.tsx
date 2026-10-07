@@ -108,13 +108,13 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
         <CheckIcon aria-hidden="true" />{saving ? t.episodeSaving : t.markNext({ number: String(read.next.number) })}</Button></div>
     </div> : read.through ? <p className="text-muted-foreground text-sm" data-caught-up>{t.allWatched}</p> : null}
 
-    <form className="flex flex-wrap items-end gap-2" onSubmit={event => { event.preventDefault(); void jump(); }}>
-      <Field className="gap-1">
+    <form className="flex items-end gap-2 sm:max-w-sm" onSubmit={event => { event.preventDefault(); void jump(); }}>
+      <Field className="min-w-0 flex-1 gap-1">
         <FieldLabel htmlFor={jumpId} className="text-muted-foreground text-xs">{t.jumpTo}</FieldLabel>
-        <Input id={jumpId} size="sm" inputMode="numeric" className="h-11 w-32 sm:h-8" value={typed}
+        <Input id={jumpId} size="sm" inputMode="numeric" className="h-11 sm:h-8" value={typed}
           onChange={event => { setTyped(event.target.value); setMissing(null); }} />
       </Field>
-      <Button type="submit" variant="outline" className="min-h-11 sm:min-h-8" disabled={saving || finding !== null || typedNumber === null}>{t.jumpGo}</Button>
+      <Button type="submit" variant="outline" className="min-h-11 shrink-0 sm:min-h-8" disabled={saving || finding !== null || typedNumber === null}>{t.jumpGo}</Button>
     </form>
     {finding !== null ? <p role="status" className="text-muted-foreground text-sm" data-finding>{t.findingEpisode({ number: String(finding) })}</p> : null}
     {missing !== null ? <p role="status" className="text-muted-foreground text-sm">{t.noSuchEpisode({ number: String(missing) })}</p> : null}
