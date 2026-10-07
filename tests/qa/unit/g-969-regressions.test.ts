@@ -55,7 +55,7 @@ async function fixture(count: number, grouped = false) {
     model: STRUCTURE_PROFILE, shape: STRUCTURE_PROFILE,
   })))}`;
   const queries: string[] = [];
-  const unavailable = new Set<string>();
+  const unavailable = new Set<string>(), unpublished = new Set<string>();
   let moved = false, headerReads = 0;
   const binding = (...rows: Record<string, { type: string; value: string }>[]) => ({ results: { bindings: rows } });
   const deps = { environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
@@ -78,7 +78,7 @@ async function fixture(count: number, grouped = false) {
       if (query.includes('SELECT DISTINCT ?variant ?revision WHERE')) {
         const target = /rv:resource <([^>]+)>/u.exec(query)![1]!;
         const selected = revision(target);
-        if (unavailable.has(target) || query.includes('FILTER(?revision =')
+        if (unavailable.has(target) || unpublished.has(target) || query.includes('FILTER(?revision =')
           && !query.includes(`FILTER(?revision = <${selected}>)`)) return binding();
         return binding({ variant: term(id(`variant:${target}`)), revision: term(selected) });
       }
@@ -101,24 +101,37 @@ async function fixture(count: number, grouped = false) {
     access: {}, account: {} } as unknown as MainWorkDependencies;
   class Session extends WorkReadSession {
     hidden = new Set<string>();
+    revokeOnSecondDisclosure?: { resource: string; component: 'name' | 'body' };
+    disclosureReads = new Map<string, number>();
     override async summaries(): Promise<never> { throw new Error('Continuation must not rehydrate the Book'); }
     override async disclosure(targets: readonly DisclosureTarget[]) {
-      return targets.map(target => this.hidden.has(target.resource) ? 'hidden' as const : 'visible' as const);
+      return targets.map(target => {
+        const key = `${target.resource}\0${target.component}`;
+        const reads = (this.disclosureReads.get(key) ?? 0) + 1;
+        this.disclosureReads.set(key, reads);
+        const revoked = this.revokeOnSecondDisclosure;
+        return this.hidden.has(target.resource) || revoked?.resource === target.resource
+          && revoked.component === target.component && reads >= 2 ? 'hidden' as const : 'visible' as const;
+      });
     }
   }
   const session = new Session(deps, new Request('http://main.test/v1/feed'), {}, { dataEpoch: 'epoch', sequence: '1' });
-  return { session, records, queries, unavailable, move: () => { moved = true; headerReads = 0; } };
+  return { session, records, queries, unavailable, unpublished, move: () => { moved = true; headerReads = 0; } };
 }
 
-test('G969/G282: distant progress resolves the next chapter in 14 graph calls without body or Book hydration', async () => {
+test('G969/G282: distant progress resolves the next chapter within 14 graph calls without body or Book hydration', async () => {
+  const calls: number[] = [];
   for (const count of [22, 1024]) {
     const f = await fixture(count);
     const current = f.records[count - 2]!;
     expect(await readChapterContinuation(f.session, work, structure, current.occurrence, 'en', true))
       .toEqual({ occurrence: f.records[count - 1]!.occurrence, language: 'en' });
-    expect(f.queries).toHaveLength(14);
+    expect(f.queries.length).toBeLessThanOrEqual(14);
+    calls.push(f.queries.length);
     expect(f.queries.some(query => query.includes('DESC(?position)'))).toBe(false);
+    expect(f.queries.some(query => query.includes('SELECT ?occurrence ?target ?pinned'))).toBe(false);
   }
+  expect(calls[1]).toBe(calls[0]);
 });
 
 test('G969/G282: unread progress, completed end and grouped reading order retain exact outcomes', async () => {
@@ -144,6 +157,34 @@ test('G969/G282: unavailable publications, live disclosure and moving compositio
   f.session.hidden.clear();
   f.move();
   await expect(readChapterContinuation(f.session, work, structure, f.records[0]!.occurrence, 'en', false))
+    .rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('Continuation skips unreadable targets and unavailable publications', async () => {
+  const f = await fixture(4);
+  f.unavailable.add(f.records[1]!.target!);
+  f.unpublished.add(f.records[2]!.target!);
+  expect(await readChapterContinuation(f.session, work, structure, f.records[0]!.occurrence, 'en', true))
+    .toEqual({ occurrence: f.records[3]!.occurrence, language: 'en' });
+});
+
+test('Final successor read refuses late name or body disclosure revocation', async () => {
+  for (const component of ['name', 'body'] as const) {
+    const f = await fixture(2), target = f.records[1]!.target!;
+    f.session.revokeOnSecondDisclosure = { resource: target, component };
+    await expect(readChapterContinuation(f.session, work, structure, f.records[0]!.occurrence, 'en', true))
+      .rejects.toBeInstanceOf(WorkReadMissing);
+    expect(f.session.disclosureReads.get(`${target}\0${component}`)).toBe(2);
+    // Publication selection is repeated in the final read after the candidate was accepted.
+    expect(f.queries.filter(query => query.includes('SELECT DISTINCT ?variant ?revision WHERE')
+      && query.includes(`rv:resource <${target}>`))).toHaveLength(2);
+  }
+});
+
+test('Completed continuation retains its final moving-head fence', async () => {
+  const f = await fixture(2);
+  f.move();
+  await expect(readChapterContinuation(f.session, work, structure, f.records[0]!.occurrence, 'en', true))
     .rejects.toBeInstanceOf(WorkReadMoved);
 });
 

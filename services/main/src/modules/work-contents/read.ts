@@ -310,7 +310,7 @@ export async function readContents(session: WorkReadSession, work: string,
 
 async function neighbor(session: WorkReadSession, header: CompositionHeader,
   snapshot: CompositionSnapshot, current: OccurrenceRecord,
-  direction: 'previous' | 'next', language: string): Promise<string | null> {
+  direction: 'previous' | 'next', language: string, strictDisclosure = false): Promise<string | null> {
   let candidates = 0;
   const selected = await seekChapter(session.deps.environment, {
     structure: header.structure, header, snapshot, from: current, direction,
@@ -330,7 +330,9 @@ async function neighbor(session: WorkReadSession, header: CompositionHeader,
         { owner: 'graph', resource: record.target, component: 'name', work: header.work },
         { owner: 'content', resource: record.target, component: 'body', revision: publication.revision, work: header.work },
       ], 'read');
-      return decisions.every(decision => decision === 'visible');
+      const visible = decisions.every(decision => decision === 'visible');
+      if (!visible && strictDisclosure) throw missing();
+      return visible;
     },
   });
   return selected?.record.occurrence ?? null;
@@ -341,7 +343,7 @@ async function neighbor(session: WorkReadSession, header: CompositionHeader,
  * Exact placements, public publications and live disclosure still gate it;
  * the enclosing Work read fences the graph position and owns the call budget.
  * Two exact placements and one navigationCandidates probe cost 14 public
- * graph calls for the first successor, at most 52 when candidates are denied.
+ * graph calls at most for the first successor, at most 52 when candidates are denied.
  * Current private Access proofs share that enclosing budget too. */
 export async function readChapterContinuation(session: WorkReadSession, work: string, structure: string,
   occurrence: string, language: string, completed: boolean) {
@@ -370,7 +372,7 @@ export async function readChapterContinuation(session: WorkReadSession, work: st
     const current = await read(occurrence);
     let next: string | null = occurrence;
     if (completed) {
-      next = await neighbor(session, header, snapshot, current, 'next', language);
+      next = await neighbor(session, header, snapshot, current, 'next', language, true);
       if (next) await read(next);
     }
     const after = await readCompositionHeader(session.deps.environment, structure).catch(structureError);
