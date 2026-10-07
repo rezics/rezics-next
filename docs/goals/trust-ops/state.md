@@ -8,14 +8,15 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 20:56 UTC. Serving frozen revisionf7a340611d0c is healthy at
+Checkpoint 2026-10-07 21:15 UTC. Serving frozen revisionf7a340611d0c is healthy at
 native25ce9fb19154/model fa39610, with Access1774, Content1705/1706,
 erased-pin45181 and deadlock signal36f887 active. All six resources are healthy;
 volumes retained, no AppHost restart, refresh terminal0 and no pending ticket. No Trust refresh is queued. G-1398 is closed/verified atf7a340611d0c after10realPG/native tests/218assertions,
 19selected unit/guardfiles and mandatory activation.
 G-1351's two commits are rebased to a7b4d5cf9 with current GroupRole/qualifier
-custody and restoredContent hooks preserved; attempt6 checks this exact current
-composition. Borrowed transaction checks remain, while the original saved relay
+custody and restoredContent hooks preserved; Sonnet attempt8 completes its realg727 caller after current-source positive
+1/561 and78/2489. The newrebase preserves45181 borrowedContentClient and
+independently capturedRelayPool; no corrected releasedreader is consumed yet. Borrowed transaction checks remain, while the original saved relay
 cut is authenticated from the distinct restored relay snapshot and current
 retained authority/head/journal stays checked by the existing callback. Successful
 crash retry waits for Kernel's corrected frozen released-proof reader.
@@ -418,3 +419,17 @@ Kernel has the exact original-generation one-line Work-contents fixture loan
 (SHA20a14603...) with all assertions/old-generation semantics preserved. Its new
 Assessment native readerff332 is landed, but ancestry confirms it is outside
 servingf7a; it awaits the next normal activation rather than a duplicate refresh.
+
+G-1343 returned138a96173 plus8dc prerequisites. Actual graph-commit/Access-fail
+retry passed; both-owner-commit/outer-record restart remains unproved because
+CAS creates two legitimate covered invalidation rows. Durable pre/post-CAS full
+Access evidence must be bound by G-1351. Source acceptance is withheld: its
+temporary Kernel overlay used the older UUID/100digit grammar; corrected source
+f5c20d is pending independent delivery, and actual TDB reopen corrupting huge
+legal integers is a separate native P1. No artificial counter cap is permitted.
+G-1401 core group lock repair reproduced two real40P01 cycles then passed12/69,
+but migration1775 stays held until its four now-claimed owner hooks are complete;
+Sonnet attempt4 owns that class proof. G-1351 Sonnet8 owns the missing genuine
+retained-context g727 caller before selected positive landing. An orphan Library
+import source can survive existing account cleanup; LaunchG1387 has the exact
+existing-owner repair request, while G-1343's remaining-row veto stays strict.
