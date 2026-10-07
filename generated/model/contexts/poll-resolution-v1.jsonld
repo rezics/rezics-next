@@ -114,7 +114,8 @@
       "@type": "xsd:integer"
     },
     "rv:winningOption": {
-      "@id": "https://rezics.com/vocab/winningOption"
+      "@id": "https://rezics.com/vocab/winningOption",
+      "@type": "@id"
     }
   }
 }

@@ -29,10 +29,12 @@
       "@type": "@id"
     },
     "rv:eventEnd": {
-      "@id": "https://rezics.com/vocab/eventEnd"
+      "@id": "https://rezics.com/vocab/eventEnd",
+      "@type": "@id"
     },
     "rv:eventStart": {
-      "@id": "https://rezics.com/vocab/eventStart"
+      "@id": "https://rezics.com/vocab/eventStart",
+      "@type": "@id"
     },
     "rv:eventTime": {
       "@id": "https://rezics.com/vocab/eventTime",
@@ -55,10 +57,12 @@
       "@type": "xsd:dateTime"
     },
     "rv:temporalKind": {
-      "@id": "https://rezics.com/vocab/temporalKind"
+      "@id": "https://rezics.com/vocab/temporalKind",
+      "@type": "@id"
     },
     "rv:temporalValue": {
-      "@id": "https://rezics.com/vocab/temporalValue"
+      "@id": "https://rezics.com/vocab/temporalValue",
+      "@type": "@id"
     },
     "rv:timeAvailability": {
       "@id": "https://rezics.com/vocab/timeAvailability",

@@ -104,7 +104,8 @@
       "@id": "https://rezics.com/vocab/ratingTimeZone"
     },
     "rv:ratingValue": {
-      "@id": "https://rezics.com/vocab/ratingValue"
+      "@id": "https://rezics.com/vocab/ratingValue",
+      "@type": "xsd:integer"
     },
     "rv:realm": {
       "@id": "https://rezics.com/vocab/realm",

@@ -50,14 +50,16 @@
       "@id": "https://rezics.com/vocab/orderKey"
     },
     "rv:orderSegment": {
-      "@id": "https://rezics.com/vocab/orderSegment"
+      "@id": "https://rezics.com/vocab/orderSegment",
+      "@type": "@id"
     },
     "rv:partInclusion": {
       "@id": "https://rezics.com/vocab/partInclusion",
       "@type": "@id"
     },
     "rv:pinnedRevision": {
-      "@id": "https://rezics.com/vocab/pinnedRevision"
+      "@id": "https://rezics.com/vocab/pinnedRevision",
+      "@type": "@id"
     },
     "rv:qualifier": {
       "@id": "https://rezics.com/vocab/qualifier",
@@ -72,10 +74,12 @@
       "@type": "@id"
     },
     "rv:selectionMode": {
-      "@id": "https://rezics.com/vocab/selectionMode"
+      "@id": "https://rezics.com/vocab/selectionMode",
+      "@type": "@id"
     },
     "rv:selectionRealm": {
-      "@id": "https://rezics.com/vocab/selectionRealm"
+      "@id": "https://rezics.com/vocab/selectionRealm",
+      "@type": "@id"
     },
     "rv:sourceKey": {
       "@id": "https://rezics.com/vocab/sourceKey"

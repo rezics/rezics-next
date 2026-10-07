@@ -1,6 +1,17 @@
 # An identified rdf:Statement with exact relation and interpretation DefinitionRefs.
 # Meaning-bearing fields are fixed per Statement; revisions change only lifecycle and evidence.
-# The meaning key excludes speaker, Context identity and preference revision.
+# Describing a Statement does not assert its base triple or grant acceptance.
+# Unqualified meaning keys retain their old semantics, excluding speaker and Context identity.
+# The fixed qualification bundle modifies the proposition, not its RDF object alone.
+# Its exact reviewed interpretation DefinitionRevision defines statement-proposition-qualification-v1:
+# interpretationContext is an opaque proposition scope, not Context semantic/default selection;
+# ExactValue reports the stated value as exact, ApproximateValue marks an approximation, and
+# UncertainValue marks the stated value as uncertain without replacing its lexical form.
+# DisputedAttribution marks contested attribution; InferredValue marks an inferred proposition.
+# Validity is [validFrom, validUntil), with an omitted bound unbounded on that side.
+# An editionScope restricts the proposition to that exact edition; omission imposes no restriction.
+# Qualification scope, precision, qualifiers, bounds and edition participate in qualified keys.
+# Speaker, recorded time, evidence and acceptance remain independent of qualification meaning.
 @prefix sh: <http://www.w3.org/ns/shacl#> .
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -22,7 +33,26 @@
     sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StatementRevision ] ;
     sh:property [ sh:path rv:source ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:migratedFrom ; sh:maxCount 1 ; sh:class rv:ClassificationApplication ] ;
-    sh:property [ sh:path rv:principal ; sh:maxCount 0 ] .
+    sh:property [ sh:path rv:principal ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:qualificationDefinition ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class rv:DefinitionRevision ] ;
+    sh:property [ sh:path rv:interpretationContext ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:valuePrecision ; sh:maxCount 1 ; sh:in ( rv:ExactValue rv:ApproximateValue rv:UncertainValue ) ] ;
+    sh:property [ sh:path rv:valueQualifier ; sh:maxCount 2 ; sh:in ( rv:DisputedAttribution rv:InferredValue ) ] ;
+    sh:property [ sh:path rv:validFrom ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:validUntil ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:editionScope ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:qualificationDefinition ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:interpretationContext ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:valuePrecision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:valueQualifier ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:validFrom ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:validUntil ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:editionScope ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:qualificationDefinition ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:interpretationContext ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:valuePrecision ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ]
+    ) .
 
 <https://rezics.com/definition/statement-v1/revision-shape>
     a sh:NodeShape ;

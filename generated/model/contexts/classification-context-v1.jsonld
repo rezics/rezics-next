@@ -29,14 +29,16 @@
       "@type": "@id"
     },
     "rv:fallbackContext": {
-      "@id": "https://rezics.com/vocab/fallbackContext"
+      "@id": "https://rezics.com/vocab/fallbackContext",
+      "@type": "@id"
     },
     "rv:inheritancePolicy": {
       "@id": "https://rezics.com/vocab/inheritancePolicy",
       "@type": "@id"
     },
     "rv:realm": {
-      "@id": "https://rezics.com/vocab/realm"
+      "@id": "https://rezics.com/vocab/realm",
+      "@type": "@id"
     },
     "rv:realmState": {
       "@id": "https://rezics.com/vocab/realmState",

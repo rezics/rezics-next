@@ -29,7 +29,8 @@
       "@type": "@id"
     },
     "rv:baseRevision": {
-      "@id": "https://rezics.com/vocab/baseRevision"
+      "@id": "https://rezics.com/vocab/baseRevision",
+      "@type": "@id"
     },
     "rv:component": {
       "@id": "https://rezics.com/vocab/component",
@@ -51,7 +52,8 @@
       "@type": "@id"
     },
     "rv:entry": {
-      "@id": "https://rezics.com/vocab/entry"
+      "@id": "https://rezics.com/vocab/entry",
+      "@type": "@id"
     },
     "rv:entryCount": {
       "@id": "https://rezics.com/vocab/entryCount",
@@ -74,7 +76,8 @@
       "@type": "xsd:integer"
     },
     "rv:interpretationDefinition": {
-      "@id": "https://rezics.com/vocab/interpretationDefinition"
+      "@id": "https://rezics.com/vocab/interpretationDefinition",
+      "@type": "@id"
     },
     "rv:manifest": {
       "@id": "https://rezics.com/vocab/manifest",

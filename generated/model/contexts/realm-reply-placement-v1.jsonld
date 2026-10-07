@@ -61,7 +61,8 @@
       "@type": "xsd:integer"
     },
     "rv:parentReply": {
-      "@id": "https://rezics.com/vocab/parentReply"
+      "@id": "https://rezics.com/vocab/parentReply",
+      "@type": "@id"
     },
     "rv:parentRevision": {
       "@id": "https://rezics.com/vocab/parentRevision"

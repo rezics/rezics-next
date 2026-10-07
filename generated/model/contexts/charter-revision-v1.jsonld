@@ -37,7 +37,8 @@
       "@type": "@id"
     },
     "rv:approvalThreshold": {
-      "@id": "https://rezics.com/vocab/approvalThreshold"
+      "@id": "https://rezics.com/vocab/approvalThreshold",
+      "@type": "xsd:integer"
     },
     "rv:charter": {
       "@id": "https://rezics.com/vocab/charter",

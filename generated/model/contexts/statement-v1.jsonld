@@ -42,12 +42,20 @@
     "rv:dataEpoch": {
       "@id": "https://rezics.com/vocab/dataEpoch"
     },
+    "rv:editionScope": {
+      "@id": "https://rezics.com/vocab/editionScope",
+      "@type": "@id"
+    },
     "rv:evidence": {
       "@id": "https://rezics.com/vocab/evidence",
       "@type": "@id"
     },
     "rv:head": {
       "@id": "https://rezics.com/vocab/head",
+      "@type": "@id"
+    },
+    "rv:interpretationContext": {
+      "@id": "https://rezics.com/vocab/interpretationContext",
       "@type": "@id"
     },
     "rv:interpretationDefinition": {
@@ -81,6 +89,10 @@
     "rv:principal": {
       "@id": "https://rezics.com/vocab/principal"
     },
+    "rv:qualificationDefinition": {
+      "@id": "https://rezics.com/vocab/qualificationDefinition",
+      "@type": "@id"
+    },
     "rv:recordedBy": {
       "@id": "https://rezics.com/vocab/recordedBy",
       "@type": "@id"
@@ -111,6 +123,22 @@
     },
     "rv:statementState": {
       "@id": "https://rezics.com/vocab/statementState",
+      "@type": "@id"
+    },
+    "rv:validFrom": {
+      "@id": "https://rezics.com/vocab/validFrom",
+      "@type": "xsd:dateTime"
+    },
+    "rv:validUntil": {
+      "@id": "https://rezics.com/vocab/validUntil",
+      "@type": "xsd:dateTime"
+    },
+    "rv:valuePrecision": {
+      "@id": "https://rezics.com/vocab/valuePrecision",
+      "@type": "@id"
+    },
+    "rv:valueQualifier": {
+      "@id": "https://rezics.com/vocab/valueQualifier",
       "@type": "@id"
     }
   }

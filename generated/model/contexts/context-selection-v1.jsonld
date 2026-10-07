@@ -29,7 +29,8 @@
       "@type": "@id"
     },
     "rv:context": {
-      "@id": "https://rezics.com/vocab/context"
+      "@id": "https://rezics.com/vocab/context",
+      "@type": "@id"
     },
     "rv:contextSelectionHead": {
       "@id": "https://rezics.com/vocab/contextSelectionHead",
@@ -55,27 +56,31 @@
       "@type": "@id"
     },
     "rv:preferenceRevision": {
-      "@id": "https://rezics.com/vocab/preferenceRevision"
+      "@id": "https://rezics.com/vocab/preferenceRevision",
+      "@type": "@id"
     },
     "rv:principal": {
       "@id": "https://rezics.com/vocab/principal"
     },
     "rv:scopeDomain": {
-      "@id": "https://rezics.com/vocab/scopeDomain"
+      "@id": "https://rezics.com/vocab/scopeDomain",
+      "@type": "@id"
     },
     "rv:scopeKind": {
       "@id": "https://rezics.com/vocab/scopeKind",
       "@type": "@id"
     },
     "rv:scopeObject": {
-      "@id": "https://rezics.com/vocab/scopeObject"
+      "@id": "https://rezics.com/vocab/scopeObject",
+      "@type": "@id"
     },
     "rv:scopeProfile": {
       "@id": "https://rezics.com/vocab/scopeProfile",
       "@type": "@id"
     },
     "rv:scopeRelation": {
-      "@id": "https://rezics.com/vocab/scopeRelation"
+      "@id": "https://rezics.com/vocab/scopeRelation",
+      "@type": "@id"
     },
     "rv:selectedBy": {
       "@id": "https://rezics.com/vocab/selectedBy",
@@ -94,7 +99,8 @@
       "@type": "@id"
     },
     "rv:semanticRevision": {
-      "@id": "https://rezics.com/vocab/semanticRevision"
+      "@id": "https://rezics.com/vocab/semanticRevision",
+      "@type": "@id"
     },
     "rv:sequence": {
       "@id": "https://rezics.com/vocab/sequence",

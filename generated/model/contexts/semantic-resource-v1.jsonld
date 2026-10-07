@@ -75,7 +75,8 @@
       "@type": "@id"
     },
     "rv:semanticHead": {
-      "@id": "https://rezics.com/vocab/semanticHead"
+      "@id": "https://rezics.com/vocab/semanticHead",
+      "@type": "@id"
     },
     "rv:sequence": {
       "@id": "https://rezics.com/vocab/sequence",

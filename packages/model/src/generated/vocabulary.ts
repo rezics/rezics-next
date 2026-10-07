@@ -888,6 +888,7 @@ export const iri = {
   "rv:PublicDomain": "https://rezics.com/vocab/PublicDomain",
   "rv:publicSearchEligibilityHead": "https://rezics.com/vocab/publicSearchEligibilityHead",
   "rv:publisher": "https://rezics.com/vocab/publisher",
+  "rv:qualificationDefinition": "https://rezics.com/vocab/qualificationDefinition",
   "rv:QualifiedFactTarget": "https://rezics.com/vocab/QualifiedFactTarget",
   "rv:qualifier": "https://rezics.com/vocab/qualifier",
   "rv:quantityKind": "https://rezics.com/vocab/quantityKind",

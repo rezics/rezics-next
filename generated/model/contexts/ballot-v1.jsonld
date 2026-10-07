@@ -40,7 +40,8 @@
       "@type": "@id"
     },
     "rv:ballotShare": {
-      "@id": "https://rezics.com/vocab/ballotShare"
+      "@id": "https://rezics.com/vocab/ballotShare",
+      "@type": "@id"
     },
     "rv:castRoute": {
       "@id": "https://rezics.com/vocab/castRoute",
@@ -63,7 +64,8 @@
       "@type": "@id"
     },
     "rv:invalidationDecision": {
-      "@id": "https://rezics.com/vocab/invalidationDecision"
+      "@id": "https://rezics.com/vocab/invalidationDecision",
+      "@type": "@id"
     },
     "rv:mandateApproval": {
       "@id": "https://rezics.com/vocab/mandateApproval",

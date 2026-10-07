@@ -84,7 +84,8 @@
       "@type": "@id"
     },
     "rv:independentOriginCount": {
-      "@id": "https://rezics.com/vocab/independentOriginCount"
+      "@id": "https://rezics.com/vocab/independentOriginCount",
+      "@type": "xsd:integer"
     },
     "rv:inputCount": {
       "@id": "https://rezics.com/vocab/inputCount",

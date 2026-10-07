@@ -25,19 +25,23 @@
       "@type": "@id"
     },
     "rv:amountDenominator": {
-      "@id": "https://rezics.com/vocab/amountDenominator"
+      "@id": "https://rezics.com/vocab/amountDenominator",
+      "@type": "xsd:integer"
     },
     "rv:amountLexical": {
       "@id": "https://rezics.com/vocab/amountLexical"
     },
     "rv:amountNumerator": {
-      "@id": "https://rezics.com/vocab/amountNumerator"
+      "@id": "https://rezics.com/vocab/amountNumerator",
+      "@type": "xsd:integer"
     },
     "rv:amountUpperDenominator": {
-      "@id": "https://rezics.com/vocab/amountUpperDenominator"
+      "@id": "https://rezics.com/vocab/amountUpperDenominator",
+      "@type": "xsd:integer"
     },
     "rv:amountUpperNumerator": {
-      "@id": "https://rezics.com/vocab/amountUpperNumerator"
+      "@id": "https://rezics.com/vocab/amountUpperNumerator",
+      "@type": "xsd:integer"
     },
     "rv:basis": {
       "@id": "https://rezics.com/vocab/basis",
@@ -67,7 +71,8 @@
       "@type": "@id"
     },
     "rv:nutrient": {
-      "@id": "https://rezics.com/vocab/nutrient"
+      "@id": "https://rezics.com/vocab/nutrient",
+      "@type": "@id"
     },
     "rv:optionality": {
       "@id": "https://rezics.com/vocab/optionality",

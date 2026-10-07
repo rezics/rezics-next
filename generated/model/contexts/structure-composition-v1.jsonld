@@ -40,17 +40,20 @@
       "@type": "@id"
     },
     "rv:generation": {
-      "@id": "https://rezics.com/vocab/generation"
+      "@id": "https://rezics.com/vocab/generation",
+      "@type": "@id"
     },
     "rv:generationState": {
       "@id": "https://rezics.com/vocab/generationState",
       "@type": "@id"
     },
     "rv:importSource": {
-      "@id": "https://rezics.com/vocab/importSource"
+      "@id": "https://rezics.com/vocab/importSource",
+      "@type": "@id"
     },
     "rv:importSourceRevision": {
-      "@id": "https://rezics.com/vocab/importSourceRevision"
+      "@id": "https://rezics.com/vocab/importSourceRevision",
+      "@type": "@id"
     },
     "rv:introducedBy": {
       "@id": "https://rezics.com/vocab/introducedBy",
@@ -65,7 +68,8 @@
       "@type": "@id"
     },
     "rv:mappingPolicy": {
-      "@id": "https://rezics.com/vocab/mappingPolicy"
+      "@id": "https://rezics.com/vocab/mappingPolicy",
+      "@type": "@id"
     },
     "rv:memberCount": {
       "@id": "https://rezics.com/vocab/memberCount",
@@ -94,14 +98,16 @@
       "@id": "https://rezics.com/vocab/orderKey"
     },
     "rv:orderSegment": {
-      "@id": "https://rezics.com/vocab/orderSegment"
+      "@id": "https://rezics.com/vocab/orderSegment",
+      "@type": "@id"
     },
     "rv:parent": {
       "@id": "https://rezics.com/vocab/parent",
       "@type": "@id"
     },
     "rv:pinnedRevision": {
-      "@id": "https://rezics.com/vocab/pinnedRevision"
+      "@id": "https://rezics.com/vocab/pinnedRevision",
+      "@type": "@id"
     },
     "rv:placementCount": {
       "@id": "https://rezics.com/vocab/placementCount",
@@ -120,7 +126,8 @@
       "@type": "@id"
     },
     "rv:restoredFrom": {
-      "@id": "https://rezics.com/vocab/restoredFrom"
+      "@id": "https://rezics.com/vocab/restoredFrom",
+      "@type": "@id"
     },
     "rv:sealCoverage": {
       "@id": "https://rezics.com/vocab/sealCoverage",
@@ -138,10 +145,12 @@
       "@type": "@id"
     },
     "rv:selectionMode": {
-      "@id": "https://rezics.com/vocab/selectionMode"
+      "@id": "https://rezics.com/vocab/selectionMode",
+      "@type": "@id"
     },
     "rv:selectionRealm": {
-      "@id": "https://rezics.com/vocab/selectionRealm"
+      "@id": "https://rezics.com/vocab/selectionRealm",
+      "@type": "@id"
     },
     "rv:sequence": {
       "@id": "https://rezics.com/vocab/sequence",

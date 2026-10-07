@@ -97,10 +97,12 @@
       "@type": "@id"
     },
     "rv:pollOpening": {
-      "@id": "https://rezics.com/vocab/pollOpening"
+      "@id": "https://rezics.com/vocab/pollOpening",
+      "@type": "@id"
     },
     "rv:pollResolution": {
-      "@id": "https://rezics.com/vocab/pollResolution"
+      "@id": "https://rezics.com/vocab/pollResolution",
+      "@type": "@id"
     },
     "rv:pollState": {
       "@id": "https://rezics.com/vocab/pollState",

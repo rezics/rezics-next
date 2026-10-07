@@ -52,7 +52,8 @@
       "@type": "xsd:dateTime"
     },
     "rv:declaredBy": {
-      "@id": "https://rezics.com/vocab/declaredBy"
+      "@id": "https://rezics.com/vocab/declaredBy",
+      "@type": "@id"
     },
     "rv:grantorKnowledge": {
       "@id": "https://rezics.com/vocab/grantorKnowledge",
@@ -87,7 +88,8 @@
       "@type": "@id"
     },
     "rv:predecessor": {
-      "@id": "https://rezics.com/vocab/predecessor"
+      "@id": "https://rezics.com/vocab/predecessor",
+      "@type": "@id"
     },
     "rv:provenance": {
       "@id": "https://rezics.com/vocab/provenance",

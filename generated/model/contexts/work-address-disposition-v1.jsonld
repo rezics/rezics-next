@@ -36,7 +36,8 @@
       "@type": "@id"
     },
     "rv:redirectWork": {
-      "@id": "https://rezics.com/vocab/redirectWork"
+      "@id": "https://rezics.com/vocab/redirectWork",
+      "@type": "@id"
     },
     "rv:routeDisposition": {
       "@id": "https://rezics.com/vocab/routeDisposition",

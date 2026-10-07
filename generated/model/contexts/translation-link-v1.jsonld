@@ -31,7 +31,8 @@
       "@id": "https://rezics.com/vocab/authorizationScope"
     },
     "rv:authorizingParty": {
-      "@id": "https://rezics.com/vocab/authorizingParty"
+      "@id": "https://rezics.com/vocab/authorizingParty",
+      "@type": "@id"
     },
     "rv:contentLanguage": {
       "@id": "https://rezics.com/vocab/contentLanguage"
@@ -67,7 +68,8 @@
       "@type": "@id"
     },
     "rv:sourceMainRevision": {
-      "@id": "https://rezics.com/vocab/sourceMainRevision"
+      "@id": "https://rezics.com/vocab/sourceMainRevision",
+      "@type": "@id"
     },
     "rv:sourceMainVersion": {
       "@id": "https://rezics.com/vocab/sourceMainVersion",

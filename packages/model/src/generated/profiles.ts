@@ -1243,7 +1243,7 @@ export const profileRegistry = {
     ]
   },
   "statement-v1": {
-    "sha256": "da4cf542d30ca2d0af244fa86efd53e4a8780a7b8feae260abc05168c358aa2a",
+    "sha256": "5a41da76ca5c3b7171c915ca1cebcab19c321562f640142e1148706c9e0c5f8b",
     "file": "shapes/statement-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/statement-v1/statement-shape",

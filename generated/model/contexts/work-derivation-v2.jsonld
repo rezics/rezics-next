@@ -59,7 +59,8 @@
       "@type": "@id"
     },
     "rv:sourceMainRevision": {
-      "@id": "https://rezics.com/vocab/sourceMainRevision"
+      "@id": "https://rezics.com/vocab/sourceMainRevision",
+      "@type": "@id"
     },
     "rv:sourceMainVersion": {
       "@id": "https://rezics.com/vocab/sourceMainVersion",

@@ -136,7 +136,8 @@
       "@type": "@id"
     },
     "rv:sourceProposal": {
-      "@id": "https://rezics.com/vocab/sourceProposal"
+      "@id": "https://rezics.com/vocab/sourceProposal",
+      "@type": "@id"
     }
   }
 }

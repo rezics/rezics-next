@@ -25,10 +25,12 @@
       "@type": "@id"
     },
     "rv:captureCoverage": {
-      "@id": "https://rezics.com/vocab/captureCoverage"
+      "@id": "https://rezics.com/vocab/captureCoverage",
+      "@type": "@id"
     },
     "rv:capturedFrom": {
-      "@id": "https://rezics.com/vocab/capturedFrom"
+      "@id": "https://rezics.com/vocab/capturedFrom",
+      "@type": "@id"
     },
     "rv:collectionHead": {
       "@id": "https://rezics.com/vocab/collectionHead",

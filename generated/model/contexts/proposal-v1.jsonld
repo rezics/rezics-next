@@ -58,7 +58,8 @@
       "@type": "@id"
     },
     "rv:proposalExecution": {
-      "@id": "https://rezics.com/vocab/proposalExecution"
+      "@id": "https://rezics.com/vocab/proposalExecution",
+      "@type": "@id"
     },
     "rv:proposalHead": {
       "@id": "https://rezics.com/vocab/proposalHead",

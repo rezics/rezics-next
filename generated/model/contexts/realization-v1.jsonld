@@ -76,7 +76,8 @@
       "@type": "@id"
     },
     "rv:sourceRevision": {
-      "@id": "https://rezics.com/vocab/sourceRevision"
+      "@id": "https://rezics.com/vocab/sourceRevision",
+      "@type": "@id"
     },
     "rv:sourceStatus": {
       "@id": "https://rezics.com/vocab/sourceStatus"
