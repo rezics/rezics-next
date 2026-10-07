@@ -164,6 +164,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/post-catalogue-scale.test.ts',
   // Designates the first platform administrator on a fresh stack.
   'tests/qa/integration/platform-bootstrap.test.ts',
+  // Online-index cancellation probes mutate owner migration receipts and create disposable schemas.
+  'tests/qa/integration/concurrent-index-migrations.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */

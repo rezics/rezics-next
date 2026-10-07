@@ -77,7 +77,7 @@ test('G-940: release records accept four-digit versions and reject duplicate num
 test('G-940: the Content applier executes 1000 after 999 and skips applied versions on replay', async () => {
   const fixture = temporaryRoot();
   try {
-    // Mirror just the real runner and its dependency; never add unreserved migrations to an owner.
+    // Mirror the real runner and its dependencies; never add unreserved migrations to an owner.
     for (const directory of [
       'services/content/src',
       'services/content/migrations',
@@ -92,6 +92,10 @@ test('G-940: the Content applier executes 1000 after 999 and skips applied versi
     copyFileSync(
       join(root, 'scripts/lib/migration-order.ts'),
       join(fixture, 'scripts/lib/migration-order.ts'),
+    );
+    copyFileSync(
+      join(root, 'scripts/lib/concurrent-index.ts'),
+      join(fixture, 'scripts/lib/concurrent-index.ts'),
     );
     for (const version of [1000, 999])
       writeFileSync(

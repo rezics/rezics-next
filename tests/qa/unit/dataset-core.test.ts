@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Acquisition } from '../../../scripts/datasets/network.ts';
 import { blobPath, canonical, repository, sha256 } from '../../../scripts/datasets/store.ts';
@@ -34,7 +34,11 @@ const source = (title = 'Fate/stay night'): DatasetSource => ({
   images: [],
   scope: { complete: true },
 });
-const temporary = () => mkdtempSync(join(repository, '.temp/datasets/unit-'));
+const temporary = () => {
+  const parent = join(repository, '.temp/datasets');
+  mkdirSync(parent, { recursive: true });
+  return mkdtempSync(join(parent, 'unit-'));
+};
 
 test('dataset: CLI rejects accidental network flags on replay and invalid/duplicate scopes', () => {
   expect(parseDatasetOptions(['fetch', '--source', 'vndb', '--images', 'all']).source).toBe('vndb');

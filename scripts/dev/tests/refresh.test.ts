@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+// sql-relations-allow: access.online_probe -- Synthetic index used only by mocked rehearsal clients.
 import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
