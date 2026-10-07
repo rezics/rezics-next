@@ -43,7 +43,7 @@ export async function expireLibraryUploads(content: Pool, now = new Date()): Pro
 
 /** Account deletion uses original own-Person provisions, never delegated
  * Agent authority. Pages avoid making a request bound a person-count limit. */
-export async function eraseLibraryImportsForPrincipals(content: Pool, access: Pool, principals: string[]) {
+export async function eraseLibraryImportsForPrincipals(content: Pool, access: Pool | PoolClient, principals: string[]) {
   let after = '';
   while (true) {
     const agents = (await access.query<{ agent_id: string }>(`SELECT DISTINCT a.agent_id FROM access.agent_provision a
