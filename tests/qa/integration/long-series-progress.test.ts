@@ -5,16 +5,14 @@ import { AccountAssertionDenied } from '../../../services/main/src/modules/accou
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
-import { StructureStageStore } from '../../../services/main/src/modules/structure/stage.ts';
 import { backfillOccurrenceLabels } from '../../../services/main/src/modules/structure/label-index-backfill.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { startMediaStack } from './media-support.ts';
 
-const native = () => `https://rezics.com/id/${randomUUID()}`;
 const short = (resource: string) => resource.slice(-36);
 type Composition = { structure: string; revision: string };
-type Stage = { id: string; holder: string; fence: string; revision: string };
+type Changed = { revision: string; occurrences: string[] };
 type Chooser = { resolved: string; items: Array<{ occurrence: string; ordinal: number; parent: string }>; complete: boolean };
 type Completed = { items: Array<{ occurrence: string; selectedRevision: string | null; completed: boolean }>;
   nextCursor: string | null; complete: boolean; consistency: string; count: { kind: string; total: null } };
@@ -44,7 +42,7 @@ test('a thousand admitted Episode occurrences seek, tick out of order and resume
     const store = new StructureProgressStore(stack.contentPool);
     const device = () => createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
       media: stack.media, mediaAccess: stack.mediaAccess, structureObjects: objects,
-      structureStages: new StructureStageStore(stack.contentPool, objects), progress: store,
+      progress: store,
       readingPositions: new ReadingPositionStore(stack.contentPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       account: { verify: async request => {
@@ -95,27 +93,27 @@ test('a thousand admitted Episode occurrences seek, tick out of order and resume
     const composition = await json<Composition>(await call(first, 'POST', '/v1/compositions', {
       profile: 'work-composition', work: series.work, mainVersion: series.mainVersion, actingSubject: person }), 201);
     const path = `/v1/compositions/${short(composition.structure)}`;
-    const stage = await json<Stage>(await call(first, 'POST', `${path}/stages`, {
-      expectedHead: composition.revision, actingSubject: person }), 201);
-    const episodes = Array.from({ length: 1000 }, native), specials = native(), special = native();
-    const entries = episodes.map((occurrence, index) => ({ occurrence, state: 'active', parent: composition.structure,
-      segmentKey: Math.floor(index / 32).toString(36).padStart(4, '0'), orderKey: (index % 32).toString(36).padStart(2, '0'),
-      role: 'part', target: index === 999 ? thousand : repeated, introducedBy: stage.revision, labels: [],
-      qualifier: { type: 'work-part', displayLabel: `Episode ${index + 1}`, inclusion: 'required' } }));
-    const grouped = [
-      ...entries,
-      { occurrence: specials, state: 'active', parent: composition.structure, segmentKey: 'zzzz', orderKey: '00',
-        role: 'group', introducedBy: stage.revision, labels: [{ value: 'Specials', language: 'en' }] },
-      { occurrence: special, state: 'active', parent: specials, segmentKey: '0000', orderKey: '00',
-        role: 'part', target: specialTarget, introducedBy: stage.revision, labels: [],
-        qualifier: { type: 'work-part', displayLabel: 'Special', inclusion: 'extra' } },
-    ];
-    for (let offset = 0; offset < grouped.length; offset += 256) await json(await call(first, 'PUT',
-      `${path}/stages/${stage.id}/pages/${offset / 256}`, { actingSubject: person,
-        holder: stage.holder, fence: stage.fence, entries: grouped.slice(offset, offset + 256) }));
-    await json(await call(first, 'POST', `${path}/stages/${stage.id}/seal`, {
-      actingSubject: person, holder: stage.holder, fence: stage.fence }));
-    await json(await call(first, 'POST', `${path}/stages/${stage.id}/activate`, { actingSubject: person }));
+    // Work compositions use the bounded change command; staged replacement is
+    // currently a Book capability. Build this admitted fixture once in batches.
+    const episodes: string[] = [];
+    let revision = composition.revision;
+    const change = async (operations: object[]) => {
+      const value = await json<Changed>(await call(first, 'POST', `${path}/changes`, {
+        profile: 'work-composition', expectedHead: revision, actingSubject: person, operations }));
+      revision = value.revision;
+      return value;
+    };
+    for (let offset = 0; offset < 1000; offset += 16) {
+      const page = await change(Array.from({ length: Math.min(16, 1000 - offset) }, (_, index) => ({
+        op: 'insert', role: 'part', parent: composition.structure, position: 'last',
+        target: offset + index === 999 ? thousand : repeated,
+        displayLabel: `Episode ${offset + index + 1}`, inclusion: 'required' })));
+      episodes.push(...page.occurrences);
+    }
+    const specials = (await change([{ op: 'insert', role: 'group', parent: composition.structure,
+      position: 'last', label: { value: 'Specials', language: 'en' } }])).occurrences[0]!;
+    const special = (await change([{ op: 'insert', role: 'part', parent: specials,
+      position: 'last', target: specialTarget, displayLabel: 'Special', inclusion: 'extra' }])).occurrences[0]!;
     await backfillOccurrenceLabels(stack.env);
     expect(Date.now() - started).toBeLessThan(600_000);
     const actorQuery = `actingSubject=${encodeURIComponent(person)}`;
@@ -140,8 +138,10 @@ test('a thousand admitted Episode occurrences seek, tick out of order and resume
     expect(await json(await call(second, 'GET', `${path}/occurrences/${short(episodes[999]!)}/progress?${actorQuery}`)))
       .toMatchObject({ completed: true, version: 1 });
     await json(await tick(special, true));
-    const separate = await json<Chooser>(await call(second, 'GET', `${chooser}?${actorQuery}&position=${encodeURIComponent(special)}&limit=1&q=Special`));
-    expect(separate.items.find(item => item.occurrence === special)).toMatchObject({ parent: specials, ordinal: 1 });
+    const separate = await json<Chooser>(await call(second, 'GET', `${chooser}?${actorQuery}&position=${encodeURIComponent(special)}&limit=1&q=1000`));
+    expect(separate.resolved).toBe(special);
+    expect(await json(await call(second, 'GET', `${path}?${actorQuery}&parent=${encodeURIComponent(specials)}&limit=1`)))
+      .toMatchObject({ occurrences: [{ occurrence: special, parent: specials, target: specialTarget }] });
     const stillMain = await json<Chooser>(await call(second, 'GET', `${chooser}?${actorQuery}&q=1000&position=start&limit=1`));
     expect(stillMain.items[0]).toMatchObject({ occurrence: episodes[999], ordinal: 1000 });
 

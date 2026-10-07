@@ -86,6 +86,10 @@ async function fixture() {
       } else if (query.includes('# reading-position:works')) {
         expect(query).toContain('rv:composedWork');
         rows = [{ work: binding(work), structure: binding(structure), revision: binding(revision), generation: binding(generation) }];
+      } else if (query.includes('# reading-position:composed-children')) {
+        expect(query).toContain('rv:composedWork');
+        expect(query).not.toContain('rv:occurrenceRole');
+        rows = [];
       } else if (query.includes('# reading-position:manifest')) rows = [{ manifest: binding(`urn:rezics:sha256:${digest}`) }];
       else {
         expect(query).toMatch(/# reading-position:(records|hydrate)/);
@@ -127,6 +131,18 @@ test('Episode parts page and finish without a Work main version, and specials ke
   expect(special.items).toMatchObject([{ occurrence: f.special.occurrence, parent: f.special.parent, ordinal: 1 }]);
   const last = await f.traversal().last(f.work);
   expect(last?.item.occurrence).toBe(f.special.occurrence);
+});
+
+test('missing and invalid sibling numbers do not walk terminal Episode navigation entries', async () => {
+  const f = await fixture();
+  for (const q of ['0', '1001', '1002', '1000000000000']) {
+    const before = f.measure();
+    const page = await f.traversal().page({ limit: 1, q });
+    expect(page).toMatchObject({ items: [], complete: true, next: null });
+    expect(f.measure().calls - before.calls).toBeLessThanOrEqual(4);
+    expect(f.measure().rowsRead - before.rowsRead).toBeLessThanOrEqual(3);
+    expect(f.measure().objectsRead - before.objectsRead).toBeLessThanOrEqual(6);
+  }
 });
 
 test('Mine chooses furthest current completion after out-of-order ticks and another device sees the same occurrence', async () => {
