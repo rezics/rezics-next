@@ -444,3 +444,12 @@ Structure ownerb175 is landed with original WorkContents6/620 proof; normal
 activation remains pending. Launch queued SonnetG-1403 for orphan Library-source
 erasure afterG-1387 releases privacy.ts, preserving strict remaining-row vetoes.
 Program corrected the reset-credit plan; no credits will be redeemed.
+
+Campaign diagnosis16d54f019 passed8focused cases/107assertions. Exact100kCOUNT
+ran925ms and all12sample reads passed under original deadlines; historical
+TimeoutError remains unlocated. Both writable sources are stopped. G-1344
+Sonnet12 now moves their existing sequential startup into campaign preparation
+phases, preserving actual startup work in600ACTIVE local setup while reporting
+and excluding only admission waits. No unmeasured external startup, budget raise,
+cardinality drop or new framework is accepted. Actual100k campaign remains open.
+All four current Trust workers now run on Sonnet; no new Codex worker started.
