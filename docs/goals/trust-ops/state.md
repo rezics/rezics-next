@@ -8,7 +8,7 @@ remain authoritative except where this checkpoint records new evidence.
 
 ## Current checkpoint
 
-Checkpoint 2026-10-07 21:15 UTC. Serving frozen revisionf7a340611d0c is healthy at
+Checkpoint 2026-10-07 21:18 UTC. Serving frozen revisionf7a340611d0c is healthy at
 native25ce9fb19154/model fa39610, with Access1774, Content1705/1706,
 erased-pin45181 and deadlock signal36f887 active. All six resources are healthy;
 volumes retained, no AppHost restart, refresh terminal0 and no pending ticket. No Trust refresh is queued. G-1398 is closed/verified atf7a340611d0c after10realPG/native tests/218assertions,
@@ -433,3 +433,14 @@ Sonnet attempt4 owns that class proof. G-1351 Sonnet8 owns the missing genuine
 retained-context g727 caller before selected positive landing. An orphan Library
 import source can survive existing account cleanup; LaunchG1387 has the exact
 existing-owner repair request, while G-1343's remaining-row veto stays strict.
+
+Kernel independently accepted corrected released-reader sourcef5c20d51645f...
+/patchf2d03d0234f9...; exact supplied patch SHA verified. G-1343 rebased cleanly
+and resumed Sonnet8 to replace its stale overlay and requalify current helpers.
+The legal huge-integer TDB persistence regression remains a separate native P1;
+no reader cap or full native pass is inferred. G-1351 has accepted inputs staged
+for its next actual pre/post-CAS slice after its current realg727 caller. Kernel
+Structure ownerb175 is landed with original WorkContents6/620 proof; normal
+activation remains pending. Launch queued SonnetG-1403 for orphan Library-source
+erasure afterG-1387 releases privacy.ts, preserving strict remaining-row vetoes.
+Program corrected the reset-credit plan; no credits will be redeemed.
