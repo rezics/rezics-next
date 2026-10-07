@@ -172,7 +172,8 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
           // it before advancing a bounded copy batch.
           if (plan.ncii && !(restricted ? plan.suppression : plan.lift))
             throw new GovernanceStale('NCII decision has no saved suppression basis');
-          await store.moderateOriginal(receipt, plan.media.source, plan.media.state, restricted, plan.lift);
+          await store.moderateOriginal(receipt, plan.media.source, plan.media.state, restricted, plan.lift,
+            restricted && plan.ncii ? plan.suppression : undefined);
           if (restricted && plan.ncii) {
             const result = await store.suppressIdenticalCopies(
               plan.media.digest,

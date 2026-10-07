@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import type { NotificationSubjectReader } from '../notification/dispatcher.ts';
 import { requireAccessOpen, sha256, type NotificationStore } from '../notification/store.ts';
 import type { SafetyResponders } from './roster.ts';
+import { completedSafetyAnswerSql } from '../safety-queue/answered-step.ts';
 
 export { safetyResponders, type SafetyResponders } from './roster.ts';
 
@@ -39,7 +40,7 @@ FROM open_cases c CROSS JOIN LATERAL (
   WHERE s.case_id = c.id AND s.process IN ('ncii','dmca_512')
     AND s.due_at <= $3::timestamptz + ($4::bigint * interval '1 millisecond')
     AND (c.review_pending OR s.step IN ('restoration_not_before','restoration_not_after'))
-    AND NOT EXISTS (SELECT 1 FROM access.moderation_decision d WHERE d.answers_step_id = s.id)
+    AND NOT EXISTS (${completedSafetyAnswerSql('s.id')})
     AND NOT EXISTS (SELECT 1 FROM access.rights_counter_notice j WHERE j.case_id = s.case_id
       AND ((j.restriction_id = s.decision_id AND j.phase IN ('done','stayed'))
         OR (j.report_id = s.report_id AND s.step IN ('restoration_not_before','restoration_not_after')
@@ -138,7 +139,7 @@ export class SafetyAlerts implements NotificationSubjectReader {
         AND c.state = 'open' AND (c.review_pending OR EXISTS (
           SELECT 1 FROM access.governance_process_step s WHERE s.id = a.step_id
             AND s.step IN ('restoration_not_before','restoration_not_after')))
-        AND NOT EXISTS (SELECT 1 FROM access.moderation_decision d WHERE d.answers_step_id = a.step_id)
+        AND NOT EXISTS (${completedSafetyAnswerSql('a.step_id')})
         AND NOT EXISTS (SELECT 1 FROM access.governance_process_step s JOIN access.rights_counter_notice j
           ON j.case_id = s.case_id WHERE s.id = a.step_id
             AND ((j.restriction_id = s.decision_id AND j.phase IN ('done','stayed'))

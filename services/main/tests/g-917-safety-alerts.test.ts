@@ -63,11 +63,14 @@ test('G917: missing responders and safety timeouts leave Access, editorial and r
     ]) {
       const calls: string[] = [];
       const failure = new Error(message);
+      const query = async (sql: string) => ({
+        rows: sql.includes('recovery_fence') ? [{ open: true }] : [],
+      });
       const access = {
-        query: async () => ({ rows: [] }),
+        query,
         connect: async () => {
           calls.push('access');
-          return { query: async () => ({ rows: [] }), release: () => {} };
+          return { query, release: () => {} };
         },
       } as unknown as Pool;
       class Producer extends NotificationProducer {

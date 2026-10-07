@@ -226,6 +226,33 @@ async function receipt(client: PoolClient, args: { operationId: string; digest: 
   recorded.get(client)?.push(args.operationId);
 }
 
+/** The digest fence is a delivery effect, independent of bounded copy-history
+ * updates. Call inside the original's transaction so an interruption cannot
+ * suppress only the reported asset while identical bytes remain public. */
+async function registerCopySuppression(client: PoolClient, digest: string, basis?: CopySuppression): Promise<string> {
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`media-copy:${digest}`]);
+  const existing = (await client.query<{ id: string; digest: string; case_id: string | null;
+    decision_id: string | null; lifted: boolean }>(`SELECT d.*,
+    EXISTS (SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id) AS lifted
+    FROM media.suppressed_digest d WHERE ($2::uuid IS NOT NULL AND d.id = $2)
+      OR ($2::uuid IS NULL AND d.digest = $1 AND NOT EXISTS (
+        SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id))
+    ORDER BY d.created_at DESC,d.id DESC LIMIT 1`, [digest, basis?.id ?? null])).rows[0];
+  if (existing && (existing.digest !== digest || existing.lifted
+    || (basis && (existing.case_id !== basis.caseId || existing.decision_id !== basis.decisionId))))
+    throw new MediaStale('copy suppression basis changed');
+  if (existing) return existing.id;
+  const id = basis?.id ?? randomUUID();
+  await client.query(`INSERT INTO media.suppressed_digest (id,digest,case_id,decision_id)
+    VALUES ($1,$2,$3,$4)`, [id, digest, basis?.caseId ?? null, basis?.decisionId ?? null]);
+  const operationId = `media-copy-digest:${id}`;
+  await receipt(client, { operationId, digest: hash(operationId), action: 'media.copy.suppress',
+    outcome: 'succeeded', eventType: 'media.copy.suppression.started',
+    payload: { digest, suppression: id, caseId: basis?.caseId ?? null,
+      decisionId: basis?.decisionId ?? null } });
+  return id;
+}
+
 export function assetIri(asset: string): string { return `${ID}${asset}`; }
 export function assetVariant(asset: string): string { return `urn:rezics:variant:${asset}`; }
 export function assetNamespace(asset: string): string { return `media/asset/${asset}/`; }
@@ -761,27 +788,7 @@ export class MediaStore {
       throw new MediaInvalid('invalid copy suppression');
     const suppressionId = await transaction(this.pool, async client => {
       await client.query("SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
-      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`media-copy:${originalDigest}`]);
-      const existing = (await client.query<{ id: string; digest: string; case_id: string | null;
-        decision_id: string | null; lifted: boolean }>(`SELECT d.*,
-        EXISTS (SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id) AS lifted
-        FROM media.suppressed_digest d WHERE ($2::uuid IS NOT NULL AND d.id = $2)
-          OR ($2::uuid IS NULL AND d.digest = $1 AND NOT EXISTS (
-            SELECT 1 FROM media.suppression_lift l WHERE l.suppression_id = d.id))
-        ORDER BY d.created_at DESC,d.id DESC LIMIT 1`, [originalDigest, basis?.id ?? null])).rows[0];
-      if (existing && (existing.digest !== originalDigest || existing.lifted
-        || (basis && (existing.case_id !== basis.caseId || existing.decision_id !== basis.decisionId))))
-        throw new MediaStale('copy suppression basis changed');
-      if (existing) return existing.id;
-      const id = basis?.id ?? randomUUID();
-      await client.query(`INSERT INTO media.suppressed_digest (id,digest,case_id,decision_id)
-        VALUES ($1,$2,$3,$4)`, [id, originalDigest, basis?.caseId ?? null, basis?.decisionId ?? null]);
-      const operationId = `media-copy-digest:${id}`;
-      await receipt(client, { operationId, digest: hash(operationId), action: 'media.copy.suppress',
-        outcome: 'succeeded', eventType: 'media.copy.suppression.started',
-        payload: { digest: originalDigest, suppression: id, caseId: basis?.caseId ?? null,
-          decisionId: basis?.decisionId ?? null } });
-      return id;
+      return registerCopySuppression(client, originalDigest, basis);
     });
     return transaction(this.pool, async client => {
       await client.query("SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
@@ -820,10 +827,13 @@ export class MediaStore {
     expectedState: string,
     suppressed: boolean,
     lift?: CopySuppressionLift,
+    suppression?: CopySuppression,
   ): Promise<string> {
     if (!uuid.test(source) || !uuid.test(expectedState) || operationId.length > 160
       || (lift && (suppressed || ![lift.id, lift.caseId, lift.decisionId,
-        lift.reversesDecisionId].every(value => uuid.test(value))))) {
+        lift.reversesDecisionId].every(value => uuid.test(value))))
+      || (suppression && (!suppressed || lift ||
+        ![suppression.id, suppression.caseId, suppression.decisionId].every(value => uuid.test(value))))) {
       throw new MediaInvalid('invalid moderation original');
     }
     const requestDigest = hash(JSON.stringify(lift
@@ -831,14 +841,20 @@ export class MediaStore {
       : [operationId, source, expectedState, suppressed]));
     return transaction(this.pool, async (client) => {
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [operationId]);
-      if (await prior(client, operationId, requestDigest, 'media.screen.review'))
-        return operationId;
+      const previous = await prior(client, operationId, requestDigest, 'media.screen.review');
       const original = (await client.query<{ byte_digest: string }>(
         "SELECT byte_digest FROM media.representation WHERE id = $1 AND kind = 'original'",
         [source])).rows[0];
       if (!original) throw new MediaStale('media original is unavailable');
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         [`media-copy:${original.byte_digest}`]);
+      // Keep existing operation digests replayable. The saved governance plan
+      // supplies the immutable suppression basis, which this fence reconciles
+      // even when an older original receipt committed before digest closure.
+      if (previous) {
+        if (suppression) await registerCopySuppression(client, original.byte_digest, suppression);
+        return operationId;
+      }
       const row = (
         await client.query(
           `SELECT a.id,a.state_head,s.*,p.byte_digest FROM media.asset a
@@ -863,6 +879,7 @@ export class MediaStore {
         'SELECT 1 WHERE media.digest_suppressed($1)', [row.byte_digest])).rowCount) {
         throw new MediaStale('identical-copy restoration requires an upheld appeal');
       }
+      if (suppression) await registerCopySuppression(client, original.byte_digest, suppression);
       await receipt(client, {
         operationId,
         digest: requestDigest,

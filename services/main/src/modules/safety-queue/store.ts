@@ -16,6 +16,7 @@ import {
   WorkReadExpired,
 } from '../work/read-session.ts';
 import { lockPreservationTarget } from '../public-report/preservation.ts';
+import { completedSafetyAnswerSql } from './answered-step.ts';
 
 export const SAFETY_QUEUE_COST = {
   page: 50,
@@ -324,7 +325,7 @@ export class SafetyQueue {
           AND c.state = 'open' AND c.kind = ANY($1::text[]) AND s.process IN ('ncii','dmca_512')
           AND s.due_at <= $2 AND ($3::uuid IS NULL OR s.id > $3)
           AND (c.review_pending OR s.step IN ('restoration_not_before','restoration_not_after'))
-          AND NOT EXISTS (SELECT 1 FROM access.moderation_decision d WHERE d.answers_step_id = s.id)
+          AND NOT EXISTS (${completedSafetyAnswerSql('s.id')})
           AND NOT EXISTS (SELECT 1 FROM access.rights_counter_notice j WHERE j.case_id = s.case_id
             AND ((j.restriction_id = s.decision_id AND j.phase IN ('done','stayed'))
               OR (j.report_id = s.report_id AND s.step IN ('restoration_not_before','restoration_not_after')

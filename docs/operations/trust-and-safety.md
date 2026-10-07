@@ -180,11 +180,46 @@ owns that launch sequence.
 The executable [launch drill declarations](../../scripts/qa/cases/launch-safety.ts)
 and [recovery tests](../../tests/qa/fault-recovery/g-744-safety.test.ts) distinguish
 deadline tracking from alert delivery, and a private case inbox from safety
-email. G-917 adds responder alerts; media enforcement's private party notice
-still requires G-918's mandatory uploader email. Keep readiness unclaimed until
+email. Responder alerts and mandatory uploader email are separate deliveries.
+Keep readiness unclaimed until
 SAFETY03, SAFETY07 and SAFETY08 run with production responder configuration and
 real delivery. The [security review](security.md#launch-review-2026-10-01)
 records the reviewed source and release-image limitation.
+
+The focused [launch image drill](../../tests/qa/integration/safety-launch-drill.test.ts)
+uses isolated owner databases, real Account assertions, local mail transport and
+synthetic PNG bytes. It checks account-free and suspended intake/correspondence,
+denied upload authority, suppression during interrupted owner effects, deadline
+tracking until confirmation, primary and backup mail, active responder absence,
+and configured matcher outage/recovery. This fixture evidence does not establish
+production delivery, scanner coverage, responder availability or registration.
+For NCII decisions, original suppression and the exact-byte digest fence commit
+together. Existing and later identical copies lose delivery immediately even
+when their bounded history updates or the owner acknowledgement remain pending.
+
+Before opening, retain the actual deployment inputs and receipts:
+
+- Appoint the approved primary and backup; record their distinct Account
+  subjects, issuer, verified addresses, mail languages, and current platform
+  moderation/evidence grants and representations. The backup appointment
+  remains missing; neither a fixture subject nor a successful local drill fills it.
+- Supply the real SMTP provider/account and host, port, TLS, authentication
+  secret references and sender. Retain the domain authentication and received
+  mail evidence required by the [email procedure](email.md), Main confidential
+  client configuration and retained erasure relay, and real SAFETY03/07/08
+  receipts. `queued`, `uncertain` and SMTP acceptance without human engagement
+  remain distinct outcomes.
+- Record the actual Cloudflare account/zone, enabled scanning and monitored
+  detection inbox, with evidence for original, rendition, imported-cover and
+  avatar delivery, caches and origin bypass. Record PhotoDNA application and
+  approval status; an approved working adapter is required before selecting
+  `MAIN_REQUIRED_MEDIA_MATCHER=provider`. The accepted launch default is `none`;
+  the current provider placeholder always fails and local corpora are forbidden
+  in production.
+- Supply NCMEC electronic-service-provider registration/access and reporting
+  custody, plus the actual DMCA designated-agent contact details, covered
+  service names, directory link, filing receipt and renewal date from the
+  [legal owner](../legal/README.md). The local fixtures supply none of these.
 
 ## Deadline alerts and responder absence
 
@@ -198,7 +233,11 @@ the [installation procedure](production-install.md#safety-responders) keeps that
 appointment explicit.
 
 The notification producer starts from open platform cases and reads each case's
-due steps through its case index, excluding answered steps. Closed case history
+due steps through its case index, excluding completed answers. An accepted,
+partial, uncertain or failed answer remains due until every required owner
+effect confirms. Cancelled answers remain unresolved. Accepting a plan cannot
+stop deadline alerts or remove
+the step from the staff due queue. Closed case history
 does not enter the deadline scan. Each tick creates up to 32 primary and 32
 backup alert records and drains up to 32 durable alert intakes; those are output
 bounds, while scan work scales with open cases and their due steps. Each source
