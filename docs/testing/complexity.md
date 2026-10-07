@@ -173,7 +173,10 @@ is a local diagnostic recipe, not a production capacity qualification or an
 extension of the 600-second preparation ceiling.
 
 The [catalogue write probe](../../tests/qa/integration/g-1031-catalogue-write.test.ts)
-profiles each of the four public Work commands and a classification decision.
+profiles each of the four public Work commands and the two public commands
+for a classification acceptance: a personal Statement and a qualified-fact
+global decision. It prepares one shared interpretation Context outside the
+measured cohorts and records each command's cost separately.
 Unparented preparation is unsampled; measured requests carry sampled parents,
 and PostgreSQL loads after telemetry. It keeps real command retries, relay
 settlement and exact selected-content checks. The larger requested scales fail
