@@ -1,4 +1,4 @@
-import { GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readZoneConfiguration, ZoneUnavailable } from './configuration.ts';
 import { uuidToSid } from '@rezics/model/address/sid';
@@ -6,7 +6,9 @@ import { DEFAULT_ZONE_PRESENTATION, ZONE_PUBLIC_READ_SOURCES } from './presentat
 import { readDynamicDefinition, executeDynamicDefinition } from '../collection/dynamic.ts';
 import { withStableSearchSnapshot, MAX_SEARCH_REQUEST_MS } from '../work/search-readiness.ts';
 import { runZoneQueryBlocks, ZoneQueryBudgetExceeded } from './query-budget.ts';
-import { InvalidZoneConfiguration,type ZoneConfiguration } from './config-format.ts';
+import { InvalidZoneConfiguration, ZONE_SITE_PUBLICATION_COST, ZonePublishedPage,
+  zonePublishedPageBinding, type ZoneConfiguration } from './config-format.ts';
+import { Value } from 'typebox/value';
 import { readCompositionPage } from '../structure/read.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { ZONE_CAMPAIGN_ART_COST } from './campaign-art.ts';
@@ -34,11 +36,49 @@ export async function readZonePublication(env: WorkActivationEnvironment, zone: 
     name: state.name, language: state.language, direction: state.direction,
     official: state.configuration.official ? address.key : null,
     revision: state.revision,
+    publicationRevision: state.publicationRevision,
     disclosure,storedDisclosure: state.disclosure,space:state.space,listing: state.listing,
     discovery: pageDiscoveryPolicy(disclosure,state.listing),presentation,
     configuration: state.configuration,
     etag: `"${hash(JSON.stringify({ revision: state.revision, presentation,disclosure,listing:state.listing,address }))}"`,
     cost: ZONE_PUBLICATION_COST };
+}
+
+/** Current public-bundle membership, O(1) after the ordinary Zone publication
+ * read. The exact binding subject is indexed; no page inventory is traversed.
+ * Recheck visibility, recovery and the selected head in the same graph snapshot. */
+export async function isZonePublishedPageRevision(env: WorkActivationEnvironment,
+  zone: string, page: string, revisionId: string): Promise<boolean> {
+  if (!Value.Check(ZonePublishedPage.properties.page, zone)
+    || !Value.Check(ZonePublishedPage.properties.page, page)
+    || !Value.Check(ZonePublishedPage.properties.revisionId, revisionId)) return false;
+  let publication: Awaited<ReturnType<typeof readZonePublication>>;
+  try { publication = await readZonePublication(env, zone); }
+  catch (error) {
+    if (error instanceof ZoneUnavailable) return false;
+    throw error;
+  }
+  if (publication.disclosure !== 'public' || !publication.publicationRevision) return false;
+  const revision = publication.publicationRevision;
+  const binding = zonePublishedPageBinding(revision, page, revisionId);
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+      rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
+      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+    GRAPH ${iri(GRAPHS.current)} { ${iri(zone)} a rv:Zone ; rv:zoneState rv:Active ;
+      rv:disclosure rv:Public ; rv:space ${iri(publication.space)} ; rv:sitePublicationHead ${iri(revision)} .
+      ${iri(publication.space)} a rv:Space ; rv:disclosure rv:Public .
+      FILTER NOT EXISTS { ${iri(zone)} rv:protectionHead ?zoneProtection }
+      FILTER NOT EXISTS { ${iri(publication.space)} rv:protectionHead ?spaceProtection } }
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:ZoneRevision ;
+      rv:component ${iri(zone)} ; rv:sitePublicationReceipt ?receipt .
+      ${iri(binding)} rv:sitePublicationRevision ${iri(revision)} ;
+        rv:page ${iri(page)} ; rv:contentRevision ${iri(`urn:rezics:content:revision:${revisionId}`)} . }
+    GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+      rv:structureOwner ${iri(zone)} ; rv:sitePublicationRevision ${iri(revision)} ;
+      rv:admittedScope ${lit(`zone:edit:${zone}`)} ; rv:publishedPage ${iri(binding)} . }
+  }`, ZONE_SITE_PUBLICATION_COST.membershipResponseBytes);
+  return result.boolean === true;
 }
 
 export { readZoneCampaignArt } from './campaign-art.ts';

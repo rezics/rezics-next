@@ -4,13 +4,15 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry }
   from '../access/admission.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { compositionReceiptIri, readCompositionReceipt,
-  sealStructureAdmissionCancellation, terminalResult } from '../structure/change.ts';
+  sealStructureAdmissionCancellation, terminalResult, type CompositionTerminal } from '../structure/change.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readWorkComponentState } from '../work/history.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
 import { checkZoneConfiguration, checkStoredZoneConfiguration, InvalidZoneConfiguration, ZONE_CONFIG_FORMAT,
-  ZONE_LIMITS, ZONE_PROFILE, type ZoneConfiguration, type ZoneQueryBlock } from './config-format.ts';
+  ZONE_LIMITS, ZONE_PROFILE, ZONE_SITE_PUBLICATION_COST, checkZoneSitePublication,
+  zonePublishedPageBinding, type ZoneSitePublicationSelection,
+  type ZoneConfiguration, type ZoneQueryBlock } from './config-format.ts';
 import { activeDefinitionDependenciesGuard } from '../context/definition-state.ts';
 import { ZONE_PRESENTATION_PROFILE, ZONE_PRESENTATION_V1_PROFILE, zoneCampaignUses, type ZonePresentation } from './presentation-format.ts';
 import { requestNewZoneCampaignRenditions } from './campaign-art.ts';
@@ -28,11 +30,12 @@ interface ZoneHead {
   spaceVisibility: 'public' | 'private'; listing: ResourceListing;
   defaultRealm?: string; presentation?: string; official?: Record<string, never>;
   defaultContext?: { context: string; semanticRevision: string };
+  publicationRevision: string | null;
 }
 
 async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<ZoneHead> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?navigation ?head
-    ?manifest ?state ?disclosure ?realm ?presentation ?context ?contextRevision ?official ?spaceDisclosure ?listing WHERE {
+    ?manifest ?state ?disclosure ?realm ?presentation ?context ?contextRevision ?official ?spaceDisclosure ?listing ?publication WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(zone)} a rv:Zone ; rv:space ?space ;
         rv:navigation ?navigation ; rv:zoneHead ?head ; rv:zoneState ?state ;
         rv:disclosure ?disclosure .
@@ -41,6 +44,7 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
         OPTIONAL { ${iri(zone)} rv:defaultRealm ?realm }
         OPTIONAL { ${iri(zone)} rv:presentation ?presentation }
         OPTIONAL { ${iri(zone)} rv:official ?official }
+        OPTIONAL { ${iri(zone)} rv:sitePublicationHead ?publication }
         OPTIONAL { ${iri(zone)} rv:defaultContext ?context }
         OPTIONAL { ${iri(zone)} rv:defaultContextRevision ?contextRevision } }
       GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:ZoneRevision ;
@@ -62,6 +66,7 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
   if (![`${RV}Public`,`${RV}Private`].includes(row.spaceDisclosure.value)
     || !['listed','unlisted'].includes(row.listing?.value ?? 'listed')) throw new ZoneUnavailable('Zone Space visibility is invalid');
   return { zone, space: row.space.value, navigation: row.navigation.value,
+    publicationRevision: row.publication?.value ?? null,
     revision: row.head.value, manifest: row.manifest.value,
     state: row.state.value === `${RV}Retired` ? 'retired' : 'active',
     disclosure: row.disclosure.value === `${RV}Public` ? 'public' : 'private',
@@ -107,7 +112,8 @@ export async function readZoneConfiguration(env: WorkActivationEnvironment, zone
 
 export interface ZoneRevisionInput {
   zone: string; expectedHead: string; actingSubject: string; idempotencyKey: string;
-  operation: 'configure' | 'retire' | 'recover';
+  operation: 'configure' | 'retire' | 'recover' | 'publish';
+  publication?: ZoneSitePublicationSelection;
   patch?: { name?: string; language?: string;
     defaultRealm?: string | null; official?: Record<string, never> | null;
     presentation?: ZonePresentation | null;
@@ -116,11 +122,99 @@ export interface ZoneRevisionInput {
     advancedBase64?: string | null };
 }
 
+export interface ZoneSitePublicationInput extends ZoneSitePublicationSelection {
+  zone: string; expectedHead: string; actingSubject: string; idempotencyKey: string;
+}
+
+export interface ZoneSitePublicationReceipt extends ZoneSitePublicationSelection,
+  Pick<CompositionTerminal, 'receipt' | 'admissionId' | 'requestDigest' | 'authorityEpoch'
+    | 'scope' | 'dataEpoch' | 'sequence'> {
+  outcome: 'succeeded'; zone: string; revision: string; themeRevision: string;
+}
+
+/** Exact historical proof for Content settlement, independent of later republishing
+ * or retirement. O(pages), one bounded receipt lookup, no Content body reads. */
+export async function readZoneSitePublicationReceipt(env: WorkActivationEnvironment,
+  receipt: string): Promise<ZoneSitePublicationReceipt | null> {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?zone ?revision ?routesRevision ?navigationRevision ?themeRevision ?count
+      ?admissionId ?digest ?authorityEpoch ?scope ?dataEpoch ?sequence ?binding ?page ?variant ?contentRevision WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+        rv:outcome rv:Succeeded ; rv:structureOwner ?zone ; rv:structureRevision ?revision ;
+        rv:sitePublicationRevision ?revision ; rv:routesRevision ?routesRevision ;
+        rv:navigationRevision ?navigationRevision ; rv:themeRevision ?themeRevision ;
+        rv:publishedPageCount ?count ; rv:publishedPage ?binding ;
+        rv:admissionId ?admissionId ; rv:requestDigest ?digest ; rv:authorityEpoch ?authorityEpoch ;
+        rv:admittedScope ?scope ; rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ZoneRevision ; rv:component ?zone ;
+        rv:predecessor ?themeRevision ; rv:sitePublicationReceipt ${iri(receipt)} ;
+        rv:dataEpoch ?dataEpoch ; rv:sequence ?sequence .
+        ?binding rv:sitePublicationRevision ?revision ; rv:page ?page ;
+          rv:variant ?variant ; rv:contentRevision ?contentRevision . }
+    } ORDER BY STR(?binding) LIMIT ${ZONE_SITE_PUBLICATION_COST.receiptRows}`, ZONE_SITE_PUBLICATION_COST.receiptResponseBytes);
+  const rows = result.results?.bindings ?? [];
+  if (!rows.length) return null;
+  const first = rows[0]!;
+  const get = (key: string) => first[key]?.value;
+  const metadata = ['zone', 'revision', 'routesRevision', 'navigationRevision', 'themeRevision',
+    'count', 'admissionId', 'digest', 'authorityEpoch', 'scope', 'dataEpoch', 'sequence'];
+  if (rows.length > ZONE_SITE_PUBLICATION_COST.maxPages
+    || metadata.some(key => !get(key) || rows.some(row => row[key]?.value !== get(key)))
+    || get('count') !== String(rows.length)
+    || get('scope') !== `zone:edit:${get('zone')}`
+    || get('dataEpoch') !== env.lineage.dataEpoch
+    || !/^[1-9][0-9]*$/.test(get('sequence') ?? '')
+    || !/^[0-9a-f]{64}$/.test(get('digest') ?? '')
+    || receipt !== compositionReceiptIri(get('admissionId')!, 'zone.edit')) {
+    throw new ZoneUnavailable('Site publication receipt is incomplete or ambiguous');
+  }
+  let selection: ZoneSitePublicationSelection;
+  try {
+    selection = checkZoneSitePublication({ routesRevision: get('routesRevision'),
+      navigationRevision: get('navigationRevision'), pages: rows.map(row => ({
+        page: row.page?.value, variantId: row.variant?.value,
+        revisionId: row.contentRevision?.value.startsWith('urn:rezics:content:revision:')
+          ? row.contentRevision.value.slice('urn:rezics:content:revision:'.length) : undefined,
+      })) });
+    if (rows.some((row, index) => row.binding?.value !== zonePublishedPageBinding(
+      get('revision')!, selection.pages[index]!.page, selection.pages[index]!.revisionId))) {
+      throw new Error('Page binding differs');
+    }
+  } catch { throw new ZoneUnavailable('Site publication page bindings differ'); }
+  return { ...selection, outcome: 'succeeded', receipt, zone: get('zone')!, revision: get('revision')!,
+    themeRevision: get('themeRevision')!, admissionId: get('admissionId')!, requestDigest: get('digest')!,
+    authorityEpoch: get('authorityEpoch')!, scope: get('scope')!, dataEpoch: get('dataEpoch')!, sequence: get('sequence')! };
+}
+
+/** Zone's admitted bundle switch. Content owns admission and custody of its page
+ * revisions; this proof records the exact selections, never follows a draft head. */
+export async function publishZoneSite(env: WorkActivationEnvironment,
+  account: Pick<AccountAssertionVerifier, 'verify'>,
+  access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
+  request: Request, input: ZoneSitePublicationInput,
+): Promise<ZoneSitePublicationReceipt & { replayed: boolean }> {
+  const { zone, expectedHead, actingSubject, idempotencyKey, ...publication } = input;
+  checkZoneSitePublication(publication);
+  const result = await changeZoneConfiguration(env, account, access, request, {
+    zone, expectedHead, actingSubject, idempotencyKey, operation: 'publish', publication });
+  const terminal = await readZoneSitePublicationReceipt(env, result.receipt);
+  if (!terminal || terminal.zone !== zone || terminal.revision !== result.revision) {
+    throw new ZoneUnavailable('Site publication receipt is unavailable');
+  }
+  return { ...terminal, replayed: result.replayed };
+}
+
 export async function changeZoneConfiguration(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
     & Partial<Pick<AccessAdmissionRegistry, 'canMarkOfficialZone'>>,
   request: Request, input: ZoneRevisionInput, media?: Pick<MediaDependencies, 'store' | 'objects'>) {
+  if (input.operation === 'publish') {
+    checkZoneSitePublication(input.publication);
+    if (input.patch !== undefined) throw new InvalidZoneConfiguration('Site publication cannot patch configuration');
+  } else if (input.publication !== undefined) {
+    throw new InvalidZoneConfiguration('Only site publication may select page revisions');
+  }
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   if (input.patch?.official !== undefined || input.patch?.defaultRealm !== undefined
     || input.patch?.presentation !== undefined) {
@@ -170,8 +264,26 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     }
     if (input.operation === 'retire' && head.state !== 'active'
       || input.operation === 'recover' && head.state !== 'retired'
-      || input.operation === 'configure' && head.state !== 'active') {
+      || (input.operation === 'configure' || input.operation === 'publish') && head.state !== 'active') {
       return invalid(new InvalidZoneConfiguration('Zone state transition is invalid'));
+    }
+    if (input.publication) {
+      // Routes are mount qualifiers in the navigation Structure. Both cuts name
+      // its current immutable revision; a separate route store would lose that cut.
+      if (input.publication.routesRevision !== input.publication.navigationRevision) {
+        return invalid(new InvalidZoneConfiguration('Routes and navigation must select the same Structure revision'));
+      }
+      const available = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(head.navigation)} a rv:Structure ;
+          rv:structureOf ${iri(input.zone)} ; rv:structureHead ${iri(input.publication.navigationRevision)} . }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.publication.navigationRevision)}
+          a rv:StructureRevision ; rv:component ${iri(head.navigation)} . }
+      }`, 1024);
+      if (available.boolean !== true) {
+        const cancelled = await sealStructureAdmissionCancellation(env, admission);
+        await access.recordGraphOutcome(admission.id, cancelled);
+        throw new ZoneStale('Zone routes or navigation head changed');
+      }
     }
     if (input.operation === 'retire') {
       const dependents = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
@@ -251,6 +363,22 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     const receipt = compositionReceiptIri(admission.id, admission.action);
     const batch = `urn:rezics:outbox:${hash(receipt)}`;
     const event = `urn:rezics:event:${hash(operation)}`;
+    const publication = input.publication;
+    const publicationFields = publication ? `
+      ${iri(receipt)} rv:sitePublicationRevision ${iri(revision)} ;
+        rv:routesRevision ${iri(publication.routesRevision)} ;
+        rv:navigationRevision ${iri(publication.navigationRevision)} ;
+        rv:themeRevision ${iri(input.expectedHead)} ; rv:publishedPageCount ${publication.pages.length} .
+      ${publication.pages.map(page => `${iri(receipt)} rv:publishedPage
+        ${iri(zonePublishedPageBinding(revision, page.page, page.revisionId))} .`).join('\n')}` : '';
+    // The command endpoint permits only the root receipt subject in its receipt
+    // graph. Immutable page bindings live with the publication revision instead.
+    const publicationPageTriples = publication ? publication.pages.map(page => {
+        const binding = iri(zonePublishedPageBinding(revision, page.page, page.revisionId));
+        return `${binding} rv:sitePublicationRevision ${iri(revision)} ;
+            rv:page ${iri(page.page)} ; rv:variant ${iri(page.variantId)} ;
+            rv:contentRevision ${iri(`urn:rezics:content:revision:${page.revisionId}`)} .`;
+      }).join('\n') : '';
     const kind = input.operation === 'retire' ? 'ZoneRetire'
       : input.operation === 'recover' ? 'ZoneRecover' : 'ZoneConfigure';
     const update = `PREFIX rv: <${RV}>
@@ -259,11 +387,13 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           rv:zoneState ?oldState ; rv:defaultRealm ?oldRealm ; rv:official ?oldOfficial ;
           rv:presentation ?oldPresentation ;
           rv:defaultContext ?oldContext ; rv:defaultContextRevision ?oldContextRevision .
+          ${publication ? `${iri(input.zone)} rv:sitePublicationHead ?oldPublication .` : ''}
           ${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ?oldName . } }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.zone)} rv:zoneHead ${iri(revision)} ;
           rv:zoneState rv:${config.state === 'active' ? 'Active' : 'Retired'} .
+          ${publication ? `${iri(input.zone)} rv:sitePublicationHead ${iri(revision)} .` : ''}
           ${name.name !== null ? `${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ${lit(name.name)}@${name.language} .` : ''}
           ${config.defaultRealm ? `${iri(input.zone)} rv:defaultRealm ${iri(config.defaultRealm)} .` : ''}
           ${config.official ? `${iri(input.zone)} rv:official true .` : ''}
@@ -276,13 +406,16 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           rv:operation ${iri(operation)} ; rv:zoneOperation rv:${kind} ;
           rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
           rv:modelRevision ${iri(ZONE_PROFILE)} ; rv:shapeRevision ${iri(ZONE_PROFILE)} ;
-          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+          ${publication ? `${iri(revision)} rv:sitePublicationReceipt ${iri(receipt)} .` : ''}
+          ${publicationPageTriples} }
         GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
           rv:operation ${iri(operation)} ; rv:requestDigest ${lit(digest)} ;
           rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
           rv:admittedScope ${lit(scope)} ; rv:outcome rv:Succeeded ;
           rv:structureOwner ${iri(input.zone)} ; rv:structureRevision ${iri(revision)} ;
-          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+          ${publicationFields} }
         GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ;
           rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ;
           rv:eventCount 1 ; rv:event ${iri(event)} .
@@ -298,6 +431,9 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           OPTIONAL { ${iri(input.zone)} rv:presentation ?oldPresentation }
           OPTIONAL { ${iri(input.zone)} rv:defaultContext ?oldContext }
           OPTIONAL { ${iri(input.zone)} rv:defaultContextRevision ?oldContextRevision }
+          ${publication ? `OPTIONAL { ${iri(input.zone)} rv:sitePublicationHead ?oldPublication }
+            ${iri(head.navigation)} a rv:Structure ; rv:structureOf ${iri(input.zone)} ;
+              rv:structureHead ${iri(publication.navigationRevision)} .` : ''}
           OPTIONAL { ${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ?oldName } }
         ${input.operation === 'retire' ? `GRAPH ${iri(GRAPHS.current)} {
           ${iri(head.navigation)} rv:selectedGeneration ?generation .
@@ -316,7 +452,11 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     catch { /* The receipt resolves an ambiguous graph response. */ }
     if (!await readCompositionReceipt(env, admission.id, admission.action)) {
       const current = await readZoneConfiguration(env, input.zone);
-      if (current.revision !== input.expectedHead) {
+      const navigationChanged = publication && (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(head.navigation)}
+          rv:structureHead ${iri(publication.navigationRevision)} . }
+      }`, 1024)).boolean !== true;
+      if (current.revision !== input.expectedHead || navigationChanged) {
         const cancelled = await sealStructureAdmissionCancellation(env, admission);
         await access.recordGraphOutcome(admission.id, cancelled);
         throw new ZoneStale('Zone head changed');

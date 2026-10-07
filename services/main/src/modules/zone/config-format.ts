@@ -1,5 +1,6 @@
 import { Type, type Static } from 'typebox';
 import { Value } from 'typebox/value';
+import { createHash } from 'node:crypto';
 import { checkZonePresentation, ZonePresentation, ZonePresentationV1, readStoredZonePresentation, ZONE_PUBLIC_READ_SOURCES }
   from './presentation-format.ts';
 
@@ -14,6 +15,45 @@ export const ZONE_LIMITS = { configBytes: 65_536, advancedBytes: 262_144, queryB
   queryNesting: 4, queryBudgetMs: 2_000, queryBudgetRows: 1_000 } as const;
 
 const nativeId = Type.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
+const contentRevisionId = Type.String({
+  pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+});
+
+/** One bounded publication command; retained bundles never follow draft heads. */
+export const ZONE_SITE_PUBLICATION_COST = { maxPages: 32, receiptRows: 33,
+  membershipGraphReads: 1, membershipResponseBytes: 1024, receiptResponseBytes: 65_536,
+  graphCommands: 1, deadlineMs: 10_000 } as const;
+export const ZonePublishedPage = Type.Object({ page: nativeId,
+  variantId: Type.String({ pattern: '^urn:rezics:variant:[0-9a-f-]{36}$' }),
+  revisionId: contentRevisionId }, { additionalProperties: false });
+export type ZonePublishedPage = Static<typeof ZonePublishedPage>;
+export const ZoneSitePublicationSelection = Type.Object({
+  routesRevision: nativeId, navigationRevision: nativeId,
+  pages: Type.Array(ZonePublishedPage, { minItems: 1, maxItems: ZONE_SITE_PUBLICATION_COST.maxPages }),
+}, { additionalProperties: false });
+export type ZoneSitePublicationSelection = Static<typeof ZoneSitePublicationSelection>;
+
+export function checkZoneSitePublication(value: unknown): ZoneSitePublicationSelection {
+  if (!Value.Check(ZoneSitePublicationSelection, value)) {
+    throw new InvalidZoneConfiguration('Invalid site publication selection');
+  }
+  const variants = new Set<string>();
+  const revisions = new Set<string>();
+  for (const page of value.pages) {
+    if (variants.has(page.variantId) || revisions.has(page.revisionId)) {
+      throw new InvalidZoneConfiguration('Duplicate site publication variant or revision');
+    }
+    variants.add(page.variantId);
+    revisions.add(page.revisionId);
+  }
+  return value;
+}
+
+/** Direct index key: no enumeration of a Zone's pages or Content revisions. */
+export function zonePublishedPageBinding(publication: string, page: string, revisionId: string) {
+  return `urn:rezics:zone-published-page:${createHash('sha256')
+    .update(`${publication}\0${page}\0${revisionId}`).digest('hex')}`;
+}
 const reference = Type.String({ maxLength: 128,
   pattern: '^https://rezics\\.com/definition/[a-z0-9]+(?:-[a-z0-9]+)*$' });
 

@@ -18,9 +18,9 @@ import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/s
 import { createAdmittedOwner } from '../modules/zone/owner-create.ts';
 import { ZoneName, readZoneName } from '../modules/zone/read-name.ts';
 import { languageTag } from '../modules/display-language/schema.ts';
-import { changeZoneConfiguration, readZoneConfiguration,
+import { changeZoneConfiguration, readZoneConfiguration, publishZoneSite,
   ZoneOfficialDenied, ZoneStale, ZoneUnavailable } from '../modules/zone/configuration.ts';
-import { InvalidZoneConfiguration } from '../modules/zone/config-format.ts';
+import { InvalidZoneConfiguration, ZoneSitePublicationSelection } from '../modules/zone/config-format.ts';
 import { DEFAULT_ZONE_PRESENTATION, ZoneCampaignArt, ZonePresentation, zoneRenderTokens }
   from '../modules/zone/presentation-format.ts';
 import { listOfficialZones, readZoneModuleData,
@@ -82,6 +82,7 @@ export const openApiOperations = {
   '/v1/zones/{id}/query-blocks': { get: { rateLimitFamily: 'read', exposure: 'platform:saved-views', bearer: true } },
   '/v1/zones/{id}/retirements': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/zones/{id}/recoveries': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/zones/{id}/site-publications': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 
 function key(request: Request) {
@@ -130,6 +131,10 @@ const configRead = t.Object({ zone: ref, revision: ref, configuration: t.Any(),
   cost: t.Object({ graphReads: t.Integer(), objectReads: t.Integer() }) });
 const revisionWrite = t.Object({ zone: ref, revision: ref, receipt: t.String(),
   replayed: t.Boolean(), sourcePosition });
+const sitePublicationWrite = t.Object({ ...ZoneSitePublicationSelection.properties,
+  outcome: t.Literal('succeeded'), zone: ref, revision: ref, themeRevision: ref,
+  receipt: t.String(), admissionId: t.String(), requestDigest: t.String(), authorityEpoch: t.String(),
+  scope: t.String(), dataEpoch: t.String(), sequence: t.String(), replayed: t.Boolean() });
 const officialZone = t.Object({ zone: ref, realm: ref, routeSegment: t.String(), address: canonicalAddress });
 const officialPage = t.Object({ items: t.Array(officialZone), next: t.Nullable(t.String()),
   cost: t.Object({ graphReads: t.Integer(), rows: t.Integer() }) });
@@ -523,6 +528,20 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           receipt: result.receipt, replayed: result.replayed,
           sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch,
             sequence: result.sequence } }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .post('/v1/zones/:id/site-publications', { params: t.Object({ id: groupUuid }),
+      body: t.Object({ ...ZoneSitePublicationSelection.properties,
+        expectedHead: ref, actingSubject: ref }, { additionalProperties: false }),
+      response: { 200: sitePublicationWrite, 201: sitePublicationWrite,
+        202: pendingOperation, ...errors } }, async ({ request, params, body }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        const result = await publishZoneSite(work.environment, work.account, work.access, request,
+          { ...body, zone: `https://rezics.com/id/${params.id}`, idempotencyKey });
+        return Response.json(result, { status: result.replayed ? 200 : 201,
+          headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
     })
     .post('/v1/zones/:id/retirements', { params: t.Object({ id: groupUuid }),
