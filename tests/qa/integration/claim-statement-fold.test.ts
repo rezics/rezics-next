@@ -4,9 +4,12 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { Parser } from 'n3';
 import { Pool } from 'pg';
+import { migrateContent } from '../../../services/content/src/migrate.ts';
 import {
   CommandOutcomeUnknown,
   FusekiClient,
+  fusekiReadBudget,
+  type SparqlResult,
 } from '../../../services/main/src/infrastructure/fuseki.ts';
 import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
 import {
@@ -33,14 +36,22 @@ import { StatementSeek } from '../../../services/main/src/modules/statement/seek
 import {
   ADMISSIONS,
   claimDigest,
+  ASSESSMENT_PROFILE,
   createClaim,
   readClaimRevisions,
   readClaimHead,
   graphHeads,
   readReceipt,
+  recordAssessment,
+  sealVerificationAdmission,
   type CreateClaimInput,
   type GraphReceipt,
 } from '../../../services/main/src/modules/verification/graph.ts';
+import { HUMAN_REVIEW_METHOD, SUMMARY_POLICY } from '../../../services/main/src/modules/verification/analysis.ts';
+import { assessmentDigest, reconcileAssessmentProducerEffects,
+  PendingVerification, type AssessClaimInput } from '../../../services/main/src/modules/verification/operations.ts';
+import { VerificationStore, type StagedAssessmentProducer,
+  type AssessmentProducerRecord } from '../../../services/main/src/modules/verification/store.ts';
 import {
   readMainOutboxEnvelope,
   readNextMainOutboxBatch,
@@ -54,12 +65,14 @@ import {
   iri,
   lit,
   hash,
+  IdempotencyConflict,
   type WorkActivationEnvironment,
 } from '../../../services/main/src/modules/work/activate.ts';
 
 const XSD = 'http://www.w3.org/2001/XMLSchema#';
 const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 let pool: Pool;
+let contentPool: Pool;
 let env: WorkActivationEnvironment;
 let directory: string;
 let relationDefinition: string;
@@ -71,6 +84,12 @@ const originalEvents: {
   event: Awaited<ReturnType<typeof readMainOutboxEnvelope>>;
 }[] = [];
 let folded: Awaited<ReturnType<typeof convertEligibleClaimsTurn>>;
+const assessmentProducers: {
+  staged: StagedAssessmentProducer;
+  terminal: AssessmentProducerRecord;
+  receipt: GraphReceipt;
+}[] = [];
+let historicalAssessment: RegisteredAdmission;
 const native = () => `${ID}${Bun.randomUUIDv7()}`;
 function admission(
   scope: string,
@@ -195,6 +214,58 @@ beforeAll(async () => {
     );
     sources.push({ input, admission: admitted, receipt: await createClaim(env, admitted, input) });
   }
+  contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 6 });
+  await migrateContent(contentPool);
+  const store = new VerificationStore(contentPool);
+  const source = sources[0]!;
+  const claim = source.receipt.result.claim!, claimRevision = source.receipt.result.claimRevision!;
+  const principal = randomUUID();
+  const evidence = await store.recordEvidence(principal, randomUUID(), claim,
+    { claimRevision, expectedHead: null, items: [] });
+  const original: AssessClaimInput = { claimRevision, evidenceSetRevision: evidence.evidence.revision,
+    sourceAssessments: [], method: 'human-review', judgment: 'supported',
+    evaluationContext: source.input.interpretationContext, adoptedRevision: null,
+    scorePerMillion: null, calibration: null, evaluationReference: null,
+    limitations: 'An explicit human judgment over the exact retained evidence manifest.',
+    expectedSummary: null, resolvesChallenges: [], actingSubject: source.input.actingSubject };
+  const digest = assessmentDigest(claim, original);
+  async function nativeAssessment(admitted: RegisteredAdmission) {
+    return recordAssessment(env, admitted, digest, { claim, claimRevision, representation: 'claim',
+      evidenceSetRevision: original.evidenceSetRevision, sourceAssessments: [], method: HUMAN_REVIEW_METHOD,
+      methodRevision: HUMAN_REVIEW_METHOD, policyRevision: SUMMARY_POLICY,
+      evaluationContext: original.evaluationContext, coverage: 'complete', support: 'supported',
+      dependence: 'established', independentOrigins: 0, scorePerMillion: null, calibration: null,
+      evaluationReference: null, limitations: original.limitations, assessorKind: 'human', actingSubject: original.actingSubject });
+  }
+  for (const cancelled of [false, true]) {
+    const admitted = { ...admission(ADMISSIONS['claim-assess'].scope, ADMISSIONS['claim-assess'].action,
+      digest, original.actingSubject), principalId: principal };
+    const staged = await store.stageAssessmentProducer({ admission: admitted.id, requestDigest: digest,
+      principal, actingSubject: original.actingSubject, scope: admitted.scope, authorityEpoch: admitted.authorityEpoch,
+      idempotencyKey: admitted.idempotencyKey, claim, claimRevision, intent: original });
+    const receipt = cancelled ? await sealVerificationAdmission(env, admitted, 'claim-assess', ['assessment'])
+      : await nativeAssessment(admitted);
+    const terminal = await store.withAssessmentProducerEffects(admitted.id, digest, staged.permit, async client => {
+      if (cancelled) return { status: 'cancelled', receipt: receipt.receipt, assessment: null,
+        activation: { status: 'cancelled' } };
+      const assessment = receipt.result.assessment!;
+      const activation = await store.activateSummary({ target: claim, context: original.evaluationContext,
+        claim, claimRevision, adoptedRevision: null, assessment, policyRevision: SUMMARY_POLICY,
+        support: 'supported', review: 'reviewed', coverage: 'complete', dependence: 'established',
+        reasons: ['human-review'], dependencies: [{ owner: 'graph', kind: 'claim', reference: claim, expectedHead: claimRevision },
+          { owner: 'content', kind: 'evidence-set', reference: claim, expectedHead: original.evidenceSetRevision }],
+        ownerPositions: { graph: { dataEpoch: receipt.dataEpoch, sequence: receipt.sequence } },
+        operationKey: `assessment:${admitted.id}`, expectedActive: null, observedDemand: null,
+        openChallenges: 0, resolvedChallenges: 0 }, client);
+      return { status: 'activated', receipt: receipt.receipt, assessment, activation };
+    });
+    assessmentProducers.push({ staged, terminal, receipt });
+  }
+  // This native terminal represents historical custody with no retained Content
+  // intent. Recovery must report it missing rather than backfill from a retry.
+  historicalAssessment = admission(ADMISSIONS['claim-assess'].scope, ADMISSIONS['claim-assess'].action,
+    digest, original.actingSubject);
+  await nativeAssessment(historicalAssessment);
   const seek = new StatementSeek(pool, env);
   while (await seek.projectOnce()) {
     /* owning bounded projector establishes the exact empty-Statement cut */
@@ -204,7 +275,142 @@ beforeAll(async () => {
     (await pool.query('SELECT open FROM access.recovery_fence WHERE id=true')).rows[0]?.open,
   ).toBe(true);
 }, 120_000);
+
+async function replayNativeAssessmentTerminal() {
+  const success = assessmentProducers[0]!, cancelled = assessmentProducers[1]!;
+  const source = sources[0]!;
+  expect((await readClaimHead(env, source.receipt.result.claim!))?.representation).toBe('statement');
+  const assessment = success.receipt.result.assessment!;
+  const before = await facts([GRAPHS.revisions, GRAPHS.receipts],
+    [assessment, success.receipt.receipt, cancelled.receipt.receipt]);
+  const content = new VerificationStore(contentPool);
+  const forbidden = async (): Promise<never> => { throw new Error('Terminal replay touched unavailable current analysis or dispatch'); };
+  content.analysisSnapshot = forbidden;
+  content.evidenceHead = forbidden;
+  content.resolveChallenges = forbidden;
+  content.activateSummary = forbidden;
+  let callbacks = 0;
+  const effects = content.withAssessmentProducerEffects.bind(content);
+  content.withAssessmentProducerEffects = (id, digest, permit, work) => effects(id, digest, permit,
+    async (client, row) => { callbacks++; return work(client, row); });
+  type RawRow = NonNullable<SparqlResult['results']>['bindings'][number];
+  const uri = (value: string) => ({ type: 'uri', value });
+  const scalar = (rows: RawRow[], predicate: string) => {
+    const row = rows.find(candidate => candidate.p?.value === predicate);
+    if (!row?.o) throw new Error(`Native fixture lacks ${predicate}`);
+    return row;
+  };
+  const mutate = (predicate: string, value: string) => (rows: RawRow[]) => {
+    scalar(rows, predicate).o = uri(value);
+  };
+  async function replay(producer: typeof success,
+    mutation?: { graph: 'receipt' | 'assessment'; change: (rows: RawRow[]) => void },
+    limits = { calls: 2, bytes: 81_920 }) {
+    const reader = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN!, Bun.env.FUSEKI_COMMAND_TOKEN!);
+    const transport = reader.query.bind(reader);
+    const reads: { graph: 'receipt' | 'assessment'; rows: number; bytes: number; cap: number | undefined }[] = [];
+    reader.commandWithReceipt = forbidden;
+    reader.update = forbidden;
+    reader.query = async (query, cap) => {
+      expect(query).toMatch(/SELECT\s+\?p\s+\?o/i);
+      expect(query).not.toContain(iri(GRAPHS.current));
+      const graph = query.includes(iri(GRAPHS.receipts)) ? 'receipt' : 'assessment';
+      expect(query).toContain(iri(graph === 'receipt' ? producer.receipt.receipt : producer.receipt.result.assessment!));
+      expect(query).toMatch(new RegExp(`LIMIT\\s+${graph === 'receipt' ? 17 : 65}\\b`, 'i'));
+      const response = await transport(query, cap);
+      reads.push({ graph, rows: response.results?.bindings.length ?? 0,
+        bytes: Buffer.byteLength(JSON.stringify(response)), cap });
+      if (mutation?.graph === graph) {
+        const projected = structuredClone(response);
+        mutation.change(projected.results!.bindings);
+        return projected;
+      }
+      return response;
+    };
+    const budget = { signal: AbortSignal.timeout(10_000), callsLeft: limits.calls, bytesLeft: limits.bytes };
+    const deps = { env: { ...env, fuseki: reader }, store: content,
+      account: { verify: forbidden }, access: { register: forbidden, claim: forbidden,
+        recordGraphOutcome: forbidden, activePrincipalId: forbidden } };
+    const outcome = await fusekiReadBudget.run(budget, () => reconcileAssessmentProducerEffects(deps,
+      producer.staged.row.admission, producer.staged.permit).then(value => ({ status: 'fulfilled' as const, value }),
+      error => ({ status: 'rejected' as const, error })));
+    expect(reads.length).toBeLessThanOrEqual(2);
+    expect(budget.callsLeft).toBeGreaterThanOrEqual(0);
+    expect(budget.bytesLeft).toBeGreaterThanOrEqual(0);
+    expect(reads.reduce((total, read) => total + read.bytes, 0)).toBeLessThanOrEqual(81_920);
+    return { outcome, reads, budget };
+  }
+  const positive = await replay(success);
+  expect(positive.outcome.status).toBe('fulfilled');
+  if (positive.outcome.status === 'fulfilled') expect(positive.outcome.value).toEqual(success.terminal);
+  expect(positive.reads.map(read => read.graph)).toEqual(['receipt', 'assessment']);
+  expect(positive.reads.map(read => read.cap)).toEqual([16_384, 65_536]);
+  expect(positive.budget.callsLeft).toBe(0);
+  const negative = await replay(cancelled);
+  expect(negative.outcome.status).toBe('fulfilled');
+  if (negative.outcome.status === 'fulfilled') expect(negative.outcome.value).toEqual(cancelled.terminal);
+  expect(negative.reads.map(read => read.graph)).toEqual(['receipt']);
+  const mutations: { name: string; graph: 'receipt' | 'assessment'; change: (rows: RawRow[]) => void;
+    conflict?: boolean }[] = [
+    { name: 'C', graph: 'assessment', change: mutate(`${RV}component`, native()), conflict: true },
+    { name: 'R', graph: 'assessment', change: mutate(`${RV}claimRevision`, native()), conflict: true },
+    { name: 'E', graph: 'assessment', change: mutate(`${RV}evidenceSetRevision`, native()), conflict: true },
+    { name: 'model', graph: 'assessment', change: mutate(`${RV}modelRevision`, `${ASSESSMENT_PROFILE}-unknown`) },
+    { name: 'shape', graph: 'assessment', change: mutate(`${RV}shapeRevision`, `${ASSESSMENT_PROFILE}-unknown`) },
+    { name: 'assessor', graph: 'assessment', change: mutate(`${RV}assessor`, native()), conflict: true },
+    { name: 'assessor-kind', graph: 'assessment', change: mutate(`${RV}assessorKind`, `${RV}AutomatedAssessor`), conflict: true },
+    { name: 'position', graph: 'assessment', change: rows => { scalar(rows, `${RV}sequence`).o!.value = '999999999999'; }, conflict: true },
+    { name: 'scalar-cardinality', graph: 'assessment', change: rows => { const extra = structuredClone(scalar(rows, `${RV}component`));
+      extra.o = uri(native()); rows.push(extra); } },
+    { name: 'dual-target-predicate', graph: 'assessment', change: rows => rows.push({ p: uri(`${RV}statementRevision`),
+      o: structuredClone(scalar(rows, `${RV}claimRevision`).o!) }) },
+    { name: 'rdf-type', graph: 'assessment', change: rows => { const row = rows.find(candidate => candidate.p?.value === `${RDF}type`
+      && candidate.o?.value === `${RV}RevisionAnchor`); if (!row) throw new Error('Native fixture lacks RevisionAnchor'); row.o = uri(`${RV}ClaimRevision`); } },
+    { name: 'sequence-type', graph: 'assessment', change: rows => { scalar(rows, `${RV}sequence`).o!.datatype = `${XSD}string`; } },
+    { name: 'assessment-row-cap', graph: 'assessment', change: rows => { while (rows.length < 65) rows.push(structuredClone(rows[0]!)); } },
+    { name: 'assessment-byte-cap', graph: 'assessment', change: rows => { scalar(rows, `${RV}limitations`).o!.value = 'x'.repeat(65_537); } },
+    { name: 'missing-assessment', graph: 'assessment', change: rows => { rows.length = 0; } },
+    { name: 'missing-receipt', graph: 'receipt', change: rows => { rows.length = 0; } },
+    { name: 'receipt-row-cap', graph: 'receipt', change: rows => { while (rows.length < 17) rows.push(structuredClone(rows[0]!)); } },
+    { name: 'receipt-position-type', graph: 'receipt', change: rows => { scalar(rows, `${RV}sequence`).o!.datatype = `${XSD}string`; } },
+  ];
+  // Faults change only the authenticated read projection. They do not persist
+  // native corruption or claim to exercise an unavailable raw-write fixture.
+  for (const mutation of mutations) {
+    const failed = await replay(success, mutation);
+    expect(failed.outcome.status, mutation.name).toBe('rejected');
+    if (failed.outcome.status === 'rejected') expect(failed.outcome.error, mutation.name)
+      .toBeInstanceOf(mutation.conflict ? IdempotencyConflict : PendingVerification);
+    expect(await content.readAssessmentProducer(success.staged.row.admission)).toEqual(success.terminal);
+  }
+  const cancelledA = await replay(cancelled, { graph: 'receipt', change: rows => rows.push({ p: uri(`${RV}assessment`), o: uri(assessment) }) });
+  expect(cancelledA.outcome.status).toBe('rejected');
+  if (cancelledA.outcome.status === 'rejected') expect(cancelledA.outcome.error).toBeInstanceOf(PendingVerification);
+  for (const limits of [{ calls: 1, bytes: 81_920 }, { calls: 2, bytes: 1 }]) {
+    const bounded = await replay(success, undefined, limits);
+    expect(bounded.outcome.status).toBe('rejected');
+    if (bounded.outcome.status === 'rejected') expect(bounded.outcome.error).toBeInstanceOf(PendingVerification);
+    expect(await content.readAssessmentProducer(success.staged.row.admission)).toEqual(success.terminal);
+  }
+  expect((await readReceipt(env, historicalAssessment.id, 'claim-assess', ['assessment']))?.outcome).toBe('succeeded');
+  expect(await content.readAssessmentProducer(historicalAssessment.id)).toBeNull();
+  const missingReader = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN!, Bun.env.FUSEKI_COMMAND_TOKEN!);
+  missingReader.query = forbidden;
+  missingReader.commandWithReceipt = forbidden;
+  const missing = await reconcileAssessmentProducerEffects({ env: { ...env, fuseki: missingReader }, store: content }, historicalAssessment.id,
+    success.staged.permit).then(() => null, error => error);
+  expect(missing?.message).toContain('original assessment producer intent is unavailable');
+  expect(callbacks).toBe(0);
+  expect(await facts([GRAPHS.revisions, GRAPHS.receipts],
+    [assessment, success.receipt.receipt, cancelled.receipt.receipt])).toEqual(before);
+  console.log(JSON.stringify({ case: 'native-terminal-replay', queries: positive.reads.length,
+    rows: positive.reads.map(read => read.rows), bytes: positive.reads.map(read => read.bytes),
+    parentCallsLeft: positive.budget.callsLeft, parentBytesLeft: positive.budget.bytesLeft,
+    wireBytesCharged: 81_920 - positive.budget.bytesLeft,
+    projectionFaults: mutations.length + 1 }));
+}
 afterAll(async () => {
+  await contentPool?.end();
   await pool?.end();
   if (directory) rmSync(directory, { recursive: true, force: true });
 });
@@ -626,3 +832,6 @@ test('native complete/release remain refused and pending admissions stop an unto
     (await pool.query('SELECT open FROM access.recovery_fence WHERE id=true')).rows[0]?.open,
   ).toBe(false);
 }, 120_000);
+
+test('native assessment and exact Content terminal replay after C becomes B without a current analysis basis',
+  replayNativeAssessmentTerminal, 120_000);

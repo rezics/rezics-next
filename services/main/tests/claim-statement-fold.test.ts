@@ -7,6 +7,7 @@ import { profileRegistry } from '../../../packages/model/src/generated/profiles.
 import {
   CommandOutcomeUnknown,
   FusekiClient,
+  fusekiReadBudget,
   type CommandEnvelope,
   type SparqlResult,
 } from '../src/infrastructure/fuseki.ts';
@@ -38,12 +39,15 @@ import {
 import { outboxEventHandlers } from '../src/modules/verification/outbox-event.ts';
 import {
   ADMISSIONS,
+  ASSESSMENT_PROFILE,
   CLAIM_PROFILE,
   claimDigest,
   graphHeads,
   readClaimHead,
   readClaimRevisions,
   readReceipt,
+  readAssessmentProducerNative,
+  OriginalAssessmentNativeUnavailable,
   receiptIri,
 } from '../src/modules/verification/graph.ts';
 import {
@@ -60,6 +64,7 @@ import {
   assessmentDigest,
   createAdmittedClaim,
   PendingVerification,
+  readOriginalAssessmentProducerNative,
   reconcileAssessmentProducerEffects,
   readClaimQuality,
   type AssessClaimInput,
@@ -81,6 +86,7 @@ import {
 } from '../src/modules/verification/store.ts';
 import {
   GRAPHS,
+  DATASET,
   CancelledActivation,
   IdempotencyConflict,
   hash,
@@ -88,7 +94,7 @@ import {
   RV,
   type WorkActivationEnvironment,
 } from '../src/modules/work/activate.ts';
-import { SUPPORT_METHOD, SUMMARY_POLICY } from '../src/modules/verification/analysis.ts';
+import { HUMAN_REVIEW_METHOD, SUPPORT_METHOD, SUMMARY_POLICY } from '../src/modules/verification/analysis.ts';
 
 const id = (n: number) =>
   `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -677,6 +683,12 @@ test('a new assessment of B cannot reuse an evidence manifest pinned to historic
   f.env.fuseki.query = async (text) => {
     if (text.includes('ASK'))
       return { boolean: !text.includes('rv:rejectionKind rv:InvalidProfile') };
+    if (/SELECT\s+\?p\s+\?o/.test(text) && text.includes(`<${GRAPHS.receipts}>`)) {
+      return { results: { bindings: cancelled && registered ? nativeAssessmentReceiptRows({
+        admission: registered.id, digest: registered.requestDigest, authorityEpoch: registered.authorityEpoch,
+        dataEpoch: f.env.lineage.dataEpoch, outcome: 'cancelled', assessment: null,
+      }) : [] } };
+    }
     if (text.includes('SELECT ?outcome ?digest ?id ?epoch ?scope')) {
       return {
         results: {
@@ -1711,8 +1723,11 @@ function assessmentProducerOperationsFixture() {
   const activations: ActivationInput[] = [];
   const state: { registered?: RegisteredAdmission; producer?: AssessmentProducerRecord; assessment?: string;
     failStage: boolean; failEffects: boolean; analysisUnavailable: boolean; effectCallbacks: number; position: string;
-    representation: 'statement' | 'claim' } = {
+    representation: 'statement' | 'claim'; receiptOutcome: 'succeeded' | 'cancelled';
+    rawReceipt?: (rows: NativeAssessmentMetadataRow[]) => NativeAssessmentMetadataRow[];
+    rawAssessment?: (rows: NativeAssessmentMetadataRow[]) => NativeAssessmentMetadataRow[] } = {
       failStage: false, failEffects: true, analysisUnavailable: false, effectCallbacks: 0, position: '42', representation: 'statement',
+      receiptOutcome: 'succeeded',
     };
   const intent: AssessClaimInput & { idempotencyKey: string } = {
     claimRevision: f.revision, evidenceSetRevision: id(210), sourceAssessments: [], method: 'automated',
@@ -1739,6 +1754,21 @@ function assessmentProducerOperationsFixture() {
   });
   f.env.fuseki.query = async text => {
     if (text.includes('ASK')) return { boolean: !text.includes('rv:rejectionKind rv:InvalidProfile') };
+    if (/SELECT\s+\?p\s+\?o/.test(text) && text.includes(`<${GRAPHS.receipts}>`)) {
+      events.push('native-receipt-read');
+      const admission = state.registered;
+      const rows = admission && (state.assessment || state.receiptOutcome === 'cancelled')
+        ? nativeAssessmentReceiptRows({ admission: admission.id, digest: admission.requestDigest,
+          authorityEpoch: admission.authorityEpoch, dataEpoch: f.env.lineage.dataEpoch,
+          outcome: state.receiptOutcome, assessment: state.receiptOutcome === 'cancelled' ? null : state.assessment! }) : [];
+      return { results: { bindings: state.rawReceipt ? state.rawReceipt(rows) : rows } };
+    }
+    if (/SELECT\s+\?p\s+\?o/.test(text) && text.includes(`<${GRAPHS.revisions}>`)) {
+      events.push('native-assessment-read');
+      const rows = state.assessment ? nativeAssessmentRecordRows({ claim: f.claim, input: intent,
+        representation: state.representation, dataEpoch: f.env.lineage.dataEpoch, sequence: state.position }) : [];
+      return { results: { bindings: state.rawAssessment ? state.rawAssessment(rows) : rows } };
+    }
     if (text.includes('SELECT ?outcome ?digest ?id ?epoch ?scope')) {
       const admission = state.registered;
       return { results: { bindings: state.assessment && admission ? [{ outcome: uri(`${RV}Succeeded`),
@@ -2202,4 +2232,519 @@ test('assessment audit refuses a live permit change before reading or returning 
     .rejects.toBeInstanceOf(VerificationStale);
   expect(changedAfterRead.queries.some(query => query.sql === 'ROLLBACK')).toBe(true);
   expect(changedAfterRead.queries.some(query => query.sql === 'COMMIT')).toBe(false);
+});
+
+type NativeAssessmentTerm = { type: string; value: string; datatype?: string; 'xml:lang'?: string };
+type NativeAssessmentMetadataRow = { p: NativeAssessmentTerm; o: NativeAssessmentTerm };
+const nativeUri = (value: string): NativeAssessmentTerm => ({ type: 'uri', value });
+const nativeLiteral = (value: string, datatype = `${XSD}string`): NativeAssessmentTerm => ({ type: 'literal', value, datatype });
+const nativeMetadata = (predicate: string, object: NativeAssessmentTerm): NativeAssessmentMetadataRow => ({ p: nativeUri(predicate), o: object });
+
+function nativeAssessmentReceiptRows(input: { admission: string; digest: string; authorityEpoch?: string;
+  dataEpoch: string; outcome: 'succeeded' | 'cancelled'; assessment: string | null }) {
+  const rows = [
+    nativeMetadata(`${RDF}type`, nativeUri(`${RV}OperationReceipt`)),
+    nativeMetadata(`${RV}outcome`, nativeUri(`${RV}${input.outcome === 'succeeded' ? 'Succeeded' : 'Cancelled'}`)),
+    nativeMetadata(`${RV}requestDigest`, nativeLiteral(input.digest)),
+    nativeMetadata(`${RV}admissionId`, nativeLiteral(input.admission)),
+    nativeMetadata(`${RV}authorityEpoch`, nativeLiteral(input.authorityEpoch ?? '1')),
+    nativeMetadata(`${RV}admittedScope`, nativeLiteral(ADMISSIONS['claim-assess'].scope)),
+    nativeMetadata(`${RV}datasetId`, nativeUri(DATASET)),
+    nativeMetadata(`${RV}dataEpoch`, nativeLiteral(input.dataEpoch)),
+    nativeMetadata(`${RV}sequence`, nativeLiteral('42', `${XSD}integer`)),
+  ];
+  if (input.outcome === 'succeeded') rows.push(nativeMetadata(`${RV}operation`, nativeUri(id(547))));
+  if (input.assessment) rows.push(nativeMetadata(`${RV}assessment`, nativeUri(input.assessment)));
+  return rows;
+}
+
+function nativeAssessmentRecordRows(input: { claim: string; input: AssessClaimInput;
+  representation: 'claim' | 'statement'; dataEpoch: string; sequence?: string }) {
+  const intent = input.input;
+  const rows = [
+    nativeMetadata(`${RDF}type`, nativeUri(`${RV}ClaimAssessment`)),
+    nativeMetadata(`${RDF}type`, nativeUri(`${RV}RevisionAnchor`)),
+    nativeMetadata(`${RV}component`, nativeUri(input.claim)),
+    nativeMetadata(`${RV}${input.representation === 'statement' ? 'statementRevision' : 'claimRevision'}`, nativeUri(intent.claimRevision)),
+    nativeMetadata(`${RV}evidenceSetRevision`, nativeUri(intent.evidenceSetRevision)),
+    ...intent.sourceAssessments.map(pin => nativeMetadata(`${RV}sourceAssessment`, nativeUri(pin))),
+    nativeMetadata(`${RV}method`, nativeUri(intent.method === 'automated' ? SUPPORT_METHOD : HUMAN_REVIEW_METHOD)),
+    nativeMetadata(`${RV}methodRevision`, nativeUri(intent.method === 'automated' ? SUPPORT_METHOD : HUMAN_REVIEW_METHOD)),
+    nativeMetadata(`${RV}policyRevision`, nativeUri(SUMMARY_POLICY)),
+    nativeMetadata(`${RV}evaluationContext`, nativeUri(intent.evaluationContext)),
+    nativeMetadata(`${RV}coverage`, nativeUri(`${RV}CompleteCoverage`)),
+    nativeMetadata(`${RV}supportResult`, nativeUri(`${RV}${intent.method === 'automated' ? 'InsufficientSupport'
+      : intent.judgment === 'supported' ? 'Supported' : intent.judgment === 'contradicted' ? 'Contradicted'
+        : intent.judgment === 'material-conflict' ? 'MaterialConflict' : 'InsufficientSupport'}`)),
+    nativeMetadata(`${RV}dependenceStatus`, nativeUri(`${RV}DependenceUnknown`)),
+    nativeMetadata(`${RV}limitations`, nativeLiteral(intent.limitations)),
+    nativeMetadata(`${RV}assessor`, nativeUri(intent.actingSubject)),
+    nativeMetadata(`${RV}assessorKind`, nativeUri(`${RV}${intent.method === 'human-review' ? 'HumanAssessor' : 'AutomatedAssessor'}`)),
+    nativeMetadata(`${RV}assessedAt`, nativeLiteral('2026-10-01T00:00:00.000Z', `${XSD}dateTime`)),
+    nativeMetadata(`${RV}modelRevision`, nativeUri(ASSESSMENT_PROFILE)),
+    nativeMetadata(`${RV}shapeRevision`, nativeUri(ASSESSMENT_PROFILE)),
+    nativeMetadata(`${RV}dataEpoch`, nativeLiteral(input.dataEpoch)),
+    nativeMetadata(`${RV}sequence`, nativeLiteral(input.sequence ?? '42', `${XSD}integer`)),
+  ];
+  if (intent.scorePerMillion !== null) rows.push(
+    nativeMetadata(`${RV}scorePerMillion`, nativeLiteral(String(intent.scorePerMillion), `${XSD}integer`)),
+    nativeMetadata(`${RV}scoreCalibration`, nativeUri(`${RV}${intent.calibration ? 'CalibratedScore' : 'UncalibratedScore'}`)),
+  );
+  if (intent.calibration) rows.push(nativeMetadata(`${RV}calibration`, nativeUri(intent.calibration)));
+  if (intent.evaluationReference) rows.push(nativeMetadata(`${RV}evaluationReference`, nativeUri(intent.evaluationReference)));
+  return rows;
+}
+
+function replaceNativeMetadata(rows: NativeAssessmentMetadataRow[], predicate: string, object: NativeAssessmentTerm) {
+  return rows.map(row => row.p.value === predicate ? { ...row, o: object } : row);
+}
+
+/** Fixed point metadata only; raw RDF terms are parsed by the production reader. */
+function nativeAssessmentReadFixture() {
+  const admission = auditAdmission(601), assessment = id(602), epoch = auditAdmission(603);
+  const source = assessmentAuditRow(601, null).producer;
+  const state = {
+    receipt: nativeAssessmentReceiptRows({ admission, digest: source.requestDigest, dataEpoch: epoch, outcome: 'succeeded', assessment }),
+    assessment: nativeAssessmentRecordRows({ claim: source.claim, input: source.intent,
+      representation: 'claim', dataEpoch: epoch }),
+  };
+  const queries: { text: string; maxBytes?: number }[] = [];
+  const fuseki = new FusekiClient('http://unused.invalid');
+  fuseki.query = async (text, maxBytes) => {
+    queries.push({ text, maxBytes });
+    if (!/SELECT\s+\?p\s+\?o/.test(text)) throw new Error('Immutable assessment read attempted another query shape');
+    if (text.includes(`<${GRAPHS.receipts}>`) && text.includes(`<${receiptIri(admission, 'claim-assess')}>`))
+      return { results: { bindings: state.receipt } };
+    if (text.includes(`<${GRAPHS.revisions}>`) && text.includes(`<${assessment}>`))
+      return { results: { bindings: state.assessment } };
+    throw new Error('Immutable assessment read retargeted its original subject');
+  };
+  return { env: { fuseki }, admission, assessment, epoch, source, state, queries };
+}
+
+test('the immutable assessment reader uses only its exact receipt and assessment with fixed raw-row and byte ceilings', async () => {
+  const f = nativeAssessmentReadFixture();
+  const found = await readAssessmentProducerNative(f.env, f.admission);
+  expect(found?.receipt).toMatchObject({ receipt: receiptIri(f.admission, 'claim-assess'), admissionId: f.admission,
+    requestDigest: f.source.requestDigest, dataEpoch: f.epoch, sequence: '42', result: { assessment: f.assessment } });
+  expect(found?.assessment).toMatchObject({ assessment: f.assessment, claim: f.source.claim,
+    claimRevision: f.source.claimRevision, evidenceSetRevision: f.source.intent.evidenceSetRevision,
+    modelRevision: ASSESSMENT_PROFILE, shapeRevision: ASSESSMENT_PROFILE, scoreCalibration: null });
+  expect(f.queries).toHaveLength(2);
+  expect(f.queries.map(query => query.maxBytes)).toEqual([16_384, 65_536]);
+  expect(f.queries[0]!.text).toMatch(/LIMIT 17\b/);
+  expect(f.queries[1]!.text).toMatch(/LIMIT 65\b/);
+  for (const query of f.queries) {
+    expect(query.text).not.toContain(`<${GRAPHS.current}>`);
+    expect(query.text).not.toMatch(/rv:head|rv:claimHead|rv:decisionHead|rv:reliabilityHead/);
+  }
+});
+
+test('the immutable receipt reader refuses ambiguous cardinality and changes in complete RDF term identity', async () => {
+  const cases: ((rows: NativeAssessmentMetadataRow[]) => NativeAssessmentMetadataRow[])[] = [
+    rows => rows.filter(row => row.p.value !== `${RDF}type`),
+    rows => [...rows, nativeMetadata(`${RV}requestDigest`, nativeLiteral('b'.repeat(64)))],
+    rows => [...rows, nativeMetadata(`${RV}requestDigest`, nativeLiteral(rows.find(row => row.p.value === `${RV}requestDigest`)!.o.value, `${XSD}integer`))],
+    rows => replaceNativeMetadata(rows, `${RV}outcome`, nativeLiteral(`${RV}Succeeded`)),
+    rows => replaceNativeMetadata(rows, `${RV}outcome`, nativeUri('urn:other:Succeeded')),
+    rows => replaceNativeMetadata(rows, `${RV}operation`, { type: 'bnode', value: 'forged-operation' }),
+    rows => replaceNativeMetadata(rows, `${RV}assessment`, { ...nativeUri(id(602)), datatype: `${XSD}string` }),
+    rows => replaceNativeMetadata(rows, `${RV}requestDigest`, { ...nativeLiteral('a'.repeat(64)), 'xml:lang': 'en' }),
+    rows => replaceNativeMetadata(rows, `${RV}sequence`, nativeLiteral('42')),
+    rows => replaceNativeMetadata(rows, `${RV}sequence`, nativeLiteral('0', `${XSD}integer`)),
+    rows => replaceNativeMetadata(rows, `${RV}authorityEpoch`, nativeLiteral('01')),
+    rows => replaceNativeMetadata(rows, `${RV}admissionId`, nativeLiteral(auditAdmission(999))),
+    rows => replaceNativeMetadata(rows, `${RV}datasetId`, nativeUri('urn:other:dataset')),
+    rows => rows.filter(row => row.p.value !== `${RV}assessment`),
+    rows => Array.from({ length: 17 }, () => rows[0]!),
+  ];
+  for (const corrupt of cases) {
+    const f = nativeAssessmentReadFixture();
+    f.state.receipt = corrupt(f.state.receipt);
+    await expect(readAssessmentProducerNative(f.env, f.admission)).rejects.toBeInstanceOf(OriginalAssessmentNativeUnavailable);
+    expect(f.queries).toHaveLength(1);
+  }
+});
+
+test('the immutable assessment reader refuses malformed singleton, revision, enum, model and optional score bindings', async () => {
+  const cases: ((rows: NativeAssessmentMetadataRow[]) => NativeAssessmentMetadataRow[])[] = [
+    rows => rows.filter(row => !(row.p.value === `${RDF}type` && row.o.value === `${RV}RevisionAnchor`)),
+    rows => [...rows, nativeMetadata(`${RV}component`, nativeUri(id(999)))],
+    rows => [...rows, nativeMetadata(`${RV}component`, nativeLiteral(rows.find(row => row.p.value === `${RV}component`)!.o.value))],
+    rows => [...rows, nativeMetadata(`${RV}statementRevision`, nativeUri(id(998)))],
+    rows => replaceNativeMetadata(rows, `${RV}claimRevision`, { ...nativeUri(id(540)), 'xml:lang': 'en' }),
+    rows => replaceNativeMetadata(rows, `${RV}evidenceSetRevision`, nativeLiteral(id(541))),
+    rows => replaceNativeMetadata(rows, `${RV}coverage`, nativeUri('urn:other:CompleteCoverage')),
+    rows => replaceNativeMetadata(rows, `${RV}supportResult`, nativeUri(`${RV}InventedSupport`)),
+    rows => replaceNativeMetadata(rows, `${RV}dependenceStatus`, nativeLiteral(`${RV}DependenceUnknown`)),
+    rows => replaceNativeMetadata(rows, `${RV}assessorKind`, nativeUri(`${RV}InventedAssessor`)),
+    rows => replaceNativeMetadata(rows, `${RV}assessor`, { type: 'bnode', value: 'forged-assessor' }),
+    rows => replaceNativeMetadata(rows, `${RV}modelRevision`, nativeUri(CLAIM_PROFILE)),
+    rows => replaceNativeMetadata(rows, `${RV}shapeRevision`, nativeUri(CLAIM_PROFILE)),
+    rows => replaceNativeMetadata(rows, `${RV}limitations`, { ...nativeLiteral('Original limitation'), 'xml:lang': 'en' }),
+    rows => replaceNativeMetadata(rows, `${RV}assessedAt`, nativeLiteral('not-a-date', `${XSD}dateTime`)),
+    rows => replaceNativeMetadata(rows, `${RV}sequence`, nativeLiteral('-1', `${XSD}integer`)),
+    rows => [...rows, nativeMetadata(`${RV}independentOriginCount`, nativeLiteral('-1', `${XSD}integer`))],
+    rows => [...rows, nativeMetadata(`${RV}scorePerMillion`, nativeLiteral('1000001', `${XSD}integer`)),
+      nativeMetadata(`${RV}scoreCalibration`, nativeUri(`${RV}UncalibratedScore`))],
+    rows => [...rows, nativeMetadata(`${RV}scorePerMillion`, nativeLiteral('1', `${XSD}integer`)),
+      nativeMetadata(`${RV}scoreCalibration`, nativeUri(`${RV}CalibratedScore`))],
+    rows => [...rows.filter(row => row.p.value !== `${RV}sourceAssessment`),
+      ...Array.from({ length: 33 }, (_, index) => nativeMetadata(`${RV}sourceAssessment`, nativeUri(id(700 + index))))],
+    rows => Array.from({ length: 65 }, () => rows[0]!),
+  ];
+  for (const corrupt of cases) {
+    const f = nativeAssessmentReadFixture();
+    f.state.assessment = corrupt(f.state.assessment);
+    await expect(readAssessmentProducerNative(f.env, f.admission)).rejects.toBeInstanceOf(OriginalAssessmentNativeUnavailable);
+    expect(f.queries).toHaveLength(2);
+  }
+});
+
+test('the immutable assessment reader retains all 32 exact source pins and valid score/origin boundaries', async () => {
+  const f = nativeAssessmentReadFixture();
+  const sources = Array.from({ length: 32 }, (_, index) => id(800 + index)).reverse();
+  const intent = { ...f.source.intent, sourceAssessments: sources, scorePerMillion: 1_000_000,
+    calibration: 'urn:assessment:fixed-calibration', evaluationReference: 'https://evaluation.example/original' };
+  f.state.assessment = replaceNativeMetadata(nativeAssessmentRecordRows({ claim: f.source.claim,
+    input: intent, representation: 'statement', dataEpoch: f.epoch }), `${RV}dependenceStatus`, nativeUri(`${RV}DependenceEstablished`));
+  f.state.assessment.push(nativeMetadata(`${RV}independentOriginCount`, nativeLiteral('64', `${XSD}integer`)));
+  const found = await readAssessmentProducerNative(f.env, f.admission);
+  expect(found?.assessment).toMatchObject({ representation: 'statement', sourceAssessments: [...sources].sort(),
+    independentOrigins: 64, scorePerMillion: 1_000_000, scoreCalibration: 'calibrated',
+    calibration: intent.calibration, evaluationReference: intent.evaluationReference });
+  expect(f.queries).toHaveLength(2);
+  const absent = nativeAssessmentReadFixture();
+  absent.state.assessment = [];
+  await expect(readAssessmentProducerNative(absent.env, absent.admission)).rejects.toBeInstanceOf(OriginalAssessmentNativeUnavailable);
+  expect(absent.queries).toHaveLength(2);
+});
+
+test('missing and cancelled immutable receipts do not load an assessment; cancelled receipts cannot carry an assessment result', async () => {
+  const missing = nativeAssessmentReadFixture();
+  missing.state.receipt = [];
+  expect(await readAssessmentProducerNative(missing.env, missing.admission)).toBeNull();
+  expect(missing.queries).toHaveLength(1);
+  const cancelled = nativeAssessmentReadFixture();
+  cancelled.state.receipt = nativeAssessmentReceiptRows({ admission: cancelled.admission,
+    digest: cancelled.source.requestDigest, dataEpoch: cancelled.epoch, outcome: 'cancelled', assessment: null });
+  expect(await readAssessmentProducerNative(cancelled.env, cancelled.admission)).toMatchObject({
+    receipt: { outcome: 'cancelled', result: {} }, assessment: null,
+  });
+  expect(cancelled.queries).toHaveLength(1);
+  cancelled.state.receipt.push(nativeMetadata(`${RV}assessment`, nativeUri(cancelled.assessment)));
+  await expect(readAssessmentProducerNative(cancelled.env, cancelled.admission)).rejects.toBeInstanceOf(OriginalAssessmentNativeUnavailable);
+});
+
+function retainedAssessmentProducer(f: ReturnType<typeof assessmentProducerOperationsFixture>,
+  status: AssessmentProducerTerminal['status'] = 'activated', oldClaimRevision = false) {
+  if (oldClaimRevision) {
+    f.intent.claimRevision = f.source;
+    f.state.representation = 'claim';
+  }
+  const { idempotencyKey, ...intent } = f.intent;
+  const requestDigest = assessmentDigest(f.claim, intent);
+  f.state.registered = {
+    id: f.admissionId, principalId: '00000000-0000-4000-8000-000000000205',
+    actingSubject: intent.actingSubject, scope: ADMISSIONS['claim-assess'].scope,
+    action: ADMISSIONS['claim-assess'].action, idempotencyKey, requestDigest, authorityEpoch: '1',
+    expiresAt: '2099-01-01T00:00:00.000Z', state: 'sealed', dispatchEligible: false, replayed: true,
+  };
+  f.state.assessment = status === 'cancelled' ? undefined : id(216);
+  f.state.receiptOutcome = status === 'cancelled' ? 'cancelled' : 'succeeded';
+  const terminal: AssessmentProducerTerminal = {
+    status, receipt: receiptIri(f.admissionId, 'claim-assess'), assessment: f.state.assessment ?? null,
+    activation: status === 'activated'
+      ? { status: 'activated', generation: id(214), number: '1', dispute: 'resolved' }
+      : status === 'refused' ? { status: 'stale-summary', active: id(777) }
+        : status === 'no-activation' ? { status: 'not-reproduced', reason: 'Original retained refusal to reproduce' }
+          : { status: 'cancelled' },
+  };
+  f.state.producer = { admission: f.admissionId, requestDigest, principal: f.state.registered.principalId,
+    actingSubject: intent.actingSubject, scope: f.state.registered.scope, authorityEpoch: '1', idempotencyKey,
+    claim: f.claim, claimRevision: intent.claimRevision, intent: structuredClone(intent),
+    stageGeneration: '0', restoreEpoch: '1', terminal };
+  f.state.analysisUnavailable = true;
+  const forbidden = (event: string) => async (): Promise<never> => {
+    f.events.push(event);
+    throw new Error(`Historical terminal attempted ${event}`);
+  };
+  f.deps.account.verify = forbidden('account');
+  f.deps.access.register = forbidden('register');
+  f.deps.access.claim = forbidden('access-claim');
+  f.deps.access.recordGraphOutcome = forbidden('access-ack');
+  f.deps.store.analysisSnapshot = forbidden('basis');
+  f.deps.store.resolveChallenges = forbidden('resolve-requested');
+  f.deps.store.activateSummary = forbidden('activate');
+  f.env.fuseki.commandWithReceipt = forbidden('graph-dispatch');
+  const rawQuery = f.env.fuseki.query.bind(f.env.fuseki);
+  f.env.fuseki.query = async (text, maxBytes) => {
+    if (!/SELECT\s+\?p\s+\?o/.test(text)) throw new Error(`Historical terminal attempted current metadata or analysis: ${text}`);
+    return rawQuery(text, maxBytes);
+  };
+  return structuredClone(f.state.producer);
+}
+
+test('retained terminal validation checks every original assessment pin before any effect or historical basis', async () => {
+  const cases: { predicate: string; object: NativeAssessmentTerm; unavailable?: boolean }[] = [
+    { predicate: `${RV}component`, object: nativeUri(id(999)) },
+    { predicate: `${RV}statementRevision`, object: nativeUri(id(998)) },
+    { predicate: `${RV}evidenceSetRevision`, object: nativeUri(id(997)) },
+    { predicate: `${RV}assessor`, object: nativeUri(id(996)) },
+    { predicate: `${RV}sequence`, object: nativeLiteral('43', `${XSD}integer`) },
+    { predicate: `${RV}modelRevision`, object: nativeUri(CLAIM_PROFILE), unavailable: true },
+    { predicate: `${RV}shapeRevision`, object: nativeUri(CLAIM_PROFILE), unavailable: true },
+  ];
+  for (const corrupt of cases) {
+    const f = assessmentProducerOperationsFixture();
+    const original = retainedAssessmentProducer(f);
+    f.state.rawAssessment = rows => replaceNativeMetadata(rows, corrupt.predicate, corrupt.object);
+    await expect(reconcileAssessmentProducerEffects({ env: f.env, store: f.deps.store }, f.admissionId, f.permit))
+      .rejects.toBeInstanceOf(corrupt.unavailable ? PendingVerification : IdempotencyConflict);
+    expect(f.state.producer).toEqual(original);
+    expect(f.state.effectCallbacks).toBe(0);
+    expect(f.resolutions).toEqual([]);
+    expect(f.activations).toEqual([]);
+    expect(f.commands).toEqual([]);
+    for (const event of ['basis', 'account', 'register', 'access-claim', 'access-ack', 'graph-dispatch', 'resolve-requested', 'activate'])
+      expect(f.events).not.toContain(event);
+  }
+});
+
+test('an original positive pinned to old Claim R replays after C became Statement B without reconstructing current meaning', async () => {
+  const f = assessmentProducerOperationsFixture();
+  const original = retainedAssessmentProducer(f, 'activated', true);
+  // The base fixture already represents C with a current Statement head B. Its
+  // mutable retained-head marker also changes; immutable replay must not read it.
+  f.corruptRoot();
+  expect(await reconcileAssessmentProducerEffects({ env: f.env, store: f.deps.store }, f.admissionId, f.permit)).toEqual(original);
+  expect(f.state.producer?.claimRevision).toBe(f.source);
+  expect(f.state.effectCallbacks).toBe(0);
+  expect(f.events).toEqual(['native-receipt-read', 'native-assessment-read']);
+  expect(f.commands).toEqual([]);
+});
+
+test('retained negative and cancelled terminals replay their exact original outcomes without rerunning effects', async () => {
+  for (const status of ['refused', 'no-activation', 'cancelled'] as const) {
+    const f = assessmentProducerOperationsFixture();
+    const original = retainedAssessmentProducer(f, status);
+    expect(await reconcileAssessmentProducerEffects({ env: f.env, store: f.deps.store }, f.admissionId, f.permit)).toEqual(original);
+    expect(f.state.producer).toEqual(original);
+    expect(f.state.effectCallbacks).toBe(0);
+    expect(f.resolutions).toEqual([]);
+    expect(f.activations).toEqual([]);
+    expect(f.commands).toEqual([]);
+    expect(f.events).toEqual(status === 'cancelled' ? ['native-receipt-read'] : ['native-receipt-read', 'native-assessment-read']);
+  }
+  const forged = assessmentProducerOperationsFixture();
+  const original = retainedAssessmentProducer(forged, 'cancelled');
+  forged.state.rawReceipt = rows => [...rows, nativeMetadata(`${RV}assessment`, nativeUri(id(999)))];
+  await expect(reconcileAssessmentProducerEffects({ env: forged.env, store: forged.deps.store }, forged.admissionId, forged.permit))
+    .rejects.toBeInstanceOf(PendingVerification);
+  expect(forged.state.producer).toEqual(original);
+  expect(forged.state.effectCallbacks).toBe(0);
+});
+
+test('missing original custody or a changed original digest cannot be repaired by a retained native terminal', async () => {
+  const f = assessmentProducerOperationsFixture();
+  const original = retainedAssessmentProducer(f);
+  f.state.producer = undefined;
+  await expect(reconcileAssessmentProducerEffects({ env: f.env, store: f.deps.store }, f.admissionId, f.permit))
+    .rejects.toBeInstanceOf(VerificationMissing);
+  expect(f.events).toEqual([]);
+  f.state.producer = { ...original, requestDigest: 'f'.repeat(64) };
+  await expect(reconcileAssessmentProducerEffects({ env: f.env, store: f.deps.store }, f.admissionId, f.permit))
+    .rejects.toBeInstanceOf(IdempotencyConflict);
+  expect(f.events).toEqual([]);
+  expect(f.state.effectCallbacks).toBe(0);
+});
+
+test('reading a pending original native proof never starts reconciliation and a missing receipt leaves custody unchanged', async () => {
+  const f = assessmentProducerOperationsFixture();
+  retainedAssessmentProducer(f);
+  if (!f.state.producer) throw new Error('Pending original fixture is unavailable');
+  f.state.producer.terminal = null;
+  const original = structuredClone(f.state.producer);
+  f.deps.store.withAssessmentProducerEffects = async () => {
+    f.events.push('effects'); throw new Error('Read-only proof attempted reconciliation');
+  };
+  const proof = await readOriginalAssessmentProducerNative({ env: f.env, store: f.deps.store }, f.admissionId);
+  expect(proof.original).toEqual(original);
+  expect(proof.receipt).toMatchObject({ outcome: 'succeeded', result: { assessment: f.state.assessment } });
+  expect(proof.recorded).toMatchObject({ claim: original.claim, claimRevision: original.claimRevision });
+  expect(f.events).toEqual(['native-receipt-read', 'native-assessment-read']);
+  f.events.length = 0;
+  f.state.rawReceipt = () => [];
+  await expect(readOriginalAssessmentProducerNative({ env: f.env, store: f.deps.store }, f.admissionId)).rejects.toBeInstanceOf(PendingVerification);
+  expect(f.events).toEqual(['native-receipt-read']);
+  expect(f.state.producer).toEqual(original);
+  expect(f.state.effectCallbacks).toBe(0);
+  expect(f.commands).toEqual([]);
+});
+
+const nativeResultBytes = (rows: NativeAssessmentMetadataRow[]) => Buffer.from(JSON.stringify({ results: { bindings: rows } }), 'utf8');
+// Bun's fetch type also carries preconnect; these local sentinels intercept only
+// the transport call exercised by the real Fuseki client.
+const nativeFetchTransport = (transport: (url: Parameters<typeof fetch>[0], init?: RequestInit) => Promise<Response>) =>
+  transport as typeof globalThis.fetch;
+
+function nativeResultStream(chunks: Uint8Array[], cancelled: (reason: unknown) => void = () => {}) {
+  let index = 0;
+  return new Response(new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (index < chunks.length) controller.enqueue(chunks[index++]!);
+      else controller.close();
+    },
+    cancel: cancelled,
+  }, { highWaterMark: 0 }), { headers: { 'content-type': 'application/sparql-results+json' } });
+}
+
+test('the actual Fuseki client shares two calls and one 80KiB native scope while charging and refunding the caller budget', async () => {
+  const f = nativeAssessmentReadFixture();
+  const responses = [nativeResultBytes(f.state.receipt), nativeResultBytes(f.state.assessment)];
+  const controller = new AbortController();
+  const parent = { signal: controller.signal, callsLeft: 5, bytesLeft: 200_000 };
+  const scopes: NonNullable<ReturnType<typeof fusekiReadBudget.getStore>>[] = [];
+  const beforeBody: { calls: number; bytes: number }[] = [];
+  let calls = 0;
+  const transport = spyOn(globalThis, 'fetch').mockImplementation(nativeFetchTransport(async (_url, init) => {
+    if (!init?.signal) throw new Error('Native read lost its transport signal');
+    init.signal.throwIfAborted();
+    const scope = fusekiReadBudget.getStore();
+    if (!scope) throw new Error('Native read lost its shared budget');
+    scopes.push(scope); beforeBody.push({ calls: scope.callsLeft, bytes: scope.bytesLeft });
+    return nativeResultStream([responses[calls++]!]);
+  }));
+  try {
+    const found = await fusekiReadBudget.run(parent, () => readAssessmentProducerNative({ fuseki: new FusekiClient('http://native-budget.invalid/') }, f.admission));
+    expect(found?.assessment?.assessment).toBe(f.assessment);
+    expect(calls).toBe(2);
+    expect(scopes[0]).toBe(scopes[1]);
+    expect(scopes[0]).not.toBe(parent);
+    expect(beforeBody).toEqual([{ calls: 1, bytes: 81_920 }, { calls: 0, bytes: 81_920 - responses[0]!.length }]);
+    expect(parent.callsLeft).toBe(3);
+    expect(parent.bytesLeft).toBe(200_000 - responses[0]!.length - responses[1]!.length);
+  } finally { transport.mockRestore(); }
+});
+
+test('a tighter caller call or byte budget survives the second native read without replenishment', async () => {
+  const f = nativeAssessmentReadFixture();
+  const receipt = nativeResultBytes(f.state.receipt), assessment = nativeResultBytes(f.state.assessment);
+  const parent = { signal: new AbortController().signal, callsLeft: 1, bytesLeft: 200_000 };
+  let calls = 0;
+  const transport = spyOn(globalThis, 'fetch').mockImplementation(nativeFetchTransport(async () => {
+    calls++;
+    return nativeResultStream([receipt]);
+  }));
+  try {
+    await expect(fusekiReadBudget.run(parent, () => readAssessmentProducerNative({ fuseki: new FusekiClient('http://native-budget.invalid/') }, f.admission)))
+      .rejects.toBeInstanceOf(OriginalAssessmentNativeUnavailable);
+    expect(calls).toBe(1);
+    expect(parent.callsLeft).toBe(0);
+    expect(parent.bytesLeft).toBe(200_000 - receipt.length);
+    calls = 0;
+    f.state.receipt = nativeAssessmentReceiptRows({ admission: f.admission, digest: f.source.requestDigest,
+      dataEpoch: f.epoch, outcome: 'cancelled', assessment: null });
+    const cancellation = nativeResultBytes(f.state.receipt);
+    transport.mockImplementation(nativeFetchTransport(async () => { calls++; return nativeResultStream([cancellation]); }));
+    const singleCall = { signal: parent.signal, callsLeft: 1, bytesLeft: cancellation.length };
+    expect(await fusekiReadBudget.run(singleCall, () => readAssessmentProducerNative({ fuseki: new FusekiClient('http://native-budget.invalid/') }, f.admission)))
+      .toMatchObject({ receipt: { outcome: 'cancelled' }, assessment: null });
+    expect(calls).toBe(1);
+    expect(singleCall.callsLeft).toBe(0);
+    expect(singleCall.bytesLeft).toBe(0);
+    calls = 0;
+    const bytes = { signal: parent.signal, callsLeft: 2, bytesLeft: receipt.length + assessment.length - 1 };
+    transport.mockImplementation(nativeFetchTransport(async () => calls++ === 0 ? nativeResultStream([receipt])
+      : nativeResultStream([assessment.subarray(0, -1), assessment.subarray(-1)])));
+    await expect(fusekiReadBudget.run(bytes, () => readAssessmentProducerNative({ fuseki: new FusekiClient('http://native-budget.invalid/') }, f.admission)))
+      .rejects.toBeInstanceOf(OriginalAssessmentNativeUnavailable);
+    expect(calls).toBe(2);
+    expect(bytes.callsLeft).toBe(0);
+    expect(bytes.bytesLeft).toBe(0);
+  } finally { transport.mockRestore(); }
+});
+
+test('streamed native receipt and assessment responses stop at their physical byte ceilings and cancel the body', async () => {
+  for (const oversized of ['receipt', 'assessment'] as const) {
+    const f = nativeAssessmentReadFixture();
+    let calls = 0, cancelled = 0;
+    const transport = spyOn(globalThis, 'fetch').mockImplementation(nativeFetchTransport(async () => {
+      const rows = calls++ === 0 ? f.state.receipt : f.state.assessment;
+      const stage = calls === 1 ? 'receipt' : 'assessment';
+      const bytes = nativeResultBytes(rows);
+      if (stage !== oversized) return nativeResultStream([bytes]);
+      const ceiling = stage === 'receipt' ? 16_384 : 65_536;
+      const full = Buffer.concat([bytes, Buffer.alloc(ceiling - bytes.length, 0x20)]);
+      return nativeResultStream([full, Buffer.from(' ')], () => { cancelled++; });
+    }));
+    try {
+      await expect(readAssessmentProducerNative({ fuseki: new FusekiClient('http://native-budget.invalid/') }, f.admission))
+        .rejects.toBeInstanceOf(OriginalAssessmentNativeUnavailable);
+      expect(calls).toBe(oversized === 'receipt' ? 1 : 2);
+      expect(cancelled).toBe(1);
+    } finally { transport.mockRestore(); }
+  }
+});
+
+test('the native scope obeys parent cancellation and a shared ten-second deadline across both reads', async () => {
+  const f = nativeAssessmentReadFixture();
+  const controller = new AbortController();
+  const parent = { signal: controller.signal, callsLeft: 3, bytesLeft: 200_000 };
+  let calls = 0;
+  const transport = spyOn(globalThis, 'fetch').mockImplementation(nativeFetchTransport(async (_url, init) => {
+    calls++;
+    if (!init?.signal) throw new Error('Native read lost its transport signal');
+    init.signal.throwIfAborted();
+    return nativeResultStream([nativeResultBytes(f.state.receipt)]);
+  }));
+  try {
+    controller.abort(new Error('Earlier parent deadline'));
+    await expect(fusekiReadBudget.run(parent, () => readAssessmentProducerNative({ fuseki: new FusekiClient('http://native-budget.invalid/') }, f.admission)))
+      .rejects.toBeInstanceOf(OriginalAssessmentNativeUnavailable);
+    expect(calls).toBe(0);
+    expect(parent.callsLeft).toBe(3);
+    expect(parent.bytesLeft).toBe(200_000);
+    const fresh = { signal: new AbortController().signal, callsLeft: 3, bytesLeft: 200_000 };
+    const requestReason = new Error('Parent cancelled while reading assessment bytes');
+    const request = new AbortController();
+    let cancellationReason: unknown;
+    transport.mockImplementation(nativeFetchTransport(async (_url, init) => {
+      if (!init?.signal) throw new Error('Native read lost its transport signal');
+      if (++calls === 1) return nativeResultStream([nativeResultBytes(f.state.receipt)]);
+      let pulled = false;
+      return new Response(new ReadableStream<Uint8Array>({ pull(stream) {
+        if (!pulled) { pulled = true; stream.enqueue(Buffer.from('{')); }
+        else request.abort(requestReason);
+      }, cancel(reason) { cancellationReason = reason; } }, { highWaterMark: 0 }));
+    }));
+    await expect(fusekiReadBudget.run({ ...fresh, signal: request.signal }, () => readAssessmentProducerNative({ fuseki: new FusekiClient('http://native-budget.invalid/') }, f.admission)))
+      .rejects.toBeInstanceOf(OriginalAssessmentNativeUnavailable);
+    expect(calls).toBe(2);
+    expect(cancellationReason).toBe(requestReason);
+    calls = 0;
+    const deadlines: { duration: number; controller: AbortController }[] = [];
+    const timeout = spyOn(AbortSignal, 'timeout').mockImplementation(duration => {
+      const timer = new AbortController(); deadlines.push({ duration, controller: timer }); return timer.signal;
+    });
+    try {
+      const reason = new DOMException('Shared native read deadline expired', 'TimeoutError');
+      cancellationReason = undefined;
+      transport.mockImplementation(nativeFetchTransport(async () => {
+        if (++calls === 1) return nativeResultStream([nativeResultBytes(f.state.receipt)]);
+        let pulled = false;
+        return new Response(new ReadableStream<Uint8Array>({ pull(stream) {
+          if (!pulled) { pulled = true; stream.enqueue(Buffer.from('{')); }
+          else deadlines[0]!.controller.abort(reason);
+        }, cancel(cancelReason) { cancellationReason = cancelReason; } }, { highWaterMark: 0 }));
+      }));
+      await expect(fusekiReadBudget.run(fresh, () => readAssessmentProducerNative({ fuseki: new FusekiClient('http://native-budget.invalid/') }, f.admission)))
+        .rejects.toBeInstanceOf(OriginalAssessmentNativeUnavailable);
+      expect(calls).toBe(2);
+      expect(deadlines[0]!.duration).toBe(10_000);
+      expect(deadlines[deadlines.length - 1]!.controller.signal.aborted).toBe(false);
+      expect(fresh.signal.aborted).toBe(false);
+      expect(cancellationReason).toBe(reason);
+    } finally { timeout.mockRestore(); }
+  } finally { transport.mockRestore(); }
 });

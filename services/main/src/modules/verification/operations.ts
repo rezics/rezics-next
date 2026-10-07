@@ -13,6 +13,8 @@ import { analyzeClaimSupport, currentVerificationHead, HUMAN_REVIEW_METHOD, SUMM
   type AnalysisResult, type ClaimScope, type Support } from './analysis.ts';
 import { ADMISSIONS, claimDigest, createClaim, graphHeads, InvalidVerificationInput, native,
   readAcceptance, readAssessment, readClaimHead, readClaimRevisions, readReliability, readReceipt, recordAssessment,
+  readAssessmentProducerNative, OriginalAssessmentNativeUnavailable,
+  receiptIri,
   validateVerificationReference,
   recordReliability, reliabilityDigest, sealVerificationAdmission,
   VerificationGraphStale, type ClaimRecord, type CreateClaimInput, type Family, type GraphReceipt,
@@ -276,6 +278,7 @@ function dependencies(claim: string, input: AssessClaimInput, basis: Basis,
 
 function producerReceipt(row: AssessmentProducerRecord, receipt: GraphReceipt) {
   if (
+    receipt.receipt !== receiptIri(row.admission, 'claim-assess') ||
     receipt.admissionId !== row.admission ||
     receipt.requestDigest !== row.requestDigest ||
     receipt.authorityEpoch !== row.authorityEpoch ||
@@ -301,19 +304,63 @@ export async function reconcileAssessmentProducerEffects(
   return reconcileAssessmentEffects(deps, admission, permit);
 }
 
+/** Read only the immutable original intent and its native terminal; never reconcile Content effects. */
+export async function readOriginalAssessmentProducerNative(
+  deps: Pick<VerificationDependencies, 'env' | 'store'>, admission: string,
+) {
+  const original = await deps.store.readAssessmentProducer(admission);
+  if (!original)
+    throw new VerificationMissing('original assessment producer intent is unavailable');
+  if (assessmentDigest(original.claim, original.intent) !== original.requestDigest) {
+    throw new IdempotencyConflict('assessment producer differs from its original digest');
+  }
+  let retainedNative: Awaited<ReturnType<typeof readAssessmentProducerNative>>;
+  try { retainedNative = await readAssessmentProducerNative(deps.env, admission); }
+  catch (error) {
+    if (error instanceof OriginalAssessmentNativeUnavailable) throw new PendingVerification(admission);
+    throw error;
+  }
+  if (!retainedNative) throw new PendingVerification(admission);
+  const { receipt, assessment: recorded } = retainedNative;
+  producerReceipt(original, receipt);
+  if (receipt.outcome === 'cancelled') return { original, receipt, recorded: null };
+  const assessment = receipt.result.assessment!;
+  if (!recorded) throw new PendingVerification(admission);
+  const input = original.intent;
+  if (
+    recorded.assessment !== assessment ||
+    recorded.claim !== original.claim ||
+    recorded.claimRevision !== original.claimRevision ||
+    recorded.dataEpoch !== receipt.dataEpoch ||
+    recorded.sequence !== receipt.sequence ||
+    recorded.evidenceSetRevision !== input.evidenceSetRevision ||
+    recorded.actingSubject !== original.actingSubject ||
+    recorded.evaluationContext !== input.evaluationContext ||
+    recorded.method !== (input.method === 'automated' ? SUPPORT_METHOD : HUMAN_REVIEW_METHOD) ||
+    (input.method === 'human-review' && recorded.support !== input.judgment) ||
+    recorded.assessorKind !== (input.method === 'human-review' ? 'human' : 'automated') ||
+    recorded.methodRevision !== recorded.method ||
+    recorded.policyRevision !== SUMMARY_POLICY ||
+    JSON.stringify(recorded.sourceAssessments) !==
+      JSON.stringify([...input.sourceAssessments].sort()) ||
+    recorded.scorePerMillion !== input.scorePerMillion ||
+    recorded.calibration !== input.calibration ||
+    recorded.evaluationReference !== (input.evaluationReference ?? null) ||
+    recorded.limitations !== input.limitations
+  ) {
+    throw new IdempotencyConflict('recorded assessment differs from original producer pins');
+  }
+  return { original, receipt, recorded };
+}
+
 async function reconcileAssessmentEffects(
   deps: Pick<VerificationDependencies, 'env' | 'store'>,
   admission: string,
   permit: AssessmentProducerPermit,
   prepared?: Basis,
 ): Promise<AssessmentProducerRecord> {
-  const original = await deps.store.readAssessmentProducer(admission);
-  if (!original)
-    throw new VerificationMissing('original assessment producer intent is unavailable');
-  const receipt = await readReceipt(deps.env, admission, 'claim-assess', ['assessment']);
-  if (!receipt) throw new PendingVerification(admission);
-  producerReceipt(original, receipt);
-  if (original.terminal || receipt.outcome === 'cancelled') {
+  const { original, receipt, recorded } = await readOriginalAssessmentProducerNative(deps, admission);
+  if (receipt.outcome === 'cancelled') {
     return deps.store.withAssessmentProducerEffects(
       admission,
       original.requestDigest,
@@ -326,30 +373,15 @@ async function reconcileAssessmentEffects(
       }),
     );
   }
-  const assessment = receipt.result.assessment!;
-  const recorded = await readAssessment(deps.env, assessment);
   if (!recorded) throw new PendingVerification(admission);
+  const assessment = recorded.assessment;
   const input = original.intent;
-  if (
-    recorded.claim !== original.claim ||
-    recorded.claimRevision !== original.claimRevision ||
-    recorded.dataEpoch !== receipt.dataEpoch ||
-    recorded.sequence !== receipt.sequence ||
-    recorded.evidenceSetRevision !== input.evidenceSetRevision ||
-    recorded.actingSubject !== original.actingSubject ||
-    recorded.evaluationContext !== input.evaluationContext ||
-    recorded.method !== (input.method === 'automated' ? SUPPORT_METHOD : HUMAN_REVIEW_METHOD) ||
-    recorded.assessorKind !== (input.method === 'human-review' ? 'human' : 'automated') ||
-    recorded.methodRevision !== recorded.method ||
-    recorded.policyRevision !== SUMMARY_POLICY ||
-    JSON.stringify(recorded.sourceAssessments) !==
-      JSON.stringify([...input.sourceAssessments].sort()) ||
-    recorded.scorePerMillion !== input.scorePerMillion ||
-    recorded.calibration !== input.calibration ||
-    recorded.evaluationReference !== (input.evaluationReference ?? null) ||
-    recorded.limitations !== input.limitations
-  ) {
-    throw new IdempotencyConflict('recorded assessment differs from original producer pins');
+  if (original.terminal) {
+    // The existing gate/table barrier still protects replay. Its immutable
+    // terminal skips the callback; lost custody must never manufacture a tail.
+    return deps.store.withAssessmentProducerEffects(admission, original.requestDigest, permit, async () => {
+      throw new PendingVerification(admission);
+    });
   }
   // These reads use the exact original R and evidence pins. A later head never retargets this intent.
   let current: Basis;

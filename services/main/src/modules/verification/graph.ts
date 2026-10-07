@@ -1,7 +1,7 @@
 // Jena-owned verification records (claim-v1, assessment-v1). Each write is one
 // guarded command with its receipt, sequence advance and one outbox batch, in
 // the classification-proposition template's shape. SQL never runs inside it.
-import { CommandRejected } from '../../infrastructure/fuseki.ts';
+import { CommandRejected, fusekiReadBudget, type SparqlResult } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
@@ -627,6 +627,244 @@ export async function recordAssessment(env: WorkActivationEnvironment, admission
 
 export interface AssessmentRecord extends AssessmentRecordInput {
   assessment: string; assessedAt: string; dataEpoch: string; sequence: string;
+}
+
+export class OriginalAssessmentNativeUnavailable extends PendingActivation {}
+
+export interface OriginalAssessmentRecord extends AssessmentRecord {
+  modelRevision: string;
+  shapeRevision: string;
+  scoreCalibration: 'calibrated' | 'uncalibrated' | null;
+}
+
+export const ORIGINAL_ASSESSMENT_NATIVE_COST = {
+  calls: 2, receiptRows: 16, assessmentRows: 64, receiptBytes: 16_384,
+  assessmentBytes: 65_536, responseBytes: 81_920, deadlineMs: 10_000, sources: 32,
+} as const;
+
+const ORIGINAL_RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
+const ORIGINAL_RECEIPT_PREDICATES = [ORIGINAL_RDF_TYPE, ...[
+  'outcome', 'requestDigest', 'admissionId', 'authorityEpoch', 'admittedScope',
+  'datasetId', 'dataEpoch', 'sequence', 'operation', 'assessment', 'rejectionKind', 'reason',
+].map(name => `${RV}${name}`)];
+const ORIGINAL_ASSESSMENT_PREDICATES = [ORIGINAL_RDF_TYPE, ...[
+  'component', 'claimRevision', 'statementRevision', 'evidenceSetRevision', 'sourceAssessment',
+  'method', 'methodRevision', 'policyRevision', 'evaluationContext', 'coverage', 'supportResult',
+  'dependenceStatus', 'independentOriginCount', 'scorePerMillion', 'scoreCalibration', 'calibration',
+  'evaluationReference', 'limitations', 'assessor', 'assessorKind', 'assessedAt', 'modelRevision',
+  'shapeRevision', 'dataEpoch', 'sequence', 'predecessor',
+].map(name => `${RV}${name}`)];
+type OriginalNativeTerm = NonNullable<NonNullable<SparqlResult['results']>['bindings'][number][string]>;
+
+const originalNativeUnavailable = (message: string): never => {
+  throw new OriginalAssessmentNativeUnavailable(message);
+};
+
+/** Only the two fixed original subjects are read. Known predicates avoid joined scalar fanout. */
+async function originalAssessmentSubject(env: Pick<WorkActivationEnvironment, 'fuseki'>,
+  subject: string, assessment: boolean): Promise<Map<string, OriginalNativeTerm[]>> {
+  const predicates = assessment ? ORIGINAL_ASSESSMENT_PREDICATES : ORIGINAL_RECEIPT_PREDICATES;
+  const maxRows = assessment ? ORIGINAL_ASSESSMENT_NATIVE_COST.assessmentRows : ORIGINAL_ASSESSMENT_NATIVE_COST.receiptRows;
+  const maxBytes = assessment ? ORIGINAL_ASSESSMENT_NATIVE_COST.assessmentBytes : ORIGINAL_ASSESSMENT_NATIVE_COST.receiptBytes;
+  const result = await env.fuseki.query(`SELECT ?p ?o WHERE {
+    VALUES ?p { ${predicates.map(predicate => `<${predicate}>`).join(' ')} }
+    GRAPH ${iri(assessment ? GRAPHS.revisions : GRAPHS.receipts)} { ${iri(subject)} ?p ?o }
+  } LIMIT ${maxRows + 1}`, maxBytes);
+  const rows = result.results?.bindings;
+  if (!Array.isArray(rows) || rows.length > maxRows) {
+    return originalNativeUnavailable('original assessment native subject is incomplete or exceeds its row bound');
+  }
+  const values = new Map<string, Map<string, OriginalNativeTerm>>();
+  for (const row of rows) {
+    const predicate = row.p, object = row.o;
+    if (!predicate || predicate.type !== 'uri' || predicate.datatype !== undefined || predicate['xml:lang'] !== undefined
+      || !predicates.includes(predicate.value) || !object || typeof object.value !== 'string'
+      || !['uri', 'literal'].includes(object.type)
+      || (object.type === 'uri' && (object.datatype !== undefined || object['xml:lang'] !== undefined))
+      || object['xml:lang'] !== undefined) {
+      return originalNativeUnavailable('original assessment native subject has an invalid RDF term');
+    }
+    const terms = values.get(predicate.value) ?? new Map<string, OriginalNativeTerm>();
+    // Plain RDF 1.1 strings and explicit xsd:string are the same term. Other
+    // datatypes, language tags and lexicals must never collapse by string value.
+    const signature = JSON.stringify([object.type, object.value,
+      object.datatype ?? (object.type === 'literal' ? `${XSD}string` : null), object['xml:lang'] ?? null]);
+    terms.set(signature, object);
+    values.set(predicate.value, terms);
+  }
+  return new Map([...values].map(([predicate, terms]) => [predicate, [...terms.values()]]));
+}
+
+/** A fixed scalar decoder for the original receipt and assessment fields only. */
+function originalAssessmentScalars(values: Map<string, OriginalNativeTerm[]>) {
+  const one = (path: string, required = true): OriginalNativeTerm | undefined => {
+    const found = values.get(path) ?? [];
+    if (found.length > 1 || required && found.length !== 1) {
+      return originalNativeUnavailable('original assessment native scalar is missing or ambiguous');
+    }
+    return found[0];
+  };
+  const reference = (path: string, required = true, nativeOnly = false): string | undefined => {
+    const term = one(path, required);
+    if (!term) return undefined;
+    if (term.type !== 'uri' || term.value.length < 1 || term.value.length > 300
+      || /[\s\u0000-\u001f\u007f<>"{}|\\^`]/u.test(term.value)
+      || !/^(?:https?:\/\/[^/]+(?:\/[^\s<>"{}|\\^`]+)?|urn:[^\s<>"{}|\\^`]+)$/u.test(term.value)
+      || nativeOnly && !NATIVE.test(term.value)) {
+      return originalNativeUnavailable('original assessment native reference is invalid');
+    }
+    return term.value;
+  };
+  const string = (path: string, required = true, maximum = 300): string | undefined => {
+    const term = one(path, required);
+    if (!term) return undefined;
+    if (term.type !== 'literal' || (term.datatype ?? `${XSD}string`) !== `${XSD}string`
+      || term.value.length < 1 || term.value.length > maximum) {
+      return originalNativeUnavailable('original assessment native string is invalid');
+    }
+    return term.value;
+  };
+  const integer = (path: string, required: boolean, minimum: bigint, maximum?: bigint): string | undefined => {
+    const term = one(path, required);
+    if (!term) return undefined;
+    if (term.type !== 'literal' || term.datatype !== `${XSD}integer`
+      || term.value.length > 300 || !/^[+-]?\d+$/u.test(term.value)) {
+      return originalNativeUnavailable('original assessment native integer is invalid');
+    }
+    const number = BigInt(term.value);
+    if (number < minimum || maximum !== undefined && number > maximum) {
+      return originalNativeUnavailable('original assessment native integer is outside its range');
+    }
+    return term.value;
+  };
+  const enumeration = <T extends Record<string, string>>(path: string, options: T): keyof T => {
+    const value = reference(path)!;
+    const entry = Object.entries(options).find(([, name]) => value === `${RV}${name}`);
+    if (!entry) return originalNativeUnavailable('original assessment native enumeration is unknown');
+    return entry[0] as keyof T;
+  };
+  return { one, reference, string, integer, enumeration };
+}
+
+/** Read original native facts without resolving current heads, analysis or a missing principal/input. */
+export async function readAssessmentProducerNative(env: Pick<WorkActivationEnvironment, 'fuseki'>,
+  admissionId: string): Promise<null | { receipt: GraphReceipt; assessment: OriginalAssessmentRecord | null }> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(admissionId)) {
+    return originalNativeUnavailable('original assessment admission identity is invalid');
+  }
+  const parent = fusekiReadBudget.getStore();
+  const reservedCalls = Math.max(0, Math.min(ORIGINAL_ASSESSMENT_NATIVE_COST.calls, parent?.callsLeft ?? ORIGINAL_ASSESSMENT_NATIVE_COST.calls));
+  const reservedBytes = Math.max(0, Math.min(ORIGINAL_ASSESSMENT_NATIVE_COST.responseBytes, parent?.bytesLeft ?? ORIGINAL_ASSESSMENT_NATIVE_COST.responseBytes));
+  if (parent) { parent.callsLeft -= reservedCalls; parent.bytesLeft -= reservedBytes; }
+  const deadline = AbortSignal.timeout(ORIGINAL_ASSESSMENT_NATIVE_COST.deadlineMs);
+  const budget = { signal: parent ? AbortSignal.any([parent.signal, deadline]) : deadline,
+    callsLeft: reservedCalls, bytesLeft: reservedBytes };
+  try {
+    budget.signal.throwIfAborted();
+    return await fusekiReadBudget.run(budget, async () => {
+      const receiptId = receiptIri(admissionId, 'claim-assess');
+      const rawReceipt = await originalAssessmentSubject(env, receiptId, false);
+      if (rawReceipt.size === 0) return null;
+      const r = originalAssessmentScalars(rawReceipt);
+      if (r.reference(ORIGINAL_RDF_TYPE) !== `${RV}OperationReceipt`
+        || r.reference(`${RV}datasetId`) !== DATASET || r.string(`${RV}admissionId`) !== admissionId) {
+        return originalNativeUnavailable('original assessment receipt identity or dataset is invalid');
+      }
+      const digest = r.string(`${RV}requestDigest`)!;
+      const authorityEpoch = r.string(`${RV}authorityEpoch`)!;
+      const scope = r.string(`${RV}admittedScope`)!;
+      if (!/^[0-9a-f]{64}$/u.test(digest) || !/^(0|[1-9][0-9]*)$/u.test(authorityEpoch)
+        || scope !== ADMISSIONS['claim-assess'].scope) {
+        return originalNativeUnavailable('original assessment receipt binding is invalid');
+      }
+      const outcome = r.enumeration(`${RV}outcome`, { succeeded: 'Succeeded', cancelled: 'Cancelled' });
+      const assessmentId = r.reference(`${RV}assessment`, false, true);
+      const operation = r.reference(`${RV}operation`, outcome === 'succeeded', true);
+      const rejection = r.reference(`${RV}rejectionKind`, false);
+      const reason = r.one(`${RV}reason`, false);
+      if (reason?.type === 'uri') r.reference(`${RV}reason`, false);
+      else if (reason) r.string(`${RV}reason`, false, 2000);
+      if (rejection !== undefined && rejection !== `${RV}InvalidProfile`
+        || outcome === 'succeeded' && (assessmentId === undefined || operation === undefined || rejection !== undefined)
+        || outcome === 'cancelled' && assessmentId !== undefined) {
+        return originalNativeUnavailable('original assessment receipt outcome is incoherent');
+      }
+      const receipt: GraphReceipt = { outcome, receipt: receiptId, admissionId, requestDigest: digest,
+        authorityEpoch, scope, dataEpoch: r.string(`${RV}dataEpoch`)!,
+        sequence: r.integer(`${RV}sequence`, true, 1n)!, result: assessmentId ? { assessment: assessmentId } : {} };
+      if (outcome === 'cancelled') return { receipt, assessment: null };
+      const raw = await originalAssessmentSubject(env, assessmentId!, true);
+      if (raw.size === 0) return originalNativeUnavailable('original native assessment is unavailable');
+      const a = originalAssessmentScalars(raw);
+      const types = raw.get(ORIGINAL_RDF_TYPE) ?? [];
+      if (types.length !== 2 || types.some(term => term.type !== 'uri'
+        || ![`${RV}ClaimAssessment`, `${RV}RevisionAnchor`].includes(term.value))) {
+        return originalNativeUnavailable('original native assessment types are invalid');
+      }
+      const legacy = a.reference(`${RV}claimRevision`, false, true);
+      const statement = a.reference(`${RV}statementRevision`, false, true);
+      if ((legacy === undefined) === (statement === undefined)) {
+        return originalNativeUnavailable('original native assessment revision pin is missing or ambiguous');
+      }
+      const modelRevision = a.reference(`${RV}modelRevision`)!;
+      const shapeRevision = a.reference(`${RV}shapeRevision`)!;
+      if (modelRevision !== ASSESSMENT_PROFILE || shapeRevision !== ASSESSMENT_PROFILE) {
+        return originalNativeUnavailable('original native assessment family revision is unsupported');
+      }
+      const sources = raw.get(`${RV}sourceAssessment`) ?? [];
+      if (sources.length > ORIGINAL_ASSESSMENT_NATIVE_COST.sources || sources.some(term => term.type !== 'uri' || !NATIVE.test(term.value))) {
+        return originalNativeUnavailable('original native source assessment pins exceed their bound or are invalid');
+      }
+      a.reference(`${RV}predecessor`, false, true);
+      const dependence = a.enumeration(`${RV}dependenceStatus`, DEPENDENCE);
+      const origins = a.integer(`${RV}independentOriginCount`, dependence === 'established', 0n, 64n);
+      if (dependence !== 'established' && origins !== undefined) {
+        return originalNativeUnavailable('original native assessment invents independent origins');
+      }
+      const score = a.integer(`${RV}scorePerMillion`, false, 0n, 1_000_000n);
+      const calibration = a.reference(`${RV}calibration`, false);
+      const scoreTerm = a.reference(`${RV}scoreCalibration`, score !== undefined);
+      const scoreCalibration = scoreTerm === `${RV}CalibratedScore` ? 'calibrated'
+        : scoreTerm === `${RV}UncalibratedScore` ? 'uncalibrated' : null;
+      if (score === undefined ? scoreTerm !== undefined || calibration !== undefined
+        : scoreCalibration === null || (scoreCalibration === 'calibrated') !== (calibration !== undefined)) {
+        return originalNativeUnavailable('original native assessment score calibration is incoherent');
+      }
+      const assessedAt = a.one(`${RV}assessedAt`)!;
+      if (assessedAt.type !== 'literal' || assessedAt.datatype !== `${XSD}dateTime`
+        || assessedAt.value.length > 64 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/u.test(assessedAt.value)
+        || !Number.isFinite(Date.parse(assessedAt.value))
+        || new Date(assessedAt.value).toISOString().slice(0, 19) !== assessedAt.value.slice(0, 19)) {
+        return originalNativeUnavailable('original native assessment recorded time is invalid');
+      }
+      const assessment: OriginalAssessmentRecord = {
+        assessment: assessmentId!, claim: a.reference(`${RV}component`, true, true)!, claimRevision: (statement ?? legacy)!,
+        ...(statement ? { representation: 'statement' as const } : {}),
+        evidenceSetRevision: a.reference(`${RV}evidenceSetRevision`, true, true)!,
+        sourceAssessments: sources.map(term => term.value).sort(), method: a.reference(`${RV}method`)!,
+        methodRevision: a.reference(`${RV}methodRevision`)!, policyRevision: a.reference(`${RV}policyRevision`)!,
+        evaluationContext: a.reference(`${RV}evaluationContext`)!, coverage: a.enumeration(`${RV}coverage`, COVERAGE),
+        support: a.enumeration(`${RV}supportResult`, SUPPORT), dependence,
+        independentOrigins: origins === undefined ? null : Number(BigInt(origins)),
+        scorePerMillion: score === undefined ? null : Number(BigInt(score)), calibration: calibration ?? null,
+        evaluationReference: a.reference(`${RV}evaluationReference`, false) ?? null,
+        limitations: a.string(`${RV}limitations`, true, 2000)!,
+        assessorKind: a.enumeration(`${RV}assessorKind`, { human: 'HumanAssessor', automated: 'AutomatedAssessor' }),
+        actingSubject: a.reference(`${RV}assessor`, true, true)!, assessedAt: assessedAt.value,
+        dataEpoch: a.string(`${RV}dataEpoch`)!, sequence: a.integer(`${RV}sequence`, true, 1n)!,
+        modelRevision, shapeRevision, scoreCalibration,
+      };
+      return { receipt, assessment };
+    });
+  } catch (error) {
+    if (error instanceof OriginalAssessmentNativeUnavailable) throw error;
+    throw new OriginalAssessmentNativeUnavailable('original assessment native read is unavailable', { cause: error });
+  } finally {
+    if (parent) {
+      parent.callsLeft += Math.max(0, Math.min(reservedCalls, budget.callsLeft));
+      parent.bytesLeft += Math.max(0, Math.min(reservedBytes, budget.bytesLeft));
+    }
+  }
 }
 
 const inverse = <T extends Record<string, string>>(map: T) =>
