@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { eraseLibraryImportsForPrincipals } from '../library-import/privacy.ts';
 import type { ObjectRecoveryStore } from '../owner/object-coverage.ts';
@@ -217,7 +217,8 @@ async function withRestoreClients<T>(relay: Pool, restored: RestoredOwners, borr
 }
 
 async function heldErasureReplay(restored: RestoredOwners, clients: BorrowedRestoreClients,
-  erasureId: string, epoch: string, revisionIds: readonly string[]): Promise<HeldGraphErasureReplay | undefined> {
+  erasureId: string, epoch: string, revisionIds: readonly string[]): Promise<
+    (HeldGraphErasureReplay & { originalEvidenceDigest: string }) | undefined> {
   const graph = restored.graph, config = graph?.heldErasure;
   if (!graph || !config) return undefined;
   if (config.cut.dataEpoch !== graph.lineage.dataEpoch || config.cut.routingEpoch !== graph.lineage.routingEpoch) {
@@ -233,15 +234,16 @@ async function heldErasureReplay(restored: RestoredOwners, clients: BorrowedRest
     }
     const proof = await readGraphErasureProof(config.originalGraph.fuseki,
       config.originalGraph.lineage, erasureId, epoch, revisionIds);
-    return { original: proof, evidenceDigest: sha256(JSON.stringify(proof)) };
+    return { original: proof, evidenceDigest: sha256(JSON.stringify([proof.receipt, proof.dataEpoch, proof.sequence])) };
   };
   const retained = await readOriginal(), original = retained.original;
   if (original.dataEpoch === graph.lineage.dataEpoch) {
     throw new ErasureRestoreHold('original suppression proof belongs to the restored graph');
   }
-  const held: HeldGraphErasureReplay = { cut: config.cut, accessHoldGeneration: config.accessHoldGeneration,
+  const held = { cut: config.cut, accessHoldGeneration: config.accessHoldGeneration,
+    originalEvidenceDigest: retained.evidenceDigest,
     signingKey: config.signingKey, maintenance: config.maintenance, revisionIds, original,
-    assertCurrent: async request => {
+    assertCurrent: async (request: Parameters<HeldGraphErasureReplay['assertCurrent']>[0]) => {
       if (request.erasureId !== erasureId || request.epoch !== epoch
         || request.cut.dataEpoch !== held.cut.dataEpoch || request.cut.routingEpoch !== held.cut.routingEpoch
         || request.cut.restoreCutover !== held.cut.restoreCutover
@@ -286,13 +288,170 @@ function restoreRequestDigest(consumer: string, replay: boolean,
   return sha256(`${consumer}\0${replay}\0${sha256(authority.sealedCoverage)}`);
 }
 
+function graphRestoreBinding(restored: RestoredOwners): Item | null {
+  const graph = restored.graph;
+  if (!graph) return null;
+  const held = graph.heldErasure;
+  return { owner: 'graph', kind: 'authority_fence', disposition: 'matched',
+    ref: `restored-graph-binding:${sha256(JSON.stringify([graph.lineage.dataEpoch, graph.lineage.routingEpoch,
+      held ? [held.cut.dataEpoch, held.cut.routingEpoch, held.cut.restoreCutover,
+        held.cut.priorDataEpoch, held.cut.priorSequence, held.accessHoldGeneration, held.originalSource,
+        held.originalSource === 'original-graph'
+          ? [held.originalGraph.lineage.dataEpoch, held.originalGraph.lineage.routingEpoch] : null] : null]))}` };
+}
+
+function originalEvidenceItem(erasureId: string, epoch: string, revisionIds: readonly string[],
+  held: HeldGraphErasureReplay & { originalEvidenceDigest: string }): Item {
+  return { owner: 'graph', kind: 'receipt', disposition: 'matched',
+    ref: `original-erasure:${erasureId}:${sha256(JSON.stringify([epoch, [...revisionIds].sort(),
+      [held.original.receipt, held.original.dataEpoch, held.original.sequence], held.originalEvidenceDigest]))}` };
+}
+
+function custodyEvidenceItem(digests: ReadonlySet<string>): Item {
+  return { owner: 'object', kind: 'receipt', disposition: 'matched',
+    ref: `retained-custody-roots:${sha256(JSON.stringify([...digests].sort()))}` };
+}
+
+function reconciliationIdentityItem(record: { operationId: string; requestDigest: string;
+  consumer: string; coverageGeneration: string | null; erasureEpoch: string | null }): Item {
+  return { owner: 'relay', kind: 'receipt', disposition: 'matched',
+    ref: `restore-reconciliation:${sha256(JSON.stringify([record.operationId, record.requestDigest,
+      record.consumer, record.coverageGeneration, record.erasureEpoch]))}` };
+}
+
 async function journalFrontier(relay: Pool | PoolClient, consumer: string) {
-  const head = (await relay.query<{ generation: string; erasure_epoch: string | null }>(
-    `SELECT generation::text AS generation, erasure_epoch::text AS erasure_epoch
+  const head = (await relay.query<{ generation: string; erasure_epoch: string | null;
+    coverage_digest: string; captured_at: string }>(
+    `SELECT generation::text AS generation, erasure_epoch::text AS erasure_epoch, coverage_digest,
+       extract(epoch FROM captured_at)::text AS captured_at
      FROM relay.recovery_coverage_head WHERE consumer = $1 FOR SHARE`, [consumer])).rows[0] ?? null;
   const journal = (await relay.query<{ epoch: string | null }>(
     'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure')).rows[0]!.epoch;
   return { head, journal };
+}
+
+/** Bind the retained intent and exact target inventory, including older entries.
+ * Mutable copy-retirement inventory is independently owned and is not a release
+ * authorization. Pages and each journal entry's target set have schema bounds. */
+async function journalEvidenceDigest(relay: PoolClient, consumer: string): Promise<string> {
+  const { head, journal } = await journalFrontier(relay, consumer);
+  const hash = createHash('sha256').update(JSON.stringify([consumer, head, journal]));
+  let after = '0';
+  for (;;) {
+    const entries = (await relay.query<{ epoch: string; facts: unknown }>(`SELECT
+      e.erasure_epoch::text AS epoch, jsonb_build_array(e.id, e.erasure_epoch::text,
+        e.operation_id, e.request_digest, e.kind, e.authority, e.principal_id,
+        e.admission_id, e.authority_epoch::text, e.account_issuer, e.account_subject, e.deleted_principal_id,
+        e.suppression_status, extract(epoch FROM e.requested_at)::text,
+        extract(epoch FROM e.suppressed_at)::text,
+        COALESCE((SELECT jsonb_agg(jsonb_build_array(t.ordinal, t.owner, t.target_kind, t.target_ref)
+          ORDER BY t.ordinal) FROM relay.erasure_target t WHERE t.erasure_id = e.id), '[]'::jsonb)) AS facts
+      FROM relay.erasure e WHERE e.erasure_epoch > $1::bigint
+      ORDER BY e.erasure_epoch LIMIT ${JOURNAL_PAGE}`, [after])).rows;
+    for (const entry of entries) hash.update('\n').update(JSON.stringify(entry.facts));
+    if (entries.length < JOURNAL_PAGE) return hash.digest('hex');
+    after = entries[entries.length - 1]!.epoch;
+  }
+}
+
+async function requireRecordedItem(relay: PoolClient, id: string, item: Item): Promise<void> {
+  const row = (await relay.query<{ disposition: string; evidence_digest: string }>(`SELECT disposition,
+    evidence_digest FROM relay.owner_reconciliation_item WHERE reconciliation_id = $1
+      AND owner = $2 AND item_kind = $3 AND item_ref = $4`, [id, item.owner, item.kind, item.ref])).rows[0];
+  if (row?.disposition !== item.disposition || row.evidence_digest !== evidence(item)) {
+    throw new ErasureRestoreHold('prior reconciliation evidence differs from the current restore');
+  }
+}
+
+/** Authenticate the complete existing immutable outcome, not merely its state
+ * or a cached summary. The retained operation is never created by release. */
+async function authenticateRestoreReconciliation(relay: PoolClient, restored: RestoredOwners,
+  accessClient: PoolClient, id: string, fenceGeneration: string, authority: RetainedAuthorityCoverage): Promise<void> {
+  const record = (await relay.query<{ operation_id: string; kind: string; scope: string; state: string;
+    hold_reason: string | null; consumer: string | null; coverage_generation: string;
+    erasure_epoch: string | null; request_digest: string; outcome_digest: string; completed_at: Date | null }>(
+    `SELECT operation_id, kind, scope, state, hold_reason, consumer, coverage_generation::text,
+      erasure_epoch::text, request_digest, outcome_digest, completed_at
+     FROM relay.owner_reconciliation WHERE id = $1 AND erasure_id IS NULL AND relocation_id IS NULL
+       AND format_from IS NULL AND format_to IS NULL FOR SHARE`, [id])).rows[0];
+  if (!record || record.kind !== 'restore' || record.state !== 'reconciled' || !record.consumer
+    || !record.operation_id.endsWith(':erasures') || record.scope !== `restore:${record.consumer}`
+    || record.hold_reason !== null || record.completed_at === null
+    || !/^[0-9a-f]{64}$/.test(record.outcome_digest)) {
+    throw new ErasureRestoreHold('restore is not reconciled with the retained journal');
+  }
+  if (![false, true].some(replay => restoreRequestDigest(record.consumer!, replay, authority) === record.request_digest)) {
+    throw new ErasureRestoreHold('restore authority capture differs from reconciliation');
+  }
+  const { head, journal } = await journalFrontier(relay, record.consumer);
+  if (!head || head.generation !== record.coverage_generation || journal !== record.erasure_epoch) {
+    throw new ErasureRestoreHold('a newer retained frontier needs reconciliation');
+  }
+  const cuts = (await relay.query<{ owner: Cut['owner']; data_epoch: string | null; sequence: string | null;
+    status: string; coverage_digest: string; cluster_id: string | null; wal_lsn: string | null;
+    format_version: string | null }>(`SELECT owner, data_epoch, sequence::text,
+      status, coverage_digest, cluster_id, wal_lsn::text, format_version FROM relay.owner_reconciliation_cut
+      WHERE reconciliation_id = $1 ORDER BY owner LIMIT 8`, [id])).rows;
+  const owners = ['account', 'access', 'content', 'graph', 'object', 'relay'];
+  if (cuts.length !== owners.length || cuts.some(cut => !owners.includes(cut.owner) || cut.status !== 'matched'
+    || cut.cluster_id !== null || cut.wal_lsn !== null || cut.format_version !== null)) {
+    throw new ErasureRestoreHold('prior reconciliation owner cuts are incomplete');
+  }
+  const outcome = createHash('sha256'), ownerHashes = new Map<string, ReturnType<typeof createHash>>();
+  let after = 0;
+  for (;;) {
+    const items = (await relay.query<{ ordinal: number; owner: Item['owner']; item_kind: Item['kind'];
+      item_ref: string; disposition: Item['disposition']; evidence_digest: string }>(`SELECT ordinal,
+        owner, item_kind, item_ref, disposition, evidence_digest FROM relay.owner_reconciliation_item
+      WHERE reconciliation_id = $1 AND ordinal > $2 ORDER BY ordinal LIMIT 1000`, [id, after])).rows;
+    for (const item of items) {
+      const digest = evidence({ owner: item.owner, kind: item.item_kind, ref: item.item_ref,
+        disposition: item.disposition });
+      if (item.ordinal !== after + 1 || !['matched', 'erased', 'replayed'].includes(item.disposition)
+        || item.evidence_digest !== digest || !owners.includes(item.owner)) {
+        throw new ErasureRestoreHold('prior reconciliation findings are incomplete or divergent');
+      }
+      if (after) outcome.update('\n');
+      outcome.update(digest);
+      const own = ownerHashes.get(item.owner);
+      if (own) own.update('\n').update(digest);
+      else ownerHashes.set(item.owner, createHash('sha256').update(digest));
+      after = item.ordinal;
+    }
+    if (items.length < 1000) break;
+  }
+  if (outcome.digest('hex') !== record.outcome_digest) {
+    throw new ErasureRestoreHold('prior reconciliation outcome differs from its findings');
+  }
+  for (const cut of cuts) {
+    const expected = cut.owner === 'relay' ? await journalEvidenceDigest(relay, record.consumer)
+      : (ownerHashes.get(cut.owner) ?? createHash('sha256')).digest('hex');
+    if (cut.coverage_digest !== expected) {
+      throw new ErasureRestoreHold('prior reconciliation owner evidence differs from its cut');
+    }
+    if (!['content', 'graph'].includes(cut.owner) && (cut.data_epoch !== null || cut.sequence !== null)) {
+      throw new ErasureRestoreHold('prior reconciliation owner position differs');
+    }
+  }
+  const control = (await restored.content.query<{ data_epoch: string; sequence: string }>(
+    'SELECT data_epoch::text AS data_epoch, sequence::text AS sequence FROM content.owner_control')).rows[0];
+  const content = cuts.find(cut => cut.owner === 'content')!, graph = cuts.find(cut => cut.owner === 'graph')!;
+  if (control?.data_epoch !== content.data_epoch || control?.sequence !== content.sequence
+    || graph.data_epoch !== restored.graph?.lineage.dataEpoch) {
+    throw new ErasureRestoreHold('prior reconciliation belongs to another restored owner cut');
+  }
+  if (graph.sequence !== await graphLineageSequence(restored.graph!.fuseki,
+    restored.graph!.lineage, restored.graph!.heldErasure?.cut)) {
+    throw new ErasureRestoreHold('prior reconciliation graph position changed');
+  }
+  await requireRecordedItem(relay, id, { owner: 'access', kind: 'authority_fence',
+    ref: `restore-access-generation:${fenceGeneration}`, disposition: 'matched' });
+  await requireRecordedItem(relay, id, reconciliationIdentityItem({ operationId: record.operation_id,
+    requestDigest: record.request_digest, consumer: record.consumer,
+    coverageGeneration: record.coverage_generation, erasureEpoch: record.erasure_epoch }));
+  await requireRecordedItem(relay, id, graphRestoreBinding(restored)!);
+  try { await assertRetainedAuthorityCoverage(relay, restored.access, record.consumer, authority, accessClient); }
+  catch { throw new ErasureRestoreHold('restored Access differs from current retained authority'); }
 }
 
 /** Record the journal epoch a quiesced capture covered on the retained coverage head. */
@@ -346,6 +505,13 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
     } catch { /* missing or divergent originals keep the whole restored owner held */ }
   }
   objects.push(custody);
+  if (protectedDigests) objects.push(custodyEvidenceItem(protectedDigests));
+  const graphBinding = graphRestoreBinding(restored);
+  if (graphBinding) graph.push(graphBinding);
+  const fenceGeneration = (await accessClient.query<{ generation: string }>(
+    'SELECT generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0]!.generation;
+  const accessGeneration: Item = { owner: 'access', kind: 'authority_fence',
+    ref: `restore-access-generation:${fenceGeneration}`, disposition: 'matched' };
   let currentAuthority: Item = { owner: 'access', kind: 'authority_fence',
     ref: 'current-retained-authority-coverage', disposition: 'matched' };
   try { await assertRetainedAuthorityCoverage(relayClient, restored.access, input.consumer, input.authority, accessClient); }
@@ -386,6 +552,7 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
             if (disposition === 'erased' || disposition === 'replayed') {
               graphProof = await readGraphErasureProof(restored.graph.fuseki,
                 restored.graph.lineage, entry.id, entry.epoch, entry.refs, held);
+              if (held) graph.push(originalEvidenceItem(entry.id, entry.epoch, entry.refs, held));
             }
           }
         } catch { disposition = 'conflict'; }
@@ -492,7 +659,10 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
     if (graphSequence === null) graph.push({ owner: 'graph', kind: 'authority_fence',
       ref: 'restored-graph-lineage', disposition: 'conflict' });
   }
-  const items = [...content, ...graph, ...objects, ...account, authority, currentAuthority];
+  const accessItems = [authority, currentAuthority, accessGeneration];
+  const items = [...content, ...graph, ...objects, ...account, ...accessItems,
+    reconciliationIdentityItem({ operationId, requestDigest, consumer: input.consumer,
+      coverageGeneration: head?.generation ?? null, erasureEpoch: journal })];
   const open = items.filter(item => OPEN.has(item.disposition));
   const holdReason = !head ? 'no retained recovery coverage head'
     : custody.disposition !== 'matched' ? 'restored command or model custody is unavailable or divergent'
@@ -510,10 +680,10 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
       sequence: graphSequence, status: status(graph), digest: itemsDigest(graph) }] : []),
     { owner: 'object', dataEpoch: null, sequence: null,
       status: status(objects), digest: itemsDigest(objects) },
-    { owner: 'access', dataEpoch: null, sequence: null, status: status([authority, currentAuthority]),
-      digest: itemsDigest([authority, currentAuthority]) },
+    { owner: 'access', dataEpoch: null, sequence: null, status: status(accessItems),
+      digest: itemsDigest(accessItems) },
     { owner: 'relay', dataEpoch: null, sequence: null, status: head ? 'matched' : 'missing',
-      digest: sha256(`${journal ?? '0'}\0${head?.generation ?? 'none'}`) },
+      digest: await journalEvidenceDigest(relayClient, input.consumer) },
   ];
   await recordReconciliation(relayClient, {
     operationId, requestDigest,
@@ -526,13 +696,14 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
 
 /** Recheck the live restored copies immediately before releasing their Access fence. */
 async function assertRestoredErasuresCurrent(relay: PoolClient, restored: RestoredOwners,
-  accessClient: PoolClient): Promise<void> {
+  accessClient: PoolClient, reconciliationId: string): Promise<void> {
   if (!restored.graph || !restored.objects) {
     throw new ErasureRestoreHold('restored graph and exact object custody are required');
   }
   let protectedDigests: Set<string>;
   try { protectedDigests = await restoredCustodyDigests(restored.access, restored.graph, restored.objects, accessClient); }
   catch { throw new ErasureRestoreHold('restored command or model custody is unavailable or divergent'); }
+  await requireRecordedItem(relay, reconciliationId, custodyEvidenceItem(protectedDigests));
   const unresolved = await relay.query(`SELECT 1 FROM relay.erasure
     WHERE suppression_status <> 'suppressed' LIMIT 1`);
   if (unresolved.rowCount) throw new ErasureRestoreHold('an erasure is not suppressed');
@@ -564,6 +735,8 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
       if (restored.graph) {
         const held = await heldErasureReplay(restored, { relayClient: relay, accessClient },
           entry.id, entry.epoch, entry.refs);
+        if (held) await requireRecordedItem(relay, reconciliationId,
+          originalEvidenceItem(entry.id, entry.epoch, entry.refs, held));
         if (entry.refs.length > 64 || !await assertGraphErasure(
           restored.graph.fuseki, restored.graph.lineage, entry.id, entry.epoch, entry.refs, held)) {
           throw new ErasureRestoreHold('restored graph still exposes an erased revision');
@@ -635,35 +808,15 @@ export async function releaseErasureRestoreHold(relay: Pool, restored: RestoredO
     clients?: BorrowedRestoreClients; beforeAccessRelease?: () => Promise<void>;
   }): Promise<void> {
   await withRestoreClients(relay, restored, options?.clients, async ({ relayClient: client, accessClient }) => {
-    const row = (await client.query<{ kind: string; state: string; consumer: string | null;
-      request_digest: string;
-      erasure_epoch: string | null; coverage_generation: string | null }>(`SELECT kind, state, consumer,
-        request_digest, erasure_epoch::text AS erasure_epoch,
-        coverage_generation::text AS coverage_generation
-      FROM relay.owner_reconciliation WHERE id = $1`, [reconciliationId])).rows[0];
-    if (row?.kind !== 'restore' || row.state !== 'reconciled' || !row.consumer) {
-      throw new ErasureRestoreHold('restore is not reconciled with the retained journal');
-    }
-    if (![false, true].some(replay => row.request_digest ===
-      restoreRequestDigest(row.consumer!, replay, authority))) {
-      throw new ErasureRestoreHold('restore authority capture differs from reconciliation');
-    }
-    const head = (await client.query<{ generation: string }>(`SELECT generation::text AS generation
-      FROM relay.recovery_coverage_head WHERE consumer = $1 FOR SHARE`, [row.consumer])).rows[0];
-    const journal = (await client.query<{ epoch: string | null }>(
-      'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure')).rows[0]!.epoch;
-    if (head?.generation !== row.coverage_generation || journal !== row.erasure_epoch) {
-      throw new ErasureRestoreHold('a newer retained frontier needs reconciliation');
-    }
+    await lockAccessRecoveryFenceForRelease(accessClient, fenceGeneration);
+    await authenticateRestoreReconciliation(client, restored, accessClient,
+      reconciliationId, fenceGeneration, authority);
     try { await assertAccountDeletionJournalCoverage(restored.access, relay, accessClient, client); }
     catch (error) {
       if (error instanceof AccountDeletionJournalConflict) throw new ErasureRestoreHold(error.message);
       throw error;
     }
-    try { await assertRetainedAuthorityCoverage(client, restored.access, row.consumer, authority, accessClient); }
-    catch { throw new ErasureRestoreHold('restored Access differs from current retained authority'); }
-    await assertRestoredErasuresCurrent(client, restored, accessClient);
-    await lockAccessRecoveryFenceForRelease(accessClient, fenceGeneration);
+    await assertRestoredErasuresCurrent(client, restored, accessClient, reconciliationId);
     if (restored.graph?.heldErasure && !options?.beforeAccessRelease) {
       throw new ErasureRestoreHold('held graph release callback is required');
     }

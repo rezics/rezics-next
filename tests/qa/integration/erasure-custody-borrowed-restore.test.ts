@@ -11,7 +11,7 @@ import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from
 import { AdmissionUnavailable, engageAccessRecoveryFence } from
   '../../../services/main/src/modules/access/admission.ts';
 import { journalErasure, markErasureSuppressed } from '../../../services/main/src/modules/erasure/journal.ts';
-import { reconcileRestoredErasures, releaseErasureRestoreHold, retainErasureCoverage,
+import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHold, retainErasureCoverage,
   type BorrowedRestoreClients, type RestoredOwners } from '../../../services/main/src/modules/erasure/reconcile.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
@@ -406,3 +406,270 @@ test('a callback committing the supplied relay loses authorization before Access
     expect(await allocatorAvailable()).toBe(true);
   });
 }, 30_000);
+
+async function committedReconciliation(authority: Awaited<ReturnType<typeof capture>>) {
+  const result = await withClients(async clients => {
+    const summary = await reconcileRestoredErasures(relay, restored,
+      { operationId: randomUUID(), consumer, replay: true, authority }, clients);
+    expect(summary.state).toBe('reconciled');
+    // The caller retains the successful helper record while Access stays closed.
+    await clients.relayClient.query('COMMIT');
+    return summary;
+  });
+  expect((await relayObserver.query('SELECT state FROM relay.owner_reconciliation WHERE id = $1',
+    [result.reconciliationId])).rows).toEqual([{ state: 'reconciled' }]);
+  return result;
+}
+
+async function reconciliationSnapshot(id: string) {
+  return {
+    header: (await relayObserver.query('SELECT * FROM relay.owner_reconciliation WHERE id = $1', [id])).rows,
+    cuts: (await relayObserver.query(`SELECT * FROM relay.owner_reconciliation_cut
+      WHERE reconciliation_id = $1 ORDER BY owner`, [id])).rows,
+    items: (await relayObserver.query(`SELECT * FROM relay.owner_reconciliation_item
+      WHERE reconciliation_id = $1 ORDER BY ordinal`, [id])).rows,
+  };
+}
+
+test('a reconstructed identical lineage authenticates the committed record independently of object property order', async () => {
+  const authority = await capture(), summary = await committedReconciliation(authority);
+  const original = await reconciliationSnapshot(summary.reconciliationId);
+  const graph = restored.graph!;
+  const reconstructed = { ...restored, graph: { ...graph,
+    lineage: { routingEpoch: graph.lineage.routingEpoch, dataEpoch: graph.lineage.dataEpoch } } };
+  await withClients(async clients => {
+    let callbacks = 0;
+    await releaseErasureRestoreHold(relay, reconstructed, summary.reconciliationId, generation, authority,
+      { clients, beforeAccessRelease: async () => { callbacks++; expect(await allocatorAvailable()).toBe(false); } });
+    expect(callbacks).toBe(1);
+    expect((await clients.accessClient.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open).toBe(true);
+    expect((await accessObserver.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open).toBe(false);
+  });
+  expect(await reconciliationSnapshot(summary.reconciliationId)).toEqual(original);
+  expect(await allocatorAvailable()).toBe(true);
+}, 30_000);
+
+async function deniedRelease(clients: BorrowedRestoreClients, id: string,
+  authority: Awaited<ReturnType<typeof capture>>, owners = restored, heldGeneration = generation) {
+  const accessIdentity = await identity(clients.accessClient), relayIdentity = await identity(clients.relayClient);
+  let callbacks = 0;
+  await expect(releaseErasureRestoreHold(relay, owners, id, heldGeneration, authority,
+    { clients, beforeAccessRelease: async () => { callbacks++; } })).rejects.toBeInstanceOf(ErasureRestoreHold);
+  expect(callbacks).toBe(0);
+  expect(await identity(clients.accessClient)).toEqual(accessIdentity);
+  expect(await identity(clients.relayClient)).toEqual(relayIdentity);
+  expect((await clients.accessClient.query(`SELECT open, generation::text AS generation
+    FROM access.recovery_fence WHERE id`)).rows).toEqual([{ open: false, generation: heldGeneration }]);
+  expect((await accessObserver.query(`SELECT open, generation::text AS generation
+    FROM access.recovery_fence WHERE id`)).rows).toEqual([{ open: false, generation }]);
+  expect(await allocatorAvailable()).toBe(false);
+  for (const client of [clients.accessClient, clients.relayClient]) {
+    expect((await client.query('SHOW lock_timeout')).rows[0].lock_timeout).toBe('11s');
+    expect((await client.query('SHOW statement_timeout')).rows[0].statement_timeout).toBe('13s');
+  }
+  expect(access.totalCount).toBe(1);
+  expect(relay.totalCount).toBe(1);
+}
+
+type RetainedCorruption = { name: string; tables: readonly string[]; statements: readonly string[] };
+const retainedCorruptions: readonly RetainedCorruption[] = [
+  { name: 'missing prior record', tables: ['owner_reconciliation_item', 'owner_reconciliation_cut', 'owner_reconciliation'],
+    statements: ['DELETE FROM relay.owner_reconciliation_item WHERE reconciliation_id = $1',
+      'DELETE FROM relay.owner_reconciliation_cut WHERE reconciliation_id = $1',
+      'DELETE FROM relay.owner_reconciliation WHERE id = $1'] },
+  { name: 'wrong kind', tables: ['owner_reconciliation'], statements: [
+    "UPDATE relay.owner_reconciliation SET kind = 'revision_recovery' WHERE id = $1"] },
+  { name: 'wrong scope', tables: ['owner_reconciliation'], statements: [
+    "UPDATE relay.owner_reconciliation SET scope = scope || ':other' WHERE id = $1"] },
+  { name: 'foreign operation namespace', tables: ['owner_reconciliation'], statements: [
+    "UPDATE relay.owner_reconciliation SET operation_id = 'foreign:' || id::text WHERE id = $1"] },
+  { name: 'another erasure operation', tables: ['owner_reconciliation'], statements: [
+    "UPDATE relay.owner_reconciliation SET operation_id = 'other:' || id::text || ':erasures' WHERE id = $1"] },
+  { name: 'unfinished prior outcome', tables: ['owner_reconciliation'], statements: [
+    "UPDATE relay.owner_reconciliation SET state = 'running', completed_at = NULL WHERE id = $1"] },
+  { name: 'wrong request digest', tables: ['owner_reconciliation'], statements: [
+    "UPDATE relay.owner_reconciliation SET request_digest = repeat('0', 64) WHERE id = $1"] },
+  { name: 'corrupt outcome digest', tables: ['owner_reconciliation'], statements: [
+    "UPDATE relay.owner_reconciliation SET outcome_digest = repeat('0', 64) WHERE id = $1"] },
+  { name: 'foreign partial format binding', tables: ['owner_reconciliation'], statements: [
+    "UPDATE relay.owner_reconciliation SET format_from = 'foreign' WHERE id = $1"] },
+  { name: 'corrupt item evidence', tables: ['owner_reconciliation_item'], statements: [
+    `UPDATE relay.owner_reconciliation_item SET evidence_digest = repeat('0', 64)
+      WHERE reconciliation_id = $1 AND ordinal = 1`] },
+  { name: 'changed generation finding', tables: ['owner_reconciliation_item'], statements: [
+    `UPDATE relay.owner_reconciliation_item SET item_ref = item_ref || ':other'
+      WHERE reconciliation_id = $1 AND owner = 'access' AND item_kind = 'authority_fence'
+        AND item_ref LIKE 'restore-access-generation:%'`] },
+  { name: 'unresolved item disposition', tables: ['owner_reconciliation_item'], statements: [
+    `UPDATE relay.owner_reconciliation_item SET disposition = 'corrupt'
+      WHERE reconciliation_id = $1 AND ordinal = 1`] },
+  { name: 'missing first ordered finding', tables: ['owner_reconciliation_item'], statements: [
+    'DELETE FROM relay.owner_reconciliation_item WHERE reconciliation_id = $1 AND ordinal = 1'] },
+  { name: 'missing final finding', tables: ['owner_reconciliation_item'], statements: [
+    `DELETE FROM relay.owner_reconciliation_item WHERE reconciliation_id = $1 AND ordinal =
+      (SELECT max(ordinal) FROM relay.owner_reconciliation_item WHERE reconciliation_id = $1)`] },
+  { name: 'empty findings', tables: ['owner_reconciliation_item'], statements: [
+    'DELETE FROM relay.owner_reconciliation_item WHERE reconciliation_id = $1'] },
+  { name: 'missing owner cut', tables: ['owner_reconciliation_cut'], statements: [
+    "DELETE FROM relay.owner_reconciliation_cut WHERE reconciliation_id = $1 AND owner = 'account'"] },
+  { name: 'extra owner cut', tables: ['owner_reconciliation_cut'], statements: [
+    `INSERT INTO relay.owner_reconciliation_cut (reconciliation_id, owner, coverage_digest, status)
+      SELECT reconciliation_id, 'source', coverage_digest, status FROM relay.owner_reconciliation_cut
+      WHERE reconciliation_id = $1 AND owner = 'account'`] },
+  { name: 'unmatched owner cut', tables: ['owner_reconciliation_cut'], statements: [
+    "UPDATE relay.owner_reconciliation_cut SET status = 'mismatch' WHERE reconciliation_id = $1 AND owner = 'access'"] },
+  { name: 'corrupt owner cut evidence', tables: ['owner_reconciliation_cut'], statements: [
+    `UPDATE relay.owner_reconciliation_cut SET coverage_digest = repeat('0', 64)
+      WHERE reconciliation_id = $1 AND owner = 'account'`] },
+  { name: 'foreign owner position', tables: ['owner_reconciliation_cut'], statements: [
+    `UPDATE relay.owner_reconciliation_cut SET data_epoch = 'foreign', sequence = 1
+      WHERE reconciliation_id = $1 AND owner = 'access'`] },
+  { name: 'foreign owner cluster and WAL', tables: ['owner_reconciliation_cut'], statements: [
+    `UPDATE relay.owner_reconciliation_cut SET cluster_id = '1', wal_lsn = '0/1'::pg_lsn
+      WHERE reconciliation_id = $1 AND owner = 'account'`] },
+  { name: 'foreign owner format', tables: ['owner_reconciliation_cut'], statements: [
+    `UPDATE relay.owner_reconciliation_cut SET format_version = 'foreign'
+      WHERE reconciliation_id = $1 AND owner = 'account'`] },
+  { name: 'changed Content cut epoch', tables: ['owner_reconciliation_cut'], statements: [
+    `UPDATE relay.owner_reconciliation_cut SET data_epoch = 'foreign'
+      WHERE reconciliation_id = $1 AND owner = 'content'`] },
+  { name: 'changed graph cut sequence', tables: ['owner_reconciliation_cut'], statements: [
+    `UPDATE relay.owner_reconciliation_cut SET sequence = sequence + 1
+      WHERE reconciliation_id = $1 AND owner = 'graph'`] },
+];
+
+test('release authenticates the entire committed prior record, ordered findings, outcome and all owner cuts', async () => {
+  const authority = await capture(), summary = await committedReconciliation(authority);
+  const original = await reconciliationSnapshot(summary.reconciliationId);
+  expect(original.cuts).toHaveLength(6);
+  expect(original.items.length).toBeGreaterThanOrEqual(5);
+  await withClients(async clients => {
+    for (const corruption of retainedCorruptions) {
+      await clients.relayClient.query('SAVEPOINT retained_corruption');
+      // Only this isolated clone permits corruption; production sees active guards.
+      for (const table of corruption.tables) await clients.relayClient.query(`ALTER TABLE relay.${table} DISABLE TRIGGER USER`);
+      for (const statement of corruption.statements) {
+        expect((await clients.relayClient.query(statement, [summary.reconciliationId])).rowCount,
+          corruption.name).toBeGreaterThan(0);
+      }
+      for (const table of corruption.tables) await clients.relayClient.query(`ALTER TABLE relay.${table} ENABLE TRIGGER USER`);
+      await deniedRelease(clients, summary.reconciliationId, authority);
+      await clients.relayClient.query('ROLLBACK TO SAVEPOINT retained_corruption');
+      await clients.relayClient.query('RELEASE SAVEPOINT retained_corruption');
+      expect(await reconciliationSnapshot(summary.reconciliationId), corruption.name).toEqual(original);
+    }
+    let callbacks = 0;
+    await releaseErasureRestoreHold(relay, restored, summary.reconciliationId, generation, authority,
+      { clients, beforeAccessRelease: async () => { callbacks++; expect(await allocatorAvailable()).toBe(false); } });
+    expect(callbacks).toBe(1);
+    expect((await clients.accessClient.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open).toBe(true);
+    expect((await accessObserver.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open).toBe(false);
+  });
+  expect(await reconciliationSnapshot(summary.reconciliationId)).toEqual(original);
+  expect(await allocatorAvailable()).toBe(true);
+}, 90_000);
+
+test('unchanged journal maximum and coverage generation cannot hide changed old intent, targets or retained head evidence', async () => {
+  const entries: Awaited<ReturnType<typeof journalErasure>>[] = [];
+  for (let count = 0; count < 2; count++) {
+    const entry = await journalErasure(writer, { operationId: randomUUID(), requestDigest: hash(randomUUID()),
+      kind: 'revision', principalId: randomUUID(), admissionId: randomUUID(), authorityEpoch: '0',
+      targets: [{ kind: 'object', ref: `sha256:${hash(randomUUID())}` }] });
+    await markErasureSuppressed(writer, entry.erasureId);
+    entries.push(entry);
+  }
+  const authority = await capture(), summary = await committedReconciliation(authority);
+  const original = await reconciliationSnapshot(summary.reconciliationId);
+  const facts = async () => ({
+    head: (await relayObserver.query('SELECT * FROM relay.recovery_coverage_head WHERE consumer = $1', [consumer])).rows,
+    intent: (await relayObserver.query('SELECT * FROM relay.erasure WHERE id = $1', [entries[0]!.erasureId])).rows,
+    targets: (await relayObserver.query('SELECT * FROM relay.erasure_target WHERE erasure_id = $1 ORDER BY ordinal',
+      [entries[0]!.erasureId])).rows,
+  });
+  const originalFacts = await facts();
+  await withClients(async clients => {
+    const frontier = async () => (await clients.relayClient.query(`SELECT generation::text,
+      (SELECT max(erasure_epoch)::text FROM relay.erasure) AS maximum
+      FROM relay.recovery_coverage_head WHERE consumer = $1`, [consumer])).rows;
+    const before = await frontier();
+    expect(before[0].maximum).toBe(entries[1]!.erasureEpoch);
+    for (const corruption of [
+      { table: 'erasure', statement: "UPDATE relay.erasure SET request_digest = repeat('0', 64) WHERE id = $1",
+        value: entries[0]!.erasureId },
+      { table: 'erasure_target', statement: `UPDATE relay.erasure_target SET target_ref = 'sha256:' || repeat('0', 64)
+        WHERE erasure_id = $1 AND ordinal = 1`, value: entries[0]!.erasureId },
+      { table: 'recovery_coverage_head', statement: `UPDATE relay.recovery_coverage_head
+        SET coverage_digest = repeat('0', 64) WHERE consumer = $1`, value: consumer },
+      { table: 'recovery_coverage_head', statement: `UPDATE relay.recovery_coverage_head
+        SET erasure_epoch = (SELECT erasure_epoch FROM relay.erasure WHERE id = $2)
+        WHERE consumer = $1`, value: consumer, epoch: entries[0]!.erasureId },
+      { table: 'recovery_coverage_head', statement: `UPDATE relay.recovery_coverage_head
+        SET captured_at = captured_at + interval '1 second' WHERE consumer = $1`, value: consumer },
+    ]) {
+      await clients.relayClient.query('SAVEPOINT journal_corruption');
+      await clients.relayClient.query(`ALTER TABLE relay.${corruption.table} DISABLE TRIGGER USER`);
+      const values = 'epoch' in corruption ? [corruption.value, corruption.epoch] : [corruption.value];
+      expect((await clients.relayClient.query(corruption.statement, values)).rowCount).toBe(1);
+      await clients.relayClient.query(`ALTER TABLE relay.${corruption.table} ENABLE TRIGGER USER`);
+      expect(await frontier()).toEqual(before);
+      await deniedRelease(clients, summary.reconciliationId, authority);
+      await clients.relayClient.query('ROLLBACK TO SAVEPOINT journal_corruption');
+      await clients.relayClient.query('RELEASE SAVEPOINT journal_corruption');
+      expect(await facts()).toEqual(originalFacts);
+      expect(await reconciliationSnapshot(summary.reconciliationId)).toEqual(original);
+    }
+  });
+  expect(await allocatorAvailable()).toBe(true);
+}, 45_000);
+
+test('a new valid closed Access generation cannot borrow an older committed reconciliation', async () => {
+  const authority = await capture(), summary = await committedReconciliation(authority);
+  const original = await reconciliationSnapshot(summary.reconciliationId);
+  await withClients(async clients => {
+    await clients.accessClient.query('SAVEPOINT changed_generation');
+    const next = (await clients.accessClient.query<{ generation: string }>(`UPDATE access.recovery_fence
+      SET generation = generation + 1 WHERE id AND NOT open RETURNING generation::text`)).rows[0]!.generation;
+    expect(next).toBe(String(BigInt(generation) + 1n));
+    await deniedRelease(clients, summary.reconciliationId, authority, restored, next);
+    await clients.accessClient.query('ROLLBACK TO SAVEPOINT changed_generation');
+    expect((await clients.accessClient.query(`SELECT open, generation::text AS generation
+      FROM access.recovery_fence WHERE id`)).rows).toEqual([{ open: false, generation }]);
+  });
+  expect(await reconciliationSnapshot(summary.reconciliationId)).toEqual(original);
+  expect(await allocatorAvailable()).toBe(true);
+}, 30_000);
+
+for (const position of ['data epoch', 'sequence'] as const) {
+  test(`changed actual Content ${position} refuses the prior committed reconciliation before callback`, async () => {
+    const authority = await capture(), summary = await committedReconciliation(authority);
+    const original = await reconciliationSnapshot(summary.reconciliationId);
+    const before = (await content.query<{ data_epoch: string; sequence: string }>(
+      'SELECT data_epoch::text, sequence::text FROM content.owner_control WHERE singleton')).rows[0]!;
+    try {
+      if (position === 'data epoch') await content.query('UPDATE content.owner_control SET data_epoch = $1 WHERE singleton', [randomUUID()]);
+      else await content.query('UPDATE content.owner_control SET sequence = sequence + 1 WHERE singleton');
+      await withClients(clients => deniedRelease(clients, summary.reconciliationId, authority));
+    } finally {
+      await content.query('UPDATE content.owner_control SET data_epoch = $1, sequence = $2 WHERE singleton',
+        [before.data_epoch, before.sequence]);
+    }
+    expect((await content.query('SELECT data_epoch::text, sequence::text FROM content.owner_control WHERE singleton')).rows)
+      .toEqual([before]);
+    expect(await reconciliationSnapshot(summary.reconciliationId)).toEqual(original);
+    expect(await allocatorAvailable()).toBe(true);
+  }, 30_000);
+}
+
+for (const change of ['data epoch', 'routing epoch'] as const) {
+  test(`changed restored graph ${change} refuses a prior record against the same actual native graph`, async () => {
+    const authority = await capture(), summary = await committedReconciliation(authority);
+    const original = await reconciliationSnapshot(summary.reconciliationId);
+    const changed: RestoredOwners = { ...restored, graph: { ...restored.graph!, lineage: {
+      ...lineage, ...(change === 'data epoch' ? { dataEpoch: randomUUID() }
+        : { routingEpoch: String(BigInt(lineage.routingEpoch) + 1n) }),
+    } } };
+    await withClients(clients => deniedRelease(clients, summary.reconciliationId, authority, changed));
+    expect(await reconciliationSnapshot(summary.reconciliationId)).toEqual(original);
+    expect(await allocatorAvailable()).toBe(true);
+  }, 30_000);
+}

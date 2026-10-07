@@ -27,7 +27,8 @@ export interface RestoredGraphCustody {
 
 export interface RetainedNativeGraphSuppressionSource {
   original: GraphSuppressionProof;
-  /** Closure-local comparison only: no new persisted proof or frontier. */
+  /** Verified event/header facts; an existing reconciliation can bind this
+   * digest, but release still rereads the exact independently retained source. */
   evidenceDigest: string;
 }
 

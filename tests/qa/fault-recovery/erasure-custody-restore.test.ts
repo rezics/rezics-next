@@ -35,8 +35,11 @@ import { commitMetadata, readMetadataReceipt } from '../../../services/main/src/
 import { checkedMetadataState, metadataDigest, type MetadataIntent } from
   '../../../services/main/src/modules/work/metadata-schema.ts';
 import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
-import { captureGraphRecoveryCoverage, cutoverRestoredGraphLineage, RestoreLineageConflict, type RecoveryCoverage } from
+import { captureGraphRecoveryCoverage, cutoverRestoredGraphLineage, readGraphRecoverySource,
+  RestoreLineageConflict, type RecoveryCoverage } from
   '../../../services/main/src/modules/work/restore-lineage.ts';
+import { assertContentRecoveryCoverage } from
+  '../../../services/main/src/modules/work/content-recovery-coverage.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
 import { offlineTextIndex } from '../../../scripts/operations/search-state.ts';
@@ -261,11 +264,13 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
               qa.composeEnv.FUSEKI_COMMAND_TOKEN!)) },
         objects: { directory: restoredDirectory, workObjects: restoredObjects } };
       // The sealed base cut is checked before any erasure replay changes its closure.
-      if (!coverage?.objects) throw new Error('fixture lacks retained object coverage');
+      if (!coverage?.objects || !coverage.content) throw new Error('fixture lacks retained owner coverage');
+      await assertContentRecoveryCoverage(restored.content, graphClient, coverage.content);
       await assertObjectRecoveryCoverage(graphClient, restored.objects!, coverage.objects);
       const generation = await engageAccessRecoveryFence(restoredAccess);
       const registry = new AccessAdmissionRegistry(restoredAccess);
-      const dependencies = { environment: { fuseki: graphClient, lineage, objectDirectory: restoredDirectory },
+      const environment = { fuseki: graphClient, lineage, objectDirectory: restoredDirectory };
+      const dependencies = { environment,
         account: { verify: async () => { throw new Error('held restore has no authentication server'); } }, access: registry };
       const main = createMainApp(graphClient, dependencies);
       const ready = () => main.handle(new Request('http://main.local/health/ready'));
@@ -274,7 +279,7 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
         .rejects.toBeInstanceOf(AdmissionUnavailable);
       expect((await new ContentCore(restored.content).readExactBatch([saved.revisionId!], async ids => new Set(ids)))[0]
         ?.status).toBe('available');
-      return { restored, graph, restoredDirectory, generation, ready };
+      return { restored, graph, restoredDirectory, generation, ready, environment, accessUrl: urls.access };
     };
     const withBorrowed = async <T>(restored: RestoredOwners,
       work: (clients: BorrowedRestoreClients) => Promise<T>): Promise<T> => {
@@ -331,6 +336,28 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
           rv:priorMainSequence ${coverage!.relay.sequence} ;
           rv:streamScope "urn:rezics:stream:main-rdf" . } }`)).boolean).toBe(true);
     };
+    const assertDurableReconciliation = async (observer: Pool, id: string) => {
+      const record = await observer.query<{ state: string; outcome_digest: string; completed: boolean }>(
+        `SELECT state, outcome_digest, completed_at IS NOT NULL AS completed
+         FROM relay.owner_reconciliation WHERE id = $1`, [id]);
+      expect(record.rowCount).toBe(1);
+      expect(record.rows[0]).toMatchObject({ state: 'reconciled', completed: true });
+      expect(record.rows[0]!.outcome_digest).toMatch(/^[0-9a-f]{64}$/);
+      expect((await observer.query(`SELECT owner FROM relay.owner_reconciliation_cut
+        WHERE reconciliation_id = $1 AND status = 'matched' ORDER BY owner`, [id])).rows)
+        .toEqual(['account', 'access', 'content', 'graph', 'object', 'relay'].sort().map(owner => ({ owner })));
+    };
+    const assertBothHeld = async (copy: Awaited<ReturnType<typeof restore>>, observer: Pool) => {
+      expect((await observer.query(`SELECT open, generation::text AS generation
+        FROM access.recovery_fence WHERE id = true`)).rows[0])
+        .toEqual({ open: false, generation: copy.generation });
+      expect((await copy.restored.graph!.fuseki.query(`PREFIX rv: <${RV}> ASK {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)}
+          rv:dataEpoch ${lit(copy.restored.graph!.lineage.dataEpoch)} ;
+          rv:routingEpoch ${lit(copy.restored.graph!.lineage.routingEpoch)} ;
+          rv:sequence 0 ; rv:restoreHold true . } }`)).boolean).toBe(true);
+      expect((await copy.ready()).status).toBe(503);
+    };
     const heldCopy = await restore();
     const next = { dataEpoch: randomUUID(), routingEpoch: /^(0|[1-9][0-9]*)$/.test(lineage.routingEpoch)
       ? String(BigInt(lineage.routingEpoch) + 1n) : randomUUID() };
@@ -340,6 +367,7 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
     const cut = { ...next, restoreCutover: `urn:rezics:restore:${next.dataEpoch}`,
       priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence };
     heldGraph.lineage = next;
+    heldCopy.environment.lineage = next;
     heldGraph.heldErasure = { cut, accessHoldGeneration: heldCopy.generation,
       signingKey: qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!,
       maintenance: heldErasureMaintenanceClient(heldCopy.graph.url, qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN!),
@@ -412,6 +440,7 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
     const retainedCut = { ...retainedNext, restoreCutover: `urn:rezics:restore:${retainedNext.dataEpoch}`,
       priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence };
     retainedGraph.lineage = retainedNext;
+    retainedCopy.environment.lineage = retainedNext;
     const maintenance = heldErasureMaintenanceClient(retainedCopy.graph.url, qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN!);
     const nativeOutcomes: string[] = [];
     const nativePositions: { datasetId: string; dataEpoch: string; sequence: string }[] = [];
@@ -438,9 +467,10 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
         WHERE stream_scope = 'urn:rezics:stream:main-rdf' AND batch_id = $1`, [batch])).rowCount).toBe(1);
     };
     live.runner.stop();
+    const relayObserver = pool(databases.urls.relay), accessObserver = pool(retainedCopy.accessUrl);
     try {
       await expect(native.query('ASK {}', 1024)).rejects.toThrow();
-      await withBorrowed(retainedCopy.restored, async clients => {
+      const retainedReconciliation = await withBorrowed(retainedCopy.restored, async clients => {
         const source = await readRetainedNativeGraphSuppressionProof(clients.relayClient,
           erase.erasureId, erase.erasureEpoch, [saved.revisionId]);
         expect(source.original).toEqual(proof);
@@ -505,8 +535,38 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
         expect(await readGraphErasureProof(retainedGraph.fuseki, retainedNext, erase.erasureId,
           erase.erasureEpoch, [saved.revisionId], { ...retainedGraph.heldErasure!,
             revisionIds: [saved.revisionId], original: proof })).toEqual(proof);
+        await clients.relayClient.query('SAVEPOINT changed_release_evidence');
+        let deniedReleaseCallbacks = 0;
+        try {
+          await changeEvidence(clients.relayClient);
+          const changed = await readRetainedNativeGraphSuppressionProof(clients.relayClient,
+            erase.erasureId, erase.erasureEpoch, [saved.revisionId]);
+          expect(changed.original).toEqual(source.original);
+          expect(changed.evidenceDigest).not.toBe(source.evidenceDigest);
+          await expect(releaseErasureRestoreHold(relay, retainedCopy.restored, reconciled.reconciliationId,
+            retainedCopy.generation, authority, { clients, beforeAccessRelease: async () => {
+              deniedReleaseCallbacks++;
+            } })).rejects.toThrow('prior reconciliation evidence differs from the current restore');
+          expect(deniedReleaseCallbacks).toBe(0);
+          expect((await clients.accessClient.query(`SELECT open, generation::text AS generation
+            FROM access.recovery_fence WHERE id = true`)).rows[0])
+            .toEqual({ open: false, generation: retainedCopy.generation });
+          expect(sends).toBe(2);
+        } finally { await clients.relayClient.query('ROLLBACK TO SAVEPOINT changed_release_evidence'); }
+        expect((await readRetainedNativeGraphSuppressionProof(clients.relayClient,
+          erase.erasureId, erase.erasureEpoch, [saved.revisionId])).evidenceDigest).toBe(source.evidenceDigest);
+        return reconciled;
+      });
+      // Reconciliation is independently durable while graph and Access remain closed.
+      await assertDurableReconciliation(relayObserver, retainedReconciliation.reconciliationId);
+      await assertBothHeld(retainedCopy, accessObserver);
+      // Retry reconstructs the same cut; object property order carries no authority.
+      retainedGraph.heldErasure!.cut = { priorSequence: retainedCut.priorSequence,
+        priorDataEpoch: retainedCut.priorDataEpoch, restoreCutover: retainedCut.restoreCutover,
+        routingEpoch: retainedCut.routingEpoch, dataEpoch: retainedCut.dataEpoch };
+      await withBorrowed(retainedCopy.restored, async clients => {
         let releases = 0;
-        await releaseErasureRestoreHold(relay, retainedCopy.restored, reconciled.reconciliationId,
+        await releaseErasureRestoreHold(relay, retainedCopy.restored, retainedReconciliation.reconciliationId,
           retainedCopy.generation, authority, { clients, beforeAccessRelease: async () => {
             releases++;
             expect((await clients.accessClient.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open)
@@ -518,10 +578,118 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
       });
       expect((await new ContentCore(retainedCopy.restored.content).readExactBatch([saved.revisionId],
         async ids => new Set(ids)))[0]?.status).toBe('erased');
+
+      // The same captured cut supplies an isolated, genuinely interrupted release.
+      const interrupted = await restore(), interruptedGraph = interrupted.restored.graph!;
+      const interruptedNext = { dataEpoch: randomUUID(), routingEpoch: retainedNext.routingEpoch };
+      await cutoverRestoredGraphLineage(interruptedGraph.fuseki,
+        { prior: { ...lineage, sequence: coverage.priorSequence }, next: interruptedNext });
+      const interruptedCut = { ...interruptedNext, restoreCutover: `urn:rezics:restore:${interruptedNext.dataEpoch}`,
+        priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence };
+      interruptedGraph.lineage = interruptedNext;
+      interrupted.environment.lineage = interruptedNext;
+      const interruptedMaintenance = heldErasureMaintenanceClient(interrupted.graph.url,
+        qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN!);
+      const interruptedOutcomes: string[] = [];
+      const interruptedPositions: { datasetId: string; dataEpoch: string; sequence: string }[] = [];
+      let interruptedSends = 0;
+      interruptedGraph.heldErasure = { cut: interruptedCut, accessHoldGeneration: interrupted.generation,
+        signingKey: qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!, originalSource: 'retained-native-event',
+        maintenance: { command: async command => {
+          interruptedSends++;
+          const outcome = await interruptedMaintenance.command(command);
+          interruptedOutcomes.push(outcome.status);
+          if (outcome.status === 'committed') interruptedPositions.push(outcome.position);
+          return outcome;
+        } } };
+      const interruptedObserver = pool(interrupted.accessUrl);
+      try {
+        const prior = await withBorrowed(interrupted.restored, clients => reconcileRestoredErasures(relay,
+          interrupted.restored, { operationId: randomUUID(), consumer, replay: true, authority }, clients));
+        expect(prior.state).toBe('reconciled');
+        expect(interruptedSends).toBe(1);
+        expect(interruptedOutcomes).toEqual(['committed']);
+        expect(interruptedPositions).toEqual([{ datasetId: DATASET, dataEpoch: interruptedNext.dataEpoch, sequence: '0' }]);
+        await assertDurableReconciliation(relayObserver, prior.reconciliationId);
+        await assertBothHeld(interrupted, interruptedObserver);
+        await interrupted.restored.access.query(`CREATE FUNCTION access.erasure_custody_release_interruption()
+          RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN
+          IF NOT OLD.open AND NEW.open THEN RAISE EXCEPTION 'fixture Access release interruption'; END IF;
+          RETURN NEW; END $$`);
+        try {
+          await interrupted.restored.access.query(`CREATE TRIGGER erasure_custody_release_interruption
+            BEFORE UPDATE OF open ON access.recovery_fence FOR EACH ROW
+            EXECUTE FUNCTION access.erasure_custody_release_interruption()`);
+          let committedGraphReleases = 0;
+          await expect(withBorrowed(interrupted.restored, clients => releaseErasureRestoreHold(relay,
+            interrupted.restored, prior.reconciliationId, interrupted.generation, authority,
+            { clients, beforeAccessRelease: async () => {
+              await releaseHeldGraph(interruptedGraph, interruptedCut);
+              committedGraphReleases++;
+            } }))).rejects.toThrow('fixture Access release interruption');
+          // Every witness is outside the injected callback and aborted transactions.
+          expect(committedGraphReleases).toBe(1);
+          expect(interruptedSends).toBe(1);
+          expect((await interruptedGraph.fuseki.query(`PREFIX rv: <${RV}> ASK {
+            GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold ?hold } }`)).boolean).toBe(false);
+          expect(await readGraphRecoverySource(interruptedGraph.fuseki)).toEqual({ ...interruptedNext,
+            sequence: '0', relay: { streamScope: 'urn:rezics:stream:main-rdf',
+              dataEpoch: interruptedNext.dataEpoch, sequence: '0' } });
+          const receipt = `urn:rezics:receipt:restore-release:${hash(interruptedNext.dataEpoch)}`;
+          const releaseDigest = hash(JSON.stringify({ family: 'restore-release-v2', lineage: interruptedNext,
+            priorDataEpoch: interruptedCut.priorDataEpoch, priorSequence: interruptedCut.priorSequence,
+            priorMainSequence: coverage.relay.sequence, streamScope: 'urn:rezics:stream:main-rdf' }));
+          const facts = (await interruptedGraph.fuseki.query(`SELECT ?predicate ?object WHERE {
+            GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?predicate ?object } } LIMIT 8`)).results?.bindings;
+          expect(facts).toHaveLength(7);
+          expect(Object.fromEntries(facts!.map(row => [row.predicate!.value, row.object!.value]))).toEqual({
+            'http://www.w3.org/1999/02/22-rdf-syntax-ns#type': `${RV}OperationReceipt`,
+            [`${RV}requestDigest`]: releaseDigest, [`${RV}datasetId`]: DATASET,
+            [`${RV}dataEpoch`]: interruptedNext.dataEpoch, [`${RV}sequence`]: '0',
+            [`${RV}priorMainSequence`]: coverage.relay.sequence,
+            [`${RV}streamScope`]: 'urn:rezics:stream:main-rdf',
+          });
+          expect(facts!.every(row => row.predicate?.type === 'uri' && !row.object?.['xml:lang'])).toBe(true);
+          for (const row of facts!) {
+            const uri = ['http://www.w3.org/1999/02/22-rdf-syntax-ns#type', `${RV}datasetId`]
+              .includes(row.predicate!.value);
+            expect(row.object!.type).toBe(uri ? 'uri' : 'literal');
+            if ([`${RV}sequence`, `${RV}priorMainSequence`].includes(row.predicate!.value)) {
+              expect(row.object!.datatype).toBe('http://www.w3.org/2001/XMLSchema#integer');
+            }
+          }
+          expect((await interruptedObserver.query(`SELECT open, generation::text AS generation
+            FROM access.recovery_fence WHERE id = true`)).rows[0])
+            .toEqual({ open: false, generation: interrupted.generation });
+          expect((await interrupted.ready()).status).toBe(503);
+          await assertDurableReconciliation(relayObserver, prior.reconciliationId);
+        } finally {
+          await interrupted.restored.access.query('DROP TRIGGER IF EXISTS erasure_custody_release_interruption ON access.recovery_fence');
+          await interrupted.restored.access.query('DROP FUNCTION access.erasure_custody_release_interruption()');
+        }
+        // Exact released-graph owner readers are pending. Retry honestly remains denied.
+        let retryCallbacks = 0;
+        await expect(withBorrowed(interrupted.restored, clients => releaseErasureRestoreHold(relay,
+          interrupted.restored, prior.reconciliationId, interrupted.generation, authority,
+          { clients, beforeAccessRelease: async () => { retryCallbacks++; } })))
+          .rejects.toThrow('captured Access generation or held graph cut changed');
+        expect(retryCallbacks).toBe(0);
+        expect(interruptedSends).toBe(1);
+        expect(interruptedOutcomes).toEqual(['committed']);
+        expect((await interruptedObserver.query(`SELECT open, generation::text AS generation
+          FROM access.recovery_fence WHERE id = true`)).rows[0])
+          .toEqual({ open: false, generation: interrupted.generation });
+        expect((await interrupted.ready()).status).toBe(503);
+        await assertDurableReconciliation(relayObserver, prior.reconciliationId);
+      } finally {
+        interrupted.graph.remove();
+        await Promise.all([close(interruptedObserver), close(interrupted.restored.account),
+          close(interrupted.restored.access), close(interrupted.restored.content)]);
+      }
     } finally {
       await live.runner.start();
       retainedCopy.graph.remove();
-      await Promise.all([close(retainedCopy.restored.account), close(retainedCopy.restored.access),
+      await Promise.all([close(relayObserver), close(accessObserver), close(retainedCopy.restored.account), close(retainedCopy.restored.access),
         close(retainedCopy.restored.content)]);
     }
     // Every negative is an isolated copy of the same held, consistent pre-erasure cut.
@@ -552,7 +720,7 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
     const operationId = randomUUID();
     const reconciled = await borrowed(clients => reconcileRestoredErasures(relay, good.restored, { operationId,
       consumer, replay: true, authority }, clients));
-    expect(reconciled).toMatchObject({ state: 'reconciled', counts: { replayed: 3, matched: 3 } });
+    expect(reconciled).toMatchObject({ state: 'reconciled', counts: { replayed: 3, matched: 7 } });
     expect(await borrowed(clients => reconcileRestoredErasures(relay, good.restored,
       { operationId, consumer, replay: true, authority }, clients)))
       .toEqual(reconciled);
