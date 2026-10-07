@@ -1,0 +1,15 @@
+# System bootstrap of the fixed Global classification Context.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/classification-global-context-v1/global-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ClassificationContext ] ;
+    sh:property [ sh:path rv:contextRole ; sh:hasValue rv:GlobalClassification ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:contextState ; sh:hasValue rv:Active ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:inheritancePolicy ;
+                  sh:hasValue <https://rezics.com/definition/classification-isolate-v1> ;
+                  sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:fallbackContext ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:realm ; sh:maxCount 0 ] .

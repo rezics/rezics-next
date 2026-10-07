@@ -1,0 +1,77 @@
+# Shared interpretation Context with independent semantic and preference component heads.
+# Semantic revisions pin at most one base revision and list sparse, content-addressed entries.
+# The Global baseline has a fixed identity and no base. No Realm parent or principal link exists.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/context-v1/global-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:SemanticContext ] ;
+    sh:property [ sh:path rv:semanticHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ContextSemanticRevision ] ;
+    sh:property [ sh:path rv:preferenceHead ; sh:maxCount 1 ; sh:class rv:ContextPreferenceRevision ] ;
+    sh:property [ sh:path rv:realm ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:principal ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:contextRole ; sh:maxCount 1 ; sh:hasValue rv:GlobalInterpretation ] ;
+    sh:property [ sh:path rv:contextState ; sh:maxCount 1 ; sh:hasValue rv:Active ] ;
+    sh:property [ sh:path rv:disclosure ; sh:maxCount 1 ; sh:hasValue rv:Public ] .
+
+<https://rezics.com/definition/context-v1/context-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:SemanticContext ] ;
+    sh:property [ sh:path rv:semanticHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ContextSemanticRevision ] ;
+    sh:property [ sh:path rv:preferenceHead ; sh:maxCount 1 ; sh:class rv:ContextPreferenceRevision ] ;
+    sh:property [ sh:path rv:realm ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:principal ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:contextRole ; sh:maxCount 1 ; sh:hasValue rv:SharedInterpretation ] ;
+    sh:property [ sh:path rv:contextState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Active rv:Retired ) ] ;
+    sh:property [ sh:path rv:disclosure ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Public rv:Private ) ] .
+
+<https://rezics.com/definition/context-v1/semantic-revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ContextSemanticRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:ContextSemanticRevision ] ;
+    sh:property [ sh:path rv:baseRevision ; sh:maxCount 1 ; sh:class rv:ContextSemanticRevision ] ;
+    sh:property [ sh:path rv:inheritanceDepth ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 8 ] ;
+    sh:property [ sh:path rv:entryCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 256 ] ;
+    sh:property [ sh:path rv:entry ; sh:maxCount 256 ; sh:class rv:ContextEntry ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SemanticContext ] ;
+    sh:property [ sh:path rv:authoredBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-v1> ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:property [ sh:path rv:principal ; sh:maxCount 0 ] .
+
+<https://rezics.com/definition/context-v1/entry-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:ContextEntry ] ;
+    sh:property [ sh:path rv:entryTarget ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:entryRelation ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:applicability ; sh:maxCount 8 ; sh:nodeKind sh:IRI ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:entryState ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:Defined ] ;
+          sh:property [ sh:path rv:interpretationDefinition ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ]
+        [ sh:property [ sh:path rv:entryState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Unresolved rv:Disabled ) ] ;
+          sh:property [ sh:path rv:interpretationDefinition ; sh:maxCount 0 ] ]
+    ) .
+
+<https://rezics.com/definition/context-v1/preference-revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ContextPreferenceRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:ContextPreferenceRevision ] ;
+    sh:property [ sh:path rv:preferenceCount ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 0 ; sh:maxInclusive 256 ] ;
+    sh:property [ sh:path rv:baseRevision ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:entry ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SemanticContext ] ;
+    sh:property [ sh:path rv:authoredBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-v1> ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:property [ sh:path rv:principal ; sh:maxCount 0 ] .

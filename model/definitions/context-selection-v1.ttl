@@ -1,0 +1,58 @@
+# Public scoped Context adoption with its own expected head and immutable revisions.
+# A selection pins one published semantic revision and optionally one preference revision.
+# Private principal selections are Access-owned and have no graph representation.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/context-selection-v1/selection-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ContextSelection ] ;
+    sh:property [ sh:path rv:consumer ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:selectionRole ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:SpeakerSelection rv:EntryDefault ) ] ;
+    sh:property [ sh:path rv:scopeProfile ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-selection-scope-v1> ] ;
+    sh:property [ sh:path rv:selectionKey ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:contextSelectionHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ContextSelectionRevision ] ;
+    sh:property [ sh:path rv:principal ; sh:maxCount 0 ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:scopeKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:DefaultScope ] ;
+          sh:property [ sh:path rv:scopeObject ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:scopeRelation ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:scopeDomain ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:scopeKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:DomainScope ] ;
+          sh:property [ sh:path rv:scopeObject ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:scopeRelation ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:scopeDomain ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ]
+        [ sh:property [ sh:path rv:scopeKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:ObjectScope ] ;
+          sh:property [ sh:path rv:scopeObject ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:scopeRelation ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:scopeDomain ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:scopeKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:ObjectRelationScope ] ;
+          sh:property [ sh:path rv:scopeObject ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:scopeRelation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:scopeDomain ; sh:maxCount 0 ] ]
+    ) .
+
+<https://rezics.com/definition/context-selection-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ContextSelectionRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ContextSelection ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:ContextSelectionRevision ] ;
+    sh:property [ sh:path rv:selectedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-selection-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/context-selection-v1> ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:selectionState ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:Selected ] ;
+          sh:property [ sh:path rv:context ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:SemanticContext ] ;
+          sh:property [ sh:path rv:semanticRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ContextSemanticRevision ] ;
+          sh:property [ sh:path rv:preferenceRevision ; sh:maxCount 1 ; sh:class rv:ContextPreferenceRevision ] ]
+        [ sh:property [ sh:path rv:selectionState ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue rv:Cleared ] ;
+          sh:property [ sh:path rv:context ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:semanticRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:preferenceRevision ; sh:maxCount 0 ] ]
+    ) .
