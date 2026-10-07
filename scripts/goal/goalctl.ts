@@ -1917,10 +1917,14 @@ async function stopProcessGroup(child: ChildProcess): Promise<void> {
   await within(5_000, closed);
 }
 
-interface UnitShardResult {
+export interface UnitShardResult {
   done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[]; fileErrors: UnitFileErrorDetail[];
   runnerErrors: UnitRunnerError[]; files: string[]; output: string; ms: number;
+  /** The shard stopped at the wall-clock budget, so files it never reached have no verdict yet. */
+  budgetExpired?: boolean;
 }
+
+export type UnitShardRunner = (cwd: string, files: readonly string[], deadline: number) => Promise<UnitShardResult>;
 
 function unitFileFromHeader(output: string, files: readonly string[], cwd: string): string | undefined {
   const known = new Set(files);
@@ -2183,7 +2187,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
       const timedOut = outcome === 'timeout'
         ? shardTimeoutFiles(text, files, cwd)
         : timedOutTestFiles(text, files, cwd);
-      return unfinished(text, timedOut);
+      return { ...unfinished(text, timedOut), ...outcome === 'timeout' ? { budgetExpired: true } : {} };
     }
     const text = output();
     const timedOut = timedOutTestFiles(text, files, cwd);
@@ -2208,18 +2212,48 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   }
 }
 
-/** Parallel `task test` shards under one wall-clock budget. An unfinished shard makes the side inconclusive:
- * failures from shards that did finish are not a verdict, because the set was not fully run. */
-export async function runUnitGate(cwd: string, files: readonly string[], shards?: number): Promise<{
+interface UnitGateResult {
   done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[];
   fileErrors: UnitFileErrorDetail[]; runnerErrors: UnitRunnerError[]; unfinished: string[]; output: string;
-}> {
-  if (!files.length) return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '' };
+}
+
+/** Parallel `task test` shards under one wall-clock budget. A shard that hits the budget leaves the side inconclusive
+ * unless its files get a verdict: the file that was running is retried alone by the caller, and the rest of that shard
+ * runs once more here, in shards sized like a first run of that many files. Failures from shards that did finish are
+ * not a verdict while any file stays unfinished, because the set was not fully run. */
+export async function runUnitGate(cwd: string, files: readonly string[], shards?: number,
+  runShard: UnitShardRunner = runUnitShard): Promise<UnitGateResult> {
+  const first = await runUnitGatePass(cwd, files, shards, runShard);
+  if (first.result.runnerErrors.length) return first.result;
+  const reachedNoVerdict = new Set(first.shards.filter(shard => shard.budgetExpired).flatMap(shard => shard.files)
+    .filter(file => !first.result.timedOut.includes(file)));
+  if (!reachedNoVerdict.size) return first.result;
+  const rerunFiles = [...reachedNoVerdict].sort();
+  console.log(`Unit gate: ${rerunFiles.length} file(s) in timed-out shard(s) had no verdict; rerunning them once`);
+  const rerun = await runUnitGatePass(cwd, rerunFiles, shards, runShard);
+  const { result } = first;
+  // The first pass's unfinished files are the shards' files; the rerun files get their verdict from the rerun alone.
+  const unfinished = [...new Set([...result.unfinished.filter(file => !reachedNoVerdict.has(file)), ...rerun.result.unfinished])].sort();
+  const merged = {
+    failing: [...new Set([...result.failing, ...rerun.result.failing])].sort(),
+    timedOut: [...new Set([...result.timedOut, ...rerun.result.timedOut])].sort(),
+    failures: [...result.failures, ...rerun.result.failures],
+    fileErrors: [...result.fileErrors, ...rerun.result.fileErrors],
+    runnerErrors: [...result.runnerErrors, ...rerun.result.runnerErrors],
+    output: `${result.output}\n${rerun.result.output}`,
+  };
+  return unfinished.length ? { done: false, ...merged, unfinished } : { done: true, ...merged, unfinished: [] };
+}
+
+async function runUnitGatePass(cwd: string, files: readonly string[], shards: number | undefined,
+  runShard: UnitShardRunner): Promise<{ result: UnitGateResult; shards: UnitShardResult[] }> {
+  const empty: UnitGateResult = { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '' };
+  if (!files.length) return { result: empty, shards: [] };
   const groups = balanceUnitShards(files, shards ?? unitGateShards());
   const budget = unitGateBudgetMs();
   console.log(`Unit gate: ${files.length} file(s) in ${groups.length} shard(s), budget ${budget}ms`);
   const deadline = Date.now() + budget;
-  const results = await Promise.all(groups.map(group => runUnitShard(cwd, group, deadline)));
+  const results = await Promise.all(groups.map(group => runShard(cwd, group, deadline)));
   for (const result of results) {
     console.log(`Unit gate shard: ${result.files.length} file(s), ${result.done ? `${result.failing.length} failing` : 'unfinished'} in ${result.ms}ms`);
   }
@@ -2231,8 +2265,7 @@ export async function runUnitGate(cwd: string, files: readonly string[], shards?
   const failures = completed.flatMap(result => result.failures);
   const fileErrors = completed.flatMap(result => result.fileErrors);
   const runnerErrors = results.flatMap(result => result.runnerErrors);
-  if (unfinished.length) return { done: false, failing, timedOut, failures, fileErrors, runnerErrors, unfinished, output };
-  return { done: true, failing, timedOut, failures, fileErrors, runnerErrors, unfinished: [], output };
+  return { result: { done: !unfinished.length, failing, timedOut, failures, fileErrors, runnerErrors, unfinished, output }, shards: results };
 }
 
 function reportUnfinished(side: 'affected' | 'main', unfinished: readonly string[]): void {
@@ -2495,13 +2528,10 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
   if (confirmed.runnerErrors.length) return runnerErrorRefusal('affected', confirmed.runnerErrors);
   const alreadyRetried = new Set(branch.done ? [] : branch.timedOut);
   const retryNewTimeouts = (files: readonly string[]) => files.filter(file => !alreadyRetried.has(file));
-  let retry: TimeoutRetryResult;
-  if (!confirmed.done) {
-    retry = await retryTimedOutFiles(worktree, retryNewTimeouts([...branchTimedOut, ...confirmed.timedOut]), 'affected');
-  } else retry = await retryTimedOutFiles(worktree, retryNewTimeouts([...branchTimedOut, ...confirmed.timedOut]), 'affected');
+  const retry = await retryTimedOutFiles(worktree, retryNewTimeouts([...branchTimedOut, ...confirmed.timedOut]), 'affected');
   const confirmedFailures = [...new Set([
     ...(!branch.done ? branchTimeoutRetry.failing : []),
-    ...(confirmed.done ? confirmed.failing.filter(file => !confirmed.timedOut.includes(file)) : []),
+    ...confirmed.failing.filter(file => !confirmed.timedOut.includes(file)),
     ...retry.failing,
   ])].sort();
   const branchUnresolved = [...new Set([
@@ -2515,7 +2545,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
   }
   const confirmedDetails = [
     ...(!branch.done ? branchTimeoutRetry.failures : []),
-    ...(confirmed.done ? confirmed.failures.filter(failure => !confirmed.timedOut.includes(failure.file)) : []),
+    ...confirmed.failures.filter(failure => !confirmed.timedOut.includes(failure.file)),
     ...retry.failures,
   ];
   const confirmedFileErrors = [

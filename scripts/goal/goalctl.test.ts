@@ -11,8 +11,8 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, inheritedSharedLifecycleOwnership, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
-  qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, withRecovery, withSlot,
-  mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief,
+  qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runUnitGate, shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, withRecovery, withSlot,
+  mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
@@ -239,6 +239,83 @@ describe('goalctl runtime policy', () => {
       `${files[1]}:`,
     ].join('\n');
     expect(shardTimeoutFiles(output, files, process.cwd())).toEqual(files);
+  });
+
+  describe('unit gate rerun of files a timed-out shard never reached', () => {
+    const files = ['a.test.ts', 'b.test.ts', 'c.test.ts', 'd.test.ts', 'e.test.ts'];
+    const shard = (group: readonly string[], fields: Partial<UnitShardResult>): UnitShardResult =>
+      ({ done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], files: [...group], output: '', ms: 1, ...fields });
+    /** The first pass's only shard stops after `slow`; later passes follow `rerun` per file. */
+    const stub = (slow: string, rerun: (group: readonly string[]) => Partial<UnitShardResult>) => {
+      const calls: string[][] = [];
+      const run = async (_cwd: string, group: readonly string[]): Promise<UnitShardResult> => {
+        calls.push([...group]);
+        return calls.length === 1
+          ? shard(group, { done: false, timedOut: [slow], budgetExpired: true })
+          : shard(group, rerun(group));
+      };
+      return { calls, run };
+    };
+
+    test('files after the timed-out one run again and the gate passes', async () => {
+      const { calls, run } = stub('b.test.ts', () => ({}));
+      const result = await runUnitGate('.', files, 1, run);
+      expect(calls).toEqual([files, ['a.test.ts', 'c.test.ts', 'd.test.ts', 'e.test.ts']]);
+      // Only the timed-out file is left for the caller's isolated retry.
+      expect(result).toMatchObject({ done: false, timedOut: ['b.test.ts'], unfinished: ['b.test.ts'], failing: [] });
+    });
+
+    test('a file that fails on the rerun counts as a failure of the side', async () => {
+      const failure = { file: 'd.test.ts', test: 'fails', detail: 'expected 1' };
+      const { run } = stub('b.test.ts', () => ({ failing: ['d.test.ts'], failures: [failure] }));
+      const result = await runUnitGate('.', files, 1, run);
+      expect(result).toMatchObject({ failing: ['d.test.ts'], failures: [failure], unfinished: ['b.test.ts'] });
+    });
+
+    test('a file that times out on the rerun stays unfinished', async () => {
+      const { calls, run } = stub('b.test.ts', group =>
+        ({ done: false, timedOut: ['c.test.ts'], budgetExpired: true, files: [...group] }));
+      const result = await runUnitGate('.', files, 1, run);
+      // The rerun happens once; its own timeout is not rerun again.
+      expect(calls).toHaveLength(2);
+      expect(result.done).toBe(false);
+      expect(result.timedOut).toEqual(['b.test.ts', 'c.test.ts']);
+      const neverStarted = result.unfinished.filter(file => !result.timedOut.includes(file));
+      expect(neverStarted).toEqual(['a.test.ts', 'd.test.ts', 'e.test.ts']);
+    });
+
+    test('the rerun uses the shard layout of a first run of that size', async () => {
+      const calls: string[][] = [];
+      const run = async (_cwd: string, group: readonly string[]): Promise<UnitShardResult> => {
+        calls.push([...group]);
+        return calls.length <= 2 ? shard(group, { done: false, timedOut: [group[0]!], budgetExpired: true }) : shard(group, {});
+      };
+      await runUnitGate('.', files, 2, run);
+      expect(calls.slice(0, 2)).toEqual(balanceUnitShards(files, 2));
+      expect(calls.slice(2)).toEqual(balanceUnitShards(['c.test.ts', 'd.test.ts', 'e.test.ts'], 2));
+    });
+
+    test('a shard that was not cut by the budget is not rerun', async () => {
+      const calls: string[][] = [];
+      const run = async (_cwd: string, group: readonly string[]) => {
+        calls.push([...group]);
+        return shard(group, { done: false });
+      };
+      const result = await runUnitGate('.', files, 1, run);
+      expect(calls).toEqual([files]);
+      expect(result.unfinished).toEqual(files);
+    });
+
+    test('a runner error on the first pass is not rerun', async () => {
+      const calls: string[][] = [];
+      const run = async (_cwd: string, group: readonly string[]) => {
+        calls.push([...group]);
+        return shard(group, { done: false, budgetExpired: true, runnerErrors: [{ files: [...group], diagnostic: 'no task' }] });
+      };
+      const result = await runUnitGate('.', files, 1, run);
+      expect(calls).toHaveLength(1);
+      expect(result.runnerErrors).toHaveLength(1);
+    });
   });
 
   test('extracts test names and assertion diffs from guard failures', () => {
@@ -1781,6 +1858,42 @@ ${edit}
         catch { return false; }
       });
       expect(hanging).toBe(false);
+    } finally { r.cleanup(); }
+  }, 60_000);
+
+  test('files a timed-out shard never started run again and the merge lands', async () => {
+    const r = repo();
+    try {
+      const slow = 'aa-slow-once.test.ts';
+      const later = ['bb-later.test.ts', 'cc-later.test.ts'];
+      const task = await r.start('G-001');
+      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(slow, ...later); r.save(ledger);
+      const seen = join(r.dir, '.temp/slow-once-seen');
+      // Slow only on the first run, so the isolated retry of this file finishes.
+      writeFileSync(join(task.worktree, slow), `import { existsSync, writeFileSync } from 'node:fs';\n`
+        + `import { setDefaultTimeout, test } from 'bun:test';\nsetDefaultTimeout(120_000);\n`
+        + `test('slow once', async () => { if (existsSync(${JSON.stringify(seen)})) return; writeFileSync(${JSON.stringify(seen)}, ''); await Bun.sleep(90_000); });\n`);
+      for (const file of later) {
+        writeFileSync(join(task.worktree, file), `import { expect, test } from 'bun:test';\ntest('passes', () => expect(true).toBe(true));\n`);
+      }
+      r.commit(task);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', slow, ...later]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add shard probes']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const plan = join(r.dir, '.temp/unit-plan');
+      writeFileSync(plan, [slow, ...later].map(file => `  unit: ${file}`).join('\n') + '\n');
+      const log = join(r.dir, '.temp/unit-log');
+      const result = r.run(['merge', task.id], {
+        GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '1', GOAL_UNIT_GATE_BUDGET_MS: '8000',
+      }, 40_000);
+      expect(result.stderr).not.toContain('inconclusive');
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('had no verdict; rerunning them once');
+      const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] })
+        .map(run => run.args.filter(arg => arg.endsWith('.test.ts')));
+      expect(runs[0]).toHaveLength(3);
+      // Bun names no file before the budget stops it, so the rerun may include the slow one; the rest must be there.
+      expect(runs[1]).toEqual(expect.arrayContaining(later.map(file => `./${file}`)));
     } finally { r.cleanup(); }
   }, 60_000);
 
