@@ -31,6 +31,7 @@ public class g911CatalogueTest {
             config.setAnalyzer(new FilteredGraphTextAssembler.CjkBigramV2());
             index = new FilteredGraphTextIndex(new TextIndexLucene(new ByteBuffersDirectory(), config));
             data = new DatasetGraphText(DatasetGraphFactory.createTxnMem(), index, new TextDocProducerTriples(index));
+            index.bindRankData(data);
             data.begin(ReadWrite.WRITE);
             try {
                 add("named", "Unrelated article", "Camp Lanterns", "Camp other Lanterns", "魔法禁書目錄", "ガラス", "ＲＵＳＴ");
@@ -54,6 +55,7 @@ public class g911CatalogueTest {
             data.add(PUBLIC, unit, term("language"), NodeFactory.createLiteralString("en"));
             data.add(PUBLIC, unit, term("disclosure"), term("Public"));
             data.add(CURRENT, main, term("selectionHead"), selection);
+            index.refreshRankSubject(data, unit.getURI());
         }
         List<FilteredGraphTextIndex.RankHit> read(String phrase, int size) {
             data.begin(ReadWrite.READ);

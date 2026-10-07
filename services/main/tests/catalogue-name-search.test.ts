@@ -144,3 +144,126 @@ test('Title and body matching binds complete names to each admitted body candida
   expect(result.results[0]?.work).toBe(id(1));
   expect(queries).toHaveLength(1);
 });
+
+test('Realm name continuation advances across empty candidate windows and reaches every adoption', async () => {
+  const realm = id(88888);
+  const raw = Array.from({ length: 2100 }, (_, n) => ({
+    id:
+      'urn:rezics:search:name:work:' +
+      id(n + 10000)
+        .split('/')
+        .at(-1),
+    key: null as string | null,
+    score: '2000000',
+    document: n,
+  })).concat(
+    Array.from({ length: 3 }, (_, n) => ({
+      id:
+        'urn:rezics:search:name:work:' +
+        id(n + 6000)
+          .split('/')
+          .at(-1),
+      key: id(n + 7000),
+      score: '2000000',
+      document: 2100 + n,
+    })),
+  );
+  const queries: string[] = [];
+  let nativeReads = 0;
+  const env = {
+    lineage: { dataEpoch: 'epoch', routingEpoch: 'route' },
+    fuseki: {
+      query: async (query: string) => {
+        queries.push(query);
+        if (query.includes('SELECT ?space'))
+          return { results: { bindings: [{ space: b(id(88889)) }] } };
+        if (query.includes('rv:rankedText')) {
+          nativeReads++;
+          const args =
+            /rv:rankedText\(rv:searchBody, "(?:[^"\\]|\\.)*", (\d+), ("(?:[^"\\]|\\.)*"),/u.exec(
+              query,
+            )!;
+          expect(args).not.toBeNull();
+          const cursor = JSON.parse(args[2]!) as string;
+          const after = cursor ? (JSON.parse(cursor) as { document: number }) : null;
+          const offset = after ? after.document + 1 : 0;
+          const selected = raw
+            .slice(offset, offset + Number(args[1]))
+            .map((hit) => ({
+              ...hit,
+              ...(hit.key ? { unit: `urn:rezics:unit:realm:${hit.document - 2100}` } : {}),
+            }));
+          return {
+            results: {
+              bindings: [
+                {
+                  epoch: b('epoch'),
+                  sequence: b('9'),
+                  generation: b(position.generation),
+                  page: b(
+                    JSON.stringify({
+                      hits: selected,
+                      more: offset + selected.length < raw.length,
+                      commit: '7',
+                    }),
+                  ),
+                },
+              ],
+            },
+          };
+        }
+        expect(query).toContain(`rv:realm <${realm}>`);
+        const units = [...query.matchAll(/<urn:rezics:unit:realm:(\d+)>/gu)].map((match) =>
+          Number(match[1]),
+        );
+        return {
+          results: {
+            bindings: units.map((n) => ({
+              unit: b(`urn:rezics:unit:realm:${n}`),
+              work: b(id(6000 + n)),
+              main: b(id(7000 + n)),
+              contribution: b(id(8000 + n)),
+              revision: b(id(8100 + n)),
+              selection: b(id(8200 + n)),
+              language: b('zh-Hant'),
+            })),
+          },
+        };
+      },
+    },
+  } as unknown as WorkActivationEnvironment;
+  let continuation: string | undefined;
+  let emptyPages = 0;
+  const works: string[] = [];
+  for (let page = 0; page < 10; page++) {
+    const before = nativeReads;
+    const result = await searchGraphSnapshot.run(
+      { clients: new Set([env.fuseki]), lineage: env.lineage, position },
+      () =>
+        readRankedCatalogue(env, {
+          phrase: 'Maintained realm alias',
+          realm,
+          language: 'zh-Hant',
+          pageSize: 2,
+          continuation,
+        }),
+    );
+    expect(nativeReads - before).toBeLessThanOrEqual(8);
+    works.push(...result.results.map((row) => row.work));
+    if (!result.results.length) {
+      emptyPages++;
+      expect(result.count.precision).toBe('lower-bound');
+      expect(result.next).not.toBeNull();
+    }
+    if (!result.next) {
+      expect(result.count).toEqual({ value: 3, precision: 'exact' });
+      break;
+    }
+    expect(result.next).not.toBe(continuation);
+    continuation = result.next;
+  }
+  expect(emptyPages).toBeGreaterThanOrEqual(4);
+  expect(works).toEqual([id(6000), id(6001), id(6002)]);
+  expect(new Set(works).size).toBe(works.length);
+  expect(queries.some((query) => query.includes('VALUES ?unit'))).toBe(true);
+});

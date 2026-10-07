@@ -621,6 +621,7 @@ public class PublicNameProjectionTest {
             assertFalse(data.contains(PUBLIC,body,p("publicTitle"),NodeFactory.createLiteralLang("Distinct alias 1000","fr")));
             refresh(data,WORK,"urn:receipt:catalogue-search-aliases");
             for(int batch=0;batch<17;batch++)maintainedNameTurn(data,"urn:receipt:catalogue-alias-copy:"+batch);
+            index.refreshRankSubject(data,body.getURI());
             data.commit();
         } finally {data.end();}
         data.begin(ReadWrite.READ);
@@ -650,7 +651,9 @@ public class PublicNameProjectionTest {
         definition.setLangField("lang");definition.setUidField("uid");
         var config=new TextIndexConfig(definition);config.setValueStored(true);
         var index=new FilteredGraphTextIndex(new TextIndexLucene(new ByteBuffersDirectory(),config));
-        return new CatalogueFixture(index,new DatasetGraphText(org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(),index,new TextDocProducerTriples(index)));
+        var data=new DatasetGraphText(org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(),index,new TextDocProducerTriples(index));
+        index.bindRankData(data);
+        return new CatalogueFixture(index,data);
     }
     private record CatalogueSelection(Node selection, Node contribution, Node decision, Node draft, Node body) {}
     private static CatalogueSelection catalogueSelection(DatasetGraph data, int n, Node owner, Node context, String language) {

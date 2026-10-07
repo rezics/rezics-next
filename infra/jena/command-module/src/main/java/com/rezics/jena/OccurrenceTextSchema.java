@@ -24,7 +24,7 @@ final class OccurrenceTextSchema {
             var fields = FieldInfos.getMergedFieldInfos(reader);
             var labels = fields.fieldInfo(FIELD);
             var order = fields.fieldInfo(ORDER);
-            return labels != null && (labels.getIndexOptions() != TYPE.indexOptions()
+            return index.rankMetadataMissing() || labels != null && (labels.getIndexOptions() != TYPE.indexOptions()
                 || labels.omitsNorms() != TYPE.omitNorms() || fields.fieldInfo(PAYLOAD) == null
                 || order == null || order.getDocValuesType() != org.apache.lucene.index.DocValuesType.SORTED);
         } catch (IOException error) { throw new TextIndexException("occurrence schema inspection failed", error); }
@@ -43,8 +43,9 @@ final class OccurrenceTextSchema {
     }
     static boolean rebuildIfIncompatible(DatasetGraph source, long deadline) {
         if (!(source instanceof org.apache.jena.query.text.DatasetGraphText data)
-            || !(data.getTextIndex() instanceof FilteredGraphTextIndex index)
-            || !incompatible(index)) return false;
+            || !(data.getTextIndex() instanceof FilteredGraphTextIndex index)) return false;
+        index.bindRankData(data);
+        if (!incompatible(index)) return false;
         data.begin(ReadWrite.WRITE);
         var producer = new TextDocProducerTriples(index);
         producer.start();

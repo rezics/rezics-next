@@ -37,6 +37,102 @@ public final class FilteredGraphTextIndex implements TextIndex {
     private static final int DEFAULT_LIMIT = 10_000;
     private static final int MAX_ADMITTED_LIMIT = 50_001;
     private final TextIndexLucene lucene;
+    static final String RANK_CONTEXT = "rankContext", RANK_GROUP = "rankGroup", RANK_SCHEMA = "rankMetadataVersion";
+    private java.lang.ref.WeakReference<org.apache.jena.sparql.core.DatasetGraph> rankData = new java.lang.ref.WeakReference<>(null);
+    void bindRankData(org.apache.jena.sparql.core.DatasetGraph data) {
+        // Command scopes/observers are temporary; the index shares the
+        // persistent text dataset's lifecycle across transactions and reads.
+        while (data instanceof org.apache.jena.sparql.core.DatasetGraphWrapper wrapper
+            && !(data instanceof org.apache.jena.query.text.DatasetGraphText)) data = wrapper.getWrapped();
+        if (data instanceof org.apache.jena.query.text.DatasetGraphText) rankData = new java.lang.ref.WeakReference<>(data);
+    }
+    private record RankMetadata(String context, String group) {}
+    private static RankMetadata rankMetadata(org.apache.jena.sparql.core.DatasetGraph data, String id) {
+        Node unit = uri(id), context = namedValue(data, PUBLIC_GRAPH, unit, "context");
+        Node result = namedValue(data, PUBLIC_GRAPH, unit, "searchResultMain");
+        Node main = namedValue(data, PUBLIC_GRAPH, unit, "mainVersion");
+        Node group = result == null ? main : result;
+        return context != null && context.isURI() && group != null && group.isURI()
+            ? new RankMetadata(context.getURI(), group.getURI()) : null;
+    }
+    /** The existing writer owns these exact terms, alongside its text values.
+     * A startup replay seeds old/offline generations before reads open. */
+    boolean rankMetadataMissing() {
+        try (var reader = DirectoryReader.open(lucene.getIndexWriter())) {
+            var missing = new BooleanQuery.Builder()
+                .add(new BooleanQuery.Builder().add(new org.apache.lucene.search.FieldExistsQuery("body"), BooleanClause.Occur.SHOULD)
+                    .add(new org.apache.lucene.search.FieldExistsQuery("publicTitle"), BooleanClause.Occur.SHOULD).build(), BooleanClause.Occur.FILTER)
+                .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER)
+                .add(new org.apache.lucene.search.PrefixQuery(new Term(lucene.getDocDef().getEntityField(), PublicNameProjection.PREFIX)), BooleanClause.Occur.MUST_NOT)
+                .add(new org.apache.lucene.search.PrefixQuery(new Term(lucene.getDocDef().getEntityField(), PublicNameProjection.DIRECTORY)), BooleanClause.Occur.MUST_NOT)
+                .add(new TermQuery(new Term(RANK_SCHEMA, "1")), BooleanClause.Occur.MUST_NOT).build();
+            return new IndexSearcher(reader).count(missing) != 0;
+        } catch (IOException error) { throw new TextIndexException("rank metadata inspection failed", error); }
+    }
+    static void refreshRankMetadata(org.apache.jena.sparql.core.DatasetGraph data, List<SearchDeltaJournal.Change> changes, boolean rebuild) {
+        org.apache.jena.sparql.core.DatasetGraph base = data;
+        while (base instanceof org.apache.jena.sparql.core.DatasetGraphWrapper wrapper
+            && !(base instanceof org.apache.jena.query.text.DatasetGraphText)) base = wrapper.getWrapped();
+        if (!(base instanceof org.apache.jena.query.text.DatasetGraphText text)
+            || !(text.getTextIndex() instanceof FilteredGraphTextIndex index)) return;
+        index.bindRankData(data);
+        if (changes.size() > SearchDeltaJournal.MAX_UNITS) throw new TextIndexException("rank metadata delta exceeds its admitted bound");
+        for (var change : changes) index.refreshRankSubject(data, change.unit());
+        if (rebuild) index.refreshRankRebuild(data);
+    }
+    void refreshRankSubject(org.apache.jena.sparql.core.DatasetGraph data, String id) {
+        if (id.startsWith(PublicNameProjection.PREFIX) || id.startsWith(PublicNameProjection.DIRECTORY)) return;
+        bindRankData(data);
+        try {
+            Query identity = new BooleanQuery.Builder()
+                .add(new TermQuery(new Term(lucene.getDocDef().getEntityField(), id)), BooleanClause.Occur.FILTER)
+                .add(new TermQuery(new Term(lucene.getDocDef().getGraphField(), CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER)
+                .add(new BooleanQuery.Builder()
+                    .add(new org.apache.lucene.search.FieldExistsQuery("body"), BooleanClause.Occur.SHOULD)
+                    .add(new org.apache.lucene.search.FieldExistsQuery("publicTitle"), BooleanClause.Occur.SHOULD).build(), BooleanClause.Occur.FILTER).build();
+            lucene.getIndexWriter().deleteDocuments(identity);
+            for (String predicate : List.of("searchBody", "publicTitle")) {
+                int bound = predicate.equals("searchBody") ? 1 : CatalogueNamePolicy.BODY_NAME_LIMIT;
+                var rows = data.find(PUBLIC_GRAPH, uri(id), uri(RV + predicate), Node.ANY);
+                try { for (int count = 0; rows.hasNext(); count++) {
+                    if (count == bound) throw new TextIndexException("rank metadata owner text exceeds its admitted bound");
+                    Node value = rows.next().getObject();
+                    if (!value.isLiteral()) throw new TextIndexException("rank metadata text is not literal");
+                    CommandWork.count("rank_metadata_values_visited", 1);
+                    Entity entity = new Entity(id, CommandPolicy.PUBLIC_SEARCH, value.getLiteralLanguage(), value.getLiteralDatatype());
+                    entity.put(predicate.equals("searchBody") ? "body" : "publicTitle", value.getLiteralLexicalForm());
+                    lucene.getIndexWriter().addDocument(rankDocument(entity, rankMetadata(data, id)));
+                } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+            }
+        } catch (IOException error) { throw new TextIndexException("rank metadata write failed", error); }
+    }
+    void refreshRankRebuild(org.apache.jena.sparql.core.DatasetGraph data) {
+        // A native reset is already an explicit whole-generation operation;
+        // its empty delta must not certify unseeded metadata. Stream owners
+        // under the existing rebuild budget, never from a ranked read.
+        long deadline = System.nanoTime() + OccurrenceTextSchema.REBUILD_DEADLINE_MS * 1_000_000L;
+        var rows = data.find(PUBLIC_GRAPH, Node.ANY, uri(RV + "searchBody"), Node.ANY);
+        try { while (rows.hasNext()) {
+            if (System.nanoTime() >= deadline) throw new TextIndexException("rank metadata rebuild exceeded its maintenance budget");
+            Node owner = rows.next().getSubject();
+            if (!owner.isURI()) throw new TextIndexException("rank metadata owner is invalid");
+            refreshRankSubject(data, owner.getURI());
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+    }
+    private Document rankDocument(Entity entity, RankMetadata metadata) {
+        var doc = org.apache.jena.query.text.RezicsLuceneDocument.build(lucene, entity);
+        if (metadata != null) {
+            doc.add(new org.apache.lucene.document.StringField(RANK_CONTEXT, metadata.context(), org.apache.lucene.document.Field.Store.YES));
+            doc.add(new org.apache.lucene.document.StringField(RANK_GROUP, metadata.group(), org.apache.lucene.document.Field.Store.YES));
+        }
+        doc.add(new org.apache.lucene.document.StringField(RANK_SCHEMA, "1", org.apache.lucene.document.Field.Store.NO));
+        return doc;
+    }
+    static boolean rankMetadataMatches(org.apache.jena.sparql.core.DatasetGraph data, String id, Document doc) {
+        var metadata = rankMetadata(data, id);
+        return metadata == null ? doc.get(RANK_CONTEXT) == null && doc.get(RANK_GROUP) == null
+            : metadata.context().equals(doc.get(RANK_CONTEXT)) && metadata.group().equals(doc.get(RANK_GROUP));
+    }
 
     public FilteredGraphTextIndex(TextIndexLucene lucene) { this.lucene = lucene; }
     public TextIndexLucene lucene() { return lucene; }
@@ -71,6 +167,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
     public RankPage ranked(Node property, String phrase, int size, RankAfter after,
                            org.apache.jena.sparql.core.DatasetGraph data, RankScope scope) {
         if (size < 1 || size > 64) throw new TextIndexException("ranked page size is out of bounds");
+        if (scope != null && scope.names() == null && rankData.get() == null)
+            throw new TextIndexException("ranked scope metadata needs startup qualification or an index rebuild");
         String field = lucene.getDocDef().getField(property);
         if (!"body".equals(field) && !"publicTitle".equals(field))
             throw new TextIndexException("ranked field is not public");
@@ -123,24 +221,13 @@ public final class FilteredGraphTextIndex implements TextIndex {
             searcher.setTimeout(() -> System.nanoTime() >= deadline);
             String entityField = lucene.getDocDef().getEntityField();
             if (scope != null && scope.realm() != null) {
-                // RDF's context object index supplies Realm units, independent
-                // of the phrase match population. Actual current adoption is
-                // still checked on each returned candidate.
-                List<org.apache.lucene.util.BytesRef> ids = new ArrayList<>();
-                var members = data.find(PUBLIC_GRAPH, Node.ANY, property("context"), uri(scope.realm()));
-                try { while (members.hasNext()) {
-                    Node unit = members.next().getSubject();
-                    if (unit.isURI()) {
-                        ids.add(new org.apache.lucene.util.BytesRef(unit.getURI()));
-                        if (catalogue) {
-                            Node work = namedValue(data, PUBLIC_GRAPH, unit, "work");
-                            if (PublicNameProjection.productResource(work)) ids.add(new org.apache.lucene.util.BytesRef(
-                                PublicNameProjection.nameUnit(work, "work").getURI()));
-                        }
-                    }
-                } } finally { org.apache.jena.atlas.iterator.Iter.close(members); }
-                query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
-                    .add(new org.apache.lucene.search.TermInSetQuery(entityField, ids), BooleanClause.Occur.FILTER).build();
+                // Names retain their document cursor and check the exact
+                // owned adoption on <=64 candidates. Body scopes are postings,
+                // never an RDF inventory of the Realm population.
+                Query realm = new TermQuery(new Term(RANK_CONTEXT, scope.realm()));
+                if (catalogue) realm = new BooleanQuery.Builder().add(realm, BooleanClause.Occur.SHOULD)
+                    .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.PREFIX + "work:")), BooleanClause.Occur.SHOULD).build();
+                query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST).add(realm, BooleanClause.Occur.FILTER).build();
             }
             if (names) query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
                 .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField,
@@ -465,6 +552,13 @@ public final class FilteredGraphTextIndex implements TextIndex {
         if (facts == null) return null;
         Node main = facts.main(), selection = facts.selection(), context = facts.context(), language = facts.language();
         Node current = CURRENT_GRAPH;
+        Node work = namedValue(data, PUBLIC_GRAPH, uri(id), "work");
+        Node revision = namedValue(data, PUBLIC_GRAPH, uri(id), "revision");
+        if (work != null && PublicNameProjection.withdrawn(data, work) || PublicNameProjection.withdrawn(data, main)
+            || facts.contribution() != null && PublicNameProjection.withdrawn(data, facts.contribution())
+            || revision != null && data.contains(uri(CommandPolicy.REVISIONS), revision, org.apache.jena.vocabulary.RDF.type.asNode(), uri(RV + "ErasedRevision"))) return null;
+        if (data.contains(uri(CommandPolicy.REVISIONS), selection, org.apache.jena.vocabulary.RDF.type.asNode(), uri(RV + "PublicationSelection"))
+            && (work == null || !PublicNameProjection.publishedSelection(data, work, main, selection, context))) return null;
         if (scope.language() != null && !scope.language().equalsIgnoreCase(language.getLiteralLexicalForm())) return null;
         if (scope.author() != null) {
             Node contribution = facts.contribution();
@@ -557,45 +651,33 @@ public final class FilteredGraphTextIndex implements TextIndex {
     }
     private static boolean canonicalGroupHit(org.apache.jena.sparql.core.DatasetGraph data, RankScope scope,
         IndexSearcher searcher, Query query, String key, String candidateId, int doc, String entityField) throws IOException {
-        List<org.apache.lucene.util.BytesRef> ids = new ArrayList<>();
-        java.util.Set<String> seen = new java.util.HashSet<>();
-        Map<String, String> selected = new java.util.HashMap<>();
-        Node graph = PUBLIC_GRAPH;
-        for (String predicate : List.of("mainVersion", "searchResultMain")) {
-            var members = data.find(graph, Node.ANY, property(predicate), uri(key));
-            try {
-                while (members.hasNext()) {
-                    Node unit = members.next().getSubject();
-                    if (!unit.isURI()) throw new TextIndexException("ranked group identity is invalid");
-                    String id = unit.getURI();
-                    // The collector already admitted this candidate. A singleton
-                    // needs only membership lookup, not a second head read.
-                    if (seen.add(id) && (candidateId.equals(id) || key.equals(admittedMain(data, id, scope)))) {
-                        ids.add(new org.apache.lucene.util.BytesRef(id));
-                    }
-                }
-            } finally { org.apache.jena.atlas.iterator.Iter.close(members); }
-        }
-        if (ids.size() == 1 && !scope.catalogue()) return true;
-        for (var id : ids) {
-            Node unit = uri(id.utf8ToString());
-            RankUnit facts = describeUnit(data, unit.getURI());
-            String identity = facts.main().getURI() + "\n"
-                + facts.language().getLiteralLexicalForm().toLowerCase(java.util.Locale.ROOT);
-            if (selected.putIfAbsent(identity, id.utf8ToString()) != null)
-                throw new TextIndexException("ranked current language selection is ambiguous");
-        }
+        Query membership = new TermQuery(new Term(RANK_GROUP, key));
         if (scope.catalogue()) {
             Node work = namedValue(data, CURRENT_GRAPH, uri(key), "work");
-            if (PublicNameProjection.productResource(work)) {
-                Node name = PublicNameProjection.nameUnit(work, "work");
-                if (nameWitness(data, name.getURI(), scope) != null) ids.add(new org.apache.lucene.util.BytesRef(name.getURI()));
-            }
+            if (PublicNameProjection.productResource(work)) membership = new BooleanQuery.Builder()
+                .add(membership, BooleanClause.Occur.SHOULD)
+                .add(new TermQuery(new Term(entityField, PublicNameProjection.nameUnit(work, "work").getURI())), BooleanClause.Occur.SHOULD).build();
         }
-        Query grouped = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
-            .add(new org.apache.lucene.search.TermInSetQuery(entityField, ids), BooleanClause.Occur.FILTER).build();
-        var best = searcher.search(grouped, 1);
-        return best.scoreDocs.length == 1 && best.scoreDocs[0].doc == doc;
+        Query grouped = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST).add(membership, BooleanClause.Occur.FILTER).build();
+        // Reject an ineligible identity once, including all its name/cache
+        // documents. A 1001-name root must not consume 1001 witness probes or
+        // hide a current lower-scoring chapter. The existing candidate budget
+        // bounds distinct owner witnesses; exhausted uncertainty is explicit.
+        var probe = new BooleanQuery.Builder().add(grouped, BooleanClause.Occur.MUST);
+        for (int count = 0; count < 64; count++) {
+            var top = searcher.search(probe.build(), 1);
+            if (top.scoreDocs.length == 0) return false;
+            var hit = top.scoreDocs[0];
+            String id = searcher.storedFields().document(hit.doc, java.util.Set.of(entityField)).get(entityField);
+            CommandWork.count("rank_group_candidates_visited", 1);
+            String witness = scope.catalogue() && id.startsWith(PublicNameProjection.PREFIX + "work:") ? nameWitness(data, id, scope) : null;
+            String admitted = admittedMain(data, witness == null ? id : witness, scope);
+            if (key.equals(admitted)) return hit.doc == doc;
+            probe.add(new TermQuery(new Term(entityField, id)), BooleanClause.Occur.MUST_NOT);
+        }
+        if (searcher.search(probe.build(), 1).scoreDocs.length != 0)
+            throw new TextIndexException("ranked group live-witness budget exceeded");
+        return false;
     }
 
     static FilteredGraphTextIndex functionIndex(org.apache.jena.sparql.function.FunctionEnv env) {
@@ -686,7 +768,16 @@ public final class FilteredGraphTextIndex implements TextIndex {
         CommandWork.timed("text_index", () -> addMeasuredEntity(entity));
     }
     private void addMeasuredEntity(Entity entity) {
-        if (!entity.getMap().containsKey(OccurrenceTextSchema.FIELD)) { lucene.addEntity(entity); return; }
+        if (!entity.getMap().containsKey(OccurrenceTextSchema.FIELD)) {
+            var data = rankData.get();
+            if (data != null && CommandPolicy.PUBLIC_SEARCH.equals(entity.getGraph())
+                && !entity.getId().startsWith(PublicNameProjection.PREFIX) && !entity.getId().startsWith(PublicNameProjection.DIRECTORY)
+                && (entity.getMap().containsKey("body") || entity.getMap().containsKey("publicTitle"))) {
+                try { lucene.getIndexWriter().addDocument(rankDocument(entity, rankMetadata(data, entity.getId()))); }
+                catch (IOException error) { throw new TextIndexException("rank metadata write failed", error); }
+            } else lucene.addEntity(entity);
+            return;
+        }
         try { lucene.getIndexWriter().addDocument(occurrenceDocument(entity)); }
         catch (IOException error) { throw new TextIndexException("occurrence text write failed", error); }
     }
@@ -737,7 +828,16 @@ public final class FilteredGraphTextIndex implements TextIndex {
     @Override public void updateEntity(Entity entity) {
         CommandWork.count("text_updates", 1);
         CommandWork.timed("text_index", () -> {
-            if (!entity.getMap().containsKey(OccurrenceTextSchema.FIELD)) { lucene.updateEntity(entity); return; }
+            if (!entity.getMap().containsKey(OccurrenceTextSchema.FIELD)) {
+                var data = rankData.get();
+                if (data != null && CommandPolicy.PUBLIC_SEARCH.equals(entity.getGraph())
+                    && !entity.getId().startsWith(PublicNameProjection.PREFIX) && !entity.getId().startsWith(PublicNameProjection.DIRECTORY)
+                    && (entity.getMap().containsKey("body") || entity.getMap().containsKey("publicTitle"))) {
+                    try { lucene.getIndexWriter().updateDocument(new Term(lucene.getDocDef().getEntityField(), entity.getId()), rankDocument(entity, rankMetadata(data, entity.getId()))); }
+                    catch (IOException error) { throw new TextIndexException("rank metadata update failed", error); }
+                } else lucene.updateEntity(entity);
+                return;
+            }
             try { lucene.getIndexWriter().updateDocument(new Term(lucene.getDocDef().getEntityField(), entity.getId()),
                 occurrenceDocument(entity)); }
             catch (IOException error) { throw new TextIndexException("occurrence text update failed", error); }

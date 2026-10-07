@@ -64,7 +64,7 @@ final class PublicNameProjection {
             && listedPublic(data, space, true) && listedPublic(data, realm, false)
             && !withdrawn(data, realm) && !withdrawn(data, space);
     }
-    private static boolean withdrawn(DatasetGraph data, Node resource) {
+    static boolean withdrawn(DatasetGraph data, Node resource) {
         for (String predicate : Set.of("head", "semanticHead", "conceptHead", "collectionHead", "zoneHead")) {
             Node head = one(data, resource, predicate);
             if (head != null && data.contains(uri(CommandPolicy.REVISIONS), head, RDF.type.asNode(), p("ErasedRevision"))) return true;

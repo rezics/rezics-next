@@ -175,6 +175,7 @@ final class SearchDeltaJournal {
                 return null;
             try (DirectoryReader reader = DirectoryReader.open(lucene.getDirectory())) {
                 IndexSearcher searcher = new IndexSearcher(reader);
+                boolean rankMetadata = org.apache.lucene.index.FieldInfos.getMergedFieldInfos(reader).fieldInfo(FilteredGraphTextIndex.RANK_SCHEMA) != null;
                 Set<String> seen = new LinkedHashSet<>();
                 // Membership is graph/document identity, independent of analyzer tokens.
                 TermQuery query = new TermQuery(new Term("graph", CommandPolicy.PUBLIC_SEARCH));
@@ -184,8 +185,12 @@ final class SearchDeltaJournal {
                     @Override public ScoreMode scoreMode() { return ScoreMode.COMPLETE_NO_SCORES; }
                     @Override public void collect(int doc) throws IOException {
                         Document stored = leaf.reader().storedFields().document(doc);
-                        if (stored.getValues("body").length == 0) return;
                         String subject = stored.get("uri");
+                        if (rankMetadata && stored.getValues("publicTitle").length != 0 && subject != null
+                            && !subject.startsWith(PublicNameProjection.PREFIX) && !subject.startsWith(PublicNameProjection.DIRECTORY)
+                            && !FilteredGraphTextIndex.rankMetadataMatches(data, subject, stored))
+                            throw new IllegalStateException("public title rank metadata differs from RDF");
+                        if (stored.getValues("body").length == 0) return;
                         if (subject == null || !seen.add(subject))
                             throw new IllegalStateException("duplicate public body document");
                         Node unit = uri(subject), body = one(data, PUBLIC, unit, BODY);
@@ -194,6 +199,8 @@ final class SearchDeltaJournal {
                             || !body.getLiteralLexicalForm().equals(stored.get("body"))
                             || !body.getLiteralLanguage().equalsIgnoreCase(stored.get("lang") == null ? "" : stored.get("lang")))
                             throw new IllegalStateException("public index differs from RDF");
+                        if (rankMetadata && !FilteredGraphTextIndex.rankMetadataMatches(data, subject, stored))
+                            throw new IllegalStateException("public rank metadata differs from RDF");
                     }
                 });
                 long population = 0;
@@ -382,6 +389,7 @@ final class SearchDeltaJournal {
 
     static void append(DatasetGraph data, Capture capture, long completedWriteEpoch) {
         List<Change> changes = capture.changes();
+        FilteredGraphTextIndex.refreshRankMetadata(data, changes, capture.reset);
         // Existing datasets created by an earlier module have no journal. The
         // first new write starts one; Main has no baseline ordinal and audits.
         if (!data.contains(GRAPH, STATE, ORDINAL, Node.ANY)) initialize(data);
@@ -517,9 +525,10 @@ final class SearchDeltaJournal {
         BooleanQuery exact = new BooleanQuery.Builder()
             .add(new TermQuery(new Term("uri", subject)), BooleanClause.Occur.MUST)
             .add(new TermQuery(new Term("graph", CommandPolicy.PUBLIC_SEARCH)), BooleanClause.Occur.FILTER)
+            .add(new org.apache.lucene.search.FieldExistsQuery("body"), BooleanClause.Occur.FILTER)
             .build();
-        var hits = searcher.search(exact, 9);
-        if (hits.totalHits.value() > 8) throw new IllegalStateException("too many exact-subject index documents");
+        var hits = searcher.search(exact, 2);
+        if (hits.totalHits.value() > 1) throw new IllegalStateException("too many exact-subject body documents");
         int bodies = 0;
         for (var hit : hits.scoreDocs) {
             Document doc = searcher.storedFields().document(hit.doc);
@@ -528,6 +537,9 @@ final class SearchDeltaJournal {
             if (values.length != 1 || body == null || !body.getLiteralLexicalForm().equals(values[0])
                 || !body.getLiteralLanguage().equalsIgnoreCase(doc.get("lang")))
                 throw new IllegalStateException("exact-subject body differs from RDF");
+            if (org.apache.lucene.index.FieldInfos.getMergedFieldInfos(searcher.getIndexReader()).fieldInfo(FilteredGraphTextIndex.RANK_SCHEMA) != null
+                && !FilteredGraphTextIndex.rankMetadataMatches(data, subject, doc))
+                throw new IllegalStateException("exact-subject rank metadata differs from RDF");
             bodies++;
         }
         if (bodies != (exists ? 1 : 0)) throw new IllegalStateException("exact-subject index membership differs");
