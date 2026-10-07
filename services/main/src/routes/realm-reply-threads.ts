@@ -15,9 +15,9 @@ const headers = { 'cache-control': 'no-store' };
 // Public reads: a private Realm answers only its members, who send a bearer
 // token and the Agent they read as; the reader's own votes come back with it.
 export const openApiOperations = {
-  '/v1/realms/{realm}/threads': { get: { exposure: 'public', bearer: false } },
-  '/v1/realms/{realm}/threads/{reply}': { get: { exposure: 'public', bearer: false } },
-  '/v1/agents/{id}/realm-contributions': { get: { exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/threads': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/realms/{realm}/threads/{reply}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/agents/{id}/realm-contributions': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
 } as const;
 
 function threadError(error: unknown): Response {

@@ -70,18 +70,18 @@ const errors = { 400: problemResult(400), 401: problemResult(401), 403: problemR
   503: problemResult(503) };
 
 export const openApiOperations = {
-  '/v1/zones': { post: { exposure: 'public', bearer: true, idempotencyKey: true }, get: { exposure: 'public',} },
-  '/v1/zones/{id}/presentation': { get: { exposure: 'public',} },
-  '/v1/zones/{id}/showcase-editor': { get: { exposure: 'public', bearer: true } },
-  '/v1/zones/{id}/routes': { get: { exposure: 'public',} },
-  '/v1/zones/{id}/mounts': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/zones/{id}/mounts/{occurrence}': { delete: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/zones/{id}': { get: { exposure: 'public', bearer: true } },
-  '/v1/zones/{id}/revisions/{revision}': { get: { exposure: 'public', bearer: true } },
-  '/v1/zones/{id}/configuration': { get: { exposure: 'public', bearer: true }, put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/zones/{id}/query-blocks': { get: { exposure: 'platform:saved-views', bearer: true } },
-  '/v1/zones/{id}/retirements': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/zones/{id}/recoveries': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/zones': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true }, get: { rateLimitFamily: 'read', exposure: 'public',} },
+  '/v1/zones/{id}/presentation': { get: { rateLimitFamily: 'read', exposure: 'public',} },
+  '/v1/zones/{id}/showcase-editor': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
+  '/v1/zones/{id}/routes': { get: { rateLimitFamily: 'read', exposure: 'public',} },
+  '/v1/zones/{id}/mounts': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/zones/{id}/mounts/{occurrence}': { delete: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/zones/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
+  '/v1/zones/{id}/revisions/{revision}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
+  '/v1/zones/{id}/configuration': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true }, put: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/zones/{id}/query-blocks': { get: { rateLimitFamily: 'read', exposure: 'platform:saved-views', bearer: true } },
+  '/v1/zones/{id}/retirements': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/zones/{id}/recoveries': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 
 function key(request: Request) {
