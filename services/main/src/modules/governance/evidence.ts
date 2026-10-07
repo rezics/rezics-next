@@ -1,6 +1,8 @@
 import type { Pool } from 'pg';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import type { RealmReplyStore } from '../realm-reply/store.ts';
+import { GLOBAL_CONTEXT } from './schema.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionNotFound } from '../work/history.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from '../structure/graph.ts';
@@ -18,6 +20,7 @@ const sourceId = (value: string): string | null => {
 };
 
 export interface EvidenceOwners {
+  reply?: ReplyEvidenceOwner;
   /** Content bodies: exact revision bytes, authorized for the reporter's acting Agent. */
   content?: { core: Pick<ContentCore, 'readExactBatch'>;
     canRead: (principal: VerifiedPrincipal, actingSubject: string, revisionIds: readonly string[]) =>
@@ -32,6 +35,59 @@ export interface EvidenceOwners {
   /** Content-owned immutable Use and its exact asset revision/representation. */
   media?: { pool: Pool;
     canReadWork: (principal: VerifiedPrincipal, actingSubject: string, work: string) => Promise<boolean> };
+}
+
+export interface ReplyEvidenceOwner {
+  pool: Pick<Pool, 'query'>;
+  reader: Pick<RealmReplyStore, 'readPublic'>;
+  core: Pick<ContentCore, 'readExactBatch'>;
+}
+
+/** A known reply never falls through Work or graph-only placement authority.
+ * Only target resolution may choose the current revision; evidence intake pins
+ * the revision supplied by its caller. Context is retained, never a permit. */
+export async function captureReplyEvidence(owner: ReplyEvidenceOwner, target: EvidenceTarget,
+  principal: VerifiedPrincipal | null, actor?: string, resolveCurrent = false): Promise<CapturedEvidence | null> {
+  try {
+    const known = await owner.pool.query(`SELECT 1 FROM content.reply_author WHERE reply = $1
+      UNION ALL SELECT 1 FROM content.reply WHERE id = $1 LIMIT 1`, [target.resource]);
+    if (!known.rowCount) return null;
+    if (target.owner !== 'content' || target.component !== 'body' || target.locator !== null
+      || (!resolveCurrent || target.revision !== null) && (!target.revision || !uuid.test(target.revision))) {
+      throw new GovernanceInvalid('Reply evidence needs an exact body revision');
+    }
+    const reply = await owner.reader.readPublic(target.resource, principal ?? undefined, actor);
+    if (!reply || reply.reply !== target.resource || target.revision !== null && reply.revisionId !== target.revision) {
+      throw new GovernanceDenied('Reported reply is unavailable');
+    }
+    const [exact] = await owner.core.readExactBatch([reply.revisionId], async ids => new Set(ids));
+    if (!exact || exact.status !== 'available' || exact.reference.resourceId !== reply.reply
+      || exact.reference.variantId !== reply.variantId || exact.reference.revisionId !== reply.revisionId
+      || exact.reference.byteDigest !== reply.revisionDigest) {
+      throw new GovernanceUnavailable('Exact reply evidence is unavailable');
+    }
+    const same = (current: typeof reply | null) => current && current.reply === reply.reply
+      && current.revisionId === reply.revisionId && current.revisionDigest === reply.revisionDigest
+      && current.variantId === reply.variantId && current.originRealm === reply.originRealm
+      && current.rootTarget === reply.rootTarget && current.rootRevision === reply.rootRevision;
+    // An anonymous reread certifies public authority for both root and origin.
+    // A private result needs a final signed fence after the exact byte read.
+    const publicReply = await owner.reader.readPublic(target.resource);
+    const publiclyReadable = !!same(publicReply);
+    if (!publiclyReadable && (!principal || !actor
+      || !same(await owner.reader.readPublic(target.resource, principal, actor)))) {
+      throw new GovernanceDenied('Reported reply changed or is unavailable');
+    }
+    return { owner: 'content', resource: reply.reply, component: 'body', locator: null,
+      revision: reply.revisionId, revisionDigest: exact.reference.byteDigest, state: 'available',
+      representation: exact.reference.format, provenance: { capturedBy: 'reply-exact-read-v1',
+        author: reply.author, realm: reply.originRealm ?? GLOBAL_CONTEXT, root: reply.rootTarget,
+        rootRevision: reply.rootRevision, variant: reply.variantId,
+        disclosure: publiclyReadable ? 'public' : 'private' } };
+  } catch (error) {
+    if (error instanceof GovernanceInvalid || error instanceof GovernanceDenied || error instanceof GovernanceUnavailable) throw error;
+    throw new GovernanceUnavailable('Reply evidence authority is unavailable', { cause: error });
+  }
 }
 
 const result = (target: EvidenceTarget, state: CapturedEvidence['state'], revisionDigest: string | null,
@@ -80,6 +136,10 @@ export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & 
       return result({ ...target, revision: null }, 'unsupported', null, null, 'no-admitted-exact-reader');
     },
     async capture(principal, actingSubject, target) {
+      if (target.owner === 'content' && owners.reply) {
+        const reply = await captureReplyEvidence(owners.reply, target, principal, actingSubject);
+        if (reply) return reply;
+      }
       if (target.owner === 'content' && target.component === 'body' && owners.content) {
         if (!target.revision || !uuid.test(target.revision)) throw new GovernanceInvalid('content evidence needs a revision');
         const [read] = await owners.content.core.readExactBatch([target.revision],

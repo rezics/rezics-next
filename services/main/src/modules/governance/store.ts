@@ -336,6 +336,17 @@ export class GovernanceStore {
         evidence.provenance.realm].includes(input.context)) {
         throw new GovernanceInvalid('review report context does not match its rating Context');
       }
+      if (evidence.provenance.capturedBy === 'reply-exact-read-v1') {
+        const realm = evidence.provenance.realm;
+        const jurisdiction = input.context === GLOBAL_CONTEXT
+          ? input.authority.kind === 'platform' && input.authority.scopeId === 'governance:platform'
+          : realm === input.context && input.authority.kind === 'realm'
+            && input.authority.scopeId === `governance:realm:${realm}`;
+        if (!jurisdiction) throw new GovernanceInvalid('Reply report jurisdiction does not match its origin');
+        if (evidence.provenance.disclosure === 'private' && input.disclosure !== 'private') {
+          throw new GovernanceInvalid('Private reply evidence requires private case disclosure');
+        }
+      }
       captured.push(evidence);
     }
     const evidenceDigest = sha256(canonical(captured.map(item => [item.owner, item.resource, item.component,

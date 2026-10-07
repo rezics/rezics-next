@@ -2,14 +2,15 @@ import type { Pool } from 'pg';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { readMergedIdentity } from '../identity-merge/resolution.ts';
-import { ownerEvidenceCapture } from '../governance/evidence.ts';
+import { captureReplyEvidence, ownerEvidenceCapture } from '../governance/evidence.ts';
 import { GovernanceDenied, GovernanceInvalid, GovernanceUnavailable, type EvidenceTarget } from '../governance/store.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { resolveTargets, type ReportTargets } from '../target/resolve.ts';
 import type { ResolvedTarget } from '../target/contract.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { workRead, type WorkReadSession } from '../work/read-session.ts';
-import { publicWork } from '../work/public-patterns.ts';
+import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
+import { RealmReplyStore } from '../realm-reply/store.ts';
 import type { PublicReportOwners } from './store.ts';
 
 const ID = 'https://rezics.com/id/';
@@ -74,25 +75,6 @@ function reportOwnerTargets(content: Pool): ReportTargets {
       targets.set(row.r.value, { resource: row.r.value, revision: row.revision.value, base: 'resource',
         types: [row.type!.value], work: null, disclosure: policy?.visibility === 'private' ? 'restricted' : 'public' });
     }
-    const replies = await session.query(`SELECT ?r ?contentRevision ?realm WHERE {
-      VALUES ?r { ${resources.map(iri).join(' ')} }
-      GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmReplySlot ; rv:reply ?r ;
-        rv:realm ?realm ; rv:replyPlacementHead ?placement .
-        ?realm rv:realmState rv:Active ; rv:space ?space . ?space rv:disclosure rv:Public . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?placement rv:reply ?r ; rv:contentRevision ?contentRevision ;
-        rv:rootTarget ?root ; rv:rootRevision ?rootRevision ; rv:placementOutcome rv:Accepted . }
-      ${publicWork('?root', '?main')}
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?rootRevision a rv:ErasedRevision } }
-    } ORDER BY ?r ?realm LIMIT ${resources.length * 16 + 1}`, resources.length * 16);
-    for (const row of replies) {
-      if (!row.r || !row.contentRevision?.value.startsWith('urn:rezics:content:revision:')) {
-        throw new GovernanceUnavailable('Reply report target is invalid');
-      }
-      if (targets.has(row.r.value)) continue;
-      const revision = row.contentRevision.value.slice('urn:rezics:content:revision:'.length);
-      targets.set(row.r.value, { resource: row.r.value, revision: ID + revision, base: 'resource',
-        types: ['https://rezics.com/vocab/MemberReply'], work: null, disclosure: 'public' });
-    }
     return targets;
   };
 }
@@ -121,6 +103,8 @@ async function authorAndRealm(session: WorkReadSession, resource: string, work: 
 
 export function publicReportOwners(deps: MainWorkDependencies, contentPool: Pool,
   core: ContentCore): PublicReportOwners {
+  const replyOwner = { pool: contentPool, core,
+    reader: new RealmReplyStore(new RealmReplyContentStore(contentPool), core, deps.access, deps.environment) };
   const capture = ownerEvidenceCapture({ graph: { env: deps.environment, canReadWork: async () => false },
     content: { core, canRead: async () => new Set() } });
   return {
@@ -132,10 +116,13 @@ export function publicReportOwners(deps: MainWorkDependencies, contentPool: Pool
       if (!principal || !input.actingSubject) headers.delete('authorization');
       const reading = new Request(request.url, { method: 'POST', headers });
       const resolve = async (session: WorkReadSession) => {
+          const reply = await captureReplyEvidence(replyOwner, { owner: 'content', component: 'body',
+            resource, revision: null, locator: null }, session.principal, session.options.actingSubject, true);
+          if (reply) return { evidence: reply, author: reply.provenance.author!,
+            realm: reply.provenance.realm === 'urn:rezics:context:global' ? null : reply.provenance.realm! };
           const [target] = await resolveTargets(session, [resource], 'report', undefined, reportOwnerTargets(contentPool));
           if (!target) throw new GovernanceDenied('Target is unavailable');
-          const contentOwned = target.types.some(type => ['https://rezics.com/vocab/MediaAsset',
-            'https://rezics.com/vocab/MemberReply'].includes(type));
+          const contentOwned = target.types.includes('https://rezics.com/vocab/MediaAsset');
           const evidenceTarget: EvidenceTarget = contentOwned
             ? { owner: 'content', component: 'body', resource, revision: target.revision.slice(-36), locator: null }
             : { owner: 'graph', component: target.base === 'work' ? 'title' : 'record',

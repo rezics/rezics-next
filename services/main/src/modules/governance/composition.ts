@@ -9,6 +9,8 @@ import { ContentModeration } from '../../../../content/src/moderation.ts';
 import { GovernanceRules } from './rules.ts';
 import { GovernanceStore } from './store.ts';
 import { ReviewReportOwner } from './report-review.ts';
+import { RealmReplyContentStore } from '../realm-reply/content-store.ts';
+import { RealmReplyStore } from '../realm-reply/store.ts';
 
 /** Main's real owner readers; every evidence lookup stays on the pinned revision. */
 export function governanceServices(accessPool: Pool, contentPool: Pool, content: ContentCore,
@@ -16,6 +18,8 @@ export function governanceServices(accessPool: Pool, contentPool: Pool, content:
   const rules = new GovernanceRules(accessPool);
   const reviews = new ReviewReportOwner(accessPool, registry, env);
   const evidence = ownerEvidenceCapture({
+    reply: { pool: contentPool, core: content,
+      reader: new RealmReplyStore(new RealmReplyContentStore(contentPool), content, registry, env) },
     content: { core: content, canRead: async (principal, actingSubject, ids) => {
       const disclosed = new Set<string>();
       for (const id of ids) {
