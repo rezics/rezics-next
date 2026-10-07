@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 20:47 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 21:21 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
@@ -26,9 +26,10 @@ Kernel roots/membership refresh completed exit0 to3afbdeb02652:
 `fa39610f05366ac072a3aa10d94d4ef02e5f72f8d404f3cb3da4b7d0c8a5fe49`.
 Content1705/1706 applied; all six apps Running Healthy. No AppHost restart,
 volumes kept. Kernel code hold RELEASED; no gate or refresh pending.
-Program lifecycle activation now SERVESf4c9d9301098 (refresh.json), including
+Latest verified lifecycle activation SERVESf7a340611d0c, including
 G1330 erased-pin45181 and G1345 auditbd968; six apps Running Healthy on
-20:46 verification. Native/model pins unchanged. G1346 lifecycle9c9c563e7
+20:55 Trust verification. Access1774 history reader is applied. Launch has a
+new normal activation queued; consult refresh.json for current serving revision. Native/model pins unchanged. G1346 lifecycle9c9c563e7
 verified live by Program44s/Main200 during heavy lock. Refresh/recovery now
 use their separate lifecycle lock, no heavy lock/QA slot; frozen staged code
 reexecutes after lock acquisition and builds use host admission. Main merges
@@ -91,109 +92,104 @@ qualifier branch preserved as `goal/g-1352-before-curator-selection-1852`.
 
 ## Ready components and active workers
 
-- G1282 RUNNING#20 implementing read-only native original-member classification.
-  440677802 retention ACCEPT43native(all39+4),316source hashes matched;
-  outside-datePublished only after original C/R/native receipt/provenance/D/Q
-  custody, overlap/unknown refuse. Mandatory Service a1bfc040 on members20e79023.
-  Next native original-directory ALL disposition traversal with one total
-  budget and archived converted witness; durable marker/version bridge deferred.
-  EOF is READ-snapshot classification only, owner completion/release denied. Baseline721b5487b39 accepted for current union.
-- G1290 RUNNING#20 on default codex: reviewed private human work.edit title
-  acceptance only, v2 explicit language/source:null, original SQL actor/custody
-  and bounded closed frame; native captures Work G/B in existing writer. Trust
-  title-admission.ts exact loan146afad6 staged .temp/ref/title-issuer-loan-granted.md;
-  live G1343 admission.ts excluded. Borrowed custody/Core/Fuseki freeze/restore.
-  Exact predecessor payload preservation and expired lost-ACK history required.
-  No terminal receipt/Access seal/name/PUBLIC/G/B mutation, promotion or recipe
-  association. Closed frame frozen before implementation; actual owner proof required.
-  New41d98735a byte correction ACCEPT43native(all39+4), pre-format lexical
-  admission262144scalar/524288TOTALsource+lookahead+copy,8MiB/partial rollback
-  and independent NT oracle. Originale20b5d89934 stays current union baseline.
-  Mandatory Core cancellationff00e763 and configured-startupb9047d38 unchanged.
-  Candidate-owner ack/promotion and recipe association remain later.
-- G1300 RUNNING#23 normalizes UNAPPLIED Access1769 to reserved1773, then proves
-  existing credits localBasis during hydration/final fences using actual template.
-  Publication64cca81cf+c7dad4d52 ACCEPT12native/full595 strict G920170.835s,
-  unchanged180s timer;24graph/1hydration/2candidates/4warm blocks, cold native
- 128/128/70 total tuples. All86pins/29restorations matched. Root harvest needs
-  native leaf, subject-read/publication-seek/Fuseki hunk, frozen seek8ea and
-  publication-only Core/Template b62; do not apply old whole Core overlay.
-  No existing localBasis consumer reaches target adapter: no unused adapter or
-  tiny empty-subject registry. Outer WorkRead/nonempty subject fence still open.
-- G1345 RUNNING#15 implementing receipt+Assessment original comparison BEFORE
-  terminal replay; defer stronger C/R anchors/B custody/E equality. Shared
-  two-call80KiB/10s strict raw RDF windows17/65. AuditLANDEDbd968879a98d,
- 161affected/guards with one timeoutsolo PASS; now serving Programf4c9d930.
-  No mandatory refresh needed for that TS-only landing.
-  Audit2b3b3b8cc independently ACCEPT42owner637/16PG377;32raw+lookahead,
-  invalid/pending originals explicit, exact maintenance job/generation/epoch,
-  PK33rows40vs41buffers64/10k. ContentEOF only under quiescence, not Access/native
-  completeness. Ready four-file prerequisite to harvest. Trust G1398 owns requested
-  fixed Access all-state/all-scope history reader/index1774; exact request in
-  assessment-access-history-request.md. Missing original intent stays unresolved.
-- G1330 MERGED#15 erased-pin component45181d8fd39d, independently accepted
-  9a756d8e4+882d5aa68; explicit prep/epoch/sequence mismatch blocker closed.
-  Actual fresh OPS1210143/sourceStable plus original available16 exact-byte proof.
-  All163affected/19guards pass, now serving Programf4c9d930. Trust types/native suppression/caller loans
-  preserved. FullTask not closed: original owner release/interruption union
-  depends on corrected G1397 +Trust G1351; graph/Access remains held.
-- G1397 RUNNING#2 exact released-native-proof reader corrections. Trust additive G1351
-  restore-lineage loan8ba staged .temp/ref/release-proof-loan.md, frozen contract
-  .temp/ref/release-retry-owner-8dc6. Whole bounded marker/receipt/control exact
-  terms/cardinality/digest/5legacy7paired fields, NO ANY restoreHold; fresh retry.
-  Borrowed helper0305/source da6d reviewed logic; actual2/29native/262.4s+
- 300parser but BLOCK invented UUID/100digit grammar and legacy exact3Main.
-  Fix legal bounded native opaque epochs/long counters and genuine old legacy
-  Main absent/missingprefix; paired3field zero check stays. No delivery to Trust
-  until corrected freeze accepted. Only new tests commit. No DB/sign/write/
-  caller completion/lifecycle changes. Trust G1343/G1351 consume after review.
-- G1352 RUNNING#14 ONE accepted native union qualification. All owner PATCH/MD/
-  JSON delivered .temp/ref/accepted-native-union/{g1290,g1379,g1282,g1373,g1392,
-  g1300}. Baselines e20b/fd1f/721b/82a8/60c9 plus currentMain, publication64cca.
-  Formally owned wrapper semantic-source-readiness-union.test.ts;208 static test
-  count was initially static; first actual208 failed, artifacts retained. Revised
-  run queued with two documented Core hook fixes (Source cancellation adapter
-  and fixed-family publication guard), independent source review ACCEPTS only
-  those corrections (Core205a67d1), full14classes208cases still pending. No assertions or
-  original bounds relaxed; no complete-union acceptance yet. Frozen hooks/hash/XML,
-  restore borrowed/generated then commit wrapper only. Preserve serving G1392
-  on final rebase. No dirty new recipe/retention/catalogue transport selection.
-- G1373 RUNNING#9 default codex: 7313dc59c recovery/cancellation component
-  independently ACCEPTED final2native +four original regressions on same final
-  Core/Journal; earlier mixed run failed its two then-new fixtures, not six-pass.
-  Actual Content201128-448eff1/122 stable, genuine physical loss/reopen/source
-  refusal/cleared-cut/admitted delivery/lostACK/second reopen. Original32 retained.
-  Cumulative nativefa0d6d94 OR incremental47dcf18d on exact baseline, never both;
-  all16 borrowed/generated restored. Activation held: next used top-level
-  search-state rebuild must offline-index only PROVED ZERO Content before relay;
-  partial same-job retry must not strip already delivered tags. Exact existing
-  phase or refuse, no new checkpoint/inferred receipt. Program QA CLI loan7c8a
-  requested, staged grant required; allocated raw-container start loan authorized.
-  RDF copies retained; private payload destruction/fullC6 unqualified.
-- G1379 RUNNING#9 USED original revision descriptor strengthening in existing
-  owner/object-coverage capture, bounded get+signal, full recursion unchanged.
-  Native same-graph manifest/component/generation/count versus owner bytes;
-  no unused header-only helper. Trust exact g916 fixture loan4ad144 staged
-  .temp/ref/g916-fixture-loan-granted.md, unclaimed immediately before staging;
-  borrowed hunk freeze/restore and original assertions mandatory. New8unit pass;
-  existing deadline fixture serving setup composed unchanged, actual native/S3 pending.
-  d11550a0b transport ACCEPT44hashes/final4HTTP99.7s, corrected full28 timed
-  out300s so activation HOLD. Receiver9371b404/combinedd83f4052 local hunks. Baselinefd1f0833e
-  Source/catalogue24 accepted; combined-native-hooks plus raw Template hook.
-  EOF only retained type-prefix coverage, NOT original owner records/adoption/
-  current Episode scalar absence. Next exact existing immutable ObjectStore/
-  Structure owner custody walk, no new HeldStructureCustody/OwnerWalk framework.
+- G1282 classifier354b0013d and dispatch495a94f0 ACCEPT: all45 actual TDB2
+  cases pass, including all43 previous cases. Frozen manifest00c9beb8 matches.
+  Original sealed directory plus exclusive converted/retained receipt and C/R
+  provenance; one whole turn512tuples/128probes/256KiB, two members. Actual
+  129-member/65-turn corpus with5000same-job/default growth retains identical
+  170tuples/83probes/42712bytes maximum. EOF certifies the read snapshot only,
+  no durable disposition/completion/release. Not in baseline G1352 union.
+  Sonnet#21 now decides the minimal authenticated same-version classification
+  seal using existing job phases; read-only, no owner-completion invention.
+- G1290 default Codex#20 remains live on private human work.edit title
+  acceptance. Explicit-language/source:null original frame/actor/custody and
+  captured native Work G/B; exact Trust title-admission loan146afad6 only.
+  Historical expired lost-ACK replay differs from fresh expiry checks. No
+  terminal receipt, Access seal, PUBLIC/name/head mutation, Source promotion
+  or recipe association. Prior recipe/byte43 proof retained; baseline Work34
+  alone is in G1352. Preserve live worker and frozen original bytes.
+- G1300 credits test-only component LANDED1a4d64e4979d: actual134 assertions
+  including real hydration/final-fence unrelated commits and all163affected/
+  19guards. Original publication12 plus strict G920595/170.835s retained;
+  old complete branch backed up before selection. Publication TS/Access1773
+  source remains unlanded; native12 included in G1352. Read-only#24 found
+  actual late WikiEvidenceStore claim binding escapes existing generation.
+  Reviewed prospective correctness repair accepted; Sonnet#25 implements
+  atomic existing ReadingPosition change notification and rollout invalidation,
+  with actual behind-frontier/low-XID/rollback/replay cases. This retains global
+  invalidation debt and does NOT fulfill nonempty subject-local cursor semantics.
+- G1345 original native receipt/Assessment reader LANDEDff332fd95559: original
+  56owner/919 and4native/454 assertions, actual source stable;161affected/
+  19guards. Terminal replay compares only actually recorded original fields,
+  strict raw RDF windows17/65, shared2calls/80KiB/10s; stronger C/R/B/E custody
+  remains deferred. Sonnet#16 now connects Trust's real Access history reader
+  to original Content/native audit under independently held clients and exact
+  cuts. Whole turn32Content lookups/64native calls/2621440bytes/10s. Missing
+  Content, malformed/pending/unsealed native remain unresolved; raw Access EOF
+  is not completeness or release. No evaluator/current intent/effects.
+- G1330 erased-pin45181d8fd39d serving; actual OPS12/10143 assertions preserves
+  original9192 and available16 exact-byte proof; all163affected/19guards. Null
+  linked metadata only, explicit preparation/epoch/sequence mismatch refusals.
+  Original paired restorece34 actual1/3584 and legacy41/1550 retained. Full task
+  stays open for Trust's authentic owner release and both interruption cases.
+- G1397 corrected additive reader SOURCE ACCEPTED, exact sourcef5c20d51645 /
+  patchf2d03d0234, restored basec0af7c809. Delivered immediately to both Trust
+  worktrees under .temp/ref/accepted-restored-release-proof-2113. Parser306/
+  1828 and original native2/29 pass; genuine absent-Main and old-Main/no-prefix
+  legacy releases pass. Whole three-case run FAILS the added paired long-counter
+  check before release: pinned Jena6.2.0 TDB2 thrift encoder narrows large
+  xsd:integer via Number.longValue. Original legal BigInteger contract unchanged.
+  Owned regression7a6d9a27d and full native qualification HOLD. Sonnet#3
+  read-only preservation-fix decision; no reader digit cap or grammar workaround.
+- G1352 exact baseline union SOURCE/ACTUAL ACCEPTED:14classes/208cases,
+  zero failures/errors/skips,497.114s. Frozen candidate and source582a3ad1,
+  combined hooksbb06e706; original method/assertion bytes preserved. Source
+  observation unconditional; fixed source-free/evidence-empty Claim alone omits
+  Publication observer. Source cancellation retains existing deadline rollback;
+  nonempty Body repair commits. Current serving membership policies/tests match.
+  Root harvested only18 native differences onto Main, regenerated matching pins,
+  gen:check and docs:check pass. Selectede6be0fe01 plus wrapper47f69fa13 is now
+  in normal162-file merge gate (.temp/kernel/native-union-selected-merge.log).
+  Mandatory refresh follows landing. Later Work/Claim/Body add-ons excluded;
+  no scalar adoption, owner closure, private destruction or release claim.
+- G1373 production9bf7789b8 ACCEPT: actual QA205840-1c2bc8 PASS1/201,
+  226.9s/source stable on native d89d232b3d30, all292 restore hashes checked.
+  Fresh proved-zero Content offline pass precedes source-admitted job relay,
+  independent inventory check and activation. Nonempty/partial retries refuse
+  without changing both frontiers/owner/generation/source/delivery; no inferred
+  offline phase. Writer refusal proves no offline work, without a direct
+  both-frontier snapshot. Original source refusal may advance private scan.
+  Exact Program CLI848cc552 and runner086f949 loans frozen/restored; stale
+  handoff corrected. Sonnet#11 composes accepted recovery/cancellation Body
+  additions onto the208 baseline and runs the indispensable combined native
+  gate. Preserve all current hooks; no production201 rerun or RDF retirement.
+- G1379 Structure owner component LANDEDb175d3b53f1c: exact descriptors on
+  every original same-graph revision, bounded ObjectStore get/cancellation,
+  full recursive/signed coverage and historical generation acceptance retained.
+  Native S3 actual1/175/35.2s, unit16/132 and original WorkContents6/620/40.5s
+  source stable;103affected/19guards. Trust's exact original-generation fixture
+  loan returned; source branch saved kernel-g1379-accepted-before-owner-2103.
+  Native Source24 in G1352; corrected transport4HTTP99.7s accepted but original
+  full28 timed out300s, so transport/adoption activation remains held. Sonnet#10
+  now fixes Launch's common Zone publication reverse-validation defect: stable
+  canonical unchanged Zone type may skip needless inbound scans AFTER direct
+  guards. Physical256/1024 bounds remain; no product mount limit. Require
+  actual1000+mounts/history and original invalid/type/overflow proofs.
 
-Trust original-erasure/operator retry remains G1343/G1351; G1398 Access history
-signature forthcoming. Launch owns all four search badge consumers under kernel
-search-grouped/search-disclosed-fields loan, preserving exact current rights and
-bounded page cost. Program G1395 moves five host-native tests onto QA stacks.
+Trust G1343 Sonnet#8 recomposes its stale reader against the accepted corrected
+export; G1351 Sonnet#8 runs authentic stopped-original caller proof and retains
+both owner-commit interruption obligations. Actual AccessCAS changes full signed
+coverage; pre-release qualification and exact post-CAS state/outbox finding must
+be retained before release commits, never guessed from released RDF. Launch
+returned search-grouped/search-disclosed-fields after G1400 landing and runs a
+normal refresh. Program's reset-credit suggestion was withdrawn: standing
+no-reset-credits direction holds.
 
 ## Operation and remaining debt
 
-Handle ready merges/rebases/resumes, then foreground
-`scripts/goal/next-event.sh kernel`. Up to24 host workers; dispatch/resume only
-at least12GiB available. Sol/high backend, short briefs, reuse exited workers,
+The coordinator owns finite turns: handle ready merges/rebases/resumes, then
+end the turn when nothing is ready. Do not run a duplicate foreground loop. Up to24 host workers; dispatch/resume only
+at least12GiB available. Sonnet/high for new backend work, short briefs, reuse exited workers,
 no worker --heavy/lifecycle/vault. Keep Main clean, respect peer holds, preserve
 maintainer documentation changes. Use durable keyed mail and ACK after action;
 Program contract/blocker/cross-request messages also append history as requested.
@@ -210,6 +206,8 @@ Coordinator handover COMPLETE: native session
 by finite coordinator resume PID972554. Prior interactive3991503 exited; do not
 kill current owner, enroll duplicate or run foreground loop. Finish ready actions
 then end the turn; coordinator wakes on durable mail/task exits. Whole Goal active.
-Protect manager codex-1 reserve (87% observed) by resuming workers on default
-codex; existing live workers keep their actual QA handles. Live native artifact
+Protect manager codex-1 reserve (90% observed; default codex83%). New/resumed
+complex or assertion-sensitive workers use Sonnet; existing live Codex workers
+finish their frozen handoffs. No banked reset credits or dependence on a reset.
+Only a regular automatic reset or weekly window changes that reserve. Live native artifact
 boundaries in `.temp/kernel/native-manager-handoff.md` and exact per-worker manifests.
