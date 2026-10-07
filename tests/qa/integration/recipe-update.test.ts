@@ -222,3 +222,142 @@ test('Recipe qualifier edits retain occurrences and refuse invalid local ingredi
     expect((await read(created, withStep.revision)).occurrences).toEqual(before.occurrences);
   } finally { await f.close(); }
 }, 240_000);
+
+test('Recipe atomic reference edits overlay each removed ingredient without changing surviving identities', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
+  const f = await authorCreditFixture(Bun.env as Record<string, string>,
+    resolve('.temp', `recipe-reference-overlay-${randomUUID()}`));
+  const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+    bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
+    accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
+    prefix: 'semantic/structure/' });
+  await objects.initialize();
+  (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
+  const path = (composition: Pick<Change, 'structure'>) =>
+    `/v1/compositions/${shortId(composition.structure)}`;
+  const change = (composition: Pick<Change, 'structure' | 'revision'>, operations: object[],
+    key = randomUUID()) => f.call('POST', `${path(composition)}/changes`, {
+      profile: 'recipe-composition', expectedHead: composition.revision,
+      actingSubject: f.actor, operations,
+    }, key);
+  const read = async (composition: Pick<Change, 'structure'>, revision?: string) => f.json<Page>(
+    await f.call('GET', `${path(composition)}`
+      + (revision ? `/revisions/${shortId(revision)}` : '')
+      + `?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+  const update = (occurrence: string, qualifier: Qualifier) => ({ op: 'update', occurrence, qualifier });
+  const remove = (occurrence: string) => ({ op: 'remove', occurrence });
+  const seed = async (role: 'step' | 'ingredient') => {
+    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST',
+      '/v1/works', await f.authoredBody({ profile: 'metadata-only-v1',
+        title: `Atomic recipe ${role} reference edit`, language: 'en',
+        semanticTypes: ['https://schema.org/Recipe'], actingSubject: f.actor })), 201);
+    await f.grant(`work:edit:${work.work}`, 'recipe.edit');
+    await f.grant(`work:read:${work.work}`, 'work.read');
+    const created = await f.json<Change>(await f.call('POST', '/v1/compositions', {
+      profile: 'recipe-composition', work: work.work, mainVersion: work.mainVersion,
+      actingSubject: f.actor,
+    }), 201);
+    const inserted = await f.json<Change>(await change(created, ['A', 'B'].map(sourceKey => ({
+      op: 'insert', parent: created.structure, position: 'last', role: 'ingredient',
+      qualifier: ingredient(`Ingredient ${sourceKey}`), sourceKey,
+    }))), 200);
+    const [a, b] = inserted.occurrences as [string, string];
+    const current = await f.json<Change>(await change(inserted, [{ op: 'insert',
+      parent: created.structure, position: 'last', role,
+      qualifier: role === 'step' ? step('Use A and B.', [a, b]) : ingredient('Substitute for A.', [a]),
+      sourceKey: 'referrer',
+    }]), 200);
+    return { current, a, b, referrer: current.occurrences[0]! };
+  };
+  const boundedChange = async (composition: Pick<Change, 'structure' | 'revision'>,
+    operations: object[], removed: string[], key = randomUUID()) => {
+    const queries: string[] = [];
+    const query = f.nativeFuseki.query.bind(f.nativeFuseki);
+    f.nativeFuseki.query = async (sparql, maxBytes) => {
+      queries.push(sparql);
+      return query(sparql, maxBytes);
+    };
+    let response: Response;
+    try { response = await change(composition, operations, key); }
+    finally { f.nativeFuseki.query = query; }
+    const incoming = queries.filter(sparql => sparql.includes('SELECT ?referrer'));
+    expect(incoming.length).toBeGreaterThan(0);
+    expect(incoming.length).toBeLessThanOrEqual(removed.length);
+    for (const sparql of incoming) {
+      expect(sparql).toMatch(/VALUES\s+\?removed\s*\{\s*<[^>]+>\s*\}/u);
+      expect(sparql).toMatch(/LIMIT\s+1\b/u);
+      expect(removed.some(id => sparql.includes(iri(id)))).toBe(true);
+    }
+    return response;
+  };
+  try {
+    for (const role of ['step', 'ingredient'] as const) {
+      for (const removeFirst of [false, true]) {
+        const { current, a, b, referrer } = await seed(role);
+        const before = await read(current);
+        const candidate = role === 'step' ? step('Use only B.', [b]) : ingredient('Independent substitute.');
+        const operations = [update(referrer, candidate), remove(a)];
+        if (removeFirst) operations.reverse();
+        const key = randomUUID();
+        const accepted = await f.json<Change>(await boundedChange(current, operations, [a], key), 200);
+        expect(accepted.occurrences).toEqual([]);
+        expect(accepted.cost).toMatchObject({ segmentsWritten: 1, rebalanced: 0 });
+        const after = await read(current);
+        expect(after.occurrences.map(record => record.occurrence)).toEqual(
+          before.occurrences.filter(record => record.occurrence !== a).map(record => record.occurrence));
+        for (const record of after.occurrences) {
+          const original = before.occurrences.find(previous => previous.occurrence === record.occurrence)!;
+          expect({ ...record, qualifier: original.qualifier }).toEqual(original);
+        }
+        expect(after.occurrences.find(record => record.occurrence === referrer)?.qualifier).toEqual(candidate);
+        expect(await f.json<Change>(await change(current, operations, key), 200)).toMatchObject({
+          revision: accepted.revision, receipt: accepted.receipt, replayed: true,
+        });
+        expect((await change(current, operations)).status).toBe(409);
+        expect((await change(current, [update(referrer, role === 'step'
+          ? step('Changed retry.', [b]) : ingredient('Changed retry.')), remove(a)], key)).status).toBe(409);
+        expect((await read(current, current.revision)).occurrences).toEqual(before.occurrences);
+        // Replay retains the accepted receipt even once a later head has advanced.
+        await f.json<Change>(await change(accepted, [{ op: 'update', occurrence: referrer,
+          label: { value: 'Later surviving occurrence edit', language: 'en' } }]), 200);
+        expect(await f.json<Change>(await change(current, operations, key), 200)).toMatchObject({
+          revision: accepted.revision, receipt: accepted.receipt, replayed: true,
+        });
+        expect((await read(current, accepted.revision)).occurrences).toEqual(after.occurrences);
+      }
+
+      const { current, a, b, referrer } = await seed(role);
+      const before = await read(current);
+      const remainingReference = role === 'step'
+        ? step('Still uses A.', [a]) : ingredient('Still substitutes for A.', [a]);
+      // An untouched referrer, an explicit retained reference and a qualifier-omitting
+      // label edit all preserve the incoming edge and must roll back the whole batch.
+      const candidates: object[][] = [[], [update(referrer, remainingReference)], [{ op: 'update',
+        occurrence: referrer, label: { value: 'Qualifier omitted', language: 'en' } }]];
+      for (const edits of candidates) {
+        for (const removeFirst of [false, true]) {
+          const operations = [update(b, ingredient('Must roll back this edit.')), ...edits, remove(a)];
+          if (removeFirst) operations.reverse();
+          expect((await boundedChange(current, operations, [a])).status).toBe(409);
+          expect(await read(current)).toEqual(before);
+        }
+      }
+    }
+
+    const { current, a, b, referrer } = await seed('step');
+    const before = await read(current);
+    // Exclusion is specific to the removed target: dropping A does not permit
+    // removing B while the very same edited step still uses B.
+    for (const removeFirst of [false, true]) {
+      const operations = [update(referrer, step('Keep B.', [b])), remove(a), remove(b)];
+      if (removeFirst) operations.reverse();
+      expect((await boundedChange(current, operations, [a, b])).status).toBe(409);
+      expect(await read(current)).toEqual(before);
+    }
+    const accepted = await f.json<Change>(await boundedChange(current, [
+      remove(b), update(referrer, step('No ingredients needed.', [])), remove(a),
+    ], [a, b]), 200);
+    expect((await read(accepted)).occurrences.map(record => record.occurrence)).toEqual([referrer]);
+    expect((await read(current, current.revision)).occurrences).toEqual(before.occurrences);
+  } finally { await f.close(); }
+}, 240_000);

@@ -148,12 +148,15 @@ function checkedPosition(position: unknown): Position {
   throw new InvalidCompositionChange('position is invalid');
 }
 
-/** Canonical, bounded operation list; every change in one request has the same kind. */
+/** Canonical bounded operations; Recipe updates may clear references atomically with removal. */
 export function checkedOperations(operations: readonly CompositionOperation[],
   profile?: StructureProfile | StructureProfileRegistration): CompositionOperation[] {
   const registration = typeof profile === 'string' ? structureProfileFor(profile) : profile;
+  const kinds = new Set(operations.map(operation => operation.op));
+  const recipeRemoval = registration?.id === 'recipe-composition' && kinds.size === 2
+    && kinds.has('update') && kinds.has('remove');
   if (!operations.length || operations.length > MAX_OPERATIONS
-    || new Set(operations.map(operation => operation.op)).size !== 1) {
+    || kinds.size !== 1 && !recipeRemoval) {
     throw new InvalidCompositionChange('a change carries 1-16 operations of one kind');
   }
   const checkedLabel = (label: Label | undefined) => {
@@ -1118,16 +1121,24 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
 
 /** Ingredient occurrence references are local membership, never arbitrary ListItem identities. */
 async function checkRecipeReferences(env: WorkActivationEnvironment, w: Working,
-  manifest: StructureManifest, cost: TreeCost): Promise<void> {
+  manifest: StructureManifest, cost: TreeCost, operations: readonly CompositionOperation[]): Promise<void> {
   const removed = [...w.placements.values()].filter(state => !state.active && state.role === 'ingredient'
     && w.original.get(state.occurrence)).map(state => state.occurrence);
-  if (removed.length) {
-    const excluded = [...w.placements.values()].filter(state => !state.active).map(state => state.occurrence);
-    // The projected inverse predicates seek only these removed identities in
-    // this generation. At most the batch's removed referrers can be skipped;
-    // one remaining active referrer is enough to refuse the removal.
+  const edited = new Set(operations.flatMap(operation => operation.op === 'update' ? [operation.occurrence] : []));
+  for (const target of removed) {
+    const excluded = [...w.placements.values()].filter(state => {
+      if (!state.active) return true;
+      if (!edited.has(state.occurrence)) return false;
+      const references = state.qualifier?.type === 'recipe-step' ? state.qualifier.usesIngredient
+        : state.qualifier?.type === 'ingredient-line' ? state.qualifier.substituteFor : [];
+      return !references.includes(target);
+    }).map(state => state.occurrence);
+    // A committed inverse edge is obsolete only if this target is absent from
+    // its final edited referrer. Check each removed target separately: dropping
+    // A cannot hide an edited reference that remains to removed ingredient B.
+    // At most the bounded batch's candidate identities can be excluded.
     const incoming = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?referrer WHERE {
-      VALUES ?removed { ${removed.map(iri).join(' ')} }
+      VALUES ?removed { ${iri(target)} }
       VALUES ?referencePredicate { rv:usesIngredient rv:substituteFor }
       GRAPH ${iri(GRAPHS.current)} {
         ?qualifier ?referencePredicate ?removed ; rv:generation ${iri(w.header.generation)} .
@@ -1326,7 +1337,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
     if (targetInvariant?.invalid) throw new CompositionConflict('invalid Work target ancestry');
     await checkFixedSelections(env, operations);
     for (const [index, operation] of operations.entries()) await apply(w, operation, index);
-    await checkRecipeReferences(env, w, manifest, cost);
+    await checkRecipeReferences(env, w, manifest, cost, operations);
   } catch (error) {
     if (!(error instanceof CompositionConflict)) throw error;
     await sealRejection(env, intent.admission, 'composition.change', 'TopologyConflict', headGuard);
@@ -1453,7 +1464,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
         ${chapterCurrent}
       }
       GRAPH ${iri(GRAPHS.revisions)} { ${revisionTriples(env, { revision, structure: header.structure,
-        predecessor: intent.expectedHead, operation, kind: OPERATION_KIND[operations[0]!.op],
+        predecessor: intent.expectedHead, operation, kind: OPERATION_KIND[operations.some(item => item.op === 'remove') ? 'remove' : operations[0]!.op],
         generation: header.generation, manifest: next, count })}
         ${chapterRevisions} }
       GRAPH ${iri(GRAPHS.receipts)} { ${receiptTriples(env, intent.admission, receipt, 'Succeeded',

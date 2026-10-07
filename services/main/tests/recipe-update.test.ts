@@ -157,3 +157,35 @@ test('candidate removals override retained membership, and references never acce
   expect(() => checkIngredientReferences([{ ...line, qualifier: ingredientLine }],
     new Map([[ingredient, { ...line, state: 'removed' }]]))).not.toThrow();
 });
+
+
+test('Recipe reference clearing and ingredient removal share a bounded batch in either order', () => {
+  const edit: CompositionOperation = update({ ...recipeStep, usesIngredient: [] });
+  const remove: CompositionOperation = { op: 'remove', occurrence: ingredient };
+  for (const operations of [[edit, remove], [remove, edit]]) {
+    expect(checkedOperations(operations, 'recipe-composition')).toEqual(operations);
+  }
+  expect(() => checkedOperations(Array.from({ length: 17 }, (_, index) => index ? edit : remove),
+    'recipe-composition')).toThrow(InvalidCompositionChange);
+  expect(() => checkedOperations([edit, { op: 'move', occurrence, parent: structure, position: 'last' }],
+    'recipe-composition')).toThrow(InvalidCompositionChange);
+  const bookEdit: CompositionOperation = { op: 'update', occurrence, label: { value: 'Retitled', language: 'en' } };
+  expect(() => checkedOperations([bookEdit, remove], 'book-composition')).toThrow('one kind');
+});
+
+test('a final edited Recipe referrer may drop a removed ingredient but cannot retain its reference', () => {
+  const line = { ...record('ingredient', ingredientLine), occurrence: ingredient,
+    qualifier: { ...ingredientLine, substituteFor: [] } };
+  const removed: OccurrenceRecord = { ...line, state: 'removed', removedBy: revision };
+  const instruction = { ...record('step', recipeStep), occurrence, qualifier: recipeStep };
+  const alternate = { ...line, occurrence, qualifier: { ...ingredientLine, substituteFor: [ingredient] } };
+  for (const referrer of [instruction, alternate]) {
+    const cleared: OccurrenceRecord = { ...referrer, qualifier: referrer.qualifier.type === 'recipe-step'
+      ? { ...referrer.qualifier, usesIngredient: [] } : { ...referrer.qualifier, substituteFor: [] } };
+    for (const candidate of [[cleared, removed], [removed, cleared]]) {
+      expect(() => checkIngredientReferences(candidate, new Map([[ingredient, line]]))).not.toThrow();
+    }
+    expect(() => checkIngredientReferences([referrer, removed], new Map([[ingredient, line]])))
+      .toThrow(InvalidStructureObject);
+  }
+});
