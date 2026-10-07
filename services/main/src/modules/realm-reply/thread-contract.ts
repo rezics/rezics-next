@@ -84,4 +84,6 @@ export const realmThread = t.Object({ profile: t.Literal('realm-thread-v1'), rea
   ancestors: t.Array(realmThreadReply, { maxItems: REALM_THREAD_COST.ancestors }),
   items: t.Array(realmThreadReply, { maxItems: REALM_THREAD_COST.replies + 1 }),
   continuations: t.Array(realmThreadContinuation, { maxItems: REALM_THREAD_COST.replies + 2 }),
+  /** Effective reading order for this page, which anonymous clients carry without session cookies. */
+  displayLanguages: t.Optional(t.Array(t.String({ maxLength: 35 }), { maxItems: 20 })),
   complete: t.Boolean(), sourcePosition: readPosition });

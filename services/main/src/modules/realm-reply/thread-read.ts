@@ -474,6 +474,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   if (!(await works(session, [focused])).has(focused.work)) throw new WorkReadMissing('Thread target is unavailable');
   const response: Static<typeof realmThread> = { profile: 'realm-thread-v1' as const, realm, thread, focus, sort, work: about,
     rootRevision: focused.rootRevision, ancestors, items, continuations: visibleContinuations,
+    displayLanguages: session.displayLanguages,
     complete: visibleContinuations.length === 0, sourcePosition: session.position };
   if (Buffer.byteLength(JSON.stringify(response), 'utf8') > REALM_THREAD_COST.responseBytes) {
     // Large valid bodies must also paginate. Hydration remains the same bounded

@@ -1,6 +1,7 @@
 import { forwardClientIp } from './main-read.ts';
 import { SESSION_KEY_COOKIE } from '../auth/cookies.ts';
-import { CONTENT_LANGUAGES_COOKIE, displayLanguageHeaders } from '../../i18n/display-languages.ts';
+import { CONTENT_LANGUAGE_LIMIT, CONTENT_LANGUAGES_COOKIE, displayLanguageHeaders, displayLanguages }
+  from '../../i18n/display-languages.ts';
 import { BFF_PREFIX } from './browser.ts';
 import { sameOriginWrite } from './origins.ts';
 import {
@@ -185,7 +186,7 @@ function forgetReadingLanguages(token: string | undefined) {
   if (token) readingLanguageCache.delete(token);
 }
 
-/** Replaces whatever display-language headers the browser sent. */
+/** Session preferences own browser language selection; anonymous cursors retain their initial read basis. */
 async function applyDisplayLanguages(
   request: Request,
   headers: Headers,
@@ -203,6 +204,26 @@ async function applyDisplayLanguages(
     input.segments[1] === 'me' &&
     (input.segments[2] === 'session-agent' || input.segments[2] === 'person-preferences');
   const signedIn = Boolean(input.accessToken);
+  const anonymousContinuation = !signedIn && request.method === 'GET' && input.segments.length === 5
+    && input.segments[1] === 'realms' && input.segments[3] === 'threads'
+    && new URL(request.url).searchParams.has('cursor');
+  const basis = anonymousContinuation ? request.headers.get('x-rezics-display-languages') : null;
+  if (basis !== null) {
+    const values = basis ? basis.split(',') : [];
+    const normalized = displayLanguages({ content: values });
+    if (values.length <= CONTENT_LANGUAGE_LIMIT && values.length === normalized.length
+      && values.every((value, index) => value === normalized[index])) {
+      // credentials:omit deliberately withholds the cookie used by SSR. Only this cursor read can
+      // replay its explicit language basis; it never supplies identity or replaces signed-in preferences.
+      headers.delete('accept-language');
+      headers.delete('x-rezics-display-languages');
+      if (basis) {
+        headers.set('accept-language', basis);
+        headers.set('x-rezics-display-languages', basis);
+      }
+      return;
+    }
+  }
   const profile =
     signedIn && !lookup && !input.writing
       ? await signedInReadingLanguages(

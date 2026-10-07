@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
-import { bestKey } from '../../../services/main/src/modules/feed/ranking.ts';
+import { activityTime, bestKey } from '../../../services/main/src/modules/feed/ranking.ts';
 import { REALM_THREAD_COST } from '../../../services/main/src/modules/realm-reply/thread-contract.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';
 import {
@@ -15,10 +15,15 @@ import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
 const native = (n: number) =>
   `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const placementV7 = (n: number, time: number) => {
+  const timestamp = time.toString(16).padStart(12, '0');
+  return `https://rezics.com/id/${timestamp.slice(0, 8)}-${timestamp.slice(8)}-7000-8000-${n.toString(16).padStart(12, '0')}`;
+};
 const sorts = ['best', 'top', 'new'] as const;
 type Sort = (typeof sorts)[number];
 interface Plan {
   'Node Type': string;
+  Alias?: string;
   'Relation Name'?: string;
   'Index Name'?: string;
   'Index Cond'?: string;
@@ -44,12 +49,15 @@ interface Reference {
   time: number;
   active: boolean;
 }
-function ordered(references: readonly Reference[], sort: Sort): ThreadSiblingKey[] {
-  return references.filter((row) => row.active).map((row) => ({
-    rank: sort === 'best' ? -bestKey(row.score, row.time) : sort === 'top' ? -row.score : 0,
-    time: String(-row.time),
-    placement: row.placement,
-  })).sort((a, b) => a.rank - b.rank || Number(a.time) - Number(b.time)
+function ordered(references: readonly Reference[], sort: Sort, includeInactive = false): ThreadSiblingKey[] {
+  return references.filter((row) => includeInactive || row.active).map((row) => {
+    const time = activityTime(row.placement, new Date(0)).time.getTime();
+    return {
+      rank: sort === 'best' ? -bestKey(row.score, time) : sort === 'top' ? -row.score : 0,
+      time: String(-time),
+      placement: row.placement,
+    };
+  }).sort((a, b) => a.rank - b.rank || Number(a.time) - Number(b.time)
     || a.placement.localeCompare(b.placement));
 }
 function expectKeys(actual: readonly ThreadSiblingKey[], expected: readonly ThreadSiblingKey[]) {
@@ -111,6 +119,7 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
           && node['Index Cond']?.includes('data_epoch')
           && node['Index Cond']?.includes('realm')
           && node['Index Cond']?.includes('parent')), name).toBe(true);
+        if (after) expect(references.find(node => node.Alias === 'r')?.['Index Cond'], name).toContain(' > ');
         // One limited drive and at most one indexed child-existence result
         // for each candidate. Denied/inactive and earlier siblings cost no scan.
         expect(references.reduce((sum, node) => sum + examined(node), 0), name)
@@ -123,16 +132,19 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
   const seekAnchor = async (row: ThreadSiblingKey, sort: Sort): Promise<ThreadSiblingKey> => {
     if (sort !== 'best') return row;
     const canonical = (await access.query<{ rank: number }>(`SELECT
-      access.realm_reply_best(score,occurred_at) AS rank FROM access.realm_thread_reference
+      access.realm_reply_best(score,placement) AS rank FROM access.realm_thread_reference
       WHERE data_epoch=$1 AND realm=$2 AND placement=$3`, [epoch, realm, row.placement])).rows[0]!;
     return { ...row, rank: canonical.rank };
   };
   const references = (parent: string, first: number, count: number): Reference[] =>
-    Array.from({ length: count }, (_, index) => ({
-      reply: native(first + index), placement: native(first + index + 100000), parent,
-      // Deliberate score/time ties exercise the placement's final seek key.
-      score: index % 5 - 2, time: baseTime + Math.floor(index / 16) * 1000, active: true,
-    }));
+    Array.from({ length: count }, (_, index) => {
+      const time = baseTime + Math.floor(index / 16) * 1000;
+      return {
+        reply: native(first + index), placement: placementV7(first + index + 100000, time), parent,
+        // Deliberate score/time ties exercise the placement's final seek key.
+        score: index % 5 - 2, time, active: true,
+      };
+    });
   try {
     await migrateContent(content);
     const source = (await content.query<{ data_epoch: string; sequence: string }>(
@@ -177,6 +189,44 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
       ...retiredChildren,
       ...references(inactive, 40000, 1000).map((row) => ({ ...row, active: false }))]);
     await access.query('ANALYZE access.realm_thread_reference');
+    for (const [scope, includeInactive] of [false, true].entries()) {
+      const legacyParent = native(97000 + scope * 2), mixedParent = native(97001 + scope * 2);
+      const legacy = Array.from({ length: 192 }, (_, index): Reference => ({
+        reply: native(500000 + scope * 1000 + index),
+        placement: native(550000 + scope * 1000 + index), parent: legacyParent,
+        // Delivery is newest last, the opposite of the legacy ID tie-break.
+        time: baseTime + index * 60000, score: 0, active: !includeInactive,
+      }));
+      const mixed = Array.from({ length: 192 }, (_, index): Reference => ({
+        reply: native(600000 + scope * 1000 + index),
+        placement: index % 2 ? native(650000 + scope * 1000 + index)
+          : placementV7(650000 + scope * 1000 + index, baseTime + index % 4 * 1000),
+        parent: mixedParent, score: Math.floor(index / 2) % 5 - 2,
+        // Neither the legacy fallback nor a UUIDv7's declared time follows
+        // this delivery clock. Mixed vote/time ties must keep the old order.
+        time: baseTime + (192 - index) * 60000, active: !includeInactive,
+      }));
+      await insert([...legacy, ...mixed]);
+      for (const [name, parent, replies] of [
+        ['legacy', legacyParent, legacy], ['mixed', mixedParent, mixed],
+      ] as const) for (const sort of sorts) {
+        const expected = ordered(replies, sort, includeInactive);
+        const first = await page(`${name}-${scope}-${sort}-first`, parent, sort, 191,
+          undefined, true, includeInactive);
+        expectKeys(first, expected);
+        for (const row of first.filter(row => row.placement.slice(-36)[14] !== '7')) {
+          expect(row.time).toBe('0');
+          expect(new Date(-Number(row.time)).toISOString()).toBe('1970-01-01T00:00:00.000Z');
+        }
+        if (name === 'legacy') expect(first.map(row => row.placement))
+          .toEqual(legacy.map(row => row.placement));
+        const shown = first.slice(0, 191);
+        const next = await page(`${name}-${scope}-${sort}-continued`, parent, sort, 191,
+          key(shown.at(-1)!), true, includeInactive);
+        expectKeys(next, expected.slice(191));
+        expect(new Set([...shown, ...next].map(row => row.reply)).size).toBe(192);
+      }
+    }
     for (const sort of sorts) {
       const expected = ordered(siblings, sort);
       const first = await page(`192-${sort}-first`, focus, sort, REALM_THREAD_COST.replies);
@@ -223,9 +273,10 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
     for (const [index, sort] of (['top', 'best'] as const).entries()) {
       const parent = native(93000 + index * 2), unrelated = native(93001 + index * 2);
       const parentReferences = references(native(92999), 93000 + index * 2, 2);
-      const voteRows = references(parent, 300000 + index * 1000, 192).map((row, offset) => ({
-        ...row, score: 0, time: baseTime - offset * 1000,
-      }));
+      const voteRows = references(parent, 300000 + index * 1000, 192).map((row, offset) => {
+        const time = baseTime - offset * 1000;
+        return { ...row, score: 0, time, placement: placementV7(400000 + index * 1000 + offset, time) };
+      });
       const otherChild = { ...references(unrelated, 320000 + index, 1)[0]!, score: 0 };
       await insert([...parentReferences, ...voteRows, otherChild]);
       const unread = voteRows[191]!, delivered = voteRows[0]!;
@@ -233,7 +284,7 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
         (data_epoch,id,sequence,kind,occurred_at,time_basis,score,best_key,realm,
           group_bucket,group_key,group_leader,group_members,sort_time,realm_thread_indexed)
         SELECT data_epoch,placement,1,'reply',occurred_at,'relay',score,
-          -access.realm_reply_best(score,occurred_at),realm,
+          -access.realm_reply_best(score,placement),realm,
           placement,placement,true,ARRAY[placement],occurred_at,true
         FROM access.realm_thread_reference
         WHERE data_epoch=$1 AND realm=$2 AND placement=ANY($3::text[])`,
@@ -245,6 +296,14 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
       const saved = key(first[190]!);
       const newBefore = await page(`vote-${sort}-new-before`, parent, 'new', 191, undefined, false);
       const originalRevision = await orderRevision(parent), otherRevision = await orderRevision(unrelated);
+
+      await access.query(`UPDATE access.realm_thread_reference
+        SET occurred_at=occurred_at+interval '1 hour',score=score,placement=placement
+        WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, unread.reply]);
+      expect(await orderRevision(parent)).toBe(originalRevision);
+      expectKeys(await page(`vote-${sort}-relay-only`, parent, sort, 191, undefined, false), first);
+      expectKeys(await page(`vote-${sort}-relay-only-new`, parent, 'new', 191, undefined, false), newBefore);
+      expect(await sourceCuts()).toEqual(cuts);
 
       await projectScore(unread.placement, 1);
       expect((await page(`vote-${sort}-promoted`, parent, sort, 191, undefined, false))[0]!.reply)
@@ -343,9 +402,9 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
       expectKeys(afterDelete, beforeDelete.slice(20, 41));
 
       const newer = { ...original[0]!, reply: native(60000 + index * 2),
-        placement: native(160000 + index * 2), score: 1000, time: baseTime + 1000000 };
+        placement: placementV7(160000 + index * 2, baseTime + 1000000), score: 1000, time: baseTime + 1000000 };
       const older = { ...original[0]!, reply: native(60001 + index * 2),
-        placement: native(160001 + index * 2), score: -1000, time: baseTime - 1000000 };
+        placement: placementV7(160001 + index * 2, baseTime - 1000000), score: -1000, time: baseTime - 1000000 };
       await insert([newer, older]);
       const current = ordered([...original.filter((row) => row.reply !== anchor.reply), newer, older], sort);
       const compare = (row: ThreadSiblingKey) => (Math.abs(row.rank - saved.rank) < 1e-8
@@ -375,7 +434,7 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
     const branchRoot = native(70000);
     await insert(Array.from({ length: 33 }, (_, depth) => ({
       reply: native(70001 + depth), parent: native(70000 + depth),
-      placement: native(170001 + depth), time: baseTime + depth * 1000,
+      placement: placementV7(170001 + depth, baseTime + depth * 1000), time: baseTime + depth * 1000,
       score: 0, active: true,
     })));
     await access.query(`UPDATE access.realm_thread_reference SET thread=$3

@@ -18,6 +18,18 @@ const siblingCursor = (read: Awaited<ReturnType<typeof readRealmThread>>) => {
   return continuation;
 };
 
+test('anonymous pages carry the exact display-language basis used by their sibling cursors', async () => {
+  const { session } = world(siblings(192));
+  const languages = ['ja', 'en', 'en-US'];
+  Object.assign(session, { displayLanguages: languages });
+  const first = await readRealmThread(session, realm, reply(1), 'new');
+  expect(first.displayLanguages).toEqual(languages);
+  const next = siblingCursor(first);
+  const second = await readRealmThread(session, realm, next.reply, 'new', next.cursor);
+  expect(second.displayLanguages).toEqual(languages);
+  expect(new Set([...first.items.slice(1), ...second.items.slice(1)].map(item => item.reply)).size).toBe(192);
+});
+
 test('sibling 192 is reachable in the existing reply order, with the focus repeated only as context', async () => {
   for (const sort of ['best', 'top', 'new'] as const) {
     const placed = siblings(192);

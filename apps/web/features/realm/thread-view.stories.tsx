@@ -3,6 +3,7 @@ import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
+import { contentLanguageCookie, displayLanguageHeaders } from '../../i18n/display-languages.ts';
 import { threadHref } from '../address/path.ts';
 import { FeedProvider } from '../feed/feed-context.tsx';
 import { memoryFeed } from '../feed/fixtures.ts';
@@ -405,5 +406,40 @@ export const ContinuationRefresh: Story = {
     await expect(await canvas.findByRole('heading', { name: 'No comments yet' })).toBeVisible();
     await expect(canvas.queryByText('The next reply is still part of this branch.')).toBeNull();
     await expect(canvas.queryByRole('button', { name: 'More replies' })).toBeNull();
+  },
+};
+
+const anonymousBasis = displayLanguageHeaders({ signedIn: false,
+  cookie: contentLanguageCookie(['ja']),
+  pageUrl: new URL(localizedPath(threadHref(storyRealm.path, storyReply(1)), 'en'), 'https://web.test').href,
+  browser: 'en-US,en;q=0.9' })['x-rezics-display-languages']!;
+let anonymousRequest: { credentials?: RequestCredentials; headers: Headers } | undefined;
+
+/** The production browser read retains the anonymous SSR basis even though credentials omit its cookie. */
+export const AnonymousReadingLanguages: Story = {
+  args: { read: { ...pagedThread, ...{ displayLanguages: anonymousBasis.split(',') } },
+    signedIn: false, mode: 'sign-in' },
+  beforeEach() {
+    anonymousRequest = undefined;
+    const original = window.fetch;
+    window.fetch = (async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input), location.origin);
+      if (!url.pathname.startsWith('/api/main/v1/realms/') || !url.searchParams.has('cursor'))
+        return original(input, init);
+      anonymousRequest = { credentials: init?.credentials, headers: new Headers(init?.headers) };
+      const matches = anonymousRequest.headers.get('x-rezics-display-languages') === anonymousBasis;
+      return Response.json(matches ? siblingPage(url.searchParams.get('cursor')!)
+        : { error: 'read_basis_changed' }, { status: matches ? 200 : 409 });
+    }) as typeof fetch;
+    return () => { window.fetch = original; };
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'More replies' }));
+    await expect(await canvas.findByText('The next reply is still part of this branch.')).toBeVisible();
+    await expect(anonymousRequest?.credentials).toBe('omit');
+    await expect(anonymousRequest?.headers.has('cookie')).toBe(false);
+    await expect(anonymousRequest?.headers.has('authorization')).toBe(false);
+    await expect(anonymousRequest?.headers.get('x-rezics-display-languages')).toBe(anonymousBasis);
   },
 };

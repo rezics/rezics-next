@@ -94,9 +94,9 @@ export class RealmReplyThreadStore {
       || after && (!Number.isFinite(after.rank) || !/^-?\d+$/.test(after.time) || !native.test(after.placement))) {
       throw new RealmReplyInvalid('Invalid sibling page');
     }
-    const rank = sort === 'best' ? 'access.realm_reply_best(r.score,r.occurred_at)'
+    const rank = sort === 'best' ? 'access.realm_reply_best(r.score,r.placement)'
       : sort === 'top' ? '-r.score::double precision' : '0::double precision';
-    const time = '-access.realm_reply_time(r.occurred_at)';
+    const time = '-access.realm_reply_time(r.placement)';
     const key = sort === 'new' ? `${time},r.placement COLLATE "C"` : `${rank},${time},r.placement COLLATE "C"`;
     const seek = sort === 'new' ? '$5::bigint,$6::text COLLATE "C"'
       : '$4::double precision,$5::bigint,$6::text COLLATE "C"';
@@ -106,7 +106,7 @@ export class RealmReplyThreadStore {
       SELECT r.reply,r.placement,${rank} AS rank,(${time})::text AS time,
       COALESCE((SELECT true FROM access.realm_thread_reference c WHERE c.data_epoch=$1 AND c.realm=$2
         AND c.parent=r.reply ${includeInactive ? '' : 'AND c.active'}
-        ORDER BY -access.realm_reply_time(c.occurred_at),c.placement COLLATE "C" LIMIT 1),false) AS has_children
+        ORDER BY -access.realm_reply_time(c.placement),c.placement COLLATE "C" LIMIT 1),false) AS has_children
       FROM access.realm_thread_reference r WHERE r.data_epoch=$1 AND r.realm=$2 AND r.parent=$3
       ${includeInactive ? '' : 'AND r.active'}
       ${after ? `AND (${key}) > (${seek})` : ''}

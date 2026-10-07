@@ -315,7 +315,10 @@ export function ThreadView({
       const { data } = await browserMainApi(undefined, { anonymous: !actingSubject }).v1
         .realms({ realm: read.realm.slice(-36) }).threads({ reply: continuation.reply.slice(-36) })
         .get({ query: { sort, cursor: continuation.cursor,
-          ...(language ? { language } : {}), ...(actingSubject ? { actingSubject } : {}) } });
+          ...(language ? { language } : {}), ...(actingSubject ? { actingSubject } : {}) },
+          ...(!actingSubject && read.displayLanguages ? {
+            headers: { 'x-rezics-display-languages': read.displayLanguages.join(',') },
+          } : {}) });
       if (!data) throw new Error('Thread continuation unavailable');
       page = data;
     }
