@@ -143,11 +143,12 @@ export default {
   reasonInterimTitle: plural({ other: insert('投诉处理期间限制 {{count}} 项内容') }, { count: asValue(number()) }),
   reasonFinalTitle: plural({ other: insert('投诉处理后限制 {{count}} 项内容') }, { count: asValue(number()) }),
   // Native review needed: reasonKeepTitle and every rsn* string (structured decision reasons).
+  // rsnNoteHelp: the private note is not sent with the decision.
   reasonKeepTitle: plural({ other: insert('保留 {{count}} 条举报中的内容') }, { count: asValue(number()) }),
   rsnGroup: '原因', rsnKeys: '按原因的编号即可选择，再按 Enter 确定。',
   rsnOther: '其他原因', rsnOtherLabel: '你的说明',
   rsnOtherHelp: insert('受影响的人会按原样看到这段说明，语言为{{language}}。最多 4000 字。', { language: String }),
-  rsnNoteHelp: '可选。随裁决保存，仅供版主查看；受影响的人看不到。',
+  rsnNoteHelp: '可选。不会随裁决发送，因此受影响的人看不到。',
   rsnRuleCited: insert('规则 {{number}}：“{{title}}”。', { number: String, title: String }),
   rsnRequired: '请先写下说明。',
   rsnDetailsLabel: '给受影响者的补充说明',

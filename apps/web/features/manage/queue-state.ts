@@ -35,8 +35,17 @@ export interface Decision {
   action: QueueAction;
   /** Shown to the author (rejection, change request), to the owners (escalation) or, for a report, the facts of its statement. */
   reason: string | null;
-  /** Kept with the decision for moderators only; a report decision's note is its private rationale. */
+  /**
+   * Moderator-only. A report decision does not send this: its rationale is shown
+   * to the case parties, and there is no separate private field to keep it in.
+   */
   note: string | null;
+  /**
+   * Words from "Details for the affected people", or the whole explanation when
+   * the reason is the moderator's own. The only free text a report decision may
+   * put in the rationale the parties read.
+   */
+  details?: string | null;
   /** Required by Main for notifying report decisions; old local drafts may lack it. */
   reasons?: ModerationDecisionCommand['reasons'];
 }

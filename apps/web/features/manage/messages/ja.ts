@@ -158,12 +158,13 @@ export default {
   reasonFinalTitle: plural({ one: '申し立ての確認後に内容を制限する',
     other: insert('{{count}}件の申し立てについて内容を制限する') }, { count: asValue(number()) }),
   // Native review needed: reasonKeepTitle and every rsn* string (structured decision reasons).
+  // rsnNoteHelp: the private note is not sent with the decision.
   reasonKeepTitle: plural({ one: '報告された内容を残す', other: insert('{{count}}件の報告内容を残す') },
     { count: asValue(number()) }),
   rsnGroup: '理由', rsnKeys: '理由の番号キーで選択し、Enter キーで決定します。',
   rsnOther: 'その他', rsnOtherLabel: 'あなたの説明',
   rsnOtherHelp: insert('影響を受ける人には、入力したとおり{{language}}で表示されます。4,000文字以内。', { language: String }),
-  rsnNoteHelp: '任意。判断とともにモデレーター向けに保管され、影響を受ける人には表示されません。',
+  rsnNoteHelp: '任意。判断とともに送信されないため、影響を受ける人には表示されません。',
   rsnRuleCited: insert('ルール{{number}}「{{title}}」。', { number: String, title: String }),
   rsnRequired: '先に説明を入力してください。',
   rsnDetailsLabel: '影響を受ける人への補足',

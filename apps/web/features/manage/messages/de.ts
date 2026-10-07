@@ -163,12 +163,13 @@ export default {
   reasonFinalTitle: plural({ one: 'Inhalte nach Abschluss der Beschwerde einschränken',
     other: insert('Inhalte aus {{count}} Beschwerden einschränken') }, { count: asValue(number()) }),
   // Native review needed: reasonKeepTitle and every rsn* string (structured decision reasons).
+  // rsnNoteHelp: the private note is not sent with the decision.
   reasonKeepTitle: plural({ one: 'Gemeldeten Inhalt behalten', other: insert('Inhalte aus {{count}} Meldungen behalten') },
     { count: asValue(number()) }),
   rsnGroup: 'Warum?', rsnKeys: 'Drücke die Nummer eines Grundes, um ihn zu wählen, dann Enter zum Entscheiden.',
   rsnOther: 'Etwas anderes', rsnOtherLabel: 'Deine Begründung',
   rsnOtherHelp: insert('Die betroffenen Personen lesen das unverändert, auf {{language}}. Bis zu 4.000 Zeichen.', { language: String }),
-  rsnNoteHelp: 'Optional. Wird mit der Entscheidung für die Moderation gespeichert; die betroffenen Personen sehen sie nie.',
+  rsnNoteHelp: 'Optional. Wird nicht mit der Entscheidung gesendet, daher sehen die betroffenen Personen sie nie.',
   rsnRuleCited: insert('Regel {{number}}: „{{title}}“.', { number: String, title: String }),
   rsnRequired: 'Schreibe zuerst deine Begründung.',
   rsnDetailsLabel: 'Angaben für die betroffenen Personen',

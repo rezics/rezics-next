@@ -134,31 +134,33 @@ export function reportDecision(basis: DecisionBasis, action: 'keep' | 'remove' |
       : action === 'final-restrict' ? 'final_restrict' : 'dismiss', targets: [...targets.values()],
     rule: { ref: rule.ref, revision: rule.revision, digest: rule.digest }, evidenceDigest,
     reversesDecisionId: null, answersStepId: null, rationale: rationale?.trim() || null,
-    // The reporter and the author learn the outcome; it is not published on the Realm's page.
+    // The reporter and the author learn the outcome, including this rationale.
+    // It is not published on the Realm's page. A moderator's private note must not be put here.
     disclosure: 'parties', idempotencyKey: key };
 }
 
 /** A basis Main could not read, as the decision's failure: a moved basis means the case changed. */
 const basisFailure = (failure: ReadFailure): CommandFailure => failure === 'moved' ? 'stale' : failure;
 
-/** Pages of reports read when looking for automation; at four a page, the most reports one decision weighs. */
-const AUTOMATION_PAGES = 50;
-
 /**
- * Whether this case's retained evidence records automation. Main checks all of
- * it and refuses a statement that denies it, so a page of reports that shows
- * none is not enough: the rest are read before saying there is none. A case
- * that changed between pages is stale, and one with more reports than the
- * bound cannot be stated truthfully here.
+ * Whether this case's retained evidence records automation. Main checks the
+ * whole case and refuses a statement that denies it, so every report page is
+ * read before saying there is none. Main does not cap how many reports one
+ * case can hold, and that size does not refuse the decision. A case that
+ * changed between pages is stale. A cursor offered again has stopped advancing,
+ * so nothing is stated from an incomplete read.
  */
 async function caseAutomation(main: MainClient, realm: string, caseId: string, actingSubject: string,
   first: DecisionBasis): Promise<Outcome<boolean>> {
   let page = first;
-  for (let read = 1; ; read++) {
+  const seen = new Set<string>();
+  for (;;) {
     const found = automationOf(page);
     if (found !== null) return { ok: true, data: found };
-    if (read >= AUTOMATION_PAGES) return { ok: false, failure: 'budget' };
-    const next = await readDecisionBasis(main, realm, caseId, actingSubject, page.nextCursor!);
+    const cursor = page.nextCursor;
+    if (!cursor || seen.has(cursor)) return { ok: false, failure: 'unavailable' };
+    seen.add(cursor);
+    const next = await readDecisionBasis(main, realm, caseId, actingSubject, cursor);
     if (!next.ok) return { ok: false, failure: basisFailure(next.failure) };
     if (next.data.generation !== first.generation) return { ok: false, failure: 'stale' };
     // Pages read before this one showed none, or the answer would already be true.
@@ -187,9 +189,10 @@ export async function decideReport(main: MainClient, realm: string, item: Modera
   // Automation is a fact of this case's evidence, read now; one statement shared by a batch cannot state it for every case.
   const reasons = { ...given, automation: automated.data };
   if (!basis.data.ruleBasis) return { ok: false, failure: 'invalid', code: 'rules_unpublished' };
-  // The reason the parties read is `reasons`; the rationale is the moderators' private note.
+  // Parties read `reasons` and this rationale. The private note is never either;
+  // only the details written for the affected people may be the rationale.
   const command = reportDecision(basis.data, decision.action as 'keep' | 'remove' | 'interim-restrict' | 'final-restrict',
-    decision.note, actingSubject, key);
+    decision.details ?? null, actingSubject, key);
   // Everything reported is already hidden: another decision got there first.
   if (!command) return { ok: false, failure: 'stale' };
   return item.kind === 'rights_complaint'

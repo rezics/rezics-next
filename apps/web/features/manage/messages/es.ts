@@ -163,12 +163,13 @@ export default {
   reasonFinalTitle: plural({ one: 'Restringir el contenido tras resolver la reclamación',
     other: insert('Restringir el contenido de {{count}} reclamaciones') }, { count: asValue(number()) }),
   // Native review needed: reasonKeepTitle and every rsn* string (structured decision reasons).
+  // rsnNoteHelp: the private note is not sent with the decision.
   reasonKeepTitle: plural({ one: 'Conservar el contenido denunciado', other: insert('Conservar contenido de {{count}} denuncias') },
     { count: asValue(number()) }),
   rsnGroup: '¿Por qué?', rsnKeys: 'Pulsa el número de un motivo para elegirlo y luego Intro para decidir.',
   rsnOther: 'Otro motivo', rsnOtherLabel: 'Tu explicación',
   rsnOtherHelp: insert('Las personas afectadas lo leerán tal cual, en {{language}}. Hasta 4.000 caracteres.', { language: String }),
-  rsnNoteHelp: 'Opcional. Se guarda con la decisión para la moderación; las personas afectadas nunca la ven.',
+  rsnNoteHelp: 'Opcional. No se envía con la decisión, así que las personas afectadas nunca la ven.',
   rsnRuleCited: insert('Regla {{number}}: «{{title}}».', { number: String, title: String }),
   rsnRequired: 'Escribe primero tu explicación.',
   rsnDetailsLabel: 'Detalles para las personas afectadas',

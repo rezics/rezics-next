@@ -26,7 +26,8 @@ function languageName(locale: UiLocale): string {
  * picked (the one used last time for this decision, else the first), so
  * `A`, Enter keeps and `R`, Enter removes the way the last item was; a
  * reason's number picks another. The decision is not sent here; it enters
- * the undo window. The private note stays with moderators.
+ * the undo window. The private note is not sent: the rationale the parties
+ * read may carry only the details written for them.
  */
 export function ReportDecisionDialog({ action, count, rule, rules, about, automation, realm, locale, messages, onDecide,
   onClose, finalFocus }: {
@@ -77,7 +78,7 @@ export function ReportDecisionDialog({ action, count, rule, rules, about, automa
     if (statement.facts.length > STATEMENT_LIMIT || note.length > NOTE_LIMIT) { setError(t.reasonTooLong); return; }
     rememberReason(realm, shown, reason);
     onDecide({ action: shown, reason: statement.facts, note: note.trim() || null,
-      reasons: reasonsOf(statement, locale, automation === true) });
+      details: own.trim() || null, reasons: reasonsOf(statement, locale, automation === true) });
   };
   const preview: ReadonlyArray<readonly [string, string]> = [[t.factsLabel, statement?.facts ?? t.previewEmpty],
     [t.scopeLabel, statement?.scope ?? t.previewEmpty], [t.decisionDurationLabel, statement?.duration ?? t.previewEmpty]];

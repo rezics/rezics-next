@@ -168,7 +168,7 @@ export const messages = {
   rsnGroup: 'Why?', rsnKeys: 'Press a reason’s number to pick it, then Enter to decide.',
   rsnOther: 'Something else', rsnOtherLabel: 'Your explanation',
   rsnOtherHelp: insert('The affected people read this as written, in {{language}}. Up to 4,000 characters.', { language: String }),
-  rsnNoteHelp: 'Optional. Kept with the decision for moderators; the affected people never see it.',
+  rsnNoteHelp: 'Optional. Not sent with the decision, so the affected people never see it.',
   rsnRuleCited: insert('Rule {{number}}: “{{title}}”.', { number: String, title: String }),
   rsnRequired: 'Write your explanation first.',
   rsnDetailsLabel: 'Details for the affected people',

@@ -163,12 +163,13 @@ export default {
   reasonFinalTitle: plural({ one: '신고 처리 후 콘텐츠 제한',
     other: insert('신고 {{count}}건의 콘텐츠 제한') }, { count: asValue(number()) }),
   // Native review needed: reasonKeepTitle and every rsn* string (structured decision reasons).
+  // rsnNoteHelp: the private note is not sent with the decision.
   reasonKeepTitle: plural({ one: '신고된 내용 유지', other: insert('신고 {{count}}건의 내용 유지') },
     { count: asValue(number()) }),
   rsnGroup: '사유', rsnKeys: '사유 번호를 눌러 선택한 다음 Enter로 결정하세요.',
   rsnOther: '기타', rsnOtherLabel: '직접 작성한 설명',
   rsnOtherHelp: insert('영향을 받는 사람들에게 {{language}}(으)로 작성한 그대로 표시됩니다. 최대 4,000자입니다.', { language: String }),
-  rsnNoteHelp: '선택 사항입니다. 결정과 함께 운영진용으로 보관되며, 영향을 받는 사람들에게는 보이지 않습니다.',
+  rsnNoteHelp: '선택 사항입니다. 결정과 함께 전송되지 않으므로, 영향을 받는 사람들에게는 보이지 않습니다.',
   rsnRuleCited: insert('규칙 {{number}}: “{{title}}”.', { number: String, title: String }),
   rsnRequired: '먼저 설명을 작성하세요.',
   rsnDetailsLabel: '영향을 받는 사람들에게 전할 세부 내용',

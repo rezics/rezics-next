@@ -157,12 +157,13 @@ export default {
   reasonFinalTitle: plural({ one: '申訴處理後限制內容',
     other: insert('限制 {{count}} 件申訴所涉及的內容') }, { count: asValue(number()) }),
   // Native review needed: reasonKeepTitle and every rsn* string (structured decision reasons).
+  // rsnNoteHelp: the private note is not sent with the decision.
   reasonKeepTitle: plural({ one: '保留遭檢舉的內容', other: insert('保留 {{count}} 則檢舉中的內容') },
     { count: asValue(number()) }),
   rsnGroup: '原因', rsnKeys: '按下原因的編號即可選取，再按 Enter 確定。',
   rsnOther: '其他原因', rsnOtherLabel: '你的說明',
   rsnOtherHelp: insert('受影響的人會看到原文，語言為{{language}}。最多 4,000 個字元。', { language: String }),
-  rsnNoteHelp: '選填。隨裁決保存，僅供管理員查看；受影響的人看不到。',
+  rsnNoteHelp: '選填。不會隨裁決送出，因此受影響的人看不到。',
   rsnRuleCited: insert('規範 {{number}}：「{{title}}」。', { number: String, title: String }),
   rsnRequired: '請先寫下說明。',
   rsnDetailsLabel: '給受影響者的補充說明',

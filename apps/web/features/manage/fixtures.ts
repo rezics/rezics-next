@@ -200,7 +200,7 @@ export function basisFor(item: ModerationItem, rules = true): DecisionBasis {
 
 export interface Recorded {
   commits: Array<{ id: string; action: string; reason: string | null; key: string; note: string | null;
-    reasons: Decision['reasons'] | null }>;
+    details: string | null; reasons: Decision['reasons'] | null }>;
 }
 
 /** A queue whose commits succeed unless `stale` names the item; reloads return `reload` when given. */
@@ -220,7 +220,7 @@ export function queueApi(options: { stale?: readonly string[]; reload?: Moderati
     people: async () => agents,
     commit: async (item, decision, key): Promise<Outcome<unknown>> => {
       recorded.commits.push({ id: item.id, action: decision.action, reason: decision.reason, key, note: decision.note,
-        reasons: decision.reasons ?? null });
+        details: decision.details ?? null, reasons: decision.reasons ?? null });
       return options.stale?.includes(item.id) ? { ok: false, failure: 'stale' } : { ok: true, data: {} };
     },
   };

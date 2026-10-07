@@ -104,7 +104,7 @@ export const InterimRestrictPhone: Story = { ...interim, globals: phone };
 export const FinalRestrictDesktop: Story = { ...final, globals: desktop };
 export const FinalRestrictPhone: Story = { ...final, globals: phone };
 
-/** A reason's number picks it, the private note goes to the rationale, and the next decision starts from the same reason. */
+/** A reason's number picks it, the private note stays off the statement, and the next decision starts from the same reason. */
 export const NumberKeyNoteAndMemory: Story = {
   globals: desktop,
   async play({ canvasElement }) {
@@ -119,7 +119,7 @@ export const NumberKeyNoteAndMemory: Story = {
     const note = dialog.getByRole('textbox', { name: 'Private note for moderators' });
     await userEvent.type(note, 'Reporter gave no edition.{Control>}{Enter}{/Control}');
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ action: 'keep',
-      note: 'Reporter gave no edition.' })]));
+      note: 'Reporter gave no edition.', details: null })]));
     await waitFor(() => expect(canvas.queryByRole('status', { name: 'Decisions you can still undo' })).toBeNull());
     await userEvent.click(within(list(canvas)).getByRole('button', { name: /Little Women/ }));
     await userEvent.keyboard('a');
@@ -148,6 +148,7 @@ export const OwnExplanation: Story = {
     await userEvent.type(own, 'The upload reproduces a paid translation.');
     await userEvent.click(dialog.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ action: 'remove',
+      details: 'The upload reproduces a paid translation.', note: null,
       reasons: expect.objectContaining({ facts: 'The upload reproduces a paid translation.',
         scope: 'The reported part of the content is hidden from readers.' }) })]));
   },
@@ -173,6 +174,7 @@ export const DetailsAfterReason: Story = {
     await visible(() => dialog.getByText(/This content breaks one of the Realm’s rules\. The second paragraph copies a paid translation\./));
     await userEvent.click(dialog.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ action: 'remove',
+      details: 'The second paragraph copies a paid translation.', note: null,
       reasons: expect.objectContaining({
         facts: 'This content breaks one of the Realm’s rules. The second paragraph copies a paid translation.' }) })]));
   },
@@ -192,6 +194,7 @@ export const OptionalDetails: Story = {
     await visible(() => dialog.getByText('We reviewed the report and found that this content follows the Realm’s rules. The 1894 text is a recognised edition.'));
     await userEvent.click(dialog.getByRole('button', { name: 'Keep' }));
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ action: 'keep',
+      details: 'The 1894 text is a recognised edition.', note: null,
       reasons: expect.objectContaining({
         facts: 'We reviewed the report and found that this content follows the Realm’s rules. The 1894 text is a recognised edition.' }) })]));
   },

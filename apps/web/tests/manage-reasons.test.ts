@@ -257,12 +257,26 @@ describe('sending a report decision', () => {
     return { data: { saved: true }, error: null };
   } } } } }) as unknown as MainClient;
 
-  test('the statement goes as `reasons` and the private note as the rationale, never the other way', async () => {
+  test('the statement goes as `reasons`; a private note is not the rationale the parties read', async () => {
     const calls: unknown[] = [];
+    const note = 'Reporter gave no edition.';
     expect(await decideReport(mainFor(calls), uuid(7), item, { action: 'keep', reason: reasons.facts,
-      note: '  Reporter gave no edition.  ', reasons }, iri(11), 'keep-key')).toEqual({ ok: true, data: { saved: true } });
+      note: `  ${note}  `, reasons }, iri(11), 'keep-key')).toEqual({ ok: true, data: { saved: true } });
     expect(calls).toEqual([{ body: expect.objectContaining({ outcome: 'dismiss', reasons,
-      rationale: 'Reporter gave no edition.', disclosure: 'parties' }), options: { headers: { 'idempotency-key': 'keep-key' } } }]);
+      rationale: null, disclosure: 'parties' }), options: { headers: { 'idempotency-key': 'keep-key' } } }]);
+    expect(JSON.stringify((calls[0] as { body: unknown }).body)).not.toContain(note);
+  });
+
+  test('details for the affected people may be the rationale, and a private note beside them still is not', async () => {
+    const calls: unknown[] = [];
+    const details = 'The 1894 text is a recognised edition.';
+    const note = 'Check the scan quality later.';
+    const facts = `${reasons.facts} ${details}`;
+    expect(await decideReport(mainFor(calls), uuid(7), item, { action: 'keep', reason: facts, note, details,
+      reasons: { ...reasons, facts } }, iri(11), 'keep-key')).toEqual({ ok: true, data: { saved: true } });
+    const body = (calls[0] as { body: Record<string, unknown> }).body;
+    expect(body).toMatchObject({ rationale: details, disclosure: 'parties', reasons: { ...reasons, facts } });
+    expect(JSON.stringify(body)).not.toContain(note);
   });
 
   test('the decision cites the published rules and the reported revision it acts on, so the notice is tied to both', async () => {
@@ -330,15 +344,32 @@ describe('sending a report decision', () => {
     expect(moved).toEqual([]);
   });
 
-  test('a case with more reports than can be read is refused rather than stated falsely', async () => {
+  test('a case with more than 200 reports is still decided, including automation recorded after the fiftieth page', async () => {
+    // Four reports a page: fifty pages are 200 reports, and Main allows another page after that.
+    const manual = Array.from({ length: 51 }, () => basisFor(item));
     const posted: Array<Record<string, unknown>> = [];
     const cursors: Array<string | undefined> = [];
-    const endless = { v1: { realms: () => ({ moderation: () => ({ get: async ({ query }: { query: { cursor?: string } }) => {
+    expect(await decideReport(paged(manual, posted, cursors), uuid(7), item, keepDecision(true), iri(11), 'k'))
+      .toEqual({ ok: true, data: {} });
+    expect(cursors).toHaveLength(51);
+    expect(posted[0]!.reasons).toEqual({ ...reasons, automation: false });
+    const later = manual.map((page, index) => index === 50
+      ? { ...page, reports: automatedBasis().reports } : page);
+    const found: Array<Record<string, unknown>> = [];
+    expect(await decideReport(paged(later, found, []), uuid(7), item, keepDecision(false), iri(11), 'k'))
+      .toEqual({ ok: true, data: {} });
+    expect(found[0]!.reasons).toEqual({ ...reasons, automation: true });
+  });
+
+  test('a report page that does not advance is not stated as manual', async () => {
+    const posted: Array<Record<string, unknown>> = [];
+    const cursors: Array<string | undefined> = [];
+    const stuck = { v1: { realms: () => ({ moderation: () => ({ get: async ({ query }: { query: { cursor?: string } }) => {
       cursors.push(query.cursor);
       return { data: { ...basisFor(item), nextCursor: 'more' }, error: null };
     } }) }), moderation: { decisions: { post: async (body: Record<string, unknown>) => { posted.push(body); return { data: {}, error: null }; } } } } } as unknown as MainClient;
-    expect(await decideReport(endless, uuid(7), item, keepDecision(false), iri(11), 'k')).toEqual({ ok: false, failure: 'budget' });
-    expect(cursors).toHaveLength(50);
+    expect(await decideReport(stuck, uuid(7), item, keepDecision(false), iri(11), 'k')).toEqual({ ok: false, failure: 'unavailable' });
+    expect(cursors.length).toBeLessThan(50);
     expect(posted).toEqual([]);
   });
 
