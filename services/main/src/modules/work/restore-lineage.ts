@@ -4,7 +4,7 @@ import { knownSearchPosition } from '../search/snapshot-state.ts';
 import type { Pool, PoolClient } from 'pg';
 import { accessOutboxCoverage, accessStateCoverage,
   scanAccessOutbox, scanAccessState } from './access-recovery-coverage.ts';
-import { relayCoverage, type RelayCoverage } from '../outbox/relay.ts';
+import { relayCoverage, relayCoverageOnClient, type RelayCoverage } from '../outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../outbox/relay-position.ts';
 import { assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
@@ -377,12 +377,18 @@ export function assertRetainedRecoveryRelayCut(coverage: RecoveryCoverage, retai
   }
 }
 
-/** Release only after an independently retained authority/receipt frontier is compared. */
+/** Release only after an independently retained authority/receipt frontier is compared.
+ * Supplying both Access and relay clients preserves the caller's transactions.
+ * The legacy relay-only argument retains its original transaction lifecycle.
+ */
 export async function releaseRestoredGraphHold(
   fuseki: FusekiClient, accessPool: Pool, relayPool: Pool,
   lineage: GraphLineage, evidence: AuthenticatedRecoveryCoverage,
-  relayClient?: PoolClient,
+  relayClient?: PoolClient, borrowedAccessClient?: PoolClient,
 ): Promise<void> {
+  if (borrowedAccessClient && !relayClient) {
+    throw new RestoreLineageConflict('borrowed restore requires both Access and relay clients');
+  }
   let coverage: RecoveryCoverage;
   try { coverage = openRecoveryPayload<RecoveryCoverage>(
     evidence?.sealedCoverage, evidence?.hmacKey, 'graph-recovery-coverage'); }
@@ -394,19 +400,58 @@ export async function releaseRestoredGraphHold(
   let accessClient: PoolClient | undefined;
   let relayHeadClient: PoolClient | undefined;
   const borrowedRelay = relayClient !== undefined;
+  const borrowedOwners = borrowedAccessClient !== undefined;
+  let accessTransaction: string | undefined;
+  let relayTransaction: string | undefined;
+  const borrowedTransaction = async (owner: 'Access' | 'relay', client: PoolClient,
+    isolation: 'repeatable read' | 'read committed', expected?: string): Promise<string> => {
+    try {
+      const actualIsolation = (await client.query('SHOW transaction_isolation')).rows[0]?.transaction_isolation;
+      if (actualIsolation !== isolation) {
+        throw new RestoreLineageConflict(`borrowed ${owner} restore requires an active ${isolation} transaction`);
+      }
+      // Consecutive IDs are stable only inside the caller's explicit transaction;
+      // an idle autocommit client obtains different IDs before any lock/effect.
+      const first = (await client.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]?.id;
+      const second = (await client.query<{ id: string }>('SELECT txid_current()::text AS id')).rows[0]?.id;
+      if (typeof first !== 'string' || !/^[0-9]+$/.test(first) || first !== second) {
+        throw new RestoreLineageConflict(`borrowed ${owner} restore requires an active ${isolation} transaction`);
+      }
+      if (expected !== undefined && first !== expected) {
+        throw new RestoreLineageConflict(`borrowed ${owner} restore transaction changed`);
+      }
+      return first;
+    } catch (error) {
+      if (error instanceof RestoreLineageConflict) throw error;
+      throw new RestoreLineageConflict(`borrowed ${owner} restore transaction is unavailable`, { cause: error });
+    }
+  };
+  const assertBorrowedTransactions = async () => {
+    if (!borrowedOwners) return;
+    await borrowedTransaction('relay', relayHeadClient!, 'read committed', relayTransaction);
+    await borrowedTransaction('Access', accessClient!, 'repeatable read', accessTransaction);
+  };
   try {
     relayHeadClient = relayClient ?? await relayPool.connect();
-    await relayHeadClient.query('BEGIN');
-    await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");
+    if (borrowedOwners) {
+      relayTransaction = await borrowedTransaction('relay', relayHeadClient, 'read committed');
+      accessTransaction = await borrowedTransaction('Access', borrowedAccessClient!, 'repeatable read');
+    } else {
+      await relayHeadClient.query('BEGIN');
+      await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");
+    }
     // Every release takes the journal allocator before the Access fence. Keep
     // that order across owners and retain both locks through both releases.
     await relayHeadClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
-    const client = await accessPool.connect();
+    const client = borrowedAccessClient ?? await accessPool.connect();
     accessClient = client;
-    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-    await client.query("SET LOCAL TIME ZONE 'UTC'");
+    if (!borrowedOwners) {
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      await client.query("SET LOCAL TIME ZONE 'UTC'");
+    }
     const fence = await client.query<{ open: boolean; generation: string }>(
       'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true FOR UPDATE');
+    await assertBorrowedTransactions();
     const fenceGeneration = fence.rows[0]?.generation;
     if (fence.rows[0]?.open !== false || typeof fenceGeneration !== 'string'
       || !/^[0-9]+$/.test(fenceGeneration)) {
@@ -431,7 +476,7 @@ export async function releaseRestoredGraphHold(
     await assertAccountDeletionJournalCoverage(accessPool, relayPool, client, relayHeadClient);
     await assertGraphDeletionEvidence(accessPool, evidence.deletions, client);
     let retainedRelay: RelayCoverage;
-    try { retainedRelay = await relayCoverage(relayPool, coverage.relay.consumer, relayHeadClient); }
+    try { retainedRelay = await relayCoverageOnClient(relayHeadClient, coverage.relay.consumer); }
     catch { throw new RestoreLineageConflict('relay checkpoint or delivered events are unavailable'); }
     assertRetainedRecoveryRelayCut(coverage, retainedRelay);
     try { await assertCurrentRecoveryCoverageHead(relayHeadClient, coverage); }
@@ -511,11 +556,13 @@ export async function releaseRestoredGraphHold(
     let graphReleased = false;
     const releaseGraph = async () => {
       if (graphReleased) throw new RestoreLineageConflict('restored graph release already completed');
+      await assertBorrowedTransactions();
       const beforeRelease = (await client.query<{ open: boolean; generation: string }>(
         'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0];
       if (beforeRelease?.open !== false || beforeRelease.generation !== fenceGeneration) {
         throw new RestoreLineageConflict('captured Access fence changed before graph release');
       }
+      await assertBorrowedTransactions();
       let updateError: unknown;
       if (held.boolean === true) {
         try { await fuseki.commandWithReceipt({ receipt, digest: releaseDigest, validations: [], deadlineMs: 10_000,
@@ -546,6 +593,7 @@ export async function releaseRestoredGraphHold(
       graphReleased = true;
     };
     try {
+      await assertBorrowedTransactions();
       await evidence.releaseErasures({ accessClient: client, relayClient: relayHeadClient,
         fenceGeneration }, releaseGraph);
     } catch (error) {
@@ -553,6 +601,7 @@ export async function releaseRestoredGraphHold(
       throw new RestoreLineageConflict(`retained erasure reconciliation failed: ${
         error instanceof Error ? error.message : 'owner replay outcome is unavailable'}`, { cause: error });
     }
+    await assertBorrowedTransactions();
     if (!graphReleased) throw new RestoreLineageConflict('retained erasure reconciliation did not release the graph');
     const releasedFence = (await client.query<{ open: boolean; generation: string }>(
       'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0];
@@ -562,18 +611,21 @@ export async function releaseRestoredGraphHold(
     if ((await fuseki.query(releasedQuery)).boolean !== true) {
       throw new RestoreLineageConflict('restored graph release evidence changed before Access commit');
     }
-    await client.query('COMMIT');
-    await relayHeadClient.query('COMMIT');
+    await assertBorrowedTransactions();
+    if (!borrowedOwners) {
+      await client.query('COMMIT');
+      await relayHeadClient.query('COMMIT');
+    }
   } catch (error) {
-    if (relayHeadClient) {
+    if (relayHeadClient && !borrowedOwners) {
       try { await relayHeadClient.query('ROLLBACK'); } catch { /* retain original error */ }
     }
-    if (accessClient) {
+    if (accessClient && !borrowedOwners) {
       try { await accessClient.query('ROLLBACK'); } catch { /* retain original error */ }
     }
     throw error;
   } finally {
     if (!borrowedRelay) relayHeadClient?.release();
-    accessClient?.release();
+    if (!borrowedOwners) accessClient?.release();
   }
 }

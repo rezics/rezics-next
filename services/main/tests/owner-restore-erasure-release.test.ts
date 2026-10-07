@@ -318,8 +318,7 @@ function fixture() {
         await validate('account-deletion-journal', accessClient);
         await relayClient!.query('SELECT 1 /* retained deletion journal */');
       }),
-    spyOn(relayCoverage, 'relayCoverage').mockImplementation(async (pool, consumer, client) => {
-      expect(pool).toBe(relay.pool);
+    spyOn(relayCoverage, 'relayCoverageOnClient').mockImplementation(async (client, consumer) => {
       expect(consumer).toBe(coverage.relay.consumer);
       expect(client).toBe(relay.client);
       await validate('retained-relay', client);

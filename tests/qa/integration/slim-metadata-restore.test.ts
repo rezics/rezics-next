@@ -23,7 +23,10 @@ import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outb
 import { readMainOutboxEnvelope, readNextMainOutboxBatch, relayCoverage, type CustodiedOutbox, type MainCloudEvent }
   from '../../../services/main/src/modules/outbox/relay.ts';
 import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
-import { retainErasureCoverage } from '../../../services/main/src/modules/erasure/reconcile.ts';
+import { reconcileRestoredErasures, releaseErasureRestoreHold, retainErasureCoverage,
+  type RestoredOwners } from '../../../services/main/src/modules/erasure/reconcile.ts';
+import { heldErasureMaintenanceClient } from '../../../services/main/src/modules/erasure/graph.ts';
+import { restoredCustodyDigests } from '../../../services/main/src/modules/erasure/custody.ts';
 import { ACTIVE_GENERATION, ensureModelGeneration }
   from '../../../services/main/src/modules/semantic/command.ts';
 import { custodyModelGenerationArtifacts, readExactModelGeneration }
@@ -38,8 +41,11 @@ import { checkedEditionV2, checkedMetadataState, METADATA_DETAILS_V2, METADATA_P
   from '../../../services/main/src/modules/work/metadata-schema.ts';
 import { readWorkComponentState } from '../../../services/main/src/modules/work/history.ts';
 import { setAdmittedWorkScalar } from '../../../services/main/src/modules/work/edit-admitted.ts';
+import { PendingAdmittedWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { SCALAR_PREDICATE } from '../../../services/main/src/modules/work/scalar-value.ts';
-import { captureGraphRecoveryCoverage, cutoverRestoredGraphLineage, readGraphRecoverySource, releaseRestoredGraphHold }
+import { accessStateCoverage } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
+import { captureGraphRecoveryCoverage, cutoverRestoredGraphLineage, readGraphRecoverySource, releaseRestoredGraphHold,
+  type AuthenticatedRecoveryCoverage }
   from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { reconcileRetainedSlimMetadata, reconcileRetainedWorkEdit }
   from '../../../services/main/src/modules/work/reconcile-restored.ts';
@@ -78,7 +84,7 @@ async function promotedPostgres(stack: QaStack, directory: string) {
       `mkdir -p /var/lib/postgresql/.temp
 PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast`],
     { cwd: root, env: stack.dockerEnv, timeout: 65_000 });
-    execFileSync('docker', ['cp', `${container}:${remote}`, data], { cwd: root, env: stack.dockerEnv, timeout: 20_000 });
+    execFileSync('docker', ['cp', `${container}:${remote}`, data], { cwd: root, env: stack.dockerEnv, timeout: 60_000 });
   } finally {
     execFileSync('docker', ['exec', '-u', 'postgres', container, 'rm', '-rf', remote],
       { cwd: root, env: stack.dockerEnv, timeout: 10_000 });
@@ -187,7 +193,8 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     await objects.initialize();
     const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
     access.configureBaseline(fuseki);
-    let custody = new ReceiptCustody(new PostgresReceiptCustodyStore(accessPool), objects, fuseki,
+    let custodyStore = new PostgresReceiptCustodyStore(accessPool);
+    let custody = new ReceiptCustody(custodyStore, objects, fuseki,
       apps.FUSEKI_TITLE_ADMISSION_KEY!, proofRetirementSender(apps.FUSEKI_URL!, apps.FUSEKI_COMMAND_TOKEN!));
     env = { fuseki, workObjects: objects, receiptCustody: custody, objectDirectory: apps.MAIN_OBJECT_DIRECTORY!,
       lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! } };
@@ -223,8 +230,16 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     };
     const request = new Request('http://main.local/v1/metadata');
     const deps = { environment: env, access, account: { verify: async () => principal } };
+    const metadataSource = async (input: Parameters<typeof setWorkMetadata>[2]) => {
+      try { return await setWorkMetadata(deps, request, input); }
+      catch (error) {
+        if (!(error instanceof PendingAdmittedWork)) throw error;
+        // Reconcile an uncertain setup result with the same real owner identity.
+        return await setWorkMetadata(deps, request, input);
+      }
+    };
     // Edition validation requires a recorded descriptive header on its owning Work.
-    await setWorkMetadata(deps, request, { profile: 'work-metadata-details-v1', work, expectedHead: null,
+    await metadataSource({ profile: 'work-metadata-details-v1', work, expectedHead: null,
       state: checkedMetadataState({ kind: 'header', originalTitle: { value: title, language: 'en' }, localized: [] }),
       actingSubject: actor, idempotencyKey: randomUUID() });
     const sourceEpoch = env.lineage.dataEpoch;
@@ -253,7 +268,7 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     expect(v2.tracklistLanguage).toBe('sr-Latn');
     const sources: Source[] = [];
     const write = async (state: MetadataEditionState | MetadataEditionStateV2, expectedHead: string | null, profile: string) => {
-      const result = await setWorkMetadata(deps, request, { profile, work, state, expectedHead,
+      const result = await metadataSource({ profile, work, state, expectedHead,
         actingSubject: actor, idempotencyKey: randomUUID() });
       const found = (await accessPool!.query<{ payload_sha256: string; payload: Buffer;
         terminal: CustodiedReceipt; outbox: Source['outbox']; retired_at: Date | null }>(
@@ -274,9 +289,10 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     await write({ ...v1, status: 'withdrawn' }, first.terminal.revision, 'work-metadata-details-v1');
     await loadStoppedCopy(stack, `PREFIX rv: <${RV}> DELETE DATA { GRAPH ${iri(GRAPHS.control)} {
       ${iri(DATASET)} rv:sequence 878 } }; INSERT DATA { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence 898 } }`);
+    const rawKey = randomUUID();
     const raw = await setAdmittedWorkScalar(env, deps.account, access, request, { work,
       expectedHead: created.workRevision!, scalarValue: { kind: 'integer', lexical: '0' },
-      actingSubject: actor, idempotencyKey: randomUUID() });
+      actingSubject: actor, idempotencyKey: rawKey });
     expect(raw.sequence).toBe('899');
     const rawBatch = await readNextMainOutboxBatch(fuseki, sourceEpoch, '2', custody);
     expect(rawBatch).toMatchObject({ graphSequence: '899', sequence: '3' });
@@ -361,7 +377,8 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     historicalPool = new Pool({ connectionString: postgres.connection(apps.ACCESS_DATABASE_URL!), max: 1, connectionTimeoutMillis: 30_000 });
     accountPool = new Pool({ connectionString: postgres.connection(apps.ACCOUNT_DATABASE_URL!) });
     contentPool = new Pool({ connectionString: postgres.connection(apps.CONTENT_DATABASE_URL!) });
-    custody = new ReceiptCustody(new PostgresReceiptCustodyStore(accessPool), objects, fuseki,
+    custodyStore = new PostgresReceiptCustodyStore(accessPool);
+    custody = new ReceiptCustody(custodyStore, objects, fuseki,
       apps.FUSEKI_TITLE_ADMISSION_KEY!, proofRetirementSender(apps.FUSEKI_URL!, apps.FUSEKI_COMMAND_TOKEN!));
     env.receiptCustody = custody;
     // Restore only an older saved physical graph. Production cutover creates
@@ -395,13 +412,15 @@ test('held product slim metadata restore preserves retired owner custody, exact 
       expect(retainedModel.shapes.find(shape => shape.profile === pin.profile)?.sha256).toBe(pin.sha256);
     }
     const checkoutAccess = accessPool.connect.bind(accessPool), checkoutRelay = relayPool.connect.bind(relayPool);
-    const repair = async (sequence: string, rawSource = false) => {
+    const repair = async (sequence: string, rawSource = false, openFence = false) => {
       const relayClient = await checkoutRelay();
       let accessClient: PoolClient | undefined;
       try {
         await relayClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
         accessClient = await checkoutAccess();
         await accessClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        // Roll back the fence's derived-source invalidation with this refusal.
+        if (openFence) await accessClient.query('UPDATE access.recovery_fence SET open=true WHERE id');
         const forbidden = () => { throw new Error('Held repair must use the supplied owner clients without live custody reconciliation'); };
         const accessQueries = spyOn(accessClient, 'query'), relayQueries = spyOn(relayClient, 'query');
         const guards = [spyOn(accessPool!, 'connect').mockImplementation(forbidden),
@@ -434,10 +453,8 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     const reconcile = (sequence: string) => repair(sequence);
     const reconcileRaw = () => repair('3', true);
     const held = await facts(fuseki);
-    await accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id');
-    await expect(reconcile('1')).rejects.toThrow();
+    await expect(repair('1',false,true)).rejects.toThrow();
     expect(await facts(fuseki)).toEqual(held);
-    await accessPool.query('UPDATE access.recovery_fence SET open=false WHERE id');
     const prematureErasures = mock(async () => { throw new Error('An incomplete signed restore cannot enter erasure release'); });
     await expect(releaseRestoredGraphHold(fuseki,accessPool,relayPool,env.lineage,{
       sealedCoverage,hmacKey:recoveryKey,accountPool,contentPool,
@@ -653,6 +670,285 @@ test('held product slim metadata restore preserves retired owner custody, exact 
       WHERE id=ANY($1::uuid[]) ORDER BY id`, [sourceAdmissionIds])).rows).toEqual(originalAdmissions);
     expect(await relayCoverage(relayPool,consumer)).toEqual(coverage);
     expect((await accessPool.query('SELECT open FROM access.recovery_fence WHERE id')).rows).toEqual([{open:false}]);
+    expect(await accessStateCoverage(accessPool)).toEqual({
+      count:signedCut.accessStateCount,digest:signedCut.accessStateDigest });
+
+    // This is the original signed frontier: never recapture after replay or
+    // replace it with the diagnostic cursor interpreted as a Main position.
+    const authority = { sealedCoverage, hmacKey: recoveryKey };
+    const operationId = `owner:reconcile:${randomUUID()}`;
+    const restoredOwners: RestoredOwners = {
+      access: accessPool, content: contentPool, account: accountPool,
+      objects: { directory: env.objectDirectory, workObjects: objects },
+      graph: {
+        fuseki, lineage: env.lineage, receiptCustody: custody,
+        heldErasure: {
+          originalSource: 'original-graph',
+          cut: { dataEpoch: restoredEpoch, routingEpoch: restoredRouting, restoreCutover: marker,
+            priorDataEpoch: sourceEpoch, priorSequence: savedSource.sequence },
+          accessHoldGeneration: fenceGeneration,
+          originalGraph: { fuseki: originalFuseki, lineage: sourceLineage },
+          signingKey: apps.FUSEKI_TITLE_ADMISSION_KEY!,
+          maintenance: heldErasureMaintenanceClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!),
+        },
+      },
+    };
+    const callbackCalls: { pid: string; txid: string; generation: string }[] = [];
+    let activeReleaseClients: { accessClient: PoolClient; relayClient: PoolClient } | undefined;
+    const evidence: AuthenticatedRecoveryCoverage = {
+      ...authority, accountPool, contentPool, objectStore: restoredOwners.objects,
+      releaseErasures: async (clients, releaseGraph) => {
+        expect(clients.accessClient).toBe(activeReleaseClients?.accessClient);
+        expect(clients.relayClient).toBe(activeReleaseClients?.relayClient);
+        const row = (await clients.accessClient.query<{ pid: string; txid: string }>(
+          'SELECT pg_backend_pid()::text AS pid,txid_current()::text AS txid')).rows[0]!;
+        callbackCalls.push({ ...row, generation: clients.fenceGeneration });
+        const reconciled = await reconcileRestoredErasures(relayPool!, restoredOwners, {
+          operationId: `${operationId}:erasures`, consumer, replay: true, authority,
+        }, clients);
+        expect(reconciled.state).toBe('reconciled');
+        expect(reconciled.holdReason).toBeNull();
+        await releaseErasureRestoreHold(relayPool!, restoredOwners,
+          reconciled.reconciliationId, clients.fenceGeneration, authority,
+          { clients, beforeAccessRelease: releaseGraph });
+      },
+    };
+    const release = async (releaseEvidence = evidence) => {
+      const relayClient = await checkoutRelay();
+      let accessClient: PoolClient | undefined;
+      try {
+        // Frozen Trust requires a fresh retained READ COMMITTED view. The
+        // caller acquires the allocator before the Access fence and owns both.
+        await relayClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+        await relayClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch',0))");
+        accessClient = await checkoutAccess();
+        await accessClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        await accessClient.query('SELECT open,generation FROM access.recovery_fence WHERE id FOR UPDATE');
+        const identitySql = 'SELECT pg_backend_pid()::text AS pid,txid_current()::text AS txid';
+        const accessIdentity = (await accessClient.query(identitySql)).rows;
+        const relayIdentity = (await relayClient.query(identitySql)).rows;
+        const accessQueries = spyOn(accessClient, 'query'), relayQueries = spyOn(relayClient, 'query');
+        const forbidden = () => { throw new Error('Borrowed release cannot checkout, end a caller transaction or reconcile live custody'); };
+        const guards = [
+          spyOn(accessPool!, 'connect').mockImplementation(forbidden),
+          spyOn(accessPool!, 'query').mockImplementation(forbidden),
+          spyOn(relayPool!, 'connect').mockImplementation(forbidden),
+          spyOn(relayPool!, 'query').mockImplementation(forbidden),
+          spyOn(accessClient, 'release').mockImplementation(forbidden),
+          spyOn(relayClient, 'release').mockImplementation(forbidden),
+          spyOn(custodyStore, 'withReceipt').mockImplementation(forbidden),
+          spyOn(custodyStore, 'receiptAt').mockImplementation(forbidden),
+          spyOn(custody, 'read').mockImplementation(forbidden),
+          spyOn(custody, 'resolve').mockImplementation(forbidden),
+          spyOn(custody, 'readCommitted').mockImplementation(forbidden),
+          spyOn(custody, 'commit').mockImplementation(forbidden),
+          spyOn(custody, 'retire').mockImplementation(forbidden),
+        ];
+        activeReleaseClients = { accessClient, relayClient };
+        try {
+          await releaseRestoredGraphHold(fuseki, accessPool!, relayPool!, env!.lineage,
+            releaseEvidence, relayClient, accessClient);
+        } finally {
+          activeReleaseClients = undefined;
+          try {
+            for (const queries of [accessQueries, relayQueries]) for (const call of queries.mock.calls) {
+              expect(String(call[0])).not.toMatch(/(?:^|;)\s*(?:BEGIN|COMMIT|ROLLBACK)\b/i);
+            }
+            for (const guard of guards) expect(guard).not.toHaveBeenCalled();
+          } finally {
+            for (const guard of guards.reverse()) guard.mockRestore();
+            accessQueries.mockRestore(); relayQueries.mockRestore();
+          }
+          expect((await accessClient.query(identitySql)).rows).toEqual(accessIdentity);
+          expect((await relayClient.query(identitySql)).rows).toEqual(relayIdentity);
+        }
+        await accessClient.query('COMMIT');
+        await relayClient.query('COMMIT');
+      } catch (error) {
+        if (accessClient) await accessClient.query('ROLLBACK').catch(() => undefined);
+        await relayClient.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      } finally {
+        accessClient?.release();
+        relayClient.release();
+      }
+    };
+    const refusePair = async (options: { access: 'repeatable read' | 'read committed' | null;
+      relay: 'repeatable read' | 'read committed' | null; message: string;
+      callback?: AuthenticatedRecoveryCoverage['releaseErasures']; callbackChangesTransaction?: boolean }) => {
+      const relayClient = await checkoutRelay();
+      let accessClient: PoolClient | undefined;
+      const beforeGraph = await facts(fuseki);
+      try {
+        if (options.relay) await relayClient.query(`BEGIN ISOLATION LEVEL ${options.relay.toUpperCase()}`);
+        accessClient = await checkoutAccess();
+        if (options.access) await accessClient.query(`BEGIN ISOLATION LEVEL ${options.access.toUpperCase()}`);
+        const accessQueries = spyOn(accessClient, 'query'), relayQueries = spyOn(relayClient, 'query');
+        const forbidden = () => { throw new Error('Refused paired release cannot checkout, release a client or dispatch native mutation'); };
+        const guards = [spyOn(accessPool!, 'connect').mockImplementation(forbidden),
+          spyOn(accessPool!, 'query').mockImplementation(forbidden), spyOn(relayPool!, 'connect').mockImplementation(forbidden),
+          spyOn(relayPool!, 'query').mockImplementation(forbidden), spyOn(accessClient, 'release').mockImplementation(forbidden),
+          spyOn(relayClient, 'release').mockImplementation(forbidden), spyOn(fuseki, 'command').mockImplementation(forbidden),
+          spyOn(fuseki, 'commandWithReceipt').mockImplementation(forbidden),
+          spyOn(custodyStore, 'withReceipt').mockImplementation(forbidden),
+          spyOn(custody, 'resolve').mockImplementation(forbidden), spyOn(custody, 'read').mockImplementation(forbidden),
+          spyOn(custody, 'readCommitted').mockImplementation(forbidden), spyOn(custody, 'commit').mockImplementation(forbidden),
+          spyOn(custody, 'retire').mockImplementation(forbidden)];
+        let refusal: unknown;
+        try {
+          await releaseRestoredGraphHold(fuseki,accessPool!,relayPool!,env!.lineage,
+            options.callback ? { ...evidence, releaseErasures: options.callback } : evidence,
+            relayClient,accessClient);
+        } catch (error) {
+          refusal = error;
+        } finally {
+          try {
+            expect(() => { if (refusal) throw refusal; }).toThrow(options.message);
+            const lifecycle = (queries: typeof accessQueries) => queries.mock.calls.map(call => String(call[0]).trim())
+              .filter(sql => /^(?:BEGIN|COMMIT|ROLLBACK)\b/i.test(sql));
+            expect(lifecycle(relayQueries)).toEqual([]);
+            expect(lifecycle(accessQueries)).toEqual(options.callbackChangesTransaction
+              ? ['ROLLBACK','BEGIN ISOLATION LEVEL REPEATABLE READ'] : []);
+            for (const guard of guards) expect(guard).not.toHaveBeenCalled();
+          } finally {
+            for (const guard of guards.reverse()) guard.mockRestore();
+            accessQueries.mockRestore(); relayQueries.mockRestore();
+          }
+        }
+        expect((await accessClient.query('SELECT open,generation::text FROM access.recovery_fence WHERE id')).rows)
+          .toEqual([{ open:false,generation:fenceGeneration }]);
+      } finally {
+        if (accessClient) { try { await accessClient.query('ROLLBACK'); } finally { accessClient.release(); } }
+        try { await relayClient.query('ROLLBACK'); } finally { relayClient.release(); }
+      }
+      expect(await facts(fuseki)).toEqual(beforeGraph);
+    };
+    const callbacksBeforeRefusal = callbackCalls.length;
+    await refusePair({ access:null,relay:'read committed',
+      message:'borrowed Access restore requires an active repeatable read transaction' });
+    await refusePair({ access:'repeatable read',relay:null,
+      message:'borrowed relay restore requires an active read committed transaction' });
+    await refusePair({ access:'read committed',relay:'read committed',
+      message:'borrowed Access restore requires an active repeatable read transaction' });
+    await refusePair({ access:'repeatable read',relay:'repeatable read',
+      message:'borrowed relay restore requires an active read committed transaction' });
+    expect(callbackCalls).toHaveLength(callbacksBeforeRefusal);
+    let changedTransactionCallbacks = 0;
+    await refusePair({ access:'repeatable read',relay:'read committed',callbackChangesTransaction:true,
+      message:'borrowed Access restore transaction changed',callback:async (clients,releaseGraph) => {
+        changedTransactionCallbacks++;
+        const reconciled = await reconcileRestoredErasures(relayPool!,restoredOwners,{
+          operationId:`${operationId}:changed-transaction:erasures`,consumer,replay:true,authority,
+        },clients);
+        // Preserve the exact custody refusal when the owner's summary stays held.
+        if (reconciled.state !== 'reconciled') await restoredCustodyDigests(accessPool!,
+          restoredOwners.graph!,restoredOwners.objects!,clients.accessClient);
+        expect(reconciled.holdReason).toBeNull();
+        expect(reconciled.state).toBe('reconciled');
+        // Lose the caller's original Access lock/snapshot, then enter a new
+        // valid transaction. Root's retained identity must veto graph release.
+        await clients.accessClient.query('ROLLBACK');
+        await clients.accessClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        await releaseErasureRestoreHold(relayPool!,restoredOwners,reconciled.reconciliationId,
+          clients.fenceGeneration,authority,{clients,beforeAccessRelease:releaseGraph});
+      } });
+    expect(changedTransactionCallbacks).toBe(1);
+    expect((await relayPool.query('SELECT operation_id FROM relay.owner_reconciliation WHERE operation_id=$1',
+      [`${operationId}:changed-transaction:erasures`])).rows).toEqual([]);
+    const releaseReceipt = `urn:rezics:receipt:restore-release:${hash(restoredEpoch)}`;
+    const beforeRelease = await facts(fuseki);
+    const interruptedCallbacks = callbackCalls.length;
+    fuseki.commandWithReceipt = async envelope => {
+      expect(envelope.receipt).toBe(releaseReceipt);
+      throw new CommandOutcomeUnknown('Interrupted before native graph release');
+    };
+    try { await expect(release()).rejects.toThrow('recovery release outcome is unknown'); }
+    finally { fuseki.commandWithReceipt = nativeCommand; }
+    expect(callbackCalls.length).toBe(interruptedCallbacks + 1);
+    expect(callbackCalls.at(-1)?.generation).toBe(fenceGeneration);
+    expect(await facts(fuseki)).toEqual(beforeRelease);
+    expect((await accessPool.query('SELECT open,generation::text FROM access.recovery_fence WHERE id')).rows)
+      .toEqual([{ open: false, generation: fenceGeneration }]);
+    expect((await relayPool.query('SELECT operation_id FROM relay.owner_reconciliation WHERE operation_id=$1',
+      [`${operationId}:erasures`])).rows).toEqual([]);
+
+    let lostRelease: CommandEnvelope | undefined;
+    fuseki.commandWithReceipt = async envelope => {
+      expect(envelope.receipt).toBe(releaseReceipt);
+      const result = await nativeCommand(envelope);
+      expect(result).toMatchObject({ status: 'committed',
+        position: { datasetId: DATASET, dataEpoch: restoredEpoch, sequence: '0' } });
+      lostRelease = envelope;
+      throw new CommandOutcomeUnknown('Lost committed native graph release acknowledgment');
+    };
+    try { await release(); }
+    finally { fuseki.commandWithReceipt = nativeCommand; }
+    expect(lostRelease).toBeDefined();
+    expect(lostRelease!.digest).toBe(hash(JSON.stringify({ family: 'restore-release-v2', lineage: env.lineage,
+      priorDataEpoch: signedCut.priorDataEpoch, priorSequence: '900', priorMainSequence: '4',
+      streamScope: MAIN_RELAY_STREAM_SCOPE })));
+    expect(callbackCalls.length).toBe(interruptedCallbacks + 2);
+    expect(callbackCalls.at(-1)?.generation).toBe(fenceGeneration);
+    expect((await accessPool.query('SELECT open,generation::text FROM access.recovery_fence WHERE id')).rows)
+      .toEqual([{ open: true, generation: (BigInt(fenceGeneration) + 1n).toString() }]);
+    expect((await fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} rv:dataEpoch ${lit(restoredEpoch)} ; rv:routingEpoch ${lit(restoredRouting)} ; rv:sequence 0 .
+        ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:dataEpoch ${lit(restoredEpoch)} ; rv:streamSequence 0 .
+        ${iri(marker)} rv:priorSequence 876 ; rv:priorMainSequence 0 ;
+          rv:reconciledPriorSequence 900 ; rv:reconciledPriorMainSequence 4 .
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
+      }
+      GRAPH ${iri(GRAPHS.receipts)} {
+        ${iri(releaseReceipt)} rv:requestDigest ${lit(lostRelease!.digest)} ;
+          rv:dataEpoch ${lit(restoredEpoch)} ; rv:sequence 0 ;
+          rv:priorMainSequence 4 ; rv:streamScope ${lit(MAIN_RELAY_STREAM_SCOPE)} .
+      }
+    }`)).boolean).toBe(true);
+    const released = await facts(fuseki);
+    expect(await fuseki.command(lostRelease!)).toMatchObject({ status: 'committed',
+      position: { datasetId: DATASET, dataEpoch: restoredEpoch, sequence: '0' } });
+    const lastCallbacks = callbackCalls.length;
+    await expect(release()).rejects.toThrow('Access recovery fence is not held');
+    expect(callbackCalls).toHaveLength(lastCallbacks);
+    expect(await facts(fuseki)).toEqual(released);
+
+    // Ordinary committed API replay preserves the original raw and retired
+    // owner results after activation; it never redispatches a graph repair.
+    const restoredAccess = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
+    restoredAccess.configureBaseline(fuseki);
+    const redispatch = spyOn(fuseki, 'commandWithReceipt').mockImplementation(async () => {
+      throw new Error('An original committed API replay must not dispatch');
+    });
+    try {
+      expect(await setAdmittedWorkScalar(env, deps.account, restoredAccess, request, { work,
+        expectedHead: created.workRevision!, scalarValue: { kind: 'integer', lexical: '0' },
+        actingSubject: actor, idempotencyKey: rawKey })).toEqual({ ...raw, replayed: true });
+      for (const source of sources) {
+        const key = (await accessPool.query<{ idempotency_key: string }>(
+          'SELECT idempotency_key FROM access.admission WHERE id=$1', [source.terminal.admissionId])).rows[0]!.idempotency_key;
+        const replay = await setWorkMetadata({ ...deps, access: restoredAccess }, request, {
+          profile: 'contentLanguages' in source.prepared.state
+            ? 'work-metadata-details-v2' : 'work-metadata-details-v1',
+          work, state: source.prepared.state,
+          expectedHead: source.terminal.predecessor === source.terminal.component ? null : source.terminal.predecessor ?? null,
+          actingSubject: actor, idempotencyKey: key,
+        });
+        expect(replay).toMatchObject({ work, component: source.terminal.component,
+          revision: source.terminal.revision, receipt: source.terminal.receipt, replayed: true,
+          sourcePosition: { dataEpoch: sourceEpoch, sequence: source.terminal.sequence } });
+      }
+      expect(redispatch).not.toHaveBeenCalled();
+    } finally { redispatch.mockRestore(); }
+    expect(await facts(fuseki)).toEqual(released);
+    expect((await accessPool.query(`SELECT receipt,request_digest,payload_sha256,payload,revision,
+      terminal,outbox,reconciled_at,retired_at,data_epoch,stream_sequence::text
+      FROM access.command_custody ORDER BY receipt`)).rows).toEqual(originalSql);
+    expect((await accessPool.query(`SELECT id,acting_subject,scope_id,request_digest,authority_epoch,
+      state,graph_receipt,graph_outcome,graph_data_epoch,graph_sequence FROM access.admission
+      WHERE id=ANY($1::uuid[]) ORDER BY id`, [sourceAdmissionIds])).rows).toEqual(originalAdmissions);
+    expect(await relayCoverage(relayPool, consumer)).toEqual(coverage);
+    for (const source of sources) expect(await objects.get(source.payloadSha256)).toEqual(new Uint8Array(source.payload));
     await rawUpdateClosed();
   } finally {
     await accessPool?.end();
