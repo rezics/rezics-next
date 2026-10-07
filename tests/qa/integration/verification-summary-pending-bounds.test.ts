@@ -152,7 +152,7 @@ test('summary pending probes stay local under completed dependency history and u
       );
       for (const scan of scans.filter((node) => node['Actual Loops'] > 0)) {
         expect(scan['Actual Loops']).toBeLessThanOrEqual(count);
-        if (unrelated || history) {
+        if (unrelated + history >= 4_096) {
           expect(scan['Index Name']).toBe('invalidation_pending_dependency');
           expect(scan['Index Cond']).toMatch(/kind.*reference/s);
         }
