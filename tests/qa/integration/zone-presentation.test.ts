@@ -256,7 +256,8 @@ test('campaign bytes follow the exact published local Showcase instead of config
   for (const path of [...frenchUrls, withVariant(`/v1/media/uses/${nextArt.use}`, french.variantId)]) {
     expect((await publicRead(path, browserHeaders)).status, path).toBe(404);
   }
-  await publish([selected, french]);
+  const restoredFrench = await save(document([nextSlide]), emptiedFrench.revisionId, french.variantId, 'fr');
+  await publish([selected, restoredFrench]);
   expect(await rendered([nextSlide], pageHeaders)).toEqual(frenchUrls);
   await publish(selected);
   for (const path of [...frenchUrls, withVariant(`/v1/media/uses/${nextArt.use}`, french.variantId)]) {
