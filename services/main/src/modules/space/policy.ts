@@ -16,6 +16,18 @@ export interface RealmPolicyDelivery { realm: string; receipt_id: string; genera
   listing?: ResourceListing; history?: RealmHistory; admission?: RealmAdmission }
 export const policyHead = (id: string) => `urn:rezics:realm-policy:${id}`;
 
+/** Creation and later delivery publish the same policy fields on the Realm.
+ * The head is the publishing command's receipt IRI, not a separate resource. */
+export function realmPolicyCurrentFacts(realm: string, space: string, revision: string,
+  policy: Pick<RealmPolicy, 'visibility' | 'reviewMode'>
+    & Partial<Pick<RealmPolicy, 'listing' | 'history' | 'admission'>>): string {
+  return `${iri(space)} rv:disclosure rv:${policy.visibility === 'private' ? 'Private' : 'Public'} ;
+    rv:listing ${lit(policy.listing ?? 'listed')} .
+    ${iri(realm)} rv:visibility ${lit(policy.visibility)} ; rv:reviewMode ${lit(policy.reviewMode)} ;
+      rv:historyVisibility ${lit(policy.history ?? 'everything')} ; rv:admissionMode ${lit(policy.admission ?? 'invitation')} ;
+      rv:realmPolicyHead ${iri(revision)} ; rv:reviewPolicy ${iri(reviewPolicy(policy.reviewMode))} .`;
+}
+
 /** One exact Realm/Space read, at most 2 rows/8 KiB. Old Realms retain their
  * profile's defaults until the first explicit unified policy publication. */
 export async function readRealmPolicy(env: WorkActivationEnvironment, realm: string): Promise<RealmPolicy | null> {
@@ -90,11 +102,9 @@ export async function deliverRealmPolicy(env: WorkActivationEnvironment, op: Rea
       GRAPH ${iri(GRAPHS.current)} { ${iri(op.realm)} rv:historyVisibility ?history ; rv:admissionMode ?admission . }
     } INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(space)} rv:disclosure rv:${op.visibility === 'private' ? 'Private' : 'Public'} ;
-        rv:listing ${lit(op.listing ?? 'listed')} .
-        ${iri(op.realm)} rv:visibility ${lit(op.visibility)} ; rv:reviewMode ${lit(op.review_mode)} ;
-          rv:historyVisibility ${lit(op.history ?? 'everything')} ; rv:admissionMode ${lit(op.admission ?? 'invitation')} ;
-          rv:realmPolicyHead ${iri(receipt)} ; rv:reviewPolicy ${iri(reviewPolicy(op.review_mode))} . }
+      GRAPH ${iri(GRAPHS.current)} { ${realmPolicyCurrentFacts(op.realm, space, receipt,
+        { visibility: op.visibility, reviewMode: op.review_mode, listing: op.listing,
+          history: op.history, admission: op.admission })} }
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
         rv:requestDigest ${lit(digest)} ; rv:realm ${iri(op.realm)} ; rv:space ${iri(space)} ;
         rv:visibility ${lit(op.visibility)} ; rv:reviewMode ${lit(op.review_mode)} ; rv:policyGeneration ${lit(op.generation)} ;

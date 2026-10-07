@@ -5,8 +5,7 @@ import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastr
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
 import { checkedInitialRealmSettings, type RealmSettings } from '../realm-admin/contract.ts';
-import { reviewPolicy } from './policy.ts';
-import { initialRealmPolicyFacts } from '../access/realm-initialization.ts';
+import { realmPolicyCurrentFacts, reviewPolicy } from './policy.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
@@ -20,7 +19,7 @@ export const REVIEW_POLICY = 'https://rezics.com/definition/realm-manager-review
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const COMMUNITY_HANDLE = /^[A-Za-z0-9](?:[A-Za-z0-9_-]{1,28})[A-Za-z0-9]$/;
 export const SPACE_CREATE_COST = { topics: 3, topicValidationCalls: 2, handleChecks: 2,
-  profileValidationCalls: 2, policyHeads: 1, graphCommandCalls: 1,
+  profileValidationCalls: 1, graphCommandCalls: 1,
   initialRulesBytes: 16_384, deadlineMs: 10_000 } as const;
 
 export class InvalidSpaceInput extends Error {}
@@ -40,14 +39,6 @@ export interface CreateRealmSpaceInput {
 export function initialRealmSettings(input: CreateRealmSpaceInput): RealmSettings {
   return checkedInitialRealmSettings(input.initialSettings ?? { visibility: 'public',
     reviewRequired: true, reviewMode: 'mandatory', whoMaySubmit: 'granted', selfJoin: false, rules: [] });
-}
-
-/** Domain-separated UUIDv8: one policy identity per principal-scoped creation
- * key, independent of retries, candidate Realm IDs and mutable settings. */
-export function realmCreationPolicyReceipt(admission: Pick<RegisteredAdmission, 'principalId' | 'idempotencyKey'>): string {
-  const hex = hash(JSON.stringify(['realm-creation-policy-v1', admission.principalId, admission.idempotencyKey]));
-  const variant = ((Number.parseInt(hex[16]!, 16) & 3) | 8).toString(16);
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-8${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
 
 export interface SpaceCreationReceipt {
@@ -174,17 +165,12 @@ function checked(receipt: SpaceCreationReceipt, admission: RegisteredAdmission,
 }
 
 async function validateCandidate(env: WorkActivationEnvironment, space: string, realm: string,
-  input: CreateRealmSpaceInput, policyRevision: string): Promise<CommandValidation[]> {
+  input: CreateRealmSpaceInput): Promise<CommandValidation[]> {
   iri(space); iri(realm); spaceCreationDigest(input);
-  const components = await profileValidations(env.fuseki, 'space-realm-v3', [
+  return profileValidations(env.fuseki, 'space-realm-v3', [
     { shape: `${SPACE_REALM_PROFILE}/space-shape`, focus: [space], graphs: [GRAPHS.current] },
     { shape: `${SPACE_REALM_PROFILE}/realm-shape`, focus: [realm], graphs: [GRAPHS.current] },
   ]);
-  const policy = await profileValidations(env.fuseki, 'realm-policy-head-v1', [
-    { shape: 'https://rezics.com/definition/realm-policy-head-v1/head-shape',
-      focus: [policyRevision], graphs: [GRAPHS.current] },
-  ]);
-  return [...components, ...policy];
 }
 
 /** Create the intended Space and Realm policy in one graph position. */
@@ -209,12 +195,10 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
   const spaceRevision = ID + Bun.randomUUIDv7();
   const realmRevision = ID + Bun.randomUUIDv7();
   const operation = ID + Bun.randomUUIDv7();
-  const { rules, ...accessSettings } = settings;
-  const policyFacts = initialRealmPolicyFacts({ realm, actingSubject: input.actingSubject,
-    creationKey: admission.idempotencyKey, creationDigest: digest,
-    policyReceipt: realmCreationPolicyReceipt(admission), settings: accessSettings, rules },
-  space, spaceCreationReceiptIri(admission.id));
-  const validations = await validateCandidate(env, space, realm, input, policyFacts.revision);
+  const receipt = spaceCreationReceiptIri(admission.id);
+  const policyFacts = realmPolicyCurrentFacts(realm, space, receipt, { visibility: settings.visibility,
+    reviewMode: settings.reviewMode!, admission: settings.selfJoin ? 'open' : 'invitation' });
+  const validations = await validateCandidate(env, space, realm, input);
   const spaceManifest = prepareComponent(env.objectDirectory, space,
     { name: input.name, language, owner: input.actingSubject, realmCapability: realm,
       capabilities: ['realm'], disclosure }, SPACE_REALM_PROFILE);
@@ -222,11 +206,10 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
     { space, state: 'active', selectionPolicy: SELECTION_POLICY,
       membershipPolicy: MEMBERSHIP_POLICY, reviewPolicy: policy,
       initialSettings: settings,
-      initialPolicyRevision: policyFacts.revision,
+      initialPolicyRevision: receipt,
       ...input.handle ? { handle: normalizeAddressAlias(input.handle,'ascii-handle').key } : {},
       ...input.topics?.length ? { topics: [...input.topics].sort() } : {} }, SPACE_REALM_PROFILE);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Space admission expired');
-  const receipt = spaceCreationReceiptIri(admission.id);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
   let updateError: unknown;
@@ -247,8 +230,7 @@ export async function createRealmSpace(env: WorkActivationEnvironment,
           ${input.topics?.length ? `rv:topic ${[...input.topics].sort().map(iri).join(', ')} ;` : ''}
           rv:selectionPolicy ${iri(SELECTION_POLICY)} ;
           rv:membershipPolicy ${iri(MEMBERSHIP_POLICY)} ; rv:head ${iri(realmRevision)} .
-        ${policyFacts.current}
-        ${iri(policyFacts.revision)} a rv:RealmPolicyHead ; rv:realm ${iri(realm)} .
+        ${policyFacts}
       }
       GRAPH ${iri(GRAPHS.revisions)} {
         ${iri(spaceRevision)} a rv:RevisionAnchor ; rv:component ${iri(space)} ;

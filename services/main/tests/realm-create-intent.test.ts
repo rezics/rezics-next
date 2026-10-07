@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { createAdmittedRealmSpace } from '../src/modules/space/create-admitted.ts';
-import { initialRealmSettings, realmCreationPolicyReceipt, spaceCreationDigest, spaceCreationReceiptIri } from '../src/modules/space/create.ts';
+import { initialRealmSettings, spaceCreationDigest, spaceCreationReceiptIri } from '../src/modules/space/create.ts';
 import { RealmAdminConflict, RealmAdminDenied, RealmAdminInvalid, RealmAdminStale,
   RealmAdminUnavailable, type RealmSettings } from '../src/modules/realm-admin/contract.ts';
 import { spaceCreationError } from '../src/routes/spaces.ts';
@@ -14,15 +14,6 @@ const settings: RealmSettings = { visibility: 'private', reviewRequired: true, r
     title: { original: 'en', labels: { en: 'Respect', ja: '尊重' } },
     body: { original: 'en', labels: { en: 'Respect readers.\nDiscuss books.', ja: '読者を尊重する。' } } }] };
 const input = { name: 'Readers', actingSubject: actor, initialSettings: settings };
-
-test('The initial policy receipt remains stable across replay and separates principals using the same creation key', () => {
-  const identity = { principalId: 'first-principal', idempotencyKey: 'creation-key' };
-  const receipt = realmCreationPolicyReceipt(identity);
-  expect(receipt).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-  expect(realmCreationPolicyReceipt({ ...identity })).toBe(receipt);
-  expect(realmCreationPolicyReceipt({ ...identity, principalId: 'second-principal' })).not.toBe(receipt);
-  expect(realmCreationPolicyReceipt({ ...identity, idempotencyKey: 'other-key' })).not.toBe(receipt);
-});
 
 test('Creation binds disclosure, admission, review mode and ordered initial rules to its key', () => {
   const digest = spaceCreationDigest(input);
@@ -72,7 +63,7 @@ test('A sealed graph receipt resumes failed initialization before creation can r
   const initializeCreated: Parameters<typeof createAdmittedRealmSpace>[5] = { initializeCreated: async (_principal, intent) => {
     effects.push('initialize');
     expect(intent).toMatchObject({ realm, actingSubject: actor, creationKey: 'creation', creationDigest: digest,
-      policyReceipt: realmCreationPolicyReceipt(admission),
+      policyReceipt: admission.id,
       settings: { visibility: 'private', selfJoin: false }, rules: settings.rules });
     if (fail) throw new RealmAdminUnavailable('Injected Access failure');
     return { realm, accessRevision: '1', replayed: true };

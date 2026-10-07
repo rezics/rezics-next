@@ -12,7 +12,7 @@ import { readRealmPolicy } from '../../../services/main/src/modules/space/policy
 import { RealmSubmissionStore } from '../../../services/main/src/modules/realm-submission/store.ts';
 import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 import { withRealmPermit } from '../../../services/main/src/modules/access/realm-management-policy.ts';
-import { realmCreationPolicyReceipt, spaceCreationReceiptIri } from '../../../services/main/src/modules/space/create.ts';
+import { spaceCreationReceiptIri } from '../../../services/main/src/modules/space/create.ts';
 
 test('Private creation never exposes a public shell through failures, concurrent retries or lost responses', async () => {
   const s = await startMediaStack('realm-create-intent');
@@ -109,22 +109,26 @@ test('Private creation never exposes a public shell through failures, concurrent
       if (intermediate[0]) await invisible(intermediate[0].space!.value, intermediate[0].realm!.value);
       stage = '';
       const retries = await Promise.all([call('POST', '/v1/spaces', body, key), call('POST', '/v1/spaces', body, key)]);
-      for (const response of retries) expect(response.status, `${await response.clone().text()} ${graphFailure}`).toBe(200);
+      const observed = (await realms(currentName))[0];
+      const graphPolicy = observed ? await readRealmPolicy(s.env, observed.realm!.value) : null;
+      const permitRevision = observed ? await withRealmPermit(s.accessPool, creator.principal, creator.actor,
+        observed.realm!.value, 'submission', async permit => permit.revision) : null;
+      const revisions = JSON.stringify({ fault, realm: observed?.realm?.value,
+        graphPolicyRevision: graphPolicy?.revision, permitRevision });
+      for (const response of retries) expect(response.status, `${await response.clone().text()} ${graphFailure} ${revisions}`).toBe(200);
       const created = await retries[0]!.json() as { space: string; realm: string; realmRevision: string; replayed: boolean };
       expect(await retries[1]!.json()).toEqual(created);
       expect(created.replayed).toBe(true);
       expect(await realms(currentName)).toHaveLength(1);
       await invisible(created.space, created.realm);
       expect(await readRealmPolicy(s.env, created.realm)).toMatchObject({ visibility: 'private', reviewMode: 'mandatory', admission: 'invitation' });
-      const initialPolicyRevision = `urn:rezics:realm-policy:${realmCreationPolicyReceipt({
-        principalId: creator.principalId, idempotencyKey: key })}`;
+      const initialPolicyRevision = spaceCreationReceiptIri(created.space.slice(-36));
       expect((await readRealmPolicy(s.env, created.realm))?.revision).toBe(initialPolicyRevision);
       const creationReceipt = spaceCreationReceiptIri(created.space.slice(-36));
       expect((await s.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
-        GRAPH ${iri(GRAPHS.current)} { ${iri(initialPolicyRevision)} a rv:RealmPolicyHead ;
-          rv:realm ${iri(created.realm)} ; rv:receipt ${iri(creationReceipt)} }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(created.realm)} rv:realmPolicyHead ${iri(creationReceipt)} }
         GRAPH ${iri(GRAPHS.receipts)} { ${iri(creationReceipt)} a rv:OperationReceipt ; rv:realm ${iri(created.realm)} }
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(initialPolicyRevision)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(initialPolicyRevision)} ?p ?o } }
       }`, 1024)).boolean).toBe(true);
       const view = await call('GET', `/v1/realms/${created.realm.slice(-36)}/settings?actingSubject=${encodeURIComponent(creator.actor)}`);
       expect(view.status, await view.clone().text()).toBe(200);
