@@ -1,7 +1,7 @@
 import type { Static } from 'typebox';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { resolveClassifications } from '../classification/resolve.ts';
-import { checkJudgmentProtection } from '../judgment/protection.ts';
+import type { JudgmentBadgeTarget } from '../judgment/badge.ts';
 import { CLASSIFIED_AS, statementMeaningKey } from '../statement/schema.ts';
 import { GRAPHS, iri, lit } from './activate.ts';
 import { classificationItem } from './read-contract.ts';
@@ -191,25 +191,25 @@ export async function readWorkClassificationBatch(
       ] as const;
     }),
   );
-  for (const item of accepted) {
-    if (item.meaningKey) {
-      if (!session.deps.judgments)
-        throw new WorkReadUnavailable('Judgment protection owner is unavailable');
-      let visible = false;
-      for (const support of supports.get(`${item.mainVersion}\0${item.decision}`) ?? []) {
-        session.checkDeadline();
-        const checked = await checkJudgmentProtection(
-          session.deps.judgments,
-          support,
-          item.source === 'local' ? { kind: 'realm', realm: scope.realm! } : { kind: 'global' },
-          item.concept,
-        ).catch(() => {
-          throw new WorkReadUnavailable('Judgment protection read is unavailable');
-        });
-        visible ||= checked.protection === 'show-all';
-      }
-      if (!visible) continue;
-    }
+  if (accepted.some(item => item.meaningKey) && !session.deps.judgments)
+    throw new WorkReadUnavailable('Judgment protection owner is unavailable');
+  const protectionTargets = accepted.flatMap((item, index) => item.meaningKey
+    ? (supports.get(`${item.mainVersion}\0${item.decision}`) ?? []).map(statement => ({
+      index,
+      target: { statement, concept: item.concept,
+        context: item.source === 'local' ? { kind: 'realm', realm: scope.realm! } : { kind: 'global' },
+      } satisfies JudgmentBadgeTarget,
+    })) : []);
+  session.checkDeadline();
+  const checks = protectionTargets.length ? await session.deps.judgments!
+    .protectionChecks(protectionTargets.map(item => item.target)).catch(() => {
+      throw new WorkReadUnavailable('Judgment protection read is unavailable');
+    }) : [];
+  session.checkDeadline();
+  const visible = new Set(protectionTargets.flatMap((item, index) =>
+    checks[index]!.protection === 'show-all' ? [item.index] : []));
+  for (const [index, item] of accepted.entries()) {
+    if (item.meaningKey && !visible.has(index)) continue;
     const name = names.get(item.concept);
     if (name?.status === 'available')
       result.get(item.work)!.items.push({

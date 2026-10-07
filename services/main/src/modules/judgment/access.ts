@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { JudgmentCounts } from './policy.ts';
-import { projectJudgmentBadge } from './badge.ts';
+import { projectJudgmentBadge, projectJudgmentBadges, type JudgmentBadgeTarget } from './badge.ts';
 import { declareConceptHint, type ConceptHintWrite } from './hint.ts';
 import { judgmentContextKey, judgmentReceiptIri, validJudgmentValue,
   type JudgmentContext, type JudgmentDimension } from './schema.ts';
@@ -81,6 +81,11 @@ export class AccessJudgments {
 
   protectionCheck(statement: string, context: JudgmentContext, concept: string | null) {
     return projectJudgmentBadge(this.pool, statement, context, concept)
+      .catch(() => { throw new JudgmentUnavailable('judgment badge projection unavailable'); });
+  }
+
+  protectionChecks(targets: readonly JudgmentBadgeTarget[]) {
+    return projectJudgmentBadges(this.pool, targets)
       .catch(() => { throw new JudgmentUnavailable('judgment badge projection unavailable'); });
   }
 
