@@ -34,6 +34,7 @@ export const DISCOVERY_EFFECTS: Readonly<Record<string, DiscoveryEffect>> = {
   'structure.command': 'irrelevant',
   'structure.project': 'irrelevant',
   'structure.stage-cancel': 'irrelevant',
+  'structure.membership.normalize': 'irrelevant',
   'studio.chapter.create': 'irrelevant',
   'post.migrate': 'irrelevant',
   'erasure.graph': 'scope',

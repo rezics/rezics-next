@@ -81,7 +81,7 @@ test('G1063: complete relay coverage accepts Work-free events and fails closed o
   );
   const position = { dataEpoch: 'epoch', sequence: '12' };
   expect(await inputs.read(position, '10', base)).toEqual({ works: [work], created: [] });
-  rows = [row('11', 'relation.change'), row('12', 'theme.activate')];
+  rows = [row('11', 'structure.membership.normalize'), row('12', 'theme.activate')];
   expect(await inputs.read(position, '10', base)).toEqual({ works: [], created: [] });
   rows = [row('12', 'work.edit', 0, work)];
   expect(await inputs.read(position, '10', base)).toBeNull();

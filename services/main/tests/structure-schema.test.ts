@@ -375,8 +375,13 @@ test('Populated libraries migrate to point revisions without rewriting saved sta
     VALUES ($1,$2,'reading',7,'saved title')`, [agent, work]);
   await pool.query(`INSERT INTO structure.progress(principal_issuer,principal_subject,structure,occurrence,completed,version)
     VALUES ('issuer','subject',$1,$2,true,4)`, [structure, occurrence]);
+  const savedLibrary = (await pool.query('SELECT to_jsonb(saved) AS state FROM reader.library_status AS saved')).rows;
+  const savedProgress = (await pool.query('SELECT to_jsonb(saved) AS state FROM structure.progress AS saved')).rows;
   await migrateContent(pool);
   await migrateContent(pool);
+  expect((await pool.query('SELECT to_jsonb(saved) AS state FROM reader.library_status AS saved')).rows).toEqual(savedLibrary);
+  expect((await pool.query('SELECT to_jsonb(saved) AS state FROM structure.progress AS saved')).rows).toEqual(savedProgress);
+  expect((await pool.query('SELECT agent FROM reader.library_status_revision')).rows).toEqual([]);
   const store = new ReaderLibraryStatusStore(pool);
   expect(await store.fence(agent)).toBe('0:0');
   expect((await store.batch(agent, [work]))[0]).toMatchObject({ status: 'reading', version: 7 });
@@ -634,7 +639,7 @@ test('COMP01/WIKI01/RECIPE01 owner schema: graph profiles publish shapes and foc
   const artifacts = buildArtifacts(root);
   const registry = artifacts.get('packages/model/src/generated/profiles.ts')!;
   const expected: Record<string, string[]> = {
-    'structure-composition-v1': ['structure', 'generation', 'segment', 'occurrence', 'placement',
+    'structure-composition-v1': ['structure', 'generation', 'segment', 'item-list', 'occurrence', 'placement',
       'removed-placement', 'revision', 'seal'],
     'zone-capability-v1': ['navigation-link', 'zone', 'mount', 'revision'],
     'collection-curation-v1': ['structure-link', 'collection', 'revision', 'definition',

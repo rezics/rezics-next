@@ -219,6 +219,7 @@ test('a podcast playlist survives automatic owner upgrade, interruption, reads a
     expect(await hasUnnormalizedMembership(f.env.fuseki)).toBe(true);
     const upgraded = await migrateOwnerData(apps);
     assertOwnerMigrationsComplete(upgraded);
+    expect(upgraded.find(row => row.owner === 'catalogue-statements')?.status).toBe('complete');
     expect(upgraded.find(row => row.owner === 'ordered-membership')).toMatchObject({
       status: 'complete', placements: 4, receipts: [expect.any(String)],
     });
@@ -271,6 +272,7 @@ test('a podcast playlist survives automatic owner upgrade, interruption, reads a
     const beforeRepeat = await datasetPosition();
     const repeated = await migrateOwnerData(apps);
     assertOwnerMigrationsComplete(repeated);
+    expect(repeated.find(row => row.owner === 'catalogue-statements')?.status).toBe('complete');
     expect(repeated.find(row => row.owner === 'ordered-membership')).toMatchObject({
       status: 'complete', placements: 0, receipts: [],
     });
