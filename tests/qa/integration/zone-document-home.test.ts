@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
-import { ContentCore, type ContentPosition } from '../../../services/content/src/core.ts';
+import { ContentCore, ContentConflict, type ContentPosition } from '../../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 import { applyContentErasure, checkContentErasureTargets, ContentErasureGraphRequired } from '../../../services/main/src/modules/erasure/content.ts';
@@ -59,7 +59,7 @@ async function fixture() {
     (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
     const core = new ContentCore(f.pool);
     let failSettlement = false;
-    let failRejection = false;
+    let failRejectionAt: number | null = null;
     let failPreparationAt: number | null = null;
     const content = new Proxy(core, { get(target, property) {
       if (property === 'preparePublication') return async (...args: Parameters<typeof target.preparePublication>) => {
@@ -70,8 +70,8 @@ async function fixture() {
         return target.preparePublication(...args);
       };
       if (property === 'settlePublication') return async (...args: Parameters<typeof target.settlePublication>) => {
-        if (failRejection && args[2].outcome === 'rejected') {
-          failRejection = false; throw new Error('interrupted before Content rejection');
+        if (args[2].outcome === 'rejected' && failRejectionAt !== null && --failRejectionAt === 0) {
+          failRejectionAt = null; throw new Error('interrupted before Content rejection');
         }
         if (failSettlement) { failSettlement = false; throw new Error('interrupted before Content settlement'); }
         return target.settlePublication(...args);
@@ -153,7 +153,8 @@ async function fixture() {
       revokeEditor,
       switchRevocationConsumed: () => !revokeBeforeSwitch,
       failSettlement: () => { failSettlement = true; },
-      failRejection: () => { failRejection = true; },
+      failRejection: () => { failRejectionAt = 1; },
+      failSecondRejection: () => { failRejectionAt = 2; },
       failSecondPreparation: () => { failPreparationAt = 2; } };
   } catch (error) { await f.close(); throw error; }
 }
@@ -365,6 +366,62 @@ test('an interrupted rejection retains the cancelled receipt and replay releases
     expect(await applyContentErasure(f.pool, { preservationAccess: f.accessPool,
       erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.zone, revisionIds: [page.revisionId] }))
       .toEqual({ applied: 1 });
+    expect((await readZoneConfiguration(f.env, f.zone)).revision).toBe(before.revision);
+    expect((await f.home()).page).toBeUndefined();
+  } finally { await f.close(); }
+}, 120_000);
+
+test('cancellation replay skips erased rejected bytes and releases the remaining page pin', async () => {
+  const f = await fixture();
+  try {
+    const before = await readZoneConfiguration(f.env, f.zone);
+    const first = f.selection.pages[0]!;
+    const second = await f.save(fromPlainText('Second variant', 'blocks'), null,
+      `urn:rezics:variant:${randomUUID()}`, f.zone, 'fr');
+    const pages = [first, second];
+    const key = randomUUID();
+    f.revokeBeforeSwitch();
+    f.failSecondRejection();
+    expect((await f.publish(pages, key, before.revision)).status).toBe(503);
+    const preparations = async () => (await f.pool.query<{ revision_id: string; status: string; pin_active: boolean }>(
+      'SELECT revision_id, status, pin_active FROM content.publication_preparation WHERE revision_id = ANY($1::uuid[])',
+      [[first.revisionId, second.revisionId]])).rows;
+    expect(await preparations()).toEqual(expect.arrayContaining([
+      { revision_id: first.revisionId, status: 'rejected', pin_active: false },
+      { revision_id: second.revisionId, status: 'pending', pin_active: true },
+    ]));
+    await expect(checkContentErasureTargets(f.pool, f.zone, [second.revisionId], true))
+      .rejects.toBeInstanceOf(ContentErasureGraphRequired);
+    const events = await f.content.readOutbox(f.initialContentPosition.dataEpoch, f.initialContentPosition.sequence, 100);
+    const rejection = events.find(event => event.revisionId === first.revisionId && event.eventType === 'content.publication.rejected');
+    if (!rejection) throw new Error('First page rejection event is missing');
+    const proof = await f.content.readProjectionPublication(rejection);
+    expect(await applyContentErasure(f.pool, { preservationAccess: f.accessPool,
+      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.zone, revisionIds: [first.revisionId] }))
+      .toEqual({ applied: 1 });
+    expect((await f.content.readExactBatch([first.revisionId], async ids => new Set(ids)))[0]?.status).toBe('erased');
+    expect(await f.content.readPublicationPreparation(proof.preparationId)).toMatchObject({
+      status: 'rejected', pinActive: false,
+      reference: { resourceId: f.zone, variantId: first.variantId, revisionId: first.revisionId, byteDigest: first.byteDigest },
+    });
+    await expect(f.content.settlePublication(rejection.operationId, proof.preparationId,
+      { ...proof.graph, receipt: `${proof.graph.receipt}:altered` }, proof.preparationPosition.dataEpoch))
+      .rejects.toBeInstanceOf(ContentConflict);
+    expect((await f.publish(pages, key, before.revision)).status).toBe(403);
+    expect(await preparations()).toEqual(expect.arrayContaining(pages.map(page => ({
+      revision_id: page.revisionId, status: 'rejected', pin_active: false,
+    }))));
+    const rejected = await f.pool.query<{ revision_id: string; count: string }>(`SELECT revision_id, count(*)::text
+      FROM content.outbox WHERE revision_id = ANY($1::uuid[]) AND event_type = 'content.publication.rejected'
+      GROUP BY revision_id`, [[first.revisionId, second.revisionId]]);
+    expect(rejected.rows).toEqual(expect.arrayContaining(pages.map(page => ({ revision_id: page.revisionId, count: '1' }))));
+    await checkContentErasureTargets(f.pool, f.zone, [second.revisionId]);
+    expect(await applyContentErasure(f.pool, { preservationAccess: f.accessPool,
+      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.zone, revisionIds: [second.revisionId] }))
+      .toEqual({ applied: 1 });
+    const settled = await f.content.ownerPosition();
+    expect((await f.publish(pages, key, before.revision)).status).toBe(403);
+    expect(await f.content.ownerPosition()).toEqual(settled);
     expect((await readZoneConfiguration(f.env, f.zone)).revision).toBe(before.revision);
     expect((await f.home()).page).toBeUndefined();
   } finally { await f.close(); }

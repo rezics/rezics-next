@@ -560,6 +560,8 @@ export async function rejectZonePageContentPublication(env: WorkActivationEnviro
     throw new ContentPublicationConflict('Site cancellation is not retained');
   }
   if (terminal.dataEpoch !== env.lineage.dataEpoch) throw new StaleGraphReceiptEpoch('Site cancellation epoch changed');
+  // Already-rejected pins resolve from retained metadata after erasure. The
+  // settlement replay below must still match this exact cancellation proof.
   const preparation = await content.readPublicationPreparation(preparationId);
   if (!preparation) return null;
   const ref = preparation.reference;

@@ -272,6 +272,14 @@ function referenceFromRow(row: Record<string, any>): ExactContentReference {
     provenance: row.provenance };
 }
 
+async function readReferenceMetadata(client: PoolClient, revisionId: string): Promise<ExactContentReference | null> {
+  const result = await client.query(`SELECT r.id, r.variant_id, r.model, r.byte_digest, r.byte_length,
+    r.source_revision, r.predecessor, r.provenance, v.language_kind, v.language_tag,
+    v.original_language_tag, v.direction, v.resource_id
+    FROM content.revision r JOIN content.variant v ON v.id = r.variant_id WHERE r.id = $1`, [revisionId]);
+  return result.rows.map(referenceFromRow)[0] ?? null;
+}
+
 async function readReference(client: PoolClient, revisionId: string): Promise<ExactContentReference | null> {
   const result = await client.query(`SELECT r.id, r.variant_id, r.model, r.byte_digest, r.byte_length,
     r.availability, r.serialized_bytes, r.body, r.source_revision, r.predecessor, r.provenance,
@@ -442,7 +450,11 @@ export class ContentCore {
     const row = result.rows[0];
     const client = await this.pool.connect();
     let reference: ExactContentReference | null;
-    try { reference = await readReference(client, row.revision_id); }
+    // Rejection releases byte custody. Its retained metadata lets cancellation
+    // resume after erasure; settlePublication still verifies the terminal proof.
+    try { reference = row.status === 'rejected' && !row.pin_active
+      ? await readReferenceMetadata(client, row.revision_id)
+      : await readReference(client, row.revision_id); }
     finally { client.release(); }
     if (!reference) throw new ContentUnavailable('prepared exact revision unavailable');
     return { operationId, reference,
@@ -871,11 +883,7 @@ export class ContentCore {
       // still required; ordinary projection always takes the strict path.
       const reference = status === 'active' && !allowUnavailableActiveReference
         ? await readReference(client, event.revisionId)
-        : (await client.query(`SELECT r.id, r.variant_id, r.model, r.byte_digest, r.byte_length,
-          r.source_revision, r.predecessor, r.provenance, v.language_kind, v.language_tag,
-          v.original_language_tag, v.direction, v.resource_id
-          FROM content.revision r JOIN content.variant v ON v.id = r.variant_id
-          WHERE r.id = $1`, [event.revisionId])).rows.map(referenceFromRow)[0] ?? null;
+        : await readReferenceMetadata(client, event.revisionId);
       if (!reference) throw new ContentUnavailable('terminal publication exact revision unavailable');
       return { preparationId: row.preparation_id,
         preparationPosition: { owner: 'content', dataEpoch: row.preparation_epoch,
