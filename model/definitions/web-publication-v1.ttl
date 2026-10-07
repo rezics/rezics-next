@@ -1,0 +1,12 @@
+# The release command validates this shape when the kind is web.
+# Several stores would be several locations of one release; an unsanctioned repost is a different release.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/web-publication-v1/publication-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:Release ] ;
+    sh:property [ sh:path rv:releaseKind ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue "web" ] ;
+    sh:property [ sh:path rv:originalUrl ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 512 ] .

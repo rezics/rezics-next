@@ -1,0 +1,19 @@
+# A snapshot is a source observation of a content location.
+# Its bytes live in the object store. A later fetch is a new snapshot, not an edit.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/web-snapshot-v1/snapshot-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:WebSnapshot ] ;
+    sh:property [ sh:path rv:publication ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Release ] ;
+    sh:property [ sh:path rv:work ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:fetchedAt ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:byteDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:byteLength ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] ;
+    sh:property [ sh:path rv:coverageScope ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:maxLength 120 ] ;
+    sh:property [ sh:path rv:coverageComplete ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "true" "false" ) ] ;
+    sh:property [ sh:path rv:object ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:acquisition ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( "fixture" "fetch" ) ] .
