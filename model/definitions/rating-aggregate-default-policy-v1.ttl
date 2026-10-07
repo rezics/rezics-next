@@ -1,0 +1,25 @@
+# An exact successor for an experience Context aggregate default.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/rating-aggregate-default-policy-v1/context-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:RatingContext ] ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:ExperienceRatingContext ] ;
+    sh:property [ sh:path rv:contextState ; sh:maxCount 1 ; sh:hasValue rv:Active ] ;
+    sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:ratingPolicyHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:ratingAggregationPolicy ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-latest-per-rater-mean-v1> ] ;
+    sh:property [ sh:path rv:ratingCadence ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-experience-v1> ] .
+
+<https://rezics.com/definition/rating-aggregate-default-policy-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:RatingPolicyRevision ] ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:RevisionAnchor ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:contextRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:predecessor ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:ratingAggregationPolicy ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( <https://rezics.com/definition/rating-latest-per-rater-mean-v1> <https://rezics.com/definition/rating-mean-per-rater-v1> <https://rezics.com/definition/rating-pooled-observation-mean-v1> ) ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/rating-aggregate-default-policy-v1> ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
