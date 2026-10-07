@@ -513,3 +513,15 @@ now owns mechanical diagnostics/cleanup/preparation only, all assertions/filters
 clocks/budgets frozen. Initial Sonnet resume was quota-refused; no force-usage.
 Only the two current correctness-critical Sonnet workers continue, while new
 mechanical slices use Cursor/Grok per Program. No live campaign or Trustrefresh.
+
+Kernel's retained SQL comment-source excerpt finding is confirmed: exact/prefix/
+suffix are derived byresolveParagraphSelector fromoriginal revision bytes,
+separate from authoredannotation body. Current Content erasure clears revision
+bytes only; immutablecomment and non-null/nonempty exact constrain a repair.
+Trust owns Main erasurecaller/qualification and requested the narrow existing
+Content immutable/source-erased seam and migration coordination from Kernel.
+Any repair must preserve IDs/digests/authoredbody and legalhold/currentwriter/
+replay semantics, with exact journal-bound terminalselectors; hiddenreads alone
+are not destruction. Commentcreated outbox currently carries IDs, not selectors;
+remaining copies/custody need explicit audit. No WAL/files/backups claim.
+Launch independently confirmed theG1394 consumer/browser closure; all mailacked.
