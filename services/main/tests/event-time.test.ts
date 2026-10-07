@@ -66,7 +66,7 @@ test('RATE09: indexed precision ends at the last microsecond without touching th
   expect(minute.instantMax).toBe('2026-05-15T12:30:59.999999Z');
 });
 
-test('RATE07/RATE08/RATE09: Event query limits bound indexed pages, aliases and histogram fanout', () => {
+test('RATE07/RATE08/RATE09: Event query limits bound source, page, aliases and histogram fanout', () => {
   expect(EVENT_QUERY_COST_CONTRACT).toEqual({ maxPageSize: 50, maxIndexedPageRows: 51,
     maxTopicStatements: 8, maxHistogramBuckets: 732 });
   expect(checkedDateRange('2026-01-01', '2026-12-31', 'day').buckets * 2)
