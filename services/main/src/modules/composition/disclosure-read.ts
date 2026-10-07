@@ -5,6 +5,7 @@ import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { canReadStructureTarget, isCatalogTarget, type StructureProfileRegistration } from '../structure/profiles.ts';
 import { admittedPublicWorks } from '../work/public-patterns.ts';
+import { collectionTargetBatchReader } from './visible-targets.ts';
 
 /** One exact Work probe per distinct candidate, under the caller's read budget.
  * Reuse the Work header's public predicate and current Access fallback; erasure
@@ -64,5 +65,17 @@ export function compositionTargetReader(session: WorkReadSession, profile: Struc
       access: session.deps.access, principal: session.principal,
       actingSubject: session.options.actingSubject, target,
       targetReader: operation => operation(session) });
+  };
+}
+
+/** Match the scalar profile policy while hydrating a candidate range once.
+ * Catalog identifiers have no native revision and retain their profile proof. */
+export function compositionTargetBatchReader(session: WorkReadSession, profile: StructureProfileRegistration) {
+  if (profile.id !== 'collection-membership' && profile.id !== 'work-composition') return undefined;
+  const read = collectionTargetBatchReader(session);
+  return async (targets: readonly string[]): Promise<ReadonlySet<string>> => {
+    const catalog = targets.filter(target => isCatalogTarget(profile, target));
+    const native = targets.filter(target => !isCatalogTarget(profile, target));
+    return new Set([...catalog, ...await read(native)]);
   };
 }

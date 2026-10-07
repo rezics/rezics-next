@@ -3,12 +3,13 @@ import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMissing, W
   type WorkReadSession } from '../work/read-session.ts';
 import { readCompositionPage } from '../structure/read.ts';
 import { canReadCompositionWork } from './disclosure-read.ts';
+import { compositionWorkBatchReader } from './visible-targets.ts';
 
 /** Responses contain at most 100 disclosed uses and one disclosed lookahead.
  * Each scan batch is bounded to 101 candidates; hidden batches are skipped under
  * the shared read deadline and query budget. No physical scan cost is disclosed.
- * Parts then use one VALUES query for Main Versions. Access checks are cached
- * per distinct Work for the duration of a read.
+ * Targets are disclosed in bounded resolver batches. Parts then use one VALUES
+ * query for Main Versions; wholes cache disclosure per distinct Work.
  */
 export const WORK_COMPOSITION_READ_COST = { page: 100, candidateProbe: 101, targetQueries: 1,
   ancestorLevels: 4, wholeBatchQueries: 1 } as const;
@@ -31,14 +32,12 @@ export async function readWorkParts(session: WorkReadSession, resource: string, 
   if (rows.length !== 1 || !rows[0]?.structure?.value || !rows[0]?.main?.value) {
     throw new WorkReadMissing('Work composition is unavailable');
   }
-  const access = new Map<string, Promise<boolean>>();
+  const canReadTargets = compositionWorkBatchReader(session);
   const page = await readCompositionPage(session.deps.environment, {
     structure: rows[0].structure.value, limit: input.limit,
     ...(input.parent ? { parent: input.parent } : {}), ...(input.after ? { after: input.after } : {}),
-    canReadTarget: target => {
-      if (!access.has(target)) access.set(target, canReadCompositionWork(session, target));
-      return access.get(target)!;
-    },
+    canReadTarget: async target => (await canReadTargets([target])).has(target),
+    canReadTargets,
   });
   const targets = [...new Set(page.occurrences.flatMap(record => record.target ? [record.target] : []))];
   const mains = targets.length ? await session.query(`SELECT ?target ?main WHERE {
@@ -70,6 +69,7 @@ export async function readWorkWholes(session: WorkReadSession, resource: string,
   const wholes: Array<{ work: string; mainVersion: string; structure: string; occurrence: string;
     segmentKey: string; orderKey: string }> = [];
   const access = new Map<string, boolean>();
+  const canReadTargets = compositionWorkBatchReader(session);
   while (true) {
     session.checkDeadline();
     const rows = await session.query(`SELECT ?whole ?main ?structure ?occurrence ?segment ?order WHERE {
@@ -87,13 +87,18 @@ export async function readWorkWholes(session: WorkReadSession, resource: string,
     } ORDER BY STR(?whole) STR(?occurrence) LIMIT ${WORK_COMPOSITION_READ_COST.candidateProbe}`,
     WORK_COMPOSITION_READ_COST.candidateProbe);
     for (const row of rows) {
-      const whole = row.whole?.value;
-      if (!whole || !row.main?.value || !row.structure?.value || !row.occurrence?.value
+      if (!row.whole?.value || !row.main?.value || !row.structure?.value || !row.occurrence?.value
         || !row.segment?.value || !row.order?.value) throw new WorkReadUnavailable('Whole projection is unavailable');
-      if (!access.has(whole)) access.set(whole, await canReadCompositionWork(session, whole));
-      if (access.get(whole)) wholes.push({ work: whole, mainVersion: row.main.value,
-        structure: row.structure.value, occurrence: row.occurrence.value,
-        segmentKey: row.segment.value, orderKey: row.order.value });
+    }
+    const candidates = [...new Set(rows.map(row => row.whole!.value))]
+      .filter(whole => !access.has(whole));
+    const readable = await canReadTargets(candidates);
+    for (const whole of candidates) access.set(whole, readable.has(whole));
+    for (const row of rows) {
+      const whole = row.whole!.value;
+      if (access.get(whole)) wholes.push({ work: whole, mainVersion: row.main!.value,
+        structure: row.structure!.value, occurrence: row.occurrence!.value,
+        segmentKey: row.segment!.value, orderKey: row.order!.value });
       if (wholes.length > input.limit) break;
     }
     if (wholes.length > input.limit || rows.length < WORK_COMPOSITION_READ_COST.candidateProbe) break;

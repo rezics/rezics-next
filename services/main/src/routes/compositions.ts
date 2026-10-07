@@ -25,7 +25,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { resourceTargetReader } from '../modules/target/resolve.ts';
 import { canReadCompositionWork, canReadCompositionResource,
-  compositionTargetReader } from '../modules/composition/disclosure-read.ts';
+  compositionTargetReader, compositionTargetBatchReader } from '../modules/composition/disclosure-read.ts';
 import { workRead, type WorkReadSession } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { groupUuid } from './shared.ts';
@@ -570,7 +570,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           ...(query.parent ? { parent: query.parent } : {}), ...(query.after ? { after: query.after } : {}),
           limit: query.limit ?? 50,
           visible: item => !structureProfileFor(header.profile).targetRoles.includes(item.role) || !!item.target,
-          canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)) }));
+          canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)),
+          canReadTargets: compositionTargetBatchReader(session, structureProfileFor(header.profile)) }));
         return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
@@ -590,7 +591,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           ...(query.parent ? { parent: query.parent } : {}), ...(query.after ? { after: query.after } : {}),
           limit: query.limit ?? 50,
           visible: item => !structureProfileFor(header.profile).targetRoles.includes(item.role) || !!item.target,
-          canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)) }));
+          canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)),
+          canReadTargets: compositionTargetBatchReader(session, structureProfileFor(header.profile)) }));
         return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
@@ -625,7 +627,8 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
           occurrence: `https://rezics.com/id/${params.occurrence}`,
           ...(query.revision ? { revision: query.revision } : {}), limit: 1,
           visible: item => !structureProfileFor(header.profile).targetRoles.includes(item.role) || !!item.target,
-          canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)) }));
+          canReadTarget: compositionTargetReader(session, structureProfileFor(header.profile)),
+          canReadTargets: compositionTargetBatchReader(session, structureProfileFor(header.profile)) }));
         return Response.json(disclosedPage(page), { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return compositionError(error); }
     })
