@@ -329,6 +329,9 @@ them to workers or external tools).
 
 The manager may change its own effort when a stretch of work calls for it.
 
+Claude managers stay interactive for now. Program runs in the maintainer's own
+terminal, and Launch's interactive session serves its UX review.
+
 ### A manager on Codex
 
 A manager can run on GPT-6.1 Sol (maintainer, 2026-10-07: backend Goals move
@@ -355,3 +358,25 @@ background notifications and no cross-session messages, so:
   turn once nothing is ready.
 - Keep the same reserve as any manager: if the account the manager runs on
   nears its limit, move workers to the other account first.
+
+### Handing a Codex manager to the coordinator
+
+The coordinator can hold one enrolled manager per Goal, on either Codex account.
+Hand over explicitly while the interactive owner is still running:
+
+1. Checkpoint the Goal's state and commit coherent progress.
+2. Mail Program the exact native session UUID and the interactive Codex process
+   PID, along with the Goal, engine, effort, working directory and tmux socket.
+3. Program enrolls it with
+   `task goal -- coordinator enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <directory> --previous-owner-pid <pid> --tmux-socket <socket>`.
+   The descriptor retains that engine's account home (`codex-1` uses
+   `~/.codex-1`); status reports the wait for the named previous owner to exit.
+4. After Program confirms enrollment, exit the interactive session. The
+   coordinator starts finite turns for queued mail and task exits; end each
+   turn once nothing is ready.
+
+Keep the tmux server outside the coordinator's service cgroup so a coordinator
+restart leaves manager turns and their dispatched workers running. Program
+serializes enrollment with the coordinator pump, pausing and restarting the
+pump when necessary; existing descriptors and attempts stay in its durable
+store.

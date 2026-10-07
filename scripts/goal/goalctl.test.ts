@@ -6,6 +6,7 @@ import { processRunning } from '../../tests/qa/support/process-liveness.ts';
 import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
+import { TmuxLauncher, processIdentity, tmuxServer, type LaunchDescriptor } from './coordinator.ts';
 import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
@@ -2727,6 +2728,57 @@ function waitForWaiter(child: ChildProcess, ready: () => boolean, output: () => 
 describe('Goal coordinator enrollment CLI', () => {
   const enrollment = ['program', '--session', '01a114cb-4d63-7f23-bf70-1610b4db2b2b', '--effort', 'high', '--cwd', '/manager'];
   const ownerFlag = ['--previous-owner-pid', String(process.pid)];
+  const socket = process.env.GOAL_TEST_TMUX_SOCKET ?? `/tmp/tmux-${process.getuid?.()}/default`;
+  let independentServer: ReturnType<typeof tmuxServer> | undefined;
+  try {
+    const server = tmuxServer(socket);
+    if (server.cgroup !== processIdentity(process.pid)!.cgroup) independentServer = server;
+  } catch { /* Enrollment needs the same independent server as the real coordinator. */ }
+
+  test.skipIf(!independentServer)('enrolls two Goals with the engine account homes and preserves the first handover', () => {
+    const directory = mkdtempSync(join(import.meta.dir, '../../.temp/coordinator-enrollment-'));
+    const homes = { codex: join(directory, 'codex'), 'codex-1': join(directory, 'codex-1') };
+    const env = { ...process.env, CODEX_HOME: '/inherited-worker-account', GOAL_MAIL_STATE_DIR: directory,
+      GOAL_CODEX_HOME: homes.codex, GOAL_CODEX_1_HOME: homes['codex-1'] };
+    const invoke = (args: string[]) => spawnSync(process.execPath, [join(import.meta.dir, 'goalctl.ts'), 'coordinator', ...args],
+      { cwd: join(import.meta.dir, '../..'), env, encoding: 'utf8' });
+    const sessions = ['01a114cb-4d63-7f23-bf70-1610b4db2b2b', '01a114cb-4d63-7f23-bf70-1610b4db2b2c'];
+    try {
+      writeFileSync(join(directory, 'ledger.json'), JSON.stringify({ tasks: {}, goals: {
+        program: { manager: 'program-manager', startedAt: '2026-01-01T00:00:00Z' },
+        kernel: { manager: 'kernel-manager', startedAt: '2026-01-01T00:00:00Z' },
+      } }));
+      const enrolled: LaunchDescriptor[] = [];
+      for (const [index, engine] of (['codex', 'codex-1'] as const).entries()) {
+        const session = sessions[index]!;
+        const goal = index === 0 ? 'program' : 'kernel';
+        const home = homes[engine];
+        mkdirSync(join(home, 'sessions'), { recursive: true });
+        writeFileSync(join(home, 'sessions', `rollout-test-${session}.jsonl`), `${JSON.stringify({ type: 'session_meta',
+          payload: { id: session, cwd: directory } })}\n`);
+        const result = invoke(['enroll', goal, '--session', session, '--engine', engine, '--effort', 'high',
+          '--cwd', directory, ...ownerFlag, '--tmux-socket', socket]);
+        expect(result.status, result.stderr).toBe(0);
+        const descriptor = JSON.parse(result.stdout) as LaunchDescriptor;
+        expect(descriptor).toMatchObject({ goal, session, engine, home, env: { CODEX_HOME: home, GOAL_ID: goal,
+          GOAL_MANAGER: `${goal}-manager` }, previousOwner: { pid: process.pid } });
+        expect(descriptor.args.slice(0, 3)).toEqual(['exec', 'resume', session]);
+        // Verification uses the real independent server, without starting any manager turn.
+        expect(() => new TmuxLauncher(directory).verify(descriptor)).not.toThrow();
+        enrolled.push(descriptor);
+      }
+      const result = invoke(['status']);
+      expect(result.status, result.stderr).toBe(0);
+      const status = JSON.parse(result.stdout) as { managers: (LaunchDescriptor & { ownership: string })[]; attempts: unknown[]; wakes: unknown[] };
+      expect(status.managers).toHaveLength(2);
+      for (const descriptor of enrolled) {
+        expect(status.managers.find(manager => manager.goal === descriptor.goal))
+          .toEqual({ ...descriptor, ownership: `waiting for previous owner ${process.pid}` });
+      }
+      expect(status.attempts).toEqual([]);
+      expect(status.wakes).toEqual([]);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
 
   test('a launched worker cannot inherit its manager native session ownership', () => {
     const parent = { ...process.env, CODEX_SESSION_ID: 'manager-session', CODEX_THREAD_ID: 'manager-session',

@@ -163,7 +163,6 @@ export class GoalCoordinator {
         const prior = JSON.parse(row.descriptor) as LaunchDescriptor;
         if (prior.session === descriptor.session && prior.home === descriptor.home) throw new Error('Native session already enrolled');
       }
-      if (enrolled.length) throw new Error('This pilot already has an enrolled manager; handover required');
       this.db.query('INSERT INTO managers VALUES(?,?)').run(descriptor.goal, JSON.stringify(descriptor));
     }).immediate();
   }

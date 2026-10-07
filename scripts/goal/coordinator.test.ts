@@ -38,10 +38,13 @@ function fixture() {
     env: { PATH: process.env.PATH ?? '', CODEX_HOME: join(dir, 'account'), GOAL_ID: 'program', CALLS: join(dir, 'calls.jsonl') },
     socket: join(dir, 'unused.socket'), server: processIdentity(process.pid)!,
     previousOwner: { ...processIdentity(process.pid)!, start: 'exited-owner' } };
+  const otherDescriptor: LaunchDescriptor = { ...descriptor, goal: 'kernel', generation: 'handover-2',
+    session: 'other-native-session', engine: 'codex', home: join(dir, 'other-account'),
+    env: { ...descriptor.env, CODEX_HOME: join(dir, 'other-account'), GOAL_ID: 'kernel' } };
   const procRoot = join(dir, 'proc');
   mkdirSync(join(procRoot, 'sys/kernel/random'), { recursive: true });
   writeFileSync(join(procRoot, 'sys/kernel/random/boot_id'), 'test-boot\n');
-  return { dir, stateDir, launcher, descriptor, procRoot,
+  return { dir, stateDir, launcher, descriptor, otherDescriptor, procRoot,
     process(pid: number, args: string[], env: string[] = [], start = '100', state = 'S', ppid = 0) {
       const directory = join(procRoot, String(pid)); mkdirSync(directory, { recursive: true });
       const fields = Array<string>(22).fill('0'); fields[0] = state; fields[1] = String(ppid); fields[19] = start;
@@ -74,6 +77,129 @@ async function waitFor(predicate: () => boolean, timeout = 5_000): Promise<void>
 }
 
 describe('durable Goal wake coordinator', () => {
+  test('Goals on different account homes retain independent wakes and launch descriptors across restart', async () => {
+    const f = fixture();
+    const events = (goal: string): WakeEvent[] => [{ key: 'timer:follow-up', body: `${goal} follow-up`,
+      dueAt: goal === 'program' ? 1_000_000 : 1_010_000 }];
+    try {
+      const first = f.open({ events });
+      first.enroll(f.descriptor); first.enroll(f.otherDescriptor); first.step();
+      expect(first.status().managers.map(manager => [manager.goal, manager.home]))
+        .toEqual([['kernel', f.otherDescriptor.home], ['program', f.descriptor.home]]);
+      expect(first.status().wakes).toHaveLength(2);
+      const program = first.status().attempts[0]!;
+      expect(program).toMatchObject({ goal: 'program', generation: f.descriptor.generation });
+      expect(program.prompt).toContain('program follow-up');
+      expect(program.prompt).not.toContain('kernel follow-up');
+      expect(JSON.parse(program.descriptor)).toEqual(f.descriptor);
+      await runAttempt(f.stateDir, program.token); first.step();
+      expect(first.status().wakes).toEqual([{ goal: 'kernel', due_at: 1_010_000, failures: 0, error: null, token: null }]);
+      first.close();
+      const restarted = f.open({ events }); f.setNow(1_009_999); restarted.step();
+      expect(f.launcher.launches).toEqual([program.token]);
+      f.setNow(1_010_000); restarted.step();
+      const kernel = restarted.status().attempts.find(attempt => attempt.goal === 'kernel')!;
+      expect(kernel).toMatchObject({ generation: f.otherDescriptor.generation });
+      expect(kernel.prompt).toContain('kernel follow-up');
+      expect(kernel.prompt).not.toContain('program follow-up');
+      expect(JSON.parse(kernel.descriptor)).toEqual(f.otherDescriptor);
+      expect(kernel.token).not.toBe(program.token);
+      await runAttempt(f.stateDir, kernel.token); restarted.step();
+      expect(restarted.status().wakes).toEqual([]);
+      expect(f.calls().map(call => ({ goal: call.goal, home: call.home }))).toEqual([
+        { goal: 'program', home: f.descriptor.home }, { goal: 'kernel', home: f.otherDescriptor.home }]);
+    } finally { f.cleanup(); }
+  });
+
+  test('one Goal manager failure backs off only its own wakes while another Goal keeps making progress', async () => {
+    const f = fixture();
+    let programEvents: WakeEvent[] = [];
+    try {
+      const coordinator = f.open({ events: goal => goal === 'kernel'
+        ? [{ key: 'exit:worker:1', body: 'Kernel worker completed' }] : programEvents });
+      coordinator.enroll(f.descriptor);
+      coordinator.enroll({ ...f.otherDescriptor, env: { ...f.otherDescriptor.env, EXIT_CODE: '7' } });
+      coordinator.step(); const kernel = coordinator.status().attempts[0]!;
+      await runAttempt(f.stateDir, kernel.token);
+      programEvents = [{ key: 'exit:worker:1', body: 'Program worker completed' }];
+      coordinator.step();
+      expect(coordinator.status().wakes.find(wake => wake.goal === 'kernel'))
+        .toMatchObject({ due_at: 1_005_000, failures: 1, error: 'Manager exit 7', token: null });
+      const program = coordinator.status().attempts.find(attempt => attempt.goal === 'program')!;
+      expect(f.launcher.launches).toEqual([kernel.token, program.token]);
+      expect(coordinator.status().wakes.find(wake => wake.goal === 'program'))
+        .toMatchObject({ due_at: 1_005_000, failures: 0, token: program.token });
+      await runAttempt(f.stateDir, program.token); coordinator.step();
+      expect(coordinator.status().wakes.map(wake => wake.goal)).toEqual(['kernel']);
+      f.setNow(1_004_999);
+      programEvents.push({ key: 'exit:worker:2', body: 'Another program worker completed' });
+      coordinator.step();
+      expect(coordinator.status().attempts.filter(attempt => attempt.goal === 'program')).toHaveLength(2);
+      expect(coordinator.status().attempts.filter(attempt => attempt.goal === 'kernel')).toHaveLength(1);
+      f.setNow(1_005_000); coordinator.step();
+      expect(coordinator.status().attempts.filter(attempt => attempt.goal === 'kernel')).toHaveLength(2);
+      expect(f.calls().map(call => call.goal)).toEqual(['kernel', 'program']);
+    } finally { f.cleanup(); }
+  });
+
+  test('one account quota denial does not delay another Goal or share its admission backoff', async () => {
+    const f = fixture();
+    const admissions: [string, string][] = [];
+    let kernelAdmitted = false;
+    let programEvents: WakeEvent[] = [];
+    try {
+      const coordinator = f.open({ events: goal => goal === 'kernel'
+        ? [{ key: 'mail:request', body: 'Kernel request' }] : programEvents,
+      admit: descriptor => {
+        admissions.push([descriptor.goal, descriptor.home]);
+        if (descriptor.goal === 'kernel' && !kernelAdmitted) throw new Error('account quota exhausted');
+      } });
+      coordinator.enroll(f.descriptor); coordinator.enroll(f.otherDescriptor); coordinator.step();
+      expect(coordinator.status().wakes[0]).toMatchObject({ goal: 'kernel', due_at: 1_005_000, failures: 1, token: null });
+      programEvents = [{ key: 'mail:request', body: 'Program request' }]; coordinator.step();
+      const program = coordinator.status().attempts[0]!;
+      expect(program.goal).toBe('program');
+      expect(admissions).toEqual([['kernel', f.otherDescriptor.home], ['program', f.descriptor.home]]);
+      await runAttempt(f.stateDir, program.token); programEvents = []; coordinator.step();
+      f.setNow(1_005_000);
+      programEvents = [{ key: 'mail:next-request', body: 'Next program request' }]; coordinator.step();
+      expect(coordinator.status().wakes.find(wake => wake.goal === 'kernel'))
+        .toMatchObject({ due_at: 1_015_000, failures: 2, token: null });
+      expect(coordinator.status().attempts.map(attempt => attempt.goal)).toEqual(['program', 'program']);
+      expect(admissions).toEqual([['kernel', f.otherDescriptor.home], ['program', f.descriptor.home],
+        ['kernel', f.otherDescriptor.home], ['program', f.descriptor.home]]);
+      kernelAdmitted = true; f.setNow(1_015_000); coordinator.step();
+      expect(coordinator.status().attempts.filter(attempt => attempt.goal === 'kernel')).toHaveLength(1);
+      expect(coordinator.status().attempts.filter(attempt => attempt.goal === 'program')).toHaveLength(2);
+      expect(admissions.at(-1)).toEqual(['kernel', f.otherDescriptor.home]);
+    } finally { f.cleanup(); }
+  });
+
+  test('a Goal with a claimed live wrapper or child does not block another Goal wake', async () => {
+    for (const identityColumn of ['wrapper', 'child']) {
+      const f = fixture();
+      let kernelEvents: WakeEvent[] = [];
+      try {
+        const coordinator = f.open({ events: goal => goal === 'kernel' ? kernelEvents
+          : [{ key: 'exit:worker:1', body: 'Program worker completed' }] });
+        coordinator.enroll(f.descriptor); coordinator.enroll(f.otherDescriptor); coordinator.step();
+        const program = coordinator.status().attempts[0]!;
+        coordinator.db.query(`UPDATE attempts SET phase='claimed',${identityColumn}=? WHERE token=?`)
+          .run(JSON.stringify(processIdentity(process.pid)), program.token);
+        f.launcher.running.clear();
+        kernelEvents = [{ key: 'exit:worker:1', body: 'Kernel worker completed' }];
+        coordinator.step(); coordinator.step();
+        const kernel = coordinator.status().attempts.find(attempt => attempt.goal === 'kernel')!;
+        expect(f.launcher.launches).toEqual([program.token, kernel.token]);
+        await runAttempt(f.stateDir, kernel.token); coordinator.step(); coordinator.step();
+        expect(coordinator.status().wakes.map(wake => wake.goal)).toEqual(['program']);
+        expect(coordinator.status().attempts.find(attempt => attempt.goal === 'program'))
+          .toMatchObject({ token: program.token, phase: 'claimed', code: null });
+        expect(f.calls().map(call => call.goal)).toEqual(['kernel']);
+      } finally { f.cleanup(); }
+    }
+  });
+
   test('intent survives a crash before launch and restart launches the same token once', async () => {
     const f = fixture();
     try {
@@ -327,8 +453,6 @@ describe('durable Goal wake coordinator', () => {
       expect(coordinator.status().managers[0]!.ownership).toBe(owner);
       expect(() => coordinator.enroll({ ...f.descriptor, effort: 'medium' })).toThrow('immutable');
       expect(() => coordinator.enroll({ ...f.descriptor, goal: 'kernel' })).toThrow('already enrolled');
-      expect(() => coordinator.enroll({ ...f.descriptor, goal: 'kernel', session: 'different-native-session' }))
-        .toThrow('already has an enrolled manager');
       owner = 'interactive process owns session'; coordinator.step();
       expect(f.launcher.launches).toEqual([]);
       expect(coordinator.status().wakes[0]!.error).toContain('interactive process');

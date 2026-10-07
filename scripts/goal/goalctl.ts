@@ -3294,7 +3294,7 @@ export function coordinatorEnrollmentOptions(args: string[]): {
   const goal = args[0] ?? '';
   const flags = namedOptions(args.slice(1), ['--session', '--engine', '--effort', '--cwd', '--tmux-socket', '--previous-owner-pid']);
   const engine = flags['--engine'] ?? 'codex';
-  if (engine !== 'codex' && engine !== 'codex-1' && engine !== 'luna') throw new Error('This pilot enrolls Codex managers only');
+  if (engine !== 'codex' && engine !== 'codex-1' && engine !== 'luna') throw new Error('The coordinator enrolls Codex managers only');
   const effort = flags['--effort'];
   const session = flags['--session'];
   const cwd = flags['--cwd'];
@@ -3335,7 +3335,6 @@ async function coordinatorCommand(args: string[]): Promise<void> {
     if (action === 'enroll') {
       const { goal, session, engine, effort, cwd: requestedCwd, socket: requestedSocket, previousOwner } = coordinatorEnrollmentOptions(rest);
       if (!activeGoals(eventLedger(directory)).includes(goal)) throw new Error(`Unknown active Goal: ${goal}`);
-      if (coordinator.status().managers.length) throw new Error('This pilot enrolls one manager; unenroll before a new handover');
       const cwd = realpathSync(resolve(requestedCwd));
       const home = realpathSync(engineEnv(engine).CODEX_HOME!);
       nativeSession(home,session,cwd);
