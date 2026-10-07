@@ -73,6 +73,9 @@ export class ReadingOrderIndex {
       - await tree.countBefore(manifest.order, `${item.parent}\u0001`, cost) + 1;
   }
   async numbered(meta: ReadingWork, parent: string, number: number): Promise<string | null> {
+    return (await this.numberedEntry(meta, parent, number))?.occurrence ?? null;
+  }
+  async numberedEntry(meta: ReadingWork, parent: string, number: number): Promise<OrderEntry | null> {
     const manifest = await this.manifest(meta), cost = newCost();
     let rank = await orderTree(this.objects).countBefore(manifest.order, `${parent}\u0001`, cost) + number - 1;
     if (rank >= manifest.order.count) return null;
@@ -83,7 +86,7 @@ export class ReadingOrderIndex {
       if (node.level === 0) {
         const entry = (node.entries as OrderEntry[])[rank];
         if (!entry) throw new WorkReadUnavailable('Reading order rank differs from root');
-        return entry.parent === parent ? entry.occurrence : null;
+        return entry.parent === parent ? entry : null;
       }
       const children = node.entries as Array<{ count: number; page: string }>;
       const child = children.find(candidate => {

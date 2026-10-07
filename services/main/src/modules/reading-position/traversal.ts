@@ -75,10 +75,13 @@ export class ReadingPositionTraversal {
     return this.metadata.get(work)!;
   }
   private async readMetadata(work: string): Promise<ReadingWork> {
+    // A PartRole can target any admitted resource. Only targets with a
+    // selected supported composition descend; Episodes remain terminal.
     const rows = await this.session.query(`# reading-position:work
       SELECT ?work ?structure ?revision ?generation WHERE {
-        BIND(${iri(work)} AS ?work) GRAPH ${current} { ${iri(work)} rv:mainVersion ?main .
-          OPTIONAL { ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile ?profile ;
+        BIND(${iri(work)} AS ?work) GRAPH ${current} {
+          OPTIONAL { ${iri(work)} rv:mainVersion ?main .
+            ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile ?profile ;
             rv:structureHead ?revision ; rv:selectedGeneration ?generation .
             FILTER(?profile IN (rv:WorkComposition, rv:BookComposition))
             ?generation rv:generationState rv:Active . }
@@ -136,6 +139,17 @@ export class ReadingPositionTraversal {
     }
     const numbered = q ? await this.numbered(meta, parent, q) : null;
     if (q && this.order) {
+      if (numbered) {
+        const entry = await readingOrderRead(() => this.order!.numberedEntry(meta, parent, Number(q)));
+        if (!entry || entry.occurrence !== numbered) throw new WorkReadUnavailable('Reading number differs from immutable order');
+        const [item] = await readingOrderRead(() => this.order!.hydrate(meta, [entry], true));
+        // Terminal parts (Episodes and other admitted targets) have no child
+        // composition to search. Their exact numeric rank must not walk the
+        // label index's PartRole navigation entries before reaching the match.
+        if (item?.role === 'part' && item.target && !(await this.metadataFor(item.target)).structure) {
+          return !after || tuple(item) > tuple(after) ? [{ item, matches: true }] : [];
+        }
+      }
       const page = await readingOrderRead(() => searchOccurrenceLabels(this.session,
         this.order!, meta, parent, q, after, probe, numbered));
       this.labelsIndexing ||= !page.current;

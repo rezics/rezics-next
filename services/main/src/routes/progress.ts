@@ -1,9 +1,10 @@
-import { workRead } from '../modules/work/read-session.ts';
+import { workRead, decodeReadCursor, encodeReadCursor } from '../modules/work/read-session.ts';
 import { resolveTargets } from '../modules/target/resolve.ts';
 import { Elysia, t } from 'elysia';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
-import { InvalidStructureProgress, StaleStructureProgress, StructureProgressConflict }
+import { InvalidStructureProgress, StaleStructureProgress, StructureProgressConflict, STRUCTURE_PROGRESS_COST,
+  type ProgressPageKey }
   from '../modules/progress/store.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader,
   readPublishedVariants } from '../modules/structure/graph.ts';
@@ -17,6 +18,8 @@ import { authorizedReadProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
+import { workReadError, workReadProblems } from './work-reads.ts';
+import { pageFields } from '../modules/work/read-contract.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const contentRevision = t.String({ pattern: '^urn:rezics:content:revision:[0-9a-f-]{36}$' });
@@ -25,6 +28,9 @@ const result = t.Object({ structure: ref, occurrence: ref, selectedRevision: t.N
   replayed: t.Optional(t.Boolean()) });
 
 export const openApiOperations = {
+  '/v1/compositions/{id}/progress': {
+    get: { exposure: 'public', rateLimitFamily: 'read', bearer: true },
+  },
   '/v1/compositions/{id}/occurrences/{occurrence}/progress': {
     get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, put: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true },
   },
@@ -83,6 +89,60 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     return { principal, work: canonical };
   };
   return new Elysia()
+    .get('/v1/compositions/:id/progress', {
+      params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: ref, cursor: t.Optional(t.String({ maxLength: 2048,
+        description: 'Continue even an empty page while nextCursor is present. Private progress pages are live, ordered by occurrence and selected revision.' })),
+        limit: t.Optional(t.Numeric({ minimum: 1, maximum: STRUCTURE_PROGRESS_COST.pageRows - 1,
+          multipleOf: 1 })) }, { additionalProperties: false }),
+      response: { 200: t.Object({ structure: ref,
+        items: t.Array(t.Object({ ...result.properties, completed: t.Literal(true) }), {
+          maxItems: STRUCTURE_PROGRESS_COST.pageRows - 1,
+          description: 'This principal\'s completed selection-qualified occurrence states, including tombstones. Any completed selection marks its occurrence complete.' }), ...pageFields,
+        consistency: t.Literal('live'), complete: t.Boolean(),
+        cost: t.Object({ progressRows: t.Integer({ maximum: STRUCTURE_PROGRESS_COST.pageRows }) }) }),
+      ...workReadProblems },
+    }, async ({ request, params, query }) => {
+      if (!work.progress) return problem(503, 'progress_unavailable', 'Progress owner is unavailable');
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        // A bearer supplies the private owner key even when the parent is public.
+        await work.account.verify(request, ['work:read']);
+        const page = await workRead(work, request, { actingSubject: query.actingSubject }, async session => {
+          const header = await readCompositionHeader(work.environment, structure);
+          if (!header || !structureProfileFor(header.profile).componentPredicate
+            || !await canReadCompositionWork(session, header.work)) {
+            throw new CompositionUnavailable('composition is unavailable');
+          }
+          const binding = ['completed-occurrences-v1', structure, header.head,
+            session.principal, query.actingSubject];
+          const cursor = decodeReadCursor(query.cursor, binding, session.position);
+          let after: ProgressPageKey | undefined;
+          if (cursor) {
+            try { after = JSON.parse(cursor.after) as ProgressPageKey; }
+            catch { throw new InvalidStructureProgress('progress cursor is invalid'); }
+            if (!after || typeof after.occurrence !== 'string'
+              || !(after.selectedRevision === null || typeof after.selectedRevision === 'string')) {
+              throw new InvalidStructureProgress('progress cursor is invalid');
+            }
+          }
+          // These are the reader's saved occurrence keys, including tombstones;
+          // no target, label or Content bytes are disclosed by this collection.
+          const saved = await work.progress!.completedPage(session.principal!, structure, query.limit ?? 50, after);
+          const nextCursor = saved.next ? encodeReadCursor(binding, session.position, JSON.stringify(saved.next)) : null;
+          return { structure, items: saved.items, nextCursor, sourcePosition: session.position,
+            count: { value: saved.items.length, kind: 'exact-page' as const, total: null },
+            consistency: 'live' as const, complete: nextCursor === null,
+            cost: { progressRows: (query.limit ?? 50) + 1 } };
+        });
+        return Response.json(page, { headers: { 'cache-control': 'private, no-store' } });
+      } catch (error) {
+        if (error instanceof InvalidStructureProgress || error instanceof CompositionUnavailable
+          || error instanceof CompositionCorrupt || error instanceof StructureObjectCorrupt
+          || error instanceof StructureObjectUnavailable) return failure(error);
+        return workReadError(error);
+      }
+    })
     .get('/v1/compositions/:id/occurrences/:occurrence/progress', {
       params: t.Object({ id: groupUuid, occurrence: groupUuid }),
       query: t.Object({ actingSubject: ref, selectedRevision: t.Optional(contentRevision) },

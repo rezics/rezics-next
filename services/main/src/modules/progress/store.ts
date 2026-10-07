@@ -11,7 +11,14 @@ export class InvalidStructureProgress extends Error {}
 export class StaleStructureProgress extends Error {}
 export class StructureProgressConflict extends Error {}
 export const STRUCTURE_PROGRESS_COST = { latestRows: 1,
+  pageRows: 51,
   libraryProjection: 'indexed top-one seek, independent of occurrence inventory' } as const;
+
+export interface ProgressPageKey { occurrence: string; selectedRevision: string | null }
+export interface CompletedProgressPage {
+  items: StructureProgress[];
+  next: ProgressPageKey | null;
+}
 
 export interface StructureProgress {
   structure: string;
@@ -53,6 +60,33 @@ function state(input: { structure: string; occurrence: string; selectedRevision:
 /** Private Content-DB owner; no target bytes or publication state are copied here. */
 export class StructureProgressStore {
   constructor(private readonly pool: Pool) {}
+
+  /** Live reader-owned state, in primary-key order. Limit the indexed range
+   * before filtering completion: a sparse history must not scan the series.
+   * Empty pages can carry a continuation, including through revision selections.
+   * https://www.postgresql.org/docs/18/indexes-multicolumn.html */
+  async completedPage(principal: VerifiedPrincipal, structure: string, limit = 50,
+    after?: ProgressPageKey): Promise<CompletedProgressPage> {
+    validIdentity(structure, after ? after.occurrence : structure, after ? after.selectedRevision : null);
+    if (!Number.isInteger(limit) || limit < 1 || limit >= STRUCTURE_PROGRESS_COST.pageRows) {
+      throw new InvalidStructureProgress('progress page limit is invalid');
+    }
+    const result = await this.pool.query<{ occurrence: string; selection_key: string;
+      completed: boolean; position: string | null; version: string }>(
+      `SELECT occurrence, selection_key, completed, position, version::text AS version
+       FROM structure.progress
+       WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
+         ${after ? 'AND (occurrence, selection_key) > ($4, $5)' : ''}
+       ORDER BY occurrence, selection_key LIMIT $${after ? 6 : 4}`,
+      [principal.issuer, principal.subject, structure,
+        ...(after ? [after.occurrence, after.selectedRevision ?? ''] : []), limit + 1]);
+    const page = result.rows.slice(0, limit);
+    const last = page.at(-1);
+    return { items: page.filter(row => row.completed).map(row => state({ structure,
+      occurrence: row.occurrence, selectedRevision: row.selection_key || null }, row)),
+    next: result.rows.length > limit && last ? { occurrence: last.occurrence,
+      selectedRevision: last.selection_key || null } : null };
+  }
 
   async read(principal: VerifiedPrincipal, structure: string, occurrence: string,
     selectedRevision: string | null = null): Promise<StructureProgress> {
