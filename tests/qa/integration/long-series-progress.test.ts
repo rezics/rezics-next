@@ -11,6 +11,7 @@ import { startMediaStack } from './media-support.ts';
 import { readCompositionHeader } from '../../../services/main/src/modules/structure/graph.ts';
 import { readProgressOrder } from '../../../services/main/src/modules/progress/order.ts';
 import { ProgressOrderProjection } from '../../../services/main/src/modules/progress/order-projection.ts';
+import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 
 const short = (resource: string) => resource.slice(-36);
 type Composition = { structure: string; revision: string };
@@ -112,6 +113,10 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
       revision = value.revision;
       return value;
     };
+    // Kernel's writer currently requires its explicit membership preparation
+    // before extending populated lists. This is admitted fixture preparation,
+    // not a replacement for the missing automatic writer integration.
+    expect((await normalizeStoredMembership(stack.env)).complete).toBe(true);
     const groups = await change([
       { op: 'insert', role: 'group', parent: composition.structure,
         position: 'last', label: { value: 'Specials', language: 'en' } },
