@@ -774,7 +774,7 @@ final class CommandService extends ActionService {
                         .equals(receiptValue(dataset, receipt, "statementUpgradeTemplateDigest"))))
                     return Map.of("status", "conflict");
                 Map<String,Object> replay = new LinkedHashMap<>(committed(dataset,receipt));
-                replay.put("templateIndex",TemplateIndexService.replay(dataset,receipt,plan)); return replay;
+                if (!slim) replay.put("templateIndex",TemplateIndexService.replay(dataset,receipt,plan)); return replay;
             }
             String legacySlim = slim ? null : CommandInvariant.legacySlimMutation(dataset, plan);
             if (legacySlim != null) return invalid(legacySlim);
@@ -803,7 +803,7 @@ final class CommandService extends ActionService {
             var releaseCoverage = ReleaseCoveragePolicy.capture(dataset, model);
             java.util.Map<String, ReleasePolicy.Prior> releases = ReleasePolicy.capture(dataset, plan);
             OccurrenceLabelIndex.Capture occurrenceLabels = new OccurrenceLabelIndex.Capture(dataset);
-            var templateBefore = TemplateIndexService.capture(dataset,plan);
+            List<TemplateIndexService.Entity> templateBefore = slim ? List.of() : TemplateIndexService.capture(dataset,plan);
             CommandWork.enter("update");
             UpdateAction.execute(plan.request(), DatasetFactory.wrap(CommandWork.observe(occurrenceLabels.observed(dataset))));
             CommandWork.enter("invariants");
@@ -864,9 +864,13 @@ final class CommandService extends ActionService {
             Map<String, Object> result = committed(dataset, receipt);
             if (!result.containsKey("position")) return Map.of("status", "invalid", "report", "receipt position incomplete");
             result = new LinkedHashMap<>(result);
-            var templateDelta = TemplateIndexService.refresh(dataset,templateBefore,plan);
-            TemplateIndexService.retain(dataset,receipt,templateDelta);
-            result.put("templateIndex",templateDelta);
+            // Slim edition metadata contains none of the template directory's four entity kinds.
+            // Its owner replay remains custodied without retaining unrelated derived payloads.
+            if (!slim) {
+                var templateDelta = TemplateIndexService.refresh(dataset,templateBefore,plan);
+                TemplateIndexService.retain(dataset,receipt,templateDelta);
+                result.put("templateIndex",templateDelta);
+            }
             CommandWork.enter("projections");
             PublicNameProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations, delta == null ? List.of() : delta.changes());
             RatingPopulationProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations);
