@@ -1,13 +1,14 @@
 import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from './admission.ts';
-import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
-import { publicWork, unerased } from '../work/public-patterns.ts';
+import { GRAPHS, RV, iri } from '../work/activate.ts';
+import { publicWork } from '../work/public-patterns.ts';
 import { publicPost } from '../post/patterns.ts';
 import { baselineMemberProof } from './baseline.ts';
 import { platformAdministratorProof } from './platform-administrator.ts';
 import { SEMANTIC_TERMS } from '../semantic/schema.ts';
 import { inAccessTransaction, requireRecoveryOpen } from './policy-transaction.ts';
+import { authorWorkGenerations } from './author-baseline.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const SEMANTIC_DISCLOSURE_LIMIT = 65;
@@ -235,16 +236,6 @@ function zoneReceiptPattern(resource: string, actor: string) {
       rv:owner ${iri(actor)} ; rv:admissionId ?admission ; rv:requestDigest ?digest . }`;
 }
 
-type AuthorReference = {
-  resource: string;
-  main_version: string;
-  action: string;
-  scope_id: string;
-  creation_admission: string;
-  graph_receipt: string;
-  request_digest: string;
-};
-
 /** The same public, explicit-grant, administrator, Zone creator, Collection
  * curator and Work member/author decisions as referenceReader. At most 65
  * exact references, five graph requests and a fixed number of indexed Access
@@ -417,58 +408,10 @@ export async function readReferenceDisclosure(
     }
     const authored = member ? works.filter((ref) => !allowed.has(ref)) : [];
     if (authored.length) {
-      const proofs = (
-        await access.query<AuthorReference>(
-          `SELECT s.work AS resource,s.main_version,
-        s.creation_admission,a.graph_receipt,a.request_digest,a.action,a.scope_id
-        FROM access.work_maintainer_set s JOIN access.work_maintainer m ON m.work = s.work AND m.agent = $3
-        JOIN access.admission a ON a.id = s.creation_admission
-        WHERE s.work = ANY($1::text[]) AND a.principal_id = $2 AND a.acting_subject = $3
-          AND ((a.action = 'work.create' AND a.scope_id = 'work:create:root')
-            OR (a.action = 'work.edit' AND a.scope_id LIKE 'work:edit:https://rezics.com/id/%'))
-          AND a.state = 'sealed' AND a.graph_outcome = 'succeeded' FOR SHARE OF s`,
-          [authored, identity.id, actor],
-        )
-      ).rows;
-      if (proofs.length) {
-        const rows =
-          (
-            await graph.query(
-              `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-          SELECT ?resource WHERE { ${proofs
-            .map(
-              (proof) => `{
-            BIND(${iri(proof.resource)} AS ?resource) FILTER EXISTS {
-              { GRAPH ${iri(GRAPHS.current)} { ?resource a rv:Post ; rv:head ?head . } }
-              ${
-                proof.action === 'work.create'
-                  ? `UNION { GRAPH ${iri(GRAPHS.current)} {
-                ?resource a schema:CreativeWork ; rv:head ?head ; rv:mainVersion ${iri(proof.main_version)} . } }`
-                  : ''
-              }
-              ${unerased('?resource')}
-              GRAPH ${iri(GRAPHS.receipts)} { ${iri(proof.graph_receipt)}
-                ${
-                  proof.action === 'work.create'
-                    ? `rv:work ?resource ; rv:mainVersion ${iri(proof.main_version)} ;`
-                    : '(rv:post|rv:chapterWork) ?resource ;'
-                }
-                rv:admissionId ${lit(proof.creation_admission)} ; rv:requestDigest ${lit(proof.request_digest)} ;
-                rv:admittedScope ${lit(proof.scope_id)} ; rv:outcome rv:Succeeded . } } }`,
-            )
-            .join(' UNION ')}
-          } LIMIT ${authored.length + 1}`,
-              32_768,
-            )
-          ).results?.bindings ?? [];
-        if (
-          rows.length > authored.length ||
-          rows.some((row) => !authored.includes(row.resource?.value ?? ''))
-        ) {
-          throw new Error('reference author batch is ambiguous');
-        }
-        for (const row of rows) allowed.add(row.resource!.value);
-      }
+      // Creation receipts prove provenance. The live maintainer set and current
+      // controller prove authority, including after either kind of handover.
+      const generations = await authorWorkGenerations(access, graph, identity.id, actor, authored);
+      for (const resource of generations.keys()) allowed.add(resource);
     }
     return allowed;
   });
