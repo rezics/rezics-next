@@ -322,7 +322,10 @@ async function projectEvent(env: WorkActivationEnvironment, content: ContentCore
         graph: publication.graph, reference: publication.reference,
         eligibility: graph.eligibility,
         text: hash(extracted.text), language: extracted.language, recipe: PROFILE_ID }));
-      const result = await env.fuseki.commandWithReceipt({ receipt: identity.receipt,
+      // A historical receipt alone cannot certify the current physical body.
+      // Uncertain responses stay deferred until this exact command re-enters
+      // the native writer and checks its original delivery descriptor.
+      const result = await env.fuseki.command({ receipt: identity.receipt,
         digest, update, validations, deadlineMs: CONTENT_PROJECTION_COST.deadlineMs });
       if (result.status !== 'committed' || result.position.dataEpoch !== env.lineage.dataEpoch) {
         throw new ContentProjectionUnavailable(`Content projection command ${result.status}`);

@@ -53,7 +53,7 @@ class ProjectionGraph extends FusekiClient {
       decisionEpoch: binding(at.dataEpoch), decisionSequence: binding(at.sequence),
     }] } };
   }
-  override async commandWithReceipt(command: Parameters<FusekiClient['commandWithReceipt']>[0]) {
+  override async command(command: Parameters<FusekiClient['command']>[0]) {
     this.attempts++;
     this.commands.add(command.receipt);
     return { status: 'committed' as const, receipt: command.receipt, replayed: false,
