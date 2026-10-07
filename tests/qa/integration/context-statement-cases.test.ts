@@ -63,8 +63,8 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
       (name text PRIMARY KEY,applied_at timestamptz NOT NULL DEFAULT now())`);
     await f.accessPool.query(`INSERT INTO public.rezics_local_migration(name)
       SELECT unnest($1::text[]) ON CONFLICT DO NOTHING`,
-    [migrationRecords(repositoryRoot,'access').filter(value => value.version !== 1300).map(value => value.name)]);
-    await f.accessPool.query("DELETE FROM public.rezics_local_migration WHERE name LIKE '%1300%'");
+    [migrationRecords(repositoryRoot,'access').filter(value => value.version !== 1499).map(value => value.name)]);
+    await f.accessPool.query("DELETE FROM public.rezics_local_migration WHERE name LIKE '%1499%'");
     const missing = `urn:rezics:sha256:${'0'.repeat(64)}`;
     await f.env.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} { ${iri(application)} a rv:ClassificationApplication ;
