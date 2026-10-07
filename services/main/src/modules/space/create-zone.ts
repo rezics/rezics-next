@@ -6,7 +6,9 @@ import type { RegisteredAdmission } from '../access/admission.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
 import { derivedId, itemListIri, COMPOSITION_PROFILE } from '../structure/graph.ts';
 import { recordTree, orderTree, structureObjects, structureCreationValidations } from '../structure/change.ts';
-import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, checkStructureManifest } from '../structure/format.ts';
+import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_INDEXED_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
+  checkStructureManifest, type StructureManifest } from '../structure/format.ts';
+import { createQualifierKeyIndex } from '../structure/qualifier-index.ts';
 import { newCost } from '../structure/tree.ts';
 import { structureProfileFor } from '../structure/profiles.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
@@ -19,7 +21,7 @@ export const SPACE_ZONE_PROFILE = 'https://rezics.com/definition/space-zone-v1';
 const ZONE_PROFILE = 'https://rezics.com/definition/zone-capability-v1';
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 export const SPACE_ZONE_CREATE_COST = { graphCommandCalls: 1, graphReceiptReads: 4,
-  immutableWrites: 7, validationCalls: 4, handleChecks: 2, deadlineMs: 10_000 } as const;
+  immutableWrites: 8, validationCalls: 4, handleChecks: 2, deadlineMs: 10_000 } as const;
 
 export interface CreateZoneSpaceInput {
   name: string;
@@ -92,11 +94,15 @@ export async function createZoneSpace(env: WorkActivationEnvironment,
     disclosure: visibility, name: input.name, language }, ZONE_PROFILE);
   const objects = structureObjects(env);
   const cost = newCost();
-  const manifestBytes = new TextEncoder().encode(JSON.stringify({
+  const source: StructureManifest = {
     format: STRUCTURE_MANIFEST_FORMAT, structure: navigation, structureOf: zone,
     profile: 'zone-navigation', generation, pageFormat: STRUCTURE_PAGE_FORMAT,
     records: await recordTree(objects).empty(cost), order: await orderTree(objects).empty(cost),
     placementCount: 0, measures: [], model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE,
+  };
+  const manifestBytes = new TextEncoder().encode(JSON.stringify({ ...source,
+    format: STRUCTURE_INDEXED_MANIFEST_FORMAT,
+    qualifierKeys: await createQualifierKeyIndex(objects, source, [], cost),
   }));
   checkStructureManifest(manifestBytes);
   const navigationManifest = await objects.put(manifestBytes);

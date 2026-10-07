@@ -9,6 +9,7 @@ import { readerLanguages } from '../display-language/select.ts';
 import { readResourceSummaries, type ResourceSummary, type SummaryReader } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { NATIVE_ID, readCompositionHeader, type CompositionHeader } from '../structure/graph.ts';
+import { readCompositionOccurrenceByQualifierKey } from '../structure/read.ts';
 import { DATASET, GRAPHS, RV, WORK_SEMANTIC_TYPES, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadSession, WorkReadMoved,
   WorkReadExpired, WorkReadLimit, WorkReadMissing, WorkReadUnavailable, type ReadPosition } from '../work/read-session.ts';
@@ -289,14 +290,17 @@ async function mountAt(read: RouteRead, state: Publication, header: CompositionH
   if (state.bundle) {
     // The current projection is an editor's draft. Resolve the retained route
     // qualifiers from the immutable publication, then apply current disclosure.
-    const page = await readVisibleCompositionPage(read.work.environment, { structure: header.structure, header,
-      revision: state.bundle.routesRevision, limit: ZONE_ROUTE_COST.mountRows,
+    const keyed = await readCompositionOccurrenceByQualifierKey(read.work.environment, {
+      structure: header.structure, header, revision: state.bundle.routesRevision,
+      key: { type: 'zone-mount', zone: state.zone, routeSegment: segment },
+      // Zone authority was admitted before lookup and is fenced by boundedRead.
+      canReadOwner: async owner => owner === state.zone,
       canReadTarget: async () => true,
       visible: item => item.role === 'mount' && !!item.target && item.qualifier?.type === 'zone-mount'
         && item.qualifier.zone === state.zone && item.qualifier.routeSegment === segment });
-    const mount = page.occurrences[0];
+    const mount = keyed.occurrences[0];
     const qualifier = mount?.qualifier;
-    if (page.next || page.occurrences.length !== 1 || !mount?.target || qualifier?.type !== 'zone-mount') {
+    if (keyed.outcome !== 'found' || keyed.occurrences.length !== 1 || !mount?.target || qualifier?.type !== 'zone-mount') {
       throw new ZoneRouteMissing('Zone route is unavailable');
     }
     if (qualifier.disclosure !== 'public') await read.semantic(state.zone);
