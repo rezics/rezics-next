@@ -248,14 +248,14 @@ const reply = (n: number, realm: string, body: string, sequence: string) => ({
   placement: iri(v7(day(`2026-09-${String(28 - n * 3).padStart(2, '0')}`), `4e7f8a9b${n}`)),
   revisionId: `f2a3b4c5-d6e7-4f8a-9b0c-${n.toString().padStart(12, '0')}`, body, dataEpoch: sourcePosition.dataEpoch,
   sequence });
-export const discussion = ok<DiscussionPage>(page([
+export const discussion = ok<DiscussionPage>({ ...page([
   reply(1, realmA, 'The chapter where the map floods is the best thing I have read this year.\nThe prose slows down '
     + 'exactly when the water rises.', '4812'),
   reply(2, realmB, '第三章把测绘写成了一种祈祷，读完很久都放不下。', '4650'),
   reply(3, realmA, 'Does anyone else read the cartographer as unreliable? Every measurement is dated but never signed.',
     '4402'),
-], 'discussion-next-cursor'));
-export const noDiscussion = ok<DiscussionPage>(page([]));
+], 'discussion-next-cursor'), complete: false });
+export const noDiscussion = ok<DiscussionPage>({ ...page([]), complete: true });
 
 const structure = iri('a4b6c8d0-e2f4-4a6b-8c0d-2e4f6a8b0c11');
 const occurrence = (n: number) => iri(`b5c7d9e1-f3a5-4b7c-9d1e-${n.toString().padStart(12, '0')}`);

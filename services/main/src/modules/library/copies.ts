@@ -139,7 +139,7 @@ export async function libraryRecordPage<T>(pool: Pool, agent: string, binding: u
     const page = rows.slice(0, limit);
     const nextCursor = rows.length > limit ? encodeReadCursor(binding, position, page.at(-1)!.key) : null;
     await client.query('COMMIT');
-    return { items: page.map(row => row.value), nextCursor };
+    return { items: page.map(row => row.value), nextCursor, complete: nextCursor === null };
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }
 }

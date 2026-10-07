@@ -18,7 +18,7 @@ import { DEFAULT_PERSON_CHOICES } from '../../../services/main/src/modules/prefe
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
-type Page<T> = { items: T[]; nextCursor: string | null };
+type Page<T> = { items: T[]; nextCursor: string | null; complete: boolean };
 type Bundle = { profile: 'rezics-library-export-v1'; rows: CanonicalRow[]; snapshot: string; nextCursor: string | null };
 async function json<T>(response: Response, status = 200): Promise<T> {
   if (response.status !== status) throw new Error(`${response.status}: ${await response.text()}`);
@@ -106,7 +106,7 @@ test('returned loan pages examine at most one bounded page despite thousands of 
       } };
     } } as unknown as Pool;
     const store = new LibraryLoanStore(measuredPool);
-    expect((await store.page(agent, { state: 'returned' })).items).toEqual([]);
+    expect(await store.page(agent, { state: 'returned' })).toMatchObject({ items: [], nextCursor: null, complete: true });
     await home.stack.contentPool.query(`UPDATE reader.library_loan SET returned_at=$3::timestamptz,version=2,
       state=state || jsonb_build_object('returnedAt',$3::text,'version',2)
       WHERE agent=$1 AND id=ANY($2::text[])`, [agent, returnedIds, now]);
@@ -115,6 +115,7 @@ test('returned loan pages examine at most one bounded page despite thousands of 
     let cursor: string | null = null;
     do {
       const page = await store.page(agent, { state: 'returned', ...(cursor ? { cursor } : {}) });
+      expect(page.complete).toBe(page.nextCursor === null);
       seen.push(...page.items); cursor = page.nextCursor;
     } while (cursor);
     expect(seen).toHaveLength(60);
@@ -183,18 +184,18 @@ test('private exact-release copies and overdue loans preserve replay, CAS, concu
     expect((await call('PATCH', copyPath, patch)).status).toBe(409);
     expect((await call('PATCH', copyPath, { ...patch, expectedVersion: 2 }, randomUUID(), home.author.token)).status).toBe(403);
     const copiesPath = `/v1/works/${target.work.slice(-36)}/copies?actingSubject=${encodeURIComponent(agent)}`;
-    expect(await json<Page<CopyState>>(await call('GET', copiesPath))).toMatchObject({ items: [{ id: copy.id, release }], nextCursor: null });
+    expect(await json<Page<CopyState>>(await call('GET', copiesPath))).toMatchObject({ items: [{ id: copy.id, release }], nextCursor: null, complete: true });
     expect((await call('GET', copiesPath, undefined, randomUUID(), home.author.token)).status).toBe(403);
     // The Work path is public, but a copy list is the viewer's own. Another Person
     // sees none of these copies, and a request with no token does not reveal them.
     const viewerCopies = `/v1/works/${target.work.slice(-36)}/copies?actingSubject=${encodeURIComponent(other)}`;
     const asViewer = await json<Page<CopyState>>(await call('GET', viewerCopies, undefined, randomUUID(), home.author.token));
-    expect(asViewer).toMatchObject({ items: [], nextCursor: null });
+    expect(asViewer).toMatchObject({ items: [], nextCursor: null, complete: true });
     expect(JSON.stringify(asViewer)).not.toContain(copy.id);
     const anonymous = await app.handle(new Request(`http://main.local${copiesPath}`, { method: 'GET' }));
     const anonymousBody = await anonymous.text();
     expect(anonymousBody).not.toContain(copy.id);
-    if (anonymous.status === 200) expect(JSON.parse(anonymousBody)).toMatchObject({ items: [] });
+    if (anonymous.status === 200) expect(JSON.parse(anonymousBody)).toMatchObject({ items: [], nextCursor: null, complete: true });
     else expect(anonymous.status).toBe(401);
     const yesterday = new Date(Date.now() - 86_400_000).toISOString(), startedAt = new Date(Date.now() - 3 * 86_400_000).toISOString();
     const dueFuture = new Date(Date.now() + 7 * 86_400_000).toISOString();
@@ -210,7 +211,7 @@ test('private exact-release copies and overdue loans preserve replay, CAS, concu
     const duePath = `/v1/me/library-loans?actingSubject=${encodeURIComponent(agent)}&state=overdue`;
     const dueResponse = await call('GET', duePath);
     expect(dueResponse.headers.get('cache-control')).toBe('private, no-store');
-    expect(await json<Page<LoanView>>(dueResponse)).toMatchObject({ items: [{ id: loan.id, state: 'overdue' }] });
+    expect(await json<Page<LoanView>>(dueResponse)).toMatchObject({ items: [{ id: loan.id, state: 'overdue' }], nextCursor: null, complete: true });
     expect((await call('GET', duePath, undefined, randomUUID(), home.author.token)).status).toBe(403);
     expect((await call('POST', `${loanPath}/return`, { actingSubject: agent, expectedVersion: 1 }, randomUUID(), home.author.token)).status).toBe(403);
     const returnKey = randomUUID();
@@ -237,7 +238,7 @@ test('private exact-release copies and overdue loans preserve replay, CAS, concu
     const removed = await json<CopyState & { replayed: boolean }>(await call('DELETE', copyPath, remove, removeKey));
     expect(removed).toMatchObject({ removed: true, version: 3 });
     expect(await json(await call('DELETE', copyPath, remove, removeKey))).toEqual({ ...removed, replayed: true });
-    expect(await json(await call('GET', copiesPath))).toMatchObject({ items: [] });
+    expect(await json(await call('GET', copiesPath))).toMatchObject({ items: [], nextCursor: null, complete: true });
     expect((await call('POST', '/v1/me/library-loans', loanBody)).status).toBe(404);
 
     const exportPage = async (actor = agent, token = home.reader.token, cursor?: string | null, snapshot?: string) => {
@@ -293,6 +294,7 @@ test('private exact-release copies and overdue loans preserve replay, CAS, concu
       const query = new URLSearchParams({ actingSubject: agent, state: 'active', limit: '20', ...(cursor ? { cursor } : {}) });
       const page = await json<Page<LoanView>>(await call('GET', `/v1/me/library-loans?${query}`));
       expect(page.items.length).toBeLessThanOrEqual(LIBRARY_RECORD_COST.page);
+      expect(page.complete).toBe(page.nextCursor === null);
       expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThan(LIBRARY_RECORD_COST.responseBytes);
       seen.push(...page.items); cursor = page.nextCursor;
     } while (cursor);
@@ -304,6 +306,7 @@ test('private exact-release copies and overdue loans preserve replay, CAS, concu
     cursor = null;
     do {
       const page = await json<Page<CopyState>>(await call('GET', `${copiesPath}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`));
+      expect(page.complete).toBe(page.nextCursor === null);
       copied.push(...page.items); cursor = page.nextCursor;
     } while (cursor);
     expect(new Set(copied.map(copy => copy.id)).size).toBe(500);

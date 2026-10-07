@@ -10,6 +10,7 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 const params = t.Object({ id: readUuid });
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 const headers = { 'cache-control': 'private, no-store' };
+const discussionRead = t.Object({ ...discussionPage.properties, complete: t.Boolean() });
 
 export const openApiOperations = {
   '/v1/resources/{resource}/discussion': { get: { exposure: 'public', bearer: false } },
@@ -20,11 +21,12 @@ export function workActivityRoutes(work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/resources/:resource/discussion', { params: t.Object({ resource: readUuid }), detail,
       query: t.Object({ ...pageQuery, realm: t.Optional(readId) }, { additionalProperties: false }),
-      response: { 200: discussionPage, ...workReadProblems },
+      response: { 200: discussionRead, ...workReadProblems },
     }, async ({ request, params: path, query }) => {
       try {
-        return Response.json(await workRead(work, request, query,
-          session => readWorkDiscussion(session, `https://rezics.com/id/${path.resource}`, query.realm)), { headers });
+        const page = await workRead(work, request, query,
+          session => readWorkDiscussion(session, `https://rezics.com/id/${path.resource}`, query.realm));
+        return Response.json({ ...page, complete: page.nextCursor === null }, { headers });
       } catch (error) {
         return workReadError(error instanceof ContentLimitExceeded
           ? new WorkReadLimit('Discussion body page exceeds its budget') : error);

@@ -44,6 +44,29 @@ test('copy and loan validation refuses malformed commands before opening a trans
   expect(libraryTimestamp('2026-10-01T08:00:00+08:00')).toBe('2026-10-01T00:00:00.000Z');
 });
 
+test('copy and loan pages are complete only when no next cursor remains', async () => {
+  const copy: CopyState = { id: release, work, release, format: null, acquiredFrom: null, acquiredAt: null,
+    ownedFrom: null, ownedThrough: null, removed: false, version: 1, changedAt: '2026-10-01T00:00:00.000Z' };
+  const loan = { id: release, copy: release, direction: 'lent' as const,
+    counterparty: { kind: 'name' as const, name: 'Jane' }, startedAt: '2026-10-01T00:00:00.000Z',
+    dueAt: '2026-10-10T00:00:00.000Z', returnedAt: null, version: 1, changedAt: '2026-10-01T00:00:00.000Z',
+    state: 'open' as const };
+  const app = libraryCopiesRoutes({ account: { verify: async () => ({ issuer: 'test', subject: 'owner' }) },
+    access: { canReadAsBaselineMember: async () => true },
+    libraryCopies: { page: async () => ({ items: [copy], nextCursor: 'more' }) },
+    libraryLoans: { page: async () => ({ items: [loan], nextCursor: null }) },
+  } as unknown as MainWorkDependencies);
+  const headers = { authorization: 'Bearer owner' };
+  const copies = await app.handle(new Request(
+    `http://main.local/v1/works/${work.slice(-36)}/copies?actingSubject=${encodeURIComponent(owner)}`, { headers }));
+  expect(copies.status).toBe(200);
+  expect(await copies.json()).toMatchObject({ items: [{ id: release }], nextCursor: 'more', complete: false });
+  const loans = await app.handle(new Request(
+    `http://main.local/v1/me/library-loans?actingSubject=${encodeURIComponent(owner)}`, { headers }));
+  expect(loans.status).toBe(200);
+  expect(await loans.json()).toMatchObject({ items: [{ id: release, state: 'open' }], nextCursor: null, complete: true });
+});
+
 test('private copy and loan routes deny another reader before touching records or the graph', async () => {
   let touched = 0;
   const app = libraryCopiesRoutes({ account: { verify: async () => ({ issuer: 'test', subject: 'other' }) },

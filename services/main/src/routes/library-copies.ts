@@ -61,14 +61,14 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/works/:id/copies', { params: t.Object({ id: readUuid }), query: t.Object(pageQuery, closed),
       response: { 200: t.Object({ items: t.Array(copyState, { maxItems: LIBRARY_RECORD_COST.page }),
-        nextCursor: t.Nullable(t.String()) }, closed), ...errors },
+        nextCursor: t.Nullable(t.String()), complete: t.Boolean() }, closed), ...errors },
     }, async ({ request, params, query }) => {
       if (!deps.libraryCopies) return unavailable();
       try {
         await own(request, query.actingSubject);
         const value = await deps.libraryCopies.page(query.actingSubject, `https://rezics.com/id/${params.id}`, query);
         await own(request, query.actingSubject);
-        return Response.json(value, { headers: privateHeaders });
+        return Response.json({ ...value, complete: value.nextCursor === null }, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
     .post('/v1/me/library-copies', { body: t.Object({ ...command, release: readId, ...copyChanges }, closed),
@@ -113,14 +113,14 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     .get('/v1/me/library-loans', { query: t.Object({ ...pageQuery,
       state: t.Optional(t.Union([t.Literal('active'), t.Literal('overdue'), t.Literal('returned')])) }, closed),
       response: { 200: t.Object({ items: t.Array(loanView, { maxItems: LIBRARY_RECORD_COST.page }),
-        nextCursor: t.Nullable(t.String()) }, closed), ...errors },
+        nextCursor: t.Nullable(t.String()), complete: t.Boolean() }, closed), ...errors },
     }, async ({ request, query }) => {
       if (!deps.libraryLoans) return unavailable();
       try {
         await own(request, query.actingSubject);
         const result = await deps.libraryLoans.page(query.actingSubject, query);
         await own(request, query.actingSubject);
-        return Response.json(result, { headers: privateHeaders });
+        return Response.json({ ...result, complete: result.nextCursor === null }, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
     .post('/v1/me/library-loans', { body: t.Object({ ...command, copy: readId, direction: loanDirection,
