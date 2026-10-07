@@ -58,15 +58,6 @@ const ratingObservationKeys = ['realm', 'context', 'work', 'main', 'slot', 'obse
  * and delete it here, because declaring both is an error.
  */
 export const establishedDeclarations: Readonly<Record<string, EstablishedDeclaration>> = {
-  'work-author-credit-v1': {
-    canonical: { credit: only(rv('AuthorCredit')), revision: only(rv('AuthorCreditRevision')) },
-    binding: {
-      required: ['credit', 'revision', 'work', 'work-head', 'key', 'ordinal', 'actor', 'receipt', 'scope',
-        'epoch', 'intent'],
-      optional: ['source-role'], roles: ['credit', 'revision'],
-      demandedBy: [rv('AuthorCredit'), rv('AuthorCreditRevision')],
-    },
-  },
   'work-metadata-v1': { canonical: { work: only(creativeWork), 'main-version': only(rv('MainVersion')) } },
   'content-publication-v1': {
     canonical: { variant: only(rv('ContentVariant')), decision: only(rv('ContentPublicationDecision')) },
@@ -117,18 +108,6 @@ export const establishedDeclarations: Readonly<Record<string, EstablishedDeclara
     binding: { required: ratingObservationKeys, optional: ['value', 'predecessor'],
       roles: ratingObservationRoles, demandedBy: [rv('RatingObservation'), rv('RatingObservationRevision')] },
   },
-  'work-address-disposition-v1': {
-    canonical: {
-      'retired-route': { types: [rv('RouteBinding')], when: [{ path: rv('routeState'), value: rv('Retired') }] },
-      'merged-route': { types: [rv('RouteBinding')], when: [{ path: rv('routeState'), value: rv('Redirected') },
-        { path: rv('routeDisposition'), value: rv('Merged') }] },
-    },
-  },
-  'work-address-lifecycle-v1': {
-    canonical: { redirect: { types: [rv('RouteBinding')],
-      when: [{ path: rv('routeState'), value: rv('Redirected') }] } },
-  },
-  'work-address-claim-v1': { canonical: { binding: only(rv('RouteBinding')) } },
   'translation-link-v1': {
     canonical: { link: only(rv('TranslationLink')) },
     binding: {
