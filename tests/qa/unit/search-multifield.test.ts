@@ -15,7 +15,7 @@ const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111
 const id = (n: number) => `https://rezics.com/id/${String(n).padStart(8, '0')}-1111-4111-8111-111111111111`;
 const value = (text: string) => ({ type: 'literal', value: text });
 
-function fixture(titleCount = 1, titleReady = true) {
+function fixture(bodyCount = 1, titleReady = true) {
   const calls: string[] = [];
   const fuseki = { commandHealth: async () => ({ moduleVersion: COMMAND_MODULE_VERSION,
     profiles: {}, instanceId: '11111111-1111-4111-8111-111111111111',
@@ -35,8 +35,8 @@ function fixture(titleCount = 1, titleReady = true) {
     }
     if (sparql.includes('?titleCount') && sparql.includes('text:query')) {
       return { results: { bindings: [{ epoch: value('epoch'), sequence: value('7'),
-        indexGeneration: value(generation), titleCount: value(String(titleCount)),
-        bodyCount: value('1'), unit: value(id(1)), titleScore: value('2.25'),
+        indexGeneration: value(generation), titleCount: value('0'),
+        bodyCount: value(String(bodyCount)), unit: value(id(1)), titleScore: value('1000000'),
         bodyScore: value('3.5'), work: value(id(2)), main: value(id(3)),
         contribution: value(id(4)), revision: value(id(5)), selection: value(id(6)),
         language: value('zh') }] } };
@@ -48,20 +48,28 @@ function fixture(titleCount = 1, titleReady = true) {
   return { calls, env };
 }
 
-test('SEARCH14: title/body binds one public unit, sums one score per field and ignores labels', async () => {
+test('SEARCH14: complete maintained Work names join one current public body and sum field scores', async () => {
   const { calls, env } = fixture();
   const result = await queryPublicMainTitleBody(env,
     { titleTerm: '星海', bodyTerm: '中文', language: 'zh' });
   expect(result.total).toBe(1);
-  expect(result.results[0]).toMatchObject({ work: id(2), mainVersion: id(3), score: 5.75 });
+  expect(result.results[0]).toMatchObject({ work: id(2), mainVersion: id(3),
+    contribution: id(4), revision: id(5), selection: id(6), language: 'zh', score: 1000003.5 });
   const joined = calls.filter(query => query.includes('?titleCount') && query.includes('text:query'));
   expect(joined).toHaveLength(1);
-  expect(joined[0]).toContain('(?unit ?titleScore) text:query (rv:publicTitle');
+  expect(joined[0]).toContain('rv:rankedText(rv:publicTitle, "星海", 1');
+  expect(joined[0]).toContain('STR(?work)');
+  expect(joined[0]).toContain(String.raw`\"names\":\"all\",\"resources\"`);
+  expect(joined[0]).toContain('BIND(1000000 AS ?titleScore)');
   expect(joined[0]).toContain('(?unit ?bodyScore) text:query (rv:searchBody');
+  expect(joined[0]).toContain('?unit a rv:MatchUnit ; rv:disclosure rv:Public');
+  expect(joined[0]).toContain('?main rv:selectionHead ?selection');
+  expect(joined[0]).toContain('FILTER(?language = "zh")');
+  expect(joined[0]).not.toContain('text:query (rv:publicTitle');
   expect(joined[0]).not.toContain('rdfs:label');
 });
 
-test('SEARCH14/SEARCH10: the dedicated title field has its own typed raw-hit bound', async () => {
+test('SEARCH14/SEARCH10: body candidates retain their typed raw-hit bound', async () => {
   const { env } = fixture(513);
   await expect(queryPublicMainTitleBody(env,
     { titleTerm: '星海', bodyTerm: '中文', language: 'zh' }))

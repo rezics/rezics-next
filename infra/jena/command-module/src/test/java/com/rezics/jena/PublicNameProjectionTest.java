@@ -643,6 +643,172 @@ public class PublicNameProjectionTest {
             assertTrue(page.hits().stream().allMatch(hit->hit.key()==null));
         } finally {data.end();data.close();}
     }
+    private record CatalogueFixture(FilteredGraphTextIndex index, DatasetGraphText data) {}
+    private static CatalogueFixture catalogueFixture() {
+        var definition=new EntityDefinition("uri","label","graph");
+        definition.set("publicTitle",p("publicTitle"));definition.set("body",p("searchBody"));
+        definition.setLangField("lang");definition.setUidField("uid");
+        var config=new TextIndexConfig(definition);config.setValueStored(true);
+        var index=new FilteredGraphTextIndex(new TextIndexLucene(new ByteBuffersDirectory(),config));
+        return new CatalogueFixture(index,new DatasetGraphText(org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(),index,new TextDocProducerTriples(index)));
+    }
+    private record CatalogueSelection(Node selection, Node contribution, Node decision, Node draft, Node body) {}
+    private static CatalogueSelection catalogueSelection(DatasetGraph data, int n, Node owner, Node context, String language) {
+        Node selection=id(n),contribution=id(n+1),decision=id(n+2),draft=id(n+3),body=id(n+4);
+        data.add(CURRENT,owner,p("selectionHead"),selection);
+        data.add(CURRENT,contribution,p("work"),WORK);data.add(CURRENT,contribution,p("publicationHead"),decision);
+        data.add(CURRENT,contribution,p("author"),id(90000));
+        data.add(REVISION_GRAPH,selection,RDF.type.asNode(),p("PublicationSelection"));
+        for (var fact:java.util.Map.of("work",WORK,"mainVersion",MAIN,"context",context,"contribution",contribution,
+            "publicationDecision",decision,"selectedDraft",draft,"language",NodeFactory.createLiteralString(language)).entrySet())
+            data.add(REVISION_GRAPH,selection,p(fact.getKey()),fact.getValue());
+        data.add(REVISION_GRAPH,decision,RDF.type.asNode(),p("PublicationDecision"));
+        for(var fact:java.util.Map.of("component",contribution,"contribution",contribution,"work",WORK,
+            "selectedDraft",draft,"disclosure",p("Public")).entrySet())data.add(REVISION_GRAPH,decision,p(fact.getKey()),fact.getValue());
+        data.add(REVISION_GRAPH,draft,RDF.type.asNode(),p("RevisionAnchor"));data.add(REVISION_GRAPH,draft,p("component"),contribution);
+        data.add(PUBLIC,body,RDF.type.asNode(),p("MatchUnit"));
+        for(var fact:java.util.Map.of("work",WORK,"mainVersion",MAIN,"context",context,"selection",selection,
+            "contribution",contribution,"revision",draft,"language",NodeFactory.createLiteralString(language),"disclosure",p("Public")).entrySet())
+            data.add(PUBLIC,body,p(fact.getKey()),fact.getValue());
+        data.add(PUBLIC,body,p("searchBody"),NodeFactory.createLiteralLang("Exact selected witness body",language));
+        return new CatalogueSelection(selection,contribution,decision,draft,body);
+    }
+    private static List<FilteredGraphTextIndex.RankHit> catalogueNameHits(CatalogueFixture fixture, String language, String realm, String author) {
+        return fixture.index().ranked(p("searchBody"),"Complete boundary alias",64,null,fixture.data(),
+            new FilteredGraphTextIndex.RankScope(realm,language,author,true)).hits().stream().filter(hit->hit.key()!=null).toList();
+    }
+    @Test public void completeNameWitnessReachesTheLastAdmittedLanguageAndAuthorWithoutASampleCap() {
+        var fixture=catalogueFixture();var data=fixture.data();data.begin(ReadWrite.WRITE);
+        String language;CatalogueSelection last;
+        try {
+            publishedOwner(data);data.delete(CURRENT,MAIN,p("selectionHead"),SELECTION);
+            var selections=new java.util.HashMap<Node,CatalogueSelection>();
+            for(int i=0;i<64;i++) {
+                var selected=catalogueSelection(data,20000+i*10,MAIN,MAIN,"en-x"+String.format("%02d",i));
+                selections.put(selected.selection(),selected);
+            }
+            // Select the actual final TDB owner-index row, not insertion order.
+            var heads=data.find(CURRENT,MAIN,p("selectionHead"),Node.ANY);Node finalHead=null;
+            try {while(heads.hasNext())finalHead=heads.next().getObject();}finally{org.apache.jena.atlas.iterator.Iter.close(heads);}
+            last=selections.get(finalHead);assertNotNull(last);
+            var languages=data.find(REVISION_GRAPH,finalHead,p("language"),Node.ANY);
+            try{language=languages.next().getObject().getLiteralLexicalForm();}finally{org.apache.jena.atlas.iterator.Iter.close(languages);}
+            data.deleteAny(REVISION_GRAPH,finalHead,p("language"),Node.ANY);
+            data.add(REVISION_GRAPH,finalHead,p("language"),NodeFactory.createLiteralString("en-"+language.substring(3).toUpperCase(java.util.Locale.ROOT)));
+            set(data,last.contribution(),"author",id(90001));
+            data.add(CURRENT,WORK,uri("https://schema.org/alternateName"),NodeFactory.createLiteralLang("Complete boundary alias","fr"));
+            refresh(data,WORK,"urn:receipt:last-language-name");data.commit();
+        } finally {data.end();}
+        data.begin(ReadWrite.READ);
+        try {
+            try(var cost=new CommandWork()) {
+                var hits=catalogueNameHits(fixture,language.toUpperCase(java.util.Locale.ROOT),null,id(90001).getURI());
+                assertEquals(1,hits.size());assertEquals(last.body().getURI(),hits.getFirst().unit());
+                assertEquals(128,counter(cost,"catalogue_name_witness_heads_visited")); // Candidate plus canonical group witness.
+            }
+            assertTrue(catalogueNameHits(fixture,"zz",null,null).isEmpty());
+            assertTrue(catalogueNameHits(fixture,language,null,id(90002).getURI()).isEmpty());
+        } finally {data.end();}
+        data.begin(ReadWrite.WRITE);
+        try {
+            // Native Main CAS rejects a 65th language before it can become current.
+            data.add(CURRENT,MAIN,p("head"),id(91000));
+            String update="PREFIX rv: <https://rezics.com/vocab/> DELETE { GRAPH <"+CommandPolicy.CURRENT+"> { <"+MAIN.getURI()+"> rv:selectionHead ?prior ; rv:head <"+id(91000).getURI()+"> } } "
+                +"INSERT { GRAPH <"+CommandPolicy.CURRENT+"> { <"+MAIN.getURI()+"> rv:selectionHead <"+id(91001).getURI()+"> ; rv:head <"+id(91002).getURI()+"> } GRAPH <"+CommandPolicy.REVISIONS+"> { <"+id(91001).getURI()+"> rv:language \"zz\" } GRAPH <"+CommandPolicy.RECEIPTS+"> { <urn:receipt:language-bound> rv:outcome rv:Succeeded } } "
+                +"WHERE { GRAPH <"+CommandPolicy.CURRENT+"> { <"+MAIN.getURI()+"> rv:head <"+id(91000).getURI()+"> . OPTIONAL { <"+MAIN.getURI()+"> rv:selectionHead ?prior } } }";
+            var plan=CommandPolicy.parse(update,"urn:receipt:language-bound");
+            assertEquals("Main language head limit exceeded",HeadCasPolicy.capture(data,plan,"urn:receipt:language-bound").error());
+            data.add(CURRENT,MAIN,p("selectionHead"),id(91001));
+            assertThrows(TextIndexException.class,()->catalogueNameHits(fixture,"zz",null,null));
+        } finally {data.abort();data.end();data.close();}
+    }
+    @Test public void exactLanguageAndRealmNameWitnessesDenyCurrentWithdrawalsBeforeRepair() throws Exception {
+        var fixture=catalogueFixture();var data=fixture.data();data.begin(ReadWrite.WRITE);
+        CatalogueSelection selected;Node slot;
+        try {
+            publishedOwner(data);space(data);realm(data,REALM);
+            String key=REALM.getURI()+"\0"+MAIN.getURI();
+            slot=uri("urn:rezics:realm-selection:"+java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(key.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+            data.add(CURRENT,slot,RDF.type.asNode(),p("RealmPublicationSlot"));
+            data.add(CURRENT,slot,p("realm"),REALM);data.add(CURRENT,slot,p("work"),WORK);data.add(CURRENT,slot,p("mainVersion"),MAIN);
+            selected=catalogueSelection(data,30000,MAIN,MAIN,"zh-Hant");
+            var adoption=catalogueSelection(data,30100,slot,REALM,"zh-Hant");
+            // Optional language copy is absent on legacy Realm selections.
+            data.deleteAny(REVISION_GRAPH,adoption.selection(),p("language"),Node.ANY);
+            // Adoption points to the same eligible Contribution decision/draft.
+            for(String predicate:List.of("contribution","publicationDecision","selectedDraft")) {
+                Node value=predicate.equals("contribution")?selected.contribution():predicate.equals("publicationDecision")?selected.decision():selected.draft();
+                data.deleteAny(REVISION_GRAPH,adoption.selection(),p(predicate),Node.ANY);data.add(REVISION_GRAPH,adoption.selection(),p(predicate),value);
+            }
+            setPublic(data,adoption.body(),"contribution",selected.contribution());setPublic(data,adoption.body(),"revision",selected.draft());
+            data.add(REVISION_GRAPH,adoption.selection(),p("slot"),slot);
+            for(int i=0;i<2000;i++)data.add(CURRENT,id(40000+i),p("selectionHead"),adoption.selection());
+            data.add(CURRENT,WORK,uri("https://schema.org/alternateName"),NodeFactory.createLiteralLang("Complete boundary alias","fr"));
+            refresh(data,WORK,"urn:receipt:exact-witness-name");data.commit();
+        } finally {data.end();}
+        data.begin(ReadWrite.WRITE);
+        try {
+            assertEquals(1,catalogueNameHits(fixture,"zh-Hant",null,null).size());
+            try(var cost=new CommandWork()) {
+                assertEquals(1,catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).size());
+                assertEquals(2,counter(cost,"catalogue_name_witness_heads_visited"));
+            }
+            assertTrue(catalogueNameHits(fixture,"en",REALM.getURI(),null).isEmpty()); // No Main fallback.
+            for(String reason:List.of("publication","draft","contribution")) {
+                if(reason.equals("publication"))set(data,selected.contribution(),"publicationHead",id(99999));
+                if(reason.equals("draft"))data.add(REVISION_GRAPH,selected.draft(),RDF.type.asNode(),p("ErasedRevision"));
+                if(reason.equals("contribution"))data.add(CURRENT,selected.contribution(),p("protectionHead"),id(99999));
+                assertTrue(PublicNameProjection.visible(data,WORK)); // English remains live.
+                assertTrue(reason,catalogueNameHits(fixture,"zh-Hant",null,null).isEmpty());
+                assertTrue(reason,catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).isEmpty());
+                set(data,selected.contribution(),"publicationHead",selected.decision());
+                data.delete(REVISION_GRAPH,selected.draft(),RDF.type.asNode(),p("ErasedRevision"));
+                data.deleteAny(CURRENT,selected.contribution(),p("protectionHead"),Node.ANY);
+            }
+            data.delete(CURRENT,MAIN,p("selectionHead"),selected.selection());
+            assertTrue(catalogueNameHits(fixture,"zh-Hant",null,null).isEmpty());
+            assertEquals(1,catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).size()); // Independent current adoption.
+            data.add(CURRENT,MAIN,p("selectionHead"),selected.selection());
+            for(Node parent:List.of(REALM,SPACE))for(String reason:List.of("private","unlisted","protection","merged","erased")) {
+                if(reason.equals("private"))set(data,parent,"disclosure",p("Private"));
+                if(reason.equals("unlisted"))set(data,parent,"listing",NodeFactory.createLiteralString("unlisted"));
+                if(reason.equals("protection"))data.add(CURRENT,parent,p("protectionHead"),id(99999));
+                if(reason.equals("merged"))data.add(CURRENT,parent,p("mergedInto"),id(99999));
+                if(reason.equals("erased")){data.add(CURRENT,parent,p("head"),id(99999));data.add(REVISION_GRAPH,id(99999),RDF.type.asNode(),p("ErasedRevision"));}
+                assertTrue(parent+" "+reason,catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).isEmpty());
+                assertEquals(1,catalogueNameHits(fixture,"zh-Hant",null,null).size());
+                set(data,parent,"disclosure",p("Public"));data.deleteAny(CURRENT,parent,p("listing"),Node.ANY);
+                for(String predicate:List.of("protectionHead","mergedInto","head"))data.deleteAny(CURRENT,parent,p(predicate),Node.ANY);
+                data.delete(REVISION_GRAPH,id(99999),RDF.type.asNode(),p("ErasedRevision"));
+            }
+            set(data,REALM,"realmState",p("Retired"));assertTrue(catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).isEmpty());
+            set(data,REALM,"realmState",p("Active"));
+            var adoptionHeads=data.find(CURRENT,slot,p("selectionHead"),Node.ANY);Node adoptionHead;
+            try{adoptionHead=adoptionHeads.next().getObject();}finally{org.apache.jena.atlas.iterator.Iter.close(adoptionHeads);}
+            set(data,slot,"selectionHead",id(99999));assertTrue(catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).isEmpty());
+            set(data,slot,"selectionHead",adoptionHead);
+            set(data,slot,"work",id(99999));assertTrue(catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).isEmpty());set(data,slot,"work",WORK);
+            set(data,slot,"mainVersion",id(99999));assertTrue(catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).isEmpty());set(data,slot,"mainVersion",MAIN);
+            data.add(PUBLIC,id(99998),p("selection"),selected.selection());assertTrue(catalogueNameHits(fixture,"zh-Hant",null,null).isEmpty());
+            data.deleteAny(PUBLIC,id(99998),Node.ANY,Node.ANY);
+            assertEquals(1,catalogueNameHits(fixture,"zh-Hant",null,null).size());assertEquals(1,catalogueNameHits(fixture,"zh-Hant",REALM.getURI(),null).size());
+            // Existing Realm body selections declare their immutable slot;
+            // general body ranking must not require the producer's hash spelling.
+            Node legacySlot=id(99997);
+            var slotRows=data.find(CURRENT,slot,Node.ANY,Node.ANY);var facts=new java.util.ArrayList<Quad>();
+            try{slotRows.forEachRemaining(facts::add);}finally{org.apache.jena.atlas.iterator.Iter.close(slotRows);}
+            for(Quad fact:facts)data.add(CURRENT,legacySlot,fact.getPredicate(),fact.getObject());
+            data.deleteAny(CURRENT,slot,Node.ANY,Node.ANY);
+            data.deleteAny(REVISION_GRAPH,adoptionHead,p("slot"),Node.ANY);data.add(REVISION_GRAPH,adoptionHead,p("slot"),legacySlot);
+            var realmScope=new FilteredGraphTextIndex.RankScope(REALM.getURI(),"zh-Hant",null,true);
+            assertEquals(1,fixture.index().ranked(p("searchBody"),"Exact selected witness body",64,null,data,realmScope).hits().stream().filter(hit->hit.key()!=null).count());
+            data.add(REVISION_GRAPH,adoptionHead,p("slot"),id(99996));
+            assertTrue(fixture.index().ranked(p("searchBody"),"Exact selected witness body",64,null,data,realmScope).hits().stream().noneMatch(hit->hit.key()!=null));
+        } finally {data.abort();data.end();data.close();}
+    }
+    private static void setPublic(DatasetGraph data,Node subject,String predicate,Node object) {
+        data.deleteAny(PUBLIC,subject,p(predicate),Node.ANY);data.add(PUBLIC,subject,p(predicate),object);
+    }
     @Test public void catalogueCacheRecipeUsesBoundedOwnerSamplesAndExactAdmissionUnderGrowth() {
         for (int population:List.of(64,1001)) {
             var data=org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph(); data.begin(ReadWrite.WRITE);

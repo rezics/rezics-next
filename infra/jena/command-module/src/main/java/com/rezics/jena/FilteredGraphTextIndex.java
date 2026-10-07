@@ -475,23 +475,33 @@ public final class FilteredGraphTextIndex implements TextIndex {
         } else {
             // A Zone population contains actual adoptions, not Realm fallbacks.
             if (!context.equals(uri(scope.realm()))) return null;
-            boolean adopted = false;
-            var slots = data.find(current, Node.ANY, property("selectionHead"), selection);
-            try {
-                while (slots.hasNext()) {
-                    Node slot = slots.next().getSubject();
-                    if (data.contains(current, slot, org.apache.jena.vocabulary.RDF.type.asNode(), property("RealmPublicationSlot"))
-                        && data.contains(current, slot, property("realm"), uri(scope.realm()))
-                        && data.contains(current, slot, property("mainVersion"), main)) { adopted = true; break; }
-                }
-            } finally { org.apache.jena.atlas.iterator.Iter.close(slots); }
-            if (!adopted) return null;
+            // Realm selections carry their exact immutable slot owner. Probe
+            // that owner directly rather than walking reverse head references.
+            Node slot = namedValue(data, uri(CommandPolicy.REVISIONS), selection, "slot");
+            if (!PublicNameProjection.publicRealm(data, uri(scope.realm()))
+                || slot == null || !slot.isURI()
+                || !data.contains(current, slot, org.apache.jena.vocabulary.RDF.type.asNode(), property("RealmPublicationSlot"))
+                || !data.contains(current, slot, property("realm"), uri(scope.realm()))
+                || !data.contains(current, slot, property("mainVersion"), main)
+                || !java.util.Objects.equals(namedValue(data, current, slot, "work"), namedValue(data, PUBLIC_GRAPH, uri(id), "work"))
+                || !data.contains(current, slot, property("selectionHead"), selection)) return null;
         }
         return facts.key();
     }
+    private static Node realmOwner(String realm, Node main) {
+        try {
+            String key = realm + "\0" + main.getURI();
+            return uri("urn:rezics:realm-selection:" + java.util.HexFormat.of().formatHex(
+                java.security.MessageDigest.getInstance("SHA-256").digest(key.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+        } catch (java.security.NoSuchAlgorithmException unavailable) { throw new IllegalStateException(unavailable); }
+    }
     private static Node namedValue(org.apache.jena.sparql.core.DatasetGraph data, Node graph, Node subject, String predicate) {
         var rows = data.find(graph, subject, uri(RV + predicate), Node.ANY);
-        try { return rows.hasNext() ? rows.next().getObject() : null; }
+        try {
+            if (!rows.hasNext()) return null;
+            Node value = rows.next().getObject();
+            return rows.hasNext() ? null : value;
+        }
         finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
     }
     /** A complete Work-name document retains its cursor identity, while an
@@ -501,17 +511,30 @@ public final class FilteredGraphTextIndex implements TextIndex {
         Node work = namedValue(data, PUBLIC_GRAPH, uri(id), "resource");
         Node main = work == null ? null : namedValue(data, CURRENT_GRAPH, work, "mainVersion");
         if (!PublicNameProjection.productResource(main)) return null;
-        Node owner = main;
-        if (scope.realm() != null) {
-            try {
-                String key = scope.realm() + "\0" + main.getURI();
-                owner = uri("urn:rezics:realm-selection:" + java.util.HexFormat.of().formatHex(
-                    java.security.MessageDigest.getInstance("SHA-256").digest(key.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
-            } catch (java.security.NoSuchAlgorithmException unavailable) { throw new IllegalStateException(unavailable); }
-        }
+        Node context = scope.realm() == null ? main : uri(scope.realm());
+        if (scope.realm() != null && !PublicNameProjection.publicRealm(data, context)) return null;
+        Node owner = scope.realm() == null ? main : realmOwner(scope.realm(), main);
+        if (scope.realm() != null && !work.equals(namedValue(data, CURRENT_GRAPH, owner, "work"))) return null;
+        // HeadCasPolicy admits <=64 distinct Main languages, and a Realm slot
+        // has one head. Read that entire owner neighbourhood, checking overflow
+        // rather than silently treating an output limit as a language limit.
+        int bound = scope.realm() == null ? 64 : 1;
+        List<Node> selections = new ArrayList<>();
         var heads = data.find(CURRENT_GRAPH, owner, uri(RV + "selectionHead"), Node.ANY);
-        try { for (int count = 0; count < 64 && heads.hasNext(); count++) {
-            Node selection = heads.next().getObject();
+        try {
+            while (selections.size() < bound && heads.hasNext()) {
+                selections.add(heads.next().getObject());
+                CommandWork.count("catalogue_name_witness_heads_visited", 1);
+            }
+            if (heads.hasNext()) throw new TextIndexException("catalogue name selection owner exceeds its admitted bound");
+        } finally { org.apache.jena.atlas.iterator.Iter.close(heads); }
+        for (Node selection : selections) {
+            Node language = namedValue(data, uri(CommandPolicy.REVISIONS), selection, "language");
+            // Legacy admitted selections may omit this optional revision copy;
+            // their unique selected public body still carries the language.
+            if (language != null && (!language.isLiteral() || scope.language() != null
+                && !scope.language().equalsIgnoreCase(language.getLiteralLexicalForm()))) continue;
+            if (!PublicNameProjection.publishedSelection(data, work, main, selection, context)) continue;
             // One current language selection has one public body unit. The
             // selection object index gives the same bounded witness for old
             // and new anchors; no optional revision link or dual reader.
@@ -521,10 +544,15 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 if (units.hasNext()) unit = units.next().getSubject();
                 if (units.hasNext()) continue; // Ambiguous current projection fails closed.
             } finally { org.apache.jena.atlas.iterator.Iter.close(units); }
+            Node unitLanguage = unit == null ? null : namedValue(data, PUBLIC_GRAPH, unit, "language");
             if (unit != null && unit.isURI() && work.equals(namedValue(data, PUBLIC_GRAPH, unit, "work"))
                 && main.equals(namedValue(data, PUBLIC_GRAPH, unit, "mainVersion"))
+                && unitLanguage != null && unitLanguage.isLiteral() && (language == null
+                    || language.getLiteralLexicalForm().equalsIgnoreCase(unitLanguage.getLiteralLexicalForm()))
+                && namedValue(data, uri(CommandPolicy.REVISIONS), selection, "contribution").equals(namedValue(data, PUBLIC_GRAPH, unit, "contribution"))
+                && namedValue(data, uri(CommandPolicy.REVISIONS), selection, "selectedDraft").equals(namedValue(data, PUBLIC_GRAPH, unit, "revision"))
                 && admittedMain(data, unit.getURI(), scope) != null) return unit.getURI();
-        } } finally { org.apache.jena.atlas.iterator.Iter.close(heads); }
+        }
         return null;
     }
     private static boolean canonicalGroupHit(org.apache.jena.sparql.core.DatasetGraph data, RankScope scope,

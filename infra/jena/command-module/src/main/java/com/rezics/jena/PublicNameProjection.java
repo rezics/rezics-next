@@ -57,7 +57,7 @@ final class PublicNameProjection {
         return (disclosure == null ? !requireDisclosure : disclosure.equals(p("Public")))
             && (listing == null || listing.equals(NodeFactory.createLiteralString("listed")));
     }
-    private static boolean publicRealm(DatasetGraph data, Node realm) {
+    static boolean publicRealm(DatasetGraph data, Node realm) {
         if (!productResource(realm)) return false;
         Node space = one(data, realm, "space");
         return productResource(space) && has(data, realm, "realmState", p("Active")) && space != null
@@ -132,14 +132,22 @@ final class PublicNameProjection {
             if (count == 64) throw new IllegalArgumentException("Main language heads exceed their admitted bound");
             Node selection = heads.next().getObject();
             CommandWork.count("public_name_heads_visited", 1);
-            Node contribution = revisionValue(data, selection, "contribution");
-            Node decision = revisionValue(data, selection, "publicationDecision");
-            Node draft = revisionValue(data, selection, "selectedDraft");
-            if (contribution != null && decision != null && draft != null && !withdrawn(data, contribution)
+            if (publishedSelection(data, work, main, selection, main)) return true;
+        } } finally { org.apache.jena.atlas.iterator.Iter.close(heads); }
+        return false;
+    }
+    /** Exact selected publication authority, independently of another live
+     * language keeping the Work name visible. Uses only owned revision probes. */
+    static boolean publishedSelection(DatasetGraph data, Node work, Node main, Node selection, Node context) {
+        if (withdrawn(data, main) || !type(data, main, RV + "MainVersion") || !has(data, main, "work", work)) return false;
+        Node contribution = revisionValue(data, selection, "contribution");
+        Node decision = revisionValue(data, selection, "publicationDecision");
+        Node draft = revisionValue(data, selection, "selectedDraft");
+        return contribution != null && decision != null && draft != null && !withdrawn(data, contribution)
                 && data.contains(REVISIONS, selection, RDF.type.asNode(), p("PublicationSelection"))
                 && data.contains(REVISIONS, selection, p("work"), work)
                 && data.contains(REVISIONS, selection, p("mainVersion"), main)
-                && data.contains(REVISIONS, selection, p("context"), main)
+                && data.contains(REVISIONS, selection, p("context"), context)
                 && has(data, contribution, "work", work)
                 && has(data, contribution, "publicationHead", decision)
                 && data.contains(REVISIONS, decision, RDF.type.asNode(), p("PublicationDecision"))
@@ -150,9 +158,7 @@ final class PublicNameProjection {
                 && data.contains(REVISIONS, decision, p("disclosure"), p("Public"))
                 && data.contains(REVISIONS, draft, RDF.type.asNode(), p("RevisionAnchor"))
                 && data.contains(REVISIONS, draft, p("component"), contribution)
-                && !data.contains(REVISIONS, draft, RDF.type.asNode(), p("ErasedRevision"))) return true;
-        } } finally { org.apache.jena.atlas.iterator.Iter.close(heads); }
-        return false;
+                && !data.contains(REVISIONS, draft, RDF.type.asNode(), p("ErasedRevision"));
     }
     static void refresh(DatasetGraph data, CommandPolicy.Plan plan, String receipt, java.util.List<CommandService.Validation> validations, java.util.List<SearchDeltaJournal.Change> changes) {
         if (plan.bootstrap() || data.contains(uri(CommandPolicy.RECEIPTS), uri(receipt), p("namePoliciesComplete"),
