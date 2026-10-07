@@ -7,8 +7,8 @@ import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
-  parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, SONNET_MODEL,
-  failingTestFiles, memoryFloorRefusal, type Ledger, type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
+  parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
+  failingTestFiles, memoryFloorRefusal, streamUnitBaseline, type Ledger, type Task, treeMentions, usageLevel, validateBrief } from './goalctl.ts';
 
 const brief = `---
 id: G-040
@@ -429,6 +429,9 @@ describe('goalctl Goals', () => {
     expect(isHeavyTest(['--affected'])).toBe(true);
     expect(isHeavyTest(['--affected=main~3'])).toBe(true);
     expect(isHeavyTest(['--tier', 'integration'])).toBe(true);
+    expect(isHeavyTest(['--result-file', 'slot.json', '--tier', 'integration'])).toBe(true);
+    expect(isHeavyTest(['--tier', 'integration', '--file', 'tests/qa/integration/a.test.ts'])).toBe(false);
+    expect(isHeavyTest(['--result-file', 'slot.json', '--tier', 'owner', '--file', 'scripts/goal/regress.test.ts'])).toBe(false);
     expect(isHeavyTest(['--heavy', 'tests/qa/integration/a.test.ts'])).toBe(true);
     expect(isHeavyTest(['--affected', '--list'])).toBe(false);
     expect(isHeavyTest(['tests/qa/integration/a.test.ts'])).toBe(false);
@@ -1046,6 +1049,45 @@ ${edit}
     }, 30_000);
   }
 
+  test('a stream cannot inherit the guard failure its first merge introduced', async () => {
+    const r = repo();
+    try {
+      const guard = repositoryGuards[0].file;
+      mkdirSync(join(r.dir, guard, '..'), { recursive: true });
+      writeFileSync(join(r.dir, guard), `import { test, expect } from 'bun:test';\nimport { readFileSync } from 'node:fs';\n`
+        + `test('inventory stays valid', () => expect(readFileSync('inventory.ts', 'utf8')).toBe('valid'));\n`);
+      writeFileSync(join(r.dir, 'inventory.ts'), 'valid');
+      r.git('add', '.'); r.git('commit', '-qm', 'Baseline inventory');
+      const baseline = r.git('rev-parse', 'main');
+      const task = await r.start('G-001');
+      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push('inventory.ts'); r.save(ledger);
+      r.commit(task);
+      writeFileSync(join(task.worktree, 'inventory.ts'), 'invalid');
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qam', 'Break inventory']).status).toBe(0);
+      await r.stopFixture(task.id);
+      expect(r.run(['merge', task.id, '--skip-unit-gate']).status).toBe(0);
+      const firstMerge = r.git('rev-parse', 'main');
+      writeFileSync(join(task.worktree, 'inventory.ts'), 'still invalid');
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qam', 'Continue stream']).status).toBe(0);
+      const result = r.run(['merge', task.id]);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain(`against main ${baseline.slice(0, 12)}`);
+      expect(result.stderr).toContain(`introduced unit failures; not merging:\n  ${guard}`);
+      expect(r.git('rev-parse', 'main')).toBe(firstMerge);
+      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+    } finally { r.cleanup(); }
+  }, 30_000);
+
+  test('stream baselines include shared and landed events and keep the earliest merge', () => {
+    const event = (before: string, after: string, taskIds: string[]) =>
+      ({ before, after, taskIds, goal: 'alpha', at: '2026-10-07' });
+    const events = [event('a', 'a', ['stream']), event('a', 'b', ['other']),
+      event('b', 'c', ['peer', 'stream']), event('d', 'e', ['stream'])];
+    expect(streamUnitBaseline(events, ['stream'], 'head')).toBe('b');
+    expect(streamUnitBaseline(events, ['peer'], 'head')).toBe('b');
+    expect(streamUnitBaseline(events, ['new'], 'head')).toBe('head');
+  });
+
   for (const outcome of ['introduced', 'inherited'] as const) {
     test(`a guard absent from the affected plan has its ${outcome} failure compared with committed main`, async () => {
       const r = repo();
@@ -1575,6 +1617,63 @@ describe('goalctl archive', () => {
   };
   const git = (dir: string, ...args: string[]) => spawnSync('git', args, { cwd: dir, encoding: 'utf8' }).stdout.trim();
 
+  for (const operation of ['fast-forward', 'own-only commit'] as const) {
+    test(`${operation} retries a held Git index until its owner releases it`, () => {
+      const dir = repo();
+      const lock = join(dir, '.git/index.lock');
+      try {
+        let args: string[];
+        if (operation === 'fast-forward') {
+          git(dir, 'switch', '-qc', 'worker');
+          writeFileSync(join(dir, 'worker.ts'), 'worker');
+          git(dir, 'add', 'worker.ts');
+          git(dir, 'commit', '-qm', 'Worker');
+          git(dir, 'switch', '-q', 'main');
+          args = ['merge', '--ff-only', 'worker'];
+        } else {
+          writeFileSync(join(dir, 'peer.ts'), 'peer');
+          git(dir, 'add', 'peer.ts');
+          writeFileSync(join(dir, 'code.ts'), 'own edit');
+          args = ['commit', '--only', '-qm', 'Own edit', '--', 'code.ts'];
+        }
+        writeFileSync(lock, 'live owner');
+        const waits: number[] = [];
+        const result = retryGitIndexLock(() => spawnSync('git', args, { cwd: dir, encoding: 'utf8' }), ms => {
+          waits.push(ms);
+          expect(readFileSync(lock, 'utf8')).toBe('live owner');
+          if (waits.length === 2) rmSync(lock); // The simulated owner releases its own lock.
+        });
+        expect(result.status).toBe(0);
+        expect(waits).toEqual([250, 500]);
+        if (operation === 'fast-forward') expect(git(dir, 'rev-parse', 'HEAD')).toBe(git(dir, 'rev-parse', 'worker'));
+        else {
+          expect(git(dir, 'show', '--format=', '--name-only', 'HEAD')).toBe('code.ts');
+          expect(git(dir, 'diff', '--cached', '--name-only')).toBe('peer.ts');
+        }
+      } finally { rmSync(dir, { recursive: true, force: true }); }
+    });
+  }
+
+  test('Git retries are bounded, preserve a live lock and do not retry unrelated failures', () => {
+    const dir = repo();
+    const lock = join(dir, '.git/index.lock');
+    try {
+      writeFileSync(lock, 'live owner');
+      let attempts = 0;
+      const waits: number[] = [];
+      const result = retryGitIndexLock(() => {
+        attempts++;
+        return spawnSync('git', ['commit', '--only', '-qm', 'Own edit', '--', 'code.ts'], { cwd: dir, encoding: 'utf8' });
+      }, ms => waits.push(ms));
+      expect(result.status).not.toBe(0);
+      expect(attempts).toBe(5);
+      expect(waits).toEqual([250, 500, 1000, 2000]);
+      expect(readFileSync(lock, 'utf8')).toBe('live owner');
+      const unrelated = { status: 1, stderr: 'index.lock: Permission denied' };
+      expect(retryGitIndexLock(() => unrelated, () => { throw new Error('unrelated failure retried'); })).toBe(unrelated);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   test('adds files to the orphan archive branch without moving HEAD and keeps earlier entries', () => {
     const dir = repo();
     try {
@@ -1659,6 +1758,90 @@ describe('heavy QA lock', () => {
       },
     };
   }
+
+  test('refresh precedes round-robin Goals and each Goal keeps its arrival order', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'heavy-goal-turns-'));
+    const lockDir = join(root, 'heavy');
+    const alive = () => true;
+    let clock = 100;
+    try {
+      const releaseHolder = await acquireHeavy(['holder'], { lockDir, goal: 'a', alive, bindExit: false, now: () => clock });
+      const runs = [
+        ['a-next', 'a'], ['a-last', 'a'], ['b-next', 'b'], ['b-last', 'b'], ['c-next', 'c'], ['task dev:refresh', 'a'],
+      ].map(([command, goal], index) => {
+        const gate = gatedSleep();
+        const sleeping = gate.next();
+        clock++;
+        const done = acquireHeavy(command!.split(' '), {
+          lockDir, pid: 1000 + index, goal, alive, bindExit: false, now: () => clock, sleep: () => gate.sleep(),
+        });
+        return { command, gate, sleeping, done };
+      });
+      await Promise.all(runs.map(run => run.sleeping));
+      releaseHolder();
+      const served: string[] = [];
+      for (const command of ['task dev:refresh', 'b-next', 'c-next', 'a-next', 'b-last', 'a-last']) {
+        const run = runs.find(run => run.command === command)!;
+        // Polling a later ticket cannot steal the next Goal's turn.
+        if (command === 'b-next') {
+          const a = runs[0]!;
+          const slept = a.gate.next();
+          a.gate.wake();
+          await slept;
+          expect(existsSync(lockDir)).toBe(false);
+        }
+        run.gate.wake();
+        const release = await run.done;
+        served.push(JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')).command);
+        release();
+      }
+      expect(served).toEqual(['task dev:refresh', 'b-next', 'c-next', 'a-next', 'b-last', 'a-last']);
+      expect(ticketRows(join(root, 'heavy-queue'))).toEqual([]);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('a second queued refresh coalesces immediately without releasing the holder', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'heavy-refresh-coalesce-'));
+    const lockDir = join(root, 'heavy');
+    const gate = gatedSleep();
+    const options = { lockDir, alive: () => true, bindExit: false, coalesceRefresh: true };
+    try {
+      const releaseHolder = await acquireHeavy(['holder'], { ...options, coalesceRefresh: false });
+      const sleeping = gate.next();
+      const first = acquireHeavy(['task', 'dev:refresh'], { ...options, pid: 1001, sleep: () => gate.sleep() });
+      await sleeping;
+      const second = await acquireHeavy(['task', 'dev:refresh'], { ...options, pid: 1002,
+        sleep: () => Promise.reject(new Error('duplicate refresh waited')) });
+      expect(second).toBeUndefined();
+      expect(ticketRows(join(root, 'heavy-queue'))).toHaveLength(1);
+      expect(JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')).command).toBe('holder');
+      releaseHolder();
+      gate.wake();
+      (await first)!();
+      expect(ticketRows(join(root, 'heavy-queue'))).toEqual([]);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('a started refresh cannot absorb a later refresh', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'heavy-refresh-started-'));
+    const lockDir = join(root, 'heavy');
+    const gate = gatedSleep();
+    const options = { lockDir, alive: () => true, bindExit: false, coalesceRefresh: true };
+    try {
+      const first = await acquireHeavy(['task', 'dev:refresh'], { ...options, pid: 1001 });
+      const sleeping = gate.next();
+      let secondStarted = false;
+      const second = acquireHeavy(['task', 'dev:refresh'], { ...options, pid: 1002, sleep: () => gate.sleep() })
+        .then(release => { secondStarted = true; return release; });
+      await sleeping;
+      expect(secondStarted).toBe(false);
+      expect(ticketRows(join(root, 'heavy-queue'))).toHaveLength(1);
+      first!();
+      gate.wake();
+      (await second)!();
+      expect(secondStarted).toBe(true);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
 
   test('two heavy waiters are served in arrival order even when the earlier one polls later', async () => {
     const root = mkdtempSync(join(tmpdir(), 'heavy-order-'));

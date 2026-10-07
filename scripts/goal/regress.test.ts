@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { selectTestCommand } from '../qa/test.ts';
-import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, parseRegressArgs, regressionRegistry,
+import { isHeavyTest } from './goalctl.ts';
+import { appendInbox, checkoutNameLength, classify, executionOutcomes, inboxEntries, parseRegressArgs, regressionBatchCommand, regressionRegistry,
   runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
 
 function repo(extraIntegration = 0) {
@@ -42,7 +43,7 @@ function repo(extraIntegration = 0) {
       queueMs: 2, testMs: 3, totalMs: 5, artifactPaths: [directory] };
   };
   const options: RegressionOptions = { repo: dir, stateDir, registry: async () => files.map(file => ({ ...file })),
-    prepare: async () => ({ ok: true, artifactPaths: [] }), runner, waitForTurn: async () => {} };
+    prepare: async () => ({ ok: true, artifactPaths: [] }), runner, slots: 1, waitForTurn: async () => {} };
   const event = (before: string, after: string, goal = 'owner') => {
     mkdirSync(stateDir, { recursive: true });
     const path = join(stateDir, 'merges.jsonl');
@@ -56,7 +57,85 @@ function repo(extraIntegration = 0) {
 }
 
 describe('pinned main-wide regression', () => {
-  test('each batch yields until a queued heavy run finishes without changing the pinned commit', async () => {
+  test('routine selection excludes browser tiers with a resumable reason; explicit full selection runs them', async () => {
+    const r = repo();
+    try {
+      const routine = await r.run({ runId: 'routine' });
+      expect(routine.status).toBe('passed');
+      expect(routine.partial).toBe(false);
+      expect(routine.files.filter(file => file.tier === 'e2e' || file.tier === 'accounts:storybook'))
+        .toEqual(expect.arrayContaining([expect.objectContaining({ outcome: 'excluded', reason: expect.stringContaining('nightly') })]));
+      expect(r.calls.some(call => call.batch.tier === 'e2e' || call.batch.tier === 'accounts:storybook')).toBe(false);
+      expect((await r.run({ resume: 'routine' })).status).toBe('passed');
+      r.calls.length = 0;
+      const full = await r.run({ runId: 'nightly', only: ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook'] });
+      expect(full.status).toBe('passed');
+      expect(full.partial).toBe(false);
+      expect(full.files.every(file => file.outcome === 'passed')).toBe(true);
+    } finally { r.cleanup(); }
+  });
+
+  test('owner and stack batches fit bounded groups and run concurrently only up to available slots', async () => {
+    const r = repo(60);
+    for (const tier of ['owner', 'fault/recovery'] as const) for (let index = 0; index < 32; index++) {
+      const file = `tests/${tier.replace('/', '-')}/extra-${index}.test.ts`;
+      r.files.push({ file, tier, outcome: 'pending' }); r.write(file, 'pass\n');
+    }
+    r.commit();
+    let active = 0;
+    let maximum = 0;
+    const activeTrees = new Set<string>();
+    try {
+      const result = await r.run({ runId: 'parallel', slots: 3, runner: async (...args) => {
+        expect(activeTrees.has(args[0])).toBe(false);
+        activeTrees.add(args[0]); active++; maximum = Math.max(maximum, active);
+        try {
+          await Bun.sleep(1);
+          return await r.runner(...args);
+        } finally { active--; activeTrees.delete(args[0]); }
+      }, waitForTurn: async () => { throw new Error('Light batches must not wait for heavy QA'); } });
+      expect(maximum).toBe(3);
+      expect(result.status).toBe('passed');
+      for (const tier of ['owner', 'integration', 'fault/recovery'] as const) {
+        const batches = result.batches.filter(batch => batch.tier === tier);
+        expect(batches.length).toBeGreaterThan(1);
+        expect(batches.every(batch => batch.files.length <= 15)).toBe(true);
+        expect(batches.flatMap(batch => batch.files).sort()).toEqual(r.files.filter(file => file.tier === tier).map(file => file.file).sort());
+      }
+      const pooled = r.calls.filter(call => ['owner', 'integration', 'fault/recovery'].includes(call.batch.tier));
+      expect(new Set(pooled.map(call => call.checkout)).size).toBe(3);
+      expect(pooled.every(call => call.checkout !== result.checkout)).toBe(true);
+    } finally { r.cleanup(); }
+  });
+
+  test('a failed lane waits for concurrent children to settle and resume retains their passes', async () => {
+    const r = repo(60);
+    let started = 0;
+    let release: (() => void) | undefined;
+    const held = new Promise<void>(done => { release = done; });
+    let heldBatch = '';
+    try {
+      const run = r.run({ runId: 'lane-stop', slots: 2, runner: async (...args) => {
+        if (args[1].tier === 'unit' || args[1].tier === 'model') return r.runner(...args);
+        started++;
+        if (started === 1) { await Bun.sleep(1); throw new Error('lane interrupted'); }
+        heldBatch = args[1].id; await held;
+        return r.runner(...args);
+      } });
+      await Bun.sleep(20);
+      expect(started).toBe(2);
+      expect(existsSync(join(r.options.stateDir, 'regress/lane-stop/lock'))).toBe(true);
+      release!();
+      await expect(run).rejects.toThrow('lane interrupted');
+      expect(r.manifest('lane-stop').batches.find(batch => batch.id === heldBatch)!.state).toBe('done');
+      r.calls.length = 0;
+      const resumed = await r.run({ resume: 'lane-stop', slots: 2 });
+      expect(resumed.status).toBe('passed');
+      expect(r.calls.some(call => call.batch.id === heldBatch)).toBe(false);
+    } finally { release!(); r.cleanup(); }
+  });
+
+  test('only browser batches yield until a queued heavy run finishes without changing the pinned commit', async () => {
     const r = repo();
     const lock = join(r.options.stateDir, 'qa-slots', 'heavy');
     const queue = join(r.options.stateDir, 'qa-slots', 'heavy-queue');
@@ -64,12 +143,12 @@ describe('pinned main-wide regression', () => {
     let polls = 0;
     const messages: string[] = [];
     try {
-      const result = await r.run({ runId: 'yield', waitForTurn: async (lockDir, interrupted) => {
+      const result = await r.run({ runId: 'yield', only: ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook'], waitForTurn: async (lockDir, interrupted) => {
         expect(lockDir).toBeUndefined();
         turns++;
         await waitForRegressionTurn(lock, interrupted, { announce: message => messages.push(message), sleep: async () => {
           polls++;
-          expect(r.calls).toHaveLength(1);
+          expect(r.calls.filter(call => call.batch.tier === 'e2e')).toHaveLength(1);
           if (polls === 1) {
             rmSync(join(queue, 'gate.json'));
             mkdirSync(lock);
@@ -79,16 +158,18 @@ describe('pinned main-wide regression', () => {
           } else rmSync(lock, { recursive: true });
         } });
       }, runner: async (...args) => {
-        expect(turns).toBe(r.calls.length + 1);
+        if (args[1].tier === 'e2e' || args[1].tier === 'accounts:storybook') {
+          expect(turns).toBe(r.calls.filter(call => call.batch.tier === 'e2e' || call.batch.tier === 'accounts:storybook').length + 1);
+        } else expect(turns).toBe(0);
         const result = await r.runner(...args);
-        if (r.calls.length === 1) {
+        if (args[1].tier === 'e2e') {
           mkdirSync(queue, { recursive: true });
           writeFileSync(join(queue, 'gate.json'), JSON.stringify({ pid: process.pid, command: 'merge gate', arrivedAt: 1 }));
         }
         return result;
       } });
       expect(polls).toBe(2);
-      expect(turns).toBe(result.batches.length);
+      expect(turns).toBe(2);
       expect(messages).toEqual(['Regression yielding to heavy QA: free; 1 waiting']);
       expect(result.atCommit).toBe(r.base);
       expect(r.git('rev-parse', 'main')).not.toBe(r.base);
@@ -100,22 +181,23 @@ describe('pinned main-wide regression', () => {
   test('interrupting a yield resumes unfinished batches at the original pinned commit', async () => {
     const r = repo();
     try {
-      await expect(r.run({ runId: 'yield-resume', waitForTurn: async (_lockDir, interrupted) => {
-        if (r.calls.length === 1) {
+      await expect(r.run({ runId: 'yield-resume', only: ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook'], waitForTurn: async (_lockDir, interrupted) => {
+        if (r.calls.some(call => call.batch.tier === 'e2e')) {
           await waitForRegressionTurn('', interrupted, { status: () => 'free; 1 waiting', announce: () => {},
             sleep: async () => { throw new Error('interrupted while yielding'); } });
         }
       } })).rejects.toThrow('interrupted while yielding');
       expect(r.manifest('yield-resume').batches[0]!.state).toBe('done');
-      expect(r.manifest('yield-resume').batches[1]!.attempts).toHaveLength(0);
+      expect(r.manifest('yield-resume').batches.find(batch => batch.tier === 'accounts:storybook')!.attempts).toHaveLength(0);
       r.commit({ [r.unit]: 'fail\n' });
       r.calls.length = 0;
       let turns = 0;
       const resumed = await r.run({ resume: 'yield-resume', waitForTurn: async () => { turns++; } });
       expect(resumed.status).toBe('passed');
       expect(resumed.atCommit).toBe(r.base);
-      expect(turns).toBe(resumed.batches.length - 1);
+      expect(turns).toBe(1);
       expect(r.calls.some(call => call.batch.tier === 'unit')).toBe(false);
+      expect(r.calls.some(call => call.batch.tier === 'e2e')).toBe(false);
       expect(new Set(r.calls.map(call => call.commit))).toEqual(new Set([r.base]));
     } finally { r.cleanup(); }
   });
@@ -123,10 +205,11 @@ describe('pinned main-wide regression', () => {
   test('diagnostic probes and infrastructure retries also yield before taking a heavy turn', async () => {
     const r = repo();
     try {
-      r.commit({ [r.unit]: 'fail\n' });
+      const browser = 'apps/web/tests/example.e2e.ts';
+      r.commit({ [browser]: 'fail\n' });
       let turns = 0;
       let unavailable = true;
-      const result = await r.run({ runId: 'yield-probes', waitForTurn: async () => { turns++; }, runner: async (...args) => {
+      const result = await r.run({ runId: 'yield-probes', only: ['e2e'], waitForTurn: async () => { turns++; }, runner: async (...args) => {
         expect(turns).toBe(r.calls.length + 1);
         const result = await r.runner(...args);
         if (unavailable) { unavailable = false; return { ...result, code: 1, classification: 'infrastructure' }; }
@@ -527,6 +610,18 @@ test('bounded CLI selections preserve the resume configuration', () => {
     .toEqual({ at: 'main', only: ['unit', 'model'], integrationBatches: 2 });
   expect(() => parseRegressArgs(['--resume', 'run', '--only', 'unit'])).toThrow('original selection');
   expect(() => parseRegressArgs(['--integration-batches', '-1'])).toThrow('Invalid');
+});
+
+test('only browser and Storybook commands acquire the heavy lock', () => {
+  for (const tier of ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook'] as const) {
+    const batch: Batch = { id: tier, tier, files: [tier === 'accounts:storybook' ? 'apps/accounts/example.stories.tsx' : 'tests/example.test.ts'], state: 'pending', attempts: [] };
+    const command = regressionBatchCommand(batch, '/tmp/report.json', '/tmp/story.xml');
+    expect(command.includes('--heavy')).toBe(tier === 'e2e' || tier === 'accounts:storybook');
+    expect(isHeavyTest(command.slice(3))).toBe(tier === 'e2e' || tier === 'accounts:storybook');
+    expect(command).toContain('--result-file');
+    if (tier === 'accounts:storybook') expect(command).toContain('--reporter=junit');
+    else expect(command).toContain('--tier');
+  }
 });
 
 test('detached worktree names leave room for owner PostgreSQL Unix sockets', () => {

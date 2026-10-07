@@ -36,10 +36,12 @@ export interface Manifest {
   diagnoses: Diagnosis[];
   /** Reserved before starting a probe, including interrupted probes, so resume cannot reset the eight-probe bound. */
   probeCounts?: Record<string, number>;
+  /** Browser tiers are inventoried but excluded from routine runs; older manifests included them. */
+  selection?: 'routine' | 'explicit';
 }
 export interface RegressionOptions {
   repo: string; stateDir: string; at?: string; resume?: string; only?: RegressionTier[]; integrationBatches?: number;
-  shards?: number; runId?: string;
+  shards?: number; slots?: number; runId?: string;
   registry?: (checkout: string) => Promise<ExpectedFile[]>;
   prepare?: (checkout: string) => Promise<{ ok: boolean; artifactPaths: string[]; reason?: string }>;
   runner?: (checkout: string, batch: Batch, directory: string, shards: number) => Promise<Execution>;
@@ -82,6 +84,10 @@ export async function waitForRegressionTurn(lockDir?: string, interrupted: () =>
   }
 }
 const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook'];
+const browserTier = (tier: RegressionTier): boolean => tier === 'e2e' || tier === 'accounts:storybook';
+const routineBrowserReason = 'Browser journeys and Storybook run in the nightly full regression';
+const batchSize = (tier: RegressionTier, files: number): number =>
+  tier === 'owner' || tier === 'integration' || tier === 'fault/recovery' ? 15 : files;
 const json = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T;
 function atomic(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -163,10 +169,14 @@ function batchesFor(files: ExpectedFile[], options: RegressionOptions): Batch[] 
   for (const tier of tiers) {
     const expected = files.filter(file => file.tier === tier && file.outcome !== 'excluded');
     if (!expected.length) throw new Error(`Zero-match regression tier: ${tier}`);
+    if (!options.only && browserTier(tier)) {
+      for (const file of expected) { file.outcome = 'excluded'; file.reason = routineBrowserReason; }
+      continue;
+    }
     const selected = options.only?.includes(tier) ?? true;
     // An integration batch cap adds that many batches even when --only selects cheap tiers.
     const run = selected || (tier === 'integration' && options.integrationBatches !== undefined);
-    const size = tier === 'integration' ? 15 : expected.length;
+    const size = batchSize(tier, expected.length);
     for (let index = 0; index < expected.length; index += size) {
       const group = expected.slice(index, index + size);
       if (!run || (tier === 'integration' && options.integrationBatches !== undefined && index / size >= options.integrationBatches)) {
@@ -185,11 +195,12 @@ export function classify(evidence: string, code = 1): Classification {
   return 'deterministic';
 }
 
-async function command(checkout: string, args: string[], logPath: string, timeoutMs = 7 * 3_600_000): Promise<number> {
+async function command(checkout: string, args: string[], logPath: string, timeoutMs = 7 * 3_600_000,
+  env: NodeJS.ProcessEnv = process.env): Promise<number> {
   mkdirSync(dirname(logPath), { recursive: true });
   const log = openSync(logPath, 'w', 0o600);
   try {
-    const child = spawn(args[0]!, args.slice(1), { cwd: checkout, detached: true, stdio: ['ignore', log, log], env: process.env });
+    const child = spawn(args[0]!, args.slice(1), { cwd: checkout, detached: true, stdio: ['ignore', log, log], env });
     const forward = (signal: NodeJS.Signals) => {
       try { if (child.pid) process.kill(-child.pid, signal); } catch { child.kill(signal); }
     };
@@ -252,22 +263,21 @@ export function executionOutcomes(checkout: string, batch: Batch, tests: TestRes
   return outcomes;
 }
 
+export function regressionBatchCommand(batch: Batch, report: string, storyXmlPath: string): string[] {
+  const standaloneStories = batch.files.every(file => file.includes('.stories.'));
+  const args = standaloneStories ? [...batch.files, '--reporter=junit', `--outputFile=${storyXmlPath}`]
+    : ['--tier', batch.tier, ...batch.files.filter(file => !file.includes('.stories.')).flatMap(file => ['--file', file])];
+  return ['bun', join(import.meta.dir, 'goalctl.ts'), 'test', ...(browserTier(batch.tier) ? ['--heavy'] : []),
+    '--result-file', report, ...args];
+}
+
 async function runBatch(checkout: string, batch: Batch, directory: string, shards: number): Promise<Execution> {
   mkdirSync(directory, { recursive: true });
   const report = join(directory, 'slot.json');
   const storyXmlPath = join(directory, 'storybook.xml');
-  const standaloneStories = batch.files.every(file => file.includes('.stories.'));
-  const args = standaloneStories ? [...batch.files, '--reporter=junit', `--outputFile=${storyXmlPath}`]
-    : ['--tier', batch.tier, ...batch.files.filter(file => !file.includes('.stories.')).flatMap(file => ['--file', file])];
   const started = Date.now();
-  const previousShards = process.env.REZICS_QA_SHARDS;
-  process.env.REZICS_QA_SHARDS = String(shards);
-  let code: number;
-  try { code = await command(checkout, ['bun', join(import.meta.dir, 'goalctl.ts'), 'test', '--heavy', '--result-file', report, ...args], join(directory, 'runner.log')); }
-  finally {
-    if (previousShards === undefined) delete process.env.REZICS_QA_SHARDS;
-    else process.env.REZICS_QA_SHARDS = previousShards;
-  }
+  const code = await command(checkout, regressionBatchCommand(batch, report, storyXmlPath), join(directory, 'runner.log'),
+    undefined, { ...process.env, REZICS_QA_SHARDS: String(shards) });
   const metadata = existsSync(report) ? json<Execution>(report) : { queueMs: 0, testMs: Date.now() - started, totalMs: Date.now() - started, artifactPaths: [] };
   const tests: TestResult[] = [];
   let evidence = readFileSync(join(directory, 'runner.log'), 'utf8');
@@ -362,6 +372,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     const treeMap = existsSync(treeMapPath) ? json<Record<string, string>>(treeMapPath) : {};
     const nameLength = checkoutNameLength(repo);
     const prepared = new Map<string, Manifest['preflight']>();
+    const preparedCheckouts = new Map<string, Manifest['preflight']>();
     const checkoutAt = async (commit: string, probe?: string, install = true) => {
       const key = `${commit}:${probe ?? 'pinned'}`;
       let checkout = treeMap[key];
@@ -382,7 +393,10 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       if (git(checkout, ['rev-parse', 'HEAD']) !== commit || git(checkout, ['status', '--porcelain'])) {
         throw new Error(`Pinned checkout changed: ${checkout}`);
       }
-      if (install && (probe || !prepared.has(commit))) prepared.set(commit, { commit, ...await prepare(checkout) });
+      if (install && (probe || !prepared.has(commit))) {
+        const preflight = { commit, ...await prepare(checkout) };
+        prepared.set(commit, preflight); preparedCheckouts.set(checkout, preflight);
+      }
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
       return checkout;
     };
@@ -408,6 +422,11 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       const identities = (files: ExpectedFile[]) => files.map(file => `${file.tier}:${file.file}`).sort().join('\n');
       if (identities(expected) !== identities(manifest.files)) throw new Error('Incomplete or changed regression manifest');
       const exclusions = new Map(expected.filter(file => file.outcome === 'excluded').map(file => [`${file.tier}:${file.file}`, file.reason]));
+      if (manifest.selection === 'routine') for (const file of expected) {
+        if (tiers.includes(file.tier as RegressionTier) && browserTier(file.tier as RegressionTier)) {
+          exclusions.set(`${file.tier}:${file.file}`, routineBrowserReason);
+        }
+      }
       if (manifest.files.some(file => (file.outcome === 'excluded') !== exclusions.has(`${file.tier}:${file.file}`)
         || (file.outcome === 'excluded' && file.reason !== exclusions.get(`${file.tier}:${file.file}`)))) {
         throw new Error('Incomplete or changed regression exclusions');
@@ -427,6 +446,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       const shards = options.shards ?? Number(process.env.REZICS_QA_SHARDS ?? 1);
       if (!Number.isSafeInteger(shards) || shards < 1) throw new Error('REZICS_QA_SHARDS must be a positive integer');
       manifest = { version: 1, runId, atCommit: pinned, checkout, startedAt: new Date().toISOString(), shards,
+        selection: options.only ? 'explicit' : 'routine',
         partial: files.some(file => file.outcome === 'deferred'), status: 'running', files, batches,
         preflight: { commit: pinned, ok: false, artifactPaths: [], reason: 'Pinned preflight pending' }, diagnoses: [] };
     }
@@ -439,7 +459,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     const execute = async (commit: string, batch: Batch, label: string, probeTree?: string): Promise<Execution> => {
       const tree = probeTree ?? await checkoutAt(commit);
       // Reports may use GOAL_REGRESS_STATE_DIR, but admission always observes goalctl's shared host lock.
-      await (options.waitForTurn ?? waitForRegressionTurn)(undefined, () => interrupted);
+      if (browserTier(batch.tier)) await (options.waitForTurn ?? waitForRegressionTurn)(undefined, () => interrupted);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
       const result = await runner(tree, batch, join(directory, label), manifest.shards);
       if (interrupted) throw new Error(`Regression ${runId} interrupted; use --resume`);
@@ -447,12 +467,12 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       if (git(tree, ['rev-parse', 'HEAD']) !== commit || git(tree, ['status', '--porcelain'])) throw new Error(`Source changed during regression: ${tree}`);
       return result;
     };
-    for (const batch of manifest.batches) {
-      if (batch.state === 'done') continue;
+    const runInitialBatch = async (batch: Batch, tree?: string): Promise<void> => {
+      if (batch.state === 'done') return;
       batch.state = 'running'; save();
       // A dead engine gets one fresh queue entry, then leaves a resumable pending batch rather than a busy loop.
       for (let attempt = 0; attempt < 2; attempt++) {
-        const result = await execute(pinned, batch, `${batch.id}/attempt-${batch.attempts.length + 1}`);
+        const result = await execute(pinned, batch, `${batch.id}/attempt-${batch.attempts.length + 1}`, tree);
         // Logs already live at artifactPaths; keep checkpoints bounded instead of copying every stack log into them.
         batch.attempts.push({ ...result, evidence: undefined });
         const voided = result.classification === 'infrastructure';
@@ -462,7 +482,32 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         batch.state = voided ? 'pending' : 'done'; save();
         if (!voided) break;
       }
+    };
+    // Large unit and model runs keep their own turn; stack and owner batches use measured memory admission.
+    for (const batch of manifest.batches.filter(batch => batch.tier === 'unit' || batch.tier === 'model')) {
+      await runInitialBatch(batch);
     }
+    const pending = manifest.batches.filter(batch => batch.state !== 'done' && !browserTier(batch.tier)
+      && batch.tier !== 'unit' && batch.tier !== 'model');
+    const slots = options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
+    if (!Number.isSafeInteger(slots) || slots < 1) throw new Error('GOAL_QA_SLOTS must be a positive integer');
+    let next = 0;
+    let failure: unknown;
+    const workers = Array.from({ length: Math.min(slots, pending.length) }, async (_, index) => {
+      let tree: string | undefined;
+      try {
+        // Each lane has its own sockets and artifact root, reused only after its previous batch finishes.
+        tree = await checkoutAt(pinned, `lane-${index}`);
+        if (!preparedCheckouts.get(tree)?.ok) {
+          manifest.preflight = preparedCheckouts.get(tree)!; save(); return;
+        }
+        while (!failure && next < pending.length) await runInitialBatch(pending[next++]!, tree);
+      } catch (error) { failure ??= error; }
+    });
+    // Keep the manifest lock until all admitted children settle, even when another lane fails.
+    await Promise.all(workers);
+    if (failure) throw failure;
+    for (const batch of manifest.batches.filter(batch => browserTier(batch.tier))) await runInitialBatch(batch);
     const eventPath = join(stateDir, 'merges.jsonl');
     const events = existsSync(eventPath) ? readFileSync(eventPath, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as MergeEvent) : [];
     const route = options.route ?? (async entry => appendInbox(stateDir, entry));

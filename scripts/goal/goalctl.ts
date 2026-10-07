@@ -376,7 +376,7 @@ export function ownerRefusal(task: Pick<Task, 'id' | 'goal'>, caller = process.e
 export function isHeavyTest(args: readonly string[]): boolean {
   if (args.includes('--heavy')) return true;
   if (args.includes('--list')) return false;
-  return args[0] === '--tier' || args.some(arg => arg === '--affected' || arg.startsWith('--affected='));
+  return (args.includes('--tier') && !args.includes('--file')) || args.some(arg => arg === '--affected' || arg.startsWith('--affected='));
 }
 
 const FIVE_HOURS = 5 * 3600;
@@ -571,9 +571,23 @@ function workerPrompt(task: Task, manager: string, engine: Engine = engineOf(tas
   ].join('\n');
 }
 
+/** A peer may briefly hold the shared index. Retry only that conflict; the lock belongs to Git, never us. */
+export function retryGitIndexLock<T extends { status: number | null; stderr: string | null }>(run: () => T,
+  sleep: (ms: number) => void = ms => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); }): T {
+  const waits = [250, 500, 1000, 2000];
+  let result = run();
+  for (const wait of waits) {
+    if (result.status === 0 || !/index\.lock['"]?:\s*File exists/i.test(result.stderr ?? '')) break;
+    sleep(wait);
+    result = run();
+  }
+  return result;
+}
+
 function git(cwd: string, args: string[], allowFail = false, options: { env?: Record<string, string>; input?: string } = {}): string {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', input: options.input, maxBuffer: 256 * 1024 * 1024,
+  const run = () => spawnSync('git', args, { cwd, encoding: 'utf8', input: options.input, maxBuffer: 256 * 1024 * 1024,
     env: options.env ? { ...process.env, ...options.env } : undefined });
+  const result = args[0] === 'commit' && args.includes('--only') ? retryGitIndexLock(run) : run();
   if (result.status !== 0 && !allowFail) throw new Error(`git ${args.join(' ')} failed:\n${result.stderr}`);
   return result.status === 0 ? result.stdout.trim() : '';
 }
@@ -1806,14 +1820,19 @@ function reportUnfinished(side: 'affected' | 'main', unfinished: readonly string
   console.log(`${lead}\n  ${unfinished.join('\n  ')}`);
 }
 
-/** A branch failure is blocking only when that file passes at main's committed boundary. */
+/** Streams retain responsibility for failures from earlier merges, including shared-branch merges. */
+export function streamUnitBaseline(events: readonly MergeEvent[], taskIds: readonly string[], current: string): string {
+  return events.find(event => event.before !== event.after && event.taskIds.some(id => taskIds.includes(id)))?.before ?? current;
+}
+
+/** A branch failure is blocking only when that file passes before the task first merged. */
 async function preMergeUnitGate(worktree: string, mainRoot: string, before: string, skip: boolean, gatedFiles: Set<string>): Promise<string | undefined> {
   if (skip) {
     console.log('Unit gate skipped: --skip-unit-gate explicitly requested by the manager');
     return;
   }
-  // Select from the task's own changes: against main's head, an un-rebased branch would also list every file
-  // main changed since the branch's base (and refuse files main added that the branch lacks).
+  // For a stream this includes its earlier landed changes, so failures from those changes are selected again.
+  // The first-merge boundary also prevents earlier guard failures from being classified as inherited.
   const base = spawnSync('git', ['merge-base', 'HEAD', before], { cwd: worktree, encoding: 'utf8' }).stdout.trim() || before;
   const plan = spawnSync('task', ['test', '--', '--affected', base, '--list'],
     { cwd: worktree, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
@@ -1880,7 +1899,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
 
 async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   reviewGuard?: (task: Task) => void): Promise<void> {
-  type PreparedMerge = { before: string; after: string; worktree: string; branch: string; sharers: string[]; committed: string[] };
+  type PreparedMerge = { before: string; baseline: string; after: string; worktree: string; branch: string; sharers: string[]; committed: string[] };
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
   const prepareMerge = (ledger: Ledger): string | PreparedMerge | undefined => {
@@ -2003,7 +2022,15 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     }
     const before = git(root, ['rev-parse', 'HEAD']);
     const after = git(root, ['rev-parse', task.branch]);
-    return { before, after, worktree: task.worktree, branch: task.branch,
+    const eventPath = join(stateDir, 'merges.jsonl');
+    const events = existsSync(eventPath) ? readFileSync(eventPath, 'utf8').split('\n').filter(Boolean)
+      .map(line => JSON.parse(line) as MergeEvent) : [];
+    const baseline = streamUnitBaseline(events, sharers.map(sharer => sharer.id), before);
+    if (spawnSync('git', ['merge-base', '--is-ancestor', baseline, before], { cwd: root }).status !== 0) {
+      task.state = 'conflict';
+      return `${task.id} first merge boundary ${baseline} is unavailable or outside main history; cannot classify inherited unit failures`;
+    }
+    return { before, baseline, after, worktree: task.worktree, branch: task.branch,
       sharers: sharers.map(sharer => sharer.id).sort(), committed: changedFiles(task).committed };
   };
   let preparedMerge = await withLedger(prepareMerge);
@@ -2015,7 +2042,7 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   // do not touch the task's changes or selected tests; only an overlap consumes the one re-gate.
   const gatedFiles = new Set<string>();
   let regated = false;
-  let unitFailure = await preMergeUnitGate(preparedMerge.worktree, root, preparedMerge.before, flags.has('--skip-unit-gate'), gatedFiles);
+  let unitFailure = await preMergeUnitGate(preparedMerge.worktree, root, preparedMerge.baseline, flags.has('--skip-unit-gate'), gatedFiles);
   for (;;) {
     const current: PreparedMerge = preparedMerge;
     const outcome = await withLedger((ledger): string | PreparedMerge | undefined => {
@@ -2060,7 +2087,7 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
         console.log(`Main advanced during the unit gate; rebased ${task.id}${overlap.length ? ', re-running the gate once' : ', existing gate remains valid'}`);
         if (overlap.length) return prepared;
       }
-      const merge = spawnSync('git', ['merge', '--ff-only', prepared.after], { cwd: root, encoding: 'utf8' });
+      const merge = retryGitIndexLock(() => spawnSync('git', ['merge', '--ff-only', prepared.after], { cwd: root, encoding: 'utf8' }));
       if (merge.status !== 0) throw new Error(`Fast-forward failed in the main checkout:\n${merge.stderr}`);
       const event: MergeEvent = { before: prepared.before, after: prepared.after, goal: task.goal ?? 'program',
         taskIds: prepared.sharers, at: new Date().toISOString() };
@@ -2074,7 +2101,7 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     if (!outcome) return;
     preparedMerge = outcome;
     regated = true;
-    unitFailure = await preMergeUnitGate(outcome.worktree, root, outcome.before, flags.has('--skip-unit-gate'), gatedFiles);
+    unitFailure = await preMergeUnitGate(outcome.worktree, root, outcome.baseline, flags.has('--skip-unit-gate'), gatedFiles);
   }
 }
 
@@ -2337,7 +2364,14 @@ function heavyQueueDir(lockDir: string): string {
   return join(dirname(lockDir), `${basename(lockDir)}-queue`);
 }
 
-/** Live tickets, shared refresh first, then oldest arrival. Tickets whose pid is gone, and tickets that cannot be ordered, are removed by whoever reads them. */
+function heavyGoalTurns(queueDir: string): string[] {
+  try {
+    const turns: unknown = JSON.parse(readFileSync(join(queueDir, 'turns'), 'utf8'));
+    return Array.isArray(turns) ? turns.filter((goal): goal is string => typeof goal === 'string') : [];
+  } catch { return []; }
+}
+
+/** Live tickets: shared refresh first, then Goals in turn order, FIFO within a Goal. Dead or unordered tickets are removed. */
 function heavyTickets(queueDir: string, alive: (pid: number) => boolean): { path: string; ticket: HeavyTicket }[] {
   let names: string[];
   try { names = readdirSync(queueDir); } catch { return []; }
@@ -2356,7 +2390,10 @@ function heavyTickets(queueDir: string, alive: (pid: number) => boolean): { path
   }
   // Refresh repairs the shared stack for every Goal. It gets the next turn, never the holder’s turn.
   const priority = (ticket: HeavyTicket) => ticket.command === 'task dev:refresh' ? 0 : 1;
-  live.sort((a, b) => priority(a.ticket) - priority(b.ticket) || a.ticket.arrivedAt - b.ticket.arrivedAt
+  const turns = heavyGoalTurns(queueDir);
+  const turn = (ticket: HeavyTicket) => priority(ticket) === 0 ? -1 : turns.indexOf(ticket.goal ?? '?');
+  live.sort((a, b) => priority(a.ticket) - priority(b.ticket) || turn(a.ticket) - turn(b.ticket)
+    || a.ticket.arrivedAt - b.ticket.arrivedAt
     || (a.ticket.seq ?? '').localeCompare(b.ticket.seq ?? '')
     || a.ticket.pid - b.ticket.pid
     || (a.path < b.path ? -1 : 1));
@@ -2411,6 +2448,8 @@ export interface HeavyWaitOptions {
   deadline?: number;
   /** Exit and signal hooks remove the ticket. In-process tests pass false so they do not exit the runner. */
   bindExit?: boolean;
+  /** A waiting refresh already includes committed main when it starts. Return undefined instead of queuing another. */
+  coalesceRefresh?: boolean;
 }
 
 /** Heavy runs (affected sets, whole tiers, wave and browser suites) are host-wide exclusive: two managers' waves
@@ -2418,8 +2457,10 @@ export interface HeavyWaitOptions {
  * run still takes an ordinary slot, so the host carries at most one heavy run and two light ones, as with one manager.
  * The lock belongs to the process and is freed when it exits, so no manager has to remember to release it.
  * Waiters poll, so a run that starts at the moment the lock frees would otherwise cut in front of one that has been
- * waiting. The ticket is written before the first poll; only the first live ticket may take a free lock (refresh before ordinary FIFO waiters). */
-export async function acquireHeavy(command: readonly string[], options: HeavyWaitOptions = {}): Promise<() => void> {
+ * waiting. Tickets preserve FIFO within each Goal, with a shared rotation preventing one Goal's backlog from starving peers. */
+export function acquireHeavy(command: readonly string[], options?: HeavyWaitOptions & { coalesceRefresh?: false }): Promise<() => void>;
+export function acquireHeavy(command: readonly string[], options: HeavyWaitOptions & { coalesceRefresh: boolean }): Promise<(() => void) | undefined>;
+export async function acquireHeavy(command: readonly string[], options: HeavyWaitOptions = {}): Promise<(() => void) | undefined> {
   const lockDir = options.lockDir ?? heavyLock;
   const queueDir = heavyQueueDir(lockDir);
   const pid = options.pid ?? process.pid;
@@ -2450,6 +2491,19 @@ export async function acquireHeavy(command: readonly string[], options: HeavyWai
     for (;;) {
       const tickets = heavyTickets(queueDir, alive);
       const ahead = tickets.findIndex(entry => entry.path === ticketPath);
+      if (options.coalesceRefresh && commandText === 'task dev:refresh') {
+        const prior = tickets.find(entry => entry.path !== ticketPath && entry.ticket.command === commandText
+          && tickets.indexOf(entry) < ahead);
+        if (prior) {
+          // A refresh that has already taken the lock must not absorb changes arriving after its snapshot.
+          let started = false;
+          try {
+            const holder = JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')) as HeavyTicket;
+            started = holder.command === commandText && holder.pid === prior.ticket.pid && alive(holder.pid);
+          } catch { /* a queued refresh has no holder record */ }
+          if (!started) return undefined;
+        }
+      }
       if (ahead === 0 && !dirLockHeld(lockDir, alive)) {
         try {
           // A negative timeout fails at once when the directory is held, so this loop's poll is the only wait.
@@ -2458,6 +2512,11 @@ export async function acquireHeavy(command: readonly string[], options: HeavyWai
           writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
             pid, goal, command: commandText, startedAt: new Date().toISOString(),
           }));
+          if (commandText !== 'task dev:refresh') {
+            const turns = heavyGoalTurns(queueDir).filter(turn => turn !== (goal ?? '?'));
+            turns.push(goal ?? '?');
+            writeFileSync(join(queueDir, 'turns'), JSON.stringify(turns));
+          }
           return () => rmSync(lockDir, { recursive: true, force: true });
         } catch { /* the lock was taken between the check and the create */ }
       }

@@ -365,10 +365,15 @@ export async function refreshSharedStack(root: string, args: string[], preparati
     console.log('Dry-run: no changes made');
     return;
   }
-  let release: () => void;
-  try { release = await acquireHeavy(['task', 'dev:refresh'], { lockDir: lock, deadline: wait ? Date.now() + 2 * 3_600_000 : Date.now() - 1 }); }
+  let release: (() => void) | undefined;
+  try { release = await acquireHeavy(['task', 'dev:refresh'], { lockDir: lock, coalesceRefresh: wait,
+    deadline: wait ? Date.now() + 2 * 3_600_000 : Date.now() - 1 }); }
   catch { throw new Error(`Shared-stack refresh refused: heavy QA is held or queued; ${wait ? 'it stayed held for two hours' : 'retry after it finishes or pass --wait'}`); }
-  const onExit = () => release();
+  if (!release) {
+    console.log('A shared-stack refresh is already queued; it will include this merge when it starts.');
+    return;
+  }
+  const onExit = release;
   process.once('exit', onExit);
   try {
     const snapshot = await inspectRefresh(root);
