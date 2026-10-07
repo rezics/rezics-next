@@ -504,6 +504,11 @@ tasks:
     cmds:
       - bun scripts/ops/postgres-preflight.ts {{.CLI_ARGS}}
 
+  ops:mail-check:
+    desc: Read bounded SPF, DKIM and DMARC DNS evidence without sending mail.
+    cmds:
+      - bun scripts/ops/mail-check.ts {{.CLI_ARGS}}
+
   ops:platform-governance:
     desc: Refuse production opening without an active permanent platform grant holder; warn until two hold it.
     cmds:

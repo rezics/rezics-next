@@ -25,6 +25,61 @@ to DKIM-sign both `List-Unsubscribe` and `List-Unsubscribe-Post`, and verify tho
 headers survive any provider rewriting. These are required by
 [RFC 8058](https://www.rfc-editor.org/rfc/rfc8058), beyond merely emitting headers.
 
+### Production inputs and DNS evidence
+
+Before rollout, retain a dated operator record with the provider/account name,
+SMTP host/port and TLS mode, credential secret references, verified From address,
+actual envelope MAIL FROM/Return-Path domain, outbound IPs or provider SPF include,
+DKIM signing domain (`d=`), active selector (`s=`), and provider-issued TXT/CNAME
+names and values. Include the DMARC policy domain, policy/report destinations,
+event source, authenticated webhook verification method, event-secret reference,
+and public HTTPS Account origin. These inputs come from the chosen provider;
+there is no production provider or domain selected by this repository. Keep
+credentials and event secrets out of this record.
+
+Write the five exact DNS inputs into an operator JSON file, for example
+`.temp/mail-domains.json` (replace every example with the provisioned values):
+
+```json
+{
+  "fromDomain": "accounts.example.com",
+  "envelopeDomain": "bounce.example.com",
+  "dkimDomain": "example.com",
+  "dkimSelector": "transactional",
+  "dmarcDomain": "example.com"
+}
+```
+
+Run `task ops:mail-check -- .temp/mail-domains.json` and retain its JSON result
+with the UTC time and resolver environment. It queries TXT at the envelope
+domain, `<selector>._domainkey.<dkimDomain>` and `_dmarc.<dmarcDomain>`; normal
+DNS resolution follows provider CNAMEs. Use the actual effective DMARC policy
+domain: check the From domain first and use its organizational domain only when
+the direct record is absent. The checker does not guess a public suffix or
+automatically discover an inherited policy.
+
+The three lookups run together with a five-second deadline and bounded answers.
+`missing` means no matching record or DNS ENODATA/NXDOMAIN; `invalid` means
+duplicate or unusable record structure; `unknown` means DNS failure, timeout,
+an oversized answer, an unsupported key type or SPF macros needing provider
+evaluation. Every state except `present` exits nonzero. `present` checks basic
+record structure and usable RSA/Ed25519 key material, not SPF include/redirect
+expansion, sender-IP authorization, reporting destination authorization,
+cryptographic message verification or DMARC alignment. Recheck unknown results;
+do not treat them as missing and rewrite DNS. Record rules follow
+[SPF](https://www.rfc-editor.org/rfc/rfc7208#section-4.5),
+[DKIM](https://www.rfc-editor.org/rfc/rfc6376#section-3.6.1),
+[RSA key requirements](https://www.rfc-editor.org/rfc/rfc8301#section-3.2),
+[Ed25519 keys](https://www.rfc-editor.org/rfc/rfc8463#section-4) and
+[DMARC discovery](https://www.rfc-editor.org/rfc/rfc7489#section-6.6.3).
+
+Only after configuration and DNS evidence pass, inspect a separately authorized
+provider test message's received `Authentication-Results`, Return-Path and
+DKIM-Signature: SPF must authorize the actual sending IP, DKIM must verify, and
+DMARC must pass alignment with From. For digests, also retain proof that DKIM
+covers both unsubscribe headers. Offline tests send solely to local SMTP fakes;
+they cannot establish this production evidence.
+
 ## Unsubscribe and suppression
 
 Every digest carries an HMAC-signed URL bound to its user, current mailbox,
@@ -71,6 +126,13 @@ HMAC-SHA256 keyed by the event secret over `account-mail-events-v1`, then sign
 this wire format. Signatures more than five minutes from Account's clock are
 refused. Never forward unsigned provider callbacks directly to Account.
 
+Rehearse the verified provider mapping with one signed hard-bounce event for a
+controlled mailbox: retain its source/event ID, timestamp, HTTP 204 and evidence
+that subsequent optional digest intake does not queue mail. Retry the same event
+with a fresh signature and verify no additional suppression effect; an altered
+body, wrong key or stale timestamp must be refused. Security/recovery mail remains
+mandatory. Capture complaint mapping too before enabling that webhook type.
+
 ## Uncertain delivery and review
 
 With `ACCOUNT_DATABASE_URL` set for the correct owner database, run
@@ -87,3 +149,10 @@ preferences before any manual database correction; never bulk-clear complaints
 or unsubscribes. No operator re-subscribe API is implemented. Address changes
 leave the old mailbox suppressed and make no assertion of consent for the new
 one. Consult [deployment](deployment.md#email-rollout) before rollout.
+
+The focused offline drill is
+`task goal -- test scripts/ops/tests/mail-check.test.ts services/account/tests/production-mail-drill.test.ts`.
+It exercises DNS adverse outcomes, local required TLS/authentication, signed
+hard-bounce suppression and lost SMTP acknowledgement without a backend or any
+external delivery. A passing rehearsal is preparation evidence; production DNS,
+provider header and authenticated webhook evidence remain operator inputs.

@@ -436,6 +436,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task ops:migrate` | Apply the release's locked, idempotent owner migrations. |
 | `task ops:env-check` | Validate production configuration, refuse payment provider rows and state the governance opening gate. |
 | `task ops:postgres-preflight` | Verify production owner diagnostic grants and disabled prepared transactions without writes. |
+| `task ops:mail-check` | Read bounded SPF, DKIM and DMARC DNS evidence without sending mail. |
 | `task ops:platform-governance` | Refuse production opening without an active permanent platform grant holder; warn until two hold it. |
 | `task ops:bootstrap` | Provision launch Realms, Zones and vocabulary, then admit bounded catalogue records through public APIs. |
 | `task release:install` | Verify a release artifact and provision a project from it. |
