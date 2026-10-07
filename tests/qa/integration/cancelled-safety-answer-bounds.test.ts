@@ -162,36 +162,36 @@ async function answerVisits(pool: Pool, statement: Statement, indexed: boolean, 
  * running thousands of network effects or weakening the owner constraints. */
 async function appendCancelled(pool: Pool, sourceId: string, count: number, stepId?: string) {
   await pool.query(`DO $history$
-    DECLARE source access.moderation_decision; attempt uuid; sequence bigint;
+    DECLARE seed_decision access.moderation_decision; attempt uuid; sequence bigint;
       answer_step uuid := NULLIF('${stepId ?? ''}','')::uuid;
     BEGIN
-      SELECT * INTO STRICT source FROM access.moderation_decision WHERE id = '${sourceId}'::uuid;
+      SELECT * INTO STRICT seed_decision FROM access.moderation_decision WHERE id = '${sourceId}'::uuid;
       FOR attempt_number IN 1..${count} LOOP
         attempt := gen_random_uuid();
         SELECT generation + 1 INTO sequence FROM access.governance_case
-          WHERE id = source.case_id FOR UPDATE;
+          WHERE id = seed_decision.case_id FOR UPDATE;
         INSERT INTO access.moderation_decision
           (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,
            authority_kind,authority_scope_id,authority_epoch,authority_proof_digest,
            idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,evidence_digest,
            rationale,disclosure,answers_step_id,statement_of_reasons)
-        VALUES (attempt,source.kind,source.outcome,source.context,source.case_id,sequence,
-          source.principal_id,source.acting_subject,source.authority_kind,source.authority_scope_id,
-          source.authority_epoch,source.authority_proof_digest,
-          source.idempotency_key || ':history:' || sequence,source.request_digest,
-          source.rule_ref,source.rule_revision,source.rule_digest,source.evidence_digest,
-          source.rationale,source.disclosure,COALESCE(answer_step,source.answers_step_id),source.statement_of_reasons);
+        VALUES (attempt,seed_decision.kind,seed_decision.outcome,seed_decision.context,seed_decision.case_id,sequence,
+          seed_decision.principal_id,seed_decision.acting_subject,seed_decision.authority_kind,seed_decision.authority_scope_id,
+          seed_decision.authority_epoch,seed_decision.authority_proof_digest,
+          seed_decision.idempotency_key || ':history:' || sequence,seed_decision.request_digest,
+          seed_decision.rule_ref,seed_decision.rule_revision,seed_decision.rule_digest,seed_decision.evidence_digest,
+          seed_decision.rationale,seed_decision.disclosure,COALESCE(answer_step,seed_decision.answers_step_id),seed_decision.statement_of_reasons);
         INSERT INTO access.safety_decision_operation (decision_id,cancelled) VALUES (attempt,true);
         INSERT INTO access.moderation_decision_target
           (decision_id,ordinal,owner,resource,component,locator,scope_kind,revision,expected_head,
            effect,expires_at,participant_subject)
         SELECT attempt,ordinal,owner,resource,component,locator,scope_kind,revision,expected_head,
-          effect,expires_at,participant_subject FROM access.moderation_decision_target WHERE decision_id = source.id;
+          effect,expires_at,participant_subject FROM access.moderation_decision_target WHERE decision_id = seed_decision.id;
         INSERT INTO access.safety_decision_effect (decision_id,ordinal,plan,state,receipt,continuation,error)
         SELECT attempt,ordinal,plan,state,receipt,continuation,error FROM access.safety_decision_effect
-          WHERE decision_id = source.id;
+          WHERE decision_id = seed_decision.id;
         UPDATE access.governance_case SET generation = sequence,decision_head = attempt
-          WHERE id = source.case_id;
+          WHERE id = seed_decision.case_id;
       END LOOP;
     END $history$`);
   await pool.query(
