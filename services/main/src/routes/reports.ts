@@ -63,7 +63,7 @@ const reportResult = t.Object({ profile: t.String(), reportId: t.String(), caseI
   evidence: t.Array(t.Object({ ordinal: t.Number(), owner: t.String(), resource: t.String(), component: t.String(),
     revision: t.Nullable(t.String()), revisionDigest: t.Nullable(t.String()), state: t.String() })) });
 export const decisionFields = {
-  reasons: t.Optional(reasons),
+  reasons,
   caseId: uuid,
   expectedGeneration: t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' }),
   actingSubject: agent,

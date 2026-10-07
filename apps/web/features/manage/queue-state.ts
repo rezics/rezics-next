@@ -1,4 +1,4 @@
-import type { ModerationItem, ReadFailure } from './types.ts';
+import type { ModerationDecisionCommand, ModerationItem, ReadFailure } from './types.ts';
 
 // The triage model behind the queue: which item is current, what is selected,
 // which decisions wait out their undo window and how each one ended. It is a
@@ -37,6 +37,8 @@ export interface Decision {
   reason: string | null;
   /** Kept with the decision for moderators only. */
   note: string | null;
+  /** Required by Main for notifying report decisions; old local drafts may lack it. */
+  reasons?: ModerationDecisionCommand['reasons'];
 }
 
 export const isReport = (item: Pick<ModerationItem, 'kind'>) =>

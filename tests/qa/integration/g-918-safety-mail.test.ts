@@ -7,6 +7,7 @@ import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import {
   SafetyDecisionMail,
+  SafetyNoticeContinuation,
   SAFETY_NOTICE_MAIL_COST,
   type SafetyNoticeMail,
 } from '../../../services/main/src/modules/governance/notices-mail.ts';
@@ -220,7 +221,7 @@ test('SAFETY07 G918: accepted decisions queue once before effect completion; can
       },
     );
     f.producer.setSafetyCorrespondence(source);
-    await f.producer.runSafetyCorrespondenceOnce();
+    await expect(f.producer.runSafetyCorrespondenceOnce()).rejects.toBeInstanceOf(SafetyNoticeContinuation);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.deliveryId).toBe(
       (

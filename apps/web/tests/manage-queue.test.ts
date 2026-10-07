@@ -252,6 +252,11 @@ describe('addresses', () => {
 describe('G330 keep or remove reported content', () => {
   const item = report(1);
 
+  test('a legacy local report draft without reasons is refused before sending', async () => {
+    expect(await decideReport({} as MainClient, uuid(1), item, { action: 'keep', reason: null, note: null },
+      iri(11), 'missing-reasons')).toEqual({ ok: false, failure: 'invalid', code: 'statement_of_reasons_required' });
+  });
+
   test('keeping closes the case against its basis and changes nothing', () => {
     const basis = basisFor(item);
     expect(reportDecision(basis, 'keep', null, iri(11), 'key-1')).toEqual({ profile: 'moderation-decision-v1',
@@ -303,10 +308,12 @@ describe('G330 keep or remove reported content', () => {
       calls.push({ body, options });
       return { data: { saved: true }, error: null };
     } } } } } as unknown as MainClient;
-    expect(await decideReport(main, uuid(1), complaint, { action: 'final-restrict', reason: 'Claim upheld', note: null },
+    const reasons = { facts: 'The claim was upheld.', scope: 'The reported revision.', duration: 'Until restored.',
+      automation: false, contentLanguage: 'en', appealRoute: '/v1/public-reports/{caseId}/correspondence' as const };
+    expect(await decideReport(main, uuid(1), complaint, { action: 'final-restrict', reason: 'Claim upheld', note: null, reasons },
       iri(11), 'rights-key')).toEqual({ ok: true, data: { saved: true } });
     expect(calls).toEqual([{ body: expect.objectContaining({ profile: 'rights-restriction-v1',
-      outcome: 'final_restrict', caseId: item.id }), options: { headers: { 'idempotency-key': 'rights-key' } } }]);
+      outcome: 'final_restrict', caseId: item.id, reasons }), options: { headers: { 'idempotency-key': 'rights-key' } } }]);
   });
 });
 

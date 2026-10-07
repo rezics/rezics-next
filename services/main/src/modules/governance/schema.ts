@@ -255,6 +255,25 @@ export const safetyPartyNotice = access.table('safety_party_notice', {
   createdAt: at('created_at').notNull(),
 });
 
+export const safetyNoticeJob = access.table('safety_notice_job', {
+  decisionId: uuid('decision_id').notNull(), ordinal: smallint('ordinal').notNull(),
+  target: jsonb('target').notNull(), participant: text('participant'),
+  phase: text('phase').notNull(), afterSubject: text('after_subject'), subject: text('subject'),
+  afterPrincipal: uuid('after_principal'),
+}, table => [primaryKey({ columns: [table.decisionId, table.ordinal] })]);
+export const safetyNoticeMailCursor = access.table('safety_notice_mail_cursor', {
+  decisionId: uuid('decision_id').primaryKey(), phase: text('phase').notNull(),
+  afterParty: uuid('after_party'), afterReportAt: at('after_report_at'), afterReport: uuid('after_report'),
+});
+export const safetyNoticeMailReceipt = access.table('safety_notice_mail_receipt', {
+  deliveryId: uuid('delivery_id').primaryKey(), decisionId: uuid('decision_id').notNull(),
+  acceptedAt: at('accepted_at').notNull(),
+});
+export const governanceCaseEvidence = access.table('governance_case_evidence', {
+  caseId: uuid('case_id').notNull(), targetKey: text('target_key').notNull(),
+  available: boolean('available').notNull(), automated: boolean('automated').notNull(),
+}, table => [primaryKey({ columns: [table.caseId, table.targetKey, table.available] })]);
+
 export const governanceTables = [governanceRuleHead, governanceRuleRevision,
   governanceCase, governanceReport, governanceEvidence, rightsComplaint,
   moderationDecision, moderationDecisionTarget, governanceProcessStep, governanceEnforcement,
@@ -265,6 +284,7 @@ export const governanceTables = [governanceRuleHead, governanceRuleRevision,
   safetyDecisionOperation,
   safetyDecisionEffect,
   safetyPartyNotice,
+  safetyNoticeJob, safetyNoticeMailCursor, safetyNoticeMailReceipt, governanceCaseEvidence,
 ] as const;
 
 export type GovernanceCaseRow = typeof governanceCase.$inferSelect;

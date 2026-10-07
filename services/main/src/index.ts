@@ -154,6 +154,7 @@ import { DATASET } from './modules/work/activate.ts';
 import { RelayHandoffPositions } from './modules/outbox/relay-position.ts';
 import { OwnerOperations } from './modules/owner/operations.ts';
 import { governanceServices } from './modules/governance/composition.ts';
+import { governanceNoticeParticipants } from './modules/governance/composition.ts';
 import { PublicReports } from './modules/public-report/store.ts';
 import { publicReportOwners } from './modules/public-report/owners.ts';
 import { AccessRealmManagement } from './modules/access/realm-management.ts';
@@ -385,6 +386,8 @@ const notificationProducerWorker = new NotificationProducerWorker(new Notificati
   notificationStore, config.MAIN_RELAY_CONSUMER ?? null, relayPool ?? null, safetyAlerts));
 notificationProducerWorker.setSafetyCorrespondence(new SafetyDecisionMail(pool, config.ACCOUNT_ISSUER,
   accountSafetyNoticeIntake(config.ACCOUNT_INTROSPECT_URL, config.ACCOUNT_MAIN_CLIENT_SECRET)));
+notificationProducerWorker.setSafetyCorrespondence(new SafetyDecisionMail(pool, config.ACCOUNT_ISSUER,
+  accountSafetyNoticeIntake(config.ACCOUNT_INTROSPECT_URL, config.ACCOUNT_MAIN_CLIENT_SECRET), governanceNoticeParticipants(environment)));
 const notificationDigestWorker = new NotificationDigestWorker(pool, notificationStore,
   config.ACCOUNT_ISSUER, new URL('/api/internal/notification-digest',
     config.ACCOUNT_INTROSPECT_URL).toString(), config.ACCOUNT_MAIN_CLIENT_SECRET);

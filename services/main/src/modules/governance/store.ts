@@ -9,7 +9,8 @@ import type { ReviewReportOwner } from './report-review.ts';
 import { DisclosureStore, configureDisclosurePool } from '../disclosure/read.ts';
 import { operationOutcome, type OperationOutcome, type EffectState } from '../operation/outcome.ts';
 import { SafetyQueue } from '../safety-queue/store.ts';
-import { mintPartyCredential } from '../public-report/store.ts';
+import { prepareDecisionNotices } from './notices.ts';
+import { validateDecisionEvidence } from './decision-evidence.ts';
 import { validContentLanguage } from '../public-report/contract.ts';
 
 export class GovernanceInvalid extends Error {}
@@ -498,6 +499,7 @@ export class GovernanceStore {
     const existing = await this.replayDecision(principal, input, request);
     if (existing)
       return this.resumeDecision(principal, input.actingSubject, existing.decisionId, true);
+    if (!input.reasons) throw new GovernanceInvalid('notifying decisions require a statement of reasons');
     // Owner reads happen before the transaction; the transaction compares them with the reviewed basis.
     const rule = await this.rules.current(input.rule.ref, caseScope);
     if (!rule || rule.revision !== input.rule.revision || rule.digest !== input.rule.digest) {
@@ -530,8 +532,6 @@ export class GovernanceStore {
           'governance.safety.evidence',
         );
       if (caseRow.authority_kind === 'platform') {
-        if (!input.reasons)
-          throw new GovernanceInvalid('platform decisions require a statement of reasons');
         const claim = (
           await client.query<{ principal_id: string; acting_subject: string }>(
             `SELECT principal_id, acting_subject FROM access.safety_case_claim
@@ -564,7 +564,7 @@ export class GovernanceStore {
       if (releasing.has(input.outcome)) {
         const dmca = (
           await client.query(
-            "SELECT 1 FROM access.governance_report r WHERE r.case_id = $1 AND (r.process = 'dmca_512' OR EXISTS (SELECT 1 FROM access.rights_complaint c WHERE c.report_id = r.id AND c.process = 'dmca_512')) LIMIT 1",
+            "SELECT 1 WHERE EXISTS (SELECT 1 FROM access.governance_report WHERE case_id = $1 AND process = 'dmca_512') OR EXISTS (SELECT 1 FROM access.rights_complaint WHERE case_id = $1 AND process = 'dmca_512')",
             [caseRow.id],
           )
         ).rowCount;
@@ -622,43 +622,12 @@ export class GovernanceStore {
       if (caseRow.state !== 'open' || caseRow.generation !== input.expectedGeneration) {
         throw new GovernanceStale('case changed since review');
       }
-      // The reviewed evidence must be exactly the case's retained evidence set.
-      const retained = (await client.query<{ digest: string }>(`SELECT evidence_digest AS digest
-        FROM access.governance_report WHERE case_id = $1`, [caseRow.id])).rows.map(row => row.digest);
-      if (!retained.includes(input.evidenceDigest)) throw new GovernanceStale('evidence basis is not retained');
-      if (
-        input.reasons?.automation === false &&
-        (
-          await client.query(
-            `SELECT 1 FROM access.governance_evidence e
-        JOIN access.governance_report r ON r.id = e.report_id WHERE r.case_id = $1
-        AND e.provenance ? 'automation' LIMIT 1`,
-            [caseRow.id],
-          )
-        ).rowCount
-      ) {
-        throw new GovernanceInvalid('reasons must disclose retained automation involvement');
-      }
       const identities = input.targets.map((target) =>
         canonical({ ...target, expectedHead: undefined, expiresAt: undefined }),
       );
       if (new Set(identities).size !== identities.length)
         throw new GovernanceInvalid('decision targets must be distinct');
-      const admittedTargets = (await client.query<{ owner: GovernanceOwner; resource: string; component: GovernanceComponent;
-        locator: string | null; revision: string | null; state: EvidenceState;
-        }>(`SELECT DISTINCT e.owner,
-          e.resource, e.component, e.locator, e.revision, e.state FROM access.governance_evidence e
-        JOIN access.governance_report r ON r.id = e.report_id WHERE r.case_id = $1`,
-      [caseRow.id])).rows;
-      for (const target of input.targets) {
-        if (!admittedTargets.some(evidence => evidence.owner === target.owner
-          && evidence.resource === target.resource && evidence.component === target.component
-          && evidence.locator === target.locator
-          && (!restricting.has(input.outcome) || evidence.state === 'available')
-          && (target.scopeKind === 'component' || evidence.revision === target.revision))) {
-          throw new GovernanceDenied('decision target is outside the reported evidence');
-        }
-      }
+      const basisReportId = await validateDecisionEvidence(client, input);
       if (input.reversesDecisionId) {
         const reversed = (await client.query<{ outcome: DecisionOutcome }>(`SELECT outcome
           FROM access.moderation_decision WHERE id = $1 AND case_id = $2`, [input.reversesDecisionId, caseRow.id])).rows[0];
@@ -765,49 +734,21 @@ export class GovernanceStore {
           [decisionId, index + 1, plans[index]],
         );
       }
-      if (input.reasons) {
-        if (!plans.length && admittedTargets[0]) {
-          const evidence = admittedTargets[0];
-          const noticePlan = await this.effects?.plan?.(
-            {
-              ...evidence,
-              scopeKind: evidence.revision ? 'exact_revision' : 'component',
-              expectedHead: evidence.revision,
-              effect: 'disclosure',
-            },
-            input.outcome,
-          );
-          if (noticePlan) plans.push(noticePlan);
-        }
-        const authors = [
-          ...new Set(
-            plans.map((plan) => plan.participant).filter((item): item is string => !!item),
-          ),
-        ];
-        const report = (await client.query<{ id: string }>(
-            'SELECT id FROM access.governance_report WHERE case_id = $1 ORDER BY received_at,id LIMIT 1',
-            [caseRow.id])).rows[0]!;
-        const parties = (await client.query<{ id: string }>(
-            `SELECT DISTINCT p.id FROM access.principal p
-          WHERE p.active AND (p.id IN (SELECT principal_id FROM access.agent_provision WHERE agent_id = ANY($1::text[]))
-            OR p.id IN (SELECT principal_id FROM access.representation WHERE subject_id = ANY($1::text[])
-              AND active AND valid_until > clock_timestamp()))`,
-            [authors],
-          )).rows;
-        for (const party of parties) {
-          const credential = await mintPartyCredential(client, caseRow.id, report.id);
-          await client.query(`INSERT INTO access.safety_party_notice
-            (id,decision_id,principal_id,case_id,credential,statement_of_reasons) VALUES ($1,$2,$3,$4,$5,$6)`,
-          [
-              Bun.randomUUIDv7(),
-              decisionId,
-              party.id,
-              caseRow.id,
-              credential,
-              { ...input.reasons, rule: input.rule },
-            ]);
-        }
+      // Dismissals still notify the case target. They cite one retained report,
+      // so choosing its first evidence item is bounded by the report's 16-item profile.
+      const noticeTargets = input.targets.length ? input.targets : (
+        await client.query<DecisionTargetInput>(`SELECT owner,resource,component,locator,revision,
+          CASE WHEN revision IS NULL THEN 'component' ELSE 'exact_revision' END AS "scopeKind",
+          revision AS "expectedHead",'disclosure' AS effect
+          FROM access.governance_evidence WHERE report_id = $1 ORDER BY ordinal LIMIT 1`, [basisReportId])
+      ).rows;
+      for (const [index, target] of noticeTargets.entries()) {
+        const plan = plans[index] ?? await this.effects?.plan?.(target, input.outcome) ?? {};
+        await client.query(`INSERT INTO access.safety_notice_job (decision_id,ordinal,target,participant)
+          VALUES ($1,$2,$3,$4)`, [decisionId, index + 1, target, plan.participant ?? null]);
       }
+      await prepareDecisionNotices(client, decisionId, caseRow.id,
+        { ...input.reasons!, ...{ rule: input.rule } }, this.effects);
       await client.query(`UPDATE access.governance_case SET decision_head = $2, generation = $3 WHERE id = $1`,
         [caseRow.id, decisionId, sequence]);
       // Empty decisions are complete on acceptance. Other decision facts are

@@ -188,8 +188,14 @@ test('SAFETY07 G918: private correspondence pages past 256 parties and reports w
     account_subject: null,
     content_language: 'en',
   }));
+  const cursor = { phase: 'parties', after_party: null as string | null,
+    after_report_at: null as string | null, after_report: null as string | null };
   const client = {
     query: async (sql: string, args?: unknown[]) => {
+      if (sql.includes('SELECT phase,after_party')) return { rows: [{ ...cursor }] };
+      if (sql.includes('SET after_party')) { cursor.after_party = args?.[1] as string | null; cursor.phase = String(args?.[2]); }
+      if (sql.includes('SET after_report_at')) { cursor.after_report_at = args?.[1] as string | null;
+        cursor.after_report = args?.[2] as string | null; cursor.phase = String(args?.[3]); }
       if (sql.includes('FROM access.recovery_fence')) return { rows: [{ open: true }] };
       if (sql.includes('FROM access.moderation_decision'))
         return {
@@ -229,13 +235,16 @@ test('SAFETY07 G918: private correspondence pages past 256 parties and reports w
     },
     release: () => {},
   };
-  await new SafetyDecisionMail(
+  const source = new SafetyDecisionMail(
     { connect: async () => client } as unknown as Pool,
     'issuer',
     async (mail) => {
       mails.push(mail);
     },
-  ).enqueueDecision(decision);
+  );
+  let complete = false;
+  for (let step = 0; step < 4 && !complete; step++) complete = await source.enqueuePage(decision);
+  expect(complete).toBe(true);
   expect(mails).toHaveLength(514);
   expect(new Set(mails.map((mail) => mail.deliveryId)).size).toBe(514);
   expect(

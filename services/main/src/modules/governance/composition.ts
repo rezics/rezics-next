@@ -4,7 +4,7 @@ import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import type { SourceIntakeStore } from '../source/intake.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { ownerEvidenceCapture, ownerTargetHeads } from './evidence.ts';
-import { ownerModerationEffects } from './effects.ts';
+import { graphNoticeParticipants, ownerModerationEffects } from './effects.ts';
 import { ContentModeration } from '../../../../content/src/moderation.ts';
 import { GovernanceRules } from './rules.ts';
 import { GovernanceStore } from './store.ts';
@@ -57,4 +57,9 @@ export function governanceServices(accessPool: Pool, contentPool: Pool, content:
       core: content,
     }), reviews);
   return { store, rules };
+}
+
+/** Main correspondence shares the private graph reader used by moderation. */
+export function governanceNoticeParticipants(env: WorkActivationEnvironment) {
+  return graphNoticeParticipants(env);
 }

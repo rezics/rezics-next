@@ -112,7 +112,7 @@ const isComponent = (value: string): value is DecisionTarget['component'] =>
  * evidence set; null when there is nothing to cite or nothing left to remove.
  */
 export function reportDecision(basis: DecisionBasis, action: 'keep' | 'remove' | 'interim-restrict' | 'final-restrict', rationale: string | null,
-  actingSubject: string, key: string): ModerationDecisionCommand | null {
+  actingSubject: string, key: string): Omit<ModerationDecisionCommand, 'reasons'> | null {
   const rule = basis.ruleBasis;
   const evidenceDigest = basis.reports[0]?.evidenceDigest;
   if (!rule || !evidenceDigest) return null;
@@ -152,6 +152,8 @@ export async function decideReport(main: MainClient, realm: string, item: Modera
   if (item.kind === 'rights_complaint' && decision.action === 'remove'
     || item.kind !== 'rights_complaint' && (decision.action === 'interim-restrict' || decision.action === 'final-restrict'))
     return { ok: false, failure: 'invalid' };
+  const reasons = decision.reasons;
+  if (!reasons) return { ok: false, failure: 'invalid', code: 'statement_of_reasons_required' };
   const basis = await readDecisionBasis(main, realm, item.id, actingSubject);
   if (!basis.ok) return { ok: false, failure: basisFailure(basis.failure) };
   if (!basis.data.ruleBasis) return { ok: false, failure: 'invalid', code: 'rules_unpublished' };
@@ -160,10 +162,10 @@ export async function decideReport(main: MainClient, realm: string, item: Modera
   // Everything reported is already hidden: another decision got there first.
   if (!command) return { ok: false, failure: 'stale' };
   return item.kind === 'rights_complaint'
-    ? send(() => main.v1.rights.restrictions.post({ ...command, profile: 'rights-restriction-v1',
+    ? send(() => main.v1.rights.restrictions.post({ ...command, reasons, profile: 'rights-restriction-v1',
       // Main's `literals()` helper currently reads as `never` through Eden.
       outcome: command.outcome as never }, keyed(key)))
-    : send(() => main.v1.moderation.decisions.post(command, keyed(key)));
+    : send(() => main.v1.moderation.decisions.post({ ...command, reasons }, keyed(key)));
 }
 
 /**

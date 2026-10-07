@@ -40,6 +40,7 @@ export const restrictionOwners = {
 } as const;
 
 export interface ModerationEffects {
+  participants?(target: DecisionTargetInput, after: string | null, limit: number): Promise<string[]>;
   plan?(target: DecisionTargetInput, outcome: DecisionOutcome, context?: {
     caseId: string; decisionId: string; reversesDecisionId: string | null;
     ncii: boolean; appealUpheld: boolean;
@@ -56,12 +57,31 @@ const effectIri = (operationId: string, ordinal: number) =>
   `urn:rezics:moderation:${hash(`${operationId}:${ordinal}`)}`;
 const typed = (value: number) => `${lit(String(value))}^^<http://www.w3.org/2001/XMLSchema#integer>`;
 
+/** Bounded affected-Agent keyset; private Account identities never enter the graph. */
+export function graphNoticeParticipants(env: WorkActivationEnvironment): Pick<ModerationEffects, 'participants'> {
+  return { async participants(target, after, limit) {
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?author WHERE {
+      GRAPH ${iri(GRAPHS.current)} {
+        { ${iri(target.resource)} rv:author ?author }
+        UNION { ?credit a rv:NativeAgentCredit ; rv:work ${iri(target.resource)} ; rv:agent ?author }
+        UNION { ?contribution a rv:TextContribution ; rv:work ${iri(target.resource)} ; rv:author ?author }
+        UNION { ${iri(target.resource)} rv:work ?work . ?credit a rv:NativeAgentCredit ; rv:work ?work ; rv:agent ?author }
+        UNION { ${iri(target.resource)} rv:owner ?author }
+        UNION { ${iri(target.resource)} a rv:Agent . BIND(${iri(target.resource)} AS ?author) }
+      }
+      ${after ? `FILTER(STR(?author) > ${lit(after)})` : ''}
+    } ORDER BY STR(?author) LIMIT ${limit}`, 16_384)).results?.bindings ?? [];
+    return rows.map(row => row.author?.value).filter((author): author is string => !!author);
+  } };
+}
+
 /** Owner CAS is the last mutable-head gate before Access writes its fence. */
 export function ownerModerationEffects(content: ContentModeration, env: WorkActivationEnvironment,
   media?: { pool: Pool; core: ContentCore },
 ): ModerationEffects {
   const store = media ? new MediaStore(media.pool, media.core) : undefined;
   return {
+    ...graphNoticeParticipants(env),
     async plan(target, outcome, context) {
       const plan: EffectPlan = {};
       if (media && /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(target.resource)) {
@@ -135,16 +155,9 @@ export function ownerModerationEffects(content: ContentModeration, env: WorkActi
         }
       }
       if (!plan.participant && target.owner === 'graph') {
-        const rows =
-          (
-            await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?author WHERE {
-          GRAPH ${iri(GRAPHS.current)} {
-            { ${iri(target.resource)} rv:author ?author }
-            UNION { ?credit a rv:NativeAgentCredit ; rv:work ${iri(target.resource)} ; rv:agent ?author }
-            UNION { ${iri(target.resource)} a rv:Agent . BIND(${iri(target.resource)} AS ?author) }
-          } } ORDER BY ?author LIMIT 1`)
-          ).results?.bindings ?? [];
-        plan.participant = rows[0]?.author?.value;
+        // Participation fences name one Agent; notice discovery has its own
+        // resumable keyset and does not mistake this fence subject for the party set.
+        plan.participant = (await graphNoticeParticipants(env).participants!(target, null, 1))[0];
       }
       return plan;
     },
