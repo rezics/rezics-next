@@ -10,16 +10,19 @@ const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000022';
 const author = 'https://rezics.com/id/00000000-0000-4000-8000-000000000023';
 const contribution = 'https://rezics.com/id/00000000-0000-4000-8000-000000000024';
 const revision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000025';
-const term = (value: string) => ({ value });
+const XSD = 'http://www.w3.org/2001/XMLSchema#';
+const uri = (value: string) => ({ type: 'uri', value });
+const literal = (value: string) => ({ type: 'literal', value, datatype: `${XSD}string` });
+const integer = (value: string) => ({ type: 'literal', value, datatype: `${XSD}integer` });
 
-function succeeded(overrides: Record<string, string> = {}) {
-  const values = { outcome: `${RV}Succeeded`, digest: 'ab'.repeat(32), id: admission,
-    epoch: '1', scope: `contribution:create:${work}`, dataEpoch: 'epoch-1', sequence: '3',
-    work, contribution, draftRevision: revision, language: 'ja', author, ...overrides };
-  return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, term(value)]));
+function succeeded(overrides: Record<string, { type: string; value: string; datatype?: string }> = {}) {
+  return { outcome: uri(`${RV}Succeeded`), digest: literal('ab'.repeat(32)), id: literal(admission),
+    epoch: literal('1'), scope: literal(`contribution:create:${work}`), dataEpoch: literal('epoch-1'),
+    sequence: integer('3'), work: uri(work), contribution: uri(contribution),
+    draftRevision: uri(revision), language: literal('ja'), author: uri(author), ...overrides };
 }
 
-function environment(bindings: Record<string, { value: string }>[], onQuery?: () => void) {
+function environment(bindings: Record<string, { type?: string; value: string; datatype?: string }>[], onQuery?: () => void) {
   const seen: { sparql: string; max?: number }[] = [];
   const env = { fuseki: { query: async (sparql: string, max?: number) => {
     seen.push({ sparql, max });
@@ -40,20 +43,24 @@ test('original create receipt reads are limited to two rows and a bounded respon
     outcome: 'succeeded', receipt: textContributionReceiptIri(admission), admissionId: admission,
     work, author, language: 'ja', contribution, draftRevision: revision, sequence: '3' });
 
-  const cancelledRow = { outcome: term(`${RV}Cancelled`), digest: term('cd'.repeat(32)),
-    id: term(admission), epoch: term('1'), scope: term(`contribution:create:${work}`),
-    dataEpoch: term('epoch-1'), sequence: term('2') };
+  const cancelledRow = { outcome: uri(`${RV}Cancelled`), digest: literal('cd'.repeat(32)),
+    id: literal(admission), epoch: literal('1'), scope: literal(`contribution:create:${work}`),
+    dataEpoch: literal('epoch-1'), sequence: integer('2') };
   const cancelled = await readTextContributionReceipt(environment([cancelledRow]).env, admission);
   expect(cancelled).toMatchObject({ outcome: 'cancelled', sequence: '2' });
   expect(cancelled).not.toHaveProperty('author');
   expect(cancelled).not.toHaveProperty('contribution');
-  await expect(readTextContributionReceipt(environment([succeeded({ outcome: `${RV}Cancelled` })]).env, admission))
+  await expect(readTextContributionReceipt(environment([succeeded({ outcome: uri(`${RV}Cancelled`) })]).env, admission))
+    .rejects.toThrow('Contribution receipt is incomplete');
+  const lexicalWork = succeeded();
+  lexicalWork.work = literal(work);
+  await expect(readTextContributionReceipt(environment([lexicalWork]).env, admission))
     .rejects.toThrow('Contribution receipt is incomplete');
 
   const duplicate = environment([succeeded(), succeeded()]);
   await expect(readTextContributionReceipt(duplicate.env, admission))
     .rejects.toThrow('Contribution receipt cardinality violation');
-  await expect(readTextContributionReceipt(environment([succeeded({ digest: '' })]).env, admission))
+  await expect(readTextContributionReceipt(environment([succeeded({ digest: literal('') })]).env, admission))
     .rejects.toThrow('Contribution receipt is incomplete');
 });
 

@@ -92,13 +92,18 @@ export interface TextContributionReceipt {
 export class ContributionWorkUnavailable extends Error {}
 export class InvalidContributionInput extends Error {}
 
+/** The create producer admits this spelling unchanged. Readers must not renormalize it. */
+export function admittedContributionLanguage(language: string): boolean {
+  return /^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(language);
+}
+
 export function textContributionDigest(input: CreateTextContributionInput): string {
   let content;
   try { content = authoredDocumentBody(input); }
   catch { throw new InvalidContributionInput('invalid text Contribution body'); }
   if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.work)
     || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(input.actingSubject)
-    || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/.test(input.language)) {
+    || !admittedContributionLanguage(input.language)) {
     throw new InvalidContributionInput('invalid text Contribution input');
   }
   return hash(JSON.stringify({ family: 'create-text-contribution-v1', work: input.work,
@@ -129,24 +134,30 @@ export async function readTextContributionReceipt(
     if (rows.length === 0) return null;
     if (rows.length !== 1) throw new Error('Contribution receipt cardinality violation');
     const row = rows[0]!;
-    const value = (key: string) => row[key]?.value;
-    const outcome = value('outcome') === `${RV}Succeeded` ? 'succeeded'
-      : value('outcome') === `${RV}Cancelled` ? 'cancelled' : null;
-    if (!outcome || !value('digest') || !value('id') || !value('epoch') || !value('scope')
-      || !value('dataEpoch') || !/^[0-9]+$/.test(value('sequence') ?? '')
-      || (outcome === 'succeeded' && (!value('work') || !value('contribution')
-        || !value('draftRevision') || !value('language') || !value('author')))
-      || (outcome === 'cancelled' && (value('work') || value('contribution')
-        || value('draftRevision') || value('language') || value('author')))) {
+    const value = (key: string, kind: 'uri' | 'literal') => {
+      const term = row[key];
+      if (!term?.value || term.type !== kind || term['xml:lang'] !== undefined) return undefined;
+      if (kind === 'uri' && term.datatype !== undefined) return undefined;
+      return term.value;
+    };
+    const outcome = value('outcome', 'uri') === `${RV}Succeeded` ? 'succeeded'
+      : value('outcome', 'uri') === `${RV}Cancelled` ? 'cancelled' : null;
+    if (!outcome || !value('digest', 'literal') || !value('id', 'literal') || !value('epoch', 'literal')
+      || !value('scope', 'literal') || !value('dataEpoch', 'literal')
+      || !/^[0-9]+$/.test(value('sequence', 'literal') ?? '')
+      || (outcome === 'succeeded' && (!value('work', 'uri') || !value('contribution', 'uri')
+        || !value('draftRevision', 'uri') || !value('language', 'literal') || !value('author', 'uri')))
+      || (outcome === 'cancelled' && ['work', 'contribution', 'draftRevision', 'language', 'author']
+        .some(key => row[key] !== undefined))) {
       throw new Error('Contribution receipt is incomplete');
     }
     assertContributionReadOpen(signal);
-    return { outcome, receipt, admissionId: value('id')!, requestDigest: value('digest')!,
-      authorityEpoch: value('epoch')!, scope: value('scope')!,
-      dataEpoch: value('dataEpoch')!, sequence: value('sequence')!,
-      ...(outcome === 'succeeded' ? { work: value('work'), contribution: value('contribution'),
-        draftRevision: value('draftRevision'), language: value('language'),
-        author: value('author') } : {}) };
+    return { outcome, receipt, admissionId: value('id', 'literal')!, requestDigest: value('digest', 'literal')!,
+      authorityEpoch: value('epoch', 'literal')!, scope: value('scope', 'literal')!,
+      dataEpoch: value('dataEpoch', 'literal')!, sequence: value('sequence', 'literal')!,
+      ...(outcome === 'succeeded' ? { work: value('work', 'uri'), contribution: value('contribution', 'uri'),
+        draftRevision: value('draftRevision', 'uri'), language: value('language', 'literal'),
+        author: value('author', 'uri') } : {}) };
   });
 }
 
