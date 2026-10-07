@@ -218,6 +218,7 @@ export function jenaContainerArguments(image: string, directory: string, name: s
     'docker',
     'run',
     '-d',
+    '--pull=never',
     '--name',
     name,
     '--network',

@@ -32,6 +32,7 @@ test('each run mounts only its own scratch directory and cannot raise its bounds
   const args = jenaContainerArguments(image, first.directory, first.name);
   expect(args).toContain(first.name);
   expect(args).not.toContain('rezics-jena-cli');
+  expect(args).toContain('--pull=never');
   expect(args).toContain('--network');
   expect(args).toContain('none');
   expect(args).toContain('--memory');
