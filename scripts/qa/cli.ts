@@ -116,6 +116,19 @@ type StackTier = 'integration' | 'fault/recovery';
 interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMatch: boolean;
   ok: boolean; testStart?: number; testEnd?: number }
 
+// Bun owner suites install signal handlers too; enforce the wall deadline on
+// their process group so a handled SIGTERM cannot keep QA capacity indefinitely.
+async function runBunTier(name: Tier, program: string, args: string[], budget: number) {
+  const result = await commandAsync(root, program, args, budget);
+  const ok = result.ok && result.elapsedMs <= budget;
+  tiers.push({ name, status: ok ? 'passed' : 'failed', elapsedMs: result.elapsedMs });
+  if (!ok) {
+    writeFileSync(join(logs, `${name}.log`), result.output);
+    errors.push(`${name} failed or exceeded ${budget / 1000}s (see logs/${name}.log)`);
+  }
+  return ok;
+}
+
 // One disposable QA project: start, bootstrap, run the files, then reset it
 // unless --keep, so finished shards release their capacity early.
 async function runShard(
@@ -532,24 +545,24 @@ try {
     if (missing.length) throw new Error(`--record requires complete case declarations; ${missing.length} IDs remain`);
   }
   // Reserve before any tier preparation: fixtures and singleton tiers also start stacks.
-  if (selected.some(tier => !['static', 'unit'].includes(tier))) {
+  if (selected.some(tier => !['static', 'unit', 'owner'].includes(tier))) {
     runSlots = await acquireQaSlots(goalSlotDirectory(root), 1, process.env, process.pid,
       { runDeadline: Date.now() + 6 * 3_600_000 });
   }
   for (const tier of selected) {
     if (tier === 'static') runTier(tier, 'bun', ['scripts/research/storage_architecture/check.ts', ...(options.backend ? ['--backend'] : [])], 120_000);
-    if (tier === 'unit')
-      runTier(
+    if (tier === 'unit' || tier === 'owner')
+      await runBunTier(
         tier,
         'bun',
         [
           'test',
-          ...testArgs('unit', selection, chosen),
-          ...(!selection && !chosen ? unitHarnessFiles : []),
+          ...testArgs(tier, selection, chosen),
+          ...(tier === 'unit' && !selection && !chosen ? unitHarnessFiles : []),
           '--reporter=junit',
-          `--reporter-outfile=${join(directory, 'unit.xml')}`,
+          `--reporter-outfile=${join(directory, `${tier}.xml`)}`,
         ],
-        180_000,
+        tier === 'owner' ? 600_000 : 180_000,
       );
     if (tier === 'model') {
       const projectRunId = `${runId}-m`;
@@ -748,7 +761,7 @@ try {
     const sourceAfter = sourceIdentity(root);
     if (sourceAfter.fingerprint !== sourceBefore.fingerprint) errors.push('Source changed during QA run');
     for (const tier of uncoveredTiers) tiers.push({ name: tier, status: 'uncovered' });
-    const tests = junitResults(directory, selected.filter(tier => tier === 'unit' || tier === 'integration'
+    const tests = junitResults(directory, selected.filter(tier => tier === 'unit' || tier === 'owner' || tier === 'integration'
       || tier === 'model' || tier === 'fault/recovery' || tier === 'e2e' || tier === 'load'));
     if (selection) {
       for (const expected of selection.tests) {

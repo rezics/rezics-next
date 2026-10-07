@@ -18,8 +18,8 @@ import { hostname } from 'node:os';
 import { acceptanceStatuses, parseJUnit, titleIds, type Case, type TestResult } from './acceptance.ts';
 import { isolatedIntegrationFileList } from './isolated-integration-files.ts';
 
-export type Tier = 'static' | 'unit' | 'integration' | 'model' | 'fault/recovery' | 'e2e' | 'load';
-export const implementedTiers: Tier[] = ['static', 'unit', 'integration', 'model', 'fault/recovery', 'e2e', 'load'];
+export type Tier = 'static' | 'unit' | 'owner' | 'integration' | 'model' | 'fault/recovery' | 'e2e' | 'load';
+export const implementedTiers: Tier[] = ['static', 'unit', 'owner', 'integration', 'model', 'fault/recovery', 'e2e', 'load'];
 export const backendTiers: Tier[] = implementedTiers.filter(tier => tier !== 'e2e');
 export const uncoveredTiers: Tier[] = [];
 export function tierArtifactName(tier: Tier): string { return tier.replaceAll('/', '-'); }
@@ -50,8 +50,8 @@ export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; k
   if (backend && onlyFailed) throw new Error('--backend --only-failed is unsupported');
   if (tier && onlyFailed) throw new Error('--tier and --only-failed cannot be combined');
   if (storybook && tier !== 'e2e') throw new Error('--storybook requires the e2e tier');
-  if ((files.length || id) && (!tier || onlyFailed || !['unit', 'integration', 'model', 'fault/recovery', 'e2e', 'load'].includes(tier))) {
-    throw new Error('--file and --id require a unit, integration, model, fault/recovery, e2e or load tier');
+  if ((files.length || id) && (!tier || onlyFailed || !['unit', 'owner', 'integration', 'model', 'fault/recovery', 'e2e', 'load'].includes(tier))) {
+    throw new Error('--file and --id require a unit, owner, integration, model, fault/recovery, e2e or load tier');
   }
   return { tier, onlyFailed, keep, record,
     ...(backend ? { backend } : {}),

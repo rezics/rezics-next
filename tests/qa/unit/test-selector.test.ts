@@ -4,8 +4,8 @@ import { testArgs } from '../../../scripts/qa/acceptance.ts';
 import { parseArgs } from '../../../scripts/qa/core.ts';
 
 test('QA09: explicit unit paths still run without a service stack', () => {
-  expect(selectTestCommand(['model/compiler/generate.test.ts', '-t', 'profile'])).toEqual([
-    'bun', ['test', 'model/compiler/generate.test.ts', '-t', 'profile'],
+  expect(selectTestCommand(['services/main/tests/command.test.ts', '-t', 'profile'])).toEqual([
+    'bun', ['test', 'services/main/tests/command.test.ts', '-t', 'profile'],
   ]);
 });
 
@@ -14,6 +14,7 @@ test('QA10/MODEL17: native model matrix selects the isolated strict model tier',
     .toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'model', '--file',
       'model/tests/native-equivalence.test.ts', '--id', 'MODEL17']]);
   expect(testArgs('model')).toEqual(['infra/jena/tests/command.integration.test.ts',
+    'services/main/tests/read-snapshot-native.test.ts',
     'model/compiler/generate.test.ts',
     'model/tests/native-equivalence.test.ts', 'model/tests/daily-rating.test.ts',
     'model/tests/experience-rating.test.ts', 'model/tests/source-reification.test.ts',
@@ -81,4 +82,12 @@ test('QA10: web browser file routes through the isolated e2e tier', () => {
   expect(selectTestCommand(['apps/web/tests/public-search.e2e.ts']))
     .toEqual(['bun', ['scripts/qa/cli.ts', '--tier', 'e2e', '--file',
       'apps/web/tests/public-search.e2e.ts']]);
+});
+
+
+test('Bun script owner files select their bounded tier without a service stack', () => {
+  expect(selectTestCommand(['scripts/dev/seed/api.test.ts'])).toEqual([
+    'bun', ['scripts/qa/cli.ts', '--tier', 'owner', '--file', 'scripts/dev/seed/api.test.ts'],
+  ]);
+  expect(parseArgs(['--tier', 'owner']).tier).toBe('owner');
 });

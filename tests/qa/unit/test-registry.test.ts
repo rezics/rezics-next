@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { testArgs, testExclusions, unitHarnessFiles, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
+import { ownerGateFiles, testArgs, testExclusions, unitHarnessFiles, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
 import { expandTestPaths, splitTestArgs } from '../../../scripts/qa/core.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -12,7 +12,7 @@ test('every tracked Bun test belongs to a full QA tier or a reasoned exclusion',
   expect(tracked.status).toBe(0);
   const files = tracked.stdout.split('\0').filter(file => /\.test\.tsx?$/.test(file));
   const registered = new Set(unitHarnessFiles);
-  for (const tier of ['unit', 'integration', 'model', 'fault/recovery', 'load'] as const) {
+  for (const tier of ['unit', 'owner', 'integration', 'model', 'fault/recovery', 'load'] as const) {
     const paths = splitTestArgs(testArgs(tier)).paths;
     expect(paths, `Duplicate test arguments in ${tier}`).toEqual([...new Set(paths)]);
     for (const file of expandTestPaths(root, paths)) registered.add(file);
@@ -34,12 +34,15 @@ test('owner discovery registers nested Bun TSX tests without admitting an unregi
     for (const directory of ['services', 'model', 'scripts', 'packages', 'apps/web', 'apps/accounts',
       'infra/dev/tests', 'infra/jena/tests']) mkdirSync(join(fixture, directory), { recursive: true });
     const owner = 'services/main/tests/nested/behavior.test.tsx';
+    const script = 'scripts/static/contract.test.ts';
+    const packageFile = 'packages/document/tests/checker.test.ts';
     for (const file of [owner, 'services/main/tests/unregistered.integration.test.ts',
-      'model/tests/daily-rating.test.ts', 'apps/web/node_modules/dependency.test.ts']) {
+      'model/tests/daily-rating.test.ts', 'apps/web/node_modules/dependency.test.ts', script, packageFile]) {
       mkdirSync(dirname(join(fixture, file)), { recursive: true });
       writeFileSync(join(fixture, file), '');
     }
     expect(unitOwnerFiles(fixture)).toEqual([owner]);
+    expect(ownerGateFiles(fixture)).toEqual([packageFile, script]);
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }

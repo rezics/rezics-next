@@ -156,7 +156,7 @@ const unitOwnerDirectories = [
 
 // Discover Bun owner tests by capability location. Stack gates retain their
 // explicit registrations, and the registry test catches every other location.
-export function unitOwnerFiles(root = join(import.meta.dir, '../..')): string[] {
+function bunOwnerFiles(root = join(import.meta.dir, '../..')): string[] {
   const reserved = new Set<string>([...integrationGateFiles, ...modelGateFiles, ...faultGateFiles,
     ...testExclusions.map(item => item.file)]);
   const found: string[] = [];
@@ -170,6 +170,19 @@ export function unitOwnerFiles(root = join(import.meta.dir, '../..')): string[] 
   };
   for (const directory of unitOwnerDirectories) walk(directory);
   return found.sort();
+}
+
+const retainedUnitOwners = new Set(['scripts/dev/config.test.ts', 'scripts/operations/search-state.test.ts']);
+export function isQaOwnerPath(path: string): boolean {
+  return !retainedUnitOwners.has(path) && !modelGateFiles.some(file => file === path)
+    && (path.startsWith('scripts/') || path.startsWith('packages/')
+    || path === 'services/main/tests/g-903-api-inputs.test.ts');
+}
+export function unitOwnerFiles(root = join(import.meta.dir, '../..')): string[] {
+  return bunOwnerFiles(root).filter(file => !isQaOwnerPath(file));
+}
+export function ownerGateFiles(root = join(import.meta.dir, '../..')): string[] {
+  return bunOwnerFiles(root).filter(isQaOwnerPath);
 }
 
 export function isQaIntegrationPath(path: string): boolean {
@@ -189,12 +202,7 @@ export const modelGateFiles = [
   'packages/model/tests/generated.test.ts',
 ] as const;
 export function isQaModelPath(path: string): boolean {
-  // Native Jena fixture tests and the equivalence matrix require an isolated stack.
-  return path === 'infra/jena/tests/command.integration.test.ts'
-    || path === 'services/main/tests/read-snapshot-native.test.ts'
-    || path === 'model/tests/daily-rating.test.ts'
-    || path === 'model/tests/experience-rating.test.ts'
-    || path === 'model/tests/native-equivalence.test.ts';
+  return modelGateFiles.some(file => file === path);
 }
 export const faultGateFiles = [
   'services/account/tests/account-pitr.integration.test.ts',
@@ -220,7 +228,7 @@ export function failedSelection(artifactRoot: string, runId: string): FailedSele
   const prior = JSON.parse(readFileSync(path, 'utf8')) as { tiers?: { name: Tier; status: string }[] };
   const tiers = (prior.tiers ?? []).filter(t => t.status === 'failed').map(t => t.name);
   if (!tiers.length) throw new Error(`Prior QA run ${runId} has no failed tier to diagnose`);
-  if (tiers.some(tier => !(['static', 'unit', 'integration', 'model', 'fault/recovery', 'e2e', 'load'] as Tier[]).includes(tier))) {
+  if (tiers.some(tier => !(['static', 'unit', 'owner', 'integration', 'model', 'fault/recovery', 'e2e', 'load'] as Tier[]).includes(tier))) {
     throw new Error(`Prior QA run ${runId} names an unsupported failed tier`);
   }
   const failed = junitResults(directory, tiers).filter(test => test.failed);
@@ -242,16 +250,16 @@ export function e2eArgs(selection?: FailedSelection,
 }
 
 export function testArgs(
-  tier: 'unit' | 'integration' | 'model' | 'fault/recovery' | 'load',
+  tier: 'unit' | 'owner' | 'integration' | 'model' | 'fault/recovery' | 'load',
   selection?: FailedSelection,
   chosen?: { files?: string[]; id?: string },
 ): string[] {
-  const base = tier === 'model' ? '' : tier === 'fault/recovery' ? 'tests/qa/fault-recovery' : `tests/qa/${tier}`;
+  const base = tier === 'model' || tier === 'owner' ? '' : tier === 'fault/recovery' ? 'tests/qa/fault-recovery' : `tests/qa/${tier}`;
   const extraGates = tier === 'integration'
     ? [...integrationGateFiles]
     : tier === 'model' ? [...modelGateFiles]
     : tier === 'fault/recovery' ? [...faultGateFiles]
-    : tier === 'load' ? [] : unitOwnerFiles();
+    : tier === 'load' ? [] : tier === 'owner' ? ownerGateFiles() : unitOwnerFiles();
   const defaults = [...(base ? [base] : []), ...extraGates];
   const supportedGates = tier === 'unit' ? [...extraGates, ...unitHarnessFiles] : extraGates;
   if (chosen) {

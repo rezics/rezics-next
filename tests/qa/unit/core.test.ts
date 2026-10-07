@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { acquireFullLock, acquireQaSlots, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
+import { acquireFullLock, acquireQaSlots, commandAsync, concurrencyGate, estimatedDurations, expandTestPaths, expectedFusekiModuleVersion,
   isolatedFaultFiles, isolatedIntegrationFiles, isolationCandidates, junitSuites, matchedNoTests, maximumShards,
   mergeJUnit, parseArgs, planShards, planStackProjects,
   recordedFileDurations, selfManagedFaultFiles, shardCount, stackPlanBudgetWarning, shardResolved, splitTestArgs,
@@ -15,6 +15,25 @@ import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructur
 
 const scratch = join(import.meta.dir, '../../../.temp');
 mkdirSync(scratch, { recursive: true });
+
+test('a handled SIGTERM cannot extend the Bun tier wall deadline', async () => {
+  const directory = mkdtempSync(join(scratch, 'qa-deadline-'));
+  const pidFile = join(directory, 'pid');
+  try {
+    const result = await commandAsync(directory, 'bun', ['-e', `
+      require('node:fs').writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));
+      process.on('SIGTERM', () => {});
+      setInterval(() => {}, 1000);
+    `], 300);
+    expect(existsSync(pidFile)).toBe(true);
+    expect(result.timedOut).toBe(true);
+    expect(result.ok).toBe(false);
+    expect(result.elapsedMs).toBeLessThan(3000);
+    expect(() => process.kill(Number(readFileSync(pidFile, 'utf8')), 0)).toThrow();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test('QA source identity hashes a generated-contract diff larger than the default subprocess buffer',()=>{
   const root=mkdtempSync(join(scratch,'qa-large-source-'));
@@ -81,7 +100,7 @@ test('QA02: backend mode selects non-browser tiers and records its exact scope',
   const source = { head: 'abc', fingerprint: 'fingerprint', clean: true };
   const testResult = { tier: 'integration' as const, file: 'tests/qa/integration/case.test.ts',
     name: 'OPS01: exact backend case', failed: false, skipped: false };
-  const tiers = ['static', 'unit', 'integration', 'model', 'fault/recovery', 'load']
+  const tiers = ['static', 'unit', 'owner', 'integration', 'model', 'fault/recovery', 'load']
     .map(name => ({ name: name as Tier, status: 'passed' as const }));
   try {
     const report = { runId: 'backend', sourceBefore: source, sourceAfter: source,

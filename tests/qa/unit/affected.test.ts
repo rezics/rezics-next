@@ -26,7 +26,7 @@ const plan = (changed: string[], extra: Partial<Parameters<typeof planAffected>[
 
 test('a changed module selects every test that reaches it and routes each to its tier', () => {
   const result = plan(['services/main/src/access.ts']);
-  expect(result.tests).toEqual({ unit: [], model: [],
+  expect(result.tests).toEqual({ unit: [], owner: [], model: [],
     integration: ['tests/qa/integration/access-api.test.ts'],
     'fault/recovery': ['tests/qa/fault-recovery/access-restore.test.ts'] });
   expect(result.deferred).toEqual([
@@ -62,9 +62,9 @@ test('only graph-selected changes build the import graph', () => {
 
 test('an unreferenced input fails closed to every registered tier', () => {
   const result = plan(['services/main/data/unknown.bin']);
-  expect(result.widened.map(item => item.tier)).toEqual(['unit', 'model', 'integration', 'fault/recovery']);
+  expect(result.widened.map(item => item.tier)).toEqual(['unit', 'owner', 'model', 'integration', 'fault/recovery']);
   expect(affectedCommands(result).map(item => item.command)).toEqual(
-    ['unit', 'model', 'integration', 'fault/recovery'].map(tier => ['bun', ['scripts/qa/cli.ts', '--tier', tier]]));
+    ['unit', 'owner', 'model', 'integration', 'fault/recovery'].map(tier => ['bun', ['scripts/qa/cli.ts', '--tier', tier]]));
 });
 
 test('a widened unit tier still runs affected unit tests outside the registered tier', () => {
@@ -96,7 +96,7 @@ test('stack harness and root script wiring add the shared-stack smoke test inste
   expect(scripts.widened).toEqual([]);
   expect(scripts.tests.integration).toEqual(['tests/qa/integration/shared-stack.test.ts']);
   expect(plan(['package.json']).widened.map(item => item.tier))
-    .toEqual(['unit', 'model', 'integration', 'fault/recovery']);
+    .toEqual(['unit', 'owner', 'model', 'integration', 'fault/recovery']);
   expect(plan(['package.json']).tests.integration).toEqual([]);
 });
 

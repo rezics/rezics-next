@@ -187,15 +187,19 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     // The same read must keep working after the legacy decision writer is retired.
     await a.grant('statement:migrate:root', 'statement.migrate');
     await a.grant('statement:migrate:root', 'statement.cutover');
+    const protectedApp = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      platformAccess, judgments: new AccessJudgments(stack.accessPool), account: { verify: async () => a.principal } });
+    const migrate = (method: string, path: string, body?: object) => protectedApp.handle(new Request(
+      `http://main.local${path}`, { method, headers: { authorization: `Bearer ${a.token}`,
+        'content-type': 'application/json', 'idempotency-key': randomUUID() },
+      ...(body ? { body: JSON.stringify(body) } : {}) }));
     const pending = await json<{ pending: { application: string; decision: string }[] }>(
-      await a.read('/v1/statement-migrations/v1/pending'));
-    for (const item of pending.pending) await json(await a.send('POST',
+      await migrate('GET', '/v1/statement-migrations/v1/pending'));
+    for (const item of pending.pending) await json(await migrate('POST',
       `/v1/statement-migrations/v1/${short(item.application)}`, { profile: 'statement-migration-v1',
         expectedDecision: item.decision, actingSubject: a.actor }), 201);
-    await json(await a.send('POST', '/v1/statement-migrations/v1/cutover',
+    await json(await migrate('POST', '/v1/statement-migrations/v1/cutover',
       { profile: 'statement-cutover-v1', actingSubject: a.actor }), 201);
-    const protectedApp = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
-      judgments: new AccessJudgments(stack.accessPool), account: { verify: async () => a.principal } });
     const protectedRead = (path: string) => protectedApp.handle(new Request(`http://main.local${path}`));
     expect((await json<Page<unknown>>(await protectedRead(`${root}/classifications`))).items).toEqual([]);
     await a.grant('classification:decide:global', 'statement.decide');

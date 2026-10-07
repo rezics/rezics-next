@@ -7,11 +7,11 @@ import { pathToFileURL } from 'node:url';
 import { parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
 import { newRunId, type Tier } from '../qa/core.ts';
 
-export type RegressionTier = 'unit' | 'model' | 'integration' | 'fault/recovery' | 'e2e' | 'accounts:storybook';
+export type RegressionTier = 'unit' | 'owner' | 'model' | 'integration' | 'fault/recovery' | 'e2e' | 'accounts:storybook';
 export type Classification = 'infrastructure' | 'resource' | 'deadline' | 'order-dependent' | 'flaky' | 'deterministic';
 type Outcome = 'pending' | 'passed' | 'failed' | 'missing' | 'void' | 'excluded' | 'deferred';
 export interface MergeEvent { before: string; after: string; goal: string; taskIds: string[]; at: string }
-export interface ExpectedFile { file: string; tier: RegressionTier | 'live' | 'load' | 'legacy'; outcome: Outcome; reason?: string }
+export interface ExpectedFile { file: string; tier: RegressionTier | 'live' | 'load' | 'legacy' | 'external'; outcome: Outcome; reason?: string }
 export interface Execution {
   code: number; outcomes: Record<string, 'passed' | 'failed' | 'missing'>; artifactPaths: string[];
   queueMs: number; testMs: number; totalMs: number; evidence?: string; classification?: Classification;
@@ -45,7 +45,7 @@ export interface RegressionOptions {
   runner?: (checkout: string, batch: Batch, directory: string, shards: number) => Promise<Execution>;
   route?: (entry: InboxEntry) => Promise<void>;
 }
-const tiers: RegressionTier[] = ['unit', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook'];
+const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook'];
 const json = <T>(path: string): T => JSON.parse(readFileSync(path, 'utf8')) as T;
 function atomic(path: string, value: unknown): void {
   mkdirSync(dirname(path), { recursive: true });
@@ -91,7 +91,7 @@ export async function regressionRegistry(checkout: string): Promise<ExpectedFile
   const registry = await import(pathToFileURL(join(checkout, 'scripts/qa/acceptance.ts')).href) as typeof import('../qa/acceptance.ts');
   const core = await import(pathToFileURL(join(checkout, 'scripts/qa/core.ts')).href) as typeof import('../qa/core.ts');
   const files: ExpectedFile[] = [];
-  for (const tier of ['unit', 'model', 'integration', 'fault/recovery', 'load'] as const) {
+  for (const tier of ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'load'] as const) {
     const paths = core.splitTestArgs(registry.testArgs(tier)).paths;
     if (tier === 'unit') paths.push(...registry.unitHarnessFiles);
     for (const file of core.expandTestPaths(checkout, paths)) files.push({ file, tier,
@@ -115,6 +115,10 @@ export async function regressionRegistry(checkout: string): Promise<ExpectedFile
     outcome: 'excluded' as const, reason: 'Opt-in network/provider evidence' })),
   ...registry.legacyHostJenaGateFiles.map(file => ({ file, tier: 'legacy' as const,
     outcome: 'excluded' as const, reason: 'Legacy tests require host JVM/Jena; retained QA gates run instead' })));
+  for (const exclusion of registry.testExclusions ?? []) {
+    if (!files.some(item => item.file === exclusion.file)) files.push({ file: exclusion.file,
+      tier: exclusion.file.startsWith('apps/about/') ? 'external' : 'live', outcome: 'excluded', reason: exclusion.reason });
+  }
   return files;
 }
 

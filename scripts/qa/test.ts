@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
-import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath } from './acceptance.ts';
+import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from './acceptance.ts';
 import { affectedPlan, affectedTiers, formatPlan, type AffectedPlan } from './affected.ts';
 import { parseArgs } from './core.ts';
 
@@ -38,9 +38,11 @@ export function selectTestCommand(args: string[]): [string, string[]] {
   const fault = files.filter(isQaFaultPath);
   const load = files.filter(isQaLoadPath);
   const e2e = files.filter(isQaE2ePath);
-  if (!integration.length && !model.length && !fault.length && !load.length && !e2e.length) return ['bun', ['test', ...args]];
-  if (integration.length + model.length + fault.length + load.length + e2e.length !== files.length
-    || [integration, model, fault, load, e2e].filter(group => group.length).length !== 1) {
+  const owner = files.filter(file => isQaOwnerPath(file) && !integration.includes(file) && !model.includes(file)
+    && !fault.includes(file) && !load.includes(file) && !e2e.includes(file));
+  if (!integration.length && !model.length && !fault.length && !load.length && !e2e.length && !owner.length) return ['bun', ['test', ...args]];
+  if (integration.length + model.length + fault.length + load.length + e2e.length + owner.length !== files.length
+    || [integration, model, fault, load, e2e, owner].filter(group => group.length).length !== 1) {
     throw new Error('Run registered QA integration, model, fault/recovery, load, e2e and other test files in separate commands');
   }
   const other = args.filter(arg => !testFile.test(arg));
@@ -52,7 +54,7 @@ export function selectTestCommand(args: string[]): [string, string[]] {
     }
     id = other[1];
   }
-  return ['bun', ['scripts/qa/cli.ts', '--tier', model.length ? 'model' : fault.length ? 'fault/recovery' : load.length ? 'load' : e2e.length ? 'e2e' : 'integration',
+  return ['bun', ['scripts/qa/cli.ts', '--tier', owner.length ? 'owner' : model.length ? 'model' : fault.length ? 'fault/recovery' : load.length ? 'load' : e2e.length ? 'e2e' : 'integration',
     ...files.flatMap(file => ['--file', file]), ...(id ? ['--id', id] : [])]];
 }
 

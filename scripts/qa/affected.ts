@@ -7,6 +7,7 @@ import {
   isQaIntegrationPath,
   isQaLoadPath,
   isQaModelPath,
+  isQaOwnerPath,
   legacyHostJenaGateFiles,
   testArgs,
   unitHarnessFiles,
@@ -15,8 +16,8 @@ import {
 // Affected-test selection for routine batches. It narrows what an agent runs;
 // final acceptance still runs the complete backend suite through `task qa -- --backend`.
 
-export type AffectedTier = 'unit' | 'integration' | 'model' | 'fault/recovery';
-export const affectedTiers: AffectedTier[] = ['unit', 'model', 'integration', 'fault/recovery'];
+export type AffectedTier = 'unit' | 'owner' | 'integration' | 'model' | 'fault/recovery';
+export const affectedTiers: AffectedTier[] = ['unit', 'owner', 'model', 'integration', 'fault/recovery'];
 
 export interface GraphModule {
   source: string;
@@ -171,7 +172,7 @@ export function routeTest(path: string): { tier: AffectedTier } | { deferred: st
   if (isQaModelPath(path)) return { tier: 'model' };
   if (isQaIntegrationPath(path)) return { tier: 'integration' };
   if (isQaFaultPath(path)) return { tier: 'fault/recovery' };
-  return { tier: 'unit' };
+  return { tier: isQaOwnerPath(path) ? 'owner' : 'unit' };
 }
 
 function referencedBy(path: string, sources: Map<string, string>, data: boolean): string[] {
@@ -212,7 +213,7 @@ export function planAffected(input: {
     base: input.base,
     changed: [...input.changed].sort(),
     frontend: [],
-    tests: { unit: [], integration: [], model: [], 'fault/recovery': [] },
+    tests: { unit: [], owner: [], integration: [], model: [], 'fault/recovery': [] },
     widened: [],
     deferred: [],
     ignored: [],

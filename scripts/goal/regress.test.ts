@@ -20,6 +20,7 @@ function repo(extraIntegration = 0) {
     ['integration', 'tests/qa/integration/example.test.ts'], ['fault/recovery', 'tests/qa/fault-recovery/example.test.ts'],
     ['e2e', 'apps/web/tests/example.e2e.ts'], ['e2e', 'apps/web/features/example.stories.tsx'],
     ['accounts:storybook', 'apps/accounts/features/example.stories.tsx'],
+    ['owner', 'scripts/ops/tests/example.test.ts'],
     ...Array.from({ length: extraIntegration }, (_, index) => ['integration', `tests/qa/integration/subdir/extra-${index}.test.ts`]),
   ].map(([tier, file]) => ({ tier, file, outcome: 'pending' })) as ExpectedFile[];
   const write = (file: string, text: string) => { mkdirSync(dirname(join(dir, file)), { recursive: true }); writeFileSync(join(dir, file), text); };
@@ -97,20 +98,26 @@ describe('pinned main-wide regression', () => {
     try {
       r.write('scripts/qa/acceptance.ts', `export const unitHarnessFiles = ['tests/qa/harness.test.ts'];
 export const legacyHostJenaGateFiles = ['services/main/tests/legacy.integration.test.ts'];
-export function testArgs(tier) { return tier === 'model' ? ['model/tests'] : tier === 'integration'
+export const testExclusions = [
+ { file: 'apps/about/tests/example.test.ts', reason: 'About owns its check' },
+ { file: 'apps/web/tests/shared-browser.test.ts', reason: 'Live shared stack fixture' }
+];
+export function testArgs(tier) { return tier === 'owner' ? ['scripts/ops/tests/example.test.ts'] : tier === 'model' ? ['model/tests'] : tier === 'integration'
 ? ['tests/qa/integration', 'services/main/tests/gate.integration.test.ts'] : [tier === 'fault/recovery' ? 'tests/qa/fault-recovery' : 'tests/qa/' + tier]; }
 `);
       r.write('scripts/qa/core.ts', `export { expandTestPaths, splitTestArgs } from ${JSON.stringify(join(import.meta.dir, '../qa/core.ts'))};\n`);
+      r.write('scripts/ops/tests/example.test.ts', '');
       r.write('services/main/tests/gate.integration.test.ts', ''); r.write('tests/qa/harness.test.ts', '');
       r.write('tests/qa/load/example.test.ts', ''); r.write('tests/live/example.test.ts', '');
       r.write('packages/ui/src/example.stories.tsx', '');
       r.write('apps/web/.storybook/main.ts', "const config = { stories: ['../features/**/*.stories.@(ts|tsx)', '../../../packages/ui/src/**/*.stories.@(ts|tsx)'] };\n");
       r.write('apps/accounts/.storybook/main.ts', "const config = { stories: ['../features/**/*.stories.@(ts|tsx)'] };\n");
       const files = await regressionRegistry(r.dir);
+      expect(files).toContainEqual({ file: 'scripts/ops/tests/example.test.ts', tier: 'owner', outcome: 'pending' });
       expect(files).toContainEqual({ file: 'services/main/tests/gate.integration.test.ts', tier: 'integration', outcome: 'pending' });
       expect(files).toContainEqual({ file: 'tests/qa/integration/subdir/extra-0.test.ts', tier: 'integration', outcome: 'pending' });
       expect(files).toContainEqual({ file: 'packages/ui/src/example.stories.tsx', tier: 'e2e', outcome: 'pending' });
-      expect(files.filter(file => file.outcome === 'excluded').map(file => file.tier).sort()).toEqual(['legacy', 'live', 'load']);
+      expect(files.filter(file => file.outcome === 'excluded').map(file => file.tier).sort()).toEqual(['external', 'legacy', 'live', 'live', 'load']);
     } finally { r.cleanup(); }
   });
 

@@ -252,7 +252,7 @@ test('QA08: a complete run requires explicit case coverage before promotion', ()
   const dir = mkdtempSync(join(scratch, 'rezics-qa-complete-'));
   try {
     const source = { head: 'abc', fingerprint: 'stable', clean: true };
-    const tiers = (['static', 'unit', 'integration', 'model', 'fault/recovery', 'e2e', 'load'] as Tier[])
+    const tiers = (['static', 'unit', 'owner', 'integration', 'model', 'fault/recovery', 'e2e', 'load'] as Tier[])
       .map(name => ({ name, status: 'passed' as const }));
     writeSummary(dir, { runId: 'complete', sourceBefore: source, sourceAfter: source,
       partial: false, errors: [], cases, tests, tiers });
