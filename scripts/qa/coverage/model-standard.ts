@@ -11,7 +11,7 @@ export const modelStandardCases: CaseDeclarations = {
     { tier: 'integration', file: 'tests/qa/integration/model-standard-label.test.ts',
       name: 'MODEL13: Label as scoped SKOS labels retain lexical value, language and exact Context qualifiers' },
     { tier: 'unit', file: 'services/main/tests/structure-listitem.test.ts',
-      name: 'MODEL13: ListItem read accepts schema:item and retained rv:target data' },
+      name: 'MODEL13: ListItem read requires normalized schema:item membership' },
   ],
   CTX01: [
     statement,
