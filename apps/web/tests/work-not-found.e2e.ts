@@ -16,7 +16,7 @@ function normalizeAddress(value: string, ref: string): string {
   return value.replaceAll(encodeURIComponent(ref), 'work-ref').replaceAll(ref, 'work-ref');
 }
 
-async function responseBody(page: Page, body: string, ref: string): Promise<string> {
+async function responseBody(page: Page, body: string, ref: string): Promise<{ body: string; staticAssets: string[] }> {
   return page.evaluate(html => {
     const doc = new DOMParser().parseFromString(html, 'text/html');
     // The shell's community navigation can finish before the first flush or in a later React segment.
@@ -49,11 +49,33 @@ async function responseBody(page: Page, body: string, ref: string): Promise<stri
     const markers: Node[] = [];
     while (comments.nextNode()) if (/^(?:\$[?!~]?|\/\$)$/.test(comments.currentNode.nodeValue ?? '')) markers.push(comments.currentNode);
     for (const marker of markers) marker.parentNode?.removeChild(marker);
+    const staticAssets = [...doc.querySelectorAll('link[rel="stylesheet"],link[rel="preload"][as="font"]')]
+      .map(link => link.getAttribute('href') ?? '')
+      .filter(href => /^\/_next\/static\/(?:css\/.+\.css|media\/.+\.woff2)$/.test(href));
     // Preload locations/order follow segment timing. Compare their complete tags in a fixed location.
-    const preloads = [...doc.querySelectorAll('link[rel="modulepreload"]')].sort((a, b) => a.outerHTML.localeCompare(b.outerHTML));
+    const preloads = [...doc.querySelectorAll('link[rel="modulepreload"],link[rel="preload"]')];
+    for (const preload of preloads) {
+      const attributes = [...preload.attributes].sort((a, b) => a.name.localeCompare(b.name));
+      for (const attribute of attributes) preload.removeAttribute(attribute.name);
+      for (const attribute of attributes) preload.setAttribute(attribute.name, attribute.value);
+    }
+    preloads.sort((a, b) => a.outerHTML.localeCompare(b.outerHTML));
     for (const preload of preloads) doc.head.append(preload);
-    return doc.documentElement.outerHTML;
+    return { body: doc.documentElement.outerHTML, staticAssets };
   }, normalizeAddress(body, ref));
+}
+
+function normalizePreloadHeader(headers: Record<string, string>, staticAssets: readonly string[]): void {
+  if (!headers.link) return;
+  // React can promote either the font or stylesheet preload into HTTP Link before flushing.
+  // Remove only those exact static hints whose assets are still compared in the response body.
+  const remaining = headers.link.split(/,\s*(?=<)/).filter(part => {
+    const hint = part.match(/^<(\/_next\/static\/css\/[^>]+\.css)>; rel=preload; as="style"$/)
+      ?? part.match(/^<(\/_next\/static\/media\/[^>]+\.woff2)>; rel=preload; as="font"; crossorigin="anonymous"; type="font\/woff2"$/);
+    return !hint || !staticAssets.includes(hint[1]!);
+  });
+  if (remaining.length) headers.link = remaining.join(', ');
+  else delete headers.link;
 }
 
 async function missingPage(page: Page, address: string, tail: string) {
@@ -63,13 +85,15 @@ async function missingPage(page: Page, address: string, tail: string) {
   await expect(page.getByRole('heading', { level: 1, name: 'Work not found', exact: true })).toBeVisible();
   await expect(page).toHaveTitle('Work not found · REZICS');
   const headers = await response!.allHeaders();
+  const content = await responseBody(page, await response!.text(), ref);
+  normalizePreloadHeader(headers, content.staticAssets);
   // Transport timestamps and tracing describe an individual request. Cache/security headers remain compared.
   for (const name of ['date', 'server-timing', 'x-request-id', 'traceparent']) delete headers[name];
   return {
     status: response!.status(),
     text: await page.locator('main').innerText(),
     title: await page.title(),
-    body: await responseBody(page, await response!.text(), ref),
+    body: content.body,
     headers: Object.fromEntries(Object.entries(headers).map(([key, value]) => [key, normalizeAddress(value, ref)])),
   };
 }
