@@ -56,12 +56,7 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
   const rightsCall = (path: string, body: object, token: string, key = randomUUID()) => rightsApp.handle(
     new Request(`http://main.local${path}`, { method: 'POST', headers: { authorization: `Bearer ${token}`,
       'idempotency-key': key, 'content-type': 'application/json' }, body: JSON.stringify(body) }));
-  const createWork = async (title: string, type = 'https://schema.org/Book', publicText = true) => {
-    const work = await f.json<Work>(await f.call('POST', '/v1/works', await f.authoredBody({
-      profile: 'metadata-only-v1', title, language: 'en', semanticTypes: [type], actingSubject: f.actor })), 201);
-    await f.grant(`work:edit:${work.work}`, 'work.edit');
-    await f.grant(`work:read:${work.work}`, 'work.read');
-    if (!publicText) return work;
+  const publishWork = async (work: Pick<Work, 'work' | 'mainVersion'>, title: string) => {
     await f.grant(`contribution:create:${work.work}`, 'contribution.create');
     const draft = await f.json<{ contribution: string; draftRevision: string }>(await f.call('POST', '/v1/contributions', {
       profile: 'text-contribution-v1', work: work.work, body: `${title} original text`, language: 'en', actingSubject: f.actor }), 201);
@@ -75,6 +70,13 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
       profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: work.mainVersion },
       work: work.work, contribution: draft.contribution, publicationDecision: publication.publicationDecision,
       expectedSelectionHead: null, selectionBasis: 'main-maintainer', actingSubject: f.actor }), 201);
+  };
+  const createWork = async (title: string, type = 'https://schema.org/Book') => {
+    const work = await f.json<Work>(await f.call('POST', '/v1/works', await f.authoredBody({
+      profile: 'metadata-only-v1', title, language: 'en', semanticTypes: [type], actingSubject: f.actor })), 201);
+    await f.grant(`work:edit:${work.work}`, 'work.edit');
+    await f.grant(`work:read:${work.work}`, 'work.read');
+    await publishWork(work, title);
     return work;
   };
   const createEpisode = async (name: string, number: number, publicWork?: string) => {
@@ -271,9 +273,13 @@ test('100 distinct public semantic Episodes fit current/exact Composition budget
       ${iri(erased.revision)} a <${RV}ErasedRevision> } }`);
     const proposal = await f.propose(`OL${randomInt(1, 1_000_000_000_000)}W`, [], 'Withdrawn source title');
     const withdrawn = await f.adoptWork(proposal);
+    await f.grant(`work:edit:${withdrawn.work}`, 'work.edit');
     await f.grant(`work:read:${withdrawn.work}`, 'work.read');
+    await publishWork(withdrawn, 'Independent native contribution');
     const beforeWithdrawal = await insert([withdrawn.work]);
     const mixedExactPath = `${path}/revisions/${shortId(current.revision)}`;
+    const beforeSupportWithdrawal = await measured<Page>('source-before-withdrawal', `${path}?limit=100`);
+    expect(beforeSupportWithdrawal.occurrences.map(item => item.target)).toContain(withdrawn.work);
     await f.json(await f.call('POST', '/v1/sources/withdrawals', { profile: 'source-support-withdrawal-v1',
       support: withdrawn.binding, expectedSupport: withdrawn.binding, reason: 'Withdraw copied title evidence' }), 201);
     // Source support withdrawal retains independent native identity and title.
