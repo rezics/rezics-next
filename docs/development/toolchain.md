@@ -148,14 +148,26 @@ not prove physical boundedness.
 describe these programs. The class names in the pinned 6.2 jar are `riotcmd.riot`,
 `arq.qparse`, `tdb2.tdbloader` and `tdb2.tdbstats`.
 
-The container is `rezics-jena-cli`. The only bind mount is `.temp/jena-cli`,
-read-only, at `/artifacts`. The checkout and the vault are not mounted. Memory
-is 768 MiB, the process limit is 256, each command's output is at most 1 MiB,
-and the run's deadline is 60 seconds. The container is removed after success,
-failure or cancellation.
-`task jena:check` takes no dataset or path argument. Generated shapes must
-already exist (`task gen`). Wiring this command into root check or CI belongs
-to the program gate, not this task.
+Each invocation creates its own container name (`rezics-jena-cli-` and 12 hex
+characters) and its own directory under `.temp/jena-cli`. It does not delete
+another run's container or files first. The id returned by `docker run` is the
+only container it removes. The only bind mount is that run's directory,
+read-only, at `/artifacts`. The checkout and the vault are not mounted.
+
+The execution budget is 60 seconds. It starts before Docker environment
+selection and includes image inspection and every Jena command; inspection does
+not get another 10 seconds outside that budget. Removing this run's container
+is a separate 15 second budget, so a finished or cancelled run can take 75
+seconds. The container command sleeps for 90 seconds so it is still present for
+that cleanup. Memory is 768 MiB, the process limit is 256, and each command's
+output is at most 1 MiB. A shell in the same process group removes the
+container when the command is signalled. It also removes it after a PID-only
+signal, because that signal kills Bun and leaves the shell running; the shell
+notices the parent pid is gone. `task jena:check` takes no dataset or path
+argument. If the Compose image is not local it stops and names that tag; it
+does not select an older image. Generated shapes must already exist
+(`task gen`). Wiring this command into root check or CI belongs to the program
+gate, not this task.
 
 ## Architecture evaluation exception (2026-09-24)
 

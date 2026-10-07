@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { loadDockerEnvironment } from '../load/docker-env.ts';
@@ -7,9 +7,10 @@ import { captureFusekiPlan } from '../load/fuseki-plan.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 
 const root = resolve(import.meta.dir, '../..');
-export const jenaContainerName = 'rezics-jena-cli';
+export const jenaNamePrefix = 'rezics-jena-cli-';
 export const jenaScratchGraph = 'https://rezics.com/jena-cli/scratch';
-const deadlineMs = 60_000;
+export const jenaExecutionMs = 60_000;
+export const jenaCleanupMs = 15_000;
 const outputBytes = 1_048_576;
 const memory = '768m';
 const heap = '384m';
@@ -23,6 +24,31 @@ const assemblers = [
   'infra/jena/fuseki-text-qa-raw.ttl',
   'infra/jena/fuseki-text-quickstart.ttl',
 ];
+
+// spawnSync does not deliver JavaScript signals. This shell lives in the same
+// process group, so a group signal runs the trap. A PID-only signal kills Bun
+// and leaves the shell; the loop then sees the parent pid is gone. Either path
+// removes only the identity written for this run, under the cleanup bound.
+const watchdogScript = `
+parent=$1
+tokenfile=$2
+seconds=$3
+trap '' HUP
+cleanup() {
+  token=$(head -n 1 "$tokenfile" 2>/dev/null || true)
+  case "$token" in
+    rezics-jena-cli-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]|[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*)
+      setsid timeout "$seconds" docker rm -f "$token" >/dev/null 2>&1 || true
+      ;;
+  esac
+  exit 0
+}
+trap cleanup TERM INT
+while kill -0 "$parent" 2>/dev/null; do
+  sleep 0.2
+done
+cleanup
+`;
 
 export interface JenaCommandBounds {
   timeoutMs: number;
@@ -41,13 +67,20 @@ export interface JenaCheckOptions {
   run?: (command: string[], bounds: JenaCommandBounds) => JenaCommandResult;
   maxOutputBytes?: number;
   deadlineMs?: number;
-  /** Remove the named container if this process is signalled while Java is blocked. */
+  cleanupMs?: number;
+  /** Watch this process and remove only its container after a signal or parent exit. */
   watchSignals?: boolean;
+}
+export interface JenaRun {
+  id: string;
+  name: string;
+  directory: string;
 }
 export interface JenaCheckEvidence {
   image: string;
   jenaVersion: string;
   container: string;
+  name: string;
   mount: string;
   riotFiles: number;
   query: {
@@ -64,17 +97,30 @@ export interface JenaCheckEvidence {
   basis: 'tdbstats stdout for one scratch dataset; not installed as stats.opt and not a live store measurement';
 }
 
-function boundsOf(options: JenaCheckOptions): { deadlineMs: number; maxOutputBytes: number } {
-  const deadline = options.deadlineMs ?? deadlineMs;
+function missingImage(image: string): Error {
+  return new Error(
+    `Pinned Fuseki image is not present: ${image}. Waiting for the required image refresh; refusing an older local tag.`,
+  );
+}
+
+function boundsOf(options: JenaCheckOptions): {
+  deadlineMs: number;
+  maxOutputBytes: number;
+  cleanupMs: number;
+} {
+  const deadline = options.deadlineMs ?? jenaExecutionMs;
   const output = options.maxOutputBytes ?? outputBytes;
-  if (!Number.isFinite(deadline) || deadline <= 0 || deadline > deadlineMs)
+  const cleanup = options.cleanupMs ?? jenaCleanupMs;
+  if (!Number.isFinite(deadline) || deadline <= 0 || deadline > jenaExecutionMs)
     throw new Error('Jena CLI deadline must be a positive bound of at most 60 seconds');
   if (!Number.isFinite(output) || output <= 0 || output > outputBytes)
     throw new Error('Jena CLI output bound must be at most 1 MiB');
-  return { deadlineMs: deadline, maxOutputBytes: output };
+  if (!Number.isFinite(cleanup) || cleanup <= 0 || cleanup > jenaCleanupMs)
+    throw new Error('Jena CLI cleanup must be a positive bound of at most 15 seconds');
+  return { deadlineMs: deadline, maxOutputBytes: output, cleanupMs: cleanup };
 }
 
-function scratchDirectory(requested?: string): string {
+function scratchParent(requested?: string): string {
   const directory = resolve(root, requested ?? '.temp/jena-cli');
   const local = relative(root, directory);
   if (
@@ -84,6 +130,13 @@ function scratchDirectory(requested?: string): string {
   )
     throw new Error('Jena CLI artifacts must stay under .temp and outside the vault');
   return directory;
+}
+
+/** A new container name and evidence directory. Callers never share one. */
+export function allocateJenaRun(parent?: string): JenaRun {
+  const id = randomBytes(6).toString('hex');
+  const base = scratchParent(parent);
+  return { id, name: `${jenaNamePrefix}${id}`, directory: join(base, id) };
 }
 
 function checkoutFile(source: string): string {
@@ -116,6 +169,7 @@ function realRun(
   command: string[],
   env: NodeJS.ProcessEnv,
   bounds: JenaCommandBounds,
+  kind: 'execution' | 'cleanup',
 ): JenaCommandResult {
   const result = spawnSync(command[0]!, command.slice(1), {
     cwd: root,
@@ -126,9 +180,18 @@ function realRun(
     killSignal: 'SIGKILL',
   });
   const error = result.error as NodeJS.ErrnoException | undefined;
-  if (error?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER')
-    throw new Error('Jena CLI output exceeded 1 MiB');
-  if (error?.code === 'ETIMEDOUT' || result.signal) throw new Error('Jena CLI deadline exceeded');
+  if (error?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') {
+    throw new Error(
+      kind === 'cleanup'
+        ? 'Jena CLI cleanup output exceeded 4 KiB'
+        : 'Jena CLI output exceeded 1 MiB',
+    );
+  }
+  if (error?.code === 'ETIMEDOUT' || result.signal) {
+    throw new Error(
+      kind === 'cleanup' ? 'Jena CLI cleanup exceeded 15 seconds' : 'Jena CLI deadline exceeded',
+    );
+  }
   return {
     status: result.status,
     stdout: result.stdout ?? '',
@@ -148,13 +211,15 @@ function tail(text: string): string {
 }
 
 /** The detached container command. TDB2 lives on a container tmpfs, never a host dataset. */
-export function jenaContainerArguments(image: string, directory: string): string[] {
+export function jenaContainerArguments(image: string, directory: string, name: string): string[] {
+  if (!new RegExp(`^${jenaNamePrefix}[0-9a-f]{12}$`).test(name))
+    throw new Error('Jena CLI container name must belong to one run');
   return [
     'docker',
     'run',
     '-d',
     '--name',
-    jenaContainerName,
+    name,
     '--network',
     'none',
     '--memory',
@@ -184,6 +249,8 @@ function useContainer<T>(
   body: (ctx: {
     directory: string;
     image: { image: string; jenaVersion: string };
+    containerId: string;
+    containerName: string;
     java: (args: string[]) => JenaCommandResult;
     exec: (args: string[]) => JenaCommandResult;
     save: (name: string, result: JenaCommandResult) => void;
@@ -192,112 +259,127 @@ function useContainer<T>(
   const limits = boundsOf(options);
   const compose = readFileSync(join(root, 'infra/dev/compose.yaml'), 'utf8');
   const image = fusekiImageFromCompose(compose);
-  if (options.imagePresent) {
-    if (!options.imagePresent(image.image))
-      throw new Error(`Pinned Fuseki image is not present: ${image.image}`);
-  }
-  const env = options.dockerEnv ?? loadDockerEnvironment();
-  if (!options.imagePresent) {
-    const inspected = realRun(
-      ['docker', 'image', 'inspect', image.image, '--format', '{{.Id}}'],
-      env,
-      { timeoutMs: 10_000, maxOutputBytes: 4096 },
-    );
-    if (inspected.status !== 0 || !inspected.stdout.trim().startsWith('sha256:'))
-      throw new Error(`Pinned Fuseki image is not present: ${image.image}`);
-  }
-  const directory = scratchDirectory(options.directory);
-  mkdirSync(directory, { recursive: true });
-  // spawnSync does not run JavaScript signal handlers, so a shell in this process
-  // group removes the container when the command is cancelled mid-Java.
-  const watchdog = options.watchSignals
-    ? spawn(
-        'sh',
-        [
-          '-c',
-          `trap '' HUP; trap 'setsid docker rm -f ${jenaContainerName} >/dev/null 2>&1; exit 0' TERM INT; while :; do sleep 1; done`,
-        ],
-        { cwd: root, env, stdio: 'ignore' },
-      )
-    : undefined;
-  const stopWatchdog = () => {
-    const pid = watchdog?.pid;
-    if (!watchdog || watchdog.exitCode !== null || pid === undefined) return;
-    watchdog.kill('SIGTERM');
-    spawnSync(
-      'sh',
-      [
-        '-c',
-        `i=0; while kill -0 ${pid} 2>/dev/null && [ "$i" -lt 150 ]; do i=$((i+1)); sleep 0.1; done`,
-      ],
-      { timeout: 20_000 },
-    );
-  };
+  if (options.imagePresent && !options.imagePresent(image.image)) throw missingImage(image.image);
   const started = Date.now();
-  const run = (command: string[], timeoutMs: number): JenaCommandResult => {
+  const env = options.dockerEnv ?? loadDockerEnvironment();
+  const run = allocateJenaRun(options.directory);
+  mkdirSync(run.directory, { recursive: true });
+  const tokenFile = join(run.directory, 'container.token');
+  let ownedId: string | undefined;
+  let attempted = false;
+  let watchdog: ReturnType<typeof spawn> | undefined;
+  const remain = () => {
+    const left = limits.deadlineMs - (Date.now() - started);
+    if (left <= 0) throw new Error('Jena CLI deadline exceeded');
+    return left;
+  };
+  const execute = (command: string[]): JenaCommandResult => {
     if (command.some((part) => part === 'pull' || part === 'build'))
       throw new Error('Jena CLI does not build or pull an image');
-    const elapsed = Date.now() - started;
-    if (elapsed >= limits.deadlineMs) throw new Error('Jena CLI deadline exceeded');
-    const bounds = {
-      timeoutMs: Math.min(timeoutMs, limits.deadlineMs - elapsed),
-      maxOutputBytes: limits.maxOutputBytes,
-    };
-    const result = options.run ? options.run(command, bounds) : realRun(command, env, bounds);
+    const bounds = { timeoutMs: remain(), maxOutputBytes: limits.maxOutputBytes };
+    const result = options.run
+      ? options.run(command, bounds)
+      : realRun(command, env, bounds, 'execution');
     const bytes = Buffer.byteLength(result.stdout) + Buffer.byteLength(result.stderr);
     if (bytes > limits.maxOutputBytes) throw new Error('Jena CLI output exceeded 1 MiB');
     if (result.status === null || result.signal) throw new Error('Jena CLI deadline exceeded');
     return result;
   };
-  const requireOk = (result: JenaCommandResult, label: string) => {
-    if (result.status !== 0)
-      throw new Error(
-        `${label} failed (${result.status}): ${tail(result.stderr || result.stdout)}`,
-      );
-  };
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    stopWatchdog();
-    const removed = options.run
-      ? options.run(['docker', 'rm', '-f', jenaContainerName], {
-          timeoutMs: 15_000,
-          maxOutputBytes: 4096,
-        })
-      : realRun(['docker', 'rm', '-f', jenaContainerName], env, {
-          timeoutMs: 15_000,
-          maxOutputBytes: 4096,
-        });
-    if (removed.status !== 0) throw new Error(`Could not remove ${jenaContainerName}`);
+  const stopWatchdog = (budgetMs: number) => {
+    if (!watchdog || watchdog.exitCode !== null || watchdog.signalCode !== null) return;
+    const pid = watchdog.pid;
+    if (budgetMs <= 0 || pid === undefined) {
+      watchdog.kill('SIGKILL');
+      return;
+    }
+    watchdog.kill('SIGTERM');
+    const steps = Math.max(1, Math.ceil(budgetMs / 100));
+    spawnSync(
+      'sh',
+      [
+        '-c',
+        `i=0; while kill -0 ${pid} 2>/dev/null && [ "$i" -lt ${steps} ]; do i=$((i+1)); sleep 0.1; done`,
+      ],
+      { timeout: budgetMs },
+    );
   };
   let failure: unknown;
   try {
-    requireOk(
-      run(['docker', 'rm', '-f', jenaContainerName], 15_000),
-      'Removing a previous Jena CLI container',
-    );
-    requireOk(
-      run(jenaContainerArguments(image.image, directory), 20_000),
-      'Starting the pinned Jena CLI container',
-    );
+    if (!options.imagePresent) {
+      const inspected = execute(['docker', 'image', 'inspect', image.image, '--format', '{{.Id}}']);
+      if (inspected.status !== 0 || !inspected.stdout.trim().startsWith('sha256:'))
+        throw missingImage(image.image);
+    }
+    writeFileSync(tokenFile, `${run.name}\n`);
+    if (options.watchSignals) {
+      watchdog = spawn(
+        'sh',
+        [
+          '-c',
+          watchdogScript,
+          'jena-cleanup',
+          String(process.pid),
+          tokenFile,
+          String(limits.cleanupMs / 1000),
+        ],
+        { cwd: root, env, stdio: 'ignore' },
+      );
+    }
+    attempted = true;
+    const startedContainer = execute(jenaContainerArguments(image.image, run.directory, run.name));
+    if (startedContainer.status !== 0) {
+      throw new Error(
+        `Starting the pinned Jena CLI container failed (${startedContainer.status}): ${tail(startedContainer.stderr || startedContainer.stdout)}`,
+      );
+    }
+    const id = startedContainer.stdout.trim();
+    if (!/^[0-9a-f]{12,64}$/.test(id))
+      throw new Error('Pinned Jena container did not return an id');
+    ownedId = id;
+    writeFileSync(tokenFile, `${id}\n`);
     const jar = `/opt/apache-jena-fuseki-${image.jenaVersion}/fuseki-server.jar`;
-    const exec = (args: string[]) => run(['docker', 'exec', jenaContainerName, ...args], 20_000);
+    const exec = (args: string[]) => execute(['docker', 'exec', id, ...args]);
     const java = (args: string[]) => exec(['java', `-Xmx${heap}`, '-cp', jar, ...args]);
     const save = (name: string, result: JenaCommandResult) => {
-      writeFileSync(join(directory, `${name}.stdout`), result.stdout);
-      writeFileSync(join(directory, `${name}.stderr`), result.stderr);
+      writeFileSync(join(run.directory, `${name}.stdout`), result.stdout);
+      writeFileSync(join(run.directory, `${name}.stderr`), result.stderr);
     };
-    return body({ directory, image, java, exec, save });
+    return body({
+      directory: run.directory,
+      image,
+      containerId: id,
+      containerName: run.name,
+      java,
+      exec,
+      save,
+    });
   } catch (error) {
     failure = error;
     throw error;
   } finally {
+    const cleanupStarted = Date.now();
+    let cleanupError: unknown;
+    const target = ownedId ?? (attempted ? run.name : undefined);
     try {
-      cleanup();
+      if (target) {
+        const bounds = { timeoutMs: limits.cleanupMs, maxOutputBytes: 4096 };
+        const removed = options.run
+          ? options.run(['docker', 'rm', '-f', target], bounds)
+          : realRun(['docker', 'rm', '-f', target], env, bounds, 'cleanup');
+        if (removed.status === null || removed.signal)
+          throw new Error('Jena CLI cleanup exceeded 15 seconds');
+        if (removed.status !== 0) throw new Error(`Could not remove ${target}`);
+      }
     } catch (error) {
-      if (failure === undefined) throw error;
+      cleanupError = error;
     }
+    const left = limits.cleanupMs - (Date.now() - cleanupStarted);
+    try {
+      stopWatchdog(left);
+    } catch {
+      /* the cleanup bound already elapsed */
+    }
+    if (cleanupError !== undefined && failure === undefined) throw cleanupError;
   }
 }
 
@@ -382,75 +464,84 @@ export function jenaRefusal(
 
 /** Validate pinned artifacts, parse the reviewed query, and record scratch graph statistics. */
 export function jenaCheck(options: JenaCheckOptions = {}): JenaCheckEvidence {
-  return useContainer(options, ({ directory, image, java, exec, save }) => {
-    const inputs = stageInputs(directory);
-    const riot = java(['riotcmd.riot', '--quiet', '--validate', ...inputs.riot]);
-    save('riot', riot);
-    if (riot.status !== 0)
-      throw new Error(`RIOT rejected Turtle or an assembler: ${tail(riot.stdout || riot.stderr)}`);
-    const sparql = readFileSync(checkoutFile(reviewedQuery), 'utf8');
-    const plan = captureFusekiPlan(sparql, {
-      label: 'work-versions',
-      directory,
-      image,
-      run: (command) => {
-        const at = command.lastIndexOf(image.image);
-        if (at < 0) throw new Error('Reviewed query capture did not use the pinned image');
-        return exec(['java', `-Xmx${heap}`, ...command.slice(at + 1)]);
-      },
-    });
-    const loaded = java([
-      'tdb2.tdbloader',
-      '--loader=basic',
-      '--loc=/tdb',
-      '/artifacts/stage/scratch.trig',
-    ]);
-    save('loader', loaded);
-    if (loaded.status !== 0)
-      throw new Error(
-        `TDB2 loader rejected the scratch TriG: ${tail(loaded.stderr || loaded.stdout)}`,
-      );
-    const defaults = java(['tdb2.tdbstats', '--loc=/tdb']);
-    save('default-stats', defaults);
-    if (defaults.status !== 0) throw new Error('Default-graph statistics failed');
-    const named = java(['tdb2.tdbstats', '--loc=/tdb', `--graph=${jenaScratchGraph}`]);
-    save('named-stats', named);
-    if (named.status !== 0) throw new Error('Named-graph statistics failed');
-    const defaultCount = countOf(defaults.stdout);
-    const namedCount = countOf(named.stdout);
-    if (defaultCount === namedCount || !named.stdout.includes('https://rezics.com/jena-cli/extra'))
-      throw new Error(
-        'Scratch statistics did not distinguish the named graph from the default graph',
-      );
-    const optimizer = exec(['find', '/tdb', '-name', 'stats.opt', '-print']);
-    save('stats-opt', optimizer);
-    if (optimizer.status !== 0 || optimizer.stdout.trim() !== '')
-      throw new Error(
-        'tdbstats stdout was not left as stdout; stats.opt appeared in the scratch dataset',
-      );
-    const evidence: JenaCheckEvidence = {
-      image: image.image,
-      jenaVersion: image.jenaVersion,
-      container: jenaContainerName,
-      mount: relative(root, directory),
-      riotFiles: inputs.riot.length,
-      query: {
-        source: reviewedQuery,
-        fixture: reviewedFixture,
-        fixtureSha256: inputs.fixtureSha256,
-        planFile: plan.planFile,
-        queryDigest: plan.queryDigest,
-      },
-      scratchGraph: jenaScratchGraph,
-      defaultCount,
-      namedCount,
-      statsOpt: 'absent',
-      basis:
-        'tdbstats stdout for one scratch dataset; not installed as stats.opt and not a live store measurement',
-    };
-    writeFileSync(join(directory, 'evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
-    return evidence;
-  });
+  return useContainer(
+    options,
+    ({ directory, image, containerId, containerName, java, exec, save }) => {
+      const inputs = stageInputs(directory);
+      const riot = java(['riotcmd.riot', '--quiet', '--validate', ...inputs.riot]);
+      save('riot', riot);
+      if (riot.status !== 0)
+        throw new Error(
+          `RIOT rejected Turtle or an assembler: ${tail(riot.stdout || riot.stderr)}`,
+        );
+      const sparql = readFileSync(checkoutFile(reviewedQuery), 'utf8');
+      const plan = captureFusekiPlan(sparql, {
+        label: 'work-versions',
+        directory,
+        image,
+        run: (command) => {
+          const at = command.lastIndexOf(image.image);
+          if (at < 0) throw new Error('Reviewed query capture did not use the pinned image');
+          return exec(['java', `-Xmx${heap}`, ...command.slice(at + 1)]);
+        },
+      });
+      const loaded = java([
+        'tdb2.tdbloader',
+        '--loader=basic',
+        '--loc=/tdb',
+        '/artifacts/stage/scratch.trig',
+      ]);
+      save('loader', loaded);
+      if (loaded.status !== 0)
+        throw new Error(
+          `TDB2 loader rejected the scratch TriG: ${tail(loaded.stderr || loaded.stdout)}`,
+        );
+      const defaults = java(['tdb2.tdbstats', '--loc=/tdb']);
+      save('default-stats', defaults);
+      if (defaults.status !== 0) throw new Error('Default-graph statistics failed');
+      const named = java(['tdb2.tdbstats', '--loc=/tdb', `--graph=${jenaScratchGraph}`]);
+      save('named-stats', named);
+      if (named.status !== 0) throw new Error('Named-graph statistics failed');
+      const defaultCount = countOf(defaults.stdout);
+      const namedCount = countOf(named.stdout);
+      if (
+        defaultCount === namedCount ||
+        !named.stdout.includes('https://rezics.com/jena-cli/extra')
+      )
+        throw new Error(
+          'Scratch statistics did not distinguish the named graph from the default graph',
+        );
+      const optimizer = exec(['find', '/tdb', '-name', 'stats.opt', '-print']);
+      save('stats-opt', optimizer);
+      if (optimizer.status !== 0 || optimizer.stdout.trim() !== '')
+        throw new Error(
+          'tdbstats stdout was not left as stdout; stats.opt appeared in the scratch dataset',
+        );
+      const evidence: JenaCheckEvidence = {
+        image: image.image,
+        jenaVersion: image.jenaVersion,
+        container: containerId,
+        name: containerName,
+        mount: relative(root, directory),
+        riotFiles: inputs.riot.length,
+        query: {
+          source: reviewedQuery,
+          fixture: reviewedFixture,
+          fixtureSha256: inputs.fixtureSha256,
+          planFile: plan.planFile,
+          queryDigest: plan.queryDigest,
+        },
+        scratchGraph: jenaScratchGraph,
+        defaultCount,
+        namedCount,
+        statsOpt: 'absent',
+        basis:
+          'tdbstats stdout for one scratch dataset; not installed as stats.opt and not a live store measurement',
+      };
+      writeFileSync(join(directory, 'evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
+      return evidence;
+    },
+  );
 }
 
 if (import.meta.main) {
@@ -460,7 +551,9 @@ if (import.meta.main) {
   }
   try {
     const evidence = jenaCheck({ watchSignals: true });
-    console.log(`.temp/jena-cli/evidence.json ${evidence.defaultCount} ${evidence.namedCount}`);
+    console.log(
+      `${evidence.mount}/evidence.json ${evidence.container} ${evidence.defaultCount} ${evidence.namedCount}`,
+    );
   } catch (error) {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
