@@ -306,3 +306,22 @@ them to workers or external tools).
 ```
 
 The manager may change its own effort when a stretch of work calls for it.
+
+### A manager on Codex
+
+A manager can run on GPT-6.1 Sol (maintainer, 2026-10-07: backend Goals move
+there so the Claude week goes to Sonnet frontend work). Start it in the Goal's
+tmux session with
+`GOAL_ID=<goal> codex --dangerously-bypass-approvals-and-sandbox -m gpt-6.1-sol -c model_reasoning_effort=high`
+(or `codex-1` for the second account) and the start message above. Codex has no
+background notifications and no cross-session messages, so:
+
+- Work in a loop: handle what is ready, then run
+  `scripts/goal/next-event.sh <goal>` in the foreground; it returns when one of
+  the Goal's tasks changes state, the Goal's inbox grows, or after 20 minutes.
+- The inbox is `.temp/goal-orchestration/messages/<goal>.md`. Other managers
+  append to it (`## <time> from <goal>` and the text); read what is new there.
+- To reach another manager, append to its inbox the same way. Claude managers
+  watch theirs.
+- Keep the same reserve as any manager: if the account the manager runs on
+  nears its limit, move workers to the other account first.
