@@ -99,12 +99,6 @@ export function parseTurtleProfile(
       throw new Error(`${location} requires xsd:string`);
     return term.value;
   };
-  // Fixed JSON values have only the existing IRI and string mappings. Reject
-  // other RDF literals instead of discarding their datatype or language tag.
-  const fixed = (term: Quad_Object, location: string): Term =>
-    term.termType === 'NamedNode'
-      ? compact(term.value)
-      : (JSON.stringify(string(term, location)) as Term);
   const integer = (term: Quad_Object, predicate: string): number => {
     if (
       term.termType !== 'Literal' ||
@@ -115,24 +109,30 @@ export function parseTurtleProfile(
       throw new Error(`${compact(predicate)} requires a safe xsd:integer`);
     return Number(term.value);
   };
-  const list = (head: Quad_Object): Term[] => {
-    const items: Term[] = [];
+  // Integer fixed values use JSON's exact safe-integer envelope. Other typed
+  // literals fail instead of losing their datatype or language tag.
+  const fixed = (term: Quad_Object, location: string, allowInteger = false): Term => {
+    if (term.termType === 'NamedNode') return compact(term.value);
+    if (allowInteger && term.termType === 'Literal' && term.datatype.value === `${xsd}integer`)
+      return `${integer(term, `${sh}hasValue`)}`;
+    return JSON.stringify(string(term, location)) as Term;
+  };
+  const list = (head: Quad_Object, location: string): Quad_Object[] => {
+    const items: Quad_Object[] = [];
     const visited = new Set<string>();
     let current = head;
     while (!(current.termType === 'NamedNode' && current.value === `${rdf}nil`)) {
       if (current.termType !== 'BlankNode' && current.termType !== 'NamedNode')
-        throw new Error('sh:in requires an RDF list ending in rdf:nil');
-      if (visited.has(key(current))) throw new Error('Cyclic sh:in RDF list');
+        throw new Error(`${location} requires an RDF list ending in rdf:nil`);
+      if (visited.has(key(current))) throw new Error(`Cyclic ${location} RDF list`);
       // A source enum is bounded independently of the parser and input graph.
-      if (items.length >= 256) throw new Error('sh:in RDF list exceeds 256 members');
+      if (items.length >= 256) throw new Error(`${location} RDF list exceeds 256 members`);
       visited.add(key(current));
       const values = fields(current, [`${rdf}first`, `${rdf}rest`]);
-      items.push(fixed(one(values, `${rdf}first`, true)!, 'sh:in member'));
+      items.push(one(values, `${rdf}first`, true)!);
       current = one(values, `${rdf}rest`, true)!;
     }
-    if (!items.length) throw new Error('Empty sh:in RDF list');
-    if (items.some((item) => item.startsWith('"')) && items.some((item) => !item.startsWith('"')))
-      throw new Error('sh:in requires one JSON mapping for every member');
+    if (!items.length) throw new Error(`Empty ${location} RDF list`);
     return items;
   };
   const property = (subject: Quad_Object): PropertyDefinition => {
@@ -153,6 +153,7 @@ export function parseTurtleProfile(
       'minInclusive',
       'maxInclusive',
       'in',
+      'languageIn',
     ];
     const values = fields(
       subject,
@@ -170,9 +171,21 @@ export function parseTurtleProfile(
       if (value) result[name] = compact(named(value, `sh:${name}`));
     }
     const hasValue = one(values, `${sh}hasValue`);
-    if (hasValue) result.hasValue = fixed(hasValue, 'sh:hasValue');
+    if (hasValue) result.hasValue = fixed(hasValue, 'sh:hasValue', true);
     const enumeration = one(values, `${sh}in`);
-    if (enumeration) result.in = list(enumeration);
+    if (enumeration) {
+      result.in = list(enumeration, 'sh:in').map((term) => fixed(term, 'sh:in member'));
+      if (
+        result.in.some((term) => term.startsWith('"')) &&
+        result.in.some((term) => !term.startsWith('"'))
+      )
+        throw new Error('sh:in requires one JSON mapping for every member');
+    }
+    const languages = one(values, `${sh}languageIn`);
+    if (languages)
+      result.languageIn = list(languages, 'sh:languageIn').map((term) =>
+        string(term, 'sh:languageIn member'),
+      );
     const pattern = one(values, `${sh}pattern`);
     if (pattern) {
       result.pattern = string(pattern, 'sh:pattern');
@@ -202,20 +215,25 @@ export function parseTurtleProfile(
       ) {
         throw new Error(`Unsupported sh:datatype ${result.datatype}`);
       }
-      if (result.nodeKind || result.class || (result.hasValue && !result.hasValue.startsWith('"')))
+      if (result.nodeKind || result.class || hasValue?.termType === 'NamedNode')
         throw new Error('Cannot lower an IRI constraint with sh:datatype');
     }
     const datatype = result.datatype && named(one(values, `${sh}datatype`)!, 'sh:datatype');
     const fixedValues = [...(result.in ?? []), ...(result.hasValue ? [result.hasValue] : [])];
     const literalValues = fixedValues.some((value) => value.startsWith('"'));
-    const iriValues = fixedValues.some((value) => !value.startsWith('"'));
+    const integerValue = result.hasValue !== undefined && /^-?\d+$/.test(result.hasValue);
+    const iriValues = fixedValues.some((value) => !value.startsWith('"') && !/^-?\d+$/.test(value));
     if (
       (literalValues && iriValues) ||
       (literalValues &&
         (result.nodeKind || result.class || (datatype && datatype !== `${xsd}string`))) ||
-      (iriValues && datatype)
+      (iriValues && datatype) ||
+      (integerValue &&
+        (result.nodeKind || result.class || (datatype && datatype !== `${xsd}integer`)))
     )
       throw new Error('Fixed values conflict with the property JSON mapping');
+    if (result.languageIn && datatype !== `${rdf}langString`)
+      throw new Error('sh:languageIn requires the language-string JSON mapping');
     if (
       (result.minInclusive !== undefined || result.maxInclusive !== undefined) &&
       datatype !== `${xsd}integer`
@@ -233,9 +251,11 @@ export function parseTurtleProfile(
       fixedValues.length &&
       (result.pattern !== undefined ||
         result.minLength !== undefined ||
-        result.maxLength !== undefined)
+        result.maxLength !== undefined ||
+        result.minInclusive !== undefined ||
+        result.maxInclusive !== undefined)
     )
-      throw new Error('Cannot lower fixed values together with string facets');
+      throw new Error('Cannot lower fixed values together with facets');
     if (result.in && result.hasValue)
       throw new Error('Cannot lower sh:in together with sh:hasValue');
     const unique = one(values, `${sh}uniqueLang`);
@@ -257,14 +277,28 @@ export function parseTurtleProfile(
   const shapes = nodes.map(({ subject }) => {
     if (subject.termType !== 'NamedNode')
       throw new Error('Turtle profiles require a named NodeShape');
-    const values = fields(subject, [`${rdf}type`, `${sh}property`, `${sh}closed`]);
+    const values = fields(subject, [`${rdf}type`, `${sh}property`, `${sh}closed`, `${sh}or`]);
     if (named(one(values, `${rdf}type`, true)!, 'rdf:type') !== `${sh}NodeShape`)
       throw new Error('Expected sh:NodeShape');
     const closed = one(values, `${sh}closed`);
+    const disjunction = one(values, `${sh}or`);
+    const branches =
+      disjunction &&
+      list(disjunction, 'sh:or').map((group) => {
+        if (group.termType !== 'BlankNode' && group.termType !== 'NamedNode')
+          throw new Error('sh:or requires local property groups');
+        const properties = fields(group, [`${sh}property`]).get(`${sh}property`) ?? [];
+        if (!properties.length || properties.length > 256)
+          throw new Error('sh:or requires 1 to 256 properties per local group');
+        return properties.map(property);
+      });
+    if (branches && branches.length < 2)
+      throw new Error('sh:or requires at least two local property groups');
     const role = shapeRole(id, subject.value);
     return {
       iri: subject.value,
       properties: (values.get(`${sh}property`) ?? []).map(property),
+      ...(branches ? { or: branches } : {}),
       ...(closed && boolean(closed, `${sh}closed`) ? { closed: true as const } : {}),
       ...(declaration?.canonical?.[role] ? { canonical: declaration.canonical[role] } : {}),
     };

@@ -1,5 +1,9 @@
 import type { ProfileDefinition } from '../compiler/ir.ts';
-import { realmStandingRatingObservationProfile } from './realm-standing-rating-observation-v1.ts';
+import { readFileSync } from 'node:fs';
+import { parseTurtleProfile } from '../compiler/shacl.ts';
+
+const realmStandingRatingObservationProfile = parseTurtleProfile('realm-standing-rating-observation-v1',
+  readFileSync(new URL('./realm-standing-rating-observation-v1.ttl', import.meta.url), 'utf8'));
 import { realmTargetRatingContextProfile } from './realm-target-rating-context-v1.ts';
 
 const required = (path: `rv:${string}`, term: `rv:${string}`) =>
@@ -13,7 +17,7 @@ export const realmTargetRatingObservationProfile = {
     ...realmTargetRatingContextProfile.shapes.map(shape => ({ ...shape, canonical: undefined,
       iri: shape.iri.replace('rating-context-', 'rating-observation-') })),
     { iri: 'https://rezics.com/definition/realm-target-rating-observation-v1/observation-shape',
-      canonical: { types: ['rv:TargetRatingObservation'] }, properties: [
+      canonical: { types: ['rv:TargetRatingObservation'] as const }, properties: [
         { path: 'rdf:type', hasValue: 'rv:TargetRatingObservation' },
         required('rv:ratingContext', 'rv:TargetRatingContext'),
         { path: 'rv:target', minCount: 1, maxCount: 1, nodeKind: 'sh:IRI' },
@@ -23,7 +27,7 @@ export const realmTargetRatingObservationProfile = {
       ] },
     ...realmStandingRatingObservationProfile.shapes.filter(shape => shape.iri.endsWith('/revision-shape'))
       .map(shape => ({ ...shape, iri: shape.iri.replace('realm-standing-', 'realm-target-'),
-        canonical: { types: ['rv:TargetRatingObservationRevision'] },
+        canonical: { types: ['rv:TargetRatingObservationRevision'] as const },
         properties: shape.properties.map(property => property.path === 'rdf:type'
           ? { ...property, hasValue: 'rv:TargetRatingObservationRevision' as const }
           : property.path === 'rv:observation' ? required('rv:observation', 'rv:TargetRatingObservation')

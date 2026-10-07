@@ -1,5 +1,9 @@
-import type { ProfileDefinition } from '../compiler/ir.ts';
-import { realmStandingRatingObservationProfile } from './realm-standing-rating-observation-v1.ts';
+import type { ProfileDefinition, Term } from '../compiler/ir.ts';
+import { readFileSync } from 'node:fs';
+import { parseTurtleProfile } from '../compiler/shacl.ts';
+
+const realmStandingRatingObservationProfile = parseTurtleProfile('realm-standing-rating-observation-v1',
+  readFileSync(new URL('./realm-standing-rating-observation-v1.ttl', import.meta.url), 'utf8'));
 
 export const realmExperienceRatingObservationProfile = {
   ...realmStandingRatingObservationProfile,
@@ -8,7 +12,7 @@ export const realmExperienceRatingObservationProfile = {
     'Only an opaque server-derived occasion reference is stored in RDF.'],
   shapes: realmStandingRatingObservationProfile.shapes.map(shape => {
     const role = shape.iri.split('/').at(-1);
-    const type = role === 'context-shape' ? 'rv:ExperienceRatingContext'
+    const type: Term | undefined = role === 'context-shape' ? 'rv:ExperienceRatingContext'
       : role === 'observation-shape' ? 'rv:ExperienceRatingObservation'
       : role === 'revision-shape' ? 'rv:ExperienceRatingObservationRevision' : undefined;
     return { ...shape,

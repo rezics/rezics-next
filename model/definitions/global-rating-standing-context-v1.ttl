@@ -1,0 +1,23 @@
+# Global rating question outside every Realm: its own 1-5 scale and Account population.
+# It never carries rv:RatingContext or rv:realm, so Realm shapes and reads cannot select it.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/global-rating-standing-context-v1/context-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rv:GlobalRatingContext ] ;
+    sh:property [ sh:path rv:contextState ; sh:hasValue rv:Active ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:realm ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:ratingPopulationOwner ; sh:hasValue <https://rezics.com/id/00000000-0000-8000-8000-676c6f62616c> ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:targetGrain ; sh:hasValue rv:MainVersion ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:ratingScaleMin ; sh:hasValue 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ] ;
+    sh:property [ sh:path rv:ratingScaleMax ; sh:hasValue 5 ; sh:maxCount 1 ; sh:datatype xsd:integer ] ;
+    sh:property [ sh:path rv:ratingCadence ; sh:hasValue <https://rezics.com/definition/rating-standing-v1> ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:ratingPopulationPolicy ; sh:hasValue <https://rezics.com/definition/rating-global-account-principal-population-v1> ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:ratingAggregationPolicy ; sh:hasValue <https://rezics.com/definition/rating-latest-per-rater-mean-v1> ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:question ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype rdf:langString ; sh:languageIn ( "en" ) ; sh:minLength 3 ; sh:maxLength 120 ] ;
+    sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+# Authored SHACL constraints for rating evidence.

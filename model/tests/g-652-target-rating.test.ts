@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
 import { realmTargetRatingContextProfile } from '../definitions/realm-target-rating-context-v1.ts';
 import { realmTargetRatingObservationProfile } from '../definitions/realm-target-rating-observation-v1.ts';
-import { realmStandingRatingContextProfile } from '../definitions/realm-standing-rating-context-v1.ts';
+import { authoredProfiles } from '../compiler/generate.ts';
+
+const realmStandingRatingContextProfile = authoredProfiles.find(profile => profile.id === 'realm-standing-rating-context-v1')!;
 import { realmReleaseRatingContextProfile } from '../definitions/realm-release-rating-context-v1.ts';
 import { buildCommandRegistry } from '../compiler/registry.ts';
 

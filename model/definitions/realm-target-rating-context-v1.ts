@@ -1,5 +1,9 @@
 import type { ProfileDefinition } from '../compiler/ir.ts';
-import { realmStandingRatingContextProfile } from './realm-standing-rating-context-v1.ts';
+import { readFileSync } from 'node:fs';
+import { parseTurtleProfile } from '../compiler/shacl.ts';
+
+const realmStandingRatingContextProfile = parseTurtleProfile('realm-standing-rating-context-v1',
+  readFileSync(new URL('./realm-standing-rating-context-v1.ttl', import.meta.url), 'utf8'));
 
 /** One profile, with the owner-selected grain fixed for the life of each Context. */
 export const realmTargetRatingContextProfile = {

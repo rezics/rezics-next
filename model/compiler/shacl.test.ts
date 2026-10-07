@@ -159,7 +159,7 @@ test('Turtle supports IRI node kind, class, closed shapes and the explicit datat
 });
 
 test('Unsupported SHACL and RDF term kinds fail by name rather than losing constraints', () => {
-  for (const name of ['or', 'node', 'languageIn']) {
+  for (const name of ['or', 'node', 'flags']) {
     expect(() =>
       parseTurtleProfile('probe-v1', turtle(`sh:path rv:value ; sh:${name} rv:Value`)),
     ).toThrow(`sh:${name}`);
@@ -256,7 +256,7 @@ test('Turtle fixed values preserve escaped lexical strings and distinguish IRIs'
     'sh:in ("main" rv:main)',
     'sh:in ("main"@en)',
     'sh:in ("01"^^xsd:integer)',
-    'sh:hasValue "01"^^xsd:integer',
+    'sh:hasValue "not-integer"^^xsd:integer',
     'sh:hasValue true',
     'sh:datatype xsd:integer ; sh:hasValue "01"',
     'sh:nodeKind sh:IRI ; sh:in ("main")',
@@ -371,4 +371,139 @@ test('The DSL lowerer distinguishes single fixed literals from single fixed IRIs
       ),
     ).toBe(false);
   }
+});
+
+test('Turtle fixed integer literals map exactly to safe JSON numbers with authored bytes intact', async () => {
+  for (const datatype of ['', '; sh:datatype xsd:integer']) {
+    const source = turtle(
+      `sh:path rv:value ; sh:maxCount 1 ; sh:hasValue "+0001"^^xsd:integer ${datatype}`,
+    );
+    const profile = parseTurtleProfile('probe-v1', source);
+    expect(profileSource(profile)).toBe(source);
+    expect(profile.shapes[0]!.properties[0]!.hasValue).toBe('1');
+    const shape = (await schemas(profile))[profile.shapes[0]!.iri]!;
+    expect(Value.Check(shape, node({ 'rv:value': [1] }))).toBe(true);
+    for (const value of ['1', '+0001', 0, 1.5, null])
+      expect(Value.Check(shape, node({ 'rv:value': [value] }))).toBe(false);
+    const context = JSON.parse(
+      buildModelOutputs([profile]).get('generated/model/contexts/probe-v1.jsonld')!,
+    )['@context'];
+    expect(context['rv:value']['@type']).toBe('xsd:integer');
+  }
+  for (const clauses of [
+    'sh:hasValue 9007199254740992',
+    'sh:hasValue "1.0"^^xsd:integer',
+    'sh:hasValue 1.0',
+    'sh:datatype xsd:string ; sh:hasValue 1',
+    'sh:nodeKind sh:IRI ; sh:hasValue 1',
+    'sh:datatype xsd:integer ; sh:hasValue 1 ; sh:minInclusive 0',
+    'sh:in (1 2)',
+  ])
+    expect(() => parseTurtleProfile('probe-v1', turtle(`sh:path rv:value ; ${clauses}`))).toThrow();
+});
+
+test('Turtle language lists keep the existing exact language-value JSON mapping', async () => {
+  const shape = await schema(
+    turtle(
+      'sh:path rv:value ; sh:datatype rdf:langString ; sh:languageIn ("en") ; sh:minLength 3 ; sh:maxLength 120',
+    ),
+  );
+  expect(
+    Value.Check(shape, node({ 'rv:value': [{ '@value': 'Question', '@language': 'en' }] })),
+  ).toBe(true);
+  for (const value of [
+    'Question',
+    { '@value': 'Question', '@language': 'fr' },
+    { '@value': 'Question', '@language': 'en-US' },
+    { '@value': 'No', '@language': 'en' },
+    { '@value': 'x'.repeat(121), '@language': 'en' },
+    { '@value': 'Question' },
+    null,
+  ])
+    expect(Value.Check(shape, node({ 'rv:value': [value] }))).toBe(false);
+  for (const clauses of [
+    'sh:datatype xsd:string ; sh:languageIn ("en")',
+    'sh:datatype rdf:langString ; sh:languageIn ()',
+    'sh:datatype rdf:langString ; sh:languageIn (rv:English)',
+    'sh:datatype rdf:langString ; sh:languageIn ("en"@en)',
+    'sh:datatype rdf:langString ; sh:languageIn (1)',
+  ])
+    expect(() => parseTurtleProfile('probe-v1', turtle(`sh:path rv:value ; ${clauses}`))).toThrow();
+  const languageList = (tail: string) =>
+    turtle('sh:path rv:value ; sh:datatype rdf:langString ; sh:languageIn _:languages') + tail;
+  for (const tail of [
+    '_:languages rdf:first "en" ; rdf:rest _:languages .',
+    '_:languages rdf:first "en" .',
+    '_:languages rdf:first "en" ; rdf:rest rdf:nil ; sh:pattern "hidden" .',
+  ])
+    expect(() => parseTurtleProfile('probe-v1', languageList(tail))).toThrow();
+  expect(() =>
+    parseTurtleProfile(
+      'probe-v1',
+      turtle(
+        `sh:path rv:value ; sh:datatype rdf:langString ; sh:languageIn (${Array(257).fill('"en"').join(' ')})`,
+      ),
+    ),
+  ).toThrow('exceeds 256');
+});
+
+const availabilityBranches = `(
+  [ sh:property [ sh:path rv:availability ; sh:hasValue rv:Available ] ;
+    sh:property [ sh:path rv:value ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ; sh:maxInclusive 10 ] ]
+  [ sh:property [ sh:path rv:availability ; sh:hasValue rv:Withdrawn ] ;
+    sh:property [ sh:path rv:value ; sh:maxCount 0 ] ]
+)`;
+const disjunction = (branches: string) =>
+  turtle(
+    'sh:path rv:availability ; sh:minCount 1 ; sh:maxCount 1 ; sh:in (rv:Available rv:Withdrawn)',
+    `sh:or ${branches} ;`,
+  );
+
+test('Turtle local disjunctions preserve available and withdrawn rating counterexamples', async () => {
+  const shape = await schema(disjunction(availabilityBranches));
+  const available = { 'rv:availability': ['https://rezics.com/vocab/Available'] };
+  const withdrawn = { 'rv:availability': ['https://rezics.com/vocab/Withdrawn'] };
+  for (const value of [1, 10])
+    expect(Value.Check(shape, node({ ...available, 'rv:value': [value] }))).toBe(true);
+  expect(Value.Check(shape, node(withdrawn))).toBe(true);
+  expect(Value.Check(shape, node({ ...withdrawn, 'rv:value': [] }))).toBe(true);
+  for (const values of [[], [0], [11], [1.5], ['1'], [null], [1, 2]])
+    expect(Value.Check(shape, node({ ...available, 'rv:value': values }))).toBe(false);
+  expect(Value.Check(shape, node(available))).toBe(false);
+  expect(Value.Check(shape, node({ ...withdrawn, 'rv:value': [1] }))).toBe(false);
+  expect(Value.Check(shape, node({ ...withdrawn, 'rv:value': null }))).toBe(false);
+  expect(Value.Check(shape, node({ 'rv:availability': ['Available'], 'rv:value': [1] }))).toBe(
+    false,
+  );
+});
+
+test('Turtle local disjunctions reject malformed lists, nesting and unlowerable groups', () => {
+  for (const branches of [
+    '()',
+    '([ sh:property [ sh:path rv:value ; sh:maxCount 0 ] ])',
+    '("literal" [ sh:property [ sh:path rv:value ; sh:maxCount 0 ] ])',
+    '([] [ sh:property [ sh:path rv:value ; sh:maxCount 0 ] ])',
+    '([ sh:class rv:Rating ] [ sh:property [ sh:path rv:value ; sh:maxCount 0 ] ])',
+    '([ sh:or () ] [ sh:property [ sh:path rv:value ; sh:maxCount 0 ] ])',
+    '([ sh:property [ sh:path (rv:first rv:second) ] ] [ sh:property [ sh:path rv:value ; sh:maxCount 0 ] ])',
+    '([ sh:property [ sh:path rv:value ; sh:datatype xsd:decimal ] ] [ sh:property [ sh:path rv:value ; sh:maxCount 0 ] ])',
+  ])
+    expect(() => parseTurtleProfile('probe-v1', disjunction(branches))).toThrow();
+  for (const tail of [
+    '_:groups rdf:first [ sh:property [ sh:path rv:value ; sh:maxCount 0 ] ] ; rdf:rest _:groups .',
+    '_:groups rdf:first [ sh:property [ sh:path rv:value ; sh:maxCount 0 ] ] .',
+    '_:groups rdf:first [ sh:property [ sh:path rv:value ; sh:maxCount 0 ] ] ; rdf:rest "bad" .',
+  ])
+    expect(() => parseTurtleProfile('probe-v1', disjunction('_:groups') + tail)).toThrow();
+  const group = '[ sh:property [ sh:path rv:value ; sh:maxCount 0 ] ]';
+  expect(() =>
+    parseTurtleProfile('probe-v1', disjunction(`(${Array(257).fill(group).join(' ')})`)),
+  ).toThrow('exceeds 256');
+  const properties = Array.from(
+    { length: 257 },
+    (_, index) => `sh:property [ sh:path rv:value${index} ; sh:maxCount 0 ]`,
+  ).join(' ; ');
+  expect(() => parseTurtleProfile('probe-v1', disjunction(`([ ${properties} ] ${group})`))).toThrow(
+    '1 to 256 properties',
+  );
 });

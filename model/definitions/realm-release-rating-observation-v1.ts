@@ -1,5 +1,9 @@
-import type { ProfileDefinition, PropertyDefinition } from '../compiler/ir.ts';
-import { realmStandingRatingObservationProfile } from './realm-standing-rating-observation-v1.ts';
+import type { ProfileDefinition, PropertyDefinition, ShapeDefinition } from '../compiler/ir.ts';
+import { readFileSync } from 'node:fs';
+import { parseTurtleProfile } from '../compiler/shacl.ts';
+
+const realmStandingRatingObservationProfile = parseTurtleProfile('realm-standing-rating-observation-v1',
+  readFileSync(new URL('./realm-standing-rating-observation-v1.ttl', import.meta.url), 'utf8'));
 
 const iri = (role: string) => `https://rezics.com/definition/realm-release-rating-observation-v1/${role}-shape`;
 const requiredClass = (path: `rv:${string}`, term: `rv:${string}` | `schema:${string}`) => ({
@@ -18,7 +22,7 @@ export const realmReleaseRatingObservationProfile = {
   id: 'realm-release-rating-observation-v1',
   comments: ['One Account-principal standing slot for one exact FixedRelease and Realm question.',
     'The slot is opaque; the release target never counts toward its MainVersion.'],
-  shapes: realmStandingRatingObservationProfile.shapes.flatMap(shape => {
+  shapes: realmStandingRatingObservationProfile.shapes.flatMap((shape): ShapeDefinition[] => {
     const role = shape.iri.split('/').at(-1);
     const renamed = { ...shape, iri: shape.iri.replace('realm-standing-', 'realm-release-') };
     if (role === 'context-shape') {
