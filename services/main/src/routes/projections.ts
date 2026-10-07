@@ -15,7 +15,7 @@ import { readingBoundary } from '../modules/reading-position/boundary.ts';
 
 const headers = { 'cache-control': 'private, no-store' };
 export const openApiOperations = {
-  '/v1/projections': { post: { exposure: 'public', bearer: true, idempotencyKey: true }, get: { exposure: 'public', bearer: false } },
+  '/v1/projections': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true }, get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
 } as const;
 
 function projectionError(error: unknown): Response {

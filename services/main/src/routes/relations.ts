@@ -67,9 +67,9 @@ export async function disclosedRelationParticipations(
 }
 
 export const openApiOperations = {
-  '/v1/relations/changes': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/relations/{id}': { get: { exposure: 'public', bearer: true } },
-  '/v1/relations/{id}/revisions/{revision}': { get: { exposure: 'public', bearer: true } },
+  '/v1/relations/changes': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/relations/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
+  '/v1/relations/{id}/revisions/{revision}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
 } as const;
 
 export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {

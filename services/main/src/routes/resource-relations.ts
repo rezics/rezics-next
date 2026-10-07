@@ -32,9 +32,9 @@ const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String
 const receipt = t.Object({ profile: t.Literal('work-derivation-v2'), derivation: native, receipt: t.String(),
   sourcePosition: position, replayed: t.Boolean() });
 export const openApiOperations = {
-  '/v1/resources/{resource}/relations': { get: { exposure: 'public', bearer: false } },
-  '/v1/resources/{resource}/continuities': { get: { exposure: 'public', bearer: false } },
-  '/v1/resources/{resource}/derivations': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/resources/{resource}/relations': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/resources/{resource}/continuities': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/resources/{resource}/derivations': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
 
 export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {

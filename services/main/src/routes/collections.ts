@@ -74,19 +74,19 @@ interface CaptureBody { definitionRevision: string; collection: string; name: st
   disclosure: 'public' | 'private'; actingSubject: string }
 
 export const openApiOperations = {
-  '/v1/collections': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/collections/{id}/name': { get: { exposure: 'public', bearer: false },
-    put: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/collections/{id}/changes': { post: { exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/collections': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/collections/{id}/name': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false },
+    put: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/collections/{id}/changes': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/collections/{id}/display-groups/{group}/moves': {
-    post: { exposure: 'public', bearer: true, idempotencyKey: true } },
-  '/v1/collections/{id}': { get: { exposure: 'public', bearer: false } },
-  '/v1/collections/{id}/revisions/{revision}': { get: { exposure: 'public', bearer: false } },
-  '/v1/collection-definitions': { post: { exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
-  '/v1/collection-definitions/{id}': { get: { exposure: 'platform:saved-views', bearer: true } },
-  '/v1/collection-definitions/{id}/revisions': { post: { exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
-  '/v1/collection-definitions/{id}/queries': { post: { exposure: 'platform:saved-views', bearer: true } },
-  '/v1/collection-definitions/{id}/captures': { post: { exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
+    post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/collections/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/collections/{id}/revisions/{revision}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/collection-definitions': { post: { rateLimitFamily: 'write', exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
+  '/v1/collection-definitions/{id}': { get: { rateLimitFamily: 'read', exposure: 'platform:saved-views', bearer: true } },
+  '/v1/collection-definitions/{id}/revisions': { post: { rateLimitFamily: 'write', exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
+  '/v1/collection-definitions/{id}/queries': { post: { rateLimitFamily: 'read', exposure: 'platform:saved-views', bearer: true } },
+  '/v1/collection-definitions/{id}/captures': { post: { rateLimitFamily: 'write', exposure: 'platform:saved-views', bearer: true, idempotencyKey: true } },
 } as const;
 
 function key(request: Request) {

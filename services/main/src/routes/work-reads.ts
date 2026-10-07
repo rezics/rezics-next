@@ -45,13 +45,13 @@ const headers = { 'cache-control': 'private, no-store' };
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 // Bearer is optional for public reads; Mine requires it at runtime. No GET uses an idempotency key.
 export const openApiOperations = {
-  '/v1/works/{id}': { get: { exposure: 'public', bearer: false } },
-  '/v1/works/{id}/versions': { get: { exposure: 'public', bearer: false } },
-  '/v1/works/{id}/adoptions': { get: { exposure: 'public', bearer: false } },
-  '/v1/works/{id}/credits': { get: { exposure: 'public', bearer: false } },
-  '/v1/works/{id}/classifications': { get: { exposure: 'public', bearer: false } },
-  '/v1/resources/{resource}/ratings': { get: { exposure: 'public', bearer: false } },
-  '/v1/resources/{resource}/rating-contexts': { get: { exposure: 'public', bearer: false } },
+  '/v1/works/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/works/{id}/versions': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/works/{id}/adoptions': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/works/{id}/credits': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/works/{id}/classifications': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/resources/{resource}/ratings': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
+  '/v1/resources/{resource}/rating-contexts': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
 } as const;
 
 export function workReadRoutes(work: MainWorkDependencies) {

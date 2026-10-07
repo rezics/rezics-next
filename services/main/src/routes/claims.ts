@@ -12,22 +12,22 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 
 export const openApiOperations = {
-  '/v1/claims': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
-  '/v1/claims/{claim}': { get: { exposure: 'platform:wiki-agents', bearer: true } },
-  '/v1/source-reliability-assessments': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
-  '/v1/claims/{claim}/assessments': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
-  '/v1/claims/{claim}/assessments/{assessment}': { get: { exposure: 'platform:wiki-agents', bearer: true } },
-  '/v1/claims/{claim}/evidence': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
-  '/v1/claims/{claim}/evidence/{revision}': { get: { exposure: 'platform:wiki-agents', bearer: true } },
-  '/v1/claims/{claim}/challenges': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true }, get: { exposure: 'platform:wiki-agents', bearer: true } },
-  '/v1/claims/{claim}/challenges/{challenge}/withdrawal': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
-  '/v1/claims/{claim}/corrections': { get: { exposure: 'platform:wiki-agents', bearer: true } },
-  '/v1/claims/{claim}/correction-subscriptions': { post: { exposure: 'platform:update-subscriptions', bearer: true, idempotencyKey: true } },
-  '/v1/verification/origins': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
-  '/v1/sources/observations/{observation}/lineage': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
-  '/v1/sources/observations/{observation}/disposition': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
-  '/v1/verification/lineage/{edge}/retraction': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
-  '/v1/sources/observations/{observation}/derivation': { post: { exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/claims': { post: { rateLimitFamily: 'write', exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}': { get: { rateLimitFamily: 'read', exposure: 'platform:wiki-agents', bearer: true } },
+  '/v1/source-reliability-assessments': { post: { rateLimitFamily: 'write', exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/assessments': { post: { rateLimitFamily: 'write', exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/assessments/{assessment}': { get: { rateLimitFamily: 'read', exposure: 'platform:wiki-agents', bearer: true } },
+  '/v1/claims/{claim}/evidence': { post: { rateLimitFamily: 'write', exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/evidence/{revision}': { get: { rateLimitFamily: 'read', exposure: 'platform:wiki-agents', bearer: true } },
+  '/v1/claims/{claim}/challenges': { post: { rateLimitFamily: 'write', exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true }, get: { rateLimitFamily: 'read', exposure: 'platform:wiki-agents', bearer: true } },
+  '/v1/claims/{claim}/challenges/{challenge}/withdrawal': { post: { rateLimitFamily: 'write', exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/claims/{claim}/corrections': { get: { rateLimitFamily: 'read', exposure: 'platform:wiki-agents', bearer: true } },
+  '/v1/claims/{claim}/correction-subscriptions': { post: { rateLimitFamily: 'write', exposure: 'platform:update-subscriptions', bearer: true, idempotencyKey: true } },
+  '/v1/verification/origins': { post: { rateLimitFamily: 'write', exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/sources/observations/{observation}/lineage': { post: { rateLimitFamily: 'write', exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/sources/observations/{observation}/disposition': { post: { rateLimitFamily: 'write', exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/verification/lineage/{edge}/retraction': { post: { rateLimitFamily: 'write', exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
+  '/v1/sources/observations/{observation}/derivation': { post: { rateLimitFamily: 'write', exposure: 'platform:wiki-agents', bearer: true, idempotencyKey: true } },
 } as const;
 
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
