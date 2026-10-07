@@ -3,13 +3,16 @@ import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
-import { ContentCore } from '../../../services/content/src/core.ts';
+import { ContentCore, type ContentPosition } from '../../../services/content/src/core.ts';
+import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
+import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
+import { applyContentErasure, checkContentErasureTargets, ContentErasureGraphRequired } from '../../../services/main/src/modules/erasure/content.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
 import { DEFAULT_ZONE_PRESENTATION } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
-import { readZoneConfiguration, readZoneSitePublicationReceipt, ZoneUnavailable,
+import { readZoneConfiguration, readZoneSitePublicationReceipt, ZoneUnavailable, ZonePublicationUnavailable,
   type ZoneSitePublicationReceipt } from '../../../services/main/src/modules/zone/configuration.ts';
 import { isZonePublishedPageRevision, readZonePublication } from '../../../services/main/src/modules/zone/publication.ts';
 import { ZONE_SITE_PUBLICATION_COST, zonePublishedPageBinding } from '../../../services/main/src/modules/zone/config-format.ts';
@@ -56,8 +59,20 @@ async function fixture() {
     (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
     const core = new ContentCore(f.pool);
     let failSettlement = false;
+    let failRejection = false;
+    let failPreparationAt: number | null = null;
     const content = new Proxy(core, { get(target, property) {
+      if (property === 'preparePublication') return async (...args: Parameters<typeof target.preparePublication>) => {
+        if (failPreparationAt !== null && --failPreparationAt === 0) {
+          failPreparationAt = null;
+          throw new ZonePublicationUnavailable('interrupted while pinning the second page');
+        }
+        return target.preparePublication(...args);
+      };
       if (property === 'settlePublication') return async (...args: Parameters<typeof target.settlePublication>) => {
+        if (failRejection && args[2].outcome === 'rejected') {
+          failRejection = false; throw new Error('interrupted before Content rejection');
+        }
         if (failSettlement) { failSettlement = false; throw new Error('interrupted before Content settlement'); }
         return target.settlePublication(...args);
       };
@@ -119,6 +134,7 @@ async function fixture() {
       return { page: resourceId, variantId, revisionId: saved.revisionId,
         byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch };
     };
+    const initialContentPosition = await core.ownerPosition();
     const initialDocument = fromPlainText('Published home', 'blocks');
     const selection = { routesRevision: created.navigationRevision,
       navigationRevision: created.navigationRevision, pages: [await save(initialDocument)] };
@@ -132,12 +148,43 @@ async function fixture() {
       language ? { 'accept-language': language } : {}), 200);
     const exact = (revision: string, editor = false) => call('GET', `/v1/content-revisions/${revision}${editor
       ? `?actingSubject=${encodeURIComponent(f.actor)}` : ''}`, undefined, randomUUID(), editor ? f.account.tokenA : null);
-    return { ...f, ...created, zoneGrant, controlId, path, selection, initialDocument, publish, save, call, home, exact, content,
+    return { ...f, ...created, zoneGrant, controlId, path, selection, initialDocument, publish, save, call, home, exact, content, initialContentPosition,
       revokeBeforeSwitch: () => { revokeBeforeSwitch = true; },
       revokeEditor,
       switchRevocationConsumed: () => !revokeBeforeSwitch,
-      failSettlement: () => { failSettlement = true; } };
+      failSettlement: () => { failSettlement = true; },
+      failRejection: () => { failRejection = true; },
+      failSecondPreparation: () => { failPreparationAt = 2; } };
   } catch (error) { await f.close(); throw error; }
+}
+
+async function reconcileSiteEvents(f: Awaited<ReturnType<typeof fixture>>, terminalType: string) {
+  const cursor = new ContentProjectionCursor(f.pool);
+  const consumer = `site-proof-${randomUUID()}`;
+  const start: ContentPosition = f.initialContentPosition;
+  await cursor.initialize(consumer);
+  // This consumer belongs to this isolated fixture. Older fixtures' publication
+  // proofs may have been deliberately damaged by their own counterexamples.
+  await f.pool.query(`UPDATE content.projection_checkpoint
+    SET sequence = $2::bigint, scan_sequence = $2::bigint WHERE consumer = $1 AND data_epoch = $3`,
+  [consumer, start.sequence, start.dataEpoch]);
+  const highWater = await f.content.ownerPosition();
+  const terminal = await f.pool.query<{ sequence: string }>(`SELECT sequence::text FROM content.outbox
+    WHERE data_epoch = $1 AND sequence > $2::bigint AND sequence <= $3::bigint
+      AND revision_id = $4 AND event_type = $5`,
+  [start.dataEpoch, start.sequence, highWater.sequence, f.selection.pages[0]!.revisionId, terminalType]);
+  expect(terminal.rows).toHaveLength(1);
+  const dispositions = new Map<string, string>();
+  for (let steps = 0; BigInt((await cursor.readScan(consumer)).sequence) < BigInt(highWater.sequence); steps++) {
+    if (steps >= 32) throw new Error('Site Content event reconciliation exceeded fixture event bound');
+    const result = await relayContentProjectionOnce(f.env, f.content, cursor, consumer);
+    if (!result) throw new Error('Site Content event reconciliation stopped before its owner cut');
+    expect(result.disposition).not.toBe('deferred');
+    dispositions.set(result.sourceSequence, result.disposition);
+  }
+  expect(dispositions.get(terminal.rows[0]!.sequence)).toBe('ignored');
+  expect(await cursor.read(consumer)).toEqual(highWater);
+  expect(await cursor.retries(consumer)).toEqual([]);
 }
 
 test('Realm-less site binds exact revisions; drafts stay outside and republishing moves public membership', async () => {
@@ -261,11 +308,22 @@ test('revocation after the Content pin prevents the final site bundle switch', a
     const before = await readZoneConfiguration(f.env, f.zone);
     const page = f.selection.pages[0]!;
     f.revokeBeforeSwitch();
-    expect((await f.publish()).status).toBe(403);
+    const key = randomUUID();
+    expect((await f.publish(f.selection.pages, key, before.revision)).status).toBe(403);
     expect(f.switchRevocationConsumed()).toBe(true);
     const preparations = await f.pool.query<{ status: string; pin_active: boolean }>(
       'SELECT status, pin_active FROM content.publication_preparation WHERE revision_id = $1', [page.revisionId]);
-    expect(preparations.rows).toEqual([{ status: 'pending', pin_active: true }]);
+    expect(preparations.rows).toEqual([{ status: 'rejected', pin_active: false }]);
+    const settledPosition = await f.content.ownerPosition();
+    expect((await f.publish(f.selection.pages, key, before.revision)).status).toBe(403);
+    expect(await f.content.ownerPosition()).toEqual(settledPosition);
+    await checkContentErasureTargets(f.pool, f.zone, [page.revisionId]);
+    const erasure = { preservationAccess: f.accessPool, erasureId: randomUUID(), erasureEpoch: '1',
+      resourceId: f.zone, revisionIds: [page.revisionId] };
+    expect(await applyContentErasure(f.pool, erasure)).toEqual({ applied: 1 });
+    expect(await applyContentErasure(f.pool, erasure)).toEqual({ applied: 0 });
+    const exact = (await f.content.readExactBatch([page.revisionId], async ids => new Set(ids)))[0];
+    expect(exact?.status).toBe('erased');
     const after = await readZoneConfiguration(f.env, f.zone);
     expect(after.revision).toBe(before.revision);
     expect(after.publicationRevision).toBe(before.publicationRevision);
@@ -276,6 +334,61 @@ test('revocation after the Content pin prevents the final site bundle switch', a
         rv:structureOwner ${iri(f.zone)} ; rv:outcome rv:Succeeded . }
     } LIMIT 2`, 4096);
     expect(receipts.results?.bindings).toHaveLength(0);
+  } finally { await f.close(); }
+}, 120_000);
+
+test('an interrupted rejection retains the cancelled receipt and replay releases its pending pin', async () => {
+  const f = await fixture();
+  try {
+    const before = await readZoneConfiguration(f.env, f.zone);
+    const page = f.selection.pages[0]!;
+    const key = randomUUID();
+    f.revokeBeforeSwitch();
+    f.failRejection();
+    expect((await f.publish(f.selection.pages, key, before.revision)).status).toBe(503);
+    const pending = await f.pool.query<{ operation_id: string; status: string; pin_active: boolean }>(
+      'SELECT operation_id, status, pin_active FROM content.publication_preparation WHERE revision_id = $1', [page.revisionId]);
+    expect(pending.rows).toHaveLength(1);
+    expect(pending.rows[0]).toMatchObject({ status: 'pending', pin_active: true });
+    await expect(checkContentErasureTargets(f.pool, f.zone, [page.revisionId], true))
+      .rejects.toBeInstanceOf(ContentErasureGraphRequired);
+    await expect(applyContentErasure(f.pool, { preservationAccess: f.accessPool,
+      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.zone, revisionIds: [page.revisionId] }))
+      .rejects.toBeInstanceOf(ContentErasureGraphRequired);
+    expect((await f.publish(f.selection.pages, key, before.revision)).status).toBe(403);
+    expect(await f.content.readPublicationPreparation(pending.rows[0]!.operation_id))
+      .toMatchObject({ status: 'rejected', pinActive: false });
+    const settled = await f.content.ownerPosition();
+    expect((await f.publish(f.selection.pages, key, before.revision)).status).toBe(403);
+    expect(await f.content.ownerPosition()).toEqual(settled);
+    await checkContentErasureTargets(f.pool, f.zone, [page.revisionId]);
+    expect(await applyContentErasure(f.pool, { preservationAccess: f.accessPool,
+      erasureId: randomUUID(), erasureEpoch: '1', resourceId: f.zone, revisionIds: [page.revisionId] }))
+      .toEqual({ applied: 1 });
+    expect((await readZoneConfiguration(f.env, f.zone)).revision).toBe(before.revision);
+    expect((await f.home()).page).toBeUndefined();
+  } finally { await f.close(); }
+}, 120_000);
+
+test('failure pinning the second page rejects the first pin without publishing a partial bundle', async () => {
+  const f = await fixture();
+  try {
+    const before = await readZoneConfiguration(f.env, f.zone);
+    const first = f.selection.pages[0]!;
+    const second = await f.save(fromPlainText('Second variant', 'blocks'), null,
+      `urn:rezics:variant:${randomUUID()}`, f.zone, 'fr');
+    const pages = [first, second];
+    const key = randomUUID();
+    f.failSecondPreparation();
+    expect((await f.publish(pages, key, before.revision)).status).toBe(503);
+    const preparations = await f.pool.query<{ revision_id: string; status: string; pin_active: boolean }>(
+      'SELECT revision_id, status, pin_active FROM content.publication_preparation WHERE revision_id = ANY($1::uuid[])',
+      [[first.revisionId, second.revisionId]]);
+    expect(preparations.rows).toEqual([{ revision_id: first.revisionId, status: 'rejected', pin_active: false }]);
+    expect((await f.publish(pages, key, before.revision)).status).toBe(403);
+    expect((await readZoneConfiguration(f.env, f.zone)).revision).toBe(before.revision);
+    expect((await f.home()).page).toBeUndefined();
+    await checkContentErasureTargets(f.pool, f.zone, [first.revisionId, second.revisionId]);
   } finally { await f.close(); }
 }, 120_000);
 
@@ -304,6 +417,20 @@ test('a site receipt survives interrupted Content settlement and replay settles 
     expect(receipts.results?.bindings).toHaveLength(1);
     expect((await f.home()).page?.reference.revisionId).toBe(f.selection.pages[0]!.revisionId);
   } finally { await f.close(); }
+}, 120_000);
+
+test('site publication terminal events reconcile without retaining a body-search projection target', async () => {
+  const published = await fixture();
+  try {
+    await published.json(await published.publish(), 201);
+    await reconcileSiteEvents(published, 'content.publication.active');
+  } finally { await published.close(); }
+  const cancelled = await fixture();
+  try {
+    cancelled.revokeBeforeSwitch();
+    expect((await cancelled.publish()).status).toBe(403);
+    await reconcileSiteEvents(cancelled, 'content.publication.rejected');
+  } finally { await cancelled.close(); }
 }, 120_000);
 
 test('public home resolves published Showcase and unknown placeholders while draft presentation and navigation stay private', async () => {

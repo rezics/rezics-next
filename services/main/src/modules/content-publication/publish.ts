@@ -540,3 +540,39 @@ export async function settleZonePageContentPublication(env: WorkActivationEnviro
     dataEpoch: publication.dataEpoch, sequence: publication.sequence,
   }, preparation.position.dataEpoch);
 }
+
+/** A retained cancellation fences the site switch before its preparation pins
+ * are released. The operation key binds the pin to that exact admission and page. */
+export async function rejectZonePageContentPublication(env: WorkActivationEnvironment,
+  content: ContentCore, preparationId: string, cancellation: {
+    receipt: string; admissionId: string; requestDigest: string; zone: string;
+    variantId: string; revisionId: string; byteDigest: string; contentEpoch: string;
+  }): Promise<Awaited<ReturnType<ContentCore['settlePublication']>> | null> {
+  const { compositionReceiptIri, readCompositionReceipt } = await import('../structure/change.ts');
+  if (cancellation.receipt !== compositionReceiptIri(cancellation.admissionId, 'zone.edit')
+    || preparationId !== `content-site-pin:${cancellation.admissionId}:${cancellation.revisionId}`) {
+    throw new ContentPublicationConflict('Site cancellation differs from its preparation');
+  }
+  const terminal = await readCompositionReceipt(env, cancellation.admissionId, 'zone.edit');
+  if (!terminal || terminal.outcome !== 'cancelled'
+    || terminal.requestDigest !== cancellation.requestDigest
+    || terminal.scope !== `zone:edit:${cancellation.zone}`) {
+    throw new ContentPublicationConflict('Site cancellation is not retained');
+  }
+  if (terminal.dataEpoch !== env.lineage.dataEpoch) throw new StaleGraphReceiptEpoch('Site cancellation epoch changed');
+  const preparation = await content.readPublicationPreparation(preparationId);
+  if (!preparation) return null;
+  const ref = preparation.reference;
+  if (ref.resourceId !== cancellation.zone || ref.variantId !== cancellation.variantId
+    || ref.revisionId !== cancellation.revisionId || ref.byteDigest !== cancellation.byteDigest
+    || preparation.position.dataEpoch !== cancellation.contentEpoch) {
+    throw new ContentPublicationConflict('Site cancellation names another Content pin');
+  }
+  if ((await content.ownerPosition()).dataEpoch !== preparation.position.dataEpoch) {
+    throw new StaleContentOwnerEpoch('Content owner epoch changed before site rejection');
+  }
+  return content.settlePublication(`content-site-reject:${hash(preparationId)}`, preparationId, {
+    outcome: 'rejected', revisionId: ref.revisionId, receipt: terminal.receipt,
+    dataEpoch: terminal.dataEpoch, sequence: terminal.sequence,
+  }, preparation.position.dataEpoch);
+}

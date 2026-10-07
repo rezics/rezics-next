@@ -22,7 +22,8 @@ import type { ResourceListing } from '../space/policy.ts';
 import type { ContentCore } from '../../../../content/src/core.ts';
 import { parseDocument } from '@rezics/document';
 import { pinAdmittedZonePageContent } from '../content-publication/publish-admitted.ts';
-import { ContentPublicationConflict, settleZonePageContentPublication } from '../content-publication/publish.ts';
+import { ContentPublicationConflict, settleZonePageContentPublication,
+  rejectZonePageContentPublication } from '../content-publication/publish.ts';
 import { RevisionNotFound } from '../work/history.ts';
 import { checkZoneSitePublishSelection, type ZoneSitePublishSelection } from './config-format.ts';
 import { readZoneThemeExecution, type ZoneThemeSelection } from '../presentation/zone-theme.ts';
@@ -257,6 +258,21 @@ function zonePagePreparationId(admissionId: string, revisionId: string) {
   return `content-site-pin:${admissionId}:${revisionId}`;
 }
 
+async function rejectCancelledSitePins(env: WorkActivationEnvironment, content: ContentCore,
+  input: ZoneRevisionInput, terminal: CompositionTerminal) {
+  if (!input.publication || terminal.outcome !== 'cancelled') return;
+  try {
+    for (const page of input.publication.pages) {
+      await rejectZonePageContentPublication(env, content,
+        zonePagePreparationId(terminal.admissionId, page.revisionId), {
+          receipt: terminal.receipt, admissionId: terminal.admissionId,
+          requestDigest: terminal.requestDigest, zone: input.zone, variantId: page.variantId,
+          revisionId: page.revisionId, byteDigest: page.byteDigest, contentEpoch: page.contentEpoch,
+        });
+    }
+  } catch { throw new ZonePublicationUnavailable('Site cancelled; Content rejection is unavailable, retry the same request'); }
+}
+
 export async function changeZoneConfiguration(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
@@ -296,6 +312,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
   const scope = `zone:edit:${input.zone}`;
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
     scope, action: 'zone.edit', idempotencyKey: input.idempotencyKey, requestDigest: digest });
+  const run = async () => {
   let renditionRequest: { configuration: ZoneConfiguration; uses: string[] } | undefined;
   let admission = registered;
   if (registered.state !== 'sealed' && registered.dispatchEligible) {
@@ -591,6 +608,10 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
   const terminal = await readCompositionReceipt(env, registered.id, registered.action);
   if (!terminal) throw new PendingActivation('Zone revision outcome is unknown');
   await access.recordGraphOutcome(registered.id, terminal);
+  if (input.publication && content && terminal.outcome === 'cancelled') {
+    await rejectCancelledSitePins(env, content, input, terminal);
+    throw new AdmissionDenied('Site publication was cancelled');
+  }
   terminalResult(terminal, registered);
   if (terminal.owner !== input.zone || terminal.requestDigest !== digest || !terminal.revision) {
     throw new IdempotencyConflict('Zone revision receipt differs from intent');
@@ -604,4 +625,27 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
   }
   return { zone: input.zone, revision: terminal.revision, receipt: terminal.receipt,
     replayed: registered.replayed, dataEpoch: terminal.dataEpoch, sequence: terminal.sequence };
+  };
+  try { return await run(); }
+  catch (error) {
+    if (!input.publication || !content) throw error;
+    // An uncertain graph switch retains its pins until a terminal receipt is
+    // known. All earlier failures can be fenced by the cancellation writer.
+    let terminal = await readCompositionReceipt(env, registered.id, registered.action);
+    if (!terminal && !(error instanceof PendingActivation)) {
+      terminal = await sealStructureAdmissionCancellation(env, registered);
+    }
+    if (!terminal) throw error;
+    await access.recordGraphOutcome(registered.id, terminal);
+    if (terminal.outcome === 'cancelled') {
+      await rejectCancelledSitePins(env, content, input, terminal);
+      throw error;
+    }
+    terminalResult(terminal, registered);
+    if (terminal.owner !== input.zone || terminal.requestDigest !== digest || !terminal.revision) {
+      throw new IdempotencyConflict('Zone revision receipt differs from intent');
+    }
+    return { zone: input.zone, revision: terminal.revision, receipt: terminal.receipt,
+      replayed: true, dataEpoch: terminal.dataEpoch, sequence: terminal.sequence };
+  }
 }

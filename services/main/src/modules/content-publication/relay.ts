@@ -5,6 +5,9 @@ import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } f
 import { PUBLIC_SEARCH_GRAPH } from '../work/select-main.ts';
 import { ContentProjectionUnavailable, extractProjectionText, projectionRecipeFor } from './projection-recipes.ts';
 import { graphRevisionSuppressed } from '../erasure/graph.ts';
+import { readZoneSitePublicationReceipt } from '../zone/configuration.ts';
+import { zonePublishedPageBinding } from '../zone/config-format.ts';
+import { compositionReceiptIri, readCompositionReceipt } from '../structure/change.ts';
 export { ContentProjectionUnavailable } from './projection-recipes.ts';
 
 const PROFILE_ID = 'content-match-unit-v1';
@@ -64,6 +67,8 @@ async function graphPublication(env: WorkActivationEnvironment, publication: Pro
   if (graph.dataEpoch !== env.lineage.dataEpoch || !decimal.test(graph.sequence)) {
     throw new ContentProjectionUnavailable('publication owner epoch differs');
   }
+  const site = await sitePublicationProof(env, publication);
+  if (site) return { kind: 'site' as const, decision: null, head: null, eligibility: null, eligibleDecision: null };
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT
     ?epoch ?sequence ?routing ?outcome ?receiptEpoch ?receiptSequence ?decision ?head
     ?eligibility ?eligibleDecision
@@ -118,9 +123,57 @@ async function graphPublication(env: WorkActivationEnvironment, publication: Pro
     || (publication.status === 'rejected' && value('decision'))) {
     throw new ContentProjectionUnavailable('graph receipt does not prove terminal Content publication');
   }
-  return { decision: value('decision') ?? null, head: value('head') ?? null,
+  return { kind: 'content' as const, decision: value('decision') ?? null, head: value('head') ?? null,
     eligibility: value('eligibility') ?? null,
     eligibleDecision: value('eligibleDecision') ?? null };
+}
+
+/** Site publication has one atomic bundle receipt and correlated page bindings,
+ * rather than one Content decision/head per language variant. Its exact terminal
+ * events acknowledge custody; they grant no body-search eligibility. */
+async function sitePublicationProof(env: WorkActivationEnvironment, publication: ProjectionPublication): Promise<boolean> {
+  const { graph, reference: ref, preparationId, preparationPosition } = publication;
+  if (publication.status === 'active') {
+    const marker = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(graph.receipt)} rv:sitePublicationRevision ?site . }
+    }`, 1024);
+    if (marker.boolean !== true) return false;
+    const site = await readZoneSitePublicationReceipt(env, graph.receipt);
+    if (!site) throw new ContentProjectionUnavailable('site publication receipt is incomplete');
+    if (site.zone !== ref.resourceId || site.dataEpoch !== graph.dataEpoch || site.sequence !== graph.sequence
+      || !site.pages.some(page => page.page === ref.resourceId && page.variantId === ref.variantId && page.revisionId === ref.revisionId)) {
+      throw new ContentProjectionUnavailable('site receipt differs from terminal Content publication');
+    }
+    const binding = zonePublishedPageBinding(site.revision, ref.resourceId, ref.revisionId);
+    const proof = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?current .
+        FILTER(?current >= ${graph.sequence})
+        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(binding)} rv:sitePublicationRevision ${iri(site.revision)} ;
+        rv:page ${iri(ref.resourceId)} ; rv:variant ${iri(ref.variantId)} ;
+        rv:contentRevision ${iri(`${CONTENT_REVISION}${ref.revisionId}`)} ; rv:byteDigest ${lit(ref.byteDigest)} ;
+        rv:ownerDataEpoch ${lit(preparationPosition.dataEpoch)} ; rv:contentPreparation ?selectedPin ; rv:ownerSequence ?selectedSequence .
+        FILTER(?selectedPin != ${lit(preparationId)} || ?selectedSequence = ${preparationPosition.sequence}) }
+    }`, 1024);
+    if (proof.boolean !== true) throw new ContentProjectionUnavailable('site page binding differs from settled Content custody');
+    return true;
+  }
+  const matched = /^content-site-pin:([0-9a-f-]{36}):([0-9a-f-]{36})$/.exec(preparationId);
+  if (!matched || graph.receipt !== compositionReceiptIri(matched[1]!, 'zone.edit')) return false;
+  const terminal = await readCompositionReceipt(env, matched[1]!, 'zone.edit');
+  if (!terminal || terminal.outcome !== 'cancelled' || matched[2] !== ref.revisionId
+    || terminal.scope !== `zone:edit:${ref.resourceId}` || terminal.dataEpoch !== graph.dataEpoch
+    || terminal.sequence !== graph.sequence) {
+    throw new ContentProjectionUnavailable('site cancellation differs from rejected Content custody');
+  }
+  const open = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+      rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?current .
+      FILTER(?current >= ${graph.sequence}) FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+  }`, 1024);
+  if (open.boolean !== true) throw new ContentProjectionUnavailable('site cancellation graph position is unavailable');
+  return true;
 }
 
 function projectionUpdate(env: WorkActivationEnvironment, event: ContentOutboxEvent,
@@ -237,6 +290,7 @@ async function projectEvent(env: WorkActivationEnvironment, content: ContentCore
       }
     }
     const graph = await graphPublication(env, publication);
+    if (graph.kind === 'site') return 'ignored';
     if (publication.status === 'rejected') return 'ignored';
     if (graph.head !== graph.decision) {
       if (!graph.head) throw new ContentProjectionUnavailable('active publication head is absent');
