@@ -1,7 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { APIError, createAuthMiddleware, createEmailVerificationToken, getSessionFromCtx } from 'better-auth/api';
+import { APIError, createAuthMiddleware, createEmailVerificationToken, getAuthoritativeSessionFromCtx, getSessionFromCtx } from 'better-auth/api';
 import { jwtVerify } from 'jose';
 import { captcha, jwt, openAPI, twoFactor } from 'better-auth/plugins';
 import { getAuthenticatorName, passkey } from '@better-auth/passkey';
@@ -197,6 +197,14 @@ export function accountAuthOptions(config: AccountConfig) {
           { 'Retry-After': String(AGENT_REGISTRATION_BUDGET.seconds) });
       }
       await operatorHooks.before(ctx);
+      if (ctx.path === '/revoke-other-sessions') {
+        // A sample of expired sessions may produce no provider delete hook at
+        // all. Drain the same bounded selection after its authoritative read;
+        // the current session remains available to the endpoint middleware.
+        const session = await getAuthoritativeSessionFromCtx(ctx);
+        if (!session) throw new APIError('UNAUTHORIZED');
+        await beforeSessionDelete(config.pool, session.session, ctx);
+      }
     }), after: createAuthMiddleware(async ctx => {
       await operatorHooks.after(ctx);
       // Embedded discovery calls run endpoint hooks; HTTP discovery is served
