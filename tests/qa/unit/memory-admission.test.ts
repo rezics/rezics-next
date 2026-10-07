@@ -369,3 +369,51 @@ test('unavailable readings fail closed, retry and retain the reason at the deadl
     .rejects.toThrow('measurement failed: Docker unavailable; no work started');
   expect(now).toBe(15);
 });
+
+for (const outcome of ['retry', 'failed', 'late'] as const) {
+  test(`startup slot ${outcome} preserves the guard, deadline and fresh admission`, async () => {
+    const directory = mkdtempSync(join(scratch, 'qa-startup-slot-'));
+    const path = join(directory, 'gate.json'), lockFile = join(directory, 'mutex.sqlite');
+    const token = 'startup-test';
+    writeFileSync(path, JSON.stringify({ token, status: 'pending' }));
+    let now = 0, reads = 0, attempts = 0, started = false, unlocked = false;
+    const options = { env: { ...qaEnv, REZICS_QA_STARTUP_SLOT_GATE: path }, lockFile,
+      deadline: 100, now: () => now, pollMs: 5,
+      read: async () => { reads++; return plenty; },
+      sleep: async (ms: number) => {
+        now = outcome === 'late' ? 100 : now + ms;
+        if (ms === 5) {
+          const competitor = new Database(lockFile);
+          try { competitor.exec('BEGIN IMMEDIATE'); competitor.exec('ROLLBACK'); unlocked = true; }
+          finally { competitor.close(true); }
+        }
+      },
+      announce: (message: string) => {
+        const match = /^QA_STARTUP_SLOT_READY (\S+) (\d+)$/.exec(message);
+        if (!match) return;
+        attempts++;
+        const competitor = new Database(lockFile);
+        try { expect(() => competitor.exec('BEGIN IMMEDIATE')).toThrow(); }
+        finally { competitor.close(true); }
+        writeFileSync(path, JSON.stringify({ token, sequence: Number(match[2]),
+          status: outcome === 'retry' && attempts === 1 ? 'retry' : outcome === 'failed' ? 'failed' : 'granted',
+          error: 'slot allocation failed' }));
+      },
+    };
+    try {
+      const work = withMemoryStartup(need, options, () => { started = true; return 'started'; });
+      if (outcome === 'retry') {
+        expect(await work).toBe('started');
+        expect(reads).toBe(2);
+        expect(attempts).toBe(2);
+        expect(unlocked).toBe(true);
+      } else {
+        await expect(work).rejects.toThrow(outcome === 'failed' ? 'slot allocation failed' : 'slot deadline reached');
+        expect(started).toBe(false);
+      }
+      const recovered = new Database(lockFile);
+      try { recovered.exec('BEGIN IMMEDIATE'); recovered.exec('ROLLBACK'); }
+      finally { recovered.close(true); }
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+}

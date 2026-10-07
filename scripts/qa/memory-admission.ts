@@ -158,6 +158,39 @@ export interface StartupMemoryOptions extends MemoryWaitOptions {
   lockFile?: string;
 }
 
+export interface StartupSlotGate {
+  token: string;
+  sequence?: number;
+  status: 'pending' | 'granted' | 'retry' | 'failed';
+  error?: string;
+}
+
+let startupSlotSequence = 0;
+/** The startup child retains the guard while its runner attempts the lifetime lease. */
+async function waitForStartupSlot(options: StartupMemoryOptions): Promise<boolean> {
+  const path = (options.env ?? process.env).REZICS_QA_STARTUP_SLOT_GATE;
+  if (!path) return true;
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? (ms => Bun.sleep(ms));
+  const announce = options.announce ?? console.log;
+  const sequence = ++startupSlotSequence;
+  let announced = false;
+  for (;;) {
+    if (now() >= options.deadline) throw new Error('QA startup slot deadline reached; no work started');
+    const gate = JSON.parse(readFileSync(path, 'utf8')) as StartupSlotGate;
+    if (gate.sequence === sequence) {
+      if (gate.status === 'granted') return true;
+      if (gate.status === 'retry') return false;
+      if (gate.status === 'failed') throw new Error(gate.error ?? 'QA startup slot acquisition failed');
+    }
+    if (!announced) {
+      announce(`QA_STARTUP_SLOT_READY ${gate.token} ${sequence}`);
+      announced = true;
+    }
+    await sleep(Math.min(25, options.deadline - now()));
+  }
+}
+
 /** All QA processes share one SQLite writer lock, released automatically on death.
  * Keep it through Compose readiness, so the next process measures the containers
  * created by this startup instead of sharing its pre-start memory snapshot. */
@@ -178,27 +211,36 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   try {
     mutex.exec('PRAGMA busy_timeout=0');
     for (;;) {
-      if (now() >= options.deadline)
-        throw new Error(`Memory admission deadline reached waiting for another QA startup; ${admissionMessage(need)}; no work started`);
-      try {
-        mutex.exec('BEGIN IMMEDIATE');
-        held = true;
-        break;
-      } catch (error) {
-        if (!['SQLITE_BUSY', 'SQLITE_LOCKED'].includes((error as { code?: string }).code ?? '')) throw error;
+      announced = false;
+      for (;;) {
+        if (now() >= options.deadline)
+          throw new Error(`Memory admission deadline reached waiting for another QA startup; ${admissionMessage(need)}; no work started`);
+        try {
+          mutex.exec('BEGIN IMMEDIATE');
+          held = true;
+          break;
+        } catch (error) {
+          if (!['SQLITE_BUSY', 'SQLITE_LOCKED'].includes((error as { code?: string }).code ?? '')) throw error;
+        }
+        if (!announced) {
+          const message = `Waiting for another QA startup; ${admissionMessage(need)}`;
+          publishWait(message);
+          announce(message);
+          announced = true;
+        }
+        await sleep(Math.min(pollMs, Math.max(0, options.deadline - now())));
       }
-      if (!announced) {
-        const message = `Waiting for another QA startup; ${admissionMessage(need)}`;
-        publishWait(message);
-        announce(message);
-        announced = true;
+      publishWait();
+      await waitForMemory(need, { ...options, emitEvents: false, onAdmissionWait: undefined });
+      if (await waitForStartupSlot(options)) {
+        reportWait();
+        return await start();
       }
+      // No slot is free. Drop the guard and repeat both admissions with a fresh reading.
+      mutex.exec('ROLLBACK');
+      held = false;
       await sleep(Math.min(pollMs, Math.max(0, options.deadline - now())));
     }
-    publishWait();
-    await waitForMemory(need, { ...options, emitEvents: false, onAdmissionWait: undefined });
-    reportWait();
-    return await start();
   } finally {
     try { publishWait(); reportWait(); }
     finally {

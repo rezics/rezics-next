@@ -57,7 +57,7 @@ import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
 import { readEnv } from '../dev/config.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan } from './browser-budget.ts';
-import { qaMemoryDeadline, qaMemoryNeed } from './memory-admission.ts';
+import { qaMemoryDeadline, qaMemoryNeed, type StartupSlotGate } from './memory-admission.ts';
 import { runQaStartupChildAsync } from './stack-startup.ts';
 import { allocateWebPort, webOrigin } from './e2e.ts';
 import { discoverJourneyPreparations, preparationBudgetMs, selectJourneyPreparations } from './e2e-preparation.ts';
@@ -153,6 +153,77 @@ async function acquireRunSlots(wanted: number, slotOptions: Parameters<typeof ac
     process.off('exit', removeWait);
   }
 }
+// The child measures under the startup mutex; the runner owns the slot through cleanup.
+async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
+  start: (environment: NodeJS.ProcessEnv, onLine: (line: string) => void) => Promise<T>,
+  reserve: (slotOptions: Parameters<typeof acquireQaSlots>[4]) => Promise<void>): Promise<T> {
+  const token = randomUUID();
+  const gateDirectory = join(root, '.temp', 'qa-startup-gates');
+  mkdirSync(gateDirectory, { recursive: true });
+  const gatePath = join(gateDirectory, `${token}.json`);
+  const publish = (status: StartupSlotGate['status'], sequence?: number, error?: string) => {
+    const temporary = `${gatePath}.tmp`;
+    writeFileSync(temporary, JSON.stringify({ token, status, sequence, error }));
+    renameSync(temporary, gatePath);
+  };
+  const waiterDirectory = env.GOAL_QA_WAIT_DIR;
+  const waitPath = waiterDirectory && join(waiterDirectory, `slot-${process.pid}-${token}.json`);
+  const removeWait = () => { if (waitPath) rmSync(waitPath, { force: true }); };
+  const removeGate = () => { removeWait(); rmSync(gatePath, { force: true }); };
+  process.on('exit', removeGate);
+  publish('pending');
+  let admission: Promise<void> | undefined;
+  const requests = new Set<number>();
+  try {
+    return await start({ ...env, REZICS_QA_STARTUP_SLOT_GATE: gatePath }, line => {
+      const request = /^QA_STARTUP_SLOT_READY (\S+) (\d+)$/.exec(line);
+      if (request?.[1] === token) {
+        const sequence = Number(request[2]);
+        // Intermediate runners can replay captured output after streaming the same request.
+        if (requests.has(sequence)) return;
+        requests.add(sequence);
+        // A busy slot means retrying memory + startup admission, never holding a stale reading.
+        admission = reserve({ deadline: Date.now(), runDeadline }).then(() => {
+          removeWait();
+          publish('granted', sequence);
+        }, error => {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!message.startsWith('No QA slot became free before the deadline')) {
+            publish('failed', sequence, message);
+            return;
+          }
+          if (waitPath) {
+            mkdirSync(waiterDirectory!, { recursive: true });
+            writeFileSync(waitPath, JSON.stringify({ pid: process.pid, goal: env.GOAL_ID,
+              command: env.GOAL_QA_COMMAND, waitingFor: 'slot',
+              message: 'Waiting for a QA slot after memory admission', since: new Date().toISOString() }));
+          }
+          publish('retry', sequence);
+        });
+      } else {
+        if (line.startsWith('Waiting; QA memory:') || line.startsWith('Waiting for another QA startup;')) removeWait();
+        noteMemory(line);
+      }
+    });
+  } finally {
+    try { await admission; }
+    finally {
+      removeGate();
+      process.off('exit', removeGate);
+    }
+  }
+}
+
+async function reserveRunSlot(slotOptions: Parameters<typeof acquireQaSlots>[4]): Promise<void> {
+  runSlots ??= await acquireRunSlots(1, slotOptions);
+}
+
+async function startRunStack(args: string[], budget: number, env: NodeJS.ProcessEnv = process.env,
+  reserve = reserveRunSlot) {
+  return withStartupSlot(env,
+    (environment, onLine) => runQaStartupChildAsync(root, args, budget, environment, onLine), reserve);
+}
+
 const release = options.tier || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 
 async function resetChildStacks(registry: string): Promise<string[]> {
@@ -199,7 +270,28 @@ async function runBunTier(name: Tier, program: string, args: string[], budget: n
 
 // One disposable QA project: start, bootstrap, run the files, then reset it
 // unless --keep, so finished shards release their capacity early.
+let runSlotInUse = false;
 async function runShard(
+  tier: StackTier, projectRunId: string, files: string[], flags: string[], budget: number,
+  isolated = false, startStack?: <T>(work: () => Promise<T>) => Promise<T>, batches: string[][] = [files],
+): Promise<ShardRun> {
+  let slots: Awaited<ReturnType<typeof acquireQaSlots>> | undefined;
+  let usesRunSlot = false;
+  try {
+    return await runShardWork(tier, projectRunId, files, flags, budget, isolated, startStack, batches,
+      async slotOptions => {
+        if (usesRunSlot || slots) return;
+        if (!runSlots && process.env.GOAL_IN_SLOT === '1' && !heavyQaRun) await reserveRunSlot(slotOptions);
+        if (runSlots && !runSlotInUse) { runSlotInUse = usesRunSlot = true; return; }
+        slots ??= await acquireRunSlots(1, { ...slotOptions, inherit: false });
+      });
+  } finally {
+    slots?.release();
+    if (usesRunSlot) runSlotInUse = false;
+  }
+}
+
+async function runShardWork(
   tier: StackTier,
   projectRunId: string,
   files: string[],
@@ -208,6 +300,7 @@ async function runShard(
   isolated = false,
   startStack?: <T>(work: () => Promise<T>) => Promise<T>,
   batches: string[][] = [files],
+  reserve: (slotOptions: Parameters<typeof acquireQaSlots>[4]) => Promise<void> = reserveRunSlot,
 ): Promise<ShardRun> {
   const preparationStartedAt = Date.now();
   const resourceClass = tier === 'integration' ? integrationResourceClass(files) : undefined;
@@ -255,11 +348,9 @@ async function runShard(
   let compose: Record<string, string> = {};
   if (needsStack) {
     started.push(projectRunId);
-    const upCommand = () => admit('other', () =>
-      runQaStartupChildAsync(root, ['stack:up', ...stackArgs], 180_000, {
-        ...environment,
-        [QA_STACK_TIER]: tier,
-      }, noteMemory), environment);
+    const upCommand = () => startRunStack(['stack:up', ...stackArgs], 180_000, {
+      ...environment, [QA_STACK_TIER]: tier,
+    }, reserve);
     const up = await (startStack ? startStack(upCommand) : upCommand()).catch(error => ({
       ok: false, timedOut: true, elapsedMs: Date.now() - preparationStartedAt,
       output: error instanceof Error ? error.message : String(error),
@@ -382,14 +473,11 @@ async function runShard(
     const batch = batches[index]!;
     const batchFile =
       batches.length === 1 ? outfile : outfile.replace(/\.xml$/, `-${index + 1}.xml`);
-    const result = await commandAsync(
-      root,
-      'bun',
-      ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
-      Math.max(1, budget - activeTestMs()),
-      testEnvironment(),
-      noteMemory, { runDeadline },
-    );
+    const runBatch = (environment: NodeJS.ProcessEnv, onLine: (line: string) => void) => commandAsync(
+      root, 'bun', ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
+      Math.max(1, budget - activeTestMs()), environment, onLine, { runDeadline });
+    const result = await (needsStack ? runBatch(testEnvironment(), noteMemory)
+      : withStartupSlot(testEnvironment(), runBatch, reserve));
     childAdmissionMs += result.admissionWaitMs;
     output.push(result.output);
     const empty = !result.ok && !result.timedOut && matchedNoTests(result.output);
@@ -482,13 +570,11 @@ async function runStackTier(tier: StackTier): Promise<void> {
   ) {
     const fixtureRoot = process.env.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture');
     const preparationFile = join(directory, 'fault-recovery-fixture-preparation.json');
-    const prepared = await admit('other', () => commandAsync(
-      root,
-      'bun',
-      ['scripts/fixture/cli.ts', 'build', '--prepare', '--profile', 'small', '--evidence', preparationFile],
-      LOAD_PREPARATION_BUDGET_MS,
+    const prepared = await admit('other', () => withStartupSlot(
       { ...qaStackEnvironment(process.env), REZICS_FIXTURE_ROOT: fixtureRoot },
-      noteMemory, { runDeadline }), qaStackEnvironment(process.env));
+      (environment, onLine) => commandAsync(root, 'bun',
+        ['scripts/fixture/cli.ts', 'build', '--prepare', '--profile', 'small', '--evidence', preparationFile],
+        LOAD_PREPARATION_BUDGET_MS, environment, onLine, { runDeadline }), reserveRunSlot), qaStackEnvironment(process.env));
     writeFileSync(join(logs, 'fault-recovery-fixture-preparation.log'), prepared.output);
     if (!prepared.ok) {
       errors.push(
@@ -516,28 +602,28 @@ async function runStackTier(tier: StackTier): Promise<void> {
     tier === 'fault/recovery'
       ? Math.min(maximum, estimates.size)
       : shardCount(estimates, budget, maximum);
-  const slots = await acquireRunSlots(wanted);
+  // Plan bounded workers without reserving leases for projects still awaiting admission.
+  const capacity = heavyQaRun || !qaSlotDirectory ? wanted
+    : Math.min(wanted, /^[1-9]\d*$/.test(process.env.GOAL_QA_SLOTS ?? '') ? Number(process.env.GOAL_QA_SLOTS) : 3);
   mkdirSync(join(directory, 'shards'), { recursive: true });
-  try {
+  {
     const prefix = tier === 'integration' ? '' : 'f';
     const integration =
-      tier === 'integration' ? planIntegrationShards(estimates, slots.count) : undefined;
+      tier === 'integration' ? planIntegrationShards(estimates, capacity) : undefined;
     const projects =
-      integration?.map((shard) => shard.files) ?? planStackProjects(estimates, slots.count, tier);
+      integration?.map((shard) => shard.files) ?? planStackProjects(estimates, capacity, tier);
     // Fault/recovery queues more projects than slots; each keeps its own deadline.
-    const tierBudget = integration ? integrationTierBudget(integration.map(shard => shard.resourceClass), slots.count)
-      : tier === 'fault/recovery' && !exclusiveRecovery ? queuedProjectsBudget(projects.map(() => budget), slots.count) : budget;
-    const warning = stackPlanBudgetWarning(estimates, tierBudget, slots.count, maximum, tier,
+    const tierBudget = integration ? integrationTierBudget(integration.map(shard => shard.resourceClass), capacity)
+      : tier === 'fault/recovery' && !exclusiveRecovery ? queuedProjectsBudget(projects.map(() => budget), capacity) : budget;
+    const warning = stackPlanBudgetWarning(estimates, tierBudget, capacity, maximum, tier,
       tier === 'integration' ? count => planIntegrationShards(estimates, count).map(shard => shard.files) : undefined);
     if (warning) console.warn(warning);
     const runs = new Array<ShardRun>(projects.length);
     let project = 0;
-    // QA projects have separate ports and stack:up retries an allocation race.
-    // Integration already holds one global slot per live project. Let those
-    // slots start together; a second three-start gate serializes their turnover.
-    const startInitialStack = concurrencyGate(tier === 'integration' ? slots.count : Math.min(slots.count, 3));
+    // Local workers bound the plan; each project takes its global lease only after admission.
+    const startInitialStack = concurrencyGate(tier === 'integration' ? capacity : Math.min(capacity, 3));
     await Promise.all(
-      Array.from({ length: Math.min(slots.count, projects.length) }, async () => {
+      Array.from({ length: Math.min(capacity, projects.length) }, async () => {
         while (project < projects.length) {
           const index = project++;
           runs[index] = await runShard(
@@ -559,8 +645,8 @@ async function runStackTier(tier: StackTier): Promise<void> {
         .map(candidate => ({ run, ...candidate })));
     const reruns: (ShardRun | undefined)[] = [];
     let next = 0;
-    const startRerunStack = concurrencyGate(Math.min(slots.count, 3));
-    await Promise.all(Array.from({ length: Math.min(slots.count, candidates.length) }, async () => {
+    const startRerunStack = concurrencyGate(Math.min(capacity, 3));
+    await Promise.all(Array.from({ length: Math.min(capacity, candidates.length) }, async () => {
       while (next < candidates.length) {
         const index = next++;
         reruns[index] = await runShard(tier, `${runId}-${prefix}r${index + 1}`,
@@ -610,8 +696,6 @@ async function runStackTier(tier: StackTier): Promise<void> {
     const ok = executed && elapsedMs <= tierBudget && runs.every(resolved) && completed.every(run => run.ok);
     tiers.push({ name: tier, status: ok ? 'passed' : 'failed', elapsedMs,
       shards: [...runs, ...completed].map(run => run.record) });
-  } finally {
-    slots.release();
   }
 }
 
@@ -635,10 +719,6 @@ try {
     const missing = missingCaseDeclarations(cases, caseCoverage);
     if (missing.length) throw new Error(`--record requires complete case declarations; ${missing.length} IDs remain`);
   }
-  // Reserve before any tier preparation: fixtures and singleton tiers also start stacks.
-  if (selected.some(tier => !['static', 'unit', 'owner'].includes(tier))) {
-    runSlots = await acquireRunSlots(1, { runDeadline });
-  }
   for (const tier of selected) {
     if (tier === 'static') await runTier(tier, 'bun', ['scripts/research/storage_architecture/check.ts', ...(options.backend ? ['--backend'] : [])], 120_000);
     if (tier === 'unit' || tier === 'owner')
@@ -657,8 +737,7 @@ try {
     if (tier === 'model') {
       const projectRunId = `${runId}-m`;
       startedProjects.push(projectRunId);
-      const up = await admit('other', () =>
-        runQaStartupChildAsync(root, ['stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000, process.env, noteMemory));
+      const up = await startRunStack(['stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
       if (!up.ok) {
         errors.push('model stack startup failed');
         writeFileSync(join(logs, 'model-stack.log'), up.output);
@@ -692,9 +771,8 @@ try {
       try {
         const projectRunId = `${runId}-e`;
         startedProjects.push(projectRunId);
-        const up = await admit('browser', () =>
-          runQaStartupChildAsync(root, ['stack:up', '--profile', 'qa', '--run-id', projectRunId,
-          '--accounts-app'], 180_000, { ...process.env, REZICS_QA_MEMORY_KIND: 'browser' }, noteMemory));
+        const up = await startRunStack(['stack:up', '--profile', 'qa', '--run-id', projectRunId,
+          '--accounts-app'], 180_000, { ...process.env, REZICS_QA_MEMORY_KIND: 'browser' });
         if (!up.ok) {
           errors.push('e2e stack startup failed');
           writeFileSync(join(logs, 'e2e-stack.log'), up.output);
@@ -774,9 +852,7 @@ try {
         splitTestArgs(testArgs(tier, selection, chosen)).paths);
       const fixturePlan = loadFixturePlan(runId, selectedFiles, chosen?.id);
       startedProjects.push(projectRunId);
-      const up = await admit('other', () =>
-        runQaStartupChildAsync(root, ['stack:up', '--profile', 'qa', '--run-id', projectRunId],
-        180_000, process.env, noteMemory));
+      const up = await startRunStack(['stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
       if (!up.ok) { errors.push(`${tier} stack startup failed`); writeFileSync(join(logs, `${artifact}-stack.log`), up.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, up.elapsedMs, up.output)); continue; }
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
       const apps = readEnv(join(stackDir, 'apps.env'));

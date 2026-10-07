@@ -375,7 +375,12 @@ export async function commandAsync(root: string, name: string, args: string[], t
       pending += chunk;
       const lines = pending.split('\n');
       pending = lines.pop()!;
-      for (const line of lines) { observeAdmission(line); onOutputLine?.(line); }
+      for (const line of lines) {
+        // Self-managed tests can start grandchildren; their request must reach the lifetime lease owner.
+        if (env.REZICS_QA_STARTUP_SLOT_GATE && /^QA_STARTUP_SLOT_READY \S+ \d+$/.test(line)) console.log(line);
+        observeAdmission(line);
+        onOutputLine?.(line);
+      }
     };
   };
   const observeStdout = observe(), observeStderr = observe();
@@ -895,6 +900,8 @@ export function goalSlotDirectory(root: string): string | undefined {
 }
 
 export interface QaSlotOptions {
+  /** Independent projects in one runner need distinct leases rather than its first lease. */
+  inherit?: boolean;
   /** Wait deadline; runs without an inherited lease cannot start until one is free. */
   deadline?: number;
   now?: () => number;
@@ -956,7 +963,7 @@ export async function acquireQaSlots(
   try {
     let announced = false;
     for (;;) {
-      const held = paths.some(path => lineage.has(owner(path))) ? 1 : 0;
+      const held = options.inherit !== false && paths.some(path => lineage.has(owner(path))) ? 1 : 0;
       for (const path of paths) {
         if (held + acquired.length >= wanted) break;
         try {
