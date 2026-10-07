@@ -15,14 +15,16 @@ import { referenceDisclosure } from '../src/modules/target/disclosed-references.
 import { PROFILES } from '../src/modules/semantic/schema.ts';
 import { prepareComponent, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { discloseParticipantName, participantReadName } from '../src/modules/work/read-contract.ts';
-import { disclosedRelationParticipations } from '../src/routes/relations.ts';
+import { disclosedRelationParticipations, relationRoutes } from '../src/routes/relations.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const privateAgent = id(1);
 const publicAgent = id(2);
 const publicWork = id(3);
 const concept = id(4);
+const character = id(5);
 const controller: VerifiedPrincipal = { issuer: 'account', subject: 'controller' };
 const stranger: VerifiedPrincipal = { issuer: 'account', subject: 'stranger' };
 const privateName = 'Private Pen';
@@ -83,6 +85,7 @@ function policyGraph(summary: (query: string) => Row[] | null, manifest?: string
 const control = { epoch: literal('epoch'), sequence: literal('1') };
 
 test('a relation keeps a readable participant when only the credited name is withheld', async () => {
+  const closed = policyGraph(() => null);
   const role = id(20);
   const occurrence = id(21);
   const participations = [
@@ -90,31 +93,96 @@ test('a relation keeps a readable participant when only the credited name is wit
       creditedName: { lexical: privateName, language: 'en' } },
     { iri: id(22), role, participant: { kind: 'external' as const, provider: 'open-library', namespace: 'author', key: 'OL1A' },
       creditedName: { lexical: 'Reported Name', language: 'en' } },
+    { iri: id(23), role, participant: { kind: 'resource' as const, ref: character },
+      creditedName: { lexical: 'Public Character', language: 'en' } },
+    { iri: id(24), role, participant: { kind: 'resource' as const, ref: concept },
+      creditedName: { lexical: 'Public Concept', language: 'en' } },
+    { iri: id(25), role, participant: { kind: 'resource' as const, ref: publicAgent },
+      creditedName: { lexical: publicName, language: 'en' } },
   ];
-  const readable = new Set([privateAgent]);
-  const withheld = await disclosedRelationParticipations(undefined, participations, readable, { [role]: 'author' },
+  const readable = new Set([privateAgent, character, concept, publicAgent]);
+  const withheld = await disclosedRelationParticipations(closed.environment, participations, readable, { [role]: 'author' },
     ANONYMOUS_VIEWER);
   expect(withheld[0]).toMatchObject({ participant: { kind: 'resource', ref: privateAgent }, availability: 'available',
     creditedName: { reference: privateAgent, status: 'unavailable' } });
   expect(JSON.stringify(withheld[0])).not.toContain(privateName);
   expect(withheld[1]?.creditedName).toEqual({ lexical: 'Reported Name', language: 'en' });
-  const hidden = await disclosedRelationParticipations({ visibleNameOwners: async () => new Set<string>() },
+  expect(withheld[2]?.creditedName).toEqual({ lexical: 'Public Character', language: 'en' });
+  expect(withheld[3]?.creditedName).toEqual({ lexical: 'Public Concept', language: 'en' });
+  expect(withheld[4]?.creditedName).toEqual({ lexical: publicName, language: 'en' });
+  const hidden = await disclosedRelationParticipations(closed.environment,
     participations, readable, { [role]: 'author' }, disclosureViewer(stranger));
   expect(hidden[0]?.creditedName).toEqual({ reference: privateAgent, status: 'unavailable' });
   expect(hidden[0]?.participant).toEqual({ kind: 'resource', ref: privateAgent });
-  const shown = await disclosedRelationParticipations({
-    visibleNameOwners: async agents => new Set(agents.filter(agent => agent === privateAgent)),
-  }, participations, readable, { [role]: 'author' }, disclosureViewer(controller));
+  const shown = await disclosedRelationParticipations(closed.environment,
+    participations, readable, { [role]: 'author' }, disclosureViewer(controller));
   expect(shown[0]?.creditedName).toEqual({ lexical: privateName, language: 'en' });
-  const absent = await disclosedRelationParticipations({
-    visibleNameOwners: async agents => new Set(agents),
-  }, participations, new Set(), { [role]: 'author' }, disclosureViewer(controller));
+  const absent = await disclosedRelationParticipations(closed.environment,
+    participations, new Set(), { [role]: 'author' }, disclosureViewer(controller));
   expect(absent[0]).toMatchObject({ participant: { kind: 'unavailable-reference' }, availability: 'unavailable' });
   expect(absent[0]).not.toHaveProperty('creditedName');
-  const published = await disclosedRelationParticipations({
-    visibleNameOwners: async agents => new Set(agents.filter(agent => agent === privateAgent)),
-  }, participations, readable, { [role]: 'author' }, disclosureViewer(stranger));
+  closed.publish();
+  const published = await disclosedRelationParticipations(closed.environment,
+    participations, readable, { [role]: 'author' }, disclosureViewer(stranger));
   expect(published[0]?.creditedName).toEqual({ lexical: privateName, language: 'en' });
+});
+
+test('both relation reads preserve private Agent identities and public non-Agent credits', async () => {
+  const definition = id(60), definitionRevision = id(61), occurrence = id(62), revision = id(63);
+  const denied = id(64);
+  const definitionDigest = prepareComponent(directory, definition, {
+    component: 'definition', kind: 'relation', lifecycle: 'active', successor: null,
+    roles: [{ key: 'member', minParticipants: 1, maxParticipants: 4, ordered: false,
+      members: [privateAgent, character, concept, denied] }],
+  }, PROFILES.definition);
+  const occurrenceDigest = prepareComponent(directory, occurrence, {
+    definition: definitionRevision, lifecycle: 'active', applicability: [],
+    participations: [privateAgent, character, concept, denied].map((ref, index) => ({
+      iri: id(70 + index), role: `${definition}/role/member`, participant: { kind: 'resource', ref },
+      creditedName: { lexical: ref === privateAgent ? privateName : ref === character ? 'Public Character'
+        : ref === concept ? 'Public Concept' : 'Denied Credit', language: 'en' },
+    })),
+  }, PROFILES.relation);
+  const closed = policyGraph(query => {
+    if (query.includes('SELECT ?head ?manifest WHERE')) return [{ head: uri(revision),
+      manifest: uri(`urn:rezics:sha256:${occurrenceDigest}`) }];
+    if (query.includes('SELECT ?p ?o WHERE')) return [
+      { p: uri('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'), o: uri(`${RV}RelationOccurrence`) },
+      { p: uri(`${RV}relationDefinition`), o: uri(definitionRevision) },
+      { p: uri(`${RV}occurrenceHead`), o: uri(revision) },
+    ];
+    if (query.includes('SELECT ?manifest ?predecessor ?epoch ?sequence')) return [{ ...control,
+      manifest: uri(`urn:rezics:sha256:${occurrenceDigest}`) }];
+    if (query.includes('SELECT ?definition ?manifest')) return [{ definition: uri(definition),
+      manifest: uri(`urn:rezics:sha256:${definitionDigest}`) }];
+    // No target summary: readable semantic resources exercise the identity fallback.
+    if (query.includes('?hold')) return [control];
+    return null;
+  });
+  let principal = stranger;
+  const work = { environment: closed.environment, account: { verify: async () => principal },
+    access: { canReadSemanticResource: async (_principal: unknown, _acting: string, resource: string) => resource !== denied,
+      canReadWork: async () => false } } as unknown as MainWorkDependencies;
+  const app = relationRoutes(closed.environment.fuseki, work);
+  for (const suffix of ['', `/revisions/${revision.slice(-36)}`]) {
+    for (principal of [stranger, controller]) {
+      const response = await app.handle(new Request(`http://main.test/v1/relations/${occurrence.slice(-36)}${suffix}`
+        + `?actingSubject=${encodeURIComponent(id(9))}&position=all`));
+      expect(response.status).toBe(200);
+      const read = await response.json();
+      expect(read.definition.roles[0].members).toEqual([privateAgent, character, concept].toSorted());
+      expect(read.participations[0]).toMatchObject({ participant: { kind: 'resource', ref: privateAgent },
+        availability: 'available', creditedName: principal === controller
+          ? { lexical: privateName, language: 'en' } : { reference: privateAgent, status: 'unavailable' } });
+      expect(read.participations[1]).toMatchObject({ participant: { kind: 'resource', ref: character },
+        availability: 'available', creditedName: { lexical: 'Public Character', language: 'en' } });
+      expect(read.participations[2].creditedName).toEqual({ lexical: 'Public Concept', language: 'en' });
+      expect(read.participations[3]).toMatchObject({ participant: { kind: 'unavailable-reference' }, availability: 'unavailable' });
+      expect(read.participations[3]).not.toHaveProperty('creditedName');
+      expect(JSON.stringify(read)).not.toContain('Denied Credit');
+      if (principal === stranger) expect(JSON.stringify(read)).not.toContain(privateName);
+    }
+  }
 });
 
 test('a withheld participant name keeps the reference and uses the unavailable shape', async () => {

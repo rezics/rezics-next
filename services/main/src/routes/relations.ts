@@ -10,12 +10,12 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { semanticError } from './semantic.ts';
 import { admittedWorkRelationChange } from '../modules/relation/work-authority.ts';
-import { visibleNames } from '../modules/disclosure/name-policy.ts';
+import { discloseInventory } from '../modules/disclosure/read.ts';
 import { disclosureViewer } from '../modules/disclosure/viewer.ts';
-import type { PersonPreferencesStore } from '../modules/preferences/store.ts';
+import type { WorkActivationEnvironment } from '../modules/work/activate.ts';
 import type { Participation } from '../modules/relation/schema.ts';
 import type { Viewer } from '../modules/suitability/policy.ts';
-import { referenceDisclosure, semanticReaderOnly, systemDisclosure, targetDisclosed } from '../modules/target/disclosed-references.ts';
+import { semanticReaderOnly, systemDisclosure, targetDisclosed } from '../modules/target/disclosed-references.ts';
 import { withheldReadName } from '../modules/work/read-contract.ts';
 import { groupUuid } from './shared.ts';
 import { readingPositionRead } from '../modules/reading-position/read.ts';
@@ -39,15 +39,19 @@ const relationRead = t.Object({ profile: t.Literal('relation-change-v1'), occurr
 
 /** Participant readability and the credited name are separate. A readable resource participant
  * keeps its identity when the name policy withholds the name; an external credit has no person owner.
- * One preference read for the resource credits on the occurrence (at most 64). */
+ * The bounded name inventory resolves Agent owners; other resources use ordinary disclosure. */
 export async function disclosedRelationParticipations(
-  preferences: Pick<PersonPreferencesStore, 'visibleNameOwners'> | undefined,
+  environment: WorkActivationEnvironment,
   participations: readonly (Participation & { iri: string })[],
   participants: ReadonlySet<string>, roleKeys: Readonly<Record<string, string>>, viewer: Viewer,
 ) {
-  const owners = participations.flatMap(item =>
-    item.participant.kind === 'resource' && item.creditedName ? [item.participant.ref] : []);
-  const visible = await visibleNames(preferences, owners, viewer, 'read');
+  const candidates = [...new Set(participations.flatMap(item =>
+    item.participant.kind === 'resource' && item.creditedName && participants.has(item.participant.ref)
+      ? [item.participant.ref] : []))];
+  const names = await discloseInventory(environment, candidates.map(resource => ({
+    owner: 'graph' as const, resource, component: 'name' as const,
+  })), viewer, 'read');
+  const visible = new Set(candidates.filter((_, index) => names[index] === 'visible'));
   return participations.map(item => {
     const availability = item.participant.kind === 'external' ? 'external' as const
       : item.participant.kind === 'resource' && participants.has(item.participant.ref) ? 'available' as const
@@ -81,26 +85,28 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     // The occurrence pins its exact DefinitionRef; a later retirement never retargets it.
     const semanticReadable = referenceReader(work.access, principal, actingSubject);
     const canRead = async (ref: string) => await semanticReadable(ref) && (await boundary.visible([ref])).has(ref);
-    // Participants and role members may be Concepts the semantic reader alone hides: one rule for both.
-    const disclose = referenceDisclosure(work.environment, { access: work.access, principal, actingSubject }, canRead);
+    // Only identities reach role members and participant references. Private names are gated separately.
+    // Concepts may be public through the target reader without a semantic read grant.
+    const disclose = async (references: readonly string[]) => {
+      const disclosedByTarget = await targetDisclosed(work.environment,
+        { access: work.access, principal, actingSubject }, references);
+      const admittedByReader = await semanticReaderOnly(canRead)(
+        references.filter(ref => !disclosedByTarget.has(ref)));
+      return new Set([...disclosedByTarget, ...admittedByReader]);
+    };
     const definition = await readExactDefinition(work.environment, read.state.definition, disclose, canRead);
     if (!definition) return null;
     const disclosed = await boundary.visible([occurrence, definition.definition, ...read.state.applicability]);
     if (!disclosed.has(occurrence) || !disclosed.has(definition.definition)) return null;
     const resourceRefs = read.state.participations.flatMap(item =>
       item.participant.kind === 'resource' ? [item.participant.ref] : []);
-    // Name policy must not turn a readable participant into an unavailable reference.
-    const disclosedByTarget = await targetDisclosed(work.environment,
-      { access: work.access, principal, actingSubject }, resourceRefs);
-    const admittedByReader = await semanticReaderOnly(canRead)(
-      resourceRefs.filter(ref => !disclosedByTarget.has(ref)));
-    const participants = new Set([...disclosedByTarget, ...admittedByReader]);
+    const participants = await disclose(resourceRefs);
     return { profile: 'relation-change-v1' as const, occurrence, revision: read.revision,
       predecessor: read.predecessor, lifecycle: read.state.lifecycle,
       definition: { revision: definition.revision, definition: definition.definition, lifecycle: definition.lifecycle,
         roles: definition.roles.map(role => ({ ...role, key: definition.roleKeys[role.role] })),
         star: definition.star ?? null },
-      participations: await disclosedRelationParticipations(work.personPreferences, read.state.participations,
+      participations: await disclosedRelationParticipations(work.environment, read.state.participations,
         participants, definition.roleKeys, disclosureViewer(principal, actingSubject)),
       applicability: read.state.applicability.filter(ref => disclosed.has(ref)), sourcePosition: read.sourcePosition };
     });
