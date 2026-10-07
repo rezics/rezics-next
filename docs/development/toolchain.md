@@ -464,6 +464,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task model:test` | Run model package tests. |
 | `task ops:backup` | Fence a persistent stack and encrypt one signed recovery set to an off-host recipient. |
 | `task ops:restore` | Verify and restore a signed recovery set into new isolated volumes; hold until checks pass. |
+| `task ops:compact` | Compact stopped TDB2 with a retained recovery window, or explicitly rollback/retire it. |
 
 <!-- toolchain-inventory:end -->
 

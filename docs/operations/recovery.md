@@ -257,6 +257,106 @@ recommendation-management grant:
    `actingSubject`, `generation`, and that value as `expectedHeadRevision`.
 4. Repeat for each used Realm basis, with `scope: "realm"` and its Realm IRI.
 
+## Offline TDB2 compaction
+
+Compaction rewrites the current graph; it neither collects revisions nor rebuilds
+Lucene. Pinned Jena 6.2.0's
+[`tdbcompact`](https://github.com/apache/jena/blob/jena-6.2.0/jena-cmds/src/main/java/tdb2/tdbcompact.java)
+retains the old generation by default. Its
+[Linux implementation](https://github.com/apache/jena/blob/jena-6.2.0/jena-tdb2/src/main/java/org/apache/jena/tdb2/sys/DatabaseOps.java)
+closes `Data-(N+1)-tmp`, moves it to `Data-(N+1)` and switches the container.
+Restart selects the highest final generation and removes temporary ones.
+Failure can occur after publication; exit status alone cannot choose recovery.
+This is not a power-loss durability guarantee.
+
+Retain a verified stopped-state recovery set with the paired Lucene cut and
+current authority/erasure frontier. Stop Main, Account, relay and all
+writers/consumers, then SIGTERM Fuseki and wait for orderly exit. Never
+manufacture `clean-stop` or remove either lock. The
+[operator command](../../scripts/ops/compact-tdb2.ts) runs only an offline
+container against the saved image/volume; it does not stop or restart services.
+It refuses an image whose owner entrypoint differs from this release. Regenerate
+and rebuild the pinned image before maintenance after an owner-script upgrade.
+The [compactor](../../infra/jena/compact-tdb2.sh) refuses a live `owner.lock`,
+unclean stop, incomplete maintenance fence or multiple retained generations.
+
+```sh
+task ops:compact -- compact --window <maintenance-name> \
+  --retain-until <YYYY-MM-DDTHH:MM:SSZ> --reserve-bytes 1073741824 --writers-stopped
+task ops:compact -- status --window <maintenance-name> --writers-stopped
+# Append to every command for an isolated persistent QA source:
+# --profile qa --run-id <source-id> --persistent
+```
+
+Expiry must be future UTC. Required free space is twice the larger of allocated
+and apparent source size, plus the reserve (default 1 GiB). Peak planning is
+existing filesystem use plus this allowance; the old source stays allocated.
+The [single copy transaction](https://github.com/apache/jena/blob/jena-6.2.0/jena-tdb2/src/main/java/org/apache/jena/tdb2/sys/CopyDSG.java)
+includes all quads and prefixes. Twice the source allows for destination indexes,
+journal and transient files; it is not a measured upper bound or a reservation.
+Stop competing disk consumers, account for quotas/snapshots, monitor free space
+and qualify this assumption on the deployment workload. Retire the previous
+successful window before another compaction. Quarantined replacements still
+consume disk until explicit custody cleanup.
+
+Keep `databases/rezics/compaction/<maintenance-name>/` with the maintenance
+record: generation names, expiry, space evidence, timestamps, phase and
+`jena.log`. Success preserves the old generation and Lucene files; expiry does
+not delete them. The existing zero-argument sanitized-candidate caller receives
+a named `compact-<UTC timestamp>` seven-day window and the same default reserve.
+
+Before reopening writers, compare exact graph/prefix coverage, epoch/sequence,
+owner receipts, Content references and erasures/revocations with the retained
+cut. Check `/health/ready`, `/health/search-ready`, representative additions and
+deletions, named graphs, CJK queries and authorized/denied snippets before
+reopening consumers. Counts alone do not verify the cut. Uncertain text needs
+the Lucene procedure below. Retain these results before retirement.
+
+Failure/interruption leaves the existing `databases/purge.incomplete` startup
+fence with this window's identity. The owner refuses that fence (its diagnostic
+still refers to erasure cutover). Ensure the compactor JVM/container has exited;
+a CLI timeout may leave it holding the lock. Inspect status/logs, keep writers
+stopped and recover explicitly:
+
+```sh
+task ops:compact -- rollback --window <maintenance-name> --writers-stopped
+```
+
+Rollback quarantines the recorded final/temporary replacement outside `tdb2`,
+retains the source and diagnostics, and releases only its own fence. The same
+command resumes interrupted rollback. Successful compaction can roll back only
+before Fuseki consumes its original clean-stop marker. After an owner restart,
+restore the whole paired recovery set with current authority/erasure
+reconciliation: old RDF alone cannot reverse newer writes and Lucene changes.
+Verify recovery before resuming services; never clear the fence by hand.
+
+After expiry, stop writers and Fuseki cleanly again, review graph/text
+verification and the recovery set, then acknowledge explicit retirement:
+
+```sh
+task ops:compact -- retire --window <maintenance-name> --verified --writers-stopped
+```
+
+This refuses early expiry, missing replacement and unexpected generations,
+unlinks only the recorded source, retains timestamped acknowledgement and
+resumes interrupted deletion. Snapshots, backups and media need separate
+custody/erasure retirement. Failed/quarantined replacements remain for diagnosis
+and explicit cleanup.
+
+The [offline fixtures](../../infra/jena/tests/compaction.test.ts) use a stand-in
+JVM to check refusal, publication failures, inherited locks and recovery;
+they establish neither populated Jena timing nor peak space. The manager still
+needs an exclusive drill: restore two isolated copies of one retained `medium`
+fixture with `task fixture:restore`, verify an actual 100,000-Work count, then
+cleanly stop each. On the first, time `ops:compact compact`, compare exact
+graph/prefix/owner coverage, and exercise rollback before resume. On the second,
+time compaction, verify graph and representative text reads with product writers
+held, cleanly stop again, wait for the named expiry and explicitly retire.
+Record fixture/image, allocated/apparent bytes, minimum free space and peak
+replacement allocation, command/phase durations and outcomes. Each maintenance
+command has a 600-second ceiling; record preparation/restore separately against
+the 600-second preparation budget. No live populated drill is qualified here.
+
 ## Offline Lucene rebuild
 
 Treat text as unavailable after uncertain index state, I/O failure, analyzer

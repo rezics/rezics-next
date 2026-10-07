@@ -23,6 +23,12 @@ if ! flock -n 9; then
   echo "fuseki-owner: another process owns $state; refusing to start" >&2
   exit 75
 fi
+# A maintenance command can publish its fence after the early check and before
+# this process acquires the lock. Inspect it again while ownership is exclusive.
+if [ -e "${FUSEKI_BASE:-/fuseki}/databases/purge.incomplete" ]; then
+  echo 'fuseki-owner: erasure candidate cutover is incomplete' >&2
+  exit 75
+fi
 if [ -e "$state/clean-stop" ]; then
   rm -f "$state/clean-stop"
 elif [ -n "$(ls -A "$state/tdb2")" ] || [ -n "$(ls -A "$state/lucene")" ]; then
