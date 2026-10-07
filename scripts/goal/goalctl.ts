@@ -1442,7 +1442,8 @@ export function mergeUnitFiles(worktree: string, plan: string): string[] {
   const collect = (file: string) => {
     const path = resolve(worktree, file);
     if (relative(worktree, path).startsWith('..') || isAbsolute(file)) throw new Error(`Unit file outside worktree: ${file}`);
-    if (!existsSync(path)) throw new Error(`Affected unit file is missing: ${file}`);
+    // A file the branch deleted, or one main added after the branch's base, has nothing to run here.
+    if (!existsSync(path)) return;
     if (statSync(path).isDirectory()) {
       for (const entry of readdirSync(path, { withFileTypes: true })) {
         if (entry.isDirectory() || /\.(?:test|spec)\.[cm]?[jt]sx?$/.test(entry.name)) collect(join(file, entry.name));
@@ -1608,7 +1609,10 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
     console.log('Unit gate skipped: --skip-unit-gate explicitly requested by the manager');
     return;
   }
-  const plan = spawnSync('task', ['test', '--', '--affected', before, '--list'],
+  // Select from the task's own changes: against main's head, an un-rebased branch would also list every file
+  // main changed since the branch's base (and refuse files main added that the branch lacks).
+  const base = spawnSync('git', ['merge-base', 'HEAD', before], { cwd: worktree, encoding: 'utf8' }).stdout.trim() || before;
+  const plan = spawnSync('task', ['test', '--', '--affected', base, '--list'],
     { cwd: worktree, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   if (plan.status !== 0) throw new Error(`Affected unit selection failed:\n${plan.stderr || plan.error?.message}`);
   const files = mergeUnitFiles(worktree, plan.stdout);
