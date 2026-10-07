@@ -1,15 +1,41 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
+import { CLASSIFIED_AS } from '../../../services/main/src/modules/statement/schema.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/src/modules/work/select-realm.ts';
 import { startHomeStack } from './feed-read-support.ts';
 import { waitForRealmDirectory } from './support/realm-directory.ts';
+import { shareClassifiedConcepts, type ClassifiedConcept, type ConceptContext } from './work-classification.ts';
 
-interface Defined { scheme: string; schemeHead: string; concept: string; sense: string }
+interface Defined { scheme: string; schemeHead: string; concept: string; sense: string; definitionRevision: string }
 interface Choices { languages: string[]; groups: { type: string; concepts: { id: string; name: { value: string };
   broader: string | null; samples: { id: string }[] }[] }[] }
 interface Suggestions { items: { id: string; realm: string; sampleWorks: { id: string }[];
   reason: { kind: string; concept?: { id: string; name: { value: string } | null } } }[] }
+
+/** A private Work may be unreadable as a Statement subject; a public one must be accepted. */
+async function acceptTopic(send: (method: string, path: string, body?: unknown) => Promise<Response>,
+  read: <T>(response: Response, expected?: number) => Promise<T>, actor: string,
+  work: { mainVersion: string }, term: ClassifiedConcept, interpretation: ConceptContext, required: boolean) {
+  const recorded = await send('POST', '/v1/statements', {
+    profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work.mainVersion,
+    predicate: CLASSIFIED_AS, relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+    value: { kind: 'resource', iri: term.concept }, applicability: [],
+    interpretation: { kind: 'explicit', context: interpretation.context,
+      semanticRevision: interpretation.semanticRevision },
+    evidence: [], actingSubject: actor,
+  });
+  if (!required && recorded.status !== 201) { await recorded.body?.cancel(); return; }
+  const statement = await read<{ statement: string; meaningKey: string }>(recorded, 201);
+  const decided = await send('POST', '/v1/statement-decisions', {
+    profile: 'statement-decision-v1',
+    target: { kind: 'qualified-fact', meaningKey: statement.meaningKey, support: [statement.statement] },
+    acceptance: { kind: 'global' }, outcome: 'accepted', expectedDecisionHead: null, actingSubject: actor,
+  });
+  if (required) await read(decided, 201);
+  else await decided.body?.cancel();
+}
 
 test('G-431 onboarding offers the shared scheme\'s Concepts by type with covers, and suggests Realms whose Works '
   + 'carry the chosen Concepts or narrower ones', async () => {
@@ -18,7 +44,8 @@ test('G-431 onboarding offers the shared scheme\'s Concepts by type with covers,
   try {
     const { stack, author, call, json } = home;
     for (const [scope, action] of [['classification:define:global', 'classification.proposition.define'],
-      ['classification:decide:global', 'classification.decision.set'], ['space:create:root', 'space.create']] as const) {
+      ['context:create:root', 'context.create'], [`statement:speak:${author.actor}`, 'statement.record'],
+      ['classification:decide:global', 'statement.decide'], ['space:create:root', 'space.create']] as const) {
       await author.grant(scope, action);
     }
     const label = (en: string, zh: string) => [{ language: 'en', value: en }, { language: 'zh-Hans', value: zh }];
@@ -38,11 +65,10 @@ test('G-431 onboarding offers the shared scheme\'s Concepts by type with covers,
     const hidden = await stack.privateWork(author.actor, 'Onboarding private draft');
     await stack.fuseki.update(`PREFIX schema: <https://schema.org/> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
       ${iri(novel.work)} a schema:Book . ${iri(epic.work)} a schema:Book . ${iri(stew.work)} a schema:Recipe . } }`);
+    const send = (method: string, path: string, body?: unknown) => call(method, path, body, author.token);
+    const interpretation = await shareClassifiedConcepts(send, json, author.actor, [fantasy, cooking]);
     for (const [work, term] of [[novel, fantasy], [epic, fantasy], [stew, cooking], [hidden, fantasy]] as const) {
-      const accepted = await call('POST', '/v1/classification-decisions', { profile: 'classification-direct-decision-v1',
-        work: work.work, mainVersion: work.mainVersion, sense: term.sense, context: { kind: 'global' },
-        outcome: 'accepted', expectedDecisionHead: null, actingSubject: author.actor }, author.token);
-      if (work !== hidden) expect(accepted.status).toBe(201);
+      await acceptTopic(send, json, author.actor, work, term, interpretation, work !== hidden);
     }
 
     // Choices: the locale's language first; Concepts named in it, grouped by type, each with public examples.

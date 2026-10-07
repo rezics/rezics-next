@@ -5,6 +5,8 @@ import { SeedApiError } from './api.ts';
 import { grantRealmProfileSeed, officialModClient, realmProfileClient } from './official-authority.ts';
 import { editorList, extraWorks, fabricApi, fictionQuotes, fictionWorks, laterModReleases, officialHubItems, officialMods, officialTheme,
   type OfficialRealmId, penNames, publicTexts, realmProfiles, zoneContent } from './official-plan.ts';
+import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
+  type ClassificationResolution } from './classified-statement.ts';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, grantImportedContributionSeedAuthority,
   grantImportedWorkSeedAuthority,
   type LocalOperatorInput } from './operator.ts';
@@ -476,13 +478,22 @@ async function modClassifications(o: Official) {
   const { receipt: { realm }, steward } = o.realm('mods');
   await grantHomeSeedAuthority(o.input(steward, steward.actingSubject), [
     { action: 'classification.context.configure', scope: `classification:context:${realm}` },
-    { action: 'classification.decision.set', scope: `classification:decide:${realm}` },
+    { action: 'statement.decide', scope: `classification:decide:${realm}` },
+    { action: 'statement.record', scope: `statement:speak:${steward.actingSubject}` },
   ]);
   if (!await o.read(`/v1/realms/${short(realm)}/classification-context`)) {
     await o.api.post('/v1/classification-contexts', { profile: 'classification-context-v1',
       realm, actingSubject: steward.actingSubject }, steward.token, seedKey('official-mod-acceptance', realm));
   }
   const concepts = await modsConcepts(o.state, steward);
+  const post = <T>(path: string, body: unknown, token: string, key: string) => o.api.post<T>(path, body, token, key);
+  const interpretation = await shareClassificationContext(post, steward.token, steward.actingSubject,
+    [...concepts.values()].map(item => ({ concept: item.concept, definitionRevision: item.definitionRevision })),
+    seedKey('official-mod-classified-context', realm));
+  for (const item of concepts.values()) {
+    await discloseClassificationConcept(post, steward.token, steward.actingSubject, item.concept,
+      seedKey('official-mod-concept-hint', item.concept.slice(-12)), { kind: 'realm', realm });
+  }
   for (const item of officialMods) {
     const target = o.works.get(item.id);
     if (!target?.published) throw new Error(`Mod Work ${item.id} is not public`);
@@ -490,15 +501,16 @@ async function modClassifications(o: Official) {
       const sense = concepts.get(label)!.sense;
       const selection = { context: { kind: 'realm-classification', id: realm },
         work: target.work.work, mainVersion: target.work.mainVersion, sense };
-      const current = await o.api.post<{ state: string; source: string; decision: string | null }>(
+      const current = await o.api.post<ClassificationResolution>(
         '/v1/classification-resolutions', { profile: 'classification-resolution-v1', ...selection },
         steward.token, seedKey('official-mod-classification-read', `${item.id}:${label}`));
-      if (current.state === 'accepted') continue;
-      const expectedDecisionHead = current.source === 'local' ? current.decision : null;
-      await o.api.post('/v1/classification-decisions', {
-        profile: 'classification-direct-decision-v1', ...selection, expectedDecisionHead,
-        outcome: 'accepted', actingSubject: steward.actingSubject }, steward.token,
-      seedKey('official-mod-classification', `${item.id}:${label}:${expectedDecisionHead ?? 'first'}`));
+      const head = current.source === 'local' && current.decision ? current.decision.slice(-12) : 'first';
+      await acceptClassifiedStatement(post, steward.token, steward.actingSubject,
+        { mainVersion: target.work.mainVersion }, concepts.get(label)!.concept, interpretation,
+        { kind: 'realm-classification', id: realm }, current, {
+          statement: seedKey('official-mod-statement', `${item.id}:${label}`),
+          decision: seedKey('official-mod-classification', `${item.id}:${label}:${head}`),
+        });
     }
   }
 }

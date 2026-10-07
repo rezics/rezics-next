@@ -1,7 +1,9 @@
 import type { Static } from 'typebox';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { inOrder } from '../feed/settled.ts';
+import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE } from '../statement/schema.ts';
 import { readRealmDirectory } from '../realm-directory/read.ts';
 import { readRealmWorks } from '../realm-reads/read-works.ts';
 import { digest } from '../recommendation/derived-generation.ts';
@@ -29,13 +31,19 @@ export async function readConceptMatches(session: WorkReadSession, works: readon
     GRAPH ${iri(GRAPHS.current)} {
       VALUES ?chosen { ${chosen.map(iri).join(' ')} }
       ?work rv:mainVersion ?main .
-      ?application a rv:ClassificationApplication ; rv:targetMainVersion ?main ;
-        rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:applicationState rv:Active ;
-        rv:sense ?sense ; rv:decisionHead ?decision .
-      ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:expression ?expression .
-      ?expression rv:assertedConcept ?concept .
+      ?expression rv:assertedConcept ?concept ; rv:expressionState rv:Active .
+      ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:expression ?expression ; rv:head ?revision .
+      ?statement a rdf:Statement ; rdf:subject ?main ; rdf:predicate <${CLASSIFIED_AS}> ; rdf:object ?concept ;
+        rv:statementState rv:Active ; rv:relationDefinition ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
+        rv:interpretationDefinition ?revision ; rv:meaningKey ?key .
+      FILTER NOT EXISTS { ?statement rv:applicability ?applicability }
+      FILTER NOT EXISTS { ?statement rv:interpretationDefinition ?other FILTER(?other != ?revision) }
+      ?slot a rv:DecisionSlot ; rv:targetKind rv:QualifiedFactTarget ; rv:decisionTarget ?key ;
+        rv:acceptanceContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:decisionHead ?decision .
       FILTER(?concept = ?chosen || EXISTS { ?concept skos:broader ?chosen } || EXISTS { ?chosen skos:narrower ?concept })
-    } GRAPH ${iri(GRAPHS.revisions)} { ?decision rv:outcome rv:Accepted . }
+    } GRAPH ${iri(GRAPHS.revisions)} { ?decision a rv:StatementDecision, rv:RevisionAnchor ;
+      rv:component ?slot ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
+      rv:outcome rv:Accepted ; rv:support ?statement . }
   } LIMIT ${SUGGESTION_COST.conceptRows + 1}`, SUGGESTION_COST.conceptRows);
   for (const row of rows) {
     const work = row.work?.value, concept = row.chosen?.value;

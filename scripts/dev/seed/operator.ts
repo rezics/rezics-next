@@ -315,7 +315,8 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
     | 'content.publish' | 'content.search-eligibility' | 'publication.adopt'
     | 'rating.context.create' | 'rating.observation.set' | 'context.create'
     | 'classification.proposition.define' | 'classification.context.configure'
-    | 'classification.decision.set' | 'recommendation.generation.manage'; scope: string }[]) {
+    | 'classification.decision.set' | 'statement.decide' | 'statement.record'
+    | 'recommendation.generation.manage'; scope: string }[]) {
   loopback(input.accessDatabaseUrl);
   const scopePrefix = { 'work.edit': 'work:edit:https://rezics.com/id/',
     'recipe.edit': 'work:edit:https://rezics.com/id/',
@@ -329,10 +330,13 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
     'context.create': 'context:create:root',
     'classification.context.configure': 'classification:context:https://rezics.com/id/',
     'classification.decision.set': 'classification:decide:https://rezics.com/id/',
+    'statement.decide': 'classification:decide:https://rezics.com/id/',
+    'statement.record': 'statement:speak:https://rezics.com/id/',
     'classification.proposition.define': 'classification:define:global',
     'recommendation.generation.manage': 'recommendation:manage' } as const;
   if (grants.length > 10 || grants.some(({ action, scope }) => {
-    if (action === 'classification.decision.set' && scope === 'classification:decide:global') return false;
+    if ((action === 'classification.decision.set' || action === 'statement.decide')
+      && scope === 'classification:decide:global') return false;
     if (action === 'context.create' || action === 'classification.proposition.define'
       || action === 'recommendation.generation.manage') return scope !== scopePrefix[action];
     return !scope.startsWith(scopePrefix[action])

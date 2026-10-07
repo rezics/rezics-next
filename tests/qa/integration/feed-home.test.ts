@@ -31,7 +31,12 @@ import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox
 import { DATASET, GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { selectRealmLocal, realmSelectionDigest } from '../../../services/main/src/modules/work/select-realm.ts';
 import { selectMainDefault, mainSelectionDigest } from '../../../services/main/src/modules/work/select-main.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { startMediaStack } from './media-support.ts';
+import { acceptClassifiedWork, discloseConcept, shareClassifiedConcepts,
+  type ClassifiedConcept } from './work-classification.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
+import { CLASSIFIED_AS } from '../../../services/main/src/modules/statement/schema.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 async function json<T>(response: Response, expected = 200): Promise<T> {
@@ -85,6 +90,7 @@ test('G282: follows and home feed use real receipts, relay progress, public read
       content: stack.content, contentAuthoring: stack.content, media: stack.media, structureObjects,
       profiles: new ProfilesAccess(stack.accessPool), personPreferences: new PersonPreferencesStore(stack.accessPool),
       savedFilters: new SavedFilterStore(stack.accessPool),
+      judgments: new AccessJudgments(stack.accessPool),
       agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
       relayPosition: new RelayHandoffPositions(relay, consumer) };
     const app = createMainApp(stack.fuseki, deps);
@@ -298,13 +304,15 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     // Onboarding offers the shared scheme's Concepts grouped by their Works' type: a Concept on a media Work
     // becomes a choice once that Work is one, and following it pins a Home tab whose feed is filtered to it.
     for (const [scope, action] of [['classification:define:global', 'classification.proposition.define'],
-      ['classification:decide:global', 'classification.decision.set']] as const) await grant(scope, action);
-    const clips = await json<{ concept: string; sense: string }>(await call('POST', '/v1/classification-vocabulary', {
+      ['context:create:root', 'context.create'], [`statement:speak:${author}`, 'statement.record'],
+      ['classification:decide:global', 'statement.decide']] as const) await grant(scope, action);
+    const clips = await json<ClassifiedConcept>(await call('POST', '/v1/classification-vocabulary', {
       profile: 'classification-proposition-v2', scheme: null, labels: [{ language: 'en', value: 'Feed clips' }],
       alternativeLabels: [], broader: [], narrower: [], actingSubject: author }, a.token), 201);
-    await json(await call('POST', '/v1/classification-decisions', { profile: 'classification-direct-decision-v1',
-      work: first.work, mainVersion: first.mainVersion, sense: clips.sense, context: { kind: 'global' },
-      outcome: 'accepted', expectedDecisionHead: null, actingSubject: author }, a.token), 201);
+    const send = (method: string, path: string, body?: unknown) => call(method, path, body, a.token);
+    const interpretation = await shareClassifiedConcepts(send, json, author, [clips]);
+    await discloseConcept(stack.accessPool, a.principal, author, clips.concept);
+    await acceptClassifiedWork(send, json, author, first, clips, interpretation);
     type Choices = { groups: { type: string; concepts: { id: string; samples: { id: string }[] }[] }[] };
     const choices = async () => json<Choices>(await call('GET', '/v1/onboarding/choices?locale=en'));
     const offered = (read: Choices) => read.groups.filter(group => group.concepts.some(concept =>
@@ -416,19 +424,29 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     // Exact tag filters reuse the classification owner, including Realm-local
     // rejection overriding global acceptance. Sparse pages remain traversable.
     for (const [scope, action] of [['classification:define:global', 'classification.proposition.define'],
-      ['classification:decide:global', 'classification.decision.set'],
+      ['classification:decide:global', 'statement.decide'],
       [`classification:context:${realm.realm}`, 'classification.context.configure'],
-      [`classification:decide:${realm.realm}`, 'classification.decision.set']] as const) await grant(scope, action);
+      [`classification:decide:${realm.realm}`, 'statement.decide'],
+      ['context:create:root', 'context.create'],
+      [`statement:speak:${author}`, 'statement.record']] as const) await grant(scope, action);
     await json(await call('POST', '/v1/classification-contexts', { profile: 'classification-context-v1',
       realm: realm.realm, actingSubject: author }, a.token), 201);
-    const tag = await json<{ sense: string }>(await call('POST', '/v1/classification-propositions', {
+    const tag = await json<ClassifiedConcept>(await call('POST', '/v1/classification-propositions', {
       profile: 'classification-proposition-v1', label: 'Feed adventures', actingSubject: author }, a.token), 201);
-    const decision = { profile: 'classification-direct-decision-v1', work: first.work, mainVersion: first.mainVersion,
-      sense: tag.sense, expectedDecisionHead: null, actingSubject: author };
-    await json(await call('POST', '/v1/classification-decisions', { ...decision,
-      context: { kind: 'global' }, outcome: 'accepted' }, a.token), 201);
-    await json(await call('POST', '/v1/classification-decisions', { ...decision,
-      context: { kind: 'realm-classification', id: realm.realm }, outcome: 'rejected' }, a.token), 201);
+    const tagContext = await shareClassifiedConcepts(send, json, author, [tag]);
+    await discloseConcept(stack.accessPool, a.principal, author, tag.concept);
+    const stated = await json<{ statement: string; meaningKey: string }>(await call('POST', '/v1/statements', {
+      profile: 'statement-v1', speaker: { kind: 'personal' }, subject: first.mainVersion,
+      predicate: CLASSIFIED_AS, relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+      value: { kind: 'resource', iri: tag.concept }, applicability: [],
+      interpretation: { kind: 'explicit', context: tagContext.context, semanticRevision: tagContext.semanticRevision },
+      evidence: [], actingSubject: author }, a.token), 201);
+    const decide = (acceptance: { kind: 'global' } | { kind: 'realm'; realm: string }, outcome: 'accepted' | 'rejected') =>
+      call('POST', '/v1/statement-decisions', { profile: 'statement-decision-v1',
+        target: { kind: 'qualified-fact', meaningKey: stated.meaningKey, support: [stated.statement] },
+        acceptance, outcome, expectedDecisionHead: null, actingSubject: author }, a.token);
+    await json(await decide({ kind: 'global' }, 'accepted'), 201);
+    await json(await decide({ kind: 'realm', realm: realm.realm }, 'rejected'), 201);
     await drain(); await refresh();
     const collect = async (query: string) => {
       const items: FeedItem[] = [];

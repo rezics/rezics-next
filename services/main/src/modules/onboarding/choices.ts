@@ -1,7 +1,9 @@
 import { choiceWorkTypeOptions } from '../types/registry.ts';
 import type { Static } from 'typebox';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { VOCABULARY_PROFILE } from '../classification/vocabulary.ts';
+import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE } from '../statement/schema.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { publicWork } from '../work/public-patterns.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
@@ -70,16 +72,22 @@ export async function readChoices(session: WorkReadSession): Promise<OnboardingC
   }
   if (concepts.size) {
     // Each Concept reads at most four accepted, public Works; their types come with them.
-    const branch = (concept: string) => `{ SELECT ?concept ?work WHERE {
+    const branch = (concept: string) => `{ SELECT DISTINCT ?concept ?work WHERE {
       BIND(${iri(concept)} AS ?concept)
       GRAPH ${iri(GRAPHS.current)} {
         ?expression rv:assertedConcept ${iri(concept)} ; rv:expressionState rv:Active .
-        ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:expression ?expression .
-        ?application a rv:ClassificationApplication ; rv:sense ?sense ; rv:targetMainVersion ?main ;
-          rv:classificationContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:applicationState rv:Active ;
-          rv:decisionHead ?decision .
-        ?main rv:work ?work . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?decision rv:outcome rv:Accepted . }
+        ?sense a rv:ClassificationSense ; rv:senseState rv:Active ; rv:expression ?expression ; rv:head ?revision .
+        ?statement a rdf:Statement ; rdf:subject ?main ; rdf:predicate <${CLASSIFIED_AS}> ; rdf:object ${iri(concept)} ;
+          rv:statementState rv:Active ; rv:relationDefinition ${iri(CLASSIFICATION_PROPOSITION_PROFILE)} ;
+          rv:interpretationDefinition ?revision ; rv:meaningKey ?key .
+        FILTER NOT EXISTS { ?statement rv:applicability ?applicability }
+        FILTER NOT EXISTS { ?statement rv:interpretationDefinition ?other FILTER(?other != ?revision) }
+        ?main rv:work ?work .
+        ?slot a rv:DecisionSlot ; rv:targetKind rv:QualifiedFactTarget ; rv:decisionTarget ?key ;
+          rv:acceptanceContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:decisionHead ?decision . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?decision a rv:StatementDecision, rv:RevisionAnchor ;
+        rv:component ?slot ; rv:decisionPolicy ${iri(STATEMENT_DECISION_PROFILE)} ;
+        rv:outcome rv:Accepted ; rv:support ?statement . }
       ${publicWork('?work', '?main')}
     } LIMIT ${CHOICES_COST.samplesPerConcept} }`;
     const limit = concepts.size * CHOICES_COST.samplesPerConcept * CHOICES_COST.workTypes;

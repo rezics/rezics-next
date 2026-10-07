@@ -3,6 +3,8 @@ import { Pool, type PoolClient } from 'pg';
 import { loadVndbSlice, metadataTag, recordedTag, seededReleasePlan, ODBL, DBCL,
   type PlannedRelease, type VndbSlice } from '../../../tests/fixtures/vndb/load.ts';
 import { SeedApiError } from './api.ts';
+import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
+  type ClassificationResolution, type SharedClassificationContext } from './classified-statement.ts';
 import { grantImportedContributionSeedAuthority, type LocalOperatorInput } from './operator.ts';
 import { seedKey } from './plan.ts';
 import { refreshSeedTokens, stableId, type SeedState, type WorkReceipt } from './state.ts';
@@ -137,17 +139,24 @@ export async function applyVnCatalogue(port: SeedPort): Promise<VnCatalogueManif
   const actor = port.actingSubject;
   await port.grant('work:create:root', 'work.create');
   await port.grant('classification:define:global', 'classification.proposition.define');
-  await port.grant('classification:decide:global', 'classification.decision.set');
-  const concept = await call<{ concept: string; sense: string }>(port, 'POST', '/v1/classification-propositions', {
-    profile: 'classification-proposition-v1', label: 'visual novel', actingSubject: actor,
-  }, seedKey('vndb-concept', 'visual-novel'));
+  await port.grant('classification:decide:global', 'statement.decide');
+  await port.grant('context:create:root', 'context.create');
+  await port.grant(`statement:speak:${actor}`, 'statement.record');
+  const concept = await call<{ concept: string; sense: string; definitionRevision: string }>(port, 'POST',
+    '/v1/classification-propositions', { profile: 'classification-proposition-v1', label: 'visual novel',
+      actingSubject: actor }, seedKey('vndb-concept', 'visual-novel'));
+  const post = <T>(path: string, body: unknown, _token: string, key: string) => call<T>(port, 'POST', path, body, key);
+  const interpretation = await shareClassificationContext(post, '', actor,
+    [{ concept: concept.concept, definitionRevision: concept.definitionRevision }],
+    seedKey('vndb-classification-context', 'visual-novel'));
+  await discloseClassificationConcept(post, '', actor, concept.concept, seedKey('vndb-concept-hint', 'visual-novel'));
   const producers = await provisionProducers(port, slice, plan.releases);
   const names = producerNames(slice);
   const made: VnWorkRecord[] = [];
   for (const [index, vn] of slice.tables.vn.entries()) {
     if (index % 10 === 0) await port.refresh?.();
     made.push(await seedVisualNovel(port, slice, vn, plan.releases.filter(release => release.vn === vn.id),
-      producers, names, concept.sense));
+      producers, names, concept, interpretation));
   }
   const releases: VnCatalogueManifest['releases'] = plan.releases.map(release => ({
     vndb: release.id, iri: vndbReleaseIri(release.id), revision: '',
@@ -176,7 +185,7 @@ export async function applyVnCatalogue(port: SeedPort): Promise<VnCatalogueManif
 
 async function seedVisualNovel(port: SeedPort, slice: VndbSlice, vn: VndbSlice['tables']['vn'][number],
   releases: PlannedRelease[], producers: Map<string, string>, names: Map<string, string>,
-  sense: string): Promise<VnWorkRecord> {
+  concept: { concept: string; sense: string }, interpretation: SharedClassificationContext): Promise<VnWorkRecord> {
   if (vn.olang !== 'en' && vn.olang !== 'ja') throw new Error(`VNDB ${vn.id} language ${vn.olang} is not en or ja`);
   const title = workTitle(slice, vn);
   const created = await createOwnWork(port, { key: seedKey('vndb-work', vn.id), title: title.value,
@@ -200,7 +209,7 @@ async function seedVisualNovel(port: SeedPort, slice: VndbSlice, vn: VndbSlice['
     await putRelease(port, created.work, vn.id, recordedTag(vn.olang), release, names, revisions);
   }
   await creditProducers(port, created.work, vn.id, recordedTag(vn.olang), releases, producers);
-  await classify(port, created, sense, vn.id);
+  await classify(port, created, concept, interpretation, vn.id);
   return { vndb: vn.id, iri: created.work, mainVersion: created.mainVersion,
     workRevision: created.workRevision, mainRevision: created.mainRevision, metadataRevision };
 }
@@ -393,17 +402,16 @@ async function listedCredits(port: SeedPort, work: string) {
   return items;
 }
 
-async function classify(port: SeedPort, work: { work: string; mainVersion: string }, sense: string, vn: string) {
-  const selection = { context: { kind: 'global' as const }, work: work.work, mainVersion: work.mainVersion, sense };
-  const current = await call<{ state: string; source: string; decision: string | null }>(port, 'POST',
-    '/v1/classification-resolutions', { profile: 'classification-resolution-v1', ...selection },
-    seedKey('vndb-class-resolution', vn));
-  if (current.state === 'accepted') return;
-  const expectedDecisionHead = current.source === 'local' ? current.decision : null;
-  await call(port, 'POST', '/v1/classification-decisions', {
-    profile: 'classification-direct-decision-v1', ...selection, expectedDecisionHead,
-    outcome: 'accepted', actingSubject: port.actingSubject,
-  }, seedKey('vndb-class-decision', `${vn}:${expectedDecisionHead?.slice(-12) ?? 'first'}`));
+async function classify(port: SeedPort, work: { work: string; mainVersion: string },
+  concept: { concept: string; sense: string }, interpretation: SharedClassificationContext, vn: string) {
+  const current = await call<ClassificationResolution>(port, 'POST', '/v1/classification-resolutions', {
+    profile: 'classification-resolution-v1', context: { kind: 'global' }, work: work.work,
+    mainVersion: work.mainVersion, sense: concept.sense }, seedKey('vndb-class-resolution', vn));
+  const head = current.source === 'local' && current.decision ? current.decision.slice(-12) : 'first';
+  await acceptClassifiedStatement(
+    (path, body, _token, key) => call(port, 'POST', path, body, key), '', port.actingSubject, work, concept.concept,
+    interpretation, { kind: 'global' }, current, { statement: seedKey('vndb-class-statement', vn),
+      decision: seedKey('vndb-class-decision', `${vn}:${head}`) });
 }
 
 async function recordRights(port: SeedPort, work: string) {
