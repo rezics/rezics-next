@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 15:47 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 16:24 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
 Goal remains active. Completion cannot be projected reliably until the physical
 locality and exact restore/Claim qualifications pass.
@@ -12,23 +12,20 @@ uses immutable source streams and a saved PostgreSQL snapshot; no site-wide
 singleton correctness head. C4 repair67883e853690, redesign8c6793a04dbb and
 classification restore1dbd4a099fe2 are applied.
 
-Latest completed refresh:84db46281330715ba9d2a0cd6fca9b51094d50ef,
-native0.5.39-eeaa550c0acc, modelab6d394 unchanged, no pending SQL. Log
-`.temp/kernel/refresh-composition-metadata-wave.log` completed exit0;
-`task urls` confirms all six applications Running Healthy. Main/Account use
-fixed3011/3012 behind3001/3002. Includes membership88ce032c80a2,
-Zone107f23261259, Realm ownera299f1f16255/admission112b05137e45,
-Trust catalogue6ee3f226f, Launch policyf6383bc94/notification84a06c164,
-Composition381fb06516f1 and final8Turtle declarations84db46281330.
-Account/Main/relay restarted with retained volumes. Verification pending index
-and query72b04d1d6ade subsequently landed: Content1703, actual45PGplans under
-65536-row growth,80/128loops and241/384buffers, all160gatefiles green. Required
-refresh queued at `.temp/kernel/refresh-verification-pending-wave.log` behind
-Launch heavy QA; full Main code gate hold until successful checkpoint. Latest
-completed revision above remains the serving checkpoint. Unmerged Claim/Event/publication/Structure/native
-union candidates remain isolated. Refresh inspection repaird04038cac prepares
-changed storage before checking membership through the candidate native module;
-Program owns queued staged-code re-execution G1346.
+Latest completed refresh:3b6aa69533e8b560f018e9310d72cd88ae7d1426,
+native0.5.39-eeaa550c0acc, modelab6d394 unchanged, no pending SQL. Refresh
+1f3e35a28e9f79ca2e6c5c405c03321f; log
+`.temp/kernel/refresh-event-scoped-alias-wave.log` completed exit0.
+`task urls` confirms six applications Running Healthy; fixed3011/3012 behind3001/3002.
+Includes prior membership/Zone/Realm/catalogue/Composition/Turtle waves,
+Verification72b04d1d6ade plus1703repair2f1c7b473a4a, Zone fixture4c98d4bf77a6
+and scoped Event/alias3b6aa69533e8 withAccess1769–1772/Relay021.
+Account/Main/relay restarted with retained volumes. Main code hold released.
+Program G1378 owns concurrent-index migration runner class repair;1703 stays
+as applied and future online indexes retain the marker+CONCURRENTLY.
+Unmerged Claim/publication/Structure/native/compiler candidates remain isolated.
+Refresh inspectiond04038cac prepares changed storage before checking membership
+through the candidate module; Program owns staged-code re-execution G1346.
 Cold populated600sec startup/restore remains unqualified; a successful shared
 small-stack prepare is insufficient.
 
@@ -64,65 +61,67 @@ held native work, final seal follows permit release, revocation is fenced.
 
 ## Running work and ready reviews
 
-- G1282#11: fixed native2d1bb19ca independently accepted;12 actualTDB2 cases,
-  13GPOS/171GSPO unchanged at4097Assessments+4097unrelatedClaimR. Building ONLY
-  bounded128-physical-tuple currentClaim inventory, exactEOF/C-witness/CAS and
-  restart/store/version refusal; held Core hooks staged. Complete/release denied.
-- G1345#7 READY: owner preparation37556e1bc, final2Turtle authorsec65d5953,
-  exact6sealedJSON-string wire25c2803e9 and actualCommandService6a9d120e5
-  independently accepted components. Real authenticated acquire/convert2Claims,
-  lost-ack replay, independent speakers, oldR/pins/custody and currentB verified;
-  QA20261007t153119-af04b9,3cases126assertions. Complete:false, release/native
-  complete denied, public reads held. Native/Core union and artifact generation
-  still manager prerequisites; build used -DskipTests, HTTP assertions actually ran.
-- G1330#6: independent slim/Core486577521 committed, real mixed tail/product
-  qualification active. Raw Work replay found dropped original actor; owner repairs
-  from exact sealed admission. Trust b642d98fa minimal borrowed API independently
-  reviewed accepted by kernel, peer freeze requested; no full operator/privacy
-  closure claim. Exact historical read93c059092 retains client/custody. Original
-  private draft roots require journal-bound erased/unavailable before retirement.
-- G1289#5: Content1702 GroupRole root mappings,<=256-entry CAS turns and complete
-  original-SHA lookup;33units/5actualPG-S3 accepted component. Minimal loaned
-  operations/restore-lineage/Mainconstructor union under actualGC/restore proof.
-  Borrowed relayCoverage transaction hazard must preserve allocator lock at release.
+- G1282#13: nativepolicy2d1bb19ca accepted;12actualTDB2,13GPOS/171GSPO
+  unchanged at4097Assessments+4097unrelatedClaimR. Inventory28a91429d bounded128
+  physical tuples; byte fixe6d0b9d2b adds oversized-head atomic refusal,11native
+  pass, independently reviewing. Now clamps absolute30s before write admission
+  and adds after-work interruption/late insertion proof. Complete/release denied;
+  sourceComplete proves only membership at attempt cut, not all conversions.
+- G1345#10: prep37556e1bc, final2Turtleec65d5953, exact6sealedJSON-string
+  wire25c2803e9 and actualCommandService6a9d120e5 independently accepted.
+  QA20261007t153119-af04b9,3cases126assertions; authenticated acquire/convert,
+  lost-ack replay, independent speakers, oldR/pins/custody/currentB preserved.
+  Native/Core/artifact union pending. New ONLY fixed assessment producer original
+  intent before graph dispatch and effect-only reconciliation/barrier, Content1704.
+  Content post-Access tails race closure; no completion witness/release yet.
+- G1330#6 READY: native/Core486577521 plus mixed repair/cutoverac43f4071
+  independently accepted;66native,95owners1074asserts, actual signed900/Main4,
+  cutover876/Main0 and mixed877/1→878/2→899/3→900/4, QA20261007t155712-6db93c,
+  605assertions. Merge gate running. Positive release held pending frozen Trust
+  b642d98fa and exact borrowed Access+relay lifecycle loan; relayCoverage must
+  preserve allocator lock. Original private draft root erasure remains C6 debt.
+- G1289#5: Content1702 GroupRole original-SHA root mappings,<=256-entry CAS;
+  33units/5actualPG-S3 accepted component. ActualGC/restore proof active; preserve
+  caller allocator lock, independently Main/diagnostic cuts and borrowed callback.
   Distinguish200Groups from201directChapters; original manifest bytes unchanged.
-- G1306#6 conflict: scoped Event9a5d3f978 plus aliasbb4c5b8b1/manager5a6f3cf6d
-  accepted actualAPI96assertions. Cold2048prefix/2051slots561.4sec/600; scoped
-  33outside effects32applied/1pending cursor ready, relevant delta refuses. Merge
-  gate blocks undeclared BACKGROUND cursor/checkpoint exactwriter classifications;
-  Program narrow serialization-points.ts loan requested. Registered test title
-  restoredf51e56721 without assertion changes. NormalizedAccess1769–1772 pending.
-- G1300#17: no standalone landing. Own895a385e9 nativehooks5cases pass, but
-  cold ORDER/LIMIT128 scans2/322/4098 source bindings at0/320/4096proposals.
-  Real application never ran because oldnative snapshot failed. Corrected1545
-  supplied; <=15min bounded-source decision in existing native/seek owner, physical
-  traversal and SQL candidate order separate. Route debt324rows/17seeks/369buffers;
-  outer WorkRead global fence unchanged,128steps/160calls/4MiB/10sec retained.
-- G1290#11: local source/adoption primitive1282cedd0b9e accepted except cancellation.
-  15actualTDB2 checks,25sourceprobes/16rows and77adoptionprobes/37rows stay local;
-  closed maintenance hook staged. New16384-effect loop after last Coredeadline
-  check blocks landing; worker adds cancellation/expiry guards and abort proof.
-  No query switch/promotion/current names release; canonical ownera299f/admission112b live.
-- G1341#9: verification72b04d1d6ade landed; reused for Launch-loaned local Zone
-  fixture. Raw stewardshipSPARQL invalidates membershipcompletion; controlled
-  normalizeStoredMembership+complete:true before product requests, preserve all
-  native/refusal/assertions. Original failure is DELETE mount of its own populated
-  parent, no unrelated ItemList poisoning. No production normalization.
-- G1352#8: Composition batch381fb06516f1 active;100Episode27graph264957bytes/
-  22SQL295–332ms; race64graph533266bytes60SQL927ms;14fixture326asserts pass.
-  Building common retained qualifier-key index, first producer immutable zone-mount,
-  temporary own-worktree G1289 hooks restored before commit. Exact misses refuse
-  missing coverage; mutable Episode scalar metadata needs source-promotion/adoption
-  barrier, direct schema:episodeNumber is accepted Resource data, not invented Statement.
-- G1354#12: last8 declarations84db46281330 active; renderer retirementa350bfe0a
-  component ready,89tests1922assertions and272artifacts/133sourcehash parity; plain
-  TS/clones without capturedTurtle refuse. HOLD until G1345 final2authors land,
-  then fresh gen:check. Now <=15min read-only next generic compiler API decision.
-- G1373#3: inactive TextEntityDocumentsb3844e51f,218production/308testlines,
-  10actualJena/Lucene cases pass; standalone unused landing prohibited. Next actual
-  public Content body delivery through existing FilteredGraphTextIndex and journal,
-  original rank/source checks, replay/recovery uncertainty; retain all RDF facts.
-  No whole-scope replacement per64-namepage; source-bound names remain later debt.
+- G1306 CLOSED: scoped Event/alias3b6aa69533e8 ACTIVE/refreshed;102affected+19
+  guards passed. Cold2048prefix/2051slots561.4sec/600;33outside effects32applied/
+  1pending ready, relevant delta refuses. ActualAPI96assertions; exact background
+  checkpoint/writers7ca7eac4f approved Program; request writers still findings.
+- G1300#18: no standalone landing. Own895a385e9 hook5actualnative cases pass.
+  Cold ORDER/LIMIT128 scans2/322/4098bindings at0/320/4096 proposals. Accepted
+  bounded-source decision now implemented in existing StatementPublicationMembership
+  and authenticated templateIndex;<=128physical GPOS/POS entries,127+lookahead,
+  exactEOF/source-token CAS, SQL candidate C-order separate. Corrected1545 inputs.
+  ActualG920 application still pending;128steps/160calls/4MiB/10sec unchanged,
+  outer WorkRead global fence remains debt.
+- G1290#12: Work source/adoption1282cedd0b9e+cancellation2f623f5e0ba3
+  independently accepted with mandatory staged Core hook.22actualTDB2, original15
+  and25sourceprobes/16rows+77adoptionprobes/37rows preserved. Qualifying ONLY actual
+  CommandService ordinary/slim/bulk cancellation+rollback on corrected1545 union.
+  No query switch/promotion/current-name release; canonical owner/admission live.
+- G1341 CLOSED: Verification72b04d1d6ade+1703repair ACTIVE;45actualPG plans
+  under65536row growth,80/128loops,241/384buffers,160affected+19guards pass.
+  Zone fixture4c98d4bf77a6 localnormalize+complete:true before product requests;
+  14actualintegrationcases545assertions, all old assertions/native refusals retained.
+- G1352#8: Composition381fb06516f1 ACTIVE;100Episode27graph264957bytes/22SQL
+  295–332ms; race64graph533266bytes60SQL927ms;14fixtures326asserts pass.
+  Common retained qualifier-key index, immutable zone-mount first, own temporary
+  G1289 hooks restored before commit. Missing coverage means unavailable, not miss.
+  Mutable Episode scalar needs G1379 source/adoption barrier, not invented Statement.
+- G1354#14: renderera350bfe0a +legacyoverride5f30b58d6 independently accepted;
+  139tests4539asserts,272artifacts/133sourcehash parity. HOLD final2authors then
+  integrated gen:check/native union. Fixing ONLY g512 projection fake and g939
+  nested generated-union traversal, old assertions intact; readonly credits facade
+  discovery decision before any g629 assertion change.
+- G1373#3: inactive TextEntityDocumentsb3844e51f,10actualJena/Lucene pass;
+  no unused standalone landing. Actual public Content body delivery through
+  FilteredGraphTextIndex/journal, original rank/source checks and recovery holds;
+  retain RDF authority initially. No whole-scope replacement per64-namepage.
+- G1379#2: direct accepted Resource scalar authority confirmed. Implement ONLY
+  native local Resource source-effect generation/proof, actual bounded TDB2 tests,
+  staged Core/Journal hooks; no retained adoption inventory/promotion/read switch.
+  Mutable Episode index remains held until full reciprocal source barrier composed.
 
 Immutable native snapshot `.temp/kernel/held-native-union-1545` preserves1455
 and imports only committed486577521 MetadataRestore exact-delta default-alias
@@ -148,8 +147,8 @@ landings require `task dev:refresh -- --wait` and checkpoint verification.
 
 Still open: full Claim fold,133-profile/current-family/DSL convergence, external
 search copies and physical population locality, Discover remeasurement, exact
-populated restore/erasure/startup, and Jena tools with Program. Zone v1-to-v2
-conversion waits for Launch G1374 draft name/address privacy repair; G1284
+populated restore/erasure/startup, and Jena tools with Program. Zone presentation/current-producer
+conversion planning follows CLOSED Launch G1374 draft name/address privacy repair; G1284
 landed9c7bf603d/closedddd529727 and released its Zone files. Shared qualifier
 lookup G1352 feeds Zone routing; nested continuity still lacks authoritative order. Optional RDF Patch cold
 comparison is deferred until a measurable consumer. Close accepted completed
