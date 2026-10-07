@@ -16,7 +16,8 @@ import { readGraphErasureProof, type GraphSuppressionProof, type HeldGraphErasur
 import { assertGraphErasure, graphLineageSequence, replayGraphErasure } from './replay-graph.ts';
 import { objectErasureAbsent, replayObjectErasure } from './replay-objects.ts';
 import { publicationSupersessionsMatch } from './replay-supersessions.ts';
-import { restoredCustodyDigests, type RestoredGraphCustody } from './custody.ts';
+import { readRetainedNativeGraphSuppressionProof, restoredCustodyDigests,
+  type RestoredGraphCustody } from './custody.ts';
 
 /** The restored owners stay fenced: a later journal entry or authority fact is unreconciled. */
 export class ErasureRestoreHold extends Error {}
@@ -219,13 +220,25 @@ async function heldErasureReplay(restored: RestoredOwners, clients: BorrowedRest
   erasureId: string, epoch: string, revisionIds: readonly string[]): Promise<HeldGraphErasureReplay | undefined> {
   const graph = restored.graph, config = graph?.heldErasure;
   if (!graph || !config) return undefined;
-  if (config.cut.dataEpoch !== graph.lineage.dataEpoch || config.cut.routingEpoch !== graph.lineage.routingEpoch
-    || config.originalGraph.fuseki === graph.fuseki
-    || config.originalGraph.lineage.dataEpoch === graph.lineage.dataEpoch) {
-    throw new ErasureRestoreHold('independent original graph and exact held cut are required');
+  if (config.cut.dataEpoch !== graph.lineage.dataEpoch || config.cut.routingEpoch !== graph.lineage.routingEpoch) {
+    throw new ErasureRestoreHold('exact held graph cut is required');
   }
-  const original = await readGraphErasureProof(config.originalGraph.fuseki,
-    config.originalGraph.lineage, erasureId, epoch, revisionIds);
+  const readOriginal = async () => {
+    if (config.originalSource === 'retained-native-event') {
+      return readRetainedNativeGraphSuppressionProof(clients.relayClient, erasureId, epoch, revisionIds);
+    }
+    if (config.originalSource !== 'original-graph' || config.originalGraph.fuseki === graph.fuseki
+      || config.originalGraph.lineage.dataEpoch === graph.lineage.dataEpoch) {
+      throw new ErasureRestoreHold('independent original suppression source is required');
+    }
+    const proof = await readGraphErasureProof(config.originalGraph.fuseki,
+      config.originalGraph.lineage, erasureId, epoch, revisionIds);
+    return { original: proof, evidenceDigest: sha256(JSON.stringify(proof)) };
+  };
+  const retained = await readOriginal(), original = retained.original;
+  if (original.dataEpoch === graph.lineage.dataEpoch) {
+    throw new ErasureRestoreHold('original suppression proof belongs to the restored graph');
+  }
   const held: HeldGraphErasureReplay = { cut: config.cut, accessHoldGeneration: config.accessHoldGeneration,
     signingKey: config.signingKey, maintenance: config.maintenance, revisionIds, original,
     assertCurrent: async request => {
@@ -244,9 +257,10 @@ async function heldErasureReplay(restored: RestoredOwners, clients: BorrowedRest
           && target.kind === 'content_revision').map(target => target.ref), revisionIds)) {
         throw new ErasureRestoreHold('held erasure differs from the retained current journal');
       }
-      const current = await readGraphErasureProof(config.originalGraph.fuseki,
-        config.originalGraph.lineage, erasureId, epoch, revisionIds);
-      if (!sameProof(current, original)) throw new ErasureRestoreHold('original graph suppression proof changed');
+      const current = await readOriginal();
+      if (!sameProof(current.original, original) || current.evidenceDigest !== retained.evidenceDigest) {
+        throw new ErasureRestoreHold('original suppression proof changed');
+      }
       const fence = (await clients.accessClient.query<{ open: boolean; generation: string }>(
         'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true FOR UPDATE')).rows[0];
       if (fence?.open !== false || fence.generation !== held.accessHoldGeneration

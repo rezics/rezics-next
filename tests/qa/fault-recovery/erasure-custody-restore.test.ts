@@ -12,8 +12,11 @@ import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from
 import { AccessAdmissionRegistry, AdmissionUnavailable, engageAccessRecoveryFence } from
   '../../../services/main/src/modules/access/admission.ts';
 import { applyContentErasure } from '../../../services/main/src/modules/erasure/content.ts';
-import { graphErasureSuppressed, heldErasureMaintenanceClient, readGraphErasureProof, suppressGraphContentRevisions } from
+import { graphErasureSuppressed, heldErasureMaintenanceClient, probeHeldGraphErasureProof, readGraphErasureProof, suppressGraphContentRevisions,
+  type HeldGraphErasureCut } from
   '../../../services/main/src/modules/erasure/graph.ts';
+import { readRetainedNativeGraphSuppressionProof, type RestoredGraphCustody } from
+  '../../../services/main/src/modules/erasure/custody.ts';
 import { ensureRetentionDomain, journalErasure, markErasureSuppressed, readErasure,
   recordErasureInventory } from '../../../services/main/src/modules/erasure/journal.ts';
 import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHold,
@@ -299,6 +302,35 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
         throw error;
       } finally { accessClient.release(); relayClient.release(); }
     };
+    const releaseHeldGraph = async (graph: RestoredGraphCustody, cut: HeldGraphErasureCut) => {
+      // Exact existing restore-release family; the production outer owner supplies this callback.
+      const receipt = `urn:rezics:receipt:restore-release:${hash(cut.dataEpoch)}`;
+      const digest = hash(JSON.stringify({ family: 'restore-release-v2', lineage: graph.lineage,
+        priorDataEpoch: cut.priorDataEpoch, priorSequence: cut.priorSequence,
+        priorMainSequence: coverage!.relay.sequence, streamScope: 'urn:rezics:stream:main-rdf' }));
+      expect((await graph.fuseki.commandWithReceipt({ receipt, digest, validations: [], deadlineMs: 10_000,
+        update: `PREFIX rv: <${RV}>
+        DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+        INSERT { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+          rv:requestDigest ${lit(digest)} ; rv:datasetId ${iri(DATASET)} ;
+          rv:dataEpoch ${lit(cut.dataEpoch)} ; rv:sequence 0 ;
+          rv:priorMainSequence ${coverage!.relay.sequence} ;
+          rv:streamScope "urn:rezics:stream:main-rdf" . } }
+        WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(cut.dataEpoch)} ;
+          rv:routingEpoch ${lit(cut.routingEpoch)} ; rv:sequence 0 ;
+          rv:restoreCutover ${iri(cut.restoreCutover)} ; rv:restoreHold true .
+          ${iri(cut.restoreCutover)} rv:priorDataEpoch ${lit(cut.priorDataEpoch)} ;
+            rv:priorSequence ${cut.priorSequence} ;
+            rv:priorMainSequence ${coverage!.relay.sequence} . }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } } }` })).status).toBe('committed');
+      expect((await graph.fuseki.query(`PREFIX rv: <${RV}> ASK {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(cut.dataEpoch)} ; rv:sequence 0 .
+          FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:requestDigest ${lit(digest)} ;
+          rv:dataEpoch ${lit(cut.dataEpoch)} ; rv:sequence 0 ;
+          rv:priorMainSequence ${coverage!.relay.sequence} ;
+          rv:streamScope "urn:rezics:stream:main-rdf" . } }`)).boolean).toBe(true);
+    };
     const heldCopy = await restore();
     const next = { dataEpoch: randomUUID(), routingEpoch: /^(0|[1-9][0-9]*)$/.test(lineage.routingEpoch)
       ? String(BigInt(lineage.routingEpoch) + 1n) : randomUUID() };
@@ -311,7 +343,7 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
     heldGraph.heldErasure = { cut, accessHoldGeneration: heldCopy.generation,
       signingKey: qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!,
       maintenance: heldErasureMaintenanceClient(heldCopy.graph.url, qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN!),
-      originalGraph: { fuseki: native, lineage } };
+      originalSource: 'original-graph', originalGraph: { fuseki: native, lineage } };
     heldGraph.heldErasure.accessHoldGeneration = String(BigInt(heldCopy.generation) + 1n);
     await expect(withBorrowed(heldCopy.restored, clients => reconcileRestoredErasures(relay, heldCopy.restored,
       { operationId: randomUUID(), consumer, replay: true, authority }, clients)))
@@ -343,27 +375,7 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
           callbacks++;
           expect((await clients.accessClient.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open)
             .toBe(false);
-          // Exact existing restore-release family; the production outer owner supplies this callback.
-          const receipt = `urn:rezics:receipt:restore-release:${hash(next.dataEpoch)}`;
-          const digest = hash(JSON.stringify({ family: 'restore-release-v1', lineage: next,
-            priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence }));
-          expect((await heldGraph.fuseki.commandWithReceipt({ receipt, digest, validations: [], deadlineMs: 10_000,
-            update: `PREFIX rv: <${RV}>
-            DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-            INSERT { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
-              rv:requestDigest ${lit(digest)} ; rv:datasetId ${iri(DATASET)} ;
-              rv:dataEpoch ${lit(next.dataEpoch)} ; rv:sequence 0 . } }
-            WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(next.dataEpoch)} ;
-              rv:routingEpoch ${lit(next.routingEpoch)} ; rv:sequence 0 ;
-              rv:restoreCutover ${iri(cut.restoreCutover)} ; rv:restoreHold true .
-              ${iri(cut.restoreCutover)} rv:priorDataEpoch ${lit(cut.priorDataEpoch)} ;
-                rv:priorSequence ${cut.priorSequence} . }
-              FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } } }` })).status).toBe('committed');
-          expect((await heldGraph.fuseki.query(`PREFIX rv: <${RV}> ASK {
-            GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(next.dataEpoch)} ; rv:sequence 0 .
-              FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
-            GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:requestDigest ${lit(digest)} ;
-              rv:dataEpoch ${lit(next.dataEpoch)} ; rv:sequence 0 . } }`)).boolean).toBe(true);
+          await releaseHeldGraph(heldGraph, cut);
         } });
       expect(callbacks).toBe(1);
       expect((await clients.accessClient.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open).toBe(true);
@@ -387,6 +399,131 @@ java -Xmx1g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader -
     await recordErasureInventory(relay, erase.erasureId, { owners: ['content'],
       liveRetentionReason: 'PostgreSQL prior rows and retained backup require separate retirement' });
     expect(await readErasure(relay, erase.erasureId)).toMatchObject({ suppression: 'suppressed', destruction: 'retained' });
+    // Retain the actual post-cut native event before stopping its original graph.
+    for (let batch = 0; batch < 8; batch++) {
+      if (!await relayMainOutboxOnce(native, relay, consumer, { ownerOutbox: custody })) break;
+      if (batch === 7) throw new Error('post-cut native relay drain exceeded its bound');
+    }
+    const retainedCopy = await restore(), retainedGraph = retainedCopy.restored.graph!;
+    const retainedNext = { dataEpoch: randomUUID(), routingEpoch: /^(0|[1-9][0-9]*)$/.test(lineage.routingEpoch)
+      ? String(BigInt(lineage.routingEpoch) + 1n) : randomUUID() };
+    await cutoverRestoredGraphLineage(retainedGraph.fuseki,
+      { prior: { ...lineage, sequence: coverage.priorSequence }, next: retainedNext });
+    const retainedCut = { ...retainedNext, restoreCutover: `urn:rezics:restore:${retainedNext.dataEpoch}`,
+      priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence };
+    retainedGraph.lineage = retainedNext;
+    const maintenance = heldErasureMaintenanceClient(retainedCopy.graph.url, qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN!);
+    const nativeOutcomes: string[] = [];
+    const nativePositions: { datasetId: string; dataEpoch: string; sequence: string }[] = [];
+    let sends = 0, afterNativeOutcome: (() => Promise<void>) | undefined;
+    retainedGraph.heldErasure = { cut: retainedCut, accessHoldGeneration: retainedCopy.generation,
+      signingKey: qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!, originalSource: 'retained-native-event',
+      maintenance: { command: async command => {
+        sends++;
+        const outcome = await maintenance.command(command);
+        nativeOutcomes.push(outcome.status);
+        if (outcome.status === 'committed') nativePositions.push(outcome.position);
+        expect(outcome.status).toBe('committed');
+        await afterNativeOutcome?.();
+        return outcome;
+      } } };
+    const changeEvidence = async (client: PoolClient) => {
+      const event = `urn:rezics:event:${hash(`${proof.receipt}\0event`)}`;
+      const batch = `urn:rezics:outbox:${hash(`${proof.receipt}\0batch`)}`;
+      expect((await client.query(`UPDATE relay.delivered_event
+        SET envelope = jsonb_set(envelope, '{data,routingEpoch}', '"8"'::jsonb)
+        WHERE stream_scope = 'urn:rezics:stream:main-rdf' AND source = 'https://rezics.com/services/main'
+          AND event_id = $1`, [event])).rowCount).toBe(1);
+      expect((await client.query(`UPDATE relay.delivered_batch SET routing_epoch = '8'
+        WHERE stream_scope = 'urn:rezics:stream:main-rdf' AND batch_id = $1`, [batch])).rowCount).toBe(1);
+    };
+    live.runner.stop();
+    try {
+      await expect(native.query('ASK {}', 1024)).rejects.toThrow();
+      await withBorrowed(retainedCopy.restored, async clients => {
+        const source = await readRetainedNativeGraphSuppressionProof(clients.relayClient,
+          erase.erasureId, erase.erasureEpoch, [saved.revisionId]);
+        expect(source.original).toEqual(proof);
+        // A real proof read is interrupted by coherent retained-row corruption.
+        // Only the fixture's caller mutates its own held transaction; HTTP results are unchanged.
+        const read = retainedGraph.fuseki.query.bind(retainedGraph.fuseki);
+        let changedBeforeSigning = false;
+        await clients.relayClient.query('SAVEPOINT before_signing');
+        retainedGraph.fuseki.query = async (query, limit) => {
+          const result = await read(query, limit);
+          if (!changedBeforeSigning && query.includes('SELECT ?graph ?subject ?predicate ?object')
+            && query.includes(iri(proof.receipt))) {
+            changedBeforeSigning = true;
+            await changeEvidence(clients.relayClient);
+          }
+          return result;
+        };
+        try {
+          const denied = await reconcileRestoredErasures(relay, retainedCopy.restored,
+            { operationId: randomUUID(), consumer, replay: true, authority }, clients);
+          expect(changedBeforeSigning).toBe(true);
+          expect(denied.state).toBe('held');
+          expect(sends).toBe(0);
+          const changed = await readRetainedNativeGraphSuppressionProof(clients.relayClient,
+            erase.erasureId, erase.erasureEpoch, [saved.revisionId]);
+          expect(changed.original).toEqual(source.original);
+          expect(changed.evidenceDigest).not.toBe(source.evidenceDigest);
+          await expect(releaseErasureRestoreHold(relay, retainedCopy.restored, denied.reconciliationId,
+            retainedCopy.generation, authority, { clients, beforeAccessRelease: async () => {
+              throw new Error('changed evidence reached graph release');
+            } })).rejects.toBeInstanceOf(ErasureRestoreHold);
+        } finally {
+          retainedGraph.fuseki.query = read;
+          await clients.relayClient.query('ROLLBACK TO SAVEPOINT before_signing');
+        }
+        expect((await readRetainedNativeGraphSuppressionProof(clients.relayClient,
+          erase.erasureId, erase.erasureEpoch, [saved.revisionId])).evidenceDigest).toBe(source.evidenceDigest);
+        await clients.relayClient.query('SAVEPOINT after_outcome');
+        afterNativeOutcome = () => changeEvidence(clients.relayClient);
+        const deniedOutcome = await reconcileRestoredErasures(relay, retainedCopy.restored,
+          { operationId: randomUUID(), consumer, replay: true, authority }, clients);
+        expect(deniedOutcome.state).toBe('held');
+        expect(sends).toBe(1);
+        expect(nativeOutcomes).toEqual(['committed']);
+        expect(nativePositions).toEqual([{ datasetId: DATASET, dataEpoch: retainedNext.dataEpoch, sequence: '0' }]);
+        const changedOutcome = await readRetainedNativeGraphSuppressionProof(clients.relayClient,
+          erase.erasureId, erase.erasureEpoch, [saved.revisionId]);
+        expect(changedOutcome.original).toEqual(source.original);
+        expect(changedOutcome.evidenceDigest).not.toBe(source.evidenceDigest);
+        expect(await probeHeldGraphErasureProof(retainedGraph.fuseki, erase.erasureId,
+          erase.erasureEpoch, [saved.revisionId], { ...retainedGraph.heldErasure!,
+            revisionIds: [saved.revisionId], original: proof }, true)).toEqual(proof);
+        expect((await clients.accessClient.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open)
+          .toBe(false);
+        afterNativeOutcome = undefined;
+        await clients.relayClient.query('ROLLBACK TO SAVEPOINT after_outcome');
+        const reconciled = await reconcileRestoredErasures(relay, retainedCopy.restored,
+          { operationId: randomUUID(), consumer, replay: true, authority }, clients);
+        expect(reconciled.state).toBe('reconciled');
+        expect(sends).toBe(2);
+        expect(nativeOutcomes).toEqual(['committed', 'committed']);
+        expect(await readGraphErasureProof(retainedGraph.fuseki, retainedNext, erase.erasureId,
+          erase.erasureEpoch, [saved.revisionId], { ...retainedGraph.heldErasure!,
+            revisionIds: [saved.revisionId], original: proof })).toEqual(proof);
+        let releases = 0;
+        await releaseErasureRestoreHold(relay, retainedCopy.restored, reconciled.reconciliationId,
+          retainedCopy.generation, authority, { clients, beforeAccessRelease: async () => {
+            releases++;
+            expect((await clients.accessClient.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open)
+              .toBe(false);
+            await releaseHeldGraph(retainedGraph, retainedCut);
+          } });
+        expect(releases).toBe(1);
+        expect((await clients.accessClient.query('SELECT open FROM access.recovery_fence WHERE id')).rows[0].open).toBe(true);
+      });
+      expect((await new ContentCore(retainedCopy.restored.content).readExactBatch([saved.revisionId],
+        async ids => new Set(ids)))[0]?.status).toBe('erased');
+    } finally {
+      await live.runner.start();
+      retainedCopy.graph.remove();
+      await Promise.all([close(retainedCopy.restored.account), close(retainedCopy.restored.access),
+        close(retainedCopy.restored.content)]);
+    }
     // Every negative is an isolated copy of the same held, consistent pre-erasure cut.
     for (const missing of [MODEL_MANIFEST_SHA256, shapeDigest, retainedCommand.payload_sha256]) {
       const copy = await restore();
