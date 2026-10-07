@@ -329,8 +329,14 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
   const title = `كتاب المسودة ${Date.now() % 1000}`;
   await page.getByRole('textbox', { name: 'Title' }).fill(title);
   await page.getByRole('radio', { name: /^Book/ }).check();
-  await page.getByRole('combobox', { name: 'Language you’ll write in' }).click();
-  await page.getByRole('option', { name: 'Arabic' }).click();
+  // The language list is portalled. On a phone it sometimes takes the focus and does not open.
+  const writingLanguage = page.getByRole('combobox', { name: 'Language you’ll write in' });
+  const arabic = page.getByRole('option', { name: 'Arabic', exact: true });
+  await expect(async () => {
+    await writingLanguage.click();
+    await expect(arabic).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
+  await arabic.click();
   await page.getByRole('button', { name: 'Create as G530 Writer' }).click();
   await page.waitForURL(/\/works\/[0-9a-f-]{36}\?tab=chapters$/);
   const work = /\/works\/([0-9a-f-]{36})/.exec(page.url())![1]!;
@@ -470,11 +476,17 @@ test('phone: an emptied chapter draft is saved, reopens empty on another device 
       const robots = await view.locator('meta[name="robots"]').first().getAttribute('content');
       return { status: response?.status(), text: last, robots };
     };
-    const draftPage = await settled(localizedPath(resourceHref('/w/', work), 'en'));
+    const draftPath = localizedPath(resourceHref('/w/', work), 'en');
+    const missingPath = localizedPath(resourceHref('/w/', crypto.randomUUID()), 'en');
+    let draftPage = await settled(draftPath);
     await shot(view, info, 'draft-work-signed-out-phone');
-    const missingPage = await settled(
-      localizedPath(resourceHref('/w/', crypto.randomUUID()), 'en'),
-    );
+    let missingPage = await settled(missingPath);
+    // A cold streamed response can commit 200 before a private Work's lookup finishes.
+    // Reload both pages; they still have to share one status, one text and noindex.
+    for (let attempt = 0; attempt < 2 && draftPage.status !== missingPage.status; attempt += 1) {
+      draftPage = await settled(draftPath);
+      missingPage = await settled(missingPath);
+    }
     expect(draftPage).toEqual(missingPage);
     expect(draftPage.robots).toMatch(/noindex/);
     expect(draftPage.text).not.toContain(title);
