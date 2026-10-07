@@ -1,0 +1,32 @@
+# Private RDF reification of source conversion fields as claims with exact observation provenance.
+# The statement subject is the source conversion, never an adopted native Work.
+# Reification records a source claim; it does not assert or accept the base edge.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix prov: <http://www.w3.org/ns/prov#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/source-reification-v1/statement-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rdf:Statement ] ;
+    sh:property [ sh:path rdf:subject ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ; sh:class rv:SourceConversion ] ;
+    sh:property [ sh:path rdf:predicate ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( rv:sourceTitle rv:sourceDescription ) ] ;
+    sh:property [ sh:path rdf:object ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:maxLength 65536 ] ;
+    sh:property [ sh:path prov:wasDerivedFrom ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ; sh:class rv:SourceObservation ] ;
+    sh:property [ sh:path rv:sourceObservation ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:nodeKind sh:IRI ; sh:class rv:SourceObservation ] ;
+    sh:property [ sh:path rv:sourceByteDigest ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
+    sh:property [ sh:path rv:sourceMappingRevision ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:hasValue "open-library-work-map-v1" ] ;
+    sh:property [ sh:path rv:sourceField ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:in ( "title" "description" ) ] ;
+    sh:property [ sh:path rv:fieldDisposition ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:datatype xsd:string ; sh:hasValue "structured-source-only" ] ;
+    sh:property [ sh:path rv:dispositionReason ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ;
+        sh:hasValue "Source evidence requires separate explicit acceptance before native use." ] .

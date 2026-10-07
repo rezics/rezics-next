@@ -3,7 +3,7 @@ import type { OpenLibraryConversion } from '../../services/main/src/modules/sour
 import type { StagedSourceObservation } from '../../services/main/src/modules/source/intake.ts';
 import { sourceFieldClaims, sourceReificationBounds, sourceStatementTriples }
   from '../../services/main/src/modules/source/reification.ts';
-import { sourceReificationProfile } from '../definitions/source-reification-v1.ts';
+import { authoredProfiles } from '../compiler/generate.ts';
 
 const conversion = (description: string | null) => ({
   profile: 'open-library-work-source-conversion-v1', state: 'staged',
@@ -28,7 +28,7 @@ test('MODEL09: reified source claims use stable IDs, exact provenance and no nat
   expect(triples).not.toContain('https://rezics.com/vocab/accepted');
   expect(sourceReificationBounds.maximumStatementsPerConversion).toBe(2);
   expect(sourceReificationBounds.maximumGeneratedTriples).toBe(24);
-  const shape = sourceReificationProfile.shapes[0]!;
+  const shape = authoredProfiles.find(profile => profile.id === 'source-reification-v1')!.shapes[0]!;
   const properties = new Map(shape.properties.map(property => [property.path, property]));
   expect(properties.get('rdf:subject')?.class).toBe('rv:SourceConversion');
   expect(properties.get('prov:wasDerivedFrom')?.class).toBe('rv:SourceObservation');

@@ -159,7 +159,7 @@ test('Turtle supports IRI node kind, class, closed shapes and the explicit datat
 });
 
 test('Unsupported SHACL and RDF term kinds fail by name rather than losing constraints', () => {
-  for (const name of ['pattern', 'in', 'or', 'node', 'minInclusive', 'languageIn']) {
+  for (const name of ['or', 'node', 'languageIn']) {
     expect(() =>
       parseTurtleProfile('probe-v1', turtle(`sh:path rv:value ; sh:${name} rv:Value`)),
     ).toThrow(`sh:${name}`);
@@ -168,7 +168,7 @@ test('Unsupported SHACL and RDF term kinds fail by name rather than losing const
     'sh:path',
   );
   expect(() =>
-    parseTurtleProfile('probe-v1', turtle('sh:path rv:value ; sh:hasValue "literal"')),
+    parseTurtleProfile('probe-v1', turtle('sh:path rv:value ; sh:hasValue "literal"@en')),
   ).toThrow('sh:hasValue');
   expect(() =>
     parseTurtleProfile('probe-v1', turtle('sh:path rv:value ; sh:nodeKind sh:Literal')),
@@ -188,6 +188,120 @@ test('Unsupported SHACL and RDF term kinds fail by name rather than losing const
       turtle('sh:path rv:value') + 'rv:Unreachable sh:pattern "ignored" .',
     ),
   ).toThrow('sh:pattern');
+});
+
+test('Turtle patterns and integer bounds preserve the JSON constraints', async () => {
+  const text = await schema(
+    turtle('sh:path rv:value ; sh:datatype xsd:string ; sh:pattern "^[a-z]+(-[a-z]+)*$"'),
+  );
+  expect(Value.Check(text, node({ 'rv:value': ['a-b'] }))).toBe(true);
+  for (const value of ['A', 'a--b', ''])
+    expect(Value.Check(text, node({ 'rv:value': [value] }))).toBe(false);
+  const bounded = await schema(
+    turtle('sh:path rv:value ; sh:datatype xsd:integer ; sh:minInclusive -2 ; sh:maxInclusive 14'),
+  );
+  for (const value of [-2, 0, 14])
+    expect(Value.Check(bounded, node({ 'rv:value': [value] }))).toBe(true);
+  for (const value of [-3, 15, 1.5, '0'])
+    expect(Value.Check(bounded, node({ 'rv:value': [value] }))).toBe(false);
+  for (const clauses of [
+    'sh:datatype xsd:integer ; sh:minInclusive 15 ; sh:maxInclusive 14',
+    'sh:datatype xsd:integer ; sh:minInclusive 9007199254740992',
+    'sh:datatype xsd:integer ; sh:maxInclusive 1.5',
+    'sh:datatype xsd:string ; sh:minInclusive 0',
+    'sh:datatype xsd:string ; sh:pattern "["',
+    'sh:datatype xsd:integer ; sh:pattern "a"',
+  ])
+    expect(() => parseTurtleProfile('probe-v1', turtle(`sh:path rv:value ; ${clauses}`))).toThrow();
+});
+
+test('Turtle fixed values preserve escaped lexical strings and distinguish IRIs', async () => {
+  const lexical = '001\\path\n"雪"';
+  const source = turtle(
+    `sh:path rv:value ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:hasValue ${JSON.stringify(lexical)}^^xsd:string`,
+  );
+  const profile = parseTurtleProfile('probe-v1', source);
+  expect(profileSource(profile)).toBe(source);
+  expect(String(profile.shapes[0]!.properties[0]!.hasValue)).toBe(JSON.stringify(lexical));
+  const shape = (await schemas(profile))[profile.shapes[0]!.iri]!;
+  expect(Value.Check(shape, node({ 'rv:value': [lexical] }))).toBe(true);
+  expect(Value.Check(shape, node({ 'rv:value': ['001'] }))).toBe(false);
+  expect(Value.Check(shape, node({}))).toBe(false);
+  for (const members of ['"main" "qualifier" "reference"', 'rv:main rv:qualifier']) {
+    const enumeration = parseTurtleProfile(
+      'probe-v1',
+      turtle(`sh:path rv:value ; sh:in (${members})`),
+    );
+    const typed = (await schemas(enumeration))[enumeration.shapes[0]!.iri]!;
+    const literal = members.startsWith('"');
+    const context = JSON.parse(
+      buildModelOutputs([enumeration]).get('generated/model/contexts/probe-v1.jsonld')!,
+    )['@context'];
+    expect(context['rv:value']['@type']).toBe(literal ? undefined : '@id');
+    expect(
+      Value.Check(
+        typed,
+        node({ 'rv:value': [literal ? 'main' : 'https://rezics.com/vocab/main'] }),
+      ),
+    ).toBe(true);
+    expect(
+      Value.Check(
+        typed,
+        node({ 'rv:value': [literal ? 'https://rezics.com/vocab/main' : 'main'] }),
+      ),
+    ).toBe(false);
+    expect(Value.Check(typed, node({ 'rv:value': ['other'] }))).toBe(false);
+  }
+  for (const clauses of [
+    'sh:in ("main" rv:main)',
+    'sh:in ("main"@en)',
+    'sh:in ("01"^^xsd:integer)',
+    'sh:hasValue "01"^^xsd:integer',
+    'sh:hasValue true',
+    'sh:datatype xsd:integer ; sh:hasValue "01"',
+    'sh:nodeKind sh:IRI ; sh:in ("main")',
+    'sh:datatype xsd:string ; sh:in (rv:main)',
+    'sh:in ("main") ; sh:pattern "main"',
+    'sh:hasValue "main" ; sh:maxLength 4',
+    'sh:in ("main") ; sh:hasValue "main"',
+    'sh:hasValue "main" ; sh:maxCount 0',
+  ])
+    expect(() => parseTurtleProfile('probe-v1', turtle(`sh:path rv:value ; ${clauses}`))).toThrow();
+});
+
+test('Turtle RDF enums require complete, acyclic, bounded lists with no hidden constructs', () => {
+  const withList = (head: string, tail: string) =>
+    turtle(`sh:path rv:value ; sh:in ${head}`) + tail;
+  for (const [head, tail] of [
+    ['rdf:nil', ''],
+    ['_:a', '_:a rdf:first "x" .'],
+    ['_:a', '_:a rdf:rest rdf:nil .'],
+    ['_:a', '_:a rdf:first "x" ; rdf:rest _:a .'],
+    ['_:a', '_:a rdf:first "x" ; rdf:rest _:b . _:b rdf:first "y" ; rdf:rest _:a .'],
+    ['_:a', '_:a rdf:first "x", "y" ; rdf:rest rdf:nil .'],
+    ['_:a', '_:a rdf:first "x" ; rdf:rest rdf:nil, _:b .'],
+    ['_:a', '_:a rdf:first "x" ; rdf:rest "tail" .'],
+    ['rv:list', ''],
+    ['rv:list', 'rv:list rdf:first "x" ; rdf:rest rv:list .'],
+    ['_:a', '_:a rdf:first "x" ; rdf:rest rdf:nil ; sh:pattern "ignored" .'],
+    ['_:a', '_:a rdf:first [ sh:pattern "ignored" ] ; rdf:rest rdf:nil .'],
+    ['("x")', 'rdf:nil rdf:first "hidden" .'],
+  ])
+    expect(() => parseTurtleProfile('probe-v1', withList(head!, tail!))).toThrow();
+  expect(
+    parseTurtleProfile(
+      'probe-v1',
+      withList('rv:list', 'rv:list rdf:first "x" ; rdf:rest rdf:nil .'),
+    ).shapes[0]!.properties[0]!.in,
+  ).toEqual(['"x"']);
+  const items = Array.from({ length: 256 }, (_, index) => `"${index}"`);
+  expect(
+    parseTurtleProfile('probe-v1', withList(`(${items.join(' ')})`, '')).shapes[0]!.properties[0]!
+      .in,
+  ).toHaveLength(256);
+  expect(() =>
+    parseTurtleProfile('probe-v1', withList(`(${[...items, '"overflow"'].join(' ')})`, '')),
+  ).toThrow('exceeds 256');
 });
 
 test('The DSL lowerer preserves literal enum term kinds in every generated context', async () => {

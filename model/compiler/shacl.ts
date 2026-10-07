@@ -94,6 +94,47 @@ export function parseTurtleProfile(
       throw new Error(`${compact(predicate)} requires xsd:boolean`);
     return ['true', '1'].includes(term.value);
   };
+  const string = (term: Quad_Object, location: string): string => {
+    if (term.termType !== 'Literal' || term.datatype.value !== `${xsd}string`)
+      throw new Error(`${location} requires xsd:string`);
+    return term.value;
+  };
+  // Fixed JSON values have only the existing IRI and string mappings. Reject
+  // other RDF literals instead of discarding their datatype or language tag.
+  const fixed = (term: Quad_Object, location: string): Term =>
+    term.termType === 'NamedNode'
+      ? compact(term.value)
+      : (JSON.stringify(string(term, location)) as Term);
+  const integer = (term: Quad_Object, predicate: string): number => {
+    if (
+      term.termType !== 'Literal' ||
+      term.datatype.value !== `${xsd}integer` ||
+      !/^[+-]?\d+$/.test(term.value) ||
+      !Number.isSafeInteger(Number(term.value))
+    )
+      throw new Error(`${compact(predicate)} requires a safe xsd:integer`);
+    return Number(term.value);
+  };
+  const list = (head: Quad_Object): Term[] => {
+    const items: Term[] = [];
+    const visited = new Set<string>();
+    let current = head;
+    while (!(current.termType === 'NamedNode' && current.value === `${rdf}nil`)) {
+      if (current.termType !== 'BlankNode' && current.termType !== 'NamedNode')
+        throw new Error('sh:in requires an RDF list ending in rdf:nil');
+      if (visited.has(key(current))) throw new Error('Cyclic sh:in RDF list');
+      // A source enum is bounded independently of the parser and input graph.
+      if (items.length >= 256) throw new Error('sh:in RDF list exceeds 256 members');
+      visited.add(key(current));
+      const values = fields(current, [`${rdf}first`, `${rdf}rest`]);
+      items.push(fixed(one(values, `${rdf}first`, true)!, 'sh:in member'));
+      current = one(values, `${rdf}rest`, true)!;
+    }
+    if (!items.length) throw new Error('Empty sh:in RDF list');
+    if (items.some((item) => item.startsWith('"')) && items.some((item) => !item.startsWith('"')))
+      throw new Error('sh:in requires one JSON mapping for every member');
+    return items;
+  };
   const property = (subject: Quad_Object): PropertyDefinition => {
     if (subject.termType !== 'BlankNode' && subject.termType !== 'NamedNode')
       throw new Error('sh:property requires a shape node');
@@ -108,6 +149,10 @@ export function parseTurtleProfile(
       'minLength',
       'maxLength',
       'class',
+      'pattern',
+      'minInclusive',
+      'maxInclusive',
+      'in',
     ];
     const values = fields(
       subject,
@@ -120,9 +165,26 @@ export function parseTurtleProfile(
       const value = one(values, `${sh}${name}`);
       if (value) result[name] = count(value, `${sh}${name}`);
     }
-    for (const name of ['hasValue', 'nodeKind', 'datatype', 'class'] as const) {
+    for (const name of ['nodeKind', 'datatype', 'class'] as const) {
       const value = one(values, `${sh}${name}`);
       if (value) result[name] = compact(named(value, `sh:${name}`));
+    }
+    const hasValue = one(values, `${sh}hasValue`);
+    if (hasValue) result.hasValue = fixed(hasValue, 'sh:hasValue');
+    const enumeration = one(values, `${sh}in`);
+    if (enumeration) result.in = list(enumeration);
+    const pattern = one(values, `${sh}pattern`);
+    if (pattern) {
+      result.pattern = string(pattern, 'sh:pattern');
+      try {
+        new RegExp(result.pattern);
+      } catch {
+        throw new Error('sh:pattern requires a valid JSON regular expression');
+      }
+    }
+    for (const name of ['minInclusive', 'maxInclusive'] as const) {
+      const value = one(values, `${sh}${name}`);
+      if (value) result[name] = integer(value, `${sh}${name}`);
     }
     if (result.nodeKind && named(one(values, `${sh}nodeKind`)!, 'sh:nodeKind') !== `${sh}IRI`) {
       throw new Error(`Unsupported sh:nodeKind ${result.nodeKind}`);
@@ -140,9 +202,42 @@ export function parseTurtleProfile(
       ) {
         throw new Error(`Unsupported sh:datatype ${result.datatype}`);
       }
-      if (result.nodeKind || result.class || result.hasValue)
+      if (result.nodeKind || result.class || (result.hasValue && !result.hasValue.startsWith('"')))
         throw new Error('Cannot lower an IRI constraint with sh:datatype');
     }
+    const datatype = result.datatype && named(one(values, `${sh}datatype`)!, 'sh:datatype');
+    const fixedValues = [...(result.in ?? []), ...(result.hasValue ? [result.hasValue] : [])];
+    const literalValues = fixedValues.some((value) => value.startsWith('"'));
+    const iriValues = fixedValues.some((value) => !value.startsWith('"'));
+    if (
+      (literalValues && iriValues) ||
+      (literalValues &&
+        (result.nodeKind || result.class || (datatype && datatype !== `${xsd}string`))) ||
+      (iriValues && datatype)
+    )
+      throw new Error('Fixed values conflict with the property JSON mapping');
+    if (
+      (result.minInclusive !== undefined || result.maxInclusive !== undefined) &&
+      datatype !== `${xsd}integer`
+    )
+      throw new Error('Numeric bounds require the xsd:integer JSON mapping');
+    if (
+      result.pattern !== undefined &&
+      datatype &&
+      ![`${xsd}string`, `${rdf}langString`].includes(datatype)
+    )
+      throw new Error('sh:pattern requires a string JSON mapping');
+    // The current lowerer emits fixed values instead of their other facets.
+    // Refuse combinations it cannot preserve rather than silently widening them.
+    if (
+      fixedValues.length &&
+      (result.pattern !== undefined ||
+        result.minLength !== undefined ||
+        result.maxLength !== undefined)
+    )
+      throw new Error('Cannot lower fixed values together with string facets');
+    if (result.in && result.hasValue)
+      throw new Error('Cannot lower sh:in together with sh:hasValue');
     const unique = one(values, `${sh}uniqueLang`);
     if (unique) {
       result.uniqueLang = boolean(unique, `${sh}uniqueLang`);
