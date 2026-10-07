@@ -1,10 +1,14 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Pool } from 'pg';
 import { MAIN_SITE_SCOPE } from '../../apps/web/features/auth/scopes.ts';
-import { parseWebAuthOptions, reconcileWebClient, retiredOperator, type WebClientAccount,
-  type WebClientRegistrationState, WebClientNotUpdatable, webClientCurrent, webClientReconcileMessage,
-  webClientRegistration } from './web-auth-bootstrap.ts';
+import { createAccountApp } from '../../services/account/src/app.ts';
+import type { createAccountAuth } from '../../services/account/src/auth.ts';
+import { parseWebAuthOptions, reconcileWebClient, replaceWebClientInstallation, retiredOperator,
+  type WebClientAccount, type WebClientInstallationChanges, type WebClientRegistrationState,
+  WebClientNotUpdatable, webClientCurrent, webClientReconcileMessage, webClientRegistration }
+  from './web-auth-bootstrap.ts';
 
 test('IAM01: local web auth bootstrap accepts only a disposable run and exact loopback callback', () => {
   expect(parseWebAuthOptions(['--run-id', 'web-demo', '--redirect-uri',
@@ -167,6 +171,88 @@ test('IAM01: an active installation that already admits the site scopes is kept'
     case: 'current', clientId: 'web-client' });
   expect(current.updates).toEqual([]);
   expect(current.registrations).toEqual([]);
+});
+
+interface MemoryInstallation { id: string; clientId: string; state: 'active' | 'revoked'; scopes: string[] }
+
+/** An installation store with the same revoke-then-install rule as Account, and no request cap. */
+function memoryInstallation(declared: readonly string[] = siteScopes) {
+  const rows: MemoryInstallation[] = [];
+  let next = 1;
+  const changes: WebClientInstallationChanges = {
+    async declaredScopes() { return declared; },
+    async revoke(installationId) {
+      const row = rows.find(item => item.id === installationId && item.state === 'active');
+      if (!row) throw new Error(`installation ${installationId} is not active`);
+      row.state = 'revoked';
+    },
+    async install(clientId, scopes) {
+      if (rows.some(item => item.clientId === clientId && item.state === 'active')) {
+        throw new Error('revoke the active installation first');
+      }
+      rows.push({ id: `installed-${next++}`, clientId, state: 'active', scopes: [...scopes] });
+    },
+  };
+  return { rows, changes, seed(row: MemoryInstallation) { rows.push({ ...row, scopes: [...row.scopes] }); } };
+}
+
+function installationRoute() {
+  const pool = { options: {}, on() { return pool; },
+    query() { throw new Error('query'); }, connect() { throw new Error('connect'); },
+    end() { return Promise.resolve(); } } as unknown as Pool;
+  const auth = { options: { baseURL: 'http://127.0.0.1:9' } } as ReturnType<typeof createAccountAuth>;
+  return createAccountApp(auth, pool);
+}
+
+const postInstall = (route: ReturnType<typeof installationRoute>, scopes: readonly string[]) =>
+  route.handle(new Request('http://127.0.0.1:9/api/account/installation-changes', {
+    method: 'POST', headers: { 'content-type': 'application/json', origin: 'http://127.0.0.1:9' },
+    body: JSON.stringify({ change: 'install', clientId: 'web-client', scopes: [...scopes], changeKey: 'ceiling' }) }));
+
+test('IAM01: a scope upgrade installs the site list the installation route rejects', async () => {
+  const route = installationRoute();
+  const rejected = await postInstall(route, siteScopes);
+  expect(rejected.status).toBe(400);
+  expect(await rejected.json()).toEqual({ error: 'invalid_request' });
+  // A 64-scope body passes validation. This stub has no database, so the handler then fails closed.
+  const admitted = await postInstall(route, siteScopes.slice(0, 64));
+  expect(admitted.status).not.toBe(400);
+  await admitted.body?.cancel();
+
+  const store = memoryInstallation();
+  store.seed({ id: 'install-1', clientId: 'web-client', state: 'active',
+    scopes: siteScopes.filter(scope => scope !== 'follow:read') });
+  const fake = fakeAccount();
+  fake.account.replaceInstallation = (clientId, installationId, scopes) =>
+    replaceWebClientInstallation(store.changes, clientId, installationId, scopes);
+  const outcome = await reconcileWebClient(fake.account, savedClient, registeredClient({
+    name: 'QA-only loopback PKCE', firstParty: false, skipConsent: false,
+    grantTypes: ['authorization_code'],
+    scopes: siteScopes.filter(scope => scope !== 'follow:read'),
+    installationScopes: siteScopes.filter(scope => scope !== 'follow:read') }));
+  expect(outcome).toEqual({ case: 'updated', clientId: 'web-client' });
+  expect(fake.registrations).toEqual([]);
+  expect(store.rows).toEqual([
+    { id: 'install-1', clientId: 'web-client', state: 'revoked',
+      scopes: siteScopes.filter(scope => scope !== 'follow:read') },
+    { id: 'installed-1', clientId: 'web-client', state: 'active', scopes: [...siteScopes] },
+  ]);
+
+  const undeclared = memoryInstallation(siteScopes.filter(scope => scope !== 'follow:read'));
+  undeclared.seed({ id: 'install-1', clientId: 'web-client', state: 'active', scopes: ['openid'] });
+  await expect(replaceWebClientInstallation(undeclared.changes, 'web-client', 'install-1', siteScopes))
+    .rejects.toThrow('exceed the App registration');
+  expect(undeclared.rows).toEqual([{ id: 'install-1', clientId: 'web-client', state: 'active', scopes: ['openid'] }]);
+
+  const missing = memoryInstallation();
+  await replaceWebClientInstallation(missing.changes, 'web-client', undefined, siteScopes);
+  expect(missing.rows).toEqual([{ id: 'installed-1', clientId: 'web-client', state: 'active', scopes: [...siteScopes] }]);
+
+  const duplicate = memoryInstallation();
+  duplicate.seed({ id: 'install-1', clientId: 'web-client', state: 'active', scopes: ['openid'] });
+  await expect(replaceWebClientInstallation(duplicate.changes, 'web-client', 'install-1', ['openid', 'openid']))
+    .rejects.toThrow('distinct OAuth scope tokens');
+  expect(duplicate.rows).toEqual([{ id: 'install-1', clientId: 'web-client', state: 'active', scopes: ['openid'] }]);
 });
 
 test('IAM01: a web client the operator cannot update is re-registered, and other failures are not', async () => {

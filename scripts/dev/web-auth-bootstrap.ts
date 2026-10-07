@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { createAccountAuth } from '../../services/account/src/auth.ts';
 import { createAccountApp } from '../../services/account/src/app.ts';
+import { installClient, revokeInstallation } from '../../services/account/src/installations.ts';
 import { operatorRole, rolePermits } from '../../services/account/src/operators.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { createAgentGraph } from '../../services/main/src/modules/agent/graph.ts';
@@ -474,6 +475,56 @@ async function registerWebClient(account: WebClientAccount, saved: { clientId: s
     : { case: 'registered', clientId: created.client_id };
 }
 
+export interface WebClientInstallationChanges {
+  declaredScopes(clientId: string): Promise<readonly string[]>;
+  revoke(installationId: string): Promise<void>;
+  install(clientId: string, scopes: readonly string[], changeKey: string): Promise<void>;
+}
+
+const installationScopeToken = /^[\x21\x23-\x5b\x5d-\x7e]+$/;
+
+/** Replace the active ceiling with `scopes`. The operator installation route
+ * accepts at most 64 scopes, and the site list is longer, so that request is
+ * rejected after a revocation would already have committed. `installClient`
+ * is the function the route calls once the body is accepted, and it admits
+ * every scope the registration declares, which is the ceiling a new client's
+ * insert trigger installs. Token and declaration checks run before revocation,
+ * so a list the installation would reject does not revoke. */
+export async function replaceWebClientInstallation(changes: WebClientInstallationChanges,
+  clientId: string, installationId: string | undefined, scopes: readonly string[]): Promise<void> {
+  if (!scopes.length || new Set(scopes).size !== scopes.length
+    || scopes.some(token => !installationScopeToken.test(token))) {
+    throw new Error('installation scopes must be distinct OAuth scope tokens');
+  }
+  const declared = new Set(await changes.declaredScopes(clientId));
+  if (scopes.some(token => !declared.has(token))) {
+    throw new Error('installation scopes exceed the App registration');
+  }
+  if (installationId) await changes.revoke(installationId);
+  await changes.install(clientId, [...scopes], randomUUID());
+}
+
+async function declaredWebClientScopes(pool: Pool, clientId: string): Promise<string[]> {
+  const registered = await pool.query<{ declared: string[] }>(`SELECT
+      public.rezics_declared_scopes(scopes, "clientCredentialsScopes") AS declared
+    FROM public."oauthClient" WHERE "clientId" = $1`, [clientId]);
+  const declared = registered.rows[0]?.declared;
+  if (!declared) throw new Error('Web client installation requires a registered client');
+  return declared;
+}
+
+function webClientInstallationChanges(pool: Pool, operatorUserId: string): WebClientInstallationChanges {
+  return {
+    declaredScopes: clientId => declaredWebClientScopes(pool, clientId),
+    async revoke(installationId) {
+      await revokeInstallation(pool, { installationId, operatorUserId });
+    },
+    async install(clientId, scopes, changeKey) {
+      await installClient(pool, { clientId, scopes, changeKey, operatorUserId });
+    },
+  };
+}
+
 /** Bring a dev web client up to the site's scopes and grants. A client update
  * never moves the installation ceiling, so an active ceiling that differs is
  * revoked and installed again. That keeps the client id and any secret. */
@@ -553,9 +604,10 @@ async function readWebClientRegistration(pool: Pool, clientId: string): Promise<
     installationState: row.installationState ?? undefined, firstParty: row.firstParty };
 }
 
-/** In-process Account, the same way registration calls the client API. Installation
- * changes go through the operator installation API: a client update does not move
- * the ceiling, and widening it in place would let old tokens gain scopes. */
+/** In-process Account, the same way registration calls the client API. A client
+ * update does not move the installation ceiling, and widening it in place would
+ * let old tokens gain scopes. The replacement uses the installation functions:
+ * the operator route cannot carry the site scope list. */
 async function openWebClientAccount(pool: Pool, apps: Record<string, string>,
   operator: { id: string; email: string; password: string }): Promise<WebClientAccount> {
   const operatorIds = new Set([operator.id]);
@@ -569,16 +621,7 @@ async function openWebClientAccount(pool: Pool, apps: Record<string, string>,
   await signIn.body?.cancel();
   if (signIn.status !== 200 || !cookie) throw new Error(`Local operator sign-in failed with HTTP ${signIn.status}`);
   const headers = new Headers({ cookie, origin: apps.ACCOUNT_BASE_URL! });
-  const postInstallation = async (body: Record<string, unknown>): Promise<void> => {
-    const response = await app.handle(new Request(`${apps.ACCOUNT_BASE_URL}/api/account/installation-changes`, {
-      method: 'POST', headers: { 'content-type': 'application/json', cookie, origin: apps.ACCOUNT_BASE_URL! },
-      body: JSON.stringify(body) }));
-    const payload = await response.json().catch(() => null) as { error?: string } | null;
-    if (!response.ok) {
-      throw new Error(`Web client installation change failed with HTTP ${response.status}${
-        payload?.error ? ` (${payload.error})` : ''}`);
-    }
-  };
+  const installation = webClientInstallationChanges(pool, operator.id);
   return {
     async updateClient(clientId, update) {
       let updated: { client_id?: string };
@@ -608,8 +651,7 @@ async function openWebClientAccount(pool: Pool, apps: Record<string, string>,
         [clientId]);
     },
     async replaceInstallation(clientId, installationId, scopes) {
-      if (installationId) await postInstallation({ change: 'revoke', installationId });
-      await postInstallation({ change: 'install', clientId, scopes: [...scopes], changeKey: randomUUID() });
+      await replaceWebClientInstallation(installation, clientId, installationId, scopes);
     },
   };
 }
