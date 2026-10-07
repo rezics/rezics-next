@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 12:27 UTC. Sol manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-07 12:35 UTC. Sol manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
 Goal unfinished. No reliable completion projection: remaining physical locality,
 current-model convergence and Claim/restore qualification still need slices.
@@ -9,9 +9,8 @@ current-model convergence and Claim/restore qualification still need slices.
 
 Trust refresh checkpoint12:22: pinned a2f79dc8c085, native0.5.39-c04c234006fa,
 model ab6d394, Access1767 applied; helpers f11ce2248 and reply reporting d9ad2ba574cb
-live. Program12:23 now restarts AppHost to apply fixed Main/Account ports3011/3012
-(G1360,420df2a18), retaining the pinned revision. Merges are permitted; queue no
-refresh until its ports checkpoint. No kernel lifecycle waiter. After pending
+live. Program ports checkpoint12:26 now runs pinned0247249ed on fixed Main/Account
+ports3011/3012 (behind3001/3002), all six resources healthy. Refreshes are open. No kernel lifecycle waiter. After pending
 native/model/migration waves, coalesce one required `task dev:refresh -- --wait`
 and hold Main code gates from queue through checkpoint; preserve retained volumes.
 Merges alone do not change serving backend. Cold maintenance-read repair belongs
@@ -22,7 +21,7 @@ remains open. Warm retry does not qualify cold startup or populated restore.
 
 ## Accepted contracts
 
-C0 current reviewed basis e75dda7b4; C2 Post first slice and110 exact authored
+C0 current reviewed basis e75dda7b4; C2 Post first slice and125 exact authored
 Turtle profiles; C3 local Work/Context/relay first path. C4 catalogue Statement
 operation, storage upgrade repair67883e853690, singleton redesign
 8c6793a04dbb Content1521 (immutable source streams/savedPGsnapshot,17integrations),
@@ -85,7 +84,9 @@ pins; Context/classification eight f32f9abe9/eec6c05c9 likewise unchanged genera
  39owner760assert and actual212assert, one hydration at320proposals (19graph calls).
   Raw SQL still visits324rows/17batches; do not claim physical locality. Manager fixed
   only new task-ID-bearing titles; first retry failed unrelated QA process reaping.
-  Rebased third gate running12:26; no timeout weakening.
+  Program fixed its cancellation/SIGKILL polling race and scan timeout7a71dbccd;
+  leaf LANDEDd52a7d95eacc with all159unit/guards green. Attempt14 read-only <=20min
+  physical eligibility/local readiness extension design; G1345 seek/read/graph untouched.
 - G1358 native Post resolver2cea01b674cd is live; attempt2 exact Zone delivery race
   fixes final published-owner recheck after awaited rights fences. Formal updated-brief
   reclaim must run on exit before gate because ledger still holds old Post scope.
@@ -94,9 +95,11 @@ pins; Context/classification eight f32f9abe9/eec6c05c9 likewise unchanged genera
   effects and live permits/sealing. No extra pool, swallowed failure or longer timeout.
 - G1354 Work kind/type six e562c86b9635, G1348 theme/protection six7380ed12c847 and
   G1352 publication/descriptive ten1e03a3388cfa landed with unit/19guard gates green,
-  all original artifact pins unchanged. Returned new batches: G1354 six Workmetadata/
-  Structure authors; G1348 nine relationship/governance; G1326 six rating/releases.
-  Independent read-only review runs; no compiler change or generated artifact drift.
+  all original artifact pins unchanged. G1348 nine relationship/governance261a93ced and G1326 six rating/releases also
+  landed with selected gates; G1348closed. G1354 six Workmetadata/Structure exact
+  sources accepted, gate returned G830 caller hashing rendered comments rather than
+  original source. Attempt6 Luna fixes this caller using profileSource and audits peers;
+  no compiler semantic change or generated artifact drift.
 - G1326 catalogue callers6c3318df5634 landed: current shared Context -> Statement ->
   qualified-fact decision, distinct command costs; actual G1031/G1035 pass and all
   gates green. Returned rating/release batch as above; now review before reuse/close.
