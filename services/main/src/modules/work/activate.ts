@@ -65,6 +65,8 @@ export interface WorkActivationEnvironment {
   objectDirectory: string;
   /** Selected for new Work semantic revisions; the directory is the migration baseline. */
   workObjects?: ImmutableObjects;
+  /** Exact supplemental roots for retained Structure manifests; no request preparation. */
+  structureGroupRoots?: import('../structure/group-root.ts').StructureGroupRootStore;
   /** A worker's lease is checked before dispatch; the graph epoch guards the commit. */
   partitionLease?: { routes: OwnerPartitionRoutes; location: string; leaseEpoch: string };
   /** Target stack's independent title signer, used only by held-owner recovery. */

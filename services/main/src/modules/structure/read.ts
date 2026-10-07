@@ -8,6 +8,7 @@ import { isCatalogTarget, structureProfileFor } from './profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, newCost, type TreeCost } from './tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { encodeReadCursor, decodeReadCursor } from '../work/read-session.ts';
+import { resolvePreparedGroups } from './group-root.ts';
 
 export interface CompositionPage {
   structure: string;
@@ -100,6 +101,7 @@ export async function readCompositionSnapshot(env: WorkActivationEnvironment, in
   }
   const cost = newCost();
   cost.pagesRead++;
+  manifest = await resolvePreparedGroups(env, value('manifest')!.slice(-64), manifest);
   return { header, revision, predecessor: value('predecessor') ?? null, manifest, objects,
     sourcePosition: { datasetId: 'product', dataEpoch: value('epoch')!, sequence: value('sequence')! }, cost };
 }

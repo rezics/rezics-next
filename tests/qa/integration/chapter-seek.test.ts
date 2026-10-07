@@ -158,8 +158,10 @@ async function installBook(f: Fixture, ids: ReturnType<typeof bookIdentities>,
     }
     GRAPH ${iri(GRAPHS.revisions)} {
       ${iri(historical)} a rv:StructureRevision ; rv:component ${iri(structure)} ; rv:manifest ${iri(historicalManifest)} ;
+        rv:modelRevision <${STRUCTURE_PROFILE}> ; rv:shapeRevision <${STRUCTURE_PROFILE}> ;
         rv:placementCount ${records.length} ; rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence 1 .
       ${iri(current)} a rv:StructureRevision ; rv:component ${iri(structure)} ; rv:manifest ${iri(currentManifest)} ;
+        rv:modelRevision <${STRUCTURE_PROFILE}> ; rv:shapeRevision <${STRUCTURE_PROFILE}> ;
         rv:placementCount ${records.length} ; rv:dataEpoch ${lit(f.env.lineage.dataEpoch)} ; rv:sequence 2 ;
         rv:predecessor ${iri(historical)} .
     }

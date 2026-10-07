@@ -1,12 +1,25 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import type { Pool, QueryResult } from 'pg';
+import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { StructureGroupRootStore } from '../src/modules/structure/group-root.ts';
+import { orderTree, recordTree } from '../src/modules/structure/change.ts';
+import { checkStructureManifest, checkStructurePage, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
+  STRUCTURE_PROFILE, type OccurrenceRecord, type OrderEntry, type StructureManifest } from '../src/modules/structure/format.ts';
+import { orderTreeKey } from '../src/modules/structure/graph.ts';
+import { readCompositionPage, readCompositionSnapshot } from '../src/modules/structure/read.ts';
+import { newCost } from '../src/modules/structure/tree.ts';
+import { chapterStoryNumber } from '../src/modules/work-contents/read.ts';
+import { WorkReadSession } from '../src/modules/work/read-session.ts';
+import { assertObjectRecoveryCoverage, captureObjectRecoveryCoverage } from '../src/modules/owner/object-coverage.ts';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { createMainApp } from '../src/app.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { StructureProgressStore } from '../src/modules/progress/store.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../src/modules/work/select-main.ts';
-import { GRAPHS, RV, iri } from '../src/modules/work/activate.ts';
+import { GRAPHS, ID, RV, iri, lit } from '../src/modules/work/activate.ts';
 
 const short = (id: string) => id.slice(-36);
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -389,5 +402,407 @@ test('Structure group order: admitted deltas, historical roots, restoration and 
       canReadTarget: async () => { throw new Error('sealed retry must reuse the original root'); } })).manifest)
       .toBe(stage.manifest);
     await restartedStages.cancel(stage.id, principalId, structure);
+  } finally { await stack.stop(); }
+}, 180_000);
+
+/** Observe actual verified S3 GETs, including read-backs performed by put. */
+function observeLegacyObjects<T extends ImmutableObjects>(objects: T) {
+  const get = objects.get.bind(objects), put = objects.put.bind(objects);
+  const cost = { gets: 0, bytes: 0, puts: 0 };
+  objects.get = async digest => {
+    const bytes = await get(digest);
+    cost.gets++;
+    cost.bytes += bytes.length;
+    return bytes;
+  };
+  objects.put = async bytes => { cost.puts++; return put(bytes); };
+  return { objects, cost, reset: () => { cost.gets = 0; cost.bytes = 0; cost.puts = 0; } };
+}
+
+/** The store uses autocommit pool queries. Delegate to the real owner pool so
+ * race/acknowledgement faults occur around committed PostgreSQL results. */
+function checkpointPool(pool: Pool, around: (sql: string, values: unknown[] | undefined,
+  execute: () => Promise<QueryResult>) => Promise<QueryResult>): Pool {
+  const wrapped: Pool = Object.create(pool);
+  Object.defineProperty(wrapped, 'query', { value: (sql: string, values?: unknown[]) =>
+    around(sql, values, () => pool.query(sql, values)) });
+  return wrapped;
+}
+
+async function legacySparseBook(stack: Awaited<ReturnType<typeof startMediaStack>>, objects: ImmutableObjects) {
+  const salt = randomUUID().slice(0, 8);
+  const id = (at: number) => `${ID}${salt}-0000-4000-8000-${at.toString(16).padStart(12, '0')}`;
+  const structure = id(1), component = id(2), owner = id(3), revision = id(4), generation = id(5);
+  const records: OccurrenceRecord[] = [], direct: OccurrenceRecord[] = [], groups: OccurrenceRecord[] = [];
+  let identity = 100, sibling = 0;
+  const record = (parent: string, index: number, role: 'chapter' | 'group',
+    division?: 'volume' | 'part' | 'extras'): OccurrenceRecord => {
+    const value: OccurrenceRecord = { occurrence: id(identity++), state: 'active', parent, role,
+      segmentKey: Math.floor(index / 32).toString(36).padStart(6, '0'),
+      orderKey: (index % 32).toString(36).padStart(2, '0'), introducedBy: revision,
+      labels: [{ value: role === 'chapter' ? 'Legacy chapter' : 'Legacy group', language: 'en' }],
+      ...(role === 'chapter' ? { target: id(100_000 + identity), selection: { mode: 'follow-context' as const } }
+        : { qualifier: { type: 'book-group' as const, division: division! } }) };
+    records.push(value);
+    return value;
+  };
+  for (let at = 0; at < 10_000; at++) {
+    const division = at === 100 ? 'volume' : at === 5_000 ? 'extras' : at === 9_900 ? 'part' : null;
+    if (division) {
+      const group = record(structure, sibling++, 'group', division);
+      groups.push(group);
+      record(group.occurrence, 0, 'chapter');
+    }
+    direct.push(record(structure, sibling++, 'chapter'));
+  }
+  const cost = newCost(), recordIndex = recordTree(objects), orderIndex = orderTree(objects);
+  const recordRoot = await recordIndex.apply(await recordIndex.empty(cost),
+    new Map(records.map(value => [value.occurrence, value])), cost);
+  const entries: OrderEntry[] = records.map(value => ({ parent: value.parent,
+    occurrence: value.occurrence, segmentKey: value.segmentKey!, orderKey: value.orderKey! }));
+  const orderRoot = await orderIndex.apply(await orderIndex.empty(cost),
+    new Map(entries.map(value => [orderTreeKey(value), value])), cost);
+  // These are newly authored legacy fixture bytes. No existing revision's
+  // manifest or object is rewritten to manufacture the preparation scenario.
+  const source: StructureManifest = { format: STRUCTURE_MANIFEST_FORMAT, structure, structureOf: component,
+    profile: 'book-composition', generation, pageFormat: STRUCTURE_PAGE_FORMAT, records: recordRoot,
+    order: orderRoot, placementCount: records.length, measures: [], model: STRUCTURE_PROFILE, shape: STRUCTURE_PROFILE };
+  const bytes = new TextEncoder().encode(JSON.stringify(source));
+  checkStructureManifest(bytes);
+  const digest = await objects.put(bytes);
+  await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
+    GRAPH ${iri(GRAPHS.current)} {
+      ${iri(structure)} a rv:Structure ; rv:structureProfile rv:BookComposition ; rv:structureOf ${iri(component)} ;
+        rv:structureHead ${iri(revision)} ; rv:selectedGeneration ${iri(generation)} .
+      ${iri(generation)} a rv:StructureGeneration ; rv:structure ${iri(structure)} ;
+        rv:generationState rv:Active ; rv:placementCount ${source.placementCount} .
+      ${iri(owner)} a <https://schema.org/Book> ; rv:mainVersion ${iri(component)} .
+      ${iri(component)} a rv:MainVersion .
+    }
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(revision)} a rv:StructureRevision ; rv:component ${iri(structure)} ;
+        rv:manifest <urn:rezics:sha256:${digest}> ; rv:placementCount ${source.placementCount} ;
+        rv:modelRevision <${STRUCTURE_PROFILE}> ; rv:shapeRevision <${STRUCTURE_PROFILE}> ;
+        rv:dataEpoch ${lit(stack.env.lineage.dataEpoch)} ; rv:sequence 1 .
+    }
+  }`);
+  return { structure, revision, source, digest, bytes, direct, groups };
+}
+
+test('Legacy group preparation: bounded durable batches, restart, CAS, lost acknowledgement and protected exact source', async () => {
+  const preparation = performance.now(), stack = await startMediaStack('legacy-group-preparation');
+  try {
+    const observed = observeLegacyObjects(stack.objects('semantic/structure/'));
+    const objects = observed.objects;
+    await objects.initialize();
+    const legacy = await legacySparseBook(stack, objects);
+    expect(performance.now() - preparation).toBeLessThan(600_000);
+    const store = new StructureGroupRootStore(stack.contentPool, objects);
+    stack.env.structureGroupRoots = store;
+    (stack.env as typeof stack.env & { structureObjects: typeof objects }).structureObjects = objects;
+    expect(await store.read(legacy.digest)).toBeNull();
+    expect(await store.completedTopGroups(legacy.digest, legacy.source)).toBeNull();
+    const pending = await readCompositionSnapshot(stack.env, { structure: legacy.structure });
+    const session = () => new WorkReadSession({ environment: stack.env } as MainWorkDependencies,
+      new Request('http://main.local/v1/chapters'), {}, { dataEpoch: stack.env.lineage.dataEpoch, sequence: '1' });
+    await expect(chapterStoryNumber(session(), pending.header, legacy.direct[0]!,
+      { ordinal: 1, path: [] }, pending)).rejects.toThrow(/group|prepar|unavailable/iu);
+
+    let deadlineChecks = 0;
+    let beforeGraph = stack.fuseki.queries;
+    observed.reset();
+    const beforeSql = stack.contentPool.checkouts;
+    let checkpoint = await store.prepare(legacy.digest, { checkDeadline: () => { deadlineChecks++; } });
+    expect(deadlineChecks).toBeGreaterThan(0);
+    expect(checkpoint).toMatchObject({ manifestDigest: legacy.digest, structure: legacy.structure,
+      records: legacy.source.records, order: legacy.source.order, total: 10_003, scanned: 256, complete: false });
+    expect(checkpoint.groups.count).toBe(1);
+    expect(checkpoint.cursor).toBe(orderTreeKey(legacy.direct[254]! as OrderEntry));
+    expect(observed.cost.gets).toBeLessThanOrEqual(32);
+    expect(observed.cost.bytes).toBeLessThan(2 * 1024 * 1024);
+    expect(stack.contentPool.checkouts - beforeSql).toBeLessThanOrEqual(6);
+    expect(stack.fuseki.queries).toBe(beforeGraph);
+    expect(await store.completedTopGroups(legacy.digest, legacy.source)).toBeNull();
+    const nextEntry = (await orderTree(objects).range(legacy.source.order, `${checkpoint.cursor}\u0000`,
+      `${legacy.structure}\u0002`, 1, newCost()))[0]!;
+    expect(nextEntry.occurrence).toBe(legacy.direct[255]!.occurrence);
+    // One newly scanned placement cannot introduce two groups. The version,
+    // cursor and scan delta are otherwise valid, so the owner guard decides it.
+    await expect(stack.contentPool.query(`UPDATE structure.group_root
+      SET version = version + 1, scanned = scanned + 1, cursor = $2, groups = $3
+      WHERE manifest_digest = $1`, [legacy.digest, orderTreeKey(nextEntry),
+      { ...checkpoint.groups, count: checkpoint.groups.count + 2 }]))
+      .rejects.toThrow('group preparation checkpoint');
+    expect(await store.read(legacy.digest)).toEqual(checkpoint);
+
+    // Author a separate exact 256-entry source from the first immutable range.
+    // It has its own SHA and never replaces an existing graph revision/object.
+    const first256 = await orderTree(objects).range(legacy.source.order, `${legacy.structure}\u0001`,
+      `${legacy.structure}\u0002`, 256, newCost());
+    expect(first256).toHaveLength(256);
+    const sourceRecords = await recordTree(objects).lookup(legacy.source.records,
+      first256.map(entry => entry.occurrence), newCost());
+    expect(sourceRecords.size).toBe(256);
+    const boundedRecords = recordTree(objects), boundedOrder = orderTree(objects), boundedCost = newCost();
+    const eofSource: StructureManifest = { ...legacy.source,
+      records: await boundedRecords.apply(await boundedRecords.empty(boundedCost),
+        new Map(first256.map(entry => [entry.occurrence, sourceRecords.get(entry.occurrence)!])), boundedCost),
+      order: await boundedOrder.apply(await boundedOrder.empty(boundedCost),
+        new Map(first256.map(entry => [orderTreeKey(entry), entry])), boundedCost),
+      placementCount: 256 };
+    const eofBytes = new TextEncoder().encode(JSON.stringify(eofSource));
+    checkStructureManifest(eofBytes);
+    const eofDigest = await objects.put(eofBytes);
+    expect(eofDigest).not.toBe(legacy.digest);
+    let insertAcknowledgementLost = false;
+    const lostInsertPool = checkpointPool(stack.contentPool, async (sql, values, execute) => {
+      const result = await execute();
+      if (!insertAcknowledgementLost && /^INSERT INTO structure\.group_root/iu.test(sql.trim())
+        && values?.[0] === eofDigest && result.rowCount === 1) {
+        insertAcknowledgementLost = true;
+        throw new Error('Fixture lost INSERT acknowledgement after PostgreSQL autocommit');
+      }
+      return result;
+    });
+    observed.reset();
+    const eofCalls = stack.contentPool.checkouts;
+    const eofPending = await new StructureGroupRootStore(lostInsertPool, objects).prepare(eofDigest);
+    expect(insertAcknowledgementLost).toBe(true);
+    expect(eofPending).toMatchObject({ manifestDigest: eofDigest, total: 256, scanned: 256, complete: false });
+    expect(eofPending.groups.count).toBe(1);
+    expect(eofPending.cursor).toBe(orderTreeKey(first256.at(-1)!));
+    expect(observed.cost.gets).toBeLessThanOrEqual(32);
+    expect(observed.cost.bytes).toBeLessThan(2 * 1024 * 1024);
+    expect(stack.contentPool.checkouts - eofCalls).toBeLessThanOrEqual(6);
+    expect(stack.fuseki.queries).toBe(beforeGraph);
+    expect(await store.completedTopGroups(eofDigest, eofSource)).toBeNull();
+    expect(await store.read(eofDigest)).toEqual(eofPending);
+    // An EOF completion has no new placements to justify a different root.
+    await expect(stack.contentPool.query(`UPDATE structure.group_root
+      SET complete = true, version = version + 1, groups = $2
+      WHERE manifest_digest = $1`, [eofDigest,
+      { ...eofPending.groups, page: `sha256:${'f'.repeat(64)}` }]))
+      .rejects.toThrow('group preparation checkpoint');
+    expect(await store.read(eofDigest)).toEqual(eofPending);
+    observed.reset();
+    const eofCompletionCalls = stack.contentPool.checkouts;
+    const eofComplete = await new StructureGroupRootStore(stack.contentPool, objects).prepare(eofDigest);
+    expect(eofComplete).toMatchObject({ scanned: 256, total: 256, complete: true,
+      cursor: eofPending.cursor, groups: eofPending.groups });
+    expect(BigInt(eofComplete.version)).toBe(BigInt(eofPending.version) + 1n);
+    expect(observed.cost.gets).toBeLessThanOrEqual(32);
+    expect(observed.cost.bytes).toBeLessThan(2 * 1024 * 1024);
+    expect(stack.contentPool.checkouts - eofCompletionCalls).toBeLessThanOrEqual(3);
+    expect(stack.fuseki.queries).toBe(beforeGraph);
+    expect(await store.completedTopGroups(eofDigest, eofSource)).toEqual(eofPending.groups);
+    expect(await objects.get(eofDigest)).toEqual(eofBytes);
+    expect(await objects.get(legacy.digest)).toEqual(legacy.bytes);
+    expect(await store.read(legacy.digest)).toEqual(checkpoint);
+    const protectedPartial = (await store.retainedRoots()).find(value => value.manifestDigest === legacy.digest);
+    expect(protectedPartial).toEqual(checkpoint);
+    expect(checkStructurePage(await objects.get(protectedPartial!.groups.page.slice(7))).tree).toBe('order');
+    expect((await orderTree(objects).range(protectedPartial!.groups, `${legacy.structure}\u0001`,
+      `${legacy.structure}\u0002`, 4, newCost())).map(value => value.occurrence)).toEqual([legacy.groups[0]!.occurrence]);
+    expect(await objects.get(legacy.digest)).toEqual(legacy.bytes);
+    const partialRead = await readCompositionSnapshot(stack.env, { structure: legacy.structure });
+    expect(partialRead.manifest.topGroups).toBeUndefined();
+    await expect(chapterStoryNumber(session(), partialRead.header, legacy.direct[0]!,
+      { ordinal: 1, path: [] }, partialRead)).rejects.toThrow(/group|prepar|unavailable/iu);
+    const coverageStore = { directory: stack.env.objectDirectory, structureObjects: objects, structureGroupRoots: store };
+    const pendingObjects = new Set<string>();
+    const partialCoverage = await captureObjectRecoveryCoverage(stack.fuseki, coverageStore, pendingObjects);
+    expect(pendingObjects.has(checkpoint.groups.page.slice(7))).toBe(true);
+    expect(pendingObjects.has(legacy.digest)).toBe(true);
+    expect(pendingObjects.has(legacy.source.records.page.slice(7))).toBe(true);
+    expect(pendingObjects.has(legacy.source.order.page.slice(7))).toBe(true);
+    await assertObjectRecoveryCoverage(stack.fuseki, coverageStore, partialCoverage);
+    // Coverage is explicit maintenance; preparation itself must still perform
+    // zero graph queries across every subsequent bounded turn.
+    beforeGraph = stack.fuseki.queries;
+
+    // Both contenders read the same committed version before either CAS runs.
+    let readers = 0, release!: () => void;
+    const barrier = new Promise<void>(resolve => { release = resolve; });
+    const racingPool = checkpointPool(stack.contentPool, async (sql, values, execute) => {
+      const result = await execute();
+      if (/^SELECT\b/iu.test(sql.trim()) && /FROM structure\.group_root/iu.test(sql)
+        && values?.[0] === legacy.digest && readers < 2) {
+        if (++readers === 2) release();
+        await barrier;
+      }
+      return result;
+    });
+    const results = await Promise.all([
+      new StructureGroupRootStore(racingPool, objects).prepare(legacy.digest),
+      new StructureGroupRootStore(racingPool, objects).prepare(legacy.digest),
+    ]);
+    expect(readers).toBe(2);
+    expect(results[0]).toEqual(results[1]);
+    expect(results[0]!.scanned).toBe(checkpoint.scanned + 256);
+    expect(BigInt(results[0]!.version)).toBe(BigInt(checkpoint.version) + 1n);
+    checkpoint = results[0]!;
+
+    let acknowledgementLost = false;
+    const lostAckPool = checkpointPool(stack.contentPool, async (sql, _values, execute) => {
+      const result = await execute();
+      if (!acknowledgementLost && /^UPDATE structure\.group_root/iu.test(sql.trim()) && result.rowCount === 1) {
+        acknowledgementLost = true;
+        throw new Error('Fixture lost acknowledgement after PostgreSQL autocommit');
+      }
+      return result;
+    });
+    const afterLostAck = await new StructureGroupRootStore(lostAckPool, objects).prepare(legacy.digest);
+    expect(acknowledgementLost).toBe(true);
+    expect(afterLostAck.scanned).toBe(checkpoint.scanned + 256);
+    expect(BigInt(afterLostAck.version)).toBe(BigInt(checkpoint.version) + 1n);
+    expect(await store.read(legacy.digest)).toEqual(afterLostAck);
+    checkpoint = afterLostAck;
+
+    const resumed = new StructureGroupRootStore(stack.contentPool, stack.objects('semantic/structure/'));
+    expect(await resumed.read(legacy.digest)).toEqual(checkpoint);
+    let turns = 3;
+    while (!checkpoint.complete) {
+      const prior = checkpoint;
+      observed.reset();
+      const calls = stack.contentPool.checkouts;
+      checkpoint = await new StructureGroupRootStore(stack.contentPool, objects).prepare(legacy.digest);
+      turns++;
+      expect(checkpoint.scanned - prior.scanned).toBeLessThanOrEqual(256);
+      expect(checkpoint.scanned).toBeGreaterThanOrEqual(prior.scanned);
+      expect(BigInt(checkpoint.version)).toBe(BigInt(prior.version) + 1n);
+      expect(observed.cost.gets).toBeLessThanOrEqual(32);
+      expect(observed.cost.bytes).toBeLessThan(2 * 1024 * 1024);
+      expect(stack.contentPool.checkouts - calls).toBeLessThanOrEqual(3);
+      expect(stack.fuseki.queries).toBe(beforeGraph);
+      expect(turns).toBeLessThanOrEqual(41);
+    }
+    expect(turns).toBeGreaterThanOrEqual(40);
+    expect(checkpoint.scanned).toBe(10_003);
+    expect(checkpoint.groups.count).toBe(3);
+    expect(await resumed.completedTopGroups(legacy.digest, legacy.source)).toEqual(checkpoint.groups);
+    expect((await orderTree(objects).range(checkpoint.groups, `${legacy.structure}\u0001`,
+      `${legacy.structure}\u0002`, 4, newCost())).map(value => value.occurrence))
+      .toEqual(legacy.groups.map(value => value.occurrence));
+    expect((await resumed.retainedRoots()).find(value => value.manifestDigest === legacy.digest)).toEqual(checkpoint);
+    expect(await objects.get(legacy.digest)).toEqual(legacy.bytes);
+    expect(checkStructureManifest(await objects.get(legacy.digest)).topGroups).toBeUndefined();
+    const calls = stack.contentPool.checkouts;
+    expect(await resumed.completedTopGroups(legacy.digest, legacy.source)).toEqual(checkpoint.groups);
+    expect(stack.contentPool.checkouts - calls).toBe(1);
+    await expect(resumed.completedTopGroups(legacy.digest, { ...legacy.source,
+      order: { ...legacy.source.order, count: legacy.source.order.count - 1 } })).rejects.toThrow(/source/iu);
+    // Source coordinates remain immutable at the durable owner boundary too.
+    await expect(stack.contentPool.query(`UPDATE structure.group_root SET structure = $2
+      WHERE manifest_digest = $1`, [legacy.digest, `${ID}${randomUUID()}`])).rejects.toThrow();
+    expect(await resumed.read(legacy.digest)).toEqual(checkpoint);
+    expect(await resumed.prepare(legacy.digest)).toEqual(checkpoint);
+    const completedObjects = new Set<string>();
+    const completedCoverage = await captureObjectRecoveryCoverage(stack.fuseki,
+      { ...coverageStore, structureGroupRoots: resumed }, completedObjects);
+    expect(completedObjects.has(checkpoint.groups.page.slice(7))).toBe(true);
+    expect(completedObjects.has(legacy.digest)).toBe(true);
+    expect(completedCoverage.referenceDigest).not.toBe(partialCoverage.referenceDigest);
+    await assertObjectRecoveryCoverage(stack.fuseki, { ...coverageStore,
+      structureGroupRoots: new StructureGroupRootStore(stack.contentPool, stack.objects('semantic/structure/')) }, completedCoverage);
+    await expect(assertObjectRecoveryCoverage(stack.fuseki, { directory: stack.env.objectDirectory,
+      structureObjects: objects }, completedCoverage)).rejects.toThrow(/coverage/iu);
+
+    stack.env.structureGroupRoots = resumed;
+    const exact = await readCompositionSnapshot(stack.env, { structure: legacy.structure, revision: legacy.revision });
+    expect(exact.manifest.topGroups).toEqual(checkpoint.groups);
+    expect(exact.header.manifest).toBe(`urn:rezics:sha256:${legacy.digest}`);
+    const last = legacy.direct.at(-1)!;
+    const page = await readCompositionPage(stack.env, { structure: legacy.structure, snapshot: exact,
+      occurrence: last.occurrence, limit: 1, canReadTarget: async () => true });
+    expect(await chapterStoryNumber(session(), exact.header, last, page.occurrenceContext!, exact)).toBe(10_002);
+    expect(await objects.get(legacy.digest)).toEqual(legacy.bytes);
+  } finally { await stack.stop(); }
+}, 180_000);
+
+test('Legacy group preparation: authentic historical anchor resolves and a bounded admitted edit carries its prepared root', async () => {
+  const stack = await startMediaStack('legacy-group-writer');
+  try {
+    const owner = await stack.member('legacy-group-writer-owner');
+    const observed = observeLegacyObjects(stack.objects('semantic/structure/'));
+    const objects = observed.objects;
+    await objects.initialize();
+    (stack.env as typeof stack.env & { structureObjects: typeof objects }).structureObjects = objects;
+    const roots = new StructureGroupRootStore(stack.contentPool, objects);
+    stack.env.structureGroupRoots = roots;
+    const title = `Legacy writer Book ${randomUUID()}`, types = ['https://schema.org/Book'];
+    const book = await activateMetadataWork(stack.env, { title, semanticTypes: types,
+      admission: stack.admission(owner.actor, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, types)) });
+    if (!book.work || !book.mainVersion) throw new Error('Book was not created');
+    await owner.grant(`work:edit:${book.work}`, 'work.edit');
+    await owner.grant(`work:read:${book.work}`, 'work.read');
+    const target = await stack.privateWork(owner.actor, 'Legacy writer chapter target');
+    await owner.grant(`work:read:${target.work}`, 'work.read');
+    const created = await json<{ structure: string; revision: string }>(await owner.send('POST', '/v1/compositions', {
+      profile: 'book-composition', work: book.work, mainVersion: book.mainVersion, actingSubject: owner.actor }), 201);
+    const placed = await json<{ revision: string; occurrences: string[] }>(await owner.send('POST',
+      `/v1/compositions/${short(created.structure)}/changes`, { profile: 'book-composition', expectedHead: created.revision,
+        actingSubject: owner.actor, operations: [
+          { op: 'insert', parent: created.structure, position: 'last', role: 'group', division: 'volume',
+            label: { value: 'Legacy volume', language: 'en' } },
+          { op: 'insert', parent: created.structure, position: 'last', role: 'chapter', target: target.work },
+        ] }), 200);
+    const child = await json<{ revision: string; occurrences: string[] }>(await owner.send('POST',
+      `/v1/compositions/${short(created.structure)}/changes`, { profile: 'book-composition', expectedHead: placed.revision,
+        actingSubject: owner.actor, operations: [{ op: 'insert', parent: placed.occurrences[0], position: 'last',
+          role: 'chapter', target: target.work }] }), 200);
+    const authored = await readCompositionSnapshot(stack.env, { structure: created.structure });
+    const authoredDigest = authored.header.manifest.slice(-64), authoredBytes = await objects.get(authoredDigest);
+    const { topGroups: _groups, ...legacyManifest } = authored.manifest;
+    const legacyBytes = new TextEncoder().encode(JSON.stringify(legacyManifest));
+    checkStructureManifest(legacyBytes);
+    const legacyDigest = await objects.put(legacyBytes), legacyRevision = `${ID}${randomUUID()}`;
+    // Add a separate legacy fixture revision using the admitted revision's
+    // owner coordinates. Preserve every existing authored revision and object.
+    await stack.fuseki.update(`PREFIX rv: <${RV}>
+      INSERT { GRAPH ${iri(GRAPHS.revisions)} { ${iri(legacyRevision)} ?predicate ?value . } }
+      WHERE { GRAPH ${iri(GRAPHS.revisions)} { ${iri(child.revision)} ?predicate ?value .
+        FILTER(?predicate NOT IN (rv:manifest, rv:predecessor)) } };
+      INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(legacyRevision)} rv:manifest <urn:rezics:sha256:${legacyDigest}> ; rv:predecessor ${iri(child.revision)} . } };
+      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(created.structure)} rv:structureHead ${iri(child.revision)} . } }
+      INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(created.structure)} rv:structureHead ${iri(legacyRevision)} . } }
+      WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(created.structure)} rv:structureHead ${iri(child.revision)} . } }`);
+    expect((await readCompositionSnapshot(stack.env, { structure: created.structure })).manifest.topGroups).toBeUndefined();
+    const complete = await roots.prepare(legacyDigest);
+    expect(complete).toMatchObject({ complete: true, total: 2, scanned: 2 });
+    expect(complete.groups.count).toBe(1);
+    const restarted = new StructureGroupRootStore(stack.contentPool, stack.objects('semantic/structure/'));
+    stack.env.structureGroupRoots = restarted;
+    expect(await restarted.completedTopGroups(legacyDigest, legacyManifest)).toEqual(complete.groups);
+    const historical = await readCompositionSnapshot(stack.env, { structure: created.structure, revision: legacyRevision });
+    expect(historical.manifest.topGroups).toEqual(complete.groups);
+    expect(historical.header.manifest).toBe(`urn:rezics:sha256:${legacyDigest}`);
+    const exactChild = await readCompositionPage(stack.env, { structure: created.structure, snapshot: historical,
+      occurrence: child.occurrences[0]!, limit: 1, canReadTarget: async () => true });
+    const session = new WorkReadSession({ environment: stack.env } as MainWorkDependencies,
+      new Request('http://main.local/v1/chapters'), {}, historical.sourcePosition);
+    expect(await chapterStoryNumber(session, historical.header, exactChild.occurrences[0]!,
+      exactChild.occurrenceContext!, historical)).toBe(1);
+    observed.reset();
+    const queries = stack.fuseki.queries;
+    const changed = await json<{ revision: string; occurrences: string[] }>(await owner.send('POST',
+      `/v1/compositions/${short(created.structure)}/changes`, { profile: 'book-composition', expectedHead: legacyRevision,
+        actingSubject: owner.actor, operations: [{ op: 'insert', parent: created.structure, position: 'last',
+          role: 'group', division: 'part', label: { value: 'After legacy preparation', language: 'en' } }] }), 200);
+    expect(stack.fuseki.queries - queries).toBeLessThanOrEqual(64);
+    expect(observed.cost.gets).toBeLessThanOrEqual(64);
+    expect(observed.cost.bytes).toBeLessThan(2 * 1024 * 1024);
+    const current = await readCompositionSnapshot(stack.env, { structure: created.structure });
+    expect(current.revision).toBe(changed.revision);
+    expect(current.manifest.topGroups?.count).toBe(2);
+    expect((await orderTree(objects).range(current.manifest.topGroups!, `${created.structure}\u0001`,
+      `${created.structure}\u0002`, 4, newCost())).map(value => value.occurrence))
+      .toEqual([placed.occurrences[0], changed.occurrences[0]]);
+    const retained = await readCompositionSnapshot(stack.env, { structure: created.structure, revision: legacyRevision });
+    expect(retained.manifest.topGroups).toEqual(complete.groups);
+    expect(retained.manifest.records).toEqual(legacyManifest.records);
+    expect(await restarted.completedTopGroups(legacyDigest, legacyManifest)).toEqual(complete.groups);
+    expect(await objects.get(legacyDigest)).toEqual(legacyBytes);
+    expect(await objects.get(authoredDigest)).toEqual(authoredBytes);
   } finally { await stack.stop(); }
 }, 180_000);

@@ -11,6 +11,8 @@ import { MODEL_COMPONENT, PROFILES } from '../semantic/schema.ts';
 import { checkStructureManifest, checkStructurePage, checkStructureSealManifest,
   InvalidStructureObject, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_SEAL_FORMAT }
   from '../structure/format.ts';
+import type { StructureGroupRootStore } from '../structure/group-root.ts';
+import { StructureObjectCorrupt } from '../structure/tree.ts';
 
 export class ObjectRecoveryConflict extends Error {
   constructor(message: string, readonly kind: 'unavailable' | 'corrupt' | 'mismatch' = 'mismatch') {
@@ -22,6 +24,8 @@ export interface ObjectRecoveryStore {
   directory: string;
   workObjects?: ImmutableObjects;
   structureObjects?: ImmutableObjects;
+  /** Supplemental custody includes incomplete preparation roots, too. */
+  structureGroupRoots?: Pick<StructureGroupRootStore, 'retainedRoots'>;
   /** Maintenance commands may overlap a bounded window of immutable reads. */
   readConcurrency?: number;
 }
@@ -362,10 +366,39 @@ export async function captureObjectRecoveryCoverage(
       checkedModelGenerations.add(manifest.component);
     }
   }
+  // The graph continues to name the original authored manifest. Content rows
+  // retain its supplemental root and cursor; pending roots must survive the
+  // same backup/GC cut as completed ones, and row loss must fail restore.
+  let prepared;
+  try { prepared = await store.structureGroupRoots?.retainedRoots() ?? []; }
+  catch (error) {
+    throw new ObjectRecoveryConflict('Structure group custody owner is unavailable or corrupt',
+      error instanceof StructureObjectCorrupt ? 'corrupt' : 'unavailable');
+  }
+  prepared.sort((a, b) => a.manifestDigest < b.manifestDigest ? -1 : a.manifestDigest > b.manifestDigest ? 1 : 0);
+  for (const checkpoint of prepared) {
+    let source;
+    try { source = checkStructureManifest(await structureObject(checkpoint.manifestDigest)); }
+    catch (error) {
+      if (error instanceof InvalidStructureObject) {
+        throw new ObjectRecoveryConflict('prepared group source manifest is corrupt', 'corrupt');
+      }
+      throw error;
+    }
+    const same = (a: typeof checkpoint.records, b: typeof checkpoint.records) =>
+      a.page === b.page && a.level === b.level && a.count === b.count;
+    if (source.structure !== checkpoint.structure || source.profile !== 'book-composition'
+      || !same(source.records, checkpoint.records) || !same(source.order, checkpoint.order)) {
+      throw new ObjectRecoveryConflict('prepared group root differs from original manifest', 'corrupt');
+    }
+    referenceHash.update(record(['structure-group-root', checkpoint]));
+    await structureManifest(checkpoint.manifestDigest, checkpoint.structure);
+    await tree(checkpoint.groups.page, 'order', checkpoint.groups.level, checkpoint.groups.count);
+  }
   for (const digest of [...objects.keys()].sort()) {
     objectHash.update(record([digest, objects.get(digest)!]));
   }
-  return { version: 1, referenceCount: String(references.length),
+  return { version: 1, referenceCount: String(references.length + prepared.length),
     referenceDigest: referenceHash.digest('hex'), anchorCount: String(anchorCount),
     anchorDigest: anchorHash.digest('hex'), objectCount: String(objects.size),
     objectDigest: objectHash.digest('hex') };

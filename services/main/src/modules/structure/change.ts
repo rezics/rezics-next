@@ -44,6 +44,7 @@ import { deepestLevel, isCatalogTarget, structureProfileFor, structureProfileFor
 import { OrderKeyInvalid, evenKeys, keyBetween, segmentKeyBetween, withinBudget } from './order-key.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, StructureTree, newCost,
   type TreeCost } from './tree.ts';
+import { resolvePreparedGroups } from './group-root.ts';
 
 export const MAX_OPERATIONS = 16;
 /** A seal reads the whole revision; larger compositions need a staged seal job. */
@@ -521,7 +522,7 @@ async function settled(env: WorkActivationEnvironment, admission: Admission): Pr
 function manifestIri(digest: string): string { return `urn:rezics:sha256:${digest}`; }
 
 async function readManifest(objects: ImmutableObjects, header: CompositionHeader,
-  cost: TreeCost): Promise<StructureManifest> {
+  cost: TreeCost, env?: WorkActivationEnvironment): Promise<StructureManifest> {
   let bytes: Uint8Array;
   try { bytes = await objects.get(header.manifest.slice(-64)); }
   catch (error) {
@@ -540,7 +541,7 @@ async function readManifest(objects: ImmutableObjects, header: CompositionHeader
     || manifest.structureOf !== header.component || manifest.profile !== header.profile) {
     throw new StructureObjectCorrupt('manifest does not belong to this composition head');
   }
-  return manifest;
+  return resolvePreparedGroups(env, header.manifest.slice(-64), manifest);
 }
 
 async function writeManifest(objects: ImmutableObjects, manifest: StructureManifest,
@@ -1330,7 +1331,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
   }
   const objects = structureObjects(env);
   const cost: CompositionCost = { ...newCost(), placementsWritten: 0, segmentsWritten: 0, rebalanced: 0 };
-  const manifest = await readManifest(objects, header, cost);
+  const manifest = await readManifest(objects, header, cost, env);
   if (header.profile === 'book-composition' && !manifest.topGroups) {
     throw new StructureObjectUnavailable('composition group root requires bounded preparation');
   }
@@ -1844,6 +1845,7 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
     throw error;
   }
   const imported = intent.stage?.kind === 'import' || intent.stage?.kind === 'refresh';
+  sourceManifest = await resolvePreparedGroups(env, sourceManifestRef!.slice(-64), sourceManifest);
   if (imported && (!sourceManifest.source || sourceManifest.source.ref !== intent.stage?.sourceRef
     || sourceManifest.source.revision !== intent.stage?.sourceRevision
     || sourceManifest.source.mappingPolicy !== intent.stage?.mappingPolicy)) {
