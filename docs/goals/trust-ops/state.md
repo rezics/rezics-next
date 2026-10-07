@@ -460,3 +460,16 @@ frozen additive export is unchanged. Serving revisioncb2446d055e5 does not carry
 that commit (ancestry checked), so source acceptance is distinct from activation.
 No duplicate refresh is queued. Four Sonnet worker processes were confirmed live
 at21:29UTC; current actual caller/helper/lock/campaign slices continue.
+
+G-1394 closed/verified after locating LaunchG1391's unchanged consumer proof:
+2regression cases pass with10global/11Realm calls for either audience under12;
+7Zone browser cases passedQA195940-72d420. Its regression file is byte-identical
+onMain after the summary fix, and the core had real native/PG qualification and
+shared activation. Separate G851 large-catalogue seed400 remains Launch's gap.
+G-1343 corrected component is in the162unit/guard gate after clean currentMain
+rebase/typecheck; modern/legacy native and fault proofs pass, outer-outcome and
+private family remain held. Kernel activation failed before writer stop at image
+build: fixed300s is shorter than retained497/656.479native evidence. Program
+SonnetG1404 owns the sole image-budget/private-diagnostic repair; unusedduplicate
+G1405brief was removed without dispatch. No data-prep/restore budgets change.
+CLI argv16c7ba4bf is landed; plain-text workaround is no longer required.
