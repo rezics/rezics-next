@@ -966,9 +966,12 @@ export class VerificationStore {
           ? await this.localHead(client, dependency) : dependency.kind === 'policy' ? dependency.reference : null });
       }
       const pending = await client.query(`SELECT 1 FROM verification.reassessment_request WHERE target = $1 AND context = $2
-        UNION ALL SELECT 1 FROM verification.invalidation i WHERE i.state = 'pending'
-          AND (i.kind, i.reference) IN (SELECT kind, reference FROM verification.summary_dependency WHERE generation_id = $3)
-        LIMIT 1`, [target, context, row.id]);
+        UNION ALL SELECT 1 FROM unnest($3::text[], $4::text[]) d(kind, reference)
+          CROSS JOIN LATERAL (
+            SELECT 1 FROM verification.invalidation i WHERE i.state = 'pending'
+              AND i.kind = d.kind AND i.reference = d.reference LIMIT 1
+          ) pending
+        LIMIT 1`, [target, context, dependencies.map(item => item.kind), dependencies.map(item => item.reference)]);
       return { generation: nativeId(row.id), number: String(row.generation), target: row.target, context: row.context,
         claim: row.claim, claimRevision: row.claim_revision, adoptedRevision: row.adopted_revision,
         assessment: row.assessment, policyRevision: row.policy_revision, support: row.support, review: row.review,
