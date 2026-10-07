@@ -53,9 +53,14 @@ Program has the coordinated host-window request for one strict-budget retry.
 The extra temporary600s wall guard was incorrect and is removed: established
 fixture/restore budgets judge active work, exclude admission waits and report
 both. The interrupted run still published no backup; completed preparation
-under600s active remains required. G-1344 attempt9 now retries current pins
-in the program-coordinated15-minute quiet startup window, preserving prior
-backups and reporting active/wait/wall separately. Manager-exclusive100k
+The100k consistent backup fx-medium-605f041f8150 completed on current
+native539/model fa, graph generatorv4 and429migration inputs:566.405s active,
+7.467s admission and573.873s wall. Its manifest records100,000Works,
+1,000Agents,10,000public units and400,000objects, with allowner counts,
+readiness, exact samples and clean stop passed. The first isolated restore is
+queued; the second and manager-exclusive campaign/timed/peak/destruction checks
+remain required. The quiet startup window lasts until19:30UTC. Frozen prior
+backups are unchanged; this background population is not command-cost evidence. Manager-exclusive100k
 qualification remains required.
 
 Program has enrolled the manager in the supervised coordinator for native session
