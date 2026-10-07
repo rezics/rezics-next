@@ -431,7 +431,7 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
   };
 }
 
-test('G-920: absent Global acceptance hydrates no ordinary proposals and advances a full raw batch', async () => {
+test('absent Global acceptance hydrates no ordinary proposals and advances a full raw batch', async () => {
   const candidates = Array.from({ length: 320 }, (_, index) => statementCandidate(100 + index));
   const run = subjectReader(candidates);
   const page = await readSubjectStatements(run.session(), run.resource);
@@ -444,7 +444,7 @@ test('G-920: absent Global acceptance hydrates no ordinary proposals and advance
     .map(row => row.statementId));
 });
 
-test('G-920: a full ineligible raw batch still fills a published Wiki page and its disclosed cursor', async () => {
+test('a full ineligible raw batch still fills a published Wiki page and its disclosed cursor', async () => {
   const candidates = Array.from({ length: SUBJECT_STATEMENT_COST.candidates + 2 }, (_, index) => statementCandidate(100 + index));
   const published = candidates.slice(-2);
   const evidence = published.map((row, index) => wikiCitation(row.statementId, 300 + index));
@@ -465,7 +465,7 @@ test('G-920: a full ineligible raw batch still fills a published Wiki page and i
   expect(next.nextCursor).toBeNull();
 });
 
-test('G-920: readable Wiki candidates separated by full raw batches share one bounded hydration', async () => {
+test('readable Wiki candidates separated by full raw batches share one bounded hydration', async () => {
   const candidates = Array.from({ length: 42 }, (_, index) => statementCandidate(100 + index));
   const published = [candidates[1]!, candidates[21]!];
   const run = subjectReader(candidates, published.map((row, index) => wikiCitation(row.statementId, 300 + index)));
@@ -476,7 +476,7 @@ test('G-920: readable Wiki candidates separated by full raw batches share one bo
   expect(page.nextCursor).not.toBeNull();
 });
 
-test('G-920: only exact acceptance, qualified acceptance or readable Wiki candidates hydrate', async () => {
+test('only exact acceptance, qualified acceptance or readable Wiki candidates hydrate', async () => {
   const candidates = [100, 101, 102, 103].map(statementCandidate);
   const run = subjectReader(candidates, [wikiCitation(candidates[2]!.statementId, 300)]);
   run.scope();
@@ -494,7 +494,7 @@ test('G-920: only exact acceptance, qualified acceptance or readable Wiki candid
 });
 
 for (const unavailable of ['exact', 'qualified'] as const) {
-  test(`G-920: unavailable ${unavailable} acceptance refuses even with the other grain and Wiki publication`, async () => {
+  test(`unavailable ${unavailable} acceptance refuses even with the other grain and Wiki publication`, async () => {
     const candidate = statementCandidate(100);
     const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
     run.scope();
@@ -507,7 +507,7 @@ for (const unavailable of ['exact', 'qualified'] as const) {
 }
 
 for (const hidden of ['private-source', 'unbound-source', 'unbound-claim', 'stale-reference'] as const) {
-  test(`G-920: ${hidden} Wiki evidence does not disclose an otherwise unaccepted Statement`, async () => {
+  test(`${hidden} Wiki evidence does not disclose an otherwise unaccepted Statement`, async () => {
     const candidate = statementCandidate(100);
     const run = subjectReader([candidate], [wikiCitation(hidden === 'unbound-claim' ? null : candidate.statementId, 300)]);
     if (hidden === 'private-source') run.privateSource();
@@ -519,7 +519,7 @@ for (const hidden of ['private-source', 'unbound-source', 'unbound-claim', 'stal
   });
 }
 
-test('G-920: published Wiki provenance never grants a private meaning Context', async () => {
+test('published Wiki provenance never grants a private meaning Context', async () => {
   const candidate = statementCandidate(100);
   const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
   run.privateMeanings.add(candidate.statementId);
@@ -531,7 +531,7 @@ test('G-920: published Wiki provenance never grants a private meaning Context', 
 });
 
 for (const race of ['evidence-withdrawal', 'claim-permission', 'private-context-grant', 'graph-position'] as const) {
-  test(`G-920: ${race} during eligible hydration refuses the final Wiki page`, async () => {
+  test(`${race} during eligible hydration refuses the final Wiki page`, async () => {
     const candidate = statementCandidate(100);
     const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
     if (race === 'evidence-withdrawal') run.withdrawWiki(2);
@@ -555,7 +555,7 @@ for (const race of ['evidence-withdrawal', 'claim-permission', 'private-context-
   });
 }
 
-test('G-920: an eligible Statement whose current meaning changed still refuses hydration', async () => {
+test('an eligible Statement whose current meaning changed still refuses hydration', async () => {
   const candidate = statementCandidate(100);
   const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
   run.hydrationChanges.set(candidate.statementId, { key: iriTerm(statementCandidate(101).meaningKey) });
@@ -563,7 +563,7 @@ test('G-920: an eligible Statement whose current meaning changed still refuses h
     .rejects.toThrow('Statement hydration differs from its candidate');
 });
 
-test('G-920: readable Wiki evidence cannot make an eligible Statement with an unbound current head available', async () => {
+test('readable Wiki evidence cannot make an eligible Statement with an unbound current head available', async () => {
   const candidate = statementCandidate(100);
   const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
   run.missingHeads.add(candidate.statementId);
@@ -572,7 +572,7 @@ test('G-920: readable Wiki evidence cannot make an eligible Statement with an un
   expect(run.hydration).toEqual([[candidate.statementId]]);
 });
 
-test('G-920: an eligible Statement with a partial qualification bundle refuses before disclosure', async () => {
+test('an eligible Statement with a partial qualification bundle refuses before disclosure', async () => {
   const candidate = statementCandidate(100);
   const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
   run.hydrationChanges.set(candidate.statementId, { qualificationDefinition: iriTerm(subjectId(4)) });
@@ -581,7 +581,7 @@ test('G-920: an eligible Statement with a partial qualification bundle refuses b
   expect(run.hydration).toEqual([[candidate.statementId]]);
 });
 
-test('G-920: exact qualified Wiki facts require every native scope and preserve their sealed bundle', async () => {
+test('exact qualified Wiki facts require every native scope and preserve their sealed bundle', async () => {
   const qualification: StatementQualification = { definition: subjectId(4),
     interpretationContext: subjectId(20), valuePrecision: 'exact', valueQualifiers: ['inferred'],
     validFrom: null, validUntil: null, editionScope: subjectId(21) };
