@@ -10,10 +10,12 @@ import { DATASET, GRAPHS, RV, hash, iri, lit,
   IdempotencyConflict, PendingActivation,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
+  STRUCTURE_INDEXED_MANIFEST_FORMAT,
   STRUCTURE_SEAL_FORMAT, checkOccurrenceRecord, checkOccurrenceQualifier, checkOccurrenceQualifierRole, checkIngredientReferences, checkStructureManifest, checkStructureSealManifest,
   checkRecipeMeasures, WorkCompletion, type RecipeMeasure, type OccurrenceRecord,
   type OccurrenceRole, type OrderEntry, type PinEntry, type StructureManifest,
   type StructureProfile } from './format.ts';
+import { createQualifierKeyIndex, updateQualifierKeyIndex } from './qualifier-index.ts';
 import {
   COMPOSITION_PROFILE,
   CompositionCorrupt,
@@ -701,13 +703,14 @@ export async function createComposition(env: WorkActivationEnvironment,
   const operation = derivedId(`${seed}\0operation`);
   const objects = structureObjects(env);
   const cost = newCost();
-  const manifest = await writeManifest(objects, { format: STRUCTURE_MANIFEST_FORMAT, structure,
+  const source: StructureManifest = { format: STRUCTURE_MANIFEST_FORMAT, structure,
     structureOf: component, profile: profile.id, generation,
     pageFormat: STRUCTURE_PAGE_FORMAT, records: await recordTree(objects).empty(cost),
     order: await orderTree(objects).empty(cost),
-    ...(profile.id === 'book-composition' ? { topGroups: await orderTree(objects).empty(cost) } : {}),
-    placementCount: 0, measures: [],
-    model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE }, cost);
+    ...(profile.id === 'book-composition' ? { topGroups: await orderTree(objects).empty(cost) } : {}), placementCount: 0, measures: [],
+    model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE };
+  const manifest = await writeManifest(objects, { ...source, format: STRUCTURE_INDEXED_MANIFEST_FORMAT,
+    qualifierKeys: await createQualifierKeyIndex(objects, source, [], cost) }, cost);
   const receipt = compositionReceiptIri(intent.admission.id, intent.admission.action);
   const occupied = `GRAPH ${iri(GRAPHS.current)} { ?existing rv:structureOf ${iri(component)} ;
     rv:structureProfile <${profile.graphProfile}> . }`;
@@ -1235,7 +1238,9 @@ function placementTriples(state: PlacementState, generation: string,
   if (state.sourceKey) add('sourceKey', lit(state.sourceKey));
   if (qualifier) {
     add('qualifier', iri(qualifier.iri));
-    triples.push(...qualifier.triples);
+    // A projection may split one RDF subject block across strings. Diff the
+    // complete block so an edited qualifier never loses its subject prefix.
+    triples.push(qualifier.triples.join('\n'));
   }
   return triples;
 }
@@ -1439,11 +1444,15 @@ export async function changeComposition(env: WorkActivationEnvironment,
     }
   }
   const count = header.placementCount + w.activeDelta;
-  const next = await writeManifest(objects, { ...manifest,
+  const nextSource = { ...manifest,
     ...(operations[0]?.op === 'completion' ? { completion: operations[0].completion } : {}),
     records: await recordTree(objects).apply(manifest.records, records, cost),
     ...(manifest.topGroups ? { topGroups: await orderTree(objects).apply(manifest.topGroups, groups, cost) } : {}),
-    order: await orderTree(objects).apply(manifest.order, order, cost), placementCount: count }, cost);
+    order: await orderTree(objects).apply(manifest.order, order, cost), placementCount: count };
+  const qualifierKeys = await updateQualifierKeyIndex(objects, manifest, nextSource,
+    [...records].map(([occurrence, after]) => ({ before: retained.get(occurrence), after: after ?? undefined })), cost);
+  const next = await writeManifest(objects, qualifierKeys ? { ...nextSource,
+    format: STRUCTURE_INDEXED_MANIFEST_FORMAT, qualifierKeys } : nextSource, cost);
   const operation = derivedId(`${intent.admission.id}\0composition\0operation`);
   const receipt = compositionReceiptIri(intent.admission.id, intent.admission.action);
   const chapter = intent.newWork;
@@ -1970,10 +1979,12 @@ export async function restoreComposition(env: WorkActivationEnvironment, intent:
   const topGroups = header.profile === 'book-composition'
     ? sourceManifest.topGroups ?? await orderTree(objects).apply(await orderTree(objects).empty(cost),
       new Map(groupEntries.map(entry => [orderTreeKey(entry), entry])), cost) : undefined;
-  const next = await writeManifest(objects, { ...sourceManifest, generation,
+  const replacementSource = { ...sourceManifest, generation,
     ...(topGroups ? { topGroups } : {}),
     ...(completion ? { completion } : {}),
-    ...(intent.stage ? {} : { restoredFrom: intent.restoredFrom }) }, cost);
+    ...(intent.stage ? {} : { restoredFrom: intent.restoredFrom }) };
+  const next = await writeManifest(objects, { ...replacementSource, format: STRUCTURE_INDEXED_MANIFEST_FORMAT,
+    qualifierKeys: await createQualifierKeyIndex(objects, replacementSource, records, cost) }, cost);
   const segments = new Map<string, SegmentState & { firstIndex: number }>();
   const projectionByRecord = records.map(() => [] as string[]);
   const projectedStates: PlacementState[] = [];

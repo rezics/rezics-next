@@ -8,7 +8,7 @@ import { graphPlacementControl, type GraphPlacementControl } from '../../service
 import { lockPreservationTarget } from '../../services/main/src/modules/public-report/preservation.ts';
 import { StructureGroupRootStore } from '../../services/main/src/modules/structure/group-root.ts';
 import { checkStructureManifest, checkStructureSealManifest, STRUCTURE_MANIFEST_FORMAT,
-  STRUCTURE_SEAL_FORMAT, STRUCTURE_PROFILE } from '../../services/main/src/modules/structure/format.ts';
+  STRUCTURE_INDEXED_MANIFEST_FORMAT, STRUCTURE_SEAL_FORMAT, STRUCTURE_PROFILE } from '../../services/main/src/modules/structure/format.ts';
 import { readCompositionHeader } from '../../services/main/src/modules/structure/graph.ts';
 import { WORK_READ_COST } from '../../services/main/src/modules/work/read-contract.ts';
 import { parseOptions, readEnv, stackDirectory } from '../dev/config.ts';
@@ -83,7 +83,7 @@ try {
         if (value.format === STRUCTURE_SEAL_FORMAT) {
           digest = checkStructureSealManifest(bytes).structureManifest.slice(7);
           bytes = await objects.get(digest);
-        } else if (value.format !== STRUCTURE_MANIFEST_FORMAT) {
+        } else if (value.format !== STRUCTURE_MANIFEST_FORMAT && value.format !== STRUCTURE_INDEXED_MANIFEST_FORMAT) {
           throw new Error('Retained Structure root has an unknown format');
         }
         const source = checkStructureManifest(bytes);

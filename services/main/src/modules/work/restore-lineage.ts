@@ -1,3 +1,4 @@
+import { StructureQualifierRootStore } from '../structure/qualifier-index.ts';
 import { StructureGroupRootStore } from '../structure/group-root.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type GraphLineage } from './activate.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
@@ -127,7 +128,8 @@ export async function captureGraphRecoveryCoverage(
 ): Promise<RecoveryCoverage> {
   if (!contentPool) throw new RestoreLineageConflict('Content owner is required for recovery coverage');
   if (objectStore?.structureObjects) objectStore = { ...objectStore,
-    structureGroupRoots: new StructureGroupRootStore(contentPool, objectStore.structureObjects) };
+    structureGroupRoots: new StructureGroupRootStore(contentPool, objectStore.structureObjects),
+    structureQualifierRoots: new StructureQualifierRootStore(contentPool, objectStore.structureObjects) };
   const fence = await accessPool.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true');
   if (fence.rows[0]?.open !== false) {
@@ -492,7 +494,9 @@ export async function releaseRestoredGraphHold(
     if (!evidence.objectStore) throw new RestoreLineageConflict('restored immutable object owner is unavailable');
     const restoredObjects = evidence.objectStore.structureObjects
       ? { ...evidence.objectStore, structureGroupRoots: new StructureGroupRootStore(
-        evidence.contentPool, evidence.objectStore.structureObjects) } : evidence.objectStore;
+        evidence.contentPool, evidence.objectStore.structureObjects),
+        structureQualifierRoots: new StructureQualifierRootStore(
+          evidence.contentPool, evidence.objectStore.structureObjects) } : evidence.objectStore;
     try { await assertObjectRecoveryCoverage(fuseki, restoredObjects, coverage.objects); }
     catch (error) { throw new RestoreLineageConflict(
       `graph or immutable objects differ from recovery coverage (${error instanceof ObjectRecoveryConflict

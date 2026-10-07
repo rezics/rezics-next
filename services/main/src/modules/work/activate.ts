@@ -57,6 +57,8 @@ export interface GraphLineage {
 }
 
 export interface WorkActivationEnvironment {
+  /** Exact original-manifest supplemental coverage owned by Content. */
+  structureQualifierRoots?: import('../structure/qualifier-index.ts').StructureQualifierRootStore;
   /** The owner stages exact slim commands before dispatch and reconciles their commit proofs. */
   receiptCustody?: import('../outbox/receipt-custody.ts').ReceiptCustody;
   addresses?: import('../address/registry.ts').AliasRegistry;

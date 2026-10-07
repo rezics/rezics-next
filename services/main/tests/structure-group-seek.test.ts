@@ -63,13 +63,19 @@ test('Retained group-only pages are included in recovery closure and missing pag
   // custody traversal would silently produce a backup that cannot number.
   expect(f.manifest.topGroups!.page).not.toBe(f.manifest.order.page);
   const retained = new Set<string>();
+  const store = { directory: '.temp/group-recovery', structureObjects: f.objects,
+    // This in-memory inline-root fixture has no supplemental Content rows.
+    structureGroupRoots: { retainedRoots: async () => [] },
+    structureQualifierRoots: { retainedRoots: async () => [] } };
+  await expect(captureObjectRecoveryCoverage(f.graph, { ...store, structureQualifierRoots: undefined }))
+    .rejects.toThrow('Structure supplemental custody owner is unavailable');
   const coverage = await captureObjectRecoveryCoverage(f.graph,
-    { directory: '.temp/group-recovery', structureObjects: f.objects }, retained);
+    store, retained);
   expect(retained.has(f.manifest.topGroups!.page.slice(7))).toBe(true);
   expect(coverage.objectCount).toBe('4');
   f.values.delete(f.manifest.topGroups!.page.slice(7));
   await expect(captureObjectRecoveryCoverage(f.graph,
-    { directory: '.temp/group-recovery', structureObjects: f.objects })).rejects.toBeInstanceOf(ObjectRecoveryConflict);
+    store)).rejects.toBeInstanceOf(ObjectRecoveryConflict);
 });
 
 test('Optional group roots preserve legacy manifest bytes and reject impossible counts', async () => {

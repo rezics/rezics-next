@@ -8,7 +8,10 @@ import { Value } from 'typebox/value';
 
 export const STRUCTURE_PROFILE = 'https://rezics.com/definition/structure-composition-v1';
 export const STRUCTURE_MANIFEST_FORMAT = 'rezics-structure-manifest-v1';
+export const STRUCTURE_INDEXED_MANIFEST_FORMAT = 'rezics-structure-manifest-v2';
 export const STRUCTURE_PAGE_FORMAT = 'rezics-structure-page-v1';
+export const STRUCTURE_QUALIFIER_KEY_PAGE_FORMAT = 'rezics-structure-qualifier-key-page-v1';
+export const STRUCTURE_QUALIFIER_KEY_INDEX_FORMAT = 'rezics-structure-qualifier-key-index-v1';
 export const STRUCTURE_SEAL_FORMAT = 'rezics-structure-seal-v1';
 
 /** Bounds shared by the graph profile, the command family and 030_structure_stage.sql. */
@@ -145,6 +148,14 @@ const entries = <T extends TSchema>(schema: T, minItems = 1) =>
 
 /** Leaves hold records in key order (only an empty tree's root leaf is empty); interior pages hold ordered child ranges. */
 export const StructurePage = Type.Union([
+  Type.Object({ format: Type.Literal(STRUCTURE_QUALIFIER_KEY_PAGE_FORMAT), tree: Type.Literal('qualifier-key'),
+    level: Type.Literal(0), entries: entries(Type.Object({
+      key: Type.String({ pattern: '^[0-9a-f]{64}\\u0001https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      occurrence: nativeId,
+    }, { additionalProperties: false }), 0) }, { additionalProperties: false }),
+  Type.Object({ format: Type.Literal(STRUCTURE_QUALIFIER_KEY_PAGE_FORMAT), tree: Type.Literal('qualifier-key'),
+    level: Type.Integer({ minimum: 1, maximum: STRUCTURE_LIMITS.treeLevels - 1 }),
+    entries: entries(interiorEntry) }, { additionalProperties: false }),
   Type.Object({ format: Type.Literal(STRUCTURE_PAGE_FORMAT), tree: Type.Literal('record'),
     level: Type.Literal(0), entries: entries(OccurrenceRecord, 0) }, { additionalProperties: false }),
   Type.Object({ format: Type.Literal(STRUCTURE_PAGE_FORMAT), tree: Type.Literal('order'),
@@ -184,8 +195,7 @@ export type WorkCompletion = Static<typeof WorkCompletion>;
  * a bounded edit copies the changed leaves and their ancestors and reuses the rest.
  * Resolution starts here and never replays the predecessor chain.
  */
-export const StructureManifest = Type.Object({
-  format: Type.Literal(STRUCTURE_MANIFEST_FORMAT),
+const manifestProperties = {
   structure: nativeId,
   structureOf: reference,
   profile: Type.Enum(STRUCTURE_PROFILES),
@@ -206,7 +216,16 @@ export const StructureManifest = Type.Object({
   restoredFrom: Type.Optional(nativeId),
   model: Type.Literal(STRUCTURE_PROFILE),
   shape: Type.Literal(STRUCTURE_PROFILE),
+};
+export const QualifierKeyIndexRoot = Type.Object({
+  format: Type.Literal(STRUCTURE_QUALIFIER_KEY_INDEX_FORMAT), sourceRoot: objectRef, root: treeRoot,
 }, { additionalProperties: false });
+export type QualifierKeyIndexRoot = Static<typeof QualifierKeyIndexRoot>;
+export const StructureManifest = Type.Union([
+  Type.Object({ format: Type.Literal(STRUCTURE_MANIFEST_FORMAT), ...manifestProperties }, { additionalProperties: false }),
+  Type.Object({ format: Type.Literal(STRUCTURE_INDEXED_MANIFEST_FORMAT), ...manifestProperties,
+    qualifierKeys: QualifierKeyIndexRoot }, { additionalProperties: false }),
+]);
 
 /** Fixed manifest: seals the selected revision of every targeted use of one Structure revision. */
 export const StructureSealManifest = Type.Object({

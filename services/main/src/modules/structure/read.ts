@@ -1,5 +1,5 @@
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { checkOccurrenceRecord, checkStructureManifest, InvalidStructureObject, STRUCTURE_LIMITS,
+import { checkOccurrenceRecord, checkStructureManifest, checkStructurePage, InvalidStructureObject, STRUCTURE_LIMITS,
   type OccurrenceRecord, type RecipeMeasure, type StructureManifest } from './format.ts';
 import { orderTree, recordTree, structureObjects } from './change.ts';
 import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey,
@@ -7,8 +7,133 @@ import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, orderTreeKey,
 import { isCatalogTarget, structureProfileFor } from './profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable, newCost, type TreeCost } from './tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
-import { encodeReadCursor, decodeReadCursor } from '../work/read-session.ts';
 import { resolvePreparedGroups } from './group-root.ts';
+import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
+import { encodeReadCursor, decodeReadCursor, WorkReadMoved } from '../work/read-session.ts';
+import { qualifierKeyTree, qualifierKeyPrefix, qualifierKeyOf, requireQualifierKeyIndex, resolvePreparedQualifierKeys,
+  QUALIFIER_KEY_COST, type QualifierKey } from './qualifier-index.ts';
+
+/** Source-bound candidates refine existing immutable membership. A miss never
+ * falls back to a complete order/record inventory or invents legacy coverage. */
+export async function readCompositionOccurrenceByQualifierKey(env: WorkActivationEnvironment, input: {
+  structure: string; revision?: string; parent?: string; key: QualifierKey; header?: CompositionHeader;
+  canReadOwner: (owner: string) => Promise<boolean>;
+  canReadTarget: (target: string) => Promise<boolean>;
+  canReadTargets?: (targets: readonly string[]) => Promise<ReadonlySet<string>>;
+  visible?: (record: OccurrenceRecord) => boolean;
+}) {
+  if (!NATIVE_ID.test(input.structure) || input.revision && !NATIVE_ID.test(input.revision)
+    || input.parent && !NATIVE_ID.test(input.parent)) throw new CompositionUnavailable('invalid qualifier key scope');
+  const prefix = qualifierKeyPrefix(input.key);
+  const header = input.header ?? await readCompositionHeader(env, input.structure);
+  if (!header || header.structure !== input.structure || !await input.canReadOwner(header.owner)) {
+    throw new CompositionUnavailable('Composition is unavailable');
+  }
+  const revision = input.revision ?? header.head;
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest ?count ?epoch ?sequence WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:StructureRevision ; rv:component ${iri(input.structure)} ;
+      rv:manifest ?manifest ; rv:placementCount ?count ; rv:dataEpoch ?epoch ; rv:sequence ?sequence }
+  } LIMIT 2`)).results?.bindings ?? [];
+  const row = rows[0], manifestRef = row?.manifest?.value;
+  if (!rows.length) throw new CompositionUnavailable('Composition revision is unavailable');
+  if (rows.length !== 1 || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifestRef ?? '')
+    || !/^\d+$/.test(row?.count?.value ?? '') || !row?.epoch || !/^\d+$/.test(row?.sequence?.value ?? '')) {
+    throw new CompositionCorrupt('Composition revision is ambiguous');
+  }
+  if (!input.revision && manifestRef !== header.manifest) throw new CompositionCorrupt('Composition head moved during key read');
+  const sourceObjects = structureObjects(env), cost = newCost(), cached = new Map<string, Promise<Uint8Array>>();
+  let bytesRead = 0;
+  const deadline = Date.now() + QUALIFIER_KEY_COST.deadlineMs;
+  const check = () => {
+    fusekiReadBudget.getStore()?.signal.throwIfAborted();
+    if (Date.now() > deadline) throw new StructureObjectUnavailable('Qualifier key read deadline exceeded');
+  };
+  const objects = { put: sourceObjects.put.bind(sourceObjects), get: async (digest: string) => {
+    check();
+    if (!cached.has(digest)) {
+      if (cached.size >= QUALIFIER_KEY_COST.objectPages) throw new StructureObjectUnavailable('Qualifier key object page budget exceeded');
+      cached.set(digest, (async () => {
+        const bytes = await sourceObjects.get(digest);
+        check();
+        bytesRead += bytes.length;
+        if (bytesRead > QUALIFIER_KEY_COST.objectBytes) throw new StructureObjectUnavailable('Qualifier key object byte budget exceeded');
+        return bytes;
+      })());
+    }
+    return cached.get(digest)!;
+  } };
+  let manifest;
+  try { manifest = checkStructureManifest(await objects.get(manifestRef!.slice(-64))); }
+  catch (error) {
+    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
+    if (error instanceof InvalidStructureObject || error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message);
+    throw error;
+  }
+  cost.pagesRead++;
+  if (manifest.structure !== input.structure || manifest.structureOf !== header.component || manifest.profile !== header.profile
+    || manifest.placementCount !== Number(row!.count!.value) || !input.revision && manifest.generation !== header.generation) {
+    throw new StructureObjectCorrupt('Qualifier key manifest differs from revision');
+  }
+  manifest = await resolvePreparedQualifierKeys(env, manifestRef!.slice(-64), manifest);
+  const coverage = requireQualifierKeyIndex(manifest), parent = input.parent ?? input.structure;
+  try {
+    const root = checkStructurePage(await objects.get(coverage.root.page.slice(7)));
+    const count = root.level === 0 ? root.entries.length
+      : (root.entries as Array<{ count: number }>).reduce((total, child) => total + child.count, 0);
+    if (root.tree !== 'qualifier-key' || root.level !== coverage.root.level || count !== coverage.root.count) {
+      throw new StructureObjectCorrupt('Qualifier posting root differs from its descriptor');
+    }
+  } catch (error) {
+    if (error instanceof ObjectUnavailable) throw new StructureObjectUnavailable(error.message);
+    if (error instanceof InvalidStructureObject || error instanceof ObjectIntegrityError) throw new StructureObjectCorrupt(error.message);
+    throw error;
+  }
+  if (parent !== input.structure) {
+    const group = (await recordTree(objects).lookup(manifest.records, [parent], cost)).get(parent);
+    if (!group || group.state !== 'active' || group.role !== 'group') throw new CompositionUnavailable('Composition parent is unavailable');
+  }
+  const profile = structureProfileFor(header.profile), occurrences: OccurrenceRecord[] = [];
+  let after = prefix, visits = 0;
+  const readable = async (records: readonly OccurrenceRecord[]) => {
+    const eligible = records.filter(record => !input.visible || input.visible(record));
+    const targets = [...new Set(eligible.flatMap(record => record.target ? [record.target] : []))];
+    const allowed = input.canReadTargets ? await input.canReadTargets(targets)
+      : new Set(await Promise.all(targets.map(async target => await input.canReadTarget(target) ? target : null)));
+    return eligible.filter(record => !record.target || allowed.has(record.target));
+  };
+  for (;;) {
+    check();
+    const batch = await qualifierKeyTree(objects).range(coverage.root, after, `${prefix.slice(0, -1)}\u0002`,
+      Math.min(QUALIFIER_KEY_COST.candidates, QUALIFIER_KEY_COST.visits - visits + 1), cost);
+    visits += batch.length;
+    if (visits > QUALIFIER_KEY_COST.visits) throw new StructureObjectUnavailable('Qualifier key candidate budget exceeded');
+    const records = await recordTree(objects).lookup(manifest.records, batch.map(entry => entry.occurrence), cost);
+    const scoped: OccurrenceRecord[] = [];
+    for (const entry of batch) {
+      const record = records.get(entry.occurrence), key = record && qualifierKeyOf(record);
+      if (!record || !key || `${qualifierKeyPrefix(key)}${record.occurrence}` !== entry.key) {
+        throw new StructureObjectCorrupt('Qualifier key candidate differs from authoritative record');
+      }
+      try { checkOccurrenceRecord(record, header.profile, profile.catalogTargetTypes,
+        profile.selectionRequiredRoles ?? profile.targetRoles, profile.selectionOptionalRoles); }
+      catch (error) {
+        if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+        throw error;
+      }
+      if (record.parent === parent) scoped.push(record);
+    }
+    for (const record of await readable(scoped)) { occurrences.push(record); if (occurrences.length === 2) break; }
+    if (occurrences.length === 2 || batch.length < QUALIFIER_KEY_COST.candidates) break;
+    after = `${batch.at(-1)!.key}\u0000`;
+  }
+  if (!await input.canReadOwner(header.owner)) throw new CompositionUnavailable('Composition is unavailable');
+  if ((await readable(occurrences)).length !== occurrences.length) throw new WorkReadMoved('Qualifier key disclosure changed during read');
+  return { structure: input.structure, owner: header.owner, component: header.component, work: header.work,
+    mainVersion: header.mainVersion, revision, occurrences,
+    outcome: occurrences.length === 2 ? 'ambiguous' as const : occurrences.length ? 'found' as const : 'missing' as const,
+    sourcePosition: { datasetId: 'product' as const, dataEpoch: row!.epoch!.value, sequence: row!.sequence!.value },
+    cost: { ...cost, pagesRead: cached.size } };
+}
 
 export interface CompositionPage {
   structure: string;

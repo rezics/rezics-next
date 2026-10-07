@@ -18,6 +18,8 @@ import {
   engageAccessRecoveryFence,
   releaseAccessRecoveryFence,
 } from '../../services/main/src/modules/access/admission.ts';
+import { StructureGroupRootStore } from '../../services/main/src/modules/structure/group-root.ts';
+import { StructureQualifierRootStore } from '../../services/main/src/modules/structure/qualifier-index.ts';
 import { captureGraphRecoveryCoverage } from '../../services/main/src/modules/work/restore-lineage.ts';
 import { capturePgRecoveryFrontier } from '../../services/main/src/modules/work/pg-recovery-frontier.ts';
 import { retainRecoveryCoverageHead } from '../../services/main/src/modules/outbox/recovery-coverage-head.ts';
@@ -66,7 +68,7 @@ export async function releaseInputs(): Promise<Record<string, string>> {
     ),
   };
 }
-export function objectStore(apps: Record<string, string>, budget?: RecoveryBudget) {
+export function objectStore(apps: Record<string, string>, budget?: RecoveryBudget, contentPool?: Pool) {
   // Share one command deadline, rather than allocating a timer per object.
   const signal = budget ? AbortSignal.timeout(budget.remaining()) : undefined;
   const store = (prefix: string) =>
@@ -86,10 +88,13 @@ export function objectStore(apps: Record<string, string>, budget?: RecoveryBudge
           }
         : {}),
     });
+  const structureObjects = store('semantic/structure/');
   return {
     directory: apps.MAIN_OBJECT_DIRECTORY!,
     workObjects: store('semantic/work/'),
-    structureObjects: store('semantic/structure/'),
+    structureObjects,
+    ...(contentPool ? { structureGroupRoots: new StructureGroupRootStore(contentPool, structureObjects),
+      structureQualifierRoots: new StructureQualifierRootStore(contentPool, structureObjects) } : {}),
     readConcurrency: 32,
   };
 }
@@ -298,7 +303,7 @@ export async function backupRecoverySet(
         pools.relay,
         context.apps.MAIN_RELAY_CONSUMER!,
         pools.content,
-        objectStore(context.apps, budget),
+        objectStore(context.apps, budget, pools.content),
       ),
     );
     const sealedCoverage = seal(coverage, options.key, 'graph-recovery-coverage');

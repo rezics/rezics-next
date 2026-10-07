@@ -4,6 +4,7 @@ import { Pool, type QueryResult } from 'pg';
 import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { StructureGroupRootStore } from '../src/modules/structure/group-root.ts';
+import { StructureQualifierRootStore } from '../src/modules/structure/qualifier-index.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
 import { checkStructureManifest, checkStructurePage, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
   STRUCTURE_PROFILE, type OccurrenceRecord, type OrderEntry, type StructureManifest } from '../src/modules/structure/format.ts';
@@ -509,6 +510,7 @@ test('Legacy group preparation: bounded durable batches, restart, CAS, lost ackn
     expect(performance.now() - preparation).toBeLessThan(600_000);
     const store = new StructureGroupRootStore(stack.contentPool, objects);
     stack.env.structureGroupRoots = store;
+    stack.env.structureQualifierRoots = new StructureQualifierRootStore(stack.contentPool, objects);
     (stack.env as typeof stack.env & { structureObjects: typeof objects }).structureObjects = objects;
     expect(await store.read(legacy.digest)).toBeNull();
     expect(await store.completedTopGroups(legacy.digest, legacy.source)).toBeNull();
@@ -618,7 +620,8 @@ test('Legacy group preparation: bounded durable batches, restart, CAS, lost ackn
     expect(partialRead.manifest.topGroups).toBeUndefined();
     await expect(chapterStoryNumber(session(), partialRead.header, legacy.direct[0]!,
       { ordinal: 1, path: [] }, partialRead)).rejects.toThrow(/group|prepar|unavailable/iu);
-    const coverageStore = { directory: stack.env.objectDirectory, structureObjects: objects, structureGroupRoots: store };
+    const coverageStore = { directory: stack.env.objectDirectory, structureObjects: objects, structureGroupRoots: store,
+      structureQualifierRoots: stack.env.structureQualifierRoots };
     const pendingObjects = new Set<string>();
     const partialCoverage = await captureObjectRecoveryCoverage(stack.fuseki, coverageStore, pendingObjects);
     expect(pendingObjects.has(checkpoint.groups.page.slice(7))).toBe(true);
@@ -714,8 +717,8 @@ test('Legacy group preparation: bounded durable batches, restart, CAS, lost ackn
     expect(completedCoverage.referenceDigest).not.toBe(partialCoverage.referenceDigest);
     await assertObjectRecoveryCoverage(stack.fuseki, { ...coverageStore,
       structureGroupRoots: new StructureGroupRootStore(stack.contentPool, stack.objects('semantic/structure/')) }, completedCoverage);
-    await expect(assertObjectRecoveryCoverage(stack.fuseki, { directory: stack.env.objectDirectory,
-      structureObjects: objects }, completedCoverage)).rejects.toThrow(/coverage/iu);
+    await expect(assertObjectRecoveryCoverage(stack.fuseki, coverageStore,
+      { ...completedCoverage, referenceCount: '0' })).rejects.toThrow(/coverage/iu);
 
     stack.env.structureGroupRoots = resumed;
     const exact = await readCompositionSnapshot(stack.env, { structure: legacy.structure, revision: legacy.revision });
@@ -820,7 +823,32 @@ test('Legacy group preparation: authentic historical anchor resolves and a bound
   } finally { await stack.stop(); }
 }, 180_000);
 
-test('Legacy group retention: OwnerOperations GC pins pending/completed custody and refuses missing backends', async () => {
+async function legacyQualifierStructure(objects: ImmutableObjects, count: number) {
+  const salt = randomUUID().slice(0, 8);
+  const id = (at: number) => `${ID}${salt}-0000-4000-8000-${at.toString(16).padStart(12, '0')}`;
+  const structure = id(1), zone = id(2), revision = id(3);
+  const records: OccurrenceRecord[] = Array.from({ length: count }, (_, at) => ({
+    occurrence: id(100 + at), state: 'active', parent: structure, role: 'mount', target: id(100_000 + at),
+    segmentKey: Math.floor(at / 32).toString(36).padStart(6, '0'), orderKey: (at % 32).toString(36).padStart(2, '0'),
+    introducedBy: revision, labels: [], qualifier: { type: 'zone-mount', zone,
+      routeSegment: `mount-${at}`, disclosure: 'public' },
+  }));
+  const cost = newCost(), recordIndex = recordTree(objects), orderIndex = orderTree(objects);
+  const entries: OrderEntry[] = records.map(record => ({ occurrence: record.occurrence,
+    parent: record.parent, segmentKey: record.segmentKey!, orderKey: record.orderKey! }));
+  const source: StructureManifest = { format: STRUCTURE_MANIFEST_FORMAT, structure, structureOf: zone,
+    profile: 'zone-navigation', generation: id(4), pageFormat: STRUCTURE_PAGE_FORMAT,
+    records: await recordIndex.apply(await recordIndex.empty(cost),
+      new Map(records.map(record => [record.occurrence, record])), cost),
+    order: await orderIndex.apply(await orderIndex.empty(cost),
+      new Map(entries.map(entry => [orderTreeKey(entry), entry])), cost),
+    placementCount: count, measures: [], model: STRUCTURE_PROFILE, shape: STRUCTURE_PROFILE };
+  const bytes = new TextEncoder().encode(JSON.stringify(source));
+  checkStructureManifest(bytes);
+  return { source, bytes, digest: await objects.put(bytes) };
+}
+
+test('Legacy Structure retention: OwnerOperations GC pins both checkpoint families and refuses missing custody', async () => {
   const stack = await startMediaStack('legacy-group-retention');
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 2 });
   const missingDatabase = new URL(Bun.env.CONTENT_DATABASE_URL!);
@@ -828,6 +856,7 @@ test('Legacy group retention: OwnerOperations GC pins pending/completed custody 
   const unavailableContent = new Pool({ connectionString: missingDatabase.toString(),
     max: 1, connectionTimeoutMillis: 1_000 });
   const missingBackendKey = `group-retention-unavailable-${randomUUID()}`;
+  const missingQualifierBackendKey = `qualifier-retention-unavailable-${randomUUID()}`;
   let restoreHold: { type: string; value: string; datatype?: string } | undefined;
   let holdChanged = false;
   try {
@@ -836,7 +865,9 @@ test('Legacy group retention: OwnerOperations GC pins pending/completed custody 
     (stack.env as typeof stack.env & { structureObjects: typeof objects }).structureObjects = objects;
     // The same real Content pool and S3 constructor pairing used by Main.
     stack.env.structureGroupRoots = new StructureGroupRootStore(stack.contentPool, objects);
+    stack.env.structureQualifierRoots = new StructureQualifierRootStore(stack.contentPool, objects);
     const roots = stack.env.structureGroupRoots;
+    const qualifierRoots = stack.env.structureQualifierRoots;
     const pendingSource = await legacySparseBook(stack, objects, 300);
     const completeSource = await legacySparseBook(stack, objects, 257);
     const pending = await roots.prepare(pendingSource.digest);
@@ -847,7 +878,19 @@ test('Legacy group retention: OwnerOperations GC pins pending/completed custody 
     const complete = await roots.prepare(completeSource.digest);
     expect(complete).toMatchObject({ total: 258, scanned: 258, complete: true });
     expect(complete.groups.count).toBe(1);
-    const protectedSet = new Set([pendingSource.digest, completeSource.digest]);
+    const pendingQualifierSource = await legacyQualifierStructure(objects, 300);
+    const completedQualifierSource = await legacyQualifierStructure(objects, 257);
+    const pendingQualifier = await qualifierRoots.prepare(pendingQualifierSource.digest);
+    expect(pendingQualifier).toMatchObject({ complete: false, progress: { visited: 256, root: { count: 256 } } });
+    const firstQualifierTurn = await qualifierRoots.prepare(completedQualifierSource.digest);
+    expect(firstQualifierTurn).toMatchObject({ complete: false, progress: { visited: 256, root: { count: 256 } } });
+    const completedQualifier = await qualifierRoots.prepare(completedQualifierSource.digest);
+    expect(completedQualifier).toMatchObject({ complete: true, progress: { visited: 257, root: { count: 257 } } });
+    expect(await qualifierRoots.completedQualifierKeys(pendingQualifierSource.digest, pendingQualifierSource.source)).toBeNull();
+    expect((await qualifierRoots.completedQualifierKeys(completedQualifierSource.digest,
+      completedQualifierSource.source))?.root).toEqual(completedQualifier.progress.root);
+    const protectedSet = new Set([pendingSource.digest, completeSource.digest,
+      pendingQualifierSource.digest, completedQualifierSource.digest]);
     const retainPage = async (reference: string): Promise<void> => {
       const digest = reference.slice(7);
       if (protectedSet.has(digest)) return;
@@ -858,11 +901,15 @@ test('Legacy group retention: OwnerOperations GC pins pending/completed custody 
       }
     };
     for (const root of [pendingSource.source.records, pendingSource.source.order, pending.groups,
-      completeSource.source.records, completeSource.source.order, complete.groups]) await retainPage(root.page);
+      completeSource.source.records, completeSource.source.order, complete.groups,
+      pendingQualifierSource.source.records, pendingQualifierSource.source.order, pendingQualifier.progress.root,
+      completedQualifierSource.source.records, completedQualifierSource.source.order, completedQualifier.progress.root]) {
+      await retainPage(root.page);
+    }
     const protectedDigests = [...protectedSet];
     // Both source trees have interior roots: ledger coverage must include their
     // child leaves, rather than preserving only the manifest/root pointers.
-    expect(protectedDigests.length).toBeGreaterThan(8);
+    expect(protectedDigests.length).toBeGreaterThan(16);
     const originalBytes = new Map(await Promise.all(protectedDigests.map(async digest =>
       [digest, await objects.get(digest)] as const)));
     const holds = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?hold WHERE {
@@ -891,13 +938,26 @@ test('Legacy group retention: OwnerOperations GC pins pending/completed custody 
       FROM relay.owner_reconciliation_cut WHERE reconciliation_id = $1 ORDER BY owner`, [result.id]);
     expect(cuts.rows).toEqual([{ owner: 'graph', status: 'matched' }, { owner: 'object', status: 'matched' }]);
     expect(await new OwnerOperations(relay, { ...stack.env,
-      structureGroupRoots: new StructureGroupRootStore(stack.contentPool, stack.objects('semantic/structure/')) })
+      structureGroupRoots: new StructureGroupRootStore(stack.contentPool, stack.objects('semantic/structure/')),
+      structureQualifierRoots: new StructureQualifierRootStore(stack.contentPool, stack.objects('semantic/structure/')) })
       .reconcileRetentionGc(key)).toMatchObject({ id: result.id, state: 'reconciled', replayed: true });
     expect(await roots.read(pendingSource.digest)).toEqual(pending);
     expect(await roots.completedTopGroups(pendingSource.digest, pendingSource.source)).toBeNull();
     expect(await roots.read(completeSource.digest)).toEqual(complete);
     expect(await roots.completedTopGroups(completeSource.digest, completeSource.source)).toEqual(complete.groups);
+    expect(await qualifierRoots.read(pendingQualifierSource.digest)).toEqual(pendingQualifier);
+    expect(await qualifierRoots.read(completedQualifierSource.digest)).toEqual(completedQualifier);
+    expect(await new StructureQualifierRootStore(stack.contentPool, stack.objects('semantic/structure/'))
+      .read(completedQualifierSource.digest)).toEqual(completedQualifier);
     for (const digest of protectedDigests) expect(await objects.get(digest)).toEqual(originalBytes.get(digest)!);
+
+    // A malformed custody response cannot masquerade as an empty retained cut.
+    // Both required resolver objects remain present at this boundary.
+    const malformedQualifierRoots: StructureQualifierRootStore = Object.create(qualifierRoots);
+    Object.defineProperty(malformedQualifierRoots, 'retainedRoots', { value: async () => undefined });
+    await expect(captureObjectRecoveryCoverage(stack.fuseki, { directory: stack.env.objectDirectory,
+      structureObjects: objects, structureGroupRoots: roots, structureQualifierRoots: malformedQualifierRoots }))
+      .rejects.toThrow('Qualifier custody is unavailable or corrupt');
 
     const { structureGroupRoots: _roots, ...missingStoreEnvironment } = stack.env;
     const missingStoreKey = `group-retention-unconfigured-${randomUUID()}`;
@@ -905,6 +965,26 @@ test('Legacy group retention: OwnerOperations GC pins pending/completed custody 
       .rejects.toBeInstanceOf(OwnerOperationUnavailable);
     expect((await relay.query(`SELECT id FROM relay.owner_reconciliation WHERE operation_id = $1`,
       [`owner:reconcile:${missingStoreKey}`])).rowCount).toBe(0);
+
+    const { structureQualifierRoots: _qualifierRoots, ...missingQualifierEnvironment } = stack.env;
+    const missingQualifierKey = `qualifier-retention-unconfigured-${randomUUID()}`;
+    await expect(new OwnerOperations(relay, missingQualifierEnvironment).reconcileRetentionGc(missingQualifierKey))
+      .rejects.toBeInstanceOf(OwnerOperationUnavailable);
+    expect((await relay.query(`SELECT id FROM relay.owner_reconciliation WHERE operation_id = $1`,
+      [`owner:reconcile:${missingQualifierKey}`])).rowCount).toBe(0);
+
+    await expect(new OwnerOperations(relay, { ...stack.env,
+      structureQualifierRoots: new StructureQualifierRootStore(unavailableContent, objects) })
+      .reconcileRetentionGc(missingQualifierBackendKey)).rejects.toThrow('Qualifier custody is unavailable or corrupt');
+    const refusedQualifier = await relay.query<{ id: string; state: string }>(`SELECT id, state
+      FROM relay.owner_reconciliation WHERE operation_id = $1`, [`owner:reconcile:${missingQualifierBackendKey}`]);
+    expect(refusedQualifier.rows).toHaveLength(1);
+    expect(refusedQualifier.rows[0]!.state).toBe('running');
+    expect((await relay.query(`SELECT item_ref FROM relay.owner_reconciliation_item
+      WHERE reconciliation_id = $1`, [refusedQualifier.rows[0]!.id])).rowCount).toBe(0);
+    await relay.query(`UPDATE relay.owner_reconciliation SET state = 'held',
+      hold_reason = 'Fixture qualifier custody backend unavailable'
+      WHERE operation_id = $1 AND state = 'running'`, [`owner:reconcile:${missingQualifierBackendKey}`]);
 
     // A real PostgreSQL connection to a nonexistent database must refuse GC;
     // an unavailable mapping owner cannot be represented as zero retained rows.
@@ -920,13 +1000,16 @@ test('Legacy group retention: OwnerOperations GC pins pending/completed custody 
     for (const digest of protectedDigests) expect(await objects.get(digest)).toEqual(originalBytes.get(digest)!);
     expect(await roots.read(pendingSource.digest)).toEqual(pending);
     expect(await roots.read(completeSource.digest)).toEqual(complete);
+    expect(await qualifierRoots.read(pendingQualifierSource.digest)).toEqual(pendingQualifier);
+    expect(await qualifierRoots.read(completedQualifierSource.digest)).toEqual(completedQualifier);
   } finally {
     // A failed backend pass remains an explicit held fixture record and must
     // release the one-running-pass constraint for later isolated QA cases.
     try {
       await relay.query(`UPDATE relay.owner_reconciliation SET state = 'held',
         hold_reason = 'Fixture group custody backend unavailable'
-        WHERE operation_id = $1 AND state = 'running'`, [`owner:reconcile:${missingBackendKey}`]);
+        WHERE operation_id = ANY($1::text[]) AND state = 'running'`,
+      [[`owner:reconcile:${missingBackendKey}`, `owner:reconcile:${missingQualifierBackendKey}`]]);
     } finally {
       try {
         if (holdChanged) {

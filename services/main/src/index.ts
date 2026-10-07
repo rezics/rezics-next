@@ -54,6 +54,7 @@ import { SerialStatisticsProjection } from './modules/work/serial-projection.ts'
 import { ZoneBrowseProjection } from './modules/zone-browse/store.ts';
 import { ReadRankingProjection } from './modules/rankings/projection.ts';
 import { ReadingSettingsStore } from './modules/reading-settings/store.ts';
+import { StructureQualifierRootStore } from './modules/structure/qualifier-index.ts';
 import { StructureStageStore } from './modules/structure/stage.ts';
 import { StructureGroupRootStore } from './modules/structure/group-root.ts';
 import { SemanticStageStore } from './modules/semantic/staging.ts';
@@ -290,7 +291,8 @@ const structureObjects = new S3ImmutableObjects({
 });
 await structureObjects.initialize();
 Object.assign(environment, { structureObjects,
-  structureGroupRoots: new StructureGroupRootStore(contentPool, structureObjects) });
+  structureGroupRoots: new StructureGroupRootStore(contentPool, structureObjects),
+  structureQualifierRoots: new StructureQualifierRootStore(contentPool, structureObjects) });
 const semanticStageObjects = new S3ImmutableObjects({
   endpoint: config.MAIN_S3_ENDPOINT, bucket: config.MAIN_S3_BUCKET,
   region: config.MAIN_S3_REGION, accessKeyId: config.MAIN_S3_ACCESS_KEY,

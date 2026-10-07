@@ -1,13 +1,13 @@
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
-import { InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_PAGE_FORMAT, checkStructurePage }
+import { InvalidStructureObject, STRUCTURE_LIMITS, STRUCTURE_PAGE_FORMAT, STRUCTURE_QUALIFIER_KEY_PAGE_FORMAT, checkStructurePage }
   from './format.ts';
 
 // Copy-on-write B+tree over immutable pages. A change set rewrites only the
 // leaves holding its keys and their ancestors; every other page is reused by
 // digest. Resolution always starts at a complete root.
 
-export type TreeKind = 'record' | 'order' | 'pin';
+export type TreeKind = 'record' | 'order' | 'pin' | 'qualifier-key';
 export interface TreeRoot { page: string; level: number; count: number }
 /** Page reads and writes of one operation, reported as its measured local work. */
 export interface TreeCost { pagesRead: number; pagesWritten: number }
@@ -43,7 +43,8 @@ export class StructureTree<T> {
   }
 
   private async write(level: number, entries: readonly unknown[], cost: TreeCost): Promise<string> {
-    const bytes = new TextEncoder().encode(JSON.stringify({ format: STRUCTURE_PAGE_FORMAT,
+    const bytes = new TextEncoder().encode(JSON.stringify({ format: this.kind === 'qualifier-key'
+      ? STRUCTURE_QUALIFIER_KEY_PAGE_FORMAT : STRUCTURE_PAGE_FORMAT,
       tree: this.kind, level, entries }));
     checkStructurePage(bytes);
     cost.pagesWritten++;

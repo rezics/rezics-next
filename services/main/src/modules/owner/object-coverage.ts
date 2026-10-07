@@ -9,11 +9,11 @@ import { RevisionCorrupt } from '../work/history.ts';
 import { visitModelGenerationArtifacts } from '../semantic/model-custody.ts';
 import { MODEL_COMPONENT, PROFILES } from '../semantic/schema.ts';
 import { checkStructureManifest, checkStructurePage, checkStructureSealManifest,
-  InvalidStructureObject, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_SEAL_FORMAT }
+  InvalidStructureObject, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_INDEXED_MANIFEST_FORMAT, STRUCTURE_SEAL_FORMAT }
   from '../structure/format.ts';
-import type { StructureGroupRootStore } from '../structure/group-root.ts';
 import { StructureObjectCorrupt } from '../structure/tree.ts';
-
+import type { StructureGroupRootStore } from '../structure/group-root.ts';
+import { qualifierSourceRoot, type StructureQualifierRootStore } from '../structure/qualifier-index.ts';
 export class ObjectRecoveryConflict extends Error {
   constructor(message: string, readonly kind: 'unavailable' | 'corrupt' | 'mismatch' = 'mismatch') {
     super(message);
@@ -26,6 +26,7 @@ export interface ObjectRecoveryStore {
   structureObjects?: ImmutableObjects;
   /** Supplemental custody includes incomplete preparation roots, too. */
   structureGroupRoots?: Pick<StructureGroupRootStore, 'retainedRoots'>;
+  structureQualifierRoots?: Pick<StructureQualifierRootStore, 'retainedRoots'>;
   /** Maintenance commands may overlap a bounded window of immutable reads. */
   readConcurrency?: number;
 }
@@ -165,6 +166,9 @@ export async function captureObjectRecoveryCoverage(
   fuseki: FusekiClient, store: ObjectRecoveryStore, retainedDigests?: Set<string>,
 ): Promise<ObjectRecoveryCoverage> {
   if (!store?.directory) throw new ObjectRecoveryConflict('immutable object owner is unavailable');
+  if (store.structureObjects && (!store.structureGroupRoots || !store.structureQualifierRoots)) {
+    throw new ObjectRecoveryConflict('Structure supplemental custody owner is unavailable', 'unavailable');
+  }
   const concurrency = store.readConcurrency ?? 1;
   if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 32)
     throw new ObjectRecoveryConflict('immutable read concurrency is outside 1..32');
@@ -220,7 +224,7 @@ export async function captureObjectRecoveryCoverage(
     if (!digest) throw new ObjectRecoveryConflict('Structure object reference is malformed', 'corrupt');
     return digest;
   };
-  const tree = async (reference: string, expectedTree: 'record' | 'order' | 'pin',
+  const tree = async (reference: string, expectedTree: 'record' | 'order' | 'pin' | 'qualifier-key',
     level: number, expectedCount: number): Promise<void> => {
     const key = `${reference}\0${expectedTree}\0${level}\0${expectedCount}`;
     if (checkedPages.has(key)) return;
@@ -267,6 +271,11 @@ export async function captureObjectRecoveryCoverage(
     await tree(manifest.order.page, 'order', manifest.order.level, manifest.order.count);
     if (manifest.topGroups) {
       await tree(manifest.topGroups.page, 'order', manifest.topGroups.level, manifest.topGroups.count);
+    }
+    if (manifest.format === STRUCTURE_INDEXED_MANIFEST_FORMAT) {
+      if (manifest.qualifierKeys.sourceRoot !== qualifierSourceRoot(manifest))
+        throw new ObjectRecoveryConflict('Qualifier root differs from source', 'corrupt');
+      await tree(manifest.qualifierKeys.root.page, 'qualifier-key', manifest.qualifierKeys.root.level, manifest.qualifierKeys.root.count);
     }
     checkedStructureRoots.add(key);
   };
@@ -320,7 +329,7 @@ export async function captureObjectRecoveryCoverage(
         }
         await structureManifest(objectDigest(seal.structureManifest), seal.structure);
         await tree(seal.pins.page, 'pin', seal.pins.level, seal.pins.count);
-      } else if (format === STRUCTURE_MANIFEST_FORMAT) {
+      } else if (format === STRUCTURE_MANIFEST_FORMAT || format === STRUCTURE_INDEXED_MANIFEST_FORMAT) {
         await structureManifest(digest, ref.component);
       } else throw new ObjectRecoveryConflict('Structure root format is unknown', 'corrupt');
       continue;
@@ -370,7 +379,10 @@ export async function captureObjectRecoveryCoverage(
   // retain its supplemental root and cursor; pending roots must survive the
   // same backup/GC cut as completed ones, and row loss must fail restore.
   let prepared;
-  try { prepared = await store.structureGroupRoots?.retainedRoots() ?? []; }
+  try {
+    prepared = store.structureGroupRoots ? await store.structureGroupRoots.retainedRoots() : [];
+    if (!Array.isArray(prepared)) throw new Error('Structure group custody returned no retained cut');
+  }
   catch (error) {
     throw new ObjectRecoveryConflict('Structure group custody owner is unavailable or corrupt',
       error instanceof StructureObjectCorrupt ? 'corrupt' : 'unavailable');
@@ -395,10 +407,28 @@ export async function captureObjectRecoveryCoverage(
     await structureManifest(checkpoint.manifestDigest, checkpoint.structure);
     await tree(checkpoint.groups.page, 'order', checkpoint.groups.level, checkpoint.groups.count);
   }
+  // The signed reference cut includes both checkpoint mapping and derived pages.
+  // Loss of a restored Content row changes the cut even while original bytes remain.
+  let preparedQualifiers;
+  try {
+    preparedQualifiers = store.structureQualifierRoots ? await store.structureQualifierRoots.retainedRoots() : [];
+    if (!Array.isArray(preparedQualifiers)) throw new Error('Qualifier custody returned no retained cut');
+  }
+  catch (error) { throw new ObjectRecoveryConflict('Qualifier custody is unavailable or corrupt',
+    error instanceof StructureObjectCorrupt ? 'corrupt' : 'unavailable'); }
+  preparedQualifiers.sort((a, b) => a.manifestDigest.localeCompare(b.manifestDigest));
+  for (const checkpoint of preparedQualifiers) {
+    const source = checkStructureManifest(await structureObject(checkpoint.manifestDigest));
+    if (checkpoint.sourceRoot !== qualifierSourceRoot(source))
+      throw new ObjectRecoveryConflict('Qualifier checkpoint differs from original source', 'corrupt');
+    referenceHash.update(record(['structure-qualifier-root', checkpoint]));
+    await structureManifest(checkpoint.manifestDigest, source.structure);
+    await tree(checkpoint.progress.root.page, 'qualifier-key', checkpoint.progress.root.level, checkpoint.progress.root.count);
+  }
   for (const digest of [...objects.keys()].sort()) {
     objectHash.update(record([digest, objects.get(digest)!]));
   }
-  return { version: 1, referenceCount: String(references.length + prepared.length),
+  return { version: 1, referenceCount: String(references.length + prepared.length + preparedQualifiers.length),
     referenceDigest: referenceHash.digest('hex'), anchorCount: String(anchorCount),
     anchorDigest: anchorHash.digest('hex'), objectCount: String(objects.size),
     objectDigest: objectHash.digest('hex') };

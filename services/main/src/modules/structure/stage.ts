@@ -6,9 +6,11 @@ import { COMPOSITION_PROFILE, NATIVE_ID, derivedId, orderTreeKey, recordTreeKey 
 import { orderTree, recordTree } from './change.ts';
 import { checkOccurrenceRecord, checkStructureManifest, checkStructurePage,
   STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT,
+  STRUCTURE_INDEXED_MANIFEST_FORMAT,
   type OccurrenceRecord, type OrderEntry } from './format.ts';
 import { newCost } from './tree.ts';
 import { deepestLevel, structureProfileFor } from './profiles.ts';
+import { createQualifierKeyIndex } from './qualifier-index.ts';
 
 const book = structureProfileFor('book-composition');
 
@@ -240,7 +242,9 @@ export class StructureStageStore {
         ? { source: { ref: stage.sourceRef, revision: stage.sourceRevision,
           mappingPolicy: stage.mappingPolicy } } : {}),
       model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE };
-    const bytes = new TextEncoder().encode(JSON.stringify(manifest));
+    const indexed = { ...manifest, format: STRUCTURE_INDEXED_MANIFEST_FORMAT,
+      qualifierKeys: await createQualifierKeyIndex(this.objects, manifest, records, cost) };
+    const bytes = new TextEncoder().encode(JSON.stringify(indexed));
     checkStructureManifest(bytes);
     const digest = await this.objects.put(bytes);
     const result = await this.pool.query<StageRow>(`UPDATE structure.stage_job

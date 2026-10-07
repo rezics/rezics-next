@@ -1,6 +1,8 @@
 import { Pool } from 'pg';
 import { FusekiClient } from './infrastructure/fuseki.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
+import { StructureGroupRootStore } from './modules/structure/group-root.ts';
+import { StructureQualifierRootStore } from './modules/structure/qualifier-index.ts';
 import { captureGraphRecoveryCoverage } from './modules/work/restore-lineage.ts';
 import { sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
 import { retainRecoveryCoverageHead } from './modules/outbox/recovery-coverage-head.ts';
@@ -23,6 +25,12 @@ const workObjects = Bun.env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
   secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix: 'semantic/work/',
 }) : undefined;
 
+const structureObjects = Bun.env.MAIN_S3_ENDPOINT ? new S3ImmutableObjects({
+  endpoint: Bun.env.MAIN_S3_ENDPOINT, bucket: Bun.env.MAIN_S3_BUCKET!,
+  region: Bun.env.MAIN_S3_REGION!, accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!,
+  secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!, prefix: 'semantic/structure/',
+}) : undefined;
+
 const account = new Pool({ connectionString: accountUrl });
 const access = new Pool({ connectionString: accessUrl });
 const relay = new Pool({ connectionString: relayUrl });
@@ -30,7 +38,10 @@ const content = new Pool({ connectionString: contentUrl });
 try {
   const coverage = await captureGraphRecoveryCoverage(
     new FusekiClient(fusekiUrl), account, access, relay, consumer, content,
-    { directory: objectDirectory, ...(workObjects ? { workObjects } : {}) });
+    { directory: objectDirectory, ...(workObjects ? { workObjects } : {}),
+      ...(structureObjects ? { structureObjects,
+        structureGroupRoots: new StructureGroupRootStore(content, structureObjects),
+        structureQualifierRoots: new StructureQualifierRootStore(content, structureObjects) } : {}) });
   const sealed = JSON.stringify(sealRecoveryPayload(
     coverage, key, 'graph-recovery-coverage'));
   await retainRecoveryCoverageHead(relay, sealed, key);

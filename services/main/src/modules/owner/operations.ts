@@ -5,6 +5,7 @@ import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.t
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
+import { StructureQualifierRootStore } from '../structure/qualifier-index.ts';
 import type { ObjectRecoveryStore } from './object-coverage.ts';
 import { StructureGroupRootStore } from '../structure/group-root.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
@@ -145,6 +146,7 @@ export class OwnerOperations {
       objectStore: { directory: this.environment.objectDirectory,
         ...(workObjects ? { workObjects } : {}),
         ...(structureObjects ? { structureObjects,
+          structureQualifierRoots: new StructureQualifierRootStore(pools[2]!, structureObjects),
           structureGroupRoots: new StructureGroupRootStore(pools[2]!, structureObjects) } : {}) } },
     close: async () => { await Promise.all(pools.map(pool => pool.end())); } };
   }
@@ -331,10 +333,14 @@ export class OwnerOperations {
     if (structureObjects && !this.environment.structureGroupRoots) {
       throw new OwnerOperationUnavailable('Structure group custody owner is unavailable');
     }
+    if (structureObjects && !this.environment.structureQualifierRoots) {
+      throw new OwnerOperationUnavailable('Structure qualifier custody owner is unavailable');
+    }
     try { return await collectUnreferencedObjects(this.relay, this.environment.fuseki,
       { directory: this.environment.objectDirectory,
         ...(workObjects ? { workObjects } : {}),
-        ...(structureObjects ? { structureObjects, structureGroupRoots: this.environment.structureGroupRoots } : {}) }, key); }
+        ...(structureObjects ? { structureObjects, structureGroupRoots: this.environment.structureGroupRoots,
+          structureQualifierRoots: this.environment.structureQualifierRoots } : {}) }, key); }
     catch (error) {
       if (error instanceof RetentionGcConflict) throw new OwnerOperationBusy(error.message);
       throw error;
@@ -486,15 +492,20 @@ export class OwnerOperations {
       if (structureObjects && !this.environment.structureGroupRoots) {
         throw new OwnerOperationUnavailable('Structure group custody owner is unavailable');
       }
+      if (structureObjects && !this.environment.structureQualifierRoots) {
+        throw new OwnerOperationUnavailable('Structure qualifier custody owner is unavailable');
+      }
       temporaryPool = new PgPool({ connectionString: accessUrl, max: 1 });
       target = { sourceLocation, targetLocation,
         target: new FusekiClient(targetLocation),
         sourceObjects: { directory: this.environment.objectDirectory,
           ...(workObjects ? { workObjects } : {}),
-          ...(structureObjects ? { structureObjects, structureGroupRoots: this.environment.structureGroupRoots } : {}) },
+          ...(structureObjects ? { structureObjects, structureGroupRoots: this.environment.structureGroupRoots,
+          structureQualifierRoots: this.environment.structureQualifierRoots } : {}) },
         targetObjects: { directory: targetDirectory,
           ...(workObjects ? { workObjects } : {}),
-          ...(structureObjects ? { structureObjects, structureGroupRoots: this.environment.structureGroupRoots } : {}) },
+          ...(structureObjects ? { structureObjects, structureGroupRoots: this.environment.structureGroupRoots,
+          structureQualifierRoots: this.environment.structureQualifierRoots } : {}) },
         routes: new OwnerPartitionRoutes(temporaryPool) };
     }
     try {
