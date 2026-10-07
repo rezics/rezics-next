@@ -313,6 +313,10 @@ describe('Main typed route contracts', () => {
         || (path === '/v1/private-queries' && statuses.includes('503'))).toBe(true);
       expect(statuses.some(status => Number(status) >= 400)).toBe(true);
       for (const [status, result] of Object.entries(operation.responses)) {
+        if (status === '304') {
+          expect(result.content).toBeUndefined();
+          continue;
+        }
         const mediaType = Number(status) >= 400 ? 'application/problem+json' : 'application/json';
         expect(result.content[mediaType]?.schema).toBeDefined();
       }
