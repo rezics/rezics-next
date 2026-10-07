@@ -377,7 +377,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
       pending = lines.pop()!;
       for (const line of lines) {
         // Self-managed tests can start grandchildren; their request must reach the lifetime lease owner.
-        if (env.REZICS_QA_STARTUP_SLOT_GATE && /^QA_STARTUP_SLOT_READY \S+ \d+$/.test(line)) console.log(line);
+        if (env.REZICS_QA_STARTUP_SLOT_GATE && /^QA_STARTUP_SLOT_READY \S+ \S+ \d+$/.test(line)) console.log(line);
         observeAdmission(line);
         onOutputLine?.(line);
       }
@@ -679,45 +679,47 @@ export const isolatedFaultFiles = new Set([
 // These files create and reset their own named QA projects (or one standalone
 // Fuseki container). They need a run ID and artifact directory, not a second
 // bootstrapped project held open by the shard harness.
-export const selfManagedFaultFiles = new Set([
-  'services/account/tests/account-pitr.integration.test.ts',
-  'services/account/tests/account-access-recovery.integration.test.ts',
-  'services/main/tests/access-pitr.integration.test.ts',
-  'services/main/tests/content-recovery.integration.test.ts',
-  'tests/qa/fault-recovery/account-erasure-frontier.test.ts',
-  'tests/qa/fault-recovery/content-projection-crash.test.ts',
-  'tests/qa/fault-recovery/content-publication-recovery.test.ts',
-  'tests/qa/fault-recovery/content-rebuild-positive.test.ts',
-  'tests/qa/fault-recovery/content-rebuild.test.ts',
-  'tests/qa/fault-recovery/coordinated-owner-cut.test.ts',
-  'tests/qa/fault-recovery/g-727-recovery-set.test.ts',
-  'tests/qa/fault-recovery/g-727-launch-drill.test.ts',
-  'tests/qa/fault-recovery/erasure-graph-purge.test.ts',
-  'tests/qa/fault-recovery/erasure-restore.test.ts',
-  'tests/qa/fault-recovery/erasure-search-command.test.ts',
-  'tests/qa/fault-recovery/erasure-search-rebuild.test.ts',
-  'tests/qa/fault-recovery/fixed-release-recovery.test.ts',
-  'tests/qa/fault-recovery/organization-publication-recovery.test.ts',
-  'tests/qa/fault-recovery/protection-restore.test.ts',
-  'tests/qa/fault-recovery/rating-daily.test.ts',
-  'tests/qa/fault-recovery/recovery-coverage-discovery.test.ts',
-  'tests/qa/fault-recovery/rights-restriction-replay.test.ts',
-  'tests/qa/fault-recovery/search-candidate-overflow.test.ts',
-  'tests/qa/fault-recovery/search-ops-cold-rebuild.test.ts',
-  'tests/qa/fault-recovery/search-ops-generation.test.ts',
-  'tests/qa/fault-recovery/search-ops-lock.test.ts',
-  'tests/qa/fault-recovery/search-ops-quickstart.test.ts',
-  'tests/qa/fault-recovery/search-raw-import.test.ts',
-  'tests/qa/fault-recovery/second-host-format-upgrade.test.ts',
-  'tests/qa/fault-recovery/source-author-credit.test.ts',
-  'tests/qa/fault-recovery/source-field-child.test.ts',
-  'tests/qa/fault-recovery/source-projection-recovery.test.ts',
-  'tests/qa/fault-recovery/tdb2-compact-history.test.ts',
-  'tests/qa/fault-recovery/translated-work-recovery.test.ts',
-  'tests/qa/fault-recovery/work-derivation-recovery.test.ts',
-  'tests/qa/fault-recovery/work-scalar-recovery.test.ts',
-  'tests/qa/fault-recovery/work-title-control.test.ts',
+// Native resources have no admission event; protocol workers defer their lease to startup.
+export const selfManagedFaultAdmission = new Map<string, 'host' | 'startup'>([
+  ['services/account/tests/account-pitr.integration.test.ts', 'host'],
+  ['services/account/tests/account-access-recovery.integration.test.ts', 'host'],
+  ['services/main/tests/access-pitr.integration.test.ts', 'host'],
+  ['services/main/tests/content-recovery.integration.test.ts', 'host'],
+  ['tests/qa/fault-recovery/account-erasure-frontier.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/content-projection-crash.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/content-publication-recovery.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/content-rebuild-positive.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/content-rebuild.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/coordinated-owner-cut.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/g-727-recovery-set.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/g-727-launch-drill.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/erasure-graph-purge.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/erasure-restore.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/erasure-search-command.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/erasure-search-rebuild.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/fixed-release-recovery.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/organization-publication-recovery.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/protection-restore.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/rating-daily.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/recovery-coverage-discovery.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/rights-restriction-replay.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/search-candidate-overflow.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/search-ops-cold-rebuild.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/search-ops-generation.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/search-ops-lock.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/search-ops-quickstart.test.ts', 'host'],
+  ['tests/qa/fault-recovery/search-raw-import.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/second-host-format-upgrade.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/source-author-credit.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/source-field-child.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/source-projection-recovery.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/tdb2-compact-history.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/translated-work-recovery.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/work-derivation-recovery.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/work-scalar-recovery.test.ts', 'startup'],
+  ['tests/qa/fault-recovery/work-title-control.test.ts', 'startup'],
 ]);
+export const selfManagedFaultFiles = new Set(selfManagedFaultAdmission.keys());
 
 export function planStackProjects(estimates: ReadonlyMap<string, number>, count: number,
   tier: 'integration' | 'fault/recovery'): string[][] {

@@ -389,13 +389,13 @@ for (const outcome of ['retry', 'failed', 'late'] as const) {
         }
       },
       announce: (message: string) => {
-        const match = /^QA_STARTUP_SLOT_READY (\S+) (\d+)$/.exec(message);
+        const match = /^QA_STARTUP_SLOT_READY (\S+) (\S+) (\d+)$/.exec(message);
         if (!match) return;
         attempts++;
         const competitor = new Database(lockFile);
         try { expect(() => competitor.exec('BEGIN IMMEDIATE')).toThrow(); }
         finally { competitor.close(true); }
-        writeFileSync(path, JSON.stringify({ token, sequence: Number(match[2]),
+        writeFileSync(path, JSON.stringify({ token, requester: match[2], sequence: Number(match[3]),
           status: outcome === 'retry' && attempts === 1 ? 'retry' : outcome === 'failed' ? 'failed' : 'granted',
           error: 'slot allocation failed' }));
       },
@@ -417,3 +417,33 @@ for (const outcome of ['retry', 'failed', 'late'] as const) {
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 }
+
+test('a startup ignores another process grant with the same sequence', async () => {
+  const directory = mkdtempSync(join(scratch, 'qa-startup-foreign-grant-'));
+  const path = join(directory, 'gate.json'), lockFile = join(directory, 'mutex.sqlite');
+  const token = 'startup-test';
+  writeFileSync(path, JSON.stringify({ token, status: 'pending' }));
+  let now = 0, started = false, requester = '';
+  try {
+    expect(await withMemoryStartup(need, {
+      env: { ...qaEnv, REZICS_QA_STARTUP_SLOT_GATE: path }, lockFile, deadline: 100,
+      now: () => now, read: async () => plenty,
+      announce: message => {
+        const match = /^QA_STARTUP_SLOT_READY (\S+) (\S+) (\d+)$/.exec(message);
+        if (!match) return;
+        requester = match[2]!;
+        writeFileSync(path, JSON.stringify({ token, requester: 'another-startup',
+          sequence: Number(match[3]), status: 'granted' }));
+      },
+      sleep: async ms => {
+        expect(started).toBe(false);
+        const gate = JSON.parse(readFileSync(path, 'utf8'));
+        expect(gate.requester).toBe('another-startup');
+        writeFileSync(path, JSON.stringify({ ...gate, requester }));
+        now += ms;
+      },
+    }, () => { started = true; return 'started'; })).toBe('started');
+    expect(now).toBe(25);
+    expect(started).toBe(true);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

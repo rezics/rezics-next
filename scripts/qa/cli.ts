@@ -28,6 +28,7 @@ import {
   planStackProjects,
   recordedFileDurations,
   selfManagedFaultFiles,
+  selfManagedFaultAdmission,
   shardCount,
   stackPlanBudgetWarning,
   shardResolved,
@@ -161,9 +162,9 @@ async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
   const gateDirectory = join(root, '.temp', 'qa-startup-gates');
   mkdirSync(gateDirectory, { recursive: true });
   const gatePath = join(gateDirectory, `${token}.json`);
-  const publish = (status: StartupSlotGate['status'], sequence?: number, error?: string) => {
+  const publish = (status: StartupSlotGate['status'], requester?: string, sequence?: number, error?: string) => {
     const temporary = `${gatePath}.tmp`;
-    writeFileSync(temporary, JSON.stringify({ token, status, sequence, error }));
+    writeFileSync(temporary, JSON.stringify({ token, status, requester, sequence, error }));
     renameSync(temporary, gatePath);
   };
   const waiterDirectory = env.GOAL_QA_WAIT_DIR;
@@ -173,23 +174,25 @@ async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
   process.on('exit', removeGate);
   publish('pending');
   let admission: Promise<void> | undefined;
-  const requests = new Set<number>();
+  const requests = new Set<string>();
   try {
     return await start({ ...env, REZICS_QA_STARTUP_SLOT_GATE: gatePath }, line => {
-      const request = /^QA_STARTUP_SLOT_READY (\S+) (\d+)$/.exec(line);
+      const request = /^QA_STARTUP_SLOT_READY (\S+) (\S+) (\d+)$/.exec(line);
       if (request?.[1] === token) {
-        const sequence = Number(request[2]);
+        const requester = request[2]!;
+        const sequence = Number(request[3]);
+        const key = `${requester}:${sequence}`;
         // Intermediate runners can replay captured output after streaming the same request.
-        if (requests.has(sequence)) return;
-        requests.add(sequence);
+        if (requests.has(key)) return;
+        requests.add(key);
         // A busy slot means retrying memory + startup admission, never holding a stale reading.
         admission = reserve({ deadline: Date.now(), runDeadline }).then(() => {
           removeWait();
-          publish('granted', sequence);
+          publish('granted', requester, sequence);
         }, error => {
           const message = error instanceof Error ? error.message : String(error);
           if (!message.startsWith('No QA slot became free before the deadline')) {
-            publish('failed', sequence, message);
+            publish('failed', requester, sequence, message);
             return;
           }
           if (waitPath) {
@@ -198,7 +201,7 @@ async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
               command: env.GOAL_QA_COMMAND, waitingFor: 'slot',
               message: 'Waiting for a QA slot after memory admission', since: new Date().toISOString() }));
           }
-          publish('retry', sequence);
+          publish('retry', requester, sequence);
         });
       } else {
         if (line.startsWith('Waiting; QA memory:') || line.startsWith('Waiting for another QA startup;')) removeWait();
@@ -219,11 +222,12 @@ async function reserveRunSlot(slotOptions: Parameters<typeof acquireQaSlots>[4])
 }
 
 /** Host-only tiers also own a lease, but retries never hold one through admission. */
-async function admitRun<T>(work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env): Promise<T> {
+async function admitRun<T>(work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env,
+  reserve = reserveRunSlot): Promise<T> {
   for (;;) {
     try {
       return await admit('other', async () => {
-        await reserveRunSlot({ deadline: Date.now(), runDeadline });
+        await reserve({ deadline: Date.now(), runDeadline });
         return work();
       }, env);
     } catch (error) {
@@ -325,6 +329,7 @@ async function runShardWork(
     ...(tier === 'fault/recovery' ? faultFixtureEnvironment : {}),
   }, resourceClass && resourceClass !== 'ordinary' ? qaResourceClasses[resourceClass].storage : undefined, resourceClass);
   const needsStack = tier !== 'fault/recovery' || !files.every(file => selfManagedFaultFiles.has(file));
+  const startupProtocol = !needsStack && files.every(file => selfManagedFaultAdmission.get(file) === 'startup');
   const persistent = qaStackMode(environment) === 'scale'
     || tier === 'integration' && files.some(file => commandOnlyIntegrationFiles.has(file));
   // Scale changes storage, not a fixture's endpoints. Product-only native
@@ -420,8 +425,8 @@ async function runShardWork(
   }
   if (!needsStack) {
     try {
-      await admit('other',
-        async () => {}, environment);
+      if (startupProtocol) await admit('other', async () => {}, environment);
+      else await admitRun(async () => {}, environment, reserve);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       errors.push(message);
@@ -491,8 +496,8 @@ async function runShardWork(
     const runBatch = (environment: NodeJS.ProcessEnv, onLine: (line: string) => void) => commandAsync(
       root, 'bun', ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
       Math.max(1, budget - activeTestMs()), environment, onLine, { runDeadline });
-    const result = await (needsStack ? runBatch(testEnvironment(), noteMemory)
-      : withStartupSlot(testEnvironment(), runBatch, reserve));
+    const result = await (startupProtocol ? withStartupSlot(testEnvironment(), runBatch, reserve)
+      : runBatch(testEnvironment(), noteMemory));
     childAdmissionMs += result.admissionWaitMs;
     output.push(result.output);
     const empty = !result.ok && !result.timedOut && matchedNoTests(result.output);

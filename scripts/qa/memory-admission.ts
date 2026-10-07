@@ -160,11 +160,13 @@ export interface StartupMemoryOptions extends MemoryWaitOptions {
 
 export interface StartupSlotGate {
   token: string;
+  requester?: string;
   sequence?: number;
   status: 'pending' | 'granted' | 'retry' | 'failed';
   error?: string;
 }
 
+const startupSlotRequester = randomUUID();
 let startupSlotSequence = 0;
 /** The startup child retains the guard while its runner attempts the lifetime lease. */
 async function waitForStartupSlot(options: StartupMemoryOptions): Promise<boolean> {
@@ -178,13 +180,13 @@ async function waitForStartupSlot(options: StartupMemoryOptions): Promise<boolea
   for (;;) {
     if (now() >= options.deadline) throw new Error('QA startup slot deadline reached; no work started');
     const gate = JSON.parse(readFileSync(path, 'utf8')) as StartupSlotGate;
-    if (gate.sequence === sequence) {
+    if (gate.requester === startupSlotRequester && gate.sequence === sequence) {
       if (gate.status === 'granted') return true;
       if (gate.status === 'retry') return false;
       if (gate.status === 'failed') throw new Error(gate.error ?? 'QA startup slot acquisition failed');
     }
     if (!announced) {
-      announce(`QA_STARTUP_SLOT_READY ${gate.token} ${sequence}`);
+      announce(`QA_STARTUP_SLOT_READY ${gate.token} ${startupSlotRequester} ${sequence}`);
       announced = true;
     }
     await sleep(Math.min(25, options.deadline - now()));

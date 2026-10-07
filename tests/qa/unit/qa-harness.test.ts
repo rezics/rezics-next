@@ -48,7 +48,7 @@ function startupHarness(directory: string) {
   mkdirSync(slots);
   mkdirSync(control);
   writeFileSync(executable, `#!${process.execPath}
-    import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+    import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
     import { join } from 'node:path';
     import { withQaStackStartup } from ${JSON.stringify(join(root, 'scripts/qa/memory-admission.ts'))};
     import { commandAsync } from ${JSON.stringify(join(root, 'scripts/qa/core.ts'))};
@@ -57,7 +57,10 @@ function startupHarness(directory: string) {
       const forwardedEnv = process.env.QA_HARNESS_REAL_HOST_TEST === '1' && args[0] === 'test'
         ? { ...process.env, QA_HARNESS_SLOT_OWNER: String(process.ppid) } : process.env;
       const result = await commandAsync(${JSON.stringify(root)}, process.execPath, args, 20000, forwardedEnv,
-        line => console.log(line), { runDeadline: Number(process.env.REZICS_QA_MEMORY_DEADLINE) });
+        line => {
+          console.log(line);
+          if (line.startsWith('Admitted; QA memory:')) writeFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-admitted'), '');
+        }, { runDeadline: Number(process.env.REZICS_QA_MEMORY_DEADLINE) });
       process.exitCode = result.ok ? 0 : 1;
     } else if (args[0] === 'test') {
       const result = await commandAsync(${JSON.stringify(root)}, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 10000,
@@ -79,13 +82,17 @@ function startupHarness(directory: string) {
         if (!leases.some(name => Number(readFileSync(join(process.env.GOAL_QA_SLOT_DIRECTORY, name, 'pid'), 'utf8')) === Number(process.env.QA_HARNESS_SLOT_OWNER ?? process.ppid)))
           throw new Error('Stack started without its runner slot');
         writeFileSync(join(control, name + '-started'), process.env.QA_HARNESS_SLOT_OWNER ?? String(process.ppid));
+        appendFileSync(join(control, name + '-startups'), String(process.pid) + '\\n');
         while (!existsSync(join(control, name + '-finish'))) await Bun.sleep(10);
         throw new Error('Intentional stack startup stub failure');
       }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10,
         announce: message => {
           console.log(message);
           // Captured output can be replayed in the same chunk before reservation finishes.
-          if (message.startsWith('QA_STARTUP_SLOT_READY')) console.log(message);
+          if (message.startsWith('QA_STARTUP_SLOT_READY')) {
+            appendFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-requests'), message + '\\n');
+            console.log(message);
+          }
         },
         read: async () => ({ vmTotal: 64 * 1024 ** 3, vmUsed: existsSync(join(control, name + '-memory')) ? 0 : 64 * 1024 ** 3,
           hostAvailable: 64 * 1024 ** 3 }) });
@@ -93,6 +100,33 @@ function startupHarness(directory: string) {
     }
   `);
   chmodSync(executable, 0o755);
+  // Execute the selected native test, refusing its actual resource startup before any data exists.
+  const nativeStartup = `#!${process.execPath}
+    import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+    import { basename, dirname, join } from 'node:path';
+    const args = process.argv.slice(2);
+    if (basename(process.argv[1]) === 'docker' && args[0] === 'ps' && args[1] === '-a') process.exit(0);
+    const control = process.env.QA_HARNESS_CONTROL;
+    const name = process.env.QA_HARNESS_NAME;
+    writeFileSync(join(control, name + '-resource-attempt'), '');
+    if (process.env.REZICS_QA_STARTUP_SLOT_GATE) throw new Error('Native startup requires host admission, not an event gate');
+    const owner = readFileSync(join(process.env.GOAL_QA_SLOT_DIRECTORY, '0', 'pid'), 'utf8');
+    if (owner !== process.env.QA_HARNESS_SLOT_OWNER) throw new Error('Native resource started without its runner lease');
+    writeFileSync(join(control, name + '-started'), owner);
+    while (!existsSync(join(control, name + '-finish'))) await Bun.sleep(10);
+    if (basename(process.argv[1]) === 'initdb') {
+      const data = args[args.indexOf('-D') + 1];
+      if (!data.startsWith(${JSON.stringify(join(root, '.temp') + '/')})) throw new Error('Native data escaped its checkout');
+      rmSync(dirname(data), { recursive: true, force: true });
+    }
+    console.error('Intentional native startup stub failure');
+    process.exit(1);
+  `;
+  for (const tool of ['initdb', 'docker']) {
+    const path = join(directory, tool);
+    writeFileSync(path, nativeStartup);
+    chmodSync(path, 0o755);
+  }
   const children: ReturnType<typeof Bun.spawn>[] = [];
   const launch = (name: string, args: string[], extraEnv: NodeJS.ProcessEnv = {}) => {
     const child = Bun.spawn([process.execPath, ...args], {
@@ -155,6 +189,70 @@ for (const tier of ['model', 'integration', 'fault/recovery']) {
   }, 20_000);
 }
 }
+
+for (const file of [
+  'services/account/tests/account-pitr.integration.test.ts',
+  'services/account/tests/account-access-recovery.integration.test.ts',
+  'services/main/tests/access-pitr.integration.test.ts',
+  'services/main/tests/content-recovery.integration.test.ts',
+  'tests/qa/fault-recovery/search-ops-quickstart.test.ts',
+]) {
+  test(`goalctl native startup waits for its host-admitted lease: ${file}`, async () => {
+    const directory = mkdtempSync(join(root, '.temp', 'qa-native-slot-'));
+    const harness = startupHarness(directory);
+    const holder = Bun.spawn([process.execPath, '-e', 'setInterval(() => {}, 1000)']);
+    const slot = await acquireQaSlots(harness.slots, 1, { GOAL_QA_SLOTS: '1' }, holder.pid);
+    try {
+      const run = harness.startGoal('native', [file], { QA_HARNESS_REAL_HOST_TEST: '1' });
+      await until(() => existsSync(join(harness.control, 'native-admitted')), 'host memory admission');
+      await Bun.sleep(50);
+      expect(existsSync(join(harness.control, 'native-resource-attempt'))).toBe(false);
+      expect(readFileSync(join(harness.slots, '0', 'pid'), 'utf8')).toBe(String(holder.pid));
+      slot.release();
+      await Promise.race([until(() => existsSync(join(harness.control, 'native-started')), 'native resource lease'),
+        run.child.exited.then(async code => { throw new Error(`Native runner exited ${code}: ${(await run.output).join('\n')}`); })]);
+      expect(readFileSync(join(harness.slots, '0', 'pid'), 'utf8')).toBe(readFileSync(join(harness.control, 'native-started'), 'utf8'));
+      writeFileSync(join(harness.control, 'native-finish'), '');
+      expect(await run.child.exited).toBe(1);
+      expect((await run.output).join('\n')).toContain('QA artifacts:');
+      expect(existsSync(join(harness.slots, '0'))).toBe(false);
+    } finally {
+      slot.release(); holder.kill(); await holder.exited;
+      await harness.stop(); rmSync(directory, { recursive: true, force: true });
+    }
+  }, 20_000);
+}
+
+test('goalctl successive startup processes restart their sequences after a slot retry', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'qa-startup-request-identity-'));
+  const harness = startupHarness(directory);
+  const holder = Bun.spawn([process.execPath, '-e', 'setInterval(() => {}, 1000)']);
+  const slot = await acquireQaSlots(harness.slots, 1, { GOAL_QA_SLOTS: '1' }, holder.pid);
+  const requests = () => {
+    const path = join(harness.control, 'successive-requests');
+    return existsSync(path) ? readFileSync(path, 'utf8').trim().split('\n').map(line => line.split(' ')) : [];
+  };
+  try {
+    writeFileSync(join(harness.control, 'successive-memory'), '');
+    const run = harness.startGoal('successive', ['tests/qa/fault-recovery/work-title-control.test.ts'], { QA_HARNESS_REPEAT: '1' });
+    await until(() => requests().some(parts => Number(parts.at(-1)) >= 2), 'startup retry beyond sequence one');
+    expect(existsSync(join(harness.control, 'successive-started'))).toBe(false);
+    slot.release();
+    await until(() => existsSync(join(harness.control, 'successive-started')), 'first startup');
+    writeFileSync(join(harness.control, 'successive-finish'), '');
+    await until(() => readFileSync(join(harness.control, 'successive-startups'), 'utf8').trim().split('\n').length === 2,
+      'second startup with a reset sequence');
+    expect(await run.child.exited).toBe(1);
+    expect((await run.output).join('\n')).toContain('QA artifacts:');
+    const identities = [...new Set(requests().map(parts => parts[2]))];
+    expect(identities).toHaveLength(2);
+    expect(requests().filter(parts => parts[2] === identities[1]).map(parts => parts[3])).toEqual(['1']);
+    expect(existsSync(join(harness.slots, '0'))).toBe(false);
+  } finally {
+    slot.release(); holder.kill(); await holder.exited;
+    await harness.stop(); rmSync(directory, { recursive: true, force: true });
+  }
+}, 20_000);
 
 test('real QA CLI retries fresh memory admission while its slot is busy', async () => {
   const directory = mkdtempSync(join(root, '.temp', 'qa-cli-slot-retry-'));
