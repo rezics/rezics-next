@@ -247,7 +247,7 @@ export const profileRegistry = {
     ]
   },
   "content-match-unit-v1": {
-    "sha256": "c21cad7776103f50a982a1820fd5719da156d97edf07e8c856dd00bcd2f18478",
+    "sha256": "c6f7c934542fc58d4680f9d050917e4834dd26cdea825c408cf2f8cb8aca7090",
     "file": "shapes/content-match-unit-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/content-match-unit-v1/projection-shape",
@@ -259,7 +259,7 @@ export const profileRegistry = {
     ]
   },
   "content-private-match-unit-v1": {
-    "sha256": "4842523abc660d6edd620947dc2c0e8fdf85031268bff6c71d8de6f5599c7288",
+    "sha256": "4eb2fbcc066dc0a4b900e106425893e440787091d345997cff6b04fc6b390a1c",
     "file": "shapes/content-private-match-unit-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/content-private-match-unit-v1/state-shape",
