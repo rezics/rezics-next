@@ -39,7 +39,11 @@ the vault credentials when needed (see [environment](README.md#environment-owner
 It asks the maintainer only for what no local action can supply, such as a
 third-party account, a payment or a product decision that changes the outcome.
 Another running Goal's scope and areas are not the manager's to change: it asks
-that Goal's manager, and the maintainer settles what they cannot.
+that Goal's manager, and the maintainer settles what they cannot. The maintainer
+does not see managers' sessions (maintainer, 2026-10-07). While a program Goal
+runs, a manager sends what it would ask the maintainer to the program manager.
+The program manager decides within this charter and passes on only what needs
+the maintainer.
 
 ## Standing directions
 
