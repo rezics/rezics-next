@@ -11,8 +11,8 @@ remain authoritative except where this checkpoint records new evidence.
 Checkpoint 2026-10-07 17:31 UTC. Kernel's required native recovery refresh
 completed at `c9b53e93dbbc`, image `906d1f549ffc`, unchanged model `ab6d394`.
 All six shared applications are healthy; retained volumes, membership and
-catalogue are current. The Main code hold is released and Trust has no queued
-refresh. G-1330's mixed retained repair/cutover is active; positive restore
+catalogue are current. Launch and kernel now hold further Main runtime code gates through their
+coalesced migration/native checkpoints. Trust has no queued refresh. G-1330's mixed retained repair/cutover is active; positive restore
 release and the remaining Claim/source-projection unions are unqualified.
 
 G-1343 borrowed reconciliation and retained-native-event component landed at
@@ -22,8 +22,11 @@ uses real retained native events, distinct diagnostic/Main positions and the
 caller's transactions. The merge gate passed after narrowly registering this
 offline recovery-fence writer in the existing maintenance allowance; no guard
 or runtime fence was bypassed. G-1351 uses the exact reviewed source for actual
-operator release. Retry after committed graph release but failed Access release
-still needs a real full-helper proof; existing unit coverage uses a callback.
+operator release. G-1343 attempt6 now repairs interruption recovery through existing entrypoints:
+committed graph release before Access CAS, and committed owner releases before
+outer outcome recording. Prior reconciliation/remaining closure must authenticate
+the mutated copy; no optional hold bypass. G-1351 keeps these exclusions until
+real positive retry evidence exists.
 Private historical command payload erasure remains a separate open contract.
 
 The compatible small fixture `fx-small-95570bd9906b` remains frozen at application
@@ -33,12 +36,16 @@ old graph/Lucene fileset retirement. Evidence records sampled disk peaks as lowe
 bounds; it does not qualify the current medium100k workload, all historical roots,
 media/backups destruction or the final populated600second restore. The run used
 current scheduling and the committed measurement repair with older runtime pins.
-G-1344 attempt7 checks the current repository image and builds a compatible
-medium baseline; manager-exclusive qualification remains required.
+G-1344 current-pin HTTP proof passed54.7s/138assertions; fixture correction landed
+`2e394b95f48c` with all160 unit/guard files green. Medium preparation failed
+readiness at557.467s and published no backup: its Realm slot is noncanonical and
+lacks the Work link. Attempt8 repairs that existing producer, versions it and
+qualifies a fresh small fixture before retrying medium. Manager-exclusive100k
+qualification remains required.
 
 Program has enrolled the manager in the supervised coordinator for native session
-`01a114cb-4d63-7f23-bf70-1610b4db2b2b`. The coordinator waits for the interactive
-owner to exit, then resumes this session on mail/task exits. Live workers and QA
+`01a114cb-4d63-7f23-bf70-1610b4db2b2b`. The interactive owner exited; the coordinator now resumes this session on
+mail/task exits. Live workers and QA
 processes continue. Read durable Goal mail, act and acknowledge; when enrolled,
 end an idle turn instead of restarting the foreground event loop.
 
