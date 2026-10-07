@@ -3,6 +3,10 @@ import type { Pool, PoolClient } from 'pg';
 import { Pool as PgPool } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { assertRetainedAuthorityCoverage, type RetainedAuthorityCoverage } from '../erasure/authority.ts';
+import { reconcileRestoredErasures, releaseErasureRestoreHold,
+  type RestoredOwners } from '../erasure/reconcile.ts';
+import type { RestoredGraphCustody } from '../erasure/custody.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
 import { StructureQualifierRootStore } from '../structure/qualifier-index.ts';
@@ -13,6 +17,7 @@ import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound, RevisionUnava
   from '../work/history.ts';
 import { releaseRestoredGraphHold, RestoreLineageConflict, type RecoveryCoverage }
   from '../work/restore-lineage.ts';
+import { heldErasureMaintenanceClient } from '../erasure/graph.ts';
 import type { OwnerReconciliationRow, OwnerRelocationRow } from './schema.ts';
 import { GraphRelocationOperator, RelocationConflict,
   type GraphRelocationTarget } from './relocation.ts';
@@ -57,6 +62,15 @@ export interface RestoreResources {
   contentPool: Pool;
   hmacKey: string;
   objectStore: ObjectRecoveryStore;
+  /** Captured handoff rows in the isolated restored copy, never current authority. */
+  restoredRelayPool?: Pool;
+  /** External retained owner evidence and the existing held native capability. */
+  erasures?: {
+    authority: RetainedAuthorityCoverage;
+    signingKey: string;
+    maintenance: Pick<FusekiClient, 'command'>;
+    originalGraph?: Pick<RestoredGraphCustody, 'fuseki' | 'lineage'>;
+  };
 }
 export interface RelocationView {
   id: string; owner: RelocationStageInput['owner']; datasetId: string;
@@ -127,7 +141,7 @@ export class OwnerOperations {
     } finally { if (!this.restoreResources) await pool.end(); }
   }
 
-  private restoreInputs(): { resources: RestoreResources; close: () => Promise<void> } {
+  private restoreInputs(sealedCoverage: string): { resources: RestoreResources; close: () => Promise<void> } {
     if (this.restoreResources) return { resources: this.restoreResources, close: async () => {} };
     const account = Bun.env.ACCOUNT_RECOVERY_DATABASE_URL;
     const access = Bun.env.ACCESS_DATABASE_URL;
@@ -141,14 +155,42 @@ export class OwnerOperations {
     const pools = [new PgPool({ connectionString: account, max: 1 }),
       new PgPool({ connectionString: access, max: 1 }),
       new PgPool({ connectionString: content, max: 1 })];
+    const capturedRelay = Bun.env.MAIN_RELAY_DATABASE_URL;
+    const retainedRelay = Bun.env.OWNER_RELAY_DATABASE_URL;
+    const signingKey = Bun.env.FUSEKI_TITLE_ADMISSION_KEY;
+    const maintenanceKey = Bun.env.FUSEKI_MAINTENANCE_TOKEN;
+    const graphUrl = Bun.env.FUSEKI_URL;
+    // The default primary relay may be the restored backup. Only an explicit
+    // retained owner route can qualify the independently current journal.
+    const configuredRetained = capturedRelay && retainedRelay && signingKey && maintenanceKey && graphUrl;
+    const restoredRelayPool = configuredRetained ? new PgPool({ connectionString: capturedRelay, max: 1 }) : undefined;
+    if (restoredRelayPool) pools.push(restoredRelayPool);
     return { resources: { accountPool: pools[0]!, accessPool: pools[1]!,
       contentPool: pools[2]!, hmacKey,
       objectStore: { directory: this.environment.objectDirectory,
         ...(workObjects ? { workObjects } : {}),
         ...(structureObjects ? { structureObjects,
           structureQualifierRoots: new StructureQualifierRootStore(pools[2]!, structureObjects),
-          structureGroupRoots: new StructureGroupRootStore(pools[2]!, structureObjects) } : {}) } },
+          structureGroupRoots: new StructureGroupRootStore(pools[2]!, structureObjects) } : {}) },
+      ...(restoredRelayPool ? { restoredRelayPool } : {}),
+      ...(configuredRetained ? { erasures: { authority: { sealedCoverage, hmacKey },
+        signingKey, maintenance: heldErasureMaintenanceClient(graphUrl, maintenanceKey) } } : {}) },
     close: async () => { await Promise.all(pools.map(pool => pool.end())); } };
+  }
+
+  private async assertIndependentRetainedRelay(resources: RestoreResources,
+    client: PoolClient): Promise<void> {
+    if (!resources.restoredRelayPool || resources.restoredRelayPool === this.relay) {
+      throw new RestoreLineageConflict('independently retained current relay is unavailable');
+    }
+    const identity = `SELECT current_database() AS database,
+      EXTRACT(EPOCH FROM pg_postmaster_start_time())::text AS instance`;
+    const current = (await client.query<{ database: string; instance: string }>(identity)).rows[0];
+    const captured = (await resources.restoredRelayPool.query<{ database: string; instance: string }>(identity)).rows[0];
+    if (!current?.database || !current.instance || !captured?.database || !captured.instance
+      || current.database === captured.database && current.instance === captured.instance) {
+      throw new RestoreLineageConflict('restored relay cannot prove an independently current erasure journal');
+    }
   }
 
   /**
@@ -160,7 +202,7 @@ export class OwnerOperations {
    */
   async reconcileRestore(input: { sealedCoverage: string; sealedDeletionSets: readonly string[] },
     key: string): Promise<RestoreReconciliationView> {
-    const { resources, close } = this.restoreInputs();
+    const { resources, close } = this.restoreInputs(input.sealedCoverage);
     try {
       let coverage: RecoveryCoverage;
       try { coverage = openRecoveryPayload<RecoveryCoverage>(
@@ -204,10 +246,45 @@ export class OwnerOperations {
         const generation = retained.rows[0]?.generation ?? null;
         let conflict: RestoreLineageConflict | undefined;
         try {
+          if (resources.erasures) await this.assertIndependentRetainedRelay(resources, client);
           await releaseRestoredGraphHold(this.environment.fuseki, resources.accessPool,
             this.relay, this.environment.lineage, { sealedCoverage: input.sealedCoverage,
               hmacKey: resources.hmacKey, accountPool: resources.accountPool,
               contentPool: resources.contentPool, objectStore: resources.objectStore,
+              restoredRelayPool: resources.restoredRelayPool,
+              ...(resources.erasures ? { releaseErasures: async (clients, releaseGraph) => {
+                const erasures = resources.erasures!;
+                if (!erasures.originalGraph) {
+                  throw new RestoreLineageConflict('independently retained original graph proof is unavailable');
+                }
+                let current: RecoveryCoverage;
+                try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
+                  erasures.authority.hmacKey, 'graph-recovery-coverage'); }
+                catch { throw new RestoreLineageConflict('independently current authority capture is invalid'); }
+                if (!current?.relay?.consumer) {
+                  throw new RestoreLineageConflict('independently current authority capture is unavailable');
+                }
+                try { await assertRetainedAuthorityCoverage(clients.relayClient, resources.accessPool,
+                  current.relay.consumer, erasures.authority, clients.accessClient); }
+                catch (error) { throw new RestoreLineageConflict('Access differs from independently current authority', { cause: error }); }
+                const restored: RestoredOwners = { account: resources.accountPool,
+                  access: resources.accessPool, content: resources.contentPool, objects: resources.objectStore,
+                  graph: { fuseki: this.environment.fuseki, lineage: this.environment.lineage,
+                    ...(this.environment.receiptCustody ? { receiptCustody: this.environment.receiptCustody } : {}),
+                    heldErasure: { cut: { ...this.environment.lineage,
+                      restoreCutover: `urn:rezics:restore:${this.environment.lineage.dataEpoch}`,
+                      priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence },
+                    accessHoldGeneration: clients.fenceGeneration, signingKey: erasures.signingKey,
+                    maintenance: erasures.maintenance, originalGraph: erasures.originalGraph } } };
+                const result = await reconcileRestoredErasures(this.relay, restored,
+                  { operationId: `${operationId}:erasures`, consumer: current.relay.consumer,
+                    replay: true, authority: erasures.authority }, clients);
+                if (result.state !== 'reconciled') {
+                  throw new RestoreLineageConflict(`retained erasure reconciliation is held: ${result.holdReason ?? 'owner evidence is unavailable'}`);
+                }
+                await releaseErasureRestoreHold(this.relay, restored, result.reconciliationId,
+                  clients.fenceGeneration, erasures.authority, { clients, beforeAccessRelease: releaseGraph });
+              } } : {}),
               deletions: { accountPool: resources.accountPool, hmacKey: resources.hmacKey,
                 sealedSets: input.sealedDeletionSets } }, client);
         } catch (error) {

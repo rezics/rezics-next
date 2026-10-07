@@ -153,12 +153,13 @@ function untouchedOwner(name: string) {
   } } as unknown as Pool };
 }
 
-function fixture() {
+function fixture(options: { capturedRelay?: boolean } = {}) {
   const relay = new SingleConnectionRelay();
   const fuseki = new HeldGraph();
   const account = untouchedOwner('Account');
   const access = untouchedOwner('Access');
   const content = untouchedOwner('Content');
+  const capturedRelay = untouchedOwner('captured relay');
   const coverage: RecoveryCoverage = { priorDataEpoch, priorSequence: '900',
     accountPg: { systemIdentifier: '1001', flushedLsn: '0/1000', walFile: '000000010000000000000001' },
     account: { rowCount: '1', rowDigest: digest }, accessOutboxCount: '1', accessOutboxDigest: digest,
@@ -177,7 +178,8 @@ function fixture() {
   const operations = new OwnerOperations(relay.pool, { fuseki, lineage,
     objectDirectory: '.temp/default-restore-objects' }, { accountPool: account.pool,
     accessPool: access.pool, contentPool: content.pool, hmacKey,
-    objectStore: { directory: '.temp/default-restore-objects' } });
+    objectStore: { directory: '.temp/default-restore-objects' },
+    ...(options.capturedRelay ? { restoredRelayPool: capturedRelay.pool } : {}) });
   const authority = { active: true };
   const app = new Elysia().use(ownerRoutes({ ownerOperations: operations,
     account: { verify: async (request: Request, scopes: readonly string[]) => {
@@ -194,7 +196,7 @@ function fixture() {
     'http://localhost/v1/owners/reconciliations', { method: 'POST', headers: {
       authorization: `Bearer ${bearer}`, 'content-type': 'application/json', 'idempotency-key': key,
     }, body: JSON.stringify(input) }));
-  return { relay, fuseki, account, access, content, authority, body, send };
+  return { relay, fuseki, account, access, content, capturedRelay, authority, body, send };
 }
 
 function expectOwnersHeld(run: ReturnType<typeof fixture>) {
@@ -204,6 +206,7 @@ function expectOwnersHeld(run: ReturnType<typeof fixture>) {
   expect(run.account.calls).toHaveLength(0);
   expect(run.access.calls).toHaveLength(0);
   expect(run.content.calls).toHaveLength(0);
+  expect(run.capturedRelay.calls).toHaveLength(0);
   expect(run.relay.cuts).toHaveLength(0);
   expect(run.relay.active).toBe(false);
 }
@@ -222,6 +225,19 @@ test('authenticated default restore records unavailable erasure release as held 
   expect(run.relay.borrowCount).toBe(1);
   expect(run.relay.maximumBorrowed).toBe(1);
   expect(run.relay.releaseCount).toBe(1);
+  expectOwnersHeld(run);
+});
+
+test('a captured relay pool alone cannot enable default restore without retained erasure composition', async () => {
+  const run = fixture({ capturedRelay: true });
+  const response = await run.send('captured-without-erasures');
+  expect(response.status).toBe(201);
+  const view = await response.json() as { id: string };
+  expect(view).toMatchObject({ kind: 'restore', scope: 'product', state: 'held',
+    disposition: 'unavailable', replayed: false });
+  expect(run.relay.records.get('owner:reconcile:captured-without-erasures')).toMatchObject({
+    hold_reason: 'retained erasure restore release is unavailable' });
+  expect(run.relay.items).toEqual([{ reconciliation_id: view.id, owner: 'relay', disposition: 'unavailable' }]);
   expectOwnersHeld(run);
 });
 

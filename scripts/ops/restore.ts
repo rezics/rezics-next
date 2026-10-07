@@ -54,6 +54,8 @@ export interface RestoredContext {
   manifest: RecoveryManifest;
   apps: Record<string, string>;
   appsFile: string;
+  /** These are the restored backup owners. The relay copy cannot establish
+   * independently current erasure or authority evidence for release. */
   pools: Record<keyof RecoveryManifest['owners'], Pool>;
   fuseki: FusekiClient;
 }
@@ -64,7 +66,8 @@ export interface RestoreChecks {
   /** Adapter to POST /v1/owners/reconciliations on this isolated Main instance.
    * Account owns authentication; a local recovery command must not forge it.
    * A matched operation owns retained-erasure reconciliation and both graph
-   * and Access release; this command only observes the released generation. */
+   * and Access release using independently retained current owner evidence;
+   * this command only observes the released generation. */
   reconcile(
     context: RestoredContext,
     body: {

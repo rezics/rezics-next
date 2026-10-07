@@ -12,7 +12,7 @@ import * as relayCoverage from '../src/modules/outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import * as objectCoverage from '../src/modules/owner/object-coverage.ts';
 import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
-import { DATASET, type GraphLineage } from '../src/modules/work/activate.ts';
+import { DATASET, hash, type GraphLineage } from '../src/modules/work/activate.ts';
 import * as accessCoverage from '../src/modules/work/access-recovery-coverage.ts';
 import * as contentCoverage from '../src/modules/work/content-recovery-coverage.ts';
 import * as pgCoverage from '../src/modules/work/pg-recovery-frontier.ts';
@@ -25,7 +25,7 @@ const priorDataEpoch = '00000000-0000-4000-8000-000000000001';
 const digest = 'a'.repeat(64);
 const ownerChecks = ['access-outbox', 'access-state', 'commerce', 'account-wal', 'account-rows',
   'account-subject-deletions', 'account-deletion-journal', 'account-deletion-evidence',
-  'retained-relay', 'current-coverage-head', 'content', 'objects'] as const;
+  'captured-relay', 'current-coverage-head', 'content', 'objects'] as const;
 type OwnerCheck = typeof ownerChecks[number];
 type ReleaseErasures = NonNullable<AuthenticatedRecoveryCoverage['releaseErasures']>;
 
@@ -38,6 +38,9 @@ class SingleConnectionOwner {
   open = false;
   generation = '5';
   deletionMarkers: { principal_id: string; authority_epoch: string }[] = [];
+  deliveringSearch = false;
+  deliveringDownload = false;
+  checkpoint?: { stream_scope: string; data_epoch: string; sequence: string };
   private transaction = false;
   private pendingOpen = false;
   private pendingGeneration = '5';
@@ -46,6 +49,8 @@ class SingleConnectionOwner {
   readonly pool: Pool;
   queryGate?: (sql: string) => Promise<void>;
   connectFailure?: Error;
+
+  get transactionOpen(): boolean { return this.transaction; }
 
   constructor(readonly name: string, private readonly trace: string[]) {
     this.client = { query: (sql: string, values?: unknown[]) => this.query(sql, values),
@@ -78,6 +83,7 @@ class SingleConnectionOwner {
       this.pendingOpen = this.open;
       this.pendingGeneration = this.generation;
     } else if (sql === 'COMMIT') {
+      if (!this.transaction) throw new Error(`${this.name} commit needs a transaction`);
       this.open = this.pendingOpen;
       this.generation = this.pendingGeneration;
       this.transaction = false;
@@ -88,19 +94,27 @@ class SingleConnectionOwner {
       this.transaction = false;
       this.trace.push(`${this.name}:rollback`);
     } else if (sql.includes('UPDATE access.recovery_fence')) {
-      if (!this.transaction || values?.[0] !== this.pendingGeneration || this.pendingOpen) {
+      if (!this.transaction || values?.[0] !== this.pendingGeneration || this.pendingOpen
+        || this.deliveringSearch || this.deliveringDownload) {
         return { rows: [], rowCount: 0 };
       }
       this.pendingOpen = true;
       this.pendingGeneration = (BigInt(this.pendingGeneration) + 1n).toString();
       this.trace.push('access:open');
       return { rows: [], rowCount: 1 };
+    } else if (sql.includes('FROM access.search_read_lease') || sql.includes('FROM access.download_read_lease')) {
+      this.trace.push('access:delivery-veto');
+      const delivering = sql.includes('FROM access.search_read_lease') && this.deliveringSearch
+        || sql.includes('FROM access.download_read_lease') && this.deliveringDownload;
+      return { rows: delivering ? [{ delivering: true }] : [], rowCount: delivering ? 1 : 0 };
     } else if (sql.includes('FROM access.recovery_fence')) {
       if (this.pendingOpen) this.trace.push('access:verify-open');
       return { rows: [{ open: this.pendingOpen, generation: this.pendingGeneration }], rowCount: 1 };
     } else if (sql.includes("kind = 'account.deletion_fenced'")) {
       this.trace.push('validated:account-deletion-evidence');
       return { rows: this.deletionMarkers, rowCount: this.deletionMarkers.length };
+    } else if (sql.includes('FROM relay.checkpoint')) {
+      return { rows: this.checkpoint ? [this.checkpoint] : [], rowCount: this.checkpoint ? 1 : 0 };
     } else if (!sql.startsWith('SET ') && !sql.startsWith('SELECT ')) {
       throw new Error(`Unexpected ${this.name} SQL: ${sql}`);
     }
@@ -209,7 +223,11 @@ class HeldRestoreGraph extends FusekiClient {
   interruptRelease = false;
   loseReleaseResponse = false;
   denyAdmission = false;
-  releaseReceipt: { receipt: string; digest: string } | null = null;
+  priorSequence = '900';
+  savedMainSequence: string | undefined = '4';
+  reconciledMainSequence?: string;
+  mainCutRows?: NonNullable<SparqlResult['results']>['bindings'];
+  releaseReceipt: { receipt: string; digest: string; priorMainSequence?: string; streamScope?: string } | null = null;
   readonly commands: CommandEnvelope[] = [];
   readonly queries: string[] = [];
 
@@ -218,9 +236,11 @@ class HeldRestoreGraph extends FusekiClient {
   override async commandWithReceipt(envelope: CommandEnvelope): Promise<CommandResult> {
     this.commands.push(envelope);
     if (this.interruptRelease) throw new Error('interrupted before graph release');
-    if (!this.cutMatches) return { status: 'guard-unmatched' };
+    if (!this.cutMatches || !this.cutGuardsMatch(envelope.update)) return { status: 'guard-unmatched' };
     this.held = false;
-    this.releaseReceipt = { receipt: envelope.receipt, digest: envelope.digest };
+    this.releaseReceipt = { receipt: envelope.receipt, digest: envelope.digest,
+      priorMainSequence: /rv:priorMainSequence ([0-9]+)/.exec(envelope.update)?.[1],
+      streamScope: /rv:streamScope "([^"]+)"/.exec(envelope.update)?.[1] };
     this.trace.push('graph:release');
     if (this.loseReleaseResponse) throw new Error('lost committed graph release response');
     return { status: 'committed', position: { datasetId: DATASET, dataEpoch: lineage.dataEpoch, sequence: '0' } };
@@ -229,8 +249,12 @@ class HeldRestoreGraph extends FusekiClient {
   override async query(sparql: string): Promise<SparqlResult> {
     this.queries.push(sparql);
     if (sparql.includes('SELECT ?savedMainSequence ?reconciledMainSequence')) {
-      // Existing legacy marker has no independent Main fields.
-      return { results: { bindings: this.cutMatches ? [{}] : [] } };
+      if (!this.cutMatches) return { results: { bindings: [] } };
+      const row: Record<string, { type: 'literal'; value: string }> = {};
+      if (this.savedMainSequence !== undefined) row.savedMainSequence = { type: 'literal', value: this.savedMainSequence };
+      if (this.reconciledMainSequence !== undefined) row.reconciledMainSequence = {
+        type: 'literal', value: this.reconciledMainSequence };
+      return { results: { bindings: this.mainCutRows ?? [row] } };
     }
     if (!sparql.includes('ASK')) throw new Error(`Unexpected restore graph query: ${sparql}`);
     if (sparql.includes(`FILTER NOT EXISTS { <${DATASET}> rv:restoreHold true }`)) {
@@ -241,28 +265,43 @@ class HeldRestoreGraph extends FusekiClient {
         receiptMatches = !!this.releaseReceipt
           && sparql.includes(`<${this.releaseReceipt.receipt}> a rv:OperationReceipt`)
           && sparql.includes(`rv:requestDigest "${this.releaseReceipt.digest}"`)
-          && sparql.includes(`rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 0`);
+          && sparql.includes(`rv:dataEpoch "${lineage.dataEpoch}" ; rv:sequence 0`)
+          && (this.releaseReceipt.priorMainSequence === undefined
+            ? !/rv:priorMainSequence [0-9]+/.test(sparql)
+            : sparql.includes(`rv:priorMainSequence ${this.releaseReceipt.priorMainSequence}`)
+              && sparql.includes(`rv:streamScope "${this.releaseReceipt.streamScope}"`));
       }
-      return { boolean: !this.held && this.cutMatches && !this.denyAdmission && receiptMatches };
+      return { boolean: !this.held && this.cutMatches && this.cutGuardsMatch(sparql)
+        && !this.denyAdmission && receiptMatches };
     }
-    if (sparql.includes('rv:restoreHold true')) return { boolean: this.held && this.cutMatches };
+    if (sparql.includes('rv:restoreHold true')) return { boolean: this.held && this.cutMatches && this.cutGuardsMatch(sparql) };
     throw new Error(`Unexpected restore graph query: ${sparql}`);
+  }
+
+  private cutGuardsMatch(sparql: string): boolean {
+    const diagnostic = /COALESCE\(\?reconciledSequence, \?savedSequence\) = ([0-9]+)/.exec(sparql)?.[1];
+    if (diagnostic !== this.priorSequence) return false;
+    const main = /COALESCE\(\?reconciledMainSequence, \?savedMainSequence\) = ([0-9]+)/.exec(sparql)?.[1];
+    if (main !== undefined) return this.savedMainSequence !== undefined
+      && (this.reconciledMainSequence ?? this.savedMainSequence) === main;
+    return this.savedMainSequence === undefined && this.reconciledMainSequence === undefined;
   }
 }
 
-function fixture() {
+function fixture(options: { actualCapturedRelay?: boolean } = {}) {
   const trace: string[] = [];
   const access = new SingleConnectionOwner('access', trace);
   const relay = new SingleConnectionOwner('relay', trace);
+  const capturedRelay = new SingleConnectionOwner('captured-relay', trace);
   const account = new SingleConnectionOwner('account', trace);
   const content = new SingleConnectionOwner('content', trace);
   const fuseki = new HeldRestoreGraph(trace);
-  const coverage: RecoveryCoverage = { priorDataEpoch, priorSequence: '41',
+  const coverage: RecoveryCoverage = { priorDataEpoch, priorSequence: '900',
     accountPg: { systemIdentifier: '1001', flushedLsn: '0/1000', walFile: '000000010000000000000001' },
     account: { rowCount: '1', rowDigest: digest }, accessOutboxCount: '1', accessOutboxDigest: digest,
     accessStateCount: '1', accessStateDigest: digest,
     relay: { streamScope: MAIN_RELAY_STREAM_SCOPE, consumer: 'restore-release', dataEpoch: priorDataEpoch,
-      sequence: '41', batchCount: '41', batchDigest: digest, eventCount: '41', eventDigest: digest },
+      sequence: '4', batchCount: '4', batchDigest: digest, eventCount: '4', eventDigest: digest },
     commerce: { version: 1, tables: Object.fromEntries(['payment_provider', 'offering', 'offering_revision',
       'plan_group', 'plan', 'price', 'plan_benefit', 'subscription', 'quote', 'subscription_change',
       'receipt', 'settlement', 'provider_callback', 'reconciliation', 'settlement_event', 'entitlement',
@@ -272,6 +311,12 @@ function fixture() {
       graphReferencesDigest: digest, catalogDigest: digest, tables: {}, excluded: {} },
     objects: { version: 1, referenceCount: '1', referenceDigest: digest, anchorCount: '1', anchorDigest: digest,
       objectCount: '1', objectDigest: digest } };
+  if (options.actualCapturedRelay) {
+    coverage.relay = { ...coverage.relay, sequence: '0', batchCount: '0', batchDigest: hash(''),
+      eventCount: '0', eventDigest: hash('') };
+    capturedRelay.checkpoint = { stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: priorDataEpoch, sequence: '0' };
+    fuseki.savedMainSequence = '0';
+  }
   const state = { failAt: undefined as OwnerCheck | undefined, callbackCalls: 0,
     historicalRoot: 'retired-model-root', historicalDigest: digest,
     journalGeneration: '11', authorityGeneration: '7', interruptEvidence: false,
@@ -322,12 +367,13 @@ function fixture() {
         await validate('account-deletion-journal', accessClient);
         await relayClient!.query('SELECT 1 /* retained deletion journal */');
       }),
-    spyOn(relayCoverage, 'relayCoverageOnClient').mockImplementation(async (client, consumer) => {
+    ...(options.actualCapturedRelay ? [] : [spyOn(relayCoverage, 'relayCoverage').mockImplementation(async (pool, consumer, client) => {
+      expect(pool).toBe(capturedRelay.pool);
       expect(consumer).toBe(coverage.relay.consumer);
-      expect(client).toBe(relay.client);
-      await validate('retained-relay', client);
+      expect(client).toBeUndefined();
+      await validate('captured-relay');
       return coverage.relay;
-    }),
+    })]),
     spyOn(coverageHead, 'assertCurrentRecoveryCoverageHead').mockImplementation(async (client, retained) => {
       expect(client).toBe(relay.client);
       expect(retained).toEqual(coverage);
@@ -356,7 +402,12 @@ function fixture() {
     expect(relayClient).toBe(relay.client);
     expect(access.active).toBe(true);
     expect(relay.active).toBe(true);
+    expect(relay.transactionOpen).toBe(true);
     expect(fenceGeneration).toBe('5');
+    const transactionStart = relay.queries.map(query => query.sql.startsWith('BEGIN')).lastIndexOf(true);
+    const currentTransaction = relay.queries.slice(transactionStart);
+    expect(currentTransaction[0]?.sql).toBe('BEGIN ISOLATION LEVEL READ COMMITTED');
+    expect(currentTransaction.some(query => query.sql === 'COMMIT' || query.sql === 'ROLLBACK')).toBe(false);
     expect(relay.queries.some(query => query.sql.includes('pg_advisory_xact_lock'))).toBe(true);
     for (const check of ownerChecks) expect(trace).toContain(`validated:${check}`);
     await accessClient.query('SELECT 1 /* current erasure authority */');
@@ -381,11 +432,12 @@ function fixture() {
   };
   const evidence: AuthenticatedRecoveryCoverage = {
     sealedCoverage: JSON.stringify(sealRecoveryPayload(coverage, hmacKey, 'graph-recovery-coverage')),
-    hmacKey, accountPool: account.pool, contentPool: content.pool,
+    hmacKey, accountPool: account.pool, contentPool: content.pool, restoredRelayPool: capturedRelay.pool,
     objectStore: { directory: '.temp/unused-restore-release-objects' }, releaseErasures: guardedRelease,
   };
-  return { access, relay, fuseki, coverage, state, trace, evidence,
-    release: (client?: PoolClient) => releaseRestoredGraphHold(fuseki, access.pool, relay.pool, lineage, evidence, client),
+  return { access, relay, capturedRelay, fuseki, coverage, state, trace, evidence,
+    release: (client?: PoolClient, accessClient?: PoolClient) => releaseRestoredGraphHold(
+      fuseki, access.pool, relay.pool, lineage, evidence, client, accessClient),
     seal: () => { evidence.sealedCoverage = JSON.stringify(sealRecoveryPayload(coverage, hmacKey, 'graph-recovery-coverage')); },
     stop: () => { for (const spy of spies) spy.mockRestore(); } };
 }
@@ -544,6 +596,92 @@ test('restore release authenticates the signed coverage before entering erasure 
   } finally { run.stop(); }
 });
 
+for (const source of ['missing', 'current-owner'] as const) {
+  test(`restore release refuses a ${source} captured relay source before opening the current owner transaction`, async () => {
+    const run = fixture();
+    if (source === 'missing') delete run.evidence.restoredRelayPool;
+    else run.evidence.restoredRelayPool = run.relay.pool;
+    try {
+      await expect(run.release()).rejects.toBeInstanceOf(RestoreLineageConflict);
+      expectBothHeld(run);
+      expect(run.state.callbackCalls).toBe(0);
+      expect(run.access.borrowCount).toBe(0);
+      expect(run.relay.borrowCount).toBe(0);
+      expect(run.capturedRelay.borrowCount).toBe(0);
+      expect(run.fuseki.commands).toHaveLength(0);
+    } finally { run.stop(); }
+  });
+}
+
+test('the actual captured relay coverage reader leaves the current relay transaction and allocator held through the callback', async () => {
+  const run = fixture({ actualCapturedRelay: true });
+  const { locks } = contentionFixture(run);
+  const currentClient = await run.relay.pool.connect();
+  let callbacks = 0;
+  run.evidence.releaseErasures = async ({ accessClient, relayClient }) => {
+    callbacks++;
+    expect(relayClient).toBe(currentClient);
+    expect(accessClient).toBe(run.access.client);
+    expect(run.capturedRelay.active).toBe(false);
+    expect(run.capturedRelay.transactionOpen).toBe(false);
+    expect(run.capturedRelay.borrowCount).toBe(1);
+    expect(run.capturedRelay.releaseCount).toBe(1);
+    expect(run.capturedRelay.queries[0]?.sql).toBe('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    expect(run.capturedRelay.queries.at(-1)?.sql).toBe('COMMIT');
+    expect(run.capturedRelay.queries.some(query => query.sql.includes('FROM relay.checkpoint'))).toBe(true);
+    expect(run.coverage.relay).toMatchObject({ sequence: '0', batchCount: '0', batchDigest: hash(''),
+      eventCount: '0', eventDigest: hash('') });
+    expect(run.relay.transactionOpen).toBe(true);
+    expect(run.relay.queries.filter(query => query.sql.startsWith('BEGIN')))
+      .toEqual([{ sql: 'BEGIN ISOLATION LEVEL READ COMMITTED', values: undefined }]);
+    expect(run.relay.queries.some(query => query.sql === 'COMMIT' || query.sql === 'ROLLBACK')).toBe(false);
+    expect(run.relay.queries.some(query => query.sql.includes('FROM relay.checkpoint'))).toBe(false);
+    expect(locks.held.get('relay-allocator')).toBe('restore');
+    expect(locks.held.get('access-fence')).toBe('restore');
+    await currentClient.query('SELECT 1 /* still inside current owner transaction */');
+    throw new RestoreLineageConflict('refuse after observing the live caller transaction');
+  };
+  try {
+    await expect(run.release(currentClient)).rejects.toBeInstanceOf(RestoreLineageConflict);
+    expect(callbacks).toBe(1);
+    expectBothHeld(run);
+    expect(run.relay.borrowCount).toBe(1);
+    expect(run.relay.maximumBorrowed).toBe(1);
+    expect(run.relay.releaseCount).toBe(0);
+    expect(run.relay.active).toBe(true);
+    expect(run.relay.transactionOpen).toBe(false);
+    expect(run.relay.queries.at(-1)?.sql).toBe('ROLLBACK');
+    expect(run.relay.queries.some(query => query.sql === 'COMMIT')).toBe(false);
+    expect(locks.held.size).toBe(0);
+    expect(run.fuseki.commands).toHaveLength(0);
+  } finally { currentClient.release(); run.stop(); }
+});
+
+for (const delivery of ['search', 'download'] as const) {
+  test(`a current ${delivery} delivery veto runs before native graph release on the same Access client`, async () => {
+    const run = fixture();
+    const guardedRelease = run.evidence.releaseErasures!;
+    run.evidence.releaseErasures = async (clients, releaseGraph) => {
+      if (delivery === 'search') run.access.deliveringSearch = true;
+      else run.access.deliveringDownload = true;
+      await guardedRelease(clients, releaseGraph);
+    };
+    try {
+      await expect(run.release()).rejects.toBeInstanceOf(RestoreLineageConflict);
+      expectBothHeld(run);
+      expect(run.state.callbackCalls).toBe(1);
+      expect(run.fuseki.commands).toHaveLength(0);
+      expect(run.trace).toContain('access:delivery-veto');
+      expect(run.access.queries.some(query => query.sql.includes('FROM access.search_read_lease')
+        && query.sql.includes('FROM access.download_read_lease'))).toBe(true);
+      expect(run.access.borrowCount).toBe(1);
+      expect(run.access.maximumBorrowed).toBe(1);
+      expect(run.access.releaseCount).toBe(1);
+      expect(run.access.queries.at(-1)?.sql).toBe('ROLLBACK');
+    } finally { run.stop(); }
+  });
+}
+
 for (const check of ownerChecks.filter(check => check !== 'account-deletion-evidence')) {
   test(`restore release rejects stale ${check} coverage before erasure callback`, async () => {
     const run = fixture();
@@ -578,6 +716,46 @@ test('restore release refuses a mismatched held graph cut before erasure callbac
     expectBothHeld(run);
     expect(run.state.callbackCalls).toBe(0);
     expect(run.fuseki.commands).toHaveLength(0);
+  } finally { run.stop(); }
+});
+
+for (const failure of ['missing', 'ambiguous', 'malformed', 'diagnostic-substitution', 'stale-reconciled'] as const) {
+  test(`restore release refuses ${failure} Main cut evidence before erasure callback`, async () => {
+    const run = fixture();
+    if (failure === 'missing') run.fuseki.mainCutRows = [];
+    if (failure === 'ambiguous') {
+      const row = { savedMainSequence: { type: 'literal' as const, value: '4' } };
+      run.fuseki.mainCutRows = [row, row];
+    }
+    if (failure === 'malformed') run.fuseki.savedMainSequence = 'not-a-position';
+    if (failure === 'diagnostic-substitution') run.fuseki.savedMainSequence = '900';
+    if (failure === 'stale-reconciled') run.fuseki.reconciledMainSequence = '5';
+    try {
+      await expect(run.release()).rejects.toBeInstanceOf(RestoreLineageConflict);
+      expectBothHeld(run);
+      expect(run.state.callbackCalls).toBe(0);
+      expect(run.fuseki.commands).toHaveLength(0);
+      expect(run.fuseki.queries.some(query => query.includes('SELECT ?savedMainSequence ?reconciledMainSequence'))).toBe(true);
+      expect(run.access.queries.at(-1)?.sql).toBe('ROLLBACK');
+      expect(run.relay.queries.at(-1)?.sql).toBe('ROLLBACK');
+    } finally { run.stop(); }
+  });
+}
+
+test('restore release retains the exact legacy receipt digest for a marker with no separate Main cut', async () => {
+  const run = fixture();
+  run.coverage.priorSequence = '4';
+  run.fuseki.priorSequence = '4';
+  run.fuseki.savedMainSequence = undefined;
+  run.seal();
+  try {
+    await run.release();
+    expect(run.fuseki.commands).toHaveLength(1);
+    expect(run.fuseki.commands[0]?.digest).toBe(hash(JSON.stringify({ family: 'restore-release-v1', lineage,
+      priorDataEpoch, priorSequence: '4' })));
+    expect(run.fuseki.releaseReceipt?.priorMainSequence).toBeUndefined();
+    expect(run.fuseki.releaseReceipt?.streamScope).toBeUndefined();
+    expect(run.access.open).toBe(true);
   } finally { run.stop(); }
 });
 
@@ -629,6 +807,9 @@ test('restore release composes evidence, graph release and Access opening on the
     expect(run.access.generation).toBe('6');
     expect(run.state.callbackCalls).toBe(1);
     expect(run.fuseki.commands).toHaveLength(1);
+    expect(run.fuseki.commands[0]?.digest).toBe(hash(JSON.stringify({ family: 'restore-release-v2', lineage,
+      priorDataEpoch, priorSequence: '900', priorMainSequence: '4', streamScope: MAIN_RELAY_STREAM_SCOPE })));
+    expect(run.fuseki.releaseReceipt).toMatchObject({ priorMainSequence: '4', streamScope: MAIN_RELAY_STREAM_SCOPE });
     expect(run.trace.indexOf('erasure:current-evidence-checked')).toBeLessThan(run.trace.indexOf('graph:release'));
     expect(run.trace.indexOf('graph:release')).toBeLessThan(run.trace.indexOf('access:open'));
     expect(run.trace.indexOf('access:open')).toBeLessThan(run.trace.indexOf('access:verify-open'));
@@ -654,6 +835,69 @@ test('restore release reuses a caller-held relay client and leaves its release t
     expect(run.relay.active).toBe(true);
     expect(run.relay.queries.at(-1)?.sql).toBe('COMMIT');
   } finally { client.release(); run.stop(); }
+});
+
+test('restore callback failure preserves both supplied owner transactions and their locks for the caller', async () => {
+  const run = fixture();
+  const { locks } = contentionFixture(run);
+  const relayClient = await run.relay.pool.connect();
+  const accessClient = await run.access.pool.connect();
+  await relayClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+  await relayClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
+  await accessClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+  await accessClient.query('SELECT open FROM access.recovery_fence WHERE id = true FOR UPDATE');
+  const relayStart = run.relay.queries.length;
+  const accessStart = run.access.queries.length;
+  let callbacks = 0;
+  const refusal = new RestoreLineageConflict('caller-owned erasure reconciliation refused');
+  run.evidence.releaseErasures = async clients => {
+    callbacks++;
+    expect(clients.relayClient).toBe(relayClient);
+    expect(clients.accessClient).toBe(accessClient);
+    expect(run.relay.transactionOpen).toBe(true);
+    expect(run.access.transactionOpen).toBe(true);
+    expect(locks.held.get('relay-allocator')).toBe('restore');
+    expect(locks.held.get('access-fence')).toBe('restore');
+    throw refusal;
+  };
+  try {
+    await expect(run.release(relayClient, accessClient)).rejects.toBe(refusal);
+    expect(callbacks).toBe(1);
+    expectBothHeld(run);
+    for (const [owner, start] of [[run.relay, relayStart], [run.access, accessStart]] as const) {
+      expect(owner.queries.slice(start).some(query => query.sql.startsWith('BEGIN')
+        || query.sql === 'COMMIT' || query.sql === 'ROLLBACK')).toBe(false);
+      expect(owner.transactionOpen).toBe(true);
+      expect(owner.active).toBe(true);
+      expect(owner.borrowCount).toBe(1);
+      expect(owner.releaseCount).toBe(0);
+    }
+    expect(locks.held.get('relay-allocator')).toBe('restore');
+    expect(locks.held.get('access-fence')).toBe('restore');
+    expect(run.fuseki.commands).toHaveLength(0);
+  } finally {
+    await accessClient.query('ROLLBACK');
+    await relayClient.query('ROLLBACK');
+    accessClient.release();
+    relayClient.release();
+    run.stop();
+  }
+});
+
+test('a supplied Access client without its relay client is refused without touching either owner transaction', async () => {
+  const run = fixture();
+  const accessClient = await run.access.pool.connect();
+  await accessClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+  const before = run.access.queries.length;
+  try {
+    await expect(run.release(undefined, accessClient)).rejects.toBeInstanceOf(RestoreLineageConflict);
+    expectBothHeld(run);
+    expect(run.access.queries).toHaveLength(before);
+    expect(run.access.transactionOpen).toBe(true);
+    expect(run.access.releaseCount).toBe(0);
+    expect(run.relay.borrowCount).toBe(0);
+    expect(run.capturedRelay.borrowCount).toBe(0);
+  } finally { await accessClient.query('ROLLBACK'); accessClient.release(); run.stop(); }
 });
 
 test('restore release rejects a callback that returns without releasing either hold', async () => {
@@ -810,7 +1054,7 @@ test('restore release retry with new retained erasure evidence leaves Access adm
   } finally { run.stop(); }
 });
 
-for (const failure of ['missing', 'mismatched'] as const) {
+for (const failure of ['missing', 'mismatched', 'missing-main', 'wrong-main', 'wrong-scope'] as const) {
   test(`restore release retry requires exact release receipt with ${failure} proof`, async () => {
     const run = fixture();
     const guardedRelease = run.evidence.releaseErasures!;
@@ -821,7 +1065,10 @@ for (const failure of ['missing', 'mismatched'] as const) {
     try {
       await expect(run.release()).rejects.toBeInstanceOf(RestoreLineageConflict);
       if (failure === 'missing') run.fuseki.releaseReceipt = null;
-      else run.fuseki.releaseReceipt!.digest = 'b'.repeat(64);
+      if (failure === 'mismatched') run.fuseki.releaseReceipt!.digest = 'b'.repeat(64);
+      if (failure === 'missing-main') delete run.fuseki.releaseReceipt!.priorMainSequence;
+      if (failure === 'wrong-main') run.fuseki.releaseReceipt!.priorMainSequence = '900';
+      if (failure === 'wrong-scope') run.fuseki.releaseReceipt!.streamScope = 'urn:rezics:relay:foreign';
       run.evidence.releaseErasures = guardedRelease;
       await expect(run.release()).rejects.toBeInstanceOf(RestoreLineageConflict);
       expect(run.state.callbackCalls).toBe(0);

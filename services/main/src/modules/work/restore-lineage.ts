@@ -194,6 +194,8 @@ export interface AuthenticatedRecoveryCoverage {
   objectStore?: ObjectRecoveryStore;
   /** Borrowed Content snapshot used by exact recovery pin verification. */
   contentClient?: PoolClient;
+  /** Captured handoff in the isolated copy, distinct from the retained journal. */
+  restoredRelayPool?: Pool;
   /**
    * Reconcile retained erasures after verifying the captured cut, then release
    * graph and Access under the same journal lock and borrowed owner clients.
@@ -532,6 +534,13 @@ export async function releaseRestoredGraphHold(
   if (!evidence.releaseErasures) {
     throw new RestoreLineageConflict('retained erasure restore release is unavailable');
   }
+  if (!evidence.restoredRelayPool || evidence.restoredRelayPool === relayPool) {
+    throw new RestoreLineageConflict('separate restored relay handoff is unavailable');
+  }
+  let capturedRelay: RelayCoverage;
+  try { capturedRelay = await relayCoverage(evidence.restoredRelayPool, coverage.relay.consumer); }
+  catch (error) { throw new RestoreLineageConflict('captured relay handoff is unavailable', { cause: error }); }
+  assertRetainedRecoveryRelayCut(coverage, capturedRelay);
   let accessClient: PoolClient | undefined;
   let relayHeadClient: PoolClient | undefined;
   const borrowedRelay = relayClient !== undefined;
@@ -572,7 +581,7 @@ export async function releaseRestoredGraphHold(
       relayTransaction = await borrowedTransaction('relay', relayHeadClient, 'read committed');
       accessTransaction = await borrowedTransaction('Access', borrowedAccessClient!, 'repeatable read');
     } else {
-      await relayHeadClient.query('BEGIN');
+      await relayHeadClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
       await relayHeadClient.query("SET LOCAL lock_timeout = '5s'");
     }
     // Every release takes the journal allocator before the Access fence. Keep
@@ -610,10 +619,6 @@ export async function releaseRestoredGraphHold(
     catch { throw new RestoreLineageConflict('retained Account deletion subject exists in restored Account'); }
     await assertAccountDeletionJournalCoverage(accessPool, relayPool, client, relayHeadClient);
     await assertGraphDeletionEvidence(accessPool, evidence.deletions, client);
-    let retainedRelay: RelayCoverage;
-    try { retainedRelay = await relayCoverageOnClient(relayHeadClient, coverage.relay.consumer); }
-    catch { throw new RestoreLineageConflict('relay checkpoint or delivered events are unavailable'); }
-    assertRetainedRecoveryRelayCut(coverage, retainedRelay);
     try { await assertCurrentRecoveryCoverageHead(relayHeadClient, coverage); }
     catch { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture'); }
     if (!coverage.content) throw new RestoreLineageConflict('Content recovery coverage is missing');
@@ -704,6 +709,11 @@ export async function releaseRestoredGraphHold(
         throw new RestoreLineageConflict('captured Access fence changed before graph release');
       }
       await assertBorrowedTransactions();
+      const delivering = await client.query(`SELECT 1 FROM access.search_read_lease WHERE state = 'delivering'
+        UNION ALL SELECT 1 FROM access.download_read_lease WHERE state = 'delivering' LIMIT 1`);
+      if (delivering.rowCount !== 0) {
+        throw new RestoreLineageConflict('Access delivery is still in progress before graph release');
+      }
       let updateError: unknown;
       if (held.boolean === true) {
         try { await fuseki.commandWithReceipt({ receipt, digest: releaseDigest, validations: [], deadlineMs: 10_000,

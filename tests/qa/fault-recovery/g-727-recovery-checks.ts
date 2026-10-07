@@ -3,12 +3,21 @@ import { randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { Pool } from 'pg';
 import { exportAccountData } from '../../../services/account/src/data-export.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
-import { OwnerOperations } from '../../../services/main/src/modules/owner/operations.ts';
+import {
+  OwnerOperations,
+  type RestoreResources,
+} from '../../../services/main/src/modules/owner/operations.ts';
+import {
+  PostgresReceiptCustodyStore,
+  ReceiptCustody,
+} from '../../../services/main/src/modules/outbox/receipt-custody.ts';
+import { proofRetirementSender } from '../../../services/main/src/modules/graph/slim-command.ts';
 import { mirrorAccountDeletionIntent } from '../../../services/main/src/modules/outbox/account-deletion-journal.ts';
 import { retainAccountSubjectDeletion } from '../../../services/main/src/modules/outbox/account-subject-deletion.ts';
 import { DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
@@ -16,6 +25,12 @@ import { objectStore } from '../../../scripts/ops/backup.ts';
 import type { RestoredContext, RestoreChecks } from '../../../scripts/ops/restore.ts';
 
 export type RecoveryProbeSource = Pick<RestoredContext, 'apps' | 'pools' | 'fuseki'>;
+
+export interface RetainedRecoveryChecks {
+  /** Caller-owned current ledger, available while the original project is stopped. */
+  relayPool: Pool;
+  erasures: NonNullable<RestoreResources['erasures']>;
+}
 
 /** Ephemeral QA custody uses distinct secret/public keyrings, just like the
  * one-Work harness. A manager can supply retained keyrings for a launch run. */
@@ -143,8 +158,20 @@ export async function captureRecoveryProbes(
 export function recoveryChecks(
   probes: Awaited<ReturnType<typeof captureRecoveryProbes>>,
   key: string,
+  retained: RetainedRecoveryChecks,
   verifyExtra?: (context: RestoredContext) => Promise<void>,
 ): RestoreChecks {
+  if (
+    typeof retained?.relayPool?.connect !== 'function' ||
+    !retained.erasures?.authority?.sealedCoverage ||
+    !retained.erasures.authority.hmacKey ||
+    !retained.erasures.signingKey ||
+    typeof retained.erasures.maintenance?.command !== 'function'
+  ) {
+    throw new Error(
+      'Recovery checks require independently retained current erasure and authority evidence',
+    );
+  }
   let verifiedBeforeRelease = false;
   return {
     verify: async (context) => {
@@ -208,14 +235,28 @@ export function recoveryChecks(
         },
         objectDirectory: context.apps.MAIN_OBJECT_DIRECTORY!,
         workObjects: objects.workObjects,
+        titleAdmissionKey: retained.erasures.signingKey,
+        ...(objects.workObjects
+          ? {
+              receiptCustody: new ReceiptCustody(
+                new PostgresReceiptCustodyStore(context.pools.access),
+                objects.workObjects,
+                context.fuseki,
+                retained.erasures.signingKey,
+                proofRetirementSender(context.apps.FUSEKI_URL!, context.apps.FUSEKI_COMMAND_TOKEN!),
+              ),
+            }
+          : {}),
       };
       const registry = new AccessAdmissionRegistry(context.pools.access);
-      const operations = new OwnerOperations(context.pools.relay, env, {
+      const operations = new OwnerOperations(retained.relayPool, env, {
         accountPool: context.pools.account,
         accessPool: context.pools.access,
         contentPool: context.pools.content,
         hmacKey: key,
         objectStore: objects,
+        restoredRelayPool: context.pools.relay,
+        erasures: retained.erasures,
       });
       const app = createMainApp(context.fuseki, {
         environment: env,
@@ -247,7 +288,7 @@ export function recoveryChecks(
         state?: string;
         disposition?: string;
       };
-      const hold = await context.pools.relay.query<{ hold_reason: string | null }>(
+      const hold = await retained.relayPool.query<{ hold_reason: string | null }>(
         'SELECT hold_reason FROM relay.owner_reconciliation WHERE operation_id = $1',
         [`owner:reconcile:${idempotencyKey}`],
       );
