@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 07:20 UTC. Manager GPT-6.1 Sol in tmux
+Checkpoint: 2026-10-07 07:48 UTC. Manager GPT-6.1 Sol in tmux
 `goal-kernel`, registered as `goal-kernel-codex`. Live truth:
 `task goal -- status`; inbox `.temp/goal-orchestration/messages/kernel.md`.
 
@@ -13,22 +13,20 @@ commits. The existing restore epoch refuses pre-restore proofs. Independent
 same-owner writers, immediate stale refusal, 205-walk drain and applied-1520
 upgrade/frontier pass 17 focused integrations; all 79 merge files and repository
 guards pass. No serialization allowance added. G-1300 is reused on codex/high
-for the deferred local challenge counts. Current storage still needs 1521
-through the canonical refresh retry.
+for the deferred local challenge counts. Content 1521 is applied on the shared stack; canonical refresh succeeded.
 
-The shared stack is repaired. G-1315 landed at 67883e853690, artifacts at
-ea78e29c6. The product assembler regression keeps `/update` absent and proves
-authenticated Statement conversion, replay and narrow native policy. Final
-`task dev:refresh -- --wait` succeeded on 18a969c808a2 with retained volumes;
-`task urls` confirms all six resources Healthy. Model generation 9 is current
-(159c5c9549ae); Access 1650 and Content 1700/1701 are current. Evidence:
-`.temp/kernel/dev-refresh-final-shared.log`. That original shared lifecycle hold was released. Current native/model
-artifacts advanced to generation 10 (ad88b61dfed1); preparation changed the web
-OAuth client ID after library:write consent landed. AppHost stop, model
-alignment and task dev restored all six Healthy. A canonical refresh retry
-ran, but main advanced before its final check, so no checkpoint was recorded.
-Regenerate current rated profiles then queue exactly one retry; coalesce all
-merges before it starts and keep material main stable once it acquires.
+The C4 shared-stack outage is repaired. G-1315 landed at 67883e853690,
+artifacts at ea78e29c6: the product assembler keeps `/update` absent and proves
+authenticated Statement conversion, replay and narrow native policy. Canonical
+refresh now succeeded after program fixed its old-checkpoint self-reference
+at 7359b43ee. All six resources Healthy, no pending SQL, model generation 11
+41d0b7e1e152 current; evidence `.temp/kernel/dev-refresh-corrected-checkpoint.log`.
+
+Six derived rating profiles subsequently landed b3825b4c4; artifacts 427f44faf
+advance model/native image. Trust-ops' one queued refresh acquired at 2138207d,
+including its Access1750/1751/1760. No duplicate kernel refresh exists. Keep
+material main stable until its checkpoint, then resume C5 merge CLI PID1348540
+(suspended by manager before fast-forward; unit children may finish).
 
 G-1296 has its native claims restored and is resumed on default codex. Its
 authored draft was stashed, rebased onto the repair, and restored; the stash
@@ -42,10 +40,10 @@ Do not enable a product raw-update endpoint.
 | Contract | State |
 | --- | --- |
 | C0 | Landed: G-1217 e75dda7b4, generation 4bc72dab2. |
-| C2 | First slice G-1226 7adef77bc + fac97ab59. G-1289 queued behind launch G-1284 and landed trust-ops G-1288. Every profile off the DSL remains. |
+| C2 | First slice G-1226 7adef77bc + fac97ab59. G-1289 running against landed launch G-1284 and trust-ops G-1288. Every profile off the DSL remains. |
 | C3 | First path G-1228 d27907918, bf6503e96, 02542960b. |
 | C4 | First slice G-1243 932f08a28182 repaired by G-1315 67883e853690; real product-layout QA and shared refresh passed. Claim folding/classification and retained restore audit remain. |
-| C5 | G-1282 resumed attempt 3: reviewed templates/paging pass focused QA, but epoch-wide pending row locks serialized unrelated applies. Fix concurrent independent-anchor reconciliation before acceptance. |
+| C5 | G-1282 reviewed: independent-anchor pending reconciliation and focused QA pass. Manager rebase preserves strict Statement replay/rate metadata; generated query bindings/image pins now committed. Retry gate runs; merge held for peer refresh checkpoint. |
 | C6 | G-1296 resumed attempt 3: five-quad proof, durable custody and exact models pass focused checks, but enabled slim writes have no owner-outbox relay reader. Delivery must work before landing. Legacy exact-model backfill remains a restore prerequisite. |
 
 Other landings: G-1297 246110a9d12f gives truthful complete on three list
@@ -59,8 +57,8 @@ keeps readable resource names and role identities. G-1243/G-1297/G-1271 closed.
   chapter GET/PUT progress passed focused QA; Recipe duplicate transports
   retired. Shared refresh queued. Candidate normalization still scans/sorts
   the full population before bounded writes; physical-work followup remains.
-- G-1282 running attempt 3: C5 independent-anchor pending consumption fix;
-  three Work templates and query/schema/fixture-only Concept feed remain.
+- G-1282 reviewed attempt 3: C5 independent-anchor pending consumption fixed;
+  three Work templates and query/schema/fixture-only Concept feed pass.
   Send launch/program exact acceptance after review and landing. Populated
   startup directory rebuild qualification remains explicit.
 - G-1290 second slice f5d13e096d70 and native pin 99c43a9d1 landed.
@@ -72,13 +70,16 @@ keeps readable resource names and role identities. G-1243/G-1297/G-1271 closed.
   2,051-slot/64-row qualification, but review found moving Main-stream tail
   and global pending-empty coverage gates. Remove unrelated-churn starvation
   before landing; scope window build fences to relevant effects.
-- G-1289 queued: dispatch when G-1284 lands; G-1288 landed 0e5218da741d.
-  Stage exact owner hooks and publication membership signatures in its worktree.
+- G-1289 running: G-1284 and G-1288 landed; exact owner hooks and current
+  publication membership signatures staged in its worktree.
 - G-1315 closed and archived after product-layout and shared-stack acceptance.
 - G-1326 first slice f624193d388d landed; artifacts b190b56a5, refresh queued.
-  Three source profiles preserve 56 constraints and five focus roles through
-  authored Turtle. Six rating profiles subsequently landed with 153 constraints
-  and 22 focus roles; artifacts/refresh and next derived-rating slice follow.
+  Three source profiles preserve 56 constraints/five focus roles. Six base
+  rating profiles preserve 153 constraints / 22 focus roles; six derived Realm
+  profiles b3825b4c4 preserve 179 constraints / 23 shapes, artifacts 427f44faf.
+  Worker attempt 4 authors remaining six target-rating v2-v4 profiles.
+- G-1341 running Luna/max: title-control and two derivation profiles move to
+  authored Turtle without compiler edits, preserving exact meaning and pins.
 - G-1330 queued behind C6 core claims: offline classification restore must use
   authenticated native maintenance on the product assembler, never /update.
 
@@ -109,7 +110,7 @@ After model/native artifact or migration changes: generate, types, committed
 artifacts, shared refresh. Preserve peer dirty files. References must be copied
 into a worktree only after dispatch succeeds; workers cannot read main .temp.
 New dispatches/resumes use default codex until account usage converges; reserve
-xhigh for first-of-kind design. Next checkpoint is singleton retirement, then C5/C6 acceptance. Full Goal
+xhigh for first-of-kind design. Next checkpoint is C5 landing and C6 delivery acceptance. Full Goal
 completion cannot yet be projected reliably: remaining population queries and
 profile migrations still need slices.
 
