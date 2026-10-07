@@ -297,6 +297,40 @@ test('Turtle fixed values preserve escaped lexical strings and distinguish IRIs'
     expect(() => parseTurtleProfile('probe-v1', turtle(`sh:path rv:value ; ${clauses}`))).toThrow();
 });
 
+test('Turtle refuses mixed enum mappings rather than admitting values outside the RDF list', async () => {
+  const source = turtle(
+    'sh:path rv:value ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRIOrLiteral ; sh:in (rv:main)',
+  );
+  const graph = new Store(new Parser().parse(source));
+  const sh = 'http://www.w3.org/ns/shacl#';
+  const rdf = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+  const head = graph.getQuads(null, sh + 'in', null, null)[0]!.object;
+  const member = graph.getObjects(head, rdf + 'first', null)[0]!;
+  const admitted = DataFactory.namedNode('https://rezics.com/vocab/main');
+  const outside = DataFactory.namedNode('https://rezics.com/vocab/other');
+  expect(member.equals(admitted)).toBe(true);
+  expect(member.equals(outside)).toBe(false);
+
+  const iri = await schema(source.replace('sh:IRIOrLiteral', 'sh:IRI'));
+  expect(Value.Check(iri, node({ 'rv:value': [admitted.value] }))).toBe(true);
+  for (const value of [outside.value, 'main', 1, null])
+    expect(Value.Check(iri, node({ 'rv:value': [value] }))).toBe(false);
+  expect(() => parseTurtleProfile('probe-v1', source)).toThrow(
+    'Cannot lower sh:in with sh:IRIOrLiteral',
+  );
+});
+
+test('Turtle integer enums remain refused instead of bypassing enum membership', () => {
+  for (const clauses of [
+    'sh:in (1 2)',
+    'sh:datatype xsd:integer ; sh:in (1 2)',
+    'sh:datatype xsd:integer ; sh:in ("1" "2")',
+    'sh:datatype xsd:integer ; sh:in (rv:main)',
+    'sh:hasValue 1 ; sh:in ("1" "2")',
+  ])
+    expect(() => parseTurtleProfile('probe-v1', turtle(`sh:path rv:value ; ${clauses}`))).toThrow();
+});
+
 test('Turtle enum and required-value conjunctions preserve graph membership and TypeBox outcomes', async () => {
   for (const [members, required, allowed] of [
     [

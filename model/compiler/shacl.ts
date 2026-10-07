@@ -260,14 +260,13 @@ export function parseTurtleProfile(
         result.maxInclusive !== undefined)
     )
       throw new Error('Cannot lower fixed values together with facets');
+    // The mixed mapping emits Type.Unknown() instead of enum items.
+    if (result.in && nodeKind === `${sh}IRIOrLiteral`)
+      throw new Error('Cannot lower sh:in with sh:IRIOrLiteral');
     // Fixed enums lower to array items plus contains. The single-item shortcut
     // also preserves the enum only when its required value is a member.
-    // IRIOrLiteral and integer mappings bypass enum items in the current lowerer.
-    if (
-      result.in &&
-      hasValue &&
-      (integerValue || nodeKind === `${sh}IRIOrLiteral` || !result.in.includes(result.hasValue!))
-    )
+    // Integer mappings bypass enum items in the current lowerer.
+    if (result.in && hasValue && (integerValue || !result.in.includes(result.hasValue!)))
       throw new Error('Cannot lower sh:in together with sh:hasValue for this JSON mapping');
     const unique = one(values, `${sh}uniqueLang`);
     if (unique) {
