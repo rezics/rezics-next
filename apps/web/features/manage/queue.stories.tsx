@@ -11,6 +11,7 @@ import zhHant from './messages/zh-Hant.ts';
 import { ManageFailure } from './parts.tsx';
 import { RealmFrame } from './realm-frame.tsx';
 import { ruleMemoryKey } from './reason-dialog.tsx';
+import { reasonMemoryKey } from './reason-presets.ts';
 import { reporters } from './queue-api.ts';
 import { QueueView } from './queue-view.tsx';
 
@@ -18,7 +19,10 @@ const recorded: Recorded = { commits: [] };
 /** Each story starts with nothing sent and no rule remembered from another story. */
 const reset = () => {
   recorded.commits.length = 0;
-  for (const action of ['reject', 'request-changes', 'remove'] as const) localStorage.removeItem(ruleMemoryKey(realm, action));
+  for (const action of ['reject', 'request-changes'] as const) localStorage.removeItem(ruleMemoryKey(realm, action));
+  for (const action of ['keep', 'remove', 'interim-restrict', 'final-restrict'] as const) {
+    localStorage.removeItem(reasonMemoryKey(realm, action));
+  }
 };
 const chinese = { ...messages, ...zhHans };
 const uuid = (iri: string) => iri.slice(-36);
@@ -140,8 +144,9 @@ export const RejectWithReason: Story = {
 };
 
 /**
- * A report shows what each reporter wrote. A keeps its content (no reason
- * needed); R removes it, with a reason the reporter and the author see.
+ * A report shows what each reporter wrote. A keeps its content and R removes
+ * it; both ask for a reason first, and the decision carries the statement the
+ * reporter and the author read.
  */
 export const KeepOrRemoveReport: Story = {
   async play({ canvasElement }) {
@@ -163,22 +168,26 @@ export const KeepOrRemoveReport: Story = {
     await expect(rows.querySelectorAll('[data-slot="work-cover"]').length).toBeGreaterThan(0);
     await expect(within(rows).queryByText('PP')).toBeNull();
     await userEvent.keyboard('a');
+    const keepDialog = within(await within(document.body).findByRole('dialog', { name: 'Keep reported content' }, { timeout: 5000 }));
+    await expect(keepDialog.getByRole('radio', { name: /It follows the rules/ })).toBeChecked();
+    await userEvent.keyboard('{Enter}');
     await expect(canvas.getByRole('status', { name: 'Decisions you can still undo' })).toHaveTextContent('Kept “Pride and Prejudice”');
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ id: queue[0]!.id, action: 'keep',
-      reason: null })]));
+      reason: 'We reviewed the report and found that this content follows the Realm’s rules.' })]));
     await userEvent.click(within(list(canvas)).getByRole('button', { name: /Little Women/ }));
     await expect((await canvas.findAllByText('The subtitle gives away the ending.'))[0]).toBeInTheDocument();
     await userEvent.keyboard('r');
     const dialog = within(await within(document.body).findByRole('dialog', { name: 'Remove reported content' }, { timeout: 5000 }));
-    await expect(dialog.queryByRole('textbox', { name: 'Private note for moderators' })).toBeNull();
-    const reasonField = () => within(within(document.body).getByRole('dialog', { name: 'Remove reported content' }))
-      .getByRole('textbox', { name: 'Why it’s removed' }) as HTMLTextAreaElement;
-    // The dialog focuses a rule radio after open. Typing before that focus lands keeps only a prefix.
-    await typeValue(reasonField, 'Rule 1: no spoilers in titles.');
-    await userEvent.click(within(within(document.body).getByRole('dialog', { name: 'Remove reported content' }))
-      .getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(dialog.getByRole('radiogroup').contains(document.activeElement)).toBe(true));
+    // The reason's number picks it; the statement the affected people read follows.
+    await userEvent.keyboard('3');
+    await expect(dialog.getByRole('radio', { name: /Unmarked spoiler/ })).toBeChecked();
+    await expect(dialog.getByText('This content gives away the story and was not marked as a spoiler.')).toBeVisible();
+    await userEvent.click(dialog.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ action: 'keep' }),
-      expect.objectContaining({ id: queue[5]!.id, action: 'remove', reason: 'Rule 1: no spoilers in titles.' })]));
+      expect.objectContaining({ id: queue[5]!.id, action: 'remove',
+        reasons: expect.objectContaining({ facts: 'This content gives away the story and was not marked as a spoiler.',
+          automation: false, contentLanguage: 'en' }) })]));
   },
 };
 

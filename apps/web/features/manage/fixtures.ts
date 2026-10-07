@@ -3,6 +3,7 @@ import type { AdminApi } from './admin-api.ts';
 import type { Outcome } from './commands.ts';
 import type { LogApi, LogNames } from './log-view.tsx';
 import type { QueueApi, QueueNames } from './queue-api.ts';
+import type { Decision } from './queue-state.ts';
 import type { AgentSummary, AuditItem, ChapterSummary, DecisionBasis, InvitationPage, Loaded, Member, ModerationItem,
   ModerationPage, PersonRecord, PublicDecision, PublishedRule, RealmHeader, RealmRule, Role, RoleImpact, SettingsView,
   WorkFacts, WorkSummary } from './types.ts';
@@ -197,7 +198,10 @@ export function basisFor(item: ModerationItem, rules = true): DecisionBasis {
     nextCursor: null, sourcePosition: position };
 }
 
-export interface Recorded { commits: Array<{ id: string; action: string; reason: string | null; key: string }> }
+export interface Recorded {
+  commits: Array<{ id: string; action: string; reason: string | null; key: string; note: string | null;
+    reasons: Decision['reasons'] | null }>;
+}
 
 /** A queue whose commits succeed unless `stale` names the item; reloads return `reload` when given. */
 export function queueApi(options: { stale?: readonly string[]; reload?: ModerationItem[]; recorded?: Recorded;
@@ -215,7 +219,8 @@ export function queueApi(options: { stale?: readonly string[]; reload?: Moderati
       : { ok: false, failure: 'missing' },
     people: async () => agents,
     commit: async (item, decision, key): Promise<Outcome<unknown>> => {
-      recorded.commits.push({ id: item.id, action: decision.action, reason: decision.reason, key });
+      recorded.commits.push({ id: item.id, action: decision.action, reason: decision.reason, key, note: decision.note,
+        reasons: decision.reasons ?? null });
       return options.stale?.includes(item.id) ? { ok: false, failure: 'stale' } : { ok: true, data: {} };
     },
   };

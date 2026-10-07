@@ -23,7 +23,9 @@ import { SubjectName } from './queue-context.tsx';
 import { actionOrder, QueueDetail, type RulesState } from './queue-detail.tsx';
 import { actionsFor, commonActions, type Decision, fullAuthority, initialTriage, itemsFor, needsReason, type PendingDecision,
   type QueueAction, type QueueAuthority, type Settled, targetIds, triage, UNDO_WINDOW_MS, visibleIds } from './queue-state.ts';
-import { ReasonDialog } from './reason-dialog.tsx';
+import { type Asked, ReasonDialog } from './reason-dialog.tsx';
+import { isReportAction, sharedRule } from './reason-presets.ts';
+import { ReportDecisionDialog } from './report-decision-dialog.tsx';
 import { mergeAgents } from './read.ts';
 import { type QueueView as View, queueHref } from './routes.ts';
 import { subjectOf } from './queue-subject.ts';
@@ -103,7 +105,7 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   namesRef.current = names;
   const [cursor, setCursor] = useState(initial.nextCursor);
   const [paging, setPaging] = useState<'idle' | 'loading' | 'moved' | 'failed'>('idle');
-  const [dialog, setDialog] = useState<{ action: Exclude<QueueAction, 'approve' | 'keep'>; ids: string[] } | null>(null);
+  const [dialog, setDialog] = useState<{ action: Exclude<QueueAction, 'approve'>; ids: string[] } | null>(null);
   const [help, setHelp] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Loaded<{ text: string; language: string }> | 'loading'>>({});
@@ -262,6 +264,13 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
     return () => document.removeEventListener('keydown', onKey);
   }, [act, dialog, help]);
 
+  const focusAfterDialog = () => (latest.current.current ? rows.current.get(latest.current.current) : null) ?? null;
+  const decideFromDialog = (decision: Decision) => {
+    const ids = dialog?.ids ?? [];
+    setDialog(null);
+    decide(ids, decision);
+  };
+
   async function more() {
     if (!cursor) return;
     setPaging('loading');
@@ -418,11 +427,13 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
         dispatch({ type: 'undo', key: last.key });
       }}>{t.undo}<Kbd aria-hidden="true">Z</Kbd></Button>
     </div> : state.committing.length ? <div role="status" className="sr-only">{t.sending}</div> : null}
-    <ReasonDialog action={dialog?.action ?? null} count={dialog?.ids.length ?? 1} locale={locale} messages={messages}
-      rules={realmRules} realm={realm}
-      finalFocus={() => (latest.current.current ? rows.current.get(latest.current.current) : null) ?? null}
-      onClose={() => setDialog(null)}
-      onDecide={decision => { const ids = dialog?.ids ?? []; setDialog(null); decide(ids, decision); }} />
+    <ReportDecisionDialog action={dialog && isReportAction(dialog.action) ? dialog.action : null}
+      count={dialog?.ids.length ?? 1} locale={locale} messages={messages} realm={realm}
+      rule={sharedRule((dialog?.ids ?? []).flatMap(id => state.items[id] ?? []), realmRules)}
+      finalFocus={focusAfterDialog} onClose={() => setDialog(null)} onDecide={decideFromDialog} />
+    <ReasonDialog action={dialog && !isReportAction(dialog.action) ? dialog.action as Asked : null}
+      count={dialog?.ids.length ?? 1} locale={locale} messages={messages} rules={realmRules} realm={realm}
+      finalFocus={focusAfterDialog} onClose={() => setDialog(null)} onDecide={decideFromDialog} />
     <Dialog open={help} onOpenChange={details => setHelp(details.open)}>
       <DialogContent size="sm">
         <DialogHeader title={t.shortcuts} description={t.shortcutsHelp} />

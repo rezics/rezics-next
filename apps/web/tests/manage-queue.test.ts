@@ -37,7 +37,8 @@ describe('what a moderator can decide', () => {
     expect([...actionsFor(submission(4, { escalation }))]).toEqual(['approve', 'reject', 'request-changes']);
     expect([...actionsFor(report(5, { kind: 'rights_complaint' }))]).toEqual([
       'keep', 'interim-restrict', 'final-restrict', 'escalate']);
-    expect(needsReason('keep')).toBe(false);
+    expect(needsReason('approve')).toBe(false);
+    expect(needsReason('keep')).toBe(true);
     expect(needsReason('remove')).toBe(true);
   });
 

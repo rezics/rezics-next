@@ -157,8 +157,9 @@ export async function decideReport(main: MainClient, realm: string, item: Modera
   const basis = await readDecisionBasis(main, realm, item.id, actingSubject);
   if (!basis.ok) return { ok: false, failure: basisFailure(basis.failure) };
   if (!basis.data.ruleBasis) return { ok: false, failure: 'invalid', code: 'rules_unpublished' };
+  // The reason the parties read is `reasons`; the rationale is the moderators' private note.
   const command = reportDecision(basis.data, decision.action as 'keep' | 'remove' | 'interim-restrict' | 'final-restrict',
-    decision.reason, actingSubject, key);
+    decision.note, actingSubject, key);
   // Everything reported is already hidden: another decision got there first.
   if (!command) return { ok: false, failure: 'stale' };
   return item.kind === 'rights_complaint'

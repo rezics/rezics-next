@@ -33,9 +33,9 @@ export const UNDO_WINDOW_MS = 6_000;
 
 export interface Decision {
   action: QueueAction;
-  /** Shown to the author (rejection, change request) or to the owners (escalation). */
+  /** Shown to the author (rejection, change request), to the owners (escalation) or, for a report, the facts of its statement. */
   reason: string | null;
-  /** Kept with the decision for moderators only. */
+  /** Kept with the decision for moderators only; a report decision's note is its private rationale. */
   note: string | null;
   /** Required by Main for notifying report decisions; old local drafts may lack it. */
   reasons?: ModerationDecisionCommand['reasons'];
@@ -73,9 +73,11 @@ export function actionsFor(item: ModerationItem, authority: QueueAuthority = ful
   return new Set<QueueAction>(['approve', 'reject', 'request-changes', ...escalate]);
 }
 
-/** Main requires a reason for everything except approving a submission or keeping reported content. */
-export const needsReason = (action: QueueAction): action is Exclude<QueueAction, 'approve' | 'keep'> =>
-  action !== 'approve' && action !== 'keep';
+/**
+ * Main requires a reason for everything except approving a submission. Keeping
+ * reported content is a decision too: its parties are told why it stayed.
+ */
+export const needsReason = (action: QueueAction): action is Exclude<QueueAction, 'approve'> => action !== 'approve';
 
 export interface PendingDecision {
   key: string;

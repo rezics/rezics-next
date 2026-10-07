@@ -16,29 +16,30 @@ import type { PublishedRule } from './types.ts';
 
 export const REASON_LIMIT = 2000;
 
+/** What this dialog asks for: the words an author sees on a rejection or change request, or a note to the owners. */
+export type Asked = Extract<QueueAction, 'reject' | 'request-changes' | 'escalate'>;
+
 /** Decisions whose reason can cite a Realm rule; an escalation is a note to the owners instead. */
-const citing = (action: QueueAction) => action !== 'escalate' && action !== 'approve' && action !== 'keep';
-/** One remembered rule per kind of answer: removals and restrictions share one, as they share a key. */
-const ruleSlot = (action: QueueAction) => action === 'request-changes' ? 'changes'
-  : action === 'reject' ? 'reject' : 'remove';
+const citing = (action: Asked) => action !== 'escalate';
+/** One remembered rule per kind of answer. */
+const ruleSlot = (action: Asked) => action === 'request-changes' ? 'changes' : 'reject';
 
 /** Where the last rule cited for a kind of decision in a Realm is kept, on this device only. */
-export const ruleMemoryKey = (realm: string, action: QueueAction) => `rezics:manage:rule:${realm}:${ruleSlot(action)}`;
+export const ruleMemoryKey = (realm: string, action: Asked) => `rezics:manage:rule:${realm}:${ruleSlot(action)}`;
 
-function recall(realm: string | undefined, action: QueueAction): string | null {
+function recall(realm: string | undefined, action: Asked): string | null {
   if (!realm) return null;
   try { return globalThis.localStorage?.getItem(ruleMemoryKey(realm, action)) ?? null; } catch { return null; }
 }
-function remember(realm: string | undefined, action: QueueAction, rule: string | null) {
+function remember(realm: string | undefined, action: Asked, rule: string | null) {
   if (!realm) return;
   try { globalThis.localStorage?.setItem(ruleMemoryKey(realm, action), rule ?? ''); } catch { /* private mode */ }
 }
 
 /**
- * Asks for the reason Main requires before a rejection, a change request, a
- * removal or an escalation. The decision is not sent here; it enters the undo
- * window. A removal's reason goes to the reporter and the author; Main keeps
- * no separate private note for it.
+ * Asks for the reason Main requires before a rejection, a change request or an
+ * escalation. The decision is not sent here; it enters the undo window. Reports
+ * are decided in `ReportDecisionDialog`, which sends a structured statement.
  *
  * When the Realm has published rules, the reason starts from the rule it
  * breaks. The rule picked last time for this kind of decision is picked
@@ -46,7 +47,7 @@ function remember(realm: string | undefined, action: QueueAction, rule: string |
  * item the same way; a rule's number picks it.
  */
 export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, rules = [], realm, locale, messages }: {
-  action: Exclude<QueueAction, 'approve' | 'keep'> | null; count: number; onDecide: (decision: Decision) => void;
+  action: Asked | null; count: number; onDecide: (decision: Decision) => void;
   onClose: () => void; locale: UiLocale; messages: ManageMessages;
   /** Where focus goes when the dialog closes: the queue's next item, so shortcuts keep working. */
   finalFocus?: () => HTMLElement | null;
@@ -92,18 +93,15 @@ export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, rul
     written.current = citation(id);
   };
   const escalating = shown === 'escalate';
-  const removing = shown === 'remove' || shown === 'interim-restrict' || shown === 'final-restrict';
   const title = shown === 'reject' ? t.reasonRejectTitle(count) : shown === 'request-changes' ? t.reasonChangesTitle(count)
-    : shown === 'interim-restrict' ? t.reasonInterimTitle(count)
-      : shown === 'final-restrict' ? t.reasonFinalTitle(count)
-        : removing ? t.reasonRemoveTitle(count) : t.reasonEscalateTitle(count);
+    : t.reasonEscalateTitle(count);
   const close = () => onClose();
   const submit = () => {
     const text = reason.trim();
     if (!text) { setError(t.reasonRequired); return; }
     if (text.length > REASON_LIMIT || note.length > 4000) { setError(t.reasonTooLong); return; }
     if (cites) remember(realm, shown, rule);
-    onDecide({ action: shown, reason: text, note: escalating || removing ? null : note.trim() || null });
+    onDecide({ action: shown, reason: text, note: escalating ? null : note.trim() || null });
   };
   return <Dialog open={action !== null} onOpenChange={details => { if (!details.open) close(); }}
     initialFocusEl={() => (cites ? rulesRef.current?.querySelector<HTMLElement>('input:checked')
@@ -138,7 +136,7 @@ export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, rul
             <p className="text-muted-foreground text-xs">{recalled ? `${t.ruleRemembered} ` : ''}{t.ruleKeys}</p>
           </RadioGroup> : null}
           <Field invalid={error !== null}>
-            <FieldLabel>{escalating ? t.escalateReasonLabel : removing ? t.removeReasonLabel : t.publicReasonLabel}</FieldLabel>
+            <FieldLabel>{escalating ? t.escalateReasonLabel : t.publicReasonLabel}</FieldLabel>
             <Textarea ref={reasonRef} value={reason} maxLength={REASON_LIMIT + 200} rows={4}
               onChange={event => { setReason(event.currentTarget.value); setError(null); }}
               onKeyDown={event => {
@@ -148,10 +146,9 @@ export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, rul
                 }
               }} />
             {error ? <FieldError>{error}</FieldError>
-              : <FieldHelper>{escalating ? t.escalateReasonHelp : removing ? t.removeReasonHelp : t.publicReasonHelp}
-              </FieldHelper>}
+              : <FieldHelper>{escalating ? t.escalateReasonHelp : t.publicReasonHelp}</FieldHelper>}
           </Field>
-          {escalating || removing ? null : <Field>
+          {escalating ? null : <Field>
             <FieldLabel>{t.noteLabel}</FieldLabel>
             <Textarea value={note} rows={2} maxLength={4000} onChange={event => setNote(event.currentTarget.value)} />
             <FieldHelper>{t.noteHelp}</FieldHelper>
@@ -159,7 +156,7 @@ export function ReasonDialog({ action, count, onDecide, onClose, finalFocus, rul
         </DialogBody>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={close}>{t.cancel}</Button>
-          <Button type="submit" variant={shown === 'reject' || removing ? 'destructive' : 'default'}>
+          <Button type="submit" variant={shown === 'reject' ? 'destructive' : 'default'}>
             {actionLabel(shown, t)}</Button>
         </DialogFooter>
       </form>
