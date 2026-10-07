@@ -94,6 +94,7 @@ async function presentationDigest(work: MainWorkDependencies, request: Request):
 export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const search = searchRoutes(fuseki, work);
   return new Elysia().post('/v1/query', { body, response: {
+    304:t.Null(),
     200: t.Object({ profile: t.Literal('query-v1'), template: t.String(), selection: querySelection,
       result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage, releaseWorksPage, resourceListPage,templateResponses]) }),
     400: problemResult(400), 401: problemResult(401), 403: problemResult(403), 404: problemResult(404), 409: problemResult(409),

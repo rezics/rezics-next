@@ -147,6 +147,12 @@ export const serializationAllowlist: SerializationAllowance[] = [
       access + '1130_notification_producer_insert_log.sql',
     ],
   },
+  {
+    relation: 'access.template_seek_checkpoint',
+    class: 'projection checkpoint (background)',
+    reason: 'Startup rebuild owns this resumable cursor. Ordinary writes advance per-anchor bases and ordinary reads never lock this row.',
+    writers: [access + '1510_template_seek.sql', main + 'modules/query/seek-index.ts'],
+  },
   ...[
     ['access.feed_checkpoint', '405_home_feed.sql', 'modules/feed/store.ts'],
     ['access.read_ranking_checkpoint', '475_read_rankings.sql', 'modules/rankings/projection.ts'],

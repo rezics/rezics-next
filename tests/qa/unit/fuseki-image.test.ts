@@ -13,7 +13,7 @@ function fixture(): string {
   const directory = mkdtempSync(join(tmpdir(), 'rezics-fuseki-image-'));
   mkdirSync(join(directory, 'scripts/dev'), { recursive: true });
   for (const path of ['infra/jena', 'infra/dev/compose.yaml', 'generated/model/manifest.json',
-    'generated/model/shapes', 'scripts/dev/release-manifest.ts']) {
+    'generated/model/shapes', 'scripts/dev/release-manifest.ts', 'services/main/src/modules/query/templates']) {
     cpSync(join(root, path), join(directory, path), { recursive: true });
   }
   return directory;

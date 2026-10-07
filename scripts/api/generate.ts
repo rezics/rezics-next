@@ -1,5 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { openapi } from '@elysia/openapi';
 import type { MainWorkDependencies } from '../../services/main/src/app.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
@@ -191,6 +191,11 @@ export async function buildMainOpenApi(): Promise<string> {
   const document = await response.json() as Document;
   assertRouteExposures(app.routes.filter(route => !route.path.startsWith('/openapi')));
   const paths = Object.entries(document.paths ?? {});
+  // HTTP conditional-read responses have no representation body.
+  for(const [,methods] of paths) for(const operation of Object.values(methods)) {
+    const unchanged=operation.responses?.['304'];
+    if(unchanged) delete unchanged.content;
+  }
   // Every installed versioned route must appear in the document (no fixed count to edit per route).
   const installed = new Set(app.routes.map(route => route.path).filter(path => /^\/v[12]\//.test(path))
     .map(path => path.replace(/:([A-Za-z0-9_]+)/g, '{$1}')));

@@ -1,4 +1,8 @@
 import { afterEach, describe, expect, spyOn, test } from 'bun:test';
+import { Value } from 'typebox/value';
+import { templates } from '../../../generated/query/templates.ts';
+import { readFileSync,readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   CommandForbidden,
   FusekiClient,
@@ -27,6 +31,22 @@ const respond = (response: Response) => {
 };
 
 describe('Native template term transport', () => {
+  test('Every reviewed view is one immutable query/schema/fixture triplet; the fourth uses the same executor',()=> {
+    const directory=resolve(import.meta.dir,'../src/modules/query/templates');
+    const files=readdirSync(directory);
+    expect(templates).toHaveLength(4);
+    for(const name of files.filter(name=>name.endsWith('.schema.ts')).map(name=>name.slice(0,-10))) {
+      expect(files).toContain(`${name}.rq`);expect(files).toContain(`${name}.fixture.json`);
+      const fixture=JSON.parse(readFileSync(resolve(directory,`${name}.fixture.json`),'utf8'));
+      const template=templates.find(template=>template.sparql===readFileSync(resolve(directory,`${name}.rq`),'utf8'))!;
+      expect(Value.Check(template.request,{profile:'template-query-v1',query:template.query,revision:1,parameters:fixture.parameters})).toBe(true);
+    }
+    const adapter=readFileSync(resolve(import.meta.dir,'../src/modules/query/template-read.ts'),'utf8');
+    expect(adapter).not.toContain('https://rezics.com/query/');
+    const feed=templates.find(template=>template.query.endsWith('followed-concept-feed'))!;
+    expect(feed.scope).toBe('public');expect(feed.eligibility).toEqual({kind:'discovery-concept',order:'newest'});
+    expect(Value.Check(feed.request,{profile:'template-query-v1',query:feed.query,revision:1,parameters:{roots:['https://rezics.com/id/11111111-1111-4111-8111-111111111111']},sparql:'SELECT * WHERE {?s ?p ?o}'})).toBe(false);
+  });
   test('sends RDF terms and server tuples without interpolating the reviewed query', async () => {
     const input = envelope();
     input.tables = [

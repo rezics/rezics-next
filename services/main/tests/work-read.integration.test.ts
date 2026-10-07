@@ -41,6 +41,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
       expect(exposure).toBe('platform:platform-admin');
     };
     const discoveryApp = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      templateSeek:stack.templateSeek,
       discovery: new DiscoveryProjection(stack.accessPool), judgments: new AccessJudgments(stack.accessPool),
       platformAccess,
       account: { verify: async () => a.principal } });
@@ -152,6 +153,26 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
     expect((await json<Page<unknown>>(await get(`${root}/classifications`))).items)
       .toMatchObject([{ sense: proposition.sense, concept: proposition.concept,
         name: { value: 'Adventure' }, source: 'global', relevance: null }]);
+    await refreshDiscovery();
+    const conceptFeed=await json<{result:Page<{id:string;concept:string}>}>(await discoveryApp.handle(
+      new Request('http://main.local/v1/query',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({profile:'template-query-v1',query:'https://rezics.com/query/followed-concept-feed',revision:1,
+          parameters:{roots:[proposition.concept]}})})));
+    expect(conceptFeed.result.items).toMatchObject([{id:first.work,concept:proposition.concept,name:{value:first.title}}]);
+    expect(conceptFeed.result.nextCursor).toBeNull();
+    await json(await a.send('POST','/v1/classification-decisions',{
+      ...decision,work:second.work,mainVersion:second.mainVersion,context:{kind:'global'},outcome:'accepted'}),201);
+    await refreshDiscovery();
+    const feedPage=async(cursor?:string)=>json<{result:Page<{id:string}>}>(await discoveryApp.handle(
+      new Request('http://main.local/v1/query',{method:'POST',headers:{'content-type':'application/json'},
+        body:JSON.stringify({profile:'template-query-v1',query:'https://rezics.com/query/followed-concept-feed',revision:1,
+          parameters:{roots:[proposition.concept]},page:{size:1,cursor}})})));
+    const newest=await feedPage();
+    expect(newest.result.items.map(item=>item.id)).toEqual([second.work]);
+    expect(newest.result.nextCursor).toBeString();
+    const older=await feedPage(newest.result.nextCursor!);
+    expect(older.result.items.map(item=>item.id)).toEqual([first.work]);
+    expect(older.result.nextCursor).toBeNull();
     expect((await json<Page<unknown>>(await get(`${root}/classifications?scope=realm&realm=${encodeURIComponent(realm.realm)}`))).items.length).toBe(1);
     await json(await a.send('POST', '/v1/classification-decisions',
       { ...decision, context: { kind: 'realm-classification', id: realm.realm }, outcome: 'rejected' }), 201);
