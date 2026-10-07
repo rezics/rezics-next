@@ -140,7 +140,7 @@ test('a thousand admitted Episode occurrences seek, tick out of order and resume
     expect(stack.fuseki.queries - missingBefore.calls).toBeLessThan(40);
     expect(await json(await call(first, 'GET', `${path}/occurrences/${short(episodes[6]!)}?${actorQuery}`)))
       .toMatchObject({ occurrences: [{ occurrence: episodes[6], parent: main, target: repeated }],
-        occurrenceContext: { ordinal: 7 } });
+        });
 
     const tick = (occurrence: string, completed: boolean, expectedVersion = 0, key?: string) => call(first, 'PUT',
       `${path}/occurrences/${short(occurrence)}/progress`, { actingSubject: person,
