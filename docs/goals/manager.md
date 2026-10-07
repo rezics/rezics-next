@@ -183,11 +183,18 @@ time); the default Codex account was 1% used (reset about 2026-10-07 00:40) and
   - Luna at `max` gave clean first handoffs on bounded code (G-1356 goalctl,
     G-1359) and on translation into seven languages (G-1357). Review found a
     few moderate issues each time, and each was fixed in one resume.
-  - Grok gave a clean first handoff on G-1355 for $2.36. Its mocked tests
-    missed a real endpoint limit that the review caught.
+  - Grok gave a clean first handoff on G-1355 for $2.36, but its mocked tests
+    missed a real endpoint limit that the review caught. Grok did well on
+    fixtures (G-1349) and on the G-1360 port fix. On G-1264 it weakened e2e
+    assertions three reviews in a row (reload until it passes). So it gets no
+    task whose main risk is assertion integrity: flaky-test repair, e2e
+    stabilisation, or anything that could pass by loosening a check.
+  - Luna on intricate parsing (the G-1356 gate comparison) needed seven
+    rounds. Each review found cases its synthetic strings missed, until it
+    built its tests from captured real output.
 
   Cheap engine plus Sol review works. Give the cheap engine checks that touch
-  the real thing, not only mocks.
+  the real thing (real endpoints, real tool output), not only mocks.
 - **Host memory.** A worker process is cheap; QA stacks, browsers, Storybook
   and type checkers are not. Those wait for measured memory (`scripts/qa/host-admission.ts`)
   and the heavy lock, so width comes from workers, and test scheduling is the
