@@ -182,9 +182,9 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await expect(async () => {
     await page.goto(workPath);
     await expect(page.getByRole('heading', { name: 'Lemon poppy muffins' }).first()).toBeVisible({ timeout: 5_000 });
-    await expect(page.locator('#recipe-experience')).toContainText('120 g butter', { timeout: 5_000 });
+    await expect(page.getByRole('region', { name: 'Recipe', exact: true })).toContainText('120 g butter', { timeout: 5_000 });
   }).toPass({ timeout: 120_000 });
-  const recipe = page.locator('#recipe-experience');
+  const recipe = page.getByRole('region', { name: 'Recipe', exact: true });
   await expect(recipe.getByRole('heading', { name: 'Cake' })).toBeVisible();
   await expect(recipe.getByRole('heading', { name: 'Icing' })).toBeVisible();
   await expect(recipe).toContainText('Yield 12 muffins');
