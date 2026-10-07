@@ -12,6 +12,7 @@ import { readResourceSummaries } from '../../../services/main/src/modules/media/
 import { DEFAULT_MEDIA_CONTEXT } from '../../../services/main/src/modules/media/store.ts';
 import { DEFAULT_PERSON_CHOICES, PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
+import { realmSelectionSlotIri } from '../../../services/main/src/modules/work/select-realm.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { startMediaStack } from './media-support.ts';
 
@@ -49,7 +50,7 @@ test('signed-in and anonymous Realm release queries retain both current summary 
     const created = await createRealmSpace(s.env, s.admission(editor.actor, 'space:create:root',
       'space.create', spaceCreationDigest(input)), input);
     if (created.outcome !== 'succeeded' || !created.realm) throw new Error('Realm fixture failed');
-    const realm = created.realm, slot = id(), selection = id();
+    const realm = created.realm, slot = realmSelectionSlotIri(realm, work.mainVersion), selection = id();
     // The Realm adopts the exact existing public Main selection witness.
     await s.fuseki.update(`PREFIX rv: <${RV}> INSERT {
       GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} a rv:RealmPublicationSlot ; rv:realm ${iri(realm)} ;
