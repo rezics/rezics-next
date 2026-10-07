@@ -13,7 +13,7 @@ import { definitionCreatorAllowed } from './definition-creator.ts';
 import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 import { publicInTransaction } from './semantic-disclosure.ts';
 import { publicPost } from '../post/patterns.ts';
-import { resolveZonePageContent, savedZonePageContent, zonePageContentAllowed,
+import { resolveZonePageContent, savedZonePageContent,
   ZONE_PAGE_CONTENT_PROOF } from './zone-content-authority.ts';
 
 export const BASELINE_MEMBER_POLICY = 'baseline-member-v1';
@@ -273,13 +273,14 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
   const zonePage = resolveZonePageContent(request);
   if (zonePage.kind === 'refused') return null;
   if (zonePage.kind === 'zone') {
+    if (request.principal.emailVerified !== true) return null;
     if (!baselineWorkTypesAllowed(request)) return null;
     const page = baselineTarget(request.action, request.scope);
     if (!page || (page.kind !== 'author-work' && page.kind !== 'reply-draft')) return null;
     if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) return null;
     const proof = await controllerProofFor(page)(client, principalId, request.actingSubject);
-    if (!proof || !await zonePageContentAllowed(client, graph, principalId, request.actingSubject,
-      zonePage.zone, request.principal.emailVerified === true)) return null;
+    if (!proof || !await zoneSpaceCreatorAllowed(client, graph, principalId, request.actingSubject,
+      zonePage.zone)) return null;
     return { ...proof, realm_membership: ZONE_PAGE_CONTENT_PROOF, collection_create: false,
       related_work: null, source_revision: null, submission_contribution: null,
       author_work: zonePage.zone, author_generation: null,
@@ -364,10 +365,8 @@ export async function baselineProofCurrent(client: PoolClient, graph: Pick<Fusek
         admission.principal_id, admission.acting_subject, target.id);
   }
   const zonePage = savedZonePageContent(saved, admission.action);
-  // Claim has already applied the verified-email rule for stewards. Passing true
-  // here still refuses a revoked grant, and an administrator does not need it.
-  if (zonePage) return zonePageContentAllowed(client, graph, admission.principal_id,
-    admission.acting_subject, zonePage, true);
+  if (zonePage) return zoneSpaceCreatorAllowed(client, graph, admission.principal_id,
+    admission.acting_subject, zonePage);
   if (target.kind === 'author-work' || target.kind === 'reply-draft' && !saved.related_work) {
     return saved.author_work === target.id && saved.author_generation != null
       && saved.author_generation === await authorWorkGeneration(client,

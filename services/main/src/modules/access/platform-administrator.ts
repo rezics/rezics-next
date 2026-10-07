@@ -89,6 +89,8 @@ export async function platformAdministratorTargetAllowed(
 }
 
 export interface PlatformAdministratorProof {
+  /** Server-resolved Content Zone, immutable with this admission's grant proof. */
+  resolved_zone_page?: string | null;
   receipt: string;
   representation_id: string;
   representation_generation: string;
@@ -152,7 +154,7 @@ export async function savedPlatformAdministratorProof(client: PoolClient, admiss
   return (
     (
       await client.query<PlatformAdministratorProof>(
-        `SELECT receipt, representation_id,
+        `SELECT receipt, representation_id, resolved_zone_page,
     representation_generation, subject_generation, principal_epoch
     FROM access.platform_administrator_admission WHERE admission_id = $1`,
         [admission],
@@ -185,8 +187,8 @@ export async function savePlatformAdministratorProof(
 ) {
   await client.query(
     `INSERT INTO access.platform_administrator_admission
-    (admission_id, receipt, representation_id, representation_generation, subject_generation, principal_epoch)
-    VALUES ($1,$2,$3,$4,$5,$6)`,
+    (admission_id, receipt, representation_id, representation_generation, subject_generation, principal_epoch, resolved_zone_page)
+    VALUES ($1,$2,$3,$4,$5,$6,$7)`,
     [
       admission,
       proof.receipt,
@@ -194,6 +196,7 @@ export async function savePlatformAdministratorProof(
       proof.representation_generation,
       proof.subject_generation,
       proof.principal_epoch,
+      proof.resolved_zone_page ?? null,
     ],
   );
 }

@@ -24,7 +24,8 @@ import type { CommandEnvelope } from '../../infrastructure/fuseki.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { baselineMemberProof, baselineProofCurrent, baselineTargetAllowed, baselineWorkTypesAllowed,
   newBaselineProof, saveBaselineProof, savedBaselineProof } from './baseline.ts';
-import { resolveZonePageContent, savedZonePageContent, zonePageAdministratorAllowed } from './zone-content-authority.ts';
+import { resolveZonePageContent, savedZonePageContent, zonePageAdministratorAllowed,
+  zoneEditScope, ZONE_PAGE_CONTENT_PROOF } from './zone-content-authority.ts';
 import { reserveBaselineSpace, settleBaselineSpace } from './baseline-quota.ts';
 import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 import { ensureBaselineScopeGate, lockAccessKey, lockAdmissionKey } from './scope-gates.ts';
@@ -1056,18 +1057,24 @@ export class AccessAdmissionRegistry {
           dispatchEligible, replayed: true };
       }
 
+      const zonePage = resolveZonePageContent(request);
       const savedAdministrator = existing ? await savedPlatformAdministratorProof(client, existing.id) : null;
       if (existing && savedAdministrator) {
         if (existing.request_digest !== request.requestDigest
           || existing.acting_subject !== request.actingSubject
-          || existing.authority_path !== authorityPath || existing.scope_id !== request.scope) {
+          || existing.authority_path !== authorityPath || existing.scope_id !== request.scope
+          || zonePage.kind === 'refused'
+          || (savedAdministrator.resolved_zone_page ?? null) !== (zonePage.kind === 'zone' ? zonePage.zone : null)) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
         const dispatchEligible = witnessCurrent && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
           && await platformAdministratorProofCurrent(client, savedAdministrator, principalId, request.actingSubject)
-          && await platformAdministratorTargetAllowed(client, this.baselineGraph, principalId,
-            request.actingSubject, request.action, request.scope)
+          && (savedAdministrator.resolved_zone_page
+            ? await zonePageAdministratorAllowed(client, this.baselineGraph, principalId,
+              request.actingSubject, savedAdministrator, request.action)
+            : await platformAdministratorTargetAllowed(client, this.baselineGraph, principalId,
+              request.actingSubject, request.action, request.scope))
           && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount;
         if (!transaction) await client.query('COMMIT');
         return { id: existing.id, principalId, actingSubject: existing.acting_subject,
@@ -1078,7 +1085,6 @@ export class AccessAdmissionRegistry {
           dispatchEligible, replayed: true };
       }
 
-      const zonePage = resolveZonePageContent(request);
       const savedBaseline = existing ? await savedBaselineProof(client, existing.id) : null;
       if (existing && savedBaseline) {
         if (existing.request_digest !== request.requestDigest
@@ -1092,10 +1098,8 @@ export class AccessAdmissionRegistry {
           || savedZonePageContent(savedBaseline, existing.action) !== (zonePage.kind === 'zone' ? zonePage.zone : null)) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        const zoneAdministrator = await zonePageAdministratorAllowed(client, this.baselineGraph,
-          existing.principal_id, existing.acting_subject, savedBaseline, existing.action);
         const dispatchEligible = !participationDenied && witnessCurrent
-          && (request.principal.emailVerified === true || zoneAdministrator)
+          && request.principal.emailVerified === true
           && baselineWorkTypesAllowed(request)
           && ['registered', 'claimed'].includes(existing.state) && existing.eligible
           && gate.open && gate.dispatch_open && existing.authority_epoch === gate.authority_epoch
@@ -1207,13 +1211,18 @@ export class AccessAdmissionRegistry {
       let publishingProof: RepresentedWorkProof | null = null;
       if (participationDenied) throw participationDenied;
       authoritySources.push(...participationSources);
-      const administratorCandidate = !existing && zonePage.kind !== 'zone' && authorityPath === 'represented-agent'
+      const administratorCandidate = !existing && zonePage.kind !== 'refused' && authorityPath === 'represented-agent'
         && platformAdministratorAction(request.action, request.scope)
         && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount
-        ? await platformAdministratorProof(client, principalId, request.actingSubject) : null;
-      const administrator = administratorCandidate && await platformAdministratorTargetAllowed(client,
-        this.baselineGraph, principalId, request.actingSubject, request.action, request.scope)
-        ? administratorCandidate : null;
+        ? await platformAdministratorProof(client, principalId, request.actingSubject, true,
+          zonePage.kind === 'zone' ? { action: 'zone.edit', scope: zoneEditScope(zonePage.zone) } : undefined) : null;
+      const administratorTarget = administratorCandidate
+        ? { ...administratorCandidate, resolved_zone_page: zonePage.kind === 'zone' ? zonePage.zone : null } : null;
+      const administrator = administratorTarget && (administratorTarget.resolved_zone_page
+        ? await zonePageAdministratorAllowed(client, this.baselineGraph, principalId,
+          request.actingSubject, administratorTarget, request.action)
+        : await platformAdministratorTargetAllowed(client, this.baselineGraph, principalId,
+          request.actingSubject, request.action, request.scope)) ? administratorTarget : null;
       if (!existing && ['media.labels.protect','media.conceal.protect'].includes(request.action) && !administrator) {
         throw new AdmissionDenied('media protection requires the platform administrator proof');
       }
@@ -1221,7 +1230,7 @@ export class AccessAdmissionRegistry {
       if (!existing && zonePage.kind === 'refused') {
         throw new AdmissionDenied('Content zone page target is unresolved');
       }
-      if (!existing && zonePage.kind === 'zone' && !baseline
+      if (!existing && zonePage.kind === 'zone' && !baseline && !administrator
         && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) {
         throw new AdmissionDenied('Zone edit authority is unavailable');
       }
@@ -1346,7 +1355,8 @@ export class AccessAdmissionRegistry {
 
       // 'open' is policy authority without a membership row. Claim still
       // rechecks that policy through baselineProofCurrent and participation.
-      if (baseline?.realm_membership && baseline.realm_membership !== 'open') {
+      if (baseline?.realm_membership && baseline.realm_membership !== 'open'
+        && baseline.realm_membership !== ZONE_PAGE_CONTENT_PROOF) {
         const [kind, membershipId, generation] = baseline.realm_membership.split(':');
         authoritySources.push({ table: kind === 'owner' ? 'permission_grant'
           : kind === 'private' ? 'private_membership' : 'membership', id: membershipId!, generation });
@@ -1588,8 +1598,11 @@ export class AccessAdmissionRegistry {
           || current.subject !== principal.rows[0]!.account_subject
           || !platformAdministratorAction(row.action, row.scope_id)
           || !await platformAdministratorProofCurrent(client, administrator, row.principal_id, row.acting_subject)
-          || !await platformAdministratorTargetAllowed(client, this.baselineGraph, row.principal_id,
-            row.acting_subject, row.action, row.scope_id)
+          || !(administrator.resolved_zone_page
+            ? await zonePageAdministratorAllowed(client, this.baselineGraph, row.principal_id,
+              row.acting_subject, administrator, row.action)
+            : await platformAdministratorTargetAllowed(client, this.baselineGraph, row.principal_id,
+              row.acting_subject, row.action, row.scope_id))
           || (await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [row.scope_id])).rowCount) {
           throw new AdmissionDenied('platform administrator authority changed before claim');
         }
@@ -1615,14 +1628,7 @@ export class AccessAdmissionRegistry {
           if (error instanceof AccountAssertionDenied) throw new AdmissionDenied('baseline Account assertion is inactive');
           throw error;
         }
-        const zoneAdministrator = await zonePageAdministratorAllowed(client, this.baselineGraph,
-          row.principal_id, row.acting_subject, baseline, row.action);
-        if (zoneAdministrator) {
-          if (!current || current.issuer !== identity.account_issuer
-            || current.subject !== identity.account_subject) {
-            throw new AdmissionDenied('platform administrator authority changed before claim');
-          }
-        } else if (current?.emailVerified !== true || current.issuer !== identity.account_issuer
+        if (current?.emailVerified !== true || current.issuer !== identity.account_issuer
           || current.subject !== identity.account_subject) {
           throw new AdmissionDenied('baseline claim needs the current verified Account assertion');
         }
