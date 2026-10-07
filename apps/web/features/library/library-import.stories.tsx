@@ -89,6 +89,33 @@ export const UseImportedValues: Story = { async play({ canvasElement }) {
   await expect(last!.held.filter(row => row.resolution?.conflictChoice === 'replace')).toHaveLength(6);
 } };
 
+/** Closing while "Use the imported value" is being saved must not leave those choices behind when the reader then keeps their own. */
+export const KeepMineAfterInterruptedPreparation: Story = { args: { make: () => {
+  const fake = last = fakeImportApi(goodreadsRows());
+  let replaced = 0;
+  return { ...fake, resolve: async (id, row, choice, options) => {
+    if (choice.conflictChoice === 'replace' && ++replaced === 3) await new Promise<void>((_resolve, reject) => {
+      const signal = options?.signal;
+      const abort = () => reject(new DOMException('The operation was aborted.', 'AbortError'));
+      if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
+    });
+    return fake.resolve(id, row, choice, options);
+  } };
+} }, async play({ canvasElement }) {
+  const canvas = await openAndUpload(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: 'Keep every unmatched row private' }));
+  await userEvent.click(canvas.getByRole('radio', { name: 'Use the imported value' }));
+  await waitFor(() => expect(canvas.getByRole('button', { name: 'Add to my library' })).toBeEnabled());
+  await userEvent.click(canvas.getByRole('button', { name: 'Add to my library' }));
+  await waitFor(() => expect(last!.held.filter(row => row.resolution?.conflictChoice === 'replace')).toHaveLength(2));
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.click(canvas.getByText('Import your books'));
+  await userEvent.click(canvas.getByRole('radio', { name: 'Keep mine (default)' }));
+  await userEvent.click(canvas.getByRole('button', { name: 'Add to my library' }));
+  await expect(await canvas.findByText(/Finished: 9 of 9 rows/, undefined, { timeout: 5000 })).toBeVisible();
+  await expect(last!.held.filter(row => row.resolution?.conflictChoice === 'replace')).toHaveLength(0);
+} };
+
 /** Another device changed the row first: it is reloaded from Main, so the second choice is made on its current version. */
 export const ChangedElsewhere: Story = { args: { make: faked({ changedElsewhere: [6] }) }, async play({ canvasElement }) {
   const canvas = await openAndUpload(canvasElement);
@@ -133,7 +160,7 @@ async play({ canvasElement }) {
 } };
 
 /** The connection dropped while applying: nothing is lost, and Continue resumes where it stopped. */
-export const InterruptedApply: Story = { args: { make: faked({ step: 2, failApplyAt: 2 }) },
+export const InterruptedApply: Story = { args: { make: faked({ step: 2, failApplyAt: 2 }), wait: async () => {} },
   async play({ canvasElement }) {
     const canvas = await openAndUpload(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Keep every unmatched row private' }));

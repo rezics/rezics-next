@@ -18,6 +18,7 @@ import { type ApplyProgress, UPLOAD_LIMIT_BYTES, type CsvInspection, type CsvMap
   type ImportRow, mainImportApi, type RowResolution } from './import-api.ts';
 import { browserImportShelf, type ImportShelf, type PendingImport } from './import-store.ts';
 import { canCommitApplyIntent, pollLibraryApply } from './import/apply.ts';
+import { reconcileConflictChoices } from './import/conflicts.ts';
 import { applyFinished, applyStarted, countGroups, groupOf, loadAllRows, needsChoice, replaceRow, reloadRow,
   type RowGroup, rowGroups } from './import-rows.ts';
 import { CsvMapper } from './library-import-map.tsx';
@@ -40,9 +41,11 @@ interface Active { entry: PendingImport; rows: ImportRow[]; loaded: boolean; pro
  * the reader's choices, starts apply and reads its progress. A reload or a second visit comes
  * back to the same upload, because Main keeps it for seven days and this browser remembers its id.
  */
-export function LibraryImport({ agent, context, locale, messages, api, shelf = browserImportShelf, initialOpen = false }: {
+export function LibraryImport({ agent, context, locale, messages, api, shelf = browserImportShelf, initialOpen = false, wait }: {
   agent: string; context: string | null; locale: UiLocale; messages: LibraryMessages; api?: ImportApi;
   shelf?: ImportShelf; initialOpen?: boolean;
+  /** How long apply observation pauses between reads; a story supplies its own clock, production uses the backoff. */
+  wait?: (milliseconds: number, signal?: AbortSignal) => Promise<void>;
 }) {
   const t = materializeData(messages, { locale });
   const router = useRouter();
@@ -52,6 +55,8 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
   const run = useRef(0);
   const controller = useRef<AbortController | null>(null);
   const loadingRows = useRef(false);
+  /** Conflict choices may be saved on Main that the loaded rows do not show, until the apply intent is committed. */
+  const conflictsSaved = useRef(false);
   const session = () => {
     if (!controller.current || controller.current.signal.aborted) controller.current = new AbortController();
     return controller.current;
@@ -156,16 +161,6 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
     }
     await showRow(id, row.index, signal);
   }
-  /** Rows the reader asked to overwrite what the Library already has: Main applies `replace` for them alone. */
-  async function useImportedValues(id: string, targets: readonly ImportRow[], signal: AbortSignal) {
-    for (const row of targets) {
-      signal.throwIfAborted();
-      const work = row.resolution?.work ?? row.match?.work;
-      if (row.source.kind !== 'source' || !work || groupOf(row) !== 'matched') continue;
-      const target = row.resolution?.target ?? row.match?.target;
-      await client.resolve(id, row, { choice: 'apply', work, ...target ? { target } : {}, conflictChoice: 'replace' }, { signal });
-    }
-  }
   async function adoptRow(id: string, row: ImportRow, workId: string) {
     const { signal } = session();
     signal.throwIfAborted();
@@ -208,12 +203,22 @@ export function LibraryImport({ agent, context, locale, messages, api, shelf = b
     try {
       // Main will not seal while a row has neither a match nor a choice: what was not found stays private.
       // A sealed import has none left in that group, so a resumed apply asks for nothing here.
-      if (!options.checkOnly) await keepPrivate(entry.id, current.filter(row => groupOf(row) === 'not-found'), signal);
-      if (!options.checkOnly && !entry.intent && useImported) await useImportedValues(entry.id, current, signal);
+      let reviewed: readonly ImportRow[] = current;
+      // A preparation closed part way left conflict choices on Main that these rows do not show: read them back.
+      if (!options.checkOnly && !entry.intent && conflictsSaved.current) {
+        const fresh = await loadAllRows(client, entry.id, entry.total, () => {}, live, signal);
+        if (!live()) return;
+        patch({ rows: fresh }); reviewed = fresh;
+      }
+      if (!options.checkOnly) await keepPrivate(entry.id, reviewed.filter(row => groupOf(row) === 'not-found'), signal);
+      if (!options.checkOnly && !entry.intent) {
+        conflictsSaved.current = true;
+        await reconcileConflictChoices(client, entry.id, reviewed, useImported, signal);
+      }
       if (!live()) return;
       // From here the intent is fixed: remember it, so a reload resumes this apply.
-      if (commitIntent) { shelf.save(agent, withIntent); patch({ entry: withIntent }); }
-      const result = await pollLibraryApply(client, entry.id, intent, { active: live, signal, ...options,
+      if (commitIntent) { shelf.save(agent, withIntent); patch({ entry: withIntent }); conflictsSaved.current = false; }
+      const result = await pollLibraryApply(client, entry.id, intent, { active: live, signal, wait, ...options,
         onProgress: progress => patch({ progress }) });
       if (!result) return;
       if (result.state === 'review') { patch({ stopped: true }); setError(t.importRequestFailed); return; }

@@ -69,3 +69,19 @@ test('an aborted lease releases the batch lock even when the action ignores canc
   await expect(new ReaderLibraryImportStore(pool).withBatch('reader', 'key', () => new Promise<never>(() => {}), lease.signal)).rejects.toThrow('lease expired');
   expect(queries.some(sql => sql.includes('pg_advisory_unlock'))).toBe(true);
 });
+
+test('a lease cancelled while a step is being planned starts no owner write', async () => {
+  const lease = new AbortController();
+  const reason = new Error('lease expired');
+  const store = new ReaderLibraryImportStore({} as Pool);
+  let dispatched = 0;
+  store.setDispatch(async () => { dispatched++;return Response.json({}, { status: 200 }); });
+  store.planStep = async (_agent, _key, _row, _step, plan) => {
+    lease.abort(reason);
+    return { plan: plan as Record<string, unknown>, completed: false };
+  };
+  const owned = new Request('http://main.local/import', { signal: lease.signal });
+  const owner = new ImportCommands(store, owned, batch, 'file');
+  await expect(owner.step(0, 'status', 'PUT', '/v1/works/work/reader-status', {})).rejects.toBe(reason);
+  expect(dispatched).toBe(0);
+});

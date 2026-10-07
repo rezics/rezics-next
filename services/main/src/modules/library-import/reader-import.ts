@@ -51,6 +51,8 @@ export class ReaderLibraryImportStore {
 
   async call(request: Request): Promise<Response> {
     if (!this.dispatch) throw new ReaderImportUnavailable('Main import dispatcher is unavailable');
+    // A continuation resumed after cancellation must not start an owner write the lock no longer covers.
+    if (request.signal.aborted) throw request.signal.reason;
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(this.ownerTimeoutMs)]);
     try { return await abortable(this.dispatch(request), signal); } catch (error) {
       if (request.signal.aborted) throw request.signal.reason;
