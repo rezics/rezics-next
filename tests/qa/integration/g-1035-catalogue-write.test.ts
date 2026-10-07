@@ -17,10 +17,9 @@ import {
 } from '../../../scripts/load/work-profile-corpus.ts';
 import { seedPublicProfileWork } from '../../../scripts/load/work-profile-work.ts';
 import { seedCatalogueProfileWorks } from '../../../scripts/load/catalogue-work.ts';
-import {
-  CATALOGUE_IMPORT_SCOPE,
-  type CatalogueImportInput,
-} from '../../../services/main/src/modules/work/catalogue-import.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
+import type { CatalogueImportInput } from '../../../services/main/src/modules/work/catalogue-import.ts';
+import { RV } from '../../../services/main/src/modules/work/activate.ts';
 import { qaTdbStorage, tdbGrowth } from '../../../scripts/load/tdb-growth.ts';
 import { scalePreparationBudgetMs } from '../../../scripts/qa/stack-environment.ts';
 
@@ -41,6 +40,10 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
   // Unparented preparation spans need not fill the sink. Every measured request
   // explicitly supplies a sampled parent, overriding the root sample ratio.
   startTelemetry('g-1035-write', { ...process.env, ...sink.env, OTEL_TRACES_SAMPLER_ARG: '0' });
+  // catalogue-import loads pg. Import it after telemetry so admission queries are observed.
+  const { CATALOGUE_IMPORT_SCOPE } = await import(
+    '../../../services/main/src/modules/work/catalogue-import.ts',
+  );
   const { startHomeStack } = await import('./feed-read-support.ts');
   const { createMainApp } = await import('../../../services/main/src/app.ts');
   const started = performance.now();
@@ -56,6 +59,7 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
     totalPreparationBudgetMs: 600_000,
     batchSize: 128,
     writeCohort: cohort,
+    classificationCommandsPerAcceptance: 2,
     backup: null,
     restore: null,
     samples: [],
@@ -139,7 +143,7 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
       );
       expect(native).toHaveLength(1);
       expect(native[0]!.attributes['rezics.fuseki.validation_ms']).toBeGreaterThan(0);
-      if (command.path === '/v1/classification-decisions') {
+      if (command.path === '/v1/statement-decisions') {
         expect(native[0]!.attributes['rezics.fuseki.text_adds']).toBe(0);
         expect(native[0]!.attributes['rezics.fuseki.text_updates']).toBe(0);
         expect(native[0]!.attributes['rezics.fuseki.text_deletes']).toBe(0);
@@ -165,7 +169,9 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
     for (const [scope, action] of [
       [CATALOGUE_IMPORT_SCOPE, 'work.create'],
       ['classification:define:global', 'classification.proposition.define'],
-      ['classification:decide:global', 'classification.decision.set'],
+      ['context:create:root', 'context.create'],
+      [`statement:speak:${actor.agent}`, 'statement.record'],
+      ['classification:decide:global', 'statement.decide'],
     ]) {
       await stack.accessPool.query(
         'INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING',
@@ -200,6 +206,45 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
         actingSubject: actor.agent,
       },
     });
+    // One shared public interpretation Context, outside every measured cohort.
+    // Each acceptance is then two public commands with separate idempotency keys.
+    const interpretation = await rawApi.command<{
+      profile: string;
+      context: string;
+      semanticRevision: string;
+      component: string;
+      revision: string;
+      replayed: boolean;
+    }>(`${key}:interpretation`, {
+      method: 'POST',
+      path: '/v1/contexts',
+      body: {
+        profile: 'context-v1',
+        role: 'shared',
+        disclosure: 'public',
+        base: null,
+        entries: [
+          {
+            target: definition.concept,
+            relation: `${RV}classifiedAs`,
+            state: 'defined',
+            definition: definition.definitionRevision,
+            applicability: [],
+          },
+        ],
+        actingSubject: actor.agent,
+      },
+    });
+    expect(interpretation).toMatchObject({ profile: 'context-v1' });
+    expect(interpretation.context).toBeString();
+    expect(interpretation.semanticRevision).toBeString();
+    expect(interpretation.component).toBe(interpretation.context);
+    expect(interpretation.revision).toBe(interpretation.semanticRevision);
+    expect(interpretation.replayed).toEqual(expect.any(Boolean));
+    evidence.interpretation = {
+      context: interpretation.context,
+      semanticRevision: interpretation.semanticRevision,
+    };
     const seed = async (index: number) => {
       signal.throwIfAborted();
       const work = await seedPublicProfileWork(api, `${key}:work:${index}`, {
@@ -267,42 +312,122 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
       relayMs += performance.now() - workRelayStarted;
       const workMs = performance.now() - cohortStarted - (collectionMs - beforeCollection);
       const afterWork = qaTdbStorage(Bun.env.REZICS_QA_RUN_ID!);
-      const classifyStarted = performance.now(),
-        beforeClassificationCollection = collectionMs;
+      const statementStarted = performance.now(),
+        beforeStatementCollection = collectionMs;
+      const recorded: { statement: string; meaningKey: string }[] = [];
       for (let offset = 0; offset < cohort; offset++) {
         signal.throwIfAborted();
         profiling = offset === 0;
         const work = works[first + offset]!;
-        const receipt = await api.command<{
-          decision: string;
-          decisionOutcome: string;
-          work: string;
-          sense: string;
-        }>(`${key}:classification:${scale}:${offset}`, {
+        const statement = await api.command<{
+          profile: string;
+          statement: string;
+          meaningKey: string;
+          component: string;
+          revision: string;
+          sourcePosition: { datasetId: string; dataEpoch: string; sequence: string };
+          replayed: boolean;
+        }>(`${key}:classification:${scale}:${offset}:statement`, {
           method: 'POST',
-          path: '/v1/classification-decisions',
+          path: '/v1/statements',
           body: {
-            profile: 'classification-direct-decision-v1',
-            context: { kind: 'global' },
-            work: work.work,
-            mainVersion: work.mainVersion,
-            sense: definition.sense,
+            profile: 'statement-v1',
+            speaker: { kind: 'personal' },
+            subject: work.mainVersion,
+            predicate: `${RV}classifiedAs`,
+            relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+            value: { kind: 'resource', iri: definition.concept },
+            applicability: [],
+            interpretation: {
+              kind: 'explicit',
+              context: interpretation.context,
+              semanticRevision: interpretation.semanticRevision,
+            },
+            evidence: [],
+            actingSubject: actor.agent,
+          },
+        });
+        expect(statement).toMatchObject({
+          profile: 'statement-v1',
+          sourcePosition: {
+            datasetId: 'product',
+            dataEpoch: expect.any(String),
+            sequence: expect.stringMatching(/^[0-9]+$/),
+          },
+        });
+        expect(statement.statement).toBeString();
+        expect(statement.component).toBe(statement.statement);
+        expect(statement.meaningKey).toMatch(/^urn:rezics:meaning:[0-9a-f]{64}$/);
+        expect(statement.revision).toBeString();
+        expect(statement.replayed).toEqual(expect.any(Boolean));
+        recorded[offset] = statement;
+      }
+      profiling = false;
+      const statementMs =
+        performance.now() - statementStarted - (collectionMs - beforeStatementCollection);
+      const afterStatements = qaTdbStorage(Bun.env.REZICS_QA_RUN_ID!);
+      const decisionStarted = performance.now(),
+        beforeDecisionCollection = collectionMs;
+      const decisions: { slot: string; decision: string }[] = [];
+      for (let offset = 0; offset < cohort; offset++) {
+        signal.throwIfAborted();
+        profiling = offset === 0;
+        const statement = recorded[offset]!;
+        const decision = await api.command<{
+          profile: string;
+          outcome: string;
+          slot: string;
+          decision: string;
+          component: string;
+          revision: string;
+          sourcePosition: { datasetId: string; dataEpoch: string; sequence: string };
+          replayed: boolean;
+        }>(`${key}:classification:${scale}:${offset}:decision`, {
+          method: 'POST',
+          path: '/v1/statement-decisions',
+          body: {
+            profile: 'statement-decision-v1',
+            target: {
+              kind: 'qualified-fact',
+              meaningKey: statement.meaningKey,
+              support: [statement.statement],
+            },
+            acceptance: { kind: 'global' },
             expectedDecisionHead: null,
             outcome: 'accepted',
             actingSubject: actor.agent,
           },
         });
-        expect(receipt).toMatchObject({
-          decisionOutcome: 'accepted',
-          work: work.work,
-          sense: definition.sense,
+        expect(decision).toMatchObject({
+          profile: 'statement-decision-v1',
+          outcome: 'accepted',
+          sourcePosition: {
+            datasetId: 'product',
+            dataEpoch: expect.any(String),
+            sequence: expect.stringMatching(/^[0-9]+$/),
+          },
         });
-        expect(receipt.decision).toBeString();
+        expect(decision.slot).toBeString();
+        expect(decision.decision).toBeString();
+        expect(decision.component).toBe(decision.slot);
+        expect(decision.revision).toBe(decision.decision);
+        expect(decision.replayed).toEqual(expect.any(Boolean));
+        expect(decision).not.toHaveProperty('decisionOutcome');
+        expect(decision).not.toHaveProperty('work');
+        expect(decision).not.toHaveProperty('sense');
+        decisions[offset] = decision;
       }
       profiling = false;
-      const classificationMs =
-        performance.now() - classifyStarted - (collectionMs - beforeClassificationCollection);
+      const decisionMs =
+        performance.now() - decisionStarted - (collectionMs - beforeDecisionCollection);
+      const classificationMs = statementMs + decisionMs;
       const afterClassification = qaTdbStorage(Bun.env.REZICS_QA_RUN_ID!);
+      expect(
+        profiles
+          .slice(beforeProfiles)
+          .map((item) => item.path)
+          .filter((path) => path === '/v1/statements' || path === '/v1/statement-decisions'),
+      ).toEqual(['/v1/statements', '/v1/statement-decisions']);
       const classificationRelayStarted = performance.now();
       await home.projectRelay();
       const classificationRelayMs = performance.now() - classificationRelayStarted;
@@ -312,17 +437,50 @@ test('G1035: disk-backed catalogue exposes public Work/classification write cost
         workCohortMs: workMs,
         workWallMsPerWrite: workMs / cohort,
         workRelayMs: relayMs - beforeRelay,
+        classificationCommandsPerAcceptance: 2,
+        statementCohortMs: statementMs,
+        statementWallMsPerCommand: statementMs / cohort,
+        decisionCohortMs: decisionMs,
+        decisionWallMsPerCommand: decisionMs / cohort,
         classificationCohortMs: classificationMs,
         classificationWallMsPerWrite: classificationMs / cohort,
         classificationRelayMs,
         workGrowth: tdbGrowth(beforeWork, afterWork, cohort),
+        statementGrowth: tdbGrowth(afterWork, afterStatements, cohort),
+        decisionGrowth: tdbGrowth(afterStatements, afterClassification, cohort),
         classificationGrowth: tdbGrowth(afterWork, afterClassification, cohort),
         beforeWork,
         afterWork,
+        afterStatements,
         afterClassification,
         profiles: profiles.slice(beforeProfiles),
       };
       (evidence.samples as unknown[]).push(sample);
+      const accepted = works[first]!;
+      const resolved = await rawApi.command<{
+        state: string;
+        source: string;
+        decision: string | null;
+        work: string;
+        sense: string;
+      }>(`${key}:classification:${scale}:resolution`, {
+        method: 'POST',
+        path: '/v1/classification-resolutions',
+        body: {
+          profile: 'classification-resolution-v1',
+          context: { kind: 'global' },
+          work: accepted.work,
+          mainVersion: accepted.mainVersion,
+          sense: definition.sense,
+        },
+      });
+      expect(resolved).toMatchObject({
+        state: 'accepted',
+        source: 'global',
+        work: accepted.work,
+        sense: definition.sense,
+        decision: decisions[0]!.decision,
+      });
       const work = selectedWork;
       const selected = await api.read<{
         contribution: string;
