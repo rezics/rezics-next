@@ -131,7 +131,19 @@ export class RealmReplyThreadStore {
   async focusBasis(epoch: string, realm: string, focus: string): Promise<{ thread: string; active: boolean } | null> {
     if (!native.test(realm) || !native.test(focus)) throw new RealmReplyInvalid('Invalid thread focus');
     return (await this.access.query<{ thread: string; active: boolean }>(`SELECT thread,active FROM access.realm_thread_reference
-      WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, focus])).rows[0] ?? null;
+      WHERE data_epoch COLLATE "C"=$1 AND realm COLLATE "C"=$2 AND reply COLLATE "C"=$3`,
+    [epoch, realm, focus])).rows[0] ?? null;
+  }
+  /** At most one indexed row per explored parent; scores never require a sibling population scan. */
+  async siblingOrderRevisions(epoch: string, realm: string, parents: readonly string[]): Promise<Map<string, string>> {
+    if (!native.test(realm) || parents.length > REALM_THREAD_COST.replies + 1
+      || parents.some(parent => !native.test(parent))) throw new RealmReplyInvalid('Invalid sibling order batch');
+    if (!parents.length) return new Map();
+    const rows = await this.access.query<{ reply: string; revision: string }>(`SELECT reply,sibling_rank_revision::text AS revision
+      FROM access.realm_thread_reference WHERE data_epoch COLLATE "C"=$1 AND realm COLLATE "C"=$2
+        AND reply COLLATE "C"=ANY($3::text[])`,
+    [epoch, realm, [...parents]]);
+    return new Map(rows.rows.map(row => [row.reply, row.revision]));
   }
   rankedPage(
     session: WorkReadSession,

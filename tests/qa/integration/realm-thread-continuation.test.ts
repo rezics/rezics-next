@@ -202,6 +202,133 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
         await seekAnchor(all[9998]!, sort)), all.slice(9999));
     }
 
+    const orderRevision = async (parent: string): Promise<string | null> =>
+      (await access.query<{ revision: string | null }>(`SELECT
+        to_jsonb(r)->>'sibling_rank_revision' AS revision FROM access.realm_thread_reference r
+        WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, parent])).rows[0]?.revision ?? null;
+    const sourceCuts = async () => ({
+      graph: (await access.query(`SELECT data_epoch,sequence::text,after_event
+        FROM access.realm_thread_checkpoint WHERE data_epoch=$1`, [epoch])).rows[0],
+      content: (await content.query(`SELECT data_epoch::text,sequence::text
+        FROM content.owner_control WHERE singleton`)).rows[0],
+    });
+    const projectScore = async (placement: string, score: number) => {
+      // FeedStore.vote writes this score; the real realm_thread_vote_changed
+      // trigger must update the sibling key and its parent fence together.
+      await access.query(`UPDATE access.feed_item SET score=$3,
+        best_key=sign($3::integer)*log(1+abs($3::double precision))
+          +extract(epoch FROM occurred_at)/86400
+        WHERE data_epoch=$1 AND id=$2`, [epoch, placement, score]);
+    };
+    for (const [index, sort] of (['top', 'best'] as const).entries()) {
+      const parent = native(93000 + index * 2), unrelated = native(93001 + index * 2);
+      const parentReferences = references(native(92999), 93000 + index * 2, 2);
+      const voteRows = references(parent, 300000 + index * 1000, 192).map((row, offset) => ({
+        ...row, score: 0, time: baseTime - offset * 1000,
+      }));
+      const otherChild = { ...references(unrelated, 320000 + index, 1)[0]!, score: 0 };
+      await insert([...parentReferences, ...voteRows, otherChild]);
+      const unread = voteRows[191]!, delivered = voteRows[0]!;
+      await access.query(`INSERT INTO access.feed_item
+        (data_epoch,id,sequence,kind,occurred_at,time_basis,score,best_key,realm,
+          group_bucket,group_key,group_leader,group_members,sort_time,realm_thread_indexed)
+        SELECT data_epoch,placement,1,'reply',occurred_at,'relay',score,
+          -access.realm_reply_best(score,occurred_at),realm,
+          placement,placement,true,ARRAY[placement],occurred_at,true
+        FROM access.realm_thread_reference
+        WHERE data_epoch=$1 AND realm=$2 AND placement=ANY($3::text[])`,
+      [epoch, realm, [unread.placement, delivered.placement, otherChild.placement]]);
+      const cuts = await sourceCuts();
+      const first = await page(`vote-${sort}-first`, parent, sort, 191, undefined, false);
+      expect(first).toHaveLength(192);
+      expect(first[191]!.reply).toBe(unread.reply);
+      const saved = key(first[190]!);
+      const newBefore = await page(`vote-${sort}-new-before`, parent, 'new', 191, undefined, false);
+      const originalRevision = await orderRevision(parent), otherRevision = await orderRevision(unrelated);
+
+      await projectScore(unread.placement, 1);
+      expect((await page(`vote-${sort}-promoted`, parent, sort, 191, undefined, false))[0]!.reply)
+        .toBe(unread.reply);
+      // Reproduce the silent skip using the old key: source cuts did not move,
+      // but the unread oldest sibling now sits before the saved cursor.
+      expect(await page(`vote-${sort}-old-key-skips`, parent, sort, 191, saved, false)).toEqual([]);
+      expect(await sourceCuts()).toEqual(cuts);
+      const promotedRevision = await orderRevision(parent);
+      expect(promotedRevision).not.toBe(originalRevision);
+      expect(promotedRevision).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(await orderRevision(unrelated)).toBe(otherRevision);
+      expectKeys(await page(`vote-${sort}-new-after`, parent, 'new', 191, undefined, false), newBefore);
+      expectKeys(await page(`vote-${sort}-new-continuation`, parent, 'new', 191,
+        key(newBefore[190]!), false), newBefore.slice(191));
+
+      await projectScore(unread.placement, 1);
+      expect(await orderRevision(parent)).toBe(promotedRevision);
+      await projectScore(delivered.placement, -1);
+      const demotedRevision = await orderRevision(parent);
+      expect(demotedRevision).not.toBe(promotedRevision);
+      // A delivered reply moving after the key duplicates unless the rank
+      // revision expires this cursor, independently of Graph/Content changes.
+      expect((await page(`vote-${sort}-old-key-duplicates`, parent, sort, 191, saved, false))
+        .map(row => row.reply)).toContain(delivered.reply);
+      expect(await sourceCuts()).toEqual(cuts);
+      await projectScore(otherChild.placement, 1);
+      expect(await orderRevision(parent)).toBe(demotedRevision);
+      expect(await orderRevision(unrelated)).not.toBe(otherRevision);
+
+      const parents = [parent, unrelated, ...voteRows.slice(0, 190).map(row => row.reply)];
+      // The same reply identities remain in old epochs and other Realms.
+      // A global reply-only index would filter this history after seeking and
+      // turn a 192-parent fence into work proportional to retained scopes.
+      await access.query(`INSERT INTO access.realm_thread_reference
+        (data_epoch,realm,reply,placement,parent,thread,work,occurred_at,activity_at,score,active)
+        SELECT CASE WHEN scope<=4 THEN r.data_epoch||':retained:'||scope ELSE r.data_epoch END,
+          CASE WHEN scope<=4 THEN r.realm ELSE ($4::text[])[scope-4] END,
+          r.reply,r.placement,r.parent,r.thread,r.work,r.occurred_at,r.activity_at,r.score,false
+        FROM access.realm_thread_reference r CROSS JOIN generate_series(1,8) AS scope
+        WHERE r.data_epoch=$1 AND r.realm=$2 AND r.reply=ANY($3::text[])`,
+      [epoch, realm, parents, Array.from({ length: 4 }, (_, scope) => native(96000 + scope))]);
+      expect(await orderRevision(parent)).toBe(demotedRevision);
+      statements = [];
+      expect(await store.focusBasis(epoch, realm, parent)).toEqual({ thread: native(92999), active: true });
+      expect(statements).toHaveLength(1);
+      for (const statement of statements) {
+        const plan = (await access.query(`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON,TIMING OFF) ${statement.text}`,
+          statement.values)).rows[0]['QUERY PLAN'][0].Plan as Plan;
+        evidence.push({ name: `vote-${sort}-focus-basis`, statement: statement.text, plan });
+        const all = nodes(plan), probes = all.filter(node => node['Relation Name'] === 'realm_thread_reference');
+        expect(probes.length).toBeGreaterThan(0);
+        expect(all.some(node => ['Seq Scan', 'Hash', 'Hash Join'].includes(node['Node Type']))).toBe(false);
+        expect(probes.every(node => nodes(node).some(index => index['Index Name'] === 'realm_reply_sibling_revision'
+          && index['Index Cond']?.includes('data_epoch') && index['Index Cond']?.includes('realm')
+          && index['Index Cond']?.includes('reply')))).toBe(true);
+        expect(probes.reduce((sum, node) => sum + examined(node), 0)).toBeLessThanOrEqual(1);
+      }
+      statements = [];
+      const revisions = await store.siblingOrderRevisions(epoch, realm, parents);
+      expect(revisions.size).toBe(192);
+      expect(revisions.get(parent)).toBe(demotedRevision!);
+      expect(statements.length).toBeGreaterThan(0);
+      for (const statement of statements) {
+        const plan = (await access.query(`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON,TIMING OFF) ${statement.text}`,
+          statement.values)).rows[0]['QUERY PLAN'][0].Plan as Plan;
+        evidence.push({ name: `vote-${sort}-parent-revisions`, statement: statement.text, plan });
+        const all = nodes(plan), probes = all.filter(node => node['Relation Name'] === 'realm_thread_reference');
+        expect(probes.length).toBeGreaterThan(0);
+        expect(all.some(node => ['Seq Scan', 'Hash', 'Hash Join'].includes(node['Node Type']))).toBe(false);
+        expect(probes.every(node => nodes(node).some(index => index['Index Name'] === 'realm_reply_sibling_revision'
+          && index['Index Cond']?.includes('data_epoch') && index['Index Cond']?.includes('realm')
+          && index['Index Cond']?.includes('reply')))).toBe(true);
+        expect(probes.reduce((sum, node) => sum + examined(node), 0)).toBeLessThanOrEqual(parents.length);
+      }
+      await access.query(`DELETE FROM access.realm_thread_reference
+        WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, parent]);
+      await insert(parentReferences.filter(row => row.reply === parent));
+      // A recreated projection row starts a fresh token instead of reviving
+      // an old cursor whose small integer revision happened to match again.
+      expect(await orderRevision(parent)).not.toBe(demotedRevision);
+      expect(await sourceCuts()).toEqual(cuts);
+    }
+
     for (const [index, sort] of sorts.entries()) {
       const parent = native(91000 + index), original = references(parent, 50000 + index * 1000, 192);
       await insert(original);
@@ -282,4 +409,4 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
     await Promise.all([access.end(), content.end()]);
     await databases.close();
   }
-}, 180_000);
+}, 480_000);

@@ -5,7 +5,7 @@ import { readAgent, readAgentCards } from '../profiles/read.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, hash, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadMissing,
-  WorkReadMoved, WorkReadUnavailable, WorkReadLimit, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
+  WorkReadMoved, WorkReadExpired, WorkReadUnavailable, WorkReadLimit, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
 import { clip, discussionParts } from './discussion-text.ts';
 import { replySlotIri } from './graph.ts';
 import { REALM_THREAD_COST, type realmThread, type realmThreadContinuation, type realmThreadReply, type realmThreadSummary,
@@ -317,15 +317,20 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   const binding = (parent: string) => ['realm-thread-siblings-v1', realm, parent, sort, hash(history), session.displayLanguages,
     session.principal ? { issuer: session.principal.issuer, subject: session.principal.subject,
       actingSubject: session.options.actingSubject } : null];
+  const orderRevisions = new Map<string, string>();
   const siblingContinuation = (parent: string, key: ThreadSiblingKey): Static<typeof realmThreadContinuation> =>
     ({ kind: 'siblings', reply: parent, cursor: encodeReadCursor(binding(parent), session.position, key.placement,
-      JSON.stringify({ rank: key.rank, time: key.time })) });
+      JSON.stringify({ rank: key.rank, time: key.time,
+        ...(sort === 'new' ? {} : { revision: orderRevisions.get(parent) }) })) });
   const cursor = decodeReadCursor(encoded, binding(focus), session.position);
   let after: ThreadSiblingKey | undefined;
+  let expectedOrderRevision: string | undefined;
   if (cursor) {
     try {
-      const key = JSON.parse(cursor.order) as { rank: number; time: string };
+      const key = JSON.parse(cursor.order) as { rank: number; time: string; revision?: string };
       if (!Number.isFinite(key.rank) || !/^-?\d+$/.test(key.time)) throw new Error('cursor');
+      if (sort !== 'new' && !uuid.test(key.revision ?? '')) throw new Error('cursor');
+      expectedOrderRevision = key.revision;
       after = { ...key, placement: cursor.after };
     } catch { throw new WorkReadInvalid('Thread sibling cursor is invalid'); }
   }
@@ -350,6 +355,13 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     if (!remaining || parent.depth === REALM_THREAD_COST.depth) {
       continuations.push({ kind: 'depth', reply: parent.reply });
       continue;
+    }
+    if (sort !== 'new') {
+      const revision = (await threads.siblingOrderRevisions(session.position.dataEpoch, realm, [parent.reply])).get(parent.reply);
+      if (!revision || parent.reply === focus && expectedOrderRevision && revision !== expectedOrderRevision) {
+        throw new WorkReadExpired('Sibling order changed; restart this branch');
+      }
+      orderRevisions.set(parent.reply, revision);
     }
     const page = await threads.siblingPage(session.position.dataEpoch, realm, parent.reply, sort, remaining,
       parent.after, includeInactive);
@@ -514,6 +526,14 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
     response.ancestors = above;
     response.continuations = limitedControls(page, above);
     response.complete = response.continuations.length === 0;
+  }
+  // Fence after hydration and byte-budget trimming too: a concurrent vote may
+  // move an unread sibling before the freshly minted cursor, even on page one.
+  if (orderRevisions.size) {
+    const current = await threads.siblingOrderRevisions(session.position.dataEpoch, realm, [...orderRevisions.keys()]);
+    if ([...orderRevisions].some(([parent, revision]) => current.get(parent) !== revision)) {
+      throw new WorkReadExpired('Sibling order changed; restart this branch');
+    }
   }
   return response;
 }

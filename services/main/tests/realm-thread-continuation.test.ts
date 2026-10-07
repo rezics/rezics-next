@@ -3,6 +3,7 @@ import { fromMarkdown } from '@rezics/document';
 import { authoredDocumentBody } from '../../content/src/document-body.ts';
 import { readRealmThread } from '../src/modules/realm-reply/thread-read.ts';
 import { REALM_THREAD_COST } from '../src/modules/realm-reply/thread-contract.ts';
+import type { ThreadVote } from '../src/modules/realm-reply/thread-store.ts';
 import { WorkReadExpired, WorkReadInvalid, WorkReadMissing, WorkReadUnavailable }
   from '../src/modules/work/read-session.ts';
 import { realm, reply, world } from './realm-reply-threads.test.ts';
@@ -34,6 +35,53 @@ test('sibling 192 is reachable in the existing reply order, with the focus repea
     expect(new Set(combined).size).toBe(192);
     expect(combined).toContain(reply(2));
     expect(combined).toContain(reply(193));
+  }
+});
+
+for (const sort of ['best', 'top'] as const) {
+  for (const change of ['promote-unread', 'demote-delivered'] as const) {
+    test(`${sort} sibling cursors restart when a vote ${change} changes their order`, async () => {
+      const votes: Record<number, Partial<ThreadVote>> = {};
+      const { session } = world(siblings(192), { votes });
+      const first = await readRealmThread(session, realm, reply(1), sort);
+      expect(first.items.some(item => item.reply === reply(2))).toBe(false);
+      const next = siblingCursor(first), position = { ...session.position };
+      votes[change === 'promote-unread' ? 2 : 193] = { score: change === 'promote-unread' ? 10 : -10 };
+      // Voting changes only Access: the graph and Content read cuts stay put.
+      expect(session.position).toEqual(position);
+      await expect(readRealmThread(session, realm, next.reply, sort, next.cursor))
+        .rejects.toBeInstanceOf(WorkReadExpired);
+      const restarted = await readRealmThread(session, realm, reply(1), sort);
+      const rest = siblingCursor(restarted);
+      const last = await readRealmThread(session, realm, rest.reply, sort, rest.cursor);
+      const reached = [...restarted.items.slice(1), ...last.items.slice(1)].map(item => item.reply);
+      expect(new Set(reached).size).toBe(192);
+    });
+  }
+}
+
+test('a vote during hydration cannot mint a cursor with an obsolete sibling order', async () => {
+  const votes: Record<number, Partial<ThreadVote>> = {};
+  const { session } = world(siblings(192), { votes });
+  const batch = session.deps.content!.readExactBatch.bind(session.deps.content!);
+  Object.assign(session.deps.content!, { readExactBatch: async (ids: string[]) => {
+    const result = await batch(ids, async ids => new Set(ids));
+    votes[2] = { score: 10 };
+    return result;
+  } });
+  await expect(readRealmThread(session, realm, reply(1), 'top')).rejects.toBeInstanceOf(WorkReadExpired);
+});
+
+test('votes leave New cursors and unrelated sibling-parent cursors valid', async () => {
+  for (const sort of ['new', 'top', 'best'] as const) {
+    const votes: Record<number, Partial<ThreadVote>> = {};
+    const placed = [...siblings(192), { id: 500, author: 1 }, { id: 501, parent: 500, author: 1 }];
+    const { session } = world(placed, { votes });
+    const first = await readRealmThread(session, realm, reply(1), sort), next = siblingCursor(first);
+    votes[sort === 'new' ? 2 : 501] = { score: 10 };
+    const last = await readRealmThread(session, realm, reply(1), sort, next.cursor);
+    expect(last.complete).toBe(true);
+    expect(new Set([...first.items.slice(1), ...last.items.slice(1)].map(item => item.reply)).size).toBe(192);
   }
 });
 

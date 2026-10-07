@@ -41,6 +41,7 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
     (_, index) => ({ id: 1000 + index, parent: placed[0]!.id, author: 1 }))];
   const calls = { graph: 0, admitted: 0, votes: 0, bodies: 0, counts: 0, store: 0 };
   const byId = new Map(placed.map((item) => [item.id, item]));
+  const siblingOrders = new Map<string, { scores: string; revision: number }>();
   const node = (item: Placed): ThreadNode => ({ reply: reply(item.id), parent: item.parent ? reply(item.parent) : null,
     author: agent(item.author), origin: null, rootTarget: work, rootRevision: item.rootRevision ?? reply(900),
     createdAt: new Date(start) });
@@ -118,6 +119,15 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
       } },
       realmReplyThreads: {
         assertThreadProjection: async () => {},
+        siblingOrderRevisions: async (_epoch: string, _realm: string, parents: readonly string[]) =>
+          new Map(parents.map(parent => {
+            const scores = JSON.stringify([...byId.values()].filter(item => item.parent && reply(item.parent) === parent)
+              .map(item => [item.id, options.votes?.[item.id]?.score ?? 0]));
+            const previous = siblingOrders.get(parent);
+            const revision = previous ? previous.revision + (previous.scores === scores ? 0 : 1) : 0;
+            siblingOrders.set(parent, { scores, revision });
+            return [parent, `00000000-0000-4000-8000-${n(revision)}`];
+          })),
         identities: async (ids: readonly string[]) => placed.filter(item => ids.includes(reply(item.id))).map(node),
         focusBasis: async (_epoch: string, _realm: string, focus: string) => {
           let current = placed.find(item => reply(item.id) === focus);
