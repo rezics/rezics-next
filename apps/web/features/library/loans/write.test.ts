@@ -69,4 +69,18 @@ describe('loan write lane', () => {
     expect(versions).toEqual([1, 2]);
     expect(result).toEqual({ ok: true, data: { dueAt: '2026-11-01T00:00:00.000Z', version: 3 } });
   });
+
+  test('an unchanged intent keeps its key and a changed one receives a new key', async () => {
+    resetRecordLanes();
+    const keys: string[] = [];
+    const apply = (choice: string, round: WriteRound) => {
+      keys.push(round.key);
+      return Promise.resolve({ ok: true as const, data: choice });
+    };
+    await submitRecord('intent-key', 'same', apply);
+    await submitRecord('intent-key', 'same', apply);
+    await submitRecord('intent-key', 'edited', apply);
+    expect(keys[0]).toBe(keys[1]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
 });

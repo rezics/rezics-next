@@ -76,6 +76,15 @@ export interface CopyDraft {
   ownedFrom: string | null;
 }
 
+/** Fields a copy edit sets. An omitted field is left as stored. */
+export interface CopyChange {
+  format?: string | null;
+  acquiredFrom?: LibraryParty | null;
+  acquiredAt?: string | null;
+  ownedFrom?: string | null;
+  ownedThrough?: string | null;
+}
+
 export interface LoanDraft {
   copy: string;
   direction: 'lent' | 'borrowed';

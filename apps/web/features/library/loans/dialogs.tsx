@@ -14,7 +14,8 @@ import type { LibraryMessages } from '../messages.ts';
 import { formatDay, today } from '../format.ts';
 import { useCopiesApi } from './provider.tsx';
 import { dayInstant, dueDay, dueInstant, instantFromLocal, laterDay, localInput } from './format.ts';
-import { handleText, partyFromInput, sameParty } from './party.ts';
+import { handleText, partyFromInput } from './party.ts';
+import { extendedLoanMatches, openedLoanMatches, returnedLoanMatches, savedCopyMatches } from './intent.ts';
 import { recordContinuation, reduceRecordPage, type RecordList } from './paging.ts';
 import type { CopyRecord, LibraryParty, LoanRecord, RecordFailure, RecordResult, ReleaseChoice } from './types.ts';
 import type { CopiesApi } from './api.ts';
@@ -169,15 +170,13 @@ export function CopyDialog({ work, title, open, onOpenChange, locale, messages, 
     const draft = { release, format: format.trim() || null, acquiredFrom, acquiredAt: dayInstant(acquiredOn),
       ownedFrom: dayInstant(ownedSince) };
     const written = await submitRecord(`copy:${work}`, draft, (choice, round) => writeNewest(round, 0,
-      () => api.createCopy(choice),
+      () => api.createCopy(choice, round.key),
       async () => {
         const copies = await api.copies(work);
         if (!copies.ok) return copies;
-        return { ok: true, data: copies.data.items.find(copy => copy.release === choice.release
-          && copy.format === choice.format && sameParty(copy.acquiredFrom, choice.acquiredFrom)) ?? null };
+        return { ok: true, data: copies.data.items.find(copy => savedCopyMatches(copy, choice)) ?? null };
       },
-      current => current.release === choice.release && current.format === choice.format
-        && sameParty(current.acquiredFrom, choice.acquiredFrom),
+      current => savedCopyMatches(current, choice),
       current => current.version, false));
     setSaving(false);
     if (!written.ok) { setError(failureText(written.failure, t, true)); return; }
@@ -308,16 +307,13 @@ export function LendDialog({ work, title, open, onOpenChange, locale, messages, 
     if (counterparty === 'invalid' || !counterparty) { setSaving(false); return; }
     const draft = { copy: chosenCopy, direction, counterparty, startedAt, dueAt };
     const written = await submitRecord(`loan:${chosenCopy}`, draft, (choice, round) => writeNewest(round, 0,
-      () => api.openLoan(choice),
+      () => api.openLoan(choice, round.key),
       async () => {
         const loans = await api.loans({ state: 'active' });
         if (!loans.ok) return loans;
-        return { ok: true, data: loans.data.items.find(loan => loan.copy === choice.copy
-          && loan.direction === choice.direction && loan.dueAt === choice.dueAt
-          && sameParty(loan.counterparty, choice.counterparty)) ?? null };
+        return { ok: true, data: loans.data.items.find(loan => openedLoanMatches(loan, choice)) ?? null };
       },
-      current => current.copy === choice.copy && current.dueAt === choice.dueAt
-        && sameParty(current.counterparty, choice.counterparty),
+      current => openedLoanMatches(current, choice),
       current => current.version, false));
     setSaving(false);
     if (!written.ok) { setError(failureText(written.failure, t, false)); return; }
@@ -401,8 +397,8 @@ export function ExtendDialog({ loan, open, onOpenChange, locale, messages, onSav
     if (!dueAt || !current || due <= current || dueAt <= loan.dueAt) { setError(t.extendForward); return; }
     setSaving(true);
     const written: RecordResult<LoanRecord> = await submitRecord(loan.id, dueAt, (choice, round) => writeNewest(round,
-      loan.version, version => api.extendLoan(loan.id, version, choice), () => api.findLoan(loan.id),
-      current => current.dueAt === choice, current => current.version));
+      loan.version, version => api.extendLoan(loan.id, version, choice, round.key), () => api.findLoan(loan.id),
+      current => extendedLoanMatches(current, choice), current => current.version));
     setSaving(false);
     if (!written.ok) { setError(failureText(written.failure, t, false)); return; }
     onSaved(written.data);
@@ -442,8 +438,8 @@ export function ReturnDialog({ loan, open, onOpenChange, locale, messages, onSav
   async function save() {
     setSaving(true);
     const written = await submitRecord(loan.id, loan.version, (version, round) => writeNewest(round, version,
-      expected => api.returnLoan(loan.id, expected), () => api.findLoan(loan.id),
-      current => current.returnedAt !== null, current => current.version));
+      expected => api.returnLoan(loan.id, expected, round.key), () => api.findLoan(loan.id),
+      current => returnedLoanMatches(current), current => current.version));
     setSaving(false);
     if (!written.ok) { setError(failureText(written.failure, t, false)); return; }
     onSaved(written.data);

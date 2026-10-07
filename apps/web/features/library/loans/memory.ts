@@ -1,5 +1,4 @@
-import type { CopyDraft, CopyRecord, LoanDraft, LoanRecord, PersonCard, RecordPage, RecordResult,
-  ReleaseChoice } from './types.ts';
+import type { CopyChange, CopyRecord, LoanRecord, PersonCard, RecordPage, RecordResult, ReleaseChoice } from './types.ts';
 import type { CopiesApi } from './api.ts';
 import { dueIsOverdue } from './format.ts';
 
@@ -33,6 +32,10 @@ function loanState(loan: Pick<LoanRecord, 'returnedAt' | 'dueAt'>, now: number):
   return dueIsOverdue(loan.dueAt, now) ? 'overdue' : 'open';
 }
 
+function definedChanges(changes: CopyChange): CopyChange {
+  return Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined));
+}
+
 /** An in-memory Main for stories. It keeps the compare-and-set versions the write lane reads back. */
 export function memoryCopiesApi(seed: Partial<MemoryCopies> = {}): CopiesApi & { state: MemoryCopies } {
   const state: MemoryCopies = { work: seed.work ?? '', now: seed.now ?? Date.now(), releases: seed.releases ?? [],
@@ -43,60 +46,98 @@ export function memoryCopiesApi(seed: Partial<MemoryCopies> = {}): CopiesApi & {
     state.failOnce = undefined;
     return { ok: false, failure: 'moved' };
   };
+  const receipts = new Map<string, RecordResult<CopyRecord | LoanRecord>>();
+  function replay<T extends CopyRecord | LoanRecord>(key: string, run: () => RecordResult<T>): RecordResult<T> {
+    const prior = receipts.get(key) as RecordResult<T> | undefined;
+    if (prior) return prior;
+    const result = run();
+    if (result.ok) receipts.set(key, result);
+    return result;
+  }
   const api: CopiesApi & { state: MemoryCopies } = {
     state,
     releases: async (_work, cursor) => ({ ok: true, data: slicePage(state.releases, cursor) }),
     copies: async (work, cursor) => ({ ok: true, data: slicePage(state.copies.filter(copy => copy.work === work && !copy.removed), cursor) }),
-    async createCopy(draft: CopyDraft) {
-      const failed = take('create');
-      if (failed) return failed;
-      const copy: CopyRecord = { id: `https://rezics.com/id/${crypto.randomUUID()}`, work: state.work,
-        release: draft.release, format: draft.format, acquiredFrom: draft.acquiredFrom, acquiredAt: draft.acquiredAt,
-        ownedFrom: draft.ownedFrom, ownedThrough: null, removed: false, version: 1,
-        changedAt: new Date(state.now).toISOString() };
-      state.copies.push(copy);
-      return { ok: true, data: copy };
+    async createCopy(draft, key) {
+      return replay(key, () => {
+        const failed = take('create');
+        if (failed) return failed;
+        const copy: CopyRecord = { id: `https://rezics.com/id/${crypto.randomUUID()}`, work: state.work,
+          release: draft.release, format: draft.format, acquiredFrom: draft.acquiredFrom, acquiredAt: draft.acquiredAt,
+          ownedFrom: draft.ownedFrom, ownedThrough: null, removed: false, version: 1,
+          changedAt: new Date(state.now).toISOString() };
+        state.copies.push(copy);
+        return { ok: true, data: copy };
+      });
+    },
+    async changeCopy(id, expectedVersion, changes, key) {
+      return replay(key, () => {
+        const copy = state.copies.find(item => item.id === id);
+        if (!copy || copy.removed) return { ok: false, failure: 'missing' };
+        if (copy.version !== expectedVersion) return { ok: false, failure: 'moved' };
+        const next = { ...copy, ...definedChanges(changes), version: copy.version + 1,
+          changedAt: new Date(state.now).toISOString() };
+        Object.assign(copy, next);
+        return { ok: true, data: { ...copy } };
+      });
+    },
+    async removeCopy(id, expectedVersion, key) {
+      return replay(key, () => {
+        const copy = state.copies.find(item => item.id === id);
+        if (!copy || copy.removed) return { ok: false, failure: 'missing' };
+        if (copy.version !== expectedVersion) return { ok: false, failure: 'moved' };
+        copy.removed = true;
+        copy.version += 1;
+        copy.changedAt = new Date(state.now).toISOString();
+        return { ok: true, data: { ...copy } };
+      });
     },
     async loans(query) {
       const items = state.loans.filter(loan => !query?.state || (query.state === 'active'
         ? loan.state !== 'returned' : loan.state === query.state));
       return { ok: true, data: page(items) };
     },
-    async openLoan(draft: LoanDraft) {
-      const failed = take('open');
-      if (failed) return failed;
-      if (state.loans.some(loan => loan.copy === draft.copy && !loan.returnedAt)) return { ok: false, failure: 'conflict' };
-      const loan: LoanRecord = { id: `https://rezics.com/id/${crypto.randomUUID()}`, copy: draft.copy,
-        direction: draft.direction, counterparty: draft.counterparty, startedAt: draft.startedAt, dueAt: draft.dueAt,
-        returnedAt: null, version: 1, changedAt: new Date(state.now).toISOString(),
-        state: loanState({ returnedAt: null, dueAt: draft.dueAt }, state.now) };
-      state.loans.push(loan);
-      return { ok: true, data: loan };
+    async openLoan(draft, key) {
+      return replay(key, () => {
+        const failed = take('open');
+        if (failed) return failed;
+        if (state.loans.some(loan => loan.copy === draft.copy && !loan.returnedAt)) return { ok: false, failure: 'conflict' };
+        const loan: LoanRecord = { id: `https://rezics.com/id/${crypto.randomUUID()}`, copy: draft.copy,
+          direction: draft.direction, counterparty: draft.counterparty, startedAt: draft.startedAt, dueAt: draft.dueAt,
+          returnedAt: null, version: 1, changedAt: new Date(state.now).toISOString(),
+          state: loanState({ returnedAt: null, dueAt: draft.dueAt }, state.now) };
+        state.loans.push(loan);
+        return { ok: true, data: loan };
+      });
     },
-    async extendLoan(id, expectedVersion, dueAt) {
-      const failed = take('extend');
-      if (failed) return failed;
-      const loan = state.loans.find(item => item.id === id);
-      if (!loan) return { ok: false, failure: 'missing' };
-      if (loan.version !== expectedVersion) return { ok: false, failure: 'moved' };
-      if (loan.returnedAt) return { ok: false, failure: 'conflict' };
-      if (dueAt <= loan.dueAt) return { ok: false, failure: 'invalid' };
-      loan.dueAt = dueAt;
-      loan.version += 1;
-      loan.state = loanState(loan, state.now);
-      return { ok: true, data: { ...loan } };
+    async extendLoan(id, expectedVersion, dueAt, key) {
+      return replay(key, () => {
+        const failed = take('extend');
+        if (failed) return failed;
+        const loan = state.loans.find(item => item.id === id);
+        if (!loan) return { ok: false, failure: 'missing' };
+        if (loan.version !== expectedVersion) return { ok: false, failure: 'moved' };
+        if (loan.returnedAt) return { ok: false, failure: 'conflict' };
+        if (dueAt <= loan.dueAt) return { ok: false, failure: 'invalid' };
+        loan.dueAt = dueAt;
+        loan.version += 1;
+        loan.state = loanState(loan, state.now);
+        return { ok: true, data: { ...loan } };
+      });
     },
-    async returnLoan(id, expectedVersion) {
-      const failed = take('return');
-      if (failed) return failed;
-      const loan = state.loans.find(item => item.id === id);
-      if (!loan) return { ok: false, failure: 'missing' };
-      if (loan.version !== expectedVersion) return { ok: false, failure: 'moved' };
-      if (loan.returnedAt) return { ok: false, failure: 'conflict' };
-      loan.returnedAt = new Date(state.now).toISOString();
-      loan.version += 1;
-      loan.state = 'returned';
-      return { ok: true, data: { ...loan } };
+    async returnLoan(id, expectedVersion, key) {
+      return replay(key, () => {
+        const failed = take('return');
+        if (failed) return failed;
+        const loan = state.loans.find(item => item.id === id);
+        if (!loan) return { ok: false, failure: 'missing' };
+        if (loan.version !== expectedVersion) return { ok: false, failure: 'moved' };
+        if (loan.returnedAt) return { ok: false, failure: 'conflict' };
+        loan.returnedAt = new Date(state.now).toISOString();
+        loan.version += 1;
+        loan.state = 'returned';
+        return { ok: true, data: { ...loan } };
+      });
     },
     async findLoan(id) {
       return { ok: true, data: state.loans.find(loan => loan.id === id) ?? null };

@@ -1,20 +1,34 @@
+import { commandKey } from '../../feed/api.ts';
 import type { RecordResult } from './types.ts';
 
 /**
  * One round of a record's write lane, shared with the reader store: the newest
  * intent replaces anything waiting, and a round that was superseded after
  * reading the record tells the next round it may trust that read.
+ * `key` is that intent's Idempotency-Key for every attempt, including a retry
+ * after a lost response.
  */
 export interface WriteRound {
   seq: number;
+  key: string;
   superseded: () => boolean;
   confirm: () => void;
   afterConfirmed: boolean;
 }
 
+/** Field order does not make a new intent. Undefined fields are absent. */
+function intentText(value: unknown): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null';
+  if (Array.isArray(value)) return `[${value.map(intentText).join(',')}]`;
+  const entries = Object.entries(value as Record<string, unknown>).filter(([, item]) => item !== undefined)
+    .sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+  return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${intentText(item)}`).join(',')}}`;
+}
+
 interface Ticket<T, R> {
   choice: T;
   seq: number;
+  key: string;
   apply: (choice: T, round: WriteRound) => Promise<R>;
 }
 
@@ -23,6 +37,15 @@ function lane<T, R>(failed: R) {
   let latest: Ticket<T, R> | null = null;
   let waiting: ((result: R) => void)[] = [];
   let seq = 0;
+  let intentChoice = '';
+  let intentKey = '';
+  const keyFor = (choice: T) => {
+    const text = intentText(choice);
+    if (text === intentChoice && intentKey) return intentKey;
+    intentChoice = text;
+    intentKey = commandKey();
+    return intentKey;
+  };
   async function run() {
     running = true;
     let afterConfirmed = false;
@@ -33,7 +56,8 @@ function lane<T, R>(failed: R) {
       waiting = [];
       let confirmed = false;
       const result = await current.apply(current.choice, {
-        seq: current.seq, afterConfirmed, confirm: () => { confirmed = true; }, superseded: () => latest !== null,
+        seq: current.seq, key: current.key, afterConfirmed, confirm: () => { confirmed = true; },
+        superseded: () => latest !== null,
       }).catch(() => failed);
       afterConfirmed = confirmed && latest !== null;
       // Callers of a replaced intent wait for the one that stood, and receive its outcome.
@@ -45,7 +69,7 @@ function lane<T, R>(failed: R) {
   return {
     submit<U>(choice: T, apply: (choice: T, round: WriteRound) => Promise<U>): Promise<U> {
       return new Promise(resolve => {
-        latest = { choice, seq: ++seq, apply: apply as unknown as Ticket<T, R>['apply'] };
+        latest = { choice, seq: ++seq, key: keyFor(choice), apply: apply as unknown as Ticket<T, R>['apply'] };
         waiting.push(resolve as (result: R) => void);
         if (!running) void run();
       });
@@ -76,9 +100,11 @@ export function submitRecord<T, R>(record: string, choice: T,
 }
 
 /**
- * Writes `choice` at `version`. A 409 reads the record again and writes only
- * when this round is still the newest intent and the record does not already
- * hold it. `retry` is false for a create: a second insert would add another copy.
+ * Writes `choice` at `version`. A lost response is tried once more with the
+ * same intent key, so a committed command is replayed instead of abandoned.
+ * A 409 reads the record again and writes only when this round is still the
+ * newest intent and the record does not already hold the whole intent.
+ * `retry` is false for a create: a second insert would add another copy.
  */
 export async function writeNewest<T>(round: WriteRound, version: number,
   write: (version: number) => Promise<RecordResult<T>>,
@@ -91,7 +117,8 @@ export async function writeNewest<T>(round: WriteRound, version: number,
     if (!fresh.ok) return fresh;
     if (fresh.data && matches(fresh.data)) return { ok: true, data: fresh.data };
   }
-  const written = await write(version);
+  let written = await write(version);
+  if (!written.ok && written.failure === 'unavailable' && !round.superseded()) written = await write(version);
   if (written.ok || (written.failure !== 'moved' && written.failure !== 'conflict')) return written;
   const fresh = await read();
   if (!fresh.ok) return fresh;

@@ -1,15 +1,15 @@
 import { browserMainApi } from '../../api/browser.ts';
 import type { MainClient } from '../../discover/types.ts';
-import { commandKey } from '../../feed/api.ts';
 import { asCopy, asLoan, asPage, asRelease } from './shape.ts';
-import type { CopyDraft, CopyRecord, LoanDraft, LoanRecord, PersonCard, RecordFailure, RecordPage, RecordResult,
-  ReleaseChoice } from './types.ts';
+import type { CopyChange, CopyDraft, CopyRecord, LoanDraft, LoanRecord, PersonCard, RecordFailure, RecordPage,
+  RecordResult, ReleaseChoice } from './types.ts';
 
 // Browser commands for the reader's own copies and loans. Each write names
-// the session's Agent, the version it read, and its own idempotency key.
-// Stories pass a `CopiesApi` that keeps the same shapes in memory.
+// the session's Agent, the version it read, and the intent's idempotency key.
+// The caller keeps that key for every retry of the unchanged intent. Stories
+// pass a `CopiesApi` that keeps the same shapes in memory.
 
-const headers = () => ({ headers: { 'idempotency-key': commandKey() } });
+const keyed = (key: string) => ({ headers: { 'idempotency-key': key } });
 const uuid = (iri: string) => iri.slice(-36);
 /** Active and returned lists are each walked this many pages while recovering one loan. */
 const LOAN_SEARCH_PAGES = 200;
@@ -38,12 +38,14 @@ async function call<T>(run: () => Promise<{ data: T | null; error: { status: num
 export interface CopiesApi {
   releases(work: string, cursor?: string | null): Promise<RecordResult<RecordPage<ReleaseChoice>>>;
   copies(work: string, cursor?: string | null): Promise<RecordResult<RecordPage<CopyRecord>>>;
-  createCopy(draft: CopyDraft): Promise<RecordResult<CopyRecord>>;
+  createCopy(draft: CopyDraft, key: string): Promise<RecordResult<CopyRecord>>;
+  changeCopy(id: string, expectedVersion: number, changes: CopyChange, key: string): Promise<RecordResult<CopyRecord>>;
+  removeCopy(id: string, expectedVersion: number, key: string): Promise<RecordResult<CopyRecord>>;
   loans(query?: { state?: 'active' | 'overdue' | 'returned'; cursor?: string | null }):
     Promise<RecordResult<RecordPage<LoanRecord>>>;
-  openLoan(draft: LoanDraft): Promise<RecordResult<LoanRecord>>;
-  extendLoan(id: string, expectedVersion: number, dueAt: string): Promise<RecordResult<LoanRecord>>;
-  returnLoan(id: string, expectedVersion: number): Promise<RecordResult<LoanRecord>>;
+  openLoan(draft: LoanDraft, key: string): Promise<RecordResult<LoanRecord>>;
+  extendLoan(id: string, expectedVersion: number, dueAt: string, key: string): Promise<RecordResult<LoanRecord>>;
+  returnLoan(id: string, expectedVersion: number, key: string): Promise<RecordResult<LoanRecord>>;
   /** The loan on any active page, then any returned page. */
   findLoan(id: string): Promise<RecordResult<LoanRecord | null>>;
   /** A handle the reader asked to use as a person. Names are never passed here. */
@@ -75,10 +77,23 @@ export function mainCopiesApi(actingSubject: string, main: () => MainClient = br
       return pageOf(read, asCopy);
     },
 
-    async createCopy(draft) {
+    async createCopy(draft, key) {
       const written = await call(() => main().v1.me['library-copies'].post({ actingSubject, expectedVersion: 0,
         release: draft.release, format: draft.format, acquiredFrom: draft.acquiredFrom, acquiredAt: draft.acquiredAt,
-        ownedFrom: draft.ownedFrom, ownedThrough: null }, headers()));
+        ownedFrom: draft.ownedFrom, ownedThrough: null }, keyed(key)));
+      return one(written, asCopy);
+    },
+
+    async changeCopy(id, expectedVersion, changes, key) {
+      const patch = Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined));
+      const written = await call(() => main().v1.me['library-copies']({ id: uuid(id) }).patch({
+        actingSubject, expectedVersion, ...patch }, keyed(key)));
+      return one(written, asCopy);
+    },
+
+    async removeCopy(id, expectedVersion, key) {
+      const written = await call(() => main().v1.me['library-copies']({ id: uuid(id) }).delete({
+        actingSubject, expectedVersion }, keyed(key)));
       return one(written, asCopy);
     },
 
@@ -88,22 +103,22 @@ export function mainCopiesApi(actingSubject: string, main: () => MainClient = br
       return pageOf(read, asLoan);
     },
 
-    async openLoan(draft) {
+    async openLoan(draft, key) {
       const written = await call(() => main().v1.me['library-loans'].post({ actingSubject, expectedVersion: 0,
         copy: draft.copy, direction: draft.direction, counterparty: draft.counterparty, startedAt: draft.startedAt,
-        dueAt: draft.dueAt }, headers()));
+        dueAt: draft.dueAt }, keyed(key)));
       return one(written, asLoan);
     },
 
-    async extendLoan(id, expectedVersion, dueAt) {
+    async extendLoan(id, expectedVersion, dueAt, key) {
       const written = await call(() => main().v1.me['library-loans']({ id: uuid(id) }).extend.post({
-        actingSubject, expectedVersion, dueAt }, headers()));
+        actingSubject, expectedVersion, dueAt }, keyed(key)));
       return one(written, asLoan);
     },
 
-    async returnLoan(id, expectedVersion) {
+    async returnLoan(id, expectedVersion, key) {
       const written = await call(() => main().v1.me['library-loans']({ id: uuid(id) }).return.post({
-        actingSubject, expectedVersion }, headers()));
+        actingSubject, expectedVersion }, keyed(key)));
       return one(written, asLoan);
     },
 
