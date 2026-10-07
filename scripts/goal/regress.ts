@@ -556,8 +556,9 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     }
     const pending = manifest.batches.filter(batch => batch.state !== 'done' && !browserTier(batch.tier)
       && batch.tier !== 'unit' && batch.tier !== 'model');
-    const slots = options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
-    if (!Number.isSafeInteger(slots) || slots < 1) throw new Error('GOAL_QA_SLOTS must be a positive integer');
+    const configuredSlots = options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
+    if (!Number.isSafeInteger(configuredSlots) || configuredSlots < 1) throw new Error('GOAL_QA_SLOTS must be a positive integer');
+    const slots = Math.min(configuredSlots, 2);
     let next = 0;
     let failure: unknown;
     const workers = Array.from({ length: Math.min(slots, pending.length) }, async (_, index) => {

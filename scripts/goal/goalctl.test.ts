@@ -6,10 +6,10 @@ import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { acquireHeavy, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
-  goalOfBriefPath, heavyQaStatus, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
+  goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   codexHoursUntil100, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, memoryFloorRefusal,
-  shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, unitFailureDetails, unitFileErrorDetails,
+  qaWaitStatusLines, shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, unitFailureDetails, unitFileErrorDetails, withSlot,
   type AccountUsage, type Ledger, type Task, type UnitFailureDetail, treeMentions, usageLevel, usageReport, validateBrief } from './goalctl.ts';
 
 const brief = `---
@@ -266,6 +266,20 @@ describe('goalctl runtime policy', () => {
     expect(introducedUnitFailureFiles([file], report(baseline), main)).toEqual([]);
     expect(introducedUnitFailureFiles([file], report(shifted), report(baseline))).toEqual([]);
     expect(introducedUnitFailureFiles([file], report(baseline), [])).toEqual([file]);
+  });
+
+  test('repeated diff findings block when branch counts exceed main and remain inherited at equal counts', () => {
+    const file = 'tests/qa/unit/permissions.test.ts';
+    const report = (...paths: string[]): UnitFailureDetail[] => paths.map(path => ({ file,
+      test: 'permission results preserve each subject path',
+      detail: ['error: expect(received).toEqual(expected)', '- Expected  - 1', '+ Received  + 1',
+        `  ${path}: {`, '    + "permission": false,'].join('\n') }));
+    const main = report('alice');
+    const branch = report('alice', 'bob');
+    const repeatedMain = report('alice', 'bob');
+
+    expect(introducedUnitFailureFiles([file], branch, main)).toEqual([file]);
+    expect(introducedUnitFailureFiles([file], repeatedMain, repeatedMain)).toEqual([]);
   });
 
   test('file-level load errors inherit only when normalized error text matches', () => {
@@ -2372,19 +2386,111 @@ describe('heavy QA lock', () => {
       expect(heavyQaStatus(join(root, 'missing'))).toBe('free; 0 waiting');
       mkdirSync(lockDir);
       writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
-        pid: process.pid, goal: 'scoped-subjects', command: 'bun test affected', startedAt: '2026-10-04T00:00:00.000Z',
+        pid: process.pid, goal: 'scoped-subjects', command: 'bun test affected', startedAt: '2026-10-04T00:00:00.000Z', commandStartedAt: null,
       }));
       mkdirSync(queueDir);
       writeFileSync(join(queueDir, 'a.json'), JSON.stringify({ pid: process.pid, command: 'a', arrivedAt: 2 }));
       writeFileSync(join(queueDir, 'b.json'), JSON.stringify({ pid: process.pid, command: 'b', arrivedAt: 3 }));
       writeFileSync(join(queueDir, 'dead.json'), JSON.stringify({ pid: dead, command: 'gone', arrivedAt: 1 }));
       expect(heavyQaStatus(lockDir)).toBe(
-        `Goal scoped-subjects since 2026-10-04T00:00:00.000Z (pid ${process.pid}): bun test affected; 2 waiting`);
+        `Goal scoped-subjects since 2026-10-04T00:00:00.000Z (pid ${process.pid}): bun test affected (command not started); 2 waiting`);
+      expect(heavyQaWaiters(lockDir)).toHaveLength(2);
+      expect(heavyQaWaiters(lockDir)[0]).toContain('QA waiting for heavy turn:');
       expect(existsSync(join(queueDir, 'dead.json'))).toBe(false);
       writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
         pid: dead, goal: 'scoped-subjects', command: 'bun test affected', startedAt: '2026-10-04T00:00:00.000Z',
       }));
       expect(heavyQaStatus(lockDir)).toBe('free; 2 waiting');
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('a heavy waiter names its turn in output and status', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'heavy-wait-status-'));
+    const lockDir = join(root, 'heavy');
+    const alive = () => true;
+    const messages: string[] = [];
+    let releaseHolder: (() => void) | undefined;
+    try {
+      releaseHolder = await acquireHeavy(['holder'], { lockDir, alive, bindExit: false });
+      await expect(acquireHeavy(['next'], { lockDir, pid: 1001, goal: 'program', alive, bindExit: false,
+        announce: message => messages.push(message), sleep: async () => {
+          expect(heavyQaWaiters(lockDir, alive)).toEqual(['QA waiting for heavy turn: Goal program (pid 1001): next']);
+          throw new Error('stop after observing the wait');
+        } })).rejects.toThrow('stop after observing the wait');
+      expect(messages[0]).toStartWith('waiting for heavy QA turn');
+    } finally { releaseHolder?.(); rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('status identifies memory waits and removes records from dead processes', () => {
+    const root = mkdtempSync(join(tmpdir(), 'qa-wait-status-'));
+    const slots = join(root, 'qa-slots');
+    const waiters = join(slots, 'waiters');
+    const dead = unusedPid();
+    mkdirSync(waiters, { recursive: true });
+    try {
+      writeFileSync(join(waiters, 'memory.json'), JSON.stringify({ pid: process.pid, goal: 'program',
+        command: 'bun test selected', waitingFor: 'memory', message: 'Waiting; QA memory: host is short', since: '2026-10-07T00:00:00.000Z' }));
+      writeFileSync(join(waiters, 'dead.json'), JSON.stringify({ pid: dead, command: 'gone', waitingFor: 'slot', since: 'now' }));
+      expect(qaWaitStatusLines(slots)).toEqual([
+        `QA waiting for memory: Goal program (pid ${process.pid}): bun test selected; Waiting; QA memory: host is short`,
+      ]);
+      expect(existsSync(join(waiters, 'dead.json'))).toBe(false);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('heavy runs use only the heavy lock when all ordinary slots are occupied', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'heavy-no-slot-'));
+    const slots = join(root, 'qa-slots');
+    const heavy = join(slots, 'heavy');
+    mkdirSync(slots, { recursive: true });
+    for (let index = 0; index < 3; index++) {
+      const path = join(slots, String(index));
+      mkdirSync(path);
+      writeFileSync(join(path, 'pid'), String(process.pid));
+    }
+    try {
+      const code = await withSlot(['fake heavy run'], true, undefined, {
+        slotDirectory: slots,
+        reap: () => {},
+        runCommand: async (_command, _env, onStart) => {
+          expect([0, 1, 2].every(index => existsSync(join(slots, String(index))))).toBe(true);
+          expect(heavyQaStatus(heavy)).toContain('command not started');
+          onStart();
+          expect(heavyQaStatus(heavy)).toContain('command started');
+          return 0;
+        },
+      });
+      expect(code).toBe(0);
+      expect([0, 1, 2].every(index => existsSync(join(slots, String(index))))).toBe(true);
+      expect(existsSync(heavy)).toBe(false);
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
+  test('a slot waiter reports its reason and appears in status until a slot opens', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'slot-wait-status-'));
+    const slots = join(root, 'qa-slots');
+    mkdirSync(slots, { recursive: true });
+    for (let index = 0; index < 3; index++) {
+      const path = join(slots, String(index));
+      mkdirSync(path);
+      writeFileSync(join(path, 'pid'), String(process.pid));
+    }
+    const messages: string[] = [];
+    try {
+      const code = await withSlot(['fake light run'], false, undefined, {
+        slotDirectory: slots, slots: 3, pollMs: 1,
+        announce: message => messages.push(message),
+        sleep: async () => {
+          expect(qaWaitStatusLines(slots, () => true)[0]).toContain(`QA waiting for slot: Goal `);
+          expect(qaWaitStatusLines(slots, () => true)[0]).toContain(`(pid ${process.pid}): fake light run; 3/3 ordinary slots busy`);
+          rmSync(join(slots, '1'), { recursive: true, force: true });
+        },
+        reap: () => {},
+        runCommand: async (_command, _env, onStart) => { onStart(); return 0; },
+      });
+      expect(code).toBe(0);
+      expect(messages).toEqual(['waiting for QA slot; 3/3 ordinary slots busy']);
+      expect(qaWaitStatusLines(slots, () => true)).toEqual([]);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 

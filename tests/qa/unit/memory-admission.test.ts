@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { execFileSync } from 'node:child_process';
@@ -311,6 +311,32 @@ for (const short of ['vm', 'host'] as const) {
     expect(messages[1]).toStartWith('Admitted;');
   });
 }
+
+test('memory waits publish their reason for Goal status and clear it on admission', async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-memory-wait-status-'));
+  let now = 0, reads = 0;
+  const messages: string[] = [];
+  const env = { ...qaEnv, GOAL_ID: 'program', GOAL_QA_COMMAND: 'bun test selected', GOAL_QA_WAIT_DIR: dir };
+  try {
+    await waitForMemory(need, { env, deadline: 20, now: () => now, pollMs: 5,
+      sleep: async ms => {
+        const files = readdirSync(dir).filter(name => name.endsWith('.json'));
+        expect(files).toHaveLength(1);
+        const wait = JSON.parse(readFileSync(join(dir, files[0]!), 'utf8')) as {
+          pid: number; goal: string; command: string; waitingFor: string; message: string;
+        };
+        expect(wait).toMatchObject({ pid: process.pid, goal: 'program', command: 'bun test selected', waitingFor: 'memory' });
+        expect(wait.message).toContain('Waiting; QA memory:');
+        now += ms;
+      },
+      announce: message => messages.push(message),
+      read: async () => ++reads === 1 ? { ...plenty, vmUsed: plenty.vmTotal } : plenty,
+    });
+    expect(messages[0]).toContain('Waiting; QA memory:');
+    expect(messages[1]).toStartWith('Admitted;');
+    expect(readdirSync(dir)).toEqual([]);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
 
 test('memory admission deadline reports both shortages and never admits late readings', async () => {
   let now = 0;

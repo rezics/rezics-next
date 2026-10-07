@@ -105,7 +105,7 @@ describe('pinned main-wide regression', () => {
     } finally { r.cleanup(); }
   });
 
-  test('owner and stack batches fit bounded groups and run concurrently only up to available slots', async () => {
+  test('owner and stack batches fit bounded groups and use at most two ordinary slots', async () => {
     const r = repo(60);
     for (const tier of ['owner', 'fault/recovery'] as const) for (let index = 0; index < 32; index++) {
       const file = `tests/${tier.replace('/', '-')}/extra-${index}.test.ts`;
@@ -124,7 +124,7 @@ describe('pinned main-wide regression', () => {
           return await r.runner(...args);
         } finally { active--; activeTrees.delete(args[0]); }
       }, waitForTurn: async () => { throw new Error('Light batches must not wait for heavy QA'); } });
-      expect(maximum).toBe(3);
+      expect(maximum).toBe(2);
       expect(result.status).toBe('passed');
       for (const tier of ['owner', 'integration', 'fault/recovery'] as const) {
         const batches = result.batches.filter(batch => batch.tier === tier);
@@ -133,7 +133,7 @@ describe('pinned main-wide regression', () => {
         expect(batches.flatMap(batch => batch.files).sort()).toEqual(r.files.filter(file => file.tier === tier).map(file => file.file).sort());
       }
       const pooled = r.calls.filter(call => ['owner', 'integration', 'fault/recovery'].includes(call.batch.tier));
-      expect(new Set(pooled.map(call => call.checkout)).size).toBe(3);
+      expect(new Set(pooled.map(call => call.checkout)).size).toBe(2);
       expect(pooled.every(call => call.checkout !== result.checkout)).toBe(true);
     } finally { r.cleanup(); }
   });

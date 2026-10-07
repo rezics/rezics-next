@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { Database } from 'bun:sqlite';
@@ -119,6 +120,28 @@ function admissionAccounting(options: MemoryWaitOptions, now: () => number): () 
   };
 }
 
+function memoryWaitStatus(env: NodeJS.ProcessEnv, now: () => number): (message?: string) => void {
+  const directory = env.GOAL_QA_WAIT_DIR;
+  if (!directory) return () => {};
+  let path: string | undefined;
+  let since: string | undefined;
+  return message => {
+    if (!message) {
+      if (path) rmSync(path, { force: true });
+      path = undefined;
+      since = undefined;
+      return;
+    }
+    mkdirSync(directory, { recursive: true });
+    path ??= join(directory, `memory-${process.pid}-${randomUUID()}.json`);
+    since ??= new Date(now()).toISOString();
+    const temporary = `${path}.${randomUUID()}.tmp`;
+    writeFileSync(temporary, JSON.stringify({ pid: process.pid, goal: env.GOAL_ID,
+      command: env.GOAL_QA_COMMAND ?? process.argv.slice(1).join(' '), waitingFor: 'memory', message, since }));
+    renameSync(temporary, path);
+  };
+}
+
 /** Saved non-QA profiles retain their restore policy even in a Goal checkout.
  * Orchestration metadata opts in only when there is no saved stack profile. */
 export async function isLocalQaRun(root = resolve(import.meta.dir, '../..'),
@@ -150,6 +173,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   const pollMs = options.pollMs ?? threshold(process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
   if (pollMs <= 0) { mutex.close(); throw new Error('REZICS_QA_MEMORY_POLL_MS must be positive'); }
   const reportWait = admissionAccounting(options, now);
+  const publishWait = memoryWaitStatus(options.env ?? process.env, now);
   let held = false, announced = false;
   try {
     mutex.exec('PRAGMA busy_timeout=0');
@@ -164,16 +188,19 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         if (!['SQLITE_BUSY', 'SQLITE_LOCKED'].includes((error as { code?: string }).code ?? '')) throw error;
       }
       if (!announced) {
-        announce(`Waiting for another QA startup; ${admissionMessage(need)}`);
+        const message = `Waiting for another QA startup; ${admissionMessage(need)}`;
+        publishWait(message);
+        announce(message);
         announced = true;
       }
       await sleep(Math.min(pollMs, Math.max(0, options.deadline - now())));
     }
+    publishWait();
     await waitForMemory(need, { ...options, emitEvents: false, onAdmissionWait: undefined });
     reportWait();
     return await start();
   } finally {
-    try { reportWait(); }
+    try { publishWait(); reportWait(); }
     finally {
       try { if (held) mutex.exec('ROLLBACK'); }
       finally { mutex.close(true); }
@@ -215,6 +242,7 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
   const reportWait = admissionAccounting(options, now);
   const sleep = options.sleep ?? (ms => Bun.sleep(ms));
   const announce = options.announce ?? console.log;
+  const publishWait = memoryWaitStatus(options.env ?? process.env, now);
   const needsVm = need.vm + need.vmReserve > 0;
   const read = options.read ?? (needsVm ? readMemory : async () => readHostMemory());
   const pollMs = options.pollMs ?? threshold(process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
@@ -231,15 +259,18 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
       message = admissionMessage(need, reading);
       if (now() < options.deadline && reading.vmTotal - reading.vmUsed >= need.vm + need.vmReserve
         && reading.hostAvailable >= need.host + need.hostReserve) {
+        publishWait();
         announce(`Admitted; ${message}`);
         return;
       }
     } catch (error) {
       message = `${admissionMessage(need)}; measurement failed: ${error instanceof Error ? error.message : String(error)}`;
     }
-    announce(`Waiting; ${message}`);
+    const waiting = `Waiting; ${message}`;
+    publishWait(waiting);
+    announce(waiting);
     if (now() >= options.deadline) throw new Error(`Memory admission deadline reached; ${message}; no work started`);
     await sleep(Math.min(pollMs, options.deadline - now()));
   }
-  } finally { reportWait(); }
+  } finally { publishWait(); reportWait(); }
 }

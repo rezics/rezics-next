@@ -2063,18 +2063,19 @@ function normalizedFindingLines(detail: string | undefined): string[] {
   });
 }
 
-function unitFailureSignatures(file: string, failures: readonly UnitFailureDetail[], errors: readonly UnitFileErrorDetail[]): Set<string> {
-  const signatures = new Set<string>();
+function unitFailureSignatures(file: string, failures: readonly UnitFailureDetail[], errors: readonly UnitFileErrorDetail[]): Map<string, number> {
+  const signatures = new Map<string, number>();
+  const add = (signature: string) => signatures.set(signature, (signatures.get(signature) ?? 0) + 1);
   for (const failure of failures.filter(item => item.file === file)) {
     const findings = normalizedFindingLines(failure.detail);
     if (findings.length) {
-      for (const finding of findings) signatures.add(JSON.stringify(['test-finding', failure.test, finding]));
+      for (const finding of findings) add(JSON.stringify(['test-finding', failure.test, finding]));
     } else {
-      signatures.add(JSON.stringify(['test-error', failure.test, normalizeUnitFileError(failure.detail ?? '')]));
+      add(JSON.stringify(['test-error', failure.test, normalizeUnitFileError(failure.detail ?? '')]));
     }
   }
   for (const error of errors.filter(item => item.file === file)) {
-    signatures.add(JSON.stringify(['file-error', normalizeUnitFileError(error.detail)]));
+    add(JSON.stringify(['file-error', normalizeUnitFileError(error.detail)]));
   }
   return signatures;
 }
@@ -2084,7 +2085,8 @@ export function introducedUnitFailureFiles(branchFiles: readonly string[], branc
   mainErrors: readonly UnitFileErrorDetail[] = []): string[] {
   return [...new Set(branchFiles.filter(file => {
     const mainSignatures = unitFailureSignatures(file, main, mainErrors);
-    return [...unitFailureSignatures(file, branch, branchErrors)].some(signature => !mainSignatures.has(signature));
+    const branchSignatures = unitFailureSignatures(file, branch, branchErrors);
+    return [...branchSignatures].some(([signature, count]) => count > (mainSignatures.get(signature) ?? 0));
   }))].sort();
 }
 
@@ -2783,6 +2785,8 @@ async function status(): Promise<void> {
   }
   for (const account of codexAccounts()) console.log(describeAccount(account));
   console.log(`heavy QA: ${heavyQaStatus()}`);
+  for (const waiting of heavyQaWaiters()) console.log(waiting);
+  for (const waiting of qaWaitStatusLines()) console.log(waiting);
   const active = activeGoals(ledger);
   for (const slug of active) {
     const own = tasks.filter(task => task.goal === slug);
@@ -2884,8 +2888,10 @@ function heavyTickets(queueDir: string, alive: (pid: number) => boolean): { path
 function heavyHolder(lockDir = heavyLock, alive: (pid: number) => boolean = pidAlive): string | undefined {
   try {
     const info = JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')) as
-      { pid: number; goal?: string; command: string; startedAt: string };
-    return alive(info.pid) ? `Goal ${info.goal ?? '?'} since ${info.startedAt} (pid ${info.pid}): ${info.command}` : undefined;
+      { pid: number; goal?: string; command: string; startedAt: string; commandStartedAt?: string | null };
+    const commandState = typeof info.commandStartedAt === 'string' ? `command started ${info.commandStartedAt}`
+      : info.commandStartedAt === null ? 'command not started' : 'command start unknown';
+    return alive(info.pid) ? `Goal ${info.goal ?? '?'} since ${info.startedAt} (pid ${info.pid}): ${info.command} (${commandState})` : undefined;
   } catch { return undefined; }
 }
 
@@ -2893,6 +2899,43 @@ function heavyHolder(lockDir = heavyLock, alive: (pid: number) => boolean = pidA
 export function heavyQaStatus(lockDir = heavyLock, alive: (pid: number) => boolean = pidAlive): string {
   const waiting = heavyTickets(heavyQueueDir(lockDir), alive).length;
   return `${heavyHolder(lockDir, alive) ?? 'free'}; ${waiting} waiting`;
+}
+
+export function heavyQaWaiters(lockDir = heavyLock, alive: (pid: number) => boolean = pidAlive): string[] {
+  return heavyTickets(heavyQueueDir(lockDir), alive).map(({ ticket }) =>
+    `QA waiting for heavy turn: Goal ${ticket.goal ?? '?'} (pid ${ticket.pid}): ${ticket.command ?? 'QA command'}`);
+}
+
+export interface QaWaitStatus {
+  pid: number; goal?: string; command: string; waitingFor: 'slot' | 'memory'; message?: string; since: string;
+}
+
+function atomicJson(path: string, value: unknown): void {
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  writeFileSync(temporary, JSON.stringify(value));
+  renameSync(temporary, path);
+}
+
+export function qaWaitStatusLines(qaSlotsDir = join(stateDir, 'qa-slots'), alive: (pid: number) => boolean = pidAlive): string[] {
+  const directory = join(qaSlotsDir, 'waiters');
+  let names: string[];
+  try { names = readdirSync(directory); } catch { return []; }
+  const lines: string[] = [];
+  for (const name of names) {
+    if (!name.endsWith('.json')) continue;
+    const path = join(directory, name);
+    try {
+      const wait = JSON.parse(readFileSync(path, 'utf8')) as QaWaitStatus;
+      if (!Number.isSafeInteger(wait.pid) || typeof wait.command !== 'string'
+        || !['slot', 'memory'].includes(wait.waitingFor) || !alive(wait.pid)) {
+        rmSync(path, { force: true });
+        continue;
+      }
+      lines.push(`QA waiting for ${wait.waitingFor}: Goal ${wait.goal ?? '?'} (pid ${wait.pid}): ${wait.command}`
+        + (wait.message ? `; ${wait.message}` : ''));
+    } catch { rmSync(path, { force: true }); }
+  }
+  return lines.sort();
 }
 
 /** `process.exit` from a signal still runs the exit hook, which is the one place a waiting ticket is removed without `finally`. */
@@ -2930,6 +2973,7 @@ export interface HeavyWaitOptions {
   bindExit?: boolean;
   /** A waiting refresh already includes committed main when it starts. Return undefined instead of queuing another. */
   coalesceRefresh?: boolean;
+  announce?: (message: string) => void;
 }
 
 /** Heavy runs (affected sets, whole tiers, wave and browser suites) are host-wide exclusive: two managers' waves
@@ -2990,7 +3034,7 @@ export async function acquireHeavy(command: readonly string[], options: HeavyWai
           // The stale-owner reap inside acquireDir still runs before that failure.
           await acquireDir(lockDir, -1, 'heavy QA');
           writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
-            pid, goal, command: commandText, startedAt: new Date().toISOString(),
+            pid, goal, command: commandText, startedAt: new Date().toISOString(), commandStartedAt: null,
           }));
           if (commandText !== 'task dev:refresh') {
             const turns = heavyGoalTurns(queueDir).filter(turn => turn !== (goal ?? '?'));
@@ -3003,9 +3047,9 @@ export async function acquireHeavy(command: readonly string[], options: HeavyWai
       if (now() > deadline) throw new Error('The heavy QA lock stayed held for six hours');
       if (!announced) {
         const holder = heavyHolder(lockDir, alive);
-        console.error(ahead > 0
-          ? `waiting for heavy QA; ${ahead} waiter${ahead === 1 ? '' : 's'} in line${holder ? ` (${holder})` : ''}`
-          : `waiting for heavy QA held by ${holder ?? 'a starting run'}`);
+        (options.announce ?? console.error)(ahead > 0
+          ? `waiting for heavy QA turn; ${ahead} waiter${ahead === 1 ? '' : 's'} in line${holder ? ` (${holder})` : ''}`
+          : `waiting for heavy QA turn held by ${holder ?? 'a starting run'}`);
         announced = true;
       }
       await sleep(pollMs);
@@ -3016,57 +3060,109 @@ export async function acquireHeavy(command: readonly string[], options: HeavyWai
   }
 }
 
-async function withSlot(command: string[], heavy = false, resultFile?: string): Promise<number> {
-  const queuedAt = Date.now();
+export interface SlotRunOptions {
+  slotDirectory?: string;
+  heavyLockDirectory?: string;
+  slots?: number;
+  timeoutMs?: number;
+  pollMs?: number;
+  now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
+  announce?: (message: string) => void;
+  reap?: () => void;
+  runCommand?: (command: readonly string[], env: NodeJS.ProcessEnv, onStart: () => void) => Promise<number>;
+}
+
+async function runQaCommand(command: readonly string[], env: NodeJS.ProcessEnv, onStart: () => void): Promise<number> {
+  const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit', env });
+  const forward = (signal: NodeJS.Signals) => child.kill(signal);
+  process.on('SIGINT', forward);
+  process.on('SIGTERM', forward);
+  try {
+    return await new Promise<number>((done, reject) => {
+      child.once('error', reject);
+      child.once('spawn', onStart);
+      child.once('exit', exit => done(exit ?? 1));
+    });
+  } finally {
+    process.off('SIGINT', forward);
+    process.off('SIGTERM', forward);
+  }
+}
+
+function markHeavyCommandStarted(lockDirectory: string): void {
+  const path = join(lockDirectory, 'info.json');
+  try {
+    const info = JSON.parse(readFileSync(path, 'utf8')) as { pid: number; [key: string]: unknown };
+    if (info.pid === process.pid) atomicJson(path, { ...info, commandStartedAt: new Date().toISOString() });
+  } catch { /* status may read the lock while it is being acquired */ }
+}
+
+function currentQaGoal(): string | undefined {
+  if (process.env.GOAL_ID) return process.env.GOAL_ID;
+  const taskId = process.env.GOAL_TASK_ID;
+  if (!taskId) return undefined;
+  try { return readLedger().tasks[taskId]?.goal; } catch { return undefined; }
+}
+
+export async function withSlot(command: string[], heavy = false, resultFile?: string, options: SlotRunOptions = {}): Promise<number> {
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? (ms => Bun.sleep(ms));
+  const announce = options.announce ?? console.error;
+  const queuedAt = now();
   let startedAt: number | undefined;
   let code: number | undefined;
   const artifactRoot = join(process.cwd(), '.artifacts', 'qa');
   const prior = new Set(existsSync(artifactRoot) ? readdirSync(artifactRoot) : []);
-  const slots = Number(process.env.GOAL_QA_SLOTS ?? 3);
-  const dir = join(stateDir, 'qa-slots');
+  const slots = heavy ? undefined : options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
+  if (!heavy && (!Number.isSafeInteger(slots) || slots! < 1)) throw new Error('GOAL_QA_SLOTS must be a positive integer');
+  const dir = options.slotDirectory ?? join(stateDir, 'qa-slots');
+  const heavyLockDirectory = options.heavyLockDirectory ?? (options.slotDirectory ? join(dir, 'heavy') : heavyLock);
+  const waiterDirectory = join(dir, 'waiters');
+  const goal = currentQaGoal();
   mkdirSync(dir, { recursive: true });
-  // Take the heavy lock before a slot, so a waiting heavy run never holds a slot that light runs need.
   let releaseHeavy: (() => void) | undefined;
+  let heldSlot: string | undefined;
+  let waitPath: string | undefined;
   try {
-    releaseHeavy = heavy ? await acquireHeavy(command) : undefined;
-    let held: string | undefined;
-    const deadline = Date.now() + 3_600_000;
-    while (!held) {
-      for (let k = 0; k < slots && !held; k++) {
-        const path = join(dir, String(k));
-        try { await acquireDir(path, 0, 'slot'); held = path; } catch { /* busy */ }
+    releaseHeavy = heavy ? await acquireHeavy(command, { lockDir: heavyLockDirectory, goal, announce }) : undefined;
+    if (!heavy) {
+      const deadline = now() + (options.timeoutMs ?? 3_600_000);
+      let announced = false;
+      while (!heldSlot) {
+        for (let k = 0; k < slots! && !heldSlot; k++) {
+          const path = join(dir, String(k));
+          try { await acquireDir(path, -1, 'slot'); heldSlot = path; } catch { /* busy */ }
+        }
+        if (!heldSlot) {
+          const free = [...Array(slots!).keys()].filter(k => !dirLockHeld(join(dir, String(k)), pidAlive)).length;
+          const record: QaWaitStatus = { pid: process.pid, goal, command: command.join(' '),
+            waitingFor: 'slot', message: `${slots! - free}/${slots} ordinary slots busy`, since: new Date(now()).toISOString() };
+          mkdirSync(waiterDirectory, { recursive: true });
+          waitPath ??= join(waiterDirectory, `slot-${process.pid}-${randomUUID()}.json`);
+          atomicJson(waitPath, record);
+          if (!announced) { announce(`waiting for QA slot; ${record.message}`); announced = true; }
+          if (now() > deadline) throw new Error('No QA slot became free within one hour; waiting for an ordinary slot');
+          await sleep(options.pollMs ?? 3000);
+        }
       }
-      if (!held) {
-        if (Date.now() > deadline) throw new Error('No QA slot became free within one hour');
-        await Bun.sleep(3000);
-      }
+      if (waitPath) rmSync(waitPath, { force: true });
     }
-    const slot = held;
-    reapStaleQaStacks();
-    try {
-      startedAt = Date.now();
-      const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit',
-        env: { ...process.env, GOAL_IN_SLOT: '1' } });
-      const forward = (signal: NodeJS.Signals) => child.kill(signal);
-      process.on('SIGINT', forward);
-      process.on('SIGTERM', forward);
-      try {
-        code = await new Promise<number>((done, reject) => {
-          child.once('error', reject);
-          child.once('exit', exit => done(exit ?? 1));
-        });
-        return code;
-      } finally {
-        process.off('SIGINT', forward);
-        process.off('SIGTERM', forward);
-      }
-    } finally {
-      rmSync(slot, { recursive: true, force: true });
-    }
+    (options.reap ?? reapStaleQaStacks)();
+    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_IN_SLOT: '1',
+      GOAL_QA_WAIT_DIR: waiterDirectory, GOAL_QA_COMMAND: command.join(' ') };
+    if (goal) env.GOAL_ID = goal;
+    code = await (options.runCommand ?? runQaCommand)(command, env, () => {
+      startedAt = now();
+      if (heavy) markHeavyCommandStarted(heavyLockDirectory);
+    });
+    return code;
   } finally {
+    if (waitPath) rmSync(waitPath, { force: true });
+    if (heldSlot) rmSync(heldSlot, { recursive: true, force: true });
     releaseHeavy?.();
     if (resultFile) {
-      const finishedAt = Date.now();
+      const finishedAt = now();
       mkdirSync(dirname(resultFile), { recursive: true });
       writeFileSync(resultFile, JSON.stringify({ code, queuedAt, startedAt, finishedAt,
         queueMs: (startedAt ?? finishedAt) - queuedAt, testMs: startedAt ? finishedAt - startedAt : 0,

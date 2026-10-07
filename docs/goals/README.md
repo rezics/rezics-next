@@ -164,12 +164,16 @@ runs the integration tiers, Storybook and browser journeys once.
 
 - Workers run only their own checks through `goalctl test`, which bounds
   concurrent QA stacks (default 3 slots, `GOAL_QA_SLOTS`; four exhausted a 62 GB host beside a dozen workers).
-- Heavy runs take a host-wide lock as well as a slot, so the host carries at
-  most one heavy run, from whichever Goal, beside two light ones. `--affected`
+- Heavy runs take only the host-wide heavy lock and consume no ordinary slot.
+  At most one heavy run starts; the three ordinary slots remain available to
+  other QA runs, and memory admission controls when each stack can start. `--affected`
   and whole `--tier` runs are heavy by themselves; bounded nonbrowser `--tier ... --file ...` batches use ordinary slots. Selected e2e journeys retain the heavy lock. Pass `--heavy` to `test` or `slot`
   for wave batches, Storybook and browser suites. The lock belongs to the
-  process and frees itself when it exits; `status` shows its holder, and a
-  heavy run waits for it.
+  process and frees itself when it exits. `status` shows whether the heavy
+  holder's command has started and lists runs waiting for a heavy turn, an
+  ordinary slot or memory; each waiting run also prints its current wait.
+- `task goal -- regress` uses at most two ordinary slots at once, leaving one
+  available for Goals' own test runs.
 - The manager merges ready tasks in waves, one at a time, regenerates derived
   artifacts once (`task gen`), runs the static checks and one
   `goalctl test --affected <wave base>` run, then commits. Failures go back to
