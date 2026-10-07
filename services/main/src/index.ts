@@ -55,6 +55,7 @@ import { ZoneBrowseProjection } from './modules/zone-browse/store.ts';
 import { ReadRankingProjection } from './modules/rankings/projection.ts';
 import { ReadingSettingsStore } from './modules/reading-settings/store.ts';
 import { StructureStageStore } from './modules/structure/stage.ts';
+import { StructureGroupRootStore } from './modules/structure/group-root.ts';
 import { SemanticStageStore } from './modules/semantic/staging.ts';
 import { AccessAdmissionRegistry } from './modules/access/admission.ts';
 import { AccessPlatformAdministrators } from './modules/access/platform-administrator.ts';
@@ -288,7 +289,8 @@ const structureObjects = new S3ImmutableObjects({
   secretAccessKey: config.MAIN_S3_SECRET_KEY, prefix: 'semantic/structure/',
 });
 await structureObjects.initialize();
-Object.assign(environment, { structureObjects });
+Object.assign(environment, { structureObjects,
+  structureGroupRoots: new StructureGroupRootStore(contentPool, structureObjects) });
 const semanticStageObjects = new S3ImmutableObjects({
   endpoint: config.MAIN_S3_ENDPOINT, bucket: config.MAIN_S3_BUCKET,
   region: config.MAIN_S3_REGION, accessKeyId: config.MAIN_S3_ACCESS_KEY,

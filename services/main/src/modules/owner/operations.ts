@@ -6,6 +6,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
 import type { ObjectRecoveryStore } from './object-coverage.ts';
+import { StructureGroupRootStore } from '../structure/group-root.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound, RevisionUnavailable }
   from '../work/history.ts';
@@ -143,7 +144,8 @@ export class OwnerOperations {
       contentPool: pools[2]!, hmacKey,
       objectStore: { directory: this.environment.objectDirectory,
         ...(workObjects ? { workObjects } : {}),
-        ...(structureObjects ? { structureObjects } : {}) } },
+        ...(structureObjects ? { structureObjects,
+          structureGroupRoots: new StructureGroupRootStore(pools[2]!, structureObjects) } : {}) } },
     close: async () => { await Promise.all(pools.map(pool => pool.end())); } };
   }
 
@@ -326,10 +328,13 @@ export class OwnerOperations {
   async reconcileRetentionGc(key: string): Promise<RetentionGcView> {
     const workObjects = this.configuredWorkObjects();
     const structureObjects = this.configuredStructureObjects();
+    if (structureObjects && !this.environment.structureGroupRoots) {
+      throw new OwnerOperationUnavailable('Structure group custody owner is unavailable');
+    }
     try { return await collectUnreferencedObjects(this.relay, this.environment.fuseki,
       { directory: this.environment.objectDirectory,
         ...(workObjects ? { workObjects } : {}),
-        ...(structureObjects ? { structureObjects } : {}) }, key); }
+        ...(structureObjects ? { structureObjects, structureGroupRoots: this.environment.structureGroupRoots } : {}) }, key); }
     catch (error) {
       if (error instanceof RetentionGcConflict) throw new OwnerOperationBusy(error.message);
       throw error;
@@ -476,17 +481,20 @@ export class OwnerOperations {
       if (!sourceLocation || !targetLocation || !targetDirectory || !accessUrl) {
         throw new OwnerOperationUnavailable('relocation target or Access route owner is unavailable');
       }
-      temporaryPool = new PgPool({ connectionString: accessUrl, max: 1 });
       const workObjects = this.configuredWorkObjects();
       const structureObjects = this.configuredStructureObjects();
+      if (structureObjects && !this.environment.structureGroupRoots) {
+        throw new OwnerOperationUnavailable('Structure group custody owner is unavailable');
+      }
+      temporaryPool = new PgPool({ connectionString: accessUrl, max: 1 });
       target = { sourceLocation, targetLocation,
         target: new FusekiClient(targetLocation),
         sourceObjects: { directory: this.environment.objectDirectory,
           ...(workObjects ? { workObjects } : {}),
-          ...(structureObjects ? { structureObjects } : {}) },
+          ...(structureObjects ? { structureObjects, structureGroupRoots: this.environment.structureGroupRoots } : {}) },
         targetObjects: { directory: targetDirectory,
           ...(workObjects ? { workObjects } : {}),
-          ...(structureObjects ? { structureObjects } : {}) },
+          ...(structureObjects ? { structureObjects, structureGroupRoots: this.environment.structureGroupRoots } : {}) },
         routes: new OwnerPartitionRoutes(temporaryPool) };
     }
     try {

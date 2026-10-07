@@ -1,3 +1,4 @@
+import { StructureGroupRootStore } from '../structure/group-root.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type GraphLineage } from './activate.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { knownSearchPosition } from '../search/snapshot-state.ts';
@@ -125,6 +126,8 @@ export async function captureGraphRecoveryCoverage(
   objectStore?: ObjectRecoveryStore,
 ): Promise<RecoveryCoverage> {
   if (!contentPool) throw new RestoreLineageConflict('Content owner is required for recovery coverage');
+  if (objectStore?.structureObjects) objectStore = { ...objectStore,
+    structureGroupRoots: new StructureGroupRootStore(contentPool, objectStore.structureObjects) };
   const fence = await accessPool.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true');
   if (fence.rows[0]?.open !== false) {
@@ -487,7 +490,10 @@ export async function releaseRestoredGraphHold(
     catch { throw new RestoreLineageConflict('Content owner or graph references differ from recovery coverage'); }
     if (!coverage.objects) throw new RestoreLineageConflict('immutable object recovery coverage is missing');
     if (!evidence.objectStore) throw new RestoreLineageConflict('restored immutable object owner is unavailable');
-    try { await assertObjectRecoveryCoverage(fuseki, evidence.objectStore, coverage.objects); }
+    const restoredObjects = evidence.objectStore.structureObjects
+      ? { ...evidence.objectStore, structureGroupRoots: new StructureGroupRootStore(
+        evidence.contentPool, evidence.objectStore.structureObjects) } : evidence.objectStore;
+    try { await assertObjectRecoveryCoverage(fuseki, restoredObjects, coverage.objects); }
     catch (error) { throw new RestoreLineageConflict(
       `graph or immutable objects differ from recovery coverage (${error instanceof ObjectRecoveryConflict
         ? error.kind : 'unavailable'})`); }

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import type { Pool, QueryResult } from 'pg';
+import { Pool, type QueryResult } from 'pg';
 import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { StructureGroupRootStore } from '../src/modules/structure/group-root.ts';
@@ -13,15 +13,24 @@ import { newCost } from '../src/modules/structure/tree.ts';
 import { chapterStoryNumber } from '../src/modules/work-contents/read.ts';
 import { WorkReadSession } from '../src/modules/work/read-session.ts';
 import { assertObjectRecoveryCoverage, captureObjectRecoveryCoverage } from '../src/modules/owner/object-coverage.ts';
+import { OwnerOperations, OwnerOperationUnavailable } from '../src/modules/owner/operations.ts';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { upgradeStoredMembership } from '../src/modules/structure/membership-normalize.ts';
 import { createMainApp } from '../src/app.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { StructureProgressStore } from '../src/modules/progress/store.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../src/modules/work/select-main.ts';
-import { GRAPHS, ID, RV, iri, lit } from '../src/modules/work/activate.ts';
+import { DATASET, GRAPHS, ID, RV, iri, lit } from '../src/modules/work/activate.ts';
 
 const short = (id: string) => id.slice(-36);
+// Direct-app fixtures bypass Main's explicit storage preparation entrypoint.
+// Run it at fixture startup, never as a chapter request or ordinary mutation.
+async function preparedReaderStack(label: string) {
+  const stack = await startMediaStack(label);
+  try { await upgradeStoredMembership(stack.env); return stack; }
+  catch (error) { await stack.stop(); throw error; }
+}
 async function json<T>(response: Response, status = 200): Promise<T> {
   const body = await response.text();
   if (response.status !== status) throw new Error(`Expected ${status}, received ${response.status}: ${body}`);
@@ -29,7 +38,7 @@ async function json<T>(response: Response, status = 200): Promise<T> {
 }
 
 test('Reader: public and private composition pages, current Content, cursor and revision fences', async () => {
-  const stack = await startMediaStack('work-contents');
+  const stack = await preparedReaderStack('work-contents');
   try {
     const a = await stack.member('contents-owner');
     const b = await stack.member('contents-stranger');
@@ -209,7 +218,7 @@ test('Reader: public and private composition pages, current Content, cursor and 
 }, 180_000);
 
 test('Reader: chapter Posts and independently maintained anthology Works retain their own identities', async () => {
-  const stack = await startMediaStack('chapter-place');
+  const stack = await preparedReaderStack('chapter-place');
   try {
     const a = await stack.member('chapter-place-owner');
     const store = stack.objects('semantic/structure/');
@@ -275,7 +284,7 @@ test('Structure group order: admitted deltas, historical roots, restoration and 
   const { checkStructureManifest } = await import('../src/modules/structure/format.ts');
   const { StructureStageStore } = await import('../src/modules/structure/stage.ts');
   const { newCost } = await import('../src/modules/structure/tree.ts');
-  const stack = await startMediaStack('structure-group-order');
+  const stack = await preparedReaderStack('structure-group-order');
   try {
     const owner = await stack.member('structure-group-order-owner');
     const objects = stack.objects('semantic/structure/');
@@ -429,7 +438,8 @@ function checkpointPool(pool: Pool, around: (sql: string, values: unknown[] | un
   return wrapped;
 }
 
-async function legacySparseBook(stack: Awaited<ReturnType<typeof startMediaStack>>, objects: ImmutableObjects) {
+async function legacySparseBook(stack: Awaited<ReturnType<typeof startMediaStack>>, objects: ImmutableObjects,
+  chapterCount = 10_000) {
   const salt = randomUUID().slice(0, 8);
   const id = (at: number) => `${ID}${salt}-0000-4000-8000-${at.toString(16).padStart(12, '0')}`;
   const structure = id(1), component = id(2), owner = id(3), revision = id(4), generation = id(5);
@@ -446,7 +456,7 @@ async function legacySparseBook(stack: Awaited<ReturnType<typeof startMediaStack
     records.push(value);
     return value;
   };
-  for (let at = 0; at < 10_000; at++) {
+  for (let at = 0; at < chapterCount; at++) {
     const division = at === 100 ? 'volume' : at === 5_000 ? 'extras' : at === 9_900 ? 'part' : null;
     if (division) {
       const group = record(structure, sibling++, 'group', division);
@@ -720,7 +730,7 @@ test('Legacy group preparation: bounded durable batches, restart, CAS, lost ackn
 }, 180_000);
 
 test('Legacy group preparation: authentic historical anchor resolves and a bounded admitted edit carries its prepared root', async () => {
-  const stack = await startMediaStack('legacy-group-writer');
+  const stack = await preparedReaderStack('legacy-group-writer');
   try {
     const owner = await stack.member('legacy-group-writer-owner');
     const observed = observeLegacyObjects(stack.objects('semantic/structure/'));
@@ -767,6 +777,9 @@ test('Legacy group preparation: authentic historical anchor resolves and a bound
       DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(created.structure)} rv:structureHead ${iri(child.revision)} . } }
       INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(created.structure)} rv:structureHead ${iri(legacyRevision)} . } }
       WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(created.structure)} rv:structureHead ${iri(child.revision)} . } }`);
+    // Raw retained-head fixture construction invalidates native membership
+    // completion. Finish that explicit preparation before admitted edits.
+    await upgradeStoredMembership(stack.env);
     expect((await readCompositionSnapshot(stack.env, { structure: created.structure })).manifest.topGroups).toBeUndefined();
     const complete = await roots.prepare(legacyDigest);
     expect(complete).toMatchObject({ complete: true, total: 2, scanned: 2 });
@@ -805,4 +818,126 @@ test('Legacy group preparation: authentic historical anchor resolves and a bound
     expect(await objects.get(legacyDigest)).toEqual(legacyBytes);
     expect(await objects.get(authoredDigest)).toEqual(authoredBytes);
   } finally { await stack.stop(); }
+}, 180_000);
+
+test('Legacy group retention: OwnerOperations GC pins pending/completed custody and refuses missing backends', async () => {
+  const stack = await startMediaStack('legacy-group-retention');
+  const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL, max: 2 });
+  const missingDatabase = new URL(Bun.env.CONTENT_DATABASE_URL!);
+  missingDatabase.pathname = `/group_roots_absent_${randomUUID().replaceAll('-', '')}`;
+  const unavailableContent = new Pool({ connectionString: missingDatabase.toString(),
+    max: 1, connectionTimeoutMillis: 1_000 });
+  const missingBackendKey = `group-retention-unavailable-${randomUUID()}`;
+  let restoreHold: { type: string; value: string; datatype?: string } | undefined;
+  let holdChanged = false;
+  try {
+    const objects = stack.objects('semantic/structure/');
+    await objects.initialize();
+    (stack.env as typeof stack.env & { structureObjects: typeof objects }).structureObjects = objects;
+    // The same real Content pool and S3 constructor pairing used by Main.
+    stack.env.structureGroupRoots = new StructureGroupRootStore(stack.contentPool, objects);
+    const roots = stack.env.structureGroupRoots;
+    const pendingSource = await legacySparseBook(stack, objects, 300);
+    const completeSource = await legacySparseBook(stack, objects, 257);
+    const pending = await roots.prepare(pendingSource.digest);
+    expect(pending).toMatchObject({ total: 301, scanned: 256, complete: false });
+    expect(pending.groups.count).toBe(1);
+    const firstCompleteTurn = await roots.prepare(completeSource.digest);
+    expect(firstCompleteTurn).toMatchObject({ total: 258, scanned: 256, complete: false });
+    const complete = await roots.prepare(completeSource.digest);
+    expect(complete).toMatchObject({ total: 258, scanned: 258, complete: true });
+    expect(complete.groups.count).toBe(1);
+    const protectedSet = new Set([pendingSource.digest, completeSource.digest]);
+    const retainPage = async (reference: string): Promise<void> => {
+      const digest = reference.slice(7);
+      if (protectedSet.has(digest)) return;
+      protectedSet.add(digest);
+      const page = checkStructurePage(await objects.get(digest));
+      if (page.level > 0) {
+        for (const child of page.entries as Array<{ page: string }>) await retainPage(child.page);
+      }
+    };
+    for (const root of [pendingSource.source.records, pendingSource.source.order, pending.groups,
+      completeSource.source.records, completeSource.source.order, complete.groups]) await retainPage(root.page);
+    const protectedDigests = [...protectedSet];
+    // Both source trees have interior roots: ledger coverage must include their
+    // child leaves, rather than preserving only the manifest/root pointers.
+    expect(protectedDigests.length).toBeGreaterThan(8);
+    const originalBytes = new Map(await Promise.all(protectedDigests.map(async digest =>
+      [digest, await objects.get(digest)] as const)));
+    const holds = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?hold WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold ?hold } } LIMIT 2`)).results?.bindings ?? [];
+    expect(holds.length).toBeLessThanOrEqual(1);
+    restoreHold = holds[0]?.hold;
+    if (restoreHold) expect(restoreHold.type).toBe('literal');
+    await stack.fuseki.update(`PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold ?previous } }
+      INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+      WHERE { OPTIONAL { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold ?previous } } }`);
+    holdChanged = true;
+
+    const operations = new OwnerOperations(relay, stack.env);
+    const key = `group-retention-${randomUUID()}`;
+    const result = await operations.reconcileRetentionGc(key);
+    expect(result).toMatchObject({ kind: 'retention_gc', state: 'reconciled', replayed: false });
+    const ledger = await relay.query<{ item_ref: string; item_kind: string; disposition: string; evidence_digest: string }>(
+      `SELECT item_ref, item_kind, disposition, evidence_digest FROM relay.owner_reconciliation_item
+        WHERE reconciliation_id = $1 AND owner = 'object' AND item_ref = ANY($2::text[])`, [result.id, protectedDigests]);
+    expect(ledger.rows).toHaveLength(protectedDigests.length);
+    for (const item of ledger.rows) {
+      expect(item).toMatchObject({ item_kind: 'retention_pin', disposition: 'preserved', evidence_digest: item.item_ref });
+    }
+    const cuts = await relay.query<{ owner: string; status: string }>(`SELECT owner, status
+      FROM relay.owner_reconciliation_cut WHERE reconciliation_id = $1 ORDER BY owner`, [result.id]);
+    expect(cuts.rows).toEqual([{ owner: 'graph', status: 'matched' }, { owner: 'object', status: 'matched' }]);
+    expect(await new OwnerOperations(relay, { ...stack.env,
+      structureGroupRoots: new StructureGroupRootStore(stack.contentPool, stack.objects('semantic/structure/')) })
+      .reconcileRetentionGc(key)).toMatchObject({ id: result.id, state: 'reconciled', replayed: true });
+    expect(await roots.read(pendingSource.digest)).toEqual(pending);
+    expect(await roots.completedTopGroups(pendingSource.digest, pendingSource.source)).toBeNull();
+    expect(await roots.read(completeSource.digest)).toEqual(complete);
+    expect(await roots.completedTopGroups(completeSource.digest, completeSource.source)).toEqual(complete.groups);
+    for (const digest of protectedDigests) expect(await objects.get(digest)).toEqual(originalBytes.get(digest)!);
+
+    const { structureGroupRoots: _roots, ...missingStoreEnvironment } = stack.env;
+    const missingStoreKey = `group-retention-unconfigured-${randomUUID()}`;
+    await expect(new OwnerOperations(relay, missingStoreEnvironment).reconcileRetentionGc(missingStoreKey))
+      .rejects.toBeInstanceOf(OwnerOperationUnavailable);
+    expect((await relay.query(`SELECT id FROM relay.owner_reconciliation WHERE operation_id = $1`,
+      [`owner:reconcile:${missingStoreKey}`])).rowCount).toBe(0);
+
+    // A real PostgreSQL connection to a nonexistent database must refuse GC;
+    // an unavailable mapping owner cannot be represented as zero retained rows.
+    await expect(new OwnerOperations(relay, { ...stack.env,
+      structureGroupRoots: new StructureGroupRootStore(unavailableContent, objects) })
+      .reconcileRetentionGc(missingBackendKey)).rejects.toThrow('Structure group custody owner is unavailable or corrupt');
+    const refused = await relay.query<{ id: string; state: string }>(`SELECT id, state
+      FROM relay.owner_reconciliation WHERE operation_id = $1`, [`owner:reconcile:${missingBackendKey}`]);
+    expect(refused.rows).toHaveLength(1);
+    expect(refused.rows[0]!.state).toBe('running');
+    expect((await relay.query(`SELECT item_ref FROM relay.owner_reconciliation_item
+      WHERE reconciliation_id = $1`, [refused.rows[0]!.id])).rowCount).toBe(0);
+    for (const digest of protectedDigests) expect(await objects.get(digest)).toEqual(originalBytes.get(digest)!);
+    expect(await roots.read(pendingSource.digest)).toEqual(pending);
+    expect(await roots.read(completeSource.digest)).toEqual(complete);
+  } finally {
+    // A failed backend pass remains an explicit held fixture record and must
+    // release the one-running-pass constraint for later isolated QA cases.
+    try {
+      await relay.query(`UPDATE relay.owner_reconciliation SET state = 'held',
+        hold_reason = 'Fixture group custody backend unavailable'
+        WHERE operation_id = $1 AND state = 'running'`, [`owner:reconcile:${missingBackendKey}`]);
+    } finally {
+      try {
+        if (holdChanged) {
+          const original = restoreHold
+            ? `${lit(restoreHold.value)}${restoreHold.datatype ? `^^${iri(restoreHold.datatype)}` : ''}` : null;
+          await stack.fuseki.update(`PREFIX rv: <${RV}>
+            DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold ?previous } }
+            ${original ? `INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold ${original} } }` : ''}
+            WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold ?previous } }`);
+        }
+      } finally { await Promise.all([relay.end(), unavailableContent.end(), stack.stop()]); }
+    }
+  }
 }, 180_000);
