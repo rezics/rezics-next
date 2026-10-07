@@ -17,6 +17,7 @@ export const READING_POSITION_COST = { occurrences: 10_000, workDepth: 16, workB
 export const readingPositionPage = t.Object({
   profile: t.Literal('reading-positions-v1'), work: readId, resolved: t.String(),
   scope: t.Optional(t.Union([t.Literal('resume'), t.Literal('positions')])),
+  visibility: t.Optional(t.Union([t.Literal('visible'), t.Literal('pending'), t.Literal('empty')])),
   items: t.Array(t.Object({ occurrence: readId, work: readId, structure: readId, revision: readId,
     parent: readId, segmentKey: t.String(), orderKey: t.String(),
     role: t.Union([t.Literal('part'), t.Literal('chapter'), t.Literal('group')]),

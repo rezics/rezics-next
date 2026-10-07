@@ -6,7 +6,7 @@ import { normalizePositionQuery } from '../modules/reading-position/store.ts';
 import { readingPositionPage, readingPositionQuery } from '../modules/reading-position/contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
-import { ReadingResumeDisclosureBound, ReadingResumeUnavailable, ReadingSeekUnavailable } from '../modules/reading-position/errors.ts';
+import { ReadingResumeUnavailable, ReadingSeekUnavailable } from '../modules/reading-position/errors.ts';
 import { problem } from './problems.ts';
 
 export { readingPositionQuery } from '../modules/reading-position/contract.ts';
@@ -16,7 +16,8 @@ export function readingPositionsRoutes(work: MainWorkDependencies) {
     query: t.Object({ ...readQuery, position: readingPositionQuery,
       q: t.Optional(t.String({ maxLength: READING_POSITION_COST.chooserQueryChars,
         description: 'Title phrase or display label; Book chapter sibling seek. Accepted episode-number seek reports unavailable until its indexed read is ready. Mine without q reads only the bounded resume scope.' })),
-      cursor: t.Optional(t.String({ maxLength: 2048 })),
+      cursor: t.Optional(t.String({ maxLength: 2048,
+        description: 'Continue while nextCursor is present, including empty pages with visibility=pending.' })),
       limit: t.Optional(t.Numeric({ minimum: 1, maximum: READING_POSITION_COST.chooserPage, multipleOf: 1 })) }, { additionalProperties: false }),
     response: { 200: readingPositionPage, ...workReadProblems } }, async ({ request, params, query }: {
       request: Request; params: { work: string }; query: { actingSubject?: string; language?: string;
@@ -41,7 +42,6 @@ export function readingPositionsRoutes(work: MainWorkDependencies) {
     } catch (error) {
       if (error instanceof ReadingSeekUnavailable) return problem(503, 'reading_seek_unavailable', error.message);
       if (error instanceof ReadingResumeUnavailable) return problem(503, 'reading_resume_index_unavailable', error.message);
-      if (error instanceof ReadingResumeDisclosureBound) return problem(422, 'reading_resume_disclosure_bound', error.message);
       return workReadError(error);
     }
   });

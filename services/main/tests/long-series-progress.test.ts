@@ -11,7 +11,7 @@ import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, type OccurrenceRecord
 import { newCost } from '../src/modules/structure/tree.ts';
 import { WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
-import { ReadingSeekUnavailable, ReadingResumeUnavailable, ReadingResumeDisclosureBound } from '../src/modules/reading-position/errors.ts';
+import { ReadingSeekUnavailable, ReadingResumeUnavailable, ReadingResumeContinuation } from '../src/modules/reading-position/errors.ts';
 import { disclosedCompletedProgress } from '../src/modules/progress/disclosure.ts';
 import { ReadingPositionStore } from '../src/modules/reading-position/store.ts';
 import { ProgressOrderProjection } from '../src/modules/progress/order-projection.ts';
@@ -74,14 +74,18 @@ async function fixture(grouped = false, _reverseNumbers = false, singletons = fa
   const principal = { issuer: 'https://reader.test', subject: 'viewer', emailVerified: true };
   const session = {
     deps: { environment: env, structureObjects: objects, progress: {
-      resumeCandidates: async () => {
+      resumeCandidates: async (_principal: unknown, _structure: string, _revision: string, after?: { occurrence: string }) => {
         indexReads++;
-        const selected = records.filter(record => completed.includes(record.occurrence) && record !== special)
-          .sort((a, b) => key(a) < key(b) ? 1 : -1).slice(0, STRUCTURE_PROGRESS_COST.resumeCandidates + 1);
+        const ordered = records.filter(record => completed.includes(record.occurrence) && record !== special)
+          .sort((a, b) => key(a) < key(b) ? 1 : -1);
+        const offset = after ? ordered.findIndex(row => row.occurrence === after.occurrence) + 1 : 0;
+        const selected = ordered.slice(offset, offset + STRUCTURE_PROGRESS_COST.resumeCandidates + 1);
+        const last = selected[Math.min(selected.length, STRUCTURE_PROGRESS_COST.resumeCandidates) - 1];
         indexRows += selected.length;
         return { items: selected.slice(0, STRUCTURE_PROGRESS_COST.resumeCandidates).map(record => ({ structure,
           occurrence: record.occurrence, selectedRevision: null, completed: true, position: null, version: 1 })),
-          more: selected.length > STRUCTURE_PROGRESS_COST.resumeCandidates };
+          more: selected.length > STRUCTURE_PROGRESS_COST.resumeCandidates,
+          next: selected.length > STRUCTURE_PROGRESS_COST.resumeCandidates && last ? { occurrence: last.occurrence, selectedRevision: null } : null };
       },
     }, readingPositions: {
       completedPage: async () => { historyPages++; throw new Error('Resume must never page history'); },
@@ -91,6 +95,7 @@ async function fixture(grouped = false, _reverseNumbers = false, singletons = fa
     query: async (query: string) => {
       calls++;
       expect(query).not.toContain('OFFSET');
+      expect(query).not.toContain('rv:composedWork');
       // Numeric terminal-part seeks never traverse all PartRole navigation
       // entries in the text index, including on an untitled Episode.
       expect(query).not.toContain('reading-position:label-index');
@@ -198,24 +203,38 @@ test('Mine over 1000 completions uses one fixed owner index window and never pag
   expect(f.measure().calls).toBeLessThan(8);
 });
 
-test('hidden furthest completion falls back within 16 candidates; exhaustion is explicit', async () => {
+test('hidden furthest completion falls back within 16 candidates and continues beyond them', async () => {
   const f = await fixture(true);
   f.completed.push(f.episodes[0]!.occurrence, f.episodes[999]!.occurrence);
   f.hidden.add(f.episodes[999]!.target!);
   expect(await chooserPosition(f.session, f.traversal(), 'mine', true, f.disclose)).toBe(f.episodes[0]!.occurrence);
   f.completed.push(...f.episodes.slice(983, 999).map(row => row.occurrence));
   for (const row of f.episodes.slice(983)) f.hidden.add(row.target!);
-  await expect(chooserPosition(f.session, f.traversal(), 'mine', true, f.disclose))
-    .rejects.toBeInstanceOf(ReadingResumeDisclosureBound);
+  let next: ReadingResumeContinuation | undefined;
+  try { await chooserPosition(f.session, f.traversal(), 'mine', true, f.disclose); }
+  catch (error) { expect(error).toBeInstanceOf(ReadingResumeContinuation); next = error as ReadingResumeContinuation; }
+  expect(next).toBeDefined();
+  expect(await chooserPosition(f.session, f.traversal(), 'mine', true, f.disclose, next!.after))
+    .toBe(f.episodes[0]!.occurrence);
   expect(await chooserPosition(f.session, f.traversal(), 'mine', false, f.disclose)).toBe('start');
 });
 
 test('a visible last sibling never returns a physical ordinal over 999 hidden items', async () => {
   const f = await fixture();
   for (const row of f.episodes.slice(0, 999)) f.hidden.add(row.target!);
-  const page = await f.traversal().page({ limit: 1 });
-  expect(page.items[0]!.occurrence).toBe(f.episodes[999]!.occurrence);
-  expect(page.items.every(row => !Object.hasOwn(row, 'ordinal'))).toBe(true);
+  let after: string | undefined, found = false;
+  for (let index = 0; index < 40; index++) {
+    const before = f.measure();
+    const page = await f.traversal().page({ limit: 1, after });
+    expect(f.measure().rowsRead - before.rowsRead).toBeLessThan(40);
+    expect(f.measure().calls - before.calls).toBeLessThan(10);
+    expect(page.items.every(row => !Object.hasOwn(row, 'ordinal'))).toBe(true);
+    if (page.items.some(row => row.occurrence === f.episodes[999]!.occurrence)) { found = true; break; }
+    expect(page).toMatchObject({ items: [], visibility: 'pending', complete: false });
+    expect(page.next).not.toBeNull();
+    after = page.next!;
+  }
+  expect(found).toBe(true);
 });
 
 test('completed collection filters hidden IDs, pins, positions and missing keys before counting', async () => {
@@ -291,7 +310,7 @@ test('order maintenance skips occurrence inventories by owner prefix and repairs
   const native = f.session.deps.environment.fuseki.query.bind(f.session.deps.environment.fuseki);
   f.session.deps.environment.fuseki.query = async (q, options) => q.includes('ASK') ? { boolean: true } : native(q, options);
   Object.assign(f.session.deps.environment, { lineage: { dataEpoch: 'test', routingEpoch: 'test' } });
-  const rows = f.episodes.slice(0, 3).map(row => ({ occurrence: row.occurrence, selection_key: '' }))
+  const rows = f.episodes.slice(0, 3).map(row => ({ occurrence: row.occurrence, selection_key: '', completed: true }))
     .sort((a, b) => a.occurrence.localeCompare(b.occurrence));
   const writes: string[] = [];
   let state = { ready: false, order_revision: f.revision, invalidations: '0',
@@ -300,6 +319,8 @@ test('order maintenance skips occurrence inventories by owner prefix and repairs
     if (sql.startsWith('SELECT order_revision')) return { rows: [state] };
     if (sql.startsWith('SELECT occurrence,selection_key')) {
       expect(sql).toContain('LIMIT 3');
+      expect(sql).not.toContain('AND completed');
+      expect(sql).not.toContain('resume_eligible');
       return { rows: rows.filter(row => !params[3] || row.occurrence > String(params[3])).slice(0, 3) };
     }
     if (sql.includes("reindex_cursor='{}'")) state = { ...state, reindex_cursor: {}, reindex_invalidations: state.invalidations };

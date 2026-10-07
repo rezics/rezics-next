@@ -19,6 +19,7 @@ export const STRUCTURE_PROGRESS_COST = { latestRows: 1,
   libraryProjection: 'indexed top-one seek, independent of occurrence inventory' } as const;
 
 export interface ProgressPageKey { occurrence: string; selectedRevision: string | null }
+export type ResumePageKey = ProgressPageKey;
 export interface CompletedProgressPage {
   items: StructureProgress[];
   next: ProgressPageKey | null;
@@ -83,8 +84,9 @@ export class StructureProgressStore {
 
   /** A partial index stops after 16 candidates and one lookahead. Readiness
    * is a keyed owner row, never a hash/count of the history. */
-  async resumeCandidates(principal: VerifiedPrincipal, structure: string, revision: string) {
+  async resumeCandidates(principal: VerifiedPrincipal, structure: string, revision: string, after?: ResumePageKey) {
     validIdentity(structure, structure, null);
+    if (after) validIdentity(structure, after.occurrence, after.selectedRevision);
     if (!ID.test(revision)) throw new InvalidStructureProgress('progress order revision is invalid');
     const scope = await this.pool.query<{ order_revision: string | null; ready: boolean }>(
       `SELECT order_revision, ready FROM structure.progress_scope
@@ -92,24 +94,48 @@ export class StructureProgressStore {
     [principal.issuer, principal.subject, structure]);
     if (!scope.rows[0]?.ready || scope.rows[0]?.order_revision !== revision) {
       const legacy = await this.pool.query(`SELECT occurrence FROM structure.progress
-        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND completed AND resume_eligible IS DISTINCT FROM false LIMIT 1`,
+        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 LIMIT 1`,
       [principal.issuer, principal.subject, structure]);
       if (legacy.rows.length) {
         this.projection?.request(principal, structure);
         throw new ProgressOrderUnavailable('Completed progress needs a current order index');
       }
-      return { items: [] as StructureProgress[], more: false };
+      return { items: [] as StructureProgress[], more: false, next: null as ResumePageKey | null };
+    }
+    let key: string | undefined;
+    if (after) {
+      const point = await this.pool.query<{ order_key: string }>(`SELECT order_key FROM structure.progress
+        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
+          AND occurrence=$4 AND selection_key=$5 AND order_revision=$6`,
+      [principal.issuer, principal.subject, structure, after.occurrence, after.selectedRevision ?? '', revision]);
+      if (!point.rows[0]?.order_key) throw new InvalidStructureProgress('Resume continuation changed');
+      key = point.rows[0].order_key;
     }
     const result = await this.pool.query<{ occurrence: string; selection_key: string; completed: boolean;
-      position: string | null; version: string }>(`SELECT occurrence, selection_key, completed, position,
-        version::text AS version FROM structure.progress
+      position: string | null; version: string; order_key: string }>(after ? `SELECT * FROM (
+        (SELECT occurrence,selection_key,completed,position,version::text AS version,order_key
+         FROM structure.progress WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
+           AND order_revision=$4 AND completed AND resume_eligible AND order_key IS NOT NULL
+           AND order_key=$6 AND occurrence=$7 AND selection_key>$8
+         ORDER BY order_key DESC,occurrence DESC,selection_key ASC LIMIT $5)
+        UNION ALL
+        (SELECT occurrence,selection_key,completed,position,version::text AS version,order_key
+         FROM structure.progress WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
+           AND order_revision=$4 AND completed AND resume_eligible AND order_key IS NOT NULL
+           AND (order_key,occurrence)<($6,$7)
+         ORDER BY order_key DESC,occurrence DESC,selection_key ASC LIMIT $5)
+      ) continuation ORDER BY order_key DESC,occurrence DESC,selection_key ASC LIMIT $5` : `SELECT occurrence, selection_key, completed, position,
+        version::text AS version,order_key FROM structure.progress
       WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
         AND order_revision = $4 AND completed AND resume_eligible AND order_key IS NOT NULL
       ORDER BY order_key DESC, occurrence DESC, selection_key ASC LIMIT $5`,
-    [principal.issuer, principal.subject, structure, revision, STRUCTURE_PROGRESS_COST.resumeCandidates + 1]);
+    [principal.issuer, principal.subject, structure, revision, STRUCTURE_PROGRESS_COST.resumeCandidates + 1,
+      ...(after ? [key!, after.occurrence, after.selectedRevision ?? ''] : [])]);
+    const more = result.rows.length > STRUCTURE_PROGRESS_COST.resumeCandidates;
+    const last = result.rows[Math.min(result.rows.length, STRUCTURE_PROGRESS_COST.resumeCandidates) - 1];
     return { items: result.rows.slice(0, STRUCTURE_PROGRESS_COST.resumeCandidates).map(row => state({
       structure, occurrence: row.occurrence, selectedRevision: row.selection_key || null }, row)),
-    more: result.rows.length > STRUCTURE_PROGRESS_COST.resumeCandidates };
+    more, next: more && last ? { occurrence: last.occurrence, selectedRevision: last.selection_key || null } : null };
   }
 
   /** Live reader-owned state, in primary-key order. Limit the indexed range

@@ -9,6 +9,8 @@ import type { Revelation } from './store.ts';
 import { READING_POSITION_COST, REVELATION_COST } from './contract.ts';
 import { compareReadingLocations, ReadingPositionTraversal } from './traversal.ts';
 import { chooserPosition } from './chooser-position.ts';
+import { ReadingResumeContinuation } from './errors.ts';
+import { readingContinuation, resumeContinuation } from './continuation.ts';
 export { READING_POSITION_COST } from './contract.ts';
 
 /** Linear in the selected composition, never the wiki/catalogue inventory.
@@ -279,8 +281,18 @@ export class ReadingBoundary {
   async chooser(work: string, limit: number, after?: string, q?: string) {
     const traversal = this.traversalFor(work);
     if (this.selection === 'mine' && !q?.trim()) {
-      if (after) throw new WorkReadInvalid('Resume reads have no chooser continuation; use position=start to browse');
-      const resolved = await chooserPosition(this.session, traversal, this.selection, await this.ownReader());
+      const cursor = after ? readingContinuation(after, 'resume') : null;
+      if (cursor && cursor.kind !== 'resume') throw new WorkReadInvalid('Reading continuation has another scope');
+      let resolved: string;
+      try { resolved = await chooserPosition(this.session, traversal, this.selection, await this.ownReader(),
+        undefined, cursor?.after); }
+      catch (error) {
+        if (!(error instanceof ReadingResumeContinuation)) throw error;
+        await this.fence();
+        return { work, resolved: 'pending', items: [] as ReadingOccurrence[],
+          next: resumeContinuation(error.after), complete: false, search: undefined,
+          scope: 'resume' as const, visibility: 'pending' as const };
+      }
       const location = resolved === 'start' ? null : await traversal.location(resolved);
       const items: ReadingOccurrence[] = [];
       if (location) {
@@ -289,7 +301,7 @@ export class ReadingBoundary {
       }
       await this.fence();
       return { work, resolved, items, next: null, complete: true, search: undefined,
-        scope: 'resume' as const };
+        scope: 'resume' as const, visibility: items.length ? 'visible' as const : 'empty' as const };
     }
     const page = await traversal.page({ limit, after, q });
     const resolved = await chooserPosition(this.session, traversal, this.selection,

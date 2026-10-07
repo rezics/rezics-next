@@ -83,9 +83,11 @@ export class ProgressOrderProjection {
         state = { ...state, order_revision: header.head, reindex_cursor: {}, reindex_invalidations: state.invalidations };
       }
       const cursor = state.reindex_cursor!;
-      const rows = (await client.query<{ occurrence: string; selection_key: string }>(`SELECT occurrence,selection_key
+      // Eligibility is derived from the current immutable Structure, never a
+      // recovery filter. Limit the raw PK range before testing completion so
+      // sparse histories and former extras both advance in bounded steps.
+      const rows = (await client.query<{ occurrence: string; selection_key: string; completed: boolean }>(`SELECT occurrence,selection_key,completed
         FROM structure.progress WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
-          AND completed AND resume_eligible IS DISTINCT FROM false
           ${cursor.occurrence ? 'AND (occurrence,selection_key)>($4,$5)' : ''}
         ORDER BY occurrence,selection_key LIMIT ${PROGRESS_ORDER_PROJECTION_COST.rows + 1}`,
       [...identity, ...(cursor.occurrence ? [cursor.occurrence, cursor.selection ?? ''] : [])])).rows;
@@ -101,6 +103,7 @@ export class ProgressOrderProjection {
       const environment = Object.assign(Object.create(this.env) as WorkActivationEnvironment, { structureObjects: objects });
       const page = rows.slice(0, PROGRESS_ORDER_PROJECTION_COST.rows);
       for (const row of page) {
+        if (!row.completed) continue;
         const order = await readProgressOrder(environment, header, row.occurrence);
         await client.query(`UPDATE structure.progress SET order_revision=$6,order_key=$7,resume_eligible=$8
           WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND occurrence=$4 AND selection_key=$5`,

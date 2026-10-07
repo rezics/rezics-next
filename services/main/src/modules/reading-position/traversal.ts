@@ -9,6 +9,7 @@ import { ReadingOrderIndex, readingOrderRead } from './immutable-order.ts';
 import { searchOccurrenceLabels } from './label-index.ts';
 import { readingWorkScope } from './work-scope.ts';
 import { ReadingSeekUnavailable } from './errors.ts';
+import { browseContinuation, readingContinuation } from './continuation.ts';
 
 /** Bounded results and live traversal state, independent of chapter inventory.
  * Each seek returns <=101 placements, with <=16 labels each. Configured stores
@@ -17,7 +18,7 @@ import { ReadingSeekUnavailable } from './errors.ts';
  * Lucene text index; chapter labels are never scanned.
  * Traversal retains only the ancestor stack and the current seek's candidates.
  * The surrounding Work read bounds graph calls, bytes and elapsed time. */
-export const READING_CHOOSER_COST = { probe: 101, contextDepth: 16, workBatch: 50 } as const;
+export const READING_CHOOSER_COST = { probe: 101, scanRows: 32, contextDepth: 16, workBatch: 50 } as const;
 const edge = 'rv:mainVersion/^rv:structureOf/rv:selectedGeneration/^rv:generation/rv:composedWork';
 const current = iri(GRAPHS.current);
 export interface ReadingWork { work: string; structure: string | null; revision: string | null; generation: string | null }
@@ -74,17 +75,6 @@ export class ReadingPositionTraversal {
   metadataFor(work: string): Promise<ReadingWork> {
     if (!this.metadata.has(work)) this.metadata.set(work, this.readMetadata(work));
     return this.metadata.get(work)!;
-  }
-  async hasNestedComposition(meta: ReadingWork): Promise<boolean> {
-    const rows = await this.session.query(`# reading-position:nested-composition
-      SELECT ?work WHERE { GRAPH ${current} {
-        ?placement rv:generation ${iri(meta.generation!)} ; rv:composedWork ?work .
-        FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
-        ?work rv:mainVersion ?main .
-        ?structure rv:structureOf ?main ; rv:structureProfile ?profile .
-        FILTER(?profile IN (rv:WorkComposition, rv:BookComposition))
-      } } LIMIT 1`, 1);
-    return rows.length > 0;
   }
   private async readMetadata(work: string): Promise<ReadingWork> {
     // A PartRole can target any admitted resource. Only targets with a
@@ -298,8 +288,12 @@ export class ReadingPositionTraversal {
     return frames.reverse();
   }
   async location(occurrence: string): Promise<ReadingLocation | null> {
+    const location = await this.navigation(occurrence);
+    return location?.item.role === 'group' ? null : location;
+  }
+  private async navigation(occurrence: string): Promise<ReadingLocation | null> {
     const [item] = await this.recordsFor([occurrence]);
-    if (!item || item.role === 'group') return null;
+    if (!item) return null;
     const prefix = await this.workPath(item.work);
     return prefix ? { item, frames: [...prefix, ...await this.localPath(item)] } : null;
   }
@@ -332,40 +326,73 @@ export class ReadingPositionTraversal {
     await this.requireWork(this.root);
     const meta = await this.metadataFor(this.root);
     const frames: ReadingFrame[] = [];
+    let checkpoint: string | null = null, lastDelivered: string | null = null;
     if (input.after) {
-      const previous = await this.location(input.after);
+      const cursor = NATIVE_ID.test(input.after)
+        ? { kind: 'browse' as const, occurrence: input.after, descend: true }
+        : readingContinuation(input.after, 'browse');
+      if (cursor.kind !== 'browse') throw new WorkReadInvalid('Reading continuation has another scope');
+      const previous = await this.navigation(cursor.occurrence);
       if (!previous) throw new WorkReadInvalid('Reading position cursor is invalid');
-      await this.requireLocation(previous);
       frames.push(...previous.frames);
-      const child = await this.child(previous.item, frames); if (child) frames.push(child);
+      // Ordering checkpoints may refer to hidden rows; they are encrypted by
+      // the route and never authorize that row or a hidden Work's children.
+      if (cursor.descend && (previous.item.role !== 'part' || !previous.item.target
+        || (await this.disclose([previous.item.target])).has(previous.item.target))) {
+        const child = await this.child(previous.item, frames); if (child) frames.push(child);
+      }
+      checkpoint = browseContinuation(cursor.occurrence, false);
     } else if (meta.structure) frames.push({ work: this.root, parent: meta.structure });
     const items: ReadingOccurrence[] = [];
-    while (frames.length && items.length <= input.limit) {
+    let examined = 0;
+    while (frames.length && items.length <= input.limit && examined < READING_CHOOSER_COST.scanRows) {
       this.session.checkDeadline();
       const frame = frames.at(-1)!, owner = await this.metadataFor(frame.work);
-      const probe = this.order ? Math.min(READING_CHOOSER_COST.probe, input.limit - items.length + 1)
-        : READING_CHOOSER_COST.probe;
+      try { await this.requireWork(frame.work); }
+      catch (error) {
+        if (!(error instanceof WorkReadMissing)) throw error;
+        frames.pop(); examined++;
+        const parent = frames.at(-1)?.after;
+        if (parent) checkpoint = browseContinuation(parent.occurrence, false);
+        continue;
+      }
+      const probe = Math.min(READING_CHOOSER_COST.probe, READING_CHOOSER_COST.scanRows - examined);
       const candidates = await this.range(owner, frame.parent, frame.after, q, false, probe);
+      examined += Math.max(1, candidates.length);
       const targets = [...new Set(candidates.flatMap(row => row.item.target && NATIVE_ID.test(row.item.target) ? [row.item.target] : []))];
       const disclosed = await this.disclose(targets);
       let descended = false;
       for (const candidate of candidates) {
         const item = candidate.item; frame.after = item;
+        checkpoint = browseContinuation(item.occurrence, false);
         if (item.role === 'part' && item.target && !disclosed.has(item.target)) continue;
         const redacted = item.target && NATIVE_ID.test(item.target) && !disclosed.has(item.target);
         if (item.role !== 'group' && candidate.matches && (!redacted || !q || String(item.ordinal) === q)) {
           items.push(redacted ? { ...item, target: null, labels: [] } : item);
+          if (items.length <= input.limit) lastDelivered = browseContinuation(item.occurrence, true);
         }
         if (items.length > input.limit) break;
         const child = await this.child(item, frames);
-        if (child) { frames.push(child); descended = true; break; }
+        if (child) {
+          frames.push(child); descended = true;
+          checkpoint = browseContinuation(item.occurrence, true);
+          break;
+        }
       }
-      if (!descended && candidates.length < probe) frames.pop();
+      if (!descended && candidates.length < probe && items.length <= input.limit) {
+        frames.pop();
+        const parent = frames.at(-1)?.after;
+        if (parent) checkpoint = browseContinuation(parent.occurrence, false);
+      }
     }
-    const complete = items.length <= input.limit;
+    const lookahead = items.length > input.limit;
+    const complete = !lookahead && frames.length === 0;
     items.splice(input.limit);
     const delivered: ReadingOccurrence[] = items.map(({ ordinal: _ordinal, ...item }) => item);
-    return { items: delivered, next: complete ? null : items.at(-1)!.occurrence, complete: complete && !this.labelsIndexing,
+    const next = complete ? null : lookahead ? lastDelivered : checkpoint;
+    if (!complete && !next) throw new WorkReadUnavailable('Reading continuation is unavailable');
+    return { items: delivered, next, complete: complete && !this.labelsIndexing,
+      visibility: delivered.length ? 'visible' as const : complete ? 'empty' as const : 'pending' as const,
       ...(q ? { search: { status: this.labelsIndexing ? 'indexing' as const : 'current' as const } } : {}) };
   }
 

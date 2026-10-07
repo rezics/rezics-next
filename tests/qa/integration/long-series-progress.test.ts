@@ -17,7 +17,7 @@ const short = (resource: string) => resource.slice(-36);
 type Composition = { structure: string; revision: string };
 type Changed = { revision: string; occurrences: string[] };
 type Chooser = { resolved: string; items: Array<{ occurrence: string; parent: string; target: string | null }>; complete: boolean;
-  scope: string; count: { value: number; total: null } };
+  scope: string; visibility: 'visible' | 'pending' | 'empty'; nextCursor: string | null; count: { value: number; total: null } };
 type Completed = { items: Array<{ occurrence: string; selectedRevision: string | null; completed: boolean; position: string | null }>;
   nextCursor: string | null; complete: boolean; consistency: string; count: { value: number; kind: string; total: null } };
 async function json<T>(response: Response, status = 200): Promise<T> {
@@ -278,16 +278,73 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
     expect(objectReads - prefixBefore.reads).toBeLessThan(40);
     expect(stack.fuseki.queries - prefixBefore.calls).toBeLessThan(40);
 
-    // A readable completion exists earlier, but 17+ later hidden candidates
-    // exceed the declared window. The response must state that limit instead
-    // of claiming an exact empty history or walking the remaining 1000 rows.
+    const opaque = (token: string) => {
+      const decoded = Buffer.from(token, 'base64url').toString('utf8');
+      expect(episodes.some(occurrence => token.includes(occurrence) || decoded.includes(short(occurrence)))).toBe(false);
+      expect(decoded).not.toContain(short(special));
+    };
+    // All 999 preceding main siblings and the earlier special are withheld.
+    // Browsing advances one 32-placement window per request, even when empty.
+    await targetRead(one, false);
+    await targetRead(specialTarget, false);
+    let browseCursor: string | null = null, browsePages = 0, emptyBrowse = 0;
+    const browsed: string[] = [];
+    do {
+      const before = { rows: graphRows, reads: objectReads, calls: stack.fuseki.queries };
+      const page: Chooser = await json<Chooser>(await call(second, 'GET', `${chooser}?${actorQuery}&position=start&limit=1`
+        + (browseCursor ? `&cursor=${encodeURIComponent(browseCursor)}` : '')));
+      expect(page.scope).toBe('positions');
+      expect(page.items.every(item => !Object.hasOwn(item, 'ordinal'))).toBe(true);
+      expect(page.count.value).toBe(page.items.length);
+      expect(graphRows - before.rows).toBeLessThan(160);
+      expect(objectReads - before.reads).toBeLessThan(40);
+      expect(stack.fuseki.queries - before.calls).toBeLessThan(40);
+      browsed.push(...page.items.map(item => item.occurrence));
+      if (!page.items.length && page.nextCursor) {
+        expect(page.visibility).toBe('pending');
+        expect(page.complete).toBe(false);
+        emptyBrowse++;
+      }
+      browseCursor = page.nextCursor;
+      if (browseCursor) opaque(browseCursor);
+      expect(++browsePages).toBeLessThan(40);
+    } while (browseCursor);
+    expect(emptyBrowse).toBeGreaterThan(0);
+    expect(browsed).toEqual([episodes[999]!]);
+    await targetRead(one, true);
+    await targetRead(specialTarget, true);
+
+    // An earlier readable completion remains reachable after 999 later hidden
+    // completions. Each pending response carries an opaque continuation, never
+    // an error or an exact-empty claim about the remaining private history.
     await targetRead(thousand, false);
-    const boundBefore = { rows: graphRows, reads: objectReads, calls: stack.fuseki.queries };
-    expect(await json(await call(second, 'GET', `${chooser}?${actorQuery}&position=mine&limit=1`), 422))
-      .toMatchObject({ code: 'reading_resume_disclosure_bound' });
-    expect(graphRows - boundBefore.rows).toBeLessThan(100);
-    expect(objectReads - boundBefore.reads).toBeLessThan(40);
-    expect(stack.fuseki.queries - boundBefore.calls).toBeLessThan(40);
+    let resumeCursor: string | null = null, resumePages = 0, pendingResume = 0;
+    let visibleResume: Chooser | null = null;
+    do {
+      const before = { rows: graphRows, reads: objectReads, calls: stack.fuseki.queries };
+      const page: Chooser = await json<Chooser>(await call(second, 'GET', `${chooser}?${actorQuery}&position=mine&limit=1`
+        + (resumeCursor ? `&cursor=${encodeURIComponent(resumeCursor)}` : '')));
+      expect(page.scope).toBe('resume');
+      expect(graphRows - before.rows).toBeLessThan(100);
+      expect(objectReads - before.reads).toBeLessThan(40);
+      expect(stack.fuseki.queries - before.calls).toBeLessThan(40);
+      if (page.visibility === 'pending') {
+        expect(page).toMatchObject({ resolved: 'pending', items: [], complete: false, count: { value: 0, total: null } });
+        expect(page.nextCursor).not.toBeNull();
+        pendingResume++;
+      } else {
+        expect(page).toMatchObject({ resolved: episodes[0], visibility: 'visible', complete: true,
+          items: [{ occurrence: episodes[0], target: one }], count: { value: 1, total: null } });
+        expect(page.nextCursor).toBeNull();
+        expect(page.items.every(item => !Object.hasOwn(item, 'ordinal'))).toBe(true);
+        visibleResume = page;
+      }
+      resumeCursor = page.nextCursor;
+      if (resumeCursor) opaque(resumeCursor);
+      expect(++resumePages).toBeLessThan(66);
+    } while (resumeCursor);
+    expect(pendingResume).toBeGreaterThan(1);
+    expect(visibleResume?.resolved).toBe(episodes[0]!);
     await targetRead(repeated, true);
     await targetRead(thousand, true);
 
@@ -372,6 +429,32 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
     expect(Object.hasOwn(afterRemoval.items[0]!, 'ordinal')).toBe(false);
     // A fresh owner-state page preserves this reader's saved tombstone key.
     expect(await store.read(editor.principal, composition.structure, episodes[0]!)).toMatchObject({ completed: true });
+
+    // A completed extra stays in private history when its inclusion changes.
+    // Recovery must derive eligibility again, even though the old index marked
+    // the row false. Incomplete main rows also exercise the raw scan bound.
+    await stack.contentPool.query(`UPDATE structure.progress SET completed=false
+      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND occurrence=ANY($4::text[]) AND selection_key=''`,
+    [editor.principal.issuer, editor.principal.subject, composition.structure, episodes]);
+    await json(await tick(special, true, 2));
+    expect((await stack.contentPool.query<{ completed: boolean; resume_eligible: boolean }>(
+      `SELECT completed,resume_eligible FROM structure.progress WHERE principal_issuer=$1
+        AND principal_subject=$2 AND structure=$3 AND occurrence=$4 AND selection_key=''`,
+      [editor.principal.issuer, editor.principal.subject, composition.structure, special])).rows[0])
+      .toMatchObject({ completed: true, resume_eligible: false });
+    expect((await json<Chooser>(await call(second, 'GET', `${chooser}?${actorQuery}&position=mine&limit=1`))).resolved).toBe('start');
+    const required = await json<Changed>(await call(first, 'POST', `${path}/changes`, {
+      profile: 'work-composition', expectedHead: removed.revision, actingSubject: person,
+      operations: [{ op: 'update', occurrence: special, displayLabel: 'Required bonus episode', inclusion: 'required' }] }));
+    await recover(required.revision);
+    expect((await stack.contentPool.query<{ resume_eligible: boolean; order_revision: string }>(
+      `SELECT resume_eligible,order_revision FROM structure.progress WHERE principal_issuer=$1
+        AND principal_subject=$2 AND structure=$3 AND occurrence=$4 AND selection_key=''`,
+      [editor.principal.issuer, editor.principal.subject, composition.structure, special])).rows[0])
+      .toMatchObject({ resume_eligible: true, order_revision: required.revision });
+    const requiredResume = await json<Chooser>(await call(second, 'GET', `${chooser}?${actorQuery}&position=mine&limit=1`));
+    expect(requiredResume.resolved).toBe(special);
+    expect(requiredResume.items).toMatchObject([{ occurrence: special, target: specialTarget }]);
     await stack.accessPool.query('UPDATE access.principal SET active = false WHERE id = $1', [editor.principalId]);
     expect((await call(second, 'GET', completedPath)).status).toBe(401);
   } finally { await stack.stop(); }
