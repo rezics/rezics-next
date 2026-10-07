@@ -3,6 +3,12 @@ import { parseTurtleProfile, type TurtleDeclaration } from '../compiler/shacl.ts
 
 export const realmPolicySelectionDeclaration = {
   id: 'realm-policy-selection-v1',
+  canonical: {
+    selection: {
+      types: ['rv:PublicationSelection'],
+      when: [{ path: 'rv:selectionBasis', value: 'rv:RealmPolicy' }],
+    },
+  },
 } as const satisfies TurtleDeclaration;
 
 export const realmPolicySelectionProfile = parseTurtleProfile(

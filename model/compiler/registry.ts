@@ -47,62 +47,12 @@ export interface EstablishedDeclaration {
   binding?: BindingRequirement;
 }
 
-const only = (...types: Term[]): CanonicalFocus => ({ types });
-
 /**
  * Registry declarations of the profiles admitted before definitions carried them.
  * Each belongs in its definition's `canonical` and `binding` fields: move it there
  * and delete it here, because declaring both is an error.
  */
-export const establishedDeclarations: Readonly<Record<string, EstablishedDeclaration>> = {
-  'translation-link-v1': {
-    canonical: { link: only(rv('TranslationLink')) },
-    binding: {
-      required: ['link', 'target-work', 'target-main', 'target-revision', 'source-work', 'source-main',
-        'status', 'language', 'translator', 'publisher', 'evidence', 'actor', 'receipt', 'scope', 'epoch'],
-      optional: ['source-revision'], roles: ['link'], demandedBy: [rv('TranslationLink')],
-    },
-  },
-  'classification-direct-decision-v1': {
-    canonical: { application: only(rv('ClassificationApplication')),
-      decision: only(rv('ClassificationDecision')) },
-    binding: {
-      required: ['work', 'main', 'sense', 'sense-revision', 'context', 'context-kind', 'application',
-        'decision', 'slot', 'proposer', 'decider', 'outcome'],
-      optional: ['realm', 'context-revision', 'predecessor'],
-      roles: ['work', 'main', 'sense', 'context', 'application', 'decision'],
-      demandedBy: [rv('ClassificationApplication'), rv('ClassificationDecision')],
-    },
-  },
-  'classification-proposition-v1': {
-    canonical: { sense: only(rv('ClassificationSense')), scheme: only(skos('ConceptScheme')),
-      concept: only(skos('Concept')), path: only(rv('ConceptPath')),
-      expression: only(rv('ClassificationExpression')) },
-    binding: {
-      required: ['scheme', 'concept', 'path', 'expression', 'sense'],
-      roles: ['scheme', 'concept', 'path', 'expression', 'sense'],
-      demandedBy: [rv('ClassificationSense'), rv('ConceptPath'), rv('ClassificationExpression'),
-        skos('Concept'), skos('ConceptScheme')],
-    },
-  },
-  'classification-context-v1': {
-    canonical: {
-      global: { types: [rv('ClassificationContext')],
-        when: [{ path: rv('contextRole'), value: rv('GlobalClassification') }] },
-      context: only(rv('ClassificationContext')),
-    },
-    binding: { required: ['realm', 'context'], roles: ['global', 'realm', 'context'],
-      demandedBy: [rv('ClassificationContext')] },
-  },
-  'main-default-selection-v1': {
-    canonical: { selection: { types: [rv('PublicationSelection')],
-      when: [{ path: rv('selectionBasis'), value: rv('MainMaintainer') }] } },
-  },
-  'realm-policy-selection-v1': { canonical: { selection: { types: [rv('PublicationSelection')],
-    when: [{ path: rv('selectionBasis'), value: rv('RealmPolicy') }] } } },
-  'realm-local-selection-v1': { canonical: { selection: only(rv('PublicationSelection')) } },
-  'realm-local-rejection-v1': { canonical: { rejection: only(rv('RealmPublicationRejection')) } },
-};
+export const establishedDeclarations: Readonly<Record<string, EstablishedDeclaration>> = {};
 
 export interface RegistryCondition { path: string; value: string }
 export interface RegistryRoute { profile: string; shape: string; when: RegistryCondition[] }

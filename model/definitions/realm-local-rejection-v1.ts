@@ -3,6 +3,9 @@ import { parseTurtleProfile, type TurtleDeclaration } from '../compiler/shacl.ts
 
 export const realmLocalRejectionDeclaration = {
   id: 'realm-local-rejection-v1',
+  canonical: {
+    rejection: { types: ['rv:RealmPublicationRejection'] },
+  },
 } as const satisfies TurtleDeclaration;
 
 export const realmLocalRejectionProfile = parseTurtleProfile(
