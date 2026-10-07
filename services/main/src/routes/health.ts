@@ -29,8 +29,10 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
         if (result.boolean !== true) throw new Error('unexpected Fuseki result');
         if (process.env.NODE_ENV === 'production') await mainSchemaReady();
         if (work) {
+          await work.access.assertRecoveryOpen();
           await assertCommandProfiles(fuseki);
           await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
+          await work.access.assertRecoveryOpen();
         }
         return { status: 'ready' as const, horizons: latestHorizonHealth() };
       } catch {
@@ -87,16 +89,19 @@ export function healthRoutes(fuseki: FusekiClient, work?: MainWorkDependencies) 
     }, async ({ status }) => {
       if (!work) return status(503, { status: 'unavailable' as const });
       try {
+        await work.access.assertRecoveryOpen();
         const occurrenceLabels = await occurrenceLabelReadiness(work.environment);
         const ready = occurrenceLabels.status === 'indexing' ? 'indexing' as const : 'ready' as const;
         if (work.contentProjection) {
           const { content, cursor, consumer } = work.contentProjection;
           const projection = await assertPublicContentSearchReady(work.environment, content, cursor, consumer);
+          await work.access.assertRecoveryOpen();
           return { status: ready, occurrenceLabels, dataEpoch: projection.graphPosition.dataEpoch,
             sequence: projection.graphPosition.sequence, indexGeneration: projection.indexGeneration };
         }
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const index = await assertPublicTextReady(fuseki, work.environment.lineage);
+        await work.access.assertRecoveryOpen();
         return { status: ready, occurrenceLabels, dataEpoch: index.dataEpoch,
           sequence: index.sequence, indexGeneration: index.generation };
       } catch {

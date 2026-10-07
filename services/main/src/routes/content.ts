@@ -27,6 +27,7 @@ import type { DocumentSnapshot } from '@rezics/document';
 import { isZonePublishedPageRevision } from '../modules/zone/publication.ts';
 import { discloseContent } from '../modules/disclosure/assembly.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
+import { graphErasedContentRevisions } from '../modules/erasure/graph.ts';
 
 const textDraftFields = {
   notes: t.Optional(t.Object({ before: t.Optional(authoredBodySchema({}, 8192)),
@@ -57,6 +58,12 @@ const eligibilityFields = {
 };
 
 export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
+  async function revisionDeliverable(revisionId: string): Promise<boolean> {
+    await work.access.assertRecoveryOpen();
+    const erased = await graphErasedContentRevisions(fuseki, [revisionId]);
+    await work.access.assertRecoveryOpen();
+    return !erased.has(revisionId);
+  }
   return new Elysia()
     .post('/v1/content-drafts', {
       body: t.Union([
@@ -152,7 +159,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         if (current.boolean !== true) return problem(404, 'comment_unavailable', 'Comment is unavailable');
         const exact = (await work.content.readExactBatch([comment.revisionId],
           async ids => new Set(ids)))[0];
-        if (exact?.status === 'denied') return problem(404, 'comment_unavailable', 'Comment is unavailable');
+        if (exact?.status === 'denied' || exact?.status === 'erased') {
+          return problem(404, 'comment_unavailable', 'Comment is unavailable');
+        }
         if (exact?.status !== 'available' || exact.reference.resourceId !== comment.resourceId
           || exact.reference.variantId !== comment.variantId
           || exact.reference.byteDigest !== comment.byteDigest) {
@@ -172,6 +181,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         } catch (error) {
           if (!(error instanceof ContentCommentInvalid)) throw error;
           return problem(503, 'revision_unavailable', 'Comment selector no longer resolves');
+        }
+        if (!await revisionDeliverable(comment.revisionId)) {
+          return problem(404, 'comment_unavailable', 'Comment is unavailable');
         }
         return Response.json({ ...comment, resolvedText: selector.exact },
           { headers: { 'cache-control': 'no-store' } });
@@ -212,7 +224,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         }
         const exact = (await work.content.readExactBatch([params.revision],
           async ids => new Set(ids)))[0];
-        if (exact?.status === 'denied') return problem(404, 'comment_unavailable', 'Comments are unavailable');
+        if (exact?.status === 'denied' || exact?.status === 'erased') {
+          return problem(404, 'comment_unavailable', 'Comments are unavailable');
+        }
         if (exact?.status !== 'available' || exact.reference.resourceId !== resourceId) {
           return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
         }
@@ -246,6 +260,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         if (Buffer.byteLength(JSON.stringify(payload), 'utf8') > 1_048_576) {
           return problem(422, 'comment_page_budget_exceeded',
             'Comment page is too large; request fewer comments');
+        }
+        if (!await revisionDeliverable(params.revision)) {
+          return problem(404, 'comment_unavailable', 'Comments are unavailable');
         }
         return Response.json(payload, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
@@ -396,7 +413,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         const exact = results[0];
         if (exact?.status === 'available'
           && exact.reference.resourceId === resourceId
-          && await publicDomainRevisionCurrent(exact.reference, work.rights?.store)) {
+          && await publicDomainRevisionCurrent(exact.reference, work.rights?.store)
+          && await revisionDeliverable(params.revision)) {
           return Response.json({ reference: exact.reference, serializedJson: exact.serializedJson,
             body: exact.body }, { headers: { 'cache-control': 'no-store' } });
         }

@@ -37,7 +37,8 @@ test('G323 first-page retries share budgets, recheck authority, and do not repla
   const fuseki = new FusekiClient(`http://127.0.0.1:${server.port}/rezics`);
   const deps = { environment: { fuseki, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
     objectDirectory: '.temp/read-basis' }, account: { verify: async () => ({ issuer: 'a', subject: 'b' }) },
-  access: { activePrincipalId: async () => active ? 'principal' : null } } as unknown as MainWorkDependencies;
+  access: { assertRecoveryOpen: async () => undefined,
+    activePrincipalId: async () => active ? 'principal' : null } } as unknown as MainWorkDependencies;
   const request = new Request('http://main.local/v1/agents/test');
   try {
     let attempts = 0;

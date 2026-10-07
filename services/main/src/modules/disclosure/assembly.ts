@@ -6,6 +6,7 @@ import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 import { configureDisclosure, discloseInventory, DisclosureUnavailable, type DisclosureChannel } from './read.ts';
 import { currentDisclosureViewer } from './viewer.ts';
 import { configureMediaVisibility } from '../media/visibility.ts';
+import { graphErasedContentRevisions } from '../erasure/graph.ts';
 
 export async function discloseContent(env: WorkActivationEnvironment, results: readonly ExactReadResult[],
   viewer: Viewer = ANONYMOUS_VIEWER, channel: DisclosureChannel = 'read'): Promise<ExactReadResult[]> {
@@ -13,8 +14,10 @@ export async function discloseContent(env: WorkActivationEnvironment, results: r
   const decisions = await discloseInventory(env, available.map(result => ({ owner: 'content' as const,
     resource: result.reference.resourceId, component: 'body' as const, revision: result.revisionId,
     work: result.reference.resourceId })), viewer, channel);
+  const erased = await graphErasedContentRevisions(env.fuseki, available.map(result => result.revisionId));
   const denied = new Set(available.filter((_, index) => decisions[index] !== 'visible').map(result => result.revisionId));
-  return results.map(result => denied.has(result.revisionId)
+  return results.map(result => erased.has(result.revisionId)
+    ? { revisionId: result.revisionId, status: 'erased' } : denied.has(result.revisionId)
     ? { revisionId: result.revisionId, status: 'denied' } : result);
 }
 

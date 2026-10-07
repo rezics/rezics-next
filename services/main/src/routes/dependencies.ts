@@ -184,7 +184,7 @@ export interface MainWorkDependencies {
   backpressureProfile?: BackpressureProfile;
   access: Pick<AccessAdmissionRegistry,
     'register' | 'claim' | 'recordGraphOutcome' | 'canReadWork' | 'canReadContributionDraft'
-    | 'canReadStandingRating' | 'canLinkTranslation' | 'canEditWork' | 'activePrincipalId'>
+    | 'canReadStandingRating' | 'canLinkTranslation' | 'canEditWork' | 'activePrincipalId' | 'assertRecoveryOpen'>
     & Partial<Pick<AccessAdmissionRegistry, 'admitCatalogue' | 'recordCatalogueOutcomes'>>
     & Partial<Pick<AccessAdmissionRegistry, 'canReadAsBaselineMember'>>
     & Partial<Pick<AccessAdmissionRegistry, 'canProtectMedia'|'canManageMedia'|'canActAsPlatformAdministrator'>>

@@ -178,10 +178,13 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
   const connections = new Map<string, PrivateSearchConnection>();
   async function readerSnapshot<T>(request: Request, read: () => Promise<T>,
     deadlineMs?: number, diagnostics?: SearchAttemptDiagnostic[]): Promise<T> {
+    await work.access.assertRecoveryOpen();
     const principal = request.headers.has('authorization')
       ? await work.account.verify(request, ['work:read']) : null;
-    return withDisclosureViewer(disclosureViewer(principal),
+    const result = await withDisclosureViewer(disclosureViewer(principal),
       () => withStableSearchSnapshot(fuseki, read, deadlineMs, diagnostics));
+    await work.access.assertRecoveryOpen();
+    return result;
   }
   async function presentationSelection(request: Request) {
     if (!request.headers.has('authorization')) return null;

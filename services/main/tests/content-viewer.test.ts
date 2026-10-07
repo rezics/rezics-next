@@ -41,6 +41,7 @@ test('parallel request scopes isolate and restore their content evidence', async
 test('a public read carries verified preferences without granting private inventory authority', async () => {
   let verifications = 0;
   const deps = { account: { verify: async () => { verifications++; return principal; } },
+    access: { assertRecoveryOpen: async () => undefined },
     environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'route' },
       fuseki: { query: async () => ({ results: { bindings: [{
         epoch: { value: 'epoch' }, sequence: { value: '1' } }] } }) } },

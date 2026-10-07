@@ -328,6 +328,13 @@ export class AccessAdmissionRegistry {
     this.realmDirectory = new RealmDirectoryIndex(pool);
   }
 
+  /** Anonymous reads and readiness share the same restore gate as admissions. */
+  async assertRecoveryOpen(): Promise<void> {
+    const row = (await this.pool.query<{ open: boolean }>(
+      'SELECT open FROM access.recovery_fence WHERE id = true')).rows[0];
+    if (row?.open !== true) throw new AdmissionUnavailable('Access is held for recovery');
+  }
+
   async hasRealmMemberAdmission(id: string): Promise<boolean> {
     return (await this.pool.query(`SELECT 1 FROM access.baseline_admission
       WHERE admission_id = $1 AND realm_membership IS NOT NULL`, [id])).rowCount === 1;

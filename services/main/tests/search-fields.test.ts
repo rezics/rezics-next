@@ -41,7 +41,8 @@ test('an empty credited-name match detects a newly matching source name at the f
 
 test('nested card reads debit the search budget and cannot outlive its wall deadline', async () => {
   let inside: WorkReadSession | undefined;
-  const deps = { environment: { lineage: { dataEpoch: 'e', routingEpoch: 'r' },
+  const deps = { access: { assertRecoveryOpen: async () => undefined },
+    environment: { lineage: { dataEpoch: 'e', routingEpoch: 'r' },
     fuseki: { query: async () => {
       const budget = fusekiReadBudget.getStore()!;
       budget.callsLeft--;
@@ -75,7 +76,8 @@ test('first-page and retained-continuation retries share the outer budget and re
       const deps = { environment: { lineage: { dataEpoch: 'e', routingEpoch: 'r' },
         fuseki: new FusekiClient(`http://127.0.0.1:${server.port}/rezics`) },
         account: { verify: async () => { verifies++; return { issuer: 'issuer', subject: 'reader' }; } },
-        access: { activePrincipalId: async () => { authorities++; return 'principal'; } },
+        access: { assertRecoveryOpen: async () => undefined,
+          activePrincipalId: async () => { authorities++; return 'principal'; } },
         sourceAuthorNames: { batch: async () => {
           nameReads++;
           return new Map([[key, { displayName: nameReads === 1 ? 'Before' : 'After',
@@ -118,7 +120,8 @@ test('SearchSnapshotMoved retries cannot replenish an enclosing search call or b
     calls++;
     return new Response(payload, { headers: { 'content-type': 'application/json' } });
   } });
-  const deps = { environment: { lineage: { dataEpoch: 'e', routingEpoch: 'r' },
+  const deps = { access: { assertRecoveryOpen: async () => undefined },
+    environment: { lineage: { dataEpoch: 'e', routingEpoch: 'r' },
     fuseki: new FusekiClient(`http://127.0.0.1:${server.port}/rezics`) } } as unknown as MainWorkDependencies;
   try {
     for (const limit of ['calls', 'bytes']) {

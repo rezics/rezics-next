@@ -42,6 +42,9 @@ function fixture() {
   } } as unknown as Pool;
   const graph = new FusekiClient('http://graph.invalid');
   graph.query = async query => {
+    if (query.includes('SELECT ?target WHERE') && query.includes('rv:ErasedRevision')) {
+      return { results: { bindings: [] } };
+    }
     if (query.includes('SELECT ?epoch ?sequence WHERE')) return { results: { bindings: [{
       epoch: term('epoch'), sequence: term('1'),
     }] } };

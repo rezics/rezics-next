@@ -25,6 +25,22 @@ function checkedTargets(revisionIds: readonly string[]): string[] {
   return [...revisionIds].sort().map(id => `urn:rezics:content:revision:${id}`);
 }
 
+/** Public Content reads consult the graph tombstone even if the Content owner erase is still retrying. */
+export async function graphErasedContentRevisions(fuseki: FusekiClient,
+  revisionIds: readonly string[]): Promise<Set<string>> {
+  if (!revisionIds.length) return new Set();
+  const targets = checkedTargets(revisionIds);
+  const result = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?target WHERE {
+    VALUES ?target { ${targets.map(iri).join(' ')} }
+    GRAPH ${iri(GRAPHS.revisions)} { ?target a rv:ErasedRevision }
+  }`, 65_536);
+  const rows = result.results?.bindings;
+  if (!rows || rows.some(row => row.target?.type !== 'uri' || !targets.includes(row.target.value))) {
+    throw new GraphErasureUnavailable('Content suppression inventory is unavailable');
+  }
+  return new Set(rows.map(row => row.target!.value.slice('urn:rezics:content:revision:'.length)));
+}
+
 async function profile(fuseki: FusekiClient) {
   const registry = profileRegistry as Record<string, { sha256: string; shapes: readonly string[] }>;
   const local = registry[PROFILE];

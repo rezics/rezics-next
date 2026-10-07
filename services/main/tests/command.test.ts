@@ -118,7 +118,7 @@ test('SYS02 Main readiness accepts the pinned command module and rejects an olde
   }
   const dependencies = (fuseki: FusekiClient) => ({ environment: { fuseki,
     lineage: { dataEpoch: 'epoch-a', routingEpoch: 'routing-a' }, objectDirectory: '.temp/unused',
-  } }) as MainWorkDependencies;
+  }, access: { assertRecoveryOpen: async () => undefined } }) as MainWorkDependencies;
   const pinned = new ReadyFuseki(COMMAND_MODULE_VERSION);
   const ready = await createMainApp(pinned, dependencies(pinned))
     .handle(new Request('http://localhost/health/ready'));

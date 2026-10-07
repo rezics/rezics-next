@@ -31,6 +31,9 @@ class ReadGraph extends FusekiClient {
   override async query(sparql: string): Promise<SparqlResult> {
     if (sparql.includes('SELECT DISTINCT ?type')) return { results: { bindings: this.currentWorkPresent
       ? [{ type: { type: 'uri', value: 'https://schema.org/CreativeWork' } }] : [] } };
+    if (sparql.includes('SELECT ?target WHERE') && sparql.includes('rv:ErasedRevision')) {
+      return { results: { bindings: [] } };
+    }
     return { boolean: sparql.includes('schema:CreativeWork') ? this.currentWorkPresent : true };
   }
 }
@@ -78,7 +81,8 @@ test('WORK09: partial Content exact history requires current Work disclosure and
         }
         return { issuer: 'test', subject: 'account-user' };
       } },
-      access: { canReadWork: async (_principal, subject, resource) =>
+      access: { assertRecoveryOpen: async () => undefined,
+        canReadWork: async (_principal, subject, resource) =>
         grant && subject === actingSubject && resource === workId } as MainWorkDependencies['access'],
       content,
     };

@@ -72,7 +72,8 @@ function workDeps(graph: WorkGraph) {
   const state = { active: true, granted: true };
   const deps = { environment: { fuseki: graph, lineage: { dataEpoch: 'epoch', routingEpoch: '1' },
     objectDirectory: '.temp/local-read-basis' }, account: { verify: async () => ({ issuer: 'account', subject: 'reader' }) },
-  access: { activePrincipalId: async () => state.active ? 'reader' : null, canReadWork: async () => state.granted } } as unknown as MainWorkDependencies;
+  access: { assertRecoveryOpen: async () => undefined,
+    activePrincipalId: async () => state.active ? 'reader' : null, canReadWork: async () => state.granted } } as unknown as MainWorkDependencies;
   return { deps, state };
 }
 

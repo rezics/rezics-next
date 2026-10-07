@@ -129,7 +129,8 @@ test('Reader: public and private composition pages, current Content, cursor and 
         if (token === b.token) return { ...b.principal, emailVerified: true };
         throw new Error('unknown bearer');
       } },
-      access: { canReadWork: stack.access.canReadWork.bind(stack.access),
+      access: { assertRecoveryOpen: stack.access.assertRecoveryOpen.bind(stack.access),
+        canReadWork: stack.access.canReadWork.bind(stack.access),
         activePrincipalId: stack.access.activePrincipalId.bind(stack.access),
         canReadAsBaselineMember: async (principal: VerifiedPrincipal, actor: string) => baselineActive
           && principal.subject === b.principal.subject && actor === b.actor } as never,

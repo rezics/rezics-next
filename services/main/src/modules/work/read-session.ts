@@ -270,6 +270,7 @@ export class WorkReadSession {
 }
 
 async function position(deps: MainWorkDependencies, fresh = false): Promise<ReadPosition> {
+  await deps.access.assertRecoveryOpen();
   const env = deps.environment;
   const known = knownSearchPosition(env.fuseki, env.lineage);
   if (known && !fresh) return { dataEpoch: known.dataEpoch, sequence: known.sequence };
@@ -354,6 +355,7 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
               throw new AccountAssertionDenied('Principal is inactive');
             }
           }
+          await deps.access.assertRecoveryOpen();
           signal.throwIfAborted();
           return complete ? complete(result, session) : result;
         } catch (error) {

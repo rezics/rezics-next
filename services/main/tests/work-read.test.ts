@@ -58,7 +58,7 @@ test('Work read envelope meters actual HTTP attempts/bytes and rejects mixed gra
   const graph = new FusekiClient(`http://127.0.0.1:${server.port}/rezics`);
   const dependencies: MainWorkDependencies = { environment: { fuseki: graph,
     lineage: { dataEpoch: 'one', routingEpoch: 'one' }, objectDirectory: '.temp/work-read' },
-  account: {} as never, access: {} as never };
+  account: {} as never, access: { assertRecoveryOpen: async () => undefined } as never };
   const request = new Request('http://main.test/v1/works');
   try {
     await expect(workRead(dependencies, request, {}, async session => {

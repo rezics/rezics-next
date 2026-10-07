@@ -72,7 +72,8 @@ function fixture() {
   const cursor = { read: async () => contentPosition(checkpoint) } as unknown as ContentProjectionCursor;
   const app = createMainApp(fuseki, { environment: {
     fuseki, lineage: { dataEpoch: graphEpoch, routingEpoch: '1' }, objectDirectory: '.temp/unused',
-  }, contentProjection: { content, cursor, consumer: 'public-search' } } as unknown as MainWorkDependencies);
+  }, access: { assertRecoveryOpen: async () => undefined },
+  contentProjection: { content, cursor, consumer: 'public-search' } } as unknown as MainWorkDependencies);
   const search = (phrase: string, language: string | null = null) => app.handle(new Request('http://localhost/v1/queries', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ profile: 'public-content-phrase-v1', phrase, language }),

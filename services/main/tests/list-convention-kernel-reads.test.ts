@@ -55,7 +55,8 @@ function catalogue(works: Work[], projections: Projection[] = [], memberships: r
   };
   const allowed = async (resources: readonly string[]) => new Set(resources);
   const deps = { environment: { fuseki: graph, objectDirectory: '.temp/list-convention-kernel-reads',
-    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } }, access: {} as never, account: {} as never,
+    lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } },
+    access: { assertRecoveryOpen: async () => undefined } as never, account: {} as never,
     mediaAccess: { canReadWorks: (_principal: unknown, _actor: unknown, resources: readonly string[]) => allowed(resources),
       canReadSemantics: (_principal: unknown, _actor: unknown, resources: readonly string[]) => allowed(resources),
       canReadPrivateContexts: (_principal: unknown, _actor: unknown, resources: readonly string[]) => allowed(resources) } };

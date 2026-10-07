@@ -1,9 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { eraseLibraryImportsForPrincipals } from '../library-import/privacy.ts';
-import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import type { ObjectRecoveryStore } from '../owner/object-coverage.ts';
-import type { GraphLineage } from '../work/activate.ts';
 import { releaseAccessRecoveryFence } from '../access/admission.ts';
 import { AccountDeletionJournalConflict, assertAccountDeletionJournalCoverage } from
   '../outbox/account-deletion-journal.ts';
@@ -16,8 +14,9 @@ import { applyContentErasure, ContentErasureGraphRequired, contentErasureResourc
 import { ErasureUnavailable, readErasure, relayTransaction, sha256 } from './journal.ts';
 import { readGraphErasureProof, type GraphSuppressionProof } from './graph.ts';
 import { assertGraphErasure, graphLineageSequence, replayGraphErasure } from './replay-graph.ts';
-import { objectErasureAbsent, protectedObjectDigests, replayObjectErasure } from './replay-objects.ts';
+import { objectErasureAbsent, replayObjectErasure } from './replay-objects.ts';
 import { publicationSupersessionsMatch } from './replay-supersessions.ts';
+import { restoredCustodyDigests, type RestoredGraphCustody } from './custody.ts';
 
 /** The restored owners stay fenced: a later journal entry or authority fact is unreconciled. */
 export class ErasureRestoreHold extends Error {}
@@ -168,7 +167,7 @@ export async function verifyErasure(relay: Pool, owners: { content?: Pool; accou
 
 export interface RestoredOwners {
   content: Pool; access: Pool; account: Pool;
-  graph?: { fuseki: FusekiClient; lineage: GraphLineage };
+  graph?: RestoredGraphCustody;
   objects?: ObjectRecoveryStore;
 }
 
@@ -203,6 +202,8 @@ export async function retainErasureCoverage(relay: Pool, consumer: string): Prom
  * coverage head or differing Access authority/deletion evidence keep the restore
  * held. Work is O(journal targets + Access rows + Access outbox rows + referenced
  * graph manifests); each graph write is bounded to 64 targets and 64 units.
+ * The existing sealed graph/object restore checks must validate the base cut
+ * before replay mutates it; this verifies its remaining exact custody at release.
  */
 export async function reconcileRestoredErasures(relay: Pool, restored: RestoredOwners, input: {
   operationId: string; consumer: string; replay: boolean;
@@ -222,6 +223,16 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
   const content: Item[] = [];
   const graph: Item[] = [];
   const objects: Item[] = [];
+  let protectedDigests: Set<string> | null = null;
+  const custody: Item = { owner: 'object', kind: 'payload',
+    ref: 'retained-command-model-custody', disposition: 'conflict' };
+  if (restored.graph && restored.objects) {
+    try {
+      protectedDigests = await restoredCustodyDigests(restored.access, restored.graph, restored.objects);
+      custody.disposition = 'matched';
+    } catch { /* missing or divergent originals keep the whole restored owner held */ }
+  }
+  objects.push(custody);
   let after = '0';
   while (true) {
     const entries = (await relay.query<{ id: string; epoch: string;
@@ -285,8 +296,6 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
   }
   // Explicit object targets are exact digests. Other non-Content target families
   // remain held until their own owner supplies a replay and release proof.
-  let protectedDigests: Set<string> | null = null;
-  let objectProtectionFailed = false;
   after = '0';
   while (true) {
     const entries = (await relay.query<{ id: string; epoch: string }>(
@@ -301,12 +310,6 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
        ORDER BY e.erasure_epoch LIMIT ${JOURNAL_PAGE}`, [after])).rows;
     for (const entry of entries) {
       const report = await readErasure(relay, entry.id);
-      if (report.targets.some(target => target.owner === 'object')
-        && !protectedDigests && !objectProtectionFailed && restored.objects && restored.graph) {
-        try { protectedDigests = await protectedObjectDigests(
-          restored.graph.fuseki, restored.objects); }
-        catch { objectProtectionFailed = true; }
-      }
       const foreign = report.targets.filter(target => !(target.owner === 'content'
         && target.kind === 'content_revision') && !(target.owner === 'object' && target.kind === 'object'));
       if (!report.targets.some(target => target.owner === 'content' && target.kind === 'content_revision')
@@ -322,7 +325,7 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
       for (const target of report.targets.filter(target => target.owner === 'object')) {
         let disposition: Item['disposition'] = 'conflict';
         if (report.suppression === 'suppressed' && restored.objects && restored.graph
-          && protectedDigests && !objectProtectionFailed) {
+          && protectedDigests) {
           try { disposition = await replayObjectErasure(restored.objects, target.ref,
             protectedDigests, input.replay); }
           catch { /* malformed or unavailable target keeps the restore held */ }
@@ -372,7 +375,8 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
   const items = [...content, ...graph, ...objects, ...account, authority, currentAuthority];
   const open = items.filter(item => OPEN.has(item.disposition));
   const holdReason = !head ? 'no retained recovery coverage head'
-    : open.length ? `${open.length} journal items are missing from the restore` : null;
+    : custody.disposition !== 'matched' ? 'restored command or model custody is unavailable or divergent'
+      : open.length ? `${open.length} journal items are unresolved in the restore` : null;
   const control = (await restored.content.query<{ data_epoch: string; sequence: string }>(
     'SELECT data_epoch::text AS data_epoch, sequence::text AS sequence FROM content.owner_control')).rows[0];
   const status = (subset: readonly Item[]): Cut['status'] =>
@@ -384,8 +388,8 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
     ...(restored.graph ? [{ owner: 'graph' as const,
       dataEpoch: graphSequence === null ? null : restored.graph.lineage.dataEpoch,
       sequence: graphSequence, status: status(graph), digest: itemsDigest(graph) }] : []),
-    ...(restored.objects ? [{ owner: 'object' as const, dataEpoch: null, sequence: null,
-      status: status(objects), digest: itemsDigest(objects) }] : []),
+    { owner: 'object', dataEpoch: null, sequence: null,
+      status: status(objects), digest: itemsDigest(objects) },
     { owner: 'access', dataEpoch: null, sequence: null, status: status([authority, currentAuthority]),
       digest: itemsDigest([authority, currentAuthority]) },
     { owner: 'relay', dataEpoch: null, sequence: null, status: head ? 'matched' : 'missing',
@@ -401,6 +405,12 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
 
 /** Recheck the live restored copies immediately before releasing their Access fence. */
 async function assertRestoredErasuresCurrent(relay: PoolClient, restored: RestoredOwners): Promise<void> {
+  if (!restored.graph || !restored.objects) {
+    throw new ErasureRestoreHold('restored graph and exact object custody are required');
+  }
+  let protectedDigests: Set<string>;
+  try { protectedDigests = await restoredCustodyDigests(restored.access, restored.graph, restored.objects); }
+  catch { throw new ErasureRestoreHold('restored command or model custody is unavailable or divergent'); }
   const unresolved = await relay.query(`SELECT 1 FROM relay.erasure
     WHERE suppression_status <> 'suppressed' LIMIT 1`);
   if (unresolved.rowCount) throw new ErasureRestoreHold('an erasure is not suppressed');
@@ -447,24 +457,17 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
     after = entries[entries.length - 1]!.epoch;
   }
   after = '0';
-  let protectedDigests: Set<string> | null = null;
   while (true) {
     const entries = (await relay.query<{ id: string; epoch: string }>(`SELECT e.id,
         e.erasure_epoch::text AS epoch FROM relay.erasure e
       WHERE e.erasure_epoch > $1::bigint AND EXISTS
         (SELECT 1 FROM relay.erasure_target t WHERE t.erasure_id = e.id AND t.owner = 'object')
       ORDER BY e.erasure_epoch LIMIT ${JOURNAL_PAGE}`, [after])).rows;
-    if (entries.length && (!restored.objects || !restored.graph)) {
-      throw new ErasureRestoreHold('restored graph and object copies are required');
-    }
-    if (entries.length && !protectedDigests) {
-      protectedDigests = await protectedObjectDigests(restored.graph!.fuseki, restored.objects!);
-    }
     for (const entry of entries) {
       const report = await readErasure(relay, entry.id);
       for (const target of report.targets.filter(target => target.owner === 'object')) {
-        if (protectedDigests!.has(target.ref.slice(7))
-          || !await objectErasureAbsent(restored.objects!, target.ref)) {
+        if (protectedDigests.has(target.ref.slice(7))
+          || !await objectErasureAbsent(restored.objects, target.ref)) {
           throw new ErasureRestoreHold('restored object copy still exposes an erased digest');
         }
       }
