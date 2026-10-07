@@ -478,7 +478,7 @@ test('revoking the designated holder ends the seeded assignment ceiling', async 
     pool = new Pool({ connectionString: url, max: 4 });
     const owner = pool;
     for (const file of schemaFiles(repositoryRoot, 'access')) {
-      if (file === '1341_platform_grant_seed_ceiling.sql') continue;
+      if (file === '1421_platform_grant_seed_ceiling.sql') continue;
       await owner.query(
         readFileSync(join(repositoryRoot, 'services/main/migrations/access', file), 'utf8'),
       );
@@ -547,7 +547,7 @@ test('revoking the designated holder ends the seeded assignment ceiling', async 
       readFileSync(
         join(
           repositoryRoot,
-          'services/main/migrations/access/1341_platform_grant_seed_ceiling.sql',
+          'services/main/migrations/access/1421_platform_grant_seed_ceiling.sql',
         ),
         'utf8',
       ),
