@@ -1,15 +1,13 @@
 import type { ReactNode } from 'react';
-import { PageContainer } from '../../../../../features/shell/page.tsx';
 import { loadWork } from '../../../../../features/work-page/read.ts';
 import { WorkUnavailable } from '../../../../../features/work-page/work-states.tsx';
 import { getMessages, requestLocale } from '../../../../../i18n/server.ts';
 
-// The edit pages sit beside the Work's hub, not inside it: they have their own frame and no Work tabs.
-export default async function EditLayout({ params, children }: {
+// Resolve before the reader's loading boundary commits its response status.
+export default async function ReadLayout({ params, children }: {
   params: Promise<{ ref: string }>; children: ReactNode;
 }) {
   const [{ ref }, locale] = await Promise.all([params, requestLocale()]);
   const work = await loadWork(ref, locale);
-  if (!work.ok) return <WorkUnavailable messages={await getMessages('workPage', locale)} />;
-  return <PageContainer className="grid gap-7 [text-autospace:normal]">{children}</PageContainer>;
+  return work.ok ? children : <WorkUnavailable messages={await getMessages('workPage', locale)} />;
 }
