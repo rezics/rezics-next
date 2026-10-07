@@ -9,7 +9,7 @@ import { orderTree, recordTree } from '../src/modules/structure/change.ts';
 import { COMPOSITION_PROFILE, orderTreeKey } from '../src/modules/structure/graph.ts';
 import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, type OccurrenceRecord } from '../src/modules/structure/format.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
-import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { WorkReadMissing, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const binding = (value: string) => ({ value });
@@ -53,6 +53,7 @@ async function fixture() {
       new Map(entries.map(entry => [orderTreeKey(entry), entry])), cost),
     placementCount: records.length, measures: [], model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE };
   const digest = await objects.put(new TextEncoder().encode(JSON.stringify(manifest)));
+  objectsRead = 0;
   const completed: string[] = [], hidden = new Set<string>();
   let finished = false, ambiguous = false, historyPages = 0;
   const principal = { issuer: 'https://reader.test', subject: 'viewer', emailVerified: true };
@@ -72,7 +73,7 @@ async function fixture() {
       // Numeric terminal-part seeks never traverse all PartRole navigation
       // entries in the text index, including on an untitled Episode.
       expect(query).not.toContain('reading-position:label-index');
-      let rows;
+      let rows: ReadRow[];
       if (query.includes('# reading-position:work\n')) {
         const resource = query.match(/BIND\(<([^>]+)> AS \?work\)/)![1]!;
         if (resource === work) rows = [{ work: binding(work), structure: binding(structure),
