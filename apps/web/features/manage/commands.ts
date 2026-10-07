@@ -1,4 +1,5 @@
 import type { Decision } from './queue-state.ts';
+import { automationOf } from './reason-presets.ts';
 import { readDecisionBasis, readMembers, readRoles, readSettings, readSubmission } from './read.ts';
 import { type DecisionBasis, type InvitationCommand, type MainClient, type MemberCommand, type ModerationDecisionCommand,
   type ModerationItem, problemCode, type ReadFailure, type RoleCommand, type SettingsView, uuidOf } from './types.ts';
@@ -152,10 +153,12 @@ export async function decideReport(main: MainClient, realm: string, item: Modera
   if (item.kind === 'rights_complaint' && decision.action === 'remove'
     || item.kind !== 'rights_complaint' && (decision.action === 'interim-restrict' || decision.action === 'final-restrict'))
     return { ok: false, failure: 'invalid' };
-  const reasons = decision.reasons;
-  if (!reasons) return { ok: false, failure: 'invalid', code: 'statement_of_reasons_required' };
+  const given = decision.reasons;
+  if (!given) return { ok: false, failure: 'invalid', code: 'statement_of_reasons_required' };
   const basis = await readDecisionBasis(main, realm, item.id, actingSubject);
   if (!basis.ok) return { ok: false, failure: basisFailure(basis.failure) };
+  // The statement says whether automation was involved as the case's evidence records it now, never less than the screen showed.
+  const reasons = { ...given, automation: given.automation || automationOf(basis.data) === true };
   if (!basis.data.ruleBasis) return { ok: false, failure: 'invalid', code: 'rules_unpublished' };
   // The reason the parties read is `reasons`; the rationale is the moderators' private note.
   const command = reportDecision(basis.data, decision.action as 'keep' | 'remove' | 'interim-restrict' | 'final-restrict',

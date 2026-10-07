@@ -4,8 +4,8 @@ import { decideReport } from '../features/manage/commands.ts';
 import { basisFor } from '../features/manage/fixtures.ts';
 import { messages, type ManageMessages } from '../features/manage/messages.ts';
 import { actionsFor, needsReason } from '../features/manage/queue-state.ts';
-import { isReportAction, NOTE_LIMIT, reasonLabelOf, reasonMemoryKey, reasonsFor, reasonsOf, recallReason, rememberReason,
-  reportReasons, type ReportAction, sharedRule, STATEMENT_LIMIT, statementFor } from '../features/manage/reason-presets.ts';
+import { automationOf, combineAutomation, isReportAction, needsDetails, NOTE_LIMIT, reasonLabelOf, reasonMemoryKey, reasonsFor, reasonsOf, recallReason, rememberReason,
+  reportReasons, type ReportAction, sharedRule, sharedRules, STATEMENT_LIMIT, statementFor } from '../features/manage/reason-presets.ts';
 import type { MainClient, ModerationItem, PublishedRule } from '../features/manage/types.ts';
 import { type UiLocale, uiLocales } from '../i18n/define.ts';
 
@@ -105,16 +105,78 @@ describe('the statement the affected person reads', () => {
     expect(statementFor('remove', 'other', t, '  ', null)).toBeNull();
     expect(statementFor('remove', 'other', t, '  Paid translation.  ', null)).toEqual({ facts: 'Paid translation.',
       scope: 'The reported part of the content is hidden from readers.',
-      duration: 'Until the author fixes the content or a moderator restores it.' });
+      duration: 'Until an authorized moderator changes or reverses this decision.' });
     expect(NOTE_LIMIT).toBeGreaterThan(STATEMENT_LIMIT);
   });
 
-  test('the contract\'s reasons carry the language the statement is written in and no automation', async () => {
+  test('case-specific details follow a preset in the public statement, and a generic reason requires them', async () => {
+    const t = await text('en');
+    expect(statementFor('remove', 'spam', t, '  The second link sells accounts.  ', null)!.facts)
+      .toBe('This content is spam or advertising that does not belong in this Realm. The second link sells accounts.');
+    expect(statementFor('remove', 'spam', t, '', null)!.facts)
+      .toBe('This content is spam or advertising that does not belong in this Realm.');
+    // The rule the report named comes before the moderator's words.
+    expect(statementFor('remove', 'rule-breach', t, 'Paragraph 3 copies a paid translation.', { number: 2, title: 'Name the edition' })!.facts)
+      .toBe('This content breaks one of the Realm’s rules. Rule 2: “Name the edition”. Paragraph 3 copies a paid translation.');
+    for (const reason of reasonsFor('remove')) expect(needsDetails(reason)).toBe(reason === 'rule-breach' || reason === 'other');
+    expect(statementFor('remove', 'rule-breach', t, '   ', { number: 2, title: 'Name the edition' })).toBeNull();
+    for (const action of actions) for (const reason of reasonsFor(action)) {
+      if (!needsDetails(reason)) expect(statementFor(action, reason, t, '', null)).not.toBeNull();
+    }
+  });
+
+  test('no duration or scope promises a release that no authorized decision makes', async () => {
+    for (const locale of uiLocales) {
+      const t = await text(locale);
+      const [remove, interim, final] = (['remove', 'interim-restrict', 'final-restrict'] as const)
+        .map(action => statementFor(action, reasonsFor(action)[0]!, t, '', null)!);
+      // Only a later decision by an authorized moderator releases an enforced restriction, whatever its reason.
+      expect(interim!.duration).toBe(remove!.duration);
+      expect(final!.duration).toBe(remove!.duration);
+    }
+    const t = await text('en');
+    const promises = /fixes|withdrawn|until it is answered|until the complaint is decided/i;
+    for (const action of actions) for (const reason of reasonsFor(action)) {
+      const statement = statementFor(action, reason, t, 'x', null)!;
+      expect(`${statement.facts} ${statement.scope} ${statement.duration}`).not.toMatch(promises);
+    }
+    expect(statementFor('remove', 'spam', t, '', null)!.duration)
+      .toBe('Until an authorized moderator changes or reverses this decision.');
+  });
+
+  test('the contract\'s reasons carry the language the statement is written in and the automation the evidence records', async () => {
     const t = await text('de');
     const statement = statementFor('keep', 'already-handled', t, '', null)!;
-    expect(reasonsOf(statement, 'de')).toEqual({ ...statement, automation: false, contentLanguage: 'de',
+    expect(reasonsOf(statement, 'de', false)).toEqual({ ...statement, automation: false, contentLanguage: 'de',
       appealRoute: '/v1/public-reports/{caseId}/correspondence' });
+    expect(reasonsOf(statement, 'de', true).automation).toBe(true);
     expect(Object.keys(reportReasons).sort()).toEqual([...actions].sort());
+  });
+});
+
+describe('automation in the evidence', () => {
+  const evidence = (provenance: Record<string, string>) => ({ ordinal: 1, owner: 'graph', resource: iri(101), component: 'title',
+    revision: 'r1', locator: null, state: 'available', representation: null, revisionDigest: null, expectedHead: 'r1', provenance });
+  const read = (provenances: Array<Record<string, string>>, nextCursor: string | null = null) => ({
+    reports: provenances.map(provenance => ({ id: uuid(2), actingSubject: null, reasonCode: 'spam', statement: null,
+      evidenceDigest: 'a'.repeat(64), receivedAt: '2026-09-28T01:00:00.000Z', evidence: [evidence(provenance)] })), nextCursor });
+
+  test('an `automation` entry in any evidence item\'s provenance is automation, as Main decides', () => {
+    expect(automationOf(read([{ capturedBy: 'reporter' }, { automation: 'local-image-screen', reason: 'likely-explicit' }]))).toBe(true);
+    expect(automationOf(read([{ capturedBy: 'reporter' }]))).toBe(false);
+    expect(automationOf(read([]))).toBe(false);
+  });
+
+  test('more reports than were read leave it unknown unless one already shows automation', () => {
+    expect(automationOf(read([{}], 'next'))).toBeNull();
+    expect(automationOf(read([{ automation: 'x' }], 'next'))).toBe(true);
+  });
+
+  test('several cases are automated if any is, manual only when every one is known to be', () => {
+    expect(combineAutomation([false, true, null])).toBe(true);
+    expect(combineAutomation([false, false])).toBe(false);
+    expect(combineAutomation([false, null])).toBeNull();
+    expect(combineAutomation([])).toBeNull();
   });
 });
 
@@ -131,6 +193,22 @@ describe('the Realm rule a decision cites', () => {
     expect(sharedRule([report('content_report', 'no-spoilers'), report('content_report', 'title_review')], rules)).toBeNull();
     expect(sharedRule([report('content_report', 'title_review')], rules)).toBeNull();
     expect(sharedRule([], rules)).toBeNull();
+  });
+});
+
+describe('the published rules a decision cites', () => {
+  const read = (ref: string, revision: string) => ({ ok: true as const, data: { ...basisFor(report()), ruleBasis: { ref, revision,
+    digest: 'a'.repeat(64), document: {} } } });
+
+  test('cases read under the same published rules show their reference and revision', () => {
+    expect(sharedRules([read('urn:rules:1', '3'), read('urn:rules:1', '3')])).toEqual({ ref: 'urn:rules:1', revision: '3' });
+  });
+
+  test('another revision, an unread case or a Realm without rules shows none', () => {
+    expect(sharedRules([read('urn:rules:1', '3'), read('urn:rules:1', '4')])).toBeNull();
+    expect(sharedRules([read('urn:rules:1', '3'), undefined])).toBeNull();
+    expect(sharedRules([{ ok: true, data: basisFor(report(), false) }])).toBeNull();
+    expect(sharedRules([])).toBeNull();
   });
 });
 
@@ -183,6 +261,31 @@ describe('sending a report decision', () => {
       note: '  Reporter gave no edition.  ', reasons }, iri(11), 'keep-key')).toEqual({ ok: true, data: { saved: true } });
     expect(calls).toEqual([{ body: expect.objectContaining({ outcome: 'dismiss', reasons,
       rationale: 'Reporter gave no edition.', disclosure: 'parties' }), options: { headers: { 'idempotency-key': 'keep-key' } } }]);
+  });
+
+  test('the decision cites the published rules and the reported revision it acts on, so the notice is tied to both', async () => {
+    const calls: Array<{ body: Record<string, unknown> }> = [];
+    await decideReport(mainFor(calls), uuid(7), item, { action: 'remove', reason: reasons.facts, note: null, reasons },
+      iri(11), 'remove-key');
+    const basis = basisFor(item);
+    expect(calls[0]!.body).toMatchObject({ rule: { ref: basis.ruleBasis!.ref, revision: basis.ruleBasis!.revision,
+      digest: basis.ruleBasis!.digest }, evidenceDigest: basis.reports[0]!.evidenceDigest, caseId: item.id,
+    targets: [{ owner: 'graph', resource: item.target.resource, component: 'title', scopeKind: 'exact_revision',
+      revision: basis.reports[0]!.evidence[0]!.revision, expectedHead: basis.reports[0]!.evidence[0]!.expectedHead }] });
+  });
+
+  test('the statement says automation was involved when the evidence records it, even if the screen showed none', async () => {
+    const automated = { ...basisFor(item), reports: basisFor(item).reports.map(entry => ({ ...entry,
+      evidence: entry.evidence.map(found => ({ ...found, provenance: { automation: 'local-image-screen' } })) })) };
+    const calls: Array<{ body: Record<string, unknown> }> = [];
+    const main = { v1: { realms: () => ({ moderation: () => ({ get: async () => ({ data: automated, error: null }) }) }),
+      moderation: { decisions: { post: async (body: Record<string, unknown>) => { calls.push({ body }); return { data: {}, error: null }; } } } } } as unknown as MainClient;
+    await decideReport(main, uuid(7), item, { action: 'keep', reason: reasons.facts, note: null, reasons }, iri(11), 'k');
+    expect(calls[0]!.body.reasons).toEqual({ ...reasons, automation: true });
+    // A manual case stays as the screen said.
+    const manual: unknown[] = [];
+    await decideReport(mainFor(manual), uuid(7), item, { action: 'keep', reason: reasons.facts, note: null, reasons }, iri(11), 'k');
+    expect(manual).toEqual([{ body: expect.objectContaining({ reasons: { ...reasons, automation: false } }), options: expect.anything() }]);
   });
 
   test('without a note there is no rationale, and the facts are not copied into it', async () => {

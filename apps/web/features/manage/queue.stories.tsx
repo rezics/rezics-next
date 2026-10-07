@@ -182,7 +182,7 @@ export const KeepOrRemoveReport: Story = {
     // The reason's number picks it; the statement the affected people read follows.
     await userEvent.keyboard('3');
     await expect(dialog.getByRole('radio', { name: /Unmarked spoiler/ })).toBeChecked();
-    await expect(dialog.getByText('This content gives away the story and was not marked as a spoiler.')).toBeVisible();
+    await waitFor(() => expect(dialog.getByText('This content gives away the story and was not marked as a spoiler.')).toBeVisible());
     await userEvent.click(dialog.getByRole('button', { name: 'Remove' }));
     await waitFor(() => expect(recorded.commits).toEqual([expect.objectContaining({ action: 'keep' }),
       expect.objectContaining({ id: queue[5]!.id, action: 'remove',

@@ -12,7 +12,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { actionLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import type { Decision } from './queue-state.ts';
-import { NOTE_LIMIT, type ReasonId, reasonLabelOf, reasonsFor, reasonsOf, recallReason, rememberReason, type ReportAction,
+import { needsDetails, NOTE_LIMIT, type ReasonId, reasonLabelOf, reasonsFor, reasonsOf, recallReason, rememberReason, type ReportAction,
   STATEMENT_LIMIT, statementFor } from './reason-presets.ts';
 
 /** The language a statement is written in, as the moderator's own language names it. */
@@ -28,10 +28,17 @@ function languageName(locale: UiLocale): string {
  * reason's number picks another. The decision is not sent here; it enters
  * the undo window. The private note stays with moderators.
  */
-export function ReportDecisionDialog({ action, count, rule, realm, locale, messages, onDecide, onClose, finalFocus }: {
+export function ReportDecisionDialog({ action, count, rule, rules, about, automation, realm, locale, messages, onDecide,
+  onClose, finalFocus }: {
   action: ReportAction | null; count: number;
   /** The Realm rule the reports cite, when they all cite the same one. */
   rule: { number: number; title: string } | null;
+  /** The published rules (reference and revision) the decision cites, when every case reads the same; as Main records it. */
+  rules: { ref: string; revision: string } | null;
+  /** What the decision acts on, as the reader knows it; null for several items. */
+  about: string | null;
+  /** Whether the evidence records automation: unknown until every case is read, and Main's own read decides on sending. */
+  automation: boolean | null;
   /** Keys the remembered reason; without it nothing is remembered. */
   realm?: string; locale: UiLocale; messages: ManageMessages;
   onDecide: (decision: Decision) => void; onClose: () => void;
@@ -59,17 +66,18 @@ export function ReportDecisionDialog({ action, count, rule, realm, locale, messa
       setOwn(''); setNote(''); setError(null);
     }
   }
-  useEffect(() => { if (reason === 'other' && opened) ownRef.current?.focus(); }, [reason, opened]);
+  useEffect(() => { if (needsDetails(reason) && opened) ownRef.current?.focus(); }, [reason, opened]);
 
   const statement = statementFor(shown, reason, t, own, rule);
   const pick = (next: ReasonId) => { setReason(next); setRecalled(false); setError(null); };
   const title = shown === 'keep' ? t.reasonKeepTitle(count) : shown === 'remove' ? t.reasonRemoveTitle(count)
     : shown === 'interim-restrict' ? t.reasonInterimTitle(count) : t.reasonFinalTitle(count);
   const submit = () => {
-    if (!statement) { setError(t.rsnRequired); ownRef.current?.focus(); return; }
-    if (own.length > STATEMENT_LIMIT || note.length > NOTE_LIMIT) { setError(t.reasonTooLong); return; }
+    if (!statement) { setError(reason === 'other' ? t.rsnRequired : t.rsnDetailsRequired); ownRef.current?.focus(); return; }
+    if (statement.facts.length > STATEMENT_LIMIT || note.length > NOTE_LIMIT) { setError(t.reasonTooLong); return; }
     rememberReason(realm, shown, reason);
-    onDecide({ action: shown, reason: statement.facts, note: note.trim() || null, reasons: reasonsOf(statement, locale) });
+    onDecide({ action: shown, reason: statement.facts, note: note.trim() || null,
+      reasons: reasonsOf(statement, locale, automation === true) });
   };
   const preview: ReadonlyArray<readonly [string, string]> = [[t.factsLabel, statement?.facts ?? t.previewEmpty],
     [t.scopeLabel, statement?.scope ?? t.previewEmpty], [t.decisionDurationLabel, statement?.duration ?? t.previewEmpty]];
@@ -100,8 +108,8 @@ export function ReportDecisionDialog({ action, count, rule, realm, locale, messa
             </RadioGroupItem>)}
             <p className="text-muted-foreground text-xs">{recalled ? `${t.ruleRemembered} ` : ''}{t.rsnKeys}</p>
           </RadioGroup>
-          {reason === 'other' ? <Field invalid={error !== null}>
-            <FieldLabel>{t.rsnOtherLabel}</FieldLabel>
+          <Field invalid={error !== null}>
+            <FieldLabel>{reason === 'other' ? t.rsnOtherLabel : t.rsnDetailsLabel}</FieldLabel>
             <Textarea ref={ownRef} value={own} rows={3} maxLength={STATEMENT_LIMIT + 200}
               onChange={event => { setOwn(event.currentTarget.value); setError(null); }}
               onKeyDown={event => {
@@ -111,8 +119,9 @@ export function ReportDecisionDialog({ action, count, rule, realm, locale, messa
                 }
               }} />
             {error ? <FieldError>{error}</FieldError>
-              : <FieldHelper>{t.rsnOtherHelp({ language: languageName(locale) })}</FieldHelper>}
-          </Field> : null}
+              : <FieldHelper>{(reason === 'other' ? t.rsnOtherHelp : needsDetails(reason) ? t.rsnDetailsRequiredHelp
+                : t.rsnDetailsHelp)({ language: languageName(locale) })}</FieldHelper>}
+          </Field>
           <section aria-label={t.previewHeading} className="grid gap-2 rounded-2xl border border-border/60 bg-muted/40 p-4">
             <h3 className="font-semibold text-sm">{t.previewHeading}</h3>
             <p className="text-muted-foreground text-xs">{t.previewLanguage({ language: languageName(locale) })}</p>
@@ -122,7 +131,10 @@ export function ReportDecisionDialog({ action, count, rule, realm, locale, messa
                 <dd className="whitespace-pre-line [overflow-wrap:anywhere]">{value}</dd>
               </div>)}
             </dl>
-            <p className="text-sm">{t.previewNoAutomation}</p>
+            {about ? <p className="text-sm">{t.rsnPreviewAbout({ target: about })}</p> : null}
+            {rules ? <p className="text-sm">{t.rsnPreviewRules({ ref: rules.ref, revision: rules.revision })}</p> : null}
+            <p className="text-sm">{automation === null ? t.rsnAutomationChecked
+              : automation ? t.previewAutomation : t.previewNoAutomation}</p>
             <p className="text-sm">{t.previewAppeal}</p>
           </section>
           <Field>

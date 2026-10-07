@@ -15,7 +15,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import type { Outcome } from './commands.ts';
 import { agentLabel, isoTime, relativeTime } from './format.ts';
-import { actionLabel, decidedText, kindLabel, reasonLabel, shortcutActions, shortcutKeys, stateLabel } from './labels.ts';
+import { actionLabel, componentLabel, decidedText, kindLabel, reasonLabel, shortcutActions, shortcutKeys, stateLabel } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import { Pill, WorkThumb } from './parts.tsx';
 import { bffQueueApi, mergeNames, type QueueApi, type QueueNames, reporters } from './queue-api.ts';
@@ -24,7 +24,7 @@ import { actionOrder, QueueDetail, type RulesState } from './queue-detail.tsx';
 import { actionsFor, commonActions, type Decision, fullAuthority, initialTriage, itemsFor, needsReason, type PendingDecision,
   type QueueAction, type QueueAuthority, type Settled, targetIds, triage, UNDO_WINDOW_MS, visibleIds } from './queue-state.ts';
 import { type Asked, ReasonDialog } from './reason-dialog.tsx';
-import { isReportAction, sharedRule } from './reason-presets.ts';
+import { automationOf, combineAutomation, isReportAction, sharedRule, sharedRules } from './reason-presets.ts';
 import { ReportDecisionDialog } from './report-decision-dialog.tsx';
 import { mergeAgents } from './read.ts';
 import { type QueueView as View, queueHref } from './routes.ts';
@@ -265,6 +265,8 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
   }, [act, dialog, help]);
 
   const focusAfterDialog = () => (latest.current.current ? rows.current.get(latest.current.current) : null) ?? null;
+  const dialogItems = (dialog?.ids ?? []).flatMap(id => state.items[id] ?? []);
+  const dialogBases = dialogItems.map(item => bases[item.id]).map(basis => basis === 'loading' ? undefined : basis);
   const decideFromDialog = (decision: Decision) => {
     const ids = dialog?.ids ?? [];
     setDialog(null);
@@ -429,7 +431,10 @@ export function QueueView({ realm, address = realm, actingSubject, authority = f
     </div> : state.committing.length ? <div role="status" className="sr-only">{t.sending}</div> : null}
     <ReportDecisionDialog action={dialog && isReportAction(dialog.action) ? dialog.action : null}
       count={dialog?.ids.length ?? 1} locale={locale} messages={messages} realm={realm}
-      rule={sharedRule((dialog?.ids ?? []).flatMap(id => state.items[id] ?? []), realmRules)}
+      rule={sharedRule(dialogItems, realmRules)} rules={sharedRules(dialogBases)}
+      about={dialogItems.length === 1 ? `${subjectOf(dialogItems[0]!.target.resource, names, t).text} · ${
+        componentLabel(dialogItems[0]!.target.component, t)}` : null}
+      automation={combineAutomation(dialogBases.map(basis => basis?.ok ? automationOf(basis.data) : null))}
       finalFocus={focusAfterDialog} onClose={() => setDialog(null)} onDecide={decideFromDialog} />
     <ReasonDialog action={dialog && !isReportAction(dialog.action) ? dialog.action as Asked : null}
       count={dialog?.ids.length ?? 1} locale={locale} messages={messages} rules={realmRules} realm={realm}

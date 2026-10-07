@@ -215,7 +215,7 @@ export function queueApi(options: { stale?: readonly string[]; reload?: Moderati
       return text ? { ok: true, data: { text, language: /\p{Script=Han}/u.test(text) ? 'zh-Hans' : 'en' } }
         : { ok: false, failure: 'unavailable' };
     },
-    basis: async item => item.kind === 'content_report' ? { ok: true, data: basisFor(item, options.rules ?? true) }
+    basis: async item => item.kind === 'content_report' || item.kind === 'rights_complaint' ? { ok: true, data: basisFor(item, options.rules ?? true) }
       : { ok: false, failure: 'missing' },
     people: async () => agents,
     commit: async (item, decision, key): Promise<Outcome<unknown>> => {

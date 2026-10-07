@@ -3,7 +3,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { ruleFor } from './labels.ts';
 import type { ManageMessages } from './messages.ts';
 import type { QueueAction } from './queue-state.ts';
-import type { ModerationDecisionCommand, ModerationItem, PublishedRule } from './types.ts';
+import type { DecisionBasis, Loaded, ModerationDecisionCommand, ModerationItem, PublishedRule } from './types.ts';
 
 type T = ContractOf<ManageMessages>;
 
@@ -65,27 +65,49 @@ const durations: Record<ReportAction, keyof T> = { keep: 'rsnDurationKeep', remo
 
 export interface Statement { facts: string; scope: string; duration: string }
 
+/** A generic reason says nothing about this case by itself: the moderator must add what in it applies. */
+export const needsDetails = (reason: ReasonId) => reason === 'other' || reason === 'rule-breach';
+
 /**
  * What the affected person reads for a reason. A reason that blames the
  * content also names the Realm rule the report cited, when there is one; a
- * kept report names no rule, since nothing was found. Null while an `other`
- * explanation is still empty.
+ * kept report names no rule, since nothing was found. The moderator's own
+ * words (`details`) follow the preset, or are the whole explanation for
+ * `other`. Null while the words a reason needs are still empty.
  */
 export function statementFor(action: ReportAction, reason: ReasonId, t: T,
-  own: string, rule: { number: number; title: string } | null): Statement | null {
+  details: string, rule: { number: number; title: string } | null): Statement | null {
   const scope = t[scopes[action]] as string;
   const duration = t[durations[action]] as string;
-  if (reason === 'other') {
-    const facts = own.trim();
-    return facts ? { facts, scope, duration } : null;
-  }
+  const own = details.trim();
+  if (needsDetails(reason) && !own) return null;
+  if (reason === 'other') return { facts: own, scope, duration };
   const cited = rule && action !== 'keep' ? ` ${t.rsnRuleCited({ number: String(rule.number), title: rule.title })}` : '';
-  return { facts: `${t[words[reason].facts] as string}${cited}`, scope, duration };
+  return { facts: `${t[words[reason].facts] as string}${cited}${own ? ` ${own}` : ''}`, scope, duration };
 }
 
-export function reasonsOf(statement: Statement, locale: UiLocale): ModerationDecisionCommand['reasons'] {
-  return { facts: statement.facts, scope: statement.scope, duration: statement.duration, automation: false,
+/** The contract's statement; `automation` is whether the case's evidence records automated involvement. */
+export function reasonsOf(statement: Statement, locale: UiLocale, automation: boolean):
+  ModerationDecisionCommand['reasons'] {
+  return { facts: statement.facts, scope: statement.scope, duration: statement.duration, automation,
     appealRoute: APPEAL_ROUTE, contentLanguage: locale };
+}
+
+/**
+ * Whether a case's retained evidence records automation, the way Main
+ * decides (an `automation` entry in an evidence item's provenance) and
+ * refuses a statement that denies it. Null when more reports exist than the
+ * page read, since a later page could still record it.
+ */
+export function automationOf(basis: Pick<DecisionBasis, 'reports' | 'nextCursor'>): boolean | null {
+  const automated = basis.reports.some(report => report.evidence.some(entry => 'automation' in entry.provenance));
+  return automated ? true : basis.nextCursor ? null : false;
+}
+
+/** The one value every case agrees on: true if any is, false if all are known to be, otherwise unknown. */
+export function combineAutomation(values: readonly (boolean | null)[]): boolean | null {
+  if (values.includes(true)) return true;
+  return values.length > 0 && values.every(value => value === false) ? false : null;
 }
 
 /** The one Realm rule every reported item names, as its number and title; null when they differ or none is named. */
@@ -110,4 +132,12 @@ export function recallReason(realm: string | undefined, action: ReportAction): P
 export function rememberReason(realm: string | undefined, action: ReportAction, reason: ReasonId) {
   if (!realm || reason === 'other') return;
   try { globalThis.localStorage?.setItem(reasonMemoryKey(realm, action), reason); } catch { /* private mode */ }
+}
+
+/** The published rules (reference and revision) every read case cites; null when they differ or a case is unread. */
+export function sharedRules(bases: readonly (Loaded<DecisionBasis> | undefined)[]): { ref: string; revision: string } | null {
+  const cited = bases.map(basis => basis?.ok ? basis.data.ruleBasis : null);
+  const first = cited[0];
+  if (!first || cited.some(entry => entry?.ref !== first.ref || entry.revision !== first.revision)) return null;
+  return { ref: first.ref, revision: first.revision };
 }
