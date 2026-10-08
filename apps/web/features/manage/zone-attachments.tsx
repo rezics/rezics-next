@@ -33,17 +33,17 @@ const realmIriPattern = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const realmIri = (realm: string) => realmIriPattern.test(realm) ? realm : `https://rezics.com/id/${realm}`;
 
 /** The steward's page of Zones that show this Realm, with withdraw and the next page. */
-export function ZoneAttachments({ realm, actingSubject, locale, messages, items, next }: {
+export function ZoneAttachments({ realm, actingSubject, locale, messages, items, nextCursor }: {
   realm: string;
   actingSubject: string;
   locale: UiLocale;
   messages: ManageMessages;
   items: ZoneAttachmentItem[];
-  next: string | null;
+  nextCursor: string | null;
 }) {
   const t = materializeData(messages, { locale });
   const [rows, setRows] = useState(items);
-  const [cursor, setCursor] = useState(next);
+  const [cursor, setCursor] = useState(nextCursor);
   const [busy, setBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -79,7 +79,7 @@ export function ZoneAttachments({ realm, actingSubject, locale, messages, items,
     setNotice(null);
     try {
       const answer = await browserMainApi().v1.realms({ realm })['zone-attachments'].get({
-        query: { actingSubject, after: cursor, limit: 24 } });
+        query: { actingSubject, cursor, limit: 24 } });
       if (answer.error || !answer.data) {
         setNotice(t.unavailableHelp);
         return;
@@ -94,7 +94,7 @@ export function ZoneAttachments({ realm, actingSubject, locale, messages, items,
         }));
         return [...current, ...incoming];
       });
-      setCursor(page.next);
+      setCursor(page.nextCursor);
     } catch {
       setNotice(t.unavailableHelp);
     } finally {

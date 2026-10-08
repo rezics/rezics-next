@@ -475,7 +475,7 @@ const attachedZone = (n: number, when: string | null = '2026-10-08T03:04:05.000Z
   ...(when ? { attachedAt: lit(when) } : {}),
 });
 
-const list = (w: ReturnType<typeof world>, input: { actingSubject?: string; after?: string; limit: number } = { actingSubject: actor, limit: 24 }) =>
+const list = (w: ReturnType<typeof world>, input: { actingSubject?: string; cursor?: string; limit: number } = { actingSubject: actor, limit: 24 }) =>
   listRealmZoneAttachments(w.env, w.account, w.access, new Request('http://main.test/v1/realms'),
     { realm: foreignRealm, ...input });
 
@@ -489,6 +489,8 @@ test('a steward lists attached Zones; a stranger and an anonymous reader get the
       attachedAt: '2026-10-08T03:04:05.000Z', address: { prefix: '/z/' },
       withdraw: { method: 'POST', path: `/v1/zones/${id(30).slice(-36)}/realm-attachment-withdrawals` } });
     expect(page.items[1]!.attachedAt).toBeNull();
+    expect(page.nextCursor).toBeNull();
+    expect(page.complete).toBe(true);
     expect(page.cost).toEqual({ graphReads: 1, sqlReads: 1, rows: 2 });
     const asked = w.state.queries.filter(query => query.includes('rv:realmAttachment ?receipt'));
     expect(asked).toHaveLength(1);
@@ -537,11 +539,17 @@ test('the attachment list pages past the first Zone and costs the same query at 
     w.state.attachments = [attachedZone(30), attachedZone(31), attachedZone(32)];
     const first = await list(w, { actingSubject: actor, limit: 1 });
     expect(first.items.map(item => item.zone)).toEqual([id(30)]);
-    expect(first.next).toBe(`v1:${id(30)}`);
-    const second = await list(w, { actingSubject: actor, limit: 1, after: first.next! });
+    expect(first.nextCursor).toBe(`v1:${id(30)}`);
+    expect(first.complete).toBe(false);
+    const second = await list(w, { actingSubject: actor, limit: 1, cursor: first.nextCursor! });
     expect(second.items.map(item => item.zone)).toEqual([id(31)]);
-    expect(second.next).toBe(`v1:${id(31)}`);
-    await expect(list(w, { actingSubject: actor, limit: 1, after: 'nope' })).rejects.toBeInstanceOf(InvalidZoneConfiguration);
+    expect(second.nextCursor).toBe(`v1:${id(31)}`);
+    expect(second.complete).toBe(false);
+    const last = await list(w, { actingSubject: actor, limit: 1, cursor: second.nextCursor! });
+    expect(last.items.map(item => item.zone)).toEqual([id(32)]);
+    expect(last.nextCursor).toBeNull();
+    expect(last.complete).toBe(true);
+    await expect(list(w, { actingSubject: actor, limit: 1, cursor: 'nope' })).rejects.toBeInstanceOf(InvalidZoneConfiguration);
 
     const costOf = async (count: number) => {
       const scale = world(directory);

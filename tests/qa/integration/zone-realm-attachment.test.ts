@@ -309,7 +309,8 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     // The author's three monthly Spaces are the listed Realm, its Zone, and nothing
     // further. The cap Realm and the two racing Zones belong to the other account.
     const empty = await a.realmFor(a.outsider, home.reader.token, home.reader.principal);
-    expect(await read(empty.realm, home.reader.token, a.outsider)).toMatchObject({ status: 200, body: { items: [] } });
+    expect(await read(empty.realm, home.reader.token, a.outsider)).toMatchObject({
+      status: 200, body: { items: [], nextCursor: null, complete: true } });
 
     const listed = async (limit = 24) => read(realm.realm, home.author.token, a.steward, limit);
     await listed();
@@ -319,7 +320,7 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     expect(one.status).toBe(200);
     const page = one.body as { items: { zone: string; name: string | null; attachedAt: string | null;
       address: { prefix: string }; withdraw: { method: string; path: string } }[];
-      next: string | null; cost: { graphReads: number } };
+      nextCursor: string | null; complete: boolean; cost: { graphReads: number } };
     expect(page.items.map(item => item.zone)).toContain(site.zone);
     const row = page.items.find(item => item.zone === site.zone)!;
     expect(row.name).toEqual(expect.any(String));
@@ -327,6 +328,8 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     expect(row.attachedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     expect(row.address.prefix).toBe('/z/');
     expect(row.withdraw).toEqual({ method: 'POST', path: `/v1/zones/${short(site.zone)}/realm-attachment-withdrawals` });
+    expect(page.nextCursor).toBeNull();
+    expect(page.complete).toBe(true);
     expect(page.cost.graphReads).toBe(1);
 
     const decoy = `https://rezics.com/id/${randomUUID()}`;
@@ -353,17 +356,18 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     expect((fifty.body as { cost: { graphReads: number } }).cost.graphReads).toBe(page.cost.graphReads);
 
     const first = await listed(1);
-    const firstPage = first.body as { items: { zone: string }[]; next: string | null };
+    const firstPage = first.body as { items: { zone: string }[]; nextCursor: string | null; complete: boolean };
     expect(firstPage.items).toHaveLength(1);
-    expect(firstPage.next).toMatch(/^v1:https:\/\/rezics\.com\/id\//);
-    const secondResponse = await call('GET', `${listPath(realm.realm, a.steward, 1)}&after=${encodeURIComponent(firstPage.next!)}`,
+    expect(firstPage.complete).toBe(false);
+    expect(firstPage.nextCursor).toMatch(/^v1:https:\/\/rezics\.com\/id\//);
+    const secondResponse = await call('GET', `${listPath(realm.realm, a.steward, 1)}&cursor=${encodeURIComponent(firstPage.nextCursor!)}`,
       undefined, home.author.token);
     expect(secondResponse.status).toBe(200);
     const second = await secondResponse.json() as { items: { zone: string }[] };
     expect(second.items).toHaveLength(1);
     expect(second.items[0]!.zone).not.toBe(firstPage.items[0]!.zone);
     const wide = await listed(50);
-    const wideItems = (wide.body as { items: { zone: string }[]; next: string | null }).items;
+    const wideItems = (wide.body as { items: { zone: string }[]; nextCursor: string | null }).items;
     expect(wideItems).toHaveLength(50);
     expect(wideItems.some(item => item.zone === decoy)).toBe(false);
 
@@ -405,18 +409,19 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
       let cursor: string | null = null;
       for (let page = 0; page < 8; page += 1) {
         const path = cursor
-          ? `${listPath(empty.realm, a.outsider, 50)}&after=${encodeURIComponent(cursor)}`
+          ? `${listPath(empty.realm, a.outsider, 50)}&cursor=${encodeURIComponent(cursor)}`
           : listPath(empty.realm, a.outsider, 50);
         const response = await call('GET', path, undefined, home.reader.token);
         expect(response.status).toBe(200);
-        const body = await response.json() as { items: { zone: string }[]; next: string | null };
+        const body = await response.json() as { items: { zone: string }[]; nextCursor: string | null; complete: boolean };
         const zones = body.items.map(item => item.zone);
         expect(zones).toEqual([...zones].sort());
         if (cursor) expect(zones[0]! > cursor.slice(3)).toBe(true);
         seen.push(...zones);
-        if (!body.next) break;
+        expect(body.complete).toBe(body.nextCursor === null);
+        if (!body.nextCursor) break;
         expect(zones).toHaveLength(50);
-        cursor = body.next;
+        cursor = body.nextCursor;
         if (page === 7) throw new Error('attachment pages did not end');
       }
       return seen;
@@ -434,11 +439,11 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     expect(await pageAll()).toEqual(atCap);
 
     const opened = await listed(1);
-    const openedPage = opened.body as { next: string | null };
-    expect(openedPage.next).toMatch(/^v1:https:\/\/rezics\.com\/id\//);
+    const openedPage = opened.body as { nextCursor: string | null };
+    expect(openedPage.nextCursor).toMatch(/^v1:https:\/\/rezics\.com\/id\//);
     await stack.accessPool.query(`UPDATE access.permission_grant SET active = false
       WHERE scope_id = $1 AND recipient_subject = $2`, [`governance:realm:${realm.realm}`, a.steward]);
-    const lost = await call('GET', `${listPath(realm.realm, a.steward, 1)}&after=${encodeURIComponent(openedPage.next!)}`,
+    const lost = await call('GET', `${listPath(realm.realm, a.steward, 1)}&cursor=${encodeURIComponent(openedPage.nextCursor!)}`,
       undefined, home.author.token);
     expect(lost.status).toBe(404);
     expect(await lost.json()).toEqual(absent.body);

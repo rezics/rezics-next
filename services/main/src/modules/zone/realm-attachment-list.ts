@@ -40,8 +40,8 @@ export interface ZoneAttachmentRow {
 export async function listRealmZoneAttachments(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Partial<Pick<AccessAdmissionRegistry, 'assertAuthority'>>,
-  request: Request, input: { realm: string; actingSubject?: string; after?: string; limit: number }) {
-  if (input.after && !CURSOR.test(input.after)) {
+  request: Request, input: { realm: string; actingSubject?: string; cursor?: string; limit: number }) {
+  if (input.cursor && !CURSOR.test(input.cursor)) {
     throw new InvalidZoneConfiguration('Unsupported Zone attachment cursor; restart the listing');
   }
   if (!Number.isInteger(input.limit) || input.limit < 1 || input.limit > 50) {
@@ -58,7 +58,7 @@ export async function listRealmZoneAttachments(env: WorkActivationEnvironment,
   }
   if (!input.actingSubject) throw new RealmAttachmentListMissing('Realm is unavailable');
   const read: { query: string; budget: number; result?: SparqlResult } = {
-    query: attachmentPageQuery(input.realm, input.after, input.limit), budget: 64 * 1024 };
+    query: attachmentPageQuery(input.realm, input.cursor, input.limit), budget: 64 * 1024 };
   const held = await duringAttachmentPage(read, () => realmAttachHeld(access,
     realmAttachRequest(principal, input.actingSubject!, input.realm)));
   if (!held) throw new RealmAttachmentListMissing('Realm is unavailable');
@@ -70,14 +70,14 @@ export async function listRealmZoneAttachments(env: WorkActivationEnvironment,
   const names = spaces.length ? await env.addresses?.currents(spaces).catch(() => new Map()) : new Map();
   const items = selected.map(row => rowOf(row, names));
   const more = rows.length > input.limit;
-  return { realm: input.realm, items,
-    next: more && items.length ? `v1:${items.at(-1)!.zone}` : null,
+  const nextCursor = more && items.length ? `v1:${items.at(-1)!.zone}` : null;
+  return { realm: input.realm, items, nextCursor, complete: nextCursor === null,
     cost: { graphReads: ZONE_ATTACHMENT_LIST_COST.graphReads,
       sqlReads: ZONE_ATTACHMENT_LIST_COST.sqlReads, rows: rows.length } };
 }
 
-function attachmentPageQuery(realm: string, after: string | undefined, limit: number): string {
-  const cursor = after ? `FILTER(STR(?zone) > ${lit(after.slice(3))})` : '';
+function attachmentPageQuery(realm: string, cursor: string | undefined, limit: number): string {
+  const seek = cursor ? `FILTER(STR(?zone) > ${lit(cursor.slice(3))})` : '';
   return `PREFIX rv: <${RV}>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     SELECT ?open ?zone ?space ?name ?language ?attachedAt WHERE {
@@ -92,7 +92,7 @@ function attachmentPageQuery(realm: string, after: string | undefined, limit: nu
             GRAPH ${iri(GRAPHS.current)} {
               ?zone rv:defaultRealm ${iri(realm)} .
               ?zone a rv:Zone ; rv:realmAttachment ?link ; rv:space ?holder .
-              ${cursor}
+              ${seek}
             }
           }
           ORDER BY STR(?zone)

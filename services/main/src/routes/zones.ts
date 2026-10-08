@@ -163,7 +163,8 @@ const zoneAttachment = t.Object({ zone: ref, name: t.Nullable(t.String()), langu
   withdraw: t.Object({ method: t.Literal('POST'),
     path: t.String({ pattern: '^/v1/zones/[0-9a-f-]{36}/realm-attachment-withdrawals$' }) },
   { additionalProperties: false }) }, { additionalProperties: false });
-const zoneAttachmentPage = t.Object({ realm: ref, items: t.Array(zoneAttachment), next: t.Nullable(t.String()),
+const zoneAttachmentPage = t.Object({ realm: ref, items: t.Array(zoneAttachment),
+  nextCursor: t.Nullable(t.String()), complete: t.Boolean(),
   cost: t.Object({ graphReads: t.Integer(), sqlReads: t.Integer(), rows: t.Integer() }) });
 const execution = t.Union([
   t.Object({ state: t.Literal('fallback'), reason: t.Union([
@@ -683,7 +684,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     })
     .get('/v1/realms/:realm/zone-attachments', { params: t.Object({ realm: groupUuid }),
       query: t.Object({ actingSubject: t.Optional(ref),
-        after: t.Optional(t.String({ maxLength: 128 })),
+        cursor: t.Optional(t.String({ maxLength: 128 })),
         limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })) }, { additionalProperties: false }),
       response: { 200: zoneAttachmentPage, ...errors } },
     async ({ request, params, query }) => {
@@ -691,7 +692,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         return Response.json(await listRealmZoneAttachments(work.environment, work.account, work.access,
           request, { realm: `https://rezics.com/id/${params.realm}`,
             ...(query.actingSubject ? { actingSubject: query.actingSubject } : {}),
-            ...(query.after ? { after: query.after } : {}),
+            ...(query.cursor ? { cursor: query.cursor } : {}),
             limit: query.limit ?? ZONE_ATTACHMENT_LIST_COST.pageSize }),
         { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) {

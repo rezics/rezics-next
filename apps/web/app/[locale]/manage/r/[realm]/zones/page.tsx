@@ -35,5 +35,5 @@ export default async function RealmZonesPage({ params }: { params: Promise<{ rea
       : null,
   }));
   return <ZoneAttachments realm={realm} actingSubject={actingSubject} locale={locale} messages={messages}
-    items={items} next={page.data.next} />;
+    items={items} nextCursor={page.data.nextCursor} />;
 }
