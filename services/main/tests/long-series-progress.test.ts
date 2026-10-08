@@ -249,6 +249,24 @@ test('search plus Mine resumes its pending window before advancing search pages'
   expect(second.items.map(row => row.occurrence)).toEqual([f.episodes[1]!.occurrence]);
   expect(searches).toEqual(['Episode', 'Episode']);
   expect(windows).toEqual([undefined, key, key]);
+  expect(first.items.every(row => !Object.hasOwn(row, 'ordinal'))).toBe(true);
+  expect(second.items.every(row => !Object.hasOwn(row, 'ordinal'))).toBe(true);
+});
+
+test('owner Mine omits ordinals while a public page of the same order keeps them', async () => {
+  const f = await fixture();
+  Object.assign(f.session.deps, { access: { canReadAsBaselineMember: async () => true } });
+  const traversal = f.traversal();
+  const mine = new ReadingBoundary(f.session, 'mine');
+  mine.traversalFor = () => traversal;
+  const privatePage = await mine.chooser(f.work, 1);
+  expect(privatePage.items.map(row => row.occurrence)).toEqual([f.episodes[0]!.occurrence]);
+  expect(privatePage.items.every(row => !Object.hasOwn(row, 'ordinal'))).toBe(true);
+  const opened = new ReadingBoundary(f.session, 'start');
+  opened.traversalFor = () => traversal;
+  const publicPage = await opened.chooser(f.work, 1);
+  const openedItem = publicPage.items[0]!;
+  expect('ordinal' in openedItem && openedItem.ordinal).toBe(1);
 });
 
 test('a visible last sibling never returns a physical ordinal over 999 hidden items', async () => {
