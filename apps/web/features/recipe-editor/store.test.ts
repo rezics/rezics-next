@@ -77,26 +77,36 @@ test('a record\'s second edit while one is in flight takes the newest slot and t
   expect(texts(fake.calls)).toEqual(['2 cups butter', '4 cups butter']);
 });
 
-test('different records write independently: none waits for another and nothing drains a backlog', async () => {
+test('one Composition write is in flight, and each other record keeps only its newest slot', async () => {
   const { fake, store } = open();
   const hold = gate();
-  // The section rename is held in flight; the timings are not.
   fake.interference.gates = { changes: hold.held };
   const rename = store.submit({ kind: 'renameSection', occurrence: id(11), label: 'Batter', language: 'en' });
   const prep = store.submit({ kind: 'timings', times: { preparation: 15 } });
   const cook = store.submit({ kind: 'timings', times: { cooking: 25 } });
-  expect(await Promise.all([prep, cook])).toEqual([{ kind: 'saved' }, { kind: 'saved' }]);
-  // Both timings were written while the rename was still in flight, each by its own lane. They race for one
-  // head, so the loser of the race is written again (a third call), but never anything else.
+  // A later preparation replaces that record's slot. It does not wait behind the first preparation.
+  const prepAgain = store.submit({ kind: 'timings', times: { preparation: 18 } });
+  // While the rename is in flight, no other Composition write has started.
   expect(fake.calls.filter(call => call.name === 'changes')).toHaveLength(1);
-  expect(fake.calls.filter(call => call.name === 'timings').length).toBeGreaterThanOrEqual(2);
-  expect(fake.calls.filter(call => call.name === 'timings').length).toBeLessThanOrEqual(3);
+  expect(fake.calls.filter(call => call.name === 'timings')).toHaveLength(0);
   expect(store.snapshot().busy).toBe(true);
   hold.release();
-  expect(await rename).toEqual({ kind: 'saved' });
+  expect(await Promise.all([rename, prep, prepAgain, cook])).toEqual([
+    { kind: 'saved' }, { kind: 'saved' }, { kind: 'saved' }, { kind: 'saved' }]);
+  const timings = fake.calls.filter(call => call.name === 'timings');
+  // The rename settled at the next head. Each timing is written once, at the head the previous write
+  // confirmed, and only the newest preparation is sent. Nothing is refused and sent again.
+  expect(timings).toHaveLength(2);
+  expect(timings.map(call => (call.body as { expectedHead: string }).expectedHead)).toEqual([id(1000), id(1001)]);
+  expect(timings.map(call => call.body)).toMatchObject([
+    { preparation: { value: { numerator: 18, denominator: 1 } } },
+    { cooking: { value: { numerator: 25, denominator: 1 } } },
+  ]);
+  expect(fake.calls.filter(call => call.name === 'changes')).toHaveLength(1);
   expect(store.snapshot().busy).toBe(false);
   const state = store.snapshot().state;
   expect(state.measures.map(item => item.kind)).toEqual(expect.arrayContaining(['preparation-duration', 'cooking-duration']));
+  expect(state.measures.find(item => item.kind === 'preparation-duration')?.value).toEqual({ numerator: 18, denominator: 1 });
   expect(state.nodes.find(node => node.occurrence === id(11))).toMatchObject({ label: { value: 'Batter' } });
 });
 

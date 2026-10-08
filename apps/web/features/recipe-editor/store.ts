@@ -4,13 +4,14 @@ import { type Answer, createRecipe, readRecipe, writePlan } from './api.ts';
 import { applyPlan, type Intent, plan, type Plan, type Reason } from './intents.ts';
 import type { RecipeState } from './model.ts';
 
-// The recipe's write path, with the rules every reader-side store in the app follows. Each record
-// (a line, a step, a section's name, the yield, one timing) has at most one write in flight and at most
-// one pending slot that every newer edit of that record overwrites. A refused write (409, the head
-// moved) reads Main again and works out only the record's newest intent over what is there now: the
-// pending one if there is one, never the stale original. Different records write independently,
-// so nothing is queued across them and nothing drains a backlog; an add, move or removal is a record
-// of its own. Nothing is kept in the browser.
+// The recipe's write path, with the rules every reader-side store in the app follows. One Composition
+// write is in flight for the whole recipe. Each record (a line, a step, a section's name, the yield,
+// one timing) keeps a single newest-intent slot: a later edit of that record replaces the slot, and
+// nothing queues a backlog of stale intents. When the write in flight settles, the next slot is
+// written against the head it confirmed, so edits from this tab do not refuse each other. A refusal
+// because the head moved (another tab) reads Main again and writes only that record's newest intent.
+// An add, move or removal is a record of its own. A read applies only when no later write has
+// confirmed since the read started. Nothing is kept in the browser.
 
 export type Refusal =
   | { kind: 'sign-in' } | { kind: 'denied' } | { kind: 'unavailable' } | { kind: 'pending' }
@@ -22,7 +23,7 @@ export type Outcome = { kind: 'saved' } | { kind: 'unchanged' } | { kind: 'refus
 
 export interface Snapshot {
   state: RecipeState;
-  /** True while a write is on its way to Main. */
+  /** True while a write is on its way to Main, or a slot is waiting for that write. */
   busy: boolean;
   /** What the last write ran into, until the next one starts. */
   failure: { intent: Intent; refusal: Refusal } | null;
@@ -43,7 +44,7 @@ export interface RecipeStore {
 
 /**
  * The record an edit sets. A second edit of the same record overwrites the one waiting; adds, removals
- * and moves are not edits of a record and have no key, so each is a lane of its own.
+ * and moves are not edits of a record and have no key, so each is a slot of its own.
  */
 function keyOf(intent: Intent): string | null {
   switch (intent.kind) {
@@ -76,20 +77,27 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   let snapshot: Snapshot = { state, busy: false, failure: null };
   let disposed = false;
   type Resolver = (outcome: Outcome) => void;
-  type Entry = { intent: Intent; id: string; command: CommandInstance; flight: Flight | null; resolvers: Resolver[] };
-  /** One record's write: the one in flight, and the newest edit waiting behind it. */
-  type Lane = { current: Entry; pending: Entry | null };
-  const lanes = new Map<string, Lane>();
+  type Entry = { key: string; intent: Intent; id: string; command: CommandInstance; flight: Flight | null; resolvers: Resolver[] };
+  /**
+   * One newest intent per record, in the order the records first became pending. Replacing a slot
+   * keeps its place. The record in flight is not in this map; its newer edit is.
+   */
+  const slots = new Map<string, Entry>();
   const listeners = new Set<() => void>();
   let idlers: (() => void)[] = [];
   let refreshes = 0;
   /** Successful writes. A read applies only when this is still the value it started with. */
   let confirmed = 0;
   let round = 0;
+  /** Entries whose callers have not been answered, including one whose body is still being read back. */
+  let active = 0;
+  let draining = false;
+  const outstanding = () => active > 0 || slots.size > 0;
   const notify = () => {
-    snapshot = { state, busy: lanes.size > 0, failure: failure ? { intent: failure.intent, refusal: failure.refusal } : null };
+    snapshot = { state, busy: outstanding(), failure: failure ? { intent: failure.intent, refusal: failure.refusal } : null };
     for (const listener of listeners) listener();
   };
+  const wake = () => { if (!outstanding()) for (const resolve of idlers.splice(0)) resolve(); };
 
   /**
    * Reads Main again. The latest read started wins over an older one. A read may replace what is
@@ -112,102 +120,140 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
     return false;
   }
 
-  /** The record's newest intent: what waits in its slot replaces the one that conflicted, and its callers wait for it. */
-  function newest(lane: Lane) {
-    if (!lane.pending) return;
-    lane.current = { ...lane.pending, resolvers: [...lane.current.resolvers, ...lane.pending.resolvers] };
-    lane.pending = null;
-  }
-
   const open = (answer: Extract<Answer<unknown>, { ok: false }>) => answer.problem === 'unavailable' || answer.problem === 'pending';
 
   /** The idempotency key is the command's, from the cook's action until success or a definitive refusal. */
-  function dispatch(lane: Lane, flight: Flight) {
+  function dispatch(entry: Entry, flight: Flight) {
     const commandRound: WriteRound = {
-      seq: ++round, key: lane.current.command.id(), afterConfirmed: false,
-      superseded: () => lane.pending !== null, confirm() {},
+      seq: ++round, key: entry.command.id(), afterConfirmed: false,
+      superseded: () => slots.has(entry.key), confirm() {},
     };
     return writePlan(main(), { structure: state.structure!, head: flight.head, actingSubject, plan: flight.plan,
       key: commandRound.key });
   }
 
+  type Phase = { kind: 'done'; outcome: Outcome } | { kind: 'refresh-body'; requireRead: boolean } | { kind: 'conflict' };
+
   /**
-   * Applies a committed command. An insertion whose replay names no occurrences cannot be placed
-   * locally, so the recipe is read again. A failed read of that replay stays unresolved.
+   * Sends the entry once. A confirmed write whose occurrences cannot be placed locally does not hold
+   * the gate across the read that follows: the head is already known, and the next slot writes against it.
    */
-  async function adopt(flight: Flight, data: { revision: string; occurrences?: string[] }): Promise<boolean> {
-    // Confirmed before the read that places an insertion, so that read cannot outrun a newer write.
-    confirmed += 1;
-    const created = data.occurrences ?? [];
-    const inserts = flight.plan.kind === 'changes' ? flight.plan.operations.filter(operation => operation.op === 'insert').length : 0;
-    if (inserts > created.length || state.head !== flight.head) {
-      const read = await refresh();
-      return inserts > created.length ? read : true;
-    }
-    state = applyPlan(state, flight.plan, data.revision, created);
-    return true;
-  }
-
-  /** The lane's intent to completion. An unresolved command is resolved with its original key before anything is replanned. */
-  async function write(lane: Lane): Promise<Outcome> {
-    // Records race for one head, so a write may lose to another record's more than once.
-    for (let attempt = 0; attempt < 4; attempt++) {
-      if (disposed) return { kind: 'busy' };
-      const entry = lane.current;
-      if (!entry.flight) {
-        if (!state.structure || !state.head) {
-          const created = await createRecipe(main(), { work, mainVersion, actingSubject });
-          if (!created.ok) return { kind: 'refused', refusal: refusalOf(created) };
-          // The Composition may already hold edits from another tab or record: read it rather than assume it is empty.
-          if (!state.structure) {
-            state = { ...state, structure: created.data.structure, head: created.data.revision };
-            confirmed += 1;
-          }
-          await refresh();
+  async function postOnce(entry: Entry): Promise<Phase> {
+    if (!entry.flight) {
+      if (!state.structure || !state.head) {
+        const created = await createRecipe(main(), { work, mainVersion, actingSubject });
+        if (!created.ok) return { kind: 'done', outcome: { kind: 'refused', refusal: refusalOf(created) } };
+        // The Composition may already hold edits from another tab: read it rather than assume it is empty.
+        if (!state.structure) {
+          state = { ...state, structure: created.data.structure, head: created.data.revision };
+          confirmed += 1;
         }
-        const planned: Plan = plan(state, entry.intent);
-        if (planned.kind === 'moot') return { kind: 'unchanged' };
-        if (planned.kind === 'invalid') return { kind: 'refused', refusal: { kind: planned.reason } };
-        entry.flight = { plan: planned, head: state.head! };
+        await refresh();
       }
-      const flight = entry.flight;
-      const answer = await dispatch(lane, flight);
-      if (answer.ok) {
-        if (!await adopt(flight, answer.data)) return { kind: 'refused', refusal: { kind: 'unavailable' } };
-        entry.command.finish({ ok: true });
-        entry.flight = null;
-        return { kind: 'saved' };
-      }
-      // A lost or still-pending response keeps this command. Retry sends it again before planning a new one.
-      if (open(answer)) return { kind: 'refused', refusal: refusalOf(answer) };
-      entry.command.finish({ ok: false, failure: answer.problem });
-      entry.flight = null;
-      if (answer.status !== 409) return { kind: 'refused', refusal: refusalOf(answer) };
-      if (!await refresh()) return { kind: 'refused', refusal: { kind: 'unavailable' } };
-      newest(lane);
+      const planned: Plan = plan(state, entry.intent);
+      if (planned.kind === 'moot') return { kind: 'done', outcome: { kind: 'unchanged' } };
+      if (planned.kind === 'invalid') return { kind: 'done', outcome: { kind: 'refused', refusal: { kind: planned.reason } } };
+      entry.flight = { plan: planned, head: state.head! };
     }
-    return { kind: 'refused', refusal: { kind: 'moved', detail: null } };
+    const flight = entry.flight;
+    const answer = await dispatch(entry, flight);
+    if (answer.ok) {
+      confirmed += 1;
+      const created = answer.data.occurrences ?? [];
+      const inserts = flight.plan.kind === 'changes' ? flight.plan.operations.filter(operation => operation.op === 'insert').length : 0;
+      if (inserts > created.length || state.head !== flight.head) {
+        // Do not move the local head backwards if a newer confirmed write already advanced it.
+        if (state.head === flight.head) state = { ...state, head: answer.data.revision };
+        return { kind: 'refresh-body', requireRead: inserts > created.length };
+      }
+      state = applyPlan(state, flight.plan, answer.data.revision, created);
+      entry.command.finish({ ok: true });
+      entry.flight = null;
+      return { kind: 'done', outcome: { kind: 'saved' } };
+    }
+    // A lost or still-pending response keeps this command. Retry sends it again before planning a new one.
+    if (open(answer)) return { kind: 'done', outcome: { kind: 'refused', refusal: refusalOf(answer) } };
+    entry.command.finish({ ok: false, failure: answer.problem });
+    entry.flight = null;
+    if (answer.status !== 409) return { kind: 'done', outcome: { kind: 'refused', refusal: refusalOf(answer) } };
+    return { kind: 'conflict' };
   }
 
-  async function run(key: string, lane: Lane) {
-    notify();
-    while (!disposed) {
-      let outcome: Outcome;
-      try { outcome = await write(lane); }
-      catch { outcome = { kind: 'refused', refusal: { kind: 'unavailable' } }; }
-      const done = lane.current;
-      if (outcome.kind === 'refused') failure = { intent: done.intent, refusal: outcome.refusal, id: done.id, key,
-        command: done.command, flight: done.flight };
-      else if (failure?.key === key) failure = null;
-      notify();
-      for (const resolve of done.resolvers) resolve(outcome);
-      if (!lane.pending) break;
-      lane.current = lane.pending;
-      lane.pending = null;
+  /** The record's newest intent replaces the one that conflicted, and its callers wait for the outcome. */
+  function adoptNewest(entry: Entry) {
+    const newer = slots.get(entry.key);
+    if (!newer) return;
+    slots.delete(entry.key);
+    entry.intent = newer.intent;
+    entry.id = newer.id;
+    entry.command = newer.command;
+    entry.flight = newer.flight;
+    entry.resolvers.push(...newer.resolvers);
+  }
+
+  /**
+   * One record to its outcome. A 409 reads again and sends only the newest intent, still ahead of every
+   * other record. A confirmed write that must read the body back lets the next slot post during that read.
+   */
+  async function settle(entry: Entry, openNext: () => void): Promise<Outcome> {
+    try {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        if (disposed) return { kind: 'busy' };
+        const phase = await postOnce(entry);
+        if (phase.kind === 'done') return phase.outcome;
+        if (phase.kind === 'refresh-body') {
+          openNext();
+          const read = await refresh();
+          // A replay that names no occurrences stays unresolved when the read fails, so retry sends it again.
+          if (phase.requireRead && !read) return { kind: 'refused', refusal: { kind: 'unavailable' } };
+          entry.command.finish({ ok: true });
+          entry.flight = null;
+          return { kind: 'saved' };
+        }
+        if (!await refresh()) return { kind: 'refused', refusal: { kind: 'unavailable' } };
+        adoptNewest(entry);
+      }
+      return { kind: 'refused', refusal: { kind: 'moved', detail: null } };
+    } catch { return { kind: 'refused', refusal: { kind: 'unavailable' } }; }
+  }
+
+  function take(): Entry | undefined {
+    const key = slots.keys().next().value;
+    if (key === undefined) return undefined;
+    const entry = slots.get(key);
+    slots.delete(key);
+    return entry;
+  }
+
+  async function drain() {
+    if (draining) return;
+    draining = true;
+    try {
+      while (!disposed) {
+        const entry = take();
+        if (!entry) break;
+        active += 1;
+        notify();
+        let opened = false;
+        let release: () => void = () => {};
+        const gate = new Promise<void>(resolve => { release = () => { if (!opened) { opened = true; resolve(); } }; });
+        void settle(entry, release).then(outcome => {
+          active -= 1;
+          if (outcome.kind === 'refused') failure = { intent: entry.intent, refusal: outcome.refusal, id: entry.id,
+            key: entry.key, command: entry.command, flight: entry.flight };
+          else if (failure?.key === entry.key) failure = null;
+          release();
+          notify();
+          const waiting = [...entry.resolvers];
+          for (const resolve of waiting) resolve(outcome);
+          wake();
+        });
+        await gate;
+      }
+    } finally {
+      draining = false;
+      if (!disposed && slots.size > 0) void drain();
     }
-    lanes.delete(key);
-    notify();
-    if (lanes.size === 0) for (const resolve of idlers.splice(0)) resolve();
   }
 
   function submit(intent: Intent, carried?: { id: string; command: CommandInstance; flight: Flight | null }): Promise<Outcome> {
@@ -217,15 +263,10 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
     const flight = carried?.flight ?? null;
     const key = keyOf(intent) ?? `once:${id}`;
     return new Promise<Outcome>(resolve => {
-      const lane = lanes.get(key);
-      // The record is being written: this edit takes the newest slot, and whoever waited there waits for it.
-      if (lane) {
-        lane.pending = { intent, id, command, flight, resolvers: [...(lane.pending?.resolvers ?? []), resolve] };
-        return;
-      }
-      const fresh: Lane = { current: { intent, id, command, flight, resolvers: [resolve] }, pending: null };
-      lanes.set(key, fresh);
-      void run(key, fresh);
+      const waiting = slots.get(key);
+      // A second edit of a record that is waiting, or in flight, replaces that one slot and keeps its callers.
+      slots.set(key, { key, intent, id, command, flight, resolvers: [...(waiting?.resolvers ?? []), resolve] });
+      void drain();
     });
   }
 
@@ -233,7 +274,7 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
     snapshot: () => snapshot,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     submit: intent => submit(intent),
-    whenIdle: () => lanes.size > 0 ? new Promise<void>(resolve => { idlers.push(resolve); }) : Promise.resolve(),
+    whenIdle: () => outstanding() ? new Promise<void>(resolve => { idlers.push(resolve); }) : Promise.resolve(),
     retry() {
       if (!failure) return Promise.resolve<Outcome>({ kind: 'unchanged' });
       return submit(failure.intent, { id: failure.id, command: failure.command, flight: failure.flight });
