@@ -1,1 +1,2 @@
-export const receiptFamilies = { 'zone.edit': 'structure-command' } as const;
+export const receiptFamilies = { 'zone.edit': 'structure-command',
+  'realm.attach': 'structure-command' } as const;

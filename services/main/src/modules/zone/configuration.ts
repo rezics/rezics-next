@@ -29,6 +29,7 @@ import { checkZoneSitePublishSelection, type ZoneSitePublishSelection } from './
 import { readZoneThemeExecution, type ZoneThemeSelection } from '../presentation/zone-theme.ts';
 import { zoneDocumentShowcase, zonePagePresentation, resolveZonePageDocument } from '../presentation/zone-document.ts';
 import { WorkReadLimit } from '../work/read-session.ts';
+import { realmAttachHeld, realmAttachRequest, ZoneRealmAttachmentDenied } from './realm-attachment.ts';
 
 export class ZoneUnavailable extends Error {}
 export class ZoneStale extends Error {}
@@ -40,6 +41,8 @@ interface ZoneHead {
   state: 'active' | 'retired'; disclosure: 'public' | 'private';
   spaceVisibility: 'public' | 'private'; listing: ResourceListing;
   defaultRealm?: string; presentation?: string; official?: Record<string, never>;
+  /** The steward behind a live cross-Space attachment; absent for a same-Space Realm. */
+  attachment?: { by: string; realm: string };
   defaultContext?: { context: string; semanticRevision: string };
   publicationRevision: string | null;
   documentSite: boolean;
@@ -47,7 +50,7 @@ interface ZoneHead {
 
 async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<ZoneHead> {
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?navigation ?head
-    ?manifest ?state ?disclosure ?realm ?presentation ?context ?contextRevision ?official ?spaceDisclosure ?listing ?publication ?spaceProfile WHERE {
+    ?manifest ?state ?disclosure ?realm ?presentation ?context ?contextRevision ?official ?spaceDisclosure ?listing ?publication ?spaceProfile ?attachedBy WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(zone)} a rv:Zone ; rv:space ?space ;
         rv:navigation ?navigation ; rv:zoneHead ?head ; rv:zoneState ?state ;
         rv:disclosure ?disclosure .
@@ -55,6 +58,7 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
         OPTIONAL { ?space rv:listing ?listing }
         OPTIONAL { ?space rv:definitionProfile ?spaceProfile }
         OPTIONAL { ${iri(zone)} rv:defaultRealm ?realm }
+        OPTIONAL { ${iri(zone)} rv:realmAttachedBy ?attachedBy }
         OPTIONAL { ${iri(zone)} rv:presentation ?presentation }
         OPTIONAL { ${iri(zone)} rv:official ?official }
         OPTIONAL { ${iri(zone)} rv:sitePublicationHead ?publication }
@@ -87,6 +91,8 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
     spaceVisibility: row.spaceDisclosure.value === `${RV}Public` ? 'public' : 'private',
     listing: (row.listing?.value ?? 'listed') as ResourceListing,
     ...(row.realm?.value ? { defaultRealm: row.realm.value } : {}),
+    ...(row.realm?.value && row.attachedBy?.value
+      ? { attachment: { by: row.attachedBy.value, realm: row.realm.value } } : {}),
     ...(row.context?.value && row.contextRevision?.value ? { defaultContext: {
       context: row.context.value, semanticRevision: row.contextRevision.value } } : {}),
     ...(row.presentation?.value ? { presentation: row.presentation.value } : {}),
@@ -120,8 +126,18 @@ export async function readZoneConfiguration(env: WorkActivationEnvironment, zone
   if (advancedBase64 && config.advanced !== `sha256:${hash(Buffer.from(advancedBase64, 'base64'))}`) {
     throw new ZoneUnavailable('Zone advanced configuration digest differs');
   }
-  return { ...head, ...name, configuration: config, ...(advancedBase64 ? { advancedBase64 } : {}),
-    cost: { graphReads: 1, objectReads: 2 } };
+  return { ...head, ...name, configuration: withoutWithdrawnRealm(config, head),
+    ...(advancedBase64 ? { advancedBase64 } : {}), cost: { graphReads: 1, objectReads: 2 } };
+}
+
+/** Stored configuration is immutable, but the graph head owns the live link: a
+ * steward's withdrawal removes it, and every reader then drops the Realm the
+ * configuration still names. */
+function withoutWithdrawnRealm<T extends { defaultRealm?: string }>(config: T,
+  head: Pick<ZoneHead, 'defaultRealm'>): T {
+  if (!config.defaultRealm || head.defaultRealm) return config;
+  const { defaultRealm: _withdrawn, ...rest } = config;
+  return rest as T;
 }
 
 /** Read an immutable presentation cut; current heads supply identity and live
@@ -143,7 +159,25 @@ export async function readZoneRevisionConfiguration(env: WorkActivationEnvironme
     || configuration.navigation !== current.navigation || configuration.state !== 'active') {
     throw new ZoneUnavailable('Published Zone configuration differs from its owner');
   }
-  return { configuration, ...readZoneName(stored.name, stored.language) };
+  return { configuration: await publishedRealmConfiguration(env, current, configuration),
+    ...readZoneName(stored.name, stored.language) };
+}
+
+/** A published cut keeps its Realm only while that Realm is still linked: the
+ * live default, or one in the Zone's own Space. A cross-Space Realm attached
+ * earlier and since withdrawn or replaced never reappears through a publish.
+ * Cost: at most one extra exact graph ASK. */
+async function publishedRealmConfiguration(env: WorkActivationEnvironment,
+  current: Pick<ZoneHead, 'zone' | 'space' | 'defaultRealm'>,
+  configuration: ZoneConfiguration): Promise<ZoneConfiguration> {
+  const realm = configuration.defaultRealm;
+  if (!realm || realm === current.defaultRealm) return configuration;
+  if ((await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} rv:space ${iri(current.space)} } }`, 1024)).boolean === true) {
+    return configuration;
+  }
+  const { defaultRealm: _unlinked, ...rest } = configuration;
+  return rest;
 }
 
 export interface ZoneRevisionInput {
@@ -278,7 +312,8 @@ async function rejectCancelledSitePins(env: WorkActivationEnvironment, content: 
 export async function changeZoneConfiguration(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
-    & Partial<Pick<AccessAdmissionRegistry, 'canMarkOfficialZone' | 'activePrincipalId' | 'withOwnerAuthority'>>,
+    & Partial<Pick<AccessAdmissionRegistry, 'canMarkOfficialZone' | 'activePrincipalId' | 'withOwnerAuthority'
+      | 'assertAuthority'>>,
   request: Request, input: ZoneRevisionInput, media?: Pick<MediaDependencies, 'store' | 'objects'>,
   content?: ContentCore) {
   if (input.operation === 'publish') {
@@ -458,10 +493,26 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
       if (error instanceof InvalidZoneConfiguration) return invalid(error);
       throw error;
     }
+    // A Realm in another Space is linked only by an attachment this edit makes,
+    // under the Realm steward's own authority. Every refusal reads alike, so a
+    // missing, invisible or someone else's Realm cannot be told apart.
+    let attach: { realm: string } | undefined;
+    const realmPatched = input.operation !== 'publish' && patch?.defaultRealm !== undefined;
     if (config.defaultRealm && input.operation !== 'publish') {
-      const realm = await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
-        ${iri(config.defaultRealm)} a rv:Realm ; rv:space ${iri(head.space)} ; rv:realmState rv:Active . } }`);
-      if (realm.boolean !== true) return invalid(new InvalidZoneConfiguration('default Realm is unavailable'));
+      const unavailable = () => invalid(new InvalidZoneConfiguration('default Realm is unavailable'));
+      const realm = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space WHERE { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(config.defaultRealm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active . } } LIMIT 2`,
+      4096)).results?.bindings ?? [];
+      if (realm.length !== 1 || !realm[0]?.space?.value) return unavailable();
+      if (realm[0].space.value !== head.space) {
+        const kept = head.attachment?.realm === config.defaultRealm
+          && (!realmPatched || patch?.defaultRealm === head.attachment.realm);
+        if (!kept) {
+          if (!realmPatched || !await realmAttachHeld(access, realmAttachRequest(principal, input.actingSubject,
+            config.defaultRealm))) return unavailable();
+          attach = { realm: config.defaultRealm };
+        }
+      }
     }
     if (config.defaultContext && input.operation !== 'publish') {
       const selected = config.defaultContext;
@@ -523,6 +574,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.zone)} rv:zoneHead ${iri(input.expectedHead)} ;
           rv:zoneState ?oldState ; rv:defaultRealm ?oldRealm ; rv:official ?oldOfficial ;
+          ${realmPatched ? 'rv:realmAttachedBy ?oldAttachedBy ; rv:realmAttachment ?oldAttachment ;' : ''}
           rv:presentation ?oldPresentation ;
           rv:defaultContext ?oldContext ; rv:defaultContextRevision ?oldContextRevision .
           ${publication ? `${iri(input.zone)} rv:sitePublicationHead ?oldPublication .` : ''}
@@ -534,6 +586,8 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           ${publication ? `${iri(input.zone)} rv:sitePublicationHead ${iri(revision)} .` : ''}
           ${promotePublicName && name.name !== null ? `${iri(input.zone)} <http://www.w3.org/2000/01/rdf-schema#label> ${lit(name.name)}@${name.language} .` : ''}
           ${config.defaultRealm ? `${iri(input.zone)} rv:defaultRealm ${iri(config.defaultRealm)} .` : ''}
+          ${attach ? `${iri(input.zone)} rv:realmAttachedBy ${iri(input.actingSubject)} ;
+            rv:realmAttachment ${iri(receipt)} .` : ''}
           ${config.official ? `${iri(input.zone)} rv:official true .` : ''}
           ${config.defaultContext ? `${iri(input.zone)} rv:defaultContext ${iri(config.defaultContext.context)} ;
             rv:defaultContextRevision ${iri(config.defaultContext.semanticRevision)} .` : ''}
@@ -565,6 +619,8 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.zone)} rv:zoneHead ${iri(input.expectedHead)} ;
           rv:zoneState ?oldState .
           OPTIONAL { ${iri(input.zone)} rv:defaultRealm ?oldRealm }
+          ${realmPatched ? `OPTIONAL { ${iri(input.zone)} rv:realmAttachedBy ?oldAttachedBy }
+            OPTIONAL { ${iri(input.zone)} rv:realmAttachment ?oldAttachment }` : ''}
           OPTIONAL { ${iri(input.zone)} rv:official ?oldOfficial }
           OPTIONAL { ${iri(input.zone)} rv:presentation ?oldPresentation }
           OPTIONAL { ${iri(input.zone)} rv:defaultContext ?oldContext }
@@ -592,8 +648,21 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
         graphs: [GRAPHS.current, GRAPHS.revisions] },
     ]);
     try {
-      const dispatch = () => validatedCommand(env, { receipt, digest, update, validations,
+      const commit = () => validatedCommand(env, { receipt, digest, update, validations,
         deadlineMs: 10_000 }, admission);
+      // The Realm steward's grant is held through the graph switch, so a
+      // withdrawal between the check and the commit cannot slip an attachment in.
+      let attachJudged = false;
+      const dispatch = !attach ? commit : async () => {
+        if (!access.withOwnerAuthority) throw new ZoneRealmAttachmentDenied('Realm attachment authority is unavailable');
+        try {
+          return await access.withOwnerAuthority(realmAttachRequest(principal, input.actingSubject, attach!.realm),
+            () => { attachJudged = true; return commit(); });
+        } catch (error) {
+          if (error instanceof AdmissionDenied && !attachJudged) throw new ZoneRealmAttachmentDenied('default Realm is unavailable');
+          throw error;
+        }
+      };
       if (publication) {
         if (!access.withOwnerAuthority) throw new ZonePublicationUnavailable('Zone authority is unavailable');
         // Pinning and the graph switch are separate owner effects. Recheck and
@@ -609,6 +678,11 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
         throw error;
       }
       if (error instanceof ZonePublicationUnavailable) throw error;
+      if (error instanceof ZoneRealmAttachmentDenied) {
+        const cancelled = await sealStructureAdmissionCancellation(env, admission);
+        await access.recordGraphOutcome(admission.id, cancelled);
+        throw new InvalidZoneConfiguration('default Realm is unavailable');
+      }
       // The receipt resolves an ambiguous graph response.
     }
     if (!await readCompositionReceipt(env, admission.id, admission.action)) {

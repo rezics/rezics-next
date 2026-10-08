@@ -50,7 +50,43 @@ function ownerCreation(kind: string, action: 'zone.edit' | 'collection.edit',
     } };
 }
 
+/** A steward's withdrawal of a cross-Space attachment, or its cancellation. The
+ * zone and realm come from the succeeded receipt itself, never from a client. */
+export const realmAttachmentEventId = (receipt: string) => `urn:rezics:event:${hash(`${receipt}\0realm-attachment`)}`;
+const realmAttachment: OwnerOutboxEventHandler = {
+  kind: `${RV}ZoneRealmAttachmentEvent`, action: 'realm.attach', type: 'com.rezics.zone.realm-attachment.v1',
+  read: async ({ fuseki, batch, eventId, value, ordinal }) => {
+    const receipt = value('receipt');
+    const digest = value('digest');
+    const outcome = value('outcome');
+    if (!receipt || !digest || ![`${RV}Succeeded`, `${RV}Cancelled`].includes(outcome ?? '')
+      || batch.batchId !== `urn:rezics:outbox:${hash(receipt)}` || eventId !== realmAttachmentEventId(receipt)
+      || ordinal !== 0 || batch.eventIds.length !== 1) {
+      throw new Error('Realm attachment event differs from its source position');
+    }
+    let proof: { zone: string; realm: string } | undefined;
+    if (outcome === `${RV}Succeeded`) {
+      const rows = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?zone ?realm WHERE {
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:requestDigest ${lit(digest)} ;
+          rv:outcome rv:Succeeded ; rv:structureOwner ?zone ; rv:realm ?realm ;
+          rv:dataEpoch ${lit(batch.dataEpoch)} ; rv:sequence ${batch.sequence} . } } LIMIT 2`)).results?.bindings ?? [];
+      if (rows.length !== 1 || !rows[0]?.zone || !rows[0].realm) {
+        throw new Error('Realm attachment event has no unique terminal graph proof');
+      }
+      proof = { zone: iri(rows[0].zone.value).slice(1, -1), realm: iri(rows[0].realm.value).slice(1, -1) };
+    }
+    return { specversion: '1.0', id: eventId, source: 'https://rezics.com/services/main',
+      type: 'com.rezics.zone.realm-attachment.v1', datacontenttype: 'application/json', data: {
+        batchId: batch.batchId, routingEpoch: batch.routingEpoch, ordinal,
+        sourcePosition: { datasetId: 'product', dataEpoch: batch.dataEpoch, sequence: batch.sequence },
+        receipt: { id: receipt, action: 'realm.attach', outcome: outcome === `${RV}Succeeded` ? 'succeeded' : 'cancelled',
+          requestDigest: digest, admissionId: value('admissionId')!, authorityEpoch: value('authorityEpoch')!,
+          scope: value('scope')!, ...proof } } };
+  },
+};
+
 export const outboxEventHandlers: readonly OwnerOutboxEventHandler[] = [
+  realmAttachment,
   ownerCreation('ZoneCreateEvent', 'zone.edit', 'zone', 'ZoneCreate', 'com.rezics.zone.created.v1'),
   ownerCreation('ZoneConfigureEvent', 'zone.edit', 'zone', 'ZoneConfigure',
     'com.rezics.zone.configured.v1'),

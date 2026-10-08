@@ -56,6 +56,7 @@ import { readZoneThemeExecution } from '../modules/presentation/zone-theme.ts';
 import { zoneDocumentShowcase, zonePagePresentation, ZONE_SHOWCASE_BLOCK_DEFINITION } from '../modules/presentation/zone-document.ts';
 import { withZoneContentAuthority } from '../modules/content-publication/draft.ts';
 import { configureZoneShowcaseDisclosure } from '../modules/zone/showcase-disclosure.ts';
+import { withdrawZoneRealmAttachment } from '../modules/zone/realm-attachment-withdrawal.ts';
 import { documentSnapshotSchema } from '../api-document.ts';
 import { parseDocument } from '@rezics/document';
 import { discloseContent } from '../modules/disclosure/assembly.ts';
@@ -89,6 +90,7 @@ export const openApiOperations = {
   '/v1/zones/{id}/configuration': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true }, put: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/zones/{id}/query-blocks': { get: { rateLimitFamily: 'read', exposure: 'platform:saved-views', bearer: true } },
   '/v1/zones/{id}/retirements': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/zones/{id}/realm-attachment-withdrawals': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/zones/{id}/recoveries': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/zones/{id}/site-publications': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
@@ -140,6 +142,8 @@ const configRead = t.Object({ zone: ref, revision: ref, configuration: t.Any(),
   ...ZoneName.properties,
   cost: t.Object({ graphReads: t.Integer(), objectReads: t.Integer() }) });
 const revisionWrite = t.Object({ zone: ref, revision: ref, receipt: t.String(),
+  replayed: t.Boolean(), sourcePosition });
+const realmAttachmentWithdrawalWrite = t.Object({ zone: ref, realm: ref, receipt: t.String(),
   replayed: t.Boolean(), sourcePosition });
 const sitePublicationWrite = t.Object({ ...ZoneSitePublicationSelection.properties,
   outcome: t.Literal('succeeded'), zone: ref, revision: ref, themeRevision: ref,
@@ -647,6 +651,21 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         return Response.json({ zone: result.zone, revision: result.revision,
           receipt: result.receipt, replayed: result.replayed,
           sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch,
+            sequence: result.sequence } }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .post('/v1/zones/:id/realm-attachment-withdrawals', { params: t.Object({ id: groupUuid }),
+      body: t.Object({ realm: ref, actingSubject: ref }, { additionalProperties: false }),
+      response: { 200: realmAttachmentWithdrawalWrite, 202: pendingOperation, ...errors } },
+    async ({ request, params, body }) => {
+      const idempotencyKey = key(request);
+      if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      try {
+        const result = await withdrawZoneRealmAttachment(work.environment, work.account, work.access,
+          request, { zone: `https://rezics.com/id/${params.id}`, realm: body.realm,
+            actingSubject: body.actingSubject, idempotencyKey });
+        return Response.json({ zone: result.zone, realm: result.realm, receipt: result.receipt,
+          replayed: result.replayed, sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch,
             sequence: result.sequence } }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
     })

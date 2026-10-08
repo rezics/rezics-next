@@ -11,6 +11,7 @@ import { authorSubmissionProof, authorWithdrawalProof, authorWorkGeneration } fr
 import { workKinds } from '../work/work-kinds.ts';
 import { definitionCreatorAllowed } from './definition-creator.ts';
 import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
+import { realmAttachAllowed } from '../zone/realm-attachment-authority.ts';
 import { publicInTransaction } from './semantic-disclosure.ts';
 import { publicPost } from '../post/patterns.ts';
 import { resolveZonePageContent, savedZonePageContent,
@@ -49,12 +50,12 @@ export interface BaselineProof {
 export type BaselineTarget = { kind: 'root' }
   | { kind: 'work' | 'collection' | 'contribution' | 'rating' | 'personal' | 'comment'
   | 'maintainer' | 'reply' | 'reply-draft' | 'realm-reply' | 'author-work' | 'submission'
-  | 'avatar' | 'submission-withdraw' | 'definition' | 'zone'; id: string };
+  | 'avatar' | 'submission-withdraw' | 'definition' | 'zone' | 'realm-attach'; id: string };
 
 // Resource management belongs to a provisioned steward Agent of any kind.
 // Ordinary member creation remains bound to a provisioned Person Agent.
 function controllerProofFor(target: BaselineTarget) {
-  return ['maintainer', 'author-work', 'reply-draft', 'avatar', 'definition', 'zone', 'submission'].includes(target.kind)
+  return ['maintainer', 'author-work', 'reply-draft', 'avatar', 'definition', 'zone', 'submission', 'realm-attach'].includes(target.kind)
     ? maintainerControllerProof : baselineMemberProof;
 }
 
@@ -78,6 +79,7 @@ export function baselineTarget(action: string, scope: string): BaselineTarget | 
   const prefixes: Record<string, { prefix: string; kind: Exclude<BaselineTarget['kind'], 'root'> }> = {
     'zone.edit': { prefix: 'zone:edit:', kind: 'zone' },
     'media.campaign': { prefix: 'zone:edit:', kind: 'zone' },
+    'realm.attach': { prefix: 'realm:attach:', kind: 'realm-attach' },
     'work.edit': { prefix: 'work:edit:', kind: 'author-work' },
     // A cook who authored a recipe writes its Composition without a separate grant.
     'recipe.edit': { prefix: 'work:edit:', kind: 'author-work' },
@@ -176,6 +178,7 @@ export async function baselineTargetAllowed(client: PoolClient, graph: Pick<Fuse
   if (target.kind === 'zone') {
     return zoneSpaceCreatorAllowed(client, graph, principalId, actingSubject, target.id);
   }
+  if (target.kind === 'realm-attach') return realmAttachAllowed(client, graph, actingSubject, target.id);
   if (!graph) return false;
   if (target.kind === 'avatar') return !!await avatarControllerProof(client, graph, principalId, target.id)
     || await authorWorkGeneration(client, graph, principalId, actingSubject, target.id) !== null;
