@@ -3,12 +3,12 @@ import { accountRecoveryCoverage, type AccountRecoveryCoverage } from '../../acc
 import type { DeletionRecoverySet } from '../../account/src/deletion-recovery-set.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import {
-  boundedPool, nestedPoolCheckoutMode, setNestedPoolCheckoutMode,
+  boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode,
 } from '../src/infrastructure/pg-pool.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { captureCommerceRecoveryCoverage, type CommerceRecoveryCoverage } from
@@ -317,4 +317,48 @@ test('restore reconciliation reuses the held access and relay connections', asyn
     `SELECT hold_reason FROM relay.owner_reconciliation WHERE operation_id = $1`,
     ['owner:reconcile:restore-pass']);
   expect(reason.rows[0]?.hold_reason).toContain('retained current capture');
+}, 30_000);
+
+function checkoutSource(origin: string): string {
+  const match = /^(.+):(\d+)(?: \S+)?$/.exec(origin);
+  if (!match?.[1] || !match[2]) throw new Error(`not a checkout origin: ${origin}`);
+  return readFileSync(resolve(root, match[1]), 'utf8').split('\n')[Number(match[2]) - 1] ?? '';
+}
+
+async function nestedOuter(pool: Pool) {
+  return pool.connect();
+}
+
+async function nestedInner(pool: Pool, text: string) {
+  return pool.query(text);
+}
+
+test('a nested checkout fault names the outer and inner call sites and omits the query', async () => {
+  const secret = 'nested_checkout_query_secret';
+  await withNestedCheckoutThrow(async () => {
+    const client = await nestedOuter(access);
+    try {
+      const error = await nestedInner(access, `SELECT '${secret}'`).then(
+        () => undefined, (caught: unknown) => caught);
+      expect(error).toBeInstanceOf(NestedPoolCheckoutError);
+      const fault = error as NestedPoolCheckoutError;
+      expect(fault.outers.length).toBeGreaterThan(0);
+      expect(fault.outers.length).toBeLessThanOrEqual(3);
+      for (const field of [fault.inner, ...fault.outers]) {
+        expect(field.length).toBeLessThanOrEqual(200);
+        expect(field.startsWith('services/main/tests/nested-pool-checkout.test.ts:')).toBe(true);
+      }
+      expect(fault.outers[0]).toMatch(/nested-pool-checkout\.test\.ts:\d+(?: nestedOuter)?$/);
+      expect(fault.inner).toMatch(/nested-pool-checkout\.test\.ts:\d+(?: nestedInner)?$/);
+      expect(checkoutSource(fault.outers[0]!)).toContain('pool.connect(');
+      expect(checkoutSource(fault.inner)).toContain('pool.query(');
+      expect(fault.pool).toBe('access');
+      expect(fault.repeats).toBeUndefined();
+      const rendered = JSON.stringify(fault);
+      expect(rendered).not.toContain(secret);
+      expect(rendered).not.toContain('SELECT');
+      expect(rendered).not.toContain('127.0.0.1');
+      expect(rendered).not.toContain(String(restoredPort));
+    } finally { client.release(); }
+  });
 }, 30_000);

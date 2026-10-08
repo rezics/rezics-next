@@ -80,7 +80,18 @@ test('nested checkout diagnostics use the fixed fault event and preserve log-mod
       held.release();
     });
     expect(lines).toHaveLength(1);
-    expectFault(lines[0], 'main.database.nested-checkout');
+    const line = lines[0]!;
+    const reported = JSON.parse(line) as Record<string, unknown>;
+    expect(reported).toMatchObject({
+      level: 'error', event: 'worker_fault', 'rezics.worker.name': 'main.database.nested-checkout',
+      'error.class': 'NestedPoolCheckoutError',
+    });
+    expect(String(reported['rezics.checkout.inner'])).toContain('database-log-privacy.test.ts:');
+    expect(String((reported['rezics.checkout.outer'] as string[])[0])).toContain('database-log-privacy.test.ts:');
+    expect(logLineCarriesPersonalData(line)).toBe(false);
+    for (const privateValue of [email, agent, sql, 'private-value', 'private-title', 'database failure']) {
+      expect(line).not.toContain(privateValue);
+    }
   } finally {
     connect.mockRestore();
     setNestedPoolCheckoutMode(previousMode);

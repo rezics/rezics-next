@@ -81,6 +81,67 @@ test('a library backfill event carries counts and durations only', () => {
   });
 });
 
+test('a nested checkout fault keeps bounded caller locations and drops query text', () => {
+  class NestedPoolCheckoutError extends Error {
+    constructor(fields: {
+      outers?: readonly string[];
+      inner?: string;
+      pool?: string;
+      repeats?: number;
+    }) {
+      super('Nested PostgreSQL pool checkout');
+      this.name = 'NestedPoolCheckoutError';
+      Object.assign(this, fields);
+    }
+  }
+  const secret = "SELECT 'reader@example.com' FROM reader";
+  const error = new NestedPoolCheckoutError({
+    outers: [
+      'services/main/src/infrastructure/pg-pool.test.ts:80 outerCheckout',
+      secret,
+      'services/main/src/caller.ts:2',
+      'services/main/src/caller.ts:3',
+      'services/main/src/caller.ts:4',
+    ],
+    inner: 'services/main/tests/nested-pool-checkout.test.ts:310',
+    pool: 'access',
+    repeats: 2,
+  });
+  const leaked = new NestedPoolCheckoutError({
+    inner: secret,
+    pool: 'postgres://user:secret@db/access',
+    repeats: 0,
+  });
+  const [line, dropped] = capture(() => {
+    logWorkerFault('main.database.nested-checkout', error);
+    logWorkerFault('main.database.nested-checkout', leaked);
+  });
+  expect(JSON.parse(line!)).toEqual({
+    level: 'error',
+    event: 'worker_fault',
+    'rezics.worker.name': 'main.database.nested-checkout',
+    'error.class': 'NestedPoolCheckoutError',
+    'rezics.checkout.outer': [
+      'services/main/src/infrastructure/pg-pool.test.ts:80 outerCheckout',
+      'services/main/src/caller.ts:2',
+      'services/main/src/caller.ts:3',
+    ],
+    'rezics.checkout.inner': 'services/main/tests/nested-pool-checkout.test.ts:310',
+    'rezics.checkout.pool': 'access',
+    'rezics.checkout.repeats': 2,
+  });
+  expect(JSON.parse(dropped!)).toEqual({
+    level: 'error',
+    event: 'worker_fault',
+    'rezics.worker.name': 'main.database.nested-checkout',
+    'error.class': 'NestedPoolCheckoutError',
+  });
+  expect(line).not.toContain('SELECT');
+  expect(line).not.toContain('reader@example.com');
+  expect(dropped).not.toContain('secret');
+  expect(dropped).not.toContain('SELECT');
+});
+
 test('an unbounded class, code, or count is omitted', () => {
   const [line] = capture(() => telemetryLog('worker_fault', 'error', {
     'error.class': 'reader@example.com',

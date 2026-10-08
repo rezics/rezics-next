@@ -29,6 +29,10 @@ const allowed = new Set([
   'rezics.backfill.examined',
   'rezics.backfill.skipped',
   'rezics.backfill.duration_ms',
+  'rezics.checkout.outer',
+  'rezics.checkout.inner',
+  'rezics.checkout.pool',
+  'rezics.checkout.repeats',
 ]);
 const counts = new Set([
   'rezics.backfill.examined',
@@ -38,6 +42,9 @@ const counts = new Set([
 const classToken = /^[A-Za-z_][A-Za-z0-9_]{0,80}$/;
 const codeToken = /^[A-Za-z0-9_]{1,32}$/;
 const workerName = /^[a-z][a-z0-9._-]{0,63}$/;
+/** Repository-relative caller `path:line` and an optional function name. */
+const checkoutOrigin = /^[A-Za-z0-9_./:-]+:\d{1,7}(?: [A-Za-z_$][A-Za-z0-9_$.#]*)?$/;
+const checkoutPool = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const emailAddress = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 const personOrAgentIri =
   /https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|urn:rezics:agent:/i;
@@ -52,6 +59,32 @@ function publicAttributes(attributes: Attributes): Attributes {
   const result: Attributes = {};
   for (const [key, value] of Object.entries(attributes)) {
     if (!allowed.has(key) || value === undefined) continue;
+    if (key === 'rezics.checkout.outer') {
+      if (!Array.isArray(value)) continue;
+      const outers: string[] = [];
+      for (const item of value) {
+        if (outers.length === 3) break;
+        if (typeof item === 'string' && item.length <= 200 && checkoutOrigin.test(item)
+          && !logLineCarriesPersonalData(item)) outers.push(item);
+      }
+      if (outers.length) result[key] = outers;
+      continue;
+    }
+    if (key === 'rezics.checkout.inner') {
+      if (typeof value === 'string' && value.length <= 200 && checkoutOrigin.test(value)
+        && !logLineCarriesPersonalData(value)) result[key] = value;
+      continue;
+    }
+    if (key === 'rezics.checkout.pool') {
+      if (typeof value === 'string' && checkoutPool.test(value) && !logLineCarriesPersonalData(value)) {
+        result[key] = value;
+      }
+      continue;
+    }
+    if (key === 'rezics.checkout.repeats') {
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) result[key] = Math.trunc(value);
+      continue;
+    }
     if (counts.has(key)) {
       if (typeof value === 'number' && Number.isFinite(value) && value >= 0) result[key] = Math.trunc(value);
       continue;
@@ -100,14 +133,30 @@ function boundedCode(error: unknown): string | undefined {
   return undefined;
 }
 
-/** One fixed event: error class and code, never the message, stack, or row. */
+/** One fixed event: error class, code, and a nested checkout's caller locations.
+ * Never the message, stack, row, or query text. */
 export function logWorkerFault(worker: string, error: unknown): void {
   const code = boundedCode(error);
   telemetryLog('worker_fault', 'error', {
     ...(workerName.test(worker) && !logLineCarriesPersonalData(worker) ? { 'rezics.worker.name': worker } : {}),
     'error.class': boundedClass(error),
     ...(code ? { 'error.code': code } : {}),
+    ...checkoutAttributes(error),
   });
+}
+
+function checkoutAttributes(error: unknown): Attributes {
+  if (!(error instanceof Error) || error.name !== 'NestedPoolCheckoutError') return {};
+  const fields = error as Error & { outers?: unknown; inner?: unknown; pool?: unknown; repeats?: unknown };
+  const attributes: Attributes = {};
+  if (Array.isArray(fields.outers)) {
+    const outers = fields.outers.filter((item): item is string => typeof item === 'string');
+    if (outers.length) attributes['rezics.checkout.outer'] = outers;
+  }
+  if (typeof fields.inner === 'string' && fields.inner !== '') attributes['rezics.checkout.inner'] = fields.inner;
+  if (typeof fields.pool === 'string') attributes['rezics.checkout.pool'] = fields.pool;
+  if (typeof fields.repeats === 'number') attributes['rezics.checkout.repeats'] = fields.repeats;
+  return attributes;
 }
 
 /** Event names and caller-selected public attributes only; never serialize Errors or request bodies. */
