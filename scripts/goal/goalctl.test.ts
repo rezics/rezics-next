@@ -883,11 +883,45 @@ describe('goalctl runtime policy', () => {
     ].join('\n');
     const branchNamed = unitFailureDetails(namedFailure, [file], root);
     const mainNamed = unitFailureDetails(namedFailure, [file], root);
-    const branchError = unitFileErrorDetails([
+    const branchOutput = [
       namedFailure, '# Unhandled error between tests', `error: Cannot find module '${root}/modules/new-import.js'`,
       `    at load (${root}/runtime/loader.js:30:2)`, '1 fail', 'Ran 1 tests across 1 files',
-    ].join('\n'), [file], root);
+    ].join('\n');
+    const branchError = unitFileErrorDetails(branchOutput, [file], root);
     expect(introducedUnitFailureFiles([file], branchNamed, mainNamed, branchError, [])).toEqual([file]);
+    const affected = unitFileEvidence(branchOutput, [file], [file], [], root);
+    const inherited = unitFileEvidence(namedFailure, [file], [file], [], root);
+    expect(affected[0]?.cases.map(item => item.test)).toEqual(['existing guard > checks the baseline']);
+    expect(affected[0]?.fileError).toContain('# Unhandled error between tests');
+    expect(affected[0]?.fileError).toContain('new-import.js');
+    expect(inherited[0]?.cases.map(item => item.test)).toEqual(['existing guard > checks the baseline']);
+    expect(inherited[0]?.fileError).toBeUndefined();
+    const runs: UnitRunEvidence[] = [
+      { side: 'affected', kind: 'confirm', files: affected },
+      { side: 'main', kind: 'first', files: inherited },
+    ];
+    const refusal = unitGateRefusal('introduced unit failures; not merging:', [file], runs);
+    const deciding = refusal.split('inherited on main:')[0] ?? refusal;
+    expect(deciding).toContain('(fail) existing guard > checks the baseline');
+    expect(deciding).toContain('# Unhandled error between tests');
+    expect(deciding).toContain(`Cannot find module '${root}/modules/new-import.js'`);
+    expect(refusal.split('inherited on main:')[1] ?? '').not.toContain('new-import.js');
+    const previous = process.env.GOAL_MERGE_LOG;
+    const directory = mkdtempSync(join(import.meta.dir, '../../.temp/unit-gate-evidence-'));
+    process.env.GOAL_MERGE_LOG = join(directory, 'merge.log');
+    try {
+      const path = writeUnitEvidence(runs);
+      const stored = JSON.parse(readFileSync(path!, 'utf8')) as { invocations: { runs: UnitRunEvidence[] }[] };
+      const storedAffected = stored.invocations[0]!.runs.find(run => run.side === 'affected')!.files[0]!;
+      const storedMain = stored.invocations[0]!.runs.find(run => run.side === 'main')!.files[0]!;
+      expect(storedAffected.fileError).toContain('new-import.js');
+      expect(storedAffected.cases[0]?.test).toBe('existing guard > checks the baseline');
+      expect(storedMain.fileError).toBeUndefined();
+    } finally {
+      if (previous === undefined) delete process.env.GOAL_MERGE_LOG;
+      else process.env.GOAL_MERGE_LOG = previous;
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   test('named scalar failures compare normalized error text when no finding diff exists', () => {

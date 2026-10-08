@@ -2375,7 +2375,7 @@ export interface UnitFileEvidence {
   cases: UnitFailureCase[];
   /** Set when a timeout's transcript or owner progress names the test that was running. */
   runningTest?: string;
-  /** Set when the file failed without a `(fail)` name, for example an import error between tests. */
+  /** A file-level diagnostic, kept beside any `(fail)` cases. An import error between tests is one. */
   fileError?: string;
 }
 export interface UnitRunEvidence {
@@ -2554,12 +2554,16 @@ function capCaseErrors(cases: readonly UnitFailureCase[]): UnitFailureCase[] {
   });
 }
 
-function capStoredError(error: string): string {
-  const lined = error.split('\n').slice(0, UNIT_GATE_FAILURE_ERROR_LINES).join('\n');
-  return capCaseErrors([{ test: '', error: lined }])[0]!.error;
+/** Named cases and a file-level error share one 20KB budget. The file-level text is not a case name. */
+function capCasesAndFileError(cases: readonly UnitFailureCase[], diagnostic: string): { cases: UnitFailureCase[]; fileError?: string } {
+  if (!diagnostic) return { cases: capCaseErrors(cases) };
+  const lined = diagnostic.split('\n').slice(0, UNIT_GATE_FAILURE_ERROR_LINES).join('\n');
+  const capped = capCaseErrors([...cases, { test: '', error: lined }]);
+  const fileError = capped.at(-1)!.error;
+  return { cases: capped.slice(0, -1), ...(fileError ? { fileError } : {}) };
 }
 
-/** An import failure is `# Unhandled error between tests` and has no `(fail)` name.
+/** An import failure is `# Unhandled error between tests` and stays even when the file also names a `(fail)` case.
  * A failing file with neither keeps the other diagnostic lines in its section. */
 function fileLevelError(section: string, failing: boolean): string {
   const lines = section.split('\n');
@@ -2592,11 +2596,12 @@ export function unitFileEvidence(output: string, scope: readonly string[], faili
   const classified = new Set([...failing, ...timedOut]);
   return scope.flatMap(file => {
     const section = fileSection(output, file, root);
-    const cases = capCaseErrors(failureCases(section));
-    const diagnostic = cases.length === 0 ? fileLevelError(section, failing.includes(file)) : '';
-    const fileError = diagnostic ? capStoredError(diagnostic) : undefined;
-    if (!classified.has(file) && cases.length === 0 && !fileError) return [];
-    const evidence: UnitFileEvidence = { file, output: capFileOutput(section), cases, ...(fileError ? { fileError } : {}) };
+    const parsed = failureCases(section);
+    // The fallback diagnostic repeats assertion text that already belongs to a named case.
+    const kept = capCasesAndFileError(parsed, fileLevelError(section, failing.includes(file) && parsed.length === 0));
+    const { cases } = kept;
+    if (!classified.has(file) && cases.length === 0 && !kept.fileError) return [];
+    const evidence: UnitFileEvidence = { file, output: capFileOutput(section), cases, ...(kept.fileError ? { fileError: kept.fileError } : {}) };
     if (timedOut.includes(file)) {
       const running = runningTestName(section);
       if (running) evidence.runningTest = running;
@@ -2622,7 +2627,7 @@ function formatFileEvidence(file: UnitFileEvidence): string {
     lines.push(`    (fail) ${item.test}`);
     lines.push(...formatErrorLines(item.error, '      '));
   }
-  if (file.fileError && !file.cases.length) lines.push(...formatErrorLines(file.fileError, '    '));
+  if (file.fileError) lines.push(...formatErrorLines(file.fileError, '    '));
   return lines.join('\n');
 }
 
@@ -2651,12 +2656,13 @@ function notePasses(evidence: UnitRunEvidence[], side: 'affected' | 'main', pass
 function preferFileEvidence(previous: UnitFileEvidence | undefined, next: UnitFileEvidence): UnitFileEvidence {
   if (!previous) return next;
   const runningTest = next.runningTest ?? previous.runningTest;
-  if (next.cases.length) return { ...next, runningTest };
-  if (previous.cases.length) return { ...previous, runningTest };
-  if (next.fileError || next.runningTest || next.output) {
-    return { ...next, runningTest, ...(next.fileError || previous.fileError ? { fileError: next.fileError ?? previous.fileError } : {}) };
-  }
-  return { ...previous, runningTest };
+  const fileError = next.fileError ?? previous.fileError;
+  const attach = (chosen: UnitFileEvidence): UnitFileEvidence =>
+    ({ ...chosen, runningTest, ...(fileError ? { fileError } : {}) });
+  if (next.cases.length) return attach(next);
+  if (previous.cases.length) return attach(previous);
+  if (next.fileError || next.runningTest || next.output) return attach(next);
+  return attach(previous);
 }
 
 /** Later runs replace earlier ones only within one side, so main cannot overwrite the branch's cases. */
