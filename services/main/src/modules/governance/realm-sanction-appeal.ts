@@ -30,6 +30,11 @@ interface AppealSource {
     | { state: 'decided'; caseId: string; statement: string; outcome: 'dismiss' | 'restore'; rationale: string };
 }
 
+function postgresCode(error: unknown): string | undefined {
+  const code = (error as { code?: unknown }).code;
+  return typeof code === 'string' ? code : undefined;
+}
+
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, item) =>
   item && typeof item === 'object' && !Array.isArray(item)
     ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))
@@ -63,9 +68,23 @@ export function idempotencyReplay(prior: { caseId: string; digest: string; state
   return { caseId: prior.caseId, state: prior.state };
 }
 
-/** A second distinct appeal waits until the open one is decided. */
+/** Fast path while one appeal is still open. A decided appeal stays one row, and the receipt unique index rejects another. */
 export function openAppealConflict(anotherOpen: boolean): void {
   if (anotherOpen) throw new GovernanceConflict(APPEAL_ALREADY_OPEN);
+}
+
+/**
+ * A unique violation is the receipt guarantee. The same key and digest replay
+ * the winning row; any other appeal for the receipt is the existing conflict.
+ */
+export function uniqueAppealOutcome(existing: { principalId: string; idempotencyKey: string; digest: string;
+  caseId: string; state: AppealState } | null, caller: string, key: string, requestDigest: string):
+  { caseId: string; state: AppealState } {
+  if (existing?.principalId === caller && existing.idempotencyKey === key) {
+    const replay = idempotencyReplay(existing, requestDigest);
+    if (replay) return replay;
+  }
+  throw new GovernanceConflict(APPEAL_ALREADY_OPEN);
 }
 
 /** The sanctioned member, or a moderator of this realm, may read. Anyone else is absent. */
@@ -181,14 +200,33 @@ export async function openRealmSanctionAppeal(principal: VerifiedPrincipal, inpu
       WHERE id = $1 AND open AND dispatch_open FOR SHARE`, [scopeId]);
     if (!gate.rowCount) throw new GovernanceUnavailable('realm governance is unavailable');
     const caseId = randomUUID();
-    await client.query(`INSERT INTO access.governance_case (id, kind, authority_kind, authority_scope_id, context,
-      target_owner, target_resource, target_component, disclosure)
-      VALUES ($1,'realm_sanction_appeal','realm',$2,$3,'membership',$4,'sanction','parties')`,
-    [caseId, scopeId, input.realm, input.receiptId]);
-    await client.query(`INSERT INTO access.realm_sanction_appeal
-      (case_id, receipt_id, realm, principal_id, member_subject, idempotency_key, request_digest, statement)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-    [caseId, input.receiptId, input.realm, caller, ban.member, input.idempotencyKey, requestDigest, statement]);
+    // The receipt unique index is the guarantee. A violation aborts the statement,
+    // so return to this savepoint and read the winning row in the same transaction.
+    await client.query('SAVEPOINT realm_sanction_appeal_insert');
+    try {
+      await client.query(`INSERT INTO access.governance_case (id, kind, authority_kind, authority_scope_id, context,
+        target_owner, target_resource, target_component, disclosure)
+        VALUES ($1,'realm_sanction_appeal','realm',$2,$3,'membership',$4,'sanction','parties')`,
+      [caseId, scopeId, input.realm, input.receiptId]);
+      await client.query(`INSERT INTO access.realm_sanction_appeal
+        (case_id, receipt_id, realm, principal_id, member_subject, idempotency_key, request_digest, statement)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [caseId, input.receiptId, input.realm, caller, ban.member, input.idempotencyKey, requestDigest, statement]);
+    } catch (error) {
+      if (postgresCode(error) !== '23505') throw error;
+      await client.query('ROLLBACK TO SAVEPOINT realm_sanction_appeal_insert');
+      const winner = (await client.query<{ case_id: string; principal_id: string; idempotency_key: string;
+        request_digest: string; state: string }>(`SELECT a.case_id, a.principal_id, a.idempotency_key, a.request_digest, c.state
+        FROM access.realm_sanction_appeal a JOIN access.governance_case c ON c.id = a.case_id
+        WHERE a.receipt_id = $1 OR (a.principal_id = $2 AND a.idempotency_key = $3)
+        ORDER BY (a.receipt_id = $1::uuid) DESC LIMIT 1`,
+      [input.receiptId, caller, input.idempotencyKey])).rows[0];
+      const outcome = uniqueAppealOutcome(winner ? {
+        principalId: winner.principal_id, idempotencyKey: winner.idempotency_key, digest: winner.request_digest,
+        caseId: winner.case_id, state: winner.state === 'open' ? 'open' : 'decided',
+      } : null, caller, input.idempotencyKey, requestDigest);
+      return { realm: input.realm, receiptId: input.receiptId, ...outcome, replayed: true };
+    }
     return { realm: input.realm, receiptId: input.receiptId, caseId, state: 'open', replayed: false };
   });
 }

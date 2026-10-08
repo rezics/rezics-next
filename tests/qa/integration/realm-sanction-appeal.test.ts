@@ -149,5 +149,51 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
     expect(banRow.rows[0]).toEqual({ active: true, reason_ref: receiptId });
     const again = await call('POST', path, { statement: 'I was banned in error.' }, banned.token, key);
     expect(again.body).toMatchObject({ caseId, replayed: true, state: 'decided' });
+    await otherModerator.grant(`agent:control:${otherModerator.actor}`, 'agent.control');
+    const sanction = async (member: typeof other) => {
+      const generation = await pool.query<{ generation: string }>(
+        `SELECT generation::text FROM access.realm_admin_revision WHERE realm = $1`, [realm]);
+      const result = await call('POST', `${root}/members`, { actingSubject: owner.actor, member: member.actor,
+        expectedGeneration: generation.rows[0]?.generation ?? '0', expectedMembershipGeneration: '0',
+        reason: 'Concurrent sanction', action: 'ban', consent: null, durationSeconds: null,
+      }, owner.token, randomUUID());
+      expect({ status: result.status, body: result.body }).toMatchObject({ status: 201 });
+      return String(result.body.receiptId);
+    };
+    const race = async (receipt: string, token: string, keys: string[], statement: string) => {
+      const results = await Promise.all(keys.map(raceKey =>
+        call('POST', `${appeal}/${receipt}/appeal`, { statement }, token, raceKey)));
+      const rows = await pool.query<{ appeals: number; cases: number }>(`SELECT
+        (SELECT count(*)::int FROM access.realm_sanction_appeal WHERE receipt_id = $1) AS appeals,
+        (SELECT count(*)::int FROM access.governance_case
+          WHERE kind = 'realm_sanction_appeal' AND target_resource = $1::text) AS cases`, [receipt]);
+      return { results, appeals: rows.rows[0]?.appeals, cases: rows.rows[0]?.cases };
+    };
+    const distinctReceipt = await sanction(other);
+    const distinct = await race(distinctReceipt, other.token, Array.from({ length: 8 }, () => randomUUID()),
+      'I appeal this sanction.');
+    const sameKey = randomUUID();
+    const sameReceipt = await sanction(otherModerator);
+    const same = await race(sameReceipt, otherModerator.token, Array.from({ length: 8 }, () => sameKey),
+      'Please read this appeal.');
+    const closed = await race(receiptId, banned.token, Array.from({ length: 8 }, () => randomUUID()),
+      'The decision is the last word on this sanction.');
+    const outcome = (results: { status: number; body: Record<string, unknown> }[]) => ({
+      created: results.filter(result => result.status === 201).length,
+      replayed: results.filter(result => result.status === 200 && result.body.replayed === true).length,
+      conflicts: results.filter(result => result.status === 409 && result.body.code === 'appeal_already_open').length,
+      serverErrors: results.filter(result => result.status >= 500).length,
+    });
+    const createdCase = same.results.find(result => result.status === 201)?.body.caseId;
+    expect({
+      distinct: { ...outcome(distinct.results), appeals: distinct.appeals, cases: distinct.cases },
+      same: { ...outcome(same.results), appeals: same.appeals, cases: same.cases,
+        sharedCase: same.results.every(result => result.body.caseId === createdCase) },
+      closed: { ...outcome(closed.results), appeals: closed.appeals, cases: closed.cases },
+    }).toEqual({
+      distinct: { created: 1, replayed: 0, conflicts: 7, serverErrors: 0, appeals: 1, cases: 1 },
+      same: { created: 1, replayed: 7, conflicts: 0, serverErrors: 0, appeals: 1, cases: 1, sharedCase: true },
+      closed: { created: 0, replayed: 0, conflicts: 8, serverErrors: 0, appeals: 1, cases: 1 },
+    });
   } finally { await stack.stop(); }
 }, 180_000);

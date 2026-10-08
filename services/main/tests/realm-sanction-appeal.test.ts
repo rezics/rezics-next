@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid } from '../src/modules/governance/store.ts';
-import { appealStatement, appealView, idempotencyReplay, isBanReceipt, openAppealConflict,
-  publicResolution, realmModerator, sanctionedPrincipal } from '../src/modules/governance/realm-sanction-appeal.ts';
+import { APPEAL_ALREADY_OPEN, appealStatement, appealView, idempotencyReplay, isBanReceipt, openAppealConflict,
+  publicResolution, realmModerator, sanctionedPrincipal, uniqueAppealOutcome } from '../src/modules/governance/realm-sanction-appeal.ts';
 
 const decider = 'https://rezics.com/id/00000000-0000-4000-8000-000000000099';
 
@@ -45,6 +45,11 @@ test('sanction guards refuse the wrong principal, a second open appeal, and a hi
   expect(idempotencyReplay({ caseId: 'case-1', digest: 'abc', state: 'open' }, 'abc')).toEqual({ caseId: 'case-1', state: 'open' });
   expect(() => idempotencyReplay({ caseId: 'case-1', digest: 'abc', state: 'open' }, 'other')).toThrow(GovernanceConflict);
   expect(idempotencyReplay(null, 'abc')).toBeNull();
+  const row = { principalId: 'principal', idempotencyKey: 'key', digest: 'abc', caseId: 'case-1', state: 'open' as const };
+  expect(uniqueAppealOutcome(row, 'principal', 'key', 'abc')).toEqual({ caseId: 'case-1', state: 'open' });
+  expect(() => uniqueAppealOutcome(row, 'principal', 'key', 'other')).toThrow('idempotency key reused');
+  expect(() => uniqueAppealOutcome(row, 'someone-else', 'key', 'abc')).toThrow(APPEAL_ALREADY_OPEN);
+  expect(() => uniqueAppealOutcome(null, 'principal', 'key', 'abc')).toThrow(APPEAL_ALREADY_OPEN);
 });
 
 test('the appeal read drops the decider identity from the whole document', () => {

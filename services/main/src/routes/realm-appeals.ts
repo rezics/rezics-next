@@ -51,7 +51,7 @@ function appealError(error: unknown): Response {
   return commandError(error);
 }
 
-/** One ban receipt has one open appeal. The read never names the decider. */
+/** One ban receipt has one appeal. The read never names the decider. */
 export function realmAppealRoutes(work: MainWorkDependencies) {
   const unavailable = () => problem(503, 'governance_unavailable', 'Governance is unavailable');
   return new Elysia()
