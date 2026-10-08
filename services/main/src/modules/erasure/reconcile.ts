@@ -14,7 +14,8 @@ import { postponeHeldMaterial } from '../public-report/preservation.ts';
 import { assertRetainedAuthorityCoverage, type RetainedAuthorityCoverage } from './authority.ts';
 import { applyContentErasure, ContentErasureGraphRequired, contentErasureResource,
   ContentErasureStale, openCommentSourceRevisions, probeContentErasure } from './content.ts';
-import { assertReplayedCommentSourcesTerminal } from '../work/content-recovery-coverage.ts';
+import { assertReplayedCommentSourcesTerminal, ContentRecoveryConflict }
+  from '../work/content-recovery-coverage.ts';
 import { ErasureUnavailable, readErasure, relayTransaction, sha256 } from './journal.ts';
 import { readGraphErasureProof, type GraphSuppressionProof, type HeldGraphErasureReplay } from './graph.ts';
 import { assertGraphErasure, graphLineageSequence, replayGraphErasure } from './replay-graph.ts';
@@ -814,7 +815,12 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
       }
       const erasedRefs = entry.refs.filter(ref => probes.get(ref) === 'erased');
       if (erasedRefs.length) {
-        await assertReplayedCommentSourcesTerminal(restored.content, erasedRefs, entry.id, entry.epoch);
+        // A stored source on an erased revision is a definitive closure refusal, not an interruption.
+        try { await assertReplayedCommentSourcesTerminal(restored.content, erasedRefs, entry.id, entry.epoch); }
+        catch (error) {
+          if (error instanceof ContentRecoveryConflict) throw new ErasureRestoreHold(error.message, { cause: error });
+          throw error;
+        }
       }
       let graphProof: GraphSuppressionProof | null = null;
       if (restored.graph) {

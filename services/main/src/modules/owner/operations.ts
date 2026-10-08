@@ -459,8 +459,8 @@ export class OwnerOperations {
    * qualification and proven release findings, the native receipt, the retained
    * frontier and the independently current authority, and live Access must still
    * equal the coverage the proven transition recorded. The original-event,
-   * historical-root and remaining erased-closure reread waits for the staged
-   * reconcile.ts seam.
+   * historical-root and remaining erased-closure reread, including any stored
+   * comment or evidence source, is `assertReleasedErasuresCurrent` below.
    */
   private async completeReleasedRestore(client: PoolClient, resources: RestoreResources,
     erasures: NonNullable<RestoreResources['erasures']>, outerId: string,
