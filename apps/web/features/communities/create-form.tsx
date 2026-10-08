@@ -51,6 +51,67 @@ export async function createCommunityWithReadback(input: CommunityCreationIntent
   return send(input, key);
 }
 
+/** One screen follows the same bound Manage uses for this list. */
+const MANAGED_REALM_PAGES = 5;
+
+export interface FounderRealmRead {
+  /** The Realm IRI at this handle when the caller can read it, or null when
+   * the address is missing, unreadable or the read failed. */
+  resolve(handle: string, actingSubject: string): Promise<string | null>;
+  /** One page of Realm IRIs the caller manages, or null when the list failed. */
+  managed(actingSubject: string, after: string | null): Promise<{
+    realms: readonly string[]; nextCursor: string | null } | null>;
+}
+
+async function resolveReadableRealm(handle: string, actingSubject: string): Promise<string | null> {
+  try {
+    const result = await browserMainApi().v1.addresses.resolve.get({
+      query: { scope: 'space', key: handle, actingSubject } });
+    const data = result.data;
+    if (!data || data.status !== 'resolved' || !('capabilities' in data)) return null;
+    return data.capabilities?.realm ?? null;
+  } catch { return null; }
+}
+
+async function readManagedRealmPage(actingSubject: string, after: string | null) {
+  try {
+    const result = await browserMainApi().v1.me['managed-realms'].get({
+      query: { actingSubject, ...after ? { after } : {} } });
+    if (!result.data) return null;
+    return { realms: result.data.items.map(item => item.realm), nextCursor: result.data.nextCursor };
+  } catch { return null; }
+}
+
+/** The Realm at `handle` when this founder manages it. Someone else's Realm,
+ * and a Realm this founder cannot read, are null: the same answer as a
+ * missing address. Nothing sent earlier is kept; both answers come from the API. */
+export async function founderRealmAtHandle(handle: string, actingSubject: string,
+  read: FounderRealmRead = { resolve: resolveReadableRealm, managed: readManagedRealmPage }): Promise<string | null> {
+  const realm = await read.resolve(handle, actingSubject);
+  if (!realm) return null;
+  let after: string | null = null;
+  for (let page = 0; page < MANAGED_REALM_PAGES; page++) {
+    const listed = await read.managed(actingSubject, after);
+    if (!listed) return null;
+    if (listed.realms.includes(realm)) return realm;
+    if (!listed.nextCursor) return null;
+    after = listed.nextCursor;
+  }
+  return null;
+}
+
+/** A private Realm has no public profile to publish, and a profile that
+ * already has a head is already saved. Either answer still opens the Realm. */
+export function profilePublicationOpensRealm(code: string | null): boolean {
+  return code === 'stale_realm_profile' || code === 'realm_unavailable';
+}
+
+function problemCode(error: { value?: unknown } | null | undefined): string | null {
+  const value = error?.value;
+  return value && typeof value === 'object' && 'code' in value && typeof value.code === 'string'
+    ? value.code : null;
+}
+
 /** Disclosure, admission and rules are one server-owned creation operation. */
 export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: string; locale: UiLocale }) {
   const router = useRouter();
@@ -102,18 +163,22 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
           initialSettings: initialCommunitySettings(visibility, publishedRules) };
         const { data, error } = await createCommunityWithReadback(creationIntent.current, `${operation}:create`);
         if (!data || !('realm' in data) || !data.realm) {
-          const code = error && error.value && typeof error.value === 'object' && 'code' in error.value
-            ? error.value.code : null;
-          if (code === 'alias_conflict' || code === 'invalid_alias') {
-            // A refused alias has no created Realm. A corrected address is a
-            // new command; uncertain outcomes retain their original intent.
-            creationIntent.current = null;
-            key.current = null;
-            setFailure('handle');
-          } else setFailure('create');
-          return;
-        }
-        realm = data.realm;
+          const code = problemCode(error);
+          // The handle is already this founder's Realm. Open that Realm
+          // instead of minting another key and another community.
+          if (code === 'alias_conflict') realm = await founderRealmAtHandle(handle, actingSubject);
+          if (!realm) {
+            if (code === 'alias_conflict' || code === 'invalid_alias') {
+              // A refused alias the founder does not manage has no Realm to
+              // open. A corrected address is a new command; uncertain
+              // outcomes retain their original intent.
+              creationIntent.current = null;
+              key.current = null;
+              setFailure('handle');
+            } else setFailure('create');
+            return;
+          }
+        } else realm = data.realm;
         setCreatedRealm(realm);
       }
       const id = realm.slice(-36);
@@ -139,7 +204,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
       const saved = await main.v1.realms({ realm: id }).profile.put({ profile: 'realm-public-profile-v2',
         expectedHead: null, actingSubject, publication },
       { headers: { 'idempotency-key': `${operation}:profile` } });
-      if (!saved.data) throw new Error('profile-write-failed');
+      if (!saved.data && !profilePublicationOpensRealm(problemCode(saved.error))) throw new Error('profile-write-failed');
       try { localStorage.setItem(`rezics:community-setup:${actingSubject}:${realm}`,
         JSON.stringify({ topics: topics.length > 0, invite: false })); } catch { /* optional local checklist */ }
       router.push(realmHref(locale, id));

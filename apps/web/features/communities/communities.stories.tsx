@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { uuidToSid } from '@rezics/model/address';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
+import { realmHref } from '../realm/route.ts';
 import { CreateCommunityForm } from './create-form.tsx';
 
 const meta = {
@@ -76,12 +76,91 @@ export const CreatedCommunityAddress: Story = {
     await userEvent.type(canvas.getByRole('textbox', { name: /Community handle/ }), 'readers-circle');
     await userEvent.type(canvas.getByRole('textbox', { name: 'Description' }), 'Discuss books together.');
     await userEvent.click(canvas.getByRole('button', { name: 'Create community' }));
-    // ast-grep-ignore: web-links-use-address-tsx -- Independent expected path guards the post-creation redirect without reusing its builder.
-    await waitFor(() => expect(createdNavigation).toHaveBeenCalledWith(`/en/r/${uuidToSid(createdRealm)}`));
+    await waitFor(() => expect(createdNavigation).toHaveBeenCalledWith(realmHref('en', createdRealm)));
     if (import.meta.env.VITE_G1002_CAPTURE === '1') {
       const { page } = await import('vitest/browser');
       await document.fonts.ready;
       await page.screenshot({ path: '../../../../.temp/g-1002-created-community.png' });
     }
+  },
+};
+
+const problem = (status: number, code: string) => Response.json({
+  type: `https://rezics.com/problems/${code}`, title: code, status, code,
+}, { status, headers: { 'content-type': 'application/problem+json' } });
+
+function mockMain(decide: (url: URL, method: string) => Response | null) {
+  const original = window.fetch;
+  window.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url, window.location.origin);
+    if (!url.pathname.startsWith('/api/main/')) return original(input, init);
+    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    return decide(url, method) ?? new Response(null, { status: 503 });
+  }) as typeof fetch;
+  return () => { window.fetch = original; };
+}
+
+async function submitReaders(canvas: ReturnType<typeof within>) {
+  await userEvent.type(canvas.getByRole('textbox', { name: 'Community name' }), 'Readers Circle');
+  await userEvent.type(canvas.getByRole('textbox', { name: /Community handle/ }), 'readers-circle');
+  await userEvent.type(canvas.getByRole('textbox', { name: 'Description' }), 'Discuss books together.');
+  await userEvent.click(canvas.getByRole('radio', { name: /Restricted/ }));
+  await userEvent.click(canvas.getByRole('button', { name: 'Create community' }));
+}
+
+const ownedRealm = `https://rezics.com/id/${createdRealm}`;
+
+/** A lost response leaves the handle taken by the founder's own Realm. The
+ * address resolves and the managed list names it, so the form opens it. */
+export const RecoveredOwnRealm: Story = {
+  parameters: { route: { pathname: '/en/r/new', onPush: createdNavigation } },
+  beforeEach() {
+    createdNavigation.mockClear();
+    return mockMain((url, method) => {
+      if (url.pathname === '/api/main/v1/spaces' && method === 'POST')
+        return problem(409, 'alias_conflict');
+      if (url.pathname === '/api/main/v1/addresses/resolve' && method === 'GET')
+        return Response.json({ profile: 'address-resolution-v1', scope: 'space', key: 'readers-circle',
+          status: 'resolved', capabilities: { realm: ownedRealm } });
+      if (url.pathname === '/api/main/v1/me/managed-realms' && method === 'GET')
+        return Response.json({ items: [{ realm: ownedRealm, permissions: ['realm.owner'],
+          openCount: { value: 0, kind: 'exact' }, escalatedCount: { value: 0, kind: 'exact' },
+          latestActivity: null }], nextCursor: null, complete: true });
+      if (url.pathname === `/api/main/v1/realms/${createdRealm}/profile` && method === 'PUT')
+        return problem(404, 'realm_unavailable');
+      return null;
+    });
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await submitReaders(canvas);
+    await waitFor(() => expect(createdNavigation).toHaveBeenCalledWith(realmHref('en', createdRealm)));
+  },
+};
+
+/** A handle that resolves to a Realm this founder does not manage is taken.
+ * The other Realm's identity is not shown. */
+export const SomeoneElsesHandle: Story = {
+  parameters: { route: { pathname: '/en/r/new', onPush: createdNavigation } },
+  beforeEach() {
+    createdNavigation.mockClear();
+    const other = '00000000-0000-8000-8000-000000000999';
+    return mockMain((url, method) => {
+      if (url.pathname === '/api/main/v1/spaces' && method === 'POST')
+        return problem(409, 'alias_conflict');
+      if (url.pathname === '/api/main/v1/addresses/resolve' && method === 'GET')
+        return Response.json({ profile: 'address-resolution-v1', scope: 'space', key: 'readers-circle',
+          status: 'resolved', capabilities: { realm: `https://rezics.com/id/${other}` } });
+      if (url.pathname === '/api/main/v1/me/managed-realms' && method === 'GET')
+        return Response.json({ items: [], nextCursor: null, complete: true });
+      return null;
+    });
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await submitReaders(canvas);
+    await waitFor(() => expect(canvas.getByRole('alert').textContent ?? '').toContain('This handle is already taken'));
+    await expect(createdNavigation).not.toHaveBeenCalled();
+    await expect(canvasElement.textContent ?? '').not.toContain('00000000-0000-8000-8000-000000000999');
   },
 };
