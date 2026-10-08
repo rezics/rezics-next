@@ -186,6 +186,13 @@ export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/title-candidate-original-custody.test.ts',
 ]);
 
+/** Fresh bootstrap writes the text generation after the first Fuseki process.
+ * These files restart that process once so qualifyAtStartup can admit the exclusive writer. */
+export const exclusiveWriterStartupFiles: ReadonlySet<string> = new Set([
+  // Original title custody prepares the Work-name directory only after that admission.
+  'tests/qa/integration/title-candidate-original-custody.test.ts',
+]);
+
 /** These files post raw SPARQL. That endpoint keeps the service from admitting the Work-name writer, so their stack keeps the fixture assembler. */
 export const rawSparqlIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/access-author.test.ts',
