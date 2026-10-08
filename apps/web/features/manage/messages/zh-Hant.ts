@@ -36,6 +36,7 @@ export default {
   moreRealms: '顯示更多社群',
   search: '搜尋',
   openQueue: '開啟審核佇列', openRealmQueue: insert('開啟 {{realm}} 的審核佇列', { realm: String }),
+  editSite: '編輯網站', editRealmSite: insert('編輯{{realm}}的網站', { realm: String }),
   waiting: plural({ one: insert('{{count}} 件待處理'), other: insert('{{count}} 件待處理') }, { count: asValue(number()) }),
   waitingAtLeast: insert('{{count}}+ 件待處理', { count: String }),
   nothingWaiting: '目前沒有待處理項目',

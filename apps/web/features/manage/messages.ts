@@ -38,6 +38,7 @@ export const messages = {
   moreRealms: 'Show more Realms',
   search: 'Search',
   openQueue: 'Open queue', openRealmQueue: insert('Open the queue of {{realm}}', { realm: String }),
+  editSite: 'Edit site', editRealmSite: insert('Edit the site of {{realm}}', { realm: String }),
   waiting: plural({ one: insert('{{count}} waiting'), other: insert('{{count}} waiting') }, { count: asValue(number()) }),
   waitingAtLeast: insert('{{count}}+ waiting', { count: String }),
   nothingWaiting: 'Nothing waiting',

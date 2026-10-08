@@ -11,10 +11,11 @@ import { relativeTime } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import { ManageFailure, Named, Thumb } from './parts.tsx';
 import { positionOf } from './permissions.ts';
+import { zoneEditorPath } from '../zone-editor/routes.ts';
 import { ActingAs } from './realm-frame.tsx';
 import { realmHref } from './routes.ts';
 import { SITE_SAFETY_PATH } from './safety-state.ts';
-import type { Loaded, ManagedRealm, RealmHeader } from './types.ts';
+import { isUuid, type Loaded, type ManagedRealm, type RealmHeader } from './types.ts';
 
 /** A managed Realm as the list shows it: Main's permissions and counts, its public name, and its Manage address. */
 export interface ManagedSummary { realm: ManagedRealm; header: RealmHeader | null; address: string }
@@ -50,8 +51,12 @@ function RealmCard({ summary, now, locale, messages }: { summary: ManagedSummary
         <ClockIcon aria-hidden="true" className="size-4" />
         {t.lastActivity({ time: relativeTime(realm.latestActivity, now, locale) })}</p> : null}
     </div>
-    <LocalizedLink href={realmHref(address)} aria-label={t.openRealmQueue({ realm: name })}
-      className={cn(buttonVariants({ size: 'sm' }), 'justify-self-start')}>{t.openQueue}</LocalizedLink>
+    <div className="flex flex-wrap gap-2">
+      <LocalizedLink href={realmHref(address)} aria-label={t.openRealmQueue({ realm: name })}
+        className={cn(buttonVariants({ size: 'sm' }), 'justify-self-start')}>{t.openQueue}</LocalizedLink>
+      {isUuid(address) ? null : <LocalizedLink href={zoneEditorPath(address)} aria-label={t.editRealmSite({ realm: name })}
+        className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), 'justify-self-start')}>{t.editSite}</LocalizedLink>}
+    </div>
   </li>;
 }
 

@@ -39,6 +39,7 @@ export default {
   moreRealms: '커뮤니티 더 보기',
   search: '검색',
   openQueue: '대기열 열기', openRealmQueue: insert('{{realm}} 대기열 열기', { realm: String }),
+  editSite: '사이트 편집', editRealmSite: insert('{{realm}} 사이트 편집', { realm: String }),
   waiting: plural({ one: insert('{{count}}건 대기 중'), other: insert('{{count}}건 대기 중') }, { count: asValue(number()) }),
   waitingAtLeast: insert('{{count}}건 이상 대기 중', { count: String }),
   nothingWaiting: '대기 중인 항목이 없어요',

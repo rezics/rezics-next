@@ -47,6 +47,7 @@ import { EntityPage } from '../entity-page/entity-page.tsx';
 import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
 import { zoneTheme } from './theme.ts';
 import { MemberList } from './site-pages.tsx';
+import { ZoneEditLink } from '../zone-editor/edit-link.tsx';
 import { ZoneHomeDocument, zoneHomeDocument } from '../zone-editor/home-document.tsx';
 import type { ZoneContext } from '@rezics/zone-sdk';
 import { cookies, headers } from 'next/headers';
@@ -449,8 +450,8 @@ async function standaloneSite(
       pkg={null}
       nonce={incoming.get(ZONE_NONCE_HEADER) ?? undefined}
       members={null}
-      actions={null}
-      masthead={<ZoneMasthead zone={zone} members={null} actions={null} />}
+      actions={<ZoneEditLink zoneId={resolved.zone} space={ref} locale={locale} />}
+      masthead={<ZoneMasthead zone={zone} members={null} actions={<ZoneEditLink zoneId={resolved.zone} space={ref} locale={locale} />} />}
       tabs={null}
       site={{
         label: zone.name.value,

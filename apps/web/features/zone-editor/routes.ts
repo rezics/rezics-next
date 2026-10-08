@@ -6,3 +6,7 @@ export function zoneEditorPath(space: string): string {
 export function zonePreviewPath(space: string): string {
   return `/manage/z/${encodeURIComponent(space)}/preview`;
 }
+
+export function zoneNavigationPath(space: string): string {
+  return `${zoneEditorPath(space)}/navigation`;
+}

@@ -39,6 +39,7 @@ export default {
   moreRealms: 'Afficher plus de communautés',
   search: 'Rechercher',
   openQueue: 'Ouvrir la file d’attente', openRealmQueue: insert('Ouvrir la file d’attente de {{realm}}', { realm: String }),
+  editSite: 'Modifier le site', editRealmSite: insert('Modifier le site de {{realm}}', { realm: String }),
   waiting: plural({ one: insert('{{count}} en attente'), other: insert('{{count}} en attente') }, { count: asValue(number()) }),
   waitingAtLeast: insert('{{count}}+ en attente', { count: String }),
   nothingWaiting: 'Rien en attente',

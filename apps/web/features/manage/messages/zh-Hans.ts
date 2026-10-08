@@ -37,6 +37,7 @@ export default {
   moreRealms: '显示更多社区',
   search: '搜索',
   openQueue: '打开待办', openRealmQueue: insert('打开{{realm}}的待办', { realm: String }),
+  editSite: '编辑站点', editRealmSite: insert('编辑{{realm}}的站点', { realm: String }),
   waiting: plural({ other: insert('{{count}} 项待处理') }, { count: asValue(number()) }),
   waitingAtLeast: insert('{{count}}+ 项待处理', { count: String }),
   nothingWaiting: '没有待处理事项',

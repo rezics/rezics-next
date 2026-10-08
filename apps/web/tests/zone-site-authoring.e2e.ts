@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { expect, type Page, test, type TestInfo } from '@playwright/test';
 import { Pool } from 'pg';
+import { spaceHref } from '../features/address/path.ts';
+import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 
 // An author writes a Realm-less Zone's home page, previews the saved draft, and publishes it.
@@ -74,13 +76,58 @@ async function writeHome(page: Page, text: string) {
 async function shoot(page: Page, name: string, info: TestInfo) {
   for (const [label, viewport] of [['1280', desktop], ['390', phone]] as const) {
     await page.setViewportSize(viewport);
+    await page.evaluate(() => window.scrollTo(0, 0));
     await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${name} at ${label}px`).toBe(true);
+    // The shell's search field is also a textbox. The writing area is the one in the page.
+    const writing = await page.evaluate(() => {
+      const main = document.getElementById('main-content') ?? document.body;
+      const boxes = [...main.querySelectorAll<HTMLElement>('[role="textbox"], textarea, input:not([type="hidden"])')];
+      const home = boxes.find(element => element.getAttribute('aria-label') === 'Home page');
+      const box = home ?? boxes[0];
+      if (!box) return true;
+      const top = box.getBoundingClientRect().top;
+      return top >= 0 && top < innerHeight;
+    });
+    expect(writing, `${name} writing area at ${label}px`).toBe(true);
     const path = info.outputPath(`${name}-${label}.png`);
     await page.screenshot({ path, fullPage: true });
     console.log(`[zone-site-authoring] ${label}px ${name}: ${path}`);
   }
   await page.setViewportSize(desktop);
+}
+
+async function createCollection(page: Page, collection: string, name: string, actingSubject: string) {
+  const key = randomUUID();
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const response = await page.request.post('/api/main/v1/collections', {
+      headers: { 'idempotency-key': key },
+      data: { collection, name, language: 'en', disclosure: 'public', actingSubject },
+    });
+    if (response.status() === 200 || response.status() === 201) return;
+    if (response.status() !== 202) throw new Error(`Collection create failed (${response.status()}): ${(await response.text()).slice(0, 400)}`);
+    await page.waitForTimeout(500);
+  }
+  throw new Error(`Collection ${name} was not created`);
+}
+
+function pageSuggestion(work: string, title: string) {
+  return {
+    work, mainVersion: work,
+    title: { value: title, language: 'en', direction: 'ltr', basis: 'requested' },
+    cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'collection', resourceType: 'collection' },
+    types: [], authors: [], matchedField: 'title', matchedText: title, matchedLanguage: 'en',
+  };
+}
+
+async function addNavigationLink(page: Page, name: string) {
+  const finder = page.getByRole('textbox', { name: 'Page' });
+  await finder.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('Harbor');
+  await page.getByRole('option', { name }).click();
+  await page.getByRole('button', { name: 'Add link' }).click();
+  await expect(page.getByRole('list', { name: 'Links' }).getByText(name)).toBeVisible();
 }
 
 test.use({ actionTimeout: 15_000 });
@@ -119,6 +166,13 @@ test('an author writes, previews and publishes a zone home page, and a second ta
   await grant(`zone:edit:${zone}`, 'zone.edit', principalId, actingSubject);
 
   const editorPath = `/en/manage/z/${spaceId}`;
+  await expect(async () => {
+    await page.goto(localizedPath(spaceHref(spaceId, 'site'), 'en'));
+    await expect(page.getByRole('link', { name: 'Edit site' })).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 90_000 });
+  await page.getByRole('link', { name: 'Edit site' }).click();
+  // The public site links with the Zone's address (short id and name), not the raw id.
+  await expect(page).toHaveURL(/\/manage\/z\/[^/?#]+$/);
   await expect(async () => {
     await page.goto(editorPath);
     await expect(page.getByRole('heading', { level: 1, name: 'Harbor notes' })).toBeVisible({ timeout: 5_000 });
@@ -203,6 +257,50 @@ test('an author writes, previews and publishes a zone home page, and a second ta
       await expect(reader.locator('.rezics-document')).not.toContainText(otherNote);
     }).toPass({ timeout: 90_000 });
     await shoot(reader, 'zone-home-republished', info);
+
+    const charts = `https://rezics.com/id/${randomUUID()}`;
+    const tides = `https://rezics.com/id/${randomUUID()}`;
+    await grant(`collection:edit:${charts}`, 'collection.edit', principalId, actingSubject);
+    await grant(`semantic:read:${charts}`, 'semantic.read', principalId, actingSubject);
+    await grant(`collection:edit:${tides}`, 'collection.edit', principalId, actingSubject);
+    await grant(`semantic:read:${tides}`, 'semantic.read', principalId, actingSubject);
+    await createCollection(page, charts, 'Harbor charts', actingSubject);
+    await createCollection(page, tides, 'Harbor tides', actingSubject);
+    await page.route(url => url.pathname.includes('/v1/search/typeahead'), async route => {
+      await route.fulfill({
+        status: 200, contentType: 'application/json',
+        body: JSON.stringify({
+          profile: 'public-work-typeahead-v1',
+          items: [pageSuggestion(charts, 'Harbor charts'), pageSuggestion(tides, 'Harbor tides')],
+          hasMore: false, sourcePosition: { dataEpoch: '00000000-0000-4000-8000-000000000901', sequence: '1' },
+        }),
+      });
+    });
+    await page.getByRole('link', { name: 'Navigation', exact: true }).click();
+    await expect(page.getByRole('heading', { level: 2, name: 'Navigation' })).toBeVisible();
+    await addNavigationLink(page, 'Harbor charts');
+    await addNavigationLink(page, 'Harbor tides');
+    await page.getByRole('button', { name: 'Move up Harbor tides' }).click();
+    await shoot(page, 'zone-navigation-editor', info);
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    await expect(page.getByText('Draft saved.')).toBeVisible();
+    await page.getByRole('button', { name: 'Publish', exact: true }).click();
+    await expect(page.getByText(/^Published\./)).toBeVisible({ timeout: 30_000 });
+    await expect(async () => {
+      await reader.goto(siteHref!);
+      await expect(reader.locator('[data-zone-site-navigation]').getByRole('link')).toHaveText(
+        ['Home', 'Harbor tides', 'Harbor charts'], { timeout: 5_000 });
+    }).toPass({ timeout: 90_000 });
+    await page.getByRole('button', { name: 'Remove Harbor charts' }).click();
+    await page.getByRole('button', { name: 'Save draft' }).click();
+    await expect(page.getByText('Draft saved.')).toBeVisible();
+    await page.getByRole('button', { name: 'Publish', exact: true }).click();
+    await expect(page.getByText(/^Published\./)).toBeVisible({ timeout: 30_000 });
+    await expect(async () => {
+      await reader.goto(siteHref!);
+      await expect(reader.locator('[data-zone-site-navigation]').getByRole('link')).toHaveText(
+        ['Home', 'Harbor tides'], { timeout: 5_000 });
+    }).toPass({ timeout: 90_000 });
     await second.close();
   } finally {
     await anonymous.close();

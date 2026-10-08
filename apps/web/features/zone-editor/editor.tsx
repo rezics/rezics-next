@@ -10,6 +10,7 @@ import { commandLane, type WriteRound } from '../api/command.ts';
 import { BodyEditor } from '../document-editor/body-editor.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { browserZoneAuthoring, choiceWire, commitCommand, type SavedDraft, type WriteResult, type ZoneAuthoringClient } from './api.ts';
+import { EditorActions } from './editor-actions.tsx';
 import { ZoneHomeDocument } from './home-document.tsx';
 import type { ZoneEditorMessages } from './messages.ts';
 import {
@@ -17,7 +18,6 @@ import {
   type DraftChoice, type EditorState, type PublicationChoice,
 } from './model.ts';
 
-const actionClass = 'h-auto min-h-9 w-full whitespace-normal py-2 sm:h-9 sm:w-auto sm:whitespace-nowrap';
 const choiceClass = 'h-auto min-h-9 w-auto whitespace-normal px-3 sm:h-9 sm:whitespace-nowrap';
 
 /**
@@ -167,29 +167,17 @@ export function ZoneHomeEditor({ zoneId, zoneIri, actingSubject, locale, copy, i
     : state.notice.kind === 'published' ? (state.notice.replayed ? copy.publishedReplayed : copy.published)
     : state.notice.kind === 'loaded' ? copy.loaded : null;
 
-  return <section className="grid min-w-0 gap-4" aria-labelledby="zone-home-title">
-    <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0 space-y-2">
-        <h2 id="zone-home-title" className="font-semibold text-xl tracking-tight">{copy.homeTitle}</h2>
-        <p className="max-w-2xl text-pretty text-muted-foreground text-sm">{copy.homeHelp}</p>
-        <p className="text-sm" role="status">{statusText}</p>
+  return <section className="grid min-w-0 gap-3" aria-labelledby="zone-home-title">
+    <div className="min-w-0 space-y-2">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h2 id="zone-home-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.homeTitle}</h2>
+        <EditorActions copy={copy} canEdit={canEdit} busy={busy} dirty={dirty}
+          saveDisabled={!!busy || !dirty || state.notice.kind === 'stale'}
+          publishDisabled={!!busy || !canPublish(state) || state.notice.kind === 'publish-stale'}
+          onSave={() => save()} onPublish={() => publish()} previewHref={previewHref} siteHref={siteHref} />
       </div>
-      <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row">
-        {canEdit ? <>
-          <Button variant="outline" className={actionClass} onClick={() => save()} disabled={!!busy || !dirty || state.notice.kind === 'stale'} isLoading={busy === 'save'}>
-            {busy === 'save' ? copy.saving : copy.save}
-          </Button>
-          <Button className={actionClass} onClick={() => publish()} disabled={!!busy || !canPublish(state) || state.notice.kind === 'publish-stale'} isLoading={busy === 'publish'}>
-            {busy === 'publish' ? copy.publishing : copy.publish}
-          </Button>
-        </> : null}
-        <LocalizedLink href={previewHref} documentNavigation={dirty} className={cn(buttonVariants({ variant: 'outline' }), actionClass)}>
-          {copy.preview}
-        </LocalizedLink>
-        <LocalizedLink href={siteHref} documentNavigation={dirty} className={cn(buttonVariants({ variant: 'outline' }), actionClass)}>
-          {copy.viewSite}
-        </LocalizedLink>
-      </div>
+      <p className="max-w-2xl text-pretty text-muted-foreground text-sm">{copy.homeHelp}</p>
+      <p className="text-sm" role="status">{statusText}</p>
     </div>
     {notice ? <p className="text-sm" role="status">{notice}</p> : null}
     {dirty && canEdit ? <p className="text-pretty text-muted-foreground text-sm">{copy.saveFirst}</p> : null}

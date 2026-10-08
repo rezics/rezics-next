@@ -36,6 +36,7 @@ export default {
   moreRealms: 'コミュニティをさらに表示',
   search: '検索',
   openQueue: 'キューを開く', openRealmQueue: insert('{{realm}}のキューを開く', { realm: String }),
+  editSite: 'サイトを編集', editRealmSite: insert('{{realm}}のサイトを編集', { realm: String }),
   waiting: plural({ one: insert('{{count}}件が確認待ち'), other: insert('{{count}}件が確認待ち') }, { count: asValue(number()) }),
   waitingAtLeast: insert('{{count}}件以上が確認待ち', { count: String }),
   nothingWaiting: '確認待ちはありません',

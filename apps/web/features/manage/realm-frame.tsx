@@ -7,9 +7,10 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { agentShort } from './format.ts';
 import type { ManageMessages } from './messages.ts';
 import { AgentMark, Named, Thumb } from './parts.tsx';
+import { zoneEditorPath } from '../zone-editor/routes.ts';
 import { AccessRealmTabs } from './settings-navigation.tsx';
-import type { RealmHeader } from './types.ts';
 import { accessMessages } from './settings-messages.ts';
+import { isUuid, type RealmHeader } from './types.ts';
 
 /** The acting Agent, shown before any decision is made (Identity before action). */
 export function ActingAs({ agent, locale, messages }: { agent: AgentOption; locale: UiLocale; messages: ManageMessages }) {
@@ -52,8 +53,12 @@ export function RealmFrame({ realm, address = realm, header, agent, locale, mess
         </div>
         <AccessRealmTabs realm={realm} address={address} actor={agent.iri} settingsAllowed={settingsAllowed} labels={{ nav: t.realmNav, queue: t.tabQueue, log: t.tabLog, members: t.tabMembers,
           roles: t.tabRoles, showcase: t.tabShowcase, settings: t.tabSettings }} />
-        <LocalizedLink href={`/manage/r/${address}/requests`} className="w-fit rounded-md pb-3 text-primary text-sm underline-offset-4 hover:underline">
-          {accessMessages[locale].requests}</LocalizedLink>
+        <div className="flex flex-wrap gap-x-4 pb-3">
+          <LocalizedLink href={`/manage/r/${address}/requests`} className="w-fit rounded-md text-primary text-sm underline-offset-4 hover:underline">
+            {accessMessages[locale].requests}</LocalizedLink>
+          {isUuid(address) ? null : <LocalizedLink href={zoneEditorPath(address)} className="w-fit rounded-md text-primary text-sm underline-offset-4 hover:underline">
+            {t.editSite}</LocalizedLink>}
+        </div>
       </div>
     </div>
     <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-10">{children}</div>

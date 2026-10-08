@@ -23,7 +23,8 @@ export default async function ZoneEditorLayout({ children, params }: {
   if (loaded.kind === 'missing') notFound();
   const copy = messages[locale];
   return <ZoneEditorFrame name={loaded.kind === 'ready' ? loaded.model.name : space} editorPath={zoneEditorPath(space)}
-    agent={agent} locale={locale} manageMessages={manageMessages} sectionsLabel={copy.sectionsLabel} sectionHome={copy.sectionHome}>
+    agent={agent} locale={locale} manageMessages={manageMessages} sectionsLabel={copy.sectionsLabel}
+    sectionHome={copy.sectionHome} sectionNavigation={copy.sectionNavigation}>
     {children}
   </ZoneEditorFrame>;
 }
