@@ -255,7 +255,7 @@ test('a banned member sees the reason, appeals once, and sees the resolution', a
 
     await banned.page.reload();
     const resolved = banned.page.getByRole('region', { name: 'Your ban' });
-    await expect(resolved.getByRole('heading', { name: 'Ban upheld' })).toBeVisible();
+    await expect(resolved.getByRole('heading', { name: /Moderators upheld the ban/ })).toBeVisible();
     await expect(resolved.getByText(rationale)).toBeVisible();
     await expect(resolved.getByRole('button', { name: 'Send appeal' })).toHaveCount(0);
     expect(await banned.page.content()).not.toContain(actingSubject);

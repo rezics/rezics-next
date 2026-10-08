@@ -20,11 +20,10 @@ export const messages = {
   receivedTitle: 'Appeal received',
   receivedBody: 'Moderators have your statement. This ban has no second appeal.',
   statementHeading: 'What you sent',
-  upheldTitle: 'Ban upheld',
-  upheldBody: 'Moderators kept this ban.',
-  reversedTitle: 'Decision reversed',
-  reversedBody: 'Moderators reversed the decision. You stay banned until a moderator lifts the ban.',
-  decided: insert('Decided on {{date}}.', { date: String }),
+  upheld: insert('Moderators upheld the ban on {{date}}.', { date: String }),
+  upheldUndated: 'Moderators upheld the ban.',
+  lifted: insert('Your ban was lifted on {{date}}.', { date: String }),
+  liftedUndated: 'Your ban was lifted.',
   sharedLabel: 'What they shared',
 };
 

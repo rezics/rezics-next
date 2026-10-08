@@ -6,23 +6,18 @@ import { operationOpen, type PlatformOperationId } from '../api/platform-access.
 import { readPlatformAccess } from '../api/main.ts';
 import { SERVER_READ_LIMITS } from '../api/server-fetch.ts';
 import { serverRead } from '../api/server-read.ts';
-import { parseBanReading, type BanReading } from './reading.ts';
+import { readingFromBanResponse, type BanReading } from './reading.ts';
 
 const appealRead = 'getV1RealmsByRealmMember-receiptsByReceiptIdAppeal' satisfies PlatformOperationId;
 
 /**
- * The member's own ban for this Realm.
- *
- * The appeal read answers the reason, the end date and the appeal, and it
- * never names the decider. It only answers when the caller already has the
- * receipt id. No current read gives that id to the sanctioned member: the
- * members list is a moderator read and omits the receipt and the reason, and
- * joining policy has no ban. Until `GET /v1/realms/{realm}/member-ban` exists,
- * this returns nothing and the page stays quiet.
- *
- * Privacy for that read: only the principal who controls `actingSubject`;
- * 404 when there is no ban and for every other caller; the body is the appeal
- * reading, including `decidedAt` once a resolution has one, and no decider.
+ * The member's own ban: `GET /v1/realms/{realm}/member-ban?actingSubject=`.
+ * Exposure is `platform:realm-appeals` (the same group as the receipt appeal),
+ * bearer, read family. Only the controller of `actingSubject` may call it.
+ * A 404 is byte-identical for no ban, an expired ban, and any other caller,
+ * and this returns nothing in every one of those cases. A 200 body is the
+ * appeal reading plus the receipt id and `decidedAt`, and `liftedAt` with the
+ * lifting receipt when a reversal lifted the ban. It never names the decider.
  */
 export async function readOwnRealmBan(realm: string, actingSubject: string): Promise<BanReading | null> {
   const id = realm.slice(-36);
@@ -37,11 +32,11 @@ export async function readOwnRealmBan(realm: string, actingSubject: string): Pro
       headers: await mainReadHeaders({ authorization: `Bearer ${token}` }),
       cache: 'no-store',
     }, { timeoutMs: SERVER_READ_LIMITS.metadata });
-    if (!response.ok) {
+    if (response.status !== 200) {
       await response.body?.cancel();
       return null;
     }
-    return parseBanReading(await response.json());
+    return readingFromBanResponse(response.status, await response.json());
   } catch {
     return null;
   }

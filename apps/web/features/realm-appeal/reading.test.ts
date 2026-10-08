@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { materializeData } from 'native-i18n';
 import { messages } from './messages.ts';
 import de from './messages/de.ts';
 import es from './messages/es.ts';
@@ -7,7 +8,7 @@ import ja from './messages/ja.ts';
 import ko from './messages/ko.ts';
 import zhHans from './messages/zh-Hans.ts';
 import zhHant from './messages/zh-Hant.ts';
-import { memberFacingText, parseBanReading, type BanReading } from './reading.ts';
+import { memberFacingText, parseBanReading, readingFromBanResponse, type BanReading } from './reading.ts';
 import { appealPresentation, banSchedule, offersAnotherAppeal, shownReading, statementProblem } from './view.ts';
 
 const receipt = '00000000-0000-4000-8000-0000000000aa';
@@ -60,9 +61,46 @@ test('one receipt offers one appeal, then the outcome and not another form', () 
   expect(appealPresentation(upheld)).toMatchObject({
     kind: 'upheld', decidedAt: '2026-10-02T08:00:00.000Z', rationale: 'The posts were the same chapter.',
   });
-  expect(appealPresentation(reversed)).toMatchObject({ kind: 'reversed', rationale: null, decidedAt: null });
+  expect(appealPresentation(reversed)).toMatchObject({
+    kind: 'reversed', rationale: null, decidedAt: null, liftedAt: null, liftingReceiptId: null,
+  });
   expect(memberFacingText(upheld)).not.toContain(moderator);
   expect(memberFacingText(reversed)).not.toContain('acting_subject');
+  expect(upheld.liftedAt).toBeNull();
+  expect(upheld.liftingReceiptId).toBeNull();
+});
+
+test('a reversed appeal records the lift and keeps the lifting receipt off the page', () => {
+  const liftingReceiptId = '00000000-0000-4000-8000-0000000000dd';
+  const reading = ban({
+    state: 'decided', caseId, statement: 'I posted it once.', outcome: 'restore', rationale: null,
+    decidedAt: '2026-10-02T08:00:00.000Z', liftedAt: '2026-10-02T08:05:00.000Z', liftingReceiptId,
+    decider: moderator,
+  });
+  expect(reading.liftedAt).toBe('2026-10-02T08:05:00.000Z');
+  expect(reading.liftingReceiptId).toBe(liftingReceiptId);
+  expect(appealPresentation(reading)).toMatchObject({ kind: 'reversed', liftedAt: reading.liftedAt, liftingReceiptId });
+  const shown = memberFacingText(reading).join('\n');
+  expect(shown).toContain('2026-10-02T08:05:00.000Z');
+  expect(shown).not.toContain(liftingReceiptId);
+  expect(shown).not.toContain(moderator);
+  const english = materializeData(messages, { locale: 'en' });
+  expect(english.lifted({ date: 'DATE' })).toBe('Your ban was lifted on DATE.');
+  expect(english.upheld({ date: 'DATE' })).toBe('Moderators upheld the ban on DATE.');
+  expect(english.liftedUndated).not.toContain('stay banned');
+  expect(english.upheldUndated).toBe('Moderators upheld the ban.');
+});
+
+test('a 404 renders nothing, even when the body looks like a ban', () => {
+  const body = {
+    realm: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
+    receiptId: receipt, action: 'ban', reason: 'Because', bannedUntil: null, permanent: true,
+    happenedAt: '2026-10-01T12:00:00.000Z', decider: moderator, appeal: { state: 'none' },
+  };
+  expect(readingFromBanResponse(404, body)).toBeNull();
+  expect(readingFromBanResponse(403, body)).toBeNull();
+  expect(readingFromBanResponse(200, body)?.receiptId).toBe(receipt);
+  expect(JSON.stringify(readingFromBanResponse(200, body))).not.toContain(moderator);
 });
 
 test('a private rationale and a bad reading stay off the page', () => {

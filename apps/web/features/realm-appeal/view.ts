@@ -26,18 +26,28 @@ export type AppealPresentation =
   | { kind: 'appeal' }
   | { kind: 'received'; statement: string }
   | { kind: 'upheld'; statement: string; rationale: string | null; decidedAt: string | null }
-  | { kind: 'reversed'; statement: string; rationale: string | null; decidedAt: string | null };
+  | {
+    kind: 'reversed';
+    statement: string;
+    rationale: string | null;
+    decidedAt: string | null;
+    liftedAt: string | null;
+    liftingReceiptId: string | null;
+  };
 
 /** What the member can do next. A receipt offers one appeal, then only the outcome. */
 export function appealPresentation(reading: BanReading): AppealPresentation {
   if (reading.appeal.state === 'none') return { kind: 'appeal' };
   if (reading.appeal.state === 'open') return { kind: 'received', statement: reading.appeal.statement };
-  return {
-    kind: reading.appeal.outcome === 'restore' ? 'reversed' : 'upheld',
+  const decided = {
     statement: reading.appeal.statement,
     rationale: reading.appeal.rationale,
     decidedAt: reading.appeal.decidedAt,
   };
+  if (reading.appeal.outcome === 'restore') {
+    return { kind: 'reversed', ...decided, liftedAt: reading.liftedAt, liftingReceiptId: reading.liftingReceiptId };
+  }
+  return { kind: 'upheld', ...decided };
 }
 
 export function offersAnotherAppeal(reading: BanReading): boolean {

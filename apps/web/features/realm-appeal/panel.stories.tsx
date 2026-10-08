@@ -8,12 +8,17 @@ import { RealmBanPanel, type AppealActions } from './panel.tsx';
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const receiptId = '00000000-0000-4000-8000-0000000000aa';
 const caseId = '00000000-0000-4000-8000-0000000000bb';
+const liftingReceiptId = '00000000-0000-4000-8000-0000000000dd';
 const reason = 'Posted the same chapter five times.';
 
-function ban(appeal: BanReading['appeal'], bannedUntil: string | null = null): BanReading {
+function ban(
+  appeal: BanReading['appeal'],
+  bannedUntil: string | null = null,
+  lift: Pick<BanReading, 'liftedAt' | 'liftingReceiptId'> = { liftedAt: null, liftingReceiptId: null },
+): BanReading {
   return {
     realm, receiptId, action: 'ban', reason, bannedUntil, permanent: bannedUntil === null,
-    happenedAt: '2026-10-01T12:00:00.000Z', appeal,
+    happenedAt: '2026-10-01T12:00:00.000Z', appeal, ...lift,
   };
 }
 
@@ -36,15 +41,7 @@ async function fits(canvasElement: HTMLElement) {
   await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth + 1);
 }
 
-/** A member who is not banned sees none of this. */
-export const NotBanned: Story = {
-  args: { reading: null },
-  play: async ({ canvasElement }) => {
-    await expect(within(canvasElement).queryByRole('region', { name: 'Your ban' })).toBeNull();
-  },
-};
-
-/** Permanent ban, the recorded reason, and one appeal. */
+/** Permanent ban, the recorded reason, and one appeal. The form starts clean. */
 export const CanAppeal: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -52,9 +49,16 @@ export const CanAppeal: Story = {
     await expect(canvas.getByText('This ban does not end.')).toBeVisible();
     await expect(canvas.getByText(reason)).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Send appeal' })).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: 'Send appeal' }));
-    await expect(canvas.getByRole('alert')).toHaveTextContent('Write what they should reconsider.');
+    await expect(canvas.queryByRole('alert')).toBeNull();
     await expect(canvas.getByRole('textbox', { name: 'Your statement' })).toHaveValue('');
+  },
+};
+
+/** A member who is not banned sees none of this. */
+export const NotBanned: Story = {
+  args: { reading: null },
+  play: async ({ canvasElement }) => {
+    await expect(within(canvasElement).queryByRole('region', { name: 'Your ban' })).toBeNull();
   },
 };
 
@@ -105,29 +109,31 @@ export const Upheld: Story = {
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { name: 'Ban upheld' })).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: /Moderators upheld the ban on/ })).toBeVisible();
     await expect(canvas.getByText('The posts were the same chapter.')).toBeVisible();
-    await expect(canvas.getByText(/Decided on/)).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: 'You are banned from this community' })).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Send appeal' })).toBeNull();
     await expect(canvasElement.textContent).not.toContain(moderatorName);
   },
 };
 
-/** Reversed does not claim the ban was lifted, and a private rationale is absent. */
+/** A reversal lifts the ban. The page names the date and not a remaining ban. */
 export const Reversed: Story = {
   args: {
     reading: ban({
       state: 'decided', caseId, statement: 'I posted it once.', outcome: 'restore',
-      rationale: null, decidedAt: null,
-    }),
+      rationale: null, decidedAt: '2026-10-02T08:30:00.000Z',
+    }, null, { liftedAt: '2026-10-02T08:30:00.000Z', liftingReceiptId }),
   },
   globals: { viewport: { value: 'desktop' } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('heading', { name: 'Decision reversed' })).toBeVisible();
-    await expect(canvas.getByText(/You stay banned until a moderator lifts the ban/)).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: /Your ban was lifted on/ })).toBeVisible();
+    await expect(canvas.queryByRole('heading', { name: 'You are banned from this community' })).toBeNull();
+    await expect(canvas.queryByText(/stay banned/)).toBeNull();
     await expect(canvas.queryByText('What they shared')).toBeNull();
     await expect(canvas.queryByRole('button', { name: 'Send appeal' })).toBeNull();
+    await expect(canvasElement.textContent).not.toContain(liftingReceiptId);
     await fits(canvasElement);
   },
 };
