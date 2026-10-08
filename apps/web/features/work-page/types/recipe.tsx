@@ -8,7 +8,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'rea
 import type { UiLocale } from '../../../i18n/define.ts';
 import { browserMainApi } from '../../api/browser.ts';
 import { followHref } from '../../entity-page/href.ts';
-import { appendRecipePage, isStaleRecipePage, recipePageQuery } from '../../recipe-editor/pages.ts';
+import { appendRecipePage, fillRecipePages, recipePageQuery } from '../../recipe-editor/pages.ts';
 import { formatMeasure } from '../../recipe-editor/quantity.ts';
 import Link from '../../shell/localized-link.tsx';
 import type { WorkPageMessages } from '../messages.ts';
@@ -272,7 +272,7 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
   initial: RecipeWorkPage | null; /** The recipe section's link in the Work's page projection. */ href: string;
   actingSubject: string | null; /** The way into the recipe editor, for a viewer who may edit it. */ edit?: { href: string; label: string } | null;
   text: string | null; locale: UiLocale; messages: WorkPageMessages;
-  /** Stories answer a later page without the network. The page itself asks only when someone continues. */
+  /** Stories answer a later page without the network. Showing more follows `next` within the reader budget. */
   readPage?: RecipePageRead;
 }) {
   const [page, setPage] = useState(initial);
@@ -307,17 +307,34 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
     setBusy(true);
     setError(false);
     try {
-      const answer = await read({ servings });
+      const filled = await fillRecipePages(read, { servings });
       if (ticket !== generation.current) return;
-      if (answer.error || !answer.data) throw new Error('scale');
+      if (!filled.ok && filled.stale) {
+        setChanged(true);
+        const again = await fillRecipePages(read, { servings });
+        if (ticket !== generation.current) return;
+        if (!again.ok || !again.page) setError(true);
+        else {
+          applied.current = servings;
+          setContinueFailed(false);
+          setPage(again.page);
+        }
+        return;
+      }
+      const next = filled.page;
+      if (!filled.ok && !next) {
+        setError(true);
+        return;
+      }
+      if (!next) throw new Error('scale');
       applied.current = servings;
       setChanged(false);
       setContinueFailed(false);
-      setPage(answer.data);
+      setPage(next);
     } catch { if (ticket === generation.current) setError(true); }
     finally { if (ticket === generation.current) setBusy(false); }
   };
-  // The next page is read only from this control. A refusal leaves what is already shown.
+  // Each click follows `next` within the same budget as the first view. A refusal leaves what is already shown.
   const more = async () => {
     const cursor = page?.next;
     if (!cursor || continuing) return;
@@ -325,25 +342,27 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
     setContinuing(true);
     setContinueFailed(false);
     try {
-      const answer = await read({ cursor });
+      const filled = await fillRecipePages(read, { cursor });
       if (ticket !== generation.current) return;
-      if (isStaleRecipePage(answer.error)) {
+      if (!filled.ok && filled.stale) {
         setChanged(true);
-        const again = await read(applied.current != null ? { servings: applied.current } : {});
+        const again = await fillRecipePages(read, applied.current != null ? { servings: applied.current } : {});
         if (ticket !== generation.current) return;
-        if (again.error || !again.data) setContinueFailed(true);
+        if (!again.ok || !again.page) setContinueFailed(true);
         else {
-          applied.current = wholeServings(again.data) ?? applied.current;
-          setPage(again.data);
+          applied.current = wholeServings(again.page) ?? applied.current;
+          setPage(again.page);
         }
         return;
       }
-      if (answer.error || !answer.data) {
+      const chunk = filled.page;
+      if (!filled.ok || !chunk) {
+        if (chunk) setPage(current => current ? appendRecipePage(current, chunk) : chunk);
         setContinueFailed(true);
         return;
       }
       setChanged(false);
-      setPage(current => current ? appendRecipePage(current, answer.data!) : answer.data);
+      setPage(current => current ? appendRecipePage(current, chunk) : chunk);
     } catch { if (ticket === generation.current) setContinueFailed(true); }
     finally { if (ticket === generation.current) setContinuing(false); }
   };

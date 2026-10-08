@@ -6,8 +6,9 @@ import { recipeEditHref } from '../features/recipe-editor/route.ts';
 import { studioHref } from '../features/studio/agent.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 
-// A recipe longer than one page. The reader shows the first part and continues, keeping a section
-// that crosses the boundary as one section. The editor loads the rest before it changes the structure.
+// A recipe longer than one reader window. The first view follows section headings until it is holding
+// about a page of occurrences, then continues; a section that crosses that boundary stays one section.
+// The editor loads the rest before it changes the structure.
 
 function fixture<T>(name: string): T {
   const path = process.env[name];
@@ -147,8 +148,15 @@ test('a long recipe shows its first part, continues with its sections whole, and
   };
 
   await open(1280);
-  await expect(recipeOf()).not.toContainText('dough-01');
-  await expect(recipeOf()).not.toContainText('Sauce');
+  const opened = recipeOf();
+  await expect(opened.getByText('1 cup dough-01')).toBeVisible();
+  await expect(opened.getByText('1 cup dough-40')).toBeVisible();
+  await expect(opened.getByText('1 cup sauce-01')).toBeVisible();
+  await expect(opened.getByText('1 cup sauce-40')).toBeVisible();
+  await expect(opened.getByRole('heading', { name: 'Dough', exact: true })).toHaveCount(1);
+  await expect(opened.getByRole('heading', { name: 'Sauce', exact: true })).toHaveCount(1);
+  await expect(opened).not.toContainText('Step 1');
+  await expect(more()).toBeVisible();
   await shoot(page, 'recipe-long-first', info);
   await continueAll();
   const recipe = recipeOf();
@@ -168,20 +176,31 @@ test('a long recipe shows its first part, continues with its sections whole, and
   await recipe.getByRole('spinbutton', { name: 'Servings' }).fill('8');
   await recipe.getByRole('button', { name: 'Scale', exact: true }).click();
   await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
-  await expect(recipe.getByRole('heading', { name: 'Dough', exact: true })).toBeVisible();
-  await expect(recipe).not.toContainText('dough-01');
-  await expect(recipe).not.toContainText('sauce-01');
+  await expect(recipe.getByRole('heading', { name: 'Dough', exact: true })).toHaveCount(1);
+  await expect(recipe.getByRole('heading', { name: 'Sauce', exact: true })).toHaveCount(1);
+  const doughLines = recipe.getByRole('heading', { name: 'Dough', exact: true }).locator('xpath=following-sibling::ul[1]').getByRole('listitem');
+  const sauceLines = recipe.getByRole('heading', { name: 'Sauce', exact: true }).locator('xpath=following-sibling::ul[1]').getByRole('listitem');
+  // Scaling replaces the window. The written amount stays beside the scaled line, so the proof is
+  // one line per ingredient, at the new count, with the method still unread.
+  await expect(doughLines).toHaveCount(40);
+  await expect(sauceLines).toHaveCount(40);
+  await expect(doughLines.first()).toContainText('2 cups dough-01');
+  await expect(sauceLines.last()).toContainText('2 cups sauce-40');
   await expect(recipe).not.toContainText('Step 40');
   await expect(more()).toBeVisible();
   await shoot(page, 'recipe-long-scaled', info);
-  await more().click();
-  await expect(page.locator('[aria-busy="true"]')).toHaveCount(0);
-  await expect(recipe.getByText('2 cups dough-01')).toBeVisible();
-  await expect(recipe).not.toContainText('sauce-01');
-  await expect(recipe).not.toContainText('Step 40');
+  await continueOnce();
+  await expect(doughLines).toHaveCount(40);
+  await expect(doughLines.first()).toContainText('2 cups dough-01');
+  await expect(recipe.getByRole('heading', { name: 'Dough', exact: true })).toHaveCount(1);
+  await expect(recipe.getByRole('heading', { name: 'Sauce', exact: true })).toHaveCount(1);
+  await expect(method.getByRole('listitem')).toHaveCount(40);
+  await expect(method.getByRole('listitem').nth(39)).toContainText('Step 40');
+  await expect(more()).toHaveCount(0);
 
   await open(390);
-  await expect(recipeOf()).not.toContainText('dough-01');
+  await expect(recipeOf().getByText('1 cup dough-01')).toBeVisible();
+  await expect(recipeOf()).not.toContainText('Step 1');
   await expect(more()).toBeVisible();
   await continueAll();
   await expect(recipeOf().getByRole('heading', { name: 'Dough', exact: true })).toHaveCount(1);

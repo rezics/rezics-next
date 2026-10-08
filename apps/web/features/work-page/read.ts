@@ -6,6 +6,7 @@ import type { ResolvedAddress } from '../address/client.ts';
 import { addressKey } from '../address/path.ts';
 import { requestLocale } from '../../i18n/server.ts';
 import { followHref } from '../entity-page/href.ts';
+import { fillRecipePages, recipePageQuery } from '../recipe-editor/pages.ts';
 import { failureOf } from './failure.ts';
 import { WORK_MISSING_HEADER } from './admission.ts';
 import { mainApiWithToken } from '../api/main.ts';
@@ -123,11 +124,19 @@ export const readWorkHeader = cache(async (id: string, _locale: UiLocale): Promi
   return settle(() => main.v1.works({ id }).get({ query: { actingSubject } }));
 });
 
-/** A Work's recipe section, read from the link its `entity-page-v1` projection gave. */
+/**
+ * A Work's recipe section, read from the link its `entity-page-v1` projection gave.
+ * The first response follows `next` within the reader budget, so a recipe that fits is whole.
+ * A later call that fails still returns the pages already read.
+ */
 export async function readRecipeWorkPage(href: string, servings?: number): Promise<Loaded<RecipeWorkPage | null>> {
   const { main, actingSubject } = await reader();
-  return settleNullable(followHref<RecipeWorkPage | null>(main, href, { actingSubject,
-    ...(servings === undefined ? {} : { servings }) }));
+  const filled = await fillRecipePages(
+    query => followHref<RecipeWorkPage | null>(main, href, recipePageQuery(actingSubject, query))(),
+    servings === undefined ? {} : { servings });
+  if (filled.page) return { ok: true, data: filled.page };
+  if (!filled.ok) return { ok: false, failure: failureOf(filled.error.status ?? 0) };
+  return { ok: true, data: null };
 }
 
 /** A Work's prompt or skill section, read from the link its projection gave. */

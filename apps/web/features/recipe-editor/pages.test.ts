@@ -8,7 +8,8 @@ import { actingSubject, fakeMain, id, mainVersion, startRecipe, structure, work 
 import { parseLine, qualifierOf } from './ingredient-line.ts';
 import { plan } from './intents.ts';
 import { emptyRecipe, type Node, type RecipePageLike, stateOf } from './model.ts';
-import { appendRecipePage, isStaleRecipePage, loadRecipe, mergeRecipeState, RECIPE_OCCURRENCE_CAP, recipePageQuery, type RecipeFetch } from './pages.ts';
+import { appendRecipePage, fillRecipePages, isStaleRecipePage, loadRecipe, mergeRecipeState, RECIPE_OCCURRENCE_CAP,
+  RECIPE_READER_OCCURRENCE_TARGET, RECIPE_READER_PAGE_BUDGET, recipePageQuery, type RecipeFetch } from './pages.ts';
 import { createRecipeStore } from './store.ts';
 
 const line = (text: string) => qualifierOf(parseLine(text), 'en');
@@ -157,6 +158,115 @@ test('reading a recipe for the editor follows the cursor and refuses a recipe pa
   }));
   const refused = await readRecipe(client(async () => ({ data: listed(bulky, 'more'), error: null })), work, actingSubject);
   expect(refused).toEqual({ ok: false, status: 422, problem: 'unavailable', detail: 'too-large' });
+});
+
+const readerPage = (nodes: readonly Node[], next?: string) => ({ ...listed(nodes, next), ingredients: [] as { occurrence: string }[] });
+const equipment = (from: number, count: number): Node[] => Array.from({ length: count }, (_, index) => ({
+  occurrence: id(from + index), parent: structure, role: 'equipment' as const,
+}));
+
+test('the reader follows next across sections until the budget, and a continuation never sends servings', async () => {
+  const queries: Array<{ cursor?: string; servings?: number }> = [];
+  const filled = await fillRecipePages(async query => {
+    queries.push({ ...query });
+    if (!query.cursor) return { data: readerPage([group, tomato], 'lines'), error: null };
+    if (query.cursor === 'lines') return { data: readerPage([salt]), error: null };
+    return { data: readerPage(equipment(1_900, 1), 'further'), error: null };
+  }, { servings: 4 });
+  expect(queries).toEqual([{ servings: 4 }, { cursor: 'lines' }]);
+  expect(filled.ok && filled.page?.occurrences.map(item => item.occurrence)).toEqual([group.occurrence, tomato.occurrence, salt.occurrence]);
+  expect(filled.ok && filled.page?.next).toBeUndefined();
+
+  let calls = 0;
+  const capped = await fillRecipePages(async query => {
+    calls += 1;
+    const index = query.cursor ? Number(query.cursor) : 0;
+    return { data: readerPage(equipment(2_000 + index, 1), String(index + 1)), error: null };
+  }, {});
+  expect(calls).toBe(RECIPE_READER_PAGE_BUDGET);
+  expect(capped.ok && capped.page?.occurrences).toHaveLength(RECIPE_READER_PAGE_BUDGET);
+  expect(capped.ok && capped.page?.next).toBe(String(RECIPE_READER_PAGE_BUDGET));
+
+  const whole = await loadRecipe(async cursor => {
+    const index = cursor ? Number(cursor) : 0;
+    return answer(listed(equipment(2_000 + index, 1), index < RECIPE_READER_PAGE_BUDGET ? String(index + 1) : undefined));
+  });
+  expect(whole.ok && whole.state.nodes).toHaveLength(RECIPE_READER_PAGE_BUDGET + 1);
+});
+
+test('the reader stops at a full page of occurrences and leaves a longer page for the next continuation', async () => {
+  let calls = 0;
+  const exact = await fillRecipePages(async query => {
+    calls += 1;
+    if (!query.cursor) return { data: readerPage(equipment(3_000, 60), 'rest'), error: null };
+    if (query.cursor === 'rest') return { data: readerPage(equipment(4_000, 40), 'tail'), error: null };
+    return { data: readerPage(equipment(5_000, 1)), error: null };
+  }, {});
+  expect(calls).toBe(2);
+  expect(exact.ok && exact.page?.occurrences).toHaveLength(RECIPE_READER_OCCURRENCE_TARGET);
+  expect(exact.ok && exact.page?.next).toBe('tail');
+
+  calls = 0;
+  const longer = await fillRecipePages(async query => {
+    calls += 1;
+    if (!query.cursor) return { data: readerPage(equipment(6_000, 90), 'more'), error: null };
+    if (query.cursor === 'more') return { data: readerPage(equipment(7_000, 20), 'tail'), error: null };
+    return { data: readerPage(equipment(8_000, 1)), error: null };
+  }, {});
+  expect(calls).toBe(2);
+  expect(longer.ok && longer.page?.occurrences).toHaveLength(90);
+  expect(longer.ok && longer.page?.next).toBe('more');
+
+  calls = 0;
+  const full = await fillRecipePages(async () => {
+    calls += 1;
+    return { data: readerPage(equipment(9_000, RECIPE_READER_OCCURRENCE_TARGET), 'tail'), error: null };
+  }, {});
+  expect(calls).toBe(1);
+  expect(full.ok && full.page?.next).toBe('tail');
+});
+
+test('a reader walk that fails keeps the pages it has, and a stale cursor is not followed again', async () => {
+  const stalled = await fillRecipePages(async query => query.cursor === 'b'
+    ? { data: null, error: { status: 503, value: null } }
+    : { data: readerPage(query.cursor ? [salt] : [group], query.cursor ? 'b' : 'a'), error: null }, {});
+  expect(stalled.ok).toBe(false);
+  if (!stalled.ok) {
+    expect(stalled.stale).toBe(false);
+    expect(stalled.page?.occurrences.map(item => item.occurrence)).toEqual([group.occurrence, salt.occurrence]);
+    expect(stalled.page?.next).toBe('b');
+  }
+
+  let followed = false;
+  const refused = await fillRecipePages(async query => {
+    if (query.cursor) followed = true;
+    return { data: null, error: { status: 503, value: null } };
+  }, {});
+  expect(refused).toEqual({ ok: false, stale: false, page: null, error: { status: 503, value: null } });
+  expect(followed).toBe(false);
+  expect(await fillRecipePages(async () => ({ data: null, error: null }), {})).toEqual({ ok: true, page: null });
+
+  let calls = 0;
+  const stale = await fillRecipePages(async query => {
+    calls += 1;
+    if (query.cursor) return { data: null, error: { status: 409, value: { profile: 'recipe-work-page-stale' } } };
+    return { data: readerPage([group], 'later'), error: null };
+  }, { servings: 8 });
+  expect(calls).toBe(2);
+  expect(stale.ok).toBe(false);
+  if (!stale.ok) {
+    expect(stale.stale).toBe(true);
+    expect(stale.page?.next).toBe('later');
+  }
+
+  calls = 0;
+  const spinning = await fillRecipePages(async query => {
+    calls += 1;
+    return { data: readerPage([group], query.cursor ? 'further' : 'again'), error: null };
+  }, {});
+  expect(calls).toBe(2);
+  expect(spinning.ok && spinning.page?.occurrences).toHaveLength(1);
+  expect(spinning.ok && spinning.page?.next).toBe('again');
 });
 
 test('a structure write waits until the recipe has been read, and a failed read keeps it closed', async () => {
