@@ -2484,7 +2484,7 @@ const UNIT_RESULT_LINE = /^\((?:pass|fail|skip|todo)\)\s+/;
 const UNIT_FAIL_LINE = /^\(fail\)\s+(.+?)(?:\s+\[[^\]]+\])?\s*$/;
 const UNIT_FILE_HEADER = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/;
 
-export type UnitGateRunKind = 'first' | 'isolated-retry' | 'never-started-rerun' | 'confirm';
+export type UnitGateRunKind = 'first' | 'isolated-retry' | 'never-started-rerun' | 'confirm' | 'alone';
 export interface UnitFailureCase { test: string; error: string }
 export interface UnitFileEvidence {
   file: string;
@@ -3624,6 +3624,144 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
   };
 }
 
+/** A start failure of the test process, not a product assertion. The step is what the refusal names. */
+export type InfrastructureStep = 'pg_ctl start' | 'embedded PostgreSQL' | 'port bind' | 'process start';
+
+/** The step a process or infrastructure start failure names. Assertion text that merely differs is not one. */
+export function infrastructureStep(text: string): InfrastructureStep | undefined {
+  if (/\bpg_ctl\b/.test(text) && (/could not start server|stopped waiting|Is server running\?|\bPID file\b/i.test(text)
+    || /Command failed: pg_ctl\b[\s\S]{0,800}?\bstart\b/.test(text))) return 'pg_ctl start';
+  if (/embedded[ -]?postgres/i.test(text)) return 'embedded PostgreSQL';
+  if (/\bEADDRINUSE\b|address already in use|port is already allocated/i.test(text)) return 'port bind';
+  return undefined;
+}
+
+interface AloneFileResult {
+  passed: boolean;
+  failures: UnitFailureDetail[];
+  fileErrors: UnitFileErrorDetail[];
+  /** Set when the file produced no product failure and the process could not start. */
+  step?: InfrastructureStep;
+  unfinished: boolean;
+}
+
+/** A crash after a failed start, such as `pool.end` on a pool the start never created.
+ * An assertion in the same text stays a product failure. */
+function startFallout(detail: string): boolean {
+  if (infrastructureStep(detail)) return true;
+  if (/\b(?:expect\(|Expected\b|Received\b|AssertionError)\b/.test(detail)) return false;
+  return /\b(?:TypeError|ReferenceError)\b/.test(detail)
+    || /is not an object|is not a function|Cannot read propert/i.test(detail);
+}
+
+/** Drops infrastructure start failures out of the case list. A file whose only failures are those,
+ * or a crash that follows that failed start, is a runner error. A product assertion beside the start failure stays. */
+function aloneFileResult(result: UnitGateResult, file: string): AloneFileResult {
+  if (!result.done || result.timedOut.includes(file) || result.unfinished.includes(file)) {
+    return { passed: false, failures: [], fileErrors: [], unfinished: true };
+  }
+  const failures = result.failures.filter(item => item.file === file);
+  const fileErrors = result.fileErrors.filter(item => item.file === file);
+  const failing = result.failing.includes(file) || failures.length > 0 || fileErrors.length > 0 || result.runnerErrors.length > 0;
+  if (!failing) return { passed: true, failures: [], fileErrors: [], unfinished: false };
+  const text = [...failures.map(item => item.detail ?? ''), ...fileErrors.map(item => item.detail),
+    ...result.runnerErrors.map(item => item.diagnostic), result.output].join('\n');
+  const step = infrastructureStep(text) ?? (result.runnerErrors.length ? 'process start' : undefined);
+  if (step) {
+    const productFailures = failures.filter(item => !startFallout(item.detail ?? ''));
+    const productErrors = fileErrors.filter(item => !startFallout(item.detail));
+    if (!productFailures.length && !productErrors.length) {
+      return { passed: false, failures: [], fileErrors: [], unfinished: false, step };
+    }
+    return { passed: false, failures: productFailures, fileErrors: productErrors, unfinished: false };
+  }
+  if (failures.length || fileErrors.length) return { passed: false, failures, fileErrors, unfinished: false };
+  return { passed: false, failures: [], fileErrors: [{ file, detail: '' }], unfinished: false };
+}
+
+export interface BranchOnlyClassification {
+  introduced: IntroducedUnitFailure[];
+  orderDependent: string[];
+  /** Still fail alone on the branch, and alone on main with the same cases and file-level errors. */
+  matched: string[];
+  inconclusive: { file: string; side: 'affected' | 'main'; step: string }[];
+}
+
+async function runFileAlone(cwd: string, file: string, side: 'affected' | 'main', runShard: UnitShardRunner | undefined,
+  onRun?: (side: 'affected' | 'main', result: UnitGateResult) => void): Promise<AloneFileResult> {
+  console.log(`Unit gate: ${file} rerun alone on ${side}`);
+  let result = await runUnitGate(cwd, [file], 1, runShard);
+  onRun?.(side, result);
+  let judged = aloneFileResult(result, file);
+  if (!judged.step) return judged;
+  // One retry. A second start failure is inconclusive and is not an introduced case.
+  console.log(`Unit gate: ${file} failed to start ${judged.step} on ${side}; retrying alone`);
+  result = await runUnitGate(cwd, [file], 1, runShard);
+  onRun?.(side, result);
+  judged = aloneFileResult(result, file);
+  return judged;
+}
+
+/** Files that failed only on the branch, compared by running each one alone on both sides.
+ * A pass on the branch is order or load dependent, so main is not run again for that file. */
+export async function classifyBranchOnlyFailures(files: readonly string[], absent: ReadonlySet<string>,
+  branchCwd: string, mainCwd: string | undefined, runShard?: UnitShardRunner,
+  onRun?: (side: 'affected' | 'main', result: UnitGateResult) => void): Promise<BranchOnlyClassification> {
+  const introduced: IntroducedUnitFailure[] = [];
+  const orderDependent: string[] = [];
+  const matched: string[] = [];
+  const inconclusive: BranchOnlyClassification['inconclusive'] = [];
+  for (const file of [...new Set(files)].sort()) {
+    const branch = await runFileAlone(branchCwd, file, 'affected', runShard, onRun);
+    if (branch.unfinished) {
+      inconclusive.push({ file, side: 'affected', step: 'unfinished run' });
+      continue;
+    }
+    if (branch.step) {
+      inconclusive.push({ file, side: 'affected', step: branch.step });
+      continue;
+    }
+    if (branch.passed) {
+      orderDependent.push(file);
+      continue;
+    }
+    if (absent.has(file) || !mainCwd) {
+      introduced.push(...introducedUnitFailures([file], branch.failures, [], branch.fileErrors, []));
+      continue;
+    }
+    const main = await runFileAlone(mainCwd, file, 'main', runShard, onRun);
+    if (main.unfinished) {
+      inconclusive.push({ file, side: 'main', step: 'unfinished run' });
+      continue;
+    }
+    if (main.step) {
+      inconclusive.push({ file, side: 'main', step: main.step });
+      continue;
+    }
+    const compared = introducedUnitFailures([file], branch.failures, main.failures, branch.fileErrors, main.fileErrors);
+    if (compared.length) introduced.push(...compared);
+    else matched.push(file);
+  }
+  return { introduced, orderDependent, matched, inconclusive };
+}
+
+/** A repeated infrastructure start failure is reported by the caller and does not refuse the merge.
+ * An unfinished alone run still does. A new case found in the same pass still does. */
+export function branchOnlyRefusal(classified: BranchOnlyClassification, evidence: readonly UnitRunEvidence[]): string | undefined {
+  const unfinished = classified.inconclusive.filter(item => item.step === 'unfinished run');
+  const parts: string[] = [];
+  if (unfinished.length) {
+    const named = unfinished.map(item => `${item.file} (${item.step})`).join('; ');
+    parts.push(unitGateRefusal(`unit gate remains inconclusive after an isolated rerun: ${named}:`,
+      unfinished.map(item => item.file), evidence));
+  }
+  if (classified.introduced.length) {
+    parts.push(unitGateRefusal('introduced unit failures; not merging:',
+      classified.introduced.map(item => item.file), evidence, 'affected', classified.introduced));
+  }
+  return parts.length ? parts.join('\n') : undefined;
+}
+
 /** A branch failure is inherited when current main already fails the same case, or the same file-level error's first line.
  * Selection uses the candidate's own changes plus files from the stream's earlier merges. */
 async function preMergeUnitGate(worktree: string, mainRoot: string, currentMain: string,
@@ -3664,10 +3802,11 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, currentMain:
     const absent = side.failing.filter(file =>
       spawnSync('git', ['cat-file', '-e', `${currentMain}:${file}`], { cwd: mainRoot }).status !== 0);
     const introduced: IntroducedUnitFailure[] = [];
-    const refusing = [...absent];
+    const refusing: string[] = [];
     const existing = side.failing.filter(file => !absent.includes(file));
     let directory: string | undefined;
     try {
+      const candidates: string[] = [];
       if (existing.length) {
         // Keep the checkout shallow: owner unit gates bind PostgreSQL sockets below it.
         mkdirSync(join(mainRoot, '.temp'), { recursive: true });
@@ -3703,11 +3842,41 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, currentMain:
             : main.fileErrors.filter(error => error.file === file && !main.timedOut.includes(error.file));
           const compared = introducedUnitFailures([file], side.failures.filter(failure => failure.file === file),
             mainDetails, side.fileErrors.filter(error => error.file === file), mainFileErrors);
-          if (compared.length) {
-            introduced.push(...compared);
-            refusing.push(file);
-          } else console.log(`Unit gate: ${file} also fails on main ${currentMain.slice(0, 12)}; reported, not blocking`);
+          if (compared.length) candidates.push(file);
+          else console.log(`Unit gate: ${file} also fails on main ${currentMain.slice(0, 12)}; reported, not blocking`);
         }
+      }
+      // The branch confirm runs every failing file in one process and main splits them into shards.
+      // A file counts as introduced only after both sides run that file alone.
+      const branchOnly = [...new Set([...absent, ...candidates])].sort();
+      if (branchOnly.length) {
+        console.log(`Unit gate: ${branchOnly.length} file(s) fail only on the branch; rerunning each alone`);
+        const classified = await classifyBranchOnlyFailures(branchOnly, new Set(absent), worktree, directory, runShard,
+          (aloneSide, result) => {
+            notePasses(evidence, aloneSide, result.passes, () => 'alone', aloneSide === 'main' ? directory : worktree);
+          });
+        if (classified.orderDependent.length) {
+          console.log(`Unit gate: ${classified.orderDependent.length} file(s) pass when run alone; order or load dependent, reported, not blocking\n  ${classified.orderDependent.join('\n  ')}`);
+        }
+        for (const file of classified.matched) {
+          console.log(`Unit gate: ${file} also fails on main ${currentMain.slice(0, 12)} when run alone; reported, not blocking`);
+        }
+        const reported = classified.inconclusive.filter(item => item.step !== 'unfinished run');
+        if (reported.length) {
+          console.log(`Unit gate: ${reported.length} file(s) failed to start when run alone; inconclusive, reported, not blocking`);
+          for (const item of reported) {
+            console.log(`Unit gate inconclusive: ${item.file} failed ${item.step} when run alone on ${item.side}; reported, not blocking`);
+          }
+        }
+        const refusal = branchOnlyRefusal(classified, evidence);
+        if (refusal && classified.inconclusive.some(item => item.step === 'unfinished run')) {
+          for (const item of classified.inconclusive.filter(entry => entry.step === 'unfinished run')) {
+            console.log(`Unit gate inconclusive: ${item.file} failed ${item.step} when run alone on ${item.side}`);
+          }
+          return refusal;
+        }
+        introduced.push(...classified.introduced);
+        refusing.push(...classified.introduced.map(item => item.file));
       }
     } finally {
       if (directory) {

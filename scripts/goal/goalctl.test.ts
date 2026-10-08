@@ -12,7 +12,7 @@ import { TmuxLauncher, processIdentity, tmuxServer, type LaunchDescriptor } from
 import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, declaredTestTimeout, migrationsBelowMain, mergeOwnerFiles, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, inheritedSharedLifecycleOwnership, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
-  addGateWorktree, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
+  addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
   planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, runUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
   mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
@@ -848,6 +848,118 @@ describe('goalctl runtime policy', () => {
     expect(deciding).toContain(`(fail) ${added}`);
     expect(deciding).not.toContain(shared);
     expect(refusal.split('inherited on main:')[1]).toContain(shared);
+  });
+
+  test('an infrastructure start failure names its step and an assertion does not', () => {
+    expect(infrastructureStep('Command failed: pg_ctl -D data -w start\npg_ctl: could not start server')).toBe('pg_ctl start');
+    expect(infrastructureStep('pg_ctl: PID file "data/postmaster.pid" does not exist\nIs server running?')).toBe('pg_ctl start');
+    expect(infrastructureStep('EmbeddedPostgres failed to start')).toBe('embedded PostgreSQL');
+    expect(infrastructureStep('Error: listen EADDRINUSE: address already in use 127.0.0.1:5432')).toBe('port bind');
+    expect(infrastructureStep('error: id 86121887 port 54321')).toBeUndefined();
+    expect(infrastructureStep('Command failed: pg_ctl -D data -m immediate -w stop')).toBeUndefined();
+  });
+
+  test('a file that fails only on the branch is classified from alone runs', async () => {
+    const load = 'services/main/tests/load-dependent.test.ts';
+    const added = 'services/main/tests/erasure-live-remediation.test.ts';
+    const fresh = 'services/main/tests/new-behavior.test.ts';
+    const start = 'services/content/tests/comment-source-erasure.test.ts';
+    const shared = 'selectors clear with the revision';
+    const created = 'a new case the branch adds';
+    const pg = 'Command failed: pg_ctl -D data -l postgres.log -o -h 127.0.0.1 -p 37561 -k sock -w start\npg_ctl: could not start server';
+    const calls: { cwd: string; files: string[] }[] = [];
+    const attempts = new Map<string, number>();
+    const fail = (file: string, testName: string, detail: string): UnitShardResult => ({
+      done: true, failing: [file], timedOut: [], failures: [{ file, test: testName, detail }],
+      fileErrors: [], runnerErrors: [], files: [file], output: '', ms: 1,
+    });
+    const pass = (file: string): UnitShardResult => ({
+      done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], files: [file], output: '', ms: 1,
+    });
+    const runner = async (cwd: string, files: readonly string[]) => {
+      calls.push({ cwd, files: [...files] });
+      const file = files[0]!;
+      if (file === load) return pass(file);
+      if (file === start) return fail(file, 'comment source selectors clear once', pg);
+      if (file === fresh) return fail(file, created, 'error: expect(received).toBe(expected)');
+      if (cwd === '/branch') return fail(file, created, 'error: Expected 200 Received 503');
+      return fail(file, shared, 'error: Expected 200 Received 503');
+    };
+    const absent = new Set([fresh]);
+    const classified = await classifyBranchOnlyFailures([load, added, fresh, start], absent, '/branch', '/main', runner);
+    expect(calls.every(call => call.files.length === 1)).toBe(true);
+    expect(classified.orderDependent).toEqual([load]);
+    expect(calls.filter(call => call.files[0] === load).map(call => call.cwd)).toEqual(['/branch']);
+    expect(classified.introduced).toEqual([
+      { file: added, cases: [created], fileError: false },
+      { file: fresh, cases: [created], fileError: false },
+    ]);
+    expect(calls.filter(call => call.files[0] === added).map(call => call.cwd)).toEqual(['/branch', '/main']);
+    expect(calls.filter(call => call.files[0] === fresh).map(call => call.cwd)).toEqual(['/branch']);
+    expect(classified.inconclusive).toEqual([{ file: start, side: 'affected', step: 'pg_ctl start' }]);
+    expect(calls.filter(call => call.files[0] === start)).toHaveLength(2);
+    expect(classified.matched).toEqual([]);
+    const names = classified.introduced.flatMap(item => item.cases);
+    expect(names).not.toContain('comment source selectors clear once');
+    const level = 'services/main/tests/governance-schema.test.ts';
+    const levelRunner = async (cwd: string, files: readonly string[]): Promise<UnitShardResult> => ({
+      done: true, failing: [files[0]!], timedOut: [], failures: [],
+      fileErrors: cwd === '/branch' ? [{ file: files[0]!, detail: 'Cannot find module "branch-only.js"' }] : [],
+      runnerErrors: [], files: [...files], output: '', ms: 1,
+    });
+    const fileError = await classifyBranchOnlyFailures([level], new Set(), '/branch', '/main', levelRunner);
+    expect(fileError.introduced).toEqual([{ file: level, cases: [], fileError: true }]);
+    const recovered = await classifyBranchOnlyFailures([start], new Set(), '/branch', '/main', async (_cwd, files) => {
+      const file = files[0]!;
+      const attempt = (attempts.get(`retry\0${file}`) ?? 0) + 1;
+      attempts.set(`retry\0${file}`, attempt);
+      return attempt === 1 ? fail(file, 'comment source selectors clear once', pg) : pass(file);
+    });
+    expect(recovered.orderDependent).toEqual([start]);
+    expect(recovered.inconclusive).toEqual([]);
+    expect(recovered.introduced).toEqual([]);
+    const crashed = 'services/main/tests/progress-from-sessions.test.ts';
+    const crashCalls: string[] = [];
+    const fallout = await classifyBranchOnlyFailures([crashed], new Set(), '/branch', '/main', async (cwd, files) => {
+      const file = files[0]!;
+      crashCalls.push(cwd);
+      return {
+        done: true, failing: [file], timedOut: [],
+        failures: [
+          { file, test: '(unnamed)', detail: pg },
+          { file, test: '(unnamed)', detail: "TypeError: undefined is not an object (evaluating 'pool.end')" },
+        ],
+        fileErrors: [], runnerErrors: [], files: [file], output: '', ms: 1,
+      };
+    });
+    expect(fallout.inconclusive).toEqual([{ file: crashed, side: 'affected', step: 'pg_ctl start' }]);
+    expect(fallout.introduced).toEqual([]);
+    expect(crashCalls).toEqual(['/branch', '/branch']);
+    expect(branchOnlyRefusal(fallout, [])).toBeUndefined();
+    const unfinished = {
+      introduced: [], orderDependent: [], matched: [],
+      inconclusive: [{ file: crashed, side: 'affected' as const, step: 'unfinished run' }],
+    };
+    expect(branchOnlyRefusal(unfinished, [])).toContain('unit gate remains inconclusive after an isolated rerun');
+    const asserted = 'services/main/tests/projection-isolation.test.ts';
+    const product = 'Fresh Access install applies every migration';
+    const mixed = await classifyBranchOnlyFailures([asserted], new Set(), '/branch', '/main', async (cwd, files) => {
+      const file = files[0]!;
+      const failures = cwd === '/branch'
+        ? [{ file, test: 'selectors clear with the revision', detail: pg }, { file, test: product, detail: 'error: expect(received).toBe(expected)\nExpected: 1\nReceived: 0' }]
+        : [{ file, test: 'selectors clear with the revision', detail: 'error: expect(received).toBe(expected)\nExpected: 1\nReceived: 2' }];
+      return { done: true, failing: [file], timedOut: [], failures, fileErrors: [], runnerErrors: [], files: [file], output: '', ms: 1 };
+    });
+    expect(mixed.introduced).toEqual([{ file: asserted, cases: [product], fileError: false }]);
+    expect(mixed.inconclusive).toEqual([]);
+    const typed = 'services/main/tests/pool-crash.test.ts';
+    const typedOnly = await classifyBranchOnlyFailures([typed], new Set(), '/branch', '/main', async (cwd, files) => {
+      const file = files[0]!;
+      if (cwd === '/main') return pass(file);
+      return fail(file, 'pool end runs', "TypeError: undefined is not an object (evaluating 'pool.end')");
+    });
+    expect(typedOnly.introduced).toEqual([{ file: typed, cases: ['pool end runs'], fileError: false }]);
+    expect(typedOnly.inconclusive).toEqual([]);
   });
 
   test('cases in one shard output are attributed to their own files', async () => {
@@ -2416,10 +2528,15 @@ process.exit(0);
           expect(r.ledger().tasks[task.id]!.state).toBe('merged');
         }
         const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-        expect(runs).toHaveLength(3);
+        // A branch-only failure is rerun alone on the branch and on main after the shared runs.
+        expect(runs).toHaveLength(outcome === 'introduced' ? 5 : 3);
         expect(runs[0].cwd).toBe(task.worktree);
         expect(runs[1].cwd).toBe(task.worktree);
         expect(runs[2].cwd).not.toBe(task.worktree);
+        if (outcome === 'introduced') {
+          expect(runs[3].cwd).toBe(task.worktree);
+          expect(runs[4].cwd).not.toBe(task.worktree);
+        }
         expect(runs.every(run => run.args.includes(`./${guard}`))).toBe(true);
         expect(r.git('worktree', 'list', '--porcelain')).not.toContain('unit-gate');
       } finally { r.cleanup(); }
@@ -2473,10 +2590,15 @@ process.exit(0);
           expect(r.ledger().tasks[task.id]!.state).toBe('merged');
         }
         const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { cwd: string; args: string[] });
-        expect(runs).toHaveLength(3);
+        // An extra case is rerun alone on both sides. Identical findings are not.
+        expect(runs).toHaveLength(introduced ? 5 : 3);
         expect(runs[0]!.cwd).toBe(task.worktree);
         expect(runs[1]!.cwd).toBe(task.worktree);
         expect(runs[2]!.cwd).not.toBe(task.worktree);
+        if (introduced) {
+          expect(runs[3]!.cwd).toBe(task.worktree);
+          expect(runs[4]!.cwd).not.toBe(task.worktree);
+        }
         expect(runs.every(run => run.args.includes(`./${guard}`))).toBe(true);
       } finally { r.cleanup(); }
     }, 30_000);
@@ -2534,11 +2656,16 @@ process.exit(0);
         if (outcome === 'skipped') expect(existsSync(log)).toBe(false);
         else {
           const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));
-          // The failing file is run with its shard, then again alone, then at main when the file already exists.
-          expect(runs).toHaveLength(outcome === 'new-file' ? 2 : 3);
+          // Shard, confirm, then main when the file exists. A branch-only failure is rerun alone on each side it can run.
+          expect(runs).toHaveLength(outcome === 'inherited' ? 3 : outcome === 'new-file' ? 3 : 5);
           expect(runs[0].cwd).toBe(task.worktree);
           expect(runs[1].cwd).toBe(task.worktree);
-          if (outcome !== 'new-file') expect(runs[2].cwd).not.toBe(task.worktree);
+          if (outcome === 'new-file') expect(runs[2].cwd).toBe(task.worktree);
+          else expect(runs[2].cwd).not.toBe(task.worktree);
+          if (outcome === 'introduced') {
+            expect(runs[3].cwd).toBe(task.worktree);
+            expect(runs[4].cwd).not.toBe(task.worktree);
+          }
           expect(runs.every(run => run.args.includes(`./${file}`))).toBe(true);
           expect(runs.every(run => !run.args.some((arg: string) => arg.includes('never.test')))).toBe(true);
           expect(r.git('worktree', 'list', '--porcelain')).not.toContain('unit-gate');
@@ -2616,8 +2743,11 @@ process.exit(0);
       const confirmed = runs.filter(run => filesOf(run).join() === [`./${files[0]}`, `./${files[7]}`].sort().join());
       expect(confirmed).toHaveLength(1);
       expect(confirmed[0]!.cwd).toBe(task.worktree);
-      const shards = runs.filter(run => run !== confirmed[0]);
+      const shards = runs.filter(run => filesOf(run).length === 2 && run !== confirmed[0]);
       expect(shards).toHaveLength(4);
+      for (const file of failing) {
+        expect(runs.filter(run => filesOf(run).join() === `./${file}` && run.cwd === task.worktree)).toHaveLength(1);
+      }
       expect(shards.every(run => run.cwd === task.worktree)).toBe(true);
       const groups = shards.map(filesOf);
       expect(groups.every(group => group.length === 2)).toBe(true);
@@ -2667,6 +2797,44 @@ process.exit(0);
       expect(confirmation).toHaveLength(1);
       expect(confirmation[0]!.cwd).toBe(task.worktree);
       expect(runs.filter(run => filesOf(run).includes(`./${mate}`))).toHaveLength(1);
+    } finally { r.cleanup(); }
+  }, 45_000);
+
+  test('a failure that passes when its file runs alone is order or load dependent and not blocking', async () => {
+    const r = repo();
+    try {
+      const keeper = 'aa-keeps-failing.test.ts';
+      const dependent = 'bb-load-dependent.test.ts';
+      const task = await r.start('G-001');
+      const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(keeper, dependent); r.save(ledger);
+      writeFileSync(join(task.worktree, keeper), `import { expect, test } from 'bun:test';\n`
+        + `test('stays invalid and marks this process', () => { (globalThis as { shardMate?: boolean }).shardMate = true; expect(true).toBe(false); });\n`);
+      writeFileSync(join(task.worktree, dependent), `import { expect, test } from 'bun:test';\n`
+        + `test('passes unless another file in this process left a mark', () => expect((globalThis as { shardMate?: boolean }).shardMate).toBe(undefined));\n`);
+      r.commit(task);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', keeper, dependent]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add load-dependent units']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const plan = join(r.dir, '.temp/unit-plan');
+      writeFileSync(plan, `  unit: ${keeper}\n  unit: ${dependent}\n`);
+      const log = join(r.dir, '.temp/unit-log');
+      const before = r.git('rev-parse', 'main');
+      const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log, GOAL_UNIT_GATE_SHARDS: '1' });
+      expect(result.status).toBe(1);
+      expect(r.git('rev-parse', 'main')).toBe(before);
+      const reported = result.stderr.split('introduced unit failures')[1] ?? '';
+      expect(reported).toContain(keeper);
+      expect(reported).not.toContain(dependent);
+      const noted: string[] = [];
+      for (const line of (result.stdout.split('order or load dependent, reported, not blocking\n')[1] ?? '').split('\n')) {
+        if (!line.startsWith('  ')) break;
+        noted.push(line.trim());
+      }
+      expect(noted).toEqual([dependent]);
+      const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { cwd: string; args: string[] });
+      const filesOf = (run: { args: string[] }) => run.args.filter(arg => arg.endsWith('.test.ts')).sort();
+      expect(runs.filter(run => filesOf(run).join() === `./${dependent}` && run.cwd === task.worktree)).toHaveLength(1);
+      expect(runs.filter(run => filesOf(run).join() === `./${keeper}` && run.cwd === task.worktree)).toHaveLength(1);
     } finally { r.cleanup(); }
   }, 45_000);
 
