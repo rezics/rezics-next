@@ -16,7 +16,10 @@ import { dirname, join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { hostname } from 'node:os';
 import { acceptanceStatuses, parseJUnit, titleIds, type Case, type TestResult } from './acceptance.ts';
-import { bindReapOwnerExit, reapChildEnvironment, reapChildScope, settleReap, sweepOrphanContainers } from './container-reaper.ts';
+import {
+  bindReapOwnerExit, forgetChildScope, noteChildScope, reapActiveChildScopes, reapChildEnvironment, reapChildScope,
+  settleReap, sweepOrphanContainers,
+} from './container-reaper.ts';
 import { isolatedIntegrationFileList } from './isolated-integration-files.ts';
 import { waitForMemory, type MemoryNeed, type MemoryWaitOptions } from './memory-admission.ts';
 
@@ -73,8 +76,12 @@ function spawnEnvironment(name: string, args: readonly string[], env: NodeJS.Pro
   return name === 'bun' && args[0] === 'test' ? reapChildEnvironment(logged) : logged;
 }
 
+function childScope(name: string, args: readonly string[], env: NodeJS.ProcessEnv): string | undefined {
+  return name === 'bun' && args[0] === 'test' ? env.REZICS_REAP_SCOPE : undefined;
+}
+
 function reapSpawnedTest(name: string, args: readonly string[], env: NodeJS.ProcessEnv): void {
-  if (name !== 'bun' || args[0] !== 'test') return;
+  if (!childScope(name, args, env)) return;
   try { reapChildScope(env); } catch { /* the command's status still stands */ }
   // A second list: the first can run before dockerd records a killed client's container.
   settleReap();
@@ -85,13 +92,17 @@ export function command(root: string, name: string, args: string[], timeoutMs: n
   env: NodeJS.ProcessEnv = process.env, maxBuffer?:number): { ok: boolean; output: string; elapsedMs: number } {
   const start = Date.now();
   const environment = spawnEnvironment(name, args, env);
-  const result = spawnSync(name, args, { cwd: root,
-    env: environment, encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs,...(maxBuffer===undefined?{}:{maxBuffer}) });
-  reapSpawnedTest(name, args, environment);
-  return { ok: result.status === 0 && !result.error,
+  const scope = childScope(name, args, environment);
+  noteChildScope(scope);
+  try {
+    const result = spawnSync(name, args, { cwd: root,
+      env: environment, encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs,...(maxBuffer===undefined?{}:{maxBuffer}) });
+    reapSpawnedTest(name, args, environment);
+    return { ok: result.status === 0 && !result.error,
     output: [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n'),
     elapsedMs: Date.now() - start };
+  } finally { forgetChildScope(scope); }
 }
 
 export function sourceIdentity(root: string): { head: string; fingerprint: string; clean: boolean } {
@@ -335,6 +346,8 @@ function stopAsyncCommandGroups(groups: ReadonlySet<number>): void {
 let asyncCommandCleanupBound = false;
 function cancelAsyncCommands(signal: NodeJS.Signals): void {
   stopAsyncCommands();
+  // commandAsync's finally does not run once this exits. Only this runner's live scopes.
+  reapActiveChildScopes();
   process.exit(signal === 'SIGINT' ? 130 : 143);
 }
 function bindAsyncCommandCleanup(): void {
@@ -358,6 +371,8 @@ export async function commandAsync(root: string, name: string, args: string[], t
   activeElapsedMs: number; admissionWaitMs: number; timedOut: boolean }> {
   const start = Date.now();
   const environment = spawnEnvironment(name, args, env);
+  const scope = childScope(name, args, environment);
+  noteChildScope(scope);
   const child = spawn(name, args, { cwd: root, detached: true,
     env: environment,
     stdio: ['ignore', 'pipe', 'pipe'] });
@@ -443,6 +458,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
     if (child.pid) commandProcessGroups.delete(child.pid);
     releaseAsyncCommandCleanup();
     reapSpawnedTest(name, args, environment);
+    forgetChildScope(scope);
   }
   const elapsedMs = Date.now() - start;
   if (waiting.size) admissionWaitMs += Date.now() - admissionStarted;
@@ -971,6 +987,7 @@ export async function acquireQaSlots(
   const onExit = () => {
     // Detached stack:up children must stop before their leases become available.
     stopAsyncCommands();
+    reapActiveChildScopes();
     release();
   };
   const onSignal = (signal: NodeJS.Signals) => {
@@ -1037,7 +1054,11 @@ function installQaRunnerReaper(): void {
   try { sweepOrphanContainers(); }
   catch (error) { console.error(`QA container sweep failed: ${error instanceof Error ? error.message : error}`); }
   // A nested runner inherited its owner and must not remove that ancestor's containers.
+  // Its own children's scopes still have to go when this process is cancelled.
   bindReapOwnerExit();
+  const onSignal = (signal: NodeJS.Signals) => cancelAsyncCommands(signal);
+  process.on('SIGINT', onSignal);
+  process.on('SIGTERM', onSignal);
 }
 
 installQaRunnerReaper();

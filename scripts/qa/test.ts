@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from './acceptance.ts';
 import { affectedPlan, affectedTiers, affectedUnitTierFiles, formatPlan, type AffectedPlan } from './affected.ts';
-import { reapChildEnvironment, reapSettleMs, removeScopedContainers } from './container-reaper.ts';
+import { forgetChildScope, noteChildScope, reapChildEnvironment, reapSettleMs, removeScopedContainers } from './container-reaper.ts';
 import { goalSlotDirectory, parseArgs } from './core.ts';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 
@@ -123,16 +123,19 @@ async function run([program, args]: [string, string[]]): Promise<number> {
       ? reapChildEnvironment({ ...process.env, AGENT: process.env.AGENT ?? '1' })
       : { ...process.env, AGENT: process.env.AGENT ?? '1' })
     : process.env;
-  const child = Bun.spawn([program, ...args], { cwd: root, env, stdout: 'inherit', stderr: 'inherit' });
-  const code = await child.exited;
-  if (spawningTest && env.REZICS_REAP_SCOPE) {
-    const scope = env.REZICS_REAP_SCOPE;
-    try { removeScopedContainers(scope); } catch { /* the child's exit status still stands */ }
-    // dockerd can commit the container after this list, once the killed client is gone.
-    await Bun.sleep(reapSettleMs);
-    try { removeScopedContainers(scope); } catch { /* the child's exit status still stands */ }
-  }
-  return code;
+  const scope = spawningTest ? env.REZICS_REAP_SCOPE : undefined;
+  noteChildScope(scope);
+  try {
+    const child = Bun.spawn([program, ...args], { cwd: root, env, stdout: 'inherit', stderr: 'inherit' });
+    const code = await child.exited;
+    if (scope) {
+      try { removeScopedContainers(scope); } catch { /* the child's exit status still stands */ }
+      // dockerd can commit the container after this list, once the killed client is gone.
+      await Bun.sleep(reapSettleMs);
+      try { removeScopedContainers(scope); } catch { /* the child's exit status still stands */ }
+    }
+    return code;
+  } finally { forgetChildScope(scope); }
 }
 
 export interface TestDispatchOptions {

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { command } from '../../../scripts/qa/core.ts';
@@ -216,3 +216,75 @@ test('owner', () => {
     expect(secondScope).not.toBe(firstScope);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('a nested runner cancelled by SIGTERM removes its children and keeps ancestor and sibling scopes', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'reap-cancel-'));
+  const bin = join(directory, 'bin');
+  mkdirSync(bin);
+  const log = join(directory, 'calls.jsonl');
+  const ready = join(directory, 'ready');
+  const hang = join(directory, 'hang.test.ts');
+  const runner = join(directory, 'nested-runner.ts');
+  writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
+import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(${JSON.stringify(log)}, JSON.stringify(args) + '\\n');
+const removed = new Set(String(process.env.REMOVED ?? '').split(',').filter(Boolean));
+const [command, ...rest] = args;
+if (command === 'ps') {
+  const filter = rest[rest.indexOf('--filter') + 1] ?? '';
+  const listed = {
+    'label=${reapScopeLabel}=extra-child': 'extra-child',
+    'label=${reapScopeLabel}=ancestor': 'ancestor',
+    'label=${reapScopeLabel}=sibling': 'sibling',
+  };
+  const ids = filter.startsWith('label=${reapOwnerLabel}=')
+    ? ['nested', 'ancestor', 'sibling']
+    : filter.startsWith('label=${reapScopeLabel}=') && !listed[filter]
+      ? ['nested']
+      : (listed[filter] ?? '').split('\\n');
+  console.log(ids.filter(id => id && !removed.has(id)).join('\\n'));
+  process.exit(0);
+}
+if (command === 'rm') process.env.REMOVED = [...removed, ...rest.slice(1).filter(id => id !== '-f')].join(',');
+process.exit(0);
+`);
+  chmodSync(join(bin, 'docker'), 0o755);
+  writeFileSync(hang, `import { test } from 'bun:test';
+import { writeFileSync } from 'node:fs';
+test('hang', () => {
+  writeFileSync(process.env.READY!, 'ready');
+  return new Promise(() => {});
+});
+`);
+  writeFileSync(runner, `import { noteChildScope } from ${JSON.stringify(join(root, 'scripts/qa/container-reaper.ts'))};
+import { commandAsync } from ${JSON.stringify(join(root, 'scripts/qa/core.ts'))};
+noteChildScope('extra-child');
+await commandAsync(${JSON.stringify(directory)}, 'bun', ['test', ${JSON.stringify(hang)}, '--timeout=60000'], 60_000, process.env);
+`);
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, READY: ready, REZICS_REAP_OWNER: '4:4' };
+  delete env.REZICS_REAP_SCOPE;
+  const child = spawn('bun', [runner], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stderr = '';
+  child.stderr?.on('data', chunk => { stderr += String(chunk); });
+  try {
+    const deadline = Date.now() + 10_000;
+    while (!existsSync(ready) && Date.now() < deadline) await Bun.sleep(20);
+    expect(existsSync(ready), stderr).toBe(true);
+    child.kill('SIGTERM');
+    const closed = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
+      child.once('close', (code, signal) => resolve({ code, signal }));
+    });
+    expect(closed, stderr).toEqual({ code: 143, signal: null });
+    const calls = readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as string[]);
+    const removed = calls.filter(call => call[0] === 'rm').flatMap(call => call.slice(2));
+    expect(removed).toContain('nested');
+    expect(removed).toContain('extra-child');
+    expect(removed).not.toContain('ancestor');
+    expect(removed).not.toContain('sibling');
+    expect(calls.some(call => call.join(' ').includes(`${reapOwnerLabel}=`) || call.includes('ancestor') || call.includes('sibling'))).toBe(false);
+  } finally {
+    child.kill('SIGKILL');
+    rmSync(directory, { recursive: true, force: true });
+  }
+}, 20_000);

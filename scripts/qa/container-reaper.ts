@@ -127,6 +127,30 @@ export function reapChildScope(env: NodeJS.ProcessEnv): void {
   removeScopedContainers(env.REZICS_REAP_SCOPE);
 }
 
+const activeChildScopes = new Set<string>();
+
+/** Remember a scope this runner minted for a child that is still running. */
+export function noteChildScope(scope: string | undefined): void {
+  if (scope) activeChildScopes.add(scope);
+}
+
+export function forgetChildScope(scope: string | undefined): void {
+  if (scope) activeChildScopes.delete(scope);
+}
+
+/**
+ * Cancellation skips the child's finally block. Remove only the scopes this
+ * process still has in flight, then look again after dockerd has had a moment.
+ */
+export function reapActiveChildScopes(): void {
+  const scopes = [...activeChildScopes];
+  if (!scopes.length) return;
+  for (const scope of scopes) activeChildScopes.delete(scope);
+  for (const scope of scopes) removeScopedContainers(scope);
+  settleReap();
+  for (const scope of scopes) removeScopedContainers(scope);
+}
+
 /** Exit of the process that minted the owner. A nested runner passes no owner and removes nothing. */
 export function reapCreatedOwner(createdOwner: string | undefined): void {
   if (!createdOwner) return;
@@ -152,14 +176,18 @@ function adoptReapEnvironment(environment: NodeJS.ProcessEnv): void {
   if (environment.REZICS_REAP_OWNER) process.env.REZICS_REAP_OWNER = environment.REZICS_REAP_OWNER;
 }
 
-/** Records this process as owner only when it minted the value, and removes every scope it owns on exit. */
+/**
+ * Every runner, including one that inherited its owner, drops the scopes it minted
+ * for children that are still running. Owner-wide removal stays with the minter.
+ */
 export function bindReapOwnerExit(env: NodeJS.ProcessEnv = process.env): void {
   const assigned = reapOwnerAssignment(env);
   adoptReapEnvironment(assigned.environment);
   const createdOwner = assigned.createdOwner;
-  if (!createdOwner) return;
   process.on('exit', () => {
     try {
+      reapActiveChildScopes();
+      if (!createdOwner) return;
       reapCreatedOwner(createdOwner);
       settleReap();
       reapCreatedOwner(createdOwner);
