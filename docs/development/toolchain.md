@@ -125,6 +125,38 @@ Run `task search:rebuild` with writers stopped to upgrade an existing volume;
 its quarantined profile step replaces the probe before rebuilding an empty
 index. Activation and requests require the Chinese, kana and width witnesses.
 
+## Fuseki integer-preservation patch
+
+Jena 6.2.0's TDB2 node table (`NodeTableTRDF`) always writes through
+[`ThriftConvert.toThriftValue`](https://github.com/apache/jena/blob/jena-6.2.0/jena-arq/src/main/java/org/apache/jena/riot/thrift/ThriftConvert.java),
+which stored every `xsd:integer`, `long`, `int`, `short` and `byte` literal that
+TDB2 does not inline as `BigInteger.longValue()`. An integer outside signed 64
+bits was silently wrapped (`1111…` with 120 digits read back as
+`8198552921648689607`), and `xsd:long` values from 2^55 and padded lexical forms
+such as `+0000000000000000000012` came back as canonical `xsd:integer`. Neither
+the node table nor `ValInteger` writing is configurable, and 6.2.0 is the
+current release with the same code on `main`.
+
+[`infra/jena/patches/ThriftConvert.java`](../../infra/jena/patches/ThriftConvert.java)
+is the upstream 6.2.0 source with one change: only plain `xsd:integer` whose
+value is a signed 64-bit number printed exactly as its lexical form is written
+as `ValInteger`; everything else takes the existing literal path with its own
+datatype and lexical form. The decoder is untouched, so stores written earlier
+stay readable. The Fuseki Dockerfile checks the shaded class against a pinned
+SHA-256 (equal to the class in `jena-arq-6.2.0.jar`), compiles the patch with
+`--release 21` against `fuseki-server.jar` and replaces the class there; a class
+under `extra/*` cannot shadow it because `fuseki-server.jar` precedes `extra/*`.
+[`native-integer-preservation.test.ts`](../../infra/jena/tests/native-integer-preservation.test.ts)
+writes TDB2 files in one JVM and reads them in another, with the pinned upstream
+class (the old behaviour) and the image's jar.
+
+Terms already truncated cannot be repaired from the store: the original value is
+gone, and adding the same term again finds the existing node-table entry. They
+need a rebuild from the source of truth through the API. Values TDB2 inlines
+(under 2^55 and at most 19 characters) keep TDB2's documented canonical form.
+Remove the patch, the Dockerfile step and the test when a Jena release stops
+wrapping out-of-range integers in `toThriftValue` and keeps derived datatypes.
+
 ## Pinned Jena CLI
 
 `task jena:check` runs the already built Fuseki image from Compose. It does not
@@ -349,7 +381,7 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | Source | Image and digest |
 | --- | --- |
 | Compose | postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722 |
-| Compose | rezics/fuseki:6.2.0-cmd0.5.39-5692ff6a9bb2 |
+| Compose | rezics/fuseki:6.2.0-cmd0.5.39-835daa8774ac |
 | Compose | rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff |
 | Compose | ghcr.io/shopify/toxiproxy:2.12.0@sha256:9378ed52a28bc50edc1350f936f518f31fa95f0d15917d6eb40b8e376d1a214e |
 | Compose | axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d |

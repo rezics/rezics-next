@@ -21,6 +21,23 @@ RUN curl --fail --location --retry 3 \
     && echo "${FUSEKI_SHA512}  /tmp/fuseki.tar.gz" | sha512sum --check - \
     && mkdir -p /opt \
     && tar -xzf /tmp/fuseki.tar.gz -C /opt
+# Jena 6.2.0 truncates xsd:integer beyond signed 64 bits in the TDB2 node table; see
+# docs/development/toolchain.md. fuseki-server.jar precedes extra/*, so the class is replaced in it.
+ARG THRIFT_CONVERT_SHA256=a7917fb253f46c0bef8bde44d66a469087a554abe9a919e0c79d31d1ec12314e
+COPY infra/jena/patches/ThriftConvert.java /patches/ThriftConvert.java
+RUN set -eu; \
+    jar="/opt/apache-jena-fuseki-${FUSEKI_VERSION}/fuseki-server.jar"; \
+    class=org/apache/jena/riot/thrift/ThriftConvert.class; \
+    mkdir /tmp/original /tmp/patched; \
+    (cd /tmp/original && jar xf "$jar" "$class"); \
+    echo "${THRIFT_CONVERT_SHA256}  /tmp/original/${class}" | sha256sum --check -; \
+    test "$(jar tf "$jar" | grep -c 'org/apache/jena/riot/thrift/ThriftConvert')" = 1; \
+    javac --release 21 -proc:none -cp "$jar" -d /tmp/patched /patches/ThriftConvert.java; \
+    (cd /tmp/patched && jar uf "$jar" org/apache/jena/riot/thrift/ThriftConvert*.class); \
+    (cd /tmp/original && jar xf "$jar" "$class"); \
+    if echo "${THRIFT_CONVERT_SHA256}  /tmp/original/${class}" | sha256sum --check --status -; then \
+      echo "ThriftConvert was not replaced" >&2; exit 1; fi; \
+    rm -rf /tmp/original /tmp/patched
 
 FROM eclipse-temurin:21.0.12_8-jre-noble@sha256:7739f0ffce786528961eea6bf46d9610ee968ac6127c9b2e93494757bdecce9f
 ENV FUSEKI_HOME=/opt/apache-jena-fuseki-6.2.0 \
