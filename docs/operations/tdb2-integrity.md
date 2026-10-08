@@ -81,8 +81,10 @@ whose file modification times do not change across the copy. A raw copy of a
 busy store is not a snapshot. `--in-place` scans without copying and is for a
 copy you already own.
 
-## Known gap
+## Fail-stop
 
-Fuseki stays up after a failed commit, serving failing reads and holding the
-writer lock. Until the command module stops the process on any `commit()`
-failure (reported as a native change), restart by hand as above.
+A command-module `commit()` that throws aborts and ends on a best-effort
+basis, logs the exception class and message, and halts the JVM with status 70.
+The dev Fuseki service uses `restart: unless-stopped`, so that exit comes back
+and the next open replays the journal. A commit failure outside the command
+module still needs the manual restart above.

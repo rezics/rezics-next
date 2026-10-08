@@ -10,7 +10,7 @@ for Fuseki/TDB2 and jena-text/Lucene restart and restore checks. The product
 - [Email](email.md): verified sender setup, optional-mail suppression, provider events and uncertain delivery.
 - [Production installation](production-install.md): operator prerequisites, API-only launch bootstrap, bounded source intake and receipt recovery.
 - [Recovery](recovery.md): offline backup/restore, epochs and Lucene rebuild.
-- [TDB2 integrity](tdb2-integrity.md): the node-table out-of-bounds fault, its recovery and the index scan.
+- [TDB2 integrity](tdb2-integrity.md): the node-table out-of-bounds fault, commit fail-stop, recovery and the index scan.
 - [Observability](observability.md): graph/text readiness, progress and diagnosis.
 - [Security](security.md): private service access, admission and disclosure.
 - [Trust and safety](trust-and-safety.md): launch restrictions, public intake, responders and urgent-harm procedures.

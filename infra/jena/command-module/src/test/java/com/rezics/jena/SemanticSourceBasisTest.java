@@ -830,7 +830,23 @@ public class SemanticSourceBasisTest {
             DatasetGraph failing = new DatasetGraphWrapper(f.data()) {
                 @Override public void commit() { throw new IllegalStateException("catalogue commit failed before durability"); }
             };
-            catalogueRejected(() -> SemanticSourceBasis.Catalogue.turn(failing, ticket, Long.MAX_VALUE));
+            var halts = new ArrayList<Integer>();
+            var lines = new ArrayList<String>();
+            var halt = CommitHalt.halt;
+            var logged = CommitHalt.logged;
+            CommitHalt.halt = halts::add;
+            CommitHalt.logged = lines::add;
+            try {
+                catalogueRejected(() -> SemanticSourceBasis.Catalogue.turn(failing, ticket, Long.MAX_VALUE));
+            } finally {
+                CommitHalt.halt = halt;
+                CommitHalt.logged = logged;
+            }
+            assertEquals(List.of(CommitHalt.STATUS), halts);
+            assertEquals(1, lines.size());
+            assertFalse(lines.get(0).contains("\n"));
+            assertTrue(lines.get(0).contains(IllegalStateException.class.getName()));
+            assertTrue(lines.get(0).contains("catalogue commit failed before durability"));
             assertEquals(saved, f.savedCheckpoint()); assertEquals(version, f.version()); assertFalse(f.data().isInTransaction());
             catalogueRejected(() -> SemanticSourceBasis.Catalogue.turn(f.data(), ticket, System.nanoTime() - 1));
             assertEquals(saved, f.savedCheckpoint()); assertEquals(version, f.version());

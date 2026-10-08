@@ -43,7 +43,7 @@ final class CommandInvariant {
             data.add(CONTROL, MAIN_STREAM, rv("dataEpoch"), control.epoch());
             data.add(CONTROL, MAIN_STREAM, rv("streamSequence"), integer(control.sequence()));
             data.add(CONTROL, MAIN_STREAM, rv("legacyThroughSequence"), integer(control.sequence()));
-            data.commit();
+            CommitHalt.commit(data);
             committed = true;
         } finally {
             try { if (!committed) data.abort(); }

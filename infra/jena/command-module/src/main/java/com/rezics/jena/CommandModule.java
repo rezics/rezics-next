@@ -88,12 +88,12 @@ public final class CommandModule implements FusekiAutoModule {
                     long deadline = System.nanoTime() + 10_000_000_000L;
                     SemanticSourceBasis.qualifyAtStartup(data, deadline);
                     SemanticSourceBasis.check(deadline);
-                    data.commit();
+                    CommitHalt.commit(data);
                 } else data.abort();
             } finally { data.end(); }
         } else {
             data.begin(org.apache.jena.query.ReadWrite.WRITE);
-            try { SemanticSourceBasis.invalidate(data); data.commit(); }
+            try { SemanticSourceBasis.invalidate(data); CommitHalt.commit(data); }
             finally { data.end(); }
         }
     }

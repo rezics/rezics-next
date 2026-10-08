@@ -651,7 +651,7 @@ final class TemplateIndexService {
             data.add(uri(STATE),turn,uri(RV+"requestDigest"),NodeFactory.createLiteralString(digest));
             data.add(uri(STATE),turn,uri(RV+"membershipResult"),NodeFactory.createLiteralString(CommandService.jsonObject(result).toString()));
             membershipDeadline(deadline);
-            CommandWork.timed("commit",data::commit);CommandWork.count("durable_commits",1);committed=true;
+            CommandWork.timed("commit",() -> CommitHalt.commit(data));CommandWork.count("durable_commits",1);committed=true;
             return result;
         } catch (MembershipDeadline expired) {
             return Map.of("status","deadline");

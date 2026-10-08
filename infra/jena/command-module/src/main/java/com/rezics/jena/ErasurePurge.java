@@ -166,7 +166,7 @@ public final class ErasurePurge {
                             output.add(REVISIONS, target, RDF.type.asNode(), ERASED_REVISION);
                             output.add(REVISIONS, target, ERASURE_EPOCH, epoch);
                         });
-                        destination.commit();
+                        CommitHalt.commit(destination);
                         System.out.println("campaignSha256=" + campaign.sha256() + " campaignTargets=" + campaign.targets().size()
                             + " retainedQuads=" + retained + " excludedQuads=" + excluded
                             + " excludedSubjects=" + removed.size());

@@ -69,7 +69,7 @@ final class OccurrenceTextSchema {
                 data.deleteAny(control, product, predicate, org.apache.jena.graph.Node.ANY);
                 data.add(control, product, predicate, NodeFactory.createURI("urn:rezics:text-index-generation:" + UUID.randomUUID()));
             }
-            data.commit();
+            CommitHalt.commit(data);
             return true;
         } catch (IOException error) { throw new TextIndexException("occurrence schema rebuild failed", error); }
         finally { producer.finish(); data.end(); }

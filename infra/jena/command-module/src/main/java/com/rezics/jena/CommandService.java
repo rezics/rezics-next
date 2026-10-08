@@ -430,7 +430,7 @@ final class CommandService extends ActionService {
                 PublicNameProjection.prepareWorkScopeDirectory(dataset, deadline);
                 String phase = PublicNameProjection.workScopeDirectoryPhase(dataset);
                 TemplateIndexService.workScopeBudget(deadline);
-                dataset.commit();
+                CommitHalt.commit(dataset);
                 commit = true;
                 return Map.of("status", "prepared", "phase", phase, "more", !"complete".equals(phase));
             } catch (java.util.concurrent.CancellationException cancelled) {
@@ -481,7 +481,7 @@ final class CommandService extends ActionService {
                     throw new IllegalStateException("title acceptance changed without an accepted outcome");
                 CommandWork.enter("commit");
                 TemplateIndexService.workScopeBudget(deadline);
-                dataset.commit(); commit = true;
+                CommitHalt.commit(dataset); commit = true;
                 CommandWork.count("durable_commits", 1);
                 return result;
             } catch (java.util.concurrent.CancellationException cancelled) {
@@ -553,7 +553,7 @@ final class CommandService extends ActionService {
                 CommandWork.enter("commit");
                 SemanticSourceBasis.check(Long.MAX_VALUE);
                 TemplateIndexService.workScopeBudget(Long.MAX_VALUE);
-                dataset.commit(); commit = true;
+                CommitHalt.commit(dataset); commit = true;
                 CommandWork.count("durable_commits", 1);
                 return Map.of("status", "retired");
             } catch (java.util.concurrent.CancellationException | SemanticSourceBasis.Cancelled cancelled) {
@@ -799,7 +799,7 @@ final class CommandService extends ActionService {
                     CommandWork.enter("commit");
                     SemanticSourceBasis.check(deadline);
                     TemplateIndexService.workScopeBudget(deadline);
-                    dataset.commit(); commit = true;
+                    CommitHalt.commit(dataset); commit = true;
                     CommandWork.count("durable_commits", 1);
                 }
                 return Map.of("items", results);
@@ -976,7 +976,7 @@ final class CommandService extends ActionService {
                 return Map.of("status", "deadline");
             SemanticSourceBasis.check(deadline);
             TemplateIndexService.workScopeBudget(deadline);
-            dataset.commit(); commit = true;
+            CommitHalt.commit(dataset); commit = true;
             CommandWork.count("durable_commits", 1);
             return result;
         } catch (java.util.concurrent.CancellationException | SemanticSourceBasis.Cancelled cancelled) {

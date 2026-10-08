@@ -348,7 +348,7 @@ final class ClaimFoldInventory {
             String post=ClaimStatementFoldPolicy.check(data,proof.snapshot());
             if(post!=null || !state.cut().equals(lineageCut(data,request.job(),deadline,clock))) return dispositionStatus("unresolved","retained original poststate/held cut changed");
             if(delta!=null) SearchDeltaJournal.append(logical,delta,publicWriteEpoch.get()+1);
-            deadline(deadline,clock); logical.commit(); committed=true; return row;
+            deadline(deadline,clock); CommitHalt.commit(logical); committed=true; return row;
         } catch(InventoryDeadline expired) { return dispositionStatus("deadline","retention deadline expired"); }
         catch(IllegalArgumentException invalid) { return dispositionStatus("unresolved",invalid.getMessage()); }
         finally {
@@ -771,7 +771,7 @@ final class ClaimFoldInventory {
             deadline(deadline,clock);
             if(!JSON.toStringFlat(classification(data,header,state,true)).equals(JSON.toStringFlat(marker)) || expectedVersion(data,header,state)!=Math.addExact(snapshot,1) || !state.cut().equals(lineageCut(data,request.job(),deadline,clock))) return dispositionStatus("unresolved","classification marker/link/held cut changed");
             if(delta!=null) SearchDeltaJournal.append(logical,delta,publicWriteEpoch.get()+1);
-            deadline(deadline,clock); logical.commit(); committed=true; return sealResult(marker,false,data);
+            deadline(deadline,clock); CommitHalt.commit(logical); committed=true; return sealResult(marker,false,data);
         } catch(InventoryDeadline expired) { return dispositionStatus("deadline","classification seal deadline expired"); }
         catch(ClassificationBudget exhausted) { return dispositionStatus("budget","classification seal work budget exhausted"); }
         catch(IllegalArgumentException invalid) { return dispositionStatus("unresolved",invalid.getMessage()); }
@@ -862,7 +862,7 @@ final class ClaimFoldInventory {
             save(data,header,new Checkpoint(cut,request.attempt(),storage,version+1,slice.after(),Math.incrementExact(request.page()),total,count,hash,sourceCut,slice.eof()));
             saveConstruction(data,request.job(),construction);
             if(slice.eof()) sealDirectory(data,request.job(),sourceCut,hash,request.attempt(),construction);
-            deadline(workDeadline,clock); data.commit(); committed=true; return result;
+            deadline(workDeadline,clock); CommitHalt.commit(data); committed=true; return result;
         } catch(InventoryDeadline expired) { return refused(request,"deadline","inventory deadline expired"); }
         catch(IllegalArgumentException invalid) { return refused(request,"invalid",invalid.getMessage()); }
         finally { try { if(!committed) data.abort(); } finally { data.end(); } }

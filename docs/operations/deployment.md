@@ -114,6 +114,8 @@ With these in place, deployment is operations work:
 - OTLP traces, metrics and logs with redaction as [observability](observability.md)
   requires.
 - Runbooks for first installation, release, rollback, restore and bulk import.
+- Fuseki restarts unless it was stopped (`restart: unless-stopped`), so a
+  commit fail-stop (exit 70) comes back and TDB2 replays the journal.
 
 The host inventory in [practical load](#practical-load-objective) still applies:
 measure disk, IOPS, page cache, JVM heap, Lucene merge space, WAL and object

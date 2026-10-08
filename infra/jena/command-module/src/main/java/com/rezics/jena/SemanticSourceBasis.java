@@ -544,7 +544,7 @@ final class SemanticSourceBasis {
                     Ticket next = new Ticket(UUID.randomUUID().toString(), UUID.randomUUID().toString());
                     long version = storage(data).getTxnSystem().getThreadTransaction().getDataVersion();
                     persist(data, old, checkpoint(cut, Math.addExact(version, 1), next, "", 0, "", null), work);
-                    check(work.deadline); data.commit(); committed = true; return next;
+                    check(work.deadline); CommitHalt.commit(data); committed = true; return next;
                 } finally { cleanup(data, committed); }
             }
         }
@@ -621,7 +621,7 @@ final class SemanticSourceBasis {
                     Ticket next = new Ticket(expected.attempt(), UUID.randomUUID().toString());
                     Page result = new Page(next, java.util.List.copyOf(references), phase == 4, work.named, work.defaults, work.probes, work.rows, work.bytes.bytes);
                     persist(data, old, checkpoint(cut, Math.addExact(version, 1), next, expected.cursor(), phase, after, result), work);
-                    check(work.deadline); data.commit(); committed = true; return result;
+                    check(work.deadline); CommitHalt.commit(data); committed = true; return result;
                 } finally { cleanup(data, committed); }
             }
         }

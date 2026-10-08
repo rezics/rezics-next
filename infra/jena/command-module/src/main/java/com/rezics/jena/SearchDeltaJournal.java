@@ -128,7 +128,7 @@ final class SearchDeltaJournal {
             CommandInvariant.Control position = CommandInvariant.readControl(data);
             if (position == null || position.textGeneration() == null) return false;
             if (!data.contains(GRAPH, STATE, ORDINAL, Node.ANY)) initialize(data);
-            data.commit();
+            CommitHalt.commit(data);
         } finally { data.end(); }
         // Admission follows the committed RDF/Lucene audit; a false result or
         // exception must leave repeated startup closed on this same store.

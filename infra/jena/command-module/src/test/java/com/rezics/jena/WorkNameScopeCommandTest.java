@@ -1,6 +1,7 @@
 package com.rezics.jena;
 
 import static org.junit.Assert.*;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -419,7 +420,25 @@ public class WorkNameScopeCommandTest {
         try (var fixture = new Fixture()) {
             fixture.finishPass();
             ((FilteredGraphTextIndex) fixture.data.getTextIndex()).lucene().getIndexWriter().close();
-            assertThrows(org.apache.lucene.store.AlreadyClosedException.class, () -> configuredStartup(fixture, null));
+            // The closed writer fails inside commit. The helper ends that transaction and would stop the process.
+            var halts = new ArrayList<Integer>();
+            var lines = new ArrayList<String>();
+            var halt = CommitHalt.halt;
+            var logged = CommitHalt.logged;
+            CommitHalt.halt = halts::add;
+            CommitHalt.logged = lines::add;
+            Throwable thrown = null;
+            try {
+                try { configuredStartup(fixture, null); }
+                catch (Throwable failure) { thrown = failure; }
+            } finally {
+                CommitHalt.halt = halt;
+                CommitHalt.logged = logged;
+            }
+            assertNotNull("closed writer must fail startup before text schema inspection", thrown);
+            assertEquals(List.of(CommitHalt.STATUS), halts);
+            assertEquals(lines.toString(), 1, lines.size());
+            assertTrue(lines.get(0), lines.get(0).contains(org.apache.lucene.store.AlreadyClosedException.class.getName()));
             assertFalse(TemplateIndexService.workScopeWriterAdmitted(fixture.data));
             uncertified(fixture);
             System.out.println("Work startup production configuration earlyException withdrawSameStore=true");
