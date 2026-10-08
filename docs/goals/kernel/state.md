@@ -1,9 +1,47 @@
 # State
 
-Checkpoint: 2026-10-08 03:35 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-08 04:04 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
+
+## Current ready-work checkpoint
+
+Whole Goal active; this section supersedes older live statuses below. Completion
+still depends on authentic Claim closure and physical C6 recovery qualification.
+
+- Program G1418 cleanup45aa4770b landed; original Core34/0 passes3.6s with
+  unchanged5s limit. Mail33952 acknowledged after starting fresh normal gates.
+  G1373 supervised reader0400 unit PID1311135 live,537files; G1379 structure0404
+  live,535files. Both self-mail terminal verdicts, no native timeout override.
+- First G1379 retry0400 refused scope before tests: manager reclaim quoted paths
+  were stored literally. Corrected frontmatter, reclaimed, scope now clean and
+  relaunched0404; terminal mailab759 acknowledged. No skipped gate/pass inferred.
+- G1282 Grok28 done, source8853 unchanged/clean. Independently checked actual
+  TitleCandidate8+WorkCommand9 XML17/0failure/error/skip; original first117 XML
+  retained. Unique coverage104firstpasses+17rerun with4duplicatepasses, not a
+  fresh117 run. Actual original SQL issuer2/71; all8 borrowed TS paths restored.
+- Full image prerequisite correction sent Programd7c589: original60s short lease
+  must be issued after compilation and immediately before TitleCandidate test,
+  then naturally expire. Long10000s fixture lease alone does not solve full test
+  ordering. No full-package exclusion, renewed authority or untested tag allowed;
+  matching native21e remains unbuilt, joined Title test3a159 remains unexecuted.
+- G1345 Sonnet18 d84 component evidence actual55/1008 owner (original51/957),
+  original integration21/704 and isolated inventory1/35. Review found unsigned
+  all-done progress can skip all native/history calls, and final awaited owner
+  checks can outlive deadline. Sonnet19 PID1247628 corrects complete progress MAC
+  under existing service capability and final deadline recheck; no new authority,
+  complete:false/release denied, unresolved creator/E-to-R/seek linkage retained.
+- Exact2line isolated-test registry loan Program290bf approved/acknowledged.
+  Combined converted Claim files fail raw CLEAR ALL400; individual cases pass.
+  Programd7c589 requests sanctioned isolation of original converting file; no
+  reset/assertion weakening. Staged facade1472 remains restored/uncommitted.
+- G1352 resumed Sonnet20 PID1327055 only original structure-schema fixture on
+  actual Main: exact current installed table inventory, preserving every original
+  case/assertion/physical bound. Three undefined-pool cases cascade from aborted
+  schema setup; no fake pool or production/schema edits authorized. Ownership
+  checked unclaimed, then narrowed/reclaimed one test. Two Sonnet workers live;
+  no Sol/Luna dispatch, host24.3GiB available at admission.
 
 ## Latest review and gate blocker
 
