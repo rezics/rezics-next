@@ -317,6 +317,7 @@ test('real creators, evidence and assessments feed one original native inventory
       contentPool,
       store,
       permit,
+      maintenanceCapability: maintenance,
       progress,
     });
     const first = await receiveClaimFoldOriginalInventoryTurn(env, accessPool, input());
@@ -379,6 +380,35 @@ test('real creators, evidence and assessments feed one original native inventory
     expect(directory2.rows.map((row) => row.claim).sort()).toEqual(
       [claim, eligible.claim.claim].sort(),
     );
+
+    // Caller-supplied progress is authenticated before any cached flag, count or cut is trusted.
+    const requestsBefore = wire.requests;
+    const { mac: _mac, ...unsigned } = captured.progress;
+    for (const forged of [
+      unsigned,
+      { ...captured.progress, members: { ...captured.progress.members, count: 99 } },
+      {
+        ...captured.progress,
+        inventory: { ...captured.progress.inventory, sourceCut: 'a'.repeat(64) },
+      },
+      { ...captured.progress, mac: 'b'.repeat(64) },
+    ]) {
+      await expect(
+        receiveClaimFoldOriginalInventoryTurn(
+          env,
+          accessPool,
+          input(forged as typeof captured.progress),
+        ),
+      ).rejects.toBeInstanceOf(ClaimStatementFoldUnavailable);
+    }
+    expect(wire.requests).toBe(requestsBefore);
+    // The genuine signed bytes verify again after a serialization round trip with the same capability.
+    const restarted = await receiveClaimFoldOriginalInventoryTurn(
+      env,
+      accessPool,
+      input(JSON.parse(JSON.stringify(captured.progress))),
+    );
+    expect(restarted.status === 'captured' && restarted.original).toEqual(captured.original);
 
     // Conversion is gated by the sealed original inventory; afterwards no newer CURRENT can replace it.
     const converted = await convertEligibleClaimsTurn(env, accessPool, {

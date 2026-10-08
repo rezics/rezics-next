@@ -3483,6 +3483,7 @@ function nativeInventoryFake(
   return { transport, rows, calls, state, results };
 }
 
+const MAINTENANCE_CAPABILITY = 'c'.repeat(64);
 function inventoryHarness(
   options: {
     claims?: number;
@@ -3515,6 +3516,7 @@ function inventoryHarness(
     contentPool: { connect: async () => contentSide.client } as unknown as Pool,
     store,
     permit: contentSide.permit,
+    maintenanceCapability: MAINTENANCE_CAPABILITY,
     progress,
   });
   return { ...f, pool, native, input, accessSide, contentSide, access };
@@ -3634,14 +3636,14 @@ test('the receiver bounds each turn, resumes the same Access cursor and refuses 
       h.pool,
       h.input({ ...progress, marker: 'urn:other' }),
     ),
-  ).rejects.toBeInstanceOf(ClaimStatementFoldStale);
+  ).rejects.toBeInstanceOf(ClaimStatementFoldUnavailable);
   await expect(
     receiveClaimFoldOriginalInventoryTurn(
       h.env,
       h.pool,
       h.input({ ...progress, content: { ...progress.content, generation: '9' } }),
     ),
-  ).rejects.toBeInstanceOf(ClaimStatementFoldStale);
+  ).rejects.toBeInstanceOf(ClaimStatementFoldUnavailable);
   h.access.generation = '8';
   await expect(
     receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input(progress)),
@@ -3738,4 +3740,190 @@ test('native refusals, wrong page identity and a forged directory never become a
   const turn = await receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input());
   expect(turn.status).toBe('captured');
   expect(h.native.calls.members.map((request) => request.progress)).toEqual(['', '127', '', '127']);
+});
+
+test('a forged all-done progress is refused before any history, native or fence work', async () => {
+  const h = inventoryHarness();
+  const invented = {
+    marker: h.fence.marker,
+    accessGeneration: '7',
+    content: { job: h.contentSide.permit.job!, generation: '8', restoreEpoch: '3' },
+    audit: {
+      cursor: null,
+      done: true,
+      windows: 3,
+      entries: 90,
+      counts: { bound: 90 },
+      digest: 'a'.repeat(64),
+    },
+    inventory: {
+      attempt: '00000000-0000-4000-8000-000000000999',
+      deadline: Date.now() + 3_600_000,
+      page: 9,
+      previous: 'b'.repeat(64),
+      total: 999,
+      sourceCut: 'c'.repeat(64),
+      seal: 'd'.repeat(64),
+      sealed: true,
+      accumulator: 'e'.repeat(64),
+    },
+    members: { progress: '', count: 999, accumulator: 'e'.repeat(64), done: true },
+  };
+  const attempts = [
+    invented,
+    { ...invented, mac: 'f'.repeat(64) },
+    { ...invented, mac: 'not-hex' },
+    { ...invented, mac: 'f'.repeat(64), extra: true },
+  ] as unknown as ClaimFoldOriginalInventoryProgress[];
+  for (const progress of attempts) {
+    await expect(
+      receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input(progress)),
+    ).rejects.toBeInstanceOf(ClaimStatementFoldUnavailable);
+  }
+  expect(h.native.calls.inventory).toEqual([]);
+  expect(h.native.calls.members).toEqual([]);
+  expect(h.accessSide.queries).toEqual([]);
+  expect(h.contentSide.queries).toEqual([]);
+  expect(h.commands).toEqual([]);
+  expect(h.sql).toEqual([]);
+});
+
+test('one changed field, an unknown field, an oversize payload or another key invalidates genuine progress', async () => {
+  const h = inventoryHarness();
+  const captured = await receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input());
+  if (captured.status !== 'captured') throw new Error('Expected capture');
+  const genuine = captured.progress;
+  const refused = async (progress: unknown, capability = MAINTENANCE_CAPABILITY) => {
+    const before = h.native.calls.inventory.length + h.native.calls.members.length;
+    await expect(
+      receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, {
+        ...h.input(progress as ClaimFoldOriginalInventoryProgress),
+        maintenanceCapability: capability,
+      }),
+    ).rejects.toBeInstanceOf(ClaimStatementFoldUnavailable);
+    expect(h.native.calls.inventory.length + h.native.calls.members.length).toBe(before);
+  };
+  await refused({ ...genuine, members: { ...genuine.members, count: genuine.members.count + 1 } });
+  await refused({ ...genuine, audit: { ...genuine.audit, digest: '0'.repeat(64) } });
+  await refused({
+    ...genuine,
+    audit: { ...genuine.audit, counts: { bound: 1, ...genuine.audit.counts } },
+  });
+  await refused({
+    ...genuine,
+    inventory: { ...genuine.inventory, total: genuine.inventory.total - 1 },
+  });
+  await refused({ ...genuine, inventory: { ...genuine.inventory, sourceCut: 'a'.repeat(64) } });
+  await refused({
+    ...genuine,
+    inventory: { ...genuine.inventory, deadline: genuine.inventory.deadline + 1 },
+  });
+  await refused({ ...genuine, accessGeneration: '8' });
+  await refused({ ...genuine, extra: 1 });
+  await refused({
+    ...genuine,
+    audit: {
+      ...genuine.audit,
+      counts: Object.fromEntries(Array.from({ length: 65 }, (_, index) => [`k:${index}`, 1])),
+    },
+  });
+  await refused({ ...genuine, members: { ...genuine.members, progress: 'x'.repeat(5000) } });
+  await refused({ ...genuine, inventory: { ...genuine.inventory, sealed: false } });
+  await refused(null);
+  await refused('progress');
+  // The same bytes under another service capability are not authentic.
+  await refused(genuine, 'd'.repeat(64));
+  // An unrelated reviewed definition pair is another job binding.
+  const another = inventoryHarness();
+  await expect(
+    receiveClaimFoldOriginalInventoryTurn(another.env, another.pool, {
+      ...another.input(genuine),
+      qualificationDefinition: id(777),
+    }),
+  ).rejects.toBeInstanceOf(ClaimStatementFoldUnavailable);
+  // A progress minted under another Content permit is genuine but stale for this cut.
+  const swapped = inventoryHarness();
+  swapped.contentSide.gate.generation = '9';
+  const minted = await receiveClaimFoldOriginalInventoryTurn(swapped.env, swapped.pool, {
+    ...swapped.input(),
+    permit: { ...swapped.contentSide.permit, generation: '9' },
+  });
+  expect(minted.status).toBe('captured');
+  await expect(
+    receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input(minted.progress)),
+  ).rejects.toBeInstanceOf(Error);
+  // The unchanged genuine progress still verifies, including after a JSON round trip and a new process key read.
+  const restarted = JSON.parse(JSON.stringify(genuine)) as ClaimFoldOriginalInventoryProgress;
+  const again = await receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input(restarted));
+  expect(again.status).toBe('captured');
+  if (again.status === 'captured') expect(again.original).toEqual(captured.original);
+  expect(again.progress).toEqual(genuine);
+});
+
+test('signed progress survives a lost acknowledgement and a restart, and an expired final read never captures', async () => {
+  const h = inventoryHarness({ faults: { loseInventoryPage: 1 } });
+  const first = await receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input());
+  if (first.status !== 'partial') throw new Error('Expected a lost acknowledgement');
+  expect(first.progress.mac).toMatch(/^[0-9a-f]{64}$/);
+  // Restart: only the serialized signed bytes and the same existing capability remain.
+  const restarted = JSON.parse(
+    JSON.stringify(first.progress),
+  ) as ClaimFoldOriginalInventoryProgress;
+  const lost = h.native.calls.inventory.at(-1)!;
+  // The deadline expires while the final SQL read is awaited: a partial, never a capture.
+  const local = new AbortController();
+  const timeout = spyOn(AbortSignal, 'timeout').mockImplementation(() => local.signal);
+  let armed = false;
+  const members = h.native.transport.claimFoldMembers.bind(h.native.transport);
+  h.native.transport.claimFoldMembers = async (request) => {
+    const page = await members(request);
+    if (page.directoryEOF) armed = true;
+    return page;
+  };
+  const query = h.contentSide.client.query.bind(h.contentSide.client);
+  h.contentSide.client.query = (async (...args: Parameters<typeof query>) => {
+    const result = await query(...args);
+    if (armed && String(args[0]).startsWith('SELECT version'))
+      local.abort(new DOMException('deadline', 'TimeoutError'));
+    return result;
+  }) as typeof query;
+  let expired;
+  try {
+    expired = await receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input(restarted));
+  } finally {
+    timeout.mockRestore();
+  }
+  expect(h.native.calls.inventory.at(-1)).toEqual(lost);
+  expect(h.native.calls.executed).toBe(2);
+  expect(expired).toMatchObject({
+    status: 'partial',
+    reason: 'budget-expired',
+    complete: false,
+    release: 'denied',
+  });
+  // The signed partial carries every finished phase and the next turn finalizes without repeating them.
+  const callsBefore = h.native.calls.inventory.length + h.native.calls.members.length;
+  const final = await receiveClaimFoldOriginalInventoryTurn(
+    h.env,
+    h.pool,
+    h.input(expired.progress),
+  );
+  expect(final.status).toBe('captured');
+  expect(h.native.calls.inventory.length + h.native.calls.members.length).toBe(callsBefore);
+  // A monotonic-clock expiry is honoured the same way.
+  const clock = spyOn(performance, 'now');
+  const base = performance.now();
+  let reads = 0;
+  // The turn reads the monotonic clock once for its deadline; every later read is past it.
+  clock.mockImplementation(() => (reads++ === 0 ? base : base + 31_000));
+  try {
+    const late = await receiveClaimFoldOriginalInventoryTurn(
+      h.env,
+      h.pool,
+      h.input(final.progress),
+    );
+    expect(late).toMatchObject({ status: 'partial', reason: 'budget-expired' });
+  } finally {
+    clock.mockRestore();
+  }
 });

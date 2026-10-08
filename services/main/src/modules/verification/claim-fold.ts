@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
@@ -1078,7 +1078,8 @@ export interface ClaimFoldMaintenanceTransport {
   ): Promise<ClaimFoldMembersPage>;
 }
 
-export interface ClaimFoldOriginalInventoryProgress {
+/** Unsigned working state. Only a signed copy ever leaves or re-enters a turn. */
+export interface ClaimFoldOriginalInventoryState {
   marker: string;
   accessGeneration: string;
   content: { job: string; generation: string; restoreEpoch: string };
@@ -1103,6 +1104,8 @@ export interface ClaimFoldOriginalInventoryProgress {
   };
   members: { progress: string; count: number; accumulator: string; done: boolean };
 }
+/** The state authenticated by a domain-separated HMAC under the service maintenance capability. */
+export type ClaimFoldOriginalInventoryProgress = ClaimFoldOriginalInventoryState & { mac: string };
 export interface ClaimFoldOriginalInventoryInput extends ClaimStatementFoldMap {
   job: string;
   transport: ClaimFoldMaintenanceTransport;
@@ -1110,6 +1113,8 @@ export interface ClaimFoldOriginalInventoryInput extends ClaimStatementFoldMap {
   store: VerificationStore;
   /** A permit from the existing maintenance closure of Content1704; this turn never closes it. */
   permit: AssessmentProducerPermit;
+  /** The service maintenance capability from composition. Keys progress authenticity; never persisted or sent. */
+  maintenanceCapability: string;
   progress?: ClaimFoldOriginalInventoryProgress;
 }
 /** What a captured original population still does not establish. Nothing here is closure or release. */
@@ -1234,11 +1239,162 @@ async function withOwnerSnapshots<T>(
   }
 }
 
+const PROGRESS_DOMAIN = 'rezics:claim-fold-original-inventory-progress:v1';
+const PROGRESS_BYTES = 16 * 1024;
+const DECIMAL = /^(0|[1-9][0-9]{0,19})$/;
+const UUID_TEXT = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
+const canonicalJson = (value: unknown): string =>
+  JSON.stringify(value, (_key, item: unknown) =>
+    item && typeof item === 'object' && !Array.isArray(item)
+      ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : item,
+  );
+function progressKey(input: ClaimFoldOriginalInventoryInput) {
+  const capability = input.maintenanceCapability;
+  if (typeof capability !== 'string' || !HEX64.test(capability))
+    throw new ClaimStatementFoldUnavailable(
+      'Claim inventory progress needs the maintenance capability',
+    );
+  return Buffer.from(capability, 'hex');
+}
+/** Job, fence, reviewed D/Q (through the map digest) and lineage are fixed by the caller's input. */
+const progressBinding = (job: ClaimFoldInventoryJob) => [
+  job.dataEpoch,
+  job.routingEpoch,
+  job.marker,
+  job.mapDigest,
+  job.job,
+];
+const progressMac = (
+  key: Buffer,
+  job: ClaimFoldInventoryJob,
+  state: ClaimFoldOriginalInventoryState,
+) =>
+  createHmac('sha256', key)
+    .update(`${PROGRESS_DOMAIN}\0${canonicalJson([progressBinding(job), state])}`)
+    .digest('hex');
+const signProgress = (
+  key: Buffer,
+  job: ClaimFoldInventoryJob,
+  state: ClaimFoldOriginalInventoryState,
+): ClaimFoldOriginalInventoryProgress => ({
+  ...structuredClone(state),
+  mac: progressMac(key, job, state),
+});
+const forged = () =>
+  new ClaimStatementFoldUnavailable('Claim inventory progress is not authentic for this job');
+
+/** Exact schema, sizes and invariants of unauthenticated caller bytes; unknown fields are refused. */
+function checkedProgress(value: unknown): ClaimFoldOriginalInventoryProgress {
+  const object = (item: unknown, keys: string): Record<string, unknown> => {
+    if (
+      !item ||
+      typeof item !== 'object' ||
+      Array.isArray(item) ||
+      Object.keys(item).sort().join() !== keys
+    )
+      throw forged();
+    return item as Record<string, unknown>;
+  };
+  const text = (item: unknown, pattern: RegExp, max = 4096) => {
+    if (typeof item !== 'string' || item.length > max || !pattern.test(item)) throw forged();
+    return item;
+  };
+  const count = (item: unknown) => {
+    if (!Number.isSafeInteger(item) || (item as number) < 0) throw forged();
+    return item as number;
+  };
+  const flag = (item: unknown) => {
+    if (typeof item !== 'boolean') throw forged();
+    return item;
+  };
+  try {
+    if (Buffer.byteLength(JSON.stringify(value) ?? '') > PROGRESS_BYTES) throw forged();
+  } catch {
+    throw forged();
+  }
+  const root = object(value, 'accessGeneration,audit,content,inventory,mac,marker,members');
+  const content = object(root.content, 'generation,job,restoreEpoch');
+  const audit = object(root.audit, 'counts,cursor,digest,done,entries,windows');
+  const cursor =
+    audit.cursor === null
+      ? null
+      : (() => {
+          const item = object(audit.cursor, 'after,recoveryGeneration');
+          return {
+            after: text(item.after, UUID_TEXT, 36),
+            recoveryGeneration: text(item.recoveryGeneration, DECIMAL, 20),
+          };
+        })();
+  const rawCounts = audit.counts;
+  if (
+    !rawCounts ||
+    typeof rawCounts !== 'object' ||
+    Array.isArray(rawCounts) ||
+    Object.keys(rawCounts).length > 64
+  )
+    throw forged();
+  const counts = Object.fromEntries(
+    Object.entries(rawCounts).map(([key, item]) => [text(key, /^[a-z:-]{1,80}$/, 80), count(item)]),
+  );
+  const inventory = object(
+    root.inventory,
+    'accumulator,attempt,deadline,page,previous,seal,sealed,sourceCut,total',
+  );
+  const members = object(root.members, 'accumulator,count,done,progress');
+  const hexOrNull = (item: unknown) => (item === null ? null : text(item, HEX64, 64));
+  const state: ClaimFoldOriginalInventoryState = {
+    marker: text(root.marker, /^urn:rezics:maintenance:claim-statement-fold:[0-9a-f]{64}$/, 200),
+    accessGeneration: text(root.accessGeneration, DECIMAL, 20),
+    content: {
+      job: text(content.job, /^[A-Za-z0-9:_-]{1,128}$/, 128),
+      generation: text(content.generation, DECIMAL, 20),
+      restoreEpoch: text(content.restoreEpoch, DECIMAL, 20),
+    },
+    audit: {
+      cursor,
+      done: flag(audit.done),
+      windows: count(audit.windows),
+      entries: count(audit.entries),
+      counts,
+      digest: text(audit.digest, HEX64, 64),
+    },
+    inventory: {
+      attempt: text(inventory.attempt, UUID_TEXT, 36),
+      deadline: count(inventory.deadline),
+      page: count(inventory.page),
+      previous: text(inventory.previous, /^(?:[0-9a-f]{64})?$/, 64),
+      total: count(inventory.total),
+      sourceCut: hexOrNull(inventory.sourceCut),
+      seal: hexOrNull(inventory.seal),
+      sealed: flag(inventory.sealed),
+      accumulator: text(inventory.accumulator, HEX64, 64),
+    },
+    members: {
+      progress: text(members.progress, /^[A-Za-z0-9_.-]*$/, 4096),
+      count: count(members.count),
+      accumulator: text(members.accumulator, HEX64, 64),
+      done: flag(members.done),
+    },
+  };
+  // Each phase can only have advanced behind its predecessor.
+  if (
+    state.inventory.sealed !== (state.inventory.seal !== null) ||
+    (state.inventory.sealed && state.inventory.sourceCut === null) ||
+    (state.audit.done && state.audit.cursor !== null) ||
+    (state.inventory.page > 0 && !state.audit.done) ||
+    (state.members.done && !state.inventory.sealed) ||
+    (state.members.count > 0 && !state.inventory.sealed)
+  )
+    throw forged();
+  return { ...state, mac: text(root.mac, HEX64, 64) };
+}
+
 /** Re-prove the closed Access generation, drained admissions and exact Content1704 permit. */
 async function recheckOwnerCuts(
   pool: Pool,
   input: ClaimFoldOriginalInventoryInput,
-  progress: ClaimFoldOriginalInventoryProgress,
+  progress: ClaimFoldOriginalInventoryState,
 ) {
   if ((await closedAccessGeneration(pool)) !== progress.accessGeneration)
     throw new ClaimStatementFoldStale('Claim inventory Access generation changed');
@@ -1300,6 +1456,15 @@ async function receiveAtBudget(
     throw new ClaimStatementFoldUnavailable(
       'Claim inventory requires the closed Content1704 permit',
     );
+  // Cached cursors, flags, counts and digests are trusted only after this check, before any side effect.
+  const key = progressKey(input);
+  let supplied: ClaimFoldOriginalInventoryState | undefined;
+  if (input.progress !== undefined) {
+    const { mac, ...rest } = checkedProgress(input.progress);
+    const expected = Buffer.from(progressMac(key, job, rest), 'hex');
+    if (!timingSafeEqual(expected, Buffer.from(mac, 'hex'))) throw forged();
+    supplied = rest;
+  }
   await acquireClaimFoldFence(env, pool, input, fence, deadline);
   const generation = await closedAccessGeneration(pool);
   const content = {
@@ -1307,8 +1472,8 @@ async function receiveAtBudget(
     generation: permit.generation,
     restoreEpoch: permit.restoreEpoch,
   };
-  let progress: ClaimFoldOriginalInventoryProgress = structuredClone(
-    input.progress ?? {
+  let progress: ClaimFoldOriginalInventoryState = structuredClone(
+    supplied ?? {
       marker: fence.marker,
       accessGeneration: generation,
       content,
@@ -1343,8 +1508,10 @@ async function receiveAtBudget(
     complete: false,
     release: 'denied',
     reason,
-    progress,
+    progress: signProgress(key, job, progress),
   });
+  // The first owner reads are awaited before any phase starts; none may finish past the one deadline.
+  if (expired()) return partial('budget-expired');
   // Original assessment history first: unresolved entries are counted, never repaired.
   for (let windows = 0; !progress.audit.done; windows++) {
     if (windows >= cost.auditWindows) return partial('turn-bound');
@@ -1501,11 +1668,13 @@ async function receiveAtBudget(
   // A late producer, Access generation change or Content gate change after capture invalidates it.
   await ownFence(env, fence);
   await recheckOwnerCuts(pool, input, progress);
+  // Awaited owner reads can outlive the turn: a capture is declared only inside its deadline.
+  if (expired()) return partial('budget-expired');
   return {
     status: 'captured',
     complete: false,
     release: 'denied',
-    progress,
+    progress: signProgress(key, job, progress),
     original: {
       job,
       attempt: sealed.attempt,
