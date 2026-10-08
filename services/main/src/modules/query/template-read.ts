@@ -14,6 +14,7 @@ import { discoveryStorage } from '../discovery/store.ts';
 import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
 import { TEMPLATE_COST, type ReviewedTemplate, type TemplateInput } from './template-schema.ts';
 import type { SeekCandidate } from './seek-index.ts';
+import { FIRST_PUBLICATION_ANCHOR, keepPublicationRow, publicationRowKey, publicationYearBoundsError, publicationYearFromKey } from './year-fact.ts';
 
 export const templateRequests=t.Union(templates.map(template=>template.request) as [typeof templates[number]['request'],...typeof templates[number]['request'][]]);
 export const templateResponses=t.Union(templates.map(template=>template.response) as [typeof templates[number]['response'],...typeof templates[number]['response'][]]);
@@ -54,13 +55,19 @@ async function admit(session:WorkReadSession, rootKind:Template['root'], roots:s
 export async function executeTemplate(deps:MainWorkDependencies,request:Request,input:TemplateInput):Promise<Response> {
   const template=templates.find(template=>template.query===input.query && template.revision===input.revision) as Template|undefined;
   if(!template || !Value.Check(template.request,input)) throw new WorkReadInvalid('Unknown or invalid reviewed template');
-  const roots=[...input.parameters.roots].sort(),limit=input.limit ?? TEMPLATE_COST.page;
+  const yearPage=template.eligibility.kind==='first-publication';
+  const bounds=publicationYearBoundsError(input.parameters.fromYear,input.parameters.toYear);
+  if(yearPage && bounds) throw new WorkReadInvalid(bounds);
+  const roots=[...(input.parameters.roots ?? [])].sort(),limit=input.limit ?? TEMPLATE_COST.page;
   if(roots.length>TEMPLATE_COST.roots || limit>TEMPLATE_COST.maxPage) throw new WorkReadLimit('Template input exceeds its budget');
   const options={...input.presentation,limit,cursor:input.cursor,localBasis:true,readOnlyTemplate:true};
   const operation=async(session:WorkReadSession)=> {
-    const admission=await admit(session,template.root,roots);
+    const admission=yearPage
+      ? {rows:[] as {root:string;main:string}[],token:readDependencyToken(['first-publication']),concepts:null}
+      : await admit(session,template.root,roots);
     const normalized={query:template.query,revision:template.revision,text:readDependencyToken(template.sparql),roots,
       contentLanguage:input.parameters.contentLanguage?.toLowerCase() ?? '',kind:input.parameters.kind ?? '',
+      fromYear:input.parameters.fromYear ?? null,toYear:input.parameters.toYear ?? null,
       languages:session.displayLanguages,actor:session.options.actingSubject ?? null,limit};
     const refs=template.sourceCredits ? await sourceCreditReferences(session,roots) : [];
     let membership:unknown, candidateRead:(after:{key:string;id:string}|null)=>Promise<SeekCandidate[]>;
@@ -80,7 +87,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
         const window=await index.candidates(session.position.dataEpoch,keys,after,Math.min(budget,Math.max(limit+1,keys.length)),input.parameters,budget);
         physicalMore=window.more;return window.rows;
       };
-    } else {
+    } else if(template.eligibility.kind==='discovery-concept') {
       const projection=deps.discovery,index=deps.templateSeek;
       if(!projection || !index || !admission.concepts) throw new WorkReadUnavailable('Accepted item directory is unavailable');
       const senses=[...new Set([...admission.concepts.values()].flatMap(concept=>concept.interpretations))];
@@ -104,6 +111,19 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
         physicalMore=page.next!==null;
         return page.rows.map(row=>({id:row.work,key:row.order_key,root:roots[0]!,terms:{mainVersion:[row.payload.mainVersion]}}));
       };
+    } else {
+      const index=deps.templateSeek;
+      if(!index) throw new WorkReadUnavailable('Template directory is unavailable');
+      const selector=template.eligibility;
+      const key:TemplateIndexKey={graph:selector.graph,predicate:selector.predicate,anchor:selector.anchor,type:selector.type};
+      extraBasis=()=>index.keys(session.position.dataEpoch,[key]);
+      membership=await extraBasis();
+      session.observeDependency('template-membership',membership,extraBasis);
+      candidateRead=async after=> {
+        const window=await index.candidates(session.position.dataEpoch,[key],after,Math.min(TEMPLATE_COST.candidates,limit+1),
+          {fromYear:input.parameters.fromYear,toYear:input.parameters.toYear},TEMPLATE_COST.candidates);
+        physicalMore=window.more;return window.rows;
+      };
     }
     const position={...session.position,dependencyToken:readDependencyToken([admission.token,membership,refs])};
     const cursor=decodeReadCursor(input.cursor,normalized,position);
@@ -121,7 +141,11 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       candidates=[...candidates,...added].sort((a,b)=>a.key<b.key?-1:a.key>b.key?1:a.id<b.id?-1:1);
     }
     if(candidates.length+admission.rows.length+source.length>TEMPLATE_COST.candidates) throw new WorkReadLimit('Template candidate budget exceeded');
-    const tables=[{columns:['_work_iri','_main_iri'],rows:admission.rows.map(row=>[uri(row.root),uri(row.main)])},
+    // An empty root VALUES is an empty join and would erase the page. The year
+    // page has no Work roots, so the unused table carries the sentinel once.
+    const tables=[{columns:['_work_iri','_main_iri'],rows:yearPage
+      ? [[uri(FIRST_PUBLICATION_ANCHOR),uri(FIRST_PUBLICATION_ANCHOR)]]
+      : admission.rows.map(row=>[uri(row.root),uri(row.main)])},
       {columns:['id','_sort'],rows:candidates.map(row=>[uri(row.id),literal(row.key)])}];
     if(template.sourceCredits) tables.push({columns:['id','key','ordinal','_work_iri','_source_confirmed'],
       rows:source.map(row=>[uri(row.id),literal(row.key),integer(row.ordinal),uri(row.work),bool(row.confirmed)])});
@@ -135,6 +159,10 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
         const value=paths.flatMap(path=>candidate.terms[path] ?? [])[0];
         if(value) terms[variable]=uri(value);
       }
+      if(yearPage) {
+        try { terms._year=integer(publicationYearFromKey(candidate.key)); }
+        catch { throw new WorkReadUnavailable('Template directory year key is unavailable'); }
+      }
       return terms;
     });
     const envelope={query:template.sparql,bindings,tables,candidates:candidateBindings,limit:Math.max(1,candidates.length)};
@@ -142,12 +170,25 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
     session.observeDependency('template-fields',readRowsToken(rows),async()=>readRowsToken(
       candidates.length ? (await deps.environment.fuseki.templateQuery(envelope)).results?.bindings ?? [] : []));
     const byId=new Map<string,ReadRow>();
+    const seenYears=new Set<string>();
     for(const row of rows) {
       const id=row.id?.value;
-      if(!id || byId.has(id)) throw new WorkReadUnavailable('Template result identity is ambiguous');
-      byId.set(id,row);
+      if(!id) throw new WorkReadUnavailable('Template result identity is ambiguous');
+      if(yearPage) {
+        const year=row.year?.value;
+        if(!year || !keepPublicationRow(seenYears,id,year)) {
+          if(!year) throw new WorkReadUnavailable('Template result identity is ambiguous');
+          continue;
+        }
+        byId.set(publicationRowKey(id,year),row);
+      } else {
+        if(byId.has(id)) throw new WorkReadUnavailable('Template result identity is ambiguous');
+        byId.set(id,row);
+      }
     }
-    const selected=candidates.filter(candidate=>byId.has(candidate.id));
+    const rowKey=(candidate:SeekCandidate)=>yearPage
+      ? publicationRowKey(candidate.id,String(publicationYearFromKey(candidate.key))) : candidate.id;
+    const selected=candidates.filter(candidate=>byId.has(rowKey(candidate)));
     const page=selected.slice(0,limit);
     const resourceFields=Object.values(template.fields).flatMap(field=>'summary' in field?[field.summary]:[]);
     const summaryIds=[...new Set(page.flatMap(candidate=>resourceFields.map(name=>byId.get(candidate.id)![name]?.value).filter((id):id is string=>!!id)))];
@@ -155,7 +196,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
     const authorFields=Object.values(template.fields).flatMap(field=>'author' in field?[field.author]:[]);
     const names=authorFields.length ? await readAuthorNames(session,page.flatMap(candidate=>authorFields.map(name=>byId.get(candidate.id)![name]?.value).filter((key):key is string=>!!key))) : new Map();
     const items=page.flatMap(candidate=> {
-      const row=byId.get(candidate.id)!,item:Record<string,unknown>={};
+      const row=byId.get(rowKey(candidate))!,item:Record<string,unknown>={};
       for(const [name,field] of Object.entries(template.fields)) {
         if('constant' in field) item[name]=field.constant;
         else if('summary' in field) {
@@ -179,7 +220,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
     const hasMore=selected.length>limit || physicalMore && candidates.length>0;
     const nextCursor=hasMore && last ? encodeReadCursor(normalized,position,last.id,last.key,
       cursor?.expiresAt ?? Date.now()+READ_BASIS_RETENTION_MS):null;
-    await admit(session,template.root,roots);
+    if(!yearPage) await admit(session,template.root,roots);
     if(readDependencyToken(await extraBasis())!==readDependencyToken(membership)) throw new WorkReadMoved('Template membership moved');
     const payload={profile:'template-result-v1',query:template.query,revision:template.revision,items,
       complete:!nextCursor,nextCursor,sourcePosition:position,count:{value:items.length,kind:'exact-page',total:null}};
@@ -194,6 +235,6 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
   return request.headers.get('if-none-match')?.split(',').map(value=>value.trim()).some(value=>value===result.etag || value==='*')
     ? new Response(null,{status:304,headers}) : Response.json({profile:'query-v1',template:template.query,
       selection:{context:'global',scope:{kind:'all'},filter:input.parameters,text:null,
-        sort:template.eligibility.kind==='discovery-concept'?'newest':'identity',pageSize:limit,facetRefs:[],semanticRevisions:[]},
+        sort:template.eligibility.kind==='discovery-concept' || template.eligibility.kind==='first-publication'?'newest':'identity',pageSize:limit,facetRefs:[],semanticRevisions:[]},
       result:result.payload},{headers});
 }

@@ -31,10 +31,10 @@ const respond = (response: Response) => {
 };
 
 describe('Native template term transport', () => {
-  test('Every reviewed view is one immutable query/schema/fixture triplet; the fourth uses the same executor',()=> {
+  test('Every reviewed view is one immutable query/schema/fixture triplet; the fifth uses the same executor',()=> {
     const directory=resolve(import.meta.dir,'../src/modules/query/templates');
     const files=readdirSync(directory);
-    expect(templates).toHaveLength(4);
+    expect(templates).toHaveLength(5);
     for(const name of files.filter(name=>name.endsWith('.schema.ts')).map(name=>name.slice(0,-10))) {
       expect(files).toContain(`${name}.rq`);expect(files).toContain(`${name}.fixture.json`);
       const fixture=JSON.parse(readFileSync(resolve(directory,`${name}.fixture.json`),'utf8'));

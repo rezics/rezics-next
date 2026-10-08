@@ -1,0 +1,58 @@
+{
+  "parameters": {},
+  "bindings": {},
+  "tables": [
+    { "columns": ["_work_iri", "_main_iri"], "rows": [[
+      { "type": "uri", "value": "urn:rezics:template-anchor:first-publication" },
+      { "type": "uri", "value": "urn:rezics:template-anchor:first-publication" }
+    ]] },
+    {
+      "columns": ["id", "_sort"],
+      "rows": [
+        [
+          { "type": "uri", "value": "https://rezics.com/id/11111111-1111-4111-8111-111111111111" },
+          { "type": "literal", "value": "7976" }
+        ],
+        [
+          { "type": "uri", "value": "https://rezics.com/id/22222222-2222-4222-8222-222222222221" },
+          { "type": "literal", "value": "8001" }
+        ],
+        [
+          { "type": "uri", "value": "https://rezics.com/id/33333333-3333-4333-8333-333333333331" },
+          { "type": "literal", "value": "9993" }
+        ],
+        [
+          { "type": "uri", "value": "https://rezics.com/id/44444444-4444-4444-8444-444444444441" },
+          { "type": "literal", "value": "7982" }
+        ],
+        [
+          { "type": "uri", "value": "https://rezics.com/id/55555555-5555-4555-8555-555555555551" },
+          { "type": "literal", "value": "7988" }
+        ],
+        [
+          { "type": "uri", "value": "https://rezics.com/id/66666666-6666-4666-8666-666666666661" },
+          { "type": "literal", "value": "7992" }
+        ],
+        [
+          { "type": "uri", "value": "https://rezics.com/id/11111111-1111-4111-8111-111111111111" },
+          { "type": "literal", "value": "8010" }
+        ]
+      ]
+    }
+  ],
+  "candidates": [
+    { "id": { "type": "uri", "value": "https://rezics.com/id/11111111-1111-4111-8111-111111111111" }, "_sort": { "type": "literal", "value": "7976" }, "_year": { "type": "literal", "value": "2024", "datatype": "http://www.w3.org/2001/XMLSchema#integer" } },
+    { "id": { "type": "uri", "value": "https://rezics.com/id/22222222-2222-4222-8222-222222222221" }, "_sort": { "type": "literal", "value": "8001" }, "_year": { "type": "literal", "value": "1999", "datatype": "http://www.w3.org/2001/XMLSchema#integer" } },
+    { "id": { "type": "uri", "value": "https://rezics.com/id/33333333-3333-4333-8333-333333333331" }, "_sort": { "type": "literal", "value": "9993" }, "_year": { "type": "literal", "value": "7", "datatype": "http://www.w3.org/2001/XMLSchema#integer" } },
+    { "id": { "type": "uri", "value": "https://rezics.com/id/44444444-4444-4444-8444-444444444441" }, "_sort": { "type": "literal", "value": "7982" }, "_year": { "type": "literal", "value": "2018", "datatype": "http://www.w3.org/2001/XMLSchema#integer" } },
+    { "id": { "type": "uri", "value": "https://rezics.com/id/55555555-5555-4555-8555-555555555551" }, "_sort": { "type": "literal", "value": "7988" }, "_year": { "type": "literal", "value": "2012", "datatype": "http://www.w3.org/2001/XMLSchema#integer" } },
+    { "id": { "type": "uri", "value": "https://rezics.com/id/66666666-6666-4666-8666-666666666661" }, "_sort": { "type": "literal", "value": "7992" }, "_year": { "type": "literal", "value": "2008", "datatype": "http://www.w3.org/2001/XMLSchema#integer" } },
+    { "id": { "type": "uri", "value": "https://rezics.com/id/11111111-1111-4111-8111-111111111111" }, "_sort": { "type": "literal", "value": "8010" }, "_year": { "type": "literal", "value": "1990", "datatype": "http://www.w3.org/2001/XMLSchema#integer" } }
+  ],
+  "dataset": "@prefix rv: <https://rezics.com/vocab/> .\n@prefix schema: <https://schema.org/> .\n@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n\n<urn:rezics:graph:current> {\n  <https://rezics.com/id/11111111-1111-4111-8111-111111111111> a schema:CreativeWork ; rv:mainVersion <https://rezics.com/id/11111111-1111-4111-8111-111111111112> ; rv:catalogueVisible true .\n  <https://rezics.com/id/11111111-1111-4111-8111-111111111112> a rv:MainVersion ; rv:work <https://rezics.com/id/11111111-1111-4111-8111-111111111111> .\n  <https://rezics.com/id/11111111-1111-4111-8111-111111111113> a rdf:Statement ; rdf:subject <https://rezics.com/id/11111111-1111-4111-8111-111111111111> ; rdf:predicate schema:datePublished ; rdf:object \"2024-06-01\"^^xsd:date ; rv:statementState rv:Active ; rv:head <https://rezics.com/id/11111111-1111-4111-8111-111111111114> .\n  <https://rezics.com/id/11111111-1111-4111-8111-111111111115> a rv:DecisionSlot ; rv:decisionTarget <https://rezics.com/id/11111111-1111-4111-8111-111111111113> ; rv:targetKind rv:StatementTarget ; rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead <https://rezics.com/id/11111111-1111-4111-8111-111111111116> .\n  <https://rezics.com/id/22222222-2222-4222-8222-222222222221> a schema:CreativeWork ; rv:mainVersion <https://rezics.com/id/22222222-2222-4222-8222-222222222222> ; rv:catalogueVisible true .\n  <https://rezics.com/id/22222222-2222-4222-8222-222222222222> a rv:MainVersion ; rv:work <https://rezics.com/id/22222222-2222-4222-8222-222222222221> .\n  <https://rezics.com/id/22222222-2222-4222-8222-222222222223> a rdf:Statement ; rdf:subject <https://rezics.com/id/22222222-2222-4222-8222-222222222221> ; rdf:predicate schema:datePublished ; rdf:object \"1999-12-31T23:00:00-05:00\"^^xsd:dateTime ; rv:statementState rv:Active ; rv:head <https://rezics.com/id/22222222-2222-4222-8222-222222222224> .\n  <https://rezics.com/id/22222222-2222-4222-8222-222222222225> a rv:DecisionSlot ; rv:decisionTarget <https://rezics.com/id/22222222-2222-4222-8222-222222222223> ; rv:targetKind rv:StatementTarget ; rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead <https://rezics.com/id/22222222-2222-4222-8222-222222222226> .\n  <https://rezics.com/id/33333333-3333-4333-8333-333333333331> a schema:CreativeWork ; rv:mainVersion <https://rezics.com/id/33333333-3333-4333-8333-333333333332> ; rv:catalogueVisible true .\n  <https://rezics.com/id/33333333-3333-4333-8333-333333333332> a rv:MainVersion ; rv:work <https://rezics.com/id/33333333-3333-4333-8333-333333333331> .\n  <https://rezics.com/id/33333333-3333-4333-8333-333333333333> a rdf:Statement ; rdf:subject <https://rezics.com/id/33333333-3333-4333-8333-333333333331> ; rdf:predicate schema:datePublished ; rdf:object \"0007\"^^xsd:gYear ; rv:statementState rv:Active ; rv:head <https://rezics.com/id/33333333-3333-4333-8333-333333333334> .\n  <https://rezics.com/id/33333333-3333-4333-8333-333333333335> a rv:DecisionSlot ; rv:decisionTarget <https://rezics.com/id/33333333-3333-4333-8333-333333333333> ; rv:targetKind rv:StatementTarget ; rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead <https://rezics.com/id/33333333-3333-4333-8333-333333333336> .\n  <https://rezics.com/id/44444444-4444-4444-8444-444444444441> a schema:CreativeWork ; rv:mainVersion <https://rezics.com/id/44444444-4444-4444-8444-444444444442> .\n  <https://rezics.com/id/44444444-4444-4444-8444-444444444442> a rv:MainVersion ; rv:work <https://rezics.com/id/44444444-4444-4444-8444-444444444441> .\n  <https://rezics.com/id/44444444-4444-4444-8444-444444444443> a rdf:Statement ; rdf:subject <https://rezics.com/id/44444444-4444-4444-8444-444444444441> ; rdf:predicate schema:datePublished ; rdf:object \"2018-04-04\"^^xsd:date ; rv:statementState rv:Active ; rv:head <https://rezics.com/id/44444444-4444-4444-8444-444444444444> .\n  <https://rezics.com/id/44444444-4444-4444-8444-444444444445> a rv:DecisionSlot ; rv:decisionTarget <https://rezics.com/id/44444444-4444-4444-8444-444444444443> ; rv:targetKind rv:StatementTarget ; rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead <https://rezics.com/id/44444444-4444-4444-8444-444444444446> .\n  <https://rezics.com/id/55555555-5555-4555-8555-555555555551> a schema:CreativeWork ; rv:mainVersion <https://rezics.com/id/55555555-5555-4555-8555-555555555552> ; rv:catalogueVisible true .\n  <https://rezics.com/id/55555555-5555-4555-8555-555555555552> a rv:MainVersion ; rv:work <https://rezics.com/id/55555555-5555-4555-8555-555555555551> .\n  <https://rezics.com/id/55555555-5555-4555-8555-555555555553> a rdf:Statement ; rdf:subject <https://rezics.com/id/55555555-5555-4555-8555-555555555551> ; rdf:predicate schema:datePublished ; rdf:object \"2012-02-02\"^^xsd:date ; rv:statementState rv:Active ; rv:head <https://rezics.com/id/55555555-5555-4555-8555-555555555554> .\n  <https://rezics.com/id/66666666-6666-4666-8666-666666666661> a schema:CreativeWork ; rv:mainVersion <https://rezics.com/id/66666666-6666-4666-8666-666666666662> ; rv:catalogueVisible true .\n  <https://rezics.com/id/66666666-6666-4666-8666-666666666662> a rv:MainVersion ; rv:work <https://rezics.com/id/66666666-6666-4666-8666-666666666661> .\n  <https://rezics.com/id/66666666-6666-4666-8666-666666666663> a rdf:Statement ; rdf:subject <https://rezics.com/id/66666666-6666-4666-8666-666666666661> ; rdf:predicate schema:datePublished ; rdf:object \"2008-08-08\"^^xsd:date ; rv:statementState rv:Withdrawn ; rv:head <https://rezics.com/id/66666666-6666-4666-8666-666666666664> .\n  <https://rezics.com/id/66666666-6666-4666-8666-666666666665> a rv:DecisionSlot ; rv:decisionTarget <https://rezics.com/id/66666666-6666-4666-8666-666666666663> ; rv:targetKind rv:StatementTarget ; rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead <https://rezics.com/id/66666666-6666-4666-8666-666666666666> .\n}\n<urn:rezics:graph:revisions> {\n  <https://rezics.com/id/11111111-1111-4111-8111-111111111116> a rv:StatementDecision ; rv:component <https://rezics.com/id/11111111-1111-4111-8111-111111111115> ; rv:outcome rv:Accepted .\n  <https://rezics.com/id/22222222-2222-4222-8222-222222222226> a rv:StatementDecision ; rv:component <https://rezics.com/id/22222222-2222-4222-8222-222222222225> ; rv:outcome rv:Accepted .\n  <https://rezics.com/id/33333333-3333-4333-8333-333333333336> a rv:StatementDecision ; rv:component <https://rezics.com/id/33333333-3333-4333-8333-333333333335> ; rv:outcome rv:Accepted .\n  <https://rezics.com/id/44444444-4444-4444-8444-444444444446> a rv:StatementDecision ; rv:component <https://rezics.com/id/44444444-4444-4444-8444-444444444445> ; rv:outcome rv:Accepted .\n  <https://rezics.com/id/66666666-6666-4666-8666-666666666666> a rv:StatementDecision ; rv:component <https://rezics.com/id/66666666-6666-4666-8666-666666666665> ; rv:outcome rv:Accepted .\n}\n",
+  "expectedIds": [
+    "https://rezics.com/id/11111111-1111-4111-8111-111111111111",
+    "https://rezics.com/id/22222222-2222-4222-8222-222222222221",
+    "https://rezics.com/id/33333333-3333-4333-8333-333333333331"
+  ]
+}

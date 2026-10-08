@@ -18,7 +18,7 @@ export function templateResponse<const I extends string, S extends TSchema>(quer
     items:t.Array(item,{maxItems:64}),complete:t.Boolean(),...pageFields});
 }
 export interface TemplateInput { profile:'template-query-v1'; query:string;revision:1;
-  parameters:{ roots:string[];contentLanguage?:string;kind?:'text-variant'|'release' };
+  parameters:{ roots?:string[];contentLanguage?:string;kind?:'text-variant'|'release';fromYear?:number;toYear?:number };
   presentation?:{language?:string;actingSubject?:string};limit?:number;cursor?:string }
 export type TemplateField = { term:string; valueType?:'boolean'|'integer'; nullable?:boolean;optional?:boolean }
   | { constant: string | number | boolean | null }
@@ -27,7 +27,8 @@ export type TemplateField = { term:string; valueType?:'boolean'|'integer'; nulla
 export interface ReviewedTemplate { query:string;revision:1;request:TSchema;response:TSchema;
   scope:'work'|'public';root:'work'|'concept';
   serverBoundInputs:readonly string[];
-  eligibility:{ kind:'rdf';selectors:readonly SeekSelector[] } | {kind:'discovery-concept';order:'newest'};
+  eligibility:{ kind:'rdf';selectors:readonly SeekSelector[] } | {kind:'discovery-concept';order:'newest'}
+    | {kind:'first-publication';graph:string;predicate:string;anchor:string;type:string};
   budgets:typeof TEMPLATE_COST;
   fields:Record<string,TemplateField>;
   sourceCredits?:boolean;

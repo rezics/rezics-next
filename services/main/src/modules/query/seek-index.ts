@@ -3,6 +3,7 @@ import { fusekiReadBudget, type FusekiClient, type TemplateIndexDelta, type Temp
   type WorkScopeDirectoryPage, type WorkScopeDirectoryRefusal } from '../../infrastructure/fuseki.ts';
 import { WorkReadUnavailable, WorkReadMoved, WorkReadLimit, readDependencyToken } from '../work/read-session.ts';
 import { controlRead, controlTransaction } from '../access/topology-control.ts';
+import { FIRST_PUBLICATION_TYPE, invertedPublicationYear } from './year-fact.ts';
 
 export interface SeekSelector { graph: string; predicate: string; type: string; root: 'work' | 'main'; }
 export interface SeekCandidate { id: string; key: string; root: string; terms: Record<string,string[]> }
@@ -135,6 +136,15 @@ export class TemplateSeekIndex {
         await client.query('DELETE FROM access.template_seek_entry WHERE epoch=$1 AND graph=$2 AND id=$3',[epoch,entity.graph,entity.id]);
         for (const property of ['work','mainVersion']) for (const anchor of entity.terms[property] ?? []) {
           for (const type of entity.terms.type ?? []) {
+            if(type===FIRST_PUBLICATION_TYPE) {
+              for (const key of entity.terms.yearKey ?? []) {
+                if(!/^\d{4}$/.test(key)) throw new WorkReadUnavailable('Physical publication year key is invalid');
+                await client.query(`INSERT INTO access.template_seek_entry(epoch,graph,predicate,anchor,type,key,id,external_key)
+                  VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
+                [epoch,entity.graph,`${RV}${property}`,anchor,type,key,entity.id,null]);
+              }
+              continue;
+            }
             if(type===`${RV}AuthorCredit` && entity.terms.retiredBy?.length) continue;
             const key = type===`${RV}RealmPublicationSlot` ? entity.terms.realm?.[0]
               :type===`${RV}AuthorCredit`?`${String(entity.terms.ordinal?.[0] ?? '').padStart(3,'0')}:${entity.id}`:entity.id;
@@ -208,7 +218,7 @@ export class TemplateSeekIndex {
       await controlTransaction(this.pool,async client=> {
         await this.deadline(client,deadline);
         await client.query('UPDATE access.template_seek_checkpoint SET cursor=$1,complete=$2 WHERE epoch=$3 AND instance=$4',
-          [{ phase,after:delta.next ?? '' },phase===4,epoch,instance]);
+          [{ phase,after:delta.next ?? '' },phase===5,epoch,instance]);
       });
     }
     throw new WorkReadUnavailable('Template directory preparation exceeds 600 seconds');
@@ -229,7 +239,7 @@ export class TemplateSeekIndex {
     return native.bases;
   }
   async candidates(epoch: string, keys: TemplateIndexKey[], after: { key:string; id:string } | null, limit:number,
-    filter: { language?:string; kind?:string } = {},budget=256): Promise<{rows:SeekCandidate[];more:boolean}> {
+    filter: { language?:string; kind?:string; fromYear?:number; toYear?:number } = {},budget=256): Promise<{rows:SeekCandidate[];more:boolean}> {
     if(limit<1 || limit>256 || keys.length>128) throw new WorkReadUnavailable('Template seek exceeds its bound');
     // Each disjoint branch seeks at most P keys. Their merge sorts only that
     // bounded window; it never sorts the anchor inventory. Hydration is later.
@@ -240,7 +250,17 @@ export class TemplateSeekIndex {
     const boundaries: {key:string; id:string}[]=[];
     for (const key of selected) {
       if (filter.kind && (key.type.endsWith('FixedRelease') ? 'release' : 'text-variant')!==filter.kind) continue;
-      const rows = await this.pool.query<{ id:string; key:string; payload: Record<string,string[]> }>(`WITH candidates AS MATERIALIZED (
+      const bounded = key.type===FIRST_PUBLICATION_TYPE && (filter.fromYear!==undefined || filter.toYear!==undefined);
+      const rows = bounded
+        ? await this.pool.query<{ id:string; key:string; payload: Record<string,string[]> }>(`WITH candidates AS MATERIALIZED (
+        SELECT id,key FROM access.template_seek_entry WHERE epoch=$1 AND graph=$2 AND predicate=$3 AND anchor=$4 AND type=$5
+        AND key >= $9::text COLLATE "C" AND key <= $10::text COLLATE "C"
+        AND (key,id)>($6::text COLLATE "C",$7::text COLLATE "C") ORDER BY key,id LIMIT $8)
+        SELECT c.id,c.key,e.payload FROM candidates c JOIN access.template_seek_entity e ON e.epoch=$1 AND e.graph=$2 AND e.id=c.id
+        ORDER BY c.key,c.id`,[epoch,key.graph,key.predicate,key.anchor,key.type,after?.key ?? '',after?.id ?? '',ask+1,
+          filter.toYear===undefined?'':invertedPublicationYear(filter.toYear),
+          filter.fromYear===undefined?invertedPublicationYear(1):invertedPublicationYear(filter.fromYear)])
+        : await this.pool.query<{ id:string; key:string; payload: Record<string,string[]> }>(`WITH candidates AS MATERIALIZED (
         SELECT id,key FROM access.template_seek_entry WHERE epoch=$1 AND graph=$2 AND predicate=$3 AND anchor=$4 AND type=$5
         AND (key,id)>($6::text COLLATE "C",$7::text COLLATE "C") ORDER BY key,id LIMIT $8)
         SELECT c.id,c.key,e.payload FROM candidates c JOIN access.template_seek_entity e ON e.epoch=$1 AND e.graph=$2 AND e.id=c.id

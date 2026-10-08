@@ -10,6 +10,7 @@ import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.ReadWrite;
 import org.apache.jena.sparql.core.DatasetGraph;
 import org.apache.jena.sparql.core.DatasetGraphWrapper;
+import org.apache.jena.datatypes.xsd.XSDDatatype;
 import org.apache.jena.vocabulary.RDF;
 import org.apache.jena.tdb2.sys.TDBInternal;
 import org.apache.jena.tdb2.store.NodeIdFactory;
@@ -22,6 +23,13 @@ final class TemplateIndexService {
     static final String RV = "https://rezics.com/vocab/", CURRENT = CommandPolicy.CURRENT,
         REVISIONS = CommandPolicy.REVISIONS, STATE = "urn:rezics:graph:template-index";
     static final List<String> TYPES = List.of("TextContribution", "RealmPublicationSlot", "AuthorCredit", "FixedRelease");
+    /** One sentinel for every accepted first-publication year. The key is the
+     * fixed-width inverted calendar year, so the existing ascending seek is newest first. */
+    static final String FIRST_PUBLICATION = RV + "FirstPublication",
+        FIRST_PUBLICATION_ANCHOR = "urn:rezics:template-anchor:first-publication",
+        DATE_PUBLISHED = "https://schema.org/datePublished",
+        GLOBAL_CONTEXT = "urn:rezics:classification-context:global";
+    private static final int PUBLICATION_BOUND = 16;
     private static final List<String> PROPERTIES = List.of("work", "mainVersion", "realm", "externalKey", "language", "publicationHead", "publicationDecision", "contribution", "selectedDraft", "selectionHead", "creditRevision", "retiredBy");
     record Entity(String graph, String id, Map<String,List<String>> terms) {}
     record Key(String graph, String predicate, String anchor, String type) {}
@@ -58,7 +66,135 @@ final class TemplateIndexService {
             terms.put("selectionDecision",values(data,REVISIONS,head,RV+"publicationDecision"));
             terms.put("selectionDraft",values(data,REVISIONS,head,RV+"selectedDraft"));
         }
+        if (types.isEmpty() && CURRENT.equals(graph)) {
+            Entity publication = routedPublication(data, id);
+            if (publication != null) return publication;
+        }
         return new Entity(graph,id,terms);
+    }
+    /** A datePublished statement, the decision slot that accepts it, or the Work
+     * itself when accepted dates already exist. The entity id is the Work, so a
+     * later command on that subject replaces the posting instead of deleting it. */
+    private static Entity routedPublication(DatasetGraph data, String subject) {
+        if (isDatePublishedStatement(data, subject)) {
+            Node work = sole(data, CURRENT, subject, RDF.subject.getURI());
+            if (work == null || !work.isURI()) return null;
+            return publicationEntity(data, work.getURI(), true);
+        }
+        if (data.contains(uri(CURRENT), uri(subject), RDF.type.asNode(), uri(RV + "DecisionSlot"))) {
+            Node target = sole(data, CURRENT, subject, RV + "decisionTarget");
+            if (target != null && target.isURI() && isDatePublishedStatement(data, target.getURI())) {
+                Node work = sole(data, CURRENT, target.getURI(), RDF.subject.getURI());
+                if (work == null || !work.isURI()) return null;
+                return publicationEntity(data, work.getURI(), true);
+            }
+        }
+        if (data.contains(uri(CURRENT), uri(subject), RDF.type.asNode(), uri("https://schema.org/CreativeWork")))
+            return publicationEntity(data, subject, false);
+        return null;
+    }
+    private static boolean isDatePublishedStatement(DatasetGraph data, String subject) {
+        if (!data.contains(uri(CURRENT), uri(subject), RDF.type.asNode(), RDF.Statement.asNode())) return false;
+        Node predicate = sole(data, CURRENT, subject, RDF.predicate.getURI());
+        return predicate != null && predicate.isURI() && DATE_PUBLISHED.equals(predicate.getURI());
+    }
+    private static Entity publicationEntity(DatasetGraph data, String work, boolean required) {
+        List<String> statements = new ArrayList<>();
+        Set<String> years = new TreeSet<>();
+        var iter = data.find(uri(CURRENT), Node.ANY, RDF.subject.asNode(), uri(work));
+        try {
+            while (iter.hasNext()) {
+                Node statement = iter.next().getSubject();
+                if (!statement.isURI() || !acceptedPublication(data, statement.getURI())) continue;
+                Integer year = publicationYear(sole(data, CURRENT, statement.getURI(), RDF.object.getURI()));
+                if (year == null) continue;
+                statements.add(statement.getURI());
+                years.add(invertedPublicationYear(year));
+                if (statements.size() > PUBLICATION_BOUND) throw new IllegalArgumentException("physical entity field exceeds bound");
+            }
+        } finally { Iter.close(iter); }
+        if (statements.isEmpty() && !required) return null;
+        Map<String,List<String>> terms = new TreeMap<>();
+        Collections.sort(statements);
+        terms.put("type", statements.isEmpty() ? List.of() : List.of(FIRST_PUBLICATION));
+        terms.put("work", statements.isEmpty() ? List.of() : List.of(FIRST_PUBLICATION_ANCHOR));
+        terms.put("yearKey", List.copyOf(years));
+        terms.put("statement", List.copyOf(statements));
+        return new Entity(CURRENT, work, terms);
+    }
+    private static boolean acceptedPublication(DatasetGraph data, String statement) {
+        if (!isDatePublishedStatement(data, statement)) return false;
+        Node state = sole(data, CURRENT, statement, RV + "statementState");
+        if (state == null || !state.isURI() || !(RV + "Active").equals(state.getURI())) return false;
+        if (publicationYear(sole(data, CURRENT, statement, RDF.object.getURI())) == null) return false;
+        var slots = data.find(uri(CURRENT), Node.ANY, uri(RV + "decisionTarget"), uri(statement));
+        try {
+            while (slots.hasNext()) {
+                Node slot = slots.next().getSubject();
+                if (!slot.isURI()) continue;
+                String id = slot.getURI();
+                if (!data.contains(uri(CURRENT), slot, RDF.type.asNode(), uri(RV + "DecisionSlot"))) continue;
+                Node kind = sole(data, CURRENT, id, RV + "targetKind");
+                Node context = sole(data, CURRENT, id, RV + "acceptanceContext");
+                Node head = sole(data, CURRENT, id, RV + "decisionHead");
+                if (kind == null || !kind.isURI() || !(RV + "StatementTarget").equals(kind.getURI())) continue;
+                if (context == null || !context.isURI() || !GLOBAL_CONTEXT.equals(context.getURI())) continue;
+                if (head == null || !head.isURI()) continue;
+                if (!data.contains(uri(REVISIONS), head, RDF.type.asNode(), uri(RV + "StatementDecision"))) continue;
+                Node outcome = sole(data, REVISIONS, head.getURI(), RV + "outcome");
+                Node component = sole(data, REVISIONS, head.getURI(), RV + "component");
+                if (outcome != null && outcome.isURI() && (RV + "Accepted").equals(outcome.getURI())
+                    && component != null && component.isURI() && id.equals(component.getURI())) return true;
+            }
+        } finally { Iter.close(slots); }
+        return false;
+    }
+    private static Node sole(DatasetGraph data, String graph, String subject, String predicate) {
+        var iter = data.find(uri(graph), uri(subject), uri(predicate), Node.ANY);
+        try {
+            if (!iter.hasNext()) return null;
+            Node node = iter.next().getObject();
+            return iter.hasNext() ? null : node;
+        } finally { Iter.close(iter); }
+    }
+    /** Calendar year of a typed date, not its UTC instant. Years outside 1–9999
+     * and invalid calendar days are absent from the directory. */
+    static Integer publicationYear(Node node) {
+        if (node == null || !node.isLiteral() || node.getLiteralDatatypeURI() == null) return null;
+        String datatype = node.getLiteralDatatypeURI(), lexical = node.getLiteralLexicalForm();
+        java.util.regex.Matcher matcher;
+        int year, month = 1, day = 1, hour = 0, minute = 0, second = 0;
+        if (XSDDatatype.XSDgYear.getURI().equals(datatype)) {
+            if (!lexical.matches("\\d{4,}") || !XSDDatatype.XSDgYear.isValid(lexical)) return null;
+            year = parseYear(lexical);
+        } else if (XSDDatatype.XSDdate.getURI().equals(datatype)) {
+            matcher = java.util.regex.Pattern.compile("^(\\d{4,})-(\\d{2})-(\\d{2})(Z|[+-]\\d{2}:\\d{2})?$").matcher(lexical);
+            if (!matcher.matches() || !XSDDatatype.XSDdate.isValid(lexical)) return null;
+            year = parseYear(matcher.group(1)); month = Integer.parseInt(matcher.group(2)); day = Integer.parseInt(matcher.group(3));
+        } else if (XSDDatatype.XSDdateTime.getURI().equals(datatype)) {
+            matcher = java.util.regex.Pattern.compile("^(\\d{4,})-(\\d{2})-(\\d{2})T(\\d{2}):(\\d{2}):(\\d{2})(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})?$").matcher(lexical);
+            if (!matcher.matches() || !XSDDatatype.XSDdateTime.isValid(lexical)) return null;
+            year = parseYear(matcher.group(1)); month = Integer.parseInt(matcher.group(2)); day = Integer.parseInt(matcher.group(3));
+            hour = Integer.parseInt(matcher.group(4)); minute = Integer.parseInt(matcher.group(5)); second = Integer.parseInt(matcher.group(6));
+        } else return null;
+        if (year < 1 || year > 9999 || !calendarDay(year, month, day) || hour > 23 || minute > 59 || second > 59) return null;
+        return year;
+    }
+    static String invertedPublicationYear(int year) {
+        if (year < 1 || year > 9999) throw new IllegalArgumentException("publication year is outside 1..9999");
+        return String.format("%04d", 10000 - year);
+    }
+    private static int parseYear(String digits) {
+        if (digits.length() > 9) return -1;
+        try { return Integer.parseInt(digits); }
+        catch (NumberFormatException ex) { return -1; }
+    }
+    private static boolean calendarDay(int year, int month, int day) {
+        if (month < 1 || month > 12 || day < 1) return false;
+        int[] days = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+        int max = days[month];
+        if (month == 2 && year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) max = 29;
+        return day <= max;
     }
     static Set<Key> keys(Entity entity) {
         Set<Key> result = new HashSet<>();
@@ -245,15 +381,18 @@ final class TemplateIndexService {
             }
             if (!"backfill".equals(ProfileRegistry.required(request,"operation"))) throw new IllegalArgumentException("unknown index read");
             int phase = request.get("phase").getAsNumber().value().intValue();
-            if(phase<0 || phase>=TYPES.size()) throw new IllegalArgumentException("invalid index phase");
-            String graph = phase==3 ? REVISIONS : CURRENT;
+            if(phase<0 || phase>TYPES.size()) throw new IllegalArgumentException("invalid index phase");
+            boolean firstPublication = phase==TYPES.size();
+            String graph = !firstPublication && phase==3 ? REVISIONS : CURRENT;
             DatasetGraph base = data;
             while(base instanceof DatasetGraphWrapper wrapper && TDBInternal.getDatasetGraphTDB(base)==null) base=wrapper.getWrapped();
             var tdb = TDBInternal.requireStorage(base);
             var index = (TupleIndexRecord) TDBInternal.findIndex(base,"GPOS").baseTupleIndex();
             var factory = new RecordFactory(32,0);
             var start = factory.createKeyOnly(); var end = factory.createKeyOnly();
-            Node[] prefix = {uri(graph),RDF.type.asNode(),uri(RV+TYPES.get(phase))};
+            Node[] prefix = firstPublication
+                ? new Node[]{uri(CURRENT), RDF.predicate.asNode(), uri(DATE_PUBLISHED)}
+                : new Node[]{uri(graph), RDF.type.asNode(), uri(RV+TYPES.get(phase))};
             for(int i=0;i<3;i++) {
                 var id = TDBInternal.getNodeId(tdb,prefix[i]);
                 if(org.apache.jena.tdb2.store.NodeId.isDoesNotExist(id)) return Map.of("entities",List.of(),"bases",List.of(),"position",position(data),"next", "");

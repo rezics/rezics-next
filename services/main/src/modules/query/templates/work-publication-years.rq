@@ -1,0 +1,43 @@
+PREFIX rv: <https://rezics.com/vocab/>
+PREFIX schema: <https://schema.org/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+SELECT DISTINCT ?id ?year ?statement WHERE {
+VALUES (?_work_iri ?_main_iri) {}
+VALUES (?id ?_sort) {}
+GRAPH <urn:rezics:graph:current> {
+  ?id a schema:CreativeWork ; rv:mainVersion ?main .
+  ?main a rv:MainVersion ; rv:work ?id .
+  ?statement a rdf:Statement ; rdf:subject ?id ; rdf:predicate schema:datePublished ;
+    rdf:object ?published ; rv:statementState rv:Active ; rv:head ?head .
+}
+FILTER(DATATYPE(?published) IN (xsd:gYear, xsd:date, xsd:dateTime))
+FILTER(YEAR(?published) = ?_year)
+BIND(YEAR(?published) AS ?year)
+FILTER EXISTS { GRAPH <urn:rezics:graph:current> {
+    ?slot a rv:DecisionSlot ; rv:decisionTarget ?statement ; rv:targetKind rv:StatementTarget ;
+      rv:acceptanceContext <urn:rezics:classification-context:global> ; rv:decisionHead ?decision . }
+  GRAPH <urn:rezics:graph:revisions> {
+    ?decision a rv:StatementDecision ; rv:component ?slot ; rv:outcome rv:Accepted . } }
+FILTER EXISTS { GRAPH <urn:rezics:graph:current> {
+    ?id a schema:CreativeWork ; rv:mainVersion ?main .
+    ?main a rv:MainVersion ; rv:work ?id . }
+  FILTER(EXISTS { GRAPH <urn:rezics:graph:current> { ?id rv:catalogueVisible true } } || EXISTS {
+    GRAPH <urn:rezics:graph:current> {
+      ?main rv:selectionHead ?publicSelection .
+      ?publicContribution rv:work ?id ; rv:publicationHead ?publicDecision . }
+    GRAPH <urn:rezics:graph:revisions> {
+      ?publicSelection a rv:PublicationSelection ; rv:work ?id ; rv:mainVersion ?main ;
+        rv:contribution ?publicContribution ; rv:publicationDecision ?publicDecision ; rv:selectedDraft ?publicDraft .
+      ?publicDecision a rv:PublicationDecision ; rv:component ?publicContribution ; rv:work ?id ;
+        rv:contribution ?publicContribution ; rv:disclosure rv:Public ; rv:selectedDraft ?publicDraft .
+      ?publicDraft a rv:RevisionAnchor ; rv:component ?publicContribution .
+      FILTER NOT EXISTS { ?publicDraft a rv:ErasedRevision } } })
+  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> {
+      ?erasedVariant rv:resource ?id ; rv:contentPublicationHead ?erasedPublication }
+    GRAPH <urn:rezics:graph:revisions> { ?erasedPublication rv:contentRevision ?erasedRevision .
+      ?erasedRevision a rv:ErasedRevision } }
+  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { ?id rv:head ?erasedWorkHead }
+    GRAPH <urn:rezics:graph:revisions> { ?erasedWorkHead a rv:ErasedRevision } }
+  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { ?id rv:protectionHead ?protection } } }
+}
