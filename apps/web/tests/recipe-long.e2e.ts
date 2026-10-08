@@ -201,7 +201,7 @@ test('a long recipe shows its first part, continues with its sections whole, and
 
   await open(390);
   await expect(recipeOf().getByText('1 cup dough-01')).toBeVisible();
-  await expect(recipeOf()).not.toContainText('Step 1');
+  await expect(recipeOf()).not.toContainText('Step 40');
   await expect(more()).toBeVisible();
   await continueAll();
   await expect(recipeOf().getByRole('heading', { name: 'Dough', exact: true })).toHaveCount(1);
