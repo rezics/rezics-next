@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import { publicPost } from '../post/patterns.ts';
 import { createHash } from 'node:crypto';
 import { DATASET, GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -419,7 +420,8 @@ const partOf = ({ resolution: _resolution, parts: _parts, ...part }: AvailableSu
  * ordinary summaries read in pages of MAX_SUMMARY_BATCH: at most one more page per 64 distinct
  * parts (nine per projection at most), on the same graph generation, and the name is the subject's. */
 async function readProjectionSummaries(env: WorkActivationEnvironment, reader: SummaryReader, input: SummaryInput,
-  projections: ReadonlyMap<string, GraphRow>, generation: string, cost: SummaryBatch['cost']) {
+  projections: ReadonlyMap<string, GraphRow>, generation: string, cost: SummaryBatch['cost'],
+  client?: PoolClient) {
   const result = new Map<string, AvailableSummary>();
   if (!projections.size) return result;
   const references = [...new Set([...projections.values()].flatMap(row => [row.projection!.subject, ...row.projection!.frames]))];
@@ -427,7 +429,7 @@ async function readProjectionSummaries(env: WorkActivationEnvironment, reader: S
   for (let offset = 0; offset < references.length; offset += MAX_SUMMARY_BATCH) {
     const page = await readSummaryPage(env, undefined, reader, { ...input,
       resources: references.slice(offset, offset + MAX_SUMMARY_BATCH), includeCollections: true,
-      projectionPart: true });
+      projectionPart: true }, client);
     if (!input.localBasis && page.generation.graph !== generation) throw new SummaryGraphMoved('Projection parts graph moved');
     for (const summary of page.summaries) {
       if (summary.status === 'available' && summary.type !== 'projection') parts.set(summary.reference, summary);
@@ -454,7 +456,7 @@ async function readProjectionSummaries(env: WorkActivationEnvironment, reader: S
  * query, one media query and one batched Access query. Additional owner types
  * use their current read functions; the returned counters include those probes. */
 async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMedia | undefined,
-  reader: SummaryReader, input: SummaryInput): Promise<SummaryBatch & { redirects: Map<string, string> }> {
+  reader: SummaryReader, input: SummaryInput, client?: PoolClient): Promise<SummaryBatch & { redirects: Map<string, string> }> {
   if (!input.resources.length || input.resources.length > MAX_SUMMARY_BATCH
     || input.resources.some(resource => resource.length > MAX_SUMMARY_REFERENCE_LENGTH || !summaryReference.test(resource))
     || (input.context !== DEFAULT_MEDIA_CONTEXT && !nativeId.test(input.context))
@@ -487,7 +489,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context };
   });
   const initialDecisions = await discloseInventory(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
-    input.channel ?? 'summary');
+    input.channel ?? 'summary', client);
   if (hasDisclosure(env)) cost.accessQueries += Math.ceil(unique.length / MAX_SUMMARY_BATCH);
   noteNameProbe(initialTargets);
   for (const [index, reference] of unique.entries()) {
@@ -535,8 +537,13 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     cost.accessQueries = 1;
   } else if (works.length && reader.canReadWork) {
     cost.accessQueries = works.length;
-    const decisions = await Promise.all(works.map(async work =>
-      await reader.canReadWork!(work) ? work : null));
+    const decisions: (string | null)[] = [];
+    if (client) {
+      for (const work of works) decisions.push(await reader.canReadWork(work) ? work : null);
+    } else {
+      decisions.push(...await Promise.all(works.map(async work =>
+        await reader.canReadWork!(work) ? work : null)));
+    }
     admitted = new Set(decisions.filter((work): work is string => work !== null));
   }
   for (const [reference, work] of restricted) {
@@ -599,8 +606,15 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     cost.accessQueries++;
   } else if (semanticResources.length && reader.canReadSemantic) {
     cost.accessChecks += semanticResources.length;
-    const decisions = await Promise.all(semanticResources.map(async resource =>
-      await reader.canReadSemantic!(resource) ? resource : null));
+    const decisions: (string | null)[] = [];
+    if (client) {
+      for (const resource of semanticResources) {
+        decisions.push(await reader.canReadSemantic(resource) ? resource : null);
+      }
+    } else {
+      decisions.push(...await Promise.all(semanticResources.map(async resource =>
+        await reader.canReadSemantic!(resource) ? resource : null)));
+    }
     admittedSemantics = new Set(decisions.filter((resource): resource is string => resource !== null));
     cost.accessQueries += semanticResources.length;
   }
@@ -706,9 +720,9 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     }
   }
   const final = reader.viewer?.signedIn
-    ? await discloseInventoryWithAnonymousNames(env, targets, reader.viewer, input.channel ?? 'summary')
+    ? await discloseInventoryWithAnonymousNames(env, targets, reader.viewer, input.channel ?? 'summary', client)
     : { decisions: await discloseInventory(env, targets, reader.viewer ?? ANONYMOUS_VIEWER,
-      input.channel ?? 'summary'), anonymousNames: [], anonymousNameProbes: 0 };
+      input.channel ?? 'summary', client), anonymousNames: [], anonymousNameProbes: 0 };
   const decisions = final.decisions;
   if (hasDisclosure(env)) cost.accessQueries += Math.ceil(targets.length / MAX_SUMMARY_BATCH);
   noteNameProbe(targets);
@@ -724,7 +738,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   // viewer delivery and public classification share its current authority cut.
   const nameIsPublic = (reference: string) => !hasDisclosure(env) || !reader.viewer?.signedIn
     || final.anonymousNames[nameIndexes.get(reference)!] === 'visible';
-  const projectionSummaries = await readProjectionSummaries(env, reader, input, projections, graph.generation, cost);
+  const projectionSummaries = await readProjectionSummaries(env, reader, input, projections, graph.generation, cost, client);
   const summaries = input.resources.map((reference): ResourceSummary => {
     const projection = projectionSummaries.get(reference);
     if (projection) return projection;
@@ -744,7 +758,7 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
       avatar: avatar(row.type, reference, avatars.get(reference)) };
   });
   const available = summaries.filter(summary => summary.status === 'available');
-  const addresses = await canonicalAddresses(env,available);
+  const addresses = await canonicalAddresses(env, available, client);
   if (available.some(summary => ['space','realm','zone'].includes(summary.type))) cost.graphQueries++;
   for (const summary of available) summary.address = addresses.get(summary.reference)!;
   return { summaries, generation: { graph: graph.generation, media: mediaGeneration,addresses: addressGeneration(summaries) }, cost,
@@ -757,9 +771,9 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
  * the survivor's title, media, revision or personal state. Ordinary reads incur
  * no extra round trip. Merge chains use one graph generation and a 10s budget. */
 export async function readResourceSummaries(env: WorkActivationEnvironment, media: SummaryMedia | undefined,
-  reader: SummaryReader, input: SummaryInput): Promise<SummaryBatch> {
+  reader: SummaryReader, input: SummaryInput, client?: PoolClient): Promise<SummaryBatch> {
   const deadline = Date.now() + MERGE_COST.deadlineMs;
-  const first = await readSummaryPage(env, media, reader, input);
+  const first = await readSummaryPage(env, media, reader, input, client);
   const graphDependencies = [first.generation.graph];
   if (input.resolveMerges === false) return { summaries: first.summaries,
     generation: first.generation, cost: first.cost };
@@ -787,7 +801,7 @@ export async function readResourceSummaries(env: WorkActivationEnvironment, medi
       break;
     }
     if (Date.now() >= deadline) throw new MediaUnavailable('Identity merge read deadline exceeded');
-    const page = await readSummaryPage(env, undefined, reader, { ...input, resources: [...frontier] });
+    const page = await readSummaryPage(env, undefined, reader, { ...input, resources: [...frontier] }, client);
     if (!input.localBasis && page.generation.graph !== first.generation.graph) throw new MediaUnavailable('Identity merge graph moved');
     graphDependencies.push(page.generation.graph);
     for (const summary of page.summaries) summaries.set(summary.reference, summary);

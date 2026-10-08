@@ -31,13 +31,12 @@ import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 import { ensureBaselineScopeGate, lockAccessKey, lockAdmissionKey } from './scope-gates.ts';
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { recordInitialMaintainer } from '../work/maintainer-proof.ts';
-import { publicSemantics, readReferenceDisclosure } from './semantic-disclosure.ts';
+import { publicInTransaction, publicSemantics, readReferenceDisclosure, requireDisclosureGraph } from './semantic-disclosure.ts';
 import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAuthority } from '../editorial-review/admission.ts';
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
   platformAdministratorProofCurrent } from './platform-administrator.ts';
-import { controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable,
-  ownAccessTransaction, releaseOwnedAccessTransaction, runInsideAccessTransaction, takeAccessClient } from './topology-control.ts';
+import { controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable } from './topology-control.ts';
 import { realmTransaction,realmManager } from './realm-management-authority.ts';
 import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
 import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof, ratingConfigurationAction } from './realm-roles-rating.ts';
@@ -283,6 +282,25 @@ async function admissionClient(pool: Pool): Promise<PoolClient> {
 /** Reads whose only writes are FOR SHARE locks commit asynchronously; see controlRead. */
 const READ_BEGIN = 'BEGIN; SET LOCAL synchronous_commit = off';
 
+/** A passed client is the caller's checkout and transaction. Otherwise this
+ * read opens and ends its own. */
+async function readAdmission<T>(pool: Pool, client: PoolClient | undefined,
+  work: (client: PoolClient) => Promise<T>): Promise<T> {
+  if (client) return work(client);
+  const connected = await pool.connect();
+  try {
+    await connected.query(READ_BEGIN);
+    await connected.query("SET LOCAL lock_timeout = '2s'");
+    await connected.query("SET LOCAL statement_timeout = '5s'");
+    const value = await work(connected);
+    await connected.query('COMMIT');
+    return value;
+  } catch (error) {
+    await rollback(connected);
+    throw error;
+  } finally { connected.release(); }
+}
+
 async function requireRecoveryOpen(client: PoolClient): Promise<string> {
   const result = await client.query<{ open: boolean; generation: string }>(
     'SELECT open, generation FROM access.recovery_fence WHERE id = true FOR SHARE');
@@ -471,10 +489,11 @@ export class AccessAdmissionRegistry {
   }
 
   /** Current Work-specific disclosure decision; no historical grant is reused. */
-  async canReadWork(principal: VerifiedPrincipal, actingSubject: string, work: string): Promise<boolean> {
+  async canReadWork(principal: VerifiedPrincipal, actingSubject: string, work: string,
+    client?: PoolClient): Promise<boolean> {
     if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)
       || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
-    return this.canReadScopedResource(principal, actingSubject, `work:read:${work}`, 'work.read');
+    return this.canReadScopedResource(principal, actingSubject, `work:read:${work}`, 'work.read', client);
   }
 
   /** Current person-Agent baseline for private reader state on public chapters.
@@ -484,34 +503,19 @@ export class AccessAdmissionRegistry {
     if (!principal.emailVerified || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) {
       return false;
     }
-    const taken = await takeAccessClient(this.pool, client);
-    try {
-      if (!taken.joined) {
-        await taken.client.query(READ_BEGIN);
-        await taken.client.query("SET LOCAL lock_timeout = '2s'");
-        await taken.client.query("SET LOCAL statement_timeout = '5s'");
-        ownAccessTransaction(taken.client);
-      }
-      const allowed = await runInsideAccessTransaction(taken.client, () =>
-        baselineMemberDecision(taken.client, principal, actingSubject));
-      if (!taken.joined) await taken.client.query('COMMIT');
-      return allowed;
-    } catch (error) {
-      if (!taken.joined) await rollback(taken.client);
-      throw error;
-    } finally {
-      if (!taken.joined) releaseOwnedAccessTransaction(taken.client);
-      taken.release();
-    }
+    return readAdmission(this.pool, client, held => baselineMemberDecision(held, principal, actingSubject));
   }
 
   /** Current disclosure decision for a semantic Resource or relation occurrence. */
   async canReadSemanticResource(principal: VerifiedPrincipal | null, actingSubject: string | null,
-    resource: string, revision?: string, graph = this.baselineGraph): Promise<boolean> {
+    resource: string, revision?: string, graph = this.baselineGraph, client?: PoolClient): Promise<boolean> {
     if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(resource)) return false;
-    if ((await publicSemantics({ pool: this.pool, graph }, [resource], revision)).has(resource)) return true;
+    const visible = client
+      ? await publicInTransaction(client, requireDisclosureGraph(graph), [resource], revision)
+      : await publicSemantics({ pool: this.pool, graph }, [resource], revision);
+    if (visible.has(resource)) return true;
     if (!principal || !actingSubject || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) return false;
-    return this.canReadScopedResource(principal, actingSubject, `semantic:read:${resource}`, 'semantic.read');
+    return this.canReadScopedResource(principal, actingSubject, `semantic:read:${resource}`, 'semantic.read', client);
   }
 
   /** The page equivalent of semantic disclosure followed by Work disclosure. */
@@ -851,25 +855,8 @@ export class AccessAdmissionRegistry {
     principal: VerifiedPrincipal, actingSubject: string, scope: string, action: string,
     client?: PoolClient,
   ): Promise<boolean> {
-    const taken = await takeAccessClient(this.pool, client);
-    try {
-      if (!taken.joined) {
-        await taken.client.query(READ_BEGIN);
-        await taken.client.query("SET LOCAL lock_timeout = '2s'");
-        await taken.client.query("SET LOCAL statement_timeout = '5s'");
-        ownAccessTransaction(taken.client);
-      }
-      const allowed = await runInsideAccessTransaction(taken.client, () =>
-        scopedResourceDecision(taken.client, this.baselineGraph, principal, actingSubject, scope, action));
-      if (!taken.joined) await taken.client.query('COMMIT');
-      return allowed;
-    } catch (error) {
-      if (!taken.joined) await rollback(taken.client);
-      throw error;
-    } finally {
-      if (!taken.joined) releaseOwnedAccessTransaction(taken.client);
-      taken.release();
-    }
+    return readAdmission(this.pool, client, held =>
+      scopedResourceDecision(held, this.baselineGraph, principal, actingSubject, scope, action));
   }
 
   /** Import authority uses creation's grant/group/role path, never member baseline.

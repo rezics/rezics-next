@@ -1,29 +1,7 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import type { AuthorityControlFamily } from './topology-schema.ts';
 import { lockAccessKey } from './scope-gates.ts';
-
-/** Clients whose current transaction this module opened. A nested authority
- * call joins that transaction instead of beginning another one. */
-const openedAccessTransaction = new WeakSet<PoolClient>();
-/** The access client already held on this call stack. `run` does not leak to
- * sibling work the way a pool checkout does, so only the holder and the work
- * it awaits see the client. */
-const heldAccessClient = new AsyncLocalStorage<PoolClient>();
-/** Serializes sibling checkouts that share one async context. Nested work
- * joins the held client and does not take a turn. */
-const accessCheckoutLane = new AsyncLocalStorage<{ tail: Promise<void> }>();
-
-/** Publish a connection the caller already checked out, such as a receipt
- * lock, so later authority work reuses it. The caller still releases it. */
-export function runOnHeldAccessClient<T>(client: PoolClient, work: () => Promise<T>): Promise<T> {
-  return heldAccessClient.run(client, work);
-}
-
-export function currentAccessClient(): PoolClient | undefined {
-  return heldAccessClient.getStore();
-}
 
 async function inExplicitTransaction(client: PoolClient): Promise<boolean> {
   // Two reads share an id only inside an explicit transaction. An idle
@@ -32,60 +10,6 @@ async function inExplicitTransaction(client: PoolClient): Promise<boolean> {
   const first = await id();
   const second = await id();
   return typeof first === 'string' && /^[0-9]+$/.test(first) && first === second;
-}
-
-async function acquireAccessCheckout(): Promise<() => void> {
-  let lane = accessCheckoutLane.getStore();
-  if (!lane) {
-    lane = { tail: Promise.resolve() };
-    accessCheckoutLane.enterWith(lane);
-  }
-  const wait = lane.tail;
-  let unlock!: () => void;
-  lane.tail = new Promise<void>(resolve => { unlock = resolve; });
-  await wait;
-  return unlock;
-}
-
-interface TakenAccessClient {
-  client: PoolClient;
-  /** The caller already opened the transaction and still owns its end. */
-  joined: boolean;
-  release(): void;
-}
-
-/** A held client is reused. Otherwise one checkout is taken, and a sibling
- * waits until that checkout is released instead of borrowing a second one. */
-export async function takeAccessClient(pool: Pool, client?: PoolClient): Promise<TakenAccessClient> {
-  const held = client ?? heldAccessClient.getStore();
-  if (held) {
-    const joined = openedAccessTransaction.has(held) || await inExplicitTransaction(held);
-    return { client: held, joined, release() {} };
-  }
-  const unlock = await acquireAccessCheckout();
-  try {
-    const connected = await pool.connect();
-    return {
-      client: connected,
-      joined: false,
-      release() { connected.release(); unlock(); },
-    };
-  } catch (error) {
-    unlock();
-    throw error;
-  }
-}
-
-export function ownAccessTransaction(client: PoolClient): void {
-  openedAccessTransaction.add(client);
-}
-
-export function releaseOwnedAccessTransaction(client: PoolClient): void {
-  openedAccessTransaction.delete(client);
-}
-
-export function runInsideAccessTransaction<T>(client: PoolClient, work: () => Promise<T>): Promise<T> {
-  return heldAccessClient.run(client, work);
 }
 
 /** Shared owner transaction, authority lookups and receipt replay for the
@@ -133,33 +57,41 @@ export function normalizeControlError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error));
 }
 
+async function boundedControl<T>(client: PoolClient, work: (client: PoolClient) => Promise<T>,
+  read: boolean): Promise<T> {
+  await client.query(read ? 'BEGIN; SET LOCAL synchronous_commit = off' : 'BEGIN');
+  await client.query("SET LOCAL lock_timeout = '2s'");
+  await client.query("SET LOCAL statement_timeout = '5s'");
+  const fence = await client.query<{ open: boolean }>(
+    'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+  if (fence.rows[0]?.open !== true) throw new ControlUnavailable('Access recovery is held');
+  const value = await work(client);
+  await client.query('COMMIT');
+  return value;
+}
+
 /** One bounded owner transaction behind the Access recovery fence.
- * A client the caller already holds is not connected, released, or, when that
- * caller already began a transaction, begun or ended here. An idle held
- * connection still gets this transaction, because the caller has no open one. */
+ * A caller that already checked out passes that client and keeps release.
+ * An open transaction on it is left to that caller; an idle connection still
+ * gets this transaction, because the caller has not begun one. */
 export async function controlTransaction<T>(pool: Pool,
   work: (client: PoolClient) => Promise<T>, read = false, client?: PoolClient): Promise<T> {
-  const taken = await takeAccessClient(pool, client);
-  try {
-    if (taken.joined) return runInsideAccessTransaction(taken.client, () => work(taken.client));
-    await taken.client.query(read ? 'BEGIN; SET LOCAL synchronous_commit = off' : 'BEGIN');
-    await taken.client.query("SET LOCAL lock_timeout = '2s'");
-    await taken.client.query("SET LOCAL statement_timeout = '5s'");
-    const fence = await taken.client.query<{ open: boolean }>(
-      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-    if (fence.rows[0]?.open !== true) throw new ControlUnavailable('Access recovery is held');
-    ownAccessTransaction(taken.client);
+  if (client) {
+    if (await inExplicitTransaction(client)) return work(client);
     try {
-      const value = await runInsideAccessTransaction(taken.client, () => work(taken.client));
-      await taken.client.query('COMMIT');
-      return value;
-    } finally { releaseOwnedAccessTransaction(taken.client); }
-  } catch (error) {
-    if (!taken.joined) {
-      try { await taken.client.query('ROLLBACK'); } catch { /* preserve original */ }
+      return await boundedControl(client, work, read);
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch { /* preserve original */ }
+      throw normalizeControlError(error);
     }
-    throw taken.joined ? error : normalizeControlError(error);
-  } finally { taken.release(); }
+  }
+  const connected = await pool.connect();
+  try {
+    return await boundedControl(connected, work, read);
+  } catch (error) {
+    try { await connected.query('ROLLBACK'); } catch { /* preserve original */ }
+    throw normalizeControlError(error);
+  } finally { connected.release(); }
 }
 
 /** A read whose only writes are FOR SHARE row locks. Locks need no crash

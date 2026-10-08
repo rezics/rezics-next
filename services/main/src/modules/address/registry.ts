@@ -4,8 +4,6 @@ import type { Pool, PoolClient } from 'pg';
 import { normalizeAddressAlias } from '@rezics/model/address/aliases';
 import { identityKeyUuid } from '@rezics/model/address/sid';
 import type { VerifiedPrincipal } from '../access/admission.ts';
-import { ownAccessTransaction, releaseOwnedAccessTransaction, runInsideAccessTransaction,
-  takeAccessClient } from '../access/topology-control.ts';
 import { ALIAS_POLICIES, type ScopePolicy } from './policy.ts';
 
 export const NATIVE_ADDRESS_HOLDER =
@@ -89,34 +87,28 @@ export class AliasRegistry {
   private readonly reading = new AsyncLocalStorage<PoolClient>();
   constructor(readonly pool: Pool) {}
 
-  async withRead<T>(operation: () => Promise<T>): Promise<T> {
-    if (this.reading.getStore()) return operation();
-    const taken = await takeAccessClient(this.pool);
+  async withRead<T>(operation: (client: PoolClient) => Promise<T>): Promise<T> {
+    const held = this.reading.getStore();
+    if (held) return operation(held);
+    const client = await this.pool.connect();
     try {
-      if (!taken.joined) {
-        await taken.client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
-        await taken.client.query("SET LOCAL lock_timeout = '2s'");
-        await taken.client.query("SET LOCAL statement_timeout = '5s'");
-        const fence = await taken.client.query(
-          'SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE',
-        );
-        if (!fence.rowCount) throw new AliasUnavailable('Access recovery hold');
-        ownAccessTransaction(taken.client);
-      }
-      const result = await this.reading.run(taken.client, () =>
-        runInsideAccessTransaction(taken.client, operation));
-      if (!taken.joined) await taken.client.query('COMMIT');
+      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '5s'");
+      const fence = await client.query(
+        'SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE',
+      );
+      if (!fence.rowCount) throw new AliasUnavailable('Access recovery hold');
+      const result = await this.reading.run(client, () => operation(client));
+      await client.query('COMMIT');
       return result;
     } catch (error) {
-      if (!taken.joined) {
-        await taken.client.query('ROLLBACK').catch(() => {});
-        if (error && typeof error === 'object' && 'code' in error)
-          throw new AliasUnavailable('Alias owner is unavailable');
-      }
+      await client.query('ROLLBACK').catch(() => {});
+      if (error && typeof error === 'object' && 'code' in error)
+        throw new AliasUnavailable('Alias owner is unavailable');
       throw error;
     } finally {
-      if (!taken.joined) releaseOwnedAccessTransaction(taken.client);
-      taken.release();
+      client.release();
     }
   }
 
@@ -174,14 +166,14 @@ export class AliasRegistry {
     return { holder: alias?.holder ?? null, alias };
   }
 
-  async currents(holders: readonly string[]): Promise<Map<string, AliasRow>> {
+  async currents(holders: readonly string[], client?: Pick<PoolClient, 'query'>): Promise<Map<string, AliasRow>> {
     if (!holders.length) return new Map();
     if (
       holders.length > ALIAS_COST.batch ||
       holders.some((holder) => !NATIVE_ADDRESS_HOLDER.test(holder))
     )
       throw new AliasInvalid('Invalid address batch');
-    const result = await (this.reading.getStore() ?? this.pool).query<AliasRow>(
+    const result = await (client ?? this.pool).query<AliasRow>(
       `SELECT * FROM access.alias_registry
       WHERE holder = ANY($1::text[]) AND state = 'current' AND scope IN ('agent','space','work')`,
       [holders],

@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { readResourceSummaries, type SummaryReader } from '../media/summary.ts';
@@ -42,8 +43,8 @@ export async function resolveAddresses(
   const signal = AbortSignal.any([request.signal, AbortSignal.timeout(ALIAS_COST.deadlineMs)]);
   try {
     return await fusekiReadBudget.run({ signal, callsLeft: 4096, bytesLeft: 8 * 1024 * 1024 }, () =>
-      work.environment.addresses!.withRead(() =>
-        resolveAddressBatch(work, request, inputs, actingSubject),
+      work.environment.addresses!.withRead(client =>
+        resolveAddressBatch(work, request, inputs, actingSubject, client),
       ),
     );
   } catch (error) {
@@ -58,6 +59,7 @@ async function resolveAddressBatch(
   request: Request,
   inputs: readonly AddressLookup[],
   actingSubject?: string,
+  client?: PoolClient,
 ) {
   if (!inputs.length || inputs.length > ALIAS_COST.batch)
     throw new AliasInvalid('Address batch exceeds its bound');
@@ -93,6 +95,7 @@ async function resolveAddressBatch(
               target,
               undefined,
               env.fuseki,
+              client,
             ) ?? Promise.resolve(false),
           realmReadProof: (realm) =>
             work.access.realmReadProof?.(viewer.principal!, actingSubject, realm) ??
@@ -102,7 +105,7 @@ async function resolveAddressBatch(
     ...(viewer.workPrincipal && actingSubject
       ? {
           canReadWork: (target) =>
-            work.access.canReadWork(viewer.workPrincipal!, actingSubject, target),
+            work.access.canReadWork(viewer.workPrincipal!, actingSubject, target, client),
         }
       : {}),
   };
@@ -215,7 +218,7 @@ async function resolveAddressBatch(
         request.headers.get('accept-language'),
       ),
       includeCollections: true,
-    });
+    }, client);
     for (const summary of batch.summaries) summaries.set(summary.reference, summary);
   }
   // Scope membership is confidential even when the target is public. Retirement

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Elysia } from 'elysia';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { normalizeAddressAlias } from '@rezics/model/address/aliases';
 import { deriveAddressSuffix } from '@rezics/model/address/suffix';
 import { ALIAS_POLICIES } from '../src/modules/address/policy.ts';
@@ -31,7 +31,7 @@ test('G1023: alias failures use alias problem codes and messages', async () => {
 test('G1023: availability accepts alias and the former name command contract is rejected', async () => {
   const registry = new AliasRegistry({} as Pool);
   const calls: string[] = [];
-  registry.withRead = async (operation) => operation();
+  registry.withRead = async (operation) => operation({} as PoolClient);
   registry.availability = async (_scope, value) => {
     calls.push(value);
     return { available: true, reason: 'available' as const };

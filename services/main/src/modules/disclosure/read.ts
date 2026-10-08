@@ -7,7 +7,6 @@ import { ANONYMOUS_VIEWER, eligible, validLabels, type Labels, type Viewer } fro
 import { mediaVisibility } from '../media/visibility.ts';
 import { nameOwnerPolicySql } from '../preferences/store.ts';
 import { BASELINE_MEMBER_POLICY } from '../access/baseline.ts';
-import { currentAccessClient } from '../access/topology-control.ts';
 import { namePolicyViewerPrincipal } from './name-policy.ts';
 
 export type DisclosureChannel = 'read' | 'summary' | 'thread' | 'feed' | 'search' | 'typeahead'
@@ -38,9 +37,10 @@ export interface DisclosureWithAnonymousNames {
   anonymousNames: DisclosureDecision[];
 }
 export interface DisclosureReader {
-  read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel): Promise<DisclosureDecision[]>;
+  read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
+    client?: PoolClient): Promise<DisclosureDecision[]>;
   readWithAnonymousNames?(targets: readonly DisclosureTarget[], viewer: Viewer,
-    channel: DisclosureChannel): Promise<DisclosureWithAnonymousNames>;
+    channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureWithAnonymousNames>;
 }
 export class DisclosureUnavailable extends MediaUnavailable {}
 export const DISCLOSURE_COST = { batch: 64, ownerStatements: 1, recoveryStatements: 1,
@@ -103,7 +103,7 @@ export class DisclosureStore implements DisclosureReader {
     }
     if (!targets.length) return { decisions: [], anonymousNames: [] };
     const suitabilityDefault = usesSuitabilityDefault(channel);
-    const source = client ?? currentAccessClient() ?? this.pool;
+    const source = client ?? this.pool;
     try {
       const nameOwners = new Map<string, string>();
       const resources = [...new Set(targets.filter(target => target.owner === 'graph'
@@ -249,28 +249,28 @@ export function configureDisclosure(env: WorkActivationEnvironment, reader: Disc
   } else delete (env as ComposedEnvironment)[owner];
 }
 export function disclose(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
-  viewer: Viewer = ANONYMOUS_VIEWER, channel: DisclosureChannel = 'read') {
+  viewer: Viewer = ANONYMOUS_VIEWER, channel: DisclosureChannel = 'read', client?: PoolClient) {
   const reader = (env as ComposedEnvironment)[owner];
   if (!reader) return Promise.resolve(targets.map(() => 'visible' as const));
-  return reader.read(targets, viewer, channel);
+  return reader.read(targets, viewer, channel, client);
 }
 
 /** Bounded inventories may exceed the transport batch, never the owner's query bound. */
 export async function discloseInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
-  viewer: Viewer, channel: DisclosureChannel): Promise<DisclosureDecision[]> {
-  return (await readInventory(env, targets, viewer, channel, false)).decisions;
+  viewer: Viewer, channel: DisclosureChannel, client?: PoolClient): Promise<DisclosureDecision[]> {
+  return (await readInventory(env, targets, viewer, channel, false, client)).decisions;
 }
 
 /** Summary publicness shares the final owner's exact-target policy statement.
  * No decision survives this batch; adapters without the paired owner still
  * perform the required anonymous name probe. Media keeps its viewer audience. */
 export function discloseInventoryWithAnonymousNames(env: WorkActivationEnvironment,
-  targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel) {
-  return readInventory(env, targets, viewer, channel, true);
+  targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel, client?: PoolClient) {
+  return readInventory(env, targets, viewer, channel, true, client);
 }
 
 async function readInventory(env: WorkActivationEnvironment, targets: readonly DisclosureTarget[],
-  viewer: Viewer, channel: DisclosureChannel, anonymousNames: boolean):
+  viewer: Viewer, channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient):
   Promise<DisclosureWithAnonymousNames & { anonymousNameProbes: number }> {
   const result: DisclosureDecision[] = [];
   const anonymous: DisclosureDecision[] = [];
@@ -341,19 +341,19 @@ async function readInventory(env: WorkActivationEnvironment, targets: readonly D
   for (let offset = 0; offset < targets.length; offset += DISCLOSURE_COST.batch) {
     const batch = current.slice(offset, offset + DISCLOSURE_COST.batch);
     if (anonymousNames && reader.readWithAnonymousNames) {
-      const evaluated = await reader.readWithAnonymousNames(batch, viewer, channel);
+      const evaluated = await reader.readWithAnonymousNames(batch, viewer, channel, client);
       if (evaluated.decisions.length !== batch.length || evaluated.anonymousNames.length !== batch.length) {
         throw new DisclosureUnavailable('Paired disclosure result is incomplete');
       }
       result.push(...evaluated.decisions);
       anonymous.push(...evaluated.anonymousNames);
     } else {
-      result.push(...await reader.read(batch, viewer, channel));
+      result.push(...await reader.read(batch, viewer, channel, client));
       if (anonymousNames) {
         const indexes = batch.flatMap((target, index) => target.owner === 'graph'
           && ['name', 'title'].includes(target.component) ? [index] : []);
         const probe = indexes.length
-          ? await reader.read(indexes.map(index => batch[index]!), ANONYMOUS_VIEWER, channel) : [];
+          ? await reader.read(indexes.map(index => batch[index]!), ANONYMOUS_VIEWER, channel, client) : [];
         if (indexes.length) anonymousNameProbes++;
         const names: DisclosureDecision[] = batch.map(() => 'hidden');
         indexes.forEach((index, ordinal) => { names[index] = probe[ordinal]!; });

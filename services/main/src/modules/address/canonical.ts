@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import { uuidToSid } from '@rezics/model/address/sid';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -37,6 +38,7 @@ export interface AddressableSummary {
 export async function canonicalAddresses(
   env: WorkActivationEnvironment,
   summaries: readonly AddressableSummary[],
+  client?: PoolClient,
 ) {
   const holders = new Map(summaries.map((summary) => [summary.reference, summary.reference]));
   const spaceTypes = summaries.filter((summary) =>
@@ -79,7 +81,7 @@ export async function canonicalAddresses(
     }
   }
   const aliases =
-    (await env.addresses?.currents([...new Set(holders.values())]).catch(() => new Map())) ??
+    (await env.addresses?.currents([...new Set(holders.values())], client).catch(() => new Map())) ??
     new Map();
   const result = new Map<string, CanonicalAddress>();
   for (const summary of summaries) {

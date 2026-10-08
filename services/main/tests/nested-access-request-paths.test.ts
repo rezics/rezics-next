@@ -6,19 +6,17 @@ import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
-import type { FusekiClient, TemplateIndexDelta } from '../src/infrastructure/fuseki.ts';
 import {
   boundedPool,
   nestedPoolCheckoutMode,
   setNestedPoolCheckoutMode,
 } from '../src/infrastructure/pg-pool.ts';
 import { AccessAdmissionRegistry, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
-import { HeldAccessReceiptCustodyStore } from '../src/modules/access/held-receipt-custody.ts';
 import { controlTransaction } from '../src/modules/access/topology-control.ts';
+import { PostgresReceiptCustodyStore } from '../src/modules/outbox/receipt-custody.ts';
 import { AliasRegistry } from '../src/modules/address/registry.ts';
 import { DisclosureStore } from '../src/modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
-import { TemplateSeekIndex } from '../src/modules/query/seek-index.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const state = join(root, '.temp', `nested-access-request-paths-${randomUUID()}`);
@@ -74,13 +72,14 @@ test('an alias read discloses and resolves current holders on the checkout it al
   const registry = new AliasRegistry(pool);
   const disclosure = new DisclosureStore(pool);
   const subject = holder();
-  const decisions = await registry.withRead(async () => {
+  const decisions = await registry.withRead(async (client) => {
     const visible = await disclosure.read(
       [{ owner: 'graph', resource: subject, component: 'record' }],
       ANONYMOUS_VIEWER,
       'read',
+      client,
     );
-    const currents = await registry.currents([subject]);
+    const currents = await registry.currents([subject], client);
     expect(currents.size).toBe(0);
     return visible;
   });
@@ -92,18 +91,15 @@ test('a scoped resource read uses the alias checkout instead of a second one', a
   const admission = new AccessAdmissionRegistry(pool);
   const subject = holder();
   const work = holder();
-  const allowed = await registry.withRead(() => admission.canReadWork(principal, subject, work));
+  const allowed = await registry.withRead(client => admission.canReadWork(principal, subject, work, client));
   expect(allowed).toBe(false);
 }, 30_000);
 
-test('sibling baseline and topology checkouts of one pool run one at a time', async () => {
+test('a baseline read uses the topology transaction that already holds the connection', async () => {
   const admission = new AccessAdmissionRegistry(pool);
   const subject = holder();
-  const [member] = await Promise.all([
-    admission.canReadAsBaselineMember(principal, subject),
-    controlTransaction(pool, async () => {}),
-    controlTransaction(pool, async () => {}),
-  ]);
+  const member = await controlTransaction(pool, client =>
+    admission.canReadAsBaselineMember(principal, subject, client));
   expect(member).toBe(false);
 }, 30_000);
 
@@ -116,7 +112,7 @@ test('a nested topology change joins the transaction already open', async () => 
         `INSERT INTO access.template_seek_pending(epoch, sequence, id, delta) VALUES ($1, 1, $2, $3)`,
         [epoch, 'nested', { bases: [] }],
       );
-    });
+    }, false, client);
   });
   const rows = await pool.query<{ n: number }>(
     'SELECT count(*)::int AS n FROM access.template_seek_pending WHERE epoch = $1', [epoch]);
@@ -124,21 +120,21 @@ test('a nested topology change joins the transaction already open', async () => 
 }, 30_000);
 
 test('a topology change during receipt custody reuses the lock connection', async () => {
-  const store = new HeldAccessReceiptCustodyStore(pool);
+  const store = new PostgresReceiptCustodyStore(pool);
   const receipt = `urn:rezics:receipt:${randomUUID()}`;
-  const delta: TemplateIndexDelta = {
-    position: { dataEpoch: randomUUID(), sequence: '1' },
-    bases: [],
-  };
-  const fuseki = { attachTemplateIndexWriter() {} } as unknown as FusekiClient;
+  const epoch = randomUUID();
   await store.withReceipt(receipt, async (session) => {
-    await new TemplateSeekIndex(pool, fuseki).apply(delta);
+    await controlTransaction(pool, async (client) => {
+      await client.query(
+        `INSERT INTO access.template_seek_pending(epoch, sequence, id, delta) VALUES ($1, 1, $2, $3)`,
+        [epoch, 'custody', { bases: [] }],
+      );
+    }, false, session.client);
     const state = await session.client!.query<{ in_tx: string | null }>(
       'SELECT pg_current_xact_id_if_assigned()::text AS in_tx');
     expect(state.rows[0]?.in_tx ?? null).toBeNull();
     const pending = await session.client!.query<{ n: number }>(
-      'SELECT count(*)::int AS n FROM access.template_seek_pending WHERE epoch = $1',
-      [delta.position.dataEpoch]);
-    expect(pending.rows[0]?.n).toBe(0);
+      'SELECT count(*)::int AS n FROM access.template_seek_pending WHERE epoch = $1', [epoch]);
+    expect(pending.rows[0]?.n).toBe(1);
   });
 }, 30_000);
