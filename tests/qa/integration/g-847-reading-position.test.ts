@@ -301,8 +301,12 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
       expect(outside.occurrences.map(item => item.target)).toEqual([unchanged.component]); expect(outside.next).toBeNull();
     }
     expect((await json<{ items: unknown[] }>(await read(relationPath, outsideContinuity, false))).items).toEqual([]);
-    const chooser = await json<{ resolved: string; items: { occurrence: string }[]; next: string | null }>(await read(`/v1/reading-positions/${short(series.work)}?limit=2`));
-    expect(chooser.resolved).toBe(readerPosition); expect(chooser.items).toHaveLength(2); expect(chooser.next).toBeString();
+    // The reader's own Mine is the resume record alone (G-1365); browsing the order is position=start.
+    const chooser = await json<{ resolved: string; scope?: string; items: { occurrence: string }[]; next: string | null }>(await read(`/v1/reading-positions/${short(series.work)}?limit=2`));
+    expect(chooser.resolved).toBe(readerPosition); expect(chooser.scope).toBe('resume');
+    expect(chooser.items.map(item => item.occurrence)).toEqual([readerPosition]); expect(chooser.next).toBeNull();
+    const browse = await json<{ scope?: string; items: { occurrence: string }[]; next: string | null }>(await read(`/v1/reading-positions/${short(series.work)}?limit=2`, 'start'));
+    expect(browse.scope).toBe('positions'); expect(browse.items).toHaveLength(2); expect(browse.next).toBeString();
     expect((await json<{ resolved: string }>(await read(`/v1/reading-positions/${short(series.work)}`, native()))).resolved).toBe('start');
     expect((await read(entityPath(early.component), 'bogus')).status).toBe(400);
     // The summary owner hook is exercised here; G-542 owns its HTTP transports.
