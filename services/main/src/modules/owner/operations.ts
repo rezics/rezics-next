@@ -8,9 +8,10 @@ import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHol
   type RestoredOwners } from '../erasure/reconcile.ts';
 import { ErasureAuthorityCoverageConflict } from '../erasure/authority.ts';
 import { ErasureUnavailable } from '../erasure/journal.ts';
-import { GraphErasureConflict } from '../erasure/graph.ts';
+import { GraphErasureConflict, GraphErasureUnavailable } from '../erasure/graph.ts';
 import { AccountDeletionJournalConflict } from '../outbox/account-deletion-journal.ts';
 import { RecoveryCoverageHeadConflict } from '../outbox/recovery-coverage-head.ts';
+import { assertReleasedErasuresCurrent } from '../erasure/reconcile.ts';
 import { captureReleaseBasis, proveReleaseTransition, readBindings, readErasuresRecord,
   recordQualification, recordRelease, requireQualification }
   from './restore-release-binding.ts';
@@ -39,9 +40,10 @@ import { reconcileRetentionGc as collectUnreferencedObjects, readRetentionGcView
   RetentionGcConflict, type RetentionGcView } from './retention-gc.ts';
 
 /** Refusals that settle a restore as held; any other error is an interruption. */
-function isDefinitiveRefusal(error: unknown): boolean {
+function isDefinitiveRefusal(error: unknown): error is Error {
   return error instanceof ErasureRestoreHold || error instanceof ErasureAuthorityCoverageConflict
     || error instanceof ErasureUnavailable || error instanceof GraphErasureConflict
+    || error instanceof GraphErasureUnavailable
     || error instanceof AccountDeletionJournalConflict || error instanceof RecoveryCoverageHeadConflict;
 }
 
@@ -277,7 +279,8 @@ export class OwnerOperations {
             if (!bindings?.release) {
               throw new RestoreLineageConflict('Access is open without this restore\'s release binding');
             }
-            await this.completeReleasedRestore(client, resources, erasures, row.id);
+            await this.completeReleasedRestore(client, resources, erasures, row.id,
+              `${operationId}:erasures`);
           } else await releaseRestoredGraphHold(this.environment.fuseki, resources.accessPool,
             this.relay, this.environment.lineage, { sealedCoverage: input.sealedCoverage,
               hmacKey: resources.hmacKey, accountPool: resources.accountPool,
@@ -460,7 +463,8 @@ export class OwnerOperations {
    * reconcile.ts seam.
    */
   private async completeReleasedRestore(client: PoolClient, resources: RestoreResources,
-    erasures: NonNullable<RestoreResources['erasures']>, outerId: string): Promise<void> {
+    erasures: NonNullable<RestoreResources['erasures']>, outerId: string,
+    erasuresOperation: string): Promise<void> {
     let current: RecoveryCoverage;
     try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
       erasures.authority.hmacKey, 'graph-recovery-coverage'); }
@@ -483,12 +487,16 @@ export class OwnerOperations {
       const graphRelease = await readRestoredGraphReleaseExpectation(this.environment.fuseki,
         this.environment.lineage, current);
       const captured = (BigInt(fence.generation) - 1n).toString();
+      const record = await readErasuresRecord(client, erasuresOperation);
+      if (!record) throw new RestoreLineageConflict('restore completion has no retained erasure record');
+      const restored = this.restoredOwners(resources, erasures, graphRelease, captured);
       try {
-        await assertRetainedAuthorityCoverage(client, resources.accessPool, current.relay.consumer,
-          erasures.authority, accessClient, { fuseki: this.environment.fuseki, graphRelease,
-            capturedGeneration: captured, binding: { outerReconciliationId: outerId } });
+        // Mandatory: authority, deletion journal and the full erased closure, no bypass.
+        await assertReleasedErasuresCurrent(this.relay, restored, record.id, captured, erasures.authority,
+          { relayClient: client, accessClient, graphRelease }, outerId);
       } catch (error) {
-        if (error instanceof ErasureAuthorityCoverageConflict) {
+        if (error instanceof RestoreLineageConflict) throw error;
+        if (isDefinitiveRefusal(error)) {
           throw new RestoreLineageConflict(error.message, { cause: error });
         }
         throw error;

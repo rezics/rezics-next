@@ -151,7 +151,7 @@ test(
           fixture,
           forged,
           key,
-          /Access differs from the coverage its release binding recorded/,
+          /restored Access differs from current retained authority/,
         );
         expect(held.releases).toEqual(stale.releases);
         console.info('owner restore erasure case passed', {

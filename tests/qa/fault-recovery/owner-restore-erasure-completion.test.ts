@@ -39,7 +39,7 @@ test(
       }[] = [
         {
           label: 'access-state',
-          reason: /Access differs from the coverage its release binding recorded/,
+          reason: /restored Access differs from current retained authority/,
           tamper: async (copy) => {
             expect(
               (
@@ -54,7 +54,7 @@ test(
         },
         {
           label: 'newer-frontier',
-          reason: /signed Access coverage is not retained/,
+          reason: /a newer retained frontier needs reconciliation/,
           tamper: async (copy) =>
             retainRecoveryCoverageHead(
               copy.retainedRelay,
@@ -65,7 +65,7 @@ test(
         {
           // Arbitrary coverage: the live values with a finding the key never signed.
           label: 'forged-release-finding',
-          reason: /differs from its durable release binding/,
+          reason: /restored Access differs from current retained authority/,
           tamper: async (copy, key) => {
             const live = await liveAccess(copy);
             await forgeFinding(
@@ -77,7 +77,7 @@ test(
         },
         {
           label: 'wrong-qualification-finding',
-          reason: /differs from its durable qualification/,
+          reason: /restored Access differs from current retained authority/,
           tamper: async (copy, key) =>
             forgeFinding(copy, key, `restore-qualification:${'b'.repeat(64)}`),
         },

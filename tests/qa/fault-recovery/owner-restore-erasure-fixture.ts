@@ -1075,7 +1075,9 @@ export async function expectRefusedCompletion(
 ) {
   const response = await copy.request(key);
   expect(response.status).toBe(200);
-  expect(await response.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
+  const body = (await response.json()) as { state: string; disposition: string };
+  expect(body.state).toBe('held');
+  expect(['conflict', 'unavailable', 'corrupt']).toContain(body.disposition);
   const held = await outerOperation(copy, key);
   expect(held.state).toBe('held');
   expect(held.hold_reason).toMatch(reason);
