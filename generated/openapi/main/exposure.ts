@@ -242,6 +242,7 @@ export const operationExposures = {
   "getV1RealmsByRealmJoining": "public",
   "getV1RealmsByRealmMain-versionsByMainVersionSelection": "public",
   "getV1RealmsByRealmMain-versionsByMainVersionSelectionsBySelectionMediaByUse": "public",
+  "getV1RealmsByRealmMember-ban": "platform:realm-appeals",
   "getV1RealmsByRealmMember-receiptsByReceiptIdAppeal": "platform:realm-appeals",
   "getV1RealmsByRealmMembers": "public",
   "getV1RealmsByRealmModeration": "public",
