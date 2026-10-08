@@ -4,17 +4,20 @@ import { resolve } from 'node:path';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
 import { AdmissionDenied, AdmissionExpired } from '../src/modules/access/admission.ts';
+import { fromPlainText } from '@rezics/document';
+import type { ContentCore } from '../../content/src/core.ts';
 import { baselineTarget } from '../src/modules/access/baseline.ts';
 import { RV, prepareComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { ZONE_CONFIG_FORMAT, ZONE_LIMITS, ZONE_PROFILE, InvalidZoneConfiguration } from '../src/modules/zone/config-format.ts';
-import { changeZoneConfiguration, readZoneConfiguration, readZoneRevisionConfiguration,
-  ZoneUnavailable } from '../src/modules/zone/configuration.ts';
+import { changeZoneConfiguration, readZoneConfiguration, readZoneRevisionConfiguration, publishZoneSite,
+  ZoneStale, ZoneUnavailable } from '../src/modules/zone/configuration.ts';
 import { realmAttachAllowed } from '../src/modules/zone/realm-attachment-authority.ts';
 import { withdrawZoneRealmAttachment } from '../src/modules/zone/realm-attachment-withdrawal.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const zone = id(1), zoneSpace = id(2), navigation = id(3), head = id(4), actor = id(5);
 const sameSpaceRealm = id(10), foreignRealm = id(11), otherRealm = id(13);
+const navigationRoute = navigation;
 const lit = (value: string) => ({ type: 'literal' as const, value });
 const rows = (bindings: Record<string, ReturnType<typeof lit>>[]) => ({ results: { bindings } });
 
@@ -41,6 +44,10 @@ function world(directory: string, fixture: Fixture = {}) {
     attachChecks: [] as string[], ownerChecks: [] as string[], recorded: [] as string[],
     attachAuthority: 'held' as 'held' | 'denied' | 'expired', ownerAuthority: 'held' as 'held' | 'denied',
     attachmentLive: true,
+    /** Runs once, as a command reaches the graph: the race window after the editor read the head. */
+    beforeApply: undefined as undefined | (() => void),
+    /** Graph state after the guarded updates the fake applied. */
+    applied: [] as string[],
   };
   const fuseki = {
     async query(query: string) {
@@ -54,6 +61,8 @@ function world(directory: string, fixture: Fixture = {}) {
           ...(realm ? { realm: lit(realm) } : {}),
           ...(linked ? { attachedBy: lit(linked.by) } : {}) }]);
       }
+      if (query.includes('SELECT DISTINCT ?type')) return rows([{ type: lit(RV + 'Zone') }]);
+      if (query.includes('rv:structureHead')) return { boolean: true };
       if (query.includes('SELECT ?manifest WHERE')) return rows([{ manifest: lit(`urn:rezics:sha256:${manifest}`) }]);
       if (query.includes('SELECT ?space WHERE')) {
         const realm = Object.keys(state.realms).find(candidate => query.includes(`<${candidate}>`));
@@ -71,6 +80,16 @@ function world(directory: string, fixture: Fixture = {}) {
     },
     async commandWithReceipt(envelope: CommandEnvelope) {
       state.envelopes.push(envelope);
+      const race = state.beforeApply;
+      if (race && envelope.update.includes('rv:Succeeded')) {
+        state.beforeApply = undefined;
+        race();
+      }
+      // The graph matches the WHERE: an edit keeping the Realm needs the record it read.
+      const where = envelope.update.slice(envelope.update.indexOf('WHERE'));
+      if (envelope.update.includes('rv:Succeeded') && where.includes(`rv:realmAttachedBy <${actor}>`)
+        && !state.link.attachment) return { status: 'guard-unmatched' as const };
+      if (envelope.update.includes('rv:Succeeded')) state.applied.push(envelope.update);
       if (!envelope.update.includes('rv:Succeeded')) {
         state.terminal = Object.fromEntries(Object.entries({ outcome: RV + 'Cancelled', digest: envelope.digest,
           admission: state.admission.id, epoch: state.admission.authorityEpoch, scope: state.admission.scope,
@@ -99,7 +118,12 @@ function world(directory: string, fixture: Fixture = {}) {
       if (state.attachAuthority === 'denied') throw new AdmissionDenied('permission is not granted');
       if (state.attachAuthority === 'expired') throw new AdmissionExpired('grant expired');
     },
+    async activePrincipalId() { return 'principal'; },
     async withOwnerAuthority<T>(request: { action: string; scope: string }, operation: (client: never) => Promise<T>) {
+      // Content's page pin is exercised by its own tests; here it only has to succeed.
+      if (request.action === 'content.publish') return {
+        publicationGuard: '', position: { dataEpoch: '11111111-1111-4111-8111-111111111111', sequence: '1' },
+        reference: { language: { kind: 'tag', tag: 'en' } } } as T;
       state.ownerChecks.push(`${request.action}@${request.scope}`);
       if (state.ownerAuthority === 'denied') throw new AdmissionDenied('permission is not granted');
       return operation(undefined as never);
@@ -185,7 +209,8 @@ test('an unrelated edit keeps a live cross-Space attachment without asking the s
     expect(w.state.attachChecks).toEqual([]);
     const update = w.state.envelopes[0]!.update;
     expect(update).toContain(`<${zone}> rv:defaultRealm <${foreignRealm}>`);
-    expect(update).not.toContain('rv:realmAttachment');
+    // The link triples are only guarded, never deleted or rewritten.
+    expect(update.slice(0, update.indexOf('WHERE'))).not.toContain('rv:realmAttachment');
   });
 });
 
@@ -198,8 +223,8 @@ test('re-submitting the attached Realm keeps its record, asks no steward and lea
     expect(w.state.ownerChecks).toEqual([]);
     const resubmitted = w.state.envelopes[0]!.update;
     expect(resubmitted).toContain(`<${zone}> rv:defaultRealm <${foreignRealm}>`);
-    expect(resubmitted).not.toContain('rv:realmAttached');
-    expect(resubmitted).not.toContain('rv:realmAttachment');
+    expect(resubmitted.slice(0, resubmitted.indexOf('WHERE'))).not.toContain('rv:realmAttach');
+    expect(resubmitted.slice(resubmitted.indexOf('WHERE'))).toContain(`rv:realmAttachedBy <${actor}>`);
     // The record is untouched, so the next unrelated edit still succeeds.
     w.state.terminal = undefined; // the fake keeps one receipt per command
     await changeZoneConfiguration(w.env, w.account, w.access, request(), { zone, expectedHead: head,
@@ -213,6 +238,56 @@ test('re-submitting the attached Realm keeps its record, asks no steward and lea
     expect(result).toMatchObject({ zone, realm: foreignRealm });
     const gone = world(directory, { realms: { [foreignRealm]: id(99) }, stored: foreignRealm, link: {} });
     expect((await readZoneConfiguration(gone.env, zone)).configuration.defaultRealm).toBeUndefined();
+  });
+});
+
+/** No Zone may hold a foreign Realm without the record that lets a steward withdraw it. */
+const resurrected = (w: ReturnType<typeof world>) => w.state.applied.some(update => {
+  const inserted = update.slice(update.indexOf('INSERT'), update.indexOf('WHERE'));
+  return inserted.includes(`rv:defaultRealm <${foreignRealm}>`) && !inserted.includes('rv:realmAttachment ');
+});
+const attachedWorld = (directory: string) => world(directory, { realms: { [foreignRealm]: id(99) },
+  stored: foreignRealm, link: { realm: foreignRealm, attachment: { by: actor } } });
+
+test('a withdrawal that lands between an unrelated edit\'s read and commit cannot be undone by it', async () => {
+  await inDirectory(async directory => {
+    const w = attachedWorld(directory);
+    w.state.beforeApply = () => { w.state.link = {}; };
+    await expect(configure(w, { name: 'Renamed' })).rejects.toBeInstanceOf(ZoneStale);
+    expect(resurrected(w)).toBe(false);
+    expect(w.state.applied).toEqual([]);
+    expect(w.state.recorded).toEqual([`${w.state.admission.id}:cancelled`]);
+    // After the withdrawal the same edit reads the new state and commits without the Realm.
+    const after = world(directory, { realms: { [foreignRealm]: id(99) }, stored: foreignRealm, link: {} });
+    await configure(after, { name: 'Renamed' });
+    expect(resurrected(after)).toBe(false);
+    const inserted = after.state.applied[0]!;
+    expect(inserted.slice(inserted.indexOf('INSERT'), inserted.indexOf('WHERE'))).not.toContain('rv:defaultRealm');
+  });
+});
+
+test('a withdrawal that lands between a publish\'s read and commit cannot be undone by it', async () => {
+  await inDirectory(async directory => {
+    const revision = '11111111-1111-4111-8111-111111111111';
+    const content = { ownerPosition: async () => ({ dataEpoch: revision }),
+      owningResourceForRevision: async () => zone,
+      readExactBatch: async () => [{ status: 'available', reference: { variantId: `urn:rezics:variant:${revision}`,
+        byteDigest: 'a'.repeat(64) }, body: { document: fromPlainText('Home', 'blocks') } }],
+      readPublicationPreparation: async () => null } as unknown as ContentCore;
+    const publish = (w: ReturnType<typeof world>) => publishZoneSite(w.env, w.account, w.access, request(), {
+      zone, expectedHead: head, actingSubject: actor, idempotencyKey: 'publish', routesRevision: navigationRoute,
+      navigationRevision: navigationRoute, pages: [{ page: zone, variantId: `urn:rezics:variant:${revision}`,
+        revisionId: revision, byteDigest: 'a'.repeat(64), contentEpoch: revision }] }, content);
+    const w = attachedWorld(directory);
+    w.state.beforeApply = () => { w.state.link = {}; };
+    await expect(publish(w)).rejects.toBeInstanceOf(ZoneStale);
+    expect(resurrected(w)).toBe(false);
+    expect(w.state.applied).toEqual([]);
+    // The guard is part of the publish itself, not only of plain edits.
+    const guarded = attachedWorld(directory);
+    await publish(guarded).catch(() => undefined);
+    const update = guarded.state.envelopes.find(envelope => envelope.update.includes('rv:Succeeded'))!.update;
+    expect(update.slice(update.indexOf('WHERE'))).toContain(`rv:realmAttachedBy <${actor}>`);
   });
 });
 

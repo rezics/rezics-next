@@ -54,10 +54,12 @@ async function arrange(home: Home) {
         direction: 'ltr', actingSubject: steward }, home.author.token), 201);
     const pages = [{ page: site.zone, variantId, revisionId: saved.revisionId, byteDigest: saved.byteDigest,
       contentEpoch: saved.sourcePosition.dataEpoch }];
-    return async () => json<{ revision: string; themeRevision: string }>(await call('POST',
-      `/v1/zones/${short(site.zone)}/site-publications`, { routesRevision: site.navigationRevision,
-        navigationRevision: site.navigationRevision, pages, expectedHead: await head(site.zone),
-        actingSubject: steward }, home.author.token), 201);
+    const body = async () => ({ routesRevision: site.navigationRevision,
+      navigationRevision: site.navigationRevision, pages, expectedHead: await head(site.zone),
+      actingSubject: steward });
+    const run = async () => json<{ revision: string; themeRevision: string }>(await call('POST',
+      `/v1/zones/${short(site.zone)}/site-publications`, await body(), home.author.token), 201);
+    return Object.assign(run, { body });
   };
   return { steward, outsider, stewardPrincipal, realmIn, zoneIn, configure, head, attach, withdraw, publicRealm,
     editorRealm, publisher };
@@ -204,5 +206,68 @@ test('a publish after the attachment ends binds no Realm', async () => {
     const linked = await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK { GRAPH ${iri(GRAPHS.current)} {
       ${iri(site.zone)} rv:defaultRealm ?realm } }`, 1024);
     expect(linked.boolean).toBe(false);
+  } finally { await home.stop(); }
+}, 180_000);
+
+test('a withdrawal landing before an edit or publish commits is not undone by it', async () => {
+  const home = await startHomeStack('zone-realm-attachment-race', { projectionStart: 'current' });
+  try {
+    const { stack, call, json } = home;
+    const a = await arrange(home);
+    const realm = await a.realmIn();
+    const site = await a.zoneIn(a.steward, home.author.token);
+    const publish = await a.publisher(site);
+    const linked = async () => (await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(site.zone)} rv:defaultRealm ?realm } }`, 1024)).boolean;
+    const noRealmAnywhere = async () => {
+      expect(await linked()).toBe(false);
+      expect(await a.editorRealm(site.zone)).toBeUndefined();
+      expect(await a.publicRealm(site.zone)).toEqual({ routes: null, presentation: null });
+    };
+    // The steward withdraws after the editor has read the Zone and before the edit reaches the graph.
+    const withdrawBefore = (marker: string) => {
+      const original = stack.env.fuseki;
+      let fired = false;
+      stack.env.fuseki = new Proxy(original, { get(target, property) {
+        if (property === 'commandWithReceipt') return async (...args: Parameters<typeof target.commandWithReceipt>) => {
+          if (!fired && args[0].update.includes(marker)) {
+            fired = true;
+            expect((await a.withdraw(site.zone, realm.realm)).status).toBe(200);
+          }
+          return target.commandWithReceipt(...args);
+        };
+        const value = Reflect.get(target, property, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      } });
+      return { fired: () => fired, restore: () => { stack.env.fuseki = original; } };
+    };
+
+    await a.attach(site.zone, realm.realm);
+    await publish();
+    const edit = withdrawBefore('rv:zoneOperation rv:ZoneConfigure');
+    const stale = await a.configure(site.zone, await a.head(site.zone), { name: 'Raced rename', language: 'en' },
+      a.steward, home.author.token);
+    edit.restore();
+    expect(edit.fired()).toBe(true);
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toMatchObject({ code: 'stale_zone_head' });
+    await noRealmAnywhere();
+    // The same edit, retried after the withdrawal, commits without the Realm.
+    await json(await a.configure(site.zone, await a.head(site.zone), { name: 'Raced rename', language: 'en' },
+      a.steward, home.author.token));
+    await noRealmAnywhere();
+
+    // A publish racing a withdrawal loses the same way and binds no Realm.
+    await a.attach(site.zone, realm.realm);
+    const racing = withdrawBefore('rv:sitePublicationRevision');
+    const lost = await call('POST', `/v1/zones/${short(site.zone)}/site-publications`, await publish.body(), home.author.token);
+    racing.restore();
+    expect(racing.fired()).toBe(true);
+    expect(lost.status).toBe(409);
+    await noRealmAnywhere();
+    await publish();
+    await noRealmAnywhere();
+    const ownerEvents = await home.projectRelay();
+    expect(ownerEvents.length).toBeGreaterThan(0);
   } finally { await home.stop(); }
 }, 180_000);

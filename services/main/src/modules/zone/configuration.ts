@@ -568,6 +568,13 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
             rv:ownerSequence ${contentPositions.get(page.revisionId)!.sequence} ;
             rv:contentLanguage ${lit(contentLanguages.get(page.revisionId)!)} .`;
       }).join('\n') : '';
+    // A steward's withdrawal removes the link without moving the Zone head, so an
+    // edit that writes the foreign Realm back must still find the exact record it
+    // read. Otherwise it would resurrect a withdrawn Realm with no record to
+    // withdraw. Any edit or publish that keeps the Realm carries this guard.
+    const linkGuard = head.attachment && config.defaultRealm === head.attachment.realm
+      ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.zone)} rv:defaultRealm ${iri(head.attachment.realm)} ;
+          rv:realmAttachedBy ${iri(head.attachment.by)} ; rv:realmAttachment ?linkedAttachment . }` : '';
     const kind = input.operation === 'retire' ? 'ZoneRetire'
       : input.operation === 'recover' ? 'ZoneRecover' : 'ZoneConfigure';
     const update = `PREFIX rv: <${RV}>
@@ -633,6 +640,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           ${iri(head.navigation)} rv:selectedGeneration ?generation .
           ?generation rv:placementCount 0 . }` : ''}
         ${contentGuards.join('\n')}
+        ${linkGuard}
         ${publication ? 'FILTER(?oldState = rv:Active)' : ''}
         ${themeSelection ? `GRAPH ${iri(GRAPHS.current)} { ${iri(selectedTheme!)}
           rv:hostZone ${iri(input.zone)} ; rv:themeActivationHead ${iri(themeSelection.activation)} . }
@@ -691,7 +699,10 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
         GRAPH ${iri(GRAPHS.current)} { ${iri(head.navigation)}
           rv:structureHead ${iri(publication.navigationRevision)} . }
       }`, 1024)).boolean !== true;
-      if (current.revision !== input.expectedHead || navigationChanged) {
+      // The head is not the only concurrency token: a withdrawal moves the link alone.
+      const linkChanged = head.attachment && config.defaultRealm === head.attachment.realm
+        && (current.attachment?.realm !== head.attachment.realm || current.attachment.by !== head.attachment.by);
+      if (current.revision !== input.expectedHead || navigationChanged || linkChanged) {
         const cancelled = await sealStructureAdmissionCancellation(env, admission);
         await access.recordGraphOutcome(admission.id, cancelled);
         throw new ZoneStale('Zone head changed');
