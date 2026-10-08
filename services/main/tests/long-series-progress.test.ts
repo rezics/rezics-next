@@ -596,6 +596,35 @@ test('a position nested past one volume is refused instead of completing as unre
   await expect(boundary.visible([record, 'untagged'])).rejects.toBeInstanceOf(ReadingContinuityUnsupported);
 });
 
+test('a revelation nested past the bound is withheld alone for a reader whose position is shallow', async () => {
+  const f = await volumeSeries();
+  f.saved.push({ structure: f.seriesStructure, occurrence: f.reader });
+  const traversal = new ReadingPositionTraversal(f.session, f.series, async resources => new Set(resources));
+  const deep = id(), deepRecord = id(), shallowRecord = id(), laterRecord = id();
+  // The editor placed a revelation inside a Work nested in a volume of the series:
+  // three Works deep, which no continuity key can hold.
+  const location = traversal.location.bind(traversal);
+  traversal.location = async occurrence => {
+    const found = await location(occurrence === deep ? f.early : occurrence);
+    if (occurrence !== deep || !found) return found;
+    const inner = { ...found.item, occurrence: deep, work: id() };
+    return { item: inner, frames: [...found.frames, { work: inner.work, parent: inner.parent, after: inner }] };
+  };
+  const recordsFor = traversal.recordsFor.bind(traversal);
+  traversal.recordsFor = occurrences => recordsFor(occurrences.map(occurrence => occurrence === deep ? f.early : occurrence));
+  const revelation = (record: string, occurrence: string) => [record, [{ record, recordKind: 'entity' as const,
+    continuityWork: f.series, occurrence, receipt: 'publication' }]] as [string, Array<{ record: string; recordKind: 'entity';
+    continuityWork: string; occurrence: string; receipt: 'publication' }>];
+  f.session.deps.readingPositions!.lookup = async () => new Map([revelation(deepRecord, deep),
+    revelation(shallowRecord, f.early), revelation(laterRecord, f.late)]);
+  const boundary = new ReadingBoundary(f.session, 'mine');
+  boundary.traversalFor = () => traversal;
+  // The deep record is withheld; the introductions at or before the position
+  // stay visible, and the one after it stays hidden as before.
+  expect([...(await boundary.visible([deepRecord, shallowRecord, laterRecord, 'untagged']))].sort())
+    .toEqual([shallowRecord, 'untagged'].sort());
+});
+
 test('a nested chapter is disclosed by its own volume before it resumes anything', async () => {
   const f = await volumeSeries();
   f.saved.push({ structure: f.seriesStructure, occurrence: f.reader });

@@ -8,8 +8,9 @@ import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
 import type { Revelation } from './store.ts';
 import { READING_POSITION_COST, REVELATION_COST } from './contract.ts';
 import { compareReadingLocations, ReadingPositionTraversal } from './traversal.ts';
+import { continuityKey } from './continuity.ts';
 import { chooserPosition } from './chooser-position.ts';
-import { ReadingResumeContinuation } from './errors.ts';
+import { ReadingContinuityUnsupported, ReadingResumeContinuation } from './errors.ts';
 import { readingContinuation, resumeContinuation, searchContinuation } from './continuation.ts';
 import type { ResumePageKey } from '../progress/store.ts';
 export { READING_POSITION_COST } from './contract.ts';
@@ -216,6 +217,11 @@ export class ReadingBoundary {
     const boundary = await traversal.location(position), revealed = await traversal.location(occurrence);
     if (!boundary || !revealed) return false;
     await traversal.requireLocation(revealed);
+    // An editor-authored record past the continuity bound has no place to
+    // compare. It is withheld alone; only the reader's own position (the
+    // boundary) is refused, and that was resolved before this point.
+    try { continuityKey(revealed); }
+    catch (error) { if (error instanceof ReadingContinuityUnsupported) return false; throw error; }
     return compareReadingLocations(boundary, revealed) >= 0;
   }
   async binding() {
