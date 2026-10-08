@@ -32,7 +32,7 @@ test('G-380: fresh proposition bootstraps once, concurrent callers agree, relay 
   const sequence = async () => (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?n WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }`)).results!.bindings[0]!.n!.value;
   const reset = async () => {
-    await fuseki.update('CLEAR ALL');
+    await fuseki.resetDataset();
     env.lineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: Bun.randomUUIDv7() };
     await initializeFreshGraph(fuseki, env.lineage);
   };

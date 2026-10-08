@@ -27,7 +27,7 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
   let relayProcess: ChildProcess | undefined;
   try {
     // This test owns one disposable QA project and exercises a source beginning at zero.
-    await fuseki.update('CLEAR ALL');
+    await fuseki.resetDataset();
     await pool.query('TRUNCATE relay.delivered_event, relay.delivered_batch, relay.checkpoint CASCADE');
     const lineage = { dataEpoch: Bun.randomUUIDv7(), routingEpoch: '1' };
     const env: WorkActivationEnvironment = { ...stack.env, fuseki, lineage,
