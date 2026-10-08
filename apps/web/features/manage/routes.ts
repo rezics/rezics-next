@@ -1,6 +1,6 @@
 import type { ModerationKind } from './types.ts';
 
-export type RealmSection = 'queue' | 'log' | 'members' | 'roles' | 'showcase' | 'settings';
+export type RealmSection = 'queue' | 'log' | 'members' | 'roles' | 'showcase' | 'zones' | 'settings';
 
 /** A Realm's management page, unlocalized; links localize it (`features/shell/localized-link.tsx`). */
 export function realmHref(realm: string, section: RealmSection = 'queue'): string {

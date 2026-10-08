@@ -74,6 +74,21 @@ const messages: ZoneEditorMessages = {
   privateLink: '非公開',
   pathInvalid: '小文字、数字、ハイフンだけの短いパスにしてください。',
   duplicatePath: 'そのパスはすでにリンクです。',
+  // Machine-drafted; needs native review.
+  sectionRealm: 'コミュニティ',
+  realmTitle: 'コミュニティ',
+  realmHelp: 'ハンドルでコミュニティを添付します。このゾーンに表示され、その管理者は取り消せます。',
+  realmHandle: 'コミュニティのハンドル',
+  realmAttach: '添付',
+  realmAttaching: '添付しています…',
+  realmNone: 'コミュニティは添付されていません。',
+  realmRemove: '外す',
+  realmRemoving: '外しています…',
+  realmRemoved: '外しました。このゾーンにはそのコミュニティが表示されなくなります。',
+  realmAttached: 'このゾーンはこのコミュニティを表示します。',
+  realmAttachedNameless: 'コミュニティが添付されています。',
+  realmUnavailable: 'そのコミュニティは利用できません。',
+  realmSaved: '添付しました。このゾーンはそのコミュニティを表示します。',
 };
 
 export default messages;

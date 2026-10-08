@@ -556,4 +556,17 @@ export default {
   reasonLanguageLabel: 'Sprache der Begründung',
   stepsNone: 'Noch kein Schriftverkehr und keine Schritte.',
   dmcaLatestAt: insert('Späteste Wiederherstellung: {{time}}', { time: String }),
+  // Machine-drafted; needs native review.
+  tabZones: 'Zonen',
+  zonesTitle: 'Angehängte Zonen',
+  zonesHelp: 'Zonen in anderen Spaces, die diese Community zeigen. Zurückziehen nimmt sie dort sofort weg.',
+  zonesEmpty: 'Keine Zone in einem anderen Space zeigt diese Community.',
+  zonesAttached: insert('Angehängt {{time}}', { time: String }),
+  zonesAttachedUnknown: 'Angehängt, bevor der Zeitpunkt aufgezeichnet wurde.',
+  zonesWithdraw: 'Zurückziehen',
+  zonesWithdrawing: 'Wird zurückgezogen…',
+  zonesWithdrawn: 'Zurückgezogen. Diese Zone zeigt die Community nicht mehr.',
+  zonesWithdrawFailed: 'Das Zurückziehen ist nicht durchgegangen. Versuche es erneut.',
+  zonesNameFallback: 'Unbenannte Zone',
+  zonesOpen: insert('{{zone}} öffnen', { zone: String }),
 } satisfies ManageMessages;

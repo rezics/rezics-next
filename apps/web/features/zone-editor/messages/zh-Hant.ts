@@ -74,6 +74,21 @@ const messages: ZoneEditorMessages = {
   privateLink: '不公開',
   pathInvalid: '請使用由小寫字母、數字和連字號組成的短路徑。',
   duplicatePath: '這個路徑已經是一個連結。',
+  // Machine-drafted; needs native review.
+  sectionRealm: '社群',
+  realmTitle: '社群',
+  realmHelp: '用社群的識別名稱附加它。它會顯示在這個區域，社群的管理者也可以撤回。',
+  realmHandle: '社群識別名稱',
+  realmAttach: '附加',
+  realmAttaching: '正在附加…',
+  realmNone: '尚未附加社群。',
+  realmRemove: '移除',
+  realmRemoving: '正在移除…',
+  realmRemoved: '已移除。這個區域不再顯示該社群。',
+  realmAttached: '這個區域顯示這個社群。',
+  realmAttachedNameless: '已附加一個社群。',
+  realmUnavailable: '無法使用該社群。',
+  realmSaved: '已附加。這個區域顯示該社群。',
 };
 
 export default messages;

@@ -517,4 +517,17 @@ export default {
   reasonLanguageLabel: '说明所用语言',
   stepsNone: '暂无往来信函或步骤。',
   dmcaLatestAt: insert('最晚恢复时间：{{time}}', { time: String }),
+  // Machine-drafted; needs native review.
+  tabZones: '区域',
+  zonesTitle: '已附加的区域',
+  zonesHelp: '其他空间里显示这个社区的区域。撤回后，该区域会立刻不再显示它。',
+  zonesEmpty: '没有其他空间的区域显示这个社区。',
+  zonesAttached: insert('附加于 {{time}}', { time: String }),
+  zonesAttachedUnknown: '附加时间早于开始记录的时候。',
+  zonesWithdraw: '撤回',
+  zonesWithdrawing: '正在撤回…',
+  zonesWithdrawn: '已撤回。该区域不再显示这个社区。',
+  zonesWithdrawFailed: '撤回没有完成。请再试一次。',
+  zonesNameFallback: '未命名区域',
+  zonesOpen: insert('打开 {{zone}}', { zone: String }),
 } satisfies Partial<ManageMessages>;

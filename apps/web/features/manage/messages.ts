@@ -555,6 +555,19 @@ export const messages = {
   reasonLanguageLabel: 'Language of the statement',
   stepsNone: 'No correspondence or steps yet.',
   dmcaLatestAt: insert('Latest restoration: {{time}}', { time: String }),
+
+  tabZones: 'Zones',
+  zonesTitle: 'Attached Zones',
+  zonesHelp: 'Zones in other Spaces that show this Realm. Withdrawing takes it off that Zone at once.',
+  zonesEmpty: 'No Zone in another Space shows this Realm.',
+  zonesAttached: insert('Attached {{time}}', { time: String }),
+  zonesAttachedUnknown: 'Attached before the time was recorded.',
+  zonesWithdraw: 'Withdraw',
+  zonesWithdrawing: 'Withdrawing…',
+  zonesWithdrawn: 'Withdrawn. That Zone no longer shows this Realm.',
+  zonesWithdrawFailed: 'The withdrawal didn’t go through. Try again.',
+  zonesNameFallback: 'Unnamed Zone',
+  zonesOpen: insert('Open {{zone}}', { zone: String }),
 };
 
 export type ManageMessages = typeof messages;

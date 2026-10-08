@@ -538,4 +538,17 @@ export default {
   reasonLanguageLabel: '사유서 작성 언어',
   stepsNone: '아직 서신이나 단계가 없어요.',
   dmcaLatestAt: insert('가장 늦은 복원: {{time}}', { time: String }),
+  // Machine-drafted; needs native review.
+  tabZones: '존',
+  zonesTitle: '연결된 존',
+  zonesHelp: '다른 스페이스에서 이 커뮤니티를 보여주는 존입니다. 철회하면 그 존에서 바로 빠집니다.',
+  zonesEmpty: '다른 스페이스의 존은 이 커뮤니티를 보여 주지 않습니다.',
+  zonesAttached: insert('{{time}}에 연결', { time: String }),
+  zonesAttachedUnknown: '시각을 기록하기 전에 연결되었습니다.',
+  zonesWithdraw: '철회',
+  zonesWithdrawing: '철회하는 중…',
+  zonesWithdrawn: '철회했습니다. 그 존은 이 커뮤니티를 더 이상 보여 주지 않습니다.',
+  zonesWithdrawFailed: '철회가 완료되지 않았습니다. 다시 시도하세요.',
+  zonesNameFallback: '이름 없는 존',
+  zonesOpen: insert('{{zone}} 열기', { zone: String }),
 } satisfies ManageMessages;

@@ -82,6 +82,20 @@ const en = {
   privateLink: 'Private',
   pathInvalid: 'Use a short path of lowercase letters, numbers and hyphens.',
   duplicatePath: 'That path is already a link.',
+  sectionRealm: 'Realm',
+  realmTitle: 'Realm',
+  realmHelp: 'Attach a Realm by its handle. It shows on this Zone, and its stewards can withdraw it.',
+  realmHandle: 'Realm handle',
+  realmAttach: 'Attach',
+  realmAttaching: 'Attaching…',
+  realmNone: 'No Realm is attached.',
+  realmRemove: 'Remove',
+  realmRemoving: 'Removing…',
+  realmRemoved: 'Removed. This Zone no longer shows that Realm.',
+  realmAttached: 'This Zone shows this Realm.',
+  realmAttachedNameless: 'A Realm is attached.',
+  realmUnavailable: 'That Realm isn’t available.',
+  realmSaved: 'Attached. This Zone shows that Realm.',
 };
 
 export const englishMessages = en;

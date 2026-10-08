@@ -10,3 +10,7 @@ export function zonePreviewPath(space: string): string {
 export function zoneNavigationPath(space: string): string {
   return `${zoneEditorPath(space)}/navigation`;
 }
+
+export function zoneRealmPath(space: string): string {
+  return `${zoneEditorPath(space)}/realm`;
+}

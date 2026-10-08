@@ -74,6 +74,21 @@ const messages: ZoneEditorMessages = {
   privateLink: 'Privado',
   pathInvalid: 'Usa una ruta corta con letras minúsculas, números y guiones.',
   duplicatePath: 'Esa ruta ya es un enlace.',
+  // Machine-drafted; needs native review.
+  sectionRealm: 'Comunidad',
+  realmTitle: 'Comunidad',
+  realmHelp: 'Vincula una comunidad por su identificador. Se muestra en esta zona, y sus responsables pueden retirarla.',
+  realmHandle: 'Identificador de la comunidad',
+  realmAttach: 'Vincular',
+  realmAttaching: 'Vinculando…',
+  realmNone: 'No hay una comunidad vinculada.',
+  realmRemove: 'Quitar',
+  realmRemoving: 'Quitando…',
+  realmRemoved: 'Quitada. Esta zona ya no muestra esa comunidad.',
+  realmAttached: 'Esta zona muestra esta comunidad.',
+  realmAttachedNameless: 'Hay una comunidad vinculada.',
+  realmUnavailable: 'Esa comunidad no está disponible.',
+  realmSaved: 'Vinculada. Esta zona muestra esa comunidad.',
 };
 
 export default messages;

@@ -80,7 +80,7 @@ function Page({ locale, mode, document, revisionId }: {
   const [initial] = useState(() => opening(document, revisionId));
   const manage = locale === 'zh-Hans' ? { ...manageMessages, ...manageZhHans } : manageMessages;
   return <ZoneEditorFrame name="Harbor notes" editorPath="/manage/z/harbor" agent={agent} locale={locale} manageMessages={manage}
-    sectionsLabel={messages[locale].sectionsLabel} sectionHome={messages[locale].sectionHome} sectionNavigation={messages[locale].sectionNavigation}>
+    sectionsLabel={messages[locale].sectionsLabel} sectionHome={messages[locale].sectionHome} sectionNavigation={messages[locale].sectionNavigation} sectionRealm={messages[locale].sectionRealm}>
     <ZoneHomeEditor zoneId={zoneId} zoneIri={zoneIri} actingSubject={actor} locale={locale} copy={messages[locale]}
       initial={initial} editable document={document} previewHref="/manage/z/harbor/preview" siteHref={sitePath}
       signInHref="/auth/start?next=%2Fmanage%2Fz%2Fharbor" api={api} />
@@ -149,7 +149,7 @@ export const StaleChoicesOnAPhone: Story = {
     const initial = opening(document, '00000000-0000-4000-8000-000000000311');
     initial.notice = { kind: 'stale', currentHead: '00000000-0000-4000-8000-000000000307' };
     return <ZoneEditorFrame name="Harbor notes" editorPath="/manage/z/harbor" agent={agent} locale="en" manageMessages={manageMessages}
-      sectionsLabel={messages.en.sectionsLabel} sectionHome={messages.en.sectionHome} sectionNavigation={messages.en.sectionNavigation}>
+      sectionsLabel={messages.en.sectionsLabel} sectionHome={messages.en.sectionHome} sectionNavigation={messages.en.sectionNavigation} sectionRealm={messages.en.sectionRealm}>
       <ZoneHomeEditor zoneId={zoneId} zoneIri={zoneIri} actingSubject={actor} locale="en" copy={messages.en}
         initial={initial} editable document={document} previewHref="/manage/z/harbor/preview" siteHref={sitePath}
         signInHref="/auth/start?next=%2Fmanage%2Fz%2Fharbor" api={clientOf([], 'save')} />
@@ -210,7 +210,7 @@ export const DraftPreview: Story = {
   render() {
     const document = fromPlainText('Morning edition of the harbor', 'blocks');
     return <ZoneEditorFrame name="Harbor notes" editorPath="/manage/z/harbor" agent={agent} locale="en" manageMessages={manageMessages}
-      sectionsLabel={messages.en.sectionsLabel} sectionHome={messages.en.sectionHome} sectionNavigation={messages.en.sectionNavigation}>
+      sectionsLabel={messages.en.sectionsLabel} sectionHome={messages.en.sectionHome} sectionNavigation={messages.en.sectionNavigation} sectionRealm={messages.en.sectionRealm}>
       <ZoneDraftPreview copy={messages.en} document={document} editorPath="/manage/z/harbor" sitePath={sitePath} status="private" />
     </ZoneEditorFrame>;
   },
@@ -260,7 +260,7 @@ function NavigationPage({ mode }: { mode: 'save' | 'stale' }) {
   const [home] = useState(() => opening(fromPlainText('Morning edition of the harbor', 'blocks'), '00000000-0000-4000-8000-000000000311'));
   const [initial] = useState<NavigationState>(() => ({ links: [], saved: [], head: navigation, notice: { kind: 'idle' } }));
   return <ZoneEditorFrame name="Harbor notes" editorPath="/manage/z/harbor" agent={agent} locale="en" manageMessages={manageMessages}
-    sectionsLabel={messages.en.sectionsLabel} sectionHome={messages.en.sectionHome} sectionNavigation={messages.en.sectionNavigation}>
+    sectionsLabel={messages.en.sectionsLabel} sectionHome={messages.en.sectionHome} sectionNavigation={messages.en.sectionNavigation} sectionRealm={messages.en.sectionRealm}>
     <ZoneNavigationEditor zoneId={zoneId} zoneIri={zoneIri} actingSubject={actor} locale="en" copy={messages.en}
       initial={initial} home={home} previewHref="/manage/z/harbor/preview" siteHref={sitePath}
       signInHref="/auth/start?next=%2Fmanage%2Fz%2Fharbor" api={api} authoring={authoring} />

@@ -74,6 +74,21 @@ const messages: ZoneEditorMessages = {
   privateLink: '不公开',
   pathInvalid: '请使用由小写字母、数字和连字符组成的短路径。',
   duplicatePath: '这个路径已经是一个链接。',
+  // Machine-drafted; needs native review.
+  sectionRealm: '社区',
+  realmTitle: '社区',
+  realmHelp: '用社区的标识名称附加它。它会显示在这个区域，社区的管理者也可以撤回。',
+  realmHandle: '社区标识名称',
+  realmAttach: '附加',
+  realmAttaching: '正在附加…',
+  realmNone: '尚未附加社区。',
+  realmRemove: '移除',
+  realmRemoving: '正在移除…',
+  realmRemoved: '已移除。这个区域不再显示该社区。',
+  realmAttached: '这个区域显示这个社区。',
+  realmAttachedNameless: '已附加一个社区。',
+  realmUnavailable: '无法使用该社区。',
+  realmSaved: '已附加。这个区域显示该社区。',
 };
 
 export default messages;

@@ -74,6 +74,21 @@ const messages: ZoneEditorMessages = {
   privateLink: 'Privé',
   pathInvalid: 'Utilisez un chemin court en lettres minuscules, chiffres et traits d’union.',
   duplicatePath: 'Ce chemin est déjà un lien.',
+  // Machine-drafted; needs native review.
+  sectionRealm: 'Communauté',
+  realmTitle: 'Communauté',
+  realmHelp: 'Rattachez une communauté par son identifiant. Elle s’affiche sur cette zone, et ses responsables peuvent la retirer.',
+  realmHandle: 'Identifiant de la communauté',
+  realmAttach: 'Rattacher',
+  realmAttaching: 'Rattachement…',
+  realmNone: 'Aucune communauté n’est rattachée.',
+  realmRemove: 'Retirer',
+  realmRemoving: 'Retrait…',
+  realmRemoved: 'Retirée. Cette zone n’affiche plus cette communauté.',
+  realmAttached: 'Cette zone affiche cette communauté.',
+  realmAttachedNameless: 'Une communauté est rattachée.',
+  realmUnavailable: 'Cette communauté n’est pas disponible.',
+  realmSaved: 'Rattachée. Cette zone affiche cette communauté.',
 };
 
 export default messages;

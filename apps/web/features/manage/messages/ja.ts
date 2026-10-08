@@ -526,4 +526,17 @@ export default {
   reasonLanguageLabel: '理由書の言語',
   stepsNone: 'まだやり取りや段階はありません。',
   dmcaLatestAt: insert('最も遅い復元: {{time}}', { time: String }),
+  // Machine-drafted; needs native review.
+  tabZones: 'ゾーン',
+  zonesTitle: '添付されたゾーン',
+  zonesHelp: '他のスペースでこのコミュニティを表示しているゾーンです。撤回すると、そのゾーンからすぐに外れます。',
+  zonesEmpty: '他のスペースのゾーンはこのコミュニティを表示していません。',
+  zonesAttached: insert('{{time}} に添付', { time: String }),
+  zonesAttachedUnknown: '記録を始める前に添付されました。',
+  zonesWithdraw: '撤回',
+  zonesWithdrawing: '撤回しています…',
+  zonesWithdrawn: '撤回しました。そのゾーンはこのコミュニティを表示しなくなりました。',
+  zonesWithdrawFailed: '撤回は完了しませんでした。もう一度試してください。',
+  zonesNameFallback: '名前のないゾーン',
+  zonesOpen: insert('{{zone}} を開く', { zone: String }),
 } satisfies ManageMessages;

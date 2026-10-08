@@ -556,4 +556,17 @@ export default {
   reasonLanguageLabel: 'Langue de l’exposé',
   stepsNone: 'Aucune correspondance ni étape pour l’instant.',
   dmcaLatestAt: insert('Rétablissement au plus tard : {{time}}', { time: String }),
+  // Machine-drafted; needs native review.
+  tabZones: 'Zones',
+  zonesTitle: 'Zones rattachées',
+  zonesHelp: 'Zones d’autres espaces qui affichent cette communauté. Le retrait l’enlève de cette zone aussitôt.',
+  zonesEmpty: 'Aucune zone d’un autre espace n’affiche cette communauté.',
+  zonesAttached: insert('Rattachée {{time}}', { time: String }),
+  zonesAttachedUnknown: 'Rattachée avant que l’heure soit enregistrée.',
+  zonesWithdraw: 'Retirer',
+  zonesWithdrawing: 'Retrait…',
+  zonesWithdrawn: 'Retirée. Cette zone n’affiche plus cette communauté.',
+  zonesWithdrawFailed: 'Le retrait n’a pas abouti. Réessayez.',
+  zonesNameFallback: 'Zone sans nom',
+  zonesOpen: insert('Ouvrir {{zone}}', { zone: String }),
 } satisfies ManageMessages;

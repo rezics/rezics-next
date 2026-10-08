@@ -74,6 +74,21 @@ const messages: ZoneEditorMessages = {
   privateLink: '비공개',
   pathInvalid: '소문자, 숫자, 하이픈만 쓴 짧은 경로를 사용하세요.',
   duplicatePath: '그 경로는 이미 링크입니다.',
+  // Machine-drafted; needs native review.
+  sectionRealm: '커뮤니티',
+  realmTitle: '커뮤니티',
+  realmHelp: '핸들로 커뮤니티를 연결합니다. 이 존에 표시되며, 그 관리자는 철회할 수 있습니다.',
+  realmHandle: '커뮤니티 핸들',
+  realmAttach: '연결',
+  realmAttaching: '연결하는 중…',
+  realmNone: '연결된 커뮤니티가 없습니다.',
+  realmRemove: '제거',
+  realmRemoving: '제거하는 중…',
+  realmRemoved: '제거했습니다. 이 존은 그 커뮤니티를 더 이상 보여 주지 않습니다.',
+  realmAttached: '이 존은 이 커뮤니티를 보여 줍니다.',
+  realmAttachedNameless: '커뮤니티가 연결되어 있습니다.',
+  realmUnavailable: '그 커뮤니티는 사용할 수 없습니다.',
+  realmSaved: '연결했습니다. 이 존은 그 커뮤니티를 보여 줍니다.',
 };
 
 export default messages;

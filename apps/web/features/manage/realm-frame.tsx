@@ -55,7 +55,7 @@ export function RealmFrame({ realm, address = realm, header, agent, locale, mess
             {header ? <Named name={header.name} /> : fallback}</h1>
         </div>
         <AccessRealmTabs realm={realm} address={address} actor={agent.iri} settingsAllowed={settingsAllowed} labels={{ nav: t.realmNav, queue: t.tabQueue, log: t.tabLog, members: t.tabMembers,
-          roles: t.tabRoles, showcase: t.tabShowcase, settings: t.tabSettings }} />
+          roles: t.tabRoles, showcase: t.tabShowcase, zones: t.tabZones, settings: t.tabSettings }} />
         <div className="flex flex-wrap gap-x-4 pb-3">
           <LocalizedLink href={`/manage/r/${address}/requests`} className="w-fit rounded-md text-primary text-sm underline-offset-4 hover:underline">
             {accessMessages[locale].requests}</LocalizedLink>

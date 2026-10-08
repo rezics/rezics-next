@@ -525,4 +525,17 @@ export default {
   reasonLanguageLabel: '說明所用語言',
   stepsNone: '尚無往來信函或步驟。',
   dmcaLatestAt: insert('最晚恢復時間：{{time}}', { time: String }),
+  // Machine-drafted; needs native review.
+  tabZones: '區域',
+  zonesTitle: '已附加的區域',
+  zonesHelp: '其他空間裡顯示這個社群的區域。撤回後，該區域會立刻不再顯示它。',
+  zonesEmpty: '沒有其他空間的區域顯示這個社群。',
+  zonesAttached: insert('附加於 {{time}}', { time: String }),
+  zonesAttachedUnknown: '附加時間早於開始記錄的時候。',
+  zonesWithdraw: '撤回',
+  zonesWithdrawing: '正在撤回…',
+  zonesWithdrawn: '已撤回。該區域不再顯示這個社群。',
+  zonesWithdrawFailed: '撤回沒有完成。請再試一次。',
+  zonesNameFallback: '未命名區域',
+  zonesOpen: insert('開啟 {{zone}}', { zone: String }),
 } satisfies ManageMessages;

@@ -553,4 +553,17 @@ export default {
   reasonLanguageLabel: 'Idioma de la exposición',
   stepsNone: 'Aún no hay correspondencia ni pasos.',
   dmcaLatestAt: insert('Restauración más tardía: {{time}}', { time: String }),
+  // Machine-drafted; needs native review.
+  tabZones: 'Zonas',
+  zonesTitle: 'Zonas vinculadas',
+  zonesHelp: 'Zonas de otros espacios que muestran esta comunidad. Retirarla la quita de esa zona al momento.',
+  zonesEmpty: 'Ninguna zona de otro espacio muestra esta comunidad.',
+  zonesAttached: insert('Vinculada {{time}}', { time: String }),
+  zonesAttachedUnknown: 'Vinculada antes de que se registrara la hora.',
+  zonesWithdraw: 'Retirar',
+  zonesWithdrawing: 'Retirando…',
+  zonesWithdrawn: 'Retirada. Esa zona ya no muestra esta comunidad.',
+  zonesWithdrawFailed: 'La retirada no se completó. Inténtalo de nuevo.',
+  zonesNameFallback: 'Zona sin nombre',
+  zonesOpen: insert('Abrir {{zone}}', { zone: String }),
 } satisfies ManageMessages;
