@@ -17,7 +17,7 @@ export default {
   measuresHeading: 'Quantité et temps',
   makes: 'Donne', makesUnit: 'Ce que ça donne', makesUnitHelp: 'muffins, pains, une tarte de 24 cm…',
   servings: 'Portions', servingsWord: 'portions',
-  prepTime: 'Préparation', cookTime: 'Cuisson', totalTime: 'Temps total', minutesUnit: 'min',
+  prepTime: 'Préparation', cookTime: 'Cuisson', totalTime: 'Temps total', minutesUnit: 'min', minutesName: 'minutes',
   timeOther: insert('Défini comme {{value}}. Saisir ici le remplace par des minutes.', { value: String }),
   amountInvalid: 'Utilisez un nombre comme 4, 1½ ou 0,5.',
   minutesInvalid: 'Utilisez des minutes entières, par exemple 45.',

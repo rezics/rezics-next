@@ -1,4 +1,4 @@
-import { leadingAmount, type Rational, sameRational } from './quantity.ts';
+import { formatQuantity, leadingAmount, type Rational, sameRational } from './quantity.ts';
 
 // An ingredient is written as one line and kept as parts. The line is what a cook types and what
 // Main shows back (`originalText`); the parts are what scaling and unit conversion read.
@@ -127,6 +127,21 @@ export function qualifierOf(parts: IngredientParts, language: string, previous?:
     parseStatus: status,
     ...(previous?.residual && status !== 'parsed' ? { residual: previous.residual } : {}),
   };
+}
+
+/**
+ * The line a cook reads for a stored ingredient: the words they wrote, with the quantity
+ * in the kitchen fraction the published recipe uses. The stored line itself is unchanged.
+ */
+export function readingLine(qualifier: IngredientQualifier): string {
+  const original = qualifier.originalText.value;
+  if (!qualifier.amount) return original;
+  const main = formatQuantity(qualifier.amount);
+  const upper = qualifier.amountUpper ? formatQuantity(qualifier.amountUpper) : null;
+  const shown = upper ? `${main}\u2013${upper}` : main;
+  const lexical = qualifier.amountLexical?.trim();
+  if (lexical && original.toLowerCase().startsWith(lexical.toLowerCase())) return shown + original.slice(lexical.length);
+  return composeLine({ ...partsOf(qualifier), quantity: shown });
 }
 
 /** Parts for a stored line, so an existing ingredient opens in the same fields it would be typed in. */

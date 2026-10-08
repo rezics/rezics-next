@@ -6,7 +6,7 @@ import { ChoiceSelect } from '@rezics/ui/select';
 import { cn } from '@rezics/ui/utils';
 import { ArrowDownIcon, ArrowUpIcon, PencilIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type FormEvent, type KeyboardEvent, useId, useRef, useState } from 'react';
-import { composeLine, emptyParts, type IngredientParts, knownUnits, parseLine, partsOf, partsProblem, qualifierOf }
+import { composeLine, emptyParts, type IngredientParts, knownUnits, parseLine, partsOf, partsProblem, qualifierOf, readingLine }
   from './ingredient-line.ts';
 import { IconAction, SyncedInput } from './controls.tsx';
 import type { Copy } from './messages.ts';
@@ -100,7 +100,7 @@ function LineEditor({ node, store, state, language, t, onDone }: Common & { node
     onDone();
   };
   const sections = groups(state);
-  return <form onSubmit={event => { event.preventDefault(); void save(); }} aria-label={t.edit({ name: node.qualifier.originalText.value })}
+  return <form onSubmit={event => { event.preventDefault(); void save(); }} aria-label={t.edit({ name: readingLine(node.qualifier) })}
     className="grid gap-3 rounded-2xl border border-primary/30 bg-card p-3">
     <LineFields line={line} parts={parts} idPrefix={id} t={t} language={language} autoFocus onSubmit={() => void save()} onCancel={onDone}
       onLine={value => { setLine(value); setParts(parseLine(value)); }}
@@ -118,7 +118,7 @@ function LineEditor({ node, store, state, language, t, onDone }: Common & { node
 function LineRow({ node, index, count, ...common }: Common & { node: IngredientNode; index: number; count: number }) {
   const [editing, setEditing] = useState(false);
   const { store, t, language, busy } = common;
-  const text = node.qualifier.originalText.value;
+  const text = readingLine(node.qualifier);
   if (editing) return <li data-line={node.occurrence}><LineEditor node={node} {...common} onDone={() => setEditing(false)} /></li>;
   return <li data-line={node.occurrence} className="flex items-center gap-1 border-border/60 border-b py-1 last:border-0">
     <span lang={language} dir={directionOf(language)} className="min-w-0 flex-1 text-pretty break-words py-1.5 font-medium">{text}</span>

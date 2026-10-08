@@ -4,21 +4,50 @@ import { Button, buttonVariants } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
 import { cn } from '@rezics/ui/utils';
 import { Clock3Icon, PencilIcon, XIcon } from 'lucide-react';
-import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
 import { browserMainApi } from '../../api/browser.ts';
 import { followHref } from '../../entity-page/href.ts';
+import { formatMeasure } from '../../recipe-editor/quantity.ts';
 import Link from '../../shell/localized-link.tsx';
 import type { WorkPageMessages } from '../messages.ts';
 import { Region } from '../region.tsx';
 import type { RecipeWorkPage } from '../types.ts';
 
-type Ingredient = RecipeWorkPage['ingredients'][number];
-type Occurrence = RecipeWorkPage['occurrences'][number];
+/** What the published page and the editor's preview both render. The editor fills it from its own state. */
+export interface ReadableRecipe {
+  ingredients: readonly ReadableIngredient[];
+  occurrences: readonly ReadableOccurrence[];
+  measures: readonly ReadableMeasure[];
+}
 
-function duration(value: { numerator: number; denominator: number }, unit: string | undefined): string {
-  const amount = value.numerator / value.denominator;
-  return `${Number.isInteger(amount) ? amount : amount.toFixed(1)} ${unit ?? 'min'}`;
+interface ReadableIngredient {
+  occurrence: string;
+  originalText: string;
+  line: string;
+  alternateLine?: string;
+  alternateSystem?: 'us' | 'metric';
+  hint?: string;
+  judgment?: 'seasoning' | 'leavening';
+  reason?: 'unparsed' | 'non-linear' | 'not-scalable';
+}
+
+interface ReadableOccurrence {
+  occurrence: string;
+  role: string;
+  parent: string;
+  labels: readonly { value: string }[];
+  qualifier?: {
+    type: string;
+    instructionText?: { value: string };
+    usesIngredient?: readonly string[];
+  };
+}
+
+interface ReadableMeasure {
+  kind: string;
+  value: { numerator: number; denominator: number };
+  unitText?: string;
 }
 
 function stepSeconds(instruction: string): number | null {
@@ -49,16 +78,16 @@ function StepTimer({ seconds, messages: t }: { seconds: number; messages: WorkPa
 /** The units a reader sees: each line as its cook wrote it, or all of them converted to one system. */
 type Units = 'written' | 'us' | 'metric';
 
-function shownLine(item: Ingredient, units: Units): string {
+function shownLine(item: ReadableIngredient, units: Units): string {
   if (units !== 'written' && item.alternateSystem === units && item.alternateLine) return item.alternateLine;
   return item.line ?? item.originalText;
 }
 
 /** Ingredients under their section headings; lines outside any section come first, unheaded. */
-function sectioned(page: RecipeWorkPage): { key: string; heading: string | null; items: Ingredient[] }[] {
+function sectioned(page: ReadableRecipe): { key: string; heading: string | null; items: ReadableIngredient[] }[] {
   const labels = new Map(page.occurrences.filter(item => item.role === 'group').map(item => [item.occurrence, item.labels[0]?.value ?? '']));
   const parents = new Map(page.occurrences.map(item => [item.occurrence, item.parent]));
-  const blocks: { key: string; heading: string | null; items: Ingredient[] }[] = [];
+  const blocks: { key: string; heading: string | null; items: ReadableIngredient[] }[] = [];
   for (const item of page.ingredients) {
     const parent = parents.get(item.occurrence);
     const heading = parent !== undefined && labels.has(parent) ? labels.get(parent)! : null;
@@ -70,7 +99,7 @@ function sectioned(page: RecipeWorkPage): { key: string; heading: string | null;
 }
 
 function IngredientList({ page, units, messages: t }: {
-  page: RecipeWorkPage; units: Units; messages: WorkPageMessages;
+  page: ReadableRecipe; units: Units; messages: WorkPageMessages;
 }) {
   return <div className="grid gap-4">{sectioned(page).map(block => <div key={block.key} className="grid gap-1">
     {block.heading ? <h4 className="font-medium text-muted-foreground text-sm">{block.heading}</h4> : null}
@@ -101,15 +130,26 @@ function UnitToggle({ value, onChange, messages: t }: {
   </div>;
 }
 
-function Steps({ items, messages: t }: { items: Occurrence[]; messages: WorkPageMessages }) {
-  const steps = items.filter(item => item.role === 'step' && item.qualifier?.type === 'recipe-step');
+/** The ingredient lines a step names, in the unit system the reader is looking at. */
+function linkedLines(step: ReadableOccurrence, page: ReadableRecipe, units: Units): string[] {
+  const ids = step.qualifier?.type === 'recipe-step' ? step.qualifier.usesIngredient ?? [] : [];
+  return ids.flatMap(id => {
+    const item = page.ingredients.find(ingredient => ingredient.occurrence === id);
+    return item ? [shownLine(item, units)] : [];
+  });
+}
+
+function Steps({ page, units, messages: t }: { page: ReadableRecipe; units: Units; messages: WorkPageMessages }) {
+  const steps = page.occurrences.filter(item => item.role === 'step' && item.qualifier?.type === 'recipe-step');
   return <ol className="grid gap-5">{steps.map((step, index) => {
-    const instruction = step.qualifier?.type === 'recipe-step' ? step.qualifier.instructionText.value : '';
+    const instruction = step.qualifier?.type === 'recipe-step' ? step.qualifier.instructionText?.value ?? '' : '';
+    const linked = linkedLines(step, page, units);
     const seconds = stepSeconds(instruction);
     return <li key={step.occurrence} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3">
       <span aria-hidden="true" className="bg-primary/10 flex size-8 items-center justify-center rounded-full font-semibold">
         {index + 1}</span>
       <div className="grid gap-2"><p className="leading-7">{instruction}</p>
+        {linked.length ? <p className="text-muted-foreground text-sm">{linked.join(' · ')}</p> : null}
         {seconds ? <StepTimer seconds={seconds} messages={t} /> : null}</div>
     </li>;
   })}</ol>;
@@ -117,7 +157,7 @@ function Steps({ items, messages: t }: { items: Occurrence[]; messages: WorkPage
 
 /** A focused recipe task keeps the display awake while its steps are open. */
 function CookMode({ page, messages: t, units, onClose }: {
-  page: RecipeWorkPage; messages: WorkPageMessages; units: Units;
+  page: ReadableRecipe; messages: WorkPageMessages; units: Units;
   onClose: () => void;
 }) {
   const close = useRef<HTMLButtonElement>(null);
@@ -171,9 +211,40 @@ function CookMode({ page, messages: t, units, onClose }: {
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.ingredients}</h3>
           <IngredientList page={page} units={units} messages={t} /></section>
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.method}</h3>
-          <Steps items={page.occurrences} messages={t} /></section>
+          <Steps page={page} units={units} messages={t} /></section>
       </div>
     </div>
+  </div>;
+}
+
+/** Yield, times, ingredients and method, shared by the Work page and the editor's preview. */
+export function RecipeContent({ page, units, messages: t, notes, controls, columns = true }: {
+  page: ReadableRecipe; units: Units; messages: WorkPageMessages; notes?: string | null; controls?: ReactNode;
+  /** Side by side from the `md` viewport. A narrow preview stacks instead. */
+  columns?: boolean;
+}) {
+  const measures = page.measures;
+  const total = measures.find(item => item.kind === 'total-duration');
+  const prep = measures.find(item => item.kind === 'preparation-duration');
+  const cook = measures.find(item => item.kind === 'cooking-duration');
+  const yieldMeasure = measures.find(item => item.kind === 'yield');
+  const facts = Boolean(yieldMeasure || prep || cook || total);
+  return <div className="grid gap-4">
+    {facts ? <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
+      {yieldMeasure ? <span><strong>{t.recipeYield}</strong> {formatMeasure(yieldMeasure.value, yieldMeasure.unitText)}</span> : null}
+      {prep ? <span><strong>{t.prepTime}</strong> {formatMeasure(prep.value, prep.unitText)}</span> : null}
+      {cook ? <span><strong>{t.cookTime}</strong> {formatMeasure(cook.value, cook.unitText)}</span> : null}
+      {total ? <span><strong>{t.totalTime}</strong> {formatMeasure(total.value, total.unitText)}</span> : null}
+    </div> : null}
+    {controls}
+    <div className={cn('grid gap-8', columns && 'md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]')}>
+      <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.ingredients}</h3>
+        <IngredientList page={page} units={units} messages={t} /></section>
+      <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.method}</h3>
+        <Steps page={page} units={units} messages={t} /></section>
+    </div>
+    {notes ? <section className="grid gap-2"><h3 className="font-semibold">{t.recipeNotes}</h3>
+      <p className="whitespace-pre-wrap leading-7">{notes}</p></section> : null}
   </div>;
 }
 
@@ -199,11 +270,6 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
   }, []);
   const convertible = page?.ingredients.some(item => item.alternateLine) ?? false;
   const base = initial?.measures.find(item => item.kind === 'servings');
-  const measures = page?.measures ?? [];
-  const total = measures.find(item => item.kind === 'total-duration');
-  const prep = measures.find(item => item.kind === 'preparation-duration');
-  const cook = measures.find(item => item.kind === 'cooking-duration');
-  const yieldMeasure = measures.find(item => item.kind === 'yield');
   const editorLink = edit ? <Link href={edit.href} className={buttonVariants({ variant: 'outline' })}>
     <PencilIcon aria-hidden="true" />{edit.label}</Link> : null;
   const scale = async (event: FormEvent) => {
@@ -218,37 +284,26 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
     } catch { setError(true); }
     finally { setBusy(false); }
   };
+  const controls = <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="flex flex-wrap items-end gap-4">
+      {base && base.value.numerator > 0 ? <form onSubmit={event => void scale(event)} className="flex items-end gap-2">
+        <label className="grid gap-1 text-sm" htmlFor="recipe-servings">{t.servings}
+          <Input id="recipe-servings" type="number" min={1} max={100} step="any" value={servings}
+            onChange={event => setServings(Number(event.target.value))} className="w-24" /></label>
+        <Button type="submit" variant="outline" disabled={busy || !Number.isInteger(servings)
+          || servings < 1 || servings > 100}>
+          {busy ? t.scaling : t.scaleRecipe}</Button>
+      </form> : null}
+      {convertible ? <UnitToggle value={units} onChange={setUnits} messages={t} /> : null}
+    </div>
+    <div className="flex flex-wrap gap-2">{editorLink}</div>
+  </div>;
   return <Region id="recipe-experience" title={t.recipeMethod}>
     {page ? <>
-      <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-        {yieldMeasure ? <span><strong>{t.recipeYield}</strong> {duration(yieldMeasure.value, yieldMeasure.unitText)}</span> : null}
-        {prep ? <span><strong>{t.prepTime}</strong> {duration(prep.value, prep.unitText)}</span> : null}
-        {cook ? <span><strong>{t.cookTime}</strong> {duration(cook.value, cook.unitText)}</span> : null}
-        {total ? <span><strong>{t.totalTime}</strong> {duration(total.value, total.unitText)}</span> : null}
-      </div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="flex flex-wrap items-end gap-4">
-          {base && base.value.numerator > 0 ? <form onSubmit={event => void scale(event)} className="flex items-end gap-2">
-            <label className="grid gap-1 text-sm" htmlFor="recipe-servings">{t.servings}
-              <Input id="recipe-servings" type="number" min={1} max={100} step="any" value={servings}
-                onChange={event => setServings(Number(event.target.value))} className="w-24" /></label>
-            <Button type="submit" variant="outline" disabled={busy || !Number.isInteger(servings)
-              || servings < 1 || servings > 100}>
-              {busy ? t.scaling : t.scaleRecipe}</Button>
-          </form> : null}
-          {convertible ? <UnitToggle value={units} onChange={setUnits} messages={t} /> : null}
-        </div>
-        <div className="flex flex-wrap gap-2">{editorLink}</div>
-      </div>
-      {error ? <p role="alert" className="text-destructive text-sm">{t.scaleFailed}</p> : null}
-      <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
-        <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.ingredients}</h3>
-          <IngredientList page={page} units={units} messages={t} /></section>
-        <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.method}</h3>
-          <Steps items={page.occurrences} messages={t} /></section>
-      </div>
-      {text ? <section className="grid gap-2"><h3 className="font-semibold">{t.recipeNotes}</h3>
-        <p className="whitespace-pre-wrap leading-7">{text}</p></section> : null}
+      <RecipeContent page={page} units={units} messages={t} notes={text} controls={<>
+        {controls}
+        {error ? <p role="alert" className="text-destructive text-sm">{t.scaleFailed}</p> : null}
+      </>} />
       {cooking ? <CookMode page={page} messages={t} units={units}
         onClose={() => setCooking(false)} /> : null}
     </> : <>

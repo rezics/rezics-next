@@ -109,3 +109,42 @@ export function amountText(value: Rational | undefined): string {
   const rest = value.numerator - whole * value.denominator;
   return whole ? `${whole} ${rest}/${value.denominator}` : `${rest}/${value.denominator}`;
 }
+
+// The published recipe reads a quantity as a kitchen fraction: eighths, quarters, thirds and halves.
+// The same snaps are what Main puts on the Work page, so the editor's list and the page cannot drift.
+const KITCHEN: readonly [bigint, bigint, string][] = [
+  [0n, 1n, ''], [1n, 8n, '⅛'], [1n, 4n, '¼'], [1n, 3n, '⅓'], [3n, 8n, '⅜'], [1n, 2n, '½'],
+  [5n, 8n, '⅝'], [2n, 3n, '⅔'], [3n, 4n, '¾'], [7n, 8n, '⅞'], [1n, 1n, '1'],
+];
+
+/** A stored rational the way a published recipe reads it: "1 ½", "¾", "2". */
+export function formatQuantity(value: Rational): string {
+  const numerator = BigInt(value.numerator);
+  const denominator = BigInt(value.denominator);
+  if (denominator < 1n || numerator < 0n) return '';
+  const whole = numerator / denominator;
+  const remainder = numerator % denominator;
+  let bestNum = remainder;
+  let bestDen = denominator;
+  let fraction = '';
+  for (const [snapNum, snapDen, text] of KITCHEN) {
+    const diff = remainder * snapDen - snapNum * denominator;
+    const abs = diff < 0n ? -diff : diff;
+    const den = denominator * snapDen;
+    if (abs * bestDen < bestNum * den) {
+      bestNum = abs;
+      bestDen = den;
+      fraction = text;
+    }
+  }
+  let shown = whole;
+  if (fraction === '1') { shown += 1n; fraction = ''; }
+  else if (fraction === '' && remainder !== 0n && whole === 0n) fraction = '⅛';
+  const wholeText = shown === 0n ? '' : shown.toString();
+  return wholeText && fraction ? `${wholeText} ${fraction}` : wholeText || fraction || '0';
+}
+
+/** A stored amount and its unit, read the same way on the editor's preview and the Work page. */
+export function formatMeasure(value: Rational, unit: string | undefined): string {
+  return `${formatQuantity(value)} ${unit ?? 'min'}`;
+}

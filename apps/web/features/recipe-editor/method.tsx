@@ -6,6 +6,7 @@ import { Textarea } from '@rezics/ui/textarea';
 import { ArrowDownIcon, ArrowUpIcon, LinkIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { type KeyboardEvent, useRef, useState } from 'react';
 import { IconAction, SyncedTextarea } from './controls.tsx';
+import { readingLine } from './ingredient-line.ts';
 import type { Copy } from './messages.ts';
 import { groups, ingredients, type IngredientNode, type RecipeState, steps, type StepNode } from './model.ts';
 import { selectionWhilePending, textWhilePending, toggleIngredient } from './step-selection.ts';
@@ -15,7 +16,7 @@ import { directionOf } from '../studio/types.ts';
 interface Common { store: RecipeStore; state: RecipeState; language: string; t: Copy; busy: boolean }
 
 /** The name an ingredient goes by in a list of links: its own line, which is unique through its section heading. */
-const nameOf = (node: IngredientNode) => node.qualifier.originalText.value;
+const nameOf = (node: IngredientNode) => readingLine(node.qualifier);
 
 /** Every ingredient as a checkbox, under its section's heading, so equal names in two sections stay apart. */
 function UsesPicker({ state, value, onChange, t, idPrefix }: {

@@ -17,7 +17,7 @@ export default {
   measuresHeading: 'Menge und Zeit',
   makes: 'Ergibt', makesUnit: 'Was es ergibt', makesUnitHelp: 'Muffins, Brote, eine Springform von 26 cm…',
   servings: 'Portionen', servingsWord: 'Portionen',
-  prepTime: 'Vorbereitungszeit', cookTime: 'Garzeit', totalTime: 'Gesamtzeit', minutesUnit: 'Min.',
+  prepTime: 'Vorbereitungszeit', cookTime: 'Garzeit', totalTime: 'Gesamtzeit', minutesUnit: 'Min.', minutesName: 'Minuten',
   timeOther: insert('Festgelegt als {{value}}. Eine Eingabe hier ersetzt es durch Minuten.', { value: String }),
   amountInvalid: 'Nutze eine Zahl wie 4, 1½ oder 0,5.',
   minutesInvalid: 'Nutze ganze Minuten, zum Beispiel 45.',

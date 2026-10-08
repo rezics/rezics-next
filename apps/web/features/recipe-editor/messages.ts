@@ -25,7 +25,7 @@ const en = {
   measuresHeading: 'Yield and time',
   makes: 'Makes', makesUnit: 'What it makes', makesUnitHelp: 'muffins, loaves, a 9-inch pie…',
   servings: 'Servings', servingsWord: 'servings',
-  prepTime: 'Prep time', cookTime: 'Cook time', totalTime: 'Total time', minutesUnit: 'min',
+  prepTime: 'Prep time', cookTime: 'Cook time', totalTime: 'Total time', minutesUnit: 'min', minutesName: 'minutes',
   timeOther: insert('Set as {{value}}. Typing here replaces it with minutes.', { value: String }),
   amountInvalid: 'Use a number such as 4, 1½ or 0.5.',
   minutesInvalid: 'Use whole minutes, such as 45.',

@@ -17,7 +17,7 @@ export default {
   measuresHeading: '분량과 시간',
   makes: '완성량', makesUnit: '완성량 단위', makesUnitHelp: '머핀, 식빵, 9인치 파이…',
   servings: '인분', servingsWord: '인분',
-  prepTime: '준비 시간', cookTime: '조리 시간', totalTime: '총 시간', minutesUnit: '분',
+  prepTime: '준비 시간', cookTime: '조리 시간', totalTime: '총 시간', minutesUnit: '분', minutesName: '분',
   timeOther: insert('“{{value}}”(으)로 설정되어 있습니다. 여기에 입력하면 분 단위로 바뀝니다.', { value: String }),
   amountInvalid: '4, 1½, 0.5처럼 숫자로 입력하세요.',
   minutesInvalid: '45처럼 정수 분으로 입력하세요.',

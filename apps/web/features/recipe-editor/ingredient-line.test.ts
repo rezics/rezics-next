@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { composeLine, parseLine, partsOf, partsProblem, qualifierOf } from './ingredient-line.ts';
+import { composeLine, parseLine, partsOf, partsProblem, qualifierOf, readingLine } from './ingredient-line.ts';
 
 test('one typed line splits into quantity, unit, name and note', () => {
   expect(parseLine('1½ cups all-purpose flour, sifted')).toEqual({ quantity: '1½', unit: 'cups', name: 'all-purpose flour', note: 'sifted' });
@@ -33,6 +33,15 @@ test('an edit keeps what the editor does not show and drops a unit IRI whose tex
   const same = qualifierOf(parseLine('300 g flour'), 'en', previous);
   expect(same).toMatchObject({ unit: 'https://qudt.org/vocab/unit/GM', optional: true, substituteFor: previous.substituteFor });
   expect(qualifierOf(parseLine('300 ml flour'), 'en', previous).unit).toBeUndefined();
+});
+
+test('a stored line reads with the published quantity, whatever way it was typed', () => {
+  expect(readingLine(qualifierOf(parseLine('1½ cups flour, sifted'), 'en'))).toBe('1 ½ cups flour, sifted');
+  expect(readingLine(qualifierOf(parseLine('1 1/2 cups flour, sifted'), 'en'))).toBe('1 ½ cups flour, sifted');
+  expect(readingLine(qualifierOf(parseLine('200 g butter, softened'), 'en'))).toBe('200 g butter, softened');
+  expect(readingLine(qualifierOf(parseLine('salt to taste'), 'en'))).toBe('salt to taste');
+  expect(readingLine(qualifierOf(parseLine('2-3 cloves garlic'), 'en'))).toBe('2–3 cloves garlic');
+  expect(readingLine(qualifierOf(parseLine('¾ tsp salt'), 'en'))).toBe('¾ tsp salt');
 });
 
 test('empty and oversized lines are caught before they are sent', () => {

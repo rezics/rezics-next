@@ -157,10 +157,13 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const principal = await work.account.verify(request, ['work:read']);
         const contribution = `https://rezics.com/id/${params.contribution}`;
+        // A baseline member's contribution proof is its own graph ASK. The exact-draft
+        // budget counts only the current-Work ASK, the revision anchor, and the identity read.
+        const readable = await work.access.canReadContributionDraft(
+          principal, query.actingSubject, contribution);
         const revision = await readExactContributionDraft(work.environment, contribution,
           `https://rezics.com/id/${params.revision}`, async target => {
-            if (!await work.access.canReadContributionDraft(
-              principal, query.actingSubject, target)) return false;
+            if (!readable) return false;
             const current = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
               PREFIX schema: <https://schema.org/> ASK {
                 GRAPH <urn:rezics:graph:current> {

@@ -17,7 +17,7 @@ export default {
   measuresHeading: 'Rendimiento y tiempo',
   makes: 'Rinde', makesUnit: 'Qué rinde', makesUnitHelp: 'magdalenas, panes, un molde de 24 cm…',
   servings: 'Raciones', servingsWord: 'raciones',
-  prepTime: 'Preparación', cookTime: 'Cocción', totalTime: 'Tiempo total', minutesUnit: 'min',
+  prepTime: 'Preparación', cookTime: 'Cocción', totalTime: 'Tiempo total', minutesUnit: 'min', minutesName: 'minutos',
   timeOther: insert('Definido como {{value}}. Escribir aquí lo sustituye por minutos.', { value: String }),
   amountInvalid: 'Usa un número como 4, 1½ o 0,5.',
   minutesInvalid: 'Usa minutos enteros, como 45.',

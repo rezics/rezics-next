@@ -116,9 +116,9 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   const cake = page.getByRole('group', { name: 'Section Cake' });
   await expect(cake).toBeVisible();
   await addLine(page, 'Add an ingredient to Cake', '1½ cups flour, sifted');
-  await expect(lines(cake)).toHaveText(['1½ cups flour, sifted']);
+  await expect(lines(cake)).toHaveText(['1 ½ cups flour, sifted']);
   await addLine(page, 'Add an ingredient to Cake', '200 g butter, softened');
-  await expect(lines(cake)).toHaveText(['1½ cups flour, sifted', '200 g butter, softened']);
+  await expect(lines(cake)).toHaveText(['1 ½ cups flour, sifted', '200 g butter, softened']);
   await page.getByRole('form', { name: 'Add a section' }).getByRole('textbox', { name: 'Section name' }).fill('Icing');
   await page.getByRole('button', { name: 'Add section' }).click();
   const icing = page.getByRole('group', { name: 'Section Icing' });
@@ -127,15 +127,15 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await expect(lines(icing)).toHaveText(['100 g butter']);
   mark('sections and lines written');
   // The line is read into parts that stay editable, and the edit keeps its place.
-  await page.getByRole('button', { name: 'Edit 1½ cups flour, sifted' }).click();
-  const edit = page.getByRole('form', { name: 'Edit 1½ cups flour, sifted' });
+  await page.getByRole('button', { name: 'Edit 1 ½ cups flour, sifted' }).click();
+  const edit = page.getByRole('form', { name: 'Edit 1 ½ cups flour, sifted' });
   await expect(edit.getByRole('textbox', { name: 'Amount' })).toHaveValue('1½');
   await expect(edit.getByRole('combobox', { name: 'Unit' })).toHaveValue('cups');
   await expect(edit.getByRole('textbox', { name: 'Ingredient', exact: true })).toHaveValue('flour');
   await expect(edit.getByRole('textbox', { name: 'Note' })).toHaveValue('sifted');
   await edit.getByRole('textbox', { name: 'Amount' }).fill('1 1/2');
   await edit.getByRole('button', { name: 'Save' }).click();
-  await expect(lines(cake)).toHaveText(['1 1/2 cups flour, sifted', '200 g butter, softened']);
+  await expect(lines(cake)).toHaveText(['1 ½ cups flour, sifted', '200 g butter, softened']);
 
   mark('line edited');
   // Steps; the third uses the icing's butter, not the cake's.
@@ -147,7 +147,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   };
   await addStep('Cream the butter with the sugar.', 'Cake', '200 g butter, softened');
   await expect(steps(page)).toHaveCount(1);
-  await addStep('Fold in the flour, spoon into a tin and bake for 25 minutes.', 'Cake', '1 1/2 cups flour, sifted');
+  await addStep('Fold in the flour, spoon into a tin and bake for 25 minutes.', 'Cake', '1 ½ cups flour, sifted');
   await expect(steps(page)).toHaveCount(2);
   await addStep('Beat the icing butter until pale.', 'Icing', '100 g butter');
   await expect(steps(page)).toHaveCount(3);
@@ -185,7 +185,7 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   // After a reload everything is as written, with the links still on the right ingredients.
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Title' })).toHaveValue('Lemon poppy muffins');
-  await expect(lines(page.getByRole('group', { name: 'Section Cake' }))).toHaveText(['1 1/2 cups flour, sifted', '200 g butter, softened']);
+  await expect(lines(page.getByRole('group', { name: 'Section Cake' }))).toHaveText(['1 ½ cups flour, sifted', '200 g butter, softened']);
   await expect(lines(page.getByRole('group', { name: 'Section Icing' }))).toHaveText(['120 g butter']);
   await expect(steps(page)).toHaveCount(4);
   await expect(steps(page).nth(2).getByRole('button', { name: /1 ingredient linked/ })).toBeVisible();

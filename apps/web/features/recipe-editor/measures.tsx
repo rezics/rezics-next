@@ -49,12 +49,15 @@ export function MeasuresSection({ store, state, language, t }: Common) {
     const other = minutesOf(measure) === 'other';
     const problem = invalid[name];
     const described = problem ? `${name}-problem` : other ? `${name}-other` : undefined;
-    return <label key={name} className="grid min-w-0 gap-1 text-sm">{label}
-      <SyncedInput name={name} inputMode={/^\d*$/.test(shown) ? 'numeric' : 'text'} value={shown} autoComplete="off"
-        placeholder={other ? undefined : t.minutesUnit}
-        aria-invalid={problem ? true : undefined} aria-describedby={described}
-        onBlur={event => commitTime(name, event.currentTarget)}
-        onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} />
+    return <label key={name} htmlFor={name} className="grid min-w-0 gap-1 text-sm">{label}
+      <span className="flex min-w-0 items-center gap-2">
+        <SyncedInput id={name} name={name} inputMode={/^\d*$/.test(shown) ? 'numeric' : 'text'} value={shown} autoComplete="off"
+          className="min-w-0 flex-1" aria-label={other ? label : `${label} (${t.minutesName})`}
+          aria-invalid={problem ? true : undefined} aria-describedby={described}
+          onBlur={event => commitTime(name, event.currentTarget)}
+          onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} />
+        {other ? null : <span aria-hidden="true" className="shrink-0 text-muted-foreground">{t.minutesName}</span>}
+      </span>
       {problem ? <span id={`${name}-problem`} className="text-destructive-foreground text-xs">{problem}</span>
         : other ? <span id={`${name}-other`} className="text-muted-foreground text-xs">{t.timeOther({ value: shown })}</span>
           : null}

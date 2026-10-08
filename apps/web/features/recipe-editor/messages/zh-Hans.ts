@@ -17,7 +17,7 @@ export default {
   measuresHeading: '份量与时间',
   makes: '成品', makesUnit: '成品单位', makesUnitHelp: '玛芬、吐司、一个 9 英寸派…',
   servings: '人份', servingsWord: '人份',
-  prepTime: '准备时间', cookTime: '烹饪时间', totalTime: '总时间', minutesUnit: '分钟',
+  prepTime: '准备时间', cookTime: '烹饪时间', totalTime: '总时间', minutesUnit: '分钟', minutesName: '分钟',
   timeOther: insert('当前设为{{value}}。在此输入会改为分钟数。', { value: String }),
   amountInvalid: '请输入数字，例如 4、1½ 或 0.5。',
   minutesInvalid: '请输入整数分钟，例如 45。',

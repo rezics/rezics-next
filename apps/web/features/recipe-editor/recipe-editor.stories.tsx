@@ -48,7 +48,7 @@ export const TypesAnIngredientLine: Story = {
     await expect(within(add).getByRole('textbox', { name: 'Ingredient' })).toHaveValue('all-purpose flour');
     await expect(within(add).getByRole('textbox', { name: 'Note' })).toHaveValue('sifted');
     await userEvent.keyboard('{Enter}');
-    await waitFor(() => expect(lines(canvasElement)).toEqual(['1½ cups all-purpose flour, sifted']));
+    await waitFor(() => expect(lines(canvasElement)).toEqual(['1 ½ cups all-purpose flour, sifted']));
     // The first write created the recipe's Composition, then inserted the line with its exact amount.
     await expect(current.calls.map(call => call.name)).toEqual(['create', 'changes']);
     await expect(changes()[0]!.body).toMatchObject({ operations: [{ op: 'insert', role: 'ingredient', qualifier: {
@@ -112,7 +112,7 @@ export const RemovingALinkedLine: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(canvas.getByRole('button', { name: 'Remove 200 g butter, softened' }));
-    await waitFor(() => expect(lines(canvasElement)).toEqual(['1½ cups flour, sifted', '100 g butter']));
+    await waitFor(() => expect(lines(canvasElement)).toEqual(['1 ½ cups flour, sifted', '100 g butter']));
     await expect(ops(changes()[0]!).map(op => op.op)).toEqual(['update', 'remove']);
     const step = current.world().recipe.nodes.find(node => node.role === 'step');
     await expect(step && step.role === 'step' && step.qualifier.usesIngredient).toEqual([]);
@@ -131,11 +131,11 @@ export const StaleEditFromASecondTab: Story = {
           qualifier: qualifierOf(parseLine('2 tbsp lemon juice'), 'en') }] }));
       }
     };
-    await userEvent.click(canvas.getByRole('button', { name: 'Move 1½ cups flour, sifted up' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Move 1 ½ cups flour, sifted up' }));
     await waitFor(() => expect(changes()).toHaveLength(2));
     await expect(changes()[0]!.body).toMatchObject({ expectedHead: id(900) });
     await expect(changes()[1]!.body).not.toMatchObject({ expectedHead: id(900) });
-    await waitFor(() => expect(lines(canvasElement)).toEqual(['1½ cups flour, sifted', '200 g butter, softened', '100 g butter', '2 tbsp lemon juice']));
+    await waitFor(() => expect(lines(canvasElement)).toEqual(['1 ½ cups flour, sifted', '200 g butter, softened', '100 g butter', '2 tbsp lemon juice']));
     await expect(canvas.queryByRole('alert')).toBeNull();
   },
 };
@@ -186,7 +186,7 @@ export const PendingStepTextSurvivesAnOlderSave: Story = {
     const row = step.closest('li');
     if (!row) throw new Error('step row');
     await userEvent.click(within(row).getByRole('button', { name: '1 ingredient linked' }));
-    await userEvent.click(within(row).getByRole('checkbox', { name: '1½ cups flour, sifted' }));
+    await userEvent.click(within(row).getByRole('checkbox', { name: '1 ½ cups flour, sifted' }));
     second.release();
     await waitFor(() => expect(changes().length).toBeGreaterThanOrEqual(3));
     await expect(changes().at(-1)!.body).toMatchObject({ operations: [{ qualifier: {
@@ -200,7 +200,8 @@ export const PendingStepTextSurvivesAnOlderSave: Story = {
 export const YieldAndTimes: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const cook = canvas.getByRole('textbox', { name: 'Cook time' });
+    const cook = canvas.getByRole('textbox', { name: 'Cook time (minutes)' });
+    await expect(canvas.getAllByText('minutes')).toHaveLength(3);
     await userEvent.type(cook, '45');
     await userEvent.tab();
     await waitFor(() => expect(current.calls.filter(call => call.name === 'timings')).toHaveLength(1));

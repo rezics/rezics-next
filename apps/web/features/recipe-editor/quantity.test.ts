@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { amountText, leadingAmount, typedAmount, wholeNumber } from './quantity.ts';
+import { amountText, formatMeasure, formatQuantity, leadingAmount, typedAmount, wholeNumber } from './quantity.ts';
 
 test('a leading quantity keeps its written form and an exact reduced value', () => {
   expect(leadingAmount('1½ cups flour')).toEqual({ lexical: '1½', amount: { numerator: 3, denominator: 2 }, rest: 'cups flour' });
@@ -34,4 +34,26 @@ test('field values: whole numbers, typed amounts and their text', () => {
   expect(typedAmount('2-3')).toBeNull();
   expect(amountText({ numerator: 3, denominator: 2 })).toBe('1 1/2');
   expect(amountText({ numerator: 4, denominator: 1 })).toBe('4');
+});
+
+test('a quantity reads as the kitchen fraction the published recipe uses', () => {
+  expect(formatQuantity({ numerator: 3, denominator: 2 })).toBe('1 ½');
+  expect(formatQuantity({ numerator: 1, denominator: 2 })).toBe('½');
+  expect(formatQuantity({ numerator: 1, denominator: 3 })).toBe('⅓');
+  expect(formatQuantity({ numerator: 2, denominator: 3 })).toBe('⅔');
+  expect(formatQuantity({ numerator: 1, denominator: 4 })).toBe('¼');
+  expect(formatQuantity({ numerator: 3, denominator: 4 })).toBe('¾');
+  expect(formatQuantity({ numerator: 1, denominator: 8 })).toBe('⅛');
+  expect(formatQuantity({ numerator: 3, denominator: 8 })).toBe('⅜');
+  expect(formatQuantity({ numerator: 5, denominator: 8 })).toBe('⅝');
+  expect(formatQuantity({ numerator: 7, denominator: 8 })).toBe('⅞');
+  expect(formatQuantity({ numerator: 9, denominator: 4 })).toBe('2 ¼');
+  expect(formatQuantity({ numerator: 4, denominator: 1 })).toBe('4');
+  expect(formatQuantity({ numerator: 0, denominator: 1 })).toBe('0');
+  // Smaller than half of an eighth still reads as an eighth, never as zero.
+  expect(formatQuantity({ numerator: 1, denominator: 100 })).toBe('⅛');
+  expect(formatMeasure({ numerator: 90, denominator: 1 }, 's')).toBe('90 s');
+  expect(formatMeasure({ numerator: 20, denominator: 1 }, 'min')).toBe('20 min');
+  expect(formatMeasure({ numerator: 3, denominator: 2 }, 'min')).toBe('1 ½ min');
+  expect(formatMeasure({ numerator: 12, denominator: 1 }, 'muffins')).toBe('12 muffins');
 });

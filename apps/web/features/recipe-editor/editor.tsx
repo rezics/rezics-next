@@ -15,6 +15,7 @@ import { DetailsSection } from './details.tsx';
 import { IngredientsSection } from './ingredients.tsx';
 import { MeasuresSection } from './measures.tsx';
 import { messages, type RecipeEditorMessages } from './messages.ts';
+import { messages as workPageMessages } from '../work-page/messages.ts';
 import { MethodSection } from './method.tsx';
 import { ingredients, type RecipeState, steps } from './model.ts';
 import { Preview } from './preview.tsx';
@@ -107,7 +108,8 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
         <MethodSection {...common} />
       </div>
       <aside className={cn('min-w-0 lg:sticky lg:top-28 lg:self-start', view === 'edit' && 'hidden lg:block')}>
-        <Preview state={state} title={entry.title} description={entry.description} language={language} t={t} />
+        <Preview state={state} title={entry.title} description={entry.description} notes={typedNotes} language={language} t={t}
+          messages={workPageMessages[locale]} />
       </aside>
     </div>
   </div>;

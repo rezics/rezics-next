@@ -17,7 +17,7 @@ export default {
   measuresHeading: '分量と時間',
   makes: '仕上がり', makesUnit: '仕上がりの単位', makesUnitHelp: 'マフィン、食パン、9インチのパイ…',
   servings: '人数', servingsWord: '人分',
-  prepTime: '下準備', cookTime: '調理時間', totalTime: '合計時間', minutesUnit: '分',
+  prepTime: '下準備', cookTime: '調理時間', totalTime: '合計時間', minutesUnit: '分', minutesName: '分',
   timeOther: insert('「{{value}}」として設定されています。ここに入力すると分に置き換わります。', { value: String }),
   amountInvalid: '4、1½、0.5 のように数字で入力してください。',
   minutesInvalid: '45 のように整数の分で入力してください。',
