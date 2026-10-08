@@ -41,3 +41,8 @@ The unit gate classifies inherited failures against the stream's first-merge bas
 - Launch owns the G-1421 original G847 fixture wiring; all its assertions stay.
 - Program owns wider owner regressions and gate diagnostics (G-1417). Kernel fixes only failures it identifies as its own.
 - Preserve peer edits and frozen originals; the vault is manager-only; the memory floor is 12 GiB for up to 24 host workers; no worker `--heavy`.
+
+## Update 2026-10-08 (later)
+
+- Landed: G-1446 (15e1d68be), G-1445 (40ba4e279, the Kernel-owned red owner cases from Program's G-1428 bisect), G-1437 year template `work-publication-years` (6d92f2faa; posting in `access.template_seek_entry`, page cost bounded at 5,000 extra entries). G-1437's image `4cc7c568097a` is built and the stack refreshed by the detached unit `rezics-kernel-build-refresh-1437` (self-mails `kernel-g1437-build-refresh-result`); close G-1437 verified only when both exits are 0.
+- G-1435 (Bangumi-like facts as data, goal/g-1435 149666d97) is done and tested but not landed: it makes `task web:typecheck` fail at `apps/web/features/recipe-editor/edit-page.tsx(104,75)` (completionStatus gains `upcoming`/`cancelled`), a file Launch's G-1444 claims together with `initial-details.ts`. Launch was mailed (`kernel-g1435-web-blocker-1008`); land after G-1444 widens both files, or on "kernel may edit". It needs `task dev:refresh -- --wait` (facet-status-v2 is a model change). Follow-up: journal `importBangumiWorkFacts` into `importDataset`. G-1436 (credit roles) is dispatchable now that G-1435 has released the lexicon seed.
