@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
+import { createGovernanceOutputRedactor } from '../../fixture/command-output.ts';
 import { BootstrapApiError, type BootstrapApi } from './api.ts';
 import type { BootstrapJournal } from './journal.ts';
 
@@ -246,10 +247,12 @@ export interface GovernanceCommandResult {
   stderr: string;
 }
 
+export { createGovernanceOutputRedactor };
+
+/** Replace a Postgres URL or a bearer token. Surrounding text, including color, stays. */
 export function redactGovernanceOutput(text: string): string {
-  return text
-    .replace(/\b(?:postgres|postgresql):\/\/\S+/gi, '[database]')
-    .replace(/\bBearer\s+\S+/gi, 'Bearer [token]');
+  const redactor = createGovernanceOutputRedactor();
+  return redactor.push(text) + redactor.finish();
 }
 
 export function platformGovernanceCommand(envFile: string): [string, ...string[]] {

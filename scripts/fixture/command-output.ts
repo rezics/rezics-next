@@ -58,17 +58,45 @@ function isSpace(char: string): boolean {
 type Scan =
   | { kind: 'emit'; end: number }
   | { kind: 'hold' }
-  | { kind: 'secret'; nameEnd: number; valueEnd: number; preservedAnsi: string; open: boolean };
+  | { kind: 'secret'; replacement: string; valueEnd: number; open: boolean };
+
+type ValueRead = { kind: 'hold' } | { kind: 'none' } | { kind: 'value'; end: number; open: boolean };
+
+/** A credential runs until whitespace or a color sequence. The sequence stays. */
+function readValue(text: string, start: number, flush: boolean): ValueRead {
+  let valueEnd = start;
+  if (valueEnd >= text.length || isSpace(text[valueEnd]!)) return { kind: 'none' };
+  while (valueEnd < text.length) {
+    if (isSpace(text[valueEnd]!)) break;
+    if (text.charCodeAt(valueEnd) === 0x1b) {
+      const looked = lookAnsi(text, valueEnd);
+      if (looked.kind === 'incomplete') {
+        if (valueEnd === start) return flush ? { kind: 'none' } : { kind: 'hold' };
+        return { kind: 'value', end: valueEnd, open: !flush };
+      }
+      if (looked.kind === 'sequence') break;
+    }
+    valueEnd++;
+  }
+  if (valueEnd === start) return { kind: 'none' };
+  if (valueEnd === text.length && !flush) return { kind: 'value', end: valueEnd, open: true };
+  return { kind: 'value', end: valueEnd, open: false };
+}
+
+function isWord(code: number): boolean {
+  return (code >= 48 && code <= 57) || (code >= 65 && code <= 90) || (code >= 97 && code <= 122) || code === 95;
+}
 
 function skipGap(
   text: string,
   index: number,
   flush: boolean,
+  spaces = true,
 ): { index: number; ansi: string } | 'hold' {
   let ansi = '';
   let cursor = index;
   while (cursor < text.length) {
-    if (isSpace(text[cursor]!)) {
+    if (spaces && isSpace(text[cursor]!)) {
       cursor++;
       continue;
     }
@@ -101,33 +129,121 @@ function scanAssignment(text: string, index: number, flush: boolean): Scan {
   const afterEquals = skipGap(text, beforeEquals.index + 1, flush);
   if (afterEquals === 'hold') return { kind: 'hold' };
   const preservedAnsi = beforeEquals.ansi + afterEquals.ansi;
-  let valueEnd = afterEquals.index;
-  if (valueEnd >= text.length || isSpace(text[valueEnd]!)) return { kind: 'emit', end: nameEnd };
-  while (valueEnd < text.length) {
-    if (isSpace(text[valueEnd]!)) break;
-    if (text.charCodeAt(valueEnd) === 0x1b) {
-      const looked = lookAnsi(text, valueEnd);
-      if (looked.kind === 'incomplete') {
-        // No value byte yet: an unfinished color sequence is not a credential.
-        if (valueEnd === afterEquals.index) return flush ? { kind: 'emit', end: nameEnd } : { kind: 'hold' };
-        return { kind: 'secret', nameEnd, valueEnd, preservedAnsi, open: !flush };
-      }
-      if (looked.kind === 'sequence') break;
-    }
-    valueEnd++;
-  }
-  if (valueEnd === afterEquals.index) return { kind: 'emit', end: nameEnd };
+  const value = readValue(text, afterEquals.index, flush);
+  if (value.kind === 'hold') return { kind: 'hold' };
+  if (value.kind === 'none') return { kind: 'emit', end: nameEnd };
   // The value can continue in the next read. Drop it once the assignment is known
   // so a tail window cannot retain the credential.
-  if (valueEnd === text.length && !flush) return { kind: 'secret', nameEnd, valueEnd, preservedAnsi, open: true };
-  return { kind: 'secret', nameEnd, valueEnd, preservedAnsi, open: false };
+  return {
+    kind: 'secret',
+    replacement: `${name}=[redacted]${preservedAnsi}`,
+    valueEnd: value.end,
+    open: value.open,
+  };
+}
+
+const DATABASE_SCHEMES = ['postgresql://', 'postgres://'] as const;
+
+function schemeRelation(text: string, index: number, scheme: string): 'match' | 'prefix' | 'no' {
+  const available = text.length - index;
+  const limit = Math.min(available, scheme.length);
+  for (let i = 0; i < limit; i++) {
+    const code = text.charCodeAt(index + i)!;
+    const folded = code >= 65 && code <= 90 ? code + 32 : code;
+    if (folded !== scheme.charCodeAt(i)) return 'no';
+  }
+  return available >= scheme.length ? 'match' : 'prefix';
+}
+
+function isCandidateStart(code: number): boolean {
+  const folded = code >= 65 && code <= 90 ? code + 32 : code;
+  return folded === 112 || folded === 98;
+}
+
+function finishDatabase(text: string, schemeEnd: number, flush: boolean): Scan {
+  const gap = skipGap(text, schemeEnd, flush, false);
+  if (gap === 'hold') return { kind: 'hold' };
+  const value = readValue(text, gap.index, flush);
+  if (value.kind === 'hold') return { kind: 'hold' };
+  if (value.kind === 'none') return { kind: 'emit', end: schemeEnd };
+  return { kind: 'secret', replacement: `[database]${gap.ansi}`, valueEnd: value.end, open: value.open };
+}
+
+/** A word boundary ignores color. `m` from a preceding SGR sequence is not a letter. */
+function scanDatabase(text: string, index: number, flush: boolean, wordEdge: boolean): Scan | null {
+  if (!wordEdge) return null;
+  let prefix = false;
+  for (const scheme of DATABASE_SCHEMES) {
+    const relation = schemeRelation(text, index, scheme);
+    if (relation === 'match') return finishDatabase(text, index + scheme.length, flush);
+    if (relation === 'prefix') prefix = true;
+  }
+  if (!prefix) return null;
+  return flush ? { kind: 'emit', end: index + 1 } : { kind: 'hold' };
+}
+
+function scanBearer(text: string, index: number, flush: boolean, wordEdge: boolean): Scan | null {
+  if (!wordEdge) return null;
+  const relation = schemeRelation(text, index, 'bearer');
+  if (relation === 'prefix') return flush ? { kind: 'emit', end: index + 1 } : { kind: 'hold' };
+  if (relation !== 'match') return null;
+  const after = index + 'bearer'.length;
+  if (after < text.length && isWord(text.charCodeAt(after)!)) return null;
+  const lead = skipGap(text, after, flush, false);
+  if (lead === 'hold') return { kind: 'hold' };
+  if (lead.index >= text.length || !isSpace(text[lead.index]!)) {
+    return lead.index >= text.length && !flush ? { kind: 'hold' } : { kind: 'emit', end: after };
+  }
+  const gap = skipGap(text, lead.index, flush, true);
+  if (gap === 'hold') return { kind: 'hold' };
+  const value = readValue(text, gap.index, flush);
+  if (value.kind === 'hold') return { kind: 'hold' };
+  if (value.kind === 'none') return gap.index >= text.length && !flush ? { kind: 'hold' } : { kind: 'emit', end: after };
+  return {
+    kind: 'secret',
+    replacement: `Bearer [token]${lead.ansi}${gap.ansi}`,
+    valueEnd: value.end,
+    open: value.open,
+  };
+}
+
+function scanGovernance(text: string, index: number, flush: boolean, wordEdge: boolean): Scan {
+  if (wordEdge) {
+    const database = scanDatabase(text, index, flush, wordEdge);
+    if (database) return database;
+    const bearer = scanBearer(text, index, flush, wordEdge);
+    if (bearer) return bearer;
+  }
+  let end = index + 1;
+  while (end < text.length && text.charCodeAt(end) !== 0x1b) {
+    if (isCandidateStart(text.charCodeAt(end)!) && !isWord(text.charCodeAt(end - 1)!)) break;
+    end++;
+  }
+  return { kind: 'emit', end };
+}
+
+function edgeAfter(text: string, edge: boolean): boolean {
+  let current = edge;
+  for (let i = 0; i < text.length; i++) {
+    if (text.charCodeAt(i) === 0x1b) {
+      const looked = lookAnsi(text, i);
+      if (looked.kind === 'sequence') {
+        i = looked.end - 1;
+        continue;
+      }
+    }
+    current = !isWord(text.charCodeAt(i)!);
+  }
+  return current;
 }
 
 function drain(
   buffer: string,
   flush: boolean,
   swallowing: boolean,
-): { emitted: string; rest: string; swallowing: boolean } {
+  governance: boolean,
+  wordEdge: boolean,
+): { emitted: string; rest: string; swallowing: boolean; wordEdge: boolean } {
   let emitted = '';
   let index = 0;
   if (swallowing) {
@@ -143,7 +259,7 @@ function drain(
           break;
         }
         if (looked.kind === 'incomplete') {
-          if (!flush) return { emitted, rest: buffer.slice(index), swallowing: true };
+          if (!flush) return { emitted, rest: buffer.slice(index), swallowing: true, wordEdge };
           swallowing = false;
           break;
         }
@@ -161,42 +277,61 @@ function drain(
       }
       if (looked.kind === 'incomplete' && !flush) break;
     }
-    const scanned = scanAssignment(buffer, index, flush);
+    const scanned = governance
+      ? scanGovernance(buffer, index, flush, wordEdge)
+      : scanAssignment(buffer, index, flush);
     if (scanned.kind === 'hold') break;
     if (scanned.kind === 'emit') {
-      emitted += buffer.slice(index, scanned.end);
+      const slice = buffer.slice(index, scanned.end);
+      emitted += slice;
+      wordEdge = edgeAfter(slice, wordEdge);
       index = scanned.end;
       continue;
     }
-    emitted += `${buffer.slice(index, scanned.nameEnd)}=[redacted]${scanned.preservedAnsi}`;
+    emitted += scanned.replacement;
+    wordEdge = edgeAfter(scanned.replacement, wordEdge);
     index = scanned.valueEnd;
     if (scanned.open) {
       swallowing = true;
       break;
     }
   }
-  return { emitted, rest: buffer.slice(index), swallowing };
+  return { emitted, rest: buffer.slice(index), swallowing, wordEdge };
 }
 
-/** Incremental redaction. A name or value may be split across reads. */
-export function createCommandOutputRedactor(): { push(chunk: string): string; finish(): string } {
+type OutputRedactor = { push(chunk: string): string; finish(): string };
+
+function createRedactor(governance: boolean): OutputRedactor {
   let pending = '';
   let swallowing = false;
+  let wordEdge = true;
   return {
     push(chunk: string) {
       pending += chunk;
-      const drained = drain(pending, false, swallowing);
+      const drained = drain(pending, false, swallowing, governance, wordEdge);
       pending = drained.rest;
       swallowing = drained.swallowing;
+      wordEdge = drained.wordEdge;
       return drained.emitted;
     },
     finish() {
-      const drained = drain(pending, true, swallowing);
+      const drained = drain(pending, true, swallowing, governance, wordEdge);
       pending = drained.rest;
       swallowing = false;
+      wordEdge = drained.wordEdge;
       return drained.emitted + drained.rest;
     },
   };
+}
+
+/** Incremental redaction. A name or value may be split across reads. */
+export function createCommandOutputRedactor(): OutputRedactor {
+  return createRedactor(false);
+}
+
+/** Postgres URLs and bearer tokens, with the same color and chunk rules as assignments. */
+export function createGovernanceOutputRedactor(): OutputRedactor {
+  return createRedactor(true);
 }
 
 /** Replace credential assignment values. Surrounding text, including color, stays. */
