@@ -2415,13 +2415,56 @@ function fileSection(output: string, file: string, root?: string): string {
   return chunks.join('\n');
 }
 
+function utf8Bytes(text: string): number {
+  return Buffer.byteLength(text);
+}
+
+/** Longest prefix of `text` whose UTF-8 encoding fits in `maxBytes`, ending on a character boundary. */
+function truncateUtf8(text: string, maxBytes: number): string {
+  if (maxBytes <= 0) return '';
+  if (utf8Bytes(text) <= maxBytes) return text;
+  const chars = [...text];
+  let bytes = 0;
+  let count = 0;
+  for (const char of chars) {
+    const size = utf8Bytes(char);
+    if (bytes + size > maxBytes) break;
+    bytes += size;
+    count++;
+  }
+  return chars.slice(0, count).join('');
+}
+
+/** A window of at most `room` UTF-8 bytes that keeps the failure when the transcript names one. */
+function utf8Window(text: string, focus: number, room: number): { start: number; text: string } {
+  const chars = [...text];
+  const prefix = [0];
+  for (const char of chars) prefix.push(prefix.at(-1)! + utf8Bytes(char));
+  const total = prefix.at(-1)!;
+  let unit = 0;
+  let focusBytes = total;
+  if (focus >= 0) {
+    for (let index = 0; index < chars.length; index++) {
+      if (unit >= focus) { focusBytes = prefix[index]!; break; }
+      unit += chars[index]!.length;
+    }
+  }
+  const startByte = focus < 0 ? Math.max(0, total - room) : Math.max(0, Math.min(focusBytes, Math.max(0, total - room)));
+  let start = 0;
+  while (start < chars.length && prefix[start + 1]! <= startByte) start++;
+  if (prefix[start]! < startByte) start++;
+  let end = start;
+  while (end < chars.length && prefix[end + 1]! - prefix[start]! <= room) end++;
+  return { start, text: chars.slice(start, end).join('') };
+}
+
 function capFileOutput(text: string): string {
-  if (text.length <= UNIT_GATE_FILE_OUTPUT_CAP) return text;
+  if (utf8Bytes(text) <= UNIT_GATE_FILE_OUTPUT_CAP) return text;
   const marker = '[truncated to 20KB]\n';
-  const room = UNIT_GATE_FILE_OUTPUT_CAP - marker.length;
+  const room = UNIT_GATE_FILE_OUTPUT_CAP - utf8Bytes(marker);
   const focus = Math.max(text.lastIndexOf('(fail) '), text.search(UNIT_TIMEOUT_LINE));
-  const start = focus < 0 ? text.length - room : Math.max(0, Math.min(focus, text.length - room));
-  return `${start > 0 ? marker : ''}${text.slice(start, start + room)}`;
+  const window = utf8Window(text, focus, room);
+  return `${window.start > 0 ? marker : ''}${window.text}`;
 }
 
 function errorBeforeFailure(pending: readonly string[]): string[] {
@@ -2476,36 +2519,38 @@ function runningTestName(section: string): string | undefined {
   return marked;
 }
 
-/** Case text shares the per-file 20KB cap with the transcript. A single assertion line can be far larger than 40 lines. */
+/** Every case name is kept. Error text shares one 20KB UTF-8 budget per file and is cut on a character boundary. */
 function capCaseErrors(cases: readonly UnitFailureCase[]): UnitFailureCase[] {
   const marker = '\n[truncated to 20KB]';
+  const markerBytes = utf8Bytes(marker);
   let room = UNIT_GATE_FILE_OUTPUT_CAP;
-  const capped: UnitFailureCase[] = [];
-  for (const item of cases) {
-    if (room <= 0) break;
-    if (item.error.length <= room) {
-      capped.push(item);
-      room -= item.error.length;
-      continue;
+  return cases.map(item => {
+    const size = utf8Bytes(item.error);
+    if (size <= room) {
+      room -= size;
+      return item;
     }
-    const note = marker.length < room ? marker : '';
-    capped.push({ test: item.test, error: `${item.error.slice(0, room - note.length)}${note}` });
-    break;
-  }
-  return capped;
+    const note = markerBytes < room ? marker : '';
+    const error = `${truncateUtf8(item.error, room - utf8Bytes(note))}${note}`;
+    room = 0;
+    return { test: item.test, error };
+  });
 }
 
 export function unitFileEvidence(output: string, scope: readonly string[], failing: readonly string[],
   timedOut: readonly string[], root?: string): UnitFileEvidence[] {
-  const wanted = new Set([...failing, ...timedOut]);
-  return scope.filter(file => wanted.has(file)).map(file => {
+  // Classification omits a failure inside a shard the budget stopped. The transcript still names it.
+  const classified = new Set([...failing, ...timedOut]);
+  return scope.flatMap(file => {
     const section = fileSection(output, file, root);
-    const evidence: UnitFileEvidence = { file, output: capFileOutput(section), cases: capCaseErrors(failureCases(section)) };
+    const cases = capCaseErrors(failureCases(section));
+    if (!classified.has(file) && cases.length === 0) return [];
+    const evidence: UnitFileEvidence = { file, output: capFileOutput(section), cases };
     if (timedOut.includes(file)) {
       const running = runningTestName(section);
       if (running) evidence.runningTest = running;
     }
-    return evidence;
+    return [evidence];
   });
 }
 
@@ -2598,7 +2643,22 @@ function mergeLogPath(): string | undefined {
   return undefined;
 }
 
-/** Writes the kept cases beside the merge log when stdout is that log, otherwise under the orchestration merges directory. */
+interface UnitEvidenceFile {
+  invocations: { invocation: number; runs: UnitRunEvidence[] }[];
+}
+
+function readUnitEvidence(path: string): UnitEvidenceFile {
+  if (!existsSync(path)) return { invocations: [] };
+  try {
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as Partial<UnitEvidenceFile>;
+    return { invocations: Array.isArray(parsed.invocations) ? parsed.invocations : [] };
+  } catch {
+    return { invocations: [] };
+  }
+}
+
+/** Writes the kept cases beside the merge log when stdout is that log, otherwise under the orchestration merges directory.
+ * A gate that runs again after main moves appends its own invocation instead of replacing the first. */
 export function writeUnitEvidence(runs: readonly UnitRunEvidence[]): string | undefined {
   if (!runs.some(run => run.files.length)) return;
   const log = mergeLogPath();
@@ -2607,7 +2667,10 @@ export function writeUnitEvidence(runs: readonly UnitRunEvidence[]): string | un
     : join(stateDir, 'merges', `${process.env.GOAL_ID ?? 'merge'}-${process.pid}-${Date.now()}.json`);
   try {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, `${JSON.stringify({ runs }, null, 2)}\n`);
+    const stored = readUnitEvidence(path);
+    const invocation = stored.invocations.reduce((max, item) => Math.max(max, item.invocation), 0) + 1;
+    stored.invocations.push({ invocation, runs: [...runs] });
+    writeFileSync(path, `${JSON.stringify(stored, null, 2)}\n`);
     console.log(`Unit gate evidence file: ${path}`);
     return path;
   } catch (error) {

@@ -392,10 +392,11 @@ describe('goalctl runtime policy', () => {
         expect(refusal).toContain('Expected: false');
         const path = writeUnitEvidence(evidence);
         expect(path).toBe(`${log.slice(0, -4)}.json`);
-        const stored = JSON.parse(readFileSync(path!, 'utf8')) as { runs: UnitRunEvidence[] };
+        const stored = JSON.parse(readFileSync(path!, 'utf8')) as { invocations: { runs: UnitRunEvidence[] }[] };
         expect(JSON.stringify(stored)).toContain(caseName);
         expect(JSON.stringify(stored)).toContain('Expected: false');
-        expect(stored.runs.some(run => run.kind === 'isolated-retry' && run.files.some(file => file.output.length <= 20 * 1024))).toBe(true);
+        expect(stored.invocations.some(item => item.runs.some(run => run.kind === 'isolated-retry'
+          && run.files.some(file => Buffer.byteLength(file.output) <= 20 * 1024)))).toBe(true);
       });
     });
 
@@ -501,11 +502,95 @@ describe('goalctl runtime policy', () => {
         expect(printedError).toContain('[truncated to 20KB]');
         expect(refusal).not.toContain(blob);
         const path = writeUnitEvidence(runs);
-        const stored = JSON.parse(readFileSync(path!, 'utf8')) as { runs: UnitRunEvidence[] };
-        const storedError = stored.runs[0]!.files[0]!.cases[0]!.error;
+        const stored = JSON.parse(readFileSync(path!, 'utf8')) as { invocations: { runs: UnitRunEvidence[] }[] };
+        const storedError = stored.invocations[0]!.runs[0]!.files[0]!.cases[0]!.error;
         expect(storedError.length).toBeLessThanOrEqual(20 * 1024);
         expect(storedError).toContain('[truncated to 20KB]');
         expect(storedError).not.toContain(blob);
+      } finally {
+        if (previous === undefined) delete process.env.GOAL_MERGE_LOG;
+        else process.env.GOAL_MERGE_LOG = previous;
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
+    test('a failure printed before the shard budget expired stays on the first run', async () => {
+      const failed = 'aa-failed-early.test.ts';
+      const later = 'bb-later-budget.test.ts';
+      const caseName = 'stops before the budget';
+      const calls: string[][] = [];
+      await withEvidence([failed, later], async (_cwd, group) => {
+        calls.push([...group]);
+        if (calls.length === 1) return shard(group, {
+          done: false, budgetExpired: true, failing: [], timedOut: [later],
+          output: `${assertion(failed, caseName, 'false', 'true')}\n${later}:\nrunning test: still going\n`,
+        });
+        if (group.length === 1 && group[0] === failed) return shard(group, { output: `${failed}:\n(pass) clears [1ms]` });
+        return shard(group, { output: `${later}:\n(pass) finishes [1ms]` });
+      }, ({ side, evidence, lines }) => {
+        expect(side.failing).not.toContain(failed);
+        const first = evidence.find(run => run.side === 'affected' && run.kind === 'first');
+        const kept = first?.files.find(file => file.file === failed);
+        expect(kept?.cases.map(item => item.test)).toEqual([caseName]);
+        expect(kept?.cases[0]?.error).toContain('Expected: false');
+        expect(lines.join('\n')).toContain(`(fail) ${caseName}`);
+      });
+    });
+
+    test('keeps every case name when one error uses the per-file budget', () => {
+      const file = 'gate-two-cases.test.ts';
+      const blob = 'E'.repeat(30 * 1024);
+      const output = [`${file}:`, `error: ${blob}`, '(fail) first huge assertion [1ms]',
+        'error: second detail', '(fail) second case stays named [1ms]'].join('\n');
+      const [kept] = unitFileEvidence(output, [file], [file], []);
+      expect(kept!.cases.map(item => item.test)).toEqual(['first huge assertion', 'second case stays named']);
+      const used = kept!.cases.reduce((sum, item) => sum + Buffer.byteLength(item.error), 0);
+      expect(used).toBeLessThanOrEqual(20 * 1024);
+      expect(kept!.cases[0]!.error).toContain('[truncated to 20KB]');
+      expect(kept!.cases[1]!.error).toBe('');
+      const refusal = unitGateRefusal('introduced unit failures; not merging:', [file], [
+        { side: 'affected', kind: 'first', files: [kept!] },
+      ]);
+      expect(refusal).toContain('(fail) first huge assertion');
+      expect(refusal).toContain('(fail) second case stays named');
+    });
+
+    test('the 20KB cap counts UTF-8 bytes and stops on a character boundary', () => {
+      const file = 'gate-wide-error.test.ts';
+      const emoji = '😀';
+      const original = `error: ${emoji.repeat(6_000)}`;
+      const output = [`${file}:`, original, '(fail) wide assertion [1ms]'].join('\n');
+      expect(original.length).toBeLessThan(20 * 1024);
+      expect(Buffer.byteLength(original)).toBeGreaterThan(20 * 1024);
+      const [kept] = unitFileEvidence(output, [file], [file], []);
+      const stored = kept!.cases[0]!.error;
+      expect(Buffer.byteLength(stored)).toBeLessThanOrEqual(20 * 1024);
+      expect(stored).toContain('[truncated to 20KB]');
+      const body = stored.replace(/\n\[truncated to 20KB\]$/, '');
+      expect(original.startsWith(body)).toBe(true);
+      expect([...body].every(char => char === emoji || char.charCodeAt(0) < 128)).toBe(true);
+      expect(Buffer.byteLength(kept!.output)).toBeLessThanOrEqual(20 * 1024);
+      expect([...kept!.output].every(char => char === emoji || char.charCodeAt(0) < 128)).toBe(true);
+      expect(kept!.output).toContain('(fail) wide assertion');
+    });
+
+    test('a later gate invocation appends its runs instead of replacing the first', () => {
+      const previous = process.env.GOAL_MERGE_LOG;
+      const directory = mkdtempSync(join(import.meta.dir, '../../.temp/unit-gate-evidence-'));
+      const log = join(directory, 'merge.log');
+      process.env.GOAL_MERGE_LOG = log;
+      try {
+        const file = 'gate-rerun.test.ts';
+        const first: UnitRunEvidence[] = [{ side: 'affected', kind: 'first', files: [
+          { file, output: '', cases: [{ test: 'first invocation fails', error: 'Expected: 1' }] }] }];
+        const second: UnitRunEvidence[] = [{ side: 'affected', kind: 'confirm', files: [
+          { file, output: '', cases: [{ test: 'second invocation fails', error: 'Expected: 2' }] }] }];
+        const path = writeUnitEvidence(first);
+        expect(writeUnitEvidence(second)).toBe(path);
+        const stored = JSON.parse(readFileSync(path!, 'utf8')) as { invocations: { invocation: number; runs: UnitRunEvidence[] }[] };
+        expect(stored.invocations.map(item => item.invocation)).toEqual([1, 2]);
+        expect(stored.invocations[0]!.runs[0]!.files[0]!.cases[0]!.test).toBe('first invocation fails');
+        expect(stored.invocations[1]!.runs[0]!.files[0]!.cases[0]!.test).toBe('second invocation fails');
       } finally {
         if (previous === undefined) delete process.env.GOAL_MERGE_LOG;
         else process.env.GOAL_MERGE_LOG = previous;
