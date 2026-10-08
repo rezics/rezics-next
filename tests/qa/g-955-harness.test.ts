@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { execFileSync } from 'node:child_process';
 import {
   existsSync,
@@ -23,8 +24,8 @@ import { completeFileResults, lastStartedTestFile } from '../../scripts/qa/file-
 import { planIntegrationShards } from '../../scripts/qa/integration-shards.ts';
 import { integrationResourceClasses, queuedProjectsBudget } from '../../scripts/qa/resource-classes.ts';
 import {
+  clearIntegrationDataset,
   filesKeptAfterResetFailure,
-  graphClearUpdate,
   integrationOwnerResetStatements,
   integrationResetHarnessFailure,
   resetIntegrationState,
@@ -437,33 +438,75 @@ test('G-955: all QA stacks inherit heap/direct-memory settings below their conta
   expect(existsSync(join(root, '.temp'))).toBe(true);
 });
 
-test('G-955: integration reset clears named graphs because CLEAR ALL removes the work-scope proof', () => {
-  // The raw update servlet answers 400 in a few milliseconds for CLEAR ALL,
-  // CLEAR NAMED, DROP ALL and DROP NAMED, and for a clear of the server-owned
-  // work-scope proof graph. Those updates never reach execution.
-  const update = graphClearUpdate([
-    'urn:rezics:graph:receipts',
-    'urn:rezics:graph:current',
-    'urn:rezics:graph:control',
-    'urn:rezics:search:public',
-    WORK_SCOPE_REPAIR_GRAPH,
-    WORK_SCOPE_REPAIR_GRAPH,
-  ]);
-  const rejected = (operation: string) =>
-    /^(?:CLEAR ALL|CLEAR NAMED|DROP ALL|DROP NAMED)$/.test(operation)
-    || operation === `CLEAR GRAPH <${WORK_SCOPE_REPAIR_GRAPH}>`
-    || operation === `DROP GRAPH <${WORK_SCOPE_REPAIR_GRAPH}>`;
-  for (const operation of update.split(';').map((part) => part.trim())) expect(rejected(operation)).toBe(false);
-  expect(update).toContain('CLEAR GRAPH <urn:rezics:graph:control>');
-  expect(update).toContain('CLEAR GRAPH <urn:rezics:graph:current>');
-  expect(update).toContain('CLEAR GRAPH <urn:rezics:graph:receipts>');
-  expect(update).toContain('CLEAR GRAPH <urn:rezics:search:public>');
-  expect(update.endsWith('CLEAR DEFAULT')).toBe(true);
-  expect(update).not.toContain(WORK_SCOPE_REPAIR_GRAPH);
-  expect(() => graphClearUpdate(['urn:rezics:graph:current>; CLEAR ALL'])).toThrow('unsafe graph IRI');
-  expect(readFileSync(join(root, 'scripts/qa/integration-reset.ts'), 'utf8')).not.toContain(
-    "update('CLEAR ALL')",
-  );
+test('G-955: repair state left by one file is absent when the next file starts', async () => {
+  const maintenance = 'ab'.repeat(32);
+  const command = 'cd'.repeat(32);
+  const repair = WORK_SCOPE_REPAIR_GRAPH;
+  const subject = 'urn:rezics:title-candidate:previous-file';
+  const predicates = [
+    'https://rezics.com/vocab/repairCursor',
+    'https://rezics.com/vocab/labelCopyPhase',
+    'https://rezics.com/vocab/labelCopyStep',
+    'https://rezics.com/vocab/labelCopyGeneration',
+    'https://rezics.com/vocab/retainedTitleCandidate',
+  ];
+  let quads = [
+    ...predicates.map((predicate) => ({ graph: repair, predicate })),
+    { graph: 'urn:rezics:graph:current', predicate: 'https://rezics.com/vocab/publicTitle' },
+  ];
+  let updates = 0;
+  const server = Bun.serve({
+    port: 0,
+    async fetch(request) {
+      const path = new URL(request.url).pathname;
+      if (path.endsWith('/update')) {
+        updates += 1;
+        return new Response('raw maintenance cannot remove the server-owned Work scope proof graph', { status: 400 });
+      }
+      if (path.endsWith('/query')) {
+        const query = await request.text();
+        const graph = query.includes(repair) ? repair : 'urn:rezics:graph:current';
+        const bindings = quads.filter((quad) => quad.graph === graph).map((quad) => ({
+          s: { type: 'uri', value: subject },
+          p: { type: 'uri', value: quad.predicate },
+          o: { type: 'literal', value: 'left-by-the-previous-file' },
+        }));
+        return Response.json({ head: { vars: ['s', 'p', 'o'] }, results: { bindings } });
+      }
+      if (!path.endsWith('/command')) return new Response('not found', { status: 404 });
+      const authorization = request.headers.get('authorization');
+      const body = await request.json() as { datasetReset?: unknown };
+      if (authorization !== `Bearer ${maintenance}` || body.datasetReset === undefined
+        || JSON.stringify(body) !== '{"datasetReset":{}}') {
+        return Response.json({ status: 'forbidden' }, { status: 403 });
+      }
+      quads = [];
+      return Response.json({ status: 'reset' });
+    },
+  });
+  try {
+    const fuseki = new FusekiClient(`http://127.0.0.1:${server.port}/data/`, maintenance, command);
+    const ask = `SELECT ?p WHERE { GRAPH <${repair}> { ?s ?p ?o } }`;
+    const left = await fuseki.query(ask);
+    expect(left.results?.bindings.map((binding) => binding.p?.value).sort()).toEqual([...predicates].sort());
+    await expect(new FusekiClient(`http://127.0.0.1:${server.port}/data/`, undefined, command).resetDataset())
+      .rejects.toThrow('Fuseki maintenance capability is required');
+    await expect(new FusekiClient(`http://127.0.0.1:${server.port}/data/`, command, command).resetDataset())
+      .rejects.toThrow('Fuseki dataset reset capability rejected');
+    expect(quads).toHaveLength(predicates.length + 1);
+    await clearIntegrationDataset(fuseki);
+    const next = await fuseki.query(ask);
+    expect(next.results?.bindings ?? []).toEqual([]);
+    const current = await fuseki.query('SELECT ?s WHERE { GRAPH <urn:rezics:graph:current> { ?s ?p ?o } }');
+    expect(current.results?.bindings ?? []).toEqual([]);
+    expect(updates).toBe(0);
+    const source = readFileSync(join(root, 'scripts/qa/integration-reset.ts'), 'utf8');
+    expect(source).toContain('clearIntegrationDataset');
+    expect(source).not.toContain('CLEAR ALL');
+    expect(source).not.toContain('.update(');
+  } finally {
+    await server.stop(true);
+  }
 });
 
 test('G-955: a broken integration reset names the stack and keeps the file that already passed', () => {

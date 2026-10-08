@@ -12,25 +12,14 @@ export const integrationOwnerResetStatements = ['account', 'access', 'content', 
   ],
 );
 
-/** Raw SPARQL update refuses to remove this server-owned proof graph. */
+/** The work-scope proof graph. It keeps per-run repair cursors, label-copy
+ * progress and retained title candidates, so a reset has to empty it too.
+ * Raw update refuses that, and the maintenance dataset reset is what does. */
 export const WORK_SCOPE_REPAIR_GRAPH = 'urn:rezics:projection:public-name-repair';
 
-const SPARQL_GRAPH_IRI = /^(?:urn:|https?:\/\/)[^\s<>"'{}|\\^`]+$/;
-
-/** `CLEAR ALL` is a 400: the raw update servlet rejects it, `CLEAR NAMED`,
- * `DROP ALL` and `DROP NAMED` because each would remove the work-scope proof
- * graph. Named clears of every other graph are admitted and still reach
- * jena-text through removeGraph/deleteAny. The servlet then deletes the
- * proof graph's scope qualification itself. */
-export function graphClearUpdate(graphs: readonly string[]): string {
-  const statements: string[] = [];
-  for (const graph of [...new Set(graphs)].sort()) {
-    if (!SPARQL_GRAPH_IRI.test(graph)) throw new Error('integration reset refused an unsafe graph IRI');
-    if (graph === WORK_SCOPE_REPAIR_GRAPH) continue;
-    statements.push(`CLEAR GRAPH <${graph}>`);
-  }
-  statements.push('CLEAR DEFAULT');
-  return statements.join('; ');
+/** Empties every graph through the maintenance command, including the proof graph. */
+export async function clearIntegrationDataset(fuseki: FusekiClient): Promise<void> {
+  await fuseki.resetDataset();
 }
 
 /** A reset that fails while the stack is broken is a harness failure. It does
@@ -79,11 +68,7 @@ async function resetGraph(
     apps.FUSEKI_MAINTENANCE_TOKEN,
     apps.FUSEKI_COMMAND_TOKEN,
   );
-  const listed = await fuseki.query('SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }');
-  const graphs = (listed.results?.bindings ?? []).flatMap((binding) =>
-    binding.g?.type === 'uri' && binding.g.value ? [binding.g.value] : [],
-  );
-  await fuseki.update(graphClearUpdate(graphs));
+  await clearIntegrationDataset(fuseki);
   await initializeFreshGraph(fuseki, lineage);
 }
 

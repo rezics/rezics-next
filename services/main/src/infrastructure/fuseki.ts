@@ -474,6 +474,39 @@ export class FusekiClient {
     }
   }
 
+  /** Empties every graph, including the work-scope proof graph. Only the maintenance capability is admitted. */
+  async resetDataset(): Promise<void> {
+    if (!this.maintenanceCapability?.match(/^[0-9a-f]{64}$/)) {
+      throw new Error('Fuseki maintenance capability is required');
+    }
+    let response: Response;
+    try {
+      response = await fetch(new URL('command', this.baseUrl), {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          authorization: `Bearer ${this.maintenanceCapability}`,
+        },
+        body: JSON.stringify({ datasetReset: {} }),
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (error) {
+      throw new CommandOutcomeUnknown('Fuseki dataset reset outcome unknown', { cause: error });
+    }
+    if (response.status === 403) throw new CommandForbidden('Fuseki dataset reset capability rejected');
+    if (!response.ok) {
+      let detail = '';
+      try {
+        detail = new TextDecoder().decode((await response.arrayBuffer()).slice(0, 2048))
+          .replace(/\s+/g, ' ').trim();
+      } catch { detail = ''; }
+      throw new Error(`Fuseki dataset reset returned ${response.status}${detail ? `: ${detail}` : ''}`);
+    }
+    const result = await response.json() as { status?: string };
+    if (result?.status !== 'reset') throw new Error('Fuseki dataset reset response malformed');
+  }
+
   async commandHealth(): Promise<CommandHealth> {
     const signal = readSignal(this.preparationSignal);
     signal.throwIfAborted();

@@ -181,6 +181,20 @@ final class CommandService extends ActionService {
                 action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
                 respond(action, 200, result); return;
             }
+            if (body.get("datasetReset") != null) {
+                // Maintenance capability only. Raw update refuses to remove the
+                // work-scope proof graph, and this envelope is not SPARQL.
+                if (!authorized(action, maintenanceCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                if (!body.keys().equals(Set.of("datasetReset")) || !body.get("datasetReset").isObject()
+                    || !body.get("datasetReset").getAsObject().keys().isEmpty())
+                    throw new IllegalArgumentException("invalid dataset reset envelope");
+                DatasetResetPolicy.reset(action.getDataService().getDataset());
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, 200, Map.of("status", "reset")); return;
+            }
             if (body.get("workScopeDirectory") != null) {
                 // Capability before the closed envelope, same as the other maintenance commands.
                 if (!authorized(action, maintenanceCapability)) {
