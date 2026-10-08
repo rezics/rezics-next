@@ -1,63 +1,78 @@
 # State
 
-Checkpoint: 2026-10-08 01:38 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-08 02:20 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
 
 ## Current checkpoint corrections
 
-This section supersedes the historical per-slice status below. Whole Goal active.
+This section supersedes historical status below. Whole Goal active; authentic
+Claim producer closure and C6 private/source-copy recovery remain on critical path.
 
-- Storage repair a2153ac04 is LANDED and ACTIVATED. Mandatory refresh5914
-  finished0, froze that revision, full original351 Maven package cases ran with
-  zero failures/errors/skips in19:28. Disk-backed MODULE fixtures, no skips or
-  raised case caps. Qualified native5692ff6a9bb2 actually serves; all six shared
-  services RunningHealthy. Current dry-run says Storage current, PendingSQL none.
-  Evidence `.temp/kernel/native-build-filesystem-351-pass.log` and
-  `.temp/kernel/native-filesystem-activation-0037.log`. Trust Access1775 applied,
-  G1401 verified and closed. This resolves the shared-stack/package blocker only.
-- G1379 merge17505 LIVE, `.temp/kernel/structure-association-merge-0117.log`.
-  First normal107 affected/19 guards PASS, shards96281/675143/22688/26397ms.
-  Main overlapped source during gate; automatic rebase now runs108-file gate once.
-  Accepted two-file association source and actual16/9414 unchanged. Stage64 real
-  integration remains pending; no Episode absence/completeness assertion.
-- G1300 current merge81924 LIVE,165 files/960s parent,
-  `.temp/kernel/publication-seek-merge-0128.log`. Earlier164 gate passed all except
-  serialization guard; native225/0failure/error/skip run-UnonEN. Program34791a606
-  narrowly permits the verified offline StatementSeek rebuild recovery-fence
-  SELECT FOR UPDATE; ordinary publication has no new global head write.
-  Migration renumbered Access1773 to1776 after peer1775; SQL/assertions identical,
-  task doc and exact filename reference updated, docs checks PASS. Content1707
-  unchanged. Exact accepted12 source bytes composed by Cursor28; actual owner
-  56/1064 QA003308-4d6e88. Physical G920595+3 proof remains old diagnostic-image
-  runtime evidence; qualified5692 matching rerun still required after activation.
-- G1397 Sonnet7 LIVE. Full enabled355 package PASS at01:22:20,42:27, image
-  835daa8774ac exported; `.temp/worktrees/g-1397/.temp/goal/final-image-build.log`.
-  Final separate-JVM/release proof still under review, do not reuse old skipped
-  image results. Exact startup ANY-hold and integer patch components accepted;
-  four startup tests are in-memory, no persisted-server inference.
-- G1373 four-file reader source ac99ca0d1 independently ACCEPTED, actual17/130.
-  Exact selected698915d09+dfaeda47a still ready. Earlier gate87868 cancelled by
-  Root with exact owned duplicate native containers, no assertion verdict.
-  ProgramG1410 fixes old stream-baseline gate planning; until landed use960s.
-  Physical private delivery/recovery/erasure chain remains pending.
-- G1282 Cursor26 resumed01:37 for mechanical current-Main accepted Claim helper
-  plus exact additive CommandService composition and focused original56 proof.
-  G1282 now claims CommandService; no new owner creator/closure semantics.
-  G1290 Cursor23 resumed for original61 current-fa native proof in throwaway
-  directory, no tracked borrowed Core/facade edits. Current G1300 facade remains
-  exclusive until landing. No full-package or assertion-repair briefs.
-- Trust sole C6 repair owners G1408/G1411 retain exact scoped loans. G1330 reader
-  loan SHA bf4b41e9bc59b84e82b45e4a2f2a7925c8df4a99666f7882babc5f1d08e6f287.
-  Original signed catalog/custody/bytes/assertions stay; bounded Comment lookup
-  and authentic signed restore qualification still required before acceptance.
-  LaunchG1414 owns original G847 nested-series continuity repair; definition-only
-  overlay loan staged, no duplicate G847 editor.
-- Manager codex-1 observed96%; preserve reserve. Default admitted Cursor workers,
-  no new Sol/Luna, no forced Sonnet/reset. All real mail through01:38 acknowledged;
-  regressions retain separate acknowledgement. Critical Root gates above remain
-  owned live processes, never infer a terminal verdict from vanished handles.
+- Shared stack repaired and healthy. Filesystem repair a2153ac04 activated after
+  full original351/0failure/error/skip Maven package19:28, native5692. Publication
+  cc1f9940e then activated Content1707/Access1776. Latest d1d351bcf integer/startup
+  repair ACTIVATED, actual serving835daa8774ac, all6 services RunningHealthy;
+  refresh36681 exit0, no pending SQL, kept data volumes and prepared membership.
+  `.temp/kernel/integer-startup-activation-0211.log`, refresh.json revisiond1.
+- G1397 CLOSED VERIFIED. Matching image835 full355/0failure/error/skip, separate-JVM
+  21-case test result0/60 assertions, unchanged originalrelease3/64 passed334.3s
+  QA012803-152801. Normal26 affected/19guards PASS, shards44753/64965/71841/661580ms;
+  Main advanced and gate remained valid. Four startup fixtures are in-memory;
+  actual paired release case proves listening-server false-hold restart. Future
+  integer writes preserved; already-truncated stores not healed. ANY restoreHold
+  permits inspection but never Source qualification. Original caps/skips unchanged.
+- G1300 LANDED cc1f9940ea5d,13 files. Access1773 renamed1776 after peer1775; SQL
+  and assertions byte-identical. Content1707 unchanged. Normal165 gate passes
+  after native isolated629325ms, closed-operation-callers isolated3898ms and40
+  no-verdict files passed; Main advanced, gate valid. Serialization isolated28/55
+  passed. Mandatory refresh66187 exit0 applied both migrations, all6 healthy.
+  Cursor29 read-only qualified5692 physical G920595+3 and publication tests LIVE;
+  record literal pin/source and do not substitute old unqualified1ca9 evidence.
+  LaunchG1414 owns originalG847 nested continuity repair; real definition fixture
+  is now on Main and activated, no duplicate editor or originalG847 pass inferred.
+- G1379 first107 normal gate PASS, overlapping Main triggered second108; second
+  native/closed-operation-caller timeouts plus no-verdict retries, no final merge
+  verdict. Root intentionally stopped exact own groups3807837/4151169 and owned
+  native container42894c to serialize retries; never call this an assertion pass.
+  Accepted two-file source16/9414 unchanged; stage64 real integration still needed.
+- G1379 then G1373 normal merges now supervised serially in independent user unit
+  rezics-kernel-ready-gates-0216.service, MainPID244783, app.slice outside manager
+  coordinator service. Current G1379 gate111 files/960s; no parallel native gates.
+  Each terminal result self-mails kernel for review; logs G-1379/G-1373 under
+  `.temp/kernel/*-supervised-gate-0216.log`. Task wrapper
+  `.temp/kernel/serial-ready-gates-0216.yml` status gives live truth. Do not launch
+  duplicates. G1410 stream-baseline planning improvement still Program-owned.
+- G1373 reader four-file ac99 source independently ACCEPTED, actual17/130.
+  Cursor15 readonly disclosure actual4/10 (correct tests/qa/unit path), and
+  private-native QA015402-5431ad actual1/20/0fail source49a6d81ca stable; XML checked
+  by worker, original fixture hashes unchanged. This proves current-head posting
+  only, not original-create immutable bytes or recovery/erasure. Do not replace
+  current-head search with unconditional original-create text: each edited head
+  needs its own immutable edit source/actor proof; no current-state inference.
+- G1282 current-Main mechanical composition764e42620 accepted by byte comparison:
+  all three changed helper/fixture bytes equal95dd0, Core exactly30 added dispatcher
+  lines, later hooks retained. Independently checked XML56/0failure/error/skip.
+  Actual106804ms, currentfa396. Manager stamped pins0c5393dca (78771fbc73f8), gen
+  andgen:check pass. UNLANDED; full368 and selected242 are inventories only.
+  Authentic operator original-I preparation/receiver and C/R/B/E closure missing.
+- G1290 current native61 proof is52 first-pass cases plus9 clean rerun after missing
+  fuseki-text.ttl fixed; original61/1failure/4errors preserved, no assertions changed.
+  Real issuer2/71 passed; transport not yet rerun against cc1 facade. Cursor25 LIVE
+  mechanically composes accepted sources onto actual currentMain with exact loans,
+  preserving publication/immutable-object/Signal/Budget/v1 issuer hooks. Attempt24
+  stopped immediately after Core claim conflict; reclaim corrected. Core remains
+  exclusively G1282, Title stages/freeze/restores additive hook before own commit.
+  No lock/isolation redesign, promotion or closure claim.
+- Trust sole C6 repairs G1408/G1411 retain exact loans; indexed bounded Comment
+  lookup and authentic signed restore must qualify. LaunchG1416 reports realAPI
+  1000-mount publication/replay and constant17/17/17/11 lookup calls, on qualified5692;
+  original byte/replay/disclosure assertions preserved. Mail acknowledged.
+- Manager codex-1 observed96%; reserve applies. Default Cursor workers, no new
+  Sol/Luna/forced Sonnet/reset. Real mail through checkpoint acknowledged;
+  regressions retain separate acknowledgement. All Root tool-owned critical jobs
+  terminal; supervised unit survives finite coordinator turns and mails on exit.
 
 Earlier checkpoint details follow; latest state above supersedes pending status.
 
