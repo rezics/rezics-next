@@ -6,7 +6,7 @@ import type { ResolvedAddress } from '../address/client.ts';
 import { addressKey } from '../address/path.ts';
 import { requestLocale } from '../../i18n/server.ts';
 import { followHref } from '../entity-page/href.ts';
-import { fillRecipePages, recipePageQuery } from '../recipe-editor/pages.ts';
+import { readRecipePage, recipePageQuery } from '../recipe-editor/pages.ts';
 import { failureOf } from './failure.ts';
 import { WORK_MISSING_HEADER } from './admission.ts';
 import { mainApiWithToken } from '../api/main.ts';
@@ -125,24 +125,22 @@ export const readWorkHeader = cache(async (id: string, _locale: UiLocale): Promi
 });
 
 /**
- * A Work's recipe section, read from the link its `entity-page-v1` projection gave.
- * The first response follows `next` within the reader budget, so a recipe that fits is whole.
- * A thrown or failed first page is this region's failure. A later page that throws or fails
- * leaves the pages already read, still continuing from the last good cursor.
+ * A Work's recipe section, one page from the link its `entity-page-v1` projection gave.
+ * That page already spans sections. A thrown or failed call is this region's failure and
+ * does not reject the Work page. A later page is a separate view.
  */
 export async function readRecipeWorkPage(href: string, servings?: number): Promise<Loaded<RecipeWorkPage | null>> {
   try {
     const { main, actingSubject } = await reader();
-    const filled = await fillRecipePages(async query => {
+    const filled = await readRecipePage(async query => {
       try {
         return await followHref<RecipeWorkPage | null>(main, href, recipePageQuery(actingSubject, query))();
       } catch {
         return { data: null, error: { status: 0 } };
       }
     }, servings === undefined ? {} : { servings });
-    if (filled.page) return { ok: true, data: filled.page };
     if (!filled.ok) return { ok: false, failure: failureOf(filled.error.status ?? 0) };
-    return { ok: true, data: null };
+    return { ok: true, data: filled.page };
   } catch {
     return { ok: false, failure: 'unavailable' };
   }

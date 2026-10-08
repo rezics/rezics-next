@@ -3,22 +3,11 @@ import { emptyRecipe, type RecipePageLike, type RecipeState, stateOf } from './m
 // Removing a section removes every child and rewrites every step that names those ingredients.
 // Moving a line, a step or a section chooses its place among siblings, and editing a step drops
 // any ingredient link that is not in hand. Those saves are planned from the recipe held here, so
-// the editor reads every remaining page before it will save. The reader's first view, and each
-// time they ask for more, follows `next` only within the budget below. Nothing here is kept for a later visit.
+// the editor reads every remaining page before it will save. The reader takes one page for the
+// first view and one more page each time they ask for more. Nothing here is kept for a later visit.
 
 /** The most occurrences the editor will assemble. A further page would still be unread, so nothing is saved. */
 export const RECIPE_OCCURRENCE_CAP = 4096;
-
-/**
- * Kernel's page doesn't yet fill across sections: one data read stops at the first section heading,
- * so a short recipe would otherwise open as that heading alone. The reader follows `next` at most
- * this many calls. This collapses to one call when a kernel page already fills across sections,
- * because that page then holds {@link RECIPE_READER_OCCURRENCE_TARGET} occurrences or the whole recipe.
- */
-export const RECIPE_READER_PAGE_BUDGET = 6;
-
-/** How many occurrences one reader walk holds before it leaves the rest behind `next`. One kernel page is this long. */
-export const RECIPE_READER_OCCURRENCE_TARGET = 100;
 
 /**
  * Query for one recipe page. A continuation sends the cursor alone: servings are already pinned in
@@ -81,45 +70,21 @@ export type RecipePageAnswer<T> = {
   error: { status?: number; value?: unknown } | null;
 };
 
-/** Pages gathered by one reader walk. A failure keeps whatever this walk already read. */
+/** One recipe page, or the failure of that one call. A failure holds no page. */
 export type FilledRecipe<T> =
   | { ok: true; page: T | null }
-  | { ok: false; stale: boolean; page: T | null; error: { status?: number; value?: unknown } };
-
-function addedOccurrences(current: readonly { occurrence: string }[], incoming: readonly { occurrence: string }[]): number {
-  const seen = new Set(current.map(item => item.occurrence));
-  let added = 0;
-  for (const item of incoming) if (!seen.has(item.occurrence)) added += 1;
-  return added;
-}
+  | { ok: false; stale: boolean; page: null; error: { status?: number; value?: unknown } };
 
 /**
- * The first page, then `next`, until this walk holds {@link RECIPE_READER_OCCURRENCE_TARGET}
- * occurrences, the next page would pass that, there is no `next`, or {@link RECIPE_READER_PAGE_BUDGET}
- * calls have been made. A page is not split, so one that would pass the target stays unread and
- * the recipe still continues. A later call that fails leaves the pages already read.
+ * One recipe page. A kernel page already spans sections and holds the occurrences of one view,
+ * so this does not follow `next`. A failure is only that call: the page already shown stays put.
  */
-export async function fillRecipePages<T extends RecipePageShape>(
+export async function readRecipePage<T>(
   read: (query: { cursor?: string; servings?: number }) => Promise<RecipePageAnswer<T>>,
   query: { cursor?: string; servings?: number }): Promise<FilledRecipe<T>> {
-  const first = await read(query);
-  if (first.error) return { ok: false, stale: isStaleRecipePage(first.error), page: null, error: first.error };
-  if (!first.data) return { ok: true, page: null };
-  let page = first.data;
-  for (let calls = 1; page.next && calls < RECIPE_READER_PAGE_BUDGET
-    && page.occurrences.length < RECIPE_READER_OCCURRENCE_TARGET; calls += 1) {
-    const cursor = page.next;
-    const incoming = await read({ cursor });
-    if (incoming.error || !incoming.data) {
-      return { ok: false, stale: isStaleRecipePage(incoming.error), page,
-        error: incoming.error ?? { status: 0, value: null } };
-    }
-    const added = addedOccurrences(page.occurrences, incoming.data.occurrences);
-    // Leave the page that would pass the target, and don't follow a cursor that adds nothing.
-    if (added === 0 || page.occurrences.length + added > RECIPE_READER_OCCURRENCE_TARGET) break;
-    page = appendRecipePage(page, incoming.data);
-  }
-  return { ok: true, page };
+  const answer = await read(query);
+  if (answer.error) return { ok: false, stale: isStaleRecipePage(answer.error), page: null, error: answer.error };
+  return { ok: true, page: answer.data };
 }
 
 export type LoadedRecipe =

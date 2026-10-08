@@ -34,7 +34,7 @@ test('a thrown first page is the recipe region unavailable, and does not reject 
   await expect(readRecipeWorkPage(href)).resolves.toEqual({ ok: false, failure: 'unavailable' });
 });
 
-test('a thrown later page keeps the first page and the cursor to continue', async () => {
+test('the first view is one page and does not read the continuation', async () => {
   let calls = 0;
   answer = query => {
     calls += 1;
@@ -46,5 +46,15 @@ test('a thrown later page keeps the first page and the cursor to continue', asyn
   if (!result.ok || !result.data) return;
   expect(result.data.next).toBe('later');
   expect(result.data.occurrences.map(item => item.occurrence)).toEqual([first.occurrences[0]!.occurrence]);
-  expect(calls).toBe(2);
+  expect(calls).toBe(1);
+});
+
+test('a failed first page is the recipe region unavailable, and a later page is not read', async () => {
+  let calls = 0;
+  answer = () => {
+    calls += 1;
+    return Promise.resolve({ data: null, error: { status: 503 } });
+  };
+  await expect(readRecipeWorkPage(href)).resolves.toEqual({ ok: false, failure: 'unavailable' });
+  expect(calls).toBe(1);
 });
