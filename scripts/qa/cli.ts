@@ -70,6 +70,10 @@ import { qaStackEnvironment, qaStackMode } from './stack-environment.ts';
 
 import { ownerTierBudgetMs } from './owner-tier-budget.ts';
 import { assertQaResourceAllocation, integrationResourceClass, integrationTierBudget, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
+import {
+  CAMPAIGN_OPERATION_ACTIVE_MS, CAMPAIGN_PREPARATION_ACTIVE_MS, campaignQualificationShard,
+  campaignShardActiveMs, runCampaignEnvelopeProcess, type CampaignEnvelopeFailure,
+} from './campaign-envelope.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const options = parseArgs(process.argv.slice(2));
@@ -287,6 +291,14 @@ type StackTier = 'integration' | 'fault/recovery';
 interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMatch: boolean;
   ok: boolean; testStart?: number; testEnd?: number }
 
+function campaignTimeoutReason(failure: CampaignEnvelopeFailure | undefined): string {
+  if (failure === 'preparation') {
+    return `Campaign preparation exceeded ${CAMPAIGN_PREPARATION_ACTIVE_MS} ms of active work`;
+  }
+  if (failure === 'deadline') return 'Campaign envelope reached its run deadline';
+  return 'Shard timed out before this file completed';
+}
+
 // Bun owner suites install signal handlers too; enforce the wall deadline on
 // their process group so a handled SIGTERM cannot keep QA capacity indefinitely.
 async function runBunTier(name: Tier, program: string, args: string[], budget: number) {
@@ -487,7 +499,8 @@ async function runShardWork(
   const fileDurations: Record<string, number> = {};
   let commandOk = true,
     timedOut = false,
-    noMatch = true;
+    noMatch = true,
+    campaignFailure: CampaignEnvelopeFailure | undefined;
   for (let index = 0; index < batches.length; index++) {
     let resetMs = 0;
     if (activeTestMs() >= budget) {
@@ -523,8 +536,23 @@ async function runShardWork(
     const runBatch = (environment: NodeJS.ProcessEnv, onLine: (line: string) => void) => commandAsync(
       root, 'bun', ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
       Math.max(1, budget - activeTestMs()), environment, onLine, { runDeadline });
-    const result = await (startupProtocol ? withStartupSlot(testEnvironment(), runBatch, reserve)
-      : runBatch(testEnvironment(), noteMemory));
+    const campaign = campaignQualificationShard(batch);
+    const result = campaign
+      ? await runCampaignEnvelopeProcess({
+        root, command: 'bun',
+        args: ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
+        env: testEnvironment(), evidencePath: join(directory, 'erasure-campaign-qualification.json'),
+        runDeadline, onLine: noteMemory,
+      })
+      : await (startupProtocol ? withStartupSlot(testEnvironment(), runBatch, reserve)
+        : runBatch(testEnvironment(), noteMemory));
+    if (campaign) {
+      campaignFailure = result.envelopeFailure;
+      record.budgetMs = result.envelopeFailure === 'preparation' ? CAMPAIGN_PREPARATION_ACTIVE_MS
+        : result.envelopeFailure === 'operation' ? CAMPAIGN_OPERATION_ACTIVE_MS
+          : campaignShardActiveMs();
+      writeFileSync(join(directory, 'campaign-envelope.json'), `${JSON.stringify(result.report, null, 2)}\n`);
+    }
     childAdmissionMs += result.admissionWaitMs;
     output.push(result.output);
     const empty = !result.ok && !result.timedOut && matchedNoTests(result.output);
@@ -539,7 +567,7 @@ async function runShardWork(
         filtered: flags.includes('-t'),
         interrupted: result.timedOut,
         incompleteFiles: result.timedOut ? [lastStartedTestFile(result.output)].filter((file): file is string => Boolean(file)) : [],
-        reason: result.timedOut ? 'Shard timed out before this file completed' : undefined,
+        reason: result.timedOut ? campaignTimeoutReason(campaignFailure) : undefined,
       },
     );
     commandOk &&= !results.missing.length;
@@ -557,9 +585,11 @@ async function runShardWork(
   const results = completeFileResults(mergeJUnit(suites, record.elapsedMs), files, tier, {
     filtered: flags.includes('-t'),
     interrupted: timedOut || !commandOk,
-    reason: timedOut
-      ? 'Shard timed out; file did not complete'
-      : 'Shard stopped before this file produced results',
+    reason: campaignFailure === 'preparation' || campaignFailure === 'deadline'
+      ? campaignTimeoutReason(campaignFailure)
+      : timedOut
+        ? 'Shard timed out; file did not complete'
+        : 'Shard stopped before this file produced results',
   });
   record.missingFiles = results.missing;
   const ok =
@@ -657,11 +687,21 @@ async function runStackTier(tier: StackTier): Promise<void> {
     const prefix = tier === 'integration' ? '' : 'f';
     const integration =
       tier === 'integration' ? planIntegrationShards(estimates, capacity) : undefined;
-    const projects =
+    const planned =
       integration?.map((shard) => shard.files) ?? planStackProjects(estimates, capacity, tier);
+    // In-file campaign preparation has its own active clock, so this file cannot
+    // share a command whose single deadline is the operation budget.
+    const projects = integration ? planned : planned.flatMap((group) => {
+      if (!group.some(file => campaignQualificationShard([file]))) return [group];
+      const rest = group.filter(file => !campaignQualificationShard([file]));
+      return [...(rest.length ? [rest] : []), [group.find(file => campaignQualificationShard([file]))!]];
+    });
+    const projectBudget = (files: readonly string[]) =>
+      campaignQualificationShard(files) ? campaignShardActiveMs() : budget;
     // Fault/recovery queues more projects than slots; each keeps its own deadline.
+    // The campaign project's wall is the sum of its two measured phases.
     const tierBudget = integration ? integrationTierBudget(integration.map(shard => shard.resourceClass), capacity)
-      : tier === 'fault/recovery' && !exclusiveRecovery ? queuedProjectsBudget(projects.map(() => budget), capacity) : budget;
+      : tier === 'fault/recovery' && !exclusiveRecovery ? queuedProjectsBudget(projects.map(projectBudget), capacity) : budget;
     const warning = stackPlanBudgetWarning(estimates, tierBudget, capacity, maximum, tier,
       tier === 'integration' ? count => planIntegrationShards(estimates, count).map(shard => shard.files) : undefined);
     if (warning) console.warn(warning);
@@ -678,7 +718,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
             `${runId}-${prefix}${index + 1}`,
             projects[index]!,
             flags,
-            budget,
+            projectBudget(projects[index]!),
             false,
             startInitialStack,
             integration?.[index]?.batches,
