@@ -1,4 +1,5 @@
 import { resourceHref } from '../address/path.ts';
+import { recipeEditHref } from '../recipe-editor/route.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
@@ -327,6 +328,25 @@ const metricRecipe: RecipeWorkPage = {
       scaled: false,
     },
   ],
+};
+
+/** A recipe that has no Composition yet still offers the structured editor to someone who may edit it. */
+export const UnstructuredRecipeCanBeEdited: Story = {
+  parameters: at('overview'),
+  render: () => (
+    <Framed work={typedWork('https://schema.org/Recipe', 'New recipe')}>
+      <RecipeExperience initial={null} href={`/v1/recipes/works/${fixture.workRef}`} actingSubject={null}
+        text="Notes from the text editor." locale="en" messages={messages.en}
+        edit={{ href: recipeEditHref(fixture.workRef), label: 'Edit recipe' }} />
+    </Framed>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Edit recipe' })).toHaveAttribute('href',
+      expect.stringContaining('/edit/recipe'));
+    await expect(canvas.getByText('Notes from the text editor.')).toBeVisible();
+    await expect(canvas.getByText(/Measured ingredients have not been added/)).toBeVisible();
+  },
 };
 
 /** A recipe written partly in grams stays in grams by default; US and metric are the reader's choice. */

@@ -57,15 +57,30 @@ export function FailureAlert({ t, refusal, detail, onRetry, onDismiss }: {
 }
 
 /**
+ * The text left in a field when a save responds. A focused field is being typed in.
+ * An unfocused field keeps text that is neither the last synced value nor this response,
+ * so an older save cannot replace a newer local edit.
+ */
+export function fieldAfterResponse(field: string, synced: string, incoming: string, focused: boolean): string {
+  if (focused || (field !== synced && field !== incoming)) return field;
+  return incoming;
+}
+
+/**
  * A field the person types in, showing what Main holds. A newer value from Main replaces the text
- * only while the field is not being typed in, so a write that finishes late never takes typing away.
+ * only while the field is not being typed in and does not already hold a newer local edit.
  */
 function useSynced<E extends HTMLInputElement | HTMLTextAreaElement>(value: string, ref: Ref<E> | undefined) {
   const own = useRef<E>(null);
+  const synced = useRef(value);
   useImperativeHandle(ref, () => own.current as E);
   useEffect(() => {
     const element = own.current;
-    if (element && document.activeElement !== element && element.value !== value) element.value = value;
+    if (!element) return;
+    const focused = document.activeElement === element;
+    const next = fieldAfterResponse(element.value, synced.current, value, focused);
+    if (!focused && element.value !== next) element.value = next;
+    if (!focused && next === value) synced.current = value;
   }, [value]);
   return own;
 }

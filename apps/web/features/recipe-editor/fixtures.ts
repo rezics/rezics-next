@@ -57,15 +57,27 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
     /** Holds every call until it settles, to put several edits in flight together. */ gate?: Promise<void>;
     /** Holds the calls of one name (`changes`, `timings`, `details`, `notes-create`, `publish`…); the call is recorded first. */
     gates?: Record<string, Promise<void>>;
+    /** Successive calls of one name each wait for the promise at that index; later calls wait for the last. */
+    holds?: Record<string, Promise<void>[]>;
+    /** Drop this many successful responses after the command is applied, so the next same key is a replay. */
+    lose?: Record<string, number>;
     /** A draft read answers nothing, so a recovery that must see the body cannot. */
     unreadableDraft?: boolean } = {};
+  const holdIndex = new Map<string, number>();
+  /** Commands that already committed, keyed by Idempotency-Key. A repeat is a replay, not a second apply. */
+  const committed = new Map<string, { digest: string; revision: string }>();
   const answer = (data: unknown) => ({ data, error: null });
   const refuse = (status: number, code: string) => ({ data: null, error: { status, value: { code } } });
   const record = async (name: string, body?: unknown, options?: { headers?: { 'idempotency-key'?: string } }) => {
     const call = { name, body, key: options?.headers?.['idempotency-key'] };
     calls.push(call);
     interference.before?.(call);
-    await interference.gates?.[name];
+    const queue = interference.holds?.[name];
+    if (queue?.length) {
+      const at = holdIndex.get(name) ?? 0;
+      holdIndex.set(name, at + 1);
+      await queue[Math.min(at, queue.length - 1)];
+    } else await interference.gates?.[name];
     await interference.gate;
   };
   const page = () => recipe.structure ? { structure: recipe.structure, revision: recipe.head, measures: recipe.measures,
@@ -73,12 +85,28 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
   const cas = (head: string) => head === recipe.head ? null : refuse(409, 'stale_composition_head');
   const advance = () => { recipe = { ...recipe, head: next() }; return recipe.head!; };
 
-  const compositionChanges = { post: async (body: { expectedHead: string; operations: Operation[] }, options?: never) => {
+  const compositionChanges = { post: async (body: { expectedHead: string; operations: Operation[] },
+    options?: { headers?: { 'idempotency-key'?: string } }) => {
+    const key = options?.headers?.['idempotency-key'];
+    const digest = JSON.stringify([body.expectedHead, body.operations]);
+    const prior = key ? committed.get(key) : undefined;
+    if (prior) {
+      await record('changes', body, options);
+      if (prior.digest !== digest) return refuse(409, 'idempotency_conflict');
+      // The command already ran. A sealed replay carries the receipt and not the occurrences it named.
+      return answer({ structure: recipe.structure, revision: prior.revision, receipt: 'receipt', replayed: true });
+    }
     await record('changes', body, options);
     const stale = cas(body.expectedHead);
     if (stale) return stale;
     const created = body.operations.filter(operation => operation.op === 'insert').map(() => next());
     recipe = { ...applyOperations(recipe, body.operations, created), head: next() };
+    if (key) committed.set(key, { digest, revision: recipe.head! });
+    const lose = interference.lose?.changes ?? 0;
+    if (lose > 0 && interference.lose) {
+      interference.lose.changes = lose - 1;
+      return { data: null, error: { status: 503, value: {} } };
+    }
     return answer({ structure: recipe.structure, revision: recipe.head, occurrences: created, receipt: 'receipt', replayed: false });
   } };
   const measurePost = (kind: 'measures' | 'timings') => async (body: Record<string, unknown> & { expectedHead: string }, options?: never) => {

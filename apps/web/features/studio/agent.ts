@@ -1,4 +1,5 @@
 import type { AgentOption } from '../auth/acting-identity.ts';
+import { recipeEditHref } from '../recipe-editor/route.ts';
 import { idOf } from './types.ts';
 import { identityKeyUuid, uuidToSid } from '@rezics/model/address';
 
@@ -42,6 +43,17 @@ export function resolveStudioAgent(segment: string, options: readonly AgentOptio
 }
 
 export type WorkTab = 'chapters' | 'text' | 'details' | 'realms';
+
+/**
+ * Where Studio opens a Work it has just created. A book starts on its chapters,
+ * a recipe in the recipe editor, and anything else on its text.
+ */
+export function createdWorkPath(agent: Pick<AgentOption, 'iri' | 'handle'>, work: string, presentation: string,
+  language: string): string {
+  if (presentation === 'book') return workHref(agent, work, 'chapters');
+  if (presentation === 'recipe') return recipeEditHref(work);
+  return `${studioHref(agent, `/works/${idOf(work)}/write`)}?language=${encodeURIComponent(language)}`;
+}
 
 /** A Work's Studio page, on one of its tabs. */
 export function workHref(agent: Pick<AgentOption, 'iri' | 'handle'>, work: string, tab?: WorkTab): string {

@@ -157,6 +157,45 @@ export const EditOfARemovedLine: Story = {
   },
 };
 
+const held = () => {
+  let release: () => void = () => {};
+  const promise = new Promise<void>(resolve => { release = resolve; });
+  return { promise, release };
+};
+
+/** An older save must not put its text back into a step while a newer edit is still pending. */
+export const PendingStepTextSurvivesAnOlderSave: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const step = canvas.getByRole('textbox', { name: 'Text of step 1' });
+    const first = held();
+    const second = held();
+    current.interference.holds = { changes: [first.promise, second.promise] };
+    await userEvent.clear(step);
+    await userEvent.type(step, 'Melt the butter.');
+    await userEvent.tab();
+    await waitFor(() => expect(changes()).toHaveLength(1));
+    await userEvent.click(step);
+    await userEvent.clear(step);
+    await userEvent.type(step, 'Melt the butter slowly.');
+    await userEvent.tab();
+    await expect(changes()).toHaveLength(1);
+    first.release();
+    await waitFor(() => expect(changes()).toHaveLength(2));
+    await expect(step).toHaveValue('Melt the butter slowly.');
+    const row = step.closest('li');
+    if (!row) throw new Error('step row');
+    await userEvent.click(within(row).getByRole('button', { name: '1 ingredient linked' }));
+    await userEvent.click(within(row).getByRole('checkbox', { name: '1½ cups flour, sifted' }));
+    second.release();
+    await waitFor(() => expect(changes().length).toBeGreaterThanOrEqual(3));
+    await expect(changes().at(-1)!.body).toMatchObject({ operations: [{ qualifier: {
+      instructionText: { value: 'Melt the butter slowly.' },
+      usesIngredient: expect.arrayContaining([id(22)]),
+    } }] });
+  },
+};
+
 /** Yield and times are written when a field is left, and only what changed is sent. */
 export const YieldAndTimes: Story = {
   async play({ canvasElement }) {

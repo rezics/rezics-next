@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { actingSubject, fakeMain, id, mainVersion, startRecipe, work } from './fixtures.ts';
-import { selectionWhilePending, toggleIngredient } from './step-selection.ts';
+import { selectionWhilePending, textWhilePending, toggleIngredient } from './step-selection.ts';
 import { createRecipeStore } from './store.ts';
 
 const stepId = id(13);
@@ -45,4 +45,13 @@ test('checking a second ingredient before the first save finishes keeps both on 
     (call.body as { operations: { qualifier: { usesIngredient: string[] } }[] }).operations[0]!.qualifier.usesIngredient);
   expect(sent).toEqual([[id(21)], [id(21), id(22)]]);
   expect(saved()).toEqual([id(21), id(22)]);
+});
+
+test('a checkbox commit keeps the newest pending step text when an older save restored the field', () => {
+  const saved = 'Melt the butter.';
+  const pending = 'Melt the butter slowly.';
+  expect(textWhilePending(saved, pending, saved)).toBe(pending);
+  expect(textWhilePending(saved, pending, pending)).toBe(pending);
+  expect(textWhilePending(saved, pending, 'Brown the butter.')).toBe('Brown the butter.');
+  expect(textWhilePending(saved, null, 'Brown the butter.')).toBe('Brown the butter.');
 });

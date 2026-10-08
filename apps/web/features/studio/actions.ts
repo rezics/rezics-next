@@ -8,9 +8,9 @@ import { readTypes } from '../catalogue/types-read.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import { signInPath } from '../auth/paths.ts';
 import { readSession } from '../auth/session.ts';
-import { studioHref, workHref } from './agent.ts';
+import { createdWorkPath } from './agent.ts';
 import type { NewWorkState } from './new-work-form.tsx';
-import { idOf, writableTypes } from './types.ts';
+import { writableTypes } from './types.ts';
 
 const idempotencyKey = /^[A-Za-z0-9:_./-]{1,128}$/;
 const language = /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/i;
@@ -55,7 +55,5 @@ export async function createWork(previous: NewWorkState, form: FormData): Promis
   if (!response.data || 'operationId' in response.data) return { status: 'pending', message: t.createPending, key, values };
   // An author's own Work is always created here; a catalogue-grain redirect means the form sent the wrong grain.
   if ('outcome' in response.data) return { status: 'error', message: t.createUnavailable, key: crypto.randomUUID(), values };
-  // A book is written chapter by chapter; anything else starts on its text.
-  redirect(localizedPath(offered.presentation === 'book' ? workHref(agent, response.data.work, 'chapters')
-    : `${studioHref(agent, `/works/${idOf(response.data.work)}/write`)}?language=${encodeURIComponent(writing)}`, locale));
+  redirect(localizedPath(createdWorkPath(agent, response.data.work, offered.presentation, writing), locale));
 }

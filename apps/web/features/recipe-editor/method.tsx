@@ -8,7 +8,7 @@ import { type KeyboardEvent, useRef, useState } from 'react';
 import { IconAction, SyncedTextarea } from './controls.tsx';
 import type { Copy } from './messages.ts';
 import { groups, ingredients, type IngredientNode, type RecipeState, steps, type StepNode } from './model.ts';
-import { selectionWhilePending, toggleIngredient } from './step-selection.ts';
+import { selectionWhilePending, textWhilePending, toggleIngredient } from './step-selection.ts';
 import type { RecipeStore } from './store.ts';
 import { directionOf } from '../studio/types.ts';
 
@@ -41,27 +41,28 @@ function UsesPicker({ state, value, onChange, t, idPrefix }: {
 function StepRow({ node, index, count, store, state, language, t, busy }: Common & { node: StepNode; index: number; count: number }) {
   const [linking, setLinking] = useState(false);
   const text = useRef<HTMLTextAreaElement>(null);
-  // Newest ingredient selection while this step's write has not settled. The checkboxes follow it,
-  // so a second check is added to it instead of replacing the references Main still has saved.
-  const pendingUses = useRef<readonly string[] | null>(null);
-  const [shownUses, setShownUses] = useState<readonly string[] | null>(null);
+  // Newest text and ingredient selection while this step's write has not settled. A late response
+  // must not put an older save back into either, or the next checkbox would resubmit that older text.
+  const pending = useRef<{ text: string; uses: readonly string[] } | null>(null);
+  const [shown, setShown] = useState<{ text: string; uses: readonly string[] } | null>(null);
   const stored = node.qualifier.instructionText.value;
   const savedUses = node.qualifier.usesIngredient;
-  const uses = selectionWhilePending(savedUses, shownUses);
+  const uses = selectionWhilePending(savedUses, shown?.uses ?? null);
   const parent = state.nodes.find(item => item.occurrence === node.parent);
   const section = parent?.role === 'group' ? parent.label?.value : null;
   const commit = (next?: readonly string[]) => {
-    const base = selectionWhilePending(savedUses, pendingUses.current);
+    const base = selectionWhilePending(savedUses, pending.current?.uses ?? null);
     const list = [...(next ?? base)];
-    const value = text.current?.value.trim() ?? stored;
-    if (!value) { if (text.current) text.current.value = stored; return; }
+    const value = textWhilePending(stored, pending.current?.text ?? null, text.current?.value.trim() ?? stored);
+    if (!value) { if (text.current) text.current.value = pending.current?.text ?? stored; return; }
     if (value === stored && list.length === base.length && list.every((item, at) => item === base[at])) return;
-    pendingUses.current = list;
-    setShownUses(list);
+    const mark = { text: value, uses: list };
+    pending.current = mark;
+    setShown(mark);
     void store.submit({ kind: 'editStep', occurrence: node.occurrence, text: value, uses: list }).then(() => {
-      if (pendingUses.current !== list) return;
-      pendingUses.current = null;
-      setShownUses(null);
+      if (pending.current !== mark) return;
+      pending.current = null;
+      setShown(null);
     });
   };
   const number = index + 1;
@@ -70,7 +71,7 @@ function StepRow({ node, index, count, store, state, language, t, busy }: Common
       <span aria-hidden="true" className="mt-2 flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 font-semibold text-sm">{number}</span>
       <div className="grid min-w-0 flex-1 gap-1">
         {section ? <span className="text-muted-foreground text-xs">{t.stepSection({ section: section })}</span> : null}
-        <SyncedTextarea ref={text} value={stored} aria-label={t.stepText({ number: String(number) })} maxLength={4000}
+        <SyncedTextarea ref={text} value={shown?.text ?? stored} aria-label={t.stepText({ number: String(number) })} maxLength={4000}
           lang={language} dir={directionOf(language)} onBlur={() => commit()} className="min-h-16" />
       </div>
     </div>

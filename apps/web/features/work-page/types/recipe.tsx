@@ -204,6 +204,8 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
   const prep = measures.find(item => item.kind === 'preparation-duration');
   const cook = measures.find(item => item.kind === 'cooking-duration');
   const yieldMeasure = measures.find(item => item.kind === 'yield');
+  const editorLink = edit ? <Link href={edit.href} className={buttonVariants({ variant: 'outline' })}>
+    <PencilIcon aria-hidden="true" />{edit.label}</Link> : null;
   const scale = async (event: FormEvent) => {
     event.preventDefault();
     if (!Number.isInteger(servings) || servings < 1 || servings > 100) return;
@@ -236,10 +238,7 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
           </form> : null}
           {convertible ? <UnitToggle value={units} onChange={setUnits} messages={t} /> : null}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {edit ? <Link href={edit.href} className={buttonVariants({ variant: 'outline' })}>
-            <PencilIcon aria-hidden="true" />{edit.label}</Link> : null}
-        </div>
+        <div className="flex flex-wrap gap-2">{editorLink}</div>
       </div>
       {error ? <p role="alert" className="text-destructive text-sm">{t.scaleFailed}</p> : null}
       <div className="grid gap-8 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
@@ -253,6 +252,7 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
       {cooking ? <CookMode page={page} messages={t} units={units}
         onClose={() => setCooking(false)} /> : null}
     </> : <>
+      {editorLink}
       <p className="text-muted-foreground text-sm">{t.recipeUnstructured}</p>
       {text ? <p className="whitespace-pre-wrap leading-7">{text}</p> : null}
     </>}
