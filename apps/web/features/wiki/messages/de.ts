@@ -17,5 +17,7 @@ export default {
   everythingNote: 'Enthält auch Einträge aus Kapiteln, die du noch nicht gelesen hast.',
   moreChapters: 'Die Geschichte hat mehr Kapitel, als diese Liste zeigt. Mit „Alles anzeigen“ siehst du den Rest.',
   unavailable: 'Die Leseposition lässt sich gerade nicht wählen.',
+  // Machine-drafted; needs native review.
+  numberSeekUnavailable: 'Ein Sprung nach Nummer ist für diese Serie noch nicht möglich. Blättere in der Liste oder suche nach dem Titel.',
   close: 'Schließen',
 } satisfies WikiMessages;

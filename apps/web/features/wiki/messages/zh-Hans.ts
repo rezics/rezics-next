@@ -17,5 +17,7 @@ export default {
   everythingNote: '包括尚未读到的章节中揭示的记录。',
   moreChapters: '故事的章节比此列表更多。用“显示全部”查看其余部分。',
   unavailable: '暂时无法选择阅读位置。',
+  // Machine-drafted; needs native review.
+  numberSeekUnavailable: '这个系列还不能按集数跳转。请浏览列表，或按标题搜索。',
   close: '关闭',
 } satisfies WikiMessages;

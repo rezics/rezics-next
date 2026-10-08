@@ -17,5 +17,7 @@ export default {
   everythingNote: 'Incluye registros revelados en capítulos que aún no has leído.',
   moreChapters: 'La historia tiene más capítulos de los que muestra esta lista. Usa Mostrar todo para ver el resto.',
   unavailable: 'No se puede elegir la posición de lectura ahora mismo.',
+  // Machine-drafted; needs native review.
+  numberSeekUnavailable: 'Saltar por número todavía no está disponible para esta serie. Recorre la lista o busca por título.',
   close: 'Cerrar',
 } satisfies WikiMessages;

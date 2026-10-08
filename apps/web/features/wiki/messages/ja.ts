@@ -17,5 +17,7 @@ export default {
   everythingNote: 'まだ読んでいない章で明かされる記録も含まれます。',
   moreChapters: 'この物語の章は一覧より多くあります。残りは「すべて表示」で見られます。',
   unavailable: 'いま読み進めた位置を選べません。',
+  // Machine-drafted; needs native review.
+  numberSeekUnavailable: 'このシリーズでは、まだ話数で移動できません。一覧から選ぶか、タイトルで検索してください。',
   close: '閉じる',
 } satisfies WikiMessages;

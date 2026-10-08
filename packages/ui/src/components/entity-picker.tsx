@@ -178,6 +178,11 @@ export function EntityPicker<T extends EntityPickerItem>({
           style={{ overflow: 'hidden' }}
         >
           {!state.q ? suggestions : null}
+          {state.notice ? (
+            <p role="status" className="px-3 py-2 text-muted-foreground text-sm">
+              {state.notice}
+            </p>
+          ) : null}
           <ComboboxList
             aria-label={label}
             tabIndex={state.items.length ? 0 : -1}

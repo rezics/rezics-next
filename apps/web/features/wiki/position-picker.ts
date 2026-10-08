@@ -1,8 +1,9 @@
-import type { EntityPickerItem, EntityPickerPage } from '@rezics/ui/entity-picker';
+import type { EntityPickerItem, EntityPickerLoad, EntityPickerPage } from '@rezics/ui/entity-picker';
 import type { ZoneText } from '@rezics/zone-sdk';
-import type { MainClient } from '../discover/types.ts';
+import { problemCode, type MainClient } from '../discover/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { idOf } from '../work-page/route.ts';
+import type { WikiMessages } from './messages.ts';
 import { withPosition } from './position.ts';
 
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }>
@@ -15,10 +16,61 @@ export interface PositionPickerItem extends EntityPickerItem {
   text: ZoneText;
   current: boolean;
 }
+/** Main's problem code when an episode series cannot jump by number yet. */
+export const readingSeekUnavailable = 'reading_seek_unavailable';
+
 export class PositionReadError extends Error {
-  constructor(readonly status: number) {
+  readonly code?: string;
+  constructor(readonly status: number, code?: string) {
     super('Reading positions unavailable');
+    this.code = code;
   }
+}
+
+/** The sentence for a numeric jump Main refused, or null when the failure stays the generic unavailable state. */
+export function positionChooserNotice(
+  code: string | undefined,
+  copy: Pick<WikiMessages, 'numberSeekUnavailable'>,
+): string | null {
+  return code === readingSeekUnavailable ? copy.numberSeekUnavailable : null;
+}
+
+export interface PositionLoadMemory {
+  /** The query whose numeric jump was refused, still sitting in the field. */
+  refusedQuery: string | null;
+  /** The first page of the unfiltered list, so paging can continue under that query. */
+  browseFirst: EntityPickerPage<PositionPickerItem> | null;
+}
+
+/**
+ * A refused numeric jump keeps the typed query and answers with the chapter list instead of failing the chooser.
+ * Title search and any other error use the ordinary page or the ordinary failure.
+ */
+export async function loadPositionPickerPage(
+  query: { q: string; cursor: string | null },
+  fetchPage: EntityPickerLoad<PositionPickerItem>,
+  memory: PositionLoadMemory,
+): Promise<PositionLoadMemory & { page: EntityPickerPage<PositionPickerItem> }> {
+  const refused = memory.refusedQuery !== null && query.q === memory.refusedQuery;
+  try {
+    const page = await fetchPage(refused ? { q: '', cursor: query.cursor } : query);
+    return {
+      page,
+      refusedQuery: refused ? query.q : null,
+      browseFirst: !query.q && !query.cursor ? page : memory.browseFirst,
+    };
+  } catch (error) {
+    if (!(error instanceof PositionReadError) || error.code !== readingSeekUnavailable || !query.q || query.cursor)
+      throw error;
+    // The field keeps the number; the list underneath is the browsable order, not an empty failure.
+    const browseFirst = memory.browseFirst ?? await fetchPage({ q: '', cursor: null });
+    return { page: browseFirst, refusedQuery: query.q, browseFirst };
+  }
+}
+
+function errorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== 'object' || !('value' in error)) return undefined;
+  return problemCode(error.value);
 }
 
 /** The content's own language survives interface-language selection. */
@@ -64,7 +116,8 @@ export async function readReadingPositionPage(
     });
   let answer = await read();
   if (answer.error?.status === 409 && !input.cursor) answer = await read();
-  if (answer.error || !answer.data) throw new PositionReadError(answer.error?.status ?? 503);
+  if (answer.error || !answer.data)
+    throw new PositionReadError(answer.error?.status ?? 503, errorCode(answer.error));
   const page = answer.data;
   if (
     (!page.complete && page.search?.status !== 'indexing' && (!page.nextCursor || page.nextCursor === input.cursor)) ||

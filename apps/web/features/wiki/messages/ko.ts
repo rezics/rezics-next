@@ -17,5 +17,7 @@ export default {
   everythingNote: '아직 읽지 않은 장에서 밝혀지는 기록도 포함됩니다.',
   moreChapters: '이야기에는 이 목록보다 많은 장이 있습니다. 나머지는 모두 보기로 확인하세요.',
   unavailable: '지금은 읽기 위치를 고를 수 없습니다.',
+  // Machine-drafted; needs native review.
+  numberSeekUnavailable: '이 시리즈는 아직 회차 번호로 이동할 수 없습니다. 목록을 살펴보거나 제목으로 검색하세요.',
   close: '닫기',
 } satisfies WikiMessages;

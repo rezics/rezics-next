@@ -27,6 +27,7 @@ const en = {
   everythingNote: 'Includes records revealed in chapters you have not read.',
   moreChapters: 'The story has more chapters than this list shows. Use Show everything to see the rest.',
   unavailable: 'The reading position cannot be chosen right now.',
+  numberSeekUnavailable: 'Jumping by number is not available for this series yet. Browse the list or search by title.',
   close: 'Close',
 };
 

@@ -9,9 +9,12 @@ import { cardRenderer, workRenderers } from '../zones/zone-home.tsx';
 import { zoneMessagesFor } from '../zones/fixtures.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { RealmPageStory } from '../realm/story-page.tsx';
+import { browseMessages } from '../discover/browse-messages.ts';
+import { focusForTyping } from '../../../../packages/ui/src/test/focus.ts';
 import * as data from './fixtures.ts';
 import { copyOf } from './messages.ts';
 import { PositionControl } from './position-control.tsx';
+import { PositionReadError, type PositionPickerItem } from './position-picker.ts';
 
 // The franchise wiki Zone at each state of its reads: empty, young and full; a page withheld by position, a quotation
 // withheld by rights, and the position control. Phone and desktop, light and dark, as the readers of this Zone see them.
@@ -294,6 +297,107 @@ export const PositionEverything: Story = {
     await expect(within(bar).getByRole('button', { name: /^Up to:|^Showing everything/ })).toHaveTextContent('Showing everything');
     await expect(within(bar).queryByRole('link', { name: 'Show everything' })).toBeNull();
   },
+};
+
+const numberSeekChoices: PositionPickerItem[] = Array.from({ length: 40 }, (_, index) => {
+  const n = index + 1;
+  const label = n === 40 ? 'The lantern market' : `Chapter ${n}`;
+  return {
+    value: `chapter-${n}`,
+    label,
+    text: data.text(label),
+    href: `/wiki?position=chapter-${n}`,
+    current: false,
+  };
+});
+
+/** Episode numbers are refused; titles and the unfiltered list still page. `down` is any other failure. */
+function numberSeekLoad({ q, cursor }: { q: string; cursor: string | null }) {
+  const query = q.normalize('NFKC').trim();
+  if (/^[+-]?\d+(?:[./]\d+)?$/.test(query)) throw new PositionReadError(503, 'reading_seek_unavailable');
+  if (query === 'down') throw new PositionReadError(503);
+  const matched = query
+    ? numberSeekChoices.filter((item) => item.label.toLowerCase().includes(query.toLowerCase()))
+    : numberSeekChoices;
+  const start = cursor ? Number(cursor) : 0;
+  const items = matched.slice(start, start + 20);
+  const next = start + 20 < matched.length ? String(start + 20) : null;
+  return Promise.resolve({ items, nextCursor: next, complete: next === null });
+}
+
+function NumberSeekChooser({ locale }: { locale: UiLocale }) {
+  const copy = copyOf(locale);
+  return (
+    <PositionControl
+      copy={copy}
+      locale={locale}
+      at={{ kind: 'all' }}
+      options={[]}
+      progress={{ href: '/wiki', current: false, resolved: null }}
+      everything={{ href: '/wiki?position=all', current: true }}
+      more={false}
+      load={numberSeekLoad}
+    />
+  );
+}
+
+/** A number the series cannot jump to yet: the field keeps it, the list still pages, and a title search still works. */
+async function showNumberSeek(canvasElement: HTMLElement) {
+  const message = copyOf('en').numberSeekUnavailable;
+  const failed = 'Couldn’t load choices.';
+  const canvas = within(canvasElement);
+  const page = within(document.body);
+  const bar = canvas.getByRole('region', { name: 'Reading position' });
+  const trigger = within(bar).getByRole('button', { name: 'Showing everything' });
+  await waitFor(() => expect(trigger).toBeEnabled());
+  await userEvent.click(trigger);
+  const input = await page.findByRole('combobox', { name: browseMessages.en.searchChapters });
+  await waitFor(() => expect(input).toBeEnabled());
+  await focusForTyping(input);
+  await userEvent.type(input, 'down');
+  await waitFor(() => expect(page.getByRole('alert')).toHaveTextContent(failed));
+  await expect(page.queryByText(message)).toBeNull();
+  await expect(input).toHaveValue('down');
+  await userEvent.clear(input);
+  await userEvent.type(input, '12');
+  await waitFor(async () => {
+    await expect(page.getByText(message)).toBeVisible();
+    await expect(input).toHaveValue('12');
+    await expect(page.getByRole('option', { name: 'Chapter 1' })).toBeVisible();
+    await expect(page.queryByRole('alert')).toBeNull();
+  });
+  const more = page.getByRole('button', { name: 'Show more' });
+  await waitFor(() => expect(more).toBeEnabled());
+  await userEvent.click(more);
+  await waitFor(() => expect(page.getByRole('option', { name: 'Chapter 21' })).toBeVisible());
+  await expect(input).toHaveValue('12');
+  await expect(page.getByText(message)).toBeVisible();
+  await userEvent.clear(input);
+  await userEvent.type(input, 'lantern');
+  await waitFor(async () => {
+    await expect(page.queryByText(message)).toBeNull();
+    await expect(page.getByRole('option', { name: 'The lantern market' })).toBeVisible();
+    await expect(page.queryByRole('option', { name: 'Chapter 1' })).toBeNull();
+  });
+  await userEvent.clear(input);
+  await userEvent.type(input, '12');
+  await waitFor(async () => {
+    await expect(page.getByText(message)).toBeVisible();
+    await expect(input).toHaveValue('12');
+  });
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+}
+
+/** Jumping by number is refused for this series. Phone (390 px) and desktop (1280 px). */
+export const NumberSeekUnavailable: Story = {
+  globals: { viewport: { value: 'desktop' } },
+  render: ({ locale }) => <NumberSeekChooser locale={locale} />,
+  play: async ({ canvasElement }) => { await showNumberSeek(canvasElement); },
+};
+
+export const NumberSeekUnavailablePhone: Story = {
+  ...NumberSeekUnavailable,
+  globals: { viewport: { value: 'phone' } },
 };
 
 /** The Japanese reading of a character page, for names in their own script and the Zone's own words. */

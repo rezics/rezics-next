@@ -10,6 +10,8 @@ export interface EntityPickerPage<T> {
   complete: boolean;
   /** More matches may appear; refreshing restarts from the current search basis. */
   updating?: boolean;
+  /** Shown with the choices. A refused query can explain itself without failing the list. */
+  notice?: string;
 }
 export type EntityPickerLoad<T> = (query: {
   q: string;
@@ -47,7 +49,7 @@ export class EntityPickerSource<T extends EntityPickerItem> {
   }
   search(q: string) {
     this.generation++;
-    this.publish({ q, items: [], nextCursor: null, complete: false, updating: false, loading: false, error: false });
+    this.publish({ q, items: [], nextCursor: null, complete: false, updating: false, loading: false, error: false, notice: undefined });
     return this.request(false);
   }
   more = () =>
@@ -82,9 +84,10 @@ export class EntityPickerSource<T extends EntityPickerItem> {
         complete: page.complete,
         updating: page.updating ?? false,
         loading: false,
+        notice: page.notice,
       });
     } catch {
-      if (generation === this.generation) this.publish({ loading: false, error: true });
+      if (generation === this.generation) this.publish({ loading: false, error: true, notice: undefined });
     }
   }
 }

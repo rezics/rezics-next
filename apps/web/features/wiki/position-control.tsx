@@ -4,8 +4,12 @@ import { buttonVariants } from '@rezics/ui/button';
 import { EntityPicker, type EntityPickerLoad } from '@rezics/ui/entity-picker';
 import { localizedPath } from '../../i18n/locale.ts';
 import {
+  loadPositionPickerPage,
+  positionChooserNotice,
   positionPickerPage,
   readReadingPositionPage,
+  readingSeekUnavailable,
+  type PositionLoadMemory,
   type PositionPickerItem,
 } from './position-picker.ts';
 import { browserMainApi } from '../api/browser.ts';
@@ -13,11 +17,11 @@ import { Sheet, SheetBody, SheetContent, SheetHeader, SheetTrigger } from '@rezi
 import { cn } from '@rezics/ui/utils';
 import type { ZoneText } from '@rezics/zone-sdk';
 import { BookMarkedIcon, CheckIcon } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { browseMessages } from '../discover/browse-messages.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import type { WikiMessages } from './messages.ts';
+import { copyOf, type WikiMessages } from './messages.ts';
 
 /** One place the reader may read up to, with the address that chooses it. */
 export interface PositionChoiceOption {
@@ -99,7 +103,10 @@ export function PositionControl({
   navigate = (href) => window.location.assign(href),
   children,
 }: PositionControlProps) {
-  const load: EntityPickerLoad<PositionPickerItem> | undefined =
+  const numberSeek = useRef<string | null>(null);
+  const browseFirst = useRef<PositionLoadMemory['browseFirst']>(null);
+  const generation = useRef(0);
+  const fetchPage: EntityPickerLoad<PositionPickerItem> | undefined =
     providedLoad ??
     (search
       ? async ({ q, cursor }) =>
@@ -121,6 +128,29 @@ export function PositionControl({
             search.current,
           )
       : undefined);
+  // A newer keystroke wins. An older read must not clear the notice for the query still in the field.
+  const load: EntityPickerLoad<PositionPickerItem> | undefined = fetchPage
+    ? async (query) => {
+        const ticket = ++generation.current;
+        try {
+          const result = await loadPositionPickerPage(query, fetchPage, {
+            refusedQuery: numberSeek.current,
+            browseFirst: browseFirst.current,
+          });
+          if (ticket === generation.current) {
+            numberSeek.current = result.refusedQuery;
+            browseFirst.current = result.browseFirst;
+          }
+          const notice = result.refusedQuery
+            ? positionChooserNotice(readingSeekUnavailable, copyOf(locale)) ?? undefined
+            : undefined;
+          return notice ? { ...result.page, notice } : result.page;
+        } catch (error) {
+          if (ticket === generation.current) numberSeek.current = null;
+          throw error;
+        }
+      }
+    : undefined;
   const [open, setOpen] = useState(false);
   const words = browseMessages[locale];
   // Tests and scripts wait for this before they press the trigger: the server-rendered button does nothing until then.
