@@ -356,12 +356,14 @@ test('commandAsync keeps preparation past the operation timeout and fails closed
     process.env, undefined, { phaseDeadline: () => ({ activeLimitMs: -1 }) });
   expect(negative.output).toContain(phaseDeadlineFailure);
   expect(negative.output.match(/phase deadline failed/g)?.length).toBe(1);
-  const leaked = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(30_000)'], 30_000,
+  const customReason = 'runner stopped for its phase limit';
+  const custom = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(30_000)'], 30_000,
     process.env, undefined, {
-      phaseDeadline: () => ({ activeLimitMs: 10_000, reason: secret }),
+      phaseDeadline: () => ({ activeLimitMs: 10_000, reason: customReason }),
     });
-  expect(leaked.output).toContain(phaseDeadlineFailure);
-  expect(leaked.output).not.toContain(secret);
+  expect(custom.timedOut).toBe(true);
+  expect(custom.output).toContain(customReason);
+  expect(custom.output).not.toContain(phaseDeadlineFailure);
   let seenPastOperationTimeout = false;
   const preparation = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(500)'], 360,
     process.env, undefined, {
@@ -405,6 +407,43 @@ test('commandAsync keeps preparation past the operation timeout and fails closed
     });
   expect(wall.output).toContain('reached its run deadline');
   expect(wall.output).not.toContain(phaseDeadlineFailure);
+  const exact = await commandAsync(import.meta.dir, 'bun', ['-e', 'process.exit(0)'], 5_000,
+    process.env, undefined, {
+      phaseDeadline: probe => ({ activeLimitMs: probe.activeElapsedMs }),
+    });
+  expect(exact.ok).toBe(true);
+  expect(exact.timedOut).toBe(false);
+  expect(exact.output).not.toContain(phaseDeadlineFailure);
+  let preparationCeiling = -1;
+  const preparationOver = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(30_000)'], 30_000,
+    process.env, undefined, {
+      phaseDeadline: probe => {
+        if (preparationCeiling < 0) preparationCeiling = probe.activeElapsedMs;
+        if (probe.activeElapsedMs <= preparationCeiling) return { activeLimitMs: preparationCeiling };
+        return campaignPhaseDeadline(sample(CAMPAIGN_PREPARATION_ACTIVE_MS + 1), { kind: 'absent' });
+      },
+    });
+  expect(preparationOver.timedOut).toBe(true);
+  expect(preparationOver.output).toContain('bun preparation exceeded 600000 ms of active work');
+  expect(preparationOver.output).not.toContain(phaseDeadlineFailure);
+  expect(preparationOver.output.match(/preparation exceeded 600000 ms of active work/g)?.length).toBe(1);
+  let operationCeiling = -1;
+  const operationOver = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(30_000)'], 30_000,
+    process.env, undefined, {
+      phaseDeadline: probe => {
+        if (operationCeiling < 0) operationCeiling = probe.activeElapsedMs;
+        if (probe.activeElapsedMs <= operationCeiling) return { activeLimitMs: operationCeiling };
+        return campaignPhaseDeadline(
+          sample(operationCeiling + CAMPAIGN_OPERATION_ACTIVE_MS + 1),
+          ready(1, operationCeiling),
+        );
+      },
+    });
+  expect(operationOver.timedOut).toBe(true);
+  expect(operationOver.output).toContain('bun timed out after 360000 ms of active work');
+  expect(operationOver.output).not.toContain(phaseDeadlineFailure);
+  expect(operationOver.output).not.toContain('preparation exceeded');
+  expect(operationOver.output.match(/timed out after 360000 ms of active work/g)?.length).toBe(1);
 }, 15_000);
 
 const runnerEvidence = new Map<string, string>();

@@ -423,7 +423,6 @@ export interface CommandPhaseSample {
 
 /** A phase callback that throws or returns an unusable limit. Not a caller-supplied message. */
 export const phaseDeadlineFailure = 'phase deadline failed';
-const trustedPhaseReason = /^[A-Za-z0-9][A-Za-z0-9._-]{0,40} (?:preparation exceeded [0-9]{1,7} ms of active work|timed out after [0-9]{1,7} ms of active work|campaign evidence was refused)$/;
 
 export async function commandAsync(root: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void,
@@ -525,7 +524,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
       const reason = phase !== null && typeof phase === 'object' && typeof phase.reason === 'string' && phase.reason.length > 0
         ? phase.reason : undefined;
       if (reason !== undefined) {
-        expire(trustedPhaseReason.test(reason) ? reason : phaseDeadlineFailure);
+        expire(reason);
         return;
       }
       const limit = phase !== null && typeof phase === 'object' ? phase.activeLimitMs : undefined;
@@ -533,7 +532,8 @@ export async function commandAsync(root: string, name: string, args: string[], t
         expire(phaseDeadlineFailure);
         return;
       }
-      if (activeElapsedMs >= limit) {
+      // The limit instant is still inside the budget. Only a later sample past it expires.
+      if (activeElapsedMs > limit) {
         expire(phaseDeadlineFailure);
         return;
       }
