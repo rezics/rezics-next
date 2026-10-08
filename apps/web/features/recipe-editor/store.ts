@@ -83,19 +83,33 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   const listeners = new Set<() => void>();
   let idlers: (() => void)[] = [];
   let refreshes = 0;
+  /** Successful writes. A read applies only when this is still the value it started with. */
+  let confirmed = 0;
   let round = 0;
   const notify = () => {
     snapshot = { state, busy: lanes.size > 0, failure: failure ? { intent: failure.intent, refusal: failure.refusal } : null };
     for (const listener of listeners) listener();
   };
 
-  /** Reads Main again. Only the latest read started may replace what is held, so a slow older read never puts back an older state. */
+  /**
+   * Reads Main again. The latest read started wins over an older one. A read may replace what is
+   * held only when no write was confirmed after it started; otherwise the snapshot is an older head
+   * and is discarded, and the recipe is read again.
+   */
   async function refresh(): Promise<boolean> {
-    const mine = ++refreshes;
-    const read = await readRecipe(main(), work, actingSubject);
-    if (!read.ok || disposed) return false;
-    if (mine === refreshes) state = read.data;
-    return true;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const mine = ++refreshes;
+      const baseline = confirmed;
+      const read = await readRecipe(main(), work, actingSubject);
+      if (!read.ok || disposed) return false;
+      if (confirmed !== baseline) {
+        if (mine !== refreshes) return true;
+        continue;
+      }
+      if (mine === refreshes) state = read.data;
+      return true;
+    }
+    return false;
   }
 
   /** The record's newest intent: what waits in its slot replaces the one that conflicted, and its callers wait for it. */
@@ -122,6 +136,8 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
    * locally, so the recipe is read again. A failed read of that replay stays unresolved.
    */
   async function adopt(flight: Flight, data: { revision: string; occurrences?: string[] }): Promise<boolean> {
+    // Confirmed before the read that places an insertion, so that read cannot outrun a newer write.
+    confirmed += 1;
     const created = data.occurrences ?? [];
     const inserts = flight.plan.kind === 'changes' ? flight.plan.operations.filter(operation => operation.op === 'insert').length : 0;
     if (inserts > created.length || state.head !== flight.head) {
@@ -143,7 +159,10 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
           const created = await createRecipe(main(), { work, mainVersion, actingSubject });
           if (!created.ok) return { kind: 'refused', refusal: refusalOf(created) };
           // The Composition may already hold edits from another tab or record: read it rather than assume it is empty.
-          if (!state.structure) state = { ...state, structure: created.data.structure, head: created.data.revision };
+          if (!state.structure) {
+            state = { ...state, structure: created.data.structure, head: created.data.revision };
+            confirmed += 1;
+          }
           await refresh();
         }
         const planned: Plan = plan(state, entry.intent);

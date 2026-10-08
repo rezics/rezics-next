@@ -62,7 +62,19 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
     /** Drop this many successful responses after the command is applied, so the next same key is a replay. */
     lose?: Record<string, number>;
     /** A draft read answers nothing, so a recovery that must see the body cannot. */
-    unreadableDraft?: boolean } = {};
+    unreadableDraft?: boolean;
+    /** The next composition change omits the occurrences it inserted, so the editor has to read the recipe back. */
+    dropOccurrences?: boolean;
+    /** A measure write is applied even when the head it names has already moved. */
+    acceptStale?: boolean;
+    /**
+     * Replaces one recipe read. `current` is the recipe Main holds at the moment of the read.
+     * Returning nothing uses that recipe; returning a value uses it instead, so a late read can be stale.
+     */
+    recipe?: (current: () => { structure: string; revision: string | null; measures: Measure[];
+      occurrences: { occurrence: string; parent: string; role: string; state: string; labels: { value: string; language: string }[];
+        qualifier?: unknown }[] } | null) => Promise<unknown>;
+  } = {};
   const holdIndex = new Map<string, number>();
   /** Commands that already committed, keyed by Idempotency-Key. A repeat is a replay, not a second apply. */
   const committed = new Map<string, { digest: string; revision: string }>();
@@ -102,16 +114,19 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
     const created = body.operations.filter(operation => operation.op === 'insert').map(() => next());
     recipe = { ...applyOperations(recipe, body.operations, created), head: next() };
     if (key) committed.set(key, { digest, revision: recipe.head! });
+    const omit = interference.dropOccurrences === true;
+    if (omit) interference.dropOccurrences = false;
     const lose = interference.lose?.changes ?? 0;
     if (lose > 0 && interference.lose) {
       interference.lose.changes = lose - 1;
       return { data: null, error: { status: 503, value: {} } };
     }
-    return answer({ structure: recipe.structure, revision: recipe.head, occurrences: created, receipt: 'receipt', replayed: false });
+    return answer({ structure: recipe.structure, revision: recipe.head, receipt: 'receipt', replayed: omit,
+      ...(omit ? {} : { occurrences: created }) });
   } };
   const measurePost = (kind: 'measures' | 'timings') => async (body: Record<string, unknown> & { expectedHead: string }, options?: never) => {
     await record(kind, body, options);
-    const stale = cas(body.expectedHead);
+    const stale = interference.acceptStale ? null : cas(body.expectedHead);
     if (stale) return stale;
     let measures = recipe.measures;
     if (kind === 'measures') {
@@ -134,7 +149,11 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
 
   const main = { v1: {
     recipes: Object.assign((_: { id: string }) => ({ measures: { post: measurePost('measures') }, timings: { post: measurePost('timings') } }), {
-      works: (_: { id: string }) => ({ get: async () => answer(page()) }) }),
+      works: (_: { id: string }) => ({ get: async () => {
+        if (!interference.recipe) return answer(page());
+        const body = await interference.recipe(page);
+        return answer(body === undefined ? page() : body);
+      } }) }),
     compositions: Object.assign((_: { id: string }) => ({ changes: compositionChanges }), {
       post: async (body: unknown, options?: never) => {
         await record('create', body, options);
