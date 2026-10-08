@@ -5,7 +5,7 @@ import { englishMessages } from '../work-page/messages.ts';
 import { RecipeExperience } from '../work-page/types/recipe.tsx';
 import { seedServedTypes } from '../catalogue/type-fixtures.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { createdWorkPath, editingHref, studioHref, textHref, workHref } from '../studio/agent.ts';
+import { createdWorkPath, editingHref, studioHref, studioSegment, textHref, workHref } from '../studio/agent.ts';
 import { agents, ids, inventory, now, workHeader } from '../studio/fixtures.ts';
 import { messages as studioMessages } from '../studio/messages.ts';
 import { StudioHome } from '../studio/studio-home.tsx';
@@ -36,8 +36,11 @@ test('a recipe with no composition offers no editor to someone who may not edit'
   expect(html).not.toContain('Edit recipe');
 });
 
+const withAgent = (href: string, who: { iri: string; handle: string | null }) =>
+  `${href}?agent=${encodeURIComponent(studioSegment(who))}`;
+
 test('creating a recipe opens the recipe editor, and a book or other work keeps its own start', () => {
-  expect(createdWorkPath(agent, created, 'recipe', 'en')).toBe(recipeEditHref(created));
+  expect(createdWorkPath(agent, created, 'recipe', 'en')).toBe(withAgent(recipeEditHref(created), agent));
   expect(createdWorkPath(agent, created, 'book', 'en')).toBe(workHref(agent, created, 'chapters'));
   expect(createdWorkPath(agent, created, 'document', 'zh-Hans')).toBe(
     `${studioHref(agent, `/works/${idOf(created)}/write`)}?language=zh-Hans`);
@@ -48,8 +51,8 @@ const recipeText = { id: ids.texts.recipe, revision: 'https://rezics.com/id/0000
 
 test('a recipe opens in the recipe editor from the work list and the work page, and other kinds keep their editors', () => {
   seedServedTypes();
-  expect(editingHref(cook, ids.recipe, 'recipe', { language: 'en', text: recipeText })).toBe(recipeEditHref(ids.recipe));
-  expect(editingHref(cook, ids.recipe, 'recipe', { language: 'ja' })).toBe(recipeEditHref(ids.recipe));
+  expect(editingHref(cook, ids.recipe, 'recipe', { language: 'en', text: recipeText })).toBe(withAgent(recipeEditHref(ids.recipe), cook));
+  expect(editingHref(cook, ids.recipe, 'recipe', { language: 'ja' })).toBe(withAgent(recipeEditHref(ids.recipe), cook));
   expect(editingHref(cook, ids.story, 'document', { language: 'en', text: { id: ids.texts.story, revision: recipeText.revision } }))
     .toBe(textHref(cook, ids.story, ids.texts.story, recipeText.revision));
   expect(editingHref(cook, ids.serial, 'book', { language: 'zh-Hans' })).toBe(workHref(cook, ids.serial, 'chapters'));

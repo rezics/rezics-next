@@ -24,6 +24,7 @@ import { isZonePage, ZONE_NONCE_HEADER, zoneCsp, zoneNonce } from './features/zo
 import { ADDRESS_HEADER, readAddress, type ResolvedAddress } from './features/address/client.ts';
 import { addressPath } from './features/address/path.ts';
 import { decideAddress } from './features/address/redirect.ts';
+import { studioSegmentIri } from './features/studio/agent.ts';
 import { displayLanguages } from './i18n/display-languages.ts';
 import { privateDiscovery, readSpacePage, realmDiscovery } from './features/address/space-read.ts';
 import { spaceDiscoveryHeaders } from './features/space-access/discovery.tsx';
@@ -38,6 +39,36 @@ import { WORK_MISSING_HEADER } from './features/work-page/admission.ts';
 // call reads it, so each request refreshes at most once and nothing
 // downstream handles expiry. The rewritten Cookie header carries the new
 // tokens to that code; Set-Cookie carries them to the browser.
+
+/**
+ * The Agent a recipe-editor link names, when the segment is an address.
+ * A handle is resolved from the Agents this account may create as. Main still
+ * admits the result; a segment this account cannot act for is not replaced here.
+ */
+async function linkedRecipeSubject(url: URL, token: string, incoming: Headers, deadlineAt: number): Promise<string | null> {
+  if (!/\/w\/[^/]+\/edit\/recipe\/?$/.test(url.pathname)) return null;
+  const segment = url.searchParams.get('agent');
+  if (!segment) return null;
+  const direct = studioSegmentIri(segment);
+  if (direct) return direct;
+  let value = segment;
+  try { value = decodeURIComponent(segment); } catch { return null; }
+  if (!value.startsWith('@')) return null;
+  const handle = value.slice(1).toLowerCase();
+  if (!/^[a-z0-9][a-z0-9_-]*$/.test(handle)) return null;
+  try {
+    const response = await serverRead(`${serviceOrigin('MAIN_ORIGIN')}/v1/me/acting-contexts?task=work.create`, {
+      headers: await mainReadHeaders({ authorization: `Bearer ${token}` }, incoming), cache: 'no-store' },
+      { deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata });
+    if (!response.ok) { await response.body?.cancel(); return null; }
+    const body = await response.json() as { contexts?: readonly { actingSubject?: unknown; handle?: unknown }[];
+      directContexts?: readonly { actingSubject?: unknown; handle?: unknown }[] };
+    const match = [...(body.contexts ?? []), ...(body.directContexts ?? [])].find(item =>
+      typeof item.handle === 'string' && item.handle.toLowerCase() === handle && typeof item.actingSubject === 'string');
+    return typeof match?.actingSubject === 'string' ? match.actingSubject : null;
+  } catch { return null; }
+}
+
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const transfer = request.nextUrl.pathname.startsWith('/api/main/v1/media/');
   const deadlineAt =
@@ -129,6 +160,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
         }),
       );
     }
+  }
+  // A Studio recipe link names its Agent. The owner read uses that Agent, and Main refuses one this account cannot act for.
+  if (token) {
+    const linked = await linkedRecipeSubject(request.nextUrl, token, incoming, deadlineAt);
+    if (linked) resourceViewer = { token, actingSubject: linked };
   }
   const pageRequest = request.method === 'GET' || request.method === 'HEAD';
   let spaceAddress: ResolvedAddress | undefined;

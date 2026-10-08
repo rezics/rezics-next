@@ -13,9 +13,28 @@ function agentSlug(agent: Pick<AgentOption, 'iri' | 'handle'>): string {
   return agent.handle ?? uuidToSid(agent.iri.slice(-36));
 }
 
+/** `@handle` or `@sid`, the same segment Studio puts in its route. */
+export function studioSegment(agent: Pick<AgentOption, 'iri' | 'handle'>): string {
+  return `@${agentSlug(agent)}`;
+}
+
+/**
+ * An IRI when the segment is itself an address (a sid or UUID, including a legacy
+ * `agent-` prefix). A chosen handle is not an address and resolves only against
+ * the Agents this person may act as.
+ */
+export function studioSegmentIri(segment: string): string | null {
+  let value: string;
+  try { value = decodeURIComponent(segment); } catch { return null; }
+  if (!value.startsWith('@') || value.length < 2 || value.length > 80) return null;
+  const key = value.slice(1);
+  const id = identityKeyUuid(/^agent-/i.test(key) ? key.slice(6) : key);
+  return id ? `https://rezics.com/id/${id}` : null;
+}
+
 /** `/studio/@{agent}` plus a Studio path such as `/new` or `/works/<id>`. */
 export function studioHref(agent: Pick<AgentOption, 'iri' | 'handle'>, path = ''): string {
-  return `/studio/@${agentSlug(agent)}${path}`;
+  return `/studio/${studioSegment(agent)}${path}`;
 }
 
 export type StudioAgent =
@@ -59,7 +78,8 @@ export interface EditingTarget {
  */
 export function editingHref(agent: Pick<AgentOption, 'iri' | 'handle'>, work: string, kind: string,
   target: EditingTarget): string {
-  if (kind === 'recipe') return recipeEditHref(work);
+  // The recipe editor lives outside `/studio/@{agent}`, so the link carries the same segment.
+  if (kind === 'recipe') return `${recipeEditHref(work)}?agent=${encodeURIComponent(studioSegment(agent))}`;
   if (kind === 'book' && !target.introduction) return workHref(agent, work, 'chapters');
   if (target.text) return textHref(agent, work, target.text.id, target.text.revision);
   return `${studioHref(agent, `/works/${idOf(work)}/write`)}?language=${encodeURIComponent(target.language)}`;
