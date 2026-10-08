@@ -88,6 +88,9 @@ export interface SummaryInput {
   languages?: readonly string[];
   /** Zone bindings admit Collections; the existing summary-batch transport does not. */
   includeCollections?: boolean;
+  /** The caller already loaded graph types. A non-Agent then needs no name-owner
+   * probe; community pages set this so that probe is not another graph request. */
+  settleNonAgentNameOwners?: boolean;
 }
 
 export type AvatarDescriptor =
@@ -483,8 +486,10 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   // Access/name/avatar hydration. Rated and absent rows then have the same
   // media generation and cost envelope as well as the same unavailable item.
   // The graph row's type already proves a non-Agent has no agent name owner.
+  // Absent rows and Agents still probe: a missing identity is not that proof.
   const settledNameOwner = (row: GraphRow | undefined) =>
-    row !== undefined && row.type !== 'agent' ? { nameOwnerResolved: true as const } : {};
+    input.settleNonAgentNameOwners && row !== undefined && row.type !== 'agent'
+      ? { nameOwnerResolved: true as const } : {};
   const initialTargets = unique.map(reference => {
     const row = graph.rows.get(reference);
     return { owner: 'graph' as const, resource: reference, component: 'name' as const,

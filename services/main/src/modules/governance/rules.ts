@@ -131,10 +131,14 @@ export class GovernanceRules implements RuleBasis {
       ) SELECT fence.open,(SELECT document FROM document) AS document,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('ref',h.ref,'revision',h.revision::text,'digest',h.digest))
           FROM access.governance_rule_head h WHERE h.scope_id=$2 AND h.ref IN (SELECT ref FROM refs)), '[]'::jsonb) AS heads,
-        (SELECT value::text FROM access.realm_member_count WHERE realm=$4) AS member_value,
-        (SELECT revision::text FROM access.realm_member_count WHERE realm=$4) AS member_revision
+        (SELECT value::text FROM access.realm_member_count
+          WHERE realm = substring($2 from char_length('governance:realm:') + 1)) AS member_value,
+        (SELECT revision::text FROM access.realm_member_count
+          WHERE realm = substring($2 from char_length('governance:realm:') + 1)) AS member_revision
       FROM fence`,
-        [realmRulesRef(realm), `governance:realm:${realm}`, JSON.stringify(fallback ?? []), realm],
+        // $2 is already `governance:realm:` plus the Realm IRI. The member count
+        // stays in this statement so a ruled Realm does not take another round trip.
+        [realmRulesRef(realm), `governance:realm:${realm}`, JSON.stringify(fallback ?? [])],
       )
     ).rows[0];
     if (!row?.open) throw new GovernanceUnavailable('Access is held for recovery');

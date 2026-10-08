@@ -216,7 +216,8 @@ export class WorkReadSession {
     } : undefined;
     const result = await readResourceSummaries(this.deps.environment, summaryMedia, reader,
       { resources, context: DEFAULT_MEDIA_CONTEXT, language: this.options.language?.toLowerCase() ?? null,
-        languages: this.displayLanguages, localBasis: this.options.localBasis });
+        languages: this.displayLanguages, localBasis: this.options.localBasis,
+        settleNonAgentNameOwners: true });
     if (this.options.localBasis) {
       const key = `summaries:${JSON.stringify(resources)}`;
       const token = readDependencyToken([result.generation.graph, result.summaries]);
@@ -273,19 +274,29 @@ export class WorkReadSession {
   checkDeadline(): void { fusekiReadBudget.getStore()?.signal.throwIfAborted(); }
 }
 
-async function position(deps: MainWorkDependencies, fresh = false): Promise<ReadPosition & {
+async function position(deps: MainWorkDependencies, fresh = false, restoreLineage = false): Promise<ReadPosition & {
   priors: ReadonlyMap<string, string> | null;
 }> {
   const env = deps.environment;
   const known = knownSearchPosition(env.fuseki, env.lineage);
   if (known && !fresh) return { dataEpoch: known.dataEpoch, sequence: known.sequence, priors: null };
-  // Restore lineage rides this fence. New discussion order needs the chain,
-  // and a second round trip would push that page over its request cap.
-  const rows = (await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence ?cutEpoch ?prior WHERE {
-    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
+  const fence = `GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
-      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
+      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }`;
+  // A restore hold still returns no row, so the read answers unavailable.
+  // Ordinary reads keep the historical select list. New discussion order also
+  // binds the restore chain here; a second round trip would exceed that page's cap.
+  if (!restoreLineage) {
+    const rows = (await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence WHERE {
+    ${fence} } } LIMIT 2`, 8192)).results?.bindings ?? [];
+    if (rows.length !== 1 || !rows[0]?.epoch || !/^\d+$/.test(rows[0].sequence?.value ?? '')) {
+      throw new WorkReadUnavailable('Graph is unavailable');
+    }
+    return { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence!.value, priors: null };
+  }
+  const rows = (await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence ?cutEpoch ?prior WHERE {
+    ${fence}
       OPTIONAL { ?cutover a rv:RestoreCutover ; rv:dataEpoch ?cutEpoch ; rv:priorDataEpoch ?prior } } } LIMIT 34`, 8192)).results?.bindings ?? [];
   const epoch = rows[0]?.epoch?.value, sequence = rows[0]?.sequence?.value ?? '';
   if (!rows.length || !epoch || !/^\d+$/.test(sequence)
@@ -344,7 +355,7 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
         && url.pathname.startsWith('/v1/') ? WORK_READ_COST.attempts : 1;
       for (let attempt = 0; ; attempt++) {
         try {
-          const located = await position(deps, options.localBasis);
+          const located = await position(deps, options.localBasis, url.searchParams.get('sort') === 'new');
           const session = new WorkReadSession(deps, request, options,
             { dataEpoch: located.dataEpoch, sequence: located.sequence }, true);
           session.restorePriors = located.priors;
