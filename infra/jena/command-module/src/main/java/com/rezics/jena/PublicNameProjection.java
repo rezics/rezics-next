@@ -249,6 +249,7 @@ final class PublicNameProjection {
         scopeState(data, WORK_SCOPE, "scopeQualification", null);
     }
     private static Node scopeState(DatasetGraph data, Node subject, String predicate) {
+        CommandWork.count("work_name_scope_point_probes", 1);
         var rows = data.find(REPAIR, subject, p(predicate), Node.ANY);
         try {
             Node value = rows.hasNext() ? rows.next().getObject() : null;
@@ -264,6 +265,7 @@ final class PublicNameProjection {
         if (value != null) data.add(REPAIR, subject, p(predicate), value);
     }
     private static Node scopeOne(DatasetGraph data, Node graph, Node subject, String predicate) {
+        CommandWork.count("work_name_scope_point_probes", 1);
         var rows = data.find(graph, subject, p(predicate), Node.ANY);
         try {
             Node value = rows.hasNext() ? rows.next().getObject() : null;
@@ -303,6 +305,17 @@ final class PublicNameProjection {
         Node proof = scopeState(data, WORK_SCOPE, "scopeQualification");
         if (proof == null || !proof.isURI()) throw new IllegalStateException("Work adoption directory qualification is missing");
         return proof;
+    }
+    record WorkNameBasis(String source, String adoption, String qualification,
+                         String dataEpoch, String routingEpoch, String store) {}
+    /** Captures current native facts; it certifies no recipe, copied names or index readiness. */
+    static WorkNameBasis captureWorkNameBasis(DatasetGraph data, Node work, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        String source = nameSourceToken(data, work, deadline).getURI();
+        WorkNameBasis result = new WorkNameBasis(source, TemplateIndexService.workAdoptionBasis(data, work),
+            scopeQualification(data).getURI(), scopeEpoch(data).getLiteralLexicalForm(),
+            scopeRouting(data).getLiteralLexicalForm(), TemplateIndexService.workScopeStore(data));
+        TemplateIndexService.workScopeBudget(deadline); return result;
     }
     /** Only explicit maintenance scans a population, using the existing native
      * GPOS seek. Controlled raw uncertainty or a new store restarts this proof. */
@@ -392,6 +405,8 @@ final class PublicNameProjection {
                 if (payload == null || !payload.isLiteral() || payload.getLiteralLexicalForm().length() > 65536)
                     throw new IllegalStateException("Work header source payload is unqualified");
                 CommandWork.count("work_name_scope_header_characters", payload.getLiteralLexicalForm().length());
+                CommandWork.count("work_name_scope_header_utf8_bytes",
+                    payload.getLiteralLexicalForm().getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
                 try {
                     var headerState = org.apache.jena.atlas.json.JSON.parse(payload.getLiteralLexicalForm());
                     if (!headerState.hasKey("kind") || !"header".equals(headerState.get("kind").getAsString().value()))
@@ -523,6 +538,221 @@ final class PublicNameProjection {
         scopeState(data, receipt, "scopePass", pass);
         return new ScopeTurn(java.util.List.copyOf(owners), visited, workScopeComplete(data, pass, deadline), false);
     }
+    // Private CURRENT-source materialization only. This predicate is deliberately
+    // absent from the text entity map; a snapshot is never an indexed generation.
+    static final Node WORK_NAME_RECIPE_LITERAL = p("workNameRecipeLiteral");
+    record RecipeTurn(int sourceValues, int lookahead, int copies, int additions, boolean complete, boolean replayed) {}
+
+    private static void checkWorkRecipeMapping(DatasetGraph data) {
+        DatasetGraph current = data;
+        while (true) {
+            if (current instanceof org.apache.jena.query.text.DatasetGraphText text) {
+                if (text.getTextIndex().getDocDef().getField(WORK_NAME_RECIPE_LITERAL) != null)
+                    throw new IllegalStateException("private Work recipe predicate must not be text-mapped");
+                return;
+            }
+            if (!(current instanceof org.apache.jena.sparql.core.DatasetGraphWrapper wrapper)) return;
+            current = wrapper.getWrapped();
+        }
+    }
+
+    static Node beginWorkNameRecipe(DatasetGraph data, Node work, Node receipt, long deadline) {
+        scopeWrite(data); TemplateIndexService.workScopeBudget(deadline);
+        checkWorkRecipeMapping(data);
+        if (receipt == null || !receipt.isURI() || scopeState(data, receipt, "recipeTurn") != null)
+            throw new IllegalStateException("Work recipe begin receipt differs");
+        Node previous = scopeState(data, receipt, "recipeBegin");
+        if (previous != null) {
+            if (!work.equals(scopeState(data, previous, "scopeWork")))
+                throw new IllegalStateException("Work recipe receipt targets another Work");
+            checkWorkNameRecipe(data, previous, deadline); return previous;
+        }
+        Node snapshot = uri(PREFIX + "work-recipe:" + java.util.UUID.randomUUID());
+        beginWorkScope(data, work, snapshot, deadline);
+        scopeState(data, snapshot, "recipeEpoch", scopeEpoch(data));
+        scopeState(data, snapshot, "recipeRouting", scopeRouting(data));
+        scopeState(data, snapshot, "recipeStore", NodeFactory.createLiteralString(TemplateIndexService.workScopeStore(data)));
+        scopeState(data, snapshot, "recipePhase", NodeFactory.createLiteralString("0"));
+        scopeState(data, receipt, "recipeBegin", snapshot);
+        TemplateIndexService.workScopeBudget(deadline); return snapshot;
+    }
+    private static int checkWorkNameRecipe(DatasetGraph data, Node snapshot, long deadline) {
+        checkWorkRecipeMapping(data);
+        checkWorkScope(data, snapshot, deadline);
+        if (!scopeEpoch(data).equals(scopeState(data, snapshot, "recipeEpoch"))
+            || !scopeRouting(data).equals(scopeState(data, snapshot, "recipeRouting"))
+            || !NodeFactory.createLiteralString(TemplateIndexService.workScopeStore(data)).equals(scopeState(data, snapshot, "recipeStore")))
+            throw new IllegalStateException("Work recipe instance changed");
+        Node phase = scopeState(data, snapshot, "recipePhase");
+        if (phase == null || !phase.isLiteral()) throw new IllegalStateException("Work recipe progress is missing");
+        int value = Integer.parseInt(phase.getLiteralLexicalForm());
+        if (value < 0 || value > 7 || value == 7 && scopeState(data, snapshot, "recipeAfter") != null)
+            throw new IllegalStateException("Work recipe progress is invalid");
+        TemplateIndexService.workScopeBudget(deadline); return value;
+    }
+    static boolean workNameRecipeComplete(DatasetGraph data, Node snapshot, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        try { return checkWorkNameRecipe(data, snapshot, deadline) == 7; }
+        catch (java.util.concurrent.CancellationException cancelled) { throw cancelled;
+        } catch (IllegalStateException | IllegalArgumentException unavailable) { return false; }
+    }
+    // Preparation limits, not primary-data constraints. Reuse the bounded
+    // header encoding and native response budgets. Count the pinned NT encoding
+    // directly on existing strings: never format or allocate a UTF-8 copy.
+    static final int WORK_RECIPE_TERM_BYTES = 4 * 65536;
+    static final int WORK_RECIPE_TURN_BYTES = TemplateQueryService.MAX_BYTES;
+    private static long recipeEncodedBytes(String text, int mode, long bytes, long limit, long deadline) {
+        for (int index = 0; index < text.length(); index++) {
+            if ((index & 255) == 0) TemplateIndexService.workScopeBudget(deadline);
+            char value = text.charAt(index);
+            CommandWork.count("work_name_recipe_lexical_units", 1);
+            if (mode == 3) { // NodeFormatterNT blank-label encoding (_:B prefix).
+                bytes += value == 'X' ? 2 : value >= 'a' && value <= 'z' || value >= 'A' && value <= 'Z'
+                    || value >= '0' && value <= '9' ? 1 : value < 256 ? 3 : 6;
+            } else if (mode == 1 && (value == '\\' || value == '\"' || value == '\t'
+                || value == '\n' || value == '\r' || value == '\f')) bytes += 2;
+            else if (mode == 2 && (value < 20 || value == ' ' || value == '\"' || value == '<' || value == '>'
+                || value == '\\' || value == '^' || value == '`' || value == '{' || value == '|' || value == '}' || value == 127)) bytes += 6;
+            else if (Character.isHighSurrogate(value) && index + 1 < text.length() && Character.isLowSurrogate(text.charAt(index + 1))) {
+                bytes += 4; index++; CommandWork.count("work_name_recipe_lexical_units", 1);
+            } else if (mode == 1 && (value == '\uFFFD' || Character.isSurrogate(value))) bytes += 6;
+            else if (Character.isSurrogate(value)) bytes++; // UTF-8 encoder's '?' replacement outside literals.
+            else bytes += value < 128 ? 1 : value < 2048 ? 2 : 3;
+            if (bytes > limit)
+                throw new IllegalStateException("Work recipe scalar byte bound exceeded");
+        }
+        return bytes;
+    }
+    private static long recipeBytes(Node value, long allowance, long deadline) {
+        TemplateIndexService.workScopeBudget(deadline);
+        if (value == null) return 0;
+        String lexical, suffix = ""; int mode; long punctuation;
+        if (value.isURI()) { lexical = value.getURI(); mode = 2; punctuation = 2; }
+        else if (value.isBlank()) { lexical = value.getBlankNodeLabel(); mode = 3; punctuation = 3; }
+        else if (value.isLiteral()) {
+            lexical = value.getLiteralLexicalForm(); mode = 1; punctuation = 2;
+            String language = value.getLiteralLanguage();
+            var direction = value.getLiteralBaseDirection();
+            if (direction != null) {
+                suffix = language; punctuation += 3 + direction.direction().length();
+            } else if (!language.isEmpty()) { suffix = language; punctuation++; }
+            else if (value.getLiteralDatatype() != null
+                && !value.getLiteralDatatype().equals(org.apache.jena.datatypes.xsd.XSDDatatype.XSDstring)) {
+                suffix = value.getLiteralDatatypeURI(); punctuation += 4;
+            }
+        } else throw new IllegalStateException("Work recipe term encoding is unavailable");
+        // Every encoded UTF-16 unit costs at least one byte. Reject huge fields
+        // in O(1), before scanning, escaping or constructing any output buffer.
+        long minimum = punctuation + (long) lexical.length() + suffix.length();
+        long limit = Math.min(WORK_RECIPE_TERM_BYTES, allowance);
+        if (minimum > limit)
+            throw new IllegalStateException("Work recipe scalar byte bound exceeded");
+        long bytes = recipeEncodedBytes(lexical, mode, punctuation, limit, deadline);
+        if (!suffix.isEmpty()) bytes = recipeEncodedBytes(suffix,
+            value.getLiteralBaseDirection() != null || !value.getLiteralLanguage().isEmpty() ? 0 : 2, bytes, limit, deadline);
+        TemplateIndexService.workScopeBudget(deadline); return bytes;
+    }
+    /** Parse the bounded current payload, but construct/visit only this page's
+     * titles. Null title entries count; direct array indexing avoids prefix replay. */
+    private static NamePage workRecipeHeaderPage(DatasetGraph data, Node work, int offset, int limit, long deadline) {
+        Node head = scopeOne(data, CURRENT, work, "descriptiveMetadataHead");
+        if (head == null || data.contains(REVISIONS, head, RDF.type.asNode(), p("ErasedRevision")))
+            return new NamePage(java.util.List.of(), false);
+        Node payload = scopeOne(data, REVISIONS, head, "metadataState");
+        if (payload == null || !payload.isLiteral() || payload.getLiteralLexicalForm().length() > 65536)
+            throw new IllegalStateException("Work recipe header payload is unavailable");
+        String text = payload.getLiteralLexicalForm();
+        CommandWork.count("work_name_recipe_header_characters", text.length());
+        CommandWork.count("work_name_recipe_header_utf8_bytes", text.getBytes(java.nio.charset.StandardCharsets.UTF_8).length);
+        var json = org.apache.jena.atlas.json.JSON.parse(text);
+        var localized = json.hasKey("localized") ? json.get("localized").getAsArray() : new org.apache.jena.atlas.json.JsonArray();
+        int total = 1 + localized.size();
+        if (offset < 0 || offset > total) throw new IllegalStateException("Work recipe header cursor is invalid");
+        java.util.List<Node> values = new java.util.ArrayList<>();
+        for (int index = offset; index < total && values.size() <= limit; index++) {
+            TemplateIndexService.workScopeBudget(deadline);
+            var item = index == 0 ? json.hasKey("originalTitle") ? json.get("originalTitle") : null : localized.get(index - 1);
+            Node name = null;
+            if (item != null && !item.isNull()) {
+                var title = item.getAsObject();
+                if (index == 0) name = NodeFactory.createLiteralLang(title.get("value").getAsString().value(), title.get("language").getAsString().value());
+                else if (title.hasKey("title") && !title.get("title").isNull())
+                    name = NodeFactory.createLiteralLang(title.get("title").getAsString().value(), title.get("language").getAsString().value());
+            }
+            values.add(name);
+        }
+        boolean more = values.size() > limit;
+        Node lookahead = more ? values.removeLast() : null;
+        TemplateIndexService.workScopeBudget(deadline); return new NamePage(values, more, lookahead);
+    }
+    static RecipeTurn advanceWorkNameRecipe(DatasetGraph data, Node snapshot, Node receipt, long deadline) {
+        scopeWrite(data); TemplateIndexService.workScopeBudget(deadline);
+        int phase = checkWorkNameRecipe(data, snapshot, deadline);
+        if (receipt == null || !receipt.isURI() || scopeState(data, receipt, "recipeBegin") != null)
+            throw new IllegalStateException("Work recipe turn receipt differs");
+        Node replay = scopeState(data, receipt, "recipeTurn");
+        if (replay != null) {
+            if (!snapshot.equals(replay)) throw new IllegalStateException("Work recipe step targets another snapshot");
+            Node eof = scopeState(data, receipt, "recipeEOF");
+            if (eof == null) throw new IllegalStateException("Work recipe step result is missing");
+            TemplateIndexService.workScopeBudget(deadline);
+            return new RecipeTurn(0, 0, 0, 0, NodeFactory.createLiteralString("true").equals(eof), true);
+        }
+        Node work = scopeState(data, snapshot, "scopeWork");
+        int sourceValues = 0, lookahead = 0, copies = 0, additions = 0;
+        long admittedBytes = 0;
+        while (phase < 7 && sourceValues + lookahead + copies <= NAME_BATCH_SIZE - 3) {
+            TemplateIndexService.workScopeBudget(deadline);
+            int limit = (NAME_BATCH_SIZE - sourceValues - lookahead - copies - 1) / 2;
+            Node after = scopeState(data, snapshot, "recipeAfter");
+            int offset = phase == 6 && after != null ? Integer.parseInt(after.getLiteralLexicalForm()) : 0;
+            NamePage page = phase < 6 ? nameRange(data, work, NAME_PREDICATES.get(phase), after, limit)
+                : workRecipeHeaderPage(data, work, offset, limit, deadline);
+            sourceValues += page.values().size(); lookahead += page.more() ? 1 : 0;
+            CommandWork.count("work_name_recipe_source_values", page.values().size());
+            CommandWork.count("work_name_recipe_lookahead", page.more() ? 1 : 0);
+            long lookaheadBound = recipeBytes(page.lookahead(), WORK_RECIPE_TURN_BYTES - admittedBytes, deadline);
+            if (lookaheadBound > WORK_RECIPE_TERM_BYTES || lookaheadBound > WORK_RECIPE_TURN_BYTES - admittedBytes)
+                throw new IllegalStateException("Work recipe lookahead byte bound exceeded");
+            admittedBytes += lookaheadBound;
+            CommandWork.count("work_name_recipe_admitted_bytes", lookaheadBound);
+            CommandWork.count("work_name_recipe_source_utf8_bytes", lookaheadBound);
+            for (Node value : page.values()) {
+                TemplateIndexService.workScopeBudget(deadline);
+                int weight = value != null && value.isLiteral() ? 2 : 1;
+                long bound = recipeBytes(value, (WORK_RECIPE_TURN_BYTES - admittedBytes) / weight, deadline);
+                long charge = bound * weight;
+                if (bound > WORK_RECIPE_TERM_BYTES || charge > WORK_RECIPE_TURN_BYTES - admittedBytes)
+                    throw new IllegalStateException("Work recipe turn byte bound exceeded");
+                admittedBytes += charge;
+                CommandWork.count("work_name_recipe_admitted_bytes", charge);
+                long bytes = bound;
+                CommandWork.count("work_name_recipe_source_utf8_bytes", bytes);
+                if (value != null && value.isLiteral()) {
+                    copies++; CommandWork.count("work_name_recipe_copy_attempts", 1);
+                    CommandWork.count("work_name_recipe_copy_utf8_bytes", bytes);
+                    // Duplicate terms remain source work without a second stored literal.
+                    CommandWork.count("work_name_recipe_literal_probes", 1);
+                    boolean present = data.contains(REPAIR, snapshot, WORK_NAME_RECIPE_LITERAL, value);
+                    CommandWork.count("work_name_recipe_literal_rows", present ? 1 : 0);
+                    if (!present) {
+                        data.add(REPAIR, snapshot, WORK_NAME_RECIPE_LITERAL, value);
+                        additions++; CommandWork.count("work_name_recipe_additions", 1);
+                    }
+                }
+            }
+            if (phase == 6) scopeState(data, snapshot, "recipeAfter", NodeFactory.createLiteralString(Integer.toString(offset + page.values().size())));
+            else if (!page.values().isEmpty()) scopeState(data, snapshot, "recipeAfter", page.values().getLast());
+            if (page.more()) break;
+            phase++; scopeState(data, snapshot, "recipeAfter", null);
+        }
+        scopeState(data, snapshot, "recipePhase", NodeFactory.createLiteralString(Integer.toString(phase)));
+        checkWorkNameRecipe(data, snapshot, deadline);
+        scopeState(data, receipt, "recipeTurn", snapshot);
+        scopeState(data, receipt, "recipeEOF", NodeFactory.createLiteralString(Boolean.toString(phase == 7)));
+        TemplateIndexService.workScopeBudget(deadline);
+        return new RecipeTurn(sourceValues, lookahead, copies, additions, phase == 7, false);
+    }
     /** Each projected dependent adds at most four constant-time adjacency
      * links. Links are immutable so a cursor survives moves, deletion and new
      * inserts without a sorted population scan or an offset replay. Historical
@@ -634,7 +864,9 @@ final class PublicNameProjection {
     static Node nameUnit(Node resource, String kind) {
         return uri(PREFIX + kind + ":" + resource.getURI().substring("https://rezics.com/id/".length()));
     }
-    private record NamePage(java.util.List<Node> values, boolean more) {}
+    private record NamePage(java.util.List<Node> values, boolean more, Node lookahead) {
+        private NamePage(java.util.List<Node> values, boolean more) { this(values, more, null); }
+    }
     /** A bounded probe used by the synchronous path and by destructive cleanup.
      * The extra value distinguishes a complete recipe from a repair batch; it
      * is never dropped as a product limit. Count every visited value, including
@@ -647,8 +879,8 @@ final class PublicNameProjection {
             CommandWork.count("public_name_labels_visited", 1);
         } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
         boolean more = values.size() > limit;
-        if (more) values.removeLast();
-        return new NamePage(values, more);
+        Node lookahead = more ? values.removeLast() : null;
+        return new NamePage(values, more, lookahead);
     }
     /** Resume on TDB's existing GSPO B+tree. No OFFSET, sort or prefix replay.
      * Persist the RDF term, not a NodeId, and resolve the current node table in
@@ -686,8 +918,8 @@ final class PublicNameProjection {
             CommandWork.count("public_name_labels_visited", 1);
         } } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
         boolean more = values.size() > limit;
-        if (more) values.removeLast();
-        return new NamePage(values, more);
+        Node lookahead = more ? values.removeLast() : null;
+        return new NamePage(values, more, lookahead);
     }
     /** These authored payload bounds are enforced by the existing revision
      * shapes (65536 metadata characters; 8000 Collection-name characters).

@@ -425,4 +425,46 @@ public class WorkNameScopeCommandTest {
             System.out.println("Work startup production configuration earlyException withdrawSameStore=true");
         }
     }
+    @Test public void currentRecipeMaterializationUsesAnUnmappedPredicateAndLeavesActualLuceneUnchanged() throws Exception {
+        try (var fixture = new Fixture()) {
+            var index = (FilteredGraphTextIndex) fixture.data.getTextIndex();
+            var production = org.apache.jena.riot.RDFDataMgr.loadModel("fuseki-text.ttl");
+            try {
+                assertFalse(production.contains(null, production.createProperty("http://jena.apache.org/text#predicate"),
+                    production.asRDFNode(PublicNameProjection.WORK_NAME_RECIPE_LITERAL)));
+            } finally { production.close(); }
+            for (String field : index.getDocDef().fields())
+                assertFalse("private recipe predicate is text-mapped: " + field,
+                    index.getDocDef().getPredicates(field).contains(PublicNameProjection.WORK_NAME_RECIPE_LITERAL));
+            int documents;
+            try (var reader = org.apache.lucene.index.DirectoryReader.open(index.lucene().getIndexWriter())) { documents = reader.numDocs(); }
+            Node source = fixture.read(() -> PublicNameProjection.nameSourceToken(fixture.data, SENTINEL));
+            String basis = fixture.read(() -> TemplateIndexService.workAdoptionBasis(fixture.data, SENTINEL));
+            Snapshot before = fixture.snapshot();
+            Node recipe = fixture.write(() -> PublicNameProjection.beginWorkNameRecipe(fixture.data, SENTINEL,
+                uri("urn:recipe:actual-text:begin"), Long.MAX_VALUE));
+            var result = fixture.write(() -> PublicNameProjection.advanceWorkNameRecipe(fixture.data, recipe,
+                uri("urn:recipe:actual-text:turn"), Long.MAX_VALUE));
+            assertTrue(result.complete()); assertEquals(1, result.copies());
+            try (var reader = org.apache.lucene.index.DirectoryReader.open(index.lucene().getIndexWriter())) {
+                assertEquals(documents, reader.numDocs());
+                var searcher = new org.apache.lucene.search.IndexSearcher(reader);
+                assertEquals(0, searcher.count(new org.apache.lucene.search.TermQuery(new org.apache.lucene.index.Term(
+                    index.getDocDef().getGraphField(), PublicNameProjection.REPAIR.getURI()))));
+            }
+            Snapshot after = fixture.snapshot();
+            assertEquals(before.singleton(), after.singleton()); assertEquals(before.proof(), after.proof());
+            assertEquals(source, after.source()); assertEquals(basis, after.basis());
+            assertEquals(before.complete(), after.complete());
+            assertEquals(before.rdf().stream().filter(q -> !q.getGraph().equals(PublicNameProjection.REPAIR)).collect(java.util.stream.Collectors.toSet()),
+                after.rdf().stream().filter(q -> !q.getGraph().equals(PublicNameProjection.REPAIR)).collect(java.util.stream.Collectors.toSet()));
+            index.getDocDef().set("accidentalRecipeMapping", PublicNameProjection.WORK_NAME_RECIPE_LITERAL);
+            assertThrows(IllegalStateException.class, () -> fixture.write(() -> PublicNameProjection.beginWorkNameRecipe(fixture.data, SENTINEL,
+                uri("urn:recipe:must-refuse-mapping"), Long.MAX_VALUE)));
+            assertFalse(fixture.read(() -> PublicNameProjection.workNameRecipeComplete(fixture.data, recipe, Long.MAX_VALUE)));
+            assertThrows(IllegalStateException.class, () -> fixture.write(() -> PublicNameProjection.advanceWorkNameRecipe(fixture.data, recipe,
+                uri("urn:recipe:must-refuse-copy"), Long.MAX_VALUE)));
+            System.out.println("Work recipe actualLucene documentsUnchanged=" + documents + " privateRecipeDocuments=0 ownerFanout=0");
+        }
+    }
 }

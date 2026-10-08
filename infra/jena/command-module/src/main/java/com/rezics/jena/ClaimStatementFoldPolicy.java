@@ -163,15 +163,48 @@ final class ClaimStatementFoldPolicy {
         } catch (IllegalArgumentException ex) { return new Snapshot(Map.of(), ex.getMessage(), count.work()); }
     }
 
-    private static void conversion(DatasetGraph data, UpdateModify modify, Node own, String map,
-        Map<Key, Set<Quad>> expected, List<Object> identities, Counter count) {
-        Node claim = required(modify, RECEIPTS, own, rv("convertedClaim")), root = required(modify, RECEIPTS, own, rv("sourceClaimRevision"));
-        Node revision = required(modify, RECEIPTS, own, rv("statementRevision"));
-        Node relation = required(modify, RECEIPTS, own, rv("relationDefinition")), qualification = required(modify, RECEIPTS, own, rv("qualificationDefinition"));
-        if (!nativeId(relation) || !nativeId(qualification) || relation.equals(qualification)
-            || !hash(json(List.of(FAMILY, PUBLISHED.getURI(), relation.getURI(), qualification.getURI()))).equals(map)) throw bad("fixed definition map differs");
-        refuseDefault(data, claim, count); refuseDefault(data, root, count); refuseDefault(data, revision, count);
+    record Retention(Snapshot snapshot, Node predicate, Node originalReceipt, String sourceDigest) {}
+    static Retention captureRetention(DatasetGraph logical, Node claim, Node root, String mapDigest, Node relation, Node qualification,
+        String relationManifest, String relationPayload, String qualificationManifest, String qualificationPayload) {
+        Counter count = new Counter();
+        try {
+            DatasetGraph data = TDBInternal.requireStorage(DatasetGraphWrapper.unwrap(logical));
+            if (!nativeId(claim) || !nativeId(root) || claim.equals(root) || !nativeId(relation) || !nativeId(qualification) || relation.equals(qualification)
+                || !hash(json(List.of(FAMILY, PUBLISHED.getURI(), relation.getURI(), qualification.getURI()))).equals(mapDigest)) throw bad("fixed retained identities/map differ");
+            Legacy original = originalSource(data, claim, root, count);
+            Node predicate = one(original.source(), rv("propositionPredicate"));
+            if (original.precision().equals("uncertain")) throw bad("uncertain retained value remains unresolved");
+            if (predicate.equals(PUBLISHED)) throw bad("datePublished is inside the fixed conversion scope");
+            Map<Key, Set<Quad>> expected = new LinkedHashMap<>();
+            definitionProof(data, relation, "PropertyDefinition", "statement-first-publication-date-v1", relationManifest, relationPayload, expected, count);
+            definitionProof(data, qualification, "InterpretationDefinition", "statement-proposition-qualification-v1", qualificationManifest, qualificationPayload, expected, count);
+            expected.put(new Key(CURRENT, claim), original.current()); expected.put(new Key(REVISIONS, root), original.source()); expected.put(new Key(RECEIPTS, original.original()), original.originalRecord());
+            List<Object> receiptTerms = new ArrayList<>(); receiptTerms.add(termIdentity(original.original()));
+            for (String field : List.of("operation", "admissionId", "requestDigest", "authorityEpoch", "admittedScope", "dataEpoch", "sequence")) receiptTerms.add(termIdentity(one(original.originalRecord(), rv(field))));
+            String digest = hash(json(List.of("claim-fold-retained-outside-publication-v1", propertyIdentity(original.current()), propertyIdentity(original.source()), receiptTerms, relation.getURI(), qualification.getURI())));
+            return new Retention(new Snapshot(Map.copyOf(expected), null, count.work()), predicate, original.original(), digest);
+        } catch (IllegalArgumentException invalid) { return new Retention(new Snapshot(Map.of(), invalid.getMessage(), count.work()), null, null, null); }
+    }
+
+    private static void sourceBytes(Set<Quad> fields) {
+        int bytes = 0;
+        for (Quad quad : fields) for (Node node : List.of(quad.getPredicate(), quad.getObject())) {
+            List<String> parts = node.isURI() ? List.of(node.getURI()) : node.isLiteral()
+                ? List.of(node.getLiteralLexicalForm(), node.getLiteralDatatypeURI(), node.getLiteralLanguage()) : List.of();
+            if (parts.isEmpty()) throw bad("unsupported original source term");
+            for (String part : parts) {
+                if (part.length() > MAX_BLOB_BYTES - bytes) throw bad("original source byte bound exceeded");
+                bytes += utf8(part).length; if (bytes > MAX_BLOB_BYTES) throw bad("original source byte bound exceeded");
+            }
+        }
+    }
+    private record Legacy(Set<Quad> current, Set<Quad> source, Node original, Set<Quad> originalRecord, String precision, List<String> qualifiers) {}
+    /** Both fixed paths demand the same bounded original Claim/root/receipt,
+     * value and provenance proof; being outside scope does not excuse corruption. */
+    private static Legacy originalSource(DatasetGraph data, Node claim, Node root, Counter count) {
+        refuseDefault(data, claim, count); refuseDefault(data, root, count);
         Set<Quad> current = stored(data, CURRENT, claim, 6, count), source = stored(data, REVISIONS, root, 40, count);
+        sourceBytes(current); sourceBytes(source);
         Set<Node> currentFields = new HashSet<>(DESCRIPTOR); currentFields.add(RDF.type.asNode());
         if (current.size() != 6 || !predicates(current).equals(currentFields) || !one(current, RDF.type.asNode()).equals(rv("Claim"))
             || !one(current, rv("claimHead")).equals(root) || !one(current, rv("claimState")).equals(rv("Active"))) throw bad("exact current Claim descriptor differs");
@@ -183,9 +216,6 @@ final class ClaimStatementFoldPolicy {
             Node value = one(source, rv(field)); reference(value);
             if (!value.equals(one(current, rv(field)))) throw bad("retained proposition identity differs");
         }
-        for (Set<Quad> record : List.of(current, source)) for (Quad guard : record)
-            if (!positive(modify.getWherePattern(), guard.getGraph(), guard.getSubject(), guard.getPredicate(), guard.getObject())) throw bad("exact current/source guards omitted");
-        if (!one(source, rv("propositionPredicate")).equals(PUBLISHED)) throw bad("predicate is unreviewed");
         if (!intersection(data, REVISIONS, List.of(new Node[]{RDF.type.asNode(), rv("ClaimRevision")}, new Node[]{rv("component"), claim}), count).equals(Set.of(root))) throw bad("source is not the sole root Claim revision");
         Node value = one(source, rv("propositionValue")); publicationDate(value);
         Node speaker = one(source, rv("statedBy")); if (!nativeId(speaker)) throw bad("public speaker differs");
@@ -209,7 +239,13 @@ final class ClaimStatementFoldPolicy {
         Set<Node> originals = intersection(data, RECEIPTS, List.of(new Node[]{rv("claim"), claim}, new Node[]{rv("claimRevision"), root},
             new Node[]{RDF.type.asNode(), rv("OperationReceipt")}, new Node[]{rv("outcome"), rv("Succeeded")}), count);
         if (originals.size() != 1) throw bad("unique successful source receipt unavailable");
-        Node original = originals.iterator().next(); Set<Quad> originalRecord = stored(data, RECEIPTS, original, 32, count);
+        Node original = originals.iterator().next(); Set<Quad> originalRecord = stored(data, RECEIPTS, original, 32, count); sourceBytes(originalRecord);
+        verifyOriginalReceipt(original, originalRecord, claim, root, sourceEpoch, sequence);
+        return new Legacy(current, source, original, originalRecord, precisionWord, List.copyOf(qualifierWords));
+    }
+
+    static void verifyOriginalReceipt(Node original, Set<Quad> originalRecord, Node claim, Node root, Node sourceEpoch, Node sequence) {
+        sourceBytes(originalRecord);
         String admission = string(one(originalRecord, rv("admissionId"))), digest = string(one(originalRecord, rv("requestDigest")));
         Node operation = one(originalRecord, rv("operation"));
         if (!one(originalRecord, RDF.type.asNode()).equals(rv("OperationReceipt")) || !one(originalRecord, rv("outcome")).equals(rv("Succeeded"))
@@ -220,6 +256,27 @@ final class ClaimStatementFoldPolicy {
             || !string(one(originalRecord, rv("authorityEpoch"))).matches("[0-9]+")
             || !one(originalRecord, rv("datasetId")).equals(PRODUCT)
             || !one(originalRecord, rv("dataEpoch")).equals(sourceEpoch) || !one(originalRecord, rv("sequence")).equals(sequence)) throw bad("original source receipt differs");
+    }
+
+    private static void conversion(DatasetGraph data, UpdateModify modify, Node own, String map,
+        Map<Key, Set<Quad>> expected, List<Object> identities, Counter count) {
+        Node claim = required(modify, RECEIPTS, own, rv("convertedClaim")), root = required(modify, RECEIPTS, own, rv("sourceClaimRevision"));
+        Node revision = required(modify, RECEIPTS, own, rv("statementRevision"));
+        Node relation = required(modify, RECEIPTS, own, rv("relationDefinition")), qualification = required(modify, RECEIPTS, own, rv("qualificationDefinition"));
+        if (!nativeId(relation) || !nativeId(qualification) || relation.equals(qualification)
+            || !hash(json(List.of(FAMILY, PUBLISHED.getURI(), relation.getURI(), qualification.getURI()))).equals(map)) throw bad("fixed definition map differs");
+        refuseDefault(data, revision, count);
+        Legacy legacy = originalSource(data, claim, root, count);
+        Set<Quad> current = legacy.current(), source = legacy.source(), originalRecord = legacy.originalRecord();
+        Node operation = one(originalRecord, rv("operation"));
+        Node original = legacy.original(), value = one(source, rv("propositionValue")), speaker = one(source, rv("statedBy")), recorded = one(source, rv("recordedAt"));
+        Node from = optional(source, rv("validFrom")), until = optional(source, rv("validUntil")), edition = optional(source, rv("editionScope")), derivation = optional(source, rv("derivation"));
+        String fromKey = from == null ? null : canonicalInstant(from), untilKey = until == null ? null : canonicalInstant(until);
+        Node precision = one(source, rv("valuePrecision")), sourceEpoch = one(source, rv("dataEpoch")), sequence = one(source, rv("sequence"));
+        String precisionWord = legacy.precision(); List<String> qualifierWords = legacy.qualifiers();
+        for (Set<Quad> record : List.of(current, source)) for (Quad guard : record)
+            if (!positive(modify.getWherePattern(), guard.getGraph(), guard.getSubject(), guard.getPredicate(), guard.getObject())) throw bad("exact current/source guards omitted");
+        if (!one(source, rv("propositionPredicate")).equals(PUBLISHED)) throw bad("predicate is unreviewed");
         definition(data, modify, own, relation, "PropertyDefinition", "statement-first-publication-date-v1", "Relation", expected, count);
         definition(data, modify, own, qualification, "InterpretationDefinition", "statement-proposition-qualification-v1", "Qualification", expected, count);
         Node subject = one(source, rv("referent")), context = one(source, rv("interpretationContext"));
@@ -270,8 +327,15 @@ final class ClaimStatementFoldPolicy {
 
     private static void definition(DatasetGraph data, UpdateModify modify, Node own, Node revision, String kind, String notation,
         String blob, Map<Key, Set<Quad>> expected, Counter count) {
+        List<Quad> guards = definitionProof(data, revision, kind, notation,
+            string(required(modify, RECEIPTS, own, rv("claimFold" + blob + "Manifest"))),
+            string(required(modify, RECEIPTS, own, rv("claimFold" + blob + "Payload"))), expected, count);
+        for (Quad guard : guards) if (!positive(modify.getWherePattern(), guard.getGraph(), guard.getSubject(), guard.getPredicate(), guard.getObject())) throw bad("exact sealed definition guards omitted");
+    }
+    private static List<Quad> definitionProof(DatasetGraph data, Node revision, String kind, String notation,
+        String manifestBytes, String payloadBytes, Map<Key, Set<Quad>> expected, Counter count) {
         refuseDefault(data, revision, count);
-        Set<Quad> anchor = stored(data, REVISIONS, revision, MAX_RECORD_QUADS, count);
+        Set<Quad> anchor = stored(data, REVISIONS, revision, MAX_RECORD_QUADS, count); sourceBytes(anchor);
         Node component = one(anchor, rv("component")), manifest = one(anchor, rv("manifest"));
         Set<Node> anchorFields = new HashSet<>(fields("component", "predecessor", "definitionKind", "lifecycle", "operation", "manifest", "modelGeneration", "modelRevision", "shapeRevision", "datasetId", "dataEpoch", "sequence"));
         anchorFields.add(RDF.type.asNode());
@@ -279,7 +343,7 @@ final class ClaimStatementFoldPolicy {
             || !one(anchor, rv("definitionKind")).equals(rv(kind)) || !one(anchor, rv("lifecycle")).equals(rv("Active"))
             || !one(anchor, rv("modelRevision")).equals(uri(DEFINITION)) || !one(anchor, rv("shapeRevision")).equals(uri(DEFINITION))) throw bad("native definition revision differs");
         refuseDefault(data, component, count);
-        Set<Quad> current = stored(data, CURRENT, component, MAX_RECORD_QUADS, count);
+        Set<Quad> current = stored(data, CURRENT, component, MAX_RECORD_QUADS, count); sourceBytes(current);
         if (current.size() != 3 || !one(current, RDF.type.asNode()).equals(rv("SemanticDefinition")) || !one(current, rv("definitionHead")).equals(revision)
             || !one(current, rv("definitionKind")).equals(rv(kind))) throw bad("native definition head or kind differs");
         if (!nativeId(one(anchor, rv("operation"))) || !one(anchor, rv("datasetId")).equals(PRODUCT)
@@ -291,20 +355,19 @@ final class ClaimStatementFoldPolicy {
         Node lifecycle = uri("urn:rezics:definition-lifecycle:" + hash(revision.getURI()));
         Set<Node> controls = intersection(data, CURRENT, List.of(new Node[]{rv("definitionRef"), revision}, new Node[]{RDF.type.asNode(), rv("DefinitionLifecycle")}), count);
         if (!controls.isEmpty() && !controls.equals(Set.of(lifecycle))) throw bad("unreviewed definition lifecycle owner");
-        Set<Quad> lifecycleRecord = stored(data, CURRENT, lifecycle, MAX_RECORD_QUADS, count); refuseDefault(data, lifecycle, count);
+        Set<Quad> lifecycleRecord = stored(data, CURRENT, lifecycle, MAX_RECORD_QUADS, count); sourceBytes(lifecycleRecord); refuseDefault(data, lifecycle, count);
         if (!lifecycleRecord.isEmpty() && (!one(lifecycleRecord, RDF.type.asNode()).equals(rv("DefinitionLifecycle"))
             || lifecycleRecord.size() != 4 || !one(lifecycleRecord, rv("definitionRef")).equals(revision) || !one(lifecycleRecord, rv("definitionState")).equals(rv("Active"))
             || !one(lifecycleRecord, rv("definitionHead")).isURI())) throw bad("definition lifecycle unavailable or retired");
-        JsonObject state = sealed(modify, own, blob, manifest, component, DEFINITION);
+        JsonObject state = sealed(manifestBytes, payloadBytes, manifest, component, DEFINITION);
         if (!state.keys().equals(Set.of("component", "kind", "lifecycle", "successor", "roles", "notation"))
             || !jsonString(state, "component").equals("definition") || !jsonString(state, "kind").equals(kind.equals("PropertyDefinition") ? "property" : "interpretation")
             || !jsonString(state, "lifecycle").equals("active") || !state.get("successor").isNull()
             || !state.get("roles").isArray() || state.get("roles").getAsArray().size() != 0 || !jsonString(state, "notation").equals(notation)) throw bad("sealed definition meaning differs");
-        for (Quad guard : List.of(new Quad(CURRENT, component, RDF.type.asNode(), rv("SemanticDefinition")), new Quad(CURRENT, component, rv("definitionKind"), rv(kind)), new Quad(CURRENT, component, rv("definitionHead"), revision),
-            new Quad(REVISIONS, revision, RDF.type.asNode(), rv("DefinitionRevision")), new Quad(REVISIONS, revision, rv("component"), component), new Quad(REVISIONS, revision, rv("manifest"), manifest),
-            new Quad(REVISIONS, revision, rv("definitionKind"), rv(kind)), new Quad(REVISIONS, revision, rv("lifecycle"), rv("Active"))))
-            if (!positive(modify.getWherePattern(), guard.getGraph(), guard.getSubject(), guard.getPredicate(), guard.getObject())) throw bad("exact sealed definition guards omitted");
         expected.put(new Key(CURRENT, component), current); expected.put(new Key(REVISIONS, revision), anchor); expected.put(new Key(CURRENT, lifecycle), lifecycleRecord);
+        return List.of(new Quad(CURRENT, component, RDF.type.asNode(), rv("SemanticDefinition")), new Quad(CURRENT, component, rv("definitionKind"), rv(kind)), new Quad(CURRENT, component, rv("definitionHead"), revision),
+            new Quad(REVISIONS, revision, RDF.type.asNode(), rv("DefinitionRevision")), new Quad(REVISIONS, revision, rv("component"), component), new Quad(REVISIONS, revision, rv("manifest"), manifest),
+            new Quad(REVISIONS, revision, rv("definitionKind"), rv(kind)), new Quad(REVISIONS, revision, rv("lifecycle"), rv("Active")));
     }
 
     /** The native proof discharges the finite emitted guard set. No operator
@@ -397,6 +460,9 @@ final class ClaimStatementFoldPolicy {
     private static JsonObject sealed(UpdateModify modify, Node own, String role, Node manifest, Node component, String profile) {
         String manifestBytes = string(required(modify, RECEIPTS, own, rv("claimFold" + role + "Manifest")));
         String payloadBytes = string(required(modify, RECEIPTS, own, rv("claimFold" + role + "Payload")));
+        return sealed(manifestBytes, payloadBytes, manifest, component, profile);
+    }
+    private static JsonObject sealed(String manifestBytes, String payloadBytes, Node manifest, Node component, String profile) {
         if (manifestBytes.getBytes(StandardCharsets.UTF_8).length > MAX_BLOB_BYTES || payloadBytes.getBytes(StandardCharsets.UTF_8).length > MAX_BLOB_BYTES
             || !manifest.equals(uri("urn:rezics:sha256:" + hash(manifestBytes)))) throw bad("sealed manifest bytes differ");
         JsonObject descriptor = strictJson(manifestBytes), payload = strictJson(payloadBytes);

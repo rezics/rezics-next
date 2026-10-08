@@ -754,4 +754,351 @@ public class WorkNameScopeBasisTest {
             f.begin(WORK, pass); assertEquals(150, f.drain(pass).size());
         }
     }
+    private static Set<Node> recipeLiterals(Fixture f, Node snapshot) {
+        return f.read(() -> {
+            Set<Node> result = new HashSet<>();
+            var rows = f.data.find(PublicNameProjection.REPAIR, snapshot, PublicNameProjection.WORK_NAME_RECIPE_LITERAL, Node.ANY);
+            try { rows.forEachRemaining(quad -> result.add(quad.getObject())); }
+            finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+            return result;
+        });
+    }
+    private static Node recipe(Fixture f, String name) {
+        return f.write(() -> PublicNameProjection.beginWorkNameRecipe(f.data, WORK, uri("urn:recipe:begin:" + name), Long.MAX_VALUE));
+    }
+    private static PublicNameProjection.RecipeTurn recipeTurn(Fixture f, Node snapshot, String receipt) {
+        return f.write(() -> PublicNameProjection.advanceWorkNameRecipe(f.data, snapshot, uri(receipt), Long.MAX_VALUE));
+    }
+    private static void drainRecipe(Fixture f, Node snapshot) {
+        for (int turn = 0; turn < 100; turn++) {
+            var result = recipeTurn(f, snapshot, "urn:recipe:drain:" + ++f.receipt);
+            assertTrue(result.sourceValues() + result.lookahead() + result.copies() <= 64);
+            if (result.complete()) return;
+        }
+        fail("bounded recipe did not finish");
+    }
+
+    @Test public void currentRecipeSnapshotsAllSixPredicatesAndPagedHeaderWithoutUnrelatedPopulationWork() {
+        long[] baseline = null;
+        for (int unrelated : new int[] {0, 320, 4096}) try (var f = new Fixture()) {
+            Set<Node> expected = new HashSet<>();
+            f.raw(data -> {
+                data.deleteAny(CURRENT, WORK, LABEL, Node.ANY);
+                for (int predicate = 0; predicate < NAMES.size(); predicate++) for (int value = 0; value < 70; value++) {
+                    Node literal = value == 0 ? NodeFactory.createLiteralLang("共通 🧪", "ja")
+                        : value % 2 == 0 ? NodeFactory.createLiteralLang("名称 " + predicate + ":" + value + " 🧪", "zh-Hant")
+                        : NodeFactory.createLiteralDT("typed " + predicate + ":" + value,
+                            org.apache.jena.datatypes.TypeMapper.getInstance().getSafeTypeByName("urn:recipe:datatype"));
+                    data.add(CURRENT, WORK, NAMES.get(predicate), literal); expected.add(literal);
+                }
+                data.add(CURRENT, WORK, NAMES.get(2), uri("urn:recipe:nonliteral"));
+                var localized = new org.apache.jena.atlas.json.JsonArray();
+                for (int i = 0; i < 145; i++) {
+                    var item = new org.apache.jena.atlas.json.JsonObject(); item.put("language", "fr");
+                    if (i % 9 == 0) item.put("title", org.apache.jena.atlas.json.JsonNull.instance);
+                    else { item.put("title", "Entête 🧪 " + i); expected.add(NodeFactory.createLiteralLang("Entête 🧪 " + i, "fr")); }
+                    localized.add(item);
+                }
+                String payload = "{\"kind\":\"header\",\"originalTitle\":{\"value\":\"原題\",\"language\":\"ja\"},\"localized\":" + localized + "}";
+                expected.add(NodeFactory.createLiteralLang("原題", "ja"));
+                header(data, WORK, id(600), id(601), payload);
+                data.add(CURRENT, WORK, p("descriptiveMetadataHead"), id(600));
+                for (int i = 0; i < unrelated; i++) {
+                    work(data, id(100000 + i * 2), id(100001 + i * 2));
+                    data.add(CURRENT, id(100000 + i * 2), NAMES.get(2), text("unrelated " + i));
+                }
+            });
+            f.prepare(); Node source = f.token(WORK); String basis = f.basis(WORK);
+            Set<Quad> singleton = f.read(() -> singleton(f.data));
+            Node snapshot = recipe(f, "population:" + unrelated);
+            long probes = 0, rows = 0, utf8 = 0, headerBytes = 0, budgetChecks = 0; int turns = 0, visits = 0, copies = 0;
+            for (; turns < 100; turns++) {
+                final int step = turns;
+                Object[] measured = f.write(() -> {
+                    long[] point = {0, 0};
+                    var bounded = new DatasetGraphWrapper(f.data) {
+                        @Override public Iterator<Quad> find(Node graph, Node subject, Node predicate, Node object) {
+                            if (graph.equals(CURRENT) && subject.equals(Node.ANY)) throw new AssertionError("recipe population scan");
+                            boolean sourceRange = graph.equals(CURRENT) && subject.equals(WORK) && NAMES.contains(predicate) && object.equals(Node.ANY);
+                            if (sourceRange) return super.find(graph, subject, predicate, object);
+                            point[0]++;
+                            return org.apache.jena.atlas.iterator.Iter.map(super.find(graph, subject, predicate, object), quad -> { point[1]++; return quad; });
+                        }
+                        @Override public boolean contains(Node graph, Node subject, Node predicate, Node object) {
+                            point[0]++; boolean present = super.contains(graph, subject, predicate, object);
+                            point[1] += present ? 1 : 0; return present;
+                        }
+                    };
+                    try (var work = new CommandWork()) {
+                        PublicNameProjection.RecipeTurn[] result = new PublicNameProjection.RecipeTurn[1];
+                        f.append(bounded, observed -> result[0] = PublicNameProjection.advanceWorkNameRecipe(observed, snapshot,
+                            uri("urn:recipe:population:" + unrelated + ":" + step), Long.MAX_VALUE));
+                        var turn = result[0];
+                        assertEquals(turn.sourceValues(), counter(work, "work_name_recipe_source_values"));
+                        assertEquals(turn.lookahead(), counter(work, "work_name_recipe_lookahead"));
+                        assertEquals(turn.copies(), counter(work, "work_name_recipe_copy_attempts"));
+                        assertEquals(turn.additions(), counter(work, "work_name_recipe_additions"));
+                        assertEquals(0, counter(work, "work_name_sources_changed"));
+                        assertEquals(0, counter(work, "work_name_adoption_bases_changed"));
+                        assertEquals(0, counter(work, "work_name_scope_links_visited"));
+                        assertTrue(turn.sourceValues() + turn.lookahead() + turn.copies() <= 64);
+                        assertEquals(counter(work, "work_name_recipe_source_utf8_bytes") + counter(work, "work_name_recipe_copy_utf8_bytes"),
+                            counter(work, "work_name_recipe_admitted_bytes"));
+                        assertTrue(counter(work, "work_name_recipe_admitted_bytes") <= PublicNameProjection.WORK_RECIPE_TURN_BYTES);
+                        assertTrue(counter(work, "work_name_scope_point_probes") <= 180);
+                        assertTrue(counter(work, "work_name_scope_point_rows") <= 180);
+                        assertTrue("total point probes exceeded bounded turn: " + point[0], point[0] <= 256);
+                        assertTrue("total point rows exceeded bounded turn: " + point[1], point[1] <= 256);
+                        assertTrue(counter(work, "work_name_scope_budget_checks") >= turn.sourceValues());
+                        return new Object[] {turn, point[0], point[1],
+                            counter(work, "work_name_recipe_source_utf8_bytes"), counter(work, "work_name_scope_header_utf8_bytes")
+                                + counter(work, "work_name_recipe_header_utf8_bytes"), counter(work, "work_name_scope_budget_checks")};
+                    }
+                });
+                var turn = (PublicNameProjection.RecipeTurn) measured[0];
+                probes += (long) measured[1]; rows += (long) measured[2]; utf8 += (long) measured[3]; headerBytes += (long) measured[4];
+                budgetChecks += (long) measured[5];
+                visits += turn.sourceValues(); copies += turn.copies();
+                assertEquals(source, f.token(WORK)); assertEquals(basis, f.basis(WORK));
+                assertEquals(singleton, f.read(() -> singleton(f.data)));
+                if (turn.complete()) { turns++; break; }
+            }
+            assertTrue(turns > 2 && turns < 100); assertEquals(567, visits); assertEquals(549, copies);
+            assertEquals(expected, recipeLiterals(f, snapshot));
+            assertTrue(f.read(() -> PublicNameProjection.workNameRecipeComplete(f.data, snapshot, Long.MAX_VALUE)));
+            assertTrue(utf8 > visits); assertTrue(headerBytes > utf8);
+            long[] counts = {turns, probes, rows, visits, copies, utf8, headerBytes, budgetChecks};
+            if (baseline == null) baseline = counts; else assertArrayEquals("unrelated population changed recipe work", baseline, counts);
+            System.out.println("Work recipe unrelated=" + unrelated + " turns=" + turns + " sourceValues=" + visits + " copies=" + copies
+                + " pointProbes=" + probes + " pointRows=" + rows + " sourceUtf8=" + utf8 + " headerUtf8=" + headerBytes + " deadlineChecks=" + budgetChecks);
+        }
+    }
+
+    @Test public void currentRecipeReplayRollbackAndInterruptionKeepNativeProgressExact() {
+        try (var f = new Fixture()) {
+            f.raw(data -> { for (int i = 0; i < 100; i++) data.add(CURRENT, WORK, NAMES.get(2), text("alias " + i)); }); f.prepare();
+            Node snapshot = recipe(f, "replay"); Node source = f.token(WORK); String basis = f.basis(WORK);
+            assertEquals(snapshot, recipe(f, "replay"));
+            Set<Quad> before = f.read(() -> bookkeeping(f.data));
+            f.data.begin(ReadWrite.WRITE);
+            try { PublicNameProjection.advanceWorkNameRecipe(f.data, snapshot, uri("urn:recipe:aborted"), Long.MAX_VALUE); f.data.abort(); }
+            finally { f.data.end(); }
+            assertEquals(before, f.read(() -> bookkeeping(f.data)));
+            try {
+                assertThrows(CancellationException.class, () -> f.write(() -> {
+                    var interrupted = new DatasetGraphWrapper(f.data) {
+                        @Override public void add(Node graph, Node subject, Node predicate, Node object) {
+                            super.add(graph, subject, predicate, object);
+                            if (predicate.equals(PublicNameProjection.WORK_NAME_RECIPE_LITERAL)) Thread.currentThread().interrupt();
+                        }
+                    };
+                    return PublicNameProjection.advanceWorkNameRecipe(interrupted, snapshot, uri("urn:recipe:interrupted"), Long.MAX_VALUE);
+                }));
+            } finally { Thread.interrupted(); }
+            assertEquals(before, f.read(() -> bookkeeping(f.data)));
+            assertThrows(CancellationException.class, () -> f.write(() -> PublicNameProjection.advanceWorkNameRecipe(f.data, snapshot,
+                uri("urn:recipe:deadline"), System.nanoTime() - 1)));
+            var first = recipeTurn(f, snapshot, "urn:recipe:first"); assertFalse(first.complete());
+            drainRecipe(f, snapshot); Set<Quad> completed = f.read(() -> bookkeeping(f.data));
+            var replay = recipeTurn(f, snapshot, "urn:recipe:first");
+            assertTrue(replay.replayed()); assertFalse("replay retains its original EOF result", replay.complete()); assertEquals(0, replay.copies());
+            assertEquals(completed, f.read(() -> bookkeeping(f.data)));
+            assertEquals(source, f.token(WORK)); assertEquals(basis, f.basis(WORK));
+            Node other = recipe(f, "second");
+            assertThrows(IllegalStateException.class, () -> recipeTurn(f, other, "urn:recipe:first"));
+            assertEquals(101, recipeLiterals(f, snapshot).size());
+        }
+    }
+
+    @Test public void currentRecipeRefusesAliasHeaderErasureAdoptionRawAndRestartChanges() {
+        for (String change : List.of("alias", "header", "erasure", "adoption", "raw", "restart", "epoch", "hold")) try (var f = new Fixture()) {
+            f.raw(data -> {
+                header(data, WORK, id(600), id(601), payload("Avant"));
+                data.add(CURRENT, WORK, p("descriptiveMetadataHead"), id(600));
+            }); f.prepare(); Node snapshot = recipe(f, change); drainRecipe(f, snapshot);
+            assertTrue(f.read(() -> PublicNameProjection.workNameRecipeComplete(f.data, snapshot, Long.MAX_VALUE)));
+            switch (change) {
+                case "alias" -> f.nativeWrite(data -> data.add(CURRENT, WORK, NAMES.get(2), text("late alias")));
+                case "header" -> f.nativeWrite(data -> replace(data, REVISIONS, id(600), p("metadataState"), text(payload("Après"))));
+                case "erasure" -> f.nativeWrite(data -> data.add(REVISIONS, id(600), RDF.type.asNode(), p("ErasedRevision")));
+                case "adoption" -> f.nativeWrite(data -> owner(data, 12, WORK, MAIN));
+                case "raw" -> f.raw(data -> data.add(CURRENT, WORK, LABEL, text("raw")));
+                case "restart" -> { f.write(() -> { PublicNameProjection.workScopeExclusiveStartup(f.data); return null; }); f.prepare(); }
+                case "epoch" -> f.raw(data -> replace(data, CONTROL, PRODUCT, p("dataEpoch"), text("new-epoch")));
+                case "hold" -> f.nativeWrite(data -> data.add(CONTROL, PRODUCT, p("restoreHold"),
+                    NodeFactory.createLiteralByValue(true, org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)));
+            }
+            assertFalse(change, f.read(() -> PublicNameProjection.workNameRecipeComplete(f.data, snapshot, Long.MAX_VALUE)));
+            assertThrows(change, IllegalStateException.class, () -> recipeTurn(f, snapshot, "urn:recipe:stale"));
+            assertThrows(change, IllegalStateException.class, () -> recipe(f, change));
+        }
+    }
+    @Test public void emptyCurrentRecipeRequiresNativeEofAndRefusesUnqualifiedOrForgedProgress() {
+        try (var f = new Fixture(false)) {
+            assertThrows(IllegalStateException.class, () -> recipe(f, "unadmitted"));
+        }
+        try (var f = new Fixture()) {
+            f.raw(data -> { for (Node predicate : NAMES) data.deleteAny(CURRENT, WORK, predicate, Node.ANY); }); f.prepare();
+            Node snapshot = recipe(f, "empty");
+            assertFalse(f.read(() -> PublicNameProjection.workNameRecipeComplete(f.data, snapshot, Long.MAX_VALUE)));
+            var turn = recipeTurn(f, snapshot, "urn:recipe:empty-eof");
+            assertTrue(turn.complete()); assertEquals(0, turn.sourceValues()); assertEquals(0, turn.copies());
+            assertTrue(recipeLiterals(f, snapshot).isEmpty());
+            Node forged = recipe(f, "unfinished");
+            assertFalse(f.read(() -> PublicNameProjection.workNameRecipeComplete(f.data, forged, Long.MAX_VALUE)));
+            f.raw(data -> replace(data, PublicNameProjection.REPAIR, forged, p("recipePhase"), text("7")));
+            assertFalse(f.read(() -> PublicNameProjection.workNameRecipeComplete(f.data, forged, Long.MAX_VALUE)));
+            assertThrows(IllegalStateException.class, () -> recipeTurn(f, forged, "urn:recipe:forged"));
+        }
+    }
+    private static long encodedBytes(Node value) {
+        return org.apache.jena.riot.out.NodeFmtLib.strNT(value).getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+    }
+    private static long[] assertRecipeByteRefusal(Fixture f, Node snapshot, String receipt, boolean unscanned) {
+        Set<Quad> before = f.read(() -> bookkeeping(f.data));
+        Node source = f.token(WORK); String basis = f.basis(WORK);
+        long[] counts = new long[3];
+        try (var measured = new CommandWork()) {
+            assertThrows(IllegalStateException.class, () -> recipeTurn(f, snapshot, receipt));
+            if (unscanned) assertEquals("oversized scalar scanned lexical units", 0,
+                counter(measured, "work_name_recipe_lexical_units"));
+            assertTrue(counter(measured, "work_name_recipe_admitted_bytes") <= PublicNameProjection.WORK_RECIPE_TURN_BYTES);
+            counts[0] = counter(measured, "work_name_recipe_source_values");
+            counts[1] = counter(measured, "work_name_recipe_lookahead");
+            counts[2] = counter(measured, "work_name_recipe_copy_attempts");
+        }
+        assertEquals("refused turn committed partial recipe/cursor/receipt", before, f.read(() -> bookkeeping(f.data)));
+        assertFalse(f.read(() -> PublicNameProjection.workNameRecipeComplete(f.data, snapshot, Long.MAX_VALUE)));
+        assertEquals(source, f.token(WORK)); assertEquals(basis, f.basis(WORK));
+        return counts;
+    }
+    @Test public void oversizedCurrentScalarsRefuseRecipeWithoutLexicalScanOrPrimaryDataRejection() {
+        String huge = "x".repeat(8 * 1024 * 1024);
+        for (String kind : List.of("label", "alias", "datatype", "language", "iri")) try (var f = new Fixture()) {
+            Node value = switch (kind) {
+                case "datatype" -> NodeFactory.createLiteralDT("small", org.apache.jena.datatypes.TypeMapper.getInstance()
+                    .getSafeTypeByName("urn:recipe:datatype:" + huge));
+                case "language" -> NodeFactory.createLiteralLang("small", "en-x-" + huge);
+                case "iri" -> uri("urn:recipe:value:" + huge);
+                default -> text(huge);
+            };
+            Node predicate = kind.equals("alias") ? NAMES.get(2) : LABEL;
+            f.raw(data -> {
+                for (Node name : NAMES) data.deleteAny(CURRENT, WORK, name, Node.ANY);
+                data.add(CURRENT, WORK, predicate, value);
+            }); f.prepare(); Node snapshot = recipe(f, "oversized:" + kind);
+            assertRecipeByteRefusal(f, snapshot, "urn:recipe:oversized:" + kind, true);
+            assertTrue("legal primary term was rejected/removed", f.read(() -> f.data.contains(CURRENT, WORK, predicate, value)));
+        }
+        // A legal bounded header can expand beyond the scalar NT byte budget.
+        try (var f = new Fixture()) {
+            f.raw(data -> {
+                for (Node name : NAMES) data.deleteAny(CURRENT, WORK, name, Node.ANY);
+                header(data, WORK, id(600), id(601), payload("\uFFFD".repeat(55000)));
+                data.add(CURRENT, WORK, p("descriptiveMetadataHead"), id(600));
+            }); f.prepare();
+            assertRecipeByteRefusal(f, recipe(f, "escaped-header"), "urn:recipe:escaped-header", false);
+        }
+        System.out.println("Work recipe oversized scalar=8MiB fields=label/alias/datatype/language/iri headerExpansion=refused formattedBytes=0");
+    }
+    @Test public void oversizedLookaheadIsChargedAndRefusesAllPartialRecipeState() {
+        try (var f = new Fixture()) {
+            f.raw(data -> {
+                data.deleteAny(CURRENT, WORK, LABEL, Node.ANY);
+                for (int index = 0; index < 31; index++) data.add(CURRENT, WORK, LABEL, text("lookahead:" + index));
+                data.add(CURRENT, WORK, LABEL, text("x".repeat(8 * 1024 * 1024)));
+            }); f.prepare(); Node snapshot = recipe(f, "oversized-lookahead");
+            long[] counts = assertRecipeByteRefusal(f, snapshot, "urn:recipe:oversized-lookahead", true);
+            assertEquals(31, counts[0]); assertEquals(1, counts[1]); assertEquals(0, counts[2]);
+            System.out.println("Work recipe oversized lookahead=1 sourceValues=31 copies=0 rollback=exact");
+        }
+    }
+    @Test public void cumulativeRecipeBytesAdmitExactBoundaryAndRefuseOverflowAtomically() {
+        for (int extra : List.of(0, 1)) try (var f = new Fixture()) {
+            int characters = PublicNameProjection.WORK_RECIPE_TURN_BYTES / 4 - 2;
+            Node first = text("a".repeat(characters)), second = text("b".repeat(characters + extra));
+            f.raw(data -> {
+                for (Node name : NAMES) data.deleteAny(CURRENT, WORK, name, Node.ANY);
+                data.add(CURRENT, WORK, LABEL, first);
+                data.add(CURRENT, WORK, NAMES.get(1), second);
+            }); f.prepare(); Node snapshot = recipe(f, "byte-boundary:" + extra);
+            if (extra == 0) {
+                try (var measured = new CommandWork()) {
+                    var turn = recipeTurn(f, snapshot, "urn:recipe:byte-boundary");
+                    assertTrue(turn.complete()); assertEquals(2, turn.sourceValues()); assertEquals(2, turn.copies());
+                    assertEquals(PublicNameProjection.WORK_RECIPE_TURN_BYTES / 2,
+                        counter(measured, "work_name_recipe_source_utf8_bytes"));
+                    assertEquals(PublicNameProjection.WORK_RECIPE_TURN_BYTES / 2,
+                        counter(measured, "work_name_recipe_copy_utf8_bytes"));
+                    assertEquals(PublicNameProjection.WORK_RECIPE_TURN_BYTES,
+                        counter(measured, "work_name_recipe_admitted_bytes"));
+                    assertEquals(Set.of(first, second), recipeLiterals(f, snapshot));
+                }
+                try (var measured = new CommandWork()) {
+                    assertTrue(recipeTurn(f, snapshot, "urn:recipe:byte-boundary").replayed());
+                    assertEquals(0, counter(measured, "work_name_recipe_admitted_bytes"));
+                    assertEquals(0, counter(measured, "work_name_recipe_lexical_units"));
+                }
+            } else {
+                long[] partialCopies = {0};
+                DatasetGraph observed = new DatasetGraphWrapper(f.data) {
+                    @Override public void add(Node graph, Node subject, Node predicate, Node object) {
+                        if (graph.equals(PublicNameProjection.REPAIR) && predicate.equals(PublicNameProjection.WORK_NAME_RECIPE_LITERAL)) partialCopies[0]++;
+                        super.add(graph, subject, predicate, object);
+                    }
+                };
+                Set<Quad> before = f.read(() -> bookkeeping(f.data));
+                assertThrows(IllegalStateException.class, () -> f.write(() -> PublicNameProjection.advanceWorkNameRecipe(observed,
+                    snapshot, uri("urn:recipe:byte-overflow"), Long.MAX_VALUE)));
+                assertEquals("test did not cross a partial copy before refusal", 1, partialCopies[0]);
+                assertEquals(before, f.read(() -> bookkeeping(f.data)));
+                assertRecipeByteRefusal(f, snapshot, "urn:recipe:byte-overflow", false);
+            }
+        }
+        System.out.println("Work recipe byteBoundary source=262144 copies=262144 total=524288 overflow=524290 rollback=exact replayBytes=0");
+    }
+    @Test public void recipeEncodingAccountsLiteralLanguageDatatypeIriAndLookaheadExactly() {
+        try (var f = new Fixture()) {
+            var edges = new ArrayList<Node>();
+            edges.add(text("\\\"\t\n\r\f\b\u0013\u0014\u007f\uFFFD\uD83D\uDE00\uD800"));
+            edges.add(NodeFactory.createLiteralLang("français 日本語 \uFFFD", "fr-CA"));
+            edges.add(NodeFactory.createLiteralDirLang("direction é\"", "ar", org.apache.jena.graph.TextDirection.RTL));
+            edges.add(NodeFactory.createLiteralDT("typed\\\"\uFFFD", org.apache.jena.datatypes.TypeMapper.getInstance()
+                .getSafeTypeByName("urn:recipe:datatype: \\\"<>^`{|}\u0013\u0014\u007fé\uD83D\uDE00")));
+            edges.add(uri("urn:recipe:iri: \\\"<>^`{|}\u0013\u0014\u007fé\uD83D\uDE00"));
+            edges.add(NodeFactory.createBlankNode("aXZ-_é日"));
+            for (int index = 0; index < 35; index++) edges.add(text("byte-edge:" + index));
+            f.raw(data -> {
+                data.deleteAny(CURRENT, WORK, LABEL, Node.ANY);
+                for (Node value : edges) data.add(CURRENT, WORK, LABEL, value);
+            }); f.prepare(); Node snapshot = recipe(f, "encoding-edges");
+            // Independent formatter oracle over terms actually decoded by TDB.
+            List<Node> physical = f.read(() -> {
+                var rows = f.data.find(CURRENT, WORK, LABEL, Node.ANY);
+                try { var values = new ArrayList<Node>(); rows.forEachRemaining(quad -> values.add(quad.getObject())); return values; }
+                finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+            });
+            int offset = 0; long totalSource = 0, totalCopy = 0;
+            for (int step = 0; step < 10; step++) try (var measured = new CommandWork()) {
+                var turn = recipeTurn(f, snapshot, "urn:recipe:encoding-edges:" + step);
+                long source = 0, copies = 0;
+                for (int index = offset; index < offset + turn.sourceValues(); index++) {
+                    Node value = physical.get(index); source += encodedBytes(value);
+                    if (value.isLiteral()) copies += encodedBytes(value);
+                }
+                if (turn.lookahead() > 0) source += encodedBytes(physical.get(offset + turn.sourceValues()));
+                assertEquals(source, counter(measured, "work_name_recipe_source_utf8_bytes"));
+                assertEquals(copies, counter(measured, "work_name_recipe_copy_utf8_bytes"));
+                assertEquals(source + copies, counter(measured, "work_name_recipe_admitted_bytes"));
+                assertTrue(source + copies <= PublicNameProjection.WORK_RECIPE_TURN_BYTES);
+                offset += turn.sourceValues(); totalSource += source; totalCopy += copies;
+                if (turn.complete()) break;
+            }
+            assertEquals(physical.size(), offset);
+            assertTrue(f.read(() -> PublicNameProjection.workNameRecipeComplete(f.data, snapshot, Long.MAX_VALUE)));
+            assertEquals(new HashSet<>(physical.stream().filter(Node::isLiteral).toList()), recipeLiterals(f, snapshot));
+            System.out.println("Work recipe encodingEdges sourceBytes=" + totalSource + " copyBytes=" + totalCopy + " lookahead=charged formatterOracle=exact");
+        }
+    }
+
 }

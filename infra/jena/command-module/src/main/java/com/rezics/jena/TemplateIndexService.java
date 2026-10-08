@@ -101,6 +101,7 @@ final class TemplateIndexService {
     /** Uses the command owner's existing absolute nano deadline. Cancellation
      * is not malformed RDF and must escape ordinary uncertainty catches. */
     static void workScopeBudget(long deadline) {
+        CommandWork.count("work_name_scope_budget_checks", 1);
         if (Thread.currentThread().isInterrupted() || System.nanoTime() >= deadline)
             throw new java.util.concurrent.CancellationException("native Work name scope request cancelled or expired");
     }

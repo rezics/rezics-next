@@ -36,6 +36,9 @@ final class ClaimFoldInventory {
 
     record DispositionRequest(Job job,String sourceCut,String seal,Row row,long deadline) {}
     record MembersRequest(Job job,String sourceCut,String seal,String progress,long deadline) {}
+    private static final String RETAIN="claim-fold-retained-outside-publication-v1", RETAIN_PREFIX="urn:rezics:claim-fold-retained:";
+    record RetainRequest(Job job,String sourceCut,String seal,Row row,String relationDefinition,String qualificationDefinition,
+        String relationManifest,String relationPayload,String qualificationManifest,String qualificationPayload,long deadline) {}
     private record Construction(long count,String hash) {}
 
     private static JsonObject parseEnvelope(byte[] bytes,String member) {
@@ -110,7 +113,9 @@ final class ClaimFoldInventory {
             Clock clock=Clock.systemUTC(); long deadline=wallDeadline(commandDeadline,clock);
             Job identity=conversionJob(data,modify,own);
             if(!sealed(data,identity,state,state.sourceCut(),state.hash(),deadline,clock)) return "Claim inventory exact source cut is unavailable";
+            if(!record(data,STATE,classifiedId(header(identity)),1,8192).isEmpty()) return "Claim inventory classification is sealed; no new dispositions";
             Node claim=ownField(modify,own,"convertedClaim"), head=ownField(modify,own,"sourceClaimRevision");
+            if(!record(data,STATE,retainedId(identity,claim),1,4096).isEmpty()) return "Claim inventory C already retained";
             if(!record(data,STATE,dispositionId(identity,claim),1,4096).isEmpty()) return "Claim inventory C already converted; exact receipt replay required";
             Row current=witness(data,claim);
             if(!head.isURI() || !current.head().equals(head.getURI()) || !member(data,identity,current)) return "Claim inventory exact C/head witness differs";
@@ -138,16 +143,23 @@ final class ClaimFoldInventory {
     }
     private static Node dispositionId(Job job,Node claim) { return uri(header(job).getURI()+":converted:"+hash(claim.getURI())); }
     private static Node progressId(Node header) { return uri(header.getURI()+":conversions"); }
-    private static long expectedVersion(DatasetGraph data,Node header,Checkpoint state) {
+    private static long expectedVersion(DatasetGraph data,Node header,Checkpoint state) { return expectedVersion(data,header,state,true); }
+    private static long expectedVersion(DatasetGraph data,Node header,Checkpoint state,boolean fresh) {
         Set<Quad> fields=record(data,STATE,progressId(header),1,4096);
         if(fields.isEmpty()) return state.version();
         JsonObject progress=JSON.parse(text(value(fields,p("claimFoldConversionCheckpoint"))));
         if(!progress.keys().equals(Set.of("sourceCut","seal","attempt","storage","version","claim","receipt"))
             || !s(progress,"sourceCut").equals(state.sourceCut()) || !s(progress,"seal").equals(state.hash())
-            || !s(progress,"attempt").equals(state.attempt()) || !s(progress,"storage").equals(state.storage()) || n(progress,"version")<=state.version()
-            || !nativeId(uri(s(progress,"claim")))) throw new IllegalArgumentException("Claim disposition checkpoint differs");
-        Node identity=uri(header.getURI()+":converted:"+hash(s(progress,"claim")));
-        JsonObject last=disposition(data,identity,state);
+            || !s(progress,"attempt").equals(state.attempt()) || !s(progress,"storage").equals(state.storage()) || n(progress,"version")<=state.version()) throw new IllegalArgumentException("Claim disposition checkpoint differs");
+        if(s(progress,"receipt").startsWith(SEALED_PREFIX)) {
+            JsonObject marker=classification(data,header,state,fresh);
+            if(marker==null || !e(progress,"claim").isEmpty() || !s(marker,"receipt").equals(s(progress,"receipt")) || number(marker,"version")!=n(progress,"version")) throw new IllegalArgumentException("Claim classification checkpoint differs");
+            return n(progress,"version");
+        }
+        if(!nativeId(uri(s(progress,"claim")))) throw new IllegalArgumentException("Claim disposition checkpoint differs");
+        boolean retained=s(progress,"receipt").startsWith(RETAIN_PREFIX);
+        Node identity=uri(header.getURI()+(retained?":retained:":":converted:")+hash(s(progress,"claim")));
+        JsonObject last=retained?retainedDisposition(data,identity,state):disposition(data,identity,state);
         if(last==null || !s(last,"claim").equals(s(progress,"claim")) || !s(last,"receipt").equals(s(progress,"receipt"))) throw new IllegalArgumentException("Claim disposition checkpoint receipt unavailable");
         return n(progress,"version");
     }
@@ -174,10 +186,12 @@ final class ClaimFoldInventory {
             if(state==null) return null; // historical partial jobs do not acquire exhaustive authority
             Clock clock=Clock.systemUTC(); long deadline=wallDeadline(commandDeadline,clock);
             if(!sealed(data,job,state,state.sourceCut(),state.hash(),deadline,clock)) return "Claim disposition source cut advanced";
+            if(!record(data,STATE,classifiedId(header(job)),1,8192).isEmpty()) return "Claim disposition classification is sealed; no new dispositions";
             Node claim=ownField(modify,own,"convertedClaim"),head=ownField(modify,own,"sourceClaimRevision");
             Row original=witness(data,claim,uri(CommandPolicy.REVISIONS));
             if(!original.head().equals(head.getURI()) || !member(data,job,original)) return "Claim disposition original witness differs";
             Node identity=dispositionId(job,claim);
+            if(!record(data,STATE,retainedId(job,claim),1,4096).isEmpty()) return "Claim disposition conflicts with immutable retention";
             if(!record(data,STATE,identity,1,4096).isEmpty()) return "Claim disposition is immutable; exact receipt replay required";
             JsonObject row=new JsonObject(); row.put("status","converted"); row.put("sourceCut",state.sourceCut()); row.put("seal",state.hash()); row.put("attempt",state.attempt()); row.put("storage",state.storage());
             row.put("claim",original.claim()); row.put("head",original.head()); row.put("witness",original.witness()); row.put("receipt",receipt); row.put("digest",receipt.substring(receipt.lastIndexOf(':')+1));
@@ -212,6 +226,11 @@ final class ClaimFoldInventory {
             deadline(deadline,clock); Checkpoint state=checkpoint(data,header(request.job())); deadline(deadline,clock);
             if(state==null || !sealed(data,request.job(),state,request.sourceCut(),request.seal(),deadline,clock) || !member(data,request.job(),request.row())) return dispositionStatus("invalid","Claim disposition source proof differs");
             deadline(deadline,clock); JsonObject row=disposition(data,dispositionId(request.job(),uri(request.row().claim())),state); deadline(deadline,clock);
+            JsonObject retained=retainedDisposition(data,retainedId(request.job(),uri(request.row().claim())),state);
+            if(retained!=null) {
+                if(row!=null || !s(retained,"claim").equals(request.row().claim()) || !s(retained,"head").equals(request.row().head()) || !s(retained,"witness").equals(request.row().witness())) return dispositionStatus("invalid","overlapping/mismatched retained disposition");
+                verifyRetentionReceipt(data,request.job(),retained); deadline(deadline,clock); return retained;
+            }
             if(row==null) return dispositionStatus("unresolved",null);
             if(!s(row,"claim").equals(request.row().claim()) || !s(row,"head").equals(request.row().head()) || !s(row,"witness").equals(request.row().witness())) return dispositionStatus("invalid","Claim disposition witness differs");
             // The fixed writer already validated immutable receipt/blob bytes. The
@@ -232,6 +251,119 @@ final class ClaimFoldInventory {
         finally { data.end(); }
     }
     private static JsonObject dispositionStatus(String status,String error) { JsonObject row=new JsonObject(); row.put("status",status); if(error!=null) row.put("error",error); return row; }
+
+    private static Node retainedId(Job job,Node claim) { return uri(header(job).getURI()+":retained:"+hash(claim.getURI())); }
+    static RetainRequest parseRetain(byte[] bytes) {
+        JsonObject row=parseEnvelope(bytes,"claimFoldRetain");
+        if(!row.keys().equals(Set.of("job","sourceCut","seal","claim","head","witness","relationDefinition","qualificationDefinition","relationManifest","relationPayload","qualificationManifest","qualificationPayload","deadline"))) throw new IllegalArgumentException("invalid fixed retained fields");
+        RetainRequest request=new RetainRequest(parseJob(row.get("job").getAsObject()),s(row,"sourceCut"),s(row,"seal"),new Row(s(row,"claim"),s(row,"head"),s(row,"witness")),
+            s(row,"relationDefinition"),s(row,"qualificationDefinition"),e(row,"relationManifest"),e(row,"relationPayload"),e(row,"qualificationManifest"),e(row,"qualificationPayload"),n(row,"deadline"));
+        validate(new Request(request.job(),"00000000-0000-0000-0000-000000000000",0,"","00000000-0000-0000-0000-000000000000",request.deadline()));
+        if(!nativeId(uri(request.row().claim())) || !nativeId(uri(request.row().head())) || !nativeId(uri(request.relationDefinition())) || !nativeId(uri(request.qualificationDefinition()))
+            || !request.sourceCut().matches("[0-9a-f]{64}") || !request.seal().matches("[0-9a-f]{64}") || !request.row().witness().matches("[0-9a-f]{64}")) throw new IllegalArgumentException("invalid retained source identity");
+        return request;
+    }
+    private static String retainDigest(RetainRequest request) {
+        return hash(RETAIN+"\n"+JSON.toStringFlat(retainInput(request)));
+    }
+    private static JsonObject retainInput(RetainRequest request) {
+        JsonObject row=requestJson(new Request(request.job(),"00000000-0000-0000-0000-000000000000",0,"","00000000-0000-0000-0000-000000000000",1));
+        for(String key:List.of("contract","attempt","page","previous","requestId","deadline")) row.remove(key);
+        row.put("sourceCut",request.sourceCut()); row.put("seal",request.seal()); row.put("claim",request.row().claim()); row.put("head",request.row().head()); row.put("witness",request.row().witness());
+        row.put("relationDefinition",request.relationDefinition()); row.put("qualificationDefinition",request.qualificationDefinition()); row.put("relationManifest",request.relationManifest()); row.put("relationPayload",request.relationPayload());
+        row.put("qualificationManifest",request.qualificationManifest()); row.put("qualificationPayload",request.qualificationPayload()); return row;
+    }
+    private static JsonObject retainedDisposition(DatasetGraph data,Node identity,Checkpoint state) {
+        Set<Quad> fields=record(data,STATE,identity,1,4096); if(fields.isEmpty()) return null;
+        JsonObject row=JSON.parse(text(value(fields,p("claimFoldRetainedDisposition"))));
+        if(state==null || !row.keys().equals(Set.of("status","contract","sourceCut","seal","attempt","storage","claim","head","witness","predicate","sourceDigest","sourceReceipt","receipt","digest"))
+            || !s(row,"status").equals("retained") || !s(row,"contract").equals(RETAIN) || !s(row,"sourceCut").equals(state.sourceCut()) || !s(row,"seal").equals(state.hash()) || !s(row,"attempt").equals(state.attempt()) || !s(row,"storage").equals(state.storage())
+            || !nativeId(uri(s(row,"claim"))) || !nativeId(uri(s(row,"head"))) || !s(row,"witness").matches("[0-9a-f]{64}") || !s(row,"sourceDigest").matches("[0-9a-f]{64}")
+            || !s(row,"digest").matches("[0-9a-f]{64}") || !s(row,"receipt").equals(RETAIN_PREFIX+s(row,"digest")) || s(row,"predicate").equals("https://schema.org/datePublished")
+            || !s(row,"sourceReceipt").matches("urn:rezics:receipt:[0-9a-f]{64}")) throw new IllegalArgumentException("invalid native retained disposition"); return row;
+    }
+    private static void verifyRetentionReceipt(DatasetGraph data,Job job,JsonObject row) {
+        Map<Node,Node> expected=retentionReceipt(data,job,row);
+        if(!record(data,RECEIPTS,uri(s(row,"receipt")),expected.size(),8192).equals(expected.entrySet().stream().map(entry->new Quad(RECEIPTS,uri(s(row,"receipt")),entry.getKey(),entry.getValue())).collect(java.util.stream.Collectors.toSet()))) throw new IllegalArgumentException("exact retained native receipt differs");
+    }
+    private static Map<Node,Node> retentionReceipt(DatasetGraph data,Job job,JsonObject row) {
+        return Map.ofEntries(Map.entry(RDF.type.asNode(),p("OperationReceipt")),Map.entry(p("commandFamily"),literal(RETAIN)),Map.entry(p("requestDigest"),literal(s(row,"digest"))),Map.entry(p("outcome"),p("Succeeded")),
+            Map.entry(p("datasetId"),PRODUCT),Map.entry(p("dataEpoch"),literal(job.dataEpoch())),Map.entry(p("sequence"),one(data,RECEIPTS,uri(job.acquireReceipt()),p("sequence"),true)),
+            Map.entry(p("claimStatementFold"),uri(job.marker())),Map.entry(p("foldMapDigest"),literal(job.mapDigest())),Map.entry(p("claimFoldJob"),literal(job.job())),
+            Map.entry(p("retainedClaim"),uri(s(row,"claim"))),Map.entry(p("sourceClaimRevision"),uri(s(row,"head"))),Map.entry(p("sourceClaimReceipt"),uri(s(row,"sourceReceipt"))),Map.entry(p("sourceDigest"),literal(s(row,"sourceDigest"))),
+            Map.entry(p("claimFoldSourceCut"),literal(s(row,"sourceCut"))),Map.entry(p("claimFoldInventorySeal"),literal(s(row,"seal"))),Map.entry(p("claimFoldSourceWitness"),literal(s(row,"witness"))),Map.entry(p("propositionPredicate"),uri(s(row,"predicate"))));
+    }
+    /** Fixed original-member retention. No caller reason/verdict or negative
+     * preparation result can publish a native terminal disposition. */
+    static JsonObject retain(DatasetGraph logical,RetainRequest request,ProfileRegistry profiles,java.util.concurrent.atomic.AtomicLong publicWriteEpoch) {
+        Clock clock=Clock.systemUTC(); long entry=clock.millis()+30_000, deadline=Math.min(entry,request.deadline());
+        DatasetGraph data=TDBInternal.requireStorage(DatasetGraphWrapper.unwrap(logical));
+        if(data.isInTransaction()) throw new IllegalArgumentException("retention owns its maintenance transaction");
+        String digest=retainDigest(request); Node identity=retainedId(request.job(),uri(request.row().claim()));
+        try { deadline(entry,clock); } catch(InventoryDeadline expired) { return dispositionStatus("deadline","retention deadline expired"); }
+        logical.begin(ReadWrite.READ);
+        try {
+            deadline(entry,clock); Checkpoint state=checkpoint(data,header(request.job()));
+            JsonObject old=retainedDisposition(data,identity,state); deadline(entry,clock);
+            if(old!=null && s(old,"digest").equals(digest) && s(old,"claim").equals(request.row().claim()) && s(old,"head").equals(request.row().head()) && s(old,"witness").equals(request.row().witness())) { verifyRetentionReceipt(data,request.job(),old); deadline(entry,clock); return old; }
+            if(old!=null) return dispositionStatus("unresolved","immutable retained input differs");
+        } catch(InventoryDeadline expired) { return dispositionStatus("deadline","retention deadline expired"); }
+        catch(IllegalArgumentException invalid) { return dispositionStatus("unresolved",invalid.getMessage()); }
+        finally { logical.end(); }
+        try { deadline(deadline,clock); } catch(InventoryDeadline expired) { return dispositionStatus("deadline","retention deadline expired"); }
+        synchronized(logical) {
+        try { deadline(deadline,clock); } catch(InventoryDeadline expired) { return dispositionStatus("deadline","retention deadline expired"); }
+        logical.begin(ReadWrite.WRITE); boolean committed=false, tracksIndex=false;
+        try {
+            deadline(deadline,clock); Checkpoint state=checkpoint(data,header(request.job())); JsonObject old=retainedDisposition(data,identity,state); deadline(deadline,clock);
+            if(old!=null && s(old,"digest").equals(digest) && s(old,"claim").equals(request.row().claim()) && s(old,"head").equals(request.row().head()) && s(old,"witness").equals(request.row().witness())) { verifyRetentionReceipt(data,request.job(),old); return old; }
+            if(old!=null || !sealed(data,request.job(),state,request.sourceCut(),request.seal(),deadline,clock)) return dispositionStatus("unresolved","retained source cut/version unavailable");
+            directorySeal(data,request.job(),state); deadline(deadline,clock);
+            if(!record(data,STATE,classifiedId(header(request.job())),1,8192).isEmpty()) return dispositionStatus("unresolved","classified job accepts no new dispositions");
+            if(!record(data,STATE,dispositionId(request.job(),uri(request.row().claim())),1,4096).isEmpty()) return dispositionStatus("unresolved","converted member cannot be retained");
+            if(!record(data,RECEIPTS,uri(RETAIN_PREFIX+digest),19,8192).isEmpty()) return dispositionStatus("unresolved","orphan/foreign retained receipt exists");
+            Row source=witness(data,uri(request.row().claim()));
+            if(!source.equals(request.row()) || !member(data,request.job(),source)) return dispositionStatus("unresolved","original retained witness differs");
+            var proof=ClaimStatementFoldPolicy.captureRetention(data,uri(source.claim()),uri(source.head()),request.job().mapDigest(),uri(request.relationDefinition()),uri(request.qualificationDefinition()),request.relationManifest(),request.relationPayload(),request.qualificationManifest(),request.qualificationPayload());
+            deadline(deadline,clock); if(proof.snapshot().error()!=null) return dispositionStatus("unresolved",proof.snapshot().error());
+            for(var focus:List.of(Map.entry("claim",source.claim()),Map.entry("revision",source.head()))) {
+                deadline(deadline,clock);
+                Map<String,Object> validation=CommandService.validateOne(data,new CommandService.Validation("claim-v1",profiles.get("claim-v1"),
+                    "https://rezics.com/definition/claim-v1/"+focus.getKey()+"-shape",List.of(focus.getValue()),List.of(CommandPolicy.CURRENT,CommandPolicy.REVISIONS),Map.of()));
+                deadline(deadline,clock); if(validation!=null) return dispositionStatus("unresolved","native retained Claim validation refused");
+            }
+            String changed=ClaimStatementFoldPolicy.check(data,proof.snapshot()); if(changed!=null) return dispositionStatus("unresolved",changed);
+            // Reuse ordinary neutral-commit tracking: a text wrapper can publish
+            // a merge even when the only RDF writes are receipts/private state.
+            tracksIndex=SearchDeltaJournal.canTrackCommit(logical);
+            if(tracksIndex) { publicWriteEpoch.incrementAndGet(); SearchDeltaJournal.fenceBeforeWrite(logical); }
+            SearchDeltaJournal.Capture delta=tracksIndex?new SearchDeltaJournal.Capture(logical,false):null;
+            JsonObject row=new JsonObject(); row.put("status","retained"); row.put("contract",RETAIN); row.put("sourceCut",state.sourceCut()); row.put("seal",state.hash()); row.put("attempt",state.attempt()); row.put("storage",state.storage());
+            row.put("claim",source.claim()); row.put("head",source.head()); row.put("witness",source.witness()); row.put("predicate",proof.predicate().getURI()); row.put("sourceDigest",proof.sourceDigest()); row.put("sourceReceipt",proof.originalReceipt().getURI()); row.put("receipt",RETAIN_PREFIX+digest); row.put("digest",digest);
+            for(var field:retentionReceipt(data,request.job(),row).entrySet()) logical.add(RECEIPTS,uri(RETAIN_PREFIX+digest),field.getKey(),field.getValue());
+            logical.add(STATE,identity,p("claimFoldRetainedDisposition"),literal(JSON.toStringFlat(row)));
+            JsonObject progress=new JsonObject(); progress.put("sourceCut",state.sourceCut()); progress.put("seal",state.hash()); progress.put("attempt",state.attempt()); progress.put("storage",state.storage()); progress.put("version",Math.addExact(version(data),1)); progress.put("claim",source.claim()); progress.put("receipt",RETAIN_PREFIX+digest);
+            logical.deleteAny(STATE,progressId(header(request.job())),p("claimFoldConversionCheckpoint"),Node.ANY); logical.add(STATE,progressId(header(request.job())),p("claimFoldConversionCheckpoint"),literal(JSON.toStringFlat(progress)));
+            verifyRetentionReceipt(data,request.job(),row); deadline(deadline,clock);
+            String post=ClaimStatementFoldPolicy.check(data,proof.snapshot());
+            if(post!=null || !state.cut().equals(lineageCut(data,request.job(),deadline,clock))) return dispositionStatus("unresolved","retained original poststate/held cut changed");
+            if(delta!=null) SearchDeltaJournal.append(logical,delta,publicWriteEpoch.get()+1);
+            deadline(deadline,clock); logical.commit(); committed=true; return row;
+        } catch(InventoryDeadline expired) { return dispositionStatus("deadline","retention deadline expired"); }
+        catch(IllegalArgumentException invalid) { return dispositionStatus("unresolved",invalid.getMessage()); }
+        finally {
+            try { if(!committed) logical.abort(); }
+            finally {
+                try {
+                    logical.end();
+                    if(committed && tracksIndex) try {
+                        if(!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(logical,-1,publicWriteEpoch.get()+1).get("available"))) SearchDeltaJournal.invalidate(logical);
+                    } catch(RuntimeException unavailable) { SearchDeltaJournal.invalidate(logical); }
+                } finally { if(tracksIndex) publicWriteEpoch.incrementAndGet(); }
+            }
+        }
+        }
+    }
 
     private static Node directory(Job job) { return uri(header(job).getURI()+":members"); }
     private static Node constructionId(Job job) { return uri(directory(job).getURI()+":construction"); }
@@ -359,6 +491,302 @@ final class ClaimFoldInventory {
         } catch(InventoryDeadline expired) { return dispositionStatus("deadline","Claim member deadline expired"); }
         catch(IllegalArgumentException invalid) { return dispositionStatus("invalid",invalid.getMessage()); }
         finally { data.end(); }
+    }
+
+    private static final String CLASSIFY="claim-fold-classify-v1";
+    /** Only this fixed reader uses the facade; no writer or general projection
+     * observes it. Every returned tuple and empty probe shares one turn budget. */
+    private static final class ClassificationWork extends DatasetGraphWrapper {
+        int tuples,probes,bytes; final int maxTuples,maxProbes,maxBytes;
+        ClassificationWork(DatasetGraph data) { this(data,512,128,256*1024); }
+        ClassificationWork(DatasetGraph data,int maxTuples,int maxProbes,int maxBytes) { super(data); this.maxTuples=maxTuples; this.maxProbes=maxProbes; this.maxBytes=maxBytes; }
+        void probe() { if(probes==maxProbes) throw new ClassificationBudget(); probes++; }
+        void tupleRoom() { if(tuples==maxTuples) throw new ClassificationBudget(); }
+        void charge(Node... nodes) {
+            tupleRoom(); tuples++;
+            for(Node node:nodes) try { bytes=Math.addExact(bytes,scalarBytes(node,maxBytes-bytes)); }
+            catch(IllegalArgumentException invalid) { throw new ClassificationBudget(); }
+        }
+        boolean reserve() { return tuples+128+96<=512 && probes+40+28<=128 && bytes+160*1024<=256*1024; }
+        @Override public Iterator<Quad> find(Node graph,Node subject,Node predicate,Node object) {
+            probe(); Iterator<Quad> source=super.find(graph,subject,predicate,object);
+            class Lookahead implements Iterator<Quad>,org.apache.jena.atlas.lib.Closeable {
+                Quad next;boolean ready;
+                @Override public boolean hasNext(){if(ready)return true;tupleRoom();if(!source.hasNext())return false;next=source.next();charge(next.getGraph(),next.getSubject(),next.getPredicate(),next.getObject());ready=true;return true;}
+                @Override public Quad next(){if(!hasNext())throw new NoSuchElementException();ready=false;return next;}
+                @Override public void close(){Iter.close(source);}
+            }
+            return new Lookahead();
+        }
+        @Override public boolean contains(Node graph,Node subject,Node predicate,Node object) {
+            var found=find(graph,subject,predicate,object);
+            try { if(!found.hasNext()) return false; found.next(); return true; } finally { Iter.close(found); }
+        }
+        JsonObject json() { JsonObject row=new JsonObject();row.put("tuples",tuples);row.put("probes",probes);row.put("bytes",bytes);return row; }
+    }
+    private static final class ClassificationBudget extends RuntimeException { private static final long serialVersionUID=1L; }
+    static MembersRequest parseClassify(byte[] bytes) {
+        JsonObject row=parseEnvelope(bytes,"claimFoldClassify");
+        if(!row.keys().equals(Set.of("job","sourceCut","seal","progress","deadline"))) throw new IllegalArgumentException("invalid fixed classification fields");
+        Job job=parseJob(row.get("job").getAsObject()); String cursor=e(row,"progress"); long deadline=n(row,"deadline");
+        validate(new Request(job,"00000000-0000-0000-0000-000000000000",0,"","00000000-0000-0000-0000-000000000000",deadline));
+        if(!s(row,"sourceCut").matches("[0-9a-f]{64}") || !s(row,"seal").matches("[0-9a-f]{64}") || cursor.length()>4096
+            || !cursor.isEmpty() && !cursor.matches("[A-Za-z0-9_-]+\\.[0-9a-f]{64}")) throw new IllegalArgumentException("invalid classification source/progress");
+        return new MembersRequest(job,s(row,"sourceCut"),s(row,"seal"),cursor,deadline);
+    }
+    private static String classificationMac(byte[] bytes) { return purposeMac(CLASSIFY,bytes); }
+    private static String purposeMac(String purpose,byte[] bytes) {
+        try { var mac=javax.crypto.Mac.getInstance("HmacSHA256");mac.init(new javax.crypto.spec.SecretKeySpec(MEMBER_KEY,"HmacSHA256"));mac.update((purpose+"\0").getBytes(StandardCharsets.UTF_8));return HexFormat.of().formatHex(mac.doFinal(bytes)); }
+        catch(java.security.GeneralSecurityException impossible) { throw new IllegalStateException(impossible); }
+    }
+    private static String classificationToken(JsonObject cursor) {
+        byte[] bytes=JSON.toStringFlat(cursor).getBytes(StandardCharsets.UTF_8);return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)+"."+classificationMac(bytes);
+    }
+    private static JsonObject classificationCursor(MembersRequest request,Checkpoint state,Construction proof,long snapshot) {
+        JsonObject cursor;
+        if(request.progress().isEmpty()) {
+            cursor=progress(new MembersRequest(request.job(),request.sourceCut(),request.seal(),"",request.deadline()),state,proof,snapshot);
+            cursor.put("purpose",CLASSIFY);cursor.put("converted",0);cursor.put("retained",0);cursor.put("transcript",ZERO);return cursor;
+        }
+        String[] parts=request.progress().split("\\.");byte[] bytes=Base64.getUrlDecoder().decode(parts[0]);
+        if(bytes.length>2048 || !MessageDigest.isEqual(HexFormat.of().parseHex(parts[1]),HexFormat.of().parseHex(classificationMac(bytes)))) throw new IllegalArgumentException("classification cursor purpose/authentication differs");
+        cursor=JSON.parse(new String(bytes,StandardCharsets.UTF_8));
+        if(!cursor.keys().equals(Set.of("job","sourceCut","seal","attempt","storage","version","construction","after","count","hash","purpose","converted","retained","transcript"))
+            || !s(cursor,"purpose").equals(CLASSIFY) || !s(cursor,"job").equals(request.job().marker()) || !s(cursor,"sourceCut").equals(state.sourceCut()) || !s(cursor,"seal").equals(state.hash())
+            || !s(cursor,"attempt").equals(state.attempt()) || !s(cursor,"storage").equals(state.storage()) || n(cursor,"version")!=snapshot || !s(cursor,"construction").equals(proof.hash())
+            || !s(cursor,"after").matches("[0-9a-f]{64}") || n(cursor,"count")<1 || n(cursor,"count")>proof.count() || !s(cursor,"hash").matches("[0-9a-f]{64}") || !s(cursor,"transcript").matches("[0-9a-f]{64}")
+            || n(cursor,"converted")<0 || n(cursor,"retained")<0 || n(cursor,"converted")+n(cursor,"retained")!=n(cursor,"count")) throw new IllegalArgumentException("classification cursor cut/partition differs");return cursor;
+    }
+    private static JsonObject classifyMember(DatasetGraph data,Job job,Checkpoint state,Row member) {
+        Node claim=uri(member.claim()),root=uri(member.head());
+        JsonObject converted=disposition(data,dispositionId(job,claim),state),retained=retainedDisposition(data,retainedId(job,claim),state);
+        if((converted==null)==(retained==null)) throw new IllegalArgumentException("original member lacks one exclusive native disposition");
+        JsonObject selected=converted==null?retained:converted;
+        if(!s(selected,"claim").equals(member.claim()) || !s(selected,"head").equals(member.head()) || !s(selected,"witness").equals(member.witness())) throw new IllegalArgumentException("classified disposition original witness differs");
+        Row actual=witness(data,claim,converted==null?CURRENT:uri(CommandPolicy.REVISIONS));
+        if(!actual.equals(member)) throw new IllegalArgumentException("classified original C/R witness changed");
+        Node original;String sourceDigest;
+        if(converted!=null) {
+            Node own=uri(s(converted,"receipt")),revision=uri(s(converted,"statementRevision"));
+            Map<Node,Node> required=Map.ofEntries(Map.entry(RDF.type.asNode(),p("OperationReceipt")),Map.entry(p("commandFamily"),literal("claim-statement-fold-convert-v1")),Map.entry(p("outcome"),p("Succeeded")),
+                Map.entry(p("datasetId"),PRODUCT),Map.entry(p("dataEpoch"),literal(job.dataEpoch())),Map.entry(p("sequence"),one(data,RECEIPTS,uri(job.acquireReceipt()),p("sequence"),true)),Map.entry(p("claimStatementFold"),uri(job.marker())),Map.entry(p("foldMapDigest"),literal(job.mapDigest())),Map.entry(p("claimFoldJob"),literal(job.job())),
+                Map.entry(p("convertedClaim"),claim),Map.entry(p("sourceClaimRevision"),root),Map.entry(p("statementRevision"),revision),Map.entry(p("requestDigest"),literal(s(converted,"digest"))),Map.entry(p("claimFoldTemplateDigest"),literal(s(converted,"templateDigest"))));
+            for(var field:required.entrySet()) {Node value=one(data,RECEIPTS,own,field.getKey(),true);scalarBytes(value,MAX_WITNESS_BYTES);if(!value.equals(field.getValue())) throw new IllegalArgumentException("classified native conversion receipt differs");}
+            Node revisions=uri(CommandPolicy.REVISIONS);
+            if(!one(data,revisions,revision,p("component"),true).equals(claim) || !one(data,revisions,revision,p("retainedSourceRevision"),true).equals(root)) throw new IllegalArgumentException("classified B original provenance differs");
+            original=one(data,revisions,revision,p("retainedSourceReceipt"),true);scalarBytes(original,MAX_WITNESS_BYTES);
+            Node digest=one(data,RECEIPTS,own,p("sourceDigest"),true);scalarBytes(digest,MAX_WITNESS_BYTES);sourceDigest=text(digest);
+        } else {
+            verifyRetentionReceipt(data,job,retained);original=uri(s(retained,"sourceReceipt"));sourceDigest=s(retained,"sourceDigest");
+            if(!one(data,CURRENT,claim,p("propositionPredicate"),true).equals(uri(s(retained,"predicate"))) || !one(data,uri(CommandPolicy.REVISIONS),root,p("propositionPredicate"),true).equals(uri(s(retained,"predicate")))) throw new IllegalArgumentException("classified retained predicate differs");
+        }
+        if(!sourceDigest.matches("[0-9a-f]{64}")) throw new IllegalArgumentException("classified source digest differs");
+        Set<Quad> receipt=record(data,RECEIPTS,original,32,16*1024);
+        Node epoch=one(data,uri(CommandPolicy.REVISIONS),root,p("dataEpoch"),true),sequence=one(data,uri(CommandPolicy.REVISIONS),root,p("sequence"),true);
+        ClaimStatementFoldPolicy.verifyOriginalReceipt(original,receipt,claim,root,epoch,sequence);
+        if(converted!=null) {
+            Node revision=uri(s(converted,"statementRevision")),revisions=uri(CommandPolicy.REVISIONS);
+            if(!data.contains(revisions,revision,RDF.type.asNode(),p("StatementRevision")) || !data.contains(revisions,revision,RDF.type.asNode(),p("RevisionAnchor"))
+                || !one(data,revisions,revision,p("dataEpoch"),true).equals(epoch) || !one(data,revisions,revision,p("sequence"),true).equals(sequence)
+                || !one(data,revisions,revision,p("operation"),true).equals(value(receipt,p("operation")))) throw new IllegalArgumentException("classified B original create provenance differs");
+        }
+        JsonObject result=new JsonObject();result.put("claim",member.claim());result.put("head",member.head());result.put("witness",member.witness());result.put("status",s(selected,"status"));
+        result.put("receipt",s(selected,"receipt"));result.put("digest",s(selected,"digest"));result.put("sourceDigest",sourceDigest);result.put("sourceReceipt",original.getURI());
+        if(converted!=null) result.put("statementRevision",s(converted,"statementRevision"));return result;
+    }
+    /** Snapshot-only native classification. No marker, mutation, owner coverage,
+     * complete/release or latest-commit assertion is emitted. */
+    static JsonObject classify(DatasetGraph logical,MembersRequest request) {
+        Clock clock=Clock.systemUTC();long deadline=Math.min(request.deadline(),clock.millis()+30_000);
+        DatasetGraph raw=TDBInternal.requireStorage(DatasetGraphWrapper.unwrap(logical));
+        if(raw.isInTransaction()) throw new IllegalArgumentException("classification owns its read transaction");
+        ClassificationWork data=new ClassificationWork(raw);
+        try {deadline(deadline,clock);} catch(InventoryDeadline expired){return dispositionStatus("deadline","classification deadline expired");}
+        raw.begin(ReadWrite.READ);
+        try {
+            deadline(deadline,clock);Checkpoint state=checkpoint(data,header(request.job()));
+            if(!sealed(data,request.job(),state,request.sourceCut(),request.seal(),deadline,clock)) throw new IllegalArgumentException("classification source cut/version unavailable");
+            Construction proof=directorySeal(data,request.job(),state);long snapshot=version(raw);JsonObject cursor=classificationCursor(request,state,proof,snapshot);deadline(deadline,clock);
+            var index=(TupleIndexRecord)TDBInternal.findIndex(raw,"GSPO").baseTupleIndex();var factory=new RecordFactory(32,0);var start=factory.createKeyOnly();var end=factory.createKeyOnly();
+            Node[] prefix={STATE,directory(request.job()),p("claimFoldInventoryMember")};boolean absent=false;
+            for(int i=0;i<3;i++){var id=TDBInternal.getNodeId(TDBInternal.requireStorage(raw),prefix[i]);if(org.apache.jena.tdb2.store.NodeId.isDoesNotExist(id)){absent=true;break;}NodeIdFactory.set(id,start.getKey(),i*8);NodeIdFactory.set(id,end.getKey(),i*8);}
+            String after=e(cursor,"after"),accumulator=s(cursor,"hash"),transcript=s(cursor,"transcript");long count=n(cursor,"count"),converted=n(cursor,"converted"),retained=n(cursor,"retained");
+            JsonArray rows=new JsonArray();boolean eof=true;
+            if(!absent){
+                NodeIdFactory.setNext(TDBInternal.getNodeId(TDBInternal.requireStorage(raw),prefix[2]),end.getKey(),16);
+                if(!after.isEmpty()){byte[] key=HexFormat.of().parseHex(after);if(!Arrays.equals(Arrays.copyOf(key,24),Arrays.copyOf(start.getKey(),24))) throw new IllegalArgumentException("classification cursor prefix differs");System.arraycopy(key,0,start.getKey(),0,32);increment(start.getKey());}
+                data.probe();var tuples=index.getRangeIndex().iterator(start,end);
+                try {while(true){
+                    data.tupleRoom();if(!tuples.hasNext())break;deadline(deadline,clock);var tuple=tuples.next();Node identity=TDBInternal.requireStorage(raw).getQuadTable().getNodeTupleTable().getNodeTable().getNodeForNodeId(NodeIdFactory.get(tuple.getKey(),24));data.charge(prefix[0],prefix[1],prefix[2],identity);deadline(deadline,clock);
+                    if(rows.size()==2 || !data.reserve()){eof=false;break;}
+                    Row member=originalMember(data,request.job(),identity);JsonObject result=classifyMember(data,request.job(),state,member);deadline(deadline,clock);
+                    rows.add(result);count=Math.addExact(count,1);if(s(result,"status").equals("converted"))converted++;else retained++;
+                    if(count>proof.count()) throw new IllegalArgumentException("classification directory duplicates/extra members");
+                    accumulator=xor(accumulator,memberHash(member));transcript=hash(transcript+"\n"+JSON.toStringFlat(result));after=HexFormat.of().formatHex(tuple.getKey());
+                }}finally{Iter.close(tuples);}
+            }
+            if(rows.isEmpty()&&!eof)throw new ClassificationBudget();
+            if(eof && (count!=proof.count() || !accumulator.equals(proof.hash()) || converted+retained!=count)) throw new IllegalArgumentException("classification EOF original partition differs");
+            if(eof) {
+                JsonObject stored=classification(data,header(request.job()),state,true);
+                if(stored!=null && (!s(stored,"construction").equals(proof.hash()) || number(stored,"count")!=count || number(stored,"converted")!=converted || number(stored,"retained")!=retained || !s(stored,"transcript").equals(transcript))) throw new IllegalArgumentException("classification EOF differs from the stored marker");
+            }
+            Checkpoint finalState=checkpoint(data,header(request.job()));
+            if(!state.equals(finalState)||version(raw)!=snapshot||!sealed(data,request.job(),finalState,request.sourceCut(),request.seal(),deadline,clock)||!proof.equals(directorySeal(data,request.job(),finalState)))throw new IllegalArgumentException("classification final snapshot cut differs");
+            cursor.put("after",after);cursor.put("count",count);cursor.put("hash",accumulator);cursor.put("transcript",transcript);cursor.put("converted",converted);cursor.put("retained",retained);
+            JsonObject result=new JsonObject();result.put("status","classified");result.put("classificationEOF",eof);result.put("sourceCut",state.sourceCut());result.put("seal",state.hash());result.put("storage",state.storage());result.put("snapshotVersion",snapshot);
+            result.put("count",count);result.put("converted",converted);result.put("retained",retained);result.put("transcript",transcript);result.put("rows",rows);result.put("progress",eof?"":classificationToken(cursor));
+            if(eof && count>0) {
+                JsonObject proofPayload=new JsonObject();proofPayload.put("purpose",SEALED);proofPayload.put("job",request.job().marker());proofPayload.put("sourceCut",state.sourceCut());proofPayload.put("seal",state.hash());proofPayload.put("attempt",state.attempt());proofPayload.put("storage",state.storage());
+                proofPayload.put("snapshotVersion",snapshot);proofPayload.put("construction",proof.hash());proofPayload.put("count",count);proofPayload.put("converted",converted);proofPayload.put("retained",retained);proofPayload.put("transcript",transcript);
+                result.put("classifiedProof",classifiedToken(proofPayload));
+            }
+            result.put("work",data.json());
+            if(JSON.toStringFlat(result).getBytes(StandardCharsets.UTF_8).length>16*1024)throw new ClassificationBudget();deadline(deadline,clock);return result;
+        }catch(InventoryDeadline expired){return dispositionStatus("deadline","classification deadline expired");}
+        catch(ClassificationBudget exhausted){return dispositionStatus("budget","classification total work budget exhausted");}
+        catch(IllegalArgumentException invalid){return dispositionStatus("unresolved",invalid.getMessage());}
+        finally{raw.end();}
+    }
+
+    private static final String SEALED="claim-fold-classified-v1", SEALED_PREFIX="urn:rezics:claim-fold-classified:";
+    /** Hard caps for the whole seal request: replay read, cold cut checks, proof
+     * comparison and the post-staging link check, including lookahead and empty probes.
+     * Measured on the 129-member corpus: 57 tuples/31 probes/17023 bytes, unchanged by 5000 unrelated acks. */
+    static final int SEAL_TUPLES=128, SEAL_PROBES=64, SEAL_BYTES=64*1024;
+    private static final Set<String> MARKER_KEYS=Set.of("contract","status","sourceCut","seal","attempt","storage","construction","count","converted","retained","transcript","snapshotVersion","version","requestDigest","receipt","proof");
+    private static final Set<String> EOF_KEYS=Set.of("purpose","job","sourceCut","seal","attempt","storage","snapshotVersion","construction","count","converted","retained","transcript");
+    private static final int MAX_PROOF=2048;
+    record SealRequest(Job job,String sourceCut,String seal,String proof,long deadline) {}
+    private static Node classifiedId(Node header) { return uri(header.getURI()+":classified"); }
+    private static String classifiedToken(JsonObject payload) {
+        byte[] bytes=JSON.toStringFlat(payload).getBytes(StandardCharsets.UTF_8);return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)+"."+purposeMac(SEALED,bytes);
+    }
+    static SealRequest parseClassifySeal(byte[] bytes) {
+        JsonObject row=parseEnvelope(bytes,"claimFoldClassifySeal");
+        if(!row.keys().equals(Set.of("job","sourceCut","seal","proof","deadline"))) throw new IllegalArgumentException("invalid fixed classification seal fields");
+        Job job=parseJob(row.get("job").getAsObject()); long deadline=n(row,"deadline");
+        validate(new Request(job,"00000000-0000-0000-0000-000000000000",0,"","00000000-0000-0000-0000-000000000000",deadline));
+        String proof=s(row,"proof");
+        if(!s(row,"sourceCut").matches("[0-9a-f]{64}") || !s(row,"seal").matches("[0-9a-f]{64}") || proof.length()>MAX_PROOF || !proof.matches("[A-Za-z0-9_-]+\\.[0-9a-f]{64}")) throw new IllegalArgumentException("invalid classification seal source/proof");
+        return new SealRequest(job,s(row,"sourceCut"),s(row,"seal"),proof,deadline);
+    }
+    private static long number(JsonObject row,String key) {
+        JsonValue value=row.get(key);
+        if(value==null || !value.isNumber()) throw new IllegalArgumentException("classification number field differs");
+        try { return new java.math.BigDecimal(value.getAsNumber().value().toString()).longValueExact(); } catch(ArithmeticException invalid) { throw new IllegalArgumentException("classification number field differs",invalid); }
+    }
+    /** The original EOF token carries the exact snapshot facts. `authenticate` is false only for a historical ack whose process MAC has expired. */
+    private static JsonObject eofPayload(String proof,boolean authenticate) {
+        String[] parts=proof.split("\\.");
+        if(parts.length!=2 || proof.length()>MAX_PROOF) throw new IllegalArgumentException("classification proof shape differs");
+        byte[] bytes=Base64.getUrlDecoder().decode(parts[0]);
+        if(bytes.length>2048 || authenticate && !MessageDigest.isEqual(HexFormat.of().parseHex(parts[1]),HexFormat.of().parseHex(purposeMac(SEALED,bytes)))) throw new IllegalArgumentException("classification proof purpose/authentication differs");
+        JsonObject payload;
+        try { payload=JSON.parse(new String(bytes,StandardCharsets.UTF_8)); } catch(JsonParseException invalid) { throw new IllegalArgumentException("classification proof fields differ",invalid); }
+        if(!payload.keys().equals(EOF_KEYS) || !s(payload,"purpose").equals(SEALED)) throw new IllegalArgumentException("classification proof fields differ");
+        for(String key:List.of("snapshotVersion","count","converted","retained")) number(payload,key);
+        return payload;
+    }
+    /** Every original EOF fact must equal the stored record; a restamped field cannot hide behind a matching digest. */
+    private static void sameEof(JsonObject eof,JsonObject row) {
+        for(String key:List.of("sourceCut","seal","attempt","storage","construction","transcript")) if(!s(eof,key).equals(s(row,key))) throw new IllegalArgumentException("classification record differs from its original EOF: "+key);
+        for(String key:List.of("snapshotVersion","count","converted","retained")) if(number(eof,key)!=number(row,key)) throw new IllegalArgumentException("classification record differs from its original EOF: "+key);
+    }
+    /** Closed marker validation against the persisted checkpoint and its retained original EOF token. Fresh authority also requires this process's MAC; no current incarnation is consulted. */
+    private static JsonObject classification(DatasetGraph data,Node header,Checkpoint state,boolean fresh) {
+        Set<Quad> fields=record(data,STATE,classifiedId(header),1,8192); if(fields.isEmpty()) return null;
+        JsonObject row;
+        try { row=JSON.parse(text(value(fields,p("claimFoldClassification")))); } catch(JsonParseException invalid) { throw new IllegalArgumentException("invalid native classification marker",invalid); }
+        if(state==null || !row.keys().equals(MARKER_KEYS)) throw new IllegalArgumentException("invalid native classification marker");
+        long count=number(row,"count"),converted=number(row,"converted"),retained=number(row,"retained"),snapshot=number(row,"snapshotVersion"),version=number(row,"version");
+        if(!s(row,"contract").equals(SEALED) || !s(row,"status").equals("classified") || !s(row,"sourceCut").equals(state.sourceCut()) || !s(row,"seal").equals(state.hash())
+            || !s(row,"attempt").equals(state.attempt()) || !s(row,"storage").equals(state.storage()) || !s(row,"construction").matches("[0-9a-f]{64}") || !s(row,"transcript").matches("[0-9a-f]{64}")
+            || count<1 || count!=state.total() || converted<0 || retained<0 || Math.addExact(converted,retained)!=count || snapshot<state.version() || version!=Math.addExact(snapshot,1)
+            || !s(row,"requestDigest").matches("[0-9a-f]{64}") || !s(row,"receipt").equals(SEALED_PREFIX+s(row,"requestDigest"))
+            || !s(row,"proof").matches("[A-Za-z0-9_-]+\\.[0-9a-f]{64}") || !s(row,"requestDigest").equals(hash(s(row,"proof")))) throw new IllegalArgumentException("invalid native classification marker");
+        JsonObject eof=eofPayload(s(row,"proof"),fresh); sameEof(eof,row);
+        String marker=header.getURI().substring(0,header.getURI().length()-":inventory".length());
+        if(!s(eof,"job").equals(marker)) throw new IllegalArgumentException("classification record differs from its original EOF: job");
+        return row;
+    }
+    /** Exact persisted lost-ACK replay: the original token is decoded and every field compared to the stored marker. Only the expired process MAC is skipped; it never asserts currentness. */
+    private static JsonObject sealReplay(DatasetGraph data,SealRequest request,Checkpoint state) {
+        Node header=header(request.job()); JsonObject marker=classification(data,header,state,false); if(marker==null) return null;
+        JsonObject eof=eofPayload(request.proof(),false);
+        if(!s(marker,"proof").equals(request.proof()) || !s(marker,"requestDigest").equals(hash(request.proof())) || !s(marker,"sourceCut").equals(request.sourceCut()) || !s(marker,"seal").equals(request.seal()) || !s(eof,"job").equals(request.job().marker())) throw new IllegalArgumentException("classification marker is immutable and differs from this proof");
+        sameEof(eof,marker);
+        if(expectedVersion(data,header,state,false)!=number(marker,"version")) throw new IllegalArgumentException("classification terminal link differs");
+        return marker;
+    }
+    /** The MAC proves this process produced an actual EOF at the bound snapshot; equal data version under the writer then proves no commit intervened. */
+    private static JsonObject sealProof(SealRequest request,Checkpoint state,Construction directory,long snapshot) {
+        JsonObject proof=eofPayload(request.proof(),true);
+        long count=number(proof,"count"),converted=number(proof,"converted"),retained=number(proof,"retained");
+        if(!s(proof,"job").equals(request.job().marker()) || !s(proof,"sourceCut").equals(state.sourceCut()) || !s(proof,"sourceCut").equals(request.sourceCut())
+            || !s(proof,"seal").equals(state.hash()) || !s(proof,"seal").equals(request.seal()) || !s(proof,"attempt").equals(state.attempt()) || !s(proof,"storage").equals(state.storage())
+            || number(proof,"snapshotVersion")!=snapshot || !s(proof,"construction").equals(directory.hash()) || count!=directory.count() || count!=state.total() || count<1
+            || converted<0 || retained<0 || Math.addExact(converted,retained)!=count || !s(proof,"transcript").matches("[0-9a-f]{64}")) throw new IllegalArgumentException("classification proof differs from the current original partition");
+        return proof;
+    }
+    private static JsonObject sealResult(JsonObject marker,boolean replay,ClassificationWork data) {
+        JsonObject result=new JsonObject(); result.put("status","sealed"); result.put("replay",replay); result.put("marker",marker); result.put("work",data.json()); return result;
+    }
+    static JsonObject sealClassification(DatasetGraph logical,SealRequest request,java.util.concurrent.atomic.AtomicLong publicWriteEpoch) { return sealClassification(logical,request,publicWriteEpoch,Clock.systemUTC()); }
+    /** Records classified EOF once. Fresh sealing is current-only; an exact stored request replays as history. No owner, Content, Access, seek, complete or release authority. */
+    static JsonObject sealClassification(DatasetGraph logical,SealRequest request,java.util.concurrent.atomic.AtomicLong publicWriteEpoch,Clock clock) {
+        long deadline=Math.min(request.deadline(),clock.millis()+30_000);
+        DatasetGraph raw=TDBInternal.requireStorage(DatasetGraphWrapper.unwrap(logical));
+        if(raw.isInTransaction()) throw new IllegalArgumentException("classification seal owns its transactions");
+        ClassificationWork data=new ClassificationWork(raw,SEAL_TUPLES,SEAL_PROBES,SEAL_BYTES); Node header=header(request.job());
+        try { deadline(deadline,clock); } catch(InventoryDeadline expired) { return dispositionStatus("deadline","classification seal deadline expired"); }
+        logical.begin(ReadWrite.READ);
+        try {
+            deadline(deadline,clock); Checkpoint state=checkpoint(data,header); if(state==null || !state.sealed()) return dispositionStatus("unresolved","classification seal requires a registered sealed inventory");
+            JsonObject old=sealReplay(data,request,state); deadline(deadline,clock); if(old!=null) return sealResult(old,true,data);
+        } catch(InventoryDeadline expired) { return dispositionStatus("deadline","classification seal deadline expired"); }
+        catch(ClassificationBudget exhausted) { return dispositionStatus("budget","classification seal work budget exhausted"); }
+        catch(IllegalArgumentException invalid) { return dispositionStatus("unresolved",invalid.getMessage()); }
+        finally { logical.end(); }
+        synchronized(logical) {
+        try { deadline(deadline,clock); } catch(InventoryDeadline expired) { return dispositionStatus("deadline","classification seal deadline expired"); }
+        logical.begin(ReadWrite.WRITE); boolean committed=false, tracksIndex=false;
+        try {
+            deadline(deadline,clock); Checkpoint state=checkpoint(data,header); if(state==null || !state.sealed()) return dispositionStatus("unresolved","classification seal requires a registered sealed inventory");
+            JsonObject old=sealReplay(data,request,state); deadline(deadline,clock); if(old!=null) return sealResult(old,true,data);
+            if(!sealed(data,request.job(),state,request.sourceCut(),request.seal(),deadline,clock)) return dispositionStatus("unresolved","classification seal source cut/version unavailable");
+            Construction directory=directorySeal(data,request.job(),state); long snapshot=version(raw); deadline(deadline,clock);
+            sealProof(request,state,directory,snapshot); deadline(deadline,clock);
+            JsonObject proof=eofPayload(request.proof(),true); String digest=hash(request.proof());
+            tracksIndex=SearchDeltaJournal.canTrackCommit(logical);
+            if(tracksIndex) { publicWriteEpoch.incrementAndGet(); SearchDeltaJournal.fenceBeforeWrite(logical); }
+            SearchDeltaJournal.Capture delta=tracksIndex?new SearchDeltaJournal.Capture(logical,false):null;
+            JsonObject marker=new JsonObject(); marker.put("contract",SEALED); marker.put("status","classified"); marker.put("sourceCut",state.sourceCut()); marker.put("seal",state.hash()); marker.put("attempt",state.attempt()); marker.put("storage",state.storage());
+            marker.put("construction",directory.hash()); marker.put("count",directory.count()); marker.put("converted",number(proof,"converted")); marker.put("retained",number(proof,"retained")); marker.put("transcript",s(proof,"transcript"));
+            marker.put("snapshotVersion",snapshot); marker.put("version",Math.addExact(snapshot,1)); marker.put("requestDigest",digest); marker.put("receipt",SEALED_PREFIX+digest); marker.put("proof",request.proof());
+            JsonObject link=new JsonObject(); link.put("sourceCut",state.sourceCut()); link.put("seal",state.hash()); link.put("attempt",state.attempt()); link.put("storage",state.storage()); link.put("version",Math.addExact(snapshot,1)); link.put("claim",""); link.put("receipt",SEALED_PREFIX+digest);
+            if(JSON.toStringFlat(marker).getBytes(StandardCharsets.UTF_8).length>4096) return dispositionStatus("unresolved","classification marker exceeds its fixed footprint");
+            logical.add(STATE,classifiedId(header),p("claimFoldClassification"),literal(JSON.toStringFlat(marker)));
+            logical.deleteAny(STATE,progressId(header),p("claimFoldConversionCheckpoint"),Node.ANY); logical.add(STATE,progressId(header),p("claimFoldConversionCheckpoint"),literal(JSON.toStringFlat(link)));
+            deadline(deadline,clock);
+            if(!JSON.toStringFlat(classification(data,header,state,true)).equals(JSON.toStringFlat(marker)) || expectedVersion(data,header,state)!=Math.addExact(snapshot,1) || !state.cut().equals(lineageCut(data,request.job(),deadline,clock))) return dispositionStatus("unresolved","classification marker/link/held cut changed");
+            if(delta!=null) SearchDeltaJournal.append(logical,delta,publicWriteEpoch.get()+1);
+            deadline(deadline,clock); logical.commit(); committed=true; return sealResult(marker,false,data);
+        } catch(InventoryDeadline expired) { return dispositionStatus("deadline","classification seal deadline expired"); }
+        catch(ClassificationBudget exhausted) { return dispositionStatus("budget","classification seal work budget exhausted"); }
+        catch(IllegalArgumentException invalid) { return dispositionStatus("unresolved",invalid.getMessage()); }
+        finally {
+            try { if(!committed) logical.abort(); }
+            finally {
+                try {
+                    logical.end();
+                    if(committed && tracksIndex) try {
+                        if(!Boolean.TRUE.equals(SearchDeltaJournal.qualifiedProof(logical,-1,publicWriteEpoch.get()+1).get("available"))) SearchDeltaJournal.invalidate(logical);
+                    } catch(RuntimeException unavailable) { SearchDeltaJournal.invalidate(logical); }
+                } finally { if(tracksIndex) publicWriteEpoch.incrementAndGet(); }
+            }
+        }
+        }
     }
 
     static Result turn(DatasetGraph logical,Request request) { return turn(logical,request,Clock.systemUTC()); }

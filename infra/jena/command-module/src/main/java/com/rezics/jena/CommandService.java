@@ -119,7 +119,68 @@ final class CommandService extends ActionService {
         try (CommandWork work = new CommandWork()) {
             byte[] bytes = action.getRequestInputStream().readNBytes(MAX_REQUEST + 1);
             if (bytes.length > MAX_REQUEST) throw new IllegalArgumentException("request too large");
-            JsonObject body = JSON.parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+            String requestJSON = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+            TitleControlPolicy.commandJSONDepth(requestJSON);
+            JsonObject body = JSON.parse(requestJSON);
+            if (body.get("titleCandidate") != null) {
+                if (!authorized(action, admittedCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                if (!body.keys().equals(Set.of("receipt", "digest", "update", "validations", "deadlineMs", "titleCandidate", "titleAdmission"))
+                    || body.get("update") == null || !body.get("update").isString()
+                    || !"".equals(body.get("update").getAsString().value())
+                    || body.get("validations") == null || !body.get("validations").isArray()
+                    || body.get("validations").getAsArray().size() != 0
+                    || !body.get("titleCandidate").isObject()
+                    || body.get("titleAdmission") == null || !body.get("titleAdmission").isObject()
+                    || body.get("deadlineMs") == null || !body.get("deadlineMs").isNumber()
+                    || !"10000".equals(body.get("deadlineMs").toString()))
+                    throw new IllegalArgumentException("invalid title candidate command envelope");
+                String receipt = iri(ProfileRegistry.required(body, "receipt"));
+                String digest = ProfileRegistry.required(body, "digest");
+                if (!digest.matches("[0-9a-f]{64}")) throw new IllegalArgumentException("invalid title candidate digest");
+                JsonObject candidate = body.get("titleCandidate").getAsObject();
+                if (!candidate.keys().equals(Set.of("frame", "custodySha256", "mode"))
+                    || ProfileRegistry.required(candidate, "frame").getBytes(StandardCharsets.UTF_8).length > 32768)
+                    throw new IllegalArgumentException("invalid title candidate command frame");
+                long deadline = System.nanoTime() + 10_000_000_000L;
+                CommandWork.enter("queue");
+                Map<String, Object> result = runTitleCandidate(action.getDataService().getDataset(), receipt, digest,
+                    candidate, body.get("titleAdmission"), deadline);
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, 200, result); return;
+            }
+            if (body.get("claimFoldClassifySeal") != null) {
+                if (!authorized(action, maintenanceCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                var request = ClaimFoldInventory.parseClassifySeal(bytes);
+                var result = ClaimFoldInventory.sealClassification(action.getDataService().getDataset(), request, publicSearchWriteEpoch);
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, 200, result); return;
+            }
+            if (body.get("claimFoldClassify") != null) {
+                if (!authorized(action, maintenanceCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                var request = ClaimFoldInventory.parseClassify(bytes);
+                var result = ClaimFoldInventory.classify(action.getDataService().getDataset(), request);
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, 200, result); return;
+            }
+            if (body.get("claimFoldRetain") != null) {
+                if (!authorized(action, maintenanceCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                var request = ClaimFoldInventory.parseRetain(bytes);
+                var result = ClaimFoldInventory.retain(action.getDataService().getDataset(), request, profiles, publicSearchWriteEpoch);
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, 200, result); return;
+            }
             if (body.get("claimFoldMembers") != null) {
                 if (!authorized(action, maintenanceCapability)) {
                     respond(action, 403, Map.of("status", "forbidden")); return;
@@ -342,6 +403,52 @@ final class CommandService extends ActionService {
     record Slim(String payloadSha256, String component, String revision) {}
     record Retirement(String receipt, String digest, String payloadSha256, String dataEpoch,
                       String sequence, String streamSequence, String signature) {}
+
+    /** Closed private acceptance; no source mutation or terminal receipt dispatch. */
+    Map<String, Object> runTitleCandidate(DatasetGraph dataset, String receipt, String digest,
+        JsonValue candidate, JsonValue proof, long deadline) {
+        synchronized (dataset) {
+            dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
+            boolean commit = false;
+            boolean tracksIndex = SearchDeltaJournal.canTrackCommit(dataset);
+            if (tracksIndex) {
+                publicSearchWriteEpoch.incrementAndGet();
+                SearchDeltaJournal.fenceBeforeWrite(dataset);
+            }
+            try {
+                CommandWork.enter("preflight");
+                TemplateIndexService.workScopeBudget(deadline);
+                try {
+                    String frame = ProfileRegistry.required(candidate.getAsObject(), "frame");
+                    if (frame.length() > 32768 || frame.getBytes(StandardCharsets.UTF_8).length > 32768)
+                        throw new IllegalArgumentException("title candidate frame exceeds its byte bound");
+                    TitleControlPolicy.candidateJSONDepth(frame);
+                    // Resolve only exact active profile/shape pins; do not execute their source mutation validation.
+                    parseValidations(JSON.parseAny(frame).getAsObject().get("validations"));
+                } catch (java.util.concurrent.CancellationException cancelled) { throw cancelled;
+                } catch (RuntimeException invalid) {
+                    TemplateIndexService.workScopeBudget(deadline);
+                    return Map.of("status", "conflict", "reason", "title candidate native profile pins differ");
+                }
+                Map<String, Object> result = new LinkedHashMap<>(TitleControlPolicy.retainCandidate(dataset,
+                    receipt, digest, candidate, proof, titleAdmissionKey, deadline));
+                Object changed = result.remove("changed");
+                if (!(changed instanceof Boolean)) throw new IllegalStateException("title acceptance omitted its write outcome");
+                if (!Boolean.TRUE.equals(changed)) return result;
+                if (!"accepted".equals(result.get("status")))
+                    throw new IllegalStateException("title acceptance changed without an accepted outcome");
+                CommandWork.enter("commit");
+                TemplateIndexService.workScopeBudget(deadline);
+                dataset.commit(); commit = true;
+                CommandWork.count("durable_commits", 1);
+                return result;
+            } catch (java.util.concurrent.CancellationException cancelled) {
+                return Map.of("status", "deadline");
+            } finally {
+                finishNativeWrite(dataset, commit, tracksIndex, false, false, false, false);
+            }
+        }
+    }
 
     Map<String, Object> runCommand(DatasetGraph dataset, String receipt, String digest, String update,
                                   List<Validation> validations, long deadline) {
