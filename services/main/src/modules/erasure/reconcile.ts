@@ -408,7 +408,7 @@ async function requireRecordedItem(relay: PoolClient, id: string, item: Item): P
  * or a cached summary. The retained operation is never created by release. */
 async function authenticateRestoreReconciliation(relay: PoolClient, restored: RestoredOwners,
   accessClient: PoolClient, id: string, fenceGeneration: string, authority: RetainedAuthorityCoverage,
-  released?: RestoredGraphReleaseProof): Promise<void> {
+  released?: RestoredGraphReleaseProof, outerReconciliationId?: string): Promise<void> {
   const record = (await relay.query<{ operation_id: string; kind: string; scope: string; state: string;
     hold_reason: string | null; consumer: string | null; coverage_generation: string;
     erasure_epoch: string | null; request_digest: string; outcome_digest: string; completed_at: Date | null }>(
@@ -494,7 +494,8 @@ async function authenticateRestoreReconciliation(relay: PoolClient, restored: Re
   await requireRecordedItem(relay, id, graphRestoreBinding(restored)!);
   try { await assertRetainedAuthorityCoverage(relay, restored.access, record.consumer, authority, accessClient,
     released ? { graphRelease: released.expectation, fuseki: restored.graph!.fuseki,
-      capturedGeneration: fenceGeneration } : undefined); }
+      capturedGeneration: fenceGeneration, ...(outerReconciliationId ? { binding: {
+        outerReconciliationId, erasuresReconciliationId: id } } : {}) } : undefined); }
   catch (error) { throw new ErasureRestoreHold('restored Access differs from current retained authority', { cause: error }); }
 }
 
@@ -884,6 +885,31 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
     if (entries.length < 1000) break;
     after = entries[entries.length - 1]!.epoch;
   }
+}
+
+/**
+ * Mandatory completion check after the native release and the Access opening
+ * both committed and only the caller's outcome write was lost. Same borrowed
+ * clients, same authentication, deletion-journal and closure checks as a
+ * resumed release, at the opened captured+1 fence; the authority helper takes
+ * the Access coverage only from the outer operation's verified release finding.
+ * It writes, signs, holds, replays and releases nothing.
+ */
+export async function assertReleasedErasuresCurrent(relay: Pool, restored: RestoredOwners,
+  reconciliationId: string, fenceGeneration: string, authority: RetainedAuthorityCoverage,
+  clients: BorrowedRestoreClients & { graphRelease: RestoredGraphReleaseExpectation },
+  outerReconciliationId: string): Promise<void> {
+  await withRestoreClients(relay, restored, clients, async ({ relayClient, accessClient }, released) => {
+    if (!released) throw new ErasureRestoreHold('native graph release evidence is unavailable');
+    await authenticateRestoreReconciliation(relayClient, restored, accessClient,
+      reconciliationId, fenceGeneration, authority, released, outerReconciliationId);
+    try { await assertAccountDeletionJournalCoverage(restored.access, relay, accessClient, relayClient); }
+    catch (error) {
+      if (error instanceof AccountDeletionJournalConflict) throw new ErasureRestoreHold(error.message);
+      throw error;
+    }
+    await assertRestoredErasuresCurrent(relayClient, restored, accessClient, reconciliationId, released);
+  }, { graphRelease: clients.graphRelease, fenceGeneration });
 }
 
 /**
