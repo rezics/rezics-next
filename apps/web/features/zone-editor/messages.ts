@@ -95,6 +95,7 @@ const en = {
   realmAttached: 'This Zone shows this Realm.',
   realmAttachedNameless: 'A Realm is attached.',
   realmUnavailable: 'That Realm isn’t available.',
+  realmAttachmentLimit: 'This community is linked to the most sites it can be.',
   realmSaved: 'Attached. This Zone shows that Realm.',
 };
 

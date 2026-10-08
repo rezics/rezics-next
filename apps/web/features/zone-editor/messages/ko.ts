@@ -88,6 +88,8 @@ const messages: ZoneEditorMessages = {
   realmAttached: '이 존은 이 커뮤니티를 보여 줍니다.',
   realmAttachedNameless: '커뮤니티가 연결되어 있습니다.',
   realmUnavailable: '그 커뮤니티는 사용할 수 없습니다.',
+  // Machine-drafted; needs native review.
+  realmAttachmentLimit: '이 커뮤니티는 연결할 수 있는 최대 사이트 수에 도달했습니다.',
   realmSaved: '연결했습니다. 이 존은 그 커뮤니티를 보여 줍니다.',
 };
 

@@ -88,6 +88,8 @@ const messages: ZoneEditorMessages = {
   realmAttached: 'このゾーンはこのコミュニティを表示します。',
   realmAttachedNameless: 'コミュニティが添付されています。',
   realmUnavailable: 'そのコミュニティは利用できません。',
+  // Machine-drafted; needs native review.
+  realmAttachmentLimit: 'このコミュニティは、リンクできるサイトの上限に達しています。',
   realmSaved: '添付しました。このゾーンはそのコミュニティを表示します。',
 };
 

@@ -88,6 +88,8 @@ const messages: ZoneEditorMessages = {
   realmAttached: '這個區域顯示這個社群。',
   realmAttachedNameless: '已附加一個社群。',
   realmUnavailable: '無法使用該社群。',
+  // Machine-drafted; needs native review.
+  realmAttachmentLimit: '這個社群已連結到它所能連結的最多網站。',
   realmSaved: '已附加。這個區域顯示該社群。',
 };
 

@@ -88,6 +88,8 @@ const messages: ZoneEditorMessages = {
   realmAttached: 'Diese Zone zeigt diese Community.',
   realmAttachedNameless: 'Eine Community ist angehängt.',
   realmUnavailable: 'Diese Community ist nicht verfügbar.',
+  // Machine-drafted; needs native review.
+  realmAttachmentLimit: 'Diese Community ist bereits mit der Höchstzahl an Websites verknüpft.',
   realmSaved: 'Angehängt. Diese Zone zeigt diese Community.',
 };
 
