@@ -4,8 +4,15 @@ import { Pool as PgPool } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { assertRetainedAuthorityCoverage, type RetainedAuthorityCoverage } from '../erasure/authority.ts';
-import { reconcileRestoredErasures, releaseErasureRestoreHold,
+import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHold,
   type RestoredOwners } from '../erasure/reconcile.ts';
+import { ErasureAuthorityCoverageConflict } from '../erasure/authority.ts';
+import { ErasureUnavailable } from '../erasure/journal.ts';
+import { GraphErasureConflict } from '../erasure/graph.ts';
+import { AccountDeletionJournalConflict } from '../outbox/account-deletion-journal.ts';
+import { RecoveryCoverageHeadConflict } from '../outbox/recovery-coverage-head.ts';
+import { readBindings, readErasuresRecord, recordQualification, recordRelease,
+  requireQualification, verifyReleasedRestore } from './restore-release-binding.ts';
 import type { RestoredGraphCustody } from '../erasure/custody.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
@@ -15,7 +22,8 @@ import { StructureGroupRootStore } from '../structure/group-root.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound, RevisionUnavailable }
   from '../work/history.ts';
-import { releaseRestoredGraphHold, RestoreLineageConflict, type RecoveryCoverage }
+import { readRestoredGraphReleaseExpectation, releaseRestoredGraphHold, RestoreInterrupted,
+  RestoreLineageConflict, type RecoveryCoverage, type RestoredReleaseClients }
   from '../work/restore-lineage.ts';
 import { heldErasureMaintenanceClient } from '../erasure/graph.ts';
 import type { OwnerReconciliationRow, OwnerRelocationRow } from './schema.ts';
@@ -27,6 +35,13 @@ import { reconcileRelayGap as rebuildRelayGap, RelayGapConflict, RelayGapInvalid
   type RelayGapInput, type RelayGapView } from './relay-gap.ts';
 import { reconcileRetentionGc as collectUnreferencedObjects, readRetentionGcView,
   RetentionGcConflict, type RetentionGcView } from './retention-gc.ts';
+
+/** Refusals that settle a restore as held; any other error is an interruption. */
+function isDefinitiveRefusal(error: unknown): boolean {
+  return error instanceof ErasureRestoreHold || error instanceof ErasureAuthorityCoverageConflict
+    || error instanceof ErasureUnavailable || error instanceof GraphErasureConflict
+    || error instanceof AccountDeletionJournalConflict || error instanceof RecoveryCoverageHeadConflict;
+}
 
 export class OwnerOperationConflict extends Error {}
 export class OwnerOperationBusy extends Error {}
@@ -250,58 +265,31 @@ export class OwnerOperations {
         let conflict: RestoreLineageConflict | undefined;
         try {
           if (resources.erasures) await this.assertIndependentRetainedRelay(resources, client);
-          await releaseRestoredGraphHold(this.environment.fuseki, resources.accessPool,
+          const erasures = resources.erasures;
+          const bindings = erasures ? await readBindings(client, row.id) : undefined;
+          const accessOpen = erasures
+            ? (await resources.accessPool.query<{ open: boolean }>(
+              'SELECT open FROM access.recovery_fence WHERE id = true')).rows[0]?.open === true : false;
+          if (erasures && accessOpen) {
+            // An earlier pass committed both owners and lost only its outcome write.
+            if (!bindings?.release) {
+              throw new RestoreLineageConflict('Access is open without this restore\'s release binding');
+            }
+            await this.completeReleasedRestore(client, resources, erasures, coverage, input.sealedCoverage,
+              row.id, `${operationId}:erasures`);
+          } else await releaseRestoredGraphHold(this.environment.fuseki, resources.accessPool,
             this.relay, this.environment.lineage, { sealedCoverage: input.sealedCoverage,
               hmacKey: resources.hmacKey, accountPool: resources.accountPool,
               contentPool: resources.contentPool, objectStore: resources.objectStore,
               restoredRelayPool: resources.restoredRelayPool,
-              ...(resources.erasures ? { releaseErasures: async (clients, releaseGraph) => {
-                const erasures = resources.erasures!;
-                if (erasures.originalSource === 'retained-native-event' && 'originalGraph' in erasures) {
-                  throw new RestoreLineageConflict('retained original proof source is ambiguous');
-                }
-                const originalSource = erasures.originalSource === 'retained-native-event'
-                  ? { originalSource: 'retained-native-event' as const }
-                  : erasures.originalSource === 'original-graph' && erasures.originalGraph
-                    ? { originalSource: 'original-graph' as const, originalGraph: erasures.originalGraph }
-                    : undefined;
-                if (!originalSource) throw new RestoreLineageConflict('independently retained original proof source is unavailable');
-                let current: RecoveryCoverage;
-                try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
-                  erasures.authority.hmacKey, 'graph-recovery-coverage'); }
-                catch { throw new RestoreLineageConflict('independently current authority capture is invalid'); }
-                if (!current?.relay?.consumer) {
-                  throw new RestoreLineageConflict('independently current authority capture is unavailable');
-                }
-                try { await assertRetainedAuthorityCoverage(clients.relayClient, resources.accessPool,
-                  current.relay.consumer, erasures.authority, clients.accessClient); }
-                catch (error) { throw new RestoreLineageConflict('Access differs from independently current authority', { cause: error }); }
-                const restoredObjects = resources.objectStore.structureObjects
-                  ? { ...resources.objectStore, structureGroupRoots: new StructureGroupRootStore(
-                    resources.contentPool, resources.objectStore.structureObjects),
-                    structureQualifierRoots: new StructureQualifierRootStore(
-                      resources.contentPool, resources.objectStore.structureObjects) } : resources.objectStore;
-                const restored: RestoredOwners = { account: resources.accountPool,
-                  access: resources.accessPool, content: resources.contentPool, objects: restoredObjects,
-                  graph: { fuseki: this.environment.fuseki, lineage: this.environment.lineage,
-                    ...(this.environment.receiptCustody ? { receiptCustody: this.environment.receiptCustody } : {}),
-                    heldErasure: { cut: { ...this.environment.lineage,
-                      restoreCutover: `urn:rezics:restore:${this.environment.lineage.dataEpoch}`,
-                      priorDataEpoch: coverage.priorDataEpoch, priorSequence: coverage.priorSequence },
-                    accessHoldGeneration: clients.fenceGeneration, signingKey: erasures.signingKey,
-                    maintenance: erasures.maintenance, ...originalSource } } };
-                const result = await reconcileRestoredErasures(this.relay, restored,
-                  { operationId: `${operationId}:erasures`, consumer: current.relay.consumer,
-                    replay: true, authority: erasures.authority }, clients);
-                if (result.state !== 'reconciled') {
-                  throw new RestoreLineageConflict(`retained erasure reconciliation is held: ${result.holdReason ?? 'owner evidence is unavailable'}`);
-                }
-                await releaseErasureRestoreHold(this.relay, restored, result.reconciliationId,
-                  clients.fenceGeneration, erasures.authority, { clients, beforeAccessRelease: releaseGraph });
-              } } : {}),
+              ...(erasures ? { qualification: { resume: Boolean(bindings?.qualification) },
+                releaseErasures: (clients, releaseGraph) => this.releaseRetainedErasures(resources, erasures,
+                  coverage, operationId, row.id, Boolean(bindings?.qualification), clients, releaseGraph) } : {}),
               deletions: { accountPool: resources.accountPool, hmacKey: resources.hmacKey,
                 sealedSets: input.sealedDeletionSets } }, client);
         } catch (error) {
+          // The operation stays running; the same key resumes from its durable record.
+          if (error instanceof RestoreInterrupted) throw new OwnerOperationUnavailable(error.message, { cause: error });
           if (!(error instanceof RestoreLineageConflict)) throw error;
           conflict = error;
         }
@@ -364,6 +352,115 @@ export class OwnerOperations {
     } finally { await close(); }
   }
 
+  /**
+   * Qualify the retained erasures and commit that record while both holds are
+   * closed, then release graph and Access in fresh transactions on the same
+   * borrowed clients. A resumed pass skips the qualification and authenticates
+   * its durable record instead of comparing the replayed owners to the base.
+   */
+  private async releaseRetainedErasures(resources: RestoreResources,
+    erasures: NonNullable<RestoreResources['erasures']>, coverage: RecoveryCoverage,
+    operationId: string, outerId: string, resume: boolean, clients: RestoredReleaseClients,
+    releaseGraph: () => Promise<void>): Promise<void> {
+    if (erasures.originalSource === 'retained-native-event' && 'originalGraph' in erasures) {
+      throw new RestoreLineageConflict('retained original proof source is ambiguous');
+    }
+    const originalSource = erasures.originalSource === 'retained-native-event'
+      ? { originalSource: 'retained-native-event' as const }
+      : erasures.originalSource === 'original-graph' && erasures.originalGraph
+        ? { originalSource: 'original-graph' as const, originalGraph: erasures.originalGraph }
+        : undefined;
+    if (!originalSource) throw new RestoreLineageConflict('independently retained original proof source is unavailable');
+    let current: RecoveryCoverage;
+    try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
+      erasures.authority.hmacKey, 'graph-recovery-coverage'); }
+    catch { throw new RestoreLineageConflict('independently current authority capture is invalid'); }
+    if (!current?.relay?.consumer) {
+      throw new RestoreLineageConflict('independently current authority capture is unavailable');
+    }
+    try { await assertRetainedAuthorityCoverage(clients.relayClient, resources.accessPool,
+      current.relay.consumer, erasures.authority, clients.accessClient); }
+    catch (error) { throw new RestoreLineageConflict('Access differs from independently current authority', { cause: error }); }
+    const restoredObjects = resources.objectStore.structureObjects
+      ? { ...resources.objectStore, structureGroupRoots: new StructureGroupRootStore(
+        resources.contentPool, resources.objectStore.structureObjects),
+        structureQualifierRoots: new StructureQualifierRootStore(
+          resources.contentPool, resources.objectStore.structureObjects) } : resources.objectStore;
+    const { graphRelease } = clients;
+    const restored: RestoredOwners = { account: resources.accountPool,
+      access: resources.accessPool, content: resources.contentPool, objects: restoredObjects,
+      graph: { fuseki: this.environment.fuseki, lineage: this.environment.lineage,
+        ...(this.environment.receiptCustody ? { receiptCustody: this.environment.receiptCustody } : {}),
+        // The marker's saved sequence is what the held cut names; a reconciled
+        // cursor, if any, is the effective cut of graphRelease.
+        heldErasure: { cut: { ...this.environment.lineage,
+          restoreCutover: graphRelease.restoreCutover,
+          priorDataEpoch: graphRelease.saved.dataEpoch, priorSequence: graphRelease.saved.graphSequence },
+        accessHoldGeneration: clients.fenceGeneration, signingKey: erasures.signingKey,
+        maintenance: erasures.maintenance, ...originalSource } } };
+    const erasuresOperation = `${operationId}:erasures`;
+    let committed = resume;
+    try {
+      if (!resume) {
+        const result = await reconcileRestoredErasures(this.relay, restored,
+          { operationId: erasuresOperation, consumer: current.relay.consumer,
+            replay: true, authority: erasures.authority },
+          { relayClient: clients.relayClient, accessClient: clients.accessClient });
+        if (result.state !== 'reconciled') {
+          throw new RestoreLineageConflict(`retained erasure reconciliation is held: ${result.holdReason ?? 'owner evidence is unavailable'}`);
+        }
+        const record = await readErasuresRecord(clients.relayClient, erasuresOperation);
+        if (!record || record.id !== result.reconciliationId) {
+          throw new RestoreLineageConflict('retained erasure reconciliation record is unavailable');
+        }
+        await recordQualification(clients.relayClient, outerId, record, clients.fenceGeneration, graphRelease);
+        await clients.commitQualification();
+        committed = true;
+      }
+      const record = await readErasuresRecord(clients.relayClient, erasuresOperation);
+      if (!record) throw new RestoreLineageConflict('retained erasure reconciliation record is unavailable');
+      await requireQualification(clients.relayClient, outerId, record, clients.fenceGeneration, graphRelease);
+      await releaseErasureRestoreHold(this.relay, restored, record.id, clients.fenceGeneration,
+        erasures.authority, { clients: { relayClient: clients.relayClient, accessClient: clients.accessClient,
+          graphRelease }, beforeAccessRelease: releaseGraph });
+      await recordRelease(clients.relayClient, resources.accessPool, clients.accessClient,
+        this.environment.fuseki, outerId, record, clients.fenceGeneration, graphRelease);
+    } catch (error) {
+      // Once the qualification is durable, only a definitive refusal settles
+      // the operation as held; an owner interruption leaves it resumable.
+      if (!committed || error instanceof RestoreLineageConflict || error instanceof RestoreInterrupted
+        || isDefinitiveRefusal(error)) throw error;
+      throw new RestoreInterrupted(`restore release interrupted: ${
+        error instanceof Error ? error.message : 'owner outcome is unavailable'}`, { cause: error });
+    }
+  }
+
+  /** Complete the outer outcome after both owners committed, without any owner effect. */
+  private async completeReleasedRestore(client: PoolClient, resources: RestoreResources,
+    erasures: NonNullable<RestoreResources['erasures']>, coverage: RecoveryCoverage,
+    sealedCoverage: string, outerId: string, erasuresOperation: string): Promise<void> {
+    const accessClient = await resources.accessPool.connect();
+    try {
+      await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
+      await accessClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+      const expectation = await readRestoredGraphReleaseExpectation(this.environment.fuseki,
+        this.environment.lineage, coverage);
+      await verifyReleasedRestore({ relay: client, accessPool: resources.accessPool, accessClient,
+        fuseki: this.environment.fuseki, outerId, erasuresOperationId: erasuresOperation,
+        authority: erasures.authority, expectation, consumer: coverage.relay.consumer,
+        requestDigests: [false, true].map(replay => createHash('sha256').update(
+          `${coverage.relay.consumer}\0${replay}\0${createHash('sha256').update(
+            erasures.authority.sealedCoverage).digest('hex')}`).digest('hex')) });
+      await client.query('COMMIT');
+      await accessClient.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined);
+      await accessClient.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally { accessClient.release(); }
+  }
+
   private async lock(client: PoolClient, operationId: string): Promise<void> {
     const result = await client.query<{ locked: boolean }>(
       'SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS locked', [operationId]);
@@ -385,7 +482,8 @@ export class OwnerOperations {
     if (row.kind === 'retention_gc') return readRetentionGcView(client, row.id, replayed);
     const finding = await client.query<{ disposition: string }>(
       `SELECT disposition FROM relay.owner_reconciliation_item
-       WHERE reconciliation_id = $1 ORDER BY ordinal LIMIT 1`, [id]);
+       WHERE reconciliation_id = $1 AND item_ref NOT LIKE 'restore-qualification:%'
+         AND item_ref NOT LIKE 'restore-release:%' ORDER BY ordinal LIMIT 1`, [id]);
     if (row.kind === 'restore') return { id: row.id, kind: 'restore', scope: 'product',
       state: row.state, disposition: (finding.rows[0]?.disposition ?? null) as
         RestoreReconciliationView['disposition'], replayed };

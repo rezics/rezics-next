@@ -16,7 +16,7 @@ import { DATASET, hash, type GraphLineage } from '../src/modules/work/activate.t
 import * as accessCoverage from '../src/modules/work/access-recovery-coverage.ts';
 import * as contentCoverage from '../src/modules/work/content-recovery-coverage.ts';
 import * as pgCoverage from '../src/modules/work/pg-recovery-frontier.ts';
-import { releaseRestoredGraphHold, RestoreLineageConflict,
+import { releaseRestoredGraphHold, RestoreInterrupted, RestoreLineageConflict,
   type AuthenticatedRecoveryCoverage, type RecoveryCoverage } from '../src/modules/work/restore-lineage.ts';
 
 const hmacKey = 'ab'.repeat(32);
@@ -258,9 +258,10 @@ class HeldRestoreGraph extends FusekiClient {
 
   override async query(sparql: string): Promise<SparqlResult> {
     this.queries.push(sparql);
-    if (sparql.includes('SELECT ?savedMainSequence ?reconciledMainSequence')) {
+    if (sparql.includes('SELECT ?savedMainSequence ?reconciledMainSequence ?savedSequence')) {
       if (!this.cutMatches) return { results: { bindings: [] } };
-      const row: Record<string, { type: 'literal'; value: string }> = {};
+      const row: Record<string, { type: 'literal'; value: string }> = {
+        savedSequence: { type: 'literal', value: this.priorSequence } };
       if (this.savedMainSequence !== undefined) row.savedMainSequence = { type: 'literal', value: this.savedMainSequence };
       if (this.reconciledMainSequence !== undefined) row.reconciledMainSequence = {
         type: 'literal', value: this.reconciledMainSequence };
@@ -1089,3 +1090,140 @@ for (const failure of ['missing', 'mismatched', 'missing-main', 'wrong-main', 'w
     } finally { run.stop(); }
   });
 }
+
+const releaseDigest = hash(JSON.stringify({ family: 'restore-release-v2', lineage, priorDataEpoch,
+  priorSequence: '900', priorMainSequence: '4', streamScope: MAIN_RELAY_STREAM_SCOPE }));
+const expectedRelease = {
+  lineage, restoreCutover: `urn:rezics:restore:${lineage.dataEpoch}`,
+  saved: { dataEpoch: priorDataEpoch, graphSequence: '900',
+    main: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: priorDataEpoch, sequence: '4' } },
+  effective: { dataEpoch: priorDataEpoch, graphSequence: '900',
+    main: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: priorDataEpoch, sequence: '4' } },
+};
+const openAccess = async (clients: Parameters<ReleaseErasures>[0]) => {
+  const opened = await clients.accessClient.query(`UPDATE access.recovery_fence
+    SET open = true, generation = generation + 1 WHERE id = true AND open = false AND generation = $1`,
+  [clients.fenceGeneration]);
+  if (opened.rowCount !== 1) throw new RestoreLineageConflict('Access recovery fence changed');
+};
+
+test('durable qualification commits the retained record while both holds are closed and then releases in fresh transactions', async () => {
+  const run = fixture();
+  run.evidence.qualification = { resume: false };
+  const owners: string[] = [];
+  run.evidence.releaseErasures = async (clients, releaseGraph) => {
+    expect(clients.graphRelease).toEqual(expectedRelease);
+    await clients.relayClient.query('SELECT 1 /* qualification record */');
+    await clients.commitQualification();
+    owners.push(run.trace.slice().join(','));
+    // Both holds are still closed after the commit, and the fresh transactions retook the locks.
+    expect(run.fuseki.held).toBe(true);
+    expect(run.access.open).toBe(false);
+    expect(run.access.transactionOpen).toBe(true);
+    expect(run.relay.transactionOpen).toBe(true);
+    expect(clients.fenceGeneration).toBe('5');
+    await releaseGraph();
+    await openAccess(clients);
+  };
+  try {
+    await run.release();
+    expect(owners[0]).not.toContain('graph:release');
+    expect(owners[0]).not.toContain('access:open');
+    expect(run.trace.filter(item => item === 'relay:commit' || item === 'access:commit')).toEqual(
+      ['relay:commit', 'access:commit', 'relay:commit', 'access:commit']);
+    expect(run.relay.queries.filter(query => query.sql.includes('pg_advisory_xact_lock'))).toHaveLength(2);
+    expect(run.access.open).toBe(true);
+    expect(run.access.generation).toBe('6');
+    expect(run.fuseki.releaseReceipt?.digest).toBe(releaseDigest);
+    expect(run.access.maximumBorrowed).toBe(1);
+    expect(run.relay.maximumBorrowed).toBe(1);
+    for (const check of ownerChecks) {
+      expect(run.trace.filter(item => item === `validated:${check}`)).toHaveLength(1);
+    }
+  } finally { run.stop(); }
+});
+
+test('an interruption after the durable qualification leaves its record committed and both holds closed', async () => {
+  const run = fixture();
+  run.evidence.qualification = { resume: false };
+  run.evidence.releaseErasures = async (clients, releaseGraph) => {
+    await clients.commitQualification();
+    await releaseGraph();
+    throw new RestoreInterrupted('Access connection lost after the native release');
+  };
+  try {
+    await expect(run.release()).rejects.toBeInstanceOf(RestoreInterrupted);
+    expect(run.trace.filter(item => item === 'relay:commit')).toHaveLength(1);
+    expect(run.fuseki.held).toBe(false);
+    expect(run.access.open).toBe(false);
+    expect(run.access.generation).toBe('5');
+    expect(run.access.queries.at(-1)?.sql).toBe('ROLLBACK');
+    expect(run.relay.queries.at(-1)?.sql).toBe('ROLLBACK');
+  } finally { run.stop(); }
+});
+
+test('a resumed qualification skips the replay-sensitive base comparison and continues from the released graph', async () => {
+  const run = fixture();
+  run.evidence.qualification = { resume: true };
+  run.fuseki.held = false;
+  run.fuseki.releaseReceipt = { receipt: `urn:rezics:receipt:restore-release:${hash(lineage.dataEpoch)}`,
+    digest: releaseDigest, priorMainSequence: '4', streamScope: MAIN_RELAY_STREAM_SCOPE };
+  run.evidence.releaseErasures = async clients => {
+    expect(clients.graphRelease).toEqual(expectedRelease);
+    await openAccess(clients);
+  };
+  try {
+    await run.release();
+    expect(run.fuseki.commands).toHaveLength(0);
+    expect(run.access.open).toBe(true);
+    expect(run.access.generation).toBe('6');
+    expect(run.trace).not.toContain('validated:content');
+    expect(run.trace).not.toContain('validated:objects');
+    for (const check of ownerChecks.filter(check => check !== 'content' && check !== 'objects')) {
+      expect(run.trace.filter(item => item === `validated:${check}`)).toHaveLength(1);
+    }
+    expect(run.trace.filter(item => item === 'relay:commit' || item === 'access:commit'))
+      .toEqual(['relay:commit', 'access:commit']);
+  } finally { run.stop(); }
+});
+
+test('a resumed qualification still refuses a graph that is neither held nor exactly released', async () => {
+  const run = fixture();
+  run.evidence.qualification = { resume: true };
+  run.fuseki.held = false;
+  run.fuseki.releaseReceipt = null;
+  try {
+    await expect(run.release()).rejects.toBeInstanceOf(RestoreLineageConflict);
+    expect(run.state.callbackCalls).toBe(0);
+    expect(run.access.open).toBe(false);
+    expect(run.access.generation).toBe('5');
+  } finally { run.stop(); }
+});
+
+test('durable qualification is refused when the caller owns neither transaction or the mode is absent', async () => {
+  const run = fixture();
+  run.evidence.releaseErasures = async clients => { await clients.commitQualification(); };
+  try {
+    await expect(run.release()).rejects.toBeInstanceOf(RestoreLineageConflict);
+    expectBothHeld(run);
+    expect(run.trace).not.toContain('relay:commit');
+    expect(run.access.queries.at(-1)?.sql).toBe('ROLLBACK');
+  } finally { run.stop(); }
+});
+
+test('the Access fence moving between the qualification commit and the fresh release keeps both holds closed', async () => {
+  const run = fixture();
+  run.evidence.qualification = { resume: false };
+  let committed = false;
+  run.evidence.releaseErasures = async clients => {
+    run.access.generation = '5';
+    run.access.open = true;
+    committed = true;
+    await clients.commitQualification();
+  };
+  try {
+    await expect(run.release()).rejects.toBeInstanceOf(RestoreLineageConflict);
+    expect(committed).toBe(true);
+    expect(run.fuseki.commands).toHaveLength(0);
+  } finally { run.stop(); }
+});

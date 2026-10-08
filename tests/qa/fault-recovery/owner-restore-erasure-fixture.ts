@@ -72,7 +72,8 @@ import {
   type RecoveryCoverage,
 } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
-import type { RestoreChecks } from '../../../scripts/ops/restore.ts';
+import type { OperatorRestoreReleaseContext, RestoreChecks } from '../../../scripts/ops/restore.ts';
+import { RecoveryBudget } from '../../../scripts/ops/recovery-set.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { healthRoutes } from '../../../services/main/src/routes/health.ts';
 import { ownerRoutes } from '../../../services/main/src/routes/owners.ts';
@@ -923,4 +924,32 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     await close();
     throw error;
   }
+}
+
+export type Fixture = Awaited<ReturnType<typeof ownerRestoreErasureFixture>>;
+export type Copy = Awaited<ReturnType<Fixture['copy']>>;
+
+export function operatorContext(fixture: Fixture, copy: Copy): OperatorRestoreReleaseContext {
+  return {
+    budget: new RecoveryBudget(),
+    fuseki: copy.fuseki,
+    apps: {
+      MAIN_DATA_EPOCH: copy.lineage.dataEpoch,
+      MAIN_ROUTING_EPOCH: copy.lineage.routingEpoch,
+    },
+    manifest: {
+      sealedCoverage: fixture.authority.sealedCoverage,
+      sealedDeletionSets: [],
+      fenceGeneration: fixture.generation,
+    },
+    pools: copy.owners,
+  };
+}
+
+export async function ownerLogins(copy: Copy) {
+  return (
+    await copy.owners.account.query<{ rolname: string; rolcanlogin: boolean }>(
+      "SELECT rolname,rolcanlogin FROM pg_roles WHERE rolname IN ('account','access','content','relay') ORDER BY rolname",
+    )
+  ).rows;
 }

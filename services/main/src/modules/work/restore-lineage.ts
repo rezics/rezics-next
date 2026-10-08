@@ -163,6 +163,46 @@ export async function readRestoredGraphReleaseProof(
 }
 
 
+/**
+ * The exact saved and effective native cuts of one restore marker, read from
+ * the held or released control graph and checked against the signed capture.
+ * It supplies an expectation only; the release proof reader rereads the
+ * native evidence and never accepts this value as a capability.
+ */
+export async function readRestoredGraphReleaseExpectation(
+  fuseki: FusekiClient, lineage: GraphLineage, coverage: RecoveryCoverage,
+): Promise<RestoredGraphReleaseExpectation> {
+  const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
+  const cuts = (await fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?savedMainSequence ?reconciledMainSequence ?savedSequence ?reconciledSequence WHERE {
+      GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
+          rv:sequence 0 ; rv:restoreCutover ${iri(marker)} .
+        ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ; rv:priorSequence ?savedSequence .
+        OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?reconciledSequence }
+        OPTIONAL { ${iri(marker)} rv:priorMainSequence ?savedMainSequence }
+        OPTIONAL { ${iri(marker)} rv:reconciledPriorMainSequence ?reconciledMainSequence }
+      } } LIMIT 2`)).results?.bindings ?? [];
+  const cut = cuts[0];
+  const canonical = /^(0|[1-9][0-9]*)$/;
+  if (cuts.length !== 1 || !cut
+    || ['savedMainSequence', 'reconciledMainSequence', 'savedSequence', 'reconciledSequence']
+      .some(key => cut[key] && !canonical.test(cut[key]!.value))
+    || cut.reconciledMainSequence && !cut.savedMainSequence
+    || !cut.savedSequence) {
+    throw new RestoreLineageConflict('restored graph Main cut is unavailable or ambiguous');
+  }
+  const position = (sequence: string): RelayHandoffPosition => ({
+    streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: coverage.priorDataEpoch, sequence });
+  const paired = cut.savedMainSequence !== undefined;
+  return { lineage: { dataEpoch: lineage.dataEpoch, routingEpoch: lineage.routingEpoch },
+    restoreCutover: marker,
+    saved: { dataEpoch: coverage.priorDataEpoch, graphSequence: cut.savedSequence.value,
+      ...(paired ? { main: position(cut.savedMainSequence!.value) } : {}) },
+    effective: { dataEpoch: coverage.priorDataEpoch,
+      graphSequence: cut.reconciledSequence?.value ?? cut.savedSequence.value,
+      ...(paired ? { main: position(cut.reconciledMainSequence?.value ?? cut.savedMainSequence!.value) } : {}) } };
+}
 
 export interface RecoveryCoverage {
   priorDataEpoch: string;
@@ -203,13 +243,33 @@ export interface AuthenticatedRecoveryCoverage {
    */
   releaseErasures?: (clients: RestoredReleaseClients,
     releaseGraph: () => Promise<void>) => Promise<void>;
+  /**
+   * Durable qualification: the callback commits its retained-journal record
+   * while both holds are closed (`commitQualification`), then releases in fresh
+   * transactions. `resume` continues a record committed by an earlier pass; the
+   * Content, object and graph-reference base comparison that replay has since
+   * changed is then not repeated.
+   */
+  qualification?: { resume: boolean };
 }
 
 export interface RestoredReleaseClients {
   accessClient: PoolClient;
   relayClient: PoolClient;
   fenceGeneration: string;
+  /** Saved and effective native cuts of this restore, read from its marker. */
+  graphRelease: RestoredGraphReleaseExpectation;
+  /**
+   * Commit the relay transaction, then the Access one, and open fresh ones that
+   * retake the allocator and the closed fence at the captured generation.
+   * Only with `qualification`; the caller's own transactions are never committed.
+   */
+  commitQualification: () => Promise<void>;
 }
+
+/** A genuine owner interruption after the native release was authenticated:
+ * the operation is not definitively held and may be resumed with the same key. */
+export class RestoreInterrupted extends Error {}
 
 export { accessOutboxCoverage, accessStateCoverage } from './access-recovery-coverage.ts';
 
@@ -635,36 +695,28 @@ export async function releaseRestoredGraphHold(
     catch { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture'); }
     if (!coverage.content) throw new RestoreLineageConflict('Content recovery coverage is missing');
     if (!evidence.contentPool) throw new RestoreLineageConflict('restored Content owner is unavailable');
-    try { await assertContentRecoveryCoverage(evidence.contentPool, fuseki, coverage.content,
-      { fuseki, relayClient: relayHeadClient, contentClient: evidence.contentClient }); }
-    catch { throw new RestoreLineageConflict('Content owner or graph references differ from recovery coverage'); }
     if (!coverage.objects) throw new RestoreLineageConflict('immutable object recovery coverage is missing');
     if (!evidence.objectStore) throw new RestoreLineageConflict('restored immutable object owner is unavailable');
-    const restoredObjects = evidence.objectStore.structureObjects
-      ? { ...evidence.objectStore, structureGroupRoots: new StructureGroupRootStore(
-        evidence.contentPool, evidence.objectStore.structureObjects),
-        structureQualifierRoots: new StructureQualifierRootStore(
-          evidence.contentPool, evidence.objectStore.structureObjects) } : evidence.objectStore;
-    try { await assertObjectRecoveryCoverage(fuseki, restoredObjects, coverage.objects); }
-    catch (error) { throw new RestoreLineageConflict(
-      `graph or immutable objects differ from recovery coverage (${error instanceof ObjectRecoveryConflict
-        ? error.kind : 'unavailable'})`); }
+    // Replay has changed the restored Content and object copies since the
+    // qualification committed; their durable record, not the signed base, binds them.
+    if (!evidence.qualification?.resume) {
+      try { await assertContentRecoveryCoverage(evidence.contentPool, fuseki, coverage.content,
+        { fuseki, relayClient: relayHeadClient, contentClient: evidence.contentClient }); }
+      catch { throw new RestoreLineageConflict('Content owner or graph references differ from recovery coverage'); }
+      const restoredObjects = evidence.objectStore.structureObjects
+        ? { ...evidence.objectStore, structureGroupRoots: new StructureGroupRootStore(
+          evidence.contentPool, evidence.objectStore.structureObjects),
+          structureQualifierRoots: new StructureQualifierRootStore(
+            evidence.contentPool, evidence.objectStore.structureObjects) } : evidence.objectStore;
+      try { await assertObjectRecoveryCoverage(fuseki, restoredObjects, coverage.objects); }
+      catch (error) { throw new RestoreLineageConflict(
+        `graph or immutable objects differ from recovery coverage (${error instanceof ObjectRecoveryConflict
+          ? error.kind : 'unavailable'})`); }
+    }
     const marker = `urn:rezics:restore:${lineage.dataEpoch}`;
     const receipt = `urn:rezics:receipt:restore-release:${hash(lineage.dataEpoch)}`;
-    const cuts = (await fuseki.query(`PREFIX rv: <${RV}>
-      SELECT ?savedMainSequence ?reconciledMainSequence WHERE { GRAPH ${iri(GRAPHS.control)} {
-        ${iri(DATASET)} rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:routingEpoch ${lit(lineage.routingEpoch)} ;
-          rv:sequence 0 ; rv:restoreCutover ${iri(marker)} .
-        ${iri(marker)} rv:priorDataEpoch ${lit(coverage.priorDataEpoch)} ; rv:priorSequence ?savedSequence .
-        OPTIONAL { ${iri(marker)} rv:priorMainSequence ?savedMainSequence }
-        OPTIONAL { ${iri(marker)} rv:reconciledPriorMainSequence ?reconciledMainSequence }
-      } } LIMIT 2`)).results?.bindings ?? [];
-    const cut = cuts[0];
-    if (cuts.length !== 1 || !cut
-      || ['savedMainSequence', 'reconciledMainSequence'].some(key => cut[key] && !/^[0-9]+$/.test(cut[key]!.value))
-      || cut.reconciledMainSequence && !cut.savedMainSequence) {
-      throw new RestoreLineageConflict('restored graph Main cut is unavailable or ambiguous');
-    }
+    const graphRelease = await readRestoredGraphReleaseExpectation(fuseki, lineage, coverage);
+    const cut = { savedMainSequence: graphRelease.saved.main?.sequence };
     const pairedMain = cut.savedMainSequence !== undefined;
     const mainCutGuard = pairedMain
       ? `${iri(marker)} rv:priorMainSequence ?savedMainSequence .
@@ -711,7 +763,9 @@ export async function releaseRestoredGraphHold(
     if (held.boolean !== true && (await fuseki.query(releasedQuery)).boolean !== true) {
       throw new RestoreLineageConflict('restored graph cut is not held for erasure reconciliation');
     }
-    let graphReleased = false;
+    // A resumed pass whose native release already committed has nothing to
+    // release; the owner callback authenticates that receipt itself.
+    let graphReleased = evidence.qualification?.resume === true && held.boolean !== true;
     const releaseGraph = async () => {
       if (graphReleased) throw new RestoreLineageConflict('restored graph release already completed');
       await assertBorrowedTransactions();
@@ -757,10 +811,31 @@ export async function releaseRestoredGraphHold(
     };
     try {
       await assertBorrowedTransactions();
+      const commitQualification = async () => {
+        if (!evidence.qualification || borrowedOwners) {
+          throw new RestoreLineageConflict('durable qualification needs this release to own both transactions');
+        }
+        await assertBorrowedTransactions();
+        // Replay is irreversible, so its record must survive a later failure.
+        await relayHeadClient!.query('COMMIT');
+        await client.query('COMMIT');
+        await relayHeadClient!.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+        await relayHeadClient!.query("SET LOCAL lock_timeout = '5s'");
+        await relayHeadClient!.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+        await client.query("SET LOCAL TIME ZONE 'UTC'");
+        const again = await client.query<{ open: boolean; generation: string }>(
+          'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true FOR UPDATE');
+        if (again.rows[0]?.open !== false || again.rows[0].generation !== fenceGeneration) {
+          throw new RestoreLineageConflict('captured Access fence changed after qualification');
+        }
+        await borrowedTransaction('relay', relayHeadClient!, 'read committed');
+        await borrowedTransaction('Access', client, 'repeatable read');
+      };
       await evidence.releaseErasures({ accessClient: client, relayClient: relayHeadClient,
-        fenceGeneration }, releaseGraph);
+        fenceGeneration, graphRelease, commitQualification }, releaseGraph);
     } catch (error) {
-      if (error instanceof RestoreLineageConflict) throw error;
+      if (error instanceof RestoreLineageConflict || error instanceof RestoreInterrupted) throw error;
       throw new RestoreLineageConflict(`retained erasure reconciliation failed: ${
         error instanceof Error ? error.message : 'owner replay outcome is unavailable'}`, { cause: error });
     }
@@ -776,8 +851,16 @@ export async function releaseRestoredGraphHold(
     }
     await assertBorrowedTransactions();
     if (!borrowedOwners) {
-      await client.query('COMMIT');
-      await relayHeadClient.query('COMMIT');
+      // A durable owner operation records its release binding on the relay, so
+      // that commits first: an Access failure then leaves a binding that never
+      // matches an open fence, while an opened fence always has its binding.
+      if (evidence.qualification) {
+        await relayHeadClient.query('COMMIT');
+        await client.query('COMMIT');
+      } else {
+        await client.query('COMMIT');
+        await relayHeadClient.query('COMMIT');
+      }
     }
   } catch (error) {
     if (relayHeadClient && !borrowedOwners) {

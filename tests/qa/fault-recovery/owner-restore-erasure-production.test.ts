@@ -23,40 +23,15 @@ import {
   scanAccessState,
 } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
-import { RecoveryBudget } from '../../../scripts/ops/recovery-set.ts';
+import { finishOperatorRestore } from '../../../scripts/ops/restore.ts';
 import {
-  finishOperatorRestore,
-  type OperatorRestoreReleaseContext,
-} from '../../../scripts/ops/restore.ts';
-import { ownerRestoreErasureFixture, restoreKey } from './owner-restore-erasure-fixture.ts';
-
-type Fixture = Awaited<ReturnType<typeof ownerRestoreErasureFixture>>;
-type Copy = Awaited<ReturnType<Fixture['copy']>>;
-
-function operatorContext(fixture: Fixture, copy: Copy): OperatorRestoreReleaseContext {
-  return {
-    budget: new RecoveryBudget(),
-    fuseki: copy.fuseki,
-    apps: {
-      MAIN_DATA_EPOCH: copy.lineage.dataEpoch,
-      MAIN_ROUTING_EPOCH: copy.lineage.routingEpoch,
-    },
-    manifest: {
-      sealedCoverage: fixture.authority.sealedCoverage,
-      sealedDeletionSets: [],
-      fenceGeneration: fixture.generation,
-    },
-    pools: copy.owners,
-  };
-}
-
-async function ownerLogins(copy: Copy) {
-  return (
-    await copy.owners.account.query<{ rolname: string; rolcanlogin: boolean }>(
-      "SELECT rolname,rolcanlogin FROM pg_roles WHERE rolname IN ('account','access','content','relay') ORDER BY rolname",
-    )
-  ).rows;
-}
+  operatorContext,
+  ownerLogins,
+  ownerRestoreErasureFixture,
+  restoreKey,
+  type Copy,
+  type Fixture,
+} from './owner-restore-erasure-fixture.ts';
 
 async function contentEpochs(copy: Copy) {
   return (
@@ -334,7 +309,10 @@ test(
           ),
         ).toBe(true);
         expect(transactions.length).toBeGreaterThan(0);
-        expect(new Set(transactions.map((value) => `${value.pid}:${value.txid}`)).size).toBe(1);
+        // One borrowed Access connection serves the qualification transaction and
+        // the fresh release transaction; no historical read opens another.
+        expect(new Set(transactions.map((value) => value.pid)).size).toBe(1);
+        expect(new Set(transactions.map((value) => value.txid)).size).toBe(2);
         expect(transactions.every((value) => value.isolation === 'repeatable read')).toBe(true);
         for (const owner of [good.retainedRelay, ...Object.values(good.owners)]) {
           expect(owner.options.max).toBe(1);

@@ -151,6 +151,15 @@ project/idempotency key, not a forced Access reopen. Failed copies
 preserve their stopped volumes and `recovery-evidence.json` for diagnosis;
 remove only that failed target when discarding it.
 
+A pass interrupted after its retained-erasure qualification committed (an owner
+connection lost after the native release, or the outcome write failing after both
+owners committed) is not a held result. The operation stays running and the same
+command with the same idempotency key resumes from that durable qualification and
+the exact native release receipt, or completes the lost outcome from the Access
+state bound at the opening. It never replays, holds again or compares the replayed
+copy to the original base again; any difference in the bound evidence settles the
+operation as held. Only a definitive refusal settles it as held at once.
+
 After verified release, start Main, relay and consumers on the restored project,
 resume at the retained, verified checkpoints, then route traffic. Do not serve
 the original project beside its restored successor.
