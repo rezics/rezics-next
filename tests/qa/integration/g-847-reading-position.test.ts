@@ -24,6 +24,7 @@ import { RV, activateMetadataWork, metadataWorkRequestDigest } from '../../../se
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { ensureGlobalClassificationContext } from '../../../services/main/src/modules/classification/global.ts';
 import { recordStatement, recordStatementRequest, setStatementDecision, statementDecisionRequest } from '../../../services/main/src/modules/statement/graph.ts';
+import { StatementSeek } from '../../../services/main/src/modules/statement/seek.ts';
 import { WikiEvidenceStore } from '../../../services/main/src/modules/wiki/evidence.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { startMediaStack } from './media-support.ts';
@@ -47,6 +48,7 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     const objects = stack.objects('semantic/structure/'); await objects.initialize();
     let verifiedEmail = true;
     const deps: MainWorkDependencies = { environment: stack.env, access: stack.access,
+      statementSeek: new StatementSeek(stack.accessPool, stack.env),
       media: stack.media, mediaAccess: stack.mediaAccess, readingPositions: store, structureObjects: objects,
       progress: new StructureProgressStore(stack.contentPool), libraryStatus: library,
       seriesSessions: new SeriesSessionReader(stack.contentPool), sessions: new ConsumptionSessionStore(stack.contentPool, library),
