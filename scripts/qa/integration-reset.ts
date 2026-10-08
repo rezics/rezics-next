@@ -12,6 +12,49 @@ export const integrationOwnerResetStatements = ['account', 'access', 'content', 
   ],
 );
 
+/** Raw SPARQL update refuses to remove this server-owned proof graph. */
+export const WORK_SCOPE_REPAIR_GRAPH = 'urn:rezics:projection:public-name-repair';
+
+const SPARQL_GRAPH_IRI = /^(?:urn:|https?:\/\/)[^\s<>"'{}|\\^`]+$/;
+
+/** `CLEAR ALL` is a 400: the raw update servlet rejects it, `CLEAR NAMED`,
+ * `DROP ALL` and `DROP NAMED` because each would remove the work-scope proof
+ * graph. Named clears of every other graph are admitted and still reach
+ * jena-text through removeGraph/deleteAny. The servlet then deletes the
+ * proof graph's scope qualification itself. */
+export function graphClearUpdate(graphs: readonly string[]): string {
+  const statements: string[] = [];
+  for (const graph of [...new Set(graphs)].sort()) {
+    if (!SPARQL_GRAPH_IRI.test(graph)) throw new Error('integration reset refused an unsafe graph IRI');
+    if (graph === WORK_SCOPE_REPAIR_GRAPH) continue;
+    statements.push(`CLEAR GRAPH <${graph}>`);
+  }
+  statements.push('CLEAR DEFAULT');
+  return statements.join('; ');
+}
+
+/** A reset that fails while the stack is broken is a harness failure. It does
+ * not fail the file that already passed, or the files the reset never reached. */
+export function integrationResetHarnessFailure(input: {
+  stack: string;
+  pendingFiles: readonly string[];
+  timedOut?: boolean;
+}): { message: string; failedFiles: readonly string[] } {
+  const pending = input.pendingFiles.length ? ` before ${input.pendingFiles.join(', ')}` : '';
+  return {
+    message: `integration reset ${input.timedOut ? 'timed out' : 'failed'} on stack ${input.stack}${pending}`,
+    failedFiles: [],
+  };
+}
+
+export function filesKeptAfterResetFailure(
+  files: readonly string[],
+  pendingFiles: readonly string[],
+): string[] {
+  const pending = new Set(pendingFiles);
+  return files.filter((file) => !pending.has(file));
+}
+
 /** Called only between exited Bun commands, never alongside a test writer.
  * Migrated templates remain untouched. A fresh lineage and object directory
  * keep graph receipts, SQL authority and immutable bytes from crossing files. */
@@ -36,11 +79,11 @@ async function resetGraph(
     apps.FUSEKI_MAINTENANCE_TOKEN,
     apps.FUSEKI_COMMAND_TOKEN,
   );
-  // CLEAR ALL + fresh bootstrap is also the classification bootstrap test's
-  // reset path; it clears receipts/control and updates the jena-text wrapper.
-  // Jena 6.2.0 monitors removeGraph/deleteAny through TextQuadAction.DELETE:
-  // https://github.com/apache/jena/blob/jena-6.2.0/jena-text/src/main/java/org/apache/jena/query/text/changes/DatasetGraphTextMonitor.java
-  await fuseki.update('CLEAR ALL');
+  const listed = await fuseki.query('SELECT DISTINCT ?g WHERE { GRAPH ?g { ?s ?p ?o } }');
+  const graphs = (listed.results?.bindings ?? []).flatMap((binding) =>
+    binding.g?.type === 'uri' && binding.g.value ? [binding.g.value] : [],
+  );
+  await fuseki.update(graphClearUpdate(graphs));
   await initializeFreshGraph(fuseki, lineage);
 }
 

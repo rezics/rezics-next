@@ -23,8 +23,12 @@ import { completeFileResults, lastStartedTestFile } from '../../scripts/qa/file-
 import { planIntegrationShards } from '../../scripts/qa/integration-shards.ts';
 import { integrationResourceClasses, queuedProjectsBudget } from '../../scripts/qa/resource-classes.ts';
 import {
+  filesKeptAfterResetFailure,
+  graphClearUpdate,
   integrationOwnerResetStatements,
+  integrationResetHarnessFailure,
   resetIntegrationState,
+  WORK_SCOPE_REPAIR_GRAPH,
 } from '../../scripts/qa/integration-reset.ts';
 import { commandOnlyIntegrationFiles } from '../../scripts/qa/isolated-integration-files.ts';
 import { qaStackEnvironment, scaleIntegrationFiles } from '../../scripts/qa/stack-environment.ts';
@@ -431,6 +435,57 @@ test('G-955: all QA stacks inherit heap/direct-memory settings below their conta
     'JVM_ARGS: ${REZICS_FUSEKI_JVM_ARGS:--Xms64m -Xmx512m -XX:MaxDirectMemorySize=128m}',
   );
   expect(existsSync(join(root, '.temp'))).toBe(true);
+});
+
+test('G-955: integration reset clears named graphs because CLEAR ALL removes the work-scope proof', () => {
+  // The raw update servlet answers 400 in a few milliseconds for CLEAR ALL,
+  // CLEAR NAMED, DROP ALL and DROP NAMED, and for a clear of the server-owned
+  // work-scope proof graph. Those updates never reach execution.
+  const update = graphClearUpdate([
+    'urn:rezics:graph:receipts',
+    'urn:rezics:graph:current',
+    'urn:rezics:graph:control',
+    'urn:rezics:search:public',
+    WORK_SCOPE_REPAIR_GRAPH,
+    WORK_SCOPE_REPAIR_GRAPH,
+  ]);
+  const rejected = (operation: string) =>
+    /^(?:CLEAR ALL|CLEAR NAMED|DROP ALL|DROP NAMED)$/.test(operation)
+    || operation === `CLEAR GRAPH <${WORK_SCOPE_REPAIR_GRAPH}>`
+    || operation === `DROP GRAPH <${WORK_SCOPE_REPAIR_GRAPH}>`;
+  for (const operation of update.split(';').map((part) => part.trim())) expect(rejected(operation)).toBe(false);
+  expect(update).toContain('CLEAR GRAPH <urn:rezics:graph:control>');
+  expect(update).toContain('CLEAR GRAPH <urn:rezics:graph:current>');
+  expect(update).toContain('CLEAR GRAPH <urn:rezics:graph:receipts>');
+  expect(update).toContain('CLEAR GRAPH <urn:rezics:search:public>');
+  expect(update.endsWith('CLEAR DEFAULT')).toBe(true);
+  expect(update).not.toContain(WORK_SCOPE_REPAIR_GRAPH);
+  expect(() => graphClearUpdate(['urn:rezics:graph:current>; CLEAR ALL'])).toThrow('unsafe graph IRI');
+  expect(readFileSync(join(root, 'scripts/qa/integration-reset.ts'), 'utf8')).not.toContain(
+    "update('CLEAR ALL')",
+  );
+});
+
+test('G-955: a broken integration reset names the stack and keeps the file that already passed', () => {
+  const passed = 'tests/qa/integration/g-896-content-sequence.test.ts';
+  const pending = 'tests/qa/integration/g-894-progress-summary.test.ts';
+  const stack = 'rezics-qa-20261008t183626-c1e5d6-1';
+  const failure = integrationResetHarnessFailure({ stack, pendingFiles: [pending] });
+  expect(failure.failedFiles).toEqual([]);
+  expect(failure.message).toContain(`on stack ${stack}`);
+  expect(failure.message).not.toContain(passed);
+  expect(integrationResetHarnessFailure({ stack, pendingFiles: [pending], timedOut: true }).message)
+    .toContain('timed out');
+  const kept = filesKeptAfterResetFailure([passed, pending], [pending]);
+  expect(kept).toEqual([passed]);
+  const results = completeFileResults(suite(passed), kept, 'integration');
+  expect(results.missing).toEqual([]);
+  expect(parseJUnit(results.xml, 'integration').map((item) => [item.file, item.failed])).toEqual([
+    [passed, false],
+  ]);
+  const cli = readFileSync(join(root, 'scripts/qa/cli.ts'), 'utf8');
+  expect(cli).toContain('integrationResetHarnessFailure');
+  expect(cli).toContain('filesKeptAfterResetFailure');
 });
 
 test('G-955: shard claims respect goalctl default capacity instead of inventing five extra slots', async () => {

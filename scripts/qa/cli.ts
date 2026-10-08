@@ -67,6 +67,7 @@ import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-owner
 import { commandOnlyIntegrationFiles, exclusiveWriterStartupFiles } from './isolated-integration-files.ts';
 import { planIntegrationShards } from './integration-shards.ts';
 import { completeFileResults, lastStartedTestFile } from './file-results.ts';
+import { filesKeptAfterResetFailure, integrationResetHarnessFailure } from './integration-reset.ts';
 import { qaStackEnvironment, qaStackMode } from './stack-environment.ts';
 
 import { ownerTierBudgetMs } from './owner-tier-budget.ts';
@@ -314,7 +315,7 @@ async function runTier(name: Tier, program: string, args: string[], budget: numb
 
 type StackTier = 'integration' | 'fault/recovery';
 interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMatch: boolean;
-  ok: boolean; testStart?: number; testEnd?: number }
+  ok: boolean; testStart?: number; testEnd?: number; resetBlockedFiles?: string[] }
 
 // Bun owner suites install signal handlers too; enforce the wall deadline on
 // their process group so a handled SIGTERM cannot keep QA capacity indefinitely.
@@ -530,6 +531,7 @@ async function runShardWork(
   const suites: string[] = [];
   const output: string[] = [];
   const fileDurations: Record<string, number> = {};
+  const resetBlockedFiles: string[] = [];
   let commandOk = true,
     timedOut = false,
     noMatch = true;
@@ -558,7 +560,15 @@ async function runShardWork(
       output.push(reset.output);
       resetMs = reset.elapsedMs;
       if (!reset.ok) {
-        timedOut ||= reset.timedOut;
+        const pending = batches.slice(index).flat();
+        const failure = integrationResetHarnessFailure({
+          stack: `rezics-qa-${projectRunId}`,
+          pendingFiles: pending,
+          timedOut: reset.timedOut,
+        });
+        writeFileSync(join(logs, `${label}-reset.log`), reset.output);
+        errors.push(`${failure.message} (see logs/${label}-reset.log)`);
+        resetBlockedFiles.push(...pending);
         commandOk = false;
         break;
       }
@@ -628,13 +638,18 @@ async function runShardWork(
   const cleanupFailures = await resetChildStacks(registry);
   if (cleanupFailures.length) writeFileSync(join(logs, `${label}-cleanup.log`), cleanupFailures.join('\n'));
   record.elapsedMs = testEnd - testStart - childAdmissionMs;
-  const results = completeFileResults(mergeJUnit(suites, record.elapsedMs), files, tier, {
-    filtered: flags.includes('-t'),
-    interrupted: timedOut || !commandOk,
-    reason: timedOut
-      ? 'Shard timed out; file did not complete'
-      : 'Shard stopped before this file produced results',
-  });
+  const results = completeFileResults(
+    mergeJUnit(suites, record.elapsedMs),
+    filesKeptAfterResetFailure(files, resetBlockedFiles),
+    tier,
+    {
+      filtered: flags.includes('-t'),
+      interrupted: timedOut || (!commandOk && resetBlockedFiles.length === 0),
+      reason: timedOut
+        ? 'Shard timed out; file did not complete'
+        : 'Shard stopped before this file produced results',
+    },
+  );
   record.missingFiles = results.missing;
   // The campaign command timeout stays budget. activeCeiling only admits a run whose
   // phase callback already enforced 600ms preparation and 360ms operation.
@@ -645,7 +660,7 @@ async function runShardWork(
   writeFileSync(join(logs, `${label}.log`), output.join('\n'));
   writeFileSync(join(logs, `${label}-durations.json`), JSON.stringify(fileDurations));
   writeFileSync(outfile, results.xml);
-  return finish({ ok, timedOut, noMatch, testStart, testEnd, xml: results.xml });
+  return finish({ ok, timedOut, noMatch, testStart, testEnd, xml: results.xml, resetBlockedFiles });
 }
 
 function failedTests(run: ShardRun, tier: StackTier): Map<string, string[]> {
@@ -809,9 +824,10 @@ async function runStackTier(tier: StackTier): Promise<void> {
     for (const rerun of replaced.values()) suites.push(...junitSuites(rerun.xml ?? '').map(suite => suite.xml));
     const completed = reruns.filter((run): run is ShardRun => run !== undefined);
     const elapsedMs = testWall(runs) + testWall(completed);
+    const resetBlocked = new Set(runs.flatMap((run) => run.resetBlockedFiles ?? []));
     const finalResults = completeFileResults(
       mergeJUnit(suites, elapsedMs),
-      [...estimates.keys()],
+      [...estimates.keys()].filter((file) => !resetBlocked.has(file)),
       tier,
       { filtered: flags.includes('-t'), interrupted: runs.some((run) => run.timedOut), elapsedMs },
     );

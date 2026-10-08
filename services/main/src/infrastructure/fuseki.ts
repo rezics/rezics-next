@@ -464,7 +464,14 @@ export class FusekiClient {
       method: 'POST', headers: { 'content-type': 'application/sparql-update' },
       body: sparql, signal: AbortSignal.timeout(10_000),
     });
-    if (!response.ok) throw new Error(`Fuseki update returned ${response.status}`);
+    if (!response.ok) {
+      let detail = '';
+      try {
+        detail = new TextDecoder().decode((await response.arrayBuffer()).slice(0, 2048))
+          .replace(/\s+/g, ' ').trim();
+      } catch { detail = ''; }
+      throw new Error(`Fuseki update returned ${response.status}${detail ? `: ${detail}` : ''}`);
+    }
   }
 
   async commandHealth(): Promise<CommandHealth> {
