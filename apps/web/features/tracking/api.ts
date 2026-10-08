@@ -3,6 +3,7 @@ import type { MainClient } from '../discover/types.ts';
 import { commandKey } from '../feed/api.ts';
 import { failureOf, type Loaded, type ReadFailure, settle, uuidOf } from '../feed/types.ts';
 import { type EpisodeApi, mainEpisodeApi } from './episode-api.ts';
+import { type MediaApi, mainMediaApi } from './media-api.ts';
 import type { EditionChoice, EditionPreference, Editions, ProgressSummary, Relations, Session, SessionChanges,
   SessionPage } from './types.ts';
 
@@ -47,6 +48,8 @@ export interface TrackingApi {
   setPreference(work: string, expectedVersion: number, choice: EditionChoice): Promise<PreferenceWrite>;
   /** Progress through the episodes or chapters a series Structure places; absent where a surface has none. */
   episodes?: EpisodeApi;
+  /** Chapters, volumes and games on the same occurrence progress. Absent where a surface has none. */
+  media?: MediaApi;
 }
 
 /** The page size Main allows for a Work's realizations and releases. */
@@ -119,6 +122,7 @@ export function mainTrackingApi(actingSubject: string, main: () => MainClient = 
 
   return {
     episodes: mainEpisodeApi(actingSubject, main),
+    media: mainMediaApi(actingSubject, main),
     sessions: (work, cursor) => settle<SessionPage>(() => main().v1.me.sessions.get({ query: { actingSubject, target: work,
       limit: 50, ...(cursor ? { cursor } : {}) } })).then(read => (read.ok
       ? { ok: true, data: { items: read.data.items, next: read.data.nextCursor } } : read)),

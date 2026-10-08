@@ -180,6 +180,20 @@ describe('Main behind the episode api', () => {
     expect(asked.puts[1]!.body).toMatchObject({ completed: true, position: 'episode:7' });
   });
 
+  test('a chapter or game keeps both versions when another device wrote first', async () => {
+    const { api, asked } = main({
+      get: () => ({ data: { completed: true, position: 'chapter:2:3', version: 4 }, error: null }),
+      put: () => ({ data: null, error: { status: 409, value: { code: 'stale_progress' } } }),
+    });
+    const written = await api.mark({ structure, occurrence: at('ch') },
+      { completed: false, position: 'chapter:2:3' }, { conflict: true });
+    expect(written.ok).toBe(false);
+    if (written.ok || written.failure !== 'stale') throw new Error('expected both versions');
+    expect(written.current).toMatchObject({ completed: true, version: 4 });
+    expect(written.submitted).toEqual({ completed: false, position: 'chapter:2:3' });
+    expect(asked.puts).toHaveLength(1);
+  });
+
   test('stale answers are reported after a few tries, not retried forever', async () => {
     const { api, asked } = main({ put: () => ({ data: null, error: { status: 409, value: { code: 'stale_progress' } } }) });
     expect(await api.mark({ structure, occurrence: at('e17') }, { completed: true })).toEqual({ ok: false, failure: 'moved' });

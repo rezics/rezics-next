@@ -108,6 +108,31 @@ const en = {
   trackedUnavailable: 'Your place in this series could not be loaded.',
   episodeSaving: 'Saving…',
   findingEpisode: insert('Finding episode {{number}}…', { number: String }),
+
+  chapters: 'Chapters',
+  volumeNumber: 'Volume',
+  chapterNumber: 'Chapter',
+  chapterPlace: insert('Chapter {{number}}', { number: String }),
+  volumeChapter: insert('Volume {{volume}}, chapter {{number}}', { volume: String, number: String }),
+  lastRead: insert('Last read: {{place}}', { place: String }),
+  noneRead: 'No chapter read yet',
+  continueChapter: insert('Continue from {{place}}', { place: String }),
+  markChapter: insert('Mark {{place}} read', { place: String }),
+  allChaptersRead: 'You have read every chapter.',
+  chapterRead: 'Read',
+  chapterUnread: 'Not read',
+  markChapterRead: 'Mark read',
+  markChapterUnread: 'Mark not read',
+  noSuchChapter: 'There is no chapter there.',
+
+  playHeading: 'Your play',
+  notPlayed: 'Not played yet',
+  gamePlayed: 'Played',
+  gameCompleted: 'Completed',
+  markPlayed: 'Mark played',
+  markCompleted: 'Mark completed',
+  routesTitle: 'Routes',
+  routesNote: 'A route is one way through the game. Completing the game follows its required parts.',
 };
 
 export const englishMessages = en;

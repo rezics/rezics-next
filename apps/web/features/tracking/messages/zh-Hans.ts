@@ -95,4 +95,22 @@ export default {
   trackedUnavailable: '无法载入你在这部作品中的进度。',
   episodeSaving: '正在保存…',
   findingEpisode: insert('正在查找第 {{number}} 集…', { number: String }),
+
+  // Machine-drafted; needs native review.
+  chapters: '章节',
+  volumeNumber: '卷', chapterNumber: '话',
+  chapterPlace: insert('第 {{number}} 话', { number: String }),
+  volumeChapter: insert('第 {{volume}} 卷，第 {{number}} 话', { volume: String, number: String }),
+  lastRead: insert('上次读到：{{place}}', { place: String }),
+  noneRead: '还没有读过任何一话',
+  continueChapter: insert('从{{place}}继续', { place: String }),
+  markChapter: insert('将{{place}}标为已读', { place: String }),
+  allChaptersRead: '你已经读完了所有章节。',
+  chapterRead: '已读', chapterUnread: '未读',
+  markChapterRead: '标为已读', markChapterUnread: '标为未读',
+  noSuchChapter: '没有这一话。',
+  playHeading: '你的游玩', notPlayed: '还没有玩过', gamePlayed: '玩过', gameCompleted: '已通关',
+  markPlayed: '标为玩过', markCompleted: '标为已通关',
+  routesTitle: '路线',
+  routesNote: '路线是通关的一种方式。完成游戏以它的必要部分为准。',
 } satisfies TrackingMessages;

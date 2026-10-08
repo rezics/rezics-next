@@ -95,4 +95,22 @@ export default {
   trackedUnavailable: 'このシリーズの進み具合を読み込めませんでした。',
   episodeSaving: '保存中…',
   findingEpisode: insert('第{{number}}話を探しています…', { number: String }),
+
+  // Machine-drafted; needs native review.
+  chapters: '章',
+  volumeNumber: '巻', chapterNumber: '話',
+  chapterPlace: insert('第{{number}}話', { number: String }),
+  volumeChapter: insert('第{{volume}}巻、第{{number}}話', { volume: String, number: String }),
+  lastRead: insert('前回：{{place}}', { place: String }),
+  noneRead: 'まだ読んでいません',
+  continueChapter: insert('{{place}}から続ける', { place: String }),
+  markChapter: insert('{{place}}を読了にする', { place: String }),
+  allChaptersRead: 'すべての章を読み終えました。',
+  chapterRead: '読了', chapterUnread: '未読',
+  markChapterRead: '読了にする', markChapterUnread: '未読に戻す',
+  noSuchChapter: 'その章はありません。',
+  playHeading: 'プレイ', notPlayed: 'まだプレイしていない', gamePlayed: 'プレイ済み', gameCompleted: 'クリア',
+  markPlayed: 'プレイ済みにする', markCompleted: 'クリアにする',
+  routesTitle: 'ルート',
+  routesNote: 'ルートはゲームの進み方の一つです。クリアは必須の部分に従います。',
 } satisfies TrackingMessages;

@@ -98,4 +98,22 @@ export default {
   trackedUnavailable: 'No se pudo cargar por dónde vas en esta serie.',
   episodeSaving: 'Guardando…',
   findingEpisode: insert('Buscando el episodio {{number}}…', { number: String }),
+
+  // Machine-drafted; needs native review.
+  chapters: 'Capítulos',
+  volumeNumber: 'Volumen', chapterNumber: 'Capítulo',
+  chapterPlace: insert('Capítulo {{number}}', { number: String }),
+  volumeChapter: insert('Volumen {{volume}}, capítulo {{number}}', { volume: String, number: String }),
+  lastRead: insert('Última lectura: {{place}}', { place: String }),
+  noneRead: 'Aún no has leído ningún capítulo',
+  continueChapter: insert('Continuar en {{place}}', { place: String }),
+  markChapter: insert('Marcar {{place}} como leído', { place: String }),
+  allChaptersRead: 'Has leído todos los capítulos.',
+  chapterRead: 'Leído', chapterUnread: 'No leído',
+  markChapterRead: 'Marcar como leído', markChapterUnread: 'Marcar como no leído',
+  noSuchChapter: 'Ese capítulo no existe.',
+  playHeading: 'Tu partida', notPlayed: 'Aún sin jugar', gamePlayed: 'Jugado', gameCompleted: 'Completado',
+  markPlayed: 'Marcar como jugado', markCompleted: 'Marcar como completado',
+  routesTitle: 'Rutas',
+  routesNote: 'Una ruta es una forma de recorrer el juego. Completarlo sigue sus partes obligatorias.',
 } satisfies TrackingMessages;

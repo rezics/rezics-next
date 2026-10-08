@@ -32,6 +32,41 @@ function cells(row: ConflictRow, editions: Editions | null, locale: UiLocale, t:
 }
 
 /**
+ * Both sides of one occurrence another device wrote first. The reader's change stays on screen until
+ * they keep it (sent again on the newer version) or take the other device's.
+ */
+export function ProgressConflict({ label, mine, theirs, t, busy, failed, onKeep, onUse }: {
+  label: string; mine: string; theirs: string; t: Copy; busy: boolean; failed: boolean;
+  onKeep: () => void; onUse: () => void;
+}) {
+  return <Alert variant="warning" role="alert" data-conflict="progress">
+    <TriangleAlertIcon aria-hidden="true" />
+    <AlertTitle>{t.conflictTitle}</AlertTitle>
+    <AlertDescription className="grid gap-3">
+      <p>{t.conflictBody}</p>
+      <table className="w-full text-start text-sm">
+        <thead className="text-xs">
+          <tr><th scope="col" className="sr-only">{t.status}</th>
+            <th scope="col" className="pe-3 text-start font-medium">{t.conflictMine}</th>
+            <th scope="col" className="text-start font-medium">{t.conflictTheirs}</th></tr>
+        </thead>
+        <tbody>
+          <tr data-conflict-field="state">
+            <th scope="row" className="py-0.5 pe-3 text-start font-normal text-muted-foreground">{label}</th>
+            <td className="pe-3">{mine}</td><td>{theirs}</td>
+          </tr>
+        </tbody>
+      </table>
+      {failed ? <p role="status" className="text-destructive-foreground text-xs">{t.conflictFailed}</p> : null}
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" disabled={busy} onClick={onKeep}>{t.keepMine}</Button>
+        <Button size="sm" variant="outline" disabled={busy} onClick={onUse}>{t.useTheirs}</Button>
+      </div>
+    </AlertDescription>
+  </Alert>;
+}
+
+/**
  * Both sides of a 409: what the reader tried to save and what another device saved first. Nothing is
  * merged; the reader keeps their change (sent again on the newer version) or takes the other.
  */

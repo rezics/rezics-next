@@ -98,4 +98,22 @@ export default {
   trackedUnavailable: 'Votre avancement dans cette série n’a pas pu être chargé.',
   episodeSaving: 'Enregistrement…',
   findingEpisode: insert('Recherche de l’épisode {{number}}…', { number: String }),
+
+  // Machine-drafted; needs native review.
+  chapters: 'Chapitres',
+  volumeNumber: 'Volume', chapterNumber: 'Chapitre',
+  chapterPlace: insert('Chapitre {{number}}', { number: String }),
+  volumeChapter: insert('Volume {{volume}}, chapitre {{number}}', { volume: String, number: String }),
+  lastRead: insert('Dernière lecture : {{place}}', { place: String }),
+  noneRead: 'Aucun chapitre lu pour l’instant',
+  continueChapter: insert('Reprendre à {{place}}', { place: String }),
+  markChapter: insert('Marquer {{place}} comme lu', { place: String }),
+  allChaptersRead: 'Vous avez lu tous les chapitres.',
+  chapterRead: 'Lu', chapterUnread: 'Non lu',
+  markChapterRead: 'Marquer comme lu', markChapterUnread: 'Marquer comme non lu',
+  noSuchChapter: 'Ce chapitre n’existe pas.',
+  playHeading: 'Votre partie', notPlayed: 'Pas encore joué', gamePlayed: 'Joué', gameCompleted: 'Terminé',
+  markPlayed: 'Marquer comme joué', markCompleted: 'Marquer comme terminé',
+  routesTitle: 'Routes',
+  routesNote: 'Une route est une façon de traverser le jeu. Terminer le jeu suit ses parties requises.',
 } satisfies TrackingMessages;

@@ -12,6 +12,7 @@ import Link from '../shell/localized-link.tsx';
 import type { TrackingApi } from './api.ts';
 import { languageName, locatorParts } from './display.ts';
 import { EpisodeProgress } from './episode-progress.tsx';
+import { MediumProgress } from './medium-progress.tsx';
 import { copyOf, type Copy } from './messages.ts';
 import { SeriesStates } from './series-states.tsx';
 import type { ReadFailure } from '../feed/types.ts';
@@ -167,9 +168,11 @@ export function SeriesProgressPanel(props: {
   preferenceForm?: boolean;
 }) {
   const actions = useReaderActions();
-  const episodes = actions.kind === 'ready' ? actions.tracking?.episodes ?? null : null;
+  const tracking = actions.kind === 'ready' ? actions.tracking ?? null : null;
+  const t = copyOf(props.locale);
   return <>
-    {episodes ? <EpisodeProgress work={props.work} api={episodes} t={copyOf(props.locale)} className={props.className} /> : null}
+    {tracking?.media ? <MediumProgress work={props.work} api={tracking.media} episodes={tracking.episodes ?? null} t={t} className={props.className} />
+      : tracking?.episodes ? <EpisodeProgress work={props.work} api={tracking.episodes} t={t} className={props.className} /> : null}
     <SeriesPartsPanel {...props} />
   </>;
 }

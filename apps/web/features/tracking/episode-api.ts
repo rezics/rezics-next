@@ -19,6 +19,17 @@ export interface StructurePage { parts: EpisodePart[]; groups: EpisodeGroup[]; n
 export interface EpisodeRef { structure: string; occurrence: string }
 export interface EpisodeProgress { completed: boolean; position: string | null; version: number }
 
+/**
+ * Another device wrote this occurrence first. `submitted` is the change this device still means to
+ * make; nothing is merged until the reader chooses.
+ */
+export interface ProgressStale {
+  ok: false;
+  failure: 'stale';
+  current: EpisodeProgress;
+  submitted: { completed: boolean; position: string | null };
+}
+
 export interface EpisodeApi {
   /**
    * The Work's series Structure and whether its root places Works (the series panel's own volumes)
@@ -29,10 +40,12 @@ export interface EpisodeApi {
   page(structure: string, query?: { parent?: string; after?: string }): Promise<Loaded<StructurePage>>;
   progress(episode: EpisodeRef): Promise<Loaded<EpisodeProgress>>;
   /**
-   * Sets one occurrence's completion. A write another device got to first is read again and the
-   * same change applied once more: the reader's intent is a state, not a delta.
+   * Sets one occurrence's completion. Without `conflict`, a write another device got to first is
+   * read again and the same change applied once more. With `conflict`, that answer is returned
+   * instead, so the reader can keep their change or take the other device's.
    */
-  mark(episode: EpisodeRef, change: { completed: boolean; position?: string | null }): Promise<Loaded<EpisodeProgress>>;
+  mark(episode: EpisodeRef, change: { completed: boolean; position?: string | null },
+    options?: { conflict?: boolean }): Promise<Loaded<EpisodeProgress> | ProgressStale>;
 }
 
 /**
@@ -82,7 +95,7 @@ export function mainEpisodeApi(actingSubject: string, main: () => MainClient = b
           .map(item => ({ occurrence: item.occurrence, label: item.labels[0]?.value ?? null })) } };
     },
     progress: read,
-    async mark(episode, change) {
+    async mark(episode, change, options) {
       for (let attempt = 0; attempt < MARK_ATTEMPTS; attempt++) {
         const current = await read(episode);
         if (!current.ok) return current;
@@ -95,8 +108,15 @@ export function mainEpisodeApi(actingSubject: string, main: () => MainClient = b
             const { data, error } = await progress(episode).put(body, { headers: { 'idempotency-key': key } });
             if (!error) return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
             if (error.status === 409) {
+              const code = (error.value as { code?: string } | null)?.code;
               // Main moving under the write asks for a pause; another device's write asks to read again.
-              if ((error.value as { code?: string } | null)?.code === 'read_basis_changed') await wait(MOVED_DELAY_MS * 2 ** attempt);
+              if (code === 'read_basis_changed') await wait(MOVED_DELAY_MS * 2 ** attempt);
+              else if (options?.conflict && code === 'stale_progress') {
+                const again = await read(episode);
+                if (!again.ok) return again;
+                return { ok: false, failure: 'stale', current: again.data,
+                  submitted: { completed: change.completed, position: body.position } };
+              }
               break;
             }
             if (error.status < 500 || tries === SEND_ATTEMPTS - 1) return { ok: false, failure: failureOf(error.status, error.value) };
