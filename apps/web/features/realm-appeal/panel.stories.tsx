@@ -42,7 +42,7 @@ async function fits(canvasElement: HTMLElement) {
 }
 
 /** Permanent ban, the recorded reason, and one appeal. The form starts clean. */
-export const CanAppeal: Story = {
+export const Default: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'You are banned from this community' })).toBeVisible();
@@ -59,6 +59,17 @@ export const NotBanned: Story = {
   args: { reading: null },
   play: async ({ canvasElement }) => {
     await expect(within(canvasElement).queryByRole('region', { name: 'Your ban' })).toBeNull();
+  },
+};
+
+/** The empty-statement error appears only after a send attempt. */
+export const EmptyStatement: Story = {
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Send appeal' }));
+    await expect(canvas.getByRole('alert')).toHaveTextContent('Write what they should reconsider.');
+    await expect(canvas.getByRole('textbox', { name: 'Your statement' })).toHaveValue('');
   },
 };
 
