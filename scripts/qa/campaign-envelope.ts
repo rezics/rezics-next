@@ -26,7 +26,24 @@ export type CampaignEvidenceState =
   | { kind: 'absent' }
   | { kind: 'ignored' }
   | { kind: 'refused' }
+  | { kind: 'contradicted' }
   | { kind: 'ready'; reportedActiveMs: number; boundaryActiveMs: number };
+
+export interface CampaignEvidenceRead {
+  parsed: unknown;
+  readError: boolean;
+  modifiedAt: number;
+  commandStartedAt: number;
+  projectRunId: string;
+  activeElapsedMs: number;
+  observedAt: number;
+}
+
+/** First fresh preparation proof. Later file writes do not replace these numbers. */
+export interface CampaignProof {
+  reportedActiveMs: number;
+  boundaryActiveMs: number;
+}
 
 export function campaignQualificationShard(files: readonly string[]): boolean {
   return files.length === 1 && files[0] === CAMPAIGN_QUALIFICATION_FILE;
@@ -54,15 +71,7 @@ export function childStackCleanupCommand(
   return 'stack:reset';
 }
 
-export function classifyCampaignEvidence(input: {
-  parsed: unknown;
-  readError: boolean;
-  modifiedAt: number;
-  commandStartedAt: number;
-  projectRunId: string;
-  activeElapsedMs: number;
-  observedAt: number;
-}): CampaignEvidenceState {
+export function classifyCampaignEvidence(input: CampaignEvidenceRead): CampaignEvidenceState {
   if (input.readError) return { kind: 'ignored' };
   if (input.parsed === undefined) return { kind: 'absent' };
   if (!Number.isFinite(input.modifiedAt) || !Number.isFinite(input.commandStartedAt) ||
@@ -87,11 +96,46 @@ export function classifyCampaignEvidence(input: {
   if (typeof reportedActiveMs !== 'number' || !Number.isFinite(reportedActiveMs) || reportedActiveMs < 0) {
     return { kind: 'refused' };
   }
-  // The write time is the preparation boundary. Poll delay stays on the preparation
-  // side. Reported active time is not added to or subtracted from the parent clock.
-  const delay = Math.max(0, input.observedAt - input.modifiedAt);
-  const boundaryActiveMs = Math.min(input.activeElapsedMs, Math.max(0, input.activeElapsedMs - delay));
-  return { kind: 'ready', reportedActiveMs, boundaryActiveMs };
+  // The parent active clock at the first fresh read is the preparation boundary.
+  // Wall time from the file's mtime to this read is not active work, so it is not
+  // subtracted. Reported preparation is a separate ceiling.
+  return { kind: 'ready', reportedActiveMs, boundaryActiveMs: input.activeElapsedMs };
+}
+
+export interface CampaignEvidenceWatch {
+  readonly proof: CampaignProof | undefined;
+  readonly contradicted: boolean;
+  observe(input: CampaignEvidenceRead, when?: 'poll' | 'final'): CampaignEvidenceState;
+}
+
+/** Remember the first fresh preparation proof. Later rewrites are checked against it. */
+export function openCampaignEvidence(): CampaignEvidenceWatch {
+  let proof: CampaignProof | undefined;
+  let contradicted = false;
+  return {
+    get proof() { return proof; },
+    get contradicted() { return contradicted; },
+    observe(input, when = 'poll') {
+      if (contradicted) return { kind: 'contradicted' };
+      const evidence = classifyCampaignEvidence(input);
+      if (proof === undefined) {
+        if (evidence.kind === 'ready') {
+          proof = { reportedActiveMs: evidence.reportedActiveMs, boundaryActiveMs: evidence.boundaryActiveMs };
+        }
+        return evidence;
+      }
+      if (evidence.kind === 'ready' && evidence.reportedActiveMs === proof.reportedActiveMs) {
+        return { kind: 'ready', reportedActiveMs: proof.reportedActiveMs, boundaryActiveMs: proof.boundaryActiveMs };
+      }
+      // A torn rewrite is unreadable JSON. The child is still writing during a poll,
+      // so that read keeps the first proof. The read after the command must be whole.
+      if (when === 'poll' && evidence.kind === 'ignored') {
+        return { kind: 'ready', reportedActiveMs: proof.reportedActiveMs, boundaryActiveMs: proof.boundaryActiveMs };
+      }
+      contradicted = true;
+      return { kind: 'contradicted' };
+    },
+  };
 }
 
 export function campaignPhaseDeadline(
@@ -101,6 +145,12 @@ export function campaignPhaseDeadline(
 ): CommandPhaseDecision {
   if (!Number.isFinite(sample.activeElapsedMs) || sample.activeElapsedMs < 0) {
     throw new Error('Invalid campaign envelope clock');
+  }
+  if (evidence.kind === 'contradicted') {
+    return {
+      phase: 'preparation', activeLimitMs: CAMPAIGN_PREPARATION_ACTIVE_MS,
+      reason: `${commandName} campaign evidence was refused`,
+    };
   }
   const preparationReason = `${commandName} preparation exceeded ${CAMPAIGN_PREPARATION_ACTIVE_MS} ms of active work`;
   const ready = evidence.kind === 'ready' ? evidence : undefined;
@@ -130,18 +180,56 @@ export function campaignCommandAccepted(input: {
   timedOut: boolean;
   evidence: CampaignEvidenceState;
   sample: CommandPhaseSample;
-}): { ok: boolean; failure?: 'preparation' | 'operation' | 'missing-preparation' } {
+}): { ok: boolean; failure?: 'preparation' | 'operation' | 'missing-preparation' | 'evidence' } {
   if (input.timedOut || !input.exitOk) return { ok: false };
+  if (input.evidence.kind === 'contradicted') return { ok: false, failure: 'evidence' };
   if (input.evidence.kind !== 'ready') return { ok: false, failure: 'missing-preparation' };
   const decision = campaignPhaseDeadline(input.sample, input.evidence);
   if (!decision.reason) return { ok: true };
   return { ok: false, failure: decision.phase === 'operation' ? 'operation' : 'preparation' };
 }
 
-/** commandAsync does not know this field until the phase-deadline hook lands. The object still carries it. */
+/** Present only while commandAsync lacks phaseDeadline. Delete this once that staged parameter is applied. */
 export function phaseCommandOptions(options: {
   runDeadline?: number;
   phaseDeadline: (sample: CommandPhaseSample) => CommandPhaseDecision;
 }): { runDeadline?: number } {
   return options;
+}
+
+/** Timer decision for the staged commandAsync hook. A reason string is copied exactly.
+ * A thrown callback or a non-finite limit expires. The runner's SIGTERM and SIGKILL stay outside. */
+export function phaseDeadlineArm(input: {
+  now: number;
+  activeElapsedMs: number;
+  admissionOpen: boolean;
+  runDeadline?: number;
+  timeoutMs: number;
+  commandName: string;
+  decide: (sample: CommandPhaseSample) => { activeLimitMs: number; reason?: string };
+}): { expire: string } | { waitMs: number } {
+  if (input.runDeadline !== undefined && input.now >= input.runDeadline) {
+    return { expire: `${input.commandName} reached its run deadline` };
+  }
+  let phase: { activeLimitMs: number; reason?: string };
+  try {
+    phase = input.decide({ activeElapsedMs: input.activeElapsedMs, admissionOpen: input.admissionOpen });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '';
+    return {
+      expire: message.length > 0 ? message : `${input.commandName} timed out after ${input.timeoutMs} ms of active work`,
+    };
+  }
+  if (phase !== null && typeof phase === 'object' && typeof phase.reason === 'string') return { expire: phase.reason };
+  if (phase === null || typeof phase !== 'object' || !Number.isFinite(phase.activeLimitMs)) {
+    return { expire: `${input.commandName} timed out after ${input.timeoutMs} ms of active work` };
+  }
+  const remaining = input.admissionOpen ? Number.POSITIVE_INFINITY : phase.activeLimitMs - input.activeElapsedMs;
+  if (!input.admissionOpen && remaining <= 0) {
+    return { expire: `${input.commandName} timed out after ${input.timeoutMs} ms of active work` };
+  }
+  const runRemaining = input.runDeadline === undefined ? Number.POSITIVE_INFINITY : input.runDeadline - input.now;
+  const waitMs = Math.max(1, Math.min(remaining, runRemaining, 200));
+  if (!Number.isFinite(waitMs)) return { expire: `${input.commandName} timed out after ${input.timeoutMs} ms of active work` };
+  return { waitMs };
 }
