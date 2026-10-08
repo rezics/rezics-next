@@ -411,9 +411,23 @@ function releaseAsyncCommandCleanup(): void {
   process.off('SIGTERM', cancelAsyncCommands);
 }
 
+export interface CommandPhaseSample {
+  /** Active time already measured here. Admission wait is not included. */
+  activeElapsedMs: number;
+  admissionOpen: boolean;
+  observedAt: number;
+  commandStartedAt: number;
+  /** Closed admission spans, plus the open span through observedAt when one is open. */
+  admission: readonly { start: number; end: number }[];
+}
+
+/** A phase callback that throws or returns an unusable limit. Not a caller-supplied message. */
+export const phaseDeadlineFailure = 'phase deadline failed';
+const trustedPhaseReason = /^[A-Za-z0-9][A-Za-z0-9._-]{0,40} (?:preparation exceeded [0-9]{1,7} ms of active work|timed out after [0-9]{1,7} ms of active work|campaign evidence was refused)$/;
+
 export async function commandAsync(root: string, name: string, args: string[], timeoutMs: number,
   env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void,
-  options: { runDeadline?: number } = {}): Promise<{ ok: boolean; output: string; elapsedMs: number;
+  options: { runDeadline?: number; phaseDeadline?: (sample: CommandPhaseSample) => { activeLimitMs: number; reason?: string } } = {}): Promise<{ ok: boolean; output: string; elapsedMs: number;
   activeElapsedMs: number; admissionWaitMs: number; timedOut: boolean }> {
   const start = Date.now();
   const environment = spawnEnvironment(name, args, env);
@@ -424,8 +438,9 @@ export async function commandAsync(root: string, name: string, args: string[], t
     stdio: ['ignore', 'pipe', 'pipe'] });
   if (child.pid) trackCommandProcess(child.pid);
   let stdout = '', stderr = '', timedOut = false;
-  const trackAdmission = options.runDeadline !== undefined || env.REZICS_QA_MEMORY_EVENTS === '1';
+  const trackAdmission = options.runDeadline !== undefined || options.phaseDeadline !== undefined || env.REZICS_QA_MEMORY_EVENTS === '1';
   const waiting = new Set<string>();
+  const admissionSpans: { start: number; end: number }[] = [];
   let admissionStarted = 0, admissionWaitMs = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const observeAdmission = (line: string) => {
@@ -439,9 +454,13 @@ export async function commandAsync(root: string, name: string, args: string[], t
       waiting.add(event[2]!);
     } else {
       if (!waiting.delete(event[2]!)) return;
-      if (!waiting.size) admissionWaitMs += Date.now() - admissionStarted;
+      if (!waiting.size) {
+        const ended = Date.now();
+        admissionSpans.push({ start: admissionStarted, end: ended });
+        admissionWaitMs += ended - admissionStarted;
+      }
     }
-    if (options.runDeadline !== undefined) armTimer();
+    if (options.runDeadline !== undefined || options.phaseDeadline !== undefined) armTimer();
   };
   const observe = () => {
     let pending = '';
@@ -470,17 +489,64 @@ export async function commandAsync(root: string, name: string, args: string[], t
   };
   let force: ReturnType<typeof setTimeout> | undefined;
   let timeoutReason = '';
-  const expire = () => {
+  const expire = (reason?: string) => {
+    if (timedOut) return;
     timedOut = true;
-    timeoutReason = options.runDeadline !== undefined && Date.now() >= options.runDeadline
-      ? `${name} reached its run deadline` : `${name} timed out after ${timeoutMs} ms of active work`;
+    if (timer) clearTimeout(timer);
+    timer = undefined;
+    timeoutReason = reason ?? (options.runDeadline !== undefined && Date.now() >= options.runDeadline
+      ? `${name} reached its run deadline` : `${name} timed out after ${timeoutMs} ms of active work`);
     // Kill the process group, including an in-progress child stack:up. Otherwise
     // it could recreate containers while the runner resets the recorded stacks.
     terminate('SIGTERM');
-    force = setTimeout(() => terminate('SIGKILL'), commandStopGraceMs);
+    if (!force) force = setTimeout(() => terminate('SIGKILL'), commandStopGraceMs);
   };
   function armTimer(): void {
+    if (timedOut) return;
     if (timer) clearTimeout(timer);
+    if (options.phaseDeadline) {
+      const now = Date.now();
+      const admissionOpen = waiting.size > 0;
+      const activeElapsedMs = now - start - admissionWaitMs - (admissionOpen ? now - admissionStarted : 0);
+      if (options.runDeadline !== undefined && now >= options.runDeadline) {
+        expire(`${name} reached its run deadline`);
+        return;
+      }
+      const admission = admissionOpen ? [...admissionSpans, { start: admissionStarted, end: now }] : admissionSpans;
+      let phase: { activeLimitMs: number; reason?: string };
+      try {
+        phase = options.phaseDeadline({
+          activeElapsedMs, admissionOpen, observedAt: now, commandStartedAt: start, admission,
+        });
+      } catch {
+        expire(phaseDeadlineFailure);
+        return;
+      }
+      const reason = phase !== null && typeof phase === 'object' && typeof phase.reason === 'string' && phase.reason.length > 0
+        ? phase.reason : undefined;
+      if (reason !== undefined) {
+        expire(trustedPhaseReason.test(reason) ? reason : phaseDeadlineFailure);
+        return;
+      }
+      const limit = phase !== null && typeof phase === 'object' ? phase.activeLimitMs : undefined;
+      if (typeof limit !== 'number' || !Number.isFinite(limit) || limit < 0) {
+        expire(phaseDeadlineFailure);
+        return;
+      }
+      if (activeElapsedMs >= limit) {
+        expire(phaseDeadlineFailure);
+        return;
+      }
+      const remaining = admissionOpen ? Number.POSITIVE_INFINITY : limit - activeElapsedMs;
+      const runRemaining = options.runDeadline === undefined ? Number.POSITIVE_INFINITY : options.runDeadline - now;
+      const delay = Math.max(1, Math.min(remaining, runRemaining, 200));
+      if (!Number.isFinite(delay)) {
+        expire(phaseDeadlineFailure);
+        return;
+      }
+      timer = setTimeout(armTimer, delay);
+      return;
+    }
     const activeElapsed = Date.now() - start - admissionWaitMs;
     const remaining = waiting.size ? Infinity : timeoutMs - activeElapsed;
     const runRemaining = options.runDeadline === undefined ? Infinity : options.runDeadline - Date.now();

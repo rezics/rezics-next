@@ -72,7 +72,7 @@ import { ownerTierBudgetMs } from './owner-tier-budget.ts';
 import { assertQaResourceAllocation, integrationResourceClass, integrationTierBudget, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
 import {
   campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard, campaignShardActiveMs,
-  childStackCleanupCommand, currentSuppliedRunIds, openCampaignEvidence, phaseCommandOptions,
+  childStackCleanupCommand, currentSuppliedRunIds, openCampaignEvidence,
   type CampaignEvidenceRead, type CommandPhaseSample,
 } from './campaign-envelope.ts';
 
@@ -265,13 +265,14 @@ async function startRunStack(args: string[], budget: number, env: NodeJS.Process
 
 const release = options.tier || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 
-function campaignEvidenceRead(projectRunId: string, commandStartedAt: number, sample: CommandPhaseSample): CampaignEvidenceRead {
+function campaignEvidenceRead(projectRunId: string, sample: CommandPhaseSample): CampaignEvidenceRead {
   const evidencePath = join(directory, 'erasure-campaign-qualification.json');
-  const observedAt = Date.now();
+  const observedAt = sample.observedAt;
+  const commandStartedAt = sample.commandStartedAt;
   if (!existsSync(evidencePath)) {
     return {
       parsed: undefined, readError: false, modifiedAt: commandStartedAt, commandStartedAt,
-      projectRunId, activeElapsedMs: sample.activeElapsedMs, observedAt,
+      projectRunId, activeElapsedMs: sample.activeElapsedMs, observedAt, admission: sample.admission,
     };
   }
   let parsed: unknown, readError = false;
@@ -279,7 +280,7 @@ function campaignEvidenceRead(projectRunId: string, commandStartedAt: number, sa
   catch { readError = true; }
   return {
     parsed, readError, modifiedAt: statSync(evidencePath).mtimeMs, commandStartedAt,
-    projectRunId, activeElapsedMs: sample.activeElapsedMs, observedAt,
+    projectRunId, activeElapsedMs: sample.activeElapsedMs, observedAt, admission: sample.admission,
   };
 }
 
@@ -555,19 +556,25 @@ async function runShardWork(
     const campaign = campaignQualificationShard(batch);
     const commandStartedAt = Date.now();
     const evidenceWatch = openCampaignEvidence();
-    const phaseDeadline = (sample: CommandPhaseSample) => campaignPhaseDeadline(sample,
-      evidenceWatch.observe(campaignEvidenceRead(projectRunId, commandStartedAt, sample)));
+    let lastSample: CommandPhaseSample = {
+      activeElapsedMs: 0, admissionOpen: false, observedAt: commandStartedAt,
+      commandStartedAt, admission: [],
+    };
+    const phaseDeadline = (sample: CommandPhaseSample) => {
+      lastSample = sample;
+      return campaignPhaseDeadline(sample, evidenceWatch.observe(campaignEvidenceRead(projectRunId, sample)));
+    };
     const result = campaign
       ? await commandAsync(root, 'bun', ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
         Math.max(1, budget - activeTestMs()), testEnvironment(), noteMemory,
-        phaseCommandOptions({ runDeadline, phaseDeadline }))
+        { runDeadline, phaseDeadline })
       : await (startupProtocol ? withStartupSlot(testEnvironment(), runBatch, reserve)
         : runBatch(testEnvironment(), noteMemory));
     if (campaign) {
-      const sample = { activeElapsedMs: result.activeElapsedMs, admissionOpen: false };
+      const sample = { ...lastSample, activeElapsedMs: result.activeElapsedMs, admissionOpen: false, observedAt: Date.now() };
       const accepted = campaignCommandAccepted({
         exitOk: result.ok, timedOut: result.timedOut, sample,
-        evidence: evidenceWatch.observe(campaignEvidenceRead(projectRunId, commandStartedAt, sample), 'final'),
+        evidence: evidenceWatch.observe(campaignEvidenceRead(projectRunId, sample), 'final'),
       });
       if (!accepted.ok) commandOk = false;
       writeFileSync(join(directory, 'campaign-envelope.json'), `${JSON.stringify({

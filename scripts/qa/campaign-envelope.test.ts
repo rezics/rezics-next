@@ -1,13 +1,14 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'bun:test';
-import { commandAsync } from './core.ts';
+import { commandAsync, phaseDeadlineFailure } from './core.ts';
 import { cleanupQaStacks } from './stack-ownership.ts';
 import { projectName } from '../dev/config.ts';
 import {
+  CAMPAIGN_OPERATION_ACTIVE_MS, CAMPAIGN_PREPARATION_ACTIVE_MS,
   campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard, campaignShardActiveMs,
   childStackCleanupCommand, classifyCampaignEvidence, currentSuppliedRunIds, openCampaignEvidence,
-  phaseDeadlineArm,
+  preparationBoundaryActiveMs,
   type CampaignEvidenceRead, type CampaignEvidenceState, type CommandPhaseSample,
 } from './campaign-envelope.ts';
 
@@ -17,7 +18,9 @@ afterEach(() => {
 });
 
 function sample(activeElapsedMs: number, admissionOpen = false): CommandPhaseSample {
-  return { activeElapsedMs, admissionOpen };
+  return {
+    activeElapsedMs, admissionOpen, observedAt: activeElapsedMs, commandStartedAt: 0, admission: [],
+  };
 }
 
 function ready(reportedActiveMs: number, boundaryActiveMs: number): CampaignEvidenceState {
@@ -104,18 +107,28 @@ test('stale, malformed, and foreign evidence do not open the operation clock', (
     ...base, parsed: { projectRunId, preparation: { activeMs: 40_000 } }, readError: false, modifiedAt: 50_000,
   });
   expect(fresh.kind).toBe('ready');
-  if (fresh.kind === 'ready') {
-    expect(fresh.reportedActiveMs).toBe(40_000);
-    expect(fresh.boundaryActiveMs).toBe(50_000);
-    expect(fresh.boundaryActiveMs).not.toBe(40_000);
-    expect(fresh.boundaryActiveMs).not.toBe(49_000);
-  }
-  const wallGap = classifyCampaignEvidence({
-    ...base, parsed: { projectRunId, preparation: { activeMs: 40_000 } }, readError: false,
-    modifiedAt: 50_000, observedAt: 550_000, activeElapsedMs: 50_000,
+  if (fresh.kind === 'ready') expect(fresh.reportedActiveMs).toBe(40_000);
+  const started = 1_000;
+  const delayed = preparationBoundaryActiveMs({
+    activeElapsedMs: 180, observedAt: started + 180, modifiedAt: started + 100, commandStartedAt: started, admission: [],
   });
-  expect(wallGap.kind).toBe('ready');
-  if (wallGap.kind === 'ready') expect(wallGap.boundaryActiveMs).toBe(50_000);
+  expect(delayed).toBe(100);
+  expect(delayed).not.toBe(180);
+  expect(delayed).not.toBe(40_000);
+  const admitted = preparationBoundaryActiveMs({
+    activeElapsedMs: 100, observedAt: started + 500, modifiedAt: started + 100, commandStartedAt: started,
+    admission: [{ start: started + 100, end: started + 500 }],
+  });
+  expect(admitted).toBe(100);
+  expect(preparationBoundaryActiveMs({
+    activeElapsedMs: 50_000, observedAt: 550_000, modifiedAt: 50_000, commandStartedAt: started, admission: [],
+  })).toBeUndefined();
+  const inconsistent = openCampaignEvidence();
+  expect(inconsistent.observe({
+    ...base, parsed: { projectRunId, preparation: { activeMs: 40_000 } }, readError: false,
+    modifiedAt: 50_000, observedAt: 550_000, activeElapsedMs: 50_000, admission: [],
+  }).kind).toBe('refused');
+  expect(inconsistent.proof).toBeUndefined();
   expect(campaignPhaseDeadline(sample(50_000), { kind: 'refused' }).phase).toBe('preparation');
 });
 
@@ -212,7 +225,7 @@ function evidenceRead(input: {
   catch { readError = true; }
   return {
     parsed, readError, modifiedAt: statSync(input.path).mtimeMs, commandStartedAt: input.commandStartedAt,
-    projectRunId: input.projectRunId, activeElapsedMs: input.activeElapsedMs, observedAt: Date.now(),
+    projectRunId: input.projectRunId, activeElapsedMs: input.activeElapsedMs, observedAt: Date.now(), admission: [],
   };
 }
 
@@ -231,7 +244,12 @@ test('repeated qualification writes keep the first preparation boundary', async 
   expect(look(10_000).kind).toBe('absent');
   writeFileSync(evidencePath, JSON.stringify({ preparation, phases: {} }));
   const first = look(180_000);
-  expect(first).toEqual({ kind: 'ready', reportedActiveMs: 180_000, boundaryActiveMs: 180_000 });
+  expect(first.kind).toBe('ready');
+  if (first.kind !== 'ready') throw new Error('missing preparation proof');
+  const boundary = first.boundaryActiveMs;
+  expect(boundary).toBeLessThanOrEqual(180_000);
+  expect(boundary).toBeGreaterThan(180_000 - 1_000);
+  expect(boundary).not.toBe(180_000 + 360_001);
   await Bun.sleep(30);
   writeFileSync(evidencePath, JSON.stringify({
     preparation, phases: { 'copy-compact-index-0': 1 },
@@ -242,26 +260,26 @@ test('repeated qualification writes keep the first preparation boundary', async 
     phaseDetails: { 'copy-compact-index-0': { status: 'succeeded' } },
   }));
   const during = look(180_000 + 360_001);
-  expect(during).toEqual({ kind: 'ready', reportedActiveMs: 180_000, boundaryActiveMs: 180_000 });
-  const refused = campaignPhaseDeadline(sample(180_000 + 360_001), during);
+  expect(during).toEqual({ kind: 'ready', reportedActiveMs: 180_000, boundaryActiveMs: boundary });
+  const refused = campaignPhaseDeadline(sample(boundary + 360_001), during);
   expect(refused.phase).toBe('operation');
   expect(refused.reason).toBe('bun timed out after 360000 ms of active work');
   expect(refused.reason).not.toContain('preparation exceeded');
   writeFileSync(evidencePath, '{');
   const torn = look(180_000 + 400_000);
-  expect(torn).toEqual({ kind: 'ready', reportedActiveMs: 180_000, boundaryActiveMs: 180_000 });
-  expect(campaignPhaseDeadline(sample(180_000 + 360_001), torn).reason).toBe(
+  expect(torn).toEqual({ kind: 'ready', reportedActiveMs: 180_000, boundaryActiveMs: boundary });
+  expect(campaignPhaseDeadline(sample(boundary + 360_001), torn).reason).toBe(
     'bun timed out after 360000 ms of active work');
   writeFileSync(evidencePath, JSON.stringify({
     preparation, completedAt: new Date().toISOString(), fixtureBackupRetained: 'kept',
   }));
   const finalWrite = look(180_000 + 20_000, 'final');
-  expect(finalWrite).toEqual({ kind: 'ready', reportedActiveMs: 180_000, boundaryActiveMs: 180_000 });
-  expect(watch.proof?.boundaryActiveMs).toBe(180_000);
-  expect(campaignPhaseDeadline(sample(180_000 + 360_001), finalWrite).reason).toBe(
+  expect(finalWrite).toEqual({ kind: 'ready', reportedActiveMs: 180_000, boundaryActiveMs: boundary });
+  expect(watch.proof?.boundaryActiveMs).toBe(boundary);
+  expect(campaignPhaseDeadline(sample(boundary + 360_001), finalWrite).reason).toBe(
     'bun timed out after 360000 ms of active work');
   expect(campaignCommandAccepted({
-    exitOk: true, timedOut: false, evidence: finalWrite, sample: sample(180_000 + 360_001),
+    exitOk: true, timedOut: false, evidence: finalWrite, sample: sample(boundary + 360_001),
   })).toEqual({ ok: false, failure: 'operation' });
   writeFileSync(evidencePath, '{');
   const corrupt = look(700_000, 'final');
@@ -272,7 +290,7 @@ test('repeated qualification writes keep the first preparation boundary', async 
   expect(corruptDecision.reason).not.toContain('timed out after 360000');
   writeFileSync(evidencePath, JSON.stringify({ projectRunId, preparation }));
   expect(look(180_000).kind).toBe('contradicted');
-  expect(watch.proof).toEqual({ reportedActiveMs: 180_000, boundaryActiveMs: 180_000 });
+  expect(watch.proof).toEqual({ reportedActiveMs: 180_000, boundaryActiveMs: boundary });
 }, 10_000);
 
 test('a later foreign run or a changed preparation proof refuses and leaves the first boundary', () => {
@@ -289,71 +307,290 @@ test('a later foreign run or a changed preparation proof refuses and leaves the 
   writeFileSync(evidencePath, JSON.stringify({ projectRunId, preparation }));
   const first = look(100_000);
   expect(first.kind).toBe('ready');
+  if (first.kind !== 'ready') throw new Error('missing preparation proof');
+  const boundary = first.boundaryActiveMs;
   expect(campaignPhaseDeadline(sample(100_000), first).reason).toContain('preparation exceeded 600000');
   writeFileSync(evidencePath, JSON.stringify({ projectRunId, preparation, completedAt: new Date().toISOString() }));
   const rewritten = look(590_000);
-  expect(rewritten).toEqual({ kind: 'ready', reportedActiveMs: 600_001, boundaryActiveMs: 100_000 });
+  expect(rewritten).toEqual({ kind: 'ready', reportedActiveMs: 600_001, boundaryActiveMs: boundary });
   expect(campaignPhaseDeadline(sample(590_000), rewritten).reason).toContain('preparation exceeded 600000');
   writeFileSync(evidencePath, JSON.stringify({ preparation: { activeMs: 1 }, completedAt: new Date().toISOString() }));
   expect(look(120_000).kind).toBe('contradicted');
-  expect(watch.proof).toEqual({ reportedActiveMs: 600_001, boundaryActiveMs: 100_000 });
+  expect(watch.proof).toEqual({ reportedActiveMs: 600_001, boundaryActiveMs: boundary });
   const other = openCampaignEvidence();
   writeFileSync(evidencePath, JSON.stringify({ projectRunId, preparation: { activeMs: 20_000 } }));
-  expect(other.observe(evidenceRead({
+  const opened = other.observe(evidenceRead({
     path: evidencePath, projectRunId, commandStartedAt, activeElapsedMs: 20_000,
-  })).kind).toBe('ready');
+  }));
+  expect(opened.kind).toBe('ready');
+  if (opened.kind !== 'ready') throw new Error('missing preparation proof');
   writeFileSync(evidencePath, JSON.stringify({ runId: 'other-run', preparation: { activeMs: 20_000 } }));
   const foreign = other.observe(evidenceRead({
     path: evidencePath, projectRunId, commandStartedAt, activeElapsedMs: 700_000,
   }));
   expect(foreign.kind).toBe('contradicted');
   expect(campaignPhaseDeadline(sample(700_000), foreign).reason).toBe('bun campaign evidence was refused');
-  expect(other.proof).toEqual({ reportedActiveMs: 20_000, boundaryActiveMs: 20_000 });
+  expect(other.proof).toEqual({ reportedActiveMs: 20_000, boundaryActiveMs: opened.boundaryActiveMs });
   expect(campaignCommandAccepted({
     exitOk: true, timedOut: false, evidence: foreign, sample: sample(700_000),
   })).toEqual({ ok: false, failure: 'evidence' });
 });
 
-test('the staged phase timer fails closed and keeps wall, preparation, and operation reasons', () => {
-  let consulted = false;
-  const wall = phaseDeadlineArm({
-    now: 5_000, activeElapsedMs: 10, admissionOpen: true, runDeadline: 5_000,
-    timeoutMs: 360_000, commandName: 'bun',
-    decide: () => { consulted = true; return { activeLimitMs: 600_000 }; },
+test('commandAsync keeps preparation past the operation timeout and fails closed without echoing a callback error', async () => {
+  const secret = 'SUPER-SECRET-PHASE-LEAK';
+  let calls = 0;
+  const thrown = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(30_000)'], 30_000,
+    process.env, undefined, {
+      phaseDeadline: () => { calls += 1; throw new Error(secret); },
+    });
+  expect(thrown.timedOut).toBe(true);
+  expect(thrown.ok).toBe(false);
+  expect(calls).toBe(1);
+  expect(thrown.output).toContain(phaseDeadlineFailure);
+  expect(thrown.output).not.toContain(secret);
+  const nonfinite = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(30_000)'], 30_000,
+    process.env, undefined, { phaseDeadline: () => ({ activeLimitMs: Number.NaN }) });
+  expect(nonfinite.output).toContain(phaseDeadlineFailure);
+  expect(nonfinite.output).not.toContain('timed out after 360000');
+  const negative = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(30_000)'], 30_000,
+    process.env, undefined, { phaseDeadline: () => ({ activeLimitMs: -1 }) });
+  expect(negative.output).toContain(phaseDeadlineFailure);
+  expect(negative.output.match(/phase deadline failed/g)?.length).toBe(1);
+  const leaked = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(30_000)'], 30_000,
+    process.env, undefined, {
+      phaseDeadline: () => ({ activeLimitMs: 10_000, reason: secret }),
+    });
+  expect(leaked.output).toContain(phaseDeadlineFailure);
+  expect(leaked.output).not.toContain(secret);
+  let seenPastOperationTimeout = false;
+  const preparation = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(500)'], 360,
+    process.env, undefined, {
+      phaseDeadline: probe => {
+        const decision = campaignPhaseDeadline(probe, { kind: 'absent' });
+        if (probe.activeElapsedMs > 360) seenPastOperationTimeout = true;
+        return decision;
+      },
+    });
+  expect(preparation.ok).toBe(true);
+  expect(preparation.timedOut).toBe(false);
+  expect(seenPastOperationTimeout).toBe(true);
+  expect(preparation.output).not.toContain('timed out after');
+  expect(preparation.output).not.toContain('preparation exceeded');
+  const reportedPath = evidenceFile('reported');
+  const reportedWatch = openCampaignEvidence();
+  const reported = await commandAsync(import.meta.dir, 'bun', ['-e', `
+    const fs = require('node:fs');
+    fs.writeFileSync(process.env.EVIDENCE, JSON.stringify({ preparation: { activeMs: ${CAMPAIGN_PREPARATION_ACTIVE_MS + 1} } }));
+    await Bun.sleep(30_000);
+  `], 30_000, { ...process.env, EVIDENCE: reportedPath }, undefined, {
+    phaseDeadline: probe => campaignPhaseDeadline(probe, reportedWatch.observe(readEvidence('reported', probe))),
   });
-  expect(consulted).toBe(false);
-  expect(wall).toEqual({ expire: 'bun reached its run deadline' });
-  const thrown = phaseDeadlineArm({
-    now: 0, activeElapsedMs: Number.NaN, admissionOpen: false, timeoutMs: 360_000, commandName: 'bun',
-    decide: () => { throw new Error('Invalid campaign envelope clock'); },
+  expect(reported.timedOut).toBe(true);
+  expect(reported.output).toContain('bun preparation exceeded 600000 ms of active work');
+  expect(reported.output).not.toContain('timed out after 360000');
+  let forgottenCalls = 0;
+  const forgotten = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(30_000)'], 30_000,
+    process.env, undefined, {
+      phaseDeadline: () => { forgottenCalls += 1; return { activeLimitMs: 40 }; },
+    });
+  expect(forgotten.timedOut).toBe(true);
+  expect(forgotten.output).toContain(phaseDeadlineFailure);
+  expect(forgotten.output).not.toContain('timed out after');
+  expect(forgottenCalls).toBeGreaterThan(0);
+  expect(forgottenCalls).toBeLessThan(4);
+  const wall = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(30_000)'], 30_000,
+    process.env, undefined, {
+      runDeadline: Date.now() + 250,
+      phaseDeadline: () => ({ activeLimitMs: CAMPAIGN_PREPARATION_ACTIVE_MS }),
+    });
+  expect(wall.output).toContain('reached its run deadline');
+  expect(wall.output).not.toContain(phaseDeadlineFailure);
+}, 15_000);
+
+const runnerEvidence = new Map<string, string>();
+function evidenceFile(name: string): string {
+  const directory = mkdtempSync(join(import.meta.dir, '../../.temp/campaign-runner-'));
+  scratch.push(directory);
+  const path = join(directory, 'erasure-campaign-qualification.json');
+  runnerEvidence.set(name, path);
+  return path;
+}
+function readEvidence(name: string, probe: CommandPhaseSample): CampaignEvidenceRead {
+  const path = runnerEvidence.get(name)!;
+  let parsed: unknown, readError = false;
+  try { parsed = JSON.parse(readFileSync(path, 'utf8')); }
+  catch { readError = true; }
+  const exists = awaitFile(path);
+  return {
+    parsed: exists ? parsed : undefined,
+    readError: exists ? readError : false,
+    modifiedAt: exists ? statSync(path).mtimeMs : probe.commandStartedAt,
+    commandStartedAt: probe.commandStartedAt,
+    projectRunId: '20261008t000000-runner-f1',
+    activeElapsedMs: probe.activeElapsedMs,
+    observedAt: probe.observedAt,
+    admission: probe.admission,
+  };
+}
+function awaitFile(path: string): boolean {
+  try { statSync(path); return true; }
+  catch { return false; }
+}
+
+test('a late first read uses the evidence write, and later rewrites cannot move that boundary', async () => {
+  const path = evidenceFile('delay');
+  const projectRunId = '20261008t000000-runner-f1';
+  const watch = openCampaignEvidence();
+  let boundary: number | undefined;
+  let firstActive = 0;
+  let writeAt = 0;
+  const child = `
+    const fs = require('node:fs');
+    const started = Date.now();
+    while (Date.now() - started < 40) {}
+    fs.writeFileSync(process.env.EVIDENCE, JSON.stringify({
+      projectRunId: ${JSON.stringify(projectRunId)},
+      preparation: { activeMs: 20_000 },
+    }));
+    await Bun.sleep(420);
+    const current = JSON.parse(fs.readFileSync(process.env.EVIDENCE, 'utf8'));
+    current.completedAt = new Date().toISOString();
+    current.phases = { 'copy-compact-index-0': 1 };
+    fs.writeFileSync(process.env.EVIDENCE, JSON.stringify(current));
+    await Bun.sleep(250);
+  `;
+  const result = await commandAsync(import.meta.dir, 'bun', ['-e', child], 30_000,
+    { ...process.env, EVIDENCE: path }, undefined, {
+      phaseDeadline: probe => {
+        if (!awaitFile(path)) return { activeLimitMs: CAMPAIGN_PREPARATION_ACTIVE_MS };
+        const modifiedAt = statSync(path).mtimeMs;
+        if (writeAt === 0) writeAt = modifiedAt;
+        if (probe.observedAt < modifiedAt + 200) return { activeLimitMs: CAMPAIGN_PREPARATION_ACTIVE_MS };
+        const evidence = watch.observe(readEvidence('delay', probe));
+        if (evidence.kind === 'ready' && boundary === undefined) {
+          boundary = evidence.boundaryActiveMs;
+          firstActive = probe.activeElapsedMs;
+        }
+        return campaignPhaseDeadline(probe, evidence);
+      },
+    });
+  expect(result.ok).toBe(true);
+  expect(boundary).toBeDefined();
+  expect(firstActive - boundary!).toBeGreaterThan(150);
+  expect(boundary).not.toBe(firstActive);
+  const again = watch.observe(readEvidence('delay', {
+    activeElapsedMs: (boundary ?? 0) + 400, admissionOpen: false, observedAt: Date.now(),
+    commandStartedAt: Date.now() - 5_000, admission: [],
+  }), 'final');
+  expect(again).toEqual({ kind: 'ready', reportedActiveMs: 20_000, boundaryActiveMs: boundary });
+  const operationReason = campaignPhaseDeadline(
+    sample((boundary ?? 0) + CAMPAIGN_OPERATION_ACTIVE_MS + 1), again).reason;
+  expect(operationReason).toBe('bun timed out after 360000 ms of active work');
+  const killed = await commandAsync(import.meta.dir, 'bun', ['-e', 'await Bun.sleep(30_000)'], 30_000,
+    process.env, undefined, {
+      phaseDeadline: probe => probe.activeElapsedMs > 80
+        ? { activeLimitMs: (boundary ?? 0) + CAMPAIGN_OPERATION_ACTIVE_MS, reason: operationReason }
+        : { activeLimitMs: (boundary ?? 0) + CAMPAIGN_OPERATION_ACTIVE_MS },
+    });
+  expect(killed.timedOut).toBe(true);
+  expect(killed.output).toContain('bun timed out after 360000 ms of active work');
+  expect(killed.output.match(/timed out after 360000 ms of active work/g)?.length).toBe(1);
+}, 10_000);
+
+test('the runner refuses a foreign proof and keeps admission off the active clock', async () => {
+  const path = evidenceFile('foreign');
+  const projectRunId = '20261008t000000-runner-f1';
+  const watch = openCampaignEvidence();
+  const child = `
+    const fs = require('node:fs');
+    fs.writeFileSync(process.env.EVIDENCE, JSON.stringify({
+      projectRunId: ${JSON.stringify(projectRunId)}, preparation: { activeMs: 20_000 },
+    }));
+    await Bun.sleep(300);
+    fs.writeFileSync(process.env.EVIDENCE, JSON.stringify({
+      runId: 'other-run', preparation: { activeMs: 20_000 },
+    }));
+    await Bun.sleep(30_000);
+  `;
+  const foreign = await commandAsync(import.meta.dir, 'bun', ['-e', child], 30_000,
+    { ...process.env, EVIDENCE: path }, undefined, {
+      phaseDeadline: probe => campaignPhaseDeadline(probe, watch.observe(readEvidence('foreign', probe))),
+    });
+  expect(foreign.timedOut).toBe(true);
+  expect(foreign.output).toContain('bun campaign evidence was refused');
+  expect(foreign.output).not.toContain('preparation exceeded');
+  expect(foreign.output).not.toContain('timed out after 360000');
+  expect(watch.proof?.reportedActiveMs).toBe(20_000);
+  const admitted = await commandAsync(import.meta.dir, 'bun', ['-e', `
+    console.log('QA_MEMORY_WAIT_BEGIN 9-1');
+    await Bun.sleep(400);
+    console.log('QA_MEMORY_WAIT_END 9-1 400');
+  `], 250, process.env, undefined, {
+    phaseDeadline: () => ({ activeLimitMs: 5_000 }),
   });
-  expect(thrown).toEqual({ expire: 'Invalid campaign envelope clock' });
-  const nonfinite = phaseDeadlineArm({
-    now: 0, activeElapsedMs: 1_000, admissionOpen: false, timeoutMs: 360_000, commandName: 'bun',
-    decide: () => ({ activeLimitMs: Number.NaN }),
+  expect(admitted.ok).toBe(true);
+  expect(admitted.admissionWaitMs).toBeGreaterThanOrEqual(300);
+  expect(admitted.activeElapsedMs).toBeLessThan(250);
+  expect(admitted.elapsedMs).toBeGreaterThanOrEqual(admitted.admissionWaitMs);
+  const stalePath = evidenceFile('stale');
+  writeFileSync(stalePath, JSON.stringify({ preparation: { activeMs: 10 } }));
+  const staleTime = new Date(Date.now() - 60_000);
+  utimesSync(stalePath, staleTime, staleTime);
+  const staleWatch = openCampaignEvidence();
+  let staleKind = '';
+  const stale = await commandAsync(import.meta.dir, 'bun', ['-e', 'process.exit(0)'], 5_000,
+    process.env, undefined, {
+      phaseDeadline: probe => {
+        const evidence = staleWatch.observe({
+          parsed: JSON.parse(readFileSync(stalePath, 'utf8')), readError: false,
+          modifiedAt: statSync(stalePath).mtimeMs, commandStartedAt: probe.commandStartedAt,
+          projectRunId, activeElapsedMs: probe.activeElapsedMs, observedAt: probe.observedAt,
+          admission: probe.admission,
+        });
+        staleKind = evidence.kind;
+        return campaignPhaseDeadline(probe, evidence);
+      },
+    });
+  expect(stale.ok).toBe(true);
+  expect(staleKind).toBe('refused');
+  expect(staleWatch.proof).toBeUndefined();
+  const tornPath = evidenceFile('torn');
+  const tornWatch = openCampaignEvidence();
+  const tornChild = `
+    const fs = require('node:fs');
+    fs.writeFileSync(process.env.EVIDENCE, JSON.stringify({
+      projectRunId: ${JSON.stringify(projectRunId)}, preparation: { activeMs: 15_000 },
+    }));
+    await Bun.sleep(450);
+    fs.writeFileSync(process.env.EVIDENCE, '{');
+    await Bun.sleep(300);
+  `;
+  const torn = await commandAsync(import.meta.dir, 'bun', ['-e', tornChild], 30_000,
+    { ...process.env, EVIDENCE: tornPath }, undefined, {
+      phaseDeadline: probe => campaignPhaseDeadline(probe, tornWatch.observe(readEvidence('torn', probe))),
+    });
+  expect(torn.ok).toBe(true);
+  expect(torn.output).not.toContain('preparation exceeded');
+  expect(tornWatch.proof?.reportedActiveMs).toBe(15_000);
+  const tornFinal = tornWatch.observe(readEvidence('torn', {
+    activeElapsedMs: torn.activeElapsedMs, admissionOpen: false, observedAt: Date.now(),
+    commandStartedAt: Date.now() - 5_000, admission: [],
+  }), 'final');
+  expect(tornFinal.kind).toBe('contradicted');
+  const malformedPath = evidenceFile('malformed');
+  const malformedWatch = openCampaignEvidence();
+  let malformedKind = '';
+  const malformed = await commandAsync(import.meta.dir, 'bun', ['-e', `
+    const fs = require('node:fs');
+    fs.writeFileSync(process.env.EVIDENCE, JSON.stringify({ preparation: { activeMs: 'bad' } }));
+    await Bun.sleep(400);
+  `], 5_000, { ...process.env, EVIDENCE: malformedPath }, undefined, {
+    phaseDeadline: probe => {
+      const evidence = malformedWatch.observe(readEvidence('malformed', probe));
+      malformedKind = evidence.kind;
+      return campaignPhaseDeadline(probe, evidence);
+    },
   });
-  expect(nonfinite).toEqual({ expire: 'bun timed out after 360000 ms of active work' });
-  const preparation = phaseDeadlineArm({
-    now: 0, activeElapsedMs: 600_001, admissionOpen: false, timeoutMs: 360_000, commandName: 'bun',
-    decide: sample => campaignPhaseDeadline(sample, { kind: 'absent' }),
-  });
-  expect(preparation).toEqual({ expire: 'bun preparation exceeded 600000 ms of active work' });
-  const operation = phaseDeadlineArm({
-    now: 0, activeElapsedMs: 180_000 + 360_001, admissionOpen: false, timeoutMs: 360_000, commandName: 'bun',
-    decide: sample => campaignPhaseDeadline(sample, ready(180_000, 180_000)),
-  });
-  expect(operation).toEqual({ expire: 'bun timed out after 360000 ms of active work' });
-  const reasonWins = phaseDeadlineArm({
-    now: 0, activeElapsedMs: 1, admissionOpen: false, timeoutMs: 360_000, commandName: 'bun',
-    decide: () => ({ activeLimitMs: Number.POSITIVE_INFINITY, reason: 'bun preparation exceeded 600000 ms of active work' }),
-  });
-  expect(reasonWins).toEqual({ expire: 'bun preparation exceeded 600000 ms of active work' });
-  const paused = phaseDeadlineArm({
-    now: 0, activeElapsedMs: 700_000, admissionOpen: true, runDeadline: 10_000,
-    timeoutMs: 360_000, commandName: 'bun',
-    decide: sample => campaignPhaseDeadline(sample, { kind: 'absent' }),
-  });
-  expect(paused).toEqual({ waitMs: 200 });
-  expect(campaignPhaseDeadline(sample(600_000), { kind: 'absent' }).reason).toBeUndefined();
-  expect(campaignPhaseDeadline(sample(200_000 + 360_000), ready(200_000, 200_000)).reason).toBeUndefined();
-});
+  expect(malformed.ok).toBe(true);
+  expect(malformedKind).toBe('refused');
+}, 15_000);
