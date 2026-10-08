@@ -1,0 +1,30 @@
+// Machine-drafted; needs native review.
+import { insert } from 'native-i18n';
+
+export default {
+  region: 'Votre bannissement',
+  title: 'Vous êtes banni·e de cette communauté',
+  endedTitle: 'Ce bannissement est terminé',
+  permanent: 'Ce bannissement n’a pas de fin.',
+  until: insert('Ce bannissement prend fin le {{date}}.', { date: String }),
+  ended: insert('Ce bannissement a pris fin le {{date}}.', { date: String }),
+  recorded: insert('Banni·e le {{date}}.', { date: String }),
+  reasonLabel: 'Motif indiqué',
+  appealTitle: 'Faire appel de ce bannissement',
+  appealHelp: 'Vous ne pouvez faire appel qu’une fois. Écrivez ce que les modérateurs doivent reconsidérer.',
+  statementLabel: 'Votre message',
+  statementHint: '2 000 caractères au plus.',
+  send: 'Envoyer l’appel',
+  statementEmpty: 'Écrivez ce qu’il faut reconsidérer.',
+  statementLong: 'Restez dans la limite de 2 000 caractères.',
+  sendFailed: 'L’appel n’a pas été envoyé. Votre message est toujours là.',
+  receivedTitle: 'Appel reçu',
+  receivedBody: 'Les modérateurs ont votre message. Ce bannissement n’accepte pas un second appel.',
+  statementHeading: 'Ce que vous avez envoyé',
+  upheldTitle: 'Bannissement maintenu',
+  upheldBody: 'Les modérateurs ont maintenu ce bannissement.',
+  reversedTitle: 'Décision annulée',
+  reversedBody: 'Les modérateurs ont annulé la décision. Vous restez banni·e tant qu’une personne ne lève pas le bannissement.',
+  decided: insert('Décidé le {{date}}.', { date: String }),
+  sharedLabel: 'Ce qu’ils ont partagé',
+};

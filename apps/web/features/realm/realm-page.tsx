@@ -34,6 +34,9 @@ import { PositionBar } from '../wiki/position-bar.tsx';
 import { withContinuity } from '../wiki/continuity.ts';
 import { ExecutionNotice, ZoneFrame, ZoneMasthead } from '../zones/zone-frame.tsx';
 import { type AdaptContext, mainExecution, zoneImage, zoneText } from './adapt.ts';
+import { RealmBanPanel } from '../realm-appeal/panel.tsx';
+import { readOwnRealmBan } from '../realm-appeal/read.ts';
+import type { BanReading } from '../realm-appeal/reading.ts';
 import { RealmMembership } from './membership.tsx';
 import { type Membership, readMembership } from './membership-state.ts';
 import type { RealmMessages } from './messages.ts';
@@ -85,6 +88,8 @@ export interface RealmView {
   mounts: readonly ZoneMount[];
   /** The signed-in reader's membership and follow; null signed out. */
   membership: Membership | null;
+  /** The signed-in member's own ban, when Main can tell them about it. */
+  ban: BanReading | null;
   messages: RealmMessages;
   zoneMessages: ZoneMessages;
 }
@@ -141,11 +146,12 @@ export async function loadRealmView(
     realmReader(),
   ]);
   if (realm.kind !== 'realm') return realm;
-  const [read, membership] = await Promise.all([
+  const [read, membership, ban] = await Promise.all([
     surface === 'site' && realm.zone ? readPresentation(realm.zone.id) : null,
     reader.actingSubject
       ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
       : null,
+    reader.actingSubject ? readOwnRealmBan(realm.header.id, reader.actingSubject) : null,
   ]);
   if (surface === 'site' && (!read || !read.ok)) {
     if (read && !read.ok && read.failure === 'missing') return { kind: 'missing' };
@@ -224,6 +230,7 @@ export async function loadRealmView(
       avatarQuery: reader.avatarQuery,
     },
     membership,
+    ban,
     mounts,
     context: {
       locale,
@@ -395,6 +402,8 @@ export async function RealmFrame({
               showDesignHref={showDesign}
               messages={zoneMessages}
             />
+            {view.ban ? <RealmBanPanel reading={view.ban} realm={realm.header.id} locale={locale}
+              messages={await getMessages('realmAppeal', locale)} /> : null}
             {realm.header.listing === 'unlisted' && discovery ? (
               <UnlistedSpaceNotice locale={locale} discovery={discovery} discoveryMetadata={false} />
             ) : null}

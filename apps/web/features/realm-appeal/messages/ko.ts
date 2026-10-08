@@ -1,0 +1,30 @@
+// Machine-drafted; needs native review.
+import { insert } from 'native-i18n';
+
+export default {
+  region: '내 차단',
+  title: '이 커뮤니티에서 차단되었어요',
+  endedTitle: '이 차단은 끝났어요',
+  permanent: '이 차단에는 끝나는 날이 없어요.',
+  until: insert('이 차단은 {{date}}에 끝나요.', { date: String }),
+  ended: insert('이 차단은 {{date}}에 끝났어요.', { date: String }),
+  recorded: insert('{{date}}에 차단되었어요.', { date: String }),
+  reasonLabel: '기록된 이유',
+  appealTitle: '이 차단에 이의 제기',
+  appealHelp: '이의 제기는 한 번만 할 수 있어요. 운영자가 다시 살펴봐야 할 점을 적어 주세요.',
+  statementLabel: '나의 설명',
+  statementHint: '2,000자까지.',
+  send: '이의 제기 보내기',
+  statementEmpty: '다시 살펴봐야 할 점을 적어 주세요.',
+  statementLong: '2,000자 이내로 적어 주세요.',
+  sendFailed: '이의 제기를 보내지 못했어요. 적은 내용은 그대로 있어요.',
+  receivedTitle: '이의 제기를 받았어요',
+  receivedBody: '운영자가 설명을 받았어요. 이 차단에는 두 번째 이의 제기를 보낼 수 없어요.',
+  statementHeading: '보낸 내용',
+  upheldTitle: '차단이 유지되었어요',
+  upheldBody: '운영자가 이 차단을 유지했어요.',
+  reversedTitle: '결정이 철회되었어요',
+  reversedBody: '운영자가 결정을 철회했어요. 누군가 차단을 해제할 때까지는 참여할 수 없어요.',
+  decided: insert('{{date}}에 결정되었어요.', { date: String }),
+  sharedLabel: '알려 준 내용',
+};
