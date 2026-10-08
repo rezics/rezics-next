@@ -35,27 +35,38 @@ function same(label: string, actual: unknown, expected: unknown): void {
   }
 }
 
+export interface FixtureSampleCall {
+  index: number;
+  operation: 'work-revision' | 'main-revision' | 'access-grant' | 'content-revision';
+  target: string;
+}
+
 /** Keyed exact reads of the manifest samples through Main, Access and Content owners; no scan. */
 export async function checkSamples(apps: Record<string, string>, manifest: FixtureManifestCore,
-  pools: { access: Pool; content: Pool }): Promise<number> {
+  pools: { access: Pool; content: Pool },
+  observe?: <T>(call: FixtureSampleCall, read: () => Promise<T>) => Promise<T>): Promise<number> {
   const env = workEnvironment(apps, manifest.lineage);
   const content = new ContentCore(pools.content);
   const position = { datasetId: 'product', dataEpoch: manifest.lineage.dataEpoch, sequence: IMPORT_SEQUENCE };
   for (const sample of manifest.samples) {
-    const work = await readExactWorkRevision(env, sample.workRevision, async id => id === sample.work);
+    const read = <T>(operation: FixtureSampleCall['operation'], target: string, work: () => Promise<T>) =>
+      observe ? observe({ index: sample.index, operation, target }, work) : work();
+    const work = await read('work-revision', sample.workRevision,
+      () => readExactWorkRevision(env, sample.workRevision, async id => id === sample.work));
     same(`sample ${sample.index} Work revision`, work, { revision: sample.workRevision, work: sample.work,
       operation: manifest.importOperation, mainVersion: sample.mainVersion, title: sample.title,
       language: 'en', semanticTypes: sample.semanticTypes, sourcePosition: position });
-    const main = await readExactMainRevision(env, sample.mainVersion, sample.mainRevision,
-      async id => id === sample.work);
+    const main = await read('main-revision', sample.mainRevision,
+      () => readExactMainRevision(env, sample.mainVersion, sample.mainRevision, async id => id === sample.work));
     same(`sample ${sample.index} MainVersion revision`, main, { revision: sample.mainRevision,
       mainVersion: sample.mainVersion, work: sample.work, operation: manifest.importOperation,
       hostingPolicy: 'metadata-only', defaultSelection: null, defaultSelections: {}, sourcePosition: position });
-    const grant = await pools.access.query(`SELECT 1 FROM access.permission_grant
+    const grant = await read('access-grant', sample.agent, () => pools.access.query(`SELECT 1 FROM access.permission_grant
       WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'work.read' AND active
-        AND valid_until > clock_timestamp()`, [sample.agent, `work:read:${sample.work}`]);
+        AND valid_until > clock_timestamp()`, [sample.agent, `work:read:${sample.work}`]));
     if (grant.rowCount !== 1) throw new Error(`sample ${sample.index} Agent read grant is missing`);
-    const [exact] = await content.readExactBatch([sample.contentRevision], async ids => new Set(ids));
+    const [exact] = await read('content-revision', sample.contentRevision,
+      () => content.readExactBatch([sample.contentRevision], async ids => new Set(ids)));
     if (exact?.status !== 'available') throw new Error(`sample ${sample.index} Content revision is ${exact?.status}`);
     same(`sample ${sample.index} Content revision`, { resource: exact.reference.resourceId,
       variant: exact.reference.variantId, body: exact.body }, { resource: sample.work,
