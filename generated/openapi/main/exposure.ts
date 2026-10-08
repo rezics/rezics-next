@@ -722,6 +722,7 @@ export const operationExposures = {
   "postV1Zones": "public",
   "postV1ZonesByIdCampaign-art": "public",
   "postV1ZonesByIdMounts": "public",
+  "postV1ZonesByIdRealm-attachment-withdrawals": "public",
   "postV1ZonesByIdRecoveries": "public",
   "postV1ZonesByIdRetirements": "public",
   "postV1ZonesByIdSite-publications": "public",
