@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { realmVisibilityFixture } from '../../../services/main/tests/realm-visibility-fixture.ts';
 import { encodeReadCursor } from '../../../services/main/src/modules/work/read-session.ts';
+import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { readRealmPolicy } from '../../../services/main/src/modules/space/policy.ts';
 import { AccessMembershipConsents } from '../../../services/main/src/modules/access/membership-consents.ts';
 import { AdmissionDenied } from '../../../services/main/src/modules/access/admission.ts';
@@ -266,7 +267,7 @@ test('G-298: policy delivery recovers ambiguous outcomes and stale concurrent ch
     const command = h.fuseki.commandWithReceipt.bind(h.fuseki);
     let block = true;
     h.fuseki.commandWithReceipt = async envelope => {
-      if (block && envelope.receipt.startsWith('urn:rezics:realm-policy:')) throw new Error('graph unavailable');
+      if (block && envelope.update.includes('rv:realmPolicyHead')) throw new Error('graph unavailable');
       return command(envelope);
     };
     expect((await h.call('PUT', `${h.root}/settings`, input, h.actor, key)).status).toBe(503);
@@ -279,7 +280,7 @@ test('G-298: policy delivery recovers ambiguous outcomes and stale concurrent ch
     // The graph commits but transport loses the response: the exact receipt proves delivery.
     h.fuseki.commandWithReceipt = async envelope => {
       const result = await command(envelope);
-      if (envelope.receipt.startsWith('urn:rezics:realm-policy:')) throw new Error('response lost after commit');
+      if (envelope.update.includes('rv:realmPolicyHead')) throw new Error('response lost after commit');
       return result;
     };
     await h.policy('restricted', 'mandatory');
@@ -302,7 +303,9 @@ test('G-298: a changed review policy cancels an unfinished automatic adoption; c
     h.fuseki.commandWithReceipt = async envelope => {
       if (change && envelope.update.includes('RealmSubmissionSelectedEvent')) {
         change = false;
-        await h.policy('public', 'mandatory');
+        // This settings change is the interruption, so it must not spend the submission's read budget.
+        await fusekiReadBudget.run({ signal: AbortSignal.timeout(30_000), callsLeft: 128,
+          bytesLeft: 1024 * 1024 }, () => h.policy('public', 'mandatory'));
       }
       return command(envelope);
     };

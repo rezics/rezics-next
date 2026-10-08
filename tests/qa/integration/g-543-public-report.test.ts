@@ -83,7 +83,7 @@ test('G-543/G-564: an exhausted writer files a real public report, reads its sta
     await json(await call('POST', `/v1/public-reports/${signed.caseId}/correspondence`, {
       kind: 'appeal', statement: 'Independent appeal intake', contentLanguage: 'sw-KE',
     }, f.account.tokenA, signed.credential), 200);
-    expect(await json(await status(), 200)).toMatchObject({ steps: expect.arrayContaining([
+    expect(await json(await status(), 200)).toMatchObject({ items: expect.arrayContaining([
       expect.objectContaining({ kind: 'appeal', statement: 'Independent appeal intake' }),
     ]) });
     // Both Account denial and outage are exercised through the real G-564

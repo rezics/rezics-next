@@ -39,12 +39,19 @@ test('G-915: interrupted v2 policy resumes at startup; acknowledgement loss, con
       settings: { visibility: 'private' as const, reviewMode: 'open' as const, reviewRequired: false,
         whoMaySubmit: 'granted' as const, rules: [] } };
     let commands = 0;
+    // Creation already publishes a receipt head. An interrupted settings
+    // command must leave that head in place until recovery delivers.
+    const createdPolicy = await readRealmPolicy(s.env, realm);
+    expect(createdPolicy?.revision).toMatch(/^urn:rezics:receipt:[0-9a-f]{64}$/);
     s.fuseki.commandWithReceipt = async () => { throw new Error('Interrupted after Access commit'); };
     const key = randomUUID();
     await expect(admin.changeSettings(owner.principal, realm, input, key, s.env)).rejects.toThrow('pending');
     const pending = (await pendingRealmPolicies(s.accessPool)).items.find(item => item.realm === realm)!;
     expect(pending).toMatchObject({ generation: '1', visibility: 'private', review_mode: 'open' });
-    expect((await readRealmPolicy(s.env, realm))!.revision).toBeNull();
+    const held = await readRealmPolicy(s.env, realm);
+    expect(held).toMatchObject({ revision: createdPolicy!.revision, visibility: createdPolicy!.visibility,
+      reviewMode: createdPolicy!.reviewMode });
+    expect(held!.revision).not.toBe(policyHead(pending.receipt_id));
     s.fuseki.commandWithReceipt = async envelope => { commands++; return graphCommand(envelope); };
     const worker = new RealmPolicyRecoveryWorker(s.accessPool, s.env);
     worker.start();
@@ -132,7 +139,7 @@ test('G-915: a failing publication remains observable and cannot starve the next
     expect(pending.items).toHaveLength(1);
     expect(pending.nextCursor).toBe(firstRealm);
     const first = await recoverRealmPolicies(s.accessPool, s.env, undefined, 1);
-    expect(first.items).toMatchObject([{ realm: firstRealm, status: 'pending', error: 'Realm policy delivery is pending' }]);
+    expect(first.items).toEqual([{ realm: firstRealm, receiptId: pending.items[0]!.receipt_id, status: 'pending' }]);
     expect(first.nextCursor).toBe(firstRealm);
     const second = await recoverRealmPolicies(s.accessPool, s.env, first.nextCursor!, 1);
     expect(second.items).toMatchObject([{ realm: secondRealm, status: 'completed' }]);

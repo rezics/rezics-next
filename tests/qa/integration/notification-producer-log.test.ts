@@ -47,9 +47,9 @@ async function append(client: Pool | PoolClient, event = randomUUID()): Promise<
 function producer(inbox: (event: NotificationEvent) => Promise<unknown> = async () => []) {
   const recipient = randomUUID();
   const actor = `https://rezics.com/id/${randomUUID()}`;
-  const source = {
-    connect: () => access.connect(),
-    query: async (sql: string, args: unknown[]) => {
+  // Decision lookup runs on the cursor transaction's client, not the pool.
+  const adapt = (query: (sql: string, args: unknown[]) => Promise<unknown>) =>
+    async (sql: string, args: unknown[]) => {
       if (sql.includes('FROM access.moderation_decision'))
         return {
           rows: [
@@ -65,8 +65,18 @@ function producer(inbox: (event: NotificationEvent) => Promise<unknown> = async 
         };
       if (sql.includes('FROM access.governance_report')) return { rows: [] };
       if (sql.includes('FROM access.safety_party_notice')) return { rows: [{ id: recipient }] };
-      return access.query(sql, args);
+      return query(sql, args);
+    };
+  const source = {
+    connect: async () => {
+      const client = await access.connect();
+      return new Proxy(client, { get(target, property, receiver) {
+        if (property === 'query') return adapt(target.query.bind(target));
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === 'function' ? value.bind(target) : value;
+      } });
     },
+    query: adapt((sql, args) => access.query(sql, args)),
   } as unknown as Pool;
   return new NotificationProducer(
     source,
