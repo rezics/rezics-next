@@ -4,10 +4,10 @@ import { discussionParts } from '../src/modules/realm-reply/discussion-text.ts';
 import { readRealmThread, readRealmThreads } from '../src/modules/realm-reply/thread-read.ts';
 import { REALM_THREAD_COST } from '../src/modules/realm-reply/thread-contract.ts';
 import { bestKey } from '../src/modules/feed/ranking.ts';
-import type { RealmRankKey } from '../src/modules/rankings/realm-threads.ts';
+import { RealmRankingsIncomplete, type RealmRankKey } from '../src/modules/rankings/realm-threads.ts';
 import type { PlacedHead, ThreadNode, ThreadVote } from '../src/modules/realm-reply/thread-store.ts';
 import { RV } from '../src/modules/work/activate.ts';
-import { decodeReadCursor, WorkReadMissing, WorkReadMoved, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { decodeReadCursor, WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
 // Realm threads over an in-memory graph, Content and vote projection: the
 // fakes answer the reads' batches, so the tests pin which replies a Realm
@@ -35,7 +35,7 @@ interface Placed { id: number; parent?: number; author: number; minutes?: number
 }
 
 export function world(placed: Placed[], options: { privateRealm?: boolean; votes?: Record<number, Partial<ThreadVote>>;
-  truncated?: boolean; countsComplete?: boolean; blocked?: number[];
+  truncated?: boolean; countsComplete?: boolean; blocked?: number[]; rankingsBehind?: boolean;
   } = {}) {
   if (options.truncated) placed = [...placed, ...Array.from({ length: REALM_THREAD_COST.replies + 2 },
     (_, index) => ({ id: 1000 + index, parent: placed[0]!.id, author: 1 }))];
@@ -172,6 +172,7 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
           limit: number,
           after?: RealmRankKey & { revision: string },
         ) => {
+          if (options.rankingsBehind) throw new RealmRankingsIncomplete();
           const revision = String(
             1 +
               Object.values(options.votes ?? {}).reduce(
@@ -374,6 +375,17 @@ test('Best weighs votes against age, Top counts votes in the period, and a reord
   const moved = world(discussions, { votes: { 1: { score: 0 }, 2: { score: 50 } } });
   await expect(readRealmThreads(moved.session, realm, { sort: 'top', window: 'all', limit: 1, now,
     cursor: all.nextCursor! })).rejects.toBeInstanceOf(WorkReadMoved);
+});
+
+test('A new Realm with no discussions is empty under Best and Top while its rankings catch up; one with discussions waits', async () => {
+  for (const sort of ['best', 'top'] as const) {
+    const empty = await readRealmThreads(world([], { rankingsBehind: true }).session, realm, { sort, now });
+    expect(empty).toMatchObject({ profile: 'realm-threads-v1', realm, sort, items: [], nextCursor: null });
+    await expect(readRealmThreads(world(discussions, { rankingsBehind: true }).session, realm, { sort, now }))
+      .rejects.toBeInstanceOf(WorkReadUnavailable);
+  }
+  // Only the unfinished projection is excused: a finished one is answered by the ranking itself.
+  expect(await readRealmThreads(world([]).session, realm, { sort: 'best', now })).toMatchObject({ items: [] });
 });
 
 test('a discussion is titled by its first line, and a first line too long for a title loses no word', () => {

@@ -92,6 +92,11 @@ export async function ensureRealmHistoryPopulation(
   return population;
 }
 
+/** The projection is open but has not reached the graph position being read. */
+export class RealmRankingsIncomplete extends WorkReadUnavailable {
+  constructor() { super('Realm rankings are projecting'); }
+}
+
 /** Reads one maintained population, without visiting an expired or denied
  * prefix. The source cut and page share one statement snapshot. A continuation
  * already admitted that population revision; pending source events cannot move
@@ -167,7 +172,7 @@ export async function realmRankPage(
   ).rows[0];
   if (!row?.open) throw new WorkReadUnavailable('Realm rankings are projecting');
   if (after && after.revision !== row.revision) throw new WorkReadMoved('Thread ranking changed');
-  if (!row.complete) throw new WorkReadUnavailable('Realm rankings are projecting');
+  if (!row.complete) throw new RealmRankingsIncomplete();
   return { revision: row.revision, rows: row.rows };
 }
 

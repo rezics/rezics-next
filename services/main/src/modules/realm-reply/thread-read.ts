@@ -17,7 +17,7 @@ import { disclosureViewer } from '../disclosure/viewer.ts';
 import { hasDocumentContent, type DocumentSnapshot } from '@rezics/document';
 import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
 import { realmHistoryOriginFilter } from '../realm-admin/history.ts';
-import type { RealmRankKey, RealmRankPage } from '../rankings/realm-threads.ts';
+import { RealmRankingsIncomplete, type RealmRankKey, type RealmRankPage } from '../rankings/realm-threads.ts';
 import { retainedMembershipBasis } from '../read-basis/membership.ts';
 
 type Sort = Static<typeof threadSort>;
@@ -157,6 +157,11 @@ async function blockedAuthors(session: WorkReadSession, authors: readonly string
   return blocked;
 }
 
+/** Whether the graph holds no placement head in this Realm at all. */
+async function realmHasNoThreads(session: WorkReadSession, realm: string): Promise<boolean> {
+  return (await session.query(`SELECT ?id WHERE { ${headPattern(realm)} } LIMIT 1`, 1)).length === 0;
+}
+
 /**
  * One page of a Realm's discussions: replies placed in the Realm that answer
  * no other reply. New follows placement order; Best (Home's vote and age
@@ -221,8 +226,17 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
       throw new WorkReadInvalid('Thread cursor is invalid');
     }
   }
-  const rankedPage: RealmRankPage | null = sort === 'new' ? null
-      : await threads.rankedPage(session, realm, sort, window, limit, after, population);
+  let rankedPage: RealmRankPage | null = null;
+  if (sort !== 'new') {
+    try { rankedPage = await threads.rankedPage(session, realm, sort, window, limit, after, population); }
+    catch (error) {
+      // A Realm with no placed reply is empty under every order, so a ranking
+      // that has not caught up with a just-created Realm has nothing to hold back.
+      if (!(error instanceof RealmRankingsIncomplete) || cursor || !await realmHasNoThreads(session, realm)) throw error;
+      retained.assertLive();
+      return { profile: 'realm-threads-v1' as const, realm, sort, window, ...pageResult(session, [], null) };
+    }
+  }
   const selected = rankedPage?.rows.slice(0, limit);
   const epochs = sort === 'new' ? await readEpochOrder(session) : '';
   const size = limit + 1;
