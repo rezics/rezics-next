@@ -230,7 +230,8 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
         const statements = await json<{ groups: { items: { kind: string; statement?: string; value: { lexical?: string } }[] }[];
           count: { value: number }; nextCursor: string | null }>(await read(statementPath, position, signed));
         const items = statements.groups.flatMap(group => group.items);
-        expect(items.filter(item => item.kind === 'statement').map(item => item.statement)).toEqual(position === 'all'
+        // Seek pages order by predicate, meaning and id; this checks which statements each position reveals.
+        expect(items.filter(item => item.kind === 'statement').map(item => item.statement).sort()).toEqual(position === 'all'
           ? [earlyFact.statement, lateFact.statement].sort() : [earlyFact.statement]);
         expect(items.some(item => item.value.lexical === alias.value.lexical)).toBe(position === 'all');
         expect(statements.count.value).toBe(items.length); expect(statements.nextCursor).toBeNull(); exercised.add('statements');
