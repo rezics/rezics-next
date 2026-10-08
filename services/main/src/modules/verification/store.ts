@@ -4,7 +4,7 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { LINEAGE_BUDGET, LINEAGE_EDGE_BUDGET, type LineageLink, type LineageProof } from './analysis.ts';
-import { verificationLimits } from './schema.ts';
+import { evidenceCoordinateKeys, evidenceDigestKeys, evidenceSourceTextKeys, verificationLimits } from './schema.ts';
 import {
   ASSESSMENT_PRODUCER_COST,
   type AssessmentProducerPermit,
@@ -363,6 +363,61 @@ export interface SummaryState {
   pendingWork: boolean;
 }
 
+const COORDINATE = new Set<string>(evidenceCoordinateKeys);
+const DIGEST_KEY = new Set<string>(evidenceDigestKeys);
+const SOURCE_KEY = new Set<string>(evidenceSourceTextKeys);
+const DIGEST_VALUE = /^[0-9a-f]{64}$/;
+
+function coordinateNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 2_147_483_647;
+}
+
+function assertRange(value: unknown): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new VerificationInvalid('content-bound selector field is invalid');
+  }
+  const range = value as Record<string, unknown>;
+  if (Object.keys(range).length !== 2 || !coordinateNumber(range.start) || !coordinateNumber(range.end)
+    || range.end < range.start) {
+    throw new VerificationInvalid('content-bound selector field is invalid');
+  }
+}
+
+/** Content-bound selectors admit source text, numeric coordinates and validated digests only. */
+function assertContentBoundSelector(selector: Record<string, unknown>): void {
+  if (!selector || typeof selector !== 'object' || Array.isArray(selector)) {
+    throw new VerificationInvalid('content-bound selector field is invalid');
+  }
+  for (const [key, value] of Object.entries(selector)) {
+    if (SOURCE_KEY.has(key)) {
+      if (typeof value !== 'string' || value.length < 1 || value.length > 4096) {
+        throw new VerificationInvalid('content-bound selector field is invalid');
+      }
+    } else if (DIGEST_KEY.has(key)) {
+      if (typeof value !== 'string' || !DIGEST_VALUE.test(value)) {
+        throw new VerificationInvalid('content-bound selector field is invalid');
+      }
+    } else if (key === 'range') {
+      assertRange(value);
+    } else if (key === 'ranges') {
+      if (!Array.isArray(value) || value.length > 32) {
+        throw new VerificationInvalid('content-bound selector field is invalid');
+      }
+      for (const range of value) assertRange(range);
+    } else if (key === 'positions') {
+      if (!Array.isArray(value) || value.length > 64 || value.some(item => !coordinateNumber(item))) {
+        throw new VerificationInvalid('content-bound selector field is invalid');
+      }
+    } else if (!COORDINATE.has(key) || !coordinateNumber(value)) {
+      throw new VerificationInvalid('content-bound selector has an unclassified field');
+    }
+  }
+}
+
+function contentBoundSelectorHasSource(selector: Record<string, unknown>): boolean {
+  return evidenceSourceTextKeys.some(key => Object.hasOwn(selector, key));
+}
+
 function checkItems(items: readonly EvidenceItemInput[]) {
   if (items.length > verificationLimits.evidenceItems) {
     throw new VerificationInvalid('evidence manifest exceeds the admitted item ceiling');
@@ -374,6 +429,8 @@ function checkItems(items: readonly EvidenceItemInput[]) {
       || JSON.stringify(item.selector).length > 4096) {
       throw new VerificationInvalid('evidence item needs exactly one bounded anchor');
     }
+    // Observation and graph selectors stay opaque. Only a Content revision has the fixed shape.
+    if (item.contentRevision) assertContentBoundSelector(item.selector);
   }
 }
 
@@ -1120,9 +1177,26 @@ export class VerificationStore {
 
   // -------------------------------------------------------------- evidence
 
+  /** Share-lock cited revisions so an erasure's update lock either sees this insert or is seen by it. */
+  private async lockContentRevisions(client: PoolClient, items: readonly EvidenceItemInput[]): Promise<void> {
+    const revisions = [...new Set(items.flatMap(item => item.contentRevision ? [item.contentRevision] : []))].sort();
+    if (!revisions.length) return;
+    const locked = await client.query<{ id: string; availability: string }>(
+      `SELECT r.id, r.availability FROM content.revision r
+       WHERE r.id = ANY($1::uuid[]) ORDER BY r.id FOR SHARE OF r`, [revisions]);
+    if (locked.rowCount !== revisions.length) throw new VerificationInvalid('content revision is unavailable');
+    const erased = new Set(locked.rows.filter(row => row.availability === 'erased').map(row => row.id));
+    for (const item of items) {
+      if (item.contentRevision && erased.has(item.contentRevision) && contentBoundSelectorHasSource(item.selector)) {
+        throw new VerificationInvalid('erased revision cannot gain source text');
+      }
+    }
+  }
+
   private async insertManifest(client: PoolClient, principal: string, claim: string, claimRevision: string,
     purpose: 'claim-head' | 'challenge', predecessor: string | null, items: readonly EvidenceItemInput[],
     operation: string, id: string): Promise<void> {
+    await this.lockContentRevisions(client, items);
     await client.query(`INSERT INTO verification.evidence_set_revision (id, claim, claim_revision, purpose,
       predecessor, item_count, manifest_digest, operation_id, principal_id)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [id, claim, claimRevision, purpose, predecessor,
@@ -1168,8 +1242,13 @@ export class VerificationStore {
   private async readEvidenceWith(client: PoolClient, id: string): Promise<EvidenceRevision> {
     const row = (await client.query('SELECT * FROM verification.evidence_set_revision WHERE id = $1', [id])).rows[0];
     if (!row) throw new VerificationMissing('evidence revision is unavailable');
-    const items = (await client.query(`SELECT i.*, c.availability AS content_availability,
-      d.state AS observation_availability
+    // An erased revision returns no source text. The journaled clear removes the
+    // stored bytes; this projection also hides them if that clear has not run.
+    const items = (await client.query(`SELECT i.revision_id, i.ordinal, i.stance, i.observation_id,
+      i.content_revision_id, i.graph_reference,
+      CASE WHEN c.availability = 'erased' THEN verification.evidence_selector_retained(i.selector)
+        ELSE i.selector END AS selector,
+      i.availability, c.availability AS content_availability, d.state AS observation_availability
       FROM verification.evidence_item i LEFT JOIN content.revision c ON c.id = i.content_revision_id
       LEFT JOIN verification.observation_disposition_head h ON h.observation_id = i.observation_id
       LEFT JOIN verification.observation_disposition d ON d.id = h.head

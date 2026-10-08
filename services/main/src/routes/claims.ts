@@ -52,12 +52,30 @@ const assessmentWritten = { ...written, 202: t.Union([pendingOperation, t.Object
 })]) };
 const read = { 200: openResult, ...authorizedReadProblems };
 
-const evidenceItem = t.Object({
-  stance: t.Union([t.Literal('supports'), t.Literal('contradicts'), t.Literal('uncertain')]),
-  observation: t.Optional(uuid), contentRevision: t.Optional(uuid), graphReference: t.Optional(reference),
-  selector: t.Record(t.String(), t.Unknown()),
-  availability: t.Union([t.Literal('available'), t.Literal('inaccessible'), t.Literal('withdrawn'), t.Literal('erased')]),
+const stance = t.Union([t.Literal('supports'), t.Literal('contradicts'), t.Literal('uncertain')]);
+const availability = t.Union([t.Literal('available'), t.Literal('inaccessible'), t.Literal('withdrawn'), t.Literal('erased')]);
+const sourceText = t.String({ minLength: 1, maxLength: 4096 });
+const coordinate = t.Integer({ minimum: 0, maximum: 2_147_483_647 });
+const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
+const range = t.Object({ start: coordinate, end: coordinate }, { additionalProperties: false });
+const contentSelector = t.Object({
+  exact: t.Optional(sourceText), prefix: t.Optional(sourceText), suffix: t.Optional(sourceText),
+  quote: t.Optional(sourceText), start: t.Optional(coordinate), end: t.Optional(coordinate),
+  position: t.Optional(coordinate), offset: t.Optional(coordinate), length: t.Optional(coordinate),
+  range: t.Optional(range), ranges: t.Optional(t.Array(range, { maxItems: 32 })),
+  positions: t.Optional(t.Array(coordinate, { maxItems: 64 })),
+  digest: t.Optional(digest), byteDigest: t.Optional(digest), sha256: t.Optional(digest),
+  representationSha256: t.Optional(digest), locatorDigest: t.Optional(digest),
+  quoteDigest: t.Optional(digest), requestDigest: t.Optional(digest),
 }, { additionalProperties: false });
+const evidenceItem = t.Union([
+  t.Object({ stance, observation: uuid, selector: t.Record(t.String(), t.Unknown()), availability },
+    { additionalProperties: false }),
+  t.Object({ stance, contentRevision: uuid, selector: contentSelector, availability },
+    { additionalProperties: false }),
+  t.Object({ stance, graphReference: reference, selector: t.Record(t.String(), t.Unknown()), availability },
+    { additionalProperties: false }),
+]);
 const lineageTarget = t.Object({ observation: t.Optional(uuid), origin: t.Optional(uuid),
   reference: t.Optional(reference) }, { additionalProperties: false });
 

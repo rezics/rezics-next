@@ -1,5 +1,5 @@
 // Typed declarations for the Content-DB `verification` schema (migrations
-// 090-096 and 1704). SQL migrations remain the DDL owner; the schema test compares these
+// 090-096, 1704 and 1709). SQL migrations remain the DDL owner; the schema test compares these
 // column lists and enumerations with the installed catalog so they cannot drift.
 // Claims, claim revisions and assessment anchors are Jena-owned (claim-v1,
 // assessment-v1); rows here reference them by exact IRI only.
@@ -25,6 +25,15 @@ const lineageBases = ['declared-by-source', 'detected', 'reviewer-asserted'] as 
 const evidencePurposes = ['claim-head', 'challenge', 'correction-proposal'] as const;
 const evidenceStances = ['supports', 'contradicts', 'uncertain'] as const;
 const evidenceAvailability = ['available', 'inaccessible', 'withdrawn', 'erased'] as const;
+
+/** Content-bound admission keys. Migration 1709's inventory functions return these same lists.
+ * A stored string under any other key is source text. Separately authored notes stay on
+ * `verification.note` columns, such as a challenge reason, and are not selector fields. */
+export const evidenceSourceTextKeys = ['exact', 'prefix', 'suffix', 'quote'] as const;
+export const evidenceDigestKeys = ['digest', 'byteDigest', 'sha256', 'representationSha256',
+  'locatorDigest', 'quoteDigest', 'requestDigest'] as const;
+export const evidenceCoordinateKeys = ['start', 'end', 'position', 'offset', 'length',
+  'range', 'ranges', 'positions'] as const;
 const challengeOutcomes = ['material-conflict', 'not-established', 'superseded', 'withdrawn'] as const;
 const summarySupport = ['supported', 'contradicted', 'material-conflict',
   'insufficient', 'unknown', 'abstained'] as const;

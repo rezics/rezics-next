@@ -86,7 +86,7 @@ test('FACT05: exact claim and assessment export retains method output while reda
       const evidence = await verification.recordEvidence(principalId, `evidence-${randomUUID()}`,
         claim, { claimRevision,
           expectedHead: null, items: [{ stance: 'supports', contentRevision: draft.revisionId,
-            selector: { kind: 'whole' }, availability: 'available' }] });
+            selector: {}, availability: 'available' }] });
       await grant('verification:assess:global', 'verification.claim-assess');
       const feverEvaluation = evaluateFeverHeldOut();
       const limitations = JSON.stringify({
