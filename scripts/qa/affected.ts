@@ -13,6 +13,7 @@ import {
   testExclusions,
   unitHarnessFiles,
 } from './acceptance.ts';
+import { expandTestPaths } from './core.ts';
 
 // Affected-test selection for routine batches. It narrows what an agent runs;
 // final acceptance still runs the complete backend suite through `task qa -- --backend`.
@@ -61,7 +62,7 @@ export interface AffectedPlan {
   widened: { tier: AffectedTier; because: string }[];
   deferred: { file: string; reason: string }[];
   ignored: { path: string; reason: string }[];
-  /** Set when the Dockerfile text is available: whether the native union test was selected. */
+  /** Set when the Dockerfile text is available: whether an input-selected native file was selected. */
   nativeUnion?: 'selected' | 'not selected' | 'unsupported COPY syntax, selected';
 }
 
@@ -71,10 +72,18 @@ const stackTiers: AffectedTier[] = ['model', 'integration', 'fault/recovery'];
 // Inputs staged or read by jena-cli.ts, including the pinned image definition.
 const jenaCheckInput = /^infra\/jena\/|^(?:model\/definitions|generated\/model\/shapes)\/.*\.ttl$|^tests\/fixtures\/jena-cli\/scratch\.trig$|^services\/main\/src\/modules\/query\/templates\/work-versions\.(?:rq|fixture\.json)$|^scripts\/qa\/jena-cli\.ts$|^infra\/dev\/compose\.yaml$/;
 const sharedStackSmoke = 'tests/qa/integration/shared-stack.test.ts';
-export const nativeUnionTest = 'infra/jena/tests/semantic-source-readiness-union.test.ts';
+// Docker/Maven tests whose inputs are the module-stage COPY set, not the unit tier.
+// Shell and HTTP checks under infra/jena/tests stay on the ordinary unit tier.
+export const inputSelectedNativeTests = [
+  'infra/jena/tests/semantic-source-readiness-union.test.ts',
+  'infra/jena/tests/erasure-campaign-native.test.ts',
+] as const;
+export const nativeUnionTest = inputSelectedNativeTests[0];
+export const erasureCampaignNativeTest = inputSelectedNativeTests[1];
 export const nativeUnionDockerfile = 'infra/jena/Dockerfile';
-/** Shown on the affected plan so a gate can see why this unit file was or was not chosen. */
+/** Shown on the affected plan so a gate can see why these unit files were or were not chosen. */
 export const nativeModuleCopyInputs = 'native module COPY inputs';
+const inputSelectedNative = new Set<string>(inputSelectedNativeTests);
 
 export interface NativeModuleCopy {
   source: string;
@@ -98,12 +107,28 @@ export function nativeModuleCopies(dockerfile: string): NativeModuleCopy[] {
   return copies;
 }
 
-function coversNativeUnionInput(path: string, copies: readonly NativeModuleCopy[]): boolean {
-  if (path === nativeUnionDockerfile || path === nativeUnionTest) return true;
+function copySourceCovers(path: string, copies: readonly NativeModuleCopy[]): boolean {
   return copies.some(({ source }) => {
     const directory = source.endsWith('/') ? source : `${source}/`;
     return path === source || path === source.replace(/\/$/, '') || path.startsWith(directory);
   });
+}
+
+/** Each registry file uses the module-stage COPY set. A change to one file selects only that file. */
+function nativeFilesTouchedBy(path: string, copies: readonly NativeModuleCopy[]): readonly string[] {
+  if (inputSelectedNative.has(path)) return [path];
+  if (path === nativeUnionDockerfile || copySourceCovers(path, copies)) return inputSelectedNativeTests;
+  return [];
+}
+
+/** Registered unit files a widened tier runs. Registry files are omitted; they are listed only when their COPY rule matched. */
+export function affectedUnitTierEntries(): string[] {
+  return [...testArgs('unit'), ...unitHarnessFiles].filter((file) => !inputSelectedNative.has(file));
+}
+
+/** File list for a widened unit command. Directories are expanded because the QA CLI accepts only test files. */
+export function affectedUnitTierFiles(root: string): string[] {
+  return expandTestPaths(root, affectedUnitTierEntries());
 }
 // The registered unit tier: `tests/qa/unit` plus its gate files.
 const registeredUnit = [...testArgs('unit'), ...unitHarnessFiles];
@@ -273,9 +298,9 @@ export function planAffected(input: {
     return checks;
   };
   const seeds = new Set<string>();
-  // The union test reproduces the Dockerfile's first-stage COPY set. Stack-tier
-  // widening for infra/jena stays in place; this unit file follows that COPY set.
-  // An unreadable COPY line fails closed by selecting the test, so planning itself still finishes.
+  // These tests reproduce the Dockerfile's first-stage COPY set inside Docker.
+  // Stack-tier widening for infra/jena stays in place. An unreadable COPY line
+  // fails closed by selecting every registry file, so planning itself still finishes.
   let nativeCopies: readonly NativeModuleCopy[] | undefined;
   let nativeUnionUnsupported = false;
   if (input.nativeUnionDockerfile !== undefined) {
@@ -286,9 +311,9 @@ export function planAffected(input: {
       nativeUnionUnsupported = true;
     }
   }
-  let nativeUnionTouched = false;
+  const matchedNative = new Set<string>();
   for (const path of plan.changed) {
-    if (nativeCopies && coversNativeUnionInput(path, nativeCopies)) nativeUnionTouched = true;
+    if (nativeCopies) for (const file of nativeFilesTouchedBy(path, nativeCopies)) matchedNative.add(file);
     if (jenaCheckInput.test(path) && !plan.tasks.some(check => check.task === 'jena:check'))
       plan.tasks.push({ task: 'jena:check', because: `${path}: pinned Jena CLI input` });
     // A root script edit changes command wiring, not installed dependencies.
@@ -337,8 +362,8 @@ export function planAffected(input: {
     }
     for (const source of references) seeds.add(source);
   }
-  if (nativeUnionUnsupported) nativeUnionTouched = true;
-  if (nativeUnionTouched && input.exists(nativeUnionTest)) seeds.add(nativeUnionTest);
+  if (nativeUnionUnsupported) for (const file of inputSelectedNativeTests) matchedNative.add(file);
+  for (const file of matchedNative) if (input.exists(file)) seeds.add(file);
   const affected = new Set<string>();
   const queue = [...seeds];
   while (queue.length) {
@@ -348,14 +373,16 @@ export function planAffected(input: {
     for (const importer of reverse.get(current) ?? [])
       if (!affected.has(importer)) queue.push(importer);
   }
-  if (nativeCopies && !nativeUnionTouched) affected.delete(nativeUnionTest);
+  if (nativeCopies) for (const file of inputSelectedNativeTests) if (!matchedNative.has(file)) affected.delete(file);
   if (input.nativeUnionDockerfile !== undefined) {
     plan.nativeUnion = nativeUnionUnsupported
       ? 'unsupported COPY syntax, selected'
-      : nativeUnionTouched && input.exists(nativeUnionTest) ? 'selected' : 'not selected';
+      : [...matchedNative].some((file) => input.exists(file)) ? 'selected' : 'not selected';
   }
   // A widened tier runs its registered default selection, which for unit is
-  // `tests/qa/unit` plus gate files; affected unit tests outside it still run.
+  // `tests/qa/unit` plus gate files. Registry files are not part of that default;
+  // they stay listed when their own COPY rule matched. Other affected unit tests
+  // outside the registered tier still run.
   const unitWidened = plan.widened.some((item) => item.tier === 'unit');
   for (const path of [...affected]
     .filter((path) => testFile.test(path) && input.exists(path))
@@ -366,7 +393,7 @@ export function planAffected(input: {
     else if ('deferred' in route) plan.deferred.push({ file: path, reason: route.deferred });
     else if (
       route.tier === 'unit'
-        ? !(unitWidened && inRegisteredUnit(path))
+        ? !(unitWidened && inRegisteredUnit(path) && !inputSelectedNative.has(path))
         : !plan.widened.some((item) => item.tier === route.tier)
     ) {
       plan.tests[route.tier].push(path);
@@ -547,7 +574,15 @@ export function formatPlan(plan: AffectedPlan): string {
   const lines = [`Affected since ${plan.base.slice(0, 12)}: ${plan.changed.length} changed paths`];
   for (const { task, because } of plan.tasks) lines.push(`  task ${task} (${because})`);
   if (plan.nativeUnion) lines.push(`  ${nativeModuleCopyInputs}: ${plan.nativeUnion}`);
-  for (const { tier, because } of plan.widened) lines.push(`  ${tier}: whole tier (${because})`);
+  for (const { tier, because } of plan.widened) {
+    // The merge gate expands `unit: whole tier` through every registered unit file.
+    // Listing the tier's files here keeps that expansion from picking up registry
+    // files whose COPY inputs did not change. An explicit full unit tier still uses testArgs.
+    if (tier === 'unit') {
+      lines.push(`  unit tier (${because})`);
+      for (const file of affectedUnitTierEntries()) lines.push(`  unit: ${file}`);
+    } else lines.push(`  ${tier}: whole tier (${because})`);
+  }
   for (const tier of affectedTiers) {
     for (const file of plan.tests[tier]) lines.push(`  ${tier}: ${file}`);
   }

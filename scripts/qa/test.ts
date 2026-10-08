@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from './acceptance.ts';
-import { affectedPlan, affectedTiers, formatPlan, type AffectedPlan } from './affected.ts';
+import { affectedPlan, affectedTiers, affectedUnitTierFiles, formatPlan, type AffectedPlan } from './affected.ts';
 import { goalSlotDirectory, parseArgs } from './core.ts';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 
@@ -84,8 +84,15 @@ export function affectedCommands(plan: AffectedPlan): { label: string; command: 
     const files = plan.tests[tier];
     const widened = plan.widened.some(item => item.tier === tier);
     if (tier === 'unit') {
-      // Widened: the registered tier, plus affected unit tests it does not include.
-      if (widened) commands.push({ label: 'unit (whole tier)', command: ['bun', ['scripts/qa/cli.ts', '--tier', 'unit']] });
+      // Widened: the registered tier except input-selected native files, plus affected
+      // unit tests it does not include. Those native files run only when their own
+      // COPY rule matched, as individual files below. An explicit `--tier unit` still
+      // runs the full registry.
+      if (widened) {
+        const files = affectedUnitTierFiles(root);
+        commands.push({ label: 'unit (whole tier)', command: ['bun', ['scripts/qa/cli.ts', '--tier', 'unit',
+          ...files.flatMap((file) => ['--file', file])]] });
+      }
       if (files.length) commands.push({ label: `unit (${files.length} files)`,
         command: ['bun', ['test', ...files.map(file => `./${file}`)]] });
       continue;
