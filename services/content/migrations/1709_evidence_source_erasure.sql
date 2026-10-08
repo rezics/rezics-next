@@ -243,8 +243,9 @@ BEGIN
   RETURN updated + repaired;
 END $$;
 
--- One indexed existence check per requested revision. The journal stores at most
--- 256 targets; a shorter list is not what keeps the scan bounded.
+-- Indexed existence checks for a non-terminal source and for a terminal row that
+-- regained source text. The journal stores at most 256 targets; a shorter list
+-- is not what keeps the scan bounded.
 CREATE FUNCTION verification.open_evidence_source_revisions(revision_ids uuid[])
 RETURNS TABLE (revision_id uuid)
 LANGUAGE plpgsql STABLE
@@ -258,11 +259,19 @@ BEGIN
   SELECT r.id
   FROM content.revision r
   WHERE r.id = ANY (revision_ids)
-    AND EXISTS (
-      SELECT 1 FROM verification.evidence_item i
-      WHERE i.content_revision_id = r.id
-        AND NOT i.source_terminal
-        AND verification.evidence_selector_has_source(i.selector)
+    AND (
+      EXISTS (
+        SELECT 1 FROM verification.evidence_item i
+        WHERE i.content_revision_id = r.id
+          AND NOT i.source_terminal
+          AND verification.evidence_selector_has_source(i.selector)
+      )
+      OR EXISTS (
+        SELECT 1 FROM verification.evidence_item i
+        WHERE i.content_revision_id = r.id
+          AND i.source_terminal
+          AND verification.evidence_selector_has_source(i.selector)
+      )
     )
   ORDER BY 1;
 END $$;

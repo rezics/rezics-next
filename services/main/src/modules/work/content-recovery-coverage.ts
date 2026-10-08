@@ -331,7 +331,8 @@ export async function assertReplayedCommentSourcesTerminal(client: Pool | PoolCl
   let open: string[];
   try {
     open = await openCommentSourceRevisions(client, revisionIds);
-    // Evidence selectors keep the same terminal rule: an erased revision has no open source row.
+    // Evidence selectors keep the same terminal rule: an erased revision has no open
+    // source row, including a terminal row that regained source text.
     open.push(...(await client.query<{ revision_id: string }>(
       'SELECT revision_id::text FROM verification.open_evidence_source_revisions($1::uuid[])',
       [revisionIds])).rows.map(row => row.revision_id));
