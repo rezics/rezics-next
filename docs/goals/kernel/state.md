@@ -16,6 +16,14 @@ Claim producer closure and C6 private/source-copy recovery remain on critical pa
   repair ACTIVATED, actual serving835daa8774ac, all6 services RunningHealthy;
   refresh36681 exit0, no pending SQL, kept data volumes and prepared membership.
   `.temp/kernel/integer-startup-activation-0211.log`, refresh.json revisiond1.
+- Post-checkpoint G1300 physical proofs independently checked: qualified5692,
+  sourcecc1 stable, originalG920 QA020543-f68c58 actual1/598/0fail/0skip122.2s;
+  publication QA020913-59acf7 actual7/88/0fail/0skip3.1s. Populations0/320/4096
+  all2returned/executor rows,0removed,4/5/4blocks;1/3/33build steps. G847 pending.
+  CursorG1290#25 ended HTTP2 timeout, partial dirty sources preserved; Grok26
+  resumed mechanical composition, no assertion repair. Actual borrowed issuer
+  Access/title-admission.ts claim corrected, Core/issuer/immutable hunks must
+  freeze/restore before owned commit and selected manager reconciliation.
 - G1397 CLOSED VERIFIED. Matching image835 full355/0failure/error/skip, separate-JVM
   21-case test result0/60 assertions, unchanged originalrelease3/64 passed334.3s
   QA012803-152801. Normal26 affected/19guards PASS, shards44753/64965/71841/661580ms;
