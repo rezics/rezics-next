@@ -12,7 +12,7 @@ function attributes(element: string): Record<string, string> {
   );
 }
 
-// Focused native run of the startup callback on a physical TDB2/Lucene store, in the same builder image,
+// Focused native run of the startup callback on an in-memory TDB2/Lucene fixture, in the same builder image,
 // build inputs and memory bounds as the accepted native union. It adds no class to that union's list.
 test('restore holds of any value start for inspection and never mint Source qualification', () => {
   const temporary = join(root, '.temp');
