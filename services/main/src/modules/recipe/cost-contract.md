@@ -32,15 +32,19 @@ visited occurrences. The RECIPE03 integration test checks these counters while
 comparing retained source bytes, native occurrences and export output.
 
 The Work page read resolves the selected Main Version and Recipe Structure in
-bounded graph queries, then pins one revision. It walks at most 4,096 occurrences
-in pages of 100, reads at most 64 measures, and rejects a response above 1 MiB.
-The optional whole-number servings request is limited to 1–100 and scales the
-same pinned occurrence set with exact rational arithmetic. Each ingredient also
-gets a kitchen display line (and a metric or US counterpart when the unit
-converts) computed in memory from that amount; the display does not add a read.
-Its reported cost includes occurrence pages, object-page reads and visited
-occurrences. Complexity is O(P + N) for P pages and N visited occurrences; the
-read repeats Work visibility checks after hydration.
+bounded graph queries, then pins one revision. One call returns at most 100
+occurrences in depth-first order and, when the hierarchy continues, a signed
+cursor that pins the revision, the servings factor and the parent stack. A
+cursor whose revision is no longer current is a stale result and is not mixed
+into the new tree. A tampered cursor is refused. Measures, at most 64, are read
+once and returned on the first page only. Each page scales its own occurrences
+with that pinned factor. The optional servings request is a whole number from
+1 to 100. A page whose JSON exceeds 1 MiB is rejected; the call does not buffer
+the rest of the hierarchy. Each call reads one child composition page, re-reads
+the cursor's parents up to the depth limit, and may read one empty child page
+per exhausted frame. The reported cost is those reads, the object pages they
+touched and the occurrences returned. The kitchen line is computed in memory.
+The read repeats Work visibility checks after hydration.
 
 The recipe operation unit tests cover rational bounds, exact aggregation and
 ambiguous-unit lexical retention. The integration test exercises a real Jena

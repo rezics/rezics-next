@@ -26,7 +26,7 @@ import { sourceFieldOccurrence } from '../modules/source/support-attach.ts';
 import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalUnavailable }
   from '../modules/source/withdrawal.ts';
 import { exportRecipe, RecipeExportLimit } from '../modules/recipe/export.ts';
-import { readRecipeWorkPage } from '../modules/recipe/work-page.ts';
+import { readRecipeWorkPage, RECIPE_WORK_PAGE_CURSOR_MAX } from '../modules/recipe/work-page.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -192,10 +192,14 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/recipes/works/:id', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: t.Optional(ref),
-        servings: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })) }, { additionalProperties: false }),
+        servings: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
+        cursor: t.Optional(t.String({ minLength: 1, maxLength: RECIPE_WORK_PAGE_CURSOR_MAX })) },
+      { additionalProperties: false }),
       detail: { security: [{}, { bearerAuth: [] }] },
       response: { 200: t.Nullable(t.Object({ profile: t.Literal('recipe-work-page-v1'), structure: ref,
-        revision: ref, occurrences: t.Array(OccurrenceRecord), measures: t.Array(RecipeMeasure),
+        revision: ref, occurrences: t.Array(OccurrenceRecord),
+        /** Present on the first page only. A continuation pins the servings factor in `cursor`. */
+        measures: t.Optional(t.Array(RecipeMeasure)),
         ingredients: t.Array(t.Object({ occurrence: ref, originalText: t.String(),
           sourceLexical: t.Optional(t.String()), amount: t.Optional(rational),
           amountUpper: t.Optional(rational), unitText: t.Optional(t.String()), scaled: t.Boolean(),
@@ -207,12 +211,18 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           hint: t.Optional(t.String({ maxLength: 1000 })),
           judgment: t.Optional(t.Union([t.Literal('seasoning'), t.Literal('leavening')])) },
         { additionalProperties: false })),
+        next: t.Optional(t.String({ minLength: 1, maxLength: RECIPE_WORK_PAGE_CURSOR_MAX })),
         cost: t.Object({ pages: t.Integer(), pagesRead: t.Integer(), occurrences: t.Integer() }) })),
-      ...workReadProblems } }, async ({ request, params, query }) => {
+      ...workReadProblems,
+      409: t.Union([problemResult(409), t.Object({ profile: t.Literal('recipe-work-page-stale'),
+        structure: ref, revision: ref, cursorRevision: ref }, { additionalProperties: false })]) } },
+    async ({ request, params, query }) => {
       try {
-        return Response.json(await workRead(work, request, { actingSubject: query.actingSubject },
-          session => readRecipeWorkPage(session, `https://rezics.com/id/${params.id}`, query.servings)),
-        { headers: { 'cache-control': 'private, no-store' } });
+        const body = await workRead(work, request, { actingSubject: query.actingSubject },
+          session => readRecipeWorkPage(session, `https://rezics.com/id/${params.id}`, query.servings, query.cursor));
+        const stale = body !== null && typeof body === 'object' && 'profile' in body
+          && body.profile === 'recipe-work-page-stale';
+        return Response.json(body, { status: stale ? 409 : 200, headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return workReadError(error); }
     })
     .post('/v1/recipes/:id/measures', { params: t.Object({ id: groupUuid }),
