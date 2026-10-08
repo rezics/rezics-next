@@ -135,7 +135,7 @@ test('library consent fences personal owners while read consent retains every re
       libraryCopies: new LibraryCopyStore(countedPool), libraryLoans: new LibraryLoanStore(countedPool),
       libraryFiles: files, libraryImport: imports,
       sessions: new ConsumptionSessionStore(countedPool, library),
-      progress: new StructureProgressStore(countedPool),
+      progress: new StructureProgressStore(countedPool, { automaticOrderProjection: false }),
       readingSettings: new ReadingSettingsStore(countedPool) });
     imports.setDispatch(request => app.handle(request));
     const call = (method: string, path: string, body?: object, token = readToken, key = randomUUID()) =>

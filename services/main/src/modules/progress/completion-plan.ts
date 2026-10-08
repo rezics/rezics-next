@@ -62,3 +62,16 @@ export function configureGraphCompletion(progress: StructureProgressStore, work:
   const pool = progress.owner;
   configureProgressCompletion(pool, new ProgressCompletionProjector(progress, pool, graphCompletionPlanner(work)));
 }
+
+const configured = new WeakSet<StructureProgressStore>();
+
+/** Start the order projection and the finish projection once per owner. A
+ * route calls this only after consent is verified, so a refused request
+ * reaches no owner method; the server also calls it when it starts listening. */
+export function configureProgressProjections(work: MainWorkDependencies) {
+  const progress = work.progress;
+  if (!progress || configured.has(progress)) return;
+  configured.add(progress);
+  progress.configureOrderProjection?.(work.environment);
+  if (progress.owner) configureGraphCompletion(progress, work);
+}

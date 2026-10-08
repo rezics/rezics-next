@@ -22,7 +22,7 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 import { pageFields } from '../modules/work/read-contract.ts';
 import { disclosedCompletedProgress, publishedProgressSelections } from '../modules/progress/disclosure.ts';
 import { readProgressOrder } from '../modules/progress/order.ts';
-import { configureGraphCompletion } from '../modules/progress/completion-plan.ts';
+import { configureProgressProjections } from '../modules/progress/completion-plan.ts';
 import { memberAnchoring } from '../modules/reading-position/continuity.ts';
 import { ReadingContinuityUnsupported } from '../modules/reading-position/errors.ts';
 
@@ -62,12 +62,11 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     (work.environment as typeof work.environment & { structureObjects?: typeof work.structureObjects })
       .structureObjects = work.structureObjects;
   }
-  work.progress?.configureOrderProjection?.(work.environment);
-  if (work.progress?.owner) configureGraphCompletion(work.progress, work);
   const visibleOccurrence = async (request: Request, structure: string, occurrence: string,
     actingSubject: string, selectedRevision: string | null, write = false) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
     const principal = await work.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
+    configureProgressProjections(work);
     const visible = await workRead(work, request, { actingSubject }, async session => {
       const header = await readCompositionHeader(work.environment, structure);
       if (!header || !structureProfileFor(header.profile).componentPredicate) {
@@ -100,6 +99,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     return { principal, ...visible };
   };
   return new Elysia()
+    .setup(() => { configureProgressProjections(work); })
     .get('/v1/compositions/:id/progress', {
       params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: ref, cursor: t.Optional(t.String({ maxLength: 2048,
@@ -119,6 +119,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         const structure = `https://rezics.com/id/${params.id}`;
         // A bearer supplies the private owner key even when the parent is public.
         await work.account.verify(request, ['work:read']);
+        configureProgressProjections(work);
         const page = await workRead(work, request, { actingSubject: query.actingSubject }, async session => {
           const header = await readCompositionHeader(work.environment, structure);
           if (!header || !structureProfileFor(header.profile).componentPredicate
