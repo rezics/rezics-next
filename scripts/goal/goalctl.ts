@@ -2178,6 +2178,43 @@ export const UNIT_JUNIT_MARKER = '<!-- goal-unit-junit -->';
 
 const UNIT_SUMMARY_LINE = /^(?:\d+ tests? failed:|\s*\d+\s+pass\b)/;
 
+interface GateJunitBlock { xml: string; before: string; after: string }
+
+/** The report the gate appended: the last marker at column 0 whose next element is `<testsuites>`.
+ * A test can print the marker indented, or an earlier copy, including one cut off mid-element.
+ * Those copies are transcripts. Only this block names failures. */
+function gateJunitBlock(output: string): GateJunitBlock | undefined {
+  let from = output.length;
+  while (from > 0) {
+    const at = output.lastIndexOf(UNIT_JUNIT_MARKER, from - 1);
+    if (at < 0) return undefined;
+    from = at;
+    if (at !== 0 && output[at - 1] !== '\n') continue;
+    const rest = output.slice(at + UNIT_JUNIT_MARKER.length);
+    const start = rest.search(/<testsuites\b/);
+    if (start < 0) continue;
+    if (!/^(?:\s*<\?xml\b[^>]*\?>)?\s*$/.test(rest.slice(0, start))) continue;
+    const end = rest.indexOf('</testsuites>', start);
+    if (end < 0) continue;
+    const close = end + '</testsuites>'.length;
+    return { xml: rest.slice(start, close), before: output.slice(0, at), after: rest.slice(close) };
+  }
+  return undefined;
+}
+
+function junitXml(output: string): string | undefined {
+  return gateJunitBlock(output)?.xml;
+}
+
+/** Text outside every JUnit block. An owner transcript joined after a block stays. */
+function stripJunitBlocks(text: string): string {
+  return text.split(UNIT_JUNIT_MARKER).map((part, index) => {
+    if (index === 0) return part;
+    const end = part.lastIndexOf('</testsuites>');
+    return end < 0 ? '' : part.slice(end + '</testsuites>'.length);
+  }).join('\n');
+}
+
 /** Drop the bun summary at the end of one segment. Its `(fail)` lines have no file header, so they belong to no file.
  * A test can print the same words in the middle; that copy is followed by a later `(pass)` or file header and stays. */
 function dropRunSummary(text: string): string {
@@ -2191,14 +2228,27 @@ function dropRunSummary(text: string): string {
   return text;
 }
 
+/** `(fail)` lines printed before the gate's report belong to whatever file was logging, not to the header they name. */
+function stripPreReportFailures(text: string): string {
+  return text.split('\n').filter(line => !/^\(fail\) /.test(line)).join('\n');
+}
+
 /** Bun's end-of-run summary has `(fail)` lines and no file header. Those lines belong to no file.
- * A unit JUnit block is removed per segment, so an owner transcript joined after it stays readable. */
+ * A unit JUnit block is removed per segment, so an owner transcript joined after it stays readable.
+ * `(fail)` lines before the gate's report are transcripts and are not file results. */
 function beforeUnitSummary(output: string): string {
-  return output.split(UNIT_JUNIT_MARKER).map((part, index) => {
-    if (index === 0) return dropRunSummary(part);
-    const end = part.lastIndexOf('</testsuites>');
-    return dropRunSummary(end < 0 ? '' : part.slice(end + '</testsuites>'.length));
-  }).join('\n');
+  const block = gateJunitBlock(output);
+  if (!block) return dropRunSummary(stripJunitBlocks(output));
+  const before = stripPreReportFailures(dropRunSummary(stripJunitBlocks(block.before)));
+  const after = dropRunSummary(stripJunitBlocks(block.after));
+  return `${before}\n${after}`;
+}
+
+/** Console text joined after the gate's report. Owner cases live here. Empty when the shard has no report. */
+function consoleAfterReport(output: string): string {
+  const block = gateJunitBlock(output);
+  if (!block) return '';
+  return dropRunSummary(stripJunitBlocks(block.after));
 }
 
 function decodeXml(text: string): string {
@@ -2216,32 +2266,43 @@ function junitAttribute(attrs: string, name: string): string | undefined {
   return new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1];
 }
 
+function junitFileAttr(fileAttr: string, root?: string): string {
+  let file = decodeXml(fileAttr).replace(/^\.\//, '');
+  if (root && isAbsolute(file)) file = relative(root, file);
+  return file;
+}
+
 /** Files the appended JUnit report names, including ones whose cases passed.
  * A file that is absent was not in that report, so its console cases still count. */
 function junitReportedFiles(output: string, candidates: readonly string[], root?: string): Set<string> {
-  const at = output.indexOf(UNIT_JUNIT_MARKER);
-  if (at < 0) return new Set();
-  const xml = output.slice(at + UNIT_JUNIT_MARKER.length);
+  const xml = junitXml(output);
+  if (xml === undefined) return new Set();
   const known = new Set(candidates);
   const files = new Set<string>();
   for (const match of xml.matchAll(/<testcase\b([^>]*?)(?:\/>|>)/g)) {
     const fileAttr = junitAttribute(match[1]!, 'file');
     if (!fileAttr) continue;
-    let file = decodeXml(fileAttr).replace(/^\.\//, '');
-    if (root && isAbsolute(file)) file = relative(root, file);
+    const file = junitFileAttr(fileAttr, root);
     if (known.has(file)) files.add(file);
   }
   return files;
 }
 
-/** Named failures from the appended JUnit report. Undefined when that report is absent.
+interface JunitFailure extends UnitFailureDetail { timeout: boolean }
+
+function junitTimeoutFailure(attrs: string): boolean {
+  if (junitAttribute(attrs, 'type') === 'TimeoutError') return true;
+  const message = junitAttribute(attrs, 'message');
+  return message !== undefined && /^test timed out\b/i.test(decodeXml(message));
+}
+
+/** Named failures from the gate's JUnit report. Undefined when that report is absent.
  * A present report with no failures is an empty list, so the console summary cannot supply names. */
-function junitFailureDetails(output: string, candidates: readonly string[], root?: string): UnitFailureDetail[] | undefined {
-  const at = output.indexOf(UNIT_JUNIT_MARKER);
-  if (at < 0) return undefined;
-  const xml = output.slice(at + UNIT_JUNIT_MARKER.length);
+function junitFailures(output: string, candidates: readonly string[], root?: string): JunitFailure[] | undefined {
+  const xml = junitXml(output);
+  if (xml === undefined) return undefined;
   const known = new Set(candidates);
-  const found: UnitFailureDetail[] = [];
+  const found: JunitFailure[] = [];
   const seen = new Set<string>();
   // A passing testcase is `<testcase ... />`. `[^>]*` would treat that slash as attributes and
   // swallow the next failing testcase, so the passing file would own the later failure.
@@ -2252,8 +2313,7 @@ function junitFailureDetails(output: string, candidates: readonly string[], root
     const name = junitAttribute(match[1]!, 'name');
     const fileAttr = junitAttribute(match[1]!, 'file');
     if (!name || !fileAttr) continue;
-    let file = decodeXml(fileAttr).replace(/^\.\//, '');
-    if (root && isAbsolute(file)) file = relative(root, file);
+    const file = junitFileAttr(fileAttr, root);
     if (!known.has(file)) continue;
     const test = decodeXml(name);
     const key = `${file}\0${test}`;
@@ -2261,9 +2321,19 @@ function junitFailureDetails(output: string, candidates: readonly string[], root
     seen.add(key);
     const message = junitAttribute(failure[1]!, 'message');
     const detail = message ? normalizeUnitFileError(decodeXml(message), root) : undefined;
-    found.push({ file, test, ...(detail ? { detail } : {}) });
+    found.push({ file, test, timeout: junitTimeoutFailure(failure[1]!), ...(detail ? { detail } : {}) });
   }
   return found;
+}
+
+function junitFailureDetails(output: string, candidates: readonly string[], root?: string): UnitFailureDetail[] | undefined {
+  const found = junitFailures(output, candidates, root);
+  if (!found) return undefined;
+  return found.map(({ file, test, detail }) => ({ file, test, ...(detail ? { detail } : {}) }));
+}
+
+function junitTimeoutFiles(output: string, candidates: readonly string[], root?: string): string[] {
+  return [...new Set((junitFailures(output, candidates, root) ?? []).filter(item => item.timeout).map(item => item.file))].sort();
 }
 
 function consoleFailureKinds(output: string, candidates: readonly string[], root?: string): { fail: Set<string>; unhandled: Set<string> } {
@@ -2283,10 +2353,12 @@ function consoleFailureKinds(output: string, candidates: readonly string[], root
   return { fail, unhandled };
 }
 
-/** Files a failing bun run names. A file the JUnit report names contributes only that report's
- * failures: console `(fail)` lines from a passing file are not failures. A file the report omits
- * still counts from the console, because bun leaves a load failure out of the report. With no
- * report, the console is the only source. Timeouts stay on the console either way. */
+/** Files a failing bun run names. The gate's report is the last column-0 `<testsuites>` block.
+ * A file that report names contributes only that report's failures. Console `(fail)` lines before
+ * the report, including ones another file printed, are not failures. A file the report omits still
+ * counts a `# Unhandled error`, and a `(fail)` line after the report, because an owner transcript
+ * is joined there and bun leaves a load failure out of the report. With no report, the console is
+ * the only source. */
 export function failingTestFiles(output: string, candidates: readonly string[], root?: string): string[] {
   const kinds = consoleFailureKinds(output, candidates, root);
   const junit = junitFailureDetails(output, candidates, root);
@@ -2380,21 +2452,32 @@ function unitFileFromHeader(output: string, files: readonly string[], cwd: strin
   return files.length === 1 ? files[0] : undefined;
 }
 
-/** Bun prints its test timeout as a failed test, so it needs a retry before it can decide a side. */
+/** Bun prints its test timeout as a failed test, so it needs a retry before it can decide a side.
+ * A JUnit `TimeoutError` names the file even when a printed header owns the console timeout line.
+ * A console timeout before the report counts only for a file that report names; a line under a
+ * header the report does not name was printed by another file. */
 export function timedOutTestFiles(output: string, candidates: readonly string[], root?: string): string[] {
   const known = new Set(candidates);
   const found = new Set<string>();
-  let current: string | undefined;
-  for (const line of beforeUnitSummary(output).split('\n')) {
-    const header = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/.exec(line);
-    if (header) {
-      current = header[1]!.replace(/^\.\//, '');
-      if (root && isAbsolute(current)) current = relative(root, current);
-      if (!known.has(current)) current = undefined;
-    } else if (current && /(?:timed out after\s+\d+(?:\.\d+)?\s*(?:ms|s)\b|timed out\s*\([^)]*\bagainst\b[^)]*\)|timeout of\s+\d+(?:\.\d+)?\s*(?:ms|s)\s+(?:was\s+)?exceeded)/i.test(line)) {
-      found.add(current);
+  const timeoutLine = /(?:timed out after\s+\d+(?:\.\d+)?\s*(?:ms|s)\b|timed out\s*\([^)]*\bagainst\b[^)]*\)|timeout of\s+\d+(?:\.\d+)?\s*(?:ms|s)\s+(?:was\s+)?exceeded)/i;
+  const scan = (text: string, onlyCovered: ReadonlySet<string> | undefined) => {
+    let current: string | undefined;
+    for (const line of text.split('\n')) {
+      const header = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/.exec(line);
+      if (header) {
+        current = header[1]!.replace(/^\.\//, '');
+        if (root && isAbsolute(current)) current = relative(root, current);
+        if (!known.has(current)) current = undefined;
+      } else if (current && timeoutLine.test(line) && (!onlyCovered || onlyCovered.has(current))) found.add(current);
     }
+  };
+  const block = gateJunitBlock(output);
+  if (!block) scan(beforeUnitSummary(output), undefined);
+  else {
+    scan(dropRunSummary(stripJunitBlocks(block.before)), junitReportedFiles(output, candidates, root));
+    scan(dropRunSummary(stripJunitBlocks(block.after)), undefined);
   }
+  for (const file of junitTimeoutFiles(output, candidates, root)) found.add(file);
   return [...found].sort();
 }
 
@@ -2466,51 +2549,62 @@ function bunRunSummaryLine(line: string): boolean {
   return /^\s*(?:\d+\s+(?:pass|fail|skip|todo|error)\b|Ran\s+\d+\s+tests?\b|(?:Test Suites|Tests|Time|Duration):|Completed in\b)/i.test(line);
 }
 
-/** Retain file-scoped unhandled errors, separate from named assertion failures. */
+/** Retain file-scoped unhandled errors, separate from named assertion failures.
+ * A file the report names already ran; its `error:` lines are transcript. A bare `error:` line
+ * before the report, under a file the report does not name, was printed by another file.
+ * `# Unhandled error` still counts for an omitted file. A bare `error:` after the report is the
+ * owner transcript joined there. */
 export function unitFileErrorDetails(output: string, candidates: readonly string[], root?: string,
   failingFiles: readonly string[] = []): UnitFileErrorDetail[] {
   const known = new Set(candidates);
-  // A file the JUnit report names already ran. Its `error:` lines are transcript, not a load failure.
   const reportedByJunit = junitReportedFiles(output, candidates, root);
   const errors = new Map<string, string[][]>();
   const sections = new Map<string, string[]>();
-  const plain = beforeUnitSummary(output).replace(/\u001b\[[\d;]*m/g, '');
   const namedFailures = new Set(unitFailureDetails(output, candidates, root).map(failure => failure.file));
-  let current: string | undefined;
-  let collecting = false;
-  for (const line of plain.split('\n')) {
-    const header = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/.exec(line);
-    if (header) {
-      current = header[1]!.replace(/^\.\//, '');
-      if (root && isAbsolute(current)) current = relative(root, current);
-      if (!known.has(current)) current = undefined;
-      if (current) sections.set(current, []);
-      collecting = false;
-      continue;
-    }
-    if (!current) continue;
-    sections.get(current)!.push(line);
-    if (/^# Unhandled error/i.test(line)) {
-      const bucket = errors.get(current) ?? [];
-      bucket.push([line.trim()]);
-      errors.set(current, bucket);
-      collecting = true;
-    } else if (isUnitErrorLine(line)) {
-      // A report that names this file already judged it. A bare `error:` line is its transcript.
-      if (reportedByJunit.has(current) && !collecting) continue;
-      if (collecting || !namedFailures.has(current)) {
+  const collect = (plain: string, bareErrors: boolean) => {
+    let current: string | undefined;
+    let collecting = false;
+    for (const line of plain.split('\n')) {
+      const header = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/.exec(line);
+      if (header) {
+        current = header[1]!.replace(/^\.\//, '');
+        if (root && isAbsolute(current)) current = relative(root, current);
+        if (!known.has(current)) current = undefined;
+        if (current) sections.set(current, []);
+        collecting = false;
+        continue;
+      }
+      if (!current) continue;
+      sections.get(current)!.push(line);
+      if (/^# Unhandled error/i.test(line)) {
         const bucket = errors.get(current) ?? [];
-        if (!collecting) bucket.push([]);
-        bucket[bucket.length - 1]!.push(line.trim());
+        bucket.push([line.trim()]);
         errors.set(current, bucket);
         collecting = true;
-      }
-    } else if (collecting && bunRunSummaryLine(line)) collecting = false;
-    else if (collecting && /^\((?:pass|fail|skip|todo)\)/.test(line)) collecting = false;
-    else if (collecting && /^\s*at\s/.test(line)) {
-      errors.get(current)!.at(-1)!.push(line.trimEnd());
-    } else if (collecting && /^\(fail\)/.test(line)) collecting = false;
-    else if (collecting) errors.get(current)!.at(-1)!.push(line.trimEnd());
+      } else if (isUnitErrorLine(line)) {
+        if (!collecting && !bareErrors) continue;
+        if (reportedByJunit.has(current) && !collecting) continue;
+        if (collecting || !namedFailures.has(current)) {
+          const bucket = errors.get(current) ?? [];
+          if (!collecting) bucket.push([]);
+          bucket[bucket.length - 1]!.push(line.trim());
+          errors.set(current, bucket);
+          collecting = true;
+        }
+      } else if (collecting && bunRunSummaryLine(line)) collecting = false;
+      else if (collecting && /^\((?:pass|fail|skip|todo)\)/.test(line)) collecting = false;
+      else if (collecting && /^\s*at\s/.test(line)) {
+        errors.get(current)!.at(-1)!.push(line.trimEnd());
+      } else if (collecting && /^\(fail\)/.test(line)) collecting = false;
+      else if (collecting) errors.get(current)!.at(-1)!.push(line.trimEnd());
+    }
+  };
+  const plain = (text: string) => dropRunSummary(stripJunitBlocks(text)).replace(/\u001b\[[\d;]*m/g, '');
+  const block = gateJunitBlock(output);
+  if (!block) collect(plain(output), true);
+  else {
+    collect(plain(block.before), false);
+    collect(plain(block.after), true);
   }
   for (const file of failingFiles) {
     if (reportedByJunit.has(file) || errors.has(file) || namedFailures.has(file)) continue;
@@ -2984,6 +3078,27 @@ function relativizeJunitFiles(xml: string, cwd: string): string {
   });
 }
 
+/** A test may print a gate transcript on stdout. Indenting it stops a column-0 header or `(fail)` line
+ * from naming a file this shard did not fail. */
+function indentPrintedStdout(text: string): string {
+  if (!text) return '';
+  return text.split('\n').map(line => line.length === 0 ? line : `  ${line}`).join('\n');
+}
+
+/** The merge log keeps the last 20KB of a shard. Indent each kept line, and start at a line boundary
+ * so a cut cannot leave a `(fail)` or a file header at column 0. */
+function indentedTranscriptTail(text: string, maxChars = 20_000): string {
+  const indented = indentPrintedStdout(text);
+  if (indented.length <= maxChars) return indented;
+  let start = indented.length - maxChars;
+  if (indented[start - 1] !== '\n') {
+    const next = indented.indexOf('\n', start);
+    if (next < 0) return '';
+    start = next + 1;
+  }
+  return indented.slice(start);
+}
+
 async function runUnitShard(cwd: string, files: readonly string[], deadline: number, invocation?: ShardInvocation): Promise<UnitShardResult> {
   const startedAt = Date.now();
   const unfinished = (output: string, timedOut: string[] = timedOutTestFiles(output, files, cwd)): UnitShardResult =>
@@ -3028,7 +3143,13 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   child.stdout?.on('data', take(stdout));
   child.stderr?.on('data', take(stderr));
   const output = () => {
-    const parts = [`${stdout.join('')}\n${stderr.join('')}`];
+    const stdoutText = stdout.join('');
+    const stderrText = stderr.join('');
+    // Bun writes its report on stderr. A test's stdout can print another file's header and `(fail)` line.
+    // Indenting stdout keeps that transcript from being read as this shard's console result. The owner
+    // tier's transcript is the result, so it stays at column 0.
+    const streamed = invocation ? `${stdoutText}\n${stderrText}` : `${indentPrintedStdout(stdoutText)}\n${stderrText}`;
+    const parts = [streamed];
     // Written as each file starts, so an outer kill still names the file that was running.
     if (invocation?.progressFile && existsSync(invocation.progressFile))
       parts.push(readFileSync(invocation.progressFile, 'utf8'));
@@ -3189,14 +3310,17 @@ function fileDeclaredTimeout(cwd: string, file: string): DeclaredTestTimeout {
 }
 
 /** A stub can return the last file's cases while the JUnit report in its output names each file.
- * A unit report joined to an owner transcript covers only the files it names. The owner's cases stay. */
+ * A unit report joined to an owner transcript covers only the files it names. The owner's cases stay.
+ * Cases a runner already listed are not kept: a printed transcript can name them. Owner cases are the
+ * `(fail)` lines after the report. A done shard that reported no file is read again, so a timeout in
+ * the gate's report is that file's result and not an unattributed runner failure. */
 function attributeShard(result: UnitShardResult): UnitShardResult {
-  if (!result.done || result.runnerErrors.length) return result;
+  if (!result.done) return result;
   const parsed = junitFailureDetails(result.output, result.files);
   if (!parsed) return result;
   const covered = junitReportedFiles(result.output, result.files);
   const seen = new Set(parsed.map(item => `${item.file}\0${item.test}`));
-  const retained = result.failures.filter(item => {
+  const retained = unitFailureDetails(consoleAfterReport(result.output), result.files).filter(item => {
     if (covered.has(item.file)) return false;
     const key = `${item.file}\0${item.test}`;
     if (seen.has(key)) return false;
@@ -3204,16 +3328,18 @@ function attributeShard(result: UnitShardResult): UnitShardResult {
     return true;
   });
   const failures = [...parsed, ...retained];
-  // Console `error:` text on a file the report names is not a file error. An omitted file still is.
-  const fileErrors = result.fileErrors.filter(error => !covered.has(error.file));
+  const timedOut = [...new Set([...result.timedOut, ...timedOutTestFiles(result.output, result.files)])].sort();
   const unhandled = [...consoleFailureKinds(result.output, result.files).unhandled].filter(file => !covered.has(file));
+  const fileErrors = unitFileErrorDetails(result.output, result.files, undefined, [
+    ...failures.map(item => item.file), ...timedOut, ...unhandled,
+  ]).filter(error => !covered.has(error.file));
   const failing = [...new Set([
     ...failures.map(item => item.file),
     ...fileErrors.map(error => error.file),
-    ...result.timedOut,
+    ...timedOut,
     ...unhandled,
   ])].sort();
-  return { ...result, failing, failures, fileErrors };
+  return { ...result, failing, timedOut, failures, fileErrors, runnerErrors: failing.length ? [] : result.runnerErrors };
 }
 
 async function runUnitGatePass(cwd: string, files: readonly string[], shards: number | undefined,
@@ -3656,8 +3782,10 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
   }
   if (!failureFiles.length) return none({ initialDone: branch.done });
   // Case evidence does not replace the raw transcript the merge log kept before that channel existed.
+  // Indent it: this line is printed while a test file is itself under the gate, and a column-0 header
+  // or `(fail)` in the excerpt would be read as another file's result.
   if (side === 'affected') {
-    console.log(`Unit gate: ${failureFiles.length} file(s) fail on the branch:\n${branch.output.slice(-20_000)}`);
+    console.log(`Unit gate: ${failureFiles.length} file(s) fail on the branch:\n${indentedTranscriptTail(branch.output)}`);
   }
   // A file can fail beside its shard-mates and pass when those failures run together. Confirm those together,
   // then retry every timeout alone so the side's decision comes from its isolated run.
@@ -3682,6 +3810,16 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
     reportUnfinished(side, unresolved);
     return none({ failing: confirmedFailures, inconclusive: unresolved, initialDone: branch.done });
   }
+  const acrossShards = branch.done && confirmed.done ? together.filter(file => !confirmed.failing.includes(file)) : [];
+  // A JUnit timeout is excluded from the together-confirm. Its alone pass is the same class as a
+  // failure that disappears when the file runs by itself.
+  const passedAlone = [...retry.passing].sort();
+  if (acrossShards.length) {
+    console.log(`Unit gate: ${acrossShards.length} file(s) failed only across shards; order-dependent, reported, not blocking\n  ${acrossShards.join('\n  ')}`);
+  }
+  if (passedAlone.length) {
+    console.log(`Unit gate: ${passedAlone.length} file(s) pass when run alone; order or load dependent, reported, not blocking\n  ${passedAlone.join('\n  ')}`);
+  }
   return {
     failing: confirmedFailures,
     failures: [
@@ -3695,7 +3833,7 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
       ...retry.fileErrors,
     ],
     runnerErrors: [], inconclusive: [], initialDone: branch.done,
-    orderDependent: branch.done && confirmed.done ? together.filter(file => !confirmed.failing.includes(file)) : [],
+    orderDependent: [...new Set([...acrossShards, ...passedAlone])].sort(),
   };
 }
 
@@ -3913,9 +4051,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, currentMain:
       console.log(`Pre-merge unit gate: every affected unit file and repository guard ${side.initialDone ? 'passes' : 'passes after isolated retry'}`);
       return;
     }
-    if (side.orderDependent.length) {
-      console.log(`Unit gate: ${side.orderDependent.length} file(s) failed only across shards; order-dependent, reported, not blocking\n  ${side.orderDependent.join('\n  ')}`);
-    }
+    // `runUnitSide` already reported order-dependent and alone-pass files.
     if (!side.failing.length) return;
     // A file main does not have is entirely new. A file both sides have is introduced only for case names or
     // file-level first lines the main run lacks; the refusal names those and leaves the shared cases below.

@@ -1196,6 +1196,155 @@ describe('goalctl runtime policy', () => {
     expect(side.fileErrors).toEqual([]);
   });
 
+  test('a junit timeout that passes when the file runs alone is order or load dependent and not blocking', async () => {
+    const slow = 'scripts/goal/goalctl.test.ts';
+    const other = 'scripts/goal/goalctl-companion.test.ts';
+    const bounds = 'services/main/tests/library-public-bounds.test.ts';
+    const files = [slow, other];
+    const caseName = 'a shard timeout stays inconclusive until the file runs alone';
+    const printed = [
+      '<?xml version="1.0" encoding="UTF-8"?>', '<testsuites>',
+      `<testcase name="library public bounds reject an oversize page" file="${bounds}">`,
+      '<failure type="AssertionError" message="error: id 111"></failure>', '</testcase>',
+      '</testsuites>',
+      // An unclosed testcase would swallow the next report's failure if the first marker were the report.
+      `<testcase name="swallowed" file="${bounds}">`,
+      '<failure type="AssertionError" message="error: id 111"></failure>',
+    ].join('\n');
+    const report = [
+      '<?xml version="1.0" encoding="UTF-8"?>', '<testsuites>',
+      `<testsuite name="${other}">`,
+      `<testcase name="companion passes" file="${other}" />`,
+      '</testsuite>',
+      `<testsuite name="${slow}">`,
+      `<testcase name="${caseName}" file="${slow}" time="18.8">`,
+      '<failure type="TimeoutError" message="test timed out" />', '</testcase>',
+      '</testsuite>', '</testsuites>',
+    ].join('\n');
+    const output = [
+      `${other}:`, '(pass) companion passes [1.00ms]',
+      `${bounds}:`, '(fail) library public bounds reject an oversize page [1.00ms]',
+      'error: id 111', 'port 54321',
+      UNIT_JUNIT_MARKER, printed,
+      `${slow}:`, `(fail) ${caseName} [18762.28ms]`,
+      UNIT_JUNIT_MARKER, report,
+      `  ${UNIT_JUNIT_MARKER}`,
+      `<testsuites><testcase name="nope" file="${other}"><failure message="nope"></failure></testcase></testsuites>`,
+    ].join('\n');
+    const candidates = [...files, bounds];
+    expect(failingTestFiles(output, candidates)).toEqual([slow]);
+    expect(timedOutTestFiles(output, candidates)).toEqual([slow]);
+    expect(unitFailureDetails(output, candidates).map(item => [item.file, item.test])).toEqual([[slow, caseName]]);
+    expect(unitFileErrorDetails(output, candidates)).toEqual([]);
+    const previousShards = process.env.GOAL_UNIT_GATE_SHARDS;
+    process.env.GOAL_UNIT_GATE_SHARDS = '1';
+    const lines: string[] = [];
+    const write = console.log;
+    console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
+    const calls: string[][] = [];
+    try {
+      const runs: UnitRunEvidence[] = [];
+      const side = await runUnitSide('/repo', files, 'affected', runs, async (_cwd, group) => {
+        calls.push([...group]);
+        if (group.length === 1) {
+          return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [],
+            files: [...group], output: `${group[0]}:\n(pass) finishes [1.00ms]`, ms: 1 };
+        }
+        return {
+          done: true, failing: [], timedOut: [], failures: [], fileErrors: [],
+          runnerErrors: [{ files: ['runner'], diagnostic: 'task: Failed to run task "goal": exit status 1' }],
+          files: [...group], output, ms: 1,
+        };
+      });
+      expect(calls.map(group => [...group].sort())).toEqual([[...files].sort(), [slow]]);
+      expect(side.failing).toEqual([]);
+      expect(side.inconclusive).toEqual([]);
+      expect(side.runnerErrors).toEqual([]);
+      expect(side.orderDependent).toEqual([slow]);
+      const printedLog = lines.join('\n');
+      expect(printedLog).toContain('pass when run alone; order or load dependent, reported, not blocking');
+      expect(printedLog).toContain(slow);
+      expect(printedLog).not.toContain('unattributed');
+      const first = runs.find(run => run.kind === 'first');
+      expect(first?.files.some(file => file.file === slow && file.cases.some(item => item.test === caseName))).toBe(true);
+      expect(first?.files.some(file => file.file === bounds)).toBe(false);
+    } finally {
+      console.log = write;
+      if (previousShards === undefined) delete process.env.GOAL_UNIT_GATE_SHARDS;
+      else process.env.GOAL_UNIT_GATE_SHARDS = previousShards;
+    }
+  });
+
+  test('a passing file that prints fail lines naming other files makes no file fail', async () => {
+    const printer = 'scripts/goal/goalctl.test.ts';
+    const bounds = 'services/main/tests/library-public-bounds.test.ts';
+    const checkout = 'services/main/tests/nested-pool-checkout.test.ts';
+    const budget = 'tests/qa/unit/search-private-budget.test.ts';
+    const files = [printer, bounds, checkout, budget];
+    const printed = [
+      '<?xml version="1.0" encoding="UTF-8"?>', '<testsuites>',
+      `<testcase name="library public bounds reject an oversize page" file="${bounds}">`,
+      '<failure type="AssertionError" message="error: id 111&#10;port 54321"></failure>', '</testcase>',
+      `<testcase name="nested pool checkout releases the client" file="${checkout}">`,
+      '<failure type="AssertionError" message="error: id 222"></failure>', '</testcase>',
+      `<testcase name="SEARCH10: private Fuseki call count rejects an invalid budget before reading" file="${budget}">`,
+      '<failure type="AssertionError" message="error: invalid budget"></failure>', '</testcase>',
+      '</testsuites>',
+    ].join('\n');
+    const report = [
+      '<?xml version="1.0" encoding="UTF-8"?>', '<testsuites>',
+      `<testsuite name="${printer}">`,
+      `<testcase name="prints a gate transcript" file="${printer}" />`,
+      '</testsuite>', '</testsuites>',
+    ].join('\n');
+    const output = [
+      `${printer}:`, '(pass) prints a gate transcript [0.40ms]',
+      `${bounds}:`, '(fail) library public bounds reject an oversize page [1.00ms]',
+      'error: id 111', 'port 54321',
+      `${checkout}:`, '(fail) nested pool checkout releases the client [2.00ms]',
+      'error: id 222',
+      `${budget}:`, '(fail) SEARCH10: private Fuseki call count rejects an invalid budget before reading [3.00ms]',
+      'error: invalid budget',
+      UNIT_JUNIT_MARKER, printed,
+      UNIT_JUNIT_MARKER, report,
+    ].join('\n');
+    expect(failingTestFiles(output, files)).toEqual([]);
+    expect(unitFailureDetails(output, files)).toEqual([]);
+    expect(unitFileErrorDetails(output, files)).toEqual([]);
+    expect(timedOutTestFiles(output, files)).toEqual([]);
+    expect(unitFileEvidence(output, files, [], [])).toEqual([]);
+    const previousShards = process.env.GOAL_UNIT_GATE_SHARDS;
+    process.env.GOAL_UNIT_GATE_SHARDS = '1';
+    const write = console.log;
+    console.log = () => {};
+    try {
+      const runs: UnitRunEvidence[] = [];
+      const side = await runUnitSide('/repo', files, 'affected', runs, async () => ({
+        done: true, failing: [bounds, checkout, budget], timedOut: [],
+        failures: [
+          { file: bounds, test: 'library public bounds reject an oversize page', detail: 'error: id 111\nport 54321' },
+          { file: checkout, test: 'nested pool checkout releases the client', detail: 'error: id 222' },
+          { file: budget, test: 'SEARCH10: private Fuseki call count rejects an invalid budget before reading', detail: 'error: invalid budget' },
+        ],
+        fileErrors: [
+          { file: bounds, detail: 'error: id 111\nport 54321' },
+          { file: checkout, detail: 'error: id 222' },
+          { file: budget, detail: 'error: invalid budget' },
+        ],
+        runnerErrors: [], files, output, ms: 1,
+      }));
+      expect(side.failing).toEqual([]);
+      expect(side.fileErrors).toEqual([]);
+      expect(side.failures).toEqual([]);
+      expect(side.runnerErrors).toEqual([]);
+      expect(runs.flatMap(run => run.files)).toEqual([]);
+    } finally {
+      console.log = write;
+      if (previousShards === undefined) delete process.env.GOAL_UNIT_GATE_SHARDS;
+      else process.env.GOAL_UNIT_GATE_SHARDS = previousShards;
+    }
+  });
+
   test('the same permission case is inherited when only its subject text changes', () => {
     const file = 'tests/qa/unit/permissions.test.ts';
     const report = (...subjects: string[]): UnitFailureDetail[] => subjects.map(subject => ({ file,
@@ -2008,6 +2157,7 @@ describe('goalctl shared lifecycle and launch gates', () => {
     writeFileSync(join(dir, '.temp/bin/corepack'), '#!/bin/sh\nexit 0\n');
     for (const binary of ['grok', 'corepack']) chmodSync(join(dir, '.temp/bin', binary), 0o755);
     writeFileSync(join(dir, '.temp/bin/task'), `#!/usr/bin/env bun
+import { spawn } from 'node:child_process';
 import { appendFileSync, readFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 if (args[0] === 'install') process.exit(0);
@@ -2021,8 +2171,12 @@ if (process.env.GOAL_TEST_RUNNER_FAILURE) {
   console.error(process.env.GOAL_TEST_RUNNER_FAILURE);
   process.exit(1);
 }
-const child = Bun.spawn(['bun', 'test', ...args.slice(2)], { stdout: 'inherit', stderr: 'inherit' });
-process.exit(await child.exited);
+// Capture the child gate and forward it on this task's own pipes. The parent gate already
+// collects those pipes. Inheriting would print the child's transcript into whatever is running this task.
+const child = spawn('bun', ['test', ...args.slice(2)], { stdio: ['ignore', 'pipe', 'pipe'] });
+child.stdout.pipe(process.stdout);
+child.stderr.pipe(process.stderr);
+child.on('close', code => process.exit(code ?? 1));
 `);
     chmodSync(join(dir, '.temp/bin/task'), 0o755);
     const ready = join(dir, '.temp/ready');
