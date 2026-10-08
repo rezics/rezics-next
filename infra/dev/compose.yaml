@@ -34,7 +34,7 @@ services:
       retries: 30
 
   fuseki:
-    image: rezics/fuseki:6.2.0-cmd0.5.39-ad8fad6e2794
+    image: rezics/fuseki:6.2.0-cmd0.5.39-4cc7c568097a
     oom_score_adj: ${REZICS_FUSEKI_OOM_SCORE_ADJ:-0}
     mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-7g}
     stop_grace_period: 60s
