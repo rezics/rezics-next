@@ -1,5 +1,96 @@
 # State
 
+## Handover (2026-10-08)
+
+Program mailc2e493 requests immediate Codex→Sonnet manager handover at this
+turn's exit; both Codex accounts near exhaustion, banked reset forbidden. Goal
+ACTIVE, C4–C6/full completion unproven. Start no duplicate jobs. Current facts
+checked 04:24 UTC; older statuses below are historical.
+
+- **G1282 Grok30 RUNNING PID1371035**, candidate8853b5367. Compose exact accepted
+  Title TS0f eight paths with native Claim56+Title61 atomically. Programc1b426:
+  external-fixture category (existing JUnit4, no migration), original Title8 in
+  wrapper immediately after actual SQL2/71 issuer/compile; all other native
+  classes in package. Guard prevents classes excluded from both. Original61
+  wrapper cases/caps unchanged. Same-pin package PLUS wrapper qualify activation,
+  never package alone/untested tag. Brief `.temp/kernel/g1282-external-fixture29.txt`.
+  Await terminal/source review, reconcile generated pin, normal merge, full image
+  qualification and mandatory refresh. Eight TS selected paths now G1282 claim;
+  G1290 joined QA test remains separate. Prior117 proof104firstpasses+17rerun
+  (4duplicatepasses), NOT fresh117. Native21e not built/activated.
+- **G1345 Sonnet19 RUNNING PID1247628**, candidated84b0ddef. Fix actual unsigned
+  cached all-done progress forgery and final awaited SQL deadline hole. Existing
+  service capability HMAC binds entire progress/job/fence/cuts/attempt/deadline;
+  no new native authority. Keep complete:false/release denied and creator/E→R/
+  seek linkage unresolved. Original51/957 preserved; prior55/1008 owner,
+  original21/704 paired integration, isolated1/35 actual passes. Inspect new proof.
+  Brief `.temp/kernel/g1345-receiver19.txt`. Facade1472 patch is staged/restored,
+  no production caller yet; no authentic owner closure inferred from component.
+- **G1373 Sonnet16 PID1487981 LIVE although task state conflict**, attemptJSON
+  empty/endedAt absent. Merge failure changed task state; apparent task-exit event
+  is NOT worker death. No duplicate resume. Candidate840fadd5c tracked files
+  unchanged; untracked `tests/qa/integration/private-original-source.test.ts`
+  being staged. Brief `.temp/kernel/g1373-private-proof16.txt` forbids tracked
+  changes/commits while gate. Read selected immutable CREATE/EDIT revision bytes;
+  initial creator authority from original CREATE receipt. Do NOT replace edited
+  search head unconditionally with initial CREATE body. Foundation1/20 is only
+  current private posting. Await staged authentic lostACK/recovery/erasure proof.
+- **G1373 merge0400 TERMINAL201**, unit inactive. Log
+  `.temp/kernel/G-1373-supervised-gate-0400-new-policy.log`: unattributed runner
+  failure28files; retry output391pass/1existingtodo/0fail5742assert112.57s. Not
+  passing evidence. Reported Program2212aa; await diagnosis/retry direction.
+- **G1379 structure0404 gate LIVE PID1320796**, user unit
+  `rezics-kernel-structure-new-policy-0404`, Taskfile `.temp/kernel/structure-new-policy-0404.yml`,
+  log `.temp/kernel/G-1379-supervised-gate-0404-new-policy.log`;535files/baseline
+  retries, G1022 known owner failure. No worker live. Candidate9e6aa7441 includes
+  exact unchanged-manifest generation/count fixture, actual2/9. Scope corrected
+  from quoted literal paths; clean. Need normal landing then real stage64 proof.
+- **G1352 schemafixture0410 gate LIVE PID1406081**, user unit
+  `rezics-kernel-schema-fixture-0410`, Taskfile `.temp/kernel/schema-fixture-0410.yml`,
+  log `.temp/kernel/G-1352-supervised-gate-0410-schema-fixture.log`;557files/5shards,
+  native shard PASS686005ms,277no-verdict retries live. No worker live.
+  Candidate8863f075b independently accepted original14cases/249assert QA040540-74b0c3,
+  exact8table inventory/all saved-column equality/new3columns null. Normal merge
+  required. Both LIVE units self-mail terminal verdicts outside coordinator.
+- **No Kernel refresh live.** Last verified shared activationd1d351bcf native835,
+  all6healthy; full355/0failure/error/skip, originalrelease3/64 passed334.3s.
+  G1397 CLOSED VERIFIED. G1300 publicationcc1 landed/activated Access1776+
+  Content1707, originalG9201/598 and publication7/88 actual physical proof;
+  closure still needs originalG847 (LaunchG1421 wiring). G1330 merged repaira215;
+  authentic held Source/private recovery remains unfinished. Every new native/
+  generated model/migration merge MUST `task dev:refresh -- --wait`.
+- **Loans:** Programfa887 approved ONLY generated native-image pin hunk in
+  `docs/development/toolchain.md` (task gen output). G1417 live claim; worker
+  freezes/stages/restores, manager reconciles exact hunk after claim release,
+  or Program offered selected --allow-scope landing. No tool/version/content edit.
+  Programc1b426 exact Docker category line/comment loan. Program290bf exact2line
+  isolated integration registry entry for new Claim test. Original mixed Claim
+  conversions raw CLEAR ALL400 reported Programd7c589; sanctioned isolation
+  pending, no reset/assertion weakening. Trust exact Title issuer50db loan
+  persists, now selected atomic G1282. Trust sole Comment/Verification C6 erasure
+  ownership G1408/G1411; never concurrent edit erasure/content.ts/barriers.
+  Launchb3868 exact originalG847 StatementSeek fixture wiring loan, all asserts
+  kept; G1421 active, await source-stable original result. Earlier exactg916
+  fixture loan native descriptors/negative tests only remains preserved.
+- **Pending API decision:** Launchde499 asks no-notes Recipe publication. Actual
+  authored own-work is private absent selected public text or catalogueVisible;
+  Recipe reader uses Work disclosure then selected Structure, no Composition
+  publication decision. Option(a) not proven by owner-granted recipe-work-page
+  fixture (other principal404). Need generic structured publication with optional
+  notes, not filler/relaxed empty_body or recipe-specific backend. Existing
+  catalogue-visible Recipes differ. Findings mailed Launch; implementation not
+  chosen/started due handover. New manager settles capability then coordinates UI.
+- Program owns wider owner regressions, gate retry diagnostics G1417, coordinator
+  handover; Kernel only own identified failures. Core cleanup45aa4770b fixed34/0
+  within original5s. Main fixture repairs79206f040 Statement12/139 and3344ee18f
+  graph-position3/45 pass, no production limit changes. Last checkpoint80ca3da23.
+  Read durable inbox and ACK each real mail ID (include `mail:` prefix); regression
+  ACK separate. Preserve peer edits/frozen originals, vault manager-only. Memory
+  floor12GiB/24host workers; no worker --heavy; current defaultGrok while Cursor
+  HTTP2 outage, correctness Sonnet at most2. Do not declare any whole contract
+  from these partial component proofs. Program will unenroll old manager AFTER
+  turn exits and launch replacement in same tmux; leave jobs/services running.
+
 Checkpoint: 2026-10-08 04:04 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
