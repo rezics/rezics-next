@@ -25,6 +25,9 @@ export const POLICY_DECISION_ACTIONS = {
 } as const;
 export type PolicyDecisionAction = keyof typeof POLICY_DECISION_ACTIONS;
 
+/** Live direct grants one decision records. The lowest ids are the proof; further grants still allow. */
+export const DIRECT_GRANT_PROOF_LIMIT = 8;
+
 export interface PolicyDecisionRequest {
   principal: VerifiedPrincipal; scopeId: string; action: PolicyDecisionAction;
   actingSubject: string | null; reusable: boolean; validitySeconds: number;
@@ -33,7 +36,7 @@ export interface PolicyDecision {
   decisionId: string | null; result: 'allow' | 'deny' | 'unavailable';
   policyId: string; policyRevision: string; authorityEpoch: string;
   expiresAt: string | null; reusable: boolean;
-  /** The single complete source selected for this judgement. */
+  /** Live direct grants that support this judgement, lowest id first, or the one role binding. */
   sources: { kind: 'permission_grant' | 'role_binding'; id: string; generation: string }[];
 }
 
@@ -74,6 +77,7 @@ interface SelectedPolicyAuthority {
 
 interface GrantFact {
   kind: 'permission_grant' | 'role_binding'; id: string; generation: string;
+  valid_until?: Date;
   membership_id: string | null; membership_generation: string | null;
   membership_kind: 'org' | 'realm' | null; membership_owner: string | null;
 }
@@ -137,6 +141,8 @@ async function policyJudgement(client: PoolClient, policy: PublishedPolicy,
 class SnapshotFacts implements PolicyFacts {
   readonly inputs = new FrameInputs();
   readonly sources: PolicyDecision['sources'] = [];
+  /** Earliest expiry among recorded direct grants. A lease ends no later than this. */
+  authorityExpiresAt: Date | null = null;
   reusableAuthority = true;
   unavailableSets = 0;
   private readonly memberships = new Map<string, PolicyMembershipFact>();
@@ -252,17 +258,23 @@ class SnapshotFacts implements PolicyFacts {
       this.budget.spendRows(this.selected.eligible ? 1 : 0);
       return this.selected.eligible;
     }
+    // permission_grant_active_lookup bounds this to one recipient, scope and action.
+    // The lowest ids are the proof; the limit bounds the snapshot write.
     const direct = await this.rows<GrantFact>(`
-      SELECT 'permission_grant' AS kind, g.id, g.generation, g.membership_id,
+      SELECT 'permission_grant' AS kind, g.id, g.generation, g.valid_until, g.membership_id,
         m.generation AS membership_generation, m.kind AS membership_kind, m.owner_subject AS membership_owner
-      FROM (SELECT * FROM access.permission_grant
-        WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
-          AND valid_until > $4 ORDER BY valid_until LIMIT 1) g
+      FROM access.permission_grant g
       LEFT JOIN access.membership m ON m.id = g.membership_id
-      WHERE (g.membership_id IS NULL
-          OR (m.state = 'joined' AND m.generation = g.membership_generation))`,
-    [this.actingSubject, this.scopeId, action, this.now]);
-    if (direct.length) { this.recordGrant(direct[0]!); return true; }
+      WHERE g.recipient_subject = $1 AND g.scope_id = $2 AND g.action = $3 AND g.active
+        AND g.valid_until > $4
+        AND (g.membership_id IS NULL
+          OR (m.state = 'joined' AND m.generation = g.membership_generation))
+      ORDER BY g.id LIMIT $5`,
+    [this.actingSubject, this.scopeId, action, this.now, DIRECT_GRANT_PROOF_LIMIT]);
+    if (direct.length) {
+      for (const grant of direct) this.recordGrant(grant);
+      return true;
+    }
     // Work creation selects direct, group, then role, exactly as admission.
     if (action === 'work.create' && this.scopeId === 'work:create:root'
       && await this.groupGrant()) return true;
@@ -291,6 +303,9 @@ class SnapshotFacts implements PolicyFacts {
     }
     if (!this.sources.some(saved => saved.kind === source.kind && saved.id === source.id)) {
       this.sources.push({ kind: source.kind, id: source.id, generation: source.generation });
+    }
+    if (source.valid_until && (!this.authorityExpiresAt || source.valid_until < this.authorityExpiresAt)) {
+      this.authorityExpiresAt = source.valid_until;
     }
   }
 
@@ -396,7 +411,11 @@ export class AccessPolicyDecisions {
       const decided = judgement.decided;
       const reusable = request.reusable && decided.outcome === 'allow' && facts.reusableAuthority;
       const decisionId = randomUUID();
-      const expiresAt = new Date(now.getTime() + request.validitySeconds * 1000);
+      const requestedEnd = new Date(now.getTime() + request.validitySeconds * 1000);
+      // Direct grants end the lease at the earliest recorded expiry, and never
+      // later than the requested window.
+      const expiresAt = facts.authorityExpiresAt && facts.authorityExpiresAt < requestedEnd
+        ? facts.authorityExpiresAt : requestedEnd;
       await insertFrame(client, { id: decisionId, kind: 'policy', principalId: principal.id,
         principalEpoch: principal.enforcement_epoch, actingSubject: request.actingSubject,
         actingSubjectGeneration: actor?.generation ?? null, action: request.action,

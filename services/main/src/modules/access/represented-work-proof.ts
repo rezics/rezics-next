@@ -38,8 +38,9 @@ export interface SavedRepresentedWorkProof {
   role_revision: string | null;
 }
 
-/** Select one indexed mandate and one direct grant. A live controller is
- * sufficient representation of its Agent, but grants no Work
+/** Select one indexed mandate and the lowest-id live direct grant. That is
+ * the first grant a decision records. A live controller is sufficient
+ * representation of its Agent, but grants no Work
  * permission: a separate grant, group or role is still required. Reusing that
  * mandate keeps revocation pinned without issuing a duplicate representation.
  * Statement time permits an indexed expiry range; capture and claim use wall
@@ -65,7 +66,7 @@ export async function representedWorkProof(client: PoolClient, principalId: stri
     SELECT id, generation FROM access.permission_grant
     WHERE recipient_subject = $1 AND scope_id = $2
       AND action = $3 AND active AND valid_until > statement_timestamp()
-    ORDER BY valid_until LIMIT 1 FOR SHARE`, [actingSubject, scope, action]);
+    ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject, scope, action]);
   return { representationId: selected.id,
     representationGeneration: selected.generation,
     subjectGeneration: selected.subject_generation,
