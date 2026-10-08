@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
@@ -8,6 +9,7 @@ import { mainSelectionDigest, selectMainDefault } from '../../../services/main/s
 import { StructureStageStore } from '../../../services/main/src/modules/structure/stage.ts';
 import { backfillOccurrenceLabels } from '../../../services/main/src/modules/structure/label-index-backfill.ts';
 import { integrationOrderPrelude } from '../support/integration-order.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { startMediaStack } from './media-support.ts';
 
 type Page = { items: Array<{ occurrence: string; ordinal: number }>; nextCursor: string | null;
@@ -28,6 +30,8 @@ test('G1021: chooser pages, numbered and CJK seeks, and saved positions at 100, 
   const stack = await startMediaStack('g-1021-reading-cost');
   try {
     const member = await stack.member('reading-cost-editor');
+    // Stage routes are catalogue-import. The running Main reads that grant through its exposure.
+    await grantRecordedPlatformUse(stack.accessPool, member.principalId, ['catalogue-import']);
     const originalObjects = stack.objects('semantic/structure/'); await originalObjects.initialize();
     let objectReads = 0, objectBytes = 0;
     const objects = { put: originalObjects.put.bind(originalObjects), get: async (digest: string) => {
@@ -44,6 +48,7 @@ test('G1021: chooser pages, numbered and CJK seeks, and saved positions at 100, 
       return result;
     };
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      platformAccess: new AccessExposure(stack.accessPool),
       media: stack.media, mediaAccess: stack.mediaAccess, readingPositions: new ReadingPositionStore(stack.contentPool),
       structureObjects: objects, structureStages: new StructureStageStore(stack.contentPool, objects),
       account: { verify: async request => {

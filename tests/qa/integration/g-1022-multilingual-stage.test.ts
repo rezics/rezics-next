@@ -1,10 +1,12 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { StructureStageStore } from '../../../services/main/src/modules/structure/stage.ts';
 import { backfillOccurrenceLabels } from '../../../services/main/src/modules/structure/label-index-backfill.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { startMediaStack } from './media-support.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`, short = (value: string) => value.slice(-36);
@@ -31,7 +33,10 @@ test('G1022: sealing, activation, search and later edits preserve every staged l
     };
     const work = await makeWork('Multilingual chapter labels', ['https://schema.org/Book']);
     const chapter = await makeWork('Multilingual chapter', ['https://schema.org/DigitalDocument']);
+    // Stage routes are catalogue-import. The running Main reads that grant through its exposure.
+    await grantRecordedPlatformUse(stack.accessPool, member.principalId, ['catalogue-import']);
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      platformAccess: new AccessExposure(stack.accessPool),
       structureObjects: objects, structureStages: new StructureStageStore(stack.contentPool, objects),
       account: { verify: async () => member.principal } });
     const call = (method: string, path: string, body?: object) => app.handle(new Request(`http://main.local${path}`, {

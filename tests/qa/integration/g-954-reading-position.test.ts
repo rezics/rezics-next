@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
@@ -8,6 +9,7 @@ import { mainSelectionDigest, selectMainDefault } from '../../../services/main/s
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { StructureStageStore, type StructureStage } from '../../../services/main/src/modules/structure/stage.ts';
 import { backfillOccurrenceLabels } from '../../../services/main/src/modules/structure/label-index-backfill.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { startMediaStack } from './media-support.ts';
 
 type Composition = { structure: string; revision: string; occurrences: string[] };
@@ -132,7 +134,10 @@ test('G954: API-built 10503-occurrence story traverses the old ceiling, seeks di
   try {
     const member = await stack.member('large-chooser-editor');
     const objects = stack.objects('semantic/structure/'); await objects.initialize();
+    // Stage routes are catalogue-import. The running Main reads that grant through its exposure.
+    await grantRecordedPlatformUse(stack.accessPool, member.principalId, ['catalogue-import']);
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      platformAccess: new AccessExposure(stack.accessPool),
       media: stack.media, mediaAccess: stack.mediaAccess, readingPositions: new ReadingPositionStore(stack.contentPool),
       structureObjects: objects, structureStages: new StructureStageStore(stack.contentPool, objects),
       account: { verify: async (request: Request) => {
