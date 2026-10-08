@@ -13,7 +13,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, inheritedSharedLifecycleOwnership, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
-  planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, runUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
+  planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, runUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_GATE_FILE_CAP, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
   mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
@@ -300,8 +300,8 @@ describe('goalctl runtime policy', () => {
       const { calls, run } = stub('b.test.ts', group =>
         ({ done: false, timedOut: ['c.test.ts'], budgetExpired: true, files: [...group] }));
       const result = await runUnitGate('.', files, 1, run);
-      // The rerun happens once; its own timeout is not rerun again.
-      expect(calls).toHaveLength(2);
+      // Files the budget never reached are continued. A later wave that classifies nothing stops.
+      expect(calls).toHaveLength(3);
       expect(result.done).toBe(false);
       expect(result.timedOut).toEqual(['b.test.ts', 'c.test.ts']);
       const neverStarted = result.unfinished.filter(file => !result.timedOut.includes(file));
@@ -340,6 +340,151 @@ describe('goalctl runtime policy', () => {
       expect(calls).toHaveLength(1);
       expect(result.runnerErrors).toHaveLength(1);
     });
+
+    test('a 600-file plan finishes every file when each shard completes only part of its files', async () => {
+      const files = Array.from({ length: 600 }, (_, index) => `wide-${String(index).padStart(3, '0')}.test.ts`);
+      const ran = new Set<string>();
+      const groups: string[][] = [];
+      let inFlight = 0;
+      let maxInFlight = 0;
+      let started = 0;
+      let release: (() => void) | undefined;
+      const hold = new Promise<void>(resolve => { release = resolve; });
+      const result = await runUnitGate('.', files, 4, async (_cwd, group) => {
+        groups.push([...group]);
+        started++;
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        if (started === 4) release?.();
+        if (started <= 4) await hold;
+        const completed = group.slice(0, Math.min(2, group.length));
+        for (const file of completed) ran.add(file);
+        inFlight--;
+        const finished = group.length <= 2;
+        return {
+          done: finished, budgetExpired: !finished, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [],
+          files: [...group], output: completed.map(file => `${file}:\n(pass) kept [1ms]\n`).join(''), ms: 1,
+        };
+      });
+      expect(maxInFlight).toBeLessThanOrEqual(4);
+      expect(groups.every(group => group.length <= UNIT_GATE_FILE_CAP)).toBe(true);
+      expect(groups.length).toBeGreaterThan(4);
+      expect(result.done).toBe(true);
+      expect(result.unfinished).toEqual([]);
+      expect([...ran].sort()).toEqual([...files].sort());
+    });
+
+    test('a shard that makes no progress is inconclusive and names its files', async () => {
+      const stuck = ['stuck-a.test.ts', 'stuck-b.test.ts', 'stuck-c.test.ts'];
+      const calls: string[][] = [];
+      const lines: string[] = [];
+      const write = console.log;
+      console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
+      try {
+        const result = await runUnitGate('.', stuck, 1, async (_cwd, group) => {
+          calls.push([...group]);
+          return shard(group, { done: false, budgetExpired: true, output: '' });
+        });
+        expect(calls).toEqual([stuck, stuck]);
+        expect(result.done).toBe(false);
+        expect(result.unfinished).toEqual(stuck);
+        const printed = lines.join('\n');
+        expect(printed).toContain('continuation made no progress');
+        for (const file of stuck) expect(printed).toContain(file);
+      } finally { console.log = write; }
+    });
+
+    test('main names the files when continuation makes no progress', async () => {
+      const stuck = ['main-a.test.ts', 'main-b.test.ts'];
+      const lines: string[] = [];
+      const write = console.log;
+      console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
+      try {
+        const side = await runUnitSide('.', stuck, 'main', [], async (_cwd, group) =>
+          shard(group, { done: false, budgetExpired: true, output: '' }));
+        expect(side.inconclusive).toEqual(stuck);
+        const printed = lines.join('\n');
+        expect(printed).toContain("main's run of 2 files did not finish");
+        for (const file of stuck) expect(printed).toContain(file);
+      } finally { console.log = write; }
+    });
+  });
+
+  test('duration-based planning puts known-slow files in their own shards', () => {
+    const budget = 12 * 60 * 1000;
+    const slow = 'services/main/tests/slow-gate.test.ts';
+    const fast = ['services/main/tests/a-gate.test.ts', 'services/main/tests/b-gate.test.ts', 'services/main/tests/c-gate.test.ts'];
+    const unmeasured = 'services/main/tests/unmeasured-gate.test.ts';
+    const planned = planUnitGateShards([
+      { file: slow, timeout: { unparseable: false }, durationMs: 10 * 60 * 1000 },
+      ...fast.map(file => ({ file, timeout: { unparseable: false }, durationMs: 5_000 })),
+      { file: unmeasured, timeout: { unparseable: false } },
+    ], 4, budget);
+    expect(planned.shards.find(entry => entry.files.includes(slow))?.files).toEqual([slow]);
+    const shared = planned.shards.filter(entry => entry.files.some(file => fast.includes(file) || file === unmeasured));
+    expect(shared).toHaveLength(1);
+    expect(shared[0]!.files).not.toContain(slow);
+    expect(shared[0]!.files).toEqual(expect.arrayContaining([...fast, unmeasured]));
+    expect(planned.shards.flatMap(entry => entry.files).sort()).toEqual([slow, ...fast, unmeasured].sort());
+  });
+
+  test('measured durations from QA history and gate evidence put known-slow files alone', async () => {
+    const cwd = mkdtempSync(join(import.meta.dir, '../../.temp/unit-gate-durations-'));
+    const slow = 'services/main/tests/slow-measured.test.ts';
+    const evidenceSlow = 'services/main/tests/evidence-slow.test.ts';
+    const fast = ['services/main/tests/fast-measured-a.test.ts', 'services/main/tests/fast-measured-b.test.ts'];
+    mkdirSync(join(cwd, '.artifacts/qa/20261008t000000-aaaaaa/logs'), { recursive: true });
+    writeFileSync(join(cwd, '.artifacts/qa/20261008t000000-aaaaaa/logs/unit-1-durations.json'),
+      JSON.stringify({ [slow]: 10 * 60 * 1000, [fast[0]]: 1_000, [fast[1]]: 1_000 }));
+    mkdirSync(join(cwd, '.temp/goal-orchestration/merges'), { recursive: true });
+    writeFileSync(join(cwd, '.temp/goal-orchestration/merges/prior.json'),
+      JSON.stringify({ invocations: [], durations: { [evidenceSlow]: 11 * 60 * 1000 } }));
+    const calls: string[][] = [];
+    const passed = (group: readonly string[]): UnitShardResult => ({
+      done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], files: [...group], output: '', ms: 1,
+    });
+    try {
+      const result = await runUnitGate(cwd, [slow, evidenceSlow, ...fast], 4, async (_cwd, group) => {
+        calls.push([...group]);
+        return passed(group);
+      });
+      expect(result.done).toBe(true);
+      expect(calls.find(group => group.includes(slow))).toEqual([slow]);
+      expect(calls.find(group => group.includes(evidenceSlow))).toEqual([evidenceSlow]);
+      const fastShard = calls.find(group => group.includes(fast[0]!));
+      expect(fastShard).toEqual(expect.arrayContaining(fast));
+      expect(fastShard).not.toContain(slow);
+      expect(fastShard).not.toContain(evidenceSlow);
+    } finally { rmSync(cwd, { recursive: true, force: true }); }
+  });
+
+  test('the gate names the unfinished files when the ceiling is reached', async () => {
+    const files = Array.from({ length: 10 }, (_, index) => `ceil-${index}.test.ts`);
+    const previous = process.env.GOAL_UNIT_GATE_CEILING_MS;
+    process.env.GOAL_UNIT_GATE_CEILING_MS = '1';
+    const lines: string[] = [];
+    const write = console.log;
+    console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
+    try {
+      const result = await runUnitGate('.', files, 1, async (_cwd, group) => {
+        await Bun.sleep(5);
+        const completed = group[0]!;
+        return {
+          done: false, budgetExpired: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [],
+          files: [...group], output: `${completed}:\n(pass) one [1ms]\n`, ms: 5,
+        };
+      });
+      expect(result.done).toBe(false);
+      expect(result.unfinished.length).toBeGreaterThan(0);
+      expect(result.unfinished.length).toBeLessThan(files.length);
+      const printed = lines.join('\n');
+      expect(printed).toContain('gate ceiling was reached');
+      for (const file of result.unfinished) expect(printed).toContain(file);
+    } finally {
+      console.log = write;
+      if (previous === undefined) delete process.env.GOAL_UNIT_GATE_CEILING_MS;
+      else process.env.GOAL_UNIT_GATE_CEILING_MS = previous;
+    }
   });
 
   describe('unit gate evidence for classified runs', () => {
@@ -3226,7 +3371,7 @@ process.exit(0);
       }, 40_000);
       expect(result.stderr).not.toContain('inconclusive');
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain('had no verdict; rerunning them once');
+      expect(result.stdout).toContain('were not reached; continuing');
       const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] })
         .map(run => run.args.filter(arg => arg.endsWith('.test.ts')));
       expect(runs[0]).toHaveLength(3);

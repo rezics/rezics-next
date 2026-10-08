@@ -2110,28 +2110,183 @@ export const UNIT_GATE_TIMEOUT_MARGIN_MS = 60_000;
 
 export interface PlannedUnitShard { files: string[]; budgetMs: number }
 
+/** Files with no measured duration share a shard only up to this count.
+ * A twelve-minute budget on a host already running other gates does not finish a hundred-file shard. */
+export const UNIT_GATE_FILE_CAP = 8;
+
 /** A file whose declared timeout plus the margin exceeds the default budget runs alone at that longer budget.
- * Every other file keeps the default. Shards run together, so the ceiling is the slowest budget, not their sum. */
-export function planUnitGateShards(entries: readonly { file: string; timeout: DeclaredTestTimeout }[],
+ * Measured durations pack every other file so the shard fits the budget: a known-slow file runs alone, and
+ * files with no measurement share a shard only up to the file cap. A wide plan is more shards, not larger
+ * ones. `shardCount` is how many of those shards run at once, not how many the plan is cut into. */
+export function planUnitGateShards(entries: readonly { file: string; timeout: DeclaredTestTimeout; durationMs?: number }[],
   shardCount: number, defaultBudgetMs: number): { shards: PlannedUnitShard[]; unparseable: string[] } {
   const unparseable: string[] = [];
   const long: PlannedUnitShard[] = [];
-  const rest: string[] = [];
+  const rest: { file: string; durationMs?: number }[] = [];
+  let measured = false;
   for (const entry of entries) {
+    const duration = measuredDuration(entry.durationMs);
     if (entry.timeout.unparseable) {
       unparseable.push(entry.file);
-      rest.push(entry.file);
+      rest.push({ file: entry.file, ...(duration === undefined ? {} : { durationMs: duration }) });
+      if (duration !== undefined) measured = true;
       continue;
     }
     const timeout = entry.timeout.ms;
     if (timeout !== undefined && timeout + UNIT_GATE_TIMEOUT_MARGIN_MS > defaultBudgetMs) {
       long.push({ files: [entry.file], budgetMs: timeout + UNIT_GATE_TIMEOUT_MARGIN_MS });
-    } else rest.push(entry.file);
+    } else {
+      rest.push({ file: entry.file, ...(duration === undefined ? {} : { durationMs: duration }) });
+      if (duration !== undefined) measured = true;
+    }
   }
-  return {
-    shards: [...long, ...balanceUnitShards(rest, shardCount).map(files => ({ files, budgetMs: defaultBudgetMs }))],
-    unparseable,
-  };
+  const packed = measured
+    ? packMeasuredUnitShards(rest, defaultBudgetMs)
+    : packCountedUnitShards(rest.map(entry => entry.file), shardCount, defaultBudgetMs);
+  return { shards: [...long, ...packed], unparseable };
+}
+
+function measuredDuration(durationMs: number | undefined): number | undefined {
+  return durationMs !== undefined && Number.isFinite(durationMs) && durationMs >= 0 ? durationMs : undefined;
+}
+
+function chunkFiles(files: readonly string[], size: number): string[][] {
+  const groups: string[][] = [];
+  for (let index = 0; index < files.length; index += size) groups.push(files.slice(index, index + size));
+  return groups;
+}
+
+/** Round-robin when that already fits the cap, so a small plan keeps today's shard shape.
+ * A plan that would put more than the cap in one shard is cut into cap-sized shards instead. */
+function packCountedUnitShards(files: readonly string[], shardCount: number, budgetMs: number): PlannedUnitShard[] {
+  if (!files.length) return [];
+  const balanced = balanceUnitShards(files, shardCount);
+  const groups = balanced.every(group => group.length <= UNIT_GATE_FILE_CAP) ? balanced : chunkFiles(files, UNIT_GATE_FILE_CAP);
+  return groups.map(group => ({ files: group, budgetMs }));
+}
+
+/** Known-slow files take a shard of their own. The rest are packed longest-first into the budget and the cap.
+ * A file with no measurement costs one cap slot, so it cannot crowd out a measured file. */
+function packMeasuredUnitShards(entries: readonly { file: string; durationMs?: number }[], budgetMs: number): PlannedUnitShard[] {
+  const room = Math.max(1, budgetMs - UNIT_GATE_TIMEOUT_MARGIN_MS);
+  const slot = Math.max(1, Math.floor(room / UNIT_GATE_FILE_CAP));
+  const solo: PlannedUnitShard[] = [];
+  const packed: { file: string; cost: number }[] = [];
+  for (const entry of entries) {
+    const duration = entry.durationMs;
+    if (duration !== undefined && (duration >= budgetMs / 2 || duration + UNIT_GATE_TIMEOUT_MARGIN_MS > budgetMs)) {
+      solo.push({ files: [entry.file], budgetMs: Math.max(budgetMs, duration + UNIT_GATE_TIMEOUT_MARGIN_MS) });
+    } else packed.push({ file: entry.file, cost: duration ?? slot });
+  }
+  packed.sort((left, right) => right.cost - left.cost || left.file.localeCompare(right.file));
+  const bins: { files: string[]; cost: number }[] = [];
+  for (const item of packed) {
+    const bin = bins.find(candidate => candidate.files.length < UNIT_GATE_FILE_CAP && candidate.cost + item.cost <= room);
+    if (bin) {
+      bin.files.push(item.file);
+      bin.cost += item.cost;
+    } else bins.push({ files: [item.file], cost: item.cost });
+  }
+  return [...solo, ...bins.map(bin => ({ files: bin.files, budgetMs }))];
+}
+
+const UNIT_DURATION_FILE = 'unit-file-durations.json';
+const UNIT_DURATION_SCAN_BYTES = 256 * 1024;
+
+function absorbDurationRecord(into: Map<string, number>, value: unknown): void {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+  for (const [file, ms] of Object.entries(value as Record<string, unknown>)) {
+    const duration = measuredDuration(typeof ms === 'number' ? ms : undefined);
+    if (duration === undefined || !file || file.startsWith('..')) continue;
+    into.set(file, Math.max(into.get(file) ?? 0, duration));
+  }
+}
+
+function readDurationJson(path: string, into: Map<string, number>): void {
+  try {
+    if (!existsSync(path) || statSync(path).size > UNIT_DURATION_SCAN_BYTES) return;
+    const parsed = JSON.parse(readFileSync(path, 'utf8')) as unknown;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'durations' in parsed) {
+      absorbDurationRecord(into, (parsed as { durations?: unknown }).durations);
+    } else absorbDurationRecord(into, parsed);
+  } catch { /* an unreadable history file is not a duration */ }
+}
+
+function recentQaDurationFiles(qaRoot: string): string[] {
+  if (!existsSync(qaRoot)) return [];
+  let runs: string[];
+  try {
+    runs = readdirSync(qaRoot, { withFileTypes: true }).filter(entry => entry.isDirectory()).map(entry => entry.name)
+      .sort((left, right) => right.localeCompare(left)).slice(0, 15);
+  } catch { return []; }
+  const files: string[] = [];
+  for (const run of runs) {
+    const logs = join(qaRoot, run, 'logs');
+    if (!existsSync(logs)) continue;
+    try {
+      for (const name of readdirSync(logs)) if (name.endsWith('-durations.json')) files.push(join(logs, name));
+    } catch { /* a run directory that cannot be read has no durations */ }
+  }
+  return files;
+}
+
+/** Measured per-file time from this gate's own memory, earlier gate evidence, and QA `*-durations.json`.
+ * The longest observation wins, so a quiet run does not shrink a shard that previously needed the room. */
+export function readMeasuredUnitDurations(cwd: string): Map<string, number> {
+  const durations = new Map<string, number>();
+  const orchestration = [join(cwd, '.temp', 'goal-orchestration'), stateDir];
+  for (const directory of orchestration) readDurationJson(join(directory, UNIT_DURATION_FILE), durations);
+  for (const directory of orchestration) {
+    const merges = join(directory, 'merges');
+    if (!existsSync(merges)) continue;
+    // The checkout's merge evidence can be large. Read duration sidecars there, and small evidence
+    // files only from the tree under test, which is where a fixture records a measured file.
+    const treeLocal = directory === join(cwd, '.temp', 'goal-orchestration');
+    try {
+      for (const name of readdirSync(merges)) {
+        if (!name.endsWith('.json')) continue;
+        if (!treeLocal && !name.endsWith('-durations.json')) continue;
+        readDurationJson(join(merges, name), durations);
+      }
+    } catch { /* evidence that cannot be read is skipped */ }
+  }
+  const qaRoots = new Set([join(cwd, '.artifacts', 'qa'), join(root, '.artifacts', 'qa')]);
+  for (const qaRoot of qaRoots) for (const path of recentQaDurationFiles(qaRoot)) readDurationJson(path, durations);
+  return durations;
+}
+
+function durationsFromOutput(output: string, files: readonly string[], skip: ReadonlySet<string>): Map<string, number> {
+  const known = new Set(files);
+  const totals = new Map<string, number>();
+  let current: string | undefined;
+  for (const line of output.split('\n')) {
+    const header = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/.exec(line);
+    if (header) {
+      const file = header[1]!.replace(/^\.\//, '');
+      current = known.has(file) ? file : undefined;
+      continue;
+    }
+    const timed = /^\((?:pass|fail|skip|todo)\)\s+.*\[(\d+(?:\.\d+)?)(ms|s)\]\s*$/.exec(line);
+    if (!current || skip.has(current) || !timed) continue;
+    const ms = Number(timed[1]) * (timed[2] === 's' ? 1000 : 1);
+    if (Number.isFinite(ms) && ms >= 0) totals.set(current, (totals.get(current) ?? 0) + ms);
+  }
+  return totals;
+}
+
+/** Keep the longest observed time for repo files. Fixture names without a directory are not history. */
+function rememberUnitDurations(found: ReadonlyMap<string, number>): void {
+  const usable = [...found].filter(([file]) => file.includes('/') && !file.startsWith('..'));
+  if (!usable.length) return;
+  const path = join(stateDir, UNIT_DURATION_FILE);
+  try {
+    mkdirSync(stateDir, { recursive: true });
+    const current = new Map<string, number>();
+    readDurationJson(path, current);
+    for (const [file, ms] of usable) current.set(file, Math.max(current.get(file) ?? 0, ms));
+    const record = Object.fromEntries([...current].sort(([left], [right]) => left.localeCompare(right)));
+    writeFileSync(path, `${JSON.stringify(record)}\n`);
+  } catch { /* a duration memory that cannot be written does not change this gate's verdict */ }
 }
 
 function existingTestFiles(worktree: string, entries: readonly string[], wholeTier: readonly string[]): string[] {
@@ -3182,6 +3337,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
       const timedOut = outcome === 'timeout'
         ? shardTimeoutFiles(text, files, cwd)
         : timedOutTestFiles(text, files, cwd);
+      rememberUnitDurations(durationsFromOutput(text, files, new Set(timedOut)));
       return { ...unfinished(text, timedOut), ...outcome === 'timeout' ? { budgetExpired: true } : {} };
     }
     const text = output();
@@ -3189,8 +3345,11 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
       ? `${text}\n${UNIT_JUNIT_MARKER}\n${relativizeJunitFiles(readFileSync(junitFile, 'utf8'), cwd)}` : text;
     // The CLI stopped at its own budget and exited. That is an unfinished shard:
     // the file that was running is retried alone, and files with no header run again.
-    if (harnessBudgetExpired(text))
-      return { ...unfinished(text, shardTimeoutFiles(text, files, cwd)), budgetExpired: true };
+    if (harnessBudgetExpired(text)) {
+      const timedOut = shardTimeoutFiles(text, files, cwd);
+      rememberUnitDurations(durationsFromOutput(text, files, new Set(timedOut)));
+      return { ...unfinished(text, timedOut), budgetExpired: true };
+    }
     const timedOut = timedOutTestFiles(reported, files, cwd);
     const failures = unitFailureDetails(reported, files, cwd);
     const namedFailing = outcome.code === 0 ? [] : failingTestFiles(reported, files, cwd);
@@ -3201,6 +3360,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     const runnerErrors = outcome.code !== 0 && !failing.length
       ? [{ files: ['runner'], diagnostic: outputTail(text) || `task ${label} exited with status ${outcome.code}` }]
       : [];
+    rememberUnitDurations(durationsFromOutput(reported, files, new Set(timedOut)));
     return { done: true, failing, timedOut, failures, fileErrors,
       runnerErrors, files: [...files], output: reported,
       ms: Date.now() - startedAt };
@@ -3257,45 +3417,188 @@ function mergeShardResults(parts: readonly UnitShardResult[]): UnitShardResult {
 interface UnitGateResult {
   done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[];
   fileErrors: UnitFileErrorDetail[]; runnerErrors: UnitRunnerError[]; unfinished: string[]; output: string;
-  /** First pass, then the never-started rerun when that pass had files the budget did not reach. */
+  /** First pass, then one pass per continuation of files a budget never reached. */
   passes: UnitGatePass[];
 }
 
-/** Parallel `task test` shards under one wall-clock budget. A shard that hits the budget leaves the side inconclusive
- * unless its files get a verdict: the file that was running is retried alone by the caller, and the rest of that shard
- * runs once more here, in shards sized like a first run of that many files. Failures from shards that did finish are
- * not a verdict while any file stays unfinished, because the set was not fully run. */
 function gatePass(kind: UnitGatePass['kind'], files: readonly string[], result: UnitGateResult): UnitGatePass {
   return { kind, output: result.output, files: [...files], failing: result.failing, timedOut: result.timedOut };
 }
 
+/** Whole-side wall clock. The default covers two schedules of a cap-sized plan at the current concurrency.
+ * Past this, files that still have no verdict are named and the gate stops. */
+function unitGateCeilingMs(fileCount: number, budgetMs: number, concurrency: number): number {
+  const raw = process.env.GOAL_UNIT_GATE_CEILING_MS;
+  if (raw !== undefined && raw !== '') return positiveInteger('GOAL_UNIT_GATE_CEILING_MS', budgetMs);
+  const waves = Math.ceil(Math.max(1, Math.ceil(fileCount / UNIT_GATE_FILE_CAP)) / Math.max(1, concurrency));
+  return Math.max(budgetMs, waves * 2 * budgetMs);
+}
+
+function gateStop(reason: string, files: readonly string[]): void {
+  const count = `${files.length} file${files.length === 1 ? '' : 's'}`;
+  console.log(`Unit gate inconclusive: ${reason} (${count})\n  ${files.join('\n  ')}`);
+}
+
+/** A file a budget-expired shard actually finished: it printed a pass, fail, skip, or todo line.
+ * The file that was running is in `timedOut` and is not finished. A header with no result was not reached. */
+function filesCompletedInOutput(output: string, files: readonly string[], timedOut: ReadonlySet<string>): Set<string> {
+  const known = new Set(files);
+  const completed = new Set<string>();
+  let current: string | undefined;
+  for (const line of output.split('\n')) {
+    const header = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/.exec(line);
+    if (header) {
+      const file = header[1]!.replace(/^\.\//, '');
+      current = known.has(file) ? file : undefined;
+      continue;
+    }
+    if (current && !timedOut.has(current) && /^\((?:pass|fail|skip|todo)\)\s+/.test(line)) completed.add(current);
+  }
+  return completed;
+}
+
+interface ShardSettlement {
+  passed: string[]; failing: string[]; failures: UnitFailureDetail[]; fileErrors: UnitFileErrorDetail[];
+  timedOut: string[]; pending: string[]; blocked: string[];
+}
+
+/** Completed files keep the verdict in this shard's transcript. Files with no result go back to the queue.
+ * A file that started and timed out stays with the isolated retry. A shard that stopped for any other reason
+ * is not split and is not run again. */
+function settleUnitShard(result: UnitShardResult): ShardSettlement {
+  const assigned = result.files;
+  const blank = (): ShardSettlement => ({
+    passed: [], failing: [], failures: [], fileErrors: [], timedOut: [], pending: [], blocked: [],
+  });
+  if (result.runnerErrors.length || (!result.done && !result.budgetExpired)) {
+    return { ...blank(), blocked: [...assigned] };
+  }
+  if (!result.budgetExpired) {
+    const timedOut = result.timedOut.filter(file => assigned.includes(file));
+    return {
+      passed: assigned.filter(file => !result.failing.includes(file) && !timedOut.includes(file)),
+      failing: [...result.failing],
+      failures: result.failures,
+      fileErrors: result.fileErrors,
+      timedOut, pending: [], blocked: [],
+    };
+  }
+  const timedOut = result.timedOut.filter(file => assigned.includes(file));
+  const completed = filesCompletedInOutput(result.output, assigned, new Set(timedOut));
+  const failures = unitFailureDetails(result.output, [...completed]).filter(item => completed.has(item.file));
+  const fileErrors = unitFileErrorDetails(result.output, [...completed]).filter(item => completed.has(item.file));
+  const failing = [...new Set([...failures.map(item => item.file), ...fileErrors.map(item => item.file)])];
+  return {
+    passed: [...completed].filter(file => !failing.includes(file)),
+    failing, failures, fileErrors, timedOut,
+    pending: assigned.filter(file => !completed.has(file) && !timedOut.includes(file)),
+    blocked: [],
+  };
+}
+
+/** Shards run at most `concurrency` at a time. Each shard's budget starts when that shard starts,
+ * so a shard waiting in the queue still receives a full budget. */
+async function mapPool<T, R>(items: readonly T[], concurrency: number, run: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(Math.max(1, concurrency), Math.max(1, items.length)) }, async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await run(items[index]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/** One schedule of the files still without a verdict. A wide plan is many shards; only `shards` run at once. */
 export async function runUnitGate(cwd: string, files: readonly string[], shards?: number,
   runShard: UnitShardRunner = runUnitShard): Promise<UnitGateResult> {
-  const first = await runUnitGatePass(cwd, files, shards, runShard);
-  const firstPass = gatePass('first', files, first.result);
-  const withPasses = (result: UnitGateResult, passes: UnitGatePass[]): UnitGateResult => ({ ...result, passes });
-  if (first.result.runnerErrors.length) return withPasses(first.result, [firstPass]);
-  const reachedNoVerdict = new Set(first.shards.filter(shard => shard.budgetExpired).flatMap(shard => shard.files)
-    .filter(file => !first.result.timedOut.includes(file)));
-  if (!reachedNoVerdict.size) return withPasses(first.result, [firstPass]);
-  const rerunFiles = [...reachedNoVerdict].sort();
-  console.log(`Unit gate: ${rerunFiles.length} file(s) in timed-out shard(s) had no verdict; rerunning them once`);
-  const rerun = await runUnitGatePass(cwd, rerunFiles, shards, runShard);
-  const { result } = first;
-  // The first pass's unfinished files are the shards' files; the rerun files get their verdict from the rerun alone.
-  const unfinished = [...new Set([...result.unfinished.filter(file => !reachedNoVerdict.has(file)), ...rerun.result.unfinished])].sort();
-  const merged = {
-    failing: [...new Set([...result.failing, ...rerun.result.failing])].sort(),
-    timedOut: [...new Set([...result.timedOut, ...rerun.result.timedOut])].sort(),
-    failures: [...result.failures, ...rerun.result.failures],
-    fileErrors: [...result.fileErrors, ...rerun.result.fileErrors],
-    runnerErrors: [...result.runnerErrors, ...rerun.result.runnerErrors],
-    output: `${result.output}\n${rerun.result.output}`,
-  };
-  const passes = [firstPass, gatePass('never-started-rerun', rerunFiles, rerun.result)];
-  return unfinished.length
-    ? { done: false, ...merged, unfinished, passes }
-    : { done: true, ...merged, unfinished: [], passes };
+  const concurrency = shards ?? unitGateShards();
+  const ceiling = unitGateCeilingMs(files.length, unitGateBudgetMs(), concurrency);
+  const startedAt = Date.now();
+  const durations = readMeasuredUnitDurations(cwd);
+  let pending = [...files];
+  const passes: UnitGatePass[] = [];
+  const failing = new Set<string>();
+  const failures: UnitFailureDetail[] = [];
+  const fileErrors: UnitFileErrorDetail[] = [];
+  const timedOut = new Set<string>();
+  /** A file that was running when the budget stopped the shard. A timeout inside a shard that exited stays on `timedOut` only. */
+  const runningAtBudget = new Set<string>();
+  const outputs: string[] = [];
+  let wave = 0;
+  const snapshot = (unfinished: readonly string[], done: boolean, runnerErrors: UnitRunnerError[] = []): UnitGateResult => ({
+    done, failing: [...failing].sort(), timedOut: [...timedOut].sort(), failures, fileErrors, runnerErrors,
+    unfinished: [...unfinished].sort(), output: outputs.join('\n'), passes,
+  });
+  while (pending.length) {
+    if (wave > 0 && Date.now() - startedAt >= ceiling) {
+      const left = [...new Set([...pending, ...runningAtBudget])].sort();
+      gateStop('the gate ceiling was reached with files still unfinished', left);
+      return snapshot(left, false);
+    }
+    const scheduled = pending;
+    const pass = await runUnitGatePass(cwd, scheduled, concurrency, runShard, durations);
+    wave++;
+    outputs.push(pass.result.output);
+    if (pass.result.runnerErrors.length) {
+      for (const file of pass.result.failing) failing.add(file);
+      failures.push(...pass.result.failures);
+      fileErrors.push(...pass.result.fileErrors);
+      for (const file of pass.result.timedOut) timedOut.add(file);
+      const unfinished = [...new Set([...pass.result.unfinished, ...runningAtBudget])].sort();
+      const result = snapshot(unfinished, unfinished.length === 0 && pass.result.done, pass.result.runnerErrors);
+      passes.push(gatePass(wave === 1 ? 'first' : 'never-started-rerun', scheduled, result));
+      return result;
+    }
+    const next = new Set<string>();
+    const blocked: string[] = [];
+    const waveFailing: string[] = [];
+    const waveTimed: string[] = [];
+    for (const shard of pass.shards) {
+      const settled = settleUnitShard(shard);
+      for (const file of settled.failing) {
+        failing.add(file);
+        waveFailing.push(file);
+      }
+      failures.push(...settled.failures);
+      fileErrors.push(...settled.fileErrors);
+      for (const file of settled.timedOut) {
+        timedOut.add(file);
+        waveTimed.push(file);
+        if (!shard.done || shard.budgetExpired) runningAtBudget.add(file);
+      }
+      for (const file of settled.pending) next.add(file);
+      blocked.push(...settled.blocked);
+    }
+    passes.push(gatePass(wave === 1 ? 'first' : 'never-started-rerun', scheduled, {
+      done: next.size === 0 && blocked.length === 0,
+      failing: [...new Set(waveFailing)].sort(),
+      timedOut: [...new Set(waveTimed)].sort(),
+      failures: [], fileErrors: [], runnerErrors: [],
+      unfinished: [...next, ...blocked].sort(),
+      output: pass.result.output, passes: [],
+    }));
+    if (blocked.length) {
+      const left = [...new Set([...blocked, ...next, ...runningAtBudget])].sort();
+      gateStop('a shard stopped without finishing and without reaching its budget', left);
+      return snapshot(left, false);
+    }
+    const nextFiles = [...next].sort();
+    if (!nextFiles.length) break;
+    // The first pass may be killed before any file prints a header. One continuation of that same set
+    // can still finish. A later wave that classifies nothing is no progress, and the gate stops.
+    if (nextFiles.length >= scheduled.length && wave > 1) {
+      const left = [...new Set([...nextFiles, ...runningAtBudget])].sort();
+      gateStop('continuation made no progress', left);
+      return snapshot(left, false);
+    }
+    console.log(`Unit gate: ${nextFiles.length} file(s) were not reached; continuing`);
+    pending = nextFiles;
+  }
+  const unfinished = [...runningAtBudget].sort();
+  return snapshot(unfinished, unfinished.length === 0);
 }
 
 function fileDeclaredTimeout(cwd: string, file: string): DeclaredTestTimeout {
@@ -3343,20 +3646,22 @@ function attributeShard(result: UnitShardResult): UnitShardResult {
 }
 
 async function runUnitGatePass(cwd: string, files: readonly string[], shards: number | undefined,
-  runShard: UnitShardRunner): Promise<{ result: UnitGateResult; shards: UnitShardResult[] }> {
+  runShard: UnitShardRunner, durations: ReadonlyMap<string, number>): Promise<{ result: UnitGateResult; shards: UnitShardResult[] }> {
   const empty: UnitGateResult = { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '', passes: [] };
   if (!files.length) return { result: empty, shards: [] };
   const budget = unitGateBudgetMs();
-  const planned = planUnitGateShards(files.map(file => ({ file, timeout: fileDeclaredTimeout(cwd, file) })),
-    shards ?? unitGateShards(), budget);
+  const concurrency = shards ?? unitGateShards();
+  const planned = planUnitGateShards(files.map(file => ({
+    file, timeout: fileDeclaredTimeout(cwd, file),
+    ...(durations.has(file) ? { durationMs: durations.get(file) } : {}),
+  })), concurrency, budget);
   for (const file of planned.unparseable) {
     console.log(`Unit gate: ${file} declared a timeout that could not be parsed; using the default shard budget`);
   }
-  // Concurrent shards share a start. The wall clock is the slowest budget, not the sum.
+  // At most `concurrency` shards run at once. Each budget starts when that shard starts.
   const slowest = Math.max(budget, ...planned.shards.map(shard => shard.budgetMs));
   console.log(`Unit gate: ${files.length} file(s) in ${planned.shards.length} shard(s), slowest budget ${slowest}ms`);
-  const started = Date.now();
-  const results = (await Promise.all(planned.shards.map(shard => runShard(cwd, shard.files, started + shard.budgetMs)))).map(attributeShard);
+  const results = (await mapPool(planned.shards, concurrency, shard => runShard(cwd, shard.files, Date.now() + shard.budgetMs))).map(attributeShard);
   for (const result of results) {
     console.log(`Unit gate shard: ${result.files.length} file(s), ${result.done ? `${result.failing.length} failing` : 'unfinished'} in ${result.ms}ms`);
   }
