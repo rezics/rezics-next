@@ -493,7 +493,7 @@ describe('goalctl runtime policy', () => {
       { files: [long], budgetMs: 970_000 },
       { files: [ordinary], budgetMs: 12 * 60 * 1000 },
     ]);
-    const calls: { files: string[]; deadline: number }[] = [];
+    const calls: { files: readonly string[]; deadline: number }[] = [];
     const previous = process.env.GOAL_UNIT_GATE_BUDGET_MS;
     delete process.env.GOAL_UNIT_GATE_BUDGET_MS;
     const lines: string[] = [];
@@ -503,7 +503,8 @@ describe('goalctl runtime policy', () => {
     try {
       const result = await runUnitGate(directory, ['long.test.ts', 'ordinary.test.ts'], 4, async (_cwd, files, deadline) => {
         calls.push({ files, deadline });
-        return { failing: [], timedOut: [], output: '', ms: 1, files, budgetExpired: false };
+        return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [],
+          output: '', ms: 1, files: [...files], budgetExpired: false };
       });
       expect(result.failing).toEqual([]);
       const longCall = calls.find(call => call.files.length === 1 && call.files[0] === 'long.test.ts');
@@ -528,7 +529,7 @@ describe('goalctl runtime policy', () => {
     const file = join(directory, 'bound.test.ts');
     writeFileSync(file, `import { test } from 'bun:test';\nconst timeout = 910_000;\ntest('slow', () => {}, timeout);\n`);
     expect(declaredTestTimeout(readFileSync(file, 'utf8')).unparseable).toBe(true);
-    const calls: { files: string[]; deadline: number }[] = [];
+    const calls: { files: readonly string[]; deadline: number }[] = [];
     const previous = process.env.GOAL_UNIT_GATE_BUDGET_MS;
     delete process.env.GOAL_UNIT_GATE_BUDGET_MS;
     const lines: string[] = [];
@@ -538,7 +539,8 @@ describe('goalctl runtime policy', () => {
     try {
       await runUnitGate(directory, ['bound.test.ts', 'missing.test.ts'], 1, async (_cwd, files, deadline) => {
         calls.push({ files, deadline });
-        return { failing: [], timedOut: [], output: '', ms: 1, files, budgetExpired: false };
+        return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [],
+          output: '', ms: 1, files: [...files], budgetExpired: false };
       });
       expect(calls).toHaveLength(1);
       expect(calls[0]!.files).toContain('bound.test.ts');
@@ -1921,7 +1923,7 @@ process.exit(0);
     mkdirSync(join(directory, 'nested'));
     writeFileSync(join(directory, 'nested/slow.test.ts'), `import { beforeAll, test } from 'bun:test';\n`
       + `beforeAll(async () => { await Bun.sleep(5_000); });\ntest('holds', () => {});\n`);
-    const env = { ...process.env, CI: 'true', REZICS_QA_PROGRESS_FILE: progress };
+    const env: NodeJS.ProcessEnv = { ...process.env, CI: 'true', REZICS_QA_PROGRESS_FILE: progress };
     delete env.AGENT;
     const child = spawn(process.execPath, ['test', '--preload', join(import.meta.dir, '../qa/owner-shard-progress.ts'),
       'nested/slow.test.ts'], { cwd: directory, env, stdio: 'ignore' });
@@ -3763,8 +3765,9 @@ describe('pre-merge type check', () => {
     expect(typecheckWorkspaces(['packages/model/package.json', 'scripts/observability/probe.ts', 'apphost/apphost.mts']))
       .toEqual(['model', 'observability-scripts', 'apphost']);
     expect(typecheckWorkspaces(['packages/observability/src/a.ts'])).toEqual(['observability']);
-    expect(typecheckWorkspaces(['docs/goals/README.md', 'services/main/README.md', 'services/main/migrations/001.sql', 'scripts/goal/goalctl.ts']))
+    expect(typecheckWorkspaces(['docs/goals/README.md', 'services/main/README.md', 'services/main/migrations/001.sql']))
       .toEqual([]);
+    expect(typecheckWorkspaces(['scripts/goal/goalctl.ts', 'scripts/goal/tsconfig.json'])).toEqual(['goal']);
   });
 
   test('every mapped workspace is a Task type check of exactly one command', () => {

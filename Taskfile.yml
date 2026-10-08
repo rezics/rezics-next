@@ -96,6 +96,11 @@ tasks:
     cmds:
       - bun scripts/qa/host-admission.ts --gib 2.5 -- bun node_modules/typescript/bin/tsc --project scripts/dev/tsconfig.json
 
+  goal:typecheck:
+    desc: Type-check the Goal scripts.
+    cmds:
+      - bun scripts/qa/host-admission.ts --gib 2.5 -- bun node_modules/typescript/bin/tsc --project scripts/goal/tsconfig.json
+
   apphost:typecheck:
     desc: Type-check the AppHost and its configuration imports with Node types.
     deps: [aspire:restore]

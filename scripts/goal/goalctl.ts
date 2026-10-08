@@ -3062,6 +3062,7 @@ export const TYPECHECK_WORKSPACES: ReadonlyArray<readonly [workspace: string, ro
   ['observability-scripts', ['scripts/observability/']],
   ['dataset', ['scripts/datasets/']],
   ['dev', ['scripts/dev/']],
+  ['goal', ['scripts/goal/']],
   ['apphost', ['apphost/']],
 ];
 
