@@ -92,7 +92,7 @@ async function sqlFixture() {
       "SELECT to_regclass('access.statement_publication_seek_coverage')::text AS relation",
     );
     if (!installed.rows[0]?.relation) await pool.query(readFileSync(new URL(
-      '../../../services/main/migrations/access/1773_statement_publication_seek.sql', import.meta.url,
+      '../../../services/main/migrations/access/1776_statement_publication_seek.sql', import.meta.url,
     ), 'utf8'));
     const recovery = (await pool.query<{ open: boolean; generation: string }>(
       'SELECT open,generation::text FROM access.recovery_fence WHERE id=true',
