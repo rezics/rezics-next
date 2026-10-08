@@ -190,7 +190,32 @@ test('every served Main route, including transports, has a reviewed exposure', (
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
-  expect(matrix.filter((entry) => entry.exposure !== 'public')).toHaveLength(244);
+  // Closed sanction-appeal read and write. Trust-ops keeps platform:realm-appeals shut until a later grant opens it.
+  const closedOperations = matrix
+    .filter((entry) => entry.exposure !== 'public')
+    .map((entry) => exposureOperationId(entry.method, entry.path));
+  expect(closedOperations).toHaveLength(246);
+  expect(closedOperations).toContain('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal');
+  expect(closedOperations).toContain('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal');
+  expect(
+    matrix.find(
+      (entry) =>
+        entry.path === '/v1/realms/{realm}/member-receipts/{receiptId}/appeal' &&
+        entry.method === 'get',
+    ),
+  ).toMatchObject({ exposure: 'platform:realm-appeals', rateLimitFamily: 'read', bearer: true });
+  expect(
+    matrix.find(
+      (entry) =>
+        entry.path === '/v1/realms/{realm}/member-receipts/{receiptId}/appeal' &&
+        entry.method === 'post',
+    ),
+  ).toMatchObject({
+    exposure: 'platform:realm-appeals',
+    rateLimitFamily: 'write',
+    bearer: true,
+    idempotencyKey: true,
+  });
   expect(entries.filter((entry) => entry.method === 'ws')).toHaveLength(3);
   const sdk = exposureSdkSource(app.routes);
   expect(sdk).toContain('platformOperationOpen');
