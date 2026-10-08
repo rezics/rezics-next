@@ -113,16 +113,22 @@ export function affectedCommands(plan: AffectedPlan): { label: string; command: 
   return commands;
 }
 
+/** Plain reporter text. A parent that forces color must not reach a child that parses it. */
+function withoutForcedColor(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const next = { ...env };
+  delete next.FORCE_COLOR;
+  return next;
+}
+
 // Direct Bun runs print only failures and the summary (AGENT=1); JUnit output is
 // unchanged and AGENT=0 restores the listing. QA tiers keep full logs, because a
 // killed tier otherwise leaves no record of the tests that had finished.
 async function run([program, args]: [string, string[]]): Promise<number> {
   const spawningTest = program === 'bun' && (args[0] === 'test' || args[0] === 'scripts/qa/cli.ts');
-  const env = program === 'bun'
-    ? (spawningTest
-      ? reapChildEnvironment({ ...process.env, AGENT: process.env.AGENT ?? '1' })
-      : { ...process.env, AGENT: process.env.AGENT ?? '1' })
-    : process.env;
+  const base = withoutForcedColor(program === 'bun'
+    ? { ...process.env, AGENT: process.env.AGENT ?? '1' }
+    : process.env);
+  const env = spawningTest ? reapChildEnvironment(base) : base;
   const scope = spawningTest ? env.REZICS_REAP_SCOPE : undefined;
   noteChildScope(scope);
   // Its own process group, so cancellation can signal the child without signalling this dispatcher.

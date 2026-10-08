@@ -84,10 +84,14 @@ test('edition commands run slim with real CAS, policy, SHACL, replay and owner-c
   await initializeRelayCheckpoint(relay, relayConsumer, slim.lineage.dataEpoch);
   let lostHandoffReceipt: string | undefined;
   let handoffCrashes = 0;
+  const relaySequences = new Map<string, string>();
   const drain = async () => {
     for (let batch = 0; batch < 100; batch++) {
       if (!await relayMainOutboxOnce(fuseki, relay, relayConsumer, { ownerOutbox: custody,
         afterDelivery: async source => {
+          // Discovery reads the position this delivery reported. A later owner
+          // SELECT of the same row is an assertion, not the request input.
+          if (source.custodiedReceipt) relaySequences.set(source.custodiedReceipt, source.sequence);
           if (source.custodiedReceipt === lostHandoffReceipt && handoffCrashes === 0) {
             handoffCrashes++;
             throw new Error('Retained handoff response lost');
@@ -212,11 +216,13 @@ test('edition commands run slim with real CAS, policy, SHACL, replay and owner-c
     lostHandoffReceipt = lostTerminal.receipt;
 
     // Real S3 deletion prevents signing retirement even though PostgreSQL already has a terminal.
+    // Restore the object the command stored. The owner payload column stays an assertion.
+    const storedCommand = await objects.get(secondRow.payload_sha256);
     await objects.discard(secondRow.payload_sha256);
     await expect(custody.retire(after.receipt)).rejects.toBeInstanceOf(ObjectUnavailable);
     expect(await proofCount(after.receipt)).toBe(6);
     expect((await custodyRow(after.receipt))?.retired_at).toBeNull();
-    expect(await objects.put(secondRow.payload)).toBe(secondRow.payload_sha256);
+    expect(await objects.put(storedCommand)).toBe(secondRow.payload_sha256);
     await custody.retire(after.receipt);
     expect(await proofCount(after.receipt)).toBe(0);
     expect(await textUnits()).toEqual(beforeText);
@@ -303,8 +309,11 @@ test('edition commands run slim with real CAS, policy, SHACL, replay and owner-c
           sequence: retained.streamSequence }, receipt: { id: receipt, metadata: { work, revision: retained.revision } },
       } });
       expect(await proofCount(receipt)).toBe(0);
+      const relaySequence = relaySequences.get(receipt);
+      expect(relaySequence).toBe(delivered.sequence);
+      if (!relaySequence) throw new Error(`Relay delivery did not report ${receipt}`);
       expect(await new DiscoveryRefreshInputs(relay, relayConsumer).read({ dataEpoch: slim.lineage.dataEpoch,
-        sequence: delivered.sequence }, (BigInt(delivered.sequence) - 1n).toString()))
+        sequence: relaySequence }, (BigInt(relaySequence) - 1n).toString()))
         .toEqual({ works: [work], created: [] });
     }
     for (const rejected of [racingAdmission]) {

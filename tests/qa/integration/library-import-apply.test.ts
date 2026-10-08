@@ -121,10 +121,12 @@ test('G428: reviewed import jobs finish, report real stalls and replay committed
     expect((await start(other, false, otherKey)).status).toBe(409);
     expect((await stack.contentPool.query<{ apply_intent: unknown }>(
       'SELECT apply_intent FROM reader.library_import_file WHERE agent=$1 AND id=$2', [agent, other])).rows[0]!.apply_intent).toBeNull();
-    const otherVersion = (await stack.contentPool.query<{ version: string }>(
-      'SELECT version::text FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2 AND row_number=0', [agent, other])).rows[0]!.version;
+    const reviewed = await checked<{ rows: { index: number; version: number }[] }>(
+      await call('GET', `/v1/me/library-imports/${other}/rows?actingSubject=${encodeURIComponent(agent)}`));
+    const otherRow = reviewed.rows.find(row => row.index === 0);
+    if (!otherRow) throw new Error('Reviewed import is missing row 0');
     await checked(await call('PUT', `/v1/me/library-imports/${other}/rows/0`, {
-      actingSubject: agent, expectedVersion: Number(otherVersion), choice: 'apply', work: second.work }));
+      actingSubject: agent, expectedVersion: otherRow.version, choice: 'apply', work: second.work }));
     expect(await terminal(keyed)).toMatchObject({ state: 'completed' });
 
     // Drop the accepted response after the start command has committed, then
