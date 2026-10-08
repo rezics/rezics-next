@@ -543,3 +543,114 @@ test('hang', () => {
     rmSync(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('a detached grandchild that ignores SIGTERM is killed after its parent exits and before the scope is reaped', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'reap-orphan-'));
+  const bin = join(directory, 'bin');
+  mkdirSync(bin);
+  const log = join(directory, 'calls.jsonl');
+  const state = join(directory, 'containers.json');
+  const ready = join(directory, 'ready');
+  const childPidFile = join(directory, 'child.pid');
+  const grandchildPidFile = join(directory, 'grandchild.pid');
+  const hang = join(directory, 'hang.test.ts');
+  writeFileSync(state, JSON.stringify({ containers: [{ id: 'ancestor', labels: [`${reapScopeLabel}.ancestor-scope=1`], removed: false }] }));
+  writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+const procState = (file) => {
+  try {
+    const stat = readFileSync('/proc/' + Number(readFileSync(file, 'utf8')) + '/stat', 'utf8');
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0] || 'missing';
+  } catch { return 'missing'; }
+};
+const grandchildState = procState(process.env.GRANDCHILD_PID);
+appendFileSync(process.env.LOG, JSON.stringify({ args, grandchildState, grandchildAlive: ['R', 'S', 'D'].includes(grandchildState) }) + '\\n');
+const statePath = process.env.STATE;
+const load = () => JSON.parse(readFileSync(statePath, 'utf8'));
+const [command, ...rest] = args;
+if (command === 'run') {
+  const labels = [];
+  for (let i = 0; i < args.length; i++) if (args[i] === '--label') labels.push(args[i + 1]);
+  const saved = load();
+  saved.containers.push({ id: 'child-container', labels, removed: false });
+  writeFileSync(statePath, JSON.stringify(saved));
+  process.exit(0);
+}
+if (command === 'ps') {
+  const filter = rest[rest.indexOf('--filter') + 1] ?? '';
+  const key = filter.startsWith('label=') ? filter.slice('label='.length).split('=')[0] : '';
+  const saved = load();
+  console.log(saved.containers.filter(container => !container.removed && container.labels.some(label => label.split('=')[0] === key)).map(container => container.id).join('\\n'));
+  process.exit(0);
+}
+if (command === 'rm') {
+  const ids = new Set(rest.filter(id => id !== '-f'));
+  const saved = load();
+  for (const container of saved.containers) if (ids.has(container.id)) container.removed = true;
+  writeFileSync(statePath, JSON.stringify(saved));
+  process.exit(0);
+}
+process.exit(0);
+`);
+  chmodSync(join(bin, 'docker'), 0o755);
+  writeFileSync(hang, `import { test } from 'bun:test';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, writeFileSync } from 'node:fs';
+test('orphan', () => {
+  writeFileSync(process.env.CHILD_PID, String(process.pid));
+  const grandchild = spawn(process.execPath, ['-e', \`
+    process.on('SIGTERM', () => {});
+    require('node:fs').writeFileSync(process.env.GRANDCHILD_PID, String(process.pid));
+    setInterval(() => {}, 1_000);
+  \`], { detached: true, stdio: 'ignore' });
+  grandchild.unref();
+  const deadline = Date.now() + 5_000;
+  while (!existsSync(process.env.GRANDCHILD_PID) && Date.now() < deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
+  const result = spawnSync('docker', ['run', '-d', '--name', 'rezics-reap-orphan-child', 'alpine', 'sleep', '600'], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(result.stderr || result.stdout || 'docker run failed');
+  writeFileSync(process.env.READY, 'ready');
+  process.on('SIGTERM', () => process.exit(0));
+  return new Promise(() => {});
+});
+`);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, READY: ready, LOG: log, STATE: state,
+    CHILD_PID: childPidFile, GRANDCHILD_PID: grandchildPidFile, REZICS_REAP_OWNER: '4:4',
+  };
+  delete env.REZICS_REAP_SCOPE;
+  delete env.REZICS_REAP_SCOPES;
+  const dispatcher = spawn('bun', [join(root, 'scripts/qa/test.ts'), hang, '--timeout=60000'], {
+    cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stderr = '';
+  dispatcher.stderr?.on('data', chunk => { stderr += String(chunk); });
+  try {
+    const deadline = Date.now() + 15_000;
+    while (!existsSync(ready) && Date.now() < deadline) await Bun.sleep(20);
+    expect(existsSync(ready), stderr).toBe(true);
+    const grandchildPid = Number(readFileSync(grandchildPidFile, 'utf8'));
+    const childPid = Number(readFileSync(childPidFile, 'utf8'));
+    const before = readFileSync(`/proc/${grandchildPid}/stat`, 'utf8');
+    expect(Number(before.slice(before.lastIndexOf(')') + 2).split(' ')[1])).toBe(childPid);
+    dispatcher.kill('SIGTERM');
+    const closed = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
+      dispatcher.once('close', (code, signal) => resolve({ code, signal }));
+    });
+    expect(closed, stderr).toEqual({ code: 143, signal: null });
+    expect(() => process.kill(grandchildPid, 0)).toThrow();
+    const calls = readFileSync(log, 'utf8').trim().split('\n').filter(Boolean)
+      .map(line => JSON.parse(line) as { args: string[]; grandchildAlive: boolean });
+    expect(calls.find(call => call.args[0] === 'run')?.grandchildAlive).toBe(true);
+    const scopeCalls = calls.filter(call => call.args.some(arg => arg.startsWith(`label=${reapScopeLabel}.`)));
+    expect(scopeCalls.length).toBeGreaterThan(0);
+    expect(scopeCalls.filter(call => call.grandchildAlive)).toEqual([]);
+    const removed = calls.filter(call => call.args[0] === 'rm').flatMap(call => call.args.slice(2));
+    expect(removed).toContain('child-container');
+    expect(removed).not.toContain('ancestor');
+  } finally {
+    dispatcher.kill('SIGKILL');
+    try { process.kill(-Number(readFileSync(grandchildPidFile, 'utf8')), 'SIGKILL'); } catch { /* already gone */ }
+    rmSync(directory, { recursive: true, force: true });
+  }
+}, 30_000);

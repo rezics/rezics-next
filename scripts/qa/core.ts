@@ -320,24 +320,24 @@ function signalProcessGroup(pid: number, signal: NodeJS.Signals): void {
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
 }
 
-/** Descendants that called setsid are not in the registered group, so a group signal misses them. */
-function signalDetachedDescendants(groups: ReadonlySet<number>, signal: NodeJS.Signals): void {
-  if (!groups.size || !existsSync('/proc')) return;
+/**
+ * Registered groups plus every descendant group visible now. A later walk cannot
+ * see a group whose parent exited during the grace and was reparented.
+ */
+function descendantProcessGroups(roots: ReadonlySet<number>): Set<number> {
+  const groups = new Set(roots);
+  if (!roots.size || !existsSync('/proc')) return groups;
   for (const entry of readdirSync('/proc')) {
     if (!/^\d+$/.test(entry)) continue;
-    let pid = 0;
-    let group = 0;
     try {
-      pid = Number(entry);
+      const pid = Number(entry);
       const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-      group = Number(fields[2]);
+      const group = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]);
       if (!group || groups.has(group)) continue;
-      if (![...ancestors(pid)].some(ancestor => groups.has(ancestor))) continue;
-    } catch { continue; }
-    try { process.kill(pid === group ? -pid : pid, signal); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+      if ([...ancestors(pid)].some(ancestor => roots.has(ancestor))) groups.add(group);
+    } catch { /* the process already exited */ }
   }
+  return groups;
 }
 
 function stopAsyncCommands(): void {
@@ -383,13 +383,14 @@ function stopAsyncCommandGroups(groups: ReadonlySet<number>): void {
 
 let asyncCommandCleanupBound = false;
 function cancelAsyncCommands(signal: NodeJS.Signals): void {
-  if (commandProcessGroups.size) {
-    for (const pid of commandProcessGroups) signalProcessGroup(pid, 'SIGTERM');
-    signalDetachedDescendants(commandProcessGroups, 'SIGTERM');
+  const groups = descendantProcessGroups(commandProcessGroups);
+  for (const group of groups) signalProcessGroup(group, 'SIGTERM');
+  if (groups.size) {
     // The child can still fork or start a container until the grace elapses.
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, commandStopGraceMs);
   }
-  stopAsyncCommands();
+  // The same groups, not a new ancestry walk: a reparented process is no longer a descendant.
+  for (const group of groups) signalProcessGroup(group, 'SIGKILL');
   // commandAsync's finally does not run once this exits. Only this runner's live scopes.
   reapActiveChildScopes();
   process.exit(signal === 'SIGINT' ? 130 : 143);
