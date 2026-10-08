@@ -1,8 +1,12 @@
+import { rawSparqlIntegrationFiles } from './isolated-integration-files.ts';
 import {
   integrationResourceClasses,
   qaResourceClasses,
   type QaResourceClass,
 } from './resource-classes.ts';
+
+/** Product assembler: query and the native command only, so startup can admit the Work-name writer. */
+export const exclusiveWorkScopeAssembler = '/fuseki/fuseki-text.ttl';
 
 export type QaStackMode = 'test' | 'scale';
 
@@ -59,4 +63,10 @@ export function qaStackEnvironment(
     REZICS_FUSEKI_MEMORY_LIMIT: env.REZICS_QA_FUSEKI_MEMORY_LIMIT ?? allocation.memory,
     REZICS_FUSEKI_JVM_ARGS: env.REZICS_QA_FUSEKI_JVM_ARGS ?? allocation.jvmArgs,
   };
+}
+
+/** One assembler serves the whole stack. Raw SPARQL, or a persistent raw-update
+ * overlay, closes the exclusive-writer startup path. */
+export function integrationStackAdmitsWorkScope(files: readonly string[], rawUpdate: boolean): boolean {
+  return !rawUpdate && files.every((file) => !rawSparqlIntegrationFiles.has(file));
 }

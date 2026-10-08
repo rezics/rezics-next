@@ -19,7 +19,9 @@ services:
       JVM_ARGS: ${REZICS_FUSEKI_JVM_ARGS:--Xms64m -Xmx512m -XX:MaxDirectMemorySize=128m}
     healthcheck:
       start_interval: 500ms
-    command: ["/opt/apache-jena-fuseki-6.2.0/fuseki-server", "--port=3030", "--no-cors", "--timeout=10000", "--config=/fuseki/fuseki-text-qa.ttl"]
+    # REZICS_FUSEKI_ASSEMBLER selects the product assembler when the stack must
+    # admit the exclusive Work-name writer. The default keeps raw SPARQL update.
+    command: ["/opt/apache-jena-fuseki-6.2.0/fuseki-server", "--port=3030", "--no-cors", "--timeout=10000", "--config=${REZICS_FUSEKI_ASSEMBLER:-/fuseki/fuseki-text-qa.ttl}"]
     volumes: !reset []
     tmpfs:
       - /fuseki/databases:mode=0777

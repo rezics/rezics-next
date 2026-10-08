@@ -28,6 +28,7 @@ const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
 const qaComposeFile = join(root, 'infra/dev/compose.qa.yaml');
 const qaRawUpdateComposeFile = join(root, 'infra/dev/compose.qa-raw-update.yaml');
+const qaWorkScopeComposeFile = join(root, 'infra/dev/compose.qa-work-scope.yaml');
 
 function run(command: string, args: string[], env: NodeJS.ProcessEnv = process.env,
   timeout?: number): string {
@@ -50,8 +51,12 @@ function runtimeEnv(): NodeJS.ProcessEnv {
 }
 
 function composeArgs(options: StackOptions, envFile: string, command: string[]): string[] {
+  // Set by the integration runner for stacks that admit the Work-name writer.
+  // The file is merged after the tmpfs overlay so only Fuseki's database survives a restart.
+  const durableFuseki = process.env.REZICS_FUSEKI_DURABLE_DATABASES === '1';
   return ['compose', '--env-file', envFile, '-f', composeFile,
     ...(options.profile === 'qa' && !options.persistent ? ['-f', qaComposeFile] : []),
+    ...(options.profile === 'qa' && !options.persistent && durableFuseki ? ['-f', qaWorkScopeComposeFile] : []),
     ...(options.rawUpdate ? ['-f', qaRawUpdateComposeFile] : []),
     '--project-name', projectName(options), ...command];
 }
