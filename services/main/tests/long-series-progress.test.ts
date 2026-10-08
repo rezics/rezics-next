@@ -667,10 +667,10 @@ function anchorClient(f: Awaited<ReturnType<typeof volumeSeries>>, rows: Array<{
 async function anchorProjection(f: Awaited<ReturnType<typeof volumeSeries>>, client: unknown) {
   const native = f.env.fuseki.query.bind(f.env.fuseki);
   // The owner of a Structure is found through its component.
-  f.env.fuseki.query = async (q: string, bytes?: number) => {
+  f.env.fuseki.query = async (q: string) => {
     if (/\bASK \{/.test(q)) return { boolean: true } as never;
     const owner = q.startsWith('SELECT ?owner') ? [...f.headers.values()].find(header => q.includes(header.component)) : undefined;
-    return (owner ? { results: { bindings: [{ owner: binding(owner.work) }] } } : await native(q, bytes)) as never;
+    return (owner ? { results: { bindings: [{ owner: binding(owner.work) }] } } : await native(q)) as never;
   };
   Object.assign(f.env, { lineage: { dataEpoch: 'test', routingEpoch: 'test' } });
   const pool = { connect: async () => client, query: async () => ({ rows: [] }) } as unknown as Pool;
@@ -711,8 +711,8 @@ test('a head that moves during an anchor page leaves the scope unprepared', asyn
   const book = f.headers.get(f.book1)!;
   const native = f.env.fuseki.query.bind(f.env.fuseki);
   let reads = 0;
-  f.env.fuseki.query = async (q: string, bytes?: number) => {
-    const value = await native(q, bytes) as { results?: { bindings: Array<Record<string, { value: string }>> } };
+  f.env.fuseki.query = async (q: string) => {
+    const value = await native(q) as { results?: { bindings: Array<Record<string, { value: string }>> } };
     // The series head is read before the page and again before it commits.
     if (q.includes('SELECT ?component') && q.includes(f.seriesStructure) && ++reads > 1) {
       for (const binding of value.results?.bindings ?? []) binding.head = { value: id() };
@@ -722,4 +722,45 @@ test('a head that moves during an anchor page leaves the scope unprepared', asyn
   await expect(projection.step()).rejects.toThrow('Progress anchor basis changed');
   expect(done.rolledBack()).toBe(true);
   expect(book.head).toBe(f.headers.get(f.book1)!.head);
+});
+
+test('a write vouches for its anchors only at the heads they were derived from', async () => {
+  const principal = { issuer: 'https://reader.test', subject: 'viewer' };
+  const structure = id(), parent = id(), head = id(), parentHead = id();
+  const calls: Array<{ sql: string; params: unknown[] }> = [];
+  const client = { query: async (sql: string, params: unknown[]) => { calls.push({ sql, params }); return { rows: [] }; } };
+  const store = new StructureProgressStore({} as Pool) as unknown as {
+    recordAnchorBasis(client: unknown, input: unknown, opened: boolean): Promise<void> };
+  const order = { revision: head, key: 'a\u0002b' };
+  const write = { principal, structure, order, anchors: [{ structure: parent, order: { revision: parentHead, key: 'a\u0002a\u0001a\u0002b' } }] };
+  // A scope this write opens is prepared for exactly its heads.
+  await store.recordAnchorBasis(client, write, true);
+  expect(calls[0]!.sql).toContain('SET anchor_revision=$4, anchor_parent=$5');
+  expect(calls[0]!.params).toEqual([principal.issuer, principal.subject, structure, head, parent, parentHead]);
+  // A scope prepared for other heads stops vouching for them.
+  await store.recordAnchorBasis(client, write, false);
+  expect(calls[1]!.sql).toContain('SET anchor_revision=NULL');
+  expect(calls[1]!.sql).toContain('anchor_revision <> $4');
+  expect(calls[1]!.params).toEqual([principal.issuer, principal.subject, structure, head, parent, parentHead]);
+  // A direct write that carries no anchors says nothing about them.
+  await store.recordAnchorBasis(client, { ...write, anchors: undefined }, false);
+  expect(calls).toHaveLength(2);
+});
+
+test('anchor readiness is one keyed scope row, and an unprepared scope asks for preparation', async () => {
+  const principal = { issuer: 'https://reader.test', subject: 'viewer' };
+  const member = { structure: id(), revision: id() }, parent = { structure: id(), revision: id() };
+  const calls: Array<{ sql: string; params: unknown[] }> = [];
+  let prepared = false;
+  const pool = { query: async (sql: string, params: unknown[]) => {
+    calls.push({ sql, params }); return { rows: prepared ? [{}] : [] };
+  } } as unknown as Pool;
+  const store = new StructureProgressStore(pool);
+  expect(await store.anchorsCurrent(principal, member, parent)).toBe(false);
+  prepared = true;
+  expect(await store.anchorsCurrent(principal, member, parent)).toBe(true);
+  expect(calls).toHaveLength(2);
+  expect(calls[0]!.sql).toContain('anchor_cursor IS NULL');
+  expect(calls[0]!.params).toEqual([principal.issuer, principal.subject, member.structure, member.revision, parent.structure, parent.revision]);
+  await expect(store.anchorsCurrent(principal, { ...member, revision: 'invalid' }, parent)).rejects.toBeInstanceOf(InvalidStructureProgress);
 });
