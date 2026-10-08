@@ -4,7 +4,7 @@ import { inAccessTransaction, requireRecoveryOpen } from '../access/policy-trans
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { authorWorkGenerations } from '../access/author-baseline.ts';
 import { baselineMemberProof } from '../access/baseline.ts';
-import { readSemanticDisclosure, type SemanticDisclosure } from '../access/semantic-disclosure.ts';
+import { explicitSemanticReadGrant, readSemanticDisclosure, type SemanticDisclosure } from '../access/semantic-disclosure.ts';
 
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAX_RESOURCES = 65;
@@ -23,6 +23,11 @@ export class MediaAccessBatchReader {
   async canReadSemantics(principal: VerifiedPrincipal | null, actingSubject: string | null,
     resources: readonly string[], graph = this.graph): Promise<SemanticDisclosure | ReadonlySet<string>> {
     return readSemanticDisclosure({ pool: this.pool, graph }, principal, actingSubject, resources);
+  }
+
+  /** Draft authority for a definition that public disclosure already admits. */
+  explicitSemanticRead(principal: VerifiedPrincipal, actingSubject: string, resource: string): Promise<boolean> {
+    return explicitSemanticReadGrant({ pool: this.pool, graph: this.graph }, principal, actingSubject, resource);
   }
 
   async canReadPrivateContexts(principal: VerifiedPrincipal, actingSubject: string,

@@ -14,6 +14,7 @@ import type { SemanticValue } from '../semantic/value.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { RevisionCorrupt } from '../work/history.ts';
 import { readPresentationCurrent, type PresentationRead } from './change.ts';
+import { namedMeaning, PUBLIC_DEFINITION_KINDS } from './property-name.ts';
 import type { PresentationState } from './schema.ts';
 
 export interface RelationBinding {
@@ -231,7 +232,7 @@ export async function renderRelation(
       throw new SemanticTargetUnavailable('relation definition is unavailable');
     const revision =
       subject.revision ?? (await readCurrentComponent(env, subject.definition, 'definition'))?.head;
-    meaning = revision ? await readExactDefinition(env, revision, disclose, canRead) : null;
+    meaning = revision ? await readExactDefinition(env, revision, disclose, canRead, PUBLIC_DEFINITION_KINDS) : null;
     if (meaning && meaning.definition !== subject.definition) meaning = null;
   } else {
     if (!(await canRead(subject.occurrence)))
@@ -271,6 +272,8 @@ export async function renderRelation(
       })),
     };
   }
+  // A property's stored roles are empty; its name uses the subject → value direction.
+  meaning = namedMeaning(meaning);
   if (!Object.values(meaning.roleKeys).includes(viewingRole))
     throw new SemanticChangeRejected('invalid', 'viewing role is unknown');
   const rows = await presentations(env, meaning, includeDrafts);

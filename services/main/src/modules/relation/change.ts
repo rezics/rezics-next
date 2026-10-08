@@ -9,7 +9,7 @@ import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGenerat
   type SemanticTerminal } from '../semantic/command.ts';
 import { ModelGenerationChanged } from '../semantic/generation-guard.ts';
 import { checkedStoredState, term, type RelationRole, type RelationStar } from '../semantic/change.ts';
-import { checkedNativeIri, MODEL_COMPONENT, PROFILES, type Lifecycle } from '../semantic/schema.ts';
+import { checkedNativeIri, definitionKindIri, MODEL_COMPONENT, PROFILES, type Lifecycle } from '../semantic/schema.ts';
 import { semanticValueRdf } from '../semantic/value.ts';
 import { checkedApplicability, checkedParticipations, checkedRevealedAt, InvalidRelationOccurrence,
   RELATION_LIMITS, RELATION_TERMS, type Participation, type RelationRoleDefinition,
@@ -69,6 +69,8 @@ export type CanonicalRelation = OccurrenceState & { revealedAt?: RevealedAt };
 export interface ExactDefinition extends EditorRecording {
   revision: string;
   definition: string;
+  /** Present on reads. Omitted by callers that build a relation fixture directly. */
+  kind?: 'relation' | 'property';
   lifecycle: Lifecycle;
   roles: RelationRoleDefinition[];
   roleKeys: Record<string, string>;
@@ -80,11 +82,22 @@ export interface ExactDefinition extends EditorRecording {
 
 export const roleIri = (definition: string, key: string): string => `${definition}/role/${key}`;
 
+type ReadableDefinitionKind = 'relation' | 'property';
+
+function graphDefinitionKind(value: string | undefined): ReadableDefinitionKind | 'other' | undefined {
+  if (value === definitionKindIri('relation')) return 'relation';
+  if (value === definitionKindIri('property')) return 'property';
+  return value ? 'other' : undefined;
+}
+
 /** Resolve the unique stored key through graph state, never a machine-local seed map.
  * SKOS notation is an identifier independent of a preferred language label:
- * https://www.w3.org/TR/skos-reference/#notations */
+ * https://www.w3.org/TR/skos-reference/#notations
+ * Callers that admit only relations treat a property key as absent, so a public
+ * property notation is not reported as a corrupt relation. */
 export async function readDefinitionByKey(env: WorkActivationEnvironment, key: string,
-  disclose: ReferenceDisclosure, canRead?: (definition: string) => Promise<boolean>): Promise<ExactDefinition | null> {
+  disclose: ReferenceDisclosure, canRead?: (definition: string) => Promise<boolean>,
+  kinds: readonly ReadableDefinitionKind[] = ['relation']): Promise<ExactDefinition | null> {
   if (!/^[a-z][a-z0-9-]{0,63}$/.test(key)) throw new SemanticChangeRejected('invalid', 'invalid definition key');
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?definition ?head WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?key a rv:DefinitionKey ; rv:keyDefinition ?definition ;
@@ -94,34 +107,43 @@ export async function readDefinitionByKey(env: WorkActivationEnvironment, key: s
   if (!rows.length) return null;
   if (rows.length !== 1) throw new RevisionCorrupt('definition key is ambiguous');
   if (canRead && !await canRead(rows[0]!.definition!.value)) return null;
-  const definition = await readExactDefinition(env, rows[0]!.head!.value, disclose, canRead);
+  const definition = await readExactDefinition(env, rows[0]!.head!.value, disclose, canRead, kinds);
+  if (!definition && !kinds.includes('property')) {
+    const property = await readExactDefinition(env, rows[0]!.head!.value, disclose, canRead, ['property']);
+    if (property) return null;
+  }
   if (!definition || definition.notation !== key) throw new RevisionCorrupt('definition key differs from retained state');
   return definition;
 }
 
-/** Resolve an exact relation DefinitionRef from its immutable revision, never the current head. The definition is a
- * semantic Resource: `canRead` gates it before its bytes load. `disclose` decides each role member, which may be a
- * Concept the semantic reader alone would hide. */
+/** Resolve an exact definition revision, never the current head. `kinds` defaults to relations so occurrence
+ * commands keep ignoring properties. The definition is a semantic Resource: `canRead` gates it before its bytes
+ * load. `disclose` decides each role member, which may be a Concept the semantic reader alone would hide. */
 export async function readExactDefinition(env: WorkActivationEnvironment, revision: string,
-  disclose: ReferenceDisclosure, canRead?: (definition: string) => Promise<boolean>): Promise<ExactDefinition | null> {
+  disclose: ReferenceDisclosure, canRead?: (definition: string) => Promise<boolean>,
+  kinds: readonly ReadableDefinitionKind[] = ['relation']): Promise<ExactDefinition | null> {
   checkedNativeIri(revision);
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?definition ?manifest WHERE {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?definition ?manifest ?kind WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:DefinitionRevision ; rv:component ?definition ;
-      rv:manifest ?manifest } } LIMIT 2`);
+      rv:manifest ?manifest . OPTIONAL { ${iri(revision)} rv:definitionKind ?kind } } } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
   if (rows.length !== 1) throw new RevisionCorrupt('definition revision is ambiguous');
   const definition = rows[0]!.definition!.value;
   if (canRead && !await canRead(definition)) return null;
+  const graphKind = graphDefinitionKind(rows[0]!.kind?.value);
+  if (graphKind === 'other') return null;
+  if (graphKind && !kinds.includes(graphKind)) return null;
   const state = checkedStoredState(await readComponent(env, rows[0]!.manifest!.value, definition, PROFILES.definition));
   if (state.component !== 'definition') throw new RevisionCorrupt('definition revision names another component');
-  if (state.kind !== 'relation') return null;
+  if (state.kind !== 'relation' && state.kind !== 'property') return null;
+  if (!kinds.includes(state.kind)) return null;
   // Role members are typed coordinates: one disclosure decision for all roles, never one per member.
   const readableMembers = await disclose(state.roles.flatMap(role => role.members ?? []));
   const roles = state.roles.map((role: RelationRole) => ({ role: roleIri(definition, role.key),
     minParticipants: role.minParticipants, maxParticipants: role.maxParticipants, ordered: role.ordered,
     ...(role.members ? { members: role.members.filter(ref => readableMembers.has(ref)) } : {}) }));
-  return { revision, definition, lifecycle: state.lifecycle, ...(state.editorRecordable === undefined ? {} : { editorRecordable: state.editorRecordable }),
+  return { revision, definition, kind: state.kind, lifecycle: state.lifecycle, ...(state.editorRecordable === undefined ? {} : { editorRecordable: state.editorRecordable }),
     ...(state.writePath === undefined ? {} : { writePath: state.writePath }),
     ...(state.notation ? { notation: state.notation } : {}),
     ...(state.workSubjectRole ? { workSubjectRole: state.workSubjectRole } : {}),

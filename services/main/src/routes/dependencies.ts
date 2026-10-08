@@ -254,7 +254,10 @@ export interface MainWorkDependencies {
   realmRecommendations?: RealmVariantRecommendationStore;
   verification?: VerificationStore;
   /** Current Access authority for bounded resource-summary batches. */
-  mediaAccess?: Pick<MediaAccessBatchReader, 'canReadWorks' | 'canReadSemantics' | 'canReadPrivateContexts'>;
+  mediaAccess?: Pick<MediaAccessBatchReader, 'canReadWorks' | 'canReadSemantics' | 'canReadPrivateContexts'> & {
+    explicitSemanticRead?(principal: import('../modules/access/admission.ts').VerifiedPrincipal,
+      actingSubject: string, resource: string): Promise<boolean>;
+  };
   /** Relay erasure journal and Content owner; absent means erasure is unavailable. */
   erasures?: ErasureService;
   realmReplies?: RealmReplyStore;

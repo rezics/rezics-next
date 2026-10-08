@@ -8,6 +8,7 @@ import { renderRelation, type RelationRendering } from '../modules/lexicon/rende
 import { listDefinitions, DEFINITION_LIST_LIMIT } from '../modules/lexicon/catalog.ts';
 import { editorRecording } from '../modules/lexicon/editor-recording.ts';
 import { LEXICON_LIMITS, PRESENTATION_PROFILE, type PresentationState } from '../modules/lexicon/schema.ts';
+import { definitionViewingRole, namedMeaning, PUBLIC_DEFINITION_KINDS } from '../modules/lexicon/property-name.ts';
 import { readerLanguages } from '../modules/display-language/select.ts';
 import { readDefinitionByKey, readExactDefinition } from '../modules/relation/change.ts';
 import { readCurrentComponent } from '../modules/semantic/change.ts';
@@ -187,7 +188,11 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     definition: string) => {
     if (!principal || !actor || !work.mediaAccess) return false;
     const disclosure = await work.mediaAccess.canReadSemantics(principal, actor, [definition], fuseki);
-    return 'granted' in disclosure && disclosure.granted.has(definition);
+    if (!('granted' in disclosure)) return false;
+    if (disclosure.granted.has(definition)) return true;
+    // Public vocabulary is left out of granted. A draft still needs the explicit read grant.
+    if (!disclosure.public.has(definition)) return false;
+    return (await work.mediaAccess.explicitSemanticRead?.(principal, actor, definition)) ?? false;
   };
   const readableState = (principal: VerifiedPrincipal | null, actor: string | undefined, state: PresentationState) =>
     state.reviewStatus === 'reviewed'
@@ -260,25 +265,39 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
     })
     .get('/v1/lexicon/definitions/:key', {
       params: t.Object({ key: t.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }) }),
-      query: t.Object({ actingSubject: t.Optional(native) }, { additionalProperties: false }),
+      query: t.Object({
+        actingSubject: t.Optional(native),
+        languages: t.Optional(t.String({ maxLength: 8192 })),
+      }, { additionalProperties: false }),
       response: { 200: t.Object({ profile: t.Literal('relation-definition-key-v1'), key: t.String(),
+        kind: t.Union([t.Literal('relation'), t.Literal('property')]),
         definition: native, revision: native, lifecycle: t.String(), roles: t.Array(t.Unknown()),
         workSubjectRole: t.Nullable(t.String()), star: t.Nullable(relationStar), editorRecordable: t.Boolean(),
-        writePath: t.Nullable(t.Union([t.Literal('derivation'), t.Literal('relation')])) }), ...authorizedReadProblems },
+        writePath: t.Nullable(t.Union([t.Literal('derivation'), t.Literal('relation')])),
+        rendering: relationRenderingSchema }), ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
       try {
         const principal = await authenticate(request, query.actingSubject);
-        const meaning = await readDefinitionByKey(work.environment, params.key,
-          disclosure(principal, query.actingSubject, ref => readable(principal, query.actingSubject, ref)),
-          definition => readable(principal, query.actingSubject, definition));
+        const canRead = (ref: string) => readable(principal, query.actingSubject, ref);
+        const disclose = disclosure(principal, query.actingSubject, canRead);
+        const meaning = await readDefinitionByKey(work.environment, params.key, disclose,
+          definition => canRead(definition), PUBLIC_DEFINITION_KINDS);
         if (!meaning || !await readable(principal, query.actingSubject, meaning.definition, meaning.revision)) {
           return problem(404, 'definition_unavailable', 'Definition is unavailable');
         }
+        const named = namedMeaning(meaning);
+        const viewingRole = definitionViewingRole(meaning);
+        if (!viewingRole) throw new SemanticChangeRejected('invalid', 'viewing role is unknown');
+        // One meaning's language inventory, the same bound as a relation rendering.
+        const rendering = await renderRelation(work.environment, { meaning: named, bindings: [] }, viewingRole,
+          readerLanguages(query.languages, request.headers.get('accept-language')), canRead,
+          await draftReadable(principal, query.actingSubject, meaning.definition), disclose);
         return Response.json({ profile: 'relation-definition-key-v1', key: params.key,
+          kind: meaning.kind ?? 'relation',
           definition: meaning.definition, revision: meaning.revision, lifecycle: meaning.lifecycle,
           roles: meaning.roles.map(role => ({ ...role, key: meaning.roleKeys[role.role] })),
           workSubjectRole: meaning.workSubjectRole ?? null, star: meaning.star ?? null,
-          ...editorRecording(meaning) }, { headers: { 'cache-control': 'no-store' } });
+          ...editorRecording(meaning), rendering }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return semanticError(error); }
     })
     .post(
@@ -417,19 +436,20 @@ export function lexiconRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
               items.push({ definition, status: 'unavailable', renderings: [] });
               continue;
             }
-            const meaning = await readExactDefinition(work.environment, revision, disclose);
+            const meaning = await readExactDefinition(work.environment, revision, disclose, undefined, PUBLIC_DEFINITION_KINDS);
             if (!meaning || meaning.definition !== definition) {
               items.push({ definition, status: 'unavailable', renderings: [] });
               continue;
             }
-            const roles = query.viewingRole ? [query.viewingRole] : Object.values(meaning.roleKeys);
+            const named = namedMeaning(meaning);
+            const roles = query.viewingRole ? [query.viewingRole] : Object.values(named.roleKeys);
             const renderings: RelationRendering[] = [];
             const includeDrafts = await draftReadable(principal, query.actingSubject, definition);
             for (const viewingRole of roles)
               renderings.push(
                 await renderRelation(
                   work.environment,
-                  { meaning, bindings: [] },
+                  { meaning: named, bindings: [] },
                   viewingRole,
                   languages,
                   canRead,

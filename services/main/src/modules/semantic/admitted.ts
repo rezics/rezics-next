@@ -209,7 +209,7 @@ export async function admittedRelationChange(env: WorkActivationEnvironment,
   platformAccess?: Pick<AccessExposure, 'require'>): Promise<RelationChangeResult> {
   // System reader: the writer validates participants against the full member list; the disclosure rule below decides what the caller may name.
   const definition = await readExactDefinition(env, input.input.definition, systemDisclosure);
-  if (!definition) throw new SemanticChangeRejected('unavailable-reference', 'relation definition is unavailable');
+  if (!definition || definition.kind === 'property') throw new SemanticChangeRejected('unavailable-reference', 'relation definition is unavailable');
   const { state, digest } = relationIntent(definition, input);
   return admitted({ env, account, access, request, actingSubject: input.actingSubject,
     platformAccess, operationId: 'postV1RelationsChanges',

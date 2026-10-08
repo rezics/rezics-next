@@ -89,11 +89,13 @@ export async function publicInTransaction(access: PoolClient, graph: Pick<Fuseki
           ${publicWork('?work', '?main')}
         }
       } UNION {
-        # Relation definitions are public vocabulary; other resources still need a public Work.
-        GRAPH ${iri(GRAPHS.current)} { ?resource a rv:SemanticDefinition ;
-          rv:definitionKind rv:RelationDefinition ; rv:definitionHead ?head . }
-        GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:DefinitionRevision ;
-          rv:definitionKind rv:RelationDefinition . }
+        # Relation and property definitions are public vocabulary; other resources still need a public Work.
+        GRAPH ${iri(GRAPHS.current)} { ?resource a rv:SemanticDefinition ; rv:definitionHead ?head .
+          { ?resource rv:definitionKind rv:RelationDefinition }
+          UNION { ?resource rv:definitionKind rv:PropertyDefinition } }
+        GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:DefinitionRevision .
+          { ?head rv:definitionKind rv:RelationDefinition }
+          UNION { ?head rv:definitionKind rv:PropertyDefinition } }
       }
       GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RevisionAnchor ;
         rv:component ?resource ; rv:lifecycle rv:Active ; rv:sequence ?sequence . }
@@ -114,6 +116,35 @@ export async function publicInTransaction(access: PoolClient, graph: Pick<Fuseki
       AND NOT EXISTS (SELECT 1 FROM access.policy
         WHERE scope_id = 'semantic:read:' || wanted.resource AND ended_at IS NULL)`, [candidates]);
   return new Set(allowed.rows.map(row => row.resource));
+}
+
+/** Public vocabulary omits an explicit read grant from `granted`. A draft still
+ * needs that grant: one indexed lookup, no graph read. */
+export async function explicitSemanticReadGrant(client: SemanticDisclosureClient,
+  principal: VerifiedPrincipal, actor: string, resource: string): Promise<boolean> {
+  if (!nativeId.test(actor) || !nativeId.test(resource)) return false;
+  return inAccessTransaction(client.pool, 'read committed', async access => {
+    await requireRecoveryOpen(access, true);
+    const rows = await access.query<{ resource: string }>(`SELECT wanted.resource
+      FROM unnest($3::text[]) AS wanted(resource)
+      JOIN access.principal AS principal
+        ON principal.account_issuer = $1 AND principal.account_subject = $2 AND principal.active
+      JOIN access.scope_gate gate ON gate.id = 'semantic:read:' || wanted.resource AND gate.open
+      JOIN access.authority_subject subject ON subject.id = $4 AND subject.active
+      JOIN LATERAL (SELECT id FROM access.representation
+        WHERE principal_id = principal.id AND subject_id = subject.id
+          AND action = 'semantic.read' AND active AND valid_until > clock_timestamp()
+        ORDER BY id LIMIT 1 FOR SHARE) represented ON true
+      JOIN LATERAL (SELECT id FROM access.permission_grant
+        WHERE recipient_subject = subject.id AND scope_id = gate.id
+          AND action = 'semantic.read' AND active AND valid_until > clock_timestamp()
+        ORDER BY id LIMIT 1 FOR SHARE) granted ON true
+      WHERE NOT EXISTS (SELECT 1 FROM access.policy
+        WHERE scope_id = gate.id AND ended_at IS NULL)
+      FOR SHARE OF gate, principal, subject`,
+      [principal.issuer, principal.subject, [resource], actor]);
+    return rows.rows.length === 1 && rows.rows[0]?.resource === resource;
+  });
 }
 
 /** Public and authenticated outcomes stay separate so a private curator baseline

@@ -255,6 +255,7 @@ test('public relation vocabulary disclosure remains independent of creation iden
   expect(r.graphs).toHaveLength(1);
   const publicQuery = r.graphs[0]!.query;
   expect(publicQuery).toContain('rv:definitionKind rv:RelationDefinition');
+  expect(publicQuery).toContain('rv:definitionKind rv:PropertyDefinition');
   expect(publicQuery).toContain('<https://rezics.com/vocab/semanticWork>');
   expect(publicQuery).toContain('rv:lifecycle rv:Active');
   expect(publicQuery).toContain('rv:protectionHead ?protection');

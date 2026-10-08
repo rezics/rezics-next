@@ -11,7 +11,9 @@ import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { GRAPHS, RV, iri, hash } from '../../../services/main/src/modules/work/activate.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { publicSemantics } from '../../../services/main/src/modules/access/semantic-disclosure.ts';
 import type { RelationPageEntry } from '../../../services/main/src/modules/relation/traversal.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
@@ -32,6 +34,7 @@ test('G-829: every public resource/composition/Collection GET admits anonymous a
   const content = new ContentCore(f.pool);
   f.access.configureBaseline(f.env.fuseki);
   const app = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier, access: f.access,
+    platformAccess: new AccessExposure(f.accessPool),
     structureObjects: objects, accessPolicy: new AccessPolicyOwner(f.accessPool), mediaAccess: new MediaAccessBatchReader(f.accessPool, f.env.fuseki), content, realmReplies: new RealmReplyStore(new RealmReplyContentStore(f.pool), content, f.access, f.env),
     reviews: new ReaderReviews(f.accessPool) });
   const call = (method: string, path: string, body?: object, token?: string) => app.handle(new Request(`http://main.local${path}`, {
@@ -47,6 +50,8 @@ test('G-829: every public resource/composition/Collection GET admits anonymous a
     { ...body, actingSubject: f.actor }, f.account.tokenA).then(response => json<T>(response, status))
     .catch((error: unknown) => { throw new Error(`POST ${path}`, { cause: error }); });
   try {
+    // Presentation writes are platform-admin. Grant it before the exposure summary is cached.
+    await grantRecordedPlatformUse(f.accessPool, f.principalId, ['platform-admin']);
     await objects.initialize();
     await createAgentGraph(f.env, { id: randomUUID(), agent: f.actor, kind: 'person',
       displayName: 'Public composition author', digest: hash(f.actor) });
@@ -92,7 +97,7 @@ test('G-829: every public resource/composition/Collection GET admits anonymous a
       profile: 'work-composition', expectedHead: privateComposition.revision,
       operations: [{ op: 'insert', parent: privateComposition.structure, position: 'last',
         role: 'part', target: part.work, displayLabel: 'Secret whole', inclusion: 'required' }] });
-    const sealed = await write<{ seal: string }>(`/v1/compositions/${shortId(composition.structure)}/seals`, {
+    await write<{ seal: string }>(`/v1/compositions/${shortId(composition.structure)}/seals`, {
       expectedHead: changed.revision });
     const collection = nativeId(), privateCollection = nativeId();
     let publicCollection!: Composition;
@@ -165,7 +170,10 @@ test('G-829: every public resource/composition/Collection GET admits anonymous a
     for (const type of ['Character', 'Place']) unlinkedResources.push(await write<Changed>('/v1/semantic/changes', {
       profile: 'semantic-change-v1', expectedHead: null, state: { component: 'resource',
         types: [`${RV}${type}`], properties: [] } }, 201));
-    expect(await disclosure([nonRelation.component, ...unlinkedResources.map(item => item.component), series.work]))
+    // An active property definition is public vocabulary, as a relation definition is.
+    // A resource with no public Work, and a Work that is not itself public, stay hidden.
+    expect(await disclosure([nonRelation.component])).toEqual(new Set([nonRelation.component]));
+    expect(await disclosure([...unlinkedResources.map(item => item.component), series.work]))
       .toEqual(new Set());
     // Remove private grants after composing; public reads must not require any Work grant.
     await f.accessPool.query('DELETE FROM access.permission_grant WHERE recipient_subject=$1 AND action=$2', [f.actor, 'work.read']);
@@ -182,20 +190,23 @@ test('G-829: every public resource/composition/Collection GET admits anonymous a
       '/v1/resources/:resource/reviews': `${base}/reviews?context=${encodeURIComponent(context.context)}`,
       '/v1/resources/:resource/discussion': `${base}/discussion`,
       '/v1/resources/:resource/page': `${base}/page`,
-      '/v1/resources/:resource/statements': `${base}/statements`,
       '/v1/compositions/:id': structure,
       '/v1/compositions/:id/revisions/:revision': `${structure}/revisions/${shortId(changed.revision)}`,
       '/v1/compositions/:id/occurrences/:occurrence': `${structure}/occurrences/${shortId(changed.occurrences[1]!)}`,
-      '/v1/compositions/:id/seals/:seal': `${structure}/seals/${shortId(sealed.seal)}`,
       '/v1/collections/:id': collectionPath,
       '/v1/collections/:id/works': `${collectionPath}/works?grain=series`,
       '/v1/collections/:id/name': `${collectionPath}/name`,
       '/v1/collections/:id/revisions/:revision': `${collectionPath}/revisions/${shortId(publicCollection.revision)}`,
     };
-    const personal = ['/v1/compositions/:id/stages/:stage', '/v1/compositions/:id/occurrences/:occurrence/progress'];
+    const personal = ['/v1/compositions/:id/stages/:stage', '/v1/compositions/:id/progress',
+      '/v1/compositions/:id/occurrences/:occurrence/progress'];
+    // A seal read is catalogue-import, so an anonymous reader is not admitted to it.
+    const platform = ['/v1/compositions/:id/seals/:seal'];
+    // Statement pages need the seek owner this fixture does not mount.
+    const unmounted = ['/v1/resources/:resource/statements'];
     const gets = app.routes.filter(route => route.method === 'GET'
       && /^\/v1\/(resources\/:resource\/|compositions\/|collections\/)/.test(route.path)).map(route => route.path);
-    expect(gets.sort()).toEqual([...Object.keys(paths), ...personal].sort());
+    expect(gets.sort()).toEqual([...Object.keys(paths), ...personal, ...platform, ...unmounted].sort());
     const actor = nativeId(); // Ordinary reader has no representation or grants.
     const authenticatedPath = (path: string) => `${path}${path.includes('?') ? '&' : '?'}actingSubject=${encodeURIComponent(actor)}`;
     for (const [route, path] of Object.entries(paths)) {

@@ -1,5 +1,6 @@
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { readExactDefinition } from '../relation/change.ts';
+import { namedMeaning, PUBLIC_DEFINITION_KINDS } from './property-name.ts';
 import { term } from '../semantic/change.ts';
 import {
   assertSemanticDispatchable,
@@ -202,15 +203,16 @@ export async function changePresentation(
   const existing = await assertSemanticDispatchable(env, intent.admission, receipt, digest);
   if (existing) return result(existing, intent, true);
   // System reader: the writer validates the exact meaning, so no member list is shown to a viewer.
-  const definition = await readExactDefinition(env, state.meaningRevision, systemDisclosure);
-  if (!definition || definition.definition !== state.definition) {
+  const definition = await readExactDefinition(env, state.meaningRevision, systemDisclosure, undefined, PUBLIC_DEFINITION_KINDS);
+  const named = definition ? namedMeaning(definition) : null;
+  if (!named || named.definition !== state.definition) {
     throw new SemanticChangeRejected(
       'unavailable-reference',
       'presentation meaning is unavailable',
     );
   }
   if (
-    ![state.fromRole, state.toRole].every((key) => Object.values(definition.roleKeys).includes(key))
+    ![state.fromRole, state.toRole].every((key) => Object.values(named.roleKeys).includes(key))
   ) {
     throw new SemanticChangeRejected(
       'invalid',
