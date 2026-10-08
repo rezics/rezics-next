@@ -632,10 +632,16 @@ test('Upgrade forwards previously signed counter-notices once and preserves thei
   const f = await safetyFixture('rights-counter-notice-upgrade', true, databases.urls);
   let now = new Date();
   f.setClock(now);
+  // Account receives this mail; the case read uses that delivered secret.
+  // The stored column remains an owner assertion and is not a client input.
+  const deliveredNotices: CounterNoticeMail[] = [];
   const notices = new RightsCounterNotices(
     f.stack.accessPool,
     f.governance,
-    async () => 'sent',
+    async (mail) => {
+      deliveredNotices.push(mail);
+      return 'sent';
+    },
     () => now,
   );
   try {
@@ -747,9 +753,13 @@ test('Upgrade forwards previously signed counter-notices once and preserves thei
       addBusinessDays(legacyReceived, 10).toISOString(),
     );
     expect(delivered.claimant_credential).toMatch(/^[A-Za-z0-9_-]{43}$/);
-    expect(
-      (await f.deps.publicReports!.status(receipt.caseId, delivered.claimant_credential)).reportId,
-    ).toBe(receipt.reportId);
+    const claimantCredential = deliveredNotices.find(
+      (mail) => mail.caseId === receipt.caseId,
+    )!.credential;
+    expect(delivered.claimant_credential).toBe(claimantCredential);
+    expect((await f.deps.publicReports!.status(receipt.caseId, claimantCredential)).reportId).toBe(
+      receipt.reportId,
+    );
     // Retained legacy windows belong in the case history, not the due queue or alerts.
     now = new Date(addBusinessDays(legacyReceived, 10).getTime() - 1);
     f.setClock(now);
