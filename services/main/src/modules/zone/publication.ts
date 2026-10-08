@@ -85,32 +85,36 @@ export async function readZonePublication(env: WorkActivationEnvironment, zone: 
       objectReads: bundle || state.documentSite ? 4 : 2 } };
 }
 
-/** Current public-bundle membership, O(1) after the ordinary Zone publication
- * read. The exact binding subject is indexed; no page inventory is traversed.
+/** Indexed membership of the current public bundle. The configuration head
+ * selects the revision; one binding ASK proves its Content pin and receipt
+ * link. Home rendering owns the receipt body, so this check leaves that body
+ * unread: a missing presentation cut must not refuse before the caller's
+ * rights and delivery fences. A gone pin or receipt link still refuses.
  * Recheck visibility, recovery and the selected head in the same graph snapshot. */
 export async function isZonePublishedPageRevision(env: WorkActivationEnvironment,
   zone: string, page: string, revisionId: string): Promise<boolean> {
   if (!Value.Check(ZonePublishedPage.properties.page, zone)
     || !Value.Check(ZonePublishedPage.properties.page, page)
     || !Value.Check(ZonePublishedPage.properties.revisionId, revisionId)) return false;
-  let publication: Awaited<ReturnType<typeof readZonePublication>>;
-  try { publication = await readZonePublication(env, zone); }
+  let state: Awaited<ReturnType<typeof readZoneConfiguration>>;
+  try { state = await readZoneConfiguration(env, zone); }
   catch (error) {
     if (error instanceof ZoneUnavailable) return false;
     throw error;
   }
-  if (publication.disclosure !== 'public' || !publication.publicationRevision) return false;
-  const revision = publication.publicationRevision;
+  const disclosure = state.disclosure === 'private' || state.spaceVisibility === 'private' ? 'private' : 'public';
+  if (state.state !== 'active' || disclosure !== 'public' || !state.publicationRevision) return false;
+  const revision = state.publicationRevision;
   const binding = zonePublishedPageBinding(revision, page, revisionId);
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
       FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
     GRAPH ${iri(GRAPHS.current)} { ${iri(zone)} a rv:Zone ; rv:zoneState rv:Active ;
-      rv:disclosure rv:Public ; rv:space ${iri(publication.space)} ; rv:sitePublicationHead ${iri(revision)} .
-      ${iri(publication.space)} a rv:Space ; rv:disclosure rv:Public .
+      rv:disclosure rv:Public ; rv:space ${iri(state.space)} ; rv:sitePublicationHead ${iri(revision)} .
+      ${iri(state.space)} a rv:Space ; rv:disclosure rv:Public .
       FILTER NOT EXISTS { ${iri(zone)} rv:protectionHead ?zoneProtection }
-      FILTER NOT EXISTS { ${iri(publication.space)} rv:protectionHead ?spaceProtection } }
+      FILTER NOT EXISTS { ${iri(state.space)} rv:protectionHead ?spaceProtection } }
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:ZoneRevision ;
       rv:component ${iri(zone)} ; rv:sitePublicationReceipt ?receipt .
       ${iri(binding)} rv:sitePublicationRevision ${iri(revision)} ;
