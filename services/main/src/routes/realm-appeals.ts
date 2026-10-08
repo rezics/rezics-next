@@ -26,7 +26,8 @@ const resolution = t.Union([t.Literal('dismiss'), t.Literal('restore')]);
 const appeal = t.Union([
   t.Object({ state: t.Literal('none') }, { additionalProperties: false }),
   t.Object({ state: t.Literal('open'), caseId: readUuid, statement }, { additionalProperties: false }),
-  t.Object({ state: t.Literal('decided'), caseId: readUuid, statement, outcome: resolution, rationale: t.String() },
+  t.Object({ state: t.Literal('decided'), caseId: readUuid, statement, outcome: resolution,
+    rationale: t.Nullable(t.String()) },
     { additionalProperties: false }),
 ]);
 const reading = t.Object({

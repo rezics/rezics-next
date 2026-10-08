@@ -224,6 +224,11 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
     expect(resolved.body.appeal).toEqual({ state: 'decided', caseId, statement: 'I was banned in error.',
       outcome: 'restore', rationale: 'The ban remains in place.' });
     hidden(resolved.body);
+    const moderatorResolved = await call('GET', path, undefined, owner.token);
+    expect(moderatorResolved.status).toBe(200);
+    expect(moderatorResolved.body.appeal).toEqual({ state: 'decided', caseId, statement: 'I was banned in error.',
+      outcome: 'restore', rationale: 'The ban remains in place.' });
+    hidden(moderatorResolved.body);
     const banRow = await pool.query<{ active: boolean; reason_ref: string }>(`SELECT active, reason_ref
       FROM access.membership_ban WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2`,
     [realm, banned.actor]);
@@ -243,6 +248,7 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
       target: appealTarget });
     expect(Value.Check(moderationItem, closedItem)).toBe(true);
     expect(JSON.stringify(closedQueue.body).includes('I was banned in error.')).toBe(false);
+    expect(JSON.stringify(closedQueue.body).includes('The ban remains in place.')).toBe(false);
     expect(auditAfter.status).toBe(200);
     expect(resolutionAfter.status).toBe(200);
     expect(resolution).toMatchObject({ kind: 'realm_sanction_resolution', outcome: 'restore',
@@ -302,11 +308,64 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
     expect(refusedAgain.body.code).toBe('appeal_not_escalable');
     expect(await queueActivity()).toEqual(reportsBefore);
     const dismissKey = randomUUID();
+    const privateRationale = 'The appeal is dismissed.';
     const dismissed = await call('POST', '/v1/moderation/decisions', { ...decision, outcome: 'dismiss',
-      caseId: dismissedCase, idempotencyKey: dismissKey, rationale: 'The appeal is dismissed.' },
+      disclosure: 'private', caseId: dismissedCase, idempotencyKey: dismissKey, rationale: privateRationale },
     owner.token, dismissKey);
     expect({ status: dismissed.status, body: dismissed.body }).toMatchObject({ status: 200,
       body: { outcome: 'dismiss', replayed: false } });
     expect(await queueActivity()).toEqual(reportsBefore);
+    const contains = (body: unknown, text: string) => JSON.stringify(body).includes(text);
+    const privatePath = `${appeal}/${distinctReceipt}/appeal`;
+    const privateMember = await call('GET', privatePath, undefined, other.token);
+    expect(privateMember.status).toBe(200);
+    expect(privateMember.body.appeal).toEqual({ state: 'decided', caseId: dismissedCase,
+      statement: 'I appeal this sanction.', outcome: 'dismiss', rationale: null });
+    expect(contains(privateMember.body, privateRationale)).toBe(false);
+    hidden(privateMember.body);
+    const privateModerator = await call('GET', privatePath, undefined, owner.token);
+    expect(privateModerator.status).toBe(200);
+    expect(privateModerator.body.appeal).toEqual({ state: 'decided', caseId: dismissedCase,
+      statement: 'I appeal this sanction.', outcome: 'dismiss', rationale: privateRationale });
+    expect(contains(privateModerator.body, privateRationale)).toBe(true);
+    hidden(privateModerator.body);
+    const privateAudit = await audit('&kind=realm_sanction_resolution');
+    const privateResolution = listed(privateAudit.body).find(item => item.caseId === dismissedCase);
+    expect(privateAudit.status).toBe(200);
+    expect(privateResolution).toMatchObject({ kind: 'realm_sanction_resolution', outcome: 'dismiss',
+      reason: privateRationale, actingSubject: owner.actor });
+    expect(contains(privateAudit.body, privateRationale)).toBe(true);
+    expect(Value.Check(auditItem, privateResolution)).toBe(true);
+    const privateQueue = await moderation('&state=closed');
+    expect(privateQueue.status).toBe(200);
+    expect(contains(privateQueue.body, privateRationale)).toBe(false);
+    const summaryKey = randomUUID();
+    const summaryRationale = 'A public summary of the appeal.';
+    const summaryCase = String(createdCase);
+    const summarized = await call('POST', '/v1/moderation/decisions', { ...decision, outcome: 'restore',
+      disclosure: 'public_summary', caseId: summaryCase, idempotencyKey: summaryKey, rationale: summaryRationale },
+    owner.token, summaryKey);
+    expect({ status: summarized.status, body: summarized.body }).toMatchObject({ status: 200,
+      body: { outcome: 'restore', replayed: false } });
+    expect(await queueActivity()).toEqual(reportsBefore);
+    const summaryPath = `${appeal}/${sameReceipt}/appeal`;
+    const summaryMember = await call('GET', summaryPath, undefined, otherModerator.token);
+    expect(summaryMember.status).toBe(200);
+    expect(summaryMember.body.appeal).toEqual({ state: 'decided', caseId: summaryCase,
+      statement: 'Please read this appeal.', outcome: 'restore', rationale: summaryRationale });
+    expect(contains(summaryMember.body, summaryRationale)).toBe(true);
+    hidden(summaryMember.body);
+    const summaryModerator = await call('GET', summaryPath, undefined, owner.token);
+    expect(summaryModerator.status).toBe(200);
+    expect(summaryModerator.body.appeal).toEqual({ state: 'decided', caseId: summaryCase,
+      statement: 'Please read this appeal.', outcome: 'restore', rationale: summaryRationale });
+    hidden(summaryModerator.body);
+    const summaryAudit = await audit('&kind=realm_sanction_resolution');
+    const summaryResolution = listed(summaryAudit.body).find(item => item.caseId === summaryCase);
+    expect(summaryResolution).toMatchObject({ kind: 'realm_sanction_resolution', outcome: 'restore',
+      reason: summaryRationale, actingSubject: owner.actor });
+    expect(contains(summaryAudit.body, summaryRationale)).toBe(true);
+    const summaryQueue = await moderation('&state=closed');
+    expect(contains(summaryQueue.body, summaryRationale)).toBe(false);
   } finally { await stack.stop(); }
 }, 180_000);

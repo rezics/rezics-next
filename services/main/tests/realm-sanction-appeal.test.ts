@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid } from '../src/modules/governance/store.ts';
 import { APPEAL_ALREADY_OPEN, appealStatement, appealView, idempotencyReplay, isBanReceipt, openAppealConflict,
-  publicResolution, realmModerator, sanctionedPrincipal, uniqueAppealOutcome } from '../src/modules/governance/realm-sanction-appeal.ts';
+  publicResolution, realmModerator, sanctionedPrincipal, uniqueAppealOutcome, visibleAppealRationale }
+  from '../src/modules/governance/realm-sanction-appeal.ts';
 
 const decider = 'https://rezics.com/id/00000000-0000-4000-8000-000000000099';
 
@@ -68,4 +69,15 @@ test('the appeal read drops the decider identity from the whole document', () =>
   expect(raw).not.toContain(decider);
   expect(raw).not.toContain('acting_subject');
   expect(raw).not.toContain('actingSubject');
+});
+
+test('a private sanction rationale stays with the moderator', () => {
+  const text = 'Kept for the moderators.';
+  expect(visibleAppealRationale(false, 'private', text)).toBeNull();
+  expect(visibleAppealRationale(false, 'parties', text)).toBe(text);
+  expect(visibleAppealRationale(false, 'public_summary', text)).toBe(text);
+  expect(visibleAppealRationale(true, 'private', text)).toBe(text);
+  expect(visibleAppealRationale(true, 'parties', text)).toBe(text);
+  expect(visibleAppealRationale(true, 'public_summary', text)).toBe(text);
+  expect(visibleAppealRationale(false, null, text)).toBeNull();
 });

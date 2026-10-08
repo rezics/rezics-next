@@ -6,6 +6,7 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved } from '../work/read-session.ts';
 import { type PersonContext, readPeople } from './context.ts';
+import { visibleAppealRationale } from '../governance/realm-sanction-appeal.ts';
 import { MANAGEMENT_READ_COST, MODERATION_CONTEXT_COST, type ManagementPosition } from './read-contract.ts';
 
 export class ManagementReadMissing extends Error {}
@@ -27,7 +28,8 @@ interface CaseRow { id: string; kind: 'content_report' | 'rights_complaint'
 interface DecisionRow { id: string; case_id: string | null; kind: 'content_moderation' | 'rights_disposition'
   | 'organization_publication_rejection' | 'realm_management' | 'realm_sanction_resolution';
   outcome: string; acting_subject: string; decided_at: Date;
-  reason: string | null; detail: unknown | null; target: { owner: string; resource: string; component: string } | null;
+  reason: string | null; disclosure: string | null; detail: unknown | null;
+  target: { owner: string; resource: string; component: string } | null;
   decided_key: string;
   case_sequence: string | null }
 
@@ -172,6 +174,8 @@ export class ManagementReadStore {
         ) AS escalation FROM (
         (SELECT cases.*, first_report.acting_subject AS author_agent, first_report.reason_code,
           NULL::jsonb AS submission
+        -- The queue names the case. A decision rationale is not a queue field:
+        -- the appeal read applies disclosure, and the audit keeps the moderator's copy.
         FROM (SELECT id, kind, $3::text AS state,
           generation::text, decision_head, opened_at,
           to_char(opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS opened_key,
@@ -248,12 +252,12 @@ export class ManagementReadStore {
     return this.page(principal, realm, options, 'audit', kind,
       // The page's own cases name each decision's target: at most one primary-key lookup per row.
       async (client, after, limit) => (await client.query<DecisionRow>(`SELECT candidates.id, case_id, candidates.kind,
-        outcome, reason, detail, acting_subject, decided_at,
+        outcome, reason, candidates.disclosure, detail, acting_subject, decided_at,
         to_char(decided_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS decided_key,
         case_sequence::text, CASE WHEN c.id IS NULL THEN NULL ELSE jsonb_build_object('owner', c.target_owner,
           'resource', c.target_resource, 'component', c.target_component) END AS target FROM (
         (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence,
-          rationale AS reason, NULL::jsonb AS detail
+          rationale AS reason, disclosure, NULL::jsonb AS detail
           FROM access.moderation_decision
           WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $2
             AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
@@ -261,7 +265,7 @@ export class ManagementReadStore {
           ORDER BY decided_at, id LIMIT $7)
         UNION ALL
         (SELECT id, case_id, kind, outcome, acting_subject, decided_at, case_sequence,
-          rationale AS reason, NULL::jsonb AS detail
+          rationale AS reason, disclosure, NULL::jsonb AS detail
           FROM access.moderation_decision
           WHERE authority_kind = 'realm' AND context = $1 AND authority_scope_id = $3
             AND ${kind ? 'kind = $4' : '$4::text IS NULL'}
@@ -270,6 +274,7 @@ export class ManagementReadStore {
         UNION ALL
         (SELECT id, NULL::uuid AS case_id, 'realm_management' AS kind, action AS outcome,
           acting_subject, created_at AS decided_at, NULL::bigint AS case_sequence, reason,
+          NULL::text AS disclosure,
           CASE WHEN action = 'realm.roles.manage' THEN result->'auditDetail' ELSE NULL END AS detail
           FROM access.realm_admin_receipt WHERE realm = $1
             AND ($4::text IS NULL OR $4 = 'realm_management')
@@ -279,7 +284,10 @@ export class ManagementReadStore {
         ORDER BY decided_at, candidates.id LIMIT $7`, [realm, scope, organizationScope(realm), kind,
         after?.time ?? null, after?.id ?? null, limit])).rows,
       row => ({ id: row.id, caseId: row.case_id, kind: row.kind, outcome: row.outcome,
-        reason: row.reason ?? null, detail: row.detail ?? null, target: row.target ?? null,
+        // This page is a moderator read, so a sanction resolution keeps its recorded rationale.
+        reason: row.kind === 'realm_sanction_resolution'
+          ? visibleAppealRationale(true, row.disclosure, row.reason) : row.reason ?? null,
+        detail: row.detail ?? null, target: row.target ?? null,
         actingSubject: row.acting_subject, decidedAt: row.decided_at.toISOString(),
         caseSequence: row.case_sequence }), row => row.decided_key);
   }

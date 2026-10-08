@@ -20,14 +20,14 @@ export interface AppealRead {
   realm: string; receiptId: string; action: 'ban'; reason: string; bannedUntil: string | null;
   permanent: boolean; happenedAt: string;
   appeal: { state: 'none' } | { state: 'open'; caseId: string; statement: string }
-    | { state: 'decided'; caseId: string; statement: string; outcome: 'dismiss' | 'restore'; rationale: string };
+    | { state: 'decided'; caseId: string; statement: string; outcome: 'dismiss' | 'restore'; rationale: string | null };
 }
 interface BanReceipt { reason: string; member: string; bannedUntil: string | null; happenedAt: string }
 interface AppealSource {
   realm: string; receiptId: string; reason: string; bannedUntil: string | null; happenedAt: string;
   decisionActingSubject: string | null;
   appeal: { state: 'none' } | { state: 'open'; caseId: string; statement: string }
-    | { state: 'decided'; caseId: string; statement: string; outcome: 'dismiss' | 'restore'; rationale: string };
+    | { state: 'decided'; caseId: string; statement: string; outcome: 'dismiss' | 'restore'; rationale: string | null };
 }
 
 function postgresCode(error: unknown): string | undefined {
@@ -90,6 +90,17 @@ export function uniqueAppealOutcome(existing: { principalId: string; idempotency
 /** The sanctioned member, or a moderator of this realm, may read. Anyone else is absent. */
 export function realmModerator(mayRead: boolean): void {
   if (!mayRead) throw new GovernanceDenied('appeal is unavailable');
+}
+
+/**
+ * The appellant always learns the outcome. The rationale follows the public-report
+ * rule: a realm moderator sees the recorded text, and the appellant sees it only
+ * when the decider shared it (`parties` or `public_summary`). `private` is outcome only.
+ */
+export function visibleAppealRationale(moderator: boolean, disclosure: string | null,
+  rationale: string | null): string | null {
+  if (moderator || disclosure === 'parties' || disclosure === 'public_summary') return rationale;
+  return null;
 }
 
 /** Drop decider identity wherever a caller assembled it next to the public fields. */
@@ -240,20 +251,22 @@ export async function readRealmSanctionAppeal(principal: VerifiedPrincipal,
     if (!ban) throw new GovernanceDenied('appeal is unavailable');
     if (!await callerPrincipal(client, principal, false)) throw new GovernanceDenied('appeal is unavailable');
     const controls = await controlsMember(client, principal, ban.member, false);
-    const moderates = controls ? false : await moderatesRealm(client, principal, `governance:realm:${input.realm}`, false);
+    const moderates = await moderatesRealm(client, principal, `governance:realm:${input.realm}`, false);
     realmModerator(controls || moderates);
     const row = (await client.query<{ case_id: string; statement: string; state: string; outcome: string | null;
-      rationale: string | null; acting_subject: string | null }>(
-      `SELECT a.case_id, a.statement, c.state, d.outcome, d.rationale, d.acting_subject
+      rationale: string | null; disclosure: string | null; acting_subject: string | null }>(
+      `SELECT a.case_id, a.statement, c.state, d.outcome, d.rationale, d.disclosure, d.acting_subject
        FROM access.realm_sanction_appeal a JOIN access.governance_case c ON c.id = a.case_id
        LEFT JOIN access.moderation_decision d ON d.id = c.decision_head
        WHERE a.receipt_id = $1 ORDER BY a.opened_at DESC LIMIT 1`, [input.receiptId])).rows[0];
+    // Availability uses the stored rationale. A private decision still exists; the appellant just does not receive its text.
     if (row && row.state !== 'open' && (row.outcome !== 'dismiss' && row.outcome !== 'restore' || !row.rationale))
       throw new GovernanceUnavailable('sanction resolution is unavailable');
     const appeal = !row ? { state: 'none' as const }
       : row.state === 'open' ? { state: 'open' as const, caseId: row.case_id, statement: row.statement }
         : { state: 'decided' as const, caseId: row.case_id, statement: row.statement,
-          outcome: row.outcome as 'dismiss' | 'restore', rationale: row.rationale ?? '' };
+          outcome: row.outcome as 'dismiss' | 'restore',
+          rationale: visibleAppealRationale(moderates, row.disclosure, row.rationale) };
     return appealView({ realm: input.realm, receiptId: input.receiptId, reason: ban.reason,
       bannedUntil: ban.bannedUntil, happenedAt: ban.happenedAt,
       decisionActingSubject: row?.acting_subject ?? null, appeal });
