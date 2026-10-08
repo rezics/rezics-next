@@ -523,7 +523,7 @@ export const profileRegistry = {
     ]
   },
   "native-agent-credit-v1": {
-    "sha256": "5e40e324be6ea9a9aa0503e265264685ee72d858060aeedb0701db93b7f96dea",
+    "sha256": "307be7d1ac523958e6b5e9c83210288214ce2bf53a2046202b8c2f7e35d3c0de",
     "file": "shapes/native-agent-credit-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/native-agent-credit-v1/credit-shape",

@@ -354,7 +354,7 @@
     },
     {
       "id": "native-agent-credit-v1",
-      "sha256": "5e40e324be6ea9a9aa0503e265264685ee72d858060aeedb0701db93b7f96dea",
+      "sha256": "307be7d1ac523958e6b5e9c83210288214ce2bf53a2046202b8c2f7e35d3c0de",
       "file": "shapes/native-agent-credit-v1.ttl"
     },
     {
@@ -4065,7 +4065,7 @@
     "shapes/main-default-selection-v1.ttl": "92f91c7e990901a457bd688dd47f576178ffa1daa90f35a4d2d1c53f751de52a",
     "shapes/main-package-release-recommendation-v1.ttl": "2560da59cda40c7ac9fd0fb38b39e2d63666e6fdb06dccf250728d7d28faab60",
     "shapes/name-registry-cleanup-v1.ttl": "72c16910157a5eeaafe965a11817f926259c09bc79ae7d21cdbc978646a380bf",
-    "shapes/native-agent-credit-v1.ttl": "5e40e324be6ea9a9aa0503e265264685ee72d858060aeedb0701db93b7f96dea",
+    "shapes/native-agent-credit-v1.ttl": "307be7d1ac523958e6b5e9c83210288214ce2bf53a2046202b8c2f7e35d3c0de",
     "shapes/poll-allocation-v1.ttl": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "shapes/poll-resolution-v1.ttl": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
     "shapes/poll-snapshot-v1.ttl": "f9471026df8866e1ce6379325f83fe20f7be7b3b68d160386e5a1319665b8214",
@@ -4157,8 +4157,8 @@
     "shapes/zone-capability-v1.ttl": "1b5fa82ec8c40e4a6b6b25223a7ca7bebc573b517e900858895a5a12ff6424a5",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "f69b3a493ce974ee386566f4a51bae625d1590c4e11c0d7d082692a29bc73811",
-    "packages/model/src/generated/schemas.ts": "a960fad68eb510413ade7c091207a84d5afcff51c3640d159c3b9e1ed4bed8c0",
+    "packages/model/src/generated/profiles.ts": "14d57a59dbce88d55d813ff2cec90bb093062822215f66d891d9deb83c90e5a3",
+    "packages/model/src/generated/schemas.ts": "5104bfdf6424c9419779d1cffd222de86b492e3eb7940567e48591c8f1bc5515",
     "packages/model/src/generated/vocabulary.ts": "4c4fc439d80563bfe248ca77ebb8e3fdd541fcea346b5ecd2343c92c4b927dfd"
   }
 }
