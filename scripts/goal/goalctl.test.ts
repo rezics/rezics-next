@@ -3918,7 +3918,11 @@ describe('Goal coordinator enrollment CLI', () => {
       ['--tmux-socket', '--engine', 'codex']]) {
       expect(() => coordinatorEnrollmentOptions([...valid, ...extra])).toThrow('Invalid option');
     }
-    expect(() => coordinatorEnrollmentOptions([...valid, '--engine', 'claude'])).toThrow('Codex managers only');
+    expect(() => coordinatorEnrollmentOptions([...valid, '--engine', 'claude'])).toThrow('--model <id>');
+    expect(coordinatorEnrollmentOptions([...valid, '--engine', 'claude', '--model', 'claude-opus-5-5']))
+      .toMatchObject({ engine: 'claude', model: 'claude-opus-5-5' });
+    expect(() => coordinatorEnrollmentOptions([...valid, '--engine', 'grok'])).toThrow('Codex and Claude managers only');
+    expect(() => coordinatorEnrollmentOptions([...valid, '--model', 'gpt-6.1-sol'])).toThrow('--model is only for --engine claude');
     expect(() => coordinatorEnrollmentOptions([...enrollment.slice(0, 4), 'invalid', ...enrollment.slice(5), ...ownerFlag]))
       .toThrow('Enrollment requires');
   });

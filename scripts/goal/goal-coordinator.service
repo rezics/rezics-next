@@ -2,6 +2,7 @@
 # Customize WorkingDirectory and supply PATH (Bun + Task + tmux + Codex) in the env file.
 # Start tmux OUTSIDE this unit first; name the live interactive owner when enrolling.
 # task goal -- coordinator enroll <goal> --session <UUID> --engine codex --effort high --cwd <root> --previous-owner-pid <pid> --tmux-socket <socket>
+# Claude: the same command with --engine claude --model <id>.
 # The first wake waits until that exact previous owner exits; status reports the wait.
 # Check task goal -- coordinator status before enabling; messages never grant permission.
 # systemctl --user daemon-reload && systemctl --user enable --now goal-coordinator.service

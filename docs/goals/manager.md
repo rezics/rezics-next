@@ -329,8 +329,11 @@ them to workers or external tools).
 
 The manager may change its own effort when a stretch of work calls for it.
 
-Claude managers stay interactive for now. Program runs in the maintainer's own
-terminal, and Launch's interactive session serves its UX review.
+A Claude manager can stay interactive or be handed to the coordinator. Program
+runs in the maintainer's own terminal, and Launch's interactive session serves
+its UX review. An enrolled manager ends each turn when nothing is ready and
+arms no watcher; the coordinator starts the next turn when mail or a task exit
+arrives.
 
 ### A manager on Codex
 
@@ -374,6 +377,15 @@ Hand over explicitly while the interactive owner is still running:
 4. After Program confirms enrollment, exit the interactive session. The
    coordinator starts finite turns for queued mail and task exits; end each
    turn once nothing is ready.
+
+A Claude manager uses the same handover. Program enrolls it with
+`task goal -- coordinator enroll <goal> --session <UUID> --engine claude --model <id> --effort <effort> --cwd <directory> --previous-owner-pid <pid> --tmux-socket <socket>`.
+The descriptor records `~/.claude` and that model. Each wake is one headless
+`claude -p --resume` turn in the manager's directory. A live process whose
+argv resumes the session, or a claude process whose shells still carry
+`CLAUDE_CODE_SESSION_ID` for it, delays the wake. A worker that inherited
+those variables (`GOAL_TASK_ID`) is not that owner. The Claude usage gate
+defers the wake while the level is restricted, as it does for dispatch.
 
 Keep the tmux server outside the coordinator's service cgroup so a coordinator
 restart leaves manager turns and their dispatched workers running. Program

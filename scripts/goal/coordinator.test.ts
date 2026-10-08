@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, nativeOwner, nativeSession,
-  processIdentity, runAttempt, sameProcess, tmuxServer, type CoordinatorOptions, type IndependentLauncher,
-  type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
+import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, claudeNativeSession, claudeProjectKey,
+  claudeWakeArgs, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer,
+  type CoordinatorOptions, type IndependentLauncher, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 import { GoalMailStore } from './mail.ts';
 
 class RecordingLauncher implements IndependentLauncher {
@@ -613,6 +613,104 @@ describe('durable Goal wake coordinator', () => {
       writeFileSync(path, `${JSON.stringify(meta)}\n`);
       writeFileSync(join(sessions, `rollout-other-${session}.jsonl`), `${JSON.stringify(meta)}\n`);
       expect(() => nativeSession(f.descriptor.home, session, f.dir)).toThrow('not uniquely present');
+    } finally { f.cleanup(); }
+  });
+
+  test('claude wake argv resumes the enrolled session with its model and effort', async () => {
+    const f = fixture();
+    const session = '33333333-3333-4333-8333-333333333333';
+    const model = 'claude-opus-5-5';
+    try {
+      expect(claudeWakeArgs(session, model, 'xhigh')).toEqual(['-p', '--resume', session, '--model', model,
+        '--effort', 'xhigh', '--dangerously-skip-permissions', '--output-format', 'json', '--', WAKE_PROMPT]);
+      const coordinator = f.open();
+      coordinator.enroll({ ...f.descriptor, engine: 'claude', session, effort: 'xhigh',
+        args: [join(f.dir, 'manager.ts'), ...claudeWakeArgs(session, model, 'xhigh')] });
+      coordinator.step();
+      const attempt = coordinator.status().attempts[0]!;
+      expect(attempt.prompt).toContain('End the turn when these are done.');
+      expect(attempt.prompt).toContain('arm no watchers');
+      expect(attempt.prompt).toContain('Worker completed');
+      await runAttempt(f.stateDir, attempt.token);
+      expect(f.calls()[0].args).toEqual(['-p', '--resume', session, '--model', model, '--effort', 'xhigh',
+        '--dangerously-skip-permissions', '--output-format', 'json', '--', attempt.prompt]);
+      expect(f.calls()[0].cwd).toBe(f.dir);
+    } finally { f.cleanup(); }
+  });
+
+  test('a live claude owner blocks the wake and an inherited worker does not', () => {
+    const f = fixture();
+    const session = '44444444-4444-4444-8444-444444444444';
+    const owner = (home: string, id: string, prior?: LaunchDescriptor['previousOwner']) =>
+      nativeOwner(home, id, prior, f.procRoot, 'claude');
+    try {
+      f.process(300, ['/home/edge/.local/bin/claude', '--model', 'claude-opus-5-5']);
+      f.process(301, ['/usr/bin/zsh', '-c', 'watch'], [`CLAUDE_CODE_SESSION_ID=${session}`], '100', 'S', 300);
+      expect(owner(f.descriptor.home, session)).toContain('process 300 (environment)');
+      f.process(302, ['claude', '-p', '--resume', session, '--model', 'claude-opus-5-5']);
+      expect(owner(f.descriptor.home, session)).toContain('process 302 (resume)');
+      const coordinator = f.open({ owner });
+      coordinator.enroll({ ...f.descriptor, engine: 'claude', session,
+        args: [join(f.dir, 'manager.ts'), ...claudeWakeArgs(session, 'claude-opus-5-5', 'high')] });
+      coordinator.step();
+      expect(f.launcher.launches).toEqual([]);
+      expect(coordinator.status().wakes[0]!.error).toContain('process 302 (resume)');
+      for (const pid of [300, 301, 302]) rmSync(join(f.procRoot, String(pid)), { recursive: true });
+      f.process(310, ['claude', '-p', '--resume', session], [`CLAUDE_CODE_SESSION_ID=${session}`, 'GOAL_TASK_ID=G-9']);
+      f.process(311, ['/bin/zsh', '-c', 'worker'], [`CLAUDE_CODE_SESSION_ID=${session}`, 'GOAL_TASK_ID=G-9'], '100', 'S', 310);
+      f.process(312, ['sleep', '30'], [`CLAUDE_CODE_SESSION_ID=${session}`], '100', 'S', 311);
+      f.process(320, ['tmux', 'server'], [`CLAUDE_CODE_SESSION_ID=${session}`]);
+      f.process(321, ['/bin/zsh'], [`CLAUDE_CODE_SESSION_ID=${session}`], '100', 'S', 320);
+      expect(owner(f.descriptor.home, session)).toBeUndefined();
+      f.setNow(coordinator.status().wakes[0]!.due_at);
+      coordinator.step();
+      expect(f.launcher.launches).toHaveLength(1);
+    } finally { f.cleanup(); }
+  });
+
+  test('a coordinator restart after the claude intent is recorded launches that token once', async () => {
+    const f = fixture();
+    const session = '55555555-5555-4555-8555-555555555555';
+    try {
+      const first = f.open({ afterIntent: () => { throw new Error('injected coordinator crash'); } });
+      first.enroll({ ...f.descriptor, engine: 'claude', session,
+        args: [join(f.dir, 'manager.ts'), ...claudeWakeArgs(session, 'claude-sonnet-5-5', 'high')] });
+      expect(() => first.step()).toThrow('injected coordinator crash');
+      const token = first.status().attempts[0]!.token;
+      expect(first.status().attempts[0]!.phase).toBe('intent');
+      expect(f.launcher.launches).toEqual([]);
+      first.close();
+      const restarted = f.open();
+      restarted.step(); restarted.step();
+      expect(f.launcher.launches).toEqual([token]);
+      expect(restarted.status().attempts).toHaveLength(1);
+      await runAttempt(f.stateDir, token);
+      restarted.step();
+      expect(f.calls()).toHaveLength(1);
+      expect(restarted.status().wakes).toEqual([]);
+    } finally { f.cleanup(); }
+  });
+
+  test('claude session handover reads the project transcript for the canonical working directory', () => {
+    const f = fixture();
+    const session = '66666666-6666-4666-8666-666666666666';
+    const home = join(f.dir, 'claude-home');
+    try {
+      expect(claudeProjectKey('/home/edge/projects/rezics/rezics-next/.temp')).toBe('-home-edge-projects-rezics-rezics-next--temp');
+      const long = `/${'Abc'.repeat(80)}`;
+      expect(claudeProjectKey(long)).toBe(`${'-'.concat('Abc'.repeat(80)).slice(0, 200)}-bjox0v`);
+      const directory = realpathSync(f.dir);
+      const file = join(home, 'projects', claudeProjectKey(directory), `${session}.jsonl`);
+      mkdirSync(join(file, '..'), { recursive: true });
+      writeFileSync(file, `${JSON.stringify({ type: 'mode', sessionId: session })}\n`
+        + `${JSON.stringify({ type: 'user', cwd: directory, sessionId: session })}\n`);
+      expect(() => claudeNativeSession(home, session, f.dir)).not.toThrow();
+      expect(() => claudeNativeSession(home, 'approximate', f.dir)).toThrow('exact native session');
+      writeFileSync(file, `${JSON.stringify({ type: 'user', cwd: f.stateDir, sessionId: session })}\n`);
+      mkdirSync(f.stateDir);
+      expect(() => claudeNativeSession(home, session, f.dir)).toThrow('does not match');
+      writeFileSync(file, `${JSON.stringify({ type: 'user', cwd: directory, sessionId: '77777777-7777-4777-8777-777777777777' })}\n`);
+      expect(() => claudeNativeSession(home, session, f.dir)).toThrow('does not match');
     } finally { f.cleanup(); }
   });
 });

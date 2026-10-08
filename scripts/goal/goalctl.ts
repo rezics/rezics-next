@@ -15,8 +15,8 @@ import { parseAffectedArgs, selectTestCommand } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
 import { land, type LandScope } from './land.ts';
 import { GoalMailStore } from './mail.ts';
-import { GoalCoordinator, nativeSession, processIdentity, tmuxServer, WAKE_LAST_MESSAGE, WAKE_PROMPT,
-  type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
+import { GoalCoordinator, claudeConfigHome, claudeNativeSession, claudeWakeArgs, nativeSession, processIdentity, tmuxServer,
+  WAKE_LAST_MESSAGE, WAKE_PROMPT, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
 export type Engine = 'claude' | 'sonnet' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
@@ -4667,25 +4667,30 @@ function managerEvents(directory: string, goal: string, mail: GoalMailStore): Wa
   return events;
 }
 export function coordinatorEnrollmentOptions(args: string[]): {
-  goal: string; session: string; engine: LaunchDescriptor['engine']; effort: string; cwd: string;
+  goal: string; session: string; engine: LaunchDescriptor['engine']; effort: string; cwd: string; model?: string;
   socket?: string; previousOwner: NonNullable<ReturnType<typeof processIdentity>>;
 } {
   const goal = args[0] ?? '';
-  const flags = namedOptions(args.slice(1), ['--session', '--engine', '--effort', '--cwd', '--tmux-socket', '--previous-owner-pid']);
+  const flags = namedOptions(args.slice(1), ['--session', '--engine', '--effort', '--cwd', '--model', '--tmux-socket', '--previous-owner-pid']);
   const engine = flags['--engine'] ?? 'codex';
-  if (engine !== 'codex' && engine !== 'codex-1' && engine !== 'luna') throw new Error('The coordinator enrolls Codex managers only');
+  if (engine !== 'codex' && engine !== 'codex-1' && engine !== 'luna' && engine !== 'claude') {
+    throw new Error('The coordinator enrolls Codex and Claude managers only');
+  }
   const effort = flags['--effort'];
   const session = flags['--session'];
   const cwd = flags['--cwd'];
+  const model = flags['--model'];
   const pidText = flags['--previous-owner-pid'];
   if (!goal || !effort || !effortsOf(engine).includes(effort) || !session || !cwd || !pidText) {
     throw new Error('Enrollment requires <goal> --session <native UUID> --effort <effort> --cwd <directory> --previous-owner-pid <pid>');
   }
+  if (engine === 'claude' && !model) throw new Error('Claude enrollment requires --model <id>');
+  if (engine !== 'claude' && model) throw new Error('--model is only for --engine claude');
   const pid = Number(pidText);
   if (!/^[1-9]\d*$/.test(pidText) || !Number.isSafeInteger(pid)) throw new Error('--previous-owner-pid must be a positive integer PID');
   const previousOwner = processIdentity(pid);
   if (!previousOwner) throw new Error(`Cannot establish the live previous owner ${pid}; enroll while that process is still running`);
-  return { goal, session, engine, effort, cwd, socket: flags['--tmux-socket'], previousOwner };
+  return { goal, session, engine, effort, cwd, model, socket: flags['--tmux-socket'], previousOwner };
 }
 async function coordinatorCommand(args: string[]): Promise<void> {
   const directory = eventStateDirectory();
@@ -4695,7 +4700,7 @@ async function coordinatorCommand(args: string[]): Promise<void> {
     events:goal => goals.includes(goal) ? managerEvents(directory,goal,mail) : [],
     admit:descriptor => {
       if (!activeGoals(eventLedger(directory)).includes(descriptor.goal)) throw new Error('Enrolled Goal is no longer active');
-      const home = engineEnv(descriptor.engine).CODEX_HOME;
+      const home = descriptor.engine === 'claude' ? realpathSync(claudeConfigHome()) : engineEnv(descriptor.engine).CODEX_HOME;
       if (!home || realpathSync(home) !== descriptor.home) throw new Error('Selected engine account home changed; handover required');
       launchGates(Object.values(readLedger().tasks),descriptor.engine,false);
     }});
@@ -4712,9 +4717,25 @@ async function coordinatorCommand(args: string[]): Promise<void> {
       return;
     }
     if (action === 'enroll') {
-      const { goal, session, engine, effort, cwd: requestedCwd, socket: requestedSocket, previousOwner } = coordinatorEnrollmentOptions(rest);
+      const { goal, session, engine, effort, model, cwd: requestedCwd, socket: requestedSocket, previousOwner } = coordinatorEnrollmentOptions(rest);
       if (!activeGoals(eventLedger(directory)).includes(goal)) throw new Error(`Unknown active Goal: ${goal}`);
       const cwd = realpathSync(resolve(requestedCwd));
+      if (engine === 'claude') {
+        const home = realpathSync(claudeConfigHome());
+        claudeNativeSession(home, session, cwd);
+        const socket = requestedSocket ?? spawnSync('tmux',['display-message','-p','#{socket_path}'],{encoding:'utf8'}).stdout.trim();
+        if (!socket) throw new Error('Enrollment needs an existing independent tmux server');
+        const descriptor: LaunchDescriptor = {goal,generation:randomUUID(),session,engine,effort,cwd,home,previousOwner,
+          program:Bun.which('claude') ?? 'claude',args:claudeWakeArgs(session,model!,effort),socket,server:tmuxServer(socket),
+          env:{PATH:process.env.PATH ?? '',HOME:homedir(),GOAL_ID:goal,
+            GOAL_MANAGER:managerOf(eventLedger(directory),goal),
+            ...(process.env.CLAUDE_CONFIG_DIR ? {CLAUDE_CONFIG_DIR:process.env.CLAUDE_CONFIG_DIR} : {}),
+            ...(process.env.GOAL_MAIL_STATE_DIR ? {GOAL_MAIL_STATE_DIR:directory} : {}),
+            ...Object.fromEntries(['GOAL_MAX_WORKERS','GOAL_MEMORY_FLOOR_GIB','STORYBOOK_MAX_WORKERS'].filter(key => process.env[key] !== undefined).map(key=>[key,process.env[key]!]))}};
+        coordinator.acquire();
+        try { coordinator.enroll(descriptor); } finally { coordinator.release(); }
+        console.log(JSON.stringify(descriptor,null,2)); return;
+      }
       const home = realpathSync(engineEnv(engine).CODEX_HOME!);
       nativeSession(home,session,cwd);
       const socket = requestedSocket ?? spawnSync('tmux',['display-message','-p','#{socket_path}'],{encoding:'utf8'}).stdout.trim();
@@ -4840,7 +4861,7 @@ async function main(argv: string[]): Promise<number> {
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
         + ' | status | usage | regress [--at <rev>] [--resume <run-id>] [--only <tiers>] [--integration-batches <n>]'
         + ' | mail send <goal> --file <path> --key <key> | mail inbox [goal] | mail ack <id> [--goal <goal>]'
-        + ' | coordinator [enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <dir> --previous-owner-pid <pid> [--tmux-socket <path>]|status|unenroll <goal>]'
+        + ' | coordinator [enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <dir> --previous-owner-pid <pid> [--model <id>] [--tmux-socket <path>]|status|unenroll <goal>]'
         + ' | inbox [--ack <n>] | test [--heavy] <task test args> | slot [--heavy|--recovery] -- <command>');
       return 2;
   }
