@@ -4,10 +4,11 @@ import { Pool as PgPool } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { assertRetainedAuthorityCoverage, type RetainedAuthorityCoverage } from '../erasure/authority.ts';
-import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHold,
+import { ErasureRestoreHold, reconcileRestoredErasures, releaseErasureRestoreHold, verifyErasure,
   type RestoredOwners } from '../erasure/reconcile.ts';
 import { ErasureAuthorityCoverageConflict } from '../erasure/authority.ts';
-import { ErasureUnavailable } from '../erasure/journal.ts';
+import { ErasureNotFound, ErasureUnavailable, sha256 } from '../erasure/journal.ts';
+import { remediateErasedContentEntry, type ErasureService } from '../erasure/request.ts';
 import { GraphErasureConflict, GraphErasureUnavailable } from '../erasure/graph.ts';
 import { AccountDeletionJournalConflict } from '../outbox/account-deletion-journal.ts';
 import { RecoveryCoverageHeadConflict } from '../outbox/recovery-coverage-head.ts';
@@ -73,8 +74,15 @@ export interface RestoreReconciliationView {
   disposition: 'matched' | 'conflict' | 'unavailable' | 'corrupt' | null;
   replayed: boolean;
 }
+/** One erasure's recorded verification; the findings are the immutable per-revision rows. */
+export interface ErasureReconciliationView {
+  id: string; kind: 'erasure'; erasure: string;
+  state: 'running' | 'held' | 'reconciled' | 'failed';
+  disposition: 'erased' | 'conflict' | null;
+  replayed: boolean;
+}
 export type ReconciliationView = RevisionReconciliationView | RestoreReconciliationView
-  | RelayGapView | RetentionGcView;
+  | RelayGapView | RetentionGcView | ErasureReconciliationView;
 export interface RestoreResources {
   accountPool: Pool;
   accessPool: Pool;
@@ -114,7 +122,8 @@ export class OwnerOperations {
   constructor(private readonly relay: Pool, private readonly environment: WorkActivationEnvironment,
     private readonly restoreResources?: RestoreResources,
     private readonly relocationTarget?: GraphRelocationTarget,
-    private readonly consumerAccessPool?: Pool) {}
+    private readonly consumerAccessPool?: Pool,
+    private readonly erasures?: ErasureService) {}
 
   private configuredWorkObjects(): ImmutableObjects | undefined {
     if (this.environment.workObjects) return this.environment.workObjects;
@@ -525,10 +534,19 @@ export class OwnerOperations {
       'SELECT id, kind, scope, state FROM relay.owner_reconciliation WHERE id = $1', [id]);
     const row = record.rows[0];
     if (!row || (row.kind !== 'revision_recovery' && row.kind !== 'restore'
-      && row.kind !== 'relay_gap' && row.kind !== 'retention_gc')) {
+      && row.kind !== 'relay_gap' && row.kind !== 'retention_gc' && row.kind !== 'erasure')) {
       throw new OwnerOperationMissing('reconciliation is missing');
     }
     if (row.kind === 'retention_gc') return readRetentionGcView(client, row.id, replayed);
+    if (row.kind === 'erasure') {
+      // The disposition is the Content revisions' own findings; copy-retirement pins decide `state` only.
+      const revisions = await client.query<{ disposition: string }>(
+        `SELECT disposition FROM relay.owner_reconciliation_item
+         WHERE reconciliation_id = $1 AND owner = 'content' AND item_kind = 'revision' LIMIT 256`, [id]);
+      return { id: row.id, kind: 'erasure', erasure: row.scope.slice('erasure:'.length), state: row.state,
+        disposition: !revisions.rowCount ? null
+          : revisions.rows.every(item => item.disposition === 'erased') ? 'erased' : 'conflict', replayed };
+    }
     const finding = await client.query<{ disposition: string }>(
       `SELECT disposition FROM relay.owner_reconciliation_item
        WHERE reconciliation_id = $1 AND item_ref NOT LIKE 'restore-qualification:%'
@@ -582,6 +600,67 @@ export class OwnerOperations {
     catch (error) {
       if (error instanceof RetentionGcConflict) throw new OwnerOperationBusy(error.message);
       throw error;
+    }
+  }
+
+  /**
+   * One journaled erasure: re-apply its own id and epoch to targets that still store a source, then
+   * record the existing per-erasure verification (kind `erasure`, immutable per-revision findings).
+   * Only a `cleared` or `clean` remediation reaches the verifier; every other outcome is refused
+   * with a typed error and records nothing, so the same key can be retried. A settled key is
+   * immutable, and a held verification is repaired by a new key. The relay client that holds the
+   * advisory lock is the one every journal read and the record use: no second checkout from the
+   * pool, no release and reacquire; this method owns BEGIN, COMMIT and ROLLBACK of the record.
+   */
+  async reconcileErasure(input: { erasureId: string }, key: string): Promise<ReconciliationView> {
+    if (!this.erasures) throw new OwnerOperationUnavailable('erasure owner is unavailable');
+    const operationId = `owner:erasure:${key}`;
+    const requestDigest = sha256(`${input.erasureId}\0verify`);
+    const client = await this.relay.connect();
+    let locked = false;
+    try {
+      await this.lock(client, operationId);
+      locked = true;
+      const row = (await client.query<Pick<OwnerReconciliationRow, 'id' | 'request_digest'>>(
+        'SELECT id, request_digest FROM relay.owner_reconciliation WHERE operation_id = $1',
+        [operationId])).rows[0];
+      if (row && row.request_digest !== requestDigest) {
+        throw new OwnerOperationConflict('idempotency key binds another reconciliation');
+      }
+      if (row) return await this.reconciliation(client, row.id, true);
+      let outcome: string;
+      try {
+        outcome = (await remediateErasedContentEntry(this.erasures, this.environment, input.erasureId, client)).outcome;
+      } catch (error) {
+        if (error instanceof ErasureNotFound) throw new OwnerOperationMissing('erasure is unavailable');
+        throw error;
+      }
+      if (outcome === 'held') throw new OwnerOperationBusy('erasure is held by a preservation hold');
+      if (outcome === 'native' || outcome === 'graph-limit' || outcome === 'failed') {
+        throw new OwnerOperationUnavailable(`erasure sources cannot be cleared: ${outcome}`);
+      }
+      if (outcome !== 'cleared' && outcome !== 'clean') {
+        throw new OwnerOperationInvalid(`erasure is not remediable: ${outcome}`);
+      }
+      await client.query('BEGIN');
+      try {
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '5s'");
+        await verifyErasure(this.relay, { content: this.erasures.content }, input.erasureId, operationId, client);
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        if (error instanceof ErasureNotFound) throw new OwnerOperationMissing('erasure is unavailable');
+        if (error instanceof ErasureUnavailable) throw new OwnerOperationInvalid(error.message);
+        throw error;
+      }
+      const recorded = (await client.query<Pick<OwnerReconciliationRow, 'id'>>(
+        'SELECT id FROM relay.owner_reconciliation WHERE operation_id = $1', [operationId])).rows[0];
+      if (!recorded) throw new OwnerOperationMissing('erasure reconciliation was not recorded');
+      return await this.reconciliation(client, recorded.id, false);
+    } finally {
+      try { if (locked) await this.unlock(client, operationId); }
+      finally { client.release(); }
     }
   }
 

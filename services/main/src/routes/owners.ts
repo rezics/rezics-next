@@ -29,6 +29,8 @@ t.Object({ profile: t.Literal('owner-reconciliation-v1'), kind: t.Literal('relay
   afterSequence: bounded(100), throughSequence: bounded(100) },
 { additionalProperties: false }),
 t.Object({ profile: t.Literal('owner-reconciliation-v1'), kind: t.Literal('retention_gc') },
+{ additionalProperties: false }),
+t.Object({ profile: t.Literal('owner-reconciliation-v1'), kind: t.Literal('erasure'), erasureId: uuid },
 { additionalProperties: false })]);
 const reconciliationState = t.Union([t.Literal('running'), t.Literal('held'),
   t.Literal('reconciled'), t.Literal('failed')]);
@@ -48,6 +50,10 @@ t.Object({ profile: t.Literal('owner-reconciliation-v1'), id: uuid,
 t.Object({ profile: t.Literal('owner-reconciliation-v1'), id: uuid,
   kind: t.Literal('retention_gc'), scope: t.Literal('product'), state: reconciliationState,
   disposition: t.Nullable(t.Union([t.Literal('retired'), t.Literal('preserved')])),
+  replayed: t.Boolean() }),
+t.Object({ profile: t.Literal('owner-reconciliation-v1'), id: uuid,
+  kind: t.Literal('erasure'), erasure: uuid, state: reconciliationState,
+  disposition: t.Nullable(t.Union([t.Literal('erased'), t.Literal('conflict')])),
   replayed: t.Boolean() })]);
 const relocationBody = t.Union([t.Object({ profile: t.Literal('owner-relocation-v1'),
   action: t.Literal('stage'), owner: t.Union([t.Literal('graph'), t.Literal('content'),
@@ -109,6 +115,8 @@ export function ownerRoutes(work: MainWorkDependencies) {
               afterSequence: body.afterSequence, throughSequence: body.throughSequence }, key)
             : body.kind === 'retention_gc'
               ? await work.ownerOperations.reconcileRetentionGc(key)
+              : body.kind === 'erasure'
+                ? await work.ownerOperations.reconcileErasure({ erasureId: body.erasureId }, key)
             : await work.ownerOperations.reconcileRevision({ revision: body.revision }, key);
         return Response.json({ profile: 'owner-reconciliation-v1', ...result },
           { ...noStore, status: result.replayed ? 200 : 201 });

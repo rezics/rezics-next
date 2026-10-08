@@ -9,6 +9,15 @@ Account, registers and claims an Access admission, binds a digest to the
 idempotency key, checks exact owner targets, journals committed intent, applies
 the owner tombstone, seals the Access outcome, and reads the journaled report.
 An owner failure after journaling remains pending for `completePendingContentErasures`.
+`remediateErasedContentSources` revisits entries that completed before source clearing existed: it reads one
+raw window of the journal by `erasure_epoch` (100 rows and one look-ahead), and re-applies each entry's own id and
+epoch to targets that still store a source, under the current preservation fence and the exact graph proof. It
+never erases a target for the first time, mints no identity and keeps no frontier; every non-cleared outcome is
+returned. The original requester's same-key replay reaches the same code and raises the existing typed refusal while a
+source remains. An operator reaches one entry through `POST /v1/owners/reconciliations` with `kind: "erasure"` and an
+`erasureId`: the owner operation remediates that entry, then records the existing per-erasure verification; only a
+`cleared` or `clean` result is verified, every other outcome is refused and records nothing. Entries of 65..256 targets
+are reported as `graph-limit`.
 
 The executable examples are `tests/qa/integration/erasure-api.test.ts` for
 denial, replay, stale/concurrent targets, partial failure, recovery, and bounded

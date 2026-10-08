@@ -121,14 +121,18 @@ async function summary(relay: Pool | PoolClient, operationId: string): Promise<R
  * Success advances the journal entry to verified; otherwise it stays unverified.
  */
 export async function verifyErasure(relay: Pool, owners: { content?: Pool; account?: Pool;
-  access?: Pool }, erasureId: string, operationId: string): Promise<ReconciliationSummary> {
-  const prior = await summary(relay, operationId);
+  access?: Pool }, erasureId: string, operationId: string,
+  borrowed?: PoolClient): Promise<ReconciliationSummary> {
+  // A caller that already holds a relay client (for example under an advisory lock) passes it:
+  // every read and the record then use that client, and the caller owns BEGIN, COMMIT and release.
+  const reader = borrowed ?? relay;
+  const prior = await summary(reader, operationId);
   if (prior) return prior;
-  const report = await readErasure(relay, erasureId);
+  const report = await readErasure(reader, erasureId);
   if (report.suppression !== 'suppressed') throw new ErasureUnavailable('erasure is not suppressed');
   const items: Item[] = [];
   if (report.kind === 'account') {
-    const header = (await relay.query<{ account_subject: string; deleted_principal_id: string | null }>(
+    const header = (await reader.query<{ account_subject: string; deleted_principal_id: string | null }>(
       'SELECT account_subject, deleted_principal_id FROM relay.erasure WHERE id = $1', [erasureId])).rows[0]!;
     if (!owners.account || !owners.access) throw new ErasureUnavailable('Account and Access owners are required');
     const live = await accountCredentialsPresent(owners.account, [header.account_subject]);
@@ -143,7 +147,7 @@ export async function verifyErasure(relay: Pool, owners: { content?: Pool; accou
   } else {
     if (!owners.content) throw new ErasureUnavailable('Content owner is required');
     const targetRefs = report.targets.map(target => target.ref);
-    const probes = await probeContentErasure(owners.content, erasureId, targetRefs);
+    const probes = await probeContentErasure(owners.content, erasureId, targetRefs, report.erasureEpoch);
     const openSources = new Set(await openCommentSourceRevisions(owners.content, targetRefs));
     for (const row of (await owners.content.query<{ revision_id: string }>(
       `SELECT revision_id::text FROM verification.open_evidence_source_revisions($1::uuid[])`,
@@ -175,8 +179,8 @@ export async function verifyErasure(relay: Pool, owners: { content?: Pool; accou
         WHERE id = $1 AND stage IN ('inventory_complete', 'deleting', 'reconciling')
           AND destruction_status IN ('retained', 'destroyed')`, [erasureId]);
     }
-  });
-  return (await summary(relay, operationId))!;
+  }, borrowed);
+  return (await summary(reader, operationId))!;
 }
 
 export interface RestoredOwners {

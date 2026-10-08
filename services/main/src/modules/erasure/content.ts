@@ -196,15 +196,18 @@ export type ContentErasureProbe = 'erased' | 'absent' | 'available' | 'foreign';
 
 /** Per-revision state of a journaled erasure in one Content copy, in one bounded read. */
 export async function probeContentErasure(content: Pool | PoolClient, erasureId: string,
-  revisionIds: readonly string[]): Promise<Map<string, ContentErasureProbe>> {
+  revisionIds: readonly string[], erasureEpoch?: string): Promise<Map<string, ContentErasureProbe>> {
   if (revisionIds.length > 256) throw new ContentErasureInvalid('Content erasure probe is too large');
   const rows = (await content.query<{ id: string; availability: string | null;
-    erasure_id: string | null }>(`SELECT wanted.id::text AS id, r.availability, t.erasure_id
+    erasure_id: string | null; erasure_epoch: string | null }>(`SELECT wanted.id::text AS id, r.availability,
+    t.erasure_id, t.erasure_epoch::text AS erasure_epoch
     FROM unnest($1::uuid[]) AS wanted(id)
     LEFT JOIN content.revision r ON r.id = wanted.id
     LEFT JOIN content.revision_erasure t ON t.revision_id = wanted.id`, [revisionIds])).rows;
+  // With an epoch, a tombstone of the same id but another epoch is not this erasure's.
   return new Map(rows.map(row => [row.id, row.availability === null ? 'absent'
-    : row.erasure_id === erasureId && row.availability === 'erased' ? 'erased'
+    : row.erasure_id === erasureId && row.availability === 'erased'
+      && (erasureEpoch === undefined || row.erasure_epoch === erasureEpoch) ? 'erased'
       : row.availability === 'available' && !row.erasure_id ? 'available' : 'foreign']));
 }
 

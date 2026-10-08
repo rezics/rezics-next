@@ -430,6 +430,7 @@ const libraryImport = new ReaderLibraryImportStore(contentPool, {
   sourceSearchesPerDay: config.MAIN_READER_IMPORT_SEARCHES_PER_DAY,
   acquisitionsPerDay: config.MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY,
 });
+const erasureService = erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool, pool) : undefined;
 const app = createMainApp(fuseki, {
   statementSeek: new StatementSeek(pool, environment),
   templateSeek,
@@ -487,7 +488,7 @@ const app = createMainApp(fuseki, {
   eventQueries,
   downloadLeases,
   protectionSigner: new ProtectionAdmissionSigner(pool, config.FUSEKI_TITLE_ADMISSION_KEY),
-  erasures: erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool, pool) : undefined,
+  erasures: erasureService,
   recommendations,
   governance: governanceServices(pool, contentPool, content, sourceIntake, access, environment),
   publicReports: new PublicReports(pool, publicReportOwners({ environment, account, access, media,
@@ -592,7 +593,8 @@ const app = createMainApp(fuseki, {
   contentPrivateSearch: { content, access: new ContentSearchReadAccess(pool),
     settlement: new PrivateSearchSettlement(pool) },
   ...(relayPool ? { relayPosition: new RelayHandoffPositions(relayPool, relayConsumer!) } : {}),
-  ...(ownerRelayPool ? { ownerOperations: new OwnerOperations(ownerRelayPool, environment) } : {}),
+  ...(ownerRelayPool ? { ownerOperations: new OwnerOperations(ownerRelayPool, environment,
+    undefined, undefined, undefined, erasureService) } : {}),
 });
 const templatePreparation = templateSeek.backfill(environment.lineage.dataEpoch)
   .catch(error=>{ console.error('Template directory is unavailable',error); });
