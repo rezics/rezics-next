@@ -14,7 +14,7 @@ import { namesOf } from '../work-levels/read.ts';
 import { idOf, iriOf } from '../work-page/route.ts';
 import { memberHref, zoneLink, type ZoneSite } from './links.ts';
 import { readEvidence, readNeighbours, type ChooserItem } from './read.ts';
-import { firstSeen, revealedAt } from './reveal.ts';
+import { firstSeen, revealedAt, type ChapterBefore } from './reveal.ts';
 import { disclosedName, occurrenceName, type PositionState } from './state.ts';
 
 // A wiki page's data for a package's `entity` slot: the page projection, the statements and relations Main returned
@@ -250,7 +250,11 @@ async function chapterOf({ id, site, state, mount, locale, lists }: {
     }
     return null;
   };
-  const before = around.ok ? around.data.previous?.occurrence ?? null : null;
+  // `none` is the first chapter. `bound` and a failed read are unknown, and are not the first chapter.
+  const before: ChapterBefore = !around.ok ? { status: 'failed' }
+    : around.data.previousStatus === 'found' && around.data.previous
+      ? { status: 'found', occurrence: around.data.previous.occurrence }
+      : around.data.previousStatus === 'none' ? { status: 'none' } : { status: 'bound' };
   const reveals = reached ? (await Promise.all(lists.filter(list => list.segment !== mount).map(async list => ({
     list, ...await revealedAt(site, state, occurrence, before, list.segment, locale) })))).flatMap(({ list, members, complete }) =>
     members.length ? [{ segment: list.segment, name: list.name, members, complete }] : []) : [];

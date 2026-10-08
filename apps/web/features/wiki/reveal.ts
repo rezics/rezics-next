@@ -39,16 +39,26 @@ async function itemsAt(site: ZoneSite, segment: string, position: string | undef
   return { items, complete: false };
 }
 
+/** How the chapter before this one settled. `none` is the first chapter. `bound` and `failed` are unknown. */
+export type ChapterBefore =
+  | { status: 'found'; occurrence: string }
+  | { status: 'none' }
+  | { status: 'bound' }
+  | { status: 'failed' };
+
 /**
- * The members of one mounted list that appear at `chapter` and not at `before`, the chapter the reader may see
- * ahead of it (null for the first). `complete` is false when the comparison stopped at its page bound or a read
- * failed, so the list may be shorter than the truth.
+ * The members of one mounted list that appear at `chapter` and not at the chapter before it.
+ * `found` compares with that chapter. `none` (the first chapter) treats everything visible as revealed here.
+ * `bound` or a failed read is not the first chapter: nothing is listed, so no member is called revealed here.
+ * `complete` is false when the comparison stopped at its page bound or a read failed, so a list may be shorter
+ * than the truth.
  */
-export async function revealedAt(site: ZoneSite, state: PositionState, chapter: string, before: string | null,
+export async function revealedAt(site: ZoneSite, state: PositionState, chapter: string, before: ChapterBefore,
   segment: string, locale: UiLocale): Promise<{ members: ZoneMember[]; complete: boolean }> {
+  if (before.status === 'bound' || before.status === 'failed') return { members: [], complete: false };
   const here = { ...site, main: chapter };
   const [now, earlier] = await Promise.all([itemsAt(here, segment, chapter),
-    before ? itemsAt(here, segment, before) : { items: [], complete: true }]);
+    before.status === 'found' ? itemsAt(here, segment, before.occurrence) : { items: [], complete: true }]);
   const seen = new Set(earlier.items.map(item => item.id));
   return { members: await readMembers(here, segment, now.items.filter(item => !seen.has(item.id)), locale, state),
     complete: now.complete && earlier.complete };

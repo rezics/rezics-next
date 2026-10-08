@@ -380,4 +380,115 @@ describe('Chapter neighbours', () => {
     expect(appearedAt).toBeGreaterThan(relationsAt);
     expect(aroundCalls(double!.calls)).toHaveLength(0);
   });
+
+  test('a record\'s first chapter is linked by the label the appearance read returns', async () => {
+    const zone = 810;
+    const work = 811;
+    const structure = 812;
+    const first = 813;
+    const last = 814;
+    const elizabeth = 815;
+    const appearance = {
+      ...chapterItem(first, work, structure),
+      labels: labels('Chapter 1'),
+      displayLabel: 'Ch. 1',
+    };
+    double = mainDouble((url) => {
+      if (url.pathname === `/v1/zones/${uuid(zone)}/routes` && url.searchParams.get('path') === '/franchise')
+        return { kind: 'index', items: [{ id: iri(work), title: name('Franchise') }], nextCursor: null };
+      if (url.pathname === `/v1/reading-positions/${uuid(work)}`) {
+        if (url.searchParams.get('firstSeen') === iri(elizabeth)) return appearancePage(work, appearance);
+        if (aroundOf(url)) return 404;
+        return positionPage(work, iri(last), [chapterItem(last, work, structure)], 'resume', null);
+      }
+      if (url.pathname === `/v1/resources/${uuid(elizabeth)}/relations`)
+        return { items: [], next: null };
+      return 404;
+    });
+    const page = await pageRequest(async () => {
+      const state = await loadPosition(uuid(zone), 'franchise', '');
+      const entity = state ? await buildEntity({
+        id: uuid(elizabeth), locale: 'en', projection: {
+          ...projection(elizabeth),
+          target: { resource: iri(elizabeth), base: 'resource', types: [] },
+          sections: [{ id: 'relations', href: `/v1/resources/${uuid(elizabeth)}/relations`, actions: [] }],
+        } as unknown as EntityProjection, site: siteOf(zone), fullPage: entityHref(uuid(elizabeth)),
+        state, mount: 'characters', lists: [],
+      }) : null;
+      return { entity };
+    }, { signedIn: true });
+    expect(page.entity?.firstSeen?.name.value).toBe('Chapter 1');
+    expect(page.entity?.firstSeen?.href?.startsWith('/')).toBe(true);
+  });
+
+  /** Members a complete reveal would claim. An unsettled previous side must claim none. */
+  const claimed = (reveals: { complete: boolean; members: { name: { value: string } }[] }[] | undefined) =>
+    (reveals ?? []).filter(list => list.complete).flatMap(list => list.members.map(member => member.name.value));
+
+  test('a previous side the scan could not settle does not claim the list was revealed here', async () => {
+    const zone = 910;
+    const work = 911;
+    const structure = 912;
+    const middle = 913;
+    const last = 914;
+    const elizabeth = 915;
+    double = mainDouble((url) => {
+      if (url.pathname === `/v1/zones/${uuid(zone)}/routes`) {
+        if (url.searchParams.get('path') === '/franchise')
+          return { kind: 'index', items: [{ id: iri(work), title: name('Franchise') }], nextCursor: null };
+        if (url.searchParams.get('path') === '/characters')
+          return { kind: 'index', items: [member(elizabeth, 'Elizabeth')], nextCursor: null };
+      }
+      if (url.pathname === `/v1/reading-positions/${uuid(work)}`) {
+        if (aroundOf(url) === iri(middle)) return aroundPage(work, middle, 'bound',
+          chapterItem(last, work, structure, 'Chapter 3'));
+        if (aroundOf(url)) return 404;
+        return positionPage(work, iri(middle), [chapterItem(middle, work, structure, 'Chapter 2')], 'resume', null);
+      }
+      return 404;
+    });
+    const page = await pageRequest(async () => {
+      const state = await loadPosition(uuid(zone), 'franchise', '');
+      const entity = state ? await buildEntity({
+        id: uuid(middle), locale: 'en', projection: projection(middle), site: siteOf(zone), fullPage: entityHref(uuid(middle)),
+        state, mount: 'chapters', lists,
+      }) : null;
+      return { entity };
+    }, { signedIn: true });
+    expect(page.entity?.chapter?.reached).toBe(true);
+    expect(page.entity?.chapter?.previous).toBeNull();
+    expect(page.entity?.chapter?.next?.name.value).toBe('Chapter 3');
+    expect(claimed(page.entity?.chapter?.reveals)).toEqual([]);
+  });
+
+  test('a neighbour read that fails does not claim the list was revealed here', async () => {
+    const zone = 1010;
+    const work = 1011;
+    const structure = 1012;
+    const middle = 1013;
+    const elizabeth = 1014;
+    double = mainDouble((url) => {
+      if (url.pathname === `/v1/zones/${uuid(zone)}/routes`) {
+        if (url.searchParams.get('path') === '/franchise')
+          return { kind: 'index', items: [{ id: iri(work), title: name('Franchise') }], nextCursor: null };
+        if (url.searchParams.get('path') === '/characters')
+          return { kind: 'index', items: [member(elizabeth, 'Elizabeth')], nextCursor: null };
+      }
+      if (url.pathname === `/v1/reading-positions/${uuid(work)}`) {
+        if (aroundOf(url)) return 503;
+        return positionPage(work, iri(middle), [chapterItem(middle, work, structure, 'Chapter 2')], 'resume', null);
+      }
+      return 404;
+    });
+    const page = await pageRequest(async () => {
+      const state = await loadPosition(uuid(zone), 'franchise', '');
+      const entity = state ? await buildEntity({
+        id: uuid(middle), locale: 'en', projection: projection(middle), site: siteOf(zone), fullPage: entityHref(uuid(middle)),
+        state, mount: 'chapters', lists,
+      }) : null;
+      return { entity };
+    }, { signedIn: true });
+    expect(page.entity?.chapter).toMatchObject({ reached: true, previous: null, next: null });
+    expect(claimed(page.entity?.chapter?.reveals)).toEqual([]);
+  });
 });

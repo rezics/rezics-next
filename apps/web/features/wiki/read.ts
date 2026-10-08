@@ -94,6 +94,11 @@ export const readChooser = cache(
 export interface ChapterNeighbours {
   previous: ChooserItem | null;
   next: ChooserItem | null;
+  /**
+   * How the previous side settled. `none` is the first chapter. `bound` means the scan window ran out,
+   * which does not say that this chapter is first.
+   */
+  previousStatus: 'found' | 'none' | 'bound';
   reached: boolean;
 }
 
@@ -118,11 +123,15 @@ export const readNeighbours = cache(
       const page = await readReadingPositionPage(main, { work, actingSubject, position, around: occurrence });
       const neighbours = page.neighbours;
       if (!neighbours) return { ok: false, failure: 'unavailable' };
+      const side = neighbours.previous;
+      const previousStatus = side.status === 'none' ? 'none' as const
+        : side.status === 'bound' ? 'bound' as const : 'found' as const;
       return {
         ok: true,
         data: {
           previous: itemAt(page, neighbours.previous),
           next: itemAt(page, neighbours.next),
+          previousStatus,
           reached: neighbours.reached,
         },
       };
