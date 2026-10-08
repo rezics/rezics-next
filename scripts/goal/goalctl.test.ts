@@ -13,8 +13,8 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, inheritedSharedLifecycleOwnership, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
-  planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, withRecovery, withSlot,
-  mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
+  planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, runUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
+  mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
@@ -317,6 +317,162 @@ describe('goalctl runtime policy', () => {
       const result = await runUnitGate('.', files, 1, run);
       expect(calls).toHaveLength(1);
       expect(result.runnerErrors).toHaveLength(1);
+    });
+  });
+
+  describe('unit gate evidence for classified runs', () => {
+    const core = 'gate-isolated.test.ts';
+    const other = 'gate-companion.test.ts';
+    const slow = 'aa-slow-gate.test.ts';
+    const later = 'bb-later-gate.test.ts';
+    const caseName = 'QA slots: SIGTERM, SIGINT, process exit, errors and the run deadline release leases';
+    const laterCase = 'later file rejects the payload';
+    const shard = (group: readonly string[], fields: Partial<UnitShardResult> = {}): UnitShardResult =>
+      ({ done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], files: [...group], output: '', ms: 1, ...fields });
+    const assertion = (file: string, name: string, expected: string, received: string) => [
+      `${file}:`, 'error: expect(received).toBe(expected)', '', `Expected: ${expected}`, `Received: ${received}`,
+      `(fail) ${name} [8.14ms]`,
+    ].join('\n');
+
+    async function withEvidence(files: readonly string[],
+      run: (cwd: string, group: readonly string[]) => Promise<UnitShardResult>,
+      check: (captured: { side: Awaited<ReturnType<typeof runUnitSide>>; evidence: UnitRunEvidence[]; lines: string[]; log: string }) => void | Promise<void>) {
+      const previousShards = process.env.GOAL_UNIT_GATE_SHARDS;
+      const previousLog = process.env.GOAL_MERGE_LOG;
+      const directory = mkdtempSync(join(import.meta.dir, '../../.temp/unit-gate-evidence-'));
+      const log = join(directory, 'merge.log');
+      process.env.GOAL_UNIT_GATE_SHARDS = '1';
+      process.env.GOAL_MERGE_LOG = log;
+      const lines: string[] = [];
+      const write = console.log;
+      console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
+      try {
+        const evidence: UnitRunEvidence[] = [];
+        const side = await runUnitSide('.', files, 'affected', evidence, run);
+        await check({ side, evidence, lines, log });
+      } finally {
+        console.log = write;
+        if (previousShards === undefined) delete process.env.GOAL_UNIT_GATE_SHARDS;
+        else process.env.GOAL_UNIT_GATE_SHARDS = previousShards;
+        if (previousLog === undefined) delete process.env.GOAL_MERGE_LOG;
+        else process.env.GOAL_MERGE_LOG = previousLog;
+        rmSync(directory, { recursive: true, force: true });
+      }
+    }
+
+    test('an isolated retry that fails keeps and prints its case name and error', async () => {
+      const calls: string[][] = [];
+      const failOutput = assertion(core, caseName, 'false', 'true');
+      await withEvidence([core, other], async (_cwd, group) => {
+        calls.push([...group]);
+        if (calls.length === 1) return shard(group, {
+          done: false, budgetExpired: true, timedOut: [core],
+          output: `${core}:\nrunning test: holds past the budget\n${other}:\n`,
+        });
+        if (group.length === 1 && group[0] === other) return shard(group, { output: `${other}:\n(pass) finishes [1ms]` });
+        return shard(group, {
+          failing: [core], output: failOutput,
+          failures: [{ file: core, test: caseName, detail: 'error: expect(received).toBe(expected)\nExpected: false\nReceived: true' }],
+        });
+      }, ({ side, evidence, lines, log }) => {
+        expect(calls.map(group => group.join(','))).toEqual([`${core},${other}`, other, core]);
+        expect(side.failing).toEqual([core]);
+        expect(side.inconclusive).toEqual([]);
+        const printed = lines.join('\n');
+        expect(printed).toContain(`(fail) ${caseName}`);
+        expect(printed).toContain('Expected: false');
+        expect(printed).toContain('timed out while running: holds past the budget');
+        const isolated = evidence.find(run => run.kind === 'isolated-retry' && run.side === 'affected');
+        expect(isolated?.files[0]).toMatchObject({ file: core, cases: [{ test: caseName }] });
+        expect(isolated?.files[0]?.cases[0]?.error).toContain('Expected: false');
+        expect(isolated?.files[0]?.cases[0]?.error).toContain('Received: true');
+        const refusal = unitGateRefusal('introduced unit failures; not merging:', side.failing, evidence);
+        expect(refusal).toContain(`introduced unit failures; not merging:\n  ${core}`);
+        expect(refusal).toContain(`(fail) ${caseName}`);
+        expect(refusal).toContain('Expected: false');
+        const path = writeUnitEvidence(evidence);
+        expect(path).toBe(`${log.slice(0, -4)}.json`);
+        const stored = JSON.parse(readFileSync(path!, 'utf8')) as { runs: UnitRunEvidence[] };
+        expect(JSON.stringify(stored)).toContain(caseName);
+        expect(JSON.stringify(stored)).toContain('Expected: false');
+        expect(stored.runs.some(run => run.kind === 'isolated-retry' && run.files.some(file => file.output.length <= 20 * 1024))).toBe(true);
+      });
+    });
+
+    test('an isolated retry that times out again names the case the transcript was running', async () => {
+      const calls: string[][] = [];
+      const timeoutOutput = [`${core}:`, `(fail) ${caseName} [5000.10ms]`, '  ^ this test timed out after 5000ms.'].join('\n');
+      await withEvidence([core, other], async (_cwd, group) => {
+        calls.push([...group]);
+        if (calls.length === 1) return shard(group, {
+          done: false, budgetExpired: true, timedOut: [core],
+          output: `${core}:\nrunning test: ${caseName}\n${other}:\n`,
+        });
+        if (group.length === 1 && group[0] === other) return shard(group, {});
+        return shard(group, { failing: [core], timedOut: [core], output: timeoutOutput });
+      }, ({ side, evidence, lines }) => {
+        expect(calls).toHaveLength(3);
+        expect(side.inconclusive).toEqual([core]);
+        expect(side.failing).toEqual([]);
+        const printed = lines.join('\n');
+        expect(printed).toContain(`(fail) ${caseName}`);
+        expect(printed).toContain('this test timed out after 5000ms');
+        const isolated = evidence.find(run => run.kind === 'isolated-retry');
+        expect(isolated?.files[0]?.runningTest).toBe(caseName);
+        expect(isolated?.files[0]?.cases[0]?.error).toContain('this test timed out after 5000ms');
+        const refusal = unitGateRefusal('unit gate remains inconclusive after isolated timeout retry:', side.inconclusive, evidence);
+        expect(refusal).toContain(`unit gate remains inconclusive after isolated timeout retry:\n  ${core}`);
+        expect(refusal).toContain(`(fail) ${caseName}`);
+        expect(refusal).toContain('this test timed out after 5000ms');
+        expect(refusal).not.toContain(other);
+      });
+    });
+
+    test('a never-started rerun failure is kept and the refusal names that case', async () => {
+      const calls: string[][] = [];
+      const failOutput = assertion(later, laterCase, 'true', 'false');
+      await withEvidence([slow, later], async (_cwd, group) => {
+        calls.push([...group]);
+        if (calls.length === 1) return shard(group, {
+          done: false, budgetExpired: true, timedOut: [slow], output: `${slow}:\nrunning test: slow once\n${later}:\n`,
+        });
+        if (group.length === 1 && group[0] === slow) return shard(group, { output: `${slow}:\n(pass) finishes [1ms]` });
+        return shard(group, {
+          failing: [later], output: failOutput,
+          failures: [{ file: later, test: laterCase, detail: 'error: expect(received).toBe(expected)\nExpected: true\nReceived: false' }],
+        });
+      }, ({ side, evidence, lines }) => {
+        expect(calls.map(group => group.join(','))).toEqual([`${slow},${later}`, later, slow, later]);
+        expect(side.failing).toEqual([later]);
+        expect(side.inconclusive).toEqual([]);
+        const rerun = evidence.find(run => run.kind === 'never-started-rerun');
+        expect(rerun?.files.map(file => file.file)).toEqual([later]);
+        expect(rerun?.files[0]?.cases[0]).toMatchObject({ test: laterCase });
+        expect(rerun?.files[0]?.cases[0]?.error).toContain('Received: false');
+        const printed = lines.join('\n');
+        expect(printed).toContain('Unit gate evidence (affected, never-started-rerun):');
+        expect(printed).toContain(`(fail) ${laterCase}`);
+        expect(printed).toContain('Expected: true');
+        const refusal = unitGateRefusal('introduced unit failures; not merging:', side.failing, evidence);
+        expect(refusal).toContain(`(fail) ${laterCase}`);
+        expect(refusal).toContain('Received: false');
+        expect(refusal).not.toContain(slow);
+        expect(evidence.some(run => run.kind === 'confirm' && run.files.some(file => file.cases.some(item => item.test === laterCase)))).toBe(true);
+      });
+    });
+
+    test('keeps at most 20KB of a file transcript and 40 lines of each failure', () => {
+      const file = 'gate-oversized.test.ts';
+      const detail = Array.from({ length: 80 }, (_, index) => `detail ${index} ${'y'.repeat(200)}`);
+      const output = [`${file}:`, 'x'.repeat(25_000), 'error: expect(received).toBe(expected)', ...detail,
+        '(fail) oversized failure [1ms]'].join('\n');
+      const [kept] = unitFileEvidence(output, [file], [file], []);
+      expect(kept!.output.length).toBeLessThanOrEqual(20 * 1024);
+      expect(kept!.output).toContain('(fail) oversized failure');
+      expect(kept!.cases[0]?.test).toBe('oversized failure');
+      expect(kept!.cases[0]?.error.split('\n')).toHaveLength(40);
+      expect(kept!.cases[0]?.error).toContain('error: expect(received).toBe(expected)');
+      expect(kept!.cases[0]?.error).not.toContain('detail 79');
     });
   });
 
@@ -1916,11 +2072,25 @@ process.exit(0);
         if (blocked) {
           expect(r.git('rev-parse', 'main')).toBe(before);
           expect(result.stderr).toContain('introduced unit failures');
+          expect(result.stderr).toContain('(fail) operation stays valid');
+          expect(result.stderr).toContain('Expected: false');
           expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
         } else {
           expect(r.git('rev-parse', 'main')).toBe(r.git('rev-parse', task.branch));
           expect(result.stdout).toContain(outcome === 'skipped' ? '--skip-unit-gate' : 'also fails on main');
         }
+        if (outcome === 'introduced' || outcome === 'inherited') {
+          expect(result.stdout).toContain('Unit gate evidence (affected,');
+          expect(result.stdout).toContain('(fail) operation stays valid');
+          expect(result.stdout).toContain('Expected: false');
+          const evidenceDir = join(r.dir, '.temp/goal-orchestration/merges');
+          const evidenceFiles = readdirSync(evidenceDir).filter(name => name.endsWith('.json'));
+          expect(evidenceFiles.length).toBeGreaterThan(0);
+          const stored = evidenceFiles.map(name => readFileSync(join(evidenceDir, name), 'utf8')).join('\n');
+          expect(stored).toContain('operation stays valid');
+          expect(stored).toContain('Expected: false');
+        }
+        if (outcome === 'inherited') expect(result.stdout).toContain('Unit gate evidence (main,');
         if (outcome === 'skipped') expect(existsSync(log)).toBe(false);
         else {
           const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line));

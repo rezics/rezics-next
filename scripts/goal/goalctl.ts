@@ -2358,6 +2358,224 @@ export function unitFileErrorDetails(output: string, candidates: readonly string
     detail: normalizeUnitFileError(lines.join('\n'), root) })));
 }
 
+/** Kept per failing file so a later retry can name the case after the raw shard log is gone. */
+const UNIT_GATE_FILE_OUTPUT_CAP = 20 * 1024;
+const UNIT_GATE_FAILURE_ERROR_LINES = 40;
+const UNIT_TIMEOUT_LINE = /(?:timed out after\s+\d+(?:\.\d+)?\s*(?:ms|s)\b|timed out\s*\([^)]*\bagainst\b[^)]*\)|timeout of\s+\d+(?:\.\d+)?\s*(?:ms|s)\s+(?:was\s+)?exceeded)/i;
+const UNIT_RESULT_LINE = /^\((?:pass|fail|skip|todo)\)\s+/;
+const UNIT_FAIL_LINE = /^\(fail\)\s+(.+?)(?:\s+\[[^\]]+\])?\s*$/;
+const UNIT_FILE_HEADER = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/;
+
+export type UnitGateRunKind = 'first' | 'isolated-retry' | 'never-started-rerun' | 'confirm';
+export interface UnitFailureCase { test: string; error: string }
+export interface UnitFileEvidence {
+  file: string;
+  /** This file's own transcript, capped at 20KB. */
+  output: string;
+  cases: UnitFailureCase[];
+  /** Set when a timeout's transcript or owner progress names the test that was running. */
+  runningTest?: string;
+}
+export interface UnitRunEvidence {
+  side: 'affected' | 'main';
+  kind: UnitGateRunKind;
+  files: UnitFileEvidence[];
+}
+export interface UnitGatePass {
+  kind: 'first' | 'never-started-rerun';
+  output: string;
+  files: string[];
+  failing: string[];
+  timedOut: string[];
+}
+
+function unitHeaderFile(header: string, root?: string): string {
+  let file = header.replace(/^\.\//, '');
+  if (root && isAbsolute(file)) file = relative(root, file);
+  return file;
+}
+
+/** A file can appear twice: bun's transcript, then the owner progress file appended after a kill. */
+function fileSection(output: string, file: string, root?: string): string {
+  const chunks: string[] = [];
+  let current: string | undefined;
+  let bucket: string[] = [];
+  const flush = () => { if (current === file && bucket.length) chunks.push(bucket.join('\n')); };
+  for (const line of output.split('\n')) {
+    const header = UNIT_FILE_HEADER.exec(line);
+    if (header) {
+      flush();
+      current = unitHeaderFile(header[1]!, root);
+      bucket = [];
+      continue;
+    }
+    if (current === file) bucket.push(line);
+  }
+  flush();
+  return chunks.join('\n');
+}
+
+function capFileOutput(text: string): string {
+  if (text.length <= UNIT_GATE_FILE_OUTPUT_CAP) return text;
+  const marker = '[truncated to 20KB]\n';
+  const room = UNIT_GATE_FILE_OUTPUT_CAP - marker.length;
+  const focus = Math.max(text.lastIndexOf('(fail) '), text.search(UNIT_TIMEOUT_LINE));
+  const start = focus < 0 ? text.length - room : Math.max(0, Math.min(focus, text.length - room));
+  return `${start > 0 ? marker : ''}${text.slice(start, start + room)}`;
+}
+
+function errorBeforeFailure(pending: readonly string[]): string[] {
+  const start = pending.findIndex(line => isUnitErrorLine(line) || UNIT_TIMEOUT_LINE.test(line) || /^Timeout:/i.test(line));
+  if (start < 0) return [];
+  const collected: string[] = [];
+  for (const line of pending.slice(start)) {
+    collected.push(line.trimEnd());
+    if (collected.length >= UNIT_GATE_FAILURE_ERROR_LINES) break;
+  }
+  return collected;
+}
+
+/** `(fail)` names plus the error bun printed before that line, or after it when the timeout follows the name. */
+function failureCases(section: string): UnitFailureCase[] {
+  const lines = section.split('\n');
+  const cases: UnitFailureCase[] = [];
+  let pending: string[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!;
+    const fail = UNIT_FAIL_LINE.exec(line);
+    if (!fail) {
+      if (UNIT_RESULT_LINE.test(line) || bunRunSummaryLine(line) || UNIT_FILE_HEADER.test(line)) pending = [];
+      else pending.push(line);
+      continue;
+    }
+    const before = errorBeforeFailure(pending);
+    const after: string[] = [];
+    for (let cursor = index + 1; cursor < lines.length && after.length < UNIT_GATE_FAILURE_ERROR_LINES; cursor++) {
+      const next = lines[cursor]!;
+      if (UNIT_RESULT_LINE.test(next) || bunRunSummaryLine(next) || UNIT_FILE_HEADER.test(next)) break;
+      if (next.trim()) after.push(next.trimEnd());
+    }
+    const error = (before.length ? before : after).slice(0, UNIT_GATE_FAILURE_ERROR_LINES).join('\n').trim();
+    cases.push({ test: fail[1]!.trim(), error });
+    pending = [];
+  }
+  return cases;
+}
+
+/** The test a timeout stopped, when the transcript or the owner progress file names it. */
+function runningTestName(section: string): string | undefined {
+  let lastFail: string | undefined;
+  let marked: string | undefined;
+  for (const line of section.split('\n')) {
+    const running = /^(?:running test|running):\s+(.+?)\s*$/.exec(line.trim());
+    if (running) marked = running[1];
+    const fail = UNIT_FAIL_LINE.exec(line);
+    if (fail) lastFail = fail[1]!.trim();
+    if (lastFail && (UNIT_TIMEOUT_LINE.test(line) || /^Timeout:/i.test(line))) return lastFail;
+  }
+  return marked;
+}
+
+export function unitFileEvidence(output: string, scope: readonly string[], failing: readonly string[],
+  timedOut: readonly string[], root?: string): UnitFileEvidence[] {
+  const wanted = new Set([...failing, ...timedOut]);
+  return scope.filter(file => wanted.has(file)).map(file => {
+    const section = fileSection(output, file, root);
+    const evidence: UnitFileEvidence = { file, output: capFileOutput(section), cases: failureCases(section) };
+    if (timedOut.includes(file)) {
+      const running = runningTestName(section);
+      if (running) evidence.runningTest = running;
+    }
+    return evidence;
+  });
+}
+
+function formatFileEvidence(file: UnitFileEvidence): string {
+  const lines = [`  ${file.file}`];
+  if (file.runningTest && !file.cases.some(item => item.test === file.runningTest)) {
+    lines.push(`    timed out while running: ${file.runningTest}`);
+  }
+  for (const item of file.cases) {
+    lines.push(`    (fail) ${item.test}`);
+    for (const errorLine of item.error.split('\n').slice(0, UNIT_GATE_FAILURE_ERROR_LINES)) {
+      if (errorLine.trim()) lines.push(`      ${errorLine}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function formatUnitEvidence(run: UnitRunEvidence): string {
+  if (!run.files.length) return '';
+  return `Unit gate evidence (${run.side}, ${run.kind}):\n${run.files.map(formatFileEvidence).join('\n')}`;
+}
+
+function noteUnitRun(evidence: UnitRunEvidence[], side: 'affected' | 'main', kind: UnitGateRunKind,
+  output: string, scope: readonly string[], failing: readonly string[], timedOut: readonly string[], root?: string): void {
+  const files = unitFileEvidence(output, scope, failing, timedOut, root);
+  if (!files.length) return;
+  const run = { side, kind, files };
+  evidence.push(run);
+  const text = formatUnitEvidence(run);
+  if (text) console.log(text);
+}
+
+function notePasses(evidence: UnitRunEvidence[], side: 'affected' | 'main', passes: readonly UnitGatePass[],
+  kindOf: (pass: UnitGatePass) => UnitGateRunKind, root?: string): void {
+  for (const pass of passes) noteUnitRun(evidence, side, kindOf(pass), pass.output, pass.files, pass.failing, pass.timedOut, root);
+}
+
+/** A later run replaces an earlier one when it names cases. A timeout that names only the running test does not drop cases already kept. */
+function preferFileEvidence(previous: UnitFileEvidence | undefined, next: UnitFileEvidence): UnitFileEvidence {
+  if (!previous) return next;
+  const runningTest = next.runningTest ?? previous.runningTest;
+  if (next.cases.length) return { ...next, runningTest };
+  if (previous.cases.length) return { ...previous, runningTest };
+  if (next.runningTest || next.output) return { ...next, runningTest };
+  return { ...previous, runningTest };
+}
+
+/** A refusal names the cases that decided it. File names alone are not evidence. */
+export function unitGateRefusal(message: string, files: readonly string[], runs: readonly UnitRunEvidence[]): string {
+  const chosen = new Map<string, UnitFileEvidence>();
+  for (const run of runs) for (const file of run.files) {
+    if (!files.includes(file.file)) continue;
+    chosen.set(file.file, preferFileEvidence(chosen.get(file.file), file));
+  }
+  return [message, ...files.map(file => {
+    const found = chosen.get(file);
+    return found ? formatFileEvidence(found) : `  ${file}`;
+  })].join('\n');
+}
+
+function mergeLogPath(): string | undefined {
+  const fromEnv = process.env.GOAL_MERGE_LOG;
+  if (fromEnv) return resolve(fromEnv);
+  try {
+    const target = readlinkSync('/proc/self/fd/1');
+    // A manager redirect (`> merge.log`) is a file. A pipe or a terminal is not a place to put a sibling.
+    if (target.startsWith('/') && !target.startsWith('/dev/')) return target;
+  } catch { /* stdout is not a regular file */ }
+  return undefined;
+}
+
+/** Writes the kept cases beside the merge log when stdout is that log, otherwise under the orchestration merges directory. */
+export function writeUnitEvidence(runs: readonly UnitRunEvidence[]): string | undefined {
+  if (!runs.some(run => run.files.length)) return;
+  const log = mergeLogPath();
+  const path = log
+    ? `${log.endsWith('.log') ? log.slice(0, -4) : log}.json`
+    : join(stateDir, 'merges', `${process.env.GOAL_ID ?? 'merge'}-${process.pid}-${Date.now()}.json`);
+  try {
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, `${JSON.stringify({ runs }, null, 2)}\n`);
+    console.log(`Unit gate evidence file: ${path}`);
+    return path;
+  } catch (error) {
+    console.log(`Unit gate evidence file was not written: ${error instanceof Error ? error.message : error}`);
+    return undefined;
+  }
+}
+
 interface UnitFinding { path: string[]; text: string }
 
 function diffContainerKey(line: string): string | undefined {
@@ -2577,19 +2795,27 @@ function mergeShardResults(parts: readonly UnitShardResult[]): UnitShardResult {
 interface UnitGateResult {
   done: boolean; failing: string[]; timedOut: string[]; failures: UnitFailureDetail[];
   fileErrors: UnitFileErrorDetail[]; runnerErrors: UnitRunnerError[]; unfinished: string[]; output: string;
+  /** First pass, then the never-started rerun when that pass had files the budget did not reach. */
+  passes: UnitGatePass[];
 }
 
 /** Parallel `task test` shards under one wall-clock budget. A shard that hits the budget leaves the side inconclusive
  * unless its files get a verdict: the file that was running is retried alone by the caller, and the rest of that shard
  * runs once more here, in shards sized like a first run of that many files. Failures from shards that did finish are
  * not a verdict while any file stays unfinished, because the set was not fully run. */
+function gatePass(kind: UnitGatePass['kind'], files: readonly string[], result: UnitGateResult): UnitGatePass {
+  return { kind, output: result.output, files: [...files], failing: result.failing, timedOut: result.timedOut };
+}
+
 export async function runUnitGate(cwd: string, files: readonly string[], shards?: number,
   runShard: UnitShardRunner = runUnitShard): Promise<UnitGateResult> {
   const first = await runUnitGatePass(cwd, files, shards, runShard);
-  if (first.result.runnerErrors.length) return first.result;
+  const firstPass = gatePass('first', files, first.result);
+  const withPasses = (result: UnitGateResult, passes: UnitGatePass[]): UnitGateResult => ({ ...result, passes });
+  if (first.result.runnerErrors.length) return withPasses(first.result, [firstPass]);
   const reachedNoVerdict = new Set(first.shards.filter(shard => shard.budgetExpired).flatMap(shard => shard.files)
     .filter(file => !first.result.timedOut.includes(file)));
-  if (!reachedNoVerdict.size) return first.result;
+  if (!reachedNoVerdict.size) return withPasses(first.result, [firstPass]);
   const rerunFiles = [...reachedNoVerdict].sort();
   console.log(`Unit gate: ${rerunFiles.length} file(s) in timed-out shard(s) had no verdict; rerunning them once`);
   const rerun = await runUnitGatePass(cwd, rerunFiles, shards, runShard);
@@ -2604,7 +2830,10 @@ export async function runUnitGate(cwd: string, files: readonly string[], shards?
     runnerErrors: [...result.runnerErrors, ...rerun.result.runnerErrors],
     output: `${result.output}\n${rerun.result.output}`,
   };
-  return unfinished.length ? { done: false, ...merged, unfinished } : { done: true, ...merged, unfinished: [] };
+  const passes = [firstPass, gatePass('never-started-rerun', rerunFiles, rerun.result)];
+  return unfinished.length
+    ? { done: false, ...merged, unfinished, passes }
+    : { done: true, ...merged, unfinished: [], passes };
 }
 
 function fileDeclaredTimeout(cwd: string, file: string): DeclaredTestTimeout {
@@ -2620,7 +2849,7 @@ function fileDeclaredTimeout(cwd: string, file: string): DeclaredTestTimeout {
 
 async function runUnitGatePass(cwd: string, files: readonly string[], shards: number | undefined,
   runShard: UnitShardRunner): Promise<{ result: UnitGateResult; shards: UnitShardResult[] }> {
-  const empty: UnitGateResult = { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '' };
+  const empty: UnitGateResult = { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '', passes: [] };
   if (!files.length) return { result: empty, shards: [] };
   const budget = unitGateBudgetMs();
   const planned = planUnitGateShards(files.map(file => ({ file, timeout: fileDeclaredTimeout(cwd, file) })),
@@ -2644,7 +2873,7 @@ async function runUnitGatePass(cwd: string, files: readonly string[], shards: nu
   const failures = completed.flatMap(result => result.failures);
   const fileErrors = completed.flatMap(result => result.fileErrors);
   const runnerErrors = results.flatMap(result => result.runnerErrors);
-  return { result: { done: !unfinished.length, failing, timedOut, failures, fileErrors, runnerErrors, unfinished, output }, shards: results };
+  return { result: { done: !unfinished.length, failing, timedOut, failures, fileErrors, runnerErrors, unfinished, output, passes: [] }, shards: results };
 }
 
 function reportUnfinished(side: 'affected' | 'main', unfinished: readonly string[]): void {
@@ -2661,11 +2890,13 @@ interface TimeoutRetryResult {
 }
 
 async function retryTimedOutFiles(cwd: string, files: readonly string[], side: 'affected' | 'main',
-  runShard?: UnitShardRunner): Promise<TimeoutRetryResult> {
+  runShard?: UnitShardRunner, onRun?: (result: UnitGateResult) => void): Promise<TimeoutRetryResult> {
   const result: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [], runnerErrors: [] };
   for (const file of [...new Set(files)].sort()) {
     console.log(`Unit gate: ${file} timed out on ${side}; rerunning alone`);
     const retry = await runUnitGate(cwd, [file], 1, runShard);
+    // Keep the case before the timeout classification discards the transcript.
+    onRun?.(retry);
     if (retry.runnerErrors.length) {
       result.inconclusive.push(file);
       result.runnerErrors.push(...retry.runnerErrors);
@@ -2975,6 +3206,93 @@ async function preMergeTypecheckGate(worktree: string, mainRoot: string, before:
   }
 }
 
+interface UnitSideResult {
+  failing: string[];
+  failures: UnitFailureDetail[];
+  fileErrors: UnitFileErrorDetail[];
+  runnerErrors: UnitRunnerError[];
+  inconclusive: string[];
+  orderDependent: string[];
+  initialDone: boolean;
+}
+
+function emptyGate(): UnitGateResult {
+  return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '', passes: [] };
+}
+
+/** One side of the unit gate: first run, never-started rerun, isolated timeout retry, and confirm.
+ * Every classified run keeps its failing cases. The caller decides whether they block the merge. */
+export async function runUnitSide(cwd: string, files: readonly string[], side: 'affected' | 'main',
+  evidence: UnitRunEvidence[], runShard?: UnitShardRunner): Promise<UnitSideResult> {
+  const none = (extra: Partial<UnitSideResult> = {}): UnitSideResult => ({
+    failing: [], failures: [], fileErrors: [], runnerErrors: [], inconclusive: [], orderDependent: [], initialDone: true, ...extra,
+  });
+  const isolatedKind = (pass: UnitGatePass): UnitGateRunKind => pass.kind === 'never-started-rerun' ? 'never-started-rerun' : 'isolated-retry';
+  const confirmKind = (pass: UnitGatePass): UnitGateRunKind => pass.kind === 'never-started-rerun' ? 'never-started-rerun' : 'confirm';
+  const branch = await runUnitGate(cwd, files, undefined, runShard);
+  notePasses(evidence, side, branch.passes, pass => pass.kind, cwd);
+  if (branch.runnerErrors.length) return none({ runnerErrors: branch.runnerErrors, initialDone: branch.done });
+  let failureFiles = branch.failing;
+  let timedOut = branch.timedOut;
+  let timeoutRetry: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [], runnerErrors: [] };
+  if (!branch.done) {
+    timeoutRetry = await retryTimedOutFiles(cwd, branch.timedOut, side, runShard, retry => {
+      notePasses(evidence, side, retry.passes, isolatedKind, cwd);
+    });
+    if (timeoutRetry.runnerErrors.length) return none({ runnerErrors: timeoutRetry.runnerErrors, initialDone: false });
+    failureFiles = [...new Set([...branch.failing, ...timeoutRetry.failing])].sort();
+    const unresolved = [...new Set([
+      ...branch.unfinished.filter(file => !branch.timedOut.includes(file)),
+      ...timeoutRetry.inconclusive,
+    ])].sort();
+    if (unresolved.length) {
+      reportUnfinished(side, unresolved);
+      return none({ failing: failureFiles, failures: timeoutRetry.failures, fileErrors: timeoutRetry.fileErrors,
+        inconclusive: unresolved, initialDone: false });
+    }
+    timedOut = branch.timedOut;
+  }
+  if (!failureFiles.length) return none({ initialDone: branch.done });
+  // A file can fail beside its shard-mates and pass when those failures run together. Confirm those together,
+  // then retry every timeout alone so the side's decision comes from its isolated run.
+  const together = failureFiles.filter(file => !timedOut.includes(file));
+  const confirmed = together.length ? await runUnitGate(cwd, together, 1, runShard) : emptyGate();
+  notePasses(evidence, side, confirmed.passes, confirmKind, cwd);
+  if (confirmed.runnerErrors.length) return none({ runnerErrors: confirmed.runnerErrors, initialDone: branch.done });
+  const alreadyRetried = new Set(branch.done ? [] : branch.timedOut);
+  const retry = await retryTimedOutFiles(cwd, [...new Set([...timedOut, ...confirmed.timedOut])].filter(file => !alreadyRetried.has(file)),
+    side, runShard, result => { notePasses(evidence, side, result.passes, isolatedKind, cwd); });
+  const confirmedFailures = [...new Set([
+    ...(!branch.done ? timeoutRetry.failing : []),
+    ...confirmed.failing.filter(file => !confirmed.timedOut.includes(file)),
+    ...retry.failing,
+  ])].sort();
+  const unresolved = [...new Set([
+    ...(!confirmed.done ? confirmed.unfinished.filter(file => !confirmed.timedOut.includes(file)) : []),
+    ...retry.inconclusive,
+  ])].sort();
+  if (retry.runnerErrors.length) return none({ runnerErrors: retry.runnerErrors, initialDone: branch.done });
+  if (unresolved.length) {
+    reportUnfinished(side, unresolved);
+    return none({ failing: confirmedFailures, inconclusive: unresolved, initialDone: branch.done });
+  }
+  return {
+    failing: confirmedFailures,
+    failures: [
+      ...(!branch.done ? timeoutRetry.failures : []),
+      ...confirmed.failures.filter(failure => !confirmed.timedOut.includes(failure.file)),
+      ...retry.failures,
+    ],
+    fileErrors: [
+      ...(!branch.done ? timeoutRetry.fileErrors : []),
+      ...confirmed.fileErrors.filter(error => !confirmed.timedOut.includes(error.file)),
+      ...retry.fileErrors,
+    ],
+    runnerErrors: [], inconclusive: [], initialDone: branch.done,
+    orderDependent: branch.done && confirmed.done ? together.filter(file => !confirmed.failing.includes(file)) : [],
+  };
+}
+
 /** A branch failure is inherited only when the classification baseline has the same failing test and assertion detail.
  * Selection uses the candidate's own changes against current main, not that older baseline. */
 async function preMergeUnitGate(worktree: string, mainRoot: string, classificationBaseline: string, currentMain: string,
@@ -2995,116 +3313,76 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, classificati
   console.log(`Pre-merge unit gate: ${files.length} affected/guard file(s) against main ${classificationBaseline.slice(0, 12)}`);
   if (!files.length) return;
   const runShard = gateShardRunner(owner);
-  // Run the branch first. A timeout is retried alone; any still-unresolved file keeps this merge inconclusive.
-  const branch = await runUnitGate(worktree, files, undefined, runShard);
-  let branchFailureFiles = branch.failing;
-  let branchTimedOut = branch.timedOut;
-  let branchTimeoutRetry: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [], runnerErrors: [] };
-  if (branch.runnerErrors.length) return runnerErrorRefusal('affected', branch.runnerErrors);
-  if (!branch.done) {
-    branchTimeoutRetry = await retryTimedOutFiles(worktree, branch.timedOut, 'affected', runShard);
-    if (branchTimeoutRetry.runnerErrors.length) return runnerErrorRefusal('affected', branchTimeoutRetry.runnerErrors);
-    branchFailureFiles = [...new Set([...branch.failing, ...branchTimeoutRetry.failing])].sort();
-    const unresolved = [...new Set([
-      ...branch.unfinished.filter(file => !branch.timedOut.includes(file)),
-      ...branchTimeoutRetry.inconclusive,
-    ])].sort();
-    if (unresolved.length) {
-      reportUnfinished('affected', unresolved);
-      return `unit gate remains inconclusive after isolated timeout retry:\n  ${unresolved.join('\n  ')}`;
-    }
-    branchTimedOut = branch.timedOut;
-  }
-  if (!branchFailureFiles.length) {
-    console.log(`Pre-merge unit gate: every affected unit file and repository guard ${branch.done ? 'passes' : 'passes after isolated retry'}`);
-    return;
-  }
-  console.log(`Unit gate: ${branchFailureFiles.length} file(s) fail on the branch:\n${branch.output.slice(-20_000)}`);
-  // A file can fail beside its shard-mates and pass when those failures run together. Confirm those together,
-  // then retry every timeout alone so the side's decision comes from its isolated run.
-  const together = branchFailureFiles.filter(file => !branchTimedOut.includes(file));
-  const confirmed = together.length ? await runUnitGate(worktree, together, 1, runShard)
-    : { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '' };
-  if (confirmed.runnerErrors.length) return runnerErrorRefusal('affected', confirmed.runnerErrors);
-  const alreadyRetried = new Set(branch.done ? [] : branch.timedOut);
-  const retryNewTimeouts = (files: readonly string[]) => files.filter(file => !alreadyRetried.has(file));
-  const retry = await retryTimedOutFiles(worktree, retryNewTimeouts([...branchTimedOut, ...confirmed.timedOut]), 'affected', runShard);
-  const confirmedFailures = [...new Set([
-    ...(!branch.done ? branchTimeoutRetry.failing : []),
-    ...confirmed.failing.filter(file => !confirmed.timedOut.includes(file)),
-    ...retry.failing,
-  ])].sort();
-  const branchUnresolved = [...new Set([
-    ...(!confirmed.done ? confirmed.unfinished.filter(file => !confirmed.timedOut.includes(file)) : []),
-    ...retry.inconclusive,
-  ])].sort();
-  if (retry.runnerErrors.length) return runnerErrorRefusal('affected', retry.runnerErrors);
-  if (branchUnresolved.length) {
-    reportUnfinished('affected', branchUnresolved);
-    return `unit gate remains inconclusive after isolated timeout retry:\n  ${branchUnresolved.join('\n  ')}`;
-  }
-  const confirmedDetails = [
-    ...(!branch.done ? branchTimeoutRetry.failures : []),
-    ...confirmed.failures.filter(failure => !confirmed.timedOut.includes(failure.file)),
-    ...retry.failures,
-  ];
-  const confirmedFileErrors = [
-    ...(!branch.done ? branchTimeoutRetry.fileErrors : []),
-    ...confirmed.fileErrors.filter(error => !confirmed.timedOut.includes(error.file)),
-    ...retry.fileErrors,
-  ];
-  const orderDependent = branch.done && confirmed.done ? together.filter(file => !confirmed.failing.includes(file)) : [];
-  if (orderDependent.length) {
-    console.log(`Unit gate: ${orderDependent.length} file(s) failed only across shards; order-dependent, reported, not blocking\n  ${orderDependent.join('\n  ')}`);
-  }
-  if (!confirmedFailures.length) return;
-  const introduced = confirmedFailures.filter(file =>
-    spawnSync('git', ['cat-file', '-e', `${classificationBaseline}:${file}`], { cwd: mainRoot }).status !== 0);
-  const existing = confirmedFailures.filter(file => !introduced.includes(file));
-  let directory: string | undefined;
+  const evidence: UnitRunEvidence[] = [];
   try {
-    if (existing.length) {
-      // Keep the checkout shallow: owner unit gates bind PostgreSQL sockets below it.
-      mkdirSync(join(mainRoot, '.temp'), { recursive: true });
-      directory = mkdtempSync(join(mainRoot, '.temp/unit-gate-'));
-      git(mainRoot, ['worktree', 'add', '--detach', directory, classificationBaseline]);
-      // Own workspace links keep the baseline on HEAD even when main has local source edits.
-      const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
-      if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
-      const main = await runUnitGate(directory, existing, undefined, runShard);
-      if (main.runnerErrors.length) return runnerErrorRefusal('main', main.runnerErrors);
-      const mainRetry = await retryTimedOutFiles(directory, main.timedOut, 'main', runShard);
-      if (mainRetry.runnerErrors.length) return runnerErrorRefusal('main', mainRetry.runnerErrors);
-      const mainUnresolved = [...new Set([
-        ...main.unfinished.filter(file => !main.timedOut.includes(file)),
-        ...mainRetry.inconclusive,
-      ])].sort();
-      const affecting = existing.filter(file => mainUnresolved.includes(file));
-      if (affecting.length) {
-        reportUnfinished('main', affecting);
-        return `unit gate remains inconclusive on main after isolated timeout retry:\n  ${affecting.join('\n  ')}`;
+    // Run the branch first. A timeout is retried alone; any still-unresolved file keeps this merge inconclusive.
+    const side = await runUnitSide(worktree, files, 'affected', evidence, runShard);
+    if (side.runnerErrors.length) return runnerErrorRefusal('affected', side.runnerErrors);
+    if (side.inconclusive.length) {
+      return unitGateRefusal('unit gate remains inconclusive after isolated timeout retry:', side.inconclusive, evidence);
+    }
+    if (!side.failing.length && !side.orderDependent.length) {
+      console.log(`Pre-merge unit gate: every affected unit file and repository guard ${side.initialDone ? 'passes' : 'passes after isolated retry'}`);
+      return;
+    }
+    if (side.failing.length) console.log(`Unit gate: ${side.failing.length} file(s) fail on the branch`);
+    if (side.orderDependent.length) {
+      console.log(`Unit gate: ${side.orderDependent.length} file(s) failed only across shards; order-dependent, reported, not blocking\n  ${side.orderDependent.join('\n  ')}`);
+    }
+    if (!side.failing.length) return;
+    const introduced = side.failing.filter(file =>
+      spawnSync('git', ['cat-file', '-e', `${classificationBaseline}:${file}`], { cwd: mainRoot }).status !== 0);
+    const existing = side.failing.filter(file => !introduced.includes(file));
+    let directory: string | undefined;
+    try {
+      if (existing.length) {
+        // Keep the checkout shallow: owner unit gates bind PostgreSQL sockets below it.
+        mkdirSync(join(mainRoot, '.temp'), { recursive: true });
+        directory = mkdtempSync(join(mainRoot, '.temp/unit-gate-'));
+        git(mainRoot, ['worktree', 'add', '--detach', directory, classificationBaseline]);
+        // Own workspace links keep the baseline on HEAD even when main has local source edits.
+        const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
+        if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
+        const main = await runUnitGate(directory, existing, undefined, runShard);
+        notePasses(evidence, 'main', main.passes, pass => pass.kind, directory);
+        if (main.runnerErrors.length) return runnerErrorRefusal('main', main.runnerErrors);
+        const mainRetry = await retryTimedOutFiles(directory, main.timedOut, 'main', runShard, retry => {
+          notePasses(evidence, 'main', retry.passes, pass => pass.kind === 'never-started-rerun' ? 'never-started-rerun' : 'isolated-retry', directory);
+        });
+        if (mainRetry.runnerErrors.length) return runnerErrorRefusal('main', mainRetry.runnerErrors);
+        const mainUnresolved = [...new Set([
+          ...main.unfinished.filter(file => !main.timedOut.includes(file)),
+          ...mainRetry.inconclusive,
+        ])].sort();
+        const affecting = existing.filter(file => mainUnresolved.includes(file));
+        if (affecting.length) {
+          reportUnfinished('main', affecting);
+          return unitGateRefusal('unit gate remains inconclusive on main after isolated timeout retry:', affecting, evidence);
+        }
+        for (const file of existing) {
+          const mainDetails = mainRetry.failing.includes(file)
+            ? mainRetry.failures.filter(failure => failure.file === file)
+            : mainRetry.passing.includes(file) ? []
+            : main.failures.filter(failure => failure.file === file && !main.timedOut.includes(failure.file));
+          const mainFileErrors = mainRetry.failing.includes(file)
+            ? mainRetry.fileErrors.filter(error => error.file === file)
+            : mainRetry.passing.includes(file) ? []
+            : main.fileErrors.filter(error => error.file === file && !main.timedOut.includes(error.file));
+          if (introducedUnitFailureFiles([file], side.failures.filter(failure => failure.file === file),
+            mainDetails, side.fileErrors.filter(error => error.file === file), mainFileErrors).includes(file)) introduced.push(file);
+          else console.log(`Unit gate: ${file} also fails on main ${classificationBaseline.slice(0, 12)} with identical failure details; reported, not blocking`);
+        }
       }
-      for (const file of existing) {
-        const mainDetails = mainRetry.failing.includes(file)
-          ? mainRetry.failures.filter(failure => failure.file === file)
-          : mainRetry.passing.includes(file) ? []
-          : main.failures.filter(failure => failure.file === file && !main.timedOut.includes(failure.file));
-        const mainFileErrors = mainRetry.failing.includes(file)
-          ? mainRetry.fileErrors.filter(error => error.file === file)
-          : mainRetry.passing.includes(file) ? []
-          : main.fileErrors.filter(error => error.file === file && !main.timedOut.includes(error.file));
-        if (introducedUnitFailureFiles([file], confirmedDetails.filter(failure => failure.file === file),
-          mainDetails, confirmedFileErrors.filter(error => error.file === file), mainFileErrors).includes(file)) introduced.push(file);
-        else console.log(`Unit gate: ${file} also fails on main ${classificationBaseline.slice(0, 12)} with identical failure details; reported, not blocking`);
+    } finally {
+      if (directory) {
+        git(mainRoot, ['worktree', 'remove', '--force', directory]);
+        rmSync(directory, { recursive: true, force: true });
       }
     }
+    return introduced.length ? unitGateRefusal('introduced unit failures; not merging:', introduced.sort(), evidence) : undefined;
   } finally {
-    if (directory) {
-      git(mainRoot, ['worktree', 'remove', '--force', directory]);
-      rmSync(directory, { recursive: true, force: true });
-    }
+    writeUnitEvidence(evidence);
   }
-  return introduced.length ? `introduced unit failures; not merging:\n  ${introduced.sort().join('\n  ')}` : undefined;
 }
 
 export interface PreparedMerge { before: string; baseline: string; after: string; worktree: string; branch: string; sharers: string[]; committed: string[] }
