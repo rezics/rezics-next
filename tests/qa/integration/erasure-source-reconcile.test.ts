@@ -525,8 +525,9 @@ test('operator reconciliation clears replanted comment and evidence sources or r
     await live.expectOpen(planted);
     expect(await live.recorded(key)).toBe(0);
     await live.expectHidden(planted);
-    // The operation refuses a caller that did not present owner:operate.
-    expect(refused.status, refused.text).toBe(403);
-    expect(problemOf(refused.body).code, refused.text).toBe('authority_denied');
+    // An assertion without owner:operate is refused as an invalid assertion (problems.ts maps
+    // AccountAssertionInsufficientScope to 401, like every other route); 403 is for an inactive principal.
+    expect(refused.status, refused.text).toBe(401);
+    expect(problemOf(refused.body).code, refused.text).toBe('account_assertion_denied');
   }
 }, 420_000);
