@@ -5,10 +5,12 @@ import { structureObjects } from '../structure/change.ts';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { continuityAnchors, enclosingStructure, readResumeOrder } from '../reading-position/continuity.ts';
-import { ReadingContinuityUnsupported } from '../reading-position/errors.ts';
+import { memberAnchors, memberEnclosure, readResumeOrder, type MemberEnclosure } from '../reading-position/continuity.ts';
 import { readIndexedProgressOrder } from './order.ts';
 import { applyAnchors, type MemberAnchor } from './anchors.ts';
+
+type AnchorCursor = { occurrence?: string; selection?: string };
+interface AnchorScope { parent: string; revision: string | null; parent_revision: string | null; cursor: AnchorCursor | null }
 
 interface Scope { principal_issuer: string; principal_subject: string; structure: string }
 interface IndexState { order_revision: string | null; ready: boolean; invalidations: string;
@@ -135,36 +137,70 @@ export class ProgressOrderProjection {
     return Object.assign(Object.create(this.env) as WorkActivationEnvironment, { structureObjects: objects });
   }
 
-  /** Index this Structure's earlier completions on the Structure that holds
-   * its Work as a member. A completion made before the Work was attached, or
-   * before anchors existed, has no row there; a changed head on either side
-   * leaves the existing ones keyed by an order that no longer holds. The scope
-   * records the heads it prepared for, so this resumes after a stop and
-   * restarts when either head moves. Returns true once the pass is complete. */
+  /** Bring this Structure's anchors on each enclosing composition up to date,
+   * one composition and one page per step. Earlier completions made before
+   * the Work was attached, or before anchors existed, have no row there; a
+   * changed head on either side leaves the existing ones keyed by an order
+   * that no longer holds; a composition that lost the Work still holds rows
+   * that must be withdrawn. Each (member, composition) pair records the heads
+   * it prepared for and a cursor, so this resumes after a stop and restarts
+   * when either head moves. Returns true once every pair is current. */
   private async prepareAnchors(client: PoolClient, identity: string[], header: CompositionHeader): Promise<boolean> {
-    let parent: CompositionHeader | undefined;
-    try { parent = await enclosingStructure(this.env, header.work); }
-    catch (error) {
-      if (error instanceof ReadingContinuityUnsupported) return true; // A refusal does not fail the pass. Ambiguous membership is a missing parent, below.
-      throw error;
+    const enclosure = await memberEnclosure(this.env, header);
+    const parents = enclosure.compositions.map(composition => composition.header.structure);
+    const saved = new Map((await client.query<AnchorScope>(`SELECT parent,revision,parent_revision,cursor
+      FROM structure.progress_anchor_scope WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
+        AND parent = ANY($4::text[])`, [...identity, parents])).rows.map(row => [row.parent, row]));
+    const stale = (composition: MemberEnclosure['compositions'][number]) => {
+      const row = saved.get(composition.header.structure);
+      return !row || row.revision !== header.head || row.parent_revision !== composition.header.head || row.cursor !== null;
+    };
+    const target = enclosure.compositions.find(stale);
+    if (target) {
+      await this.anchorPage(client, identity, header, enclosure, target.header.structure, saved.get(target.header.structure),
+        { revision: header.head, parentRevision: target.header.head }, false);
+      return false;
     }
-    const want = { revision: header.head, parent: parent?.structure ?? '', parentRevision: parent?.head ?? '' };
-    const saved = (await client.query<{ anchor_revision: string | null; anchor_parent: string | null;
-      anchor_parent_revision: string | null; anchor_cursor: { occurrence?: string; selection?: string } | null }>(
-      `SELECT anchor_revision,anchor_parent,anchor_parent_revision,anchor_cursor FROM structure.progress_scope
-        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3`, identity)).rows[0]!;
-    const current = saved.anchor_revision === want.revision && saved.anchor_parent === want.parent
-      && saved.anchor_parent_revision === want.parentRevision;
-    if (current && !saved.anchor_cursor) return true;
-    const cursor = current ? saved.anchor_cursor ?? {} : {};
+    // A composition that no longer holds the Work: withdraw what it indexed.
+    const removed = (await client.query<AnchorScope>(`SELECT parent,revision,parent_revision,cursor
+      FROM structure.progress_anchor_scope WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
+        AND parent <> '' AND parent <> ALL($4::text[]) ORDER BY parent LIMIT 1`, [...identity, parents])).rows[0];
+    if (removed) {
+      await this.anchorPage(client, identity, header, enclosure, removed.parent, removed, undefined, true);
+      return false;
+    }
+    await this.reconcileOverflow(client, identity, enclosure);
+    return true;
+  }
+
+  /** The overflow mark is present while the member is enclosed by more
+   * compositions than it keeps anchors for and the reader has progress in it. */
+  private async reconcileOverflow(client: PoolClient, identity: string[], enclosure: MemberEnclosure) {
+    if (enclosure.overflow) {
+      await client.query(`INSERT INTO structure.progress_anchor_scope (principal_issuer,principal_subject,structure,parent)
+        SELECT $1,$2,$3,'' WHERE EXISTS (SELECT 1 FROM structure.progress WHERE principal_issuer=$1
+          AND principal_subject=$2 AND structure=$3 AND completed LIMIT 1) ON CONFLICT DO NOTHING`, identity);
+      return;
+    }
+    await client.query(`DELETE FROM structure.progress_anchor_scope
+      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND parent=''`, identity);
+  }
+
+  /** One page of this member's rows, indexed on (or withdrawn from) one composition. */
+  private async anchorPage(client: PoolClient, identity: string[], header: CompositionHeader, enclosure: MemberEnclosure,
+    parent: string, saved: AnchorScope | undefined, basis: { revision: string; parentRevision: string } | undefined,
+    withdraw: boolean): Promise<void> {
+    const current = !!saved && saved.cursor !== null && (withdraw ? saved.revision === null
+      : saved.revision === basis!.revision && saved.parent_revision === basis!.parentRevision);
+    const cursor = current ? saved!.cursor! : {};
     if (!current) {
-      await client.query(`UPDATE structure.progress_scope SET anchor_revision=$4,anchor_parent=$5,
-        anchor_parent_revision=$6,anchor_cursor=$7::jsonb
-        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3`,
-      [...identity, want.revision, want.parent, want.parentRevision, parent ? '{}' : null]);
+      await client.query(`INSERT INTO structure.progress_anchor_scope
+        (principal_issuer,principal_subject,structure,parent,revision,parent_revision,cursor)
+        VALUES ($1,$2,$3,$4,$5,$6,'{}'::jsonb)
+        ON CONFLICT (principal_issuer,principal_subject,structure,parent)
+        DO UPDATE SET revision=EXCLUDED.revision,parent_revision=EXCLUDED.parent_revision,cursor=EXCLUDED.cursor`,
+      [...identity, parent, basis?.revision ?? null, basis?.parentRevision ?? null]);
     }
-    // No parent and ambiguous membership are the same: nothing is anchored.
-    if (!parent) return true;
     const rows = (await client.query<{ occurrence: string; selection_key: string; completed: boolean }>(
       `SELECT occurrence,selection_key,completed FROM structure.progress
         WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
@@ -175,29 +211,31 @@ export class ProgressOrderProjection {
     const page = rows.slice(0, PROGRESS_ORDER_PROJECTION_COST.rows);
     for (const row of page) {
       let anchors: MemberAnchor[];
-      try {
+      if (withdraw) anchors = [{ structure: parent, through: identity[2]!, order: null }];
+      else {
         const local = row.completed ? await readIndexedProgressOrder(environment, header, row.occurrence) : undefined;
         // Another Structure's own anchor, not a completion placed here.
         if (local === null) continue;
-        anchors = await continuityAnchors(environment, header, row.occurrence, local);
-      } catch (error) {
-        // A chain this walk will not store stays unindexed. The progress row itself remains.
-        if (error instanceof ReadingContinuityUnsupported) continue;
-        throw error;
+        anchors = await memberAnchors(environment, header, enclosure, local);
       }
       await applyAnchors(client, { issuer: identity[0]!, subject: identity[1]! }, identity[2]!,
-        row.occurrence, row.selection_key, row.completed, anchors);
+        row.occurrence, row.selection_key, row.completed, anchors, parent);
     }
-    // Both heads must be the ones this page was derived from when it commits.
-    if ((await readCompositionHeader(this.env, identity[2]!))?.head !== header.head
-      || (await readCompositionHeader(this.env, parent.structure))?.head !== parent.head) {
-      throw new Error('Progress anchor basis changed');
+    // Every head must be the one this page was derived from when it commits.
+    // A withdrawal derives nothing from them.
+    for (const [structure, head] of withdraw ? [] : [[identity[2]!, header.head],
+      ...enclosure.compositions.map(composition => [composition.header.structure, composition.header.head] as const)]) {
+      if ((await readCompositionHeader(this.env, structure))?.head !== head) throw new Error('Progress anchor basis changed');
     }
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
     const last = page.at(-1), more = rows.length > PROGRESS_ORDER_PROJECTION_COST.rows;
-    await client.query(`UPDATE structure.progress_scope SET anchor_cursor=$4::jsonb
-      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3`,
-    [...identity, more && last ? JSON.stringify({ occurrence: last.occurrence, selection: last.selection_key }) : null]);
-    return !more;
+    const next = more && last ? JSON.stringify({ occurrence: last.occurrence, selection: last.selection_key }) : null;
+    if (withdraw && !next) {
+      await client.query(`DELETE FROM structure.progress_anchor_scope
+        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND parent=$4`, [...identity, parent]);
+      return;
+    }
+    await client.query(`UPDATE structure.progress_anchor_scope SET cursor=$5::jsonb
+      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND parent=$4`, [...identity, parent, next]);
   }
 }

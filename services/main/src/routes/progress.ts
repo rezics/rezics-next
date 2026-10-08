@@ -22,7 +22,7 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 import { pageFields } from '../modules/work/read-contract.ts';
 import { disclosedCompletedProgress, publishedProgressSelections } from '../modules/progress/disclosure.ts';
 import { readProgressOrder } from '../modules/progress/order.ts';
-import { continuityAnchors } from '../modules/reading-position/continuity.ts';
+import { memberAnchoring } from '../modules/reading-position/continuity.ts';
 import { ReadingContinuityUnsupported } from '../modules/reading-position/errors.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -92,8 +92,8 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       }
       const canonical = (await resolveTargets(session, [header.work], 'discussion'))[0]!.resource;
       const order = write ? await readProgressOrder(work.environment, header, occurrence) : undefined;
-      const anchors = write ? await continuityAnchors(work.environment, header, occurrence, order) : undefined;
-      return { work: canonical, order, anchors };
+      const anchoring = write ? await memberAnchoring(work.environment, header, order) : undefined;
+      return { work: canonical, order, anchoring };
     });
     return { principal, ...visible };
   };
@@ -190,7 +190,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
           body.actingSubject, body.selectedRevision ?? null, true);
         const value = await work.progress.write({ principal: visible.principal, structure, occurrence,
           library: { agent: body.actingSubject, work: visible.work },
-          order: visible.order, anchors: visible.anchors,
+          order: visible.order, anchoring: visible.anchoring,
           selectedRevision: body.selectedRevision ?? null, completed: body.completed,
           position: body.position, expectedVersion: body.expectedVersion, idempotencyKey });
         return Response.json(value, { headers: { 'cache-control': 'private, no-store' } });

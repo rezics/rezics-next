@@ -12,7 +12,8 @@ import { newCost } from '../src/modules/structure/tree.ts';
 import { WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
 import { ReadingSeekUnavailable, ReadingResumeUnavailable, ReadingResumeContinuation, ReadingContinuityUnsupported } from '../src/modules/reading-position/errors.ts';
-import { continuityAnchors } from '../src/modules/reading-position/continuity.ts';
+import { MAX_ENCLOSING_PLACEMENTS, memberAnchoring, memberEnclosure } from '../src/modules/reading-position/continuity.ts';
+import { applyAnchors } from '../src/modules/progress/anchors.ts';
 import { disclosedCompletedProgress } from '../src/modules/progress/disclosure.ts';
 import { ReadingPositionStore } from '../src/modules/reading-position/store.ts';
 import { ProgressOrderProjection } from '../src/modules/progress/order-projection.ts';
@@ -418,8 +419,10 @@ test('ambiguous terminal metadata fails closed and cannot masquerade as an admit
   await expect(f.traversal().metadataFor(f.episodes[0]!.target!)).rejects.toBeInstanceOf(WorkReadUnavailable);
 });
 
-async function volumeSeries() {
+/** `holders` further compositions (omnibuses) hold volume 1 beside the series. */
+async function volumeSeries(holders = 0) {
   const series = id(), volume1 = id(), volume2 = id(), seriesStructure = id(), book1 = id(), book2 = id();
+  const others = Array.from({ length: holders }, () => ({ work: id(), structure: id(), head: id(), member: id() }));
   const seriesRevision = id(), bookRevision = id(), generation = id();
   const member1 = id(), member2 = id(), early = id(), reader = id(), late = id();
   const stored = new Map<string, Uint8Array>();
@@ -440,6 +443,8 @@ async function volumeSeries() {
   const chapterTarget = 'https://schema.org/DigitalDocument';
   const bookRecords = [record(early, book1, 'a', 'chapter', chapterTarget), record(reader, book1, 'b', 'chapter', chapterTarget)];
   const laterRecords = [record(late, book2, 'a', 'chapter', chapterTarget)];
+  const heads = (structure: string) => structure === seriesStructure ? seriesRevision
+    : others.find(other => other.structure === structure)?.head ?? bookRevision;
   const compose = async (structure: string, profile: 'work-composition' | 'book-composition', records: OccurrenceRecord[]) => {
     const cost = newCost();
     const entries = records.map(row => ({ parent: row.parent, segmentKey: row.segmentKey!, orderKey: row.orderKey!, occurrence: row.occurrence }));
@@ -448,9 +453,10 @@ async function volumeSeries() {
       records: await recordTree(objects).apply(await recordTree(objects).empty(cost), new Map(records.map(row => [row.occurrence, row])), cost),
       order: await orderTree(objects).apply(await orderTree(objects).empty(cost), new Map(entries.map(entry => [orderTreeKey(entry), entry])), cost) };
     const digest = await objects.put(new TextEncoder().encode(JSON.stringify(manifest)));
-    const work = structure === seriesStructure ? series : structure === book1 ? volume1 : volume2;
+    const work = structure === seriesStructure ? series : structure === book1 ? volume1 : structure === book2 ? volume2
+      : others.find(other => other.structure === structure)!.work;
     const header: CompositionHeader = { structure, profile, owner: work, component: manifest.structureOf, mainVersion: manifest.structureOf,
-      work, head: structure === seriesStructure ? seriesRevision : bookRevision, generation, placementCount: records.length,
+      work, head: heads(structure), generation, placementCount: records.length,
       manifest: `urn:rezics:sha256:${digest}` };
     return header;
   };
@@ -458,10 +464,14 @@ async function volumeSeries() {
     [seriesStructure, await compose(seriesStructure, 'work-composition', seriesRecords)],
     [book1, await compose(book1, 'book-composition', bookRecords)],
     [book2, await compose(book2, 'book-composition', laterRecords)],
+    ...await Promise.all(others.map(async other => [other.structure,
+      await compose(other.structure, 'work-composition', [record(other.member, other.structure, 'a', 'part', volume1)])] as const)),
   ]);
   const placed = [
     { occurrence: member1, structure: seriesStructure, work: series, parent: seriesStructure, segmentKey: 'a', orderKey: 'a', role: 'part' as const, target: volume1 },
     { occurrence: member2, structure: seriesStructure, work: series, parent: seriesStructure, segmentKey: 'a', orderKey: 'b', role: 'part' as const, target: volume2 },
+    ...others.map(other => ({ occurrence: other.member, structure: other.structure, work: other.work, parent: other.structure,
+      segmentKey: 'a', orderKey: 'a', role: 'part' as const, target: volume1 })),
     { occurrence: early, structure: book1, work: volume1, parent: book1, segmentKey: 'a', orderKey: 'a', role: 'chapter' as const, target: bookRecords[0]!.target! },
     { occurrence: reader, structure: book1, work: volume1, parent: book1, segmentKey: 'a', orderKey: 'b', role: 'chapter' as const, target: bookRecords[1]!.target! },
     { occurrence: late, structure: book2, work: volume2, parent: book2, segmentKey: 'a', orderKey: 'a', role: 'chapter' as const, target: laterRecords[0]!.target! },
@@ -470,11 +480,20 @@ async function volumeSeries() {
   const env = { structureObjects: objects, fuseki: { query: async (q: string) => {
     if (q.includes('# reading-position:enclosing-member')) {
       const child = q.match(/schema:item <([^>]+)>/)![1]!;
-      const member = child === volume1 ? member1 : child === volume2 ? member2 : '';
-      return { results: { bindings: member ? [{ work: binding(series), structure: binding(seriesStructure), occurrence: binding(member) }] : [] } };
+      const only = q.match(/FILTER\(\?structure = <([^>]+)>\)/)?.[1];
+      const limit = Number(q.match(/LIMIT (\d+)/)![1]);
+      const held = child === volume1 ? [{ work: series, structure: seriesStructure, occurrence: member1 },
+        ...others.map(other => ({ work: other.work, structure: other.structure, occurrence: other.member }))]
+        : child === volume2 ? [{ work: series, structure: seriesStructure, occurrence: member2 }] : [];
+      // The query orders by Structure and takes `limit` rows.
+      const bindings = held.filter(row => !only || row.structure === only).sort((a, b) => a.structure < b.structure ? -1 : 1)
+        .slice(0, limit).map(row => ({ work: binding(row.work), structure: binding(row.structure), occurrence: binding(row.occurrence) }));
+      return { results: { bindings } };
     }
     const structure = [...headers.keys()].find(value => q.includes(value));
-    const header = structure ? headers.get(structure) : undefined;
+    // The owner of a Structure is found through its component.
+    const header = structure ? headers.get(structure)
+      : q.startsWith('SELECT ?owner') ? [...headers.values()].find(value => q.includes(value.component)) : undefined;
     return { results: { bindings: q.includes('SELECT ?component') && header ? [{
       component: binding(header.component), profile: binding(`https://rezics.com/vocab/${header.profile === 'book-composition' ? 'BookComposition' : 'WorkComposition'}`),
       head: binding(header.head), generation: binding(generation), count: binding(String(header.placementCount)), manifest: binding(header.manifest),
@@ -492,20 +511,23 @@ async function volumeSeries() {
     query: async (query: string) => {
       if (query.includes('# reading-position:work\n')) {
         const resource = query.match(/BIND\(<([^>]+)> AS \?work\)/)![1]!;
-        const structure = resource === series ? seriesStructure : resource === volume1 ? book1 : resource === volume2 ? book2 : '';
-        const revision = structure === seriesStructure ? seriesRevision : bookRevision;
+        const structure = resource === series ? seriesStructure : resource === volume1 ? book1 : resource === volume2 ? book2
+          : others.find(other => other.work === resource)?.structure ?? '';
+        const revision = heads(structure);
         return structure ? [{ work: binding(resource), structure: binding(structure), revision: binding(revision), generation: binding(generation) }] : [{ work: binding(resource) }];
       }
       if (query.includes('# reading-position:parent-work')) {
         const child = query.match(/schema:item <([^>]+)>/)![1]!;
-        const member = child === volume1 ? member1 : child === volume2 ? member2 : '';
+        // The query keeps the placement inside the root's own continuity.
+        const root = others.find(other => query.includes(`* <${other.work}> }`));
+        const member = child === volume1 ? root?.member ?? member1 : child === volume2 ? member2 : '';
         return member ? [{ occurrence: binding(member) }] : [];
       }
       if (query.includes('# reading-position:records')) {
         const wanted = query.match(/VALUES [^{]+\{([^}]+)}/)![1]!;
         return placed.filter(row => wanted.includes(row.occurrence)).map(row => ({
           work: binding(row.work), structure: binding(row.structure),
-          revision: binding(row.structure === seriesStructure ? seriesRevision : bookRevision),
+          revision: binding(heads(row.structure)),
           occurrence: binding(row.occurrence), parent: binding(row.parent), segmentKey: binding(row.segmentKey),
           orderKey: binding(row.orderKey), role: binding(`https://rezics.com/vocab/${row.role === 'part' ? 'PartRole' : 'ChapterRole'}`),
           target: binding(row.target),
@@ -516,15 +538,15 @@ async function volumeSeries() {
   } as unknown as WorkReadSession;
   const disclose = async (_reader: WorkReadSession, selected: { structure: string }, rows: readonly { occurrence: string }[]) =>
     rows.filter(row => placed.some(item => item.occurrence === row.occurrence && item.structure === selected.structure));
-  return { series, seriesStructure, book1, member1, early, reader, late, saved, headers, env, session, disclose, placed };
+  return { series, seriesStructure, book1, member1, early, reader, late, saved, headers, env, session, disclose, placed, others };
 }
 
 test('a chapter inside volume 1 resumes across the series and keeps only earlier introductions', async () => {
   const f = await volumeSeries();
   const local = { revision: f.headers.get(f.book1)!.head, key: 'a\u0002b', eligible: true };
-  const anchors = await continuityAnchors(f.env as never, f.headers.get(f.book1)!, f.reader, local);
-  expect(anchors).toEqual([{ structure: f.seriesStructure, order: { revision: f.headers.get(f.seriesStructure)!.head,
-    key: 'a\u0002a\u0001a\u0002b', eligible: true } }]);
+  const anchors = await memberAnchoring(f.env as never, f.headers.get(f.book1)!, local);
+  expect(anchors).toEqual({ overflow: false, anchors: [{ structure: f.seriesStructure, through: f.book1,
+    order: { revision: f.headers.get(f.seriesStructure)!.head, key: 'a\u0002a\u0001a\u0002b', eligible: true } }] });
   f.saved.push({ structure: f.seriesStructure, occurrence: f.reader });
   const traversal = new ReadingPositionTraversal(f.session, f.series, async resources => new Set(resources));
   expect(await chooserPosition(f.session, traversal, 'mine', true, f.disclose as never)).toBe(f.reader);
@@ -642,23 +664,35 @@ test('a volume whose anchors are not prepared for the current heads makes series
   expect(await chooserPosition(f.session, traversal, 'mine', true, f.disclose as never)).toBe(f.reader);
 });
 
-function anchorClient(f: Awaited<ReturnType<typeof volumeSeries>>, rows: Array<{ occurrence: string; selection_key: string; completed: boolean }>) {
+type AnchorScopeRow = { parent: string; revision: string | null; parent_revision: string | null;
+  cursor: { occurrence?: string; selection?: string } | null };
+
+/** A Content DB client that answers the anchor pass from in-memory scope rows. */
+function anchorClient(f: Awaited<ReturnType<typeof volumeSeries>>, rows: Array<{ occurrence: string; selection_key: string; completed: boolean }>,
+  initial: AnchorScopeRow[] = []) {
   const writes: Array<{ sql: string; params: unknown[] }> = [];
   const head = f.headers.get(f.book1)!.head;
-  let basis: { anchor_revision: string | null; anchor_parent: string | null; anchor_parent_revision: string | null;
-    anchor_cursor: { occurrence?: string; selection?: string } | null } = { anchor_revision: null, anchor_parent: null,
-    anchor_parent_revision: null, anchor_cursor: null };
+  const scopes = new Map<string, AnchorScopeRow>(initial.map(row => [row.parent, row]));
   let rolledBack = false;
   const client = { release: () => {}, query: async (sql: string, params: unknown[] = []) => {
     if (sql.startsWith('SELECT order_revision')) return { rows: [{ ready: true, order_revision: head, invalidations: '0',
       reindex_cursor: null, reindex_invalidations: null }] };
-    if (sql.startsWith('SELECT anchor_revision')) return { rows: [basis] };
-    if (sql.includes('UPDATE structure.progress_scope SET anchor_revision=$4')) {
-      basis = { anchor_revision: String(params[3]), anchor_parent: String(params[4]), anchor_parent_revision: String(params[5]),
-        anchor_cursor: params[6] === null ? null : JSON.parse(String(params[6])) };
-    } else if (sql.includes('UPDATE structure.progress_scope SET anchor_cursor')) {
-      basis = { ...basis, anchor_cursor: params[3] === null ? null : JSON.parse(String(params[3])) };
-    } else if (sql.startsWith('SELECT occurrence,selection_key,completed')) {
+    if (sql.startsWith('SELECT parent,revision')) {
+      const parents = params[3] as string[];
+      // Rows for the compositions that hold the member, or the ones that no longer do.
+      if (sql.includes('parent = ANY')) return { rows: [...scopes.values()].filter(row => parents.includes(row.parent)) };
+      return { rows: [...scopes.values()].filter(row => row.parent !== '' && !parents.includes(row.parent)).slice(0, 1) };
+    }
+    if (sql.includes('INSERT INTO structure.progress_anchor_scope') && sql.includes("'{}'::jsonb")) {
+      scopes.set(String(params[3]), { parent: String(params[3]), revision: params[4] as string | null,
+        parent_revision: params[5] as string | null, cursor: {} });
+    } else if (sql.includes('UPDATE structure.progress_anchor_scope SET cursor')) {
+      const row = scopes.get(String(params[3]))!;
+      scopes.set(row.parent, { ...row, cursor: params[4] === null ? null : JSON.parse(String(params[4])) });
+    } else if (sql.startsWith('DELETE FROM structure.progress_anchor_scope')) scopes.delete(String(params[3] ?? ''));
+    else if (sql.includes('INSERT INTO structure.progress_anchor_scope') && sql.includes('SELECT $1,$2,$3')) scopes.set('', {
+      parent: '', revision: null, parent_revision: null, cursor: null });
+    else if (sql.startsWith('SELECT occurrence,selection_key,completed')) {
       expect(sql).toContain('LIMIT 3');
       const after = params[3] as string | undefined;
       return { rows: rows.filter(row => !after || row.occurrence > after).slice(0, 3) };
@@ -666,7 +700,7 @@ function anchorClient(f: Awaited<ReturnType<typeof volumeSeries>>, rows: Array<{
     else if (sql.includes('INSERT INTO structure.progress\n') || sql.includes('UPDATE structure.progress SET')) writes.push({ sql, params });
     return { rows: [] };
   } };
-  return { client, writes, state: () => basis, rolledBack: () => rolledBack };
+  return { client, writes, scopes, state: (parent: string) => scopes.get(parent), rolledBack: () => rolledBack };
 }
 
 async function anchorProjection(f: Awaited<ReturnType<typeof volumeSeries>>, client: unknown) {
@@ -684,6 +718,9 @@ async function anchorProjection(f: Awaited<ReturnType<typeof volumeSeries>>, cli
   return projection;
 }
 
+const anchoredOn = (writes: Array<{ params: unknown[] }>, structure: string) =>
+  writes.filter(write => write.params[2] === structure);
+
 test('earlier completions are anchored on the enclosing series two at a time, resumably', async () => {
   const f = await volumeSeries();
   // The last key sorts after any generated identity: an incomplete row nothing is anchored for.
@@ -694,15 +731,15 @@ test('earlier completions are anchored on the enclosing series two at a time, re
   const seriesHead = f.headers.get(f.seriesStructure)!.head;
   await projection.step();
   const anchored = () => done.writes.filter(write => write.sql.includes('INSERT INTO structure.progress\n'));
-  expect(done.state()).toMatchObject({ anchor_revision: f.headers.get(f.book1)!.head, anchor_parent: f.seriesStructure,
-    anchor_parent_revision: seriesHead, anchor_cursor: { occurrence: rows[1]!.occurrence } });
+  expect(done.state(f.seriesStructure)).toMatchObject({ revision: f.headers.get(f.book1)!.head,
+    parent_revision: seriesHead, cursor: { occurrence: rows[1]!.occurrence } });
   // Two rows per step; the third row is the lookahead that proves there is more.
   expect(anchored().length + done.writes.filter(write => write.sql.includes('UPDATE structure.progress SET')).length).toBe(2);
   expect(anchored().map(write => write.params[3])).toEqual(
     rows.slice(0, 2).map(row => row.occurrence));
   expect(anchored().every(write => write.params[2] === f.seriesStructure && write.params[5] === seriesHead)).toBe(true);
   await projection.step();
-  expect(done.state().anchor_cursor).toBeNull();
+  expect(done.state(f.seriesStructure)!.cursor).toBeNull();
   // The incomplete third row withdraws any anchor it had; nothing is created.
   expect(done.writes.at(-1)!.sql).toContain('UPDATE structure.progress SET completed = false');
   // A prepared scope is not rewritten again until a head moves.
@@ -731,75 +768,231 @@ test('a head that moves during an anchor page leaves the scope unprepared', asyn
   expect(book.head).toBe(f.headers.get(f.book1)!.head);
 });
 
-test('a write vouches for its anchors only at the heads they were derived from', async () => {
+test('a write vouches for each composition\'s anchors only at the heads they were derived from', async () => {
   const principal = { issuer: 'https://reader.test', subject: 'viewer' };
-  const structure = id(), parent = id(), head = id(), parentHead = id();
+  const structure = id(), parent = id(), other = id(), head = id(), parentHead = id(), otherHead = id();
   const calls: Array<{ sql: string; params: unknown[] }> = [];
   const client = { query: async (sql: string, params: unknown[]) => { calls.push({ sql, params }); return { rows: [] }; } };
   const store = new StructureProgressStore({} as Pool) as unknown as {
     recordAnchorBasis(client: unknown, input: unknown, opened: boolean): Promise<void> };
   const order = { revision: head, key: 'a\u0002b' };
-  const write = { principal, structure, order, anchors: [{ structure: parent, order: { revision: parentHead, key: 'a\u0002a\u0001a\u0002b' } }] };
-  // A scope this write opens is prepared for exactly its heads.
+  const anchors = [{ structure: parent, through: structure, order: { revision: parentHead, key: 'a\u0002a\u0001a\u0002b' } },
+    { structure: other, through: structure, order: { revision: otherHead, key: 'b\u0002a\u0001a\u0002b' } }];
+  const write = { principal, structure, order, anchoring: { anchors, overflow: false } };
+  // A scope this write opens is prepared for exactly its heads, one pair per composition.
   await store.recordAnchorBasis(client, write, true);
-  expect(calls[0]!.sql).toContain('SET anchor_revision=$4, anchor_parent=$5');
-  expect(calls[0]!.params).toEqual([principal.issuer, principal.subject, structure, head, parent, parentHead]);
-  // A scope prepared for other heads stops vouching for them.
+  expect(calls.map(call => call.params)).toEqual([
+    [principal.issuer, principal.subject, structure, parent, head, parentHead],
+    [principal.issuer, principal.subject, structure, other, head, otherHead]]);
+  calls.length = 0;
+  // A scope prepared for other heads, or for a composition this write no longer
+  // places the member on, stops vouching until the pass rewrites or withdraws it.
   await store.recordAnchorBasis(client, write, false);
-  expect(calls[1]!.sql).toContain('SET anchor_revision=NULL');
-  expect(calls[1]!.sql).toContain('anchor_revision <> $4');
-  expect(calls[1]!.params).toEqual([principal.issuer, principal.subject, structure, head, parent, parentHead]);
-  // A direct write that carries no anchors says nothing about them.
-  await store.recordAnchorBasis(client, { ...write, anchors: undefined }, false);
-  expect(calls).toHaveLength(2);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.sql).toContain('SET revision=NULL');
+  expect(calls[0]!.sql).toContain('NOT IN');
+  expect(calls[0]!.params).toEqual([principal.issuer, principal.subject, structure, [parent, other], [head, head], [parentHead, otherHead]]);
+  // A composition without an order here has nothing to vouch for.
+  calls.length = 0;
+  await store.recordAnchorBasis(client, { ...write, anchoring: { anchors: [{ ...anchors[0]!, order: null }], overflow: false } }, false);
+  expect(calls[0]!.params.slice(3)).toEqual([[], [], []]);
+  // A derivation that failed vouches for nothing, even where it opened the scope.
+  calls.length = 0;
+  await store.recordAnchorBasis(client, { ...write, anchoring: { unknown: true } }, true);
+  expect(calls).toEqual([]);
+  await store.recordAnchorBasis(client, { ...write, anchoring: { unknown: true } }, false);
+  expect(calls[0]!.params.slice(3)).toEqual([[], [], []]);
+  // A direct write that carries no anchoring says nothing about them.
+  calls.length = 0;
+  await store.recordAnchorBasis(client, { ...write, anchoring: undefined }, false);
+  expect(calls).toHaveLength(0);
 });
 
-test('a volume placed in two compositions saves chapter progress without a series anchor', async () => {
-  const f = await volumeSeries();
-  const book = f.headers.get(f.book1)!;
-  const volume = book.work;
-  const omnibus = id(), omnibusStructure = id(), omnibusMember = id();
-  const native = f.env.fuseki.query.bind(f.env.fuseki);
+/** The graph stops placing the volume in the compositions the filter rejects. */
+function losePlacements(f: Awaited<ReturnType<typeof volumeSeries>>, keep: (structure: string) => boolean) {
+  const query = f.env.fuseki.query.bind(f.env.fuseki);
   f.env.fuseki.query = (async (q: string) => {
-    if (q.includes('# reading-position:enclosing-member') && q.includes(volume)) {
-      return { results: { bindings: [
-        { work: binding(f.series), structure: binding(f.seriesStructure), occurrence: binding(f.member1) },
-        { work: binding(omnibus), structure: binding(omnibusStructure), occurrence: binding(omnibusMember) },
-      ] } };
-    }
-    return native(q);
+    const value = await query(q) as { results?: { bindings: Array<{ structure?: { value: string } }> } };
+    if (!q.includes('# reading-position:enclosing-member')) return value;
+    return { results: { bindings: value.results!.bindings.filter(row => keep(row.structure!.value)) } };
   }) as typeof f.env.fuseki.query;
-  const local = { revision: book.head, key: 'a\u0002b', eligible: true };
-  // The progress route stores this list. Empty means the chapter write records
-  // no series anchor and does not fail.
-  await expect(continuityAnchors(f.env as never, book, f.reader, local)).resolves.toEqual([]);
-  const done = anchorClient(f, [{ occurrence: f.reader, selection_key: '', completed: true }]);
+}
+
+function localOrder(f: Awaited<ReturnType<typeof volumeSeries>>) {
+  return { revision: f.headers.get(f.book1)!.head, key: 'a\u0002b', eligible: true };
+}
+
+test('a volume in a series and an omnibus keeps an independent anchor on each', async () => {
+  const f = await volumeSeries(1);
+  const omnibus = f.others[0]!, book = f.headers.get(f.book1)!;
+  const anchoring = await memberAnchoring(f.env as never, book, localOrder(f));
+  expect(anchoring).toMatchObject({ overflow: false });
+  const keyed = (structure: string) => (anchoring as { anchors: Array<{ structure: string; order: { key: string } | null }> })
+    .anchors.find(anchor => anchor.structure === structure)?.order?.key;
+  expect(keyed(f.seriesStructure)).toBe('a\u0002a\u0001a\u0002b');
+  expect(keyed(omnibus.structure)).toBe('a\u0002a\u0001a\u0002b');
+  expect((anchoring as { anchors: unknown[] }).anchors).toHaveLength(2);
+  // Each composition resumes at the chapter from its own anchors, with no
+  // reader-wide check for which compositions hold the volume.
+  f.saved.push({ structure: f.seriesStructure, occurrence: f.reader }, { structure: omnibus.structure, occurrence: f.reader });
+  let overflowReads = 0;
+  Object.assign(f.session.deps.progress!, { overflowMembers: async () => { overflowReads++; return []; } });
+  const asked: string[] = [];
+  const current = f.session.deps.progress!.anchorsCurrent;
+  f.session.deps.progress!.anchorsCurrent = async (principal, member, parent) => {
+    asked.push(parent.structure); return current(principal, member, parent);
+  };
+  for (const work of [f.series, omnibus.work]) {
+    const traversal = new ReadingPositionTraversal(f.session, work, async resources => new Set(resources));
+    expect(await chooserPosition(f.session, traversal, 'mine', true, f.disclose as never)).toBe(f.reader);
+  }
+  expect(asked).toEqual([f.seriesStructure, omnibus.structure]);
+  expect(overflowReads).toBe(0);
+  // Only the series is current: the omnibus has not been prepared for these heads.
+  f.session.deps.progress!.anchorsCurrent = async (_principal, _member, parent) => parent.structure === f.seriesStructure;
+  const series = new ReadingPositionTraversal(f.session, f.series, async resources => new Set(resources));
+  expect(await chooserPosition(f.session, series, 'mine', true, f.disclose as never)).toBe(f.reader);
+  const omnibusRead = new ReadingPositionTraversal(f.session, omnibus.work, async resources => new Set(resources));
+  await expect(chooserPosition(f.session, omnibusRead, 'mine', true, f.disclose as never)).rejects.toBeInstanceOf(ReadingResumeUnavailable);
+});
+
+test('a second placement prepares its own anchors and leaves the first alone, then nothing is pending', async () => {
+  const f = await volumeSeries(1);
+  const omnibus = f.others[0]!, book = f.headers.get(f.book1)!;
+  const rows = [f.early, f.reader].sort().map(occurrence => ({ occurrence, selection_key: '', completed: true }));
+  // The series row was prepared when the volume had no other placement.
+  const done = anchorClient(f, rows, [{ parent: f.seriesStructure, revision: book.head,
+    parent_revision: f.headers.get(f.seriesStructure)!.head, cursor: null }]);
   const projection = await anchorProjection(f, done.client);
   await projection.step();
-  expect(done.writes.filter(write => write.sql.includes('structure.progress'))).toEqual([]);
-  expect(done.state()).toMatchObject({ anchor_parent: '', anchor_cursor: null });
-  // The chapter stands on its book. Series resume sees that book and refuses
-  // to treat the missing anchor as an unstarted series.
-  Object.assign(f.session.deps.progress!, { resumeStructures: async () => [book.structure] });
-  const traversal = new ReadingPositionTraversal(f.session, f.series, async resources => new Set(resources));
-  await expect(chooserPosition(f.session, traversal, 'mine', true, f.disclose as never))
-    .rejects.toThrow('A reading position belongs to more than one series');
+  expect(done.state(omnibus.structure)).toMatchObject({ revision: book.head, parent_revision: omnibus.head, cursor: null });
+  expect(done.writes.length).toBe(2);
+  expect(done.writes.every(write => write.params[2] === omnibus.structure && write.params[5] === omnibus.head)).toBe(true);
+  expect(anchoredOn(done.writes, f.seriesStructure)).toEqual([]);
+  expect(done.state(f.seriesStructure)).toMatchObject({ revision: book.head, cursor: null });
+  // The last page settles the pair; the next step finds nothing left to do.
+  await projection.step();
+  const settled = done.writes.length;
+  await projection.step();
+  await projection.step();
+  expect(done.writes.length).toBe(settled);
+  expect(done.state(omnibus.structure)).toMatchObject({ revision: book.head, parent_revision: omnibus.head, cursor: null });
+  // An untick afterwards withdraws the chapter from both compositions.
+  const principal = { issuer: 'https://reader.test', subject: 'viewer' };
+  const anchoring = await memberAnchoring(f.env as never, book, localOrder(f));
+  const sent: Array<{ sql: string; params: unknown[] }> = [];
+  const recorder = { query: async (sql: string, params: unknown[]) => { sent.push({ sql, params }); return { rows: [] }; } };
+  await applyAnchors(recorder as never, principal, f.book1, f.reader, '', false, (anchoring as Extract<typeof anchoring, { anchors: unknown }>).anchors);
+  expect(sent.map(call => call.params[2]).sort()).toEqual([f.seriesStructure, omnibus.structure].sort());
+  expect(sent.every(call => call.sql.includes('SET completed = false'))).toBe(true);
 });
 
-test('eligible progress structures are one index page, not a series inventory', async () => {
+test('a lost placement has its anchors withdrawn, and a stale pair never keeps resume preparing', async () => {
+  const f = await volumeSeries(1);
+  const omnibus = f.others[0]!, book = f.headers.get(f.book1)!;
+  const rows = [f.early, f.reader].sort().map(occurrence => ({ occurrence, selection_key: '', completed: true }));
+  // The omnibus placement is gone, but its row still vouches for the old heads.
+  const stale = { parent: omnibus.structure, revision: book.head, parent_revision: omnibus.head, cursor: null };
+  const done = anchorClient(f, rows, [{ parent: f.seriesStructure, revision: book.head,
+    parent_revision: f.headers.get(f.seriesStructure)!.head, cursor: null }, stale]);
+  const projection = await anchorProjection(f, done.client);
+  losePlacements(f, structure => structure !== omnibus.structure);
+  await projection.step();
+  // Both rows are withdrawn from the omnibus only: nothing is rewritten on the series.
+  expect(done.writes).toHaveLength(2);
+  expect(done.writes.every(write => write.params[2] === omnibus.structure && write.sql.includes('SET completed = false'))).toBe(true);
+  expect(done.state(omnibus.structure)).toBeUndefined();
+  expect(done.state(f.seriesStructure)).toMatchObject({ revision: book.head, cursor: null });
+  await projection.step();
+  const settled = done.writes.length;
+  await projection.step();
+  expect(done.writes.length).toBe(settled);
+  expect(done.state(omnibus.structure)).toBeUndefined();
+});
+
+test('a withdrawal resumes after a stop and finishes in bounded pages', async () => {
+  const f = await volumeSeries(1);
+  const omnibus = f.others[0]!, book = f.headers.get(f.book1)!;
+  const rows = ['a', 'b', 'c', 'd'].map(suffix => ({ occurrence: `https://rezics.com/id/00000000-0000-0000-0000-00000000000${suffix.charCodeAt(0) - 96}`,
+    selection_key: '', completed: true }));
+  const done = anchorClient(f, rows, [{ parent: f.seriesStructure, revision: book.head,
+    parent_revision: f.headers.get(f.seriesStructure)!.head, cursor: null },
+  { parent: omnibus.structure, revision: book.head, parent_revision: omnibus.head, cursor: null }]);
+  const projection = await anchorProjection(f, done.client);
+  losePlacements(f, structure => structure !== omnibus.structure);
+  await projection.step();
+  expect(done.writes).toHaveLength(2);
+  expect(done.state(omnibus.structure)).toMatchObject({ revision: null, cursor: { occurrence: rows[1]!.occurrence } });
+  await projection.step();
+  expect(done.writes).toHaveLength(4);
+  expect(done.state(omnibus.structure)).toBeUndefined();
+});
+
+test('a fifth enclosing composition is kept without an anchor and answers resume as unavailable', async () => {
+  const f = await volumeSeries(MAX_ENCLOSING_PLACEMENTS);
+  const book = f.headers.get(f.book1)!;
+  const enclosure = await memberEnclosure(f.env as never, book);
+  expect(enclosure.compositions).toHaveLength(MAX_ENCLOSING_PLACEMENTS);
+  expect(enclosure.overflow).toBe(true);
+  const all = [{ structure: f.seriesStructure, work: f.series }, ...f.others].map(row => ({ structure: row.structure, work: row.work }))
+    .sort((a, b) => a.structure < b.structure ? -1 : 1);
+  const kept = all.slice(0, MAX_ENCLOSING_PLACEMENTS), extra = all[MAX_ENCLOSING_PLACEMENTS]!;
+  expect(enclosure.compositions.map(composition => composition.header.structure)).toEqual(kept.map(row => row.structure));
+  const anchoring = await memberAnchoring(f.env as never, book, localOrder(f)) as { anchors: unknown[]; overflow: boolean };
+  expect(anchoring.overflow).toBe(true);
+  expect(anchoring.anchors).toHaveLength(MAX_ENCLOSING_PLACEMENTS);
+  // The extra composition holds the volume, so its reader cannot be called unstarted.
+  Object.assign(f.session.deps.progress!, { overflowMembers: async () => [f.book1] });
+  const refused = new ReadingPositionTraversal(f.session, extra.work, async resources => new Set(resources));
+  await expect(chooserPosition(f.session, refused, 'mine', true, f.disclose as never)).rejects.toBeInstanceOf(ReadingResumeUnavailable);
+  // A kept composition resolves from its own anchors, and a reader whose marked
+  // member sits elsewhere is unaffected.
+  const first = kept[0]!;
+  f.saved.push({ structure: first.structure, occurrence: f.reader });
+  const resolved = new ReadingPositionTraversal(f.session, first.work, async resources => new Set(resources));
+  expect(await chooserPosition(f.session, resolved, 'mine', true, f.disclose as never)).toBe(f.reader);
+  Object.assign(f.session.deps.progress!, { overflowMembers: async () => [f.book1] });
+  const unrelated = await volumeSeries();
+  Object.assign(unrelated.session.deps.progress!, { overflowMembers: async () => [unrelated.book1] });
+  const solo = new ReadingPositionTraversal(unrelated.session, unrelated.series, async resources => new Set(resources));
+  expect(await chooserPosition(unrelated.session, solo, 'mine', true, unrelated.disclose as never)).toBe('start');
+  // More marked members than a page can check fail closed.
+  Object.assign(unrelated.session.deps.progress!, { overflowMembers: async () => Array.from({ length: 17 }, id) });
+  await expect(chooserPosition(unrelated.session, solo, 'mine', true, unrelated.disclose as never)).rejects.toBeInstanceOf(ReadingResumeUnavailable);
+});
+
+test('an unstarted reader resumes at start in a bounded number of reads', async () => {
+  const f = await volumeSeries(MAX_ENCLOSING_PLACEMENTS);
+  const traversal = new ReadingPositionTraversal(f.session, f.series, async resources => new Set(resources));
+  let seeks = 0, marks = 0, fuseki = 0, placements = 0;
+  const query = f.env.fuseki.query.bind(f.env.fuseki);
+  f.env.fuseki.query = async (q: string) => {
+    fuseki++; if (q.includes('# reading-position:enclosing-member')) placements++;
+    return query(q) as never;
+  };
+  const candidates = f.session.deps.progress!.resumeCandidates;
+  f.session.deps.progress!.resumeCandidates = async (...input: Parameters<typeof candidates>) => { seeks++; return candidates(...input); };
+  Object.assign(f.session.deps.progress!, { overflowMembers: async () => { marks++; return []; } });
+  expect(f.saved.filter(row => row.structure === f.seriesStructure)).toEqual([]);
+  expect(await chooserPosition(f.session, traversal, 'mine', true, f.disclose as never)).toBe('start');
+  // One resume seek and one mark seek; no reader-wide scan, no placement query.
+  expect({ seeks, marks, placements }).toEqual({ seeks: 1, marks: 1, placements: 0 });
+  expect(fuseki).toBeLessThanOrEqual(2);
+});
+
+test('marked members are one index page, not a series inventory', async () => {
   const principal = { issuer: 'https://reader.test', subject: 'viewer' };
   const structure = id();
   const calls: Array<{ sql: string; params: unknown[] }> = [];
   const pool = { query: async (sql: string, params: unknown[]) => {
     calls.push({ sql, params });
-    return { rows: [{ structure }, { structure }] };
+    return { rows: [{ structure }] };
   } } as unknown as Pool;
   const store = new StructureProgressStore(pool);
-  expect(await store.resumeStructures(principal)).toEqual([structure]);
+  expect(await store.overflowMembers(principal)).toEqual([structure]);
   expect(calls).toHaveLength(1);
-  expect(calls[0]!.sql).toContain('FROM structure.progress');
-  expect(calls[0]!.sql).toContain('AND completed AND resume_eligible');
-  expect(calls[0]!.sql).toContain('ORDER BY structure, occurrence, selection_key');
+  expect(calls[0]!.sql).toContain('FROM structure.progress_anchor_scope');
+  expect(calls[0]!.sql).toContain("parent = ''");
   expect(calls[0]!.sql).not.toContain('JOIN');
   expect(calls[0]!.params).toEqual([principal.issuer, principal.subject, STRUCTURE_PROGRESS_COST.resumeCandidates + 1]);
 });
@@ -817,7 +1010,8 @@ test('anchor readiness is one keyed scope row, and an unprepared scope asks for 
   prepared = true;
   expect(await store.anchorsCurrent(principal, member, parent)).toBe(true);
   expect(calls).toHaveLength(2);
-  expect(calls[0]!.sql).toContain('anchor_cursor IS NULL');
-  expect(calls[0]!.params).toEqual([principal.issuer, principal.subject, member.structure, member.revision, parent.structure, parent.revision]);
+  expect(calls[0]!.sql).toContain('FROM structure.progress_anchor_scope');
+  expect(calls[0]!.sql).toContain('cursor IS NULL');
+  expect(calls[0]!.params).toEqual([principal.issuer, principal.subject, member.structure, parent.structure, member.revision, parent.revision]);
   await expect(store.anchorsCurrent(principal, { ...member, revision: 'invalid' }, parent)).rejects.toBeInstanceOf(InvalidStructureProgress);
 });

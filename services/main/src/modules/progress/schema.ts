@@ -32,10 +32,13 @@ export const progressScope = structure.table('progress_scope', {
   invalidations: bigint('invalidations', { mode: 'bigint' }).notNull(),
   reindexCursor: jsonb('reindex_cursor').$type<{ occurrence?: string; selection?: string }>(),
   reindexInvalidations: bigint('reindex_invalidations', { mode: 'bigint' }),
-  anchorRevision: text('anchor_revision'), anchorParent: text('anchor_parent'),
-  anchorParentRevision: text('anchor_parent_revision'),
-  anchorCursor: jsonb('anchor_cursor').$type<{ occurrence?: string; selection?: string }>(),
 }, table => [primaryKey({ columns: [table.principalIssuer, table.principalSubject, table.structure] })]);
+export const progressAnchorScope = structure.table('progress_anchor_scope', {
+  principalIssuer: text('principal_issuer').notNull(), principalSubject: text('principal_subject').notNull(),
+  structure: text('structure').notNull(), parent: text('parent').notNull(),
+  revision: text('revision'), parentRevision: text('parent_revision'),
+  cursor: jsonb('cursor').$type<{ occurrence?: string; selection?: string }>(),
+}, table => [primaryKey({ columns: [table.principalIssuer, table.principalSubject, table.structure, table.parent] })]);
 
 export const progressCommand = structure.table('progress_command', {
   principalIssuer: text('principal_issuer').notNull(),

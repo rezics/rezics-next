@@ -1,9 +1,9 @@
 import { readCompositionHeader } from '../structure/graph.ts';
 import { disclosedCompletedProgress } from '../progress/disclosure.ts';
-import { ProgressOrderUnavailable, type ResumePageKey } from '../progress/store.ts';
 import { WorkReadMissing, type WorkReadSession } from '../work/read-session.ts';
 import type { ReadingOccurrence } from './boundary.ts';
-import { continuityKey, memberSeriesIsAmbiguous, CONTINUITY_MEMBER_BOUND } from './continuity.ts';
+import { ProgressOrderUnavailable, STRUCTURE_PROGRESS_COST, type ResumePageKey } from '../progress/store.ts';
+import { continuityKey, holdsWithoutAnchor, CONTINUITY_MEMBER_BOUND, MAX_ENCLOSING_PLACEMENTS } from './continuity.ts';
 import { ReadingContinuityUnsupported, ReadingResumeContinuation, ReadingResumeUnavailable } from './errors.ts';
 import { type ReadingWork, type ReadingPositionTraversal } from './traversal.ts';
 
@@ -96,25 +96,26 @@ export async function chooserPosition(session: WorkReadSession, traversal: Readi
     }
   }
   if (candidates.more && candidates.next) throw new ReadingResumeContinuation(candidates.next);
-  // No series anchor was recorded: the chapter progress stands on its own book.
-  // If that book is a member of more than one composition, this series cannot
-  // claim the position, and it cannot pretend the reader has not started.
-  await unavailableIfAmbiguousMember(session, header);
+  await unavailableIfUnanchored(session, header);
   return 'start';
 }
 
-async function unavailableIfAmbiguousMember(session: WorkReadSession, header: { structure: string }) {
+/** A member keeps anchors on at most MAX_ENCLOSING_PLACEMENTS compositions and
+ * marks itself when it has more. Such a member's progress may belong to this
+ * series without an anchor here, so the series cannot say the reader has not
+ * started. A reader with no marked member costs one empty index seek. */
+async function unavailableIfUnanchored(session: WorkReadSession, header: { structure: string }) {
   const { principal, deps } = session;
   // Stubs that only answer a series candidate keep the unstarted result.
-  // Production reads this reader's own eligible structures, never the series.
-  if (!principal || !deps.progress || typeof deps.progress.resumeStructures !== 'function') return;
-  const structures = await deps.progress.resumeStructures(principal);
-  for (const structure of structures) {
-    if (structure === header.structure) continue;
-    const book = await readCompositionHeader(deps.environment, structure);
-    if (!book) continue;
-    if (await memberSeriesIsAmbiguous(deps.environment, book.work, header.structure)) {
-      throw new ReadingResumeUnavailable('A reading position belongs to more than one series');
+  if (!principal || !deps.progress || typeof deps.progress.overflowMembers !== 'function') return;
+  const members = await deps.progress.overflowMembers(principal);
+  if (members.length > STRUCTURE_PROGRESS_COST.resumeCandidates) {
+    throw new ReadingResumeUnavailable('Too many compositions hold this reader\'s progress to resolve resume');
+  }
+  for (const structure of members) {
+    const member = await readCompositionHeader(deps.environment, structure);
+    if (member && await holdsWithoutAnchor(deps.environment, member, header.structure)) {
+      throw new ReadingResumeUnavailable(`A reading position belongs to more than ${MAX_ENCLOSING_PLACEMENTS} compositions`);
     }
   }
 }

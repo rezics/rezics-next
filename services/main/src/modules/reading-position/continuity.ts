@@ -2,7 +2,7 @@ import { STRUCTURE_LIMITS } from '../structure/format.ts';
 import { readCompositionHeader, type CompositionHeader } from '../structure/graph.ts';
 import { readIndexedProgressOrder, readProgressOrder, type ProgressOrder } from '../progress/order.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { READING_POSITION_COST } from './contract.ts';
+import type { MemberAnchor, MemberAnchoring } from '../progress/anchors.ts';
 import { ReadingContinuityUnsupported } from './errors.ts';
 import type { ReadingLocation } from './traversal.ts';
 
@@ -14,12 +14,6 @@ export const CONTINUITY_MEMBER_BOUND = 1;
 export const CONTINUITY_INDEX_HOPS = CONTINUITY_MEMBER_BOUND + 1;
 /** Each Structure contributes at most maxDepth ancestor steps. */
 export const CONTINUITY_KEY_PARTS = STRUCTURE_LIMITS.maxDepth * (CONTINUITY_INDEX_HOPS + 1);
-
-export interface ContinuityAnchor {
-  structure: string;
-  /** Null withdraws a previous anchor when this occurrence no longer has an order. */
-  order: ProgressOrder | null;
-}
 
 /** Series order, then order within the enclosing member. The same string is
  * the progress order key, the resume seek, and the disclosure comparison. */
@@ -39,16 +33,24 @@ export function continuityKey(location: ReadingLocation): string {
   return location.frames.map(frame => `${frame.after!.segmentKey}\u0002${frame.after!.orderKey}`).join('\u0001');
 }
 
-interface EnclosingMember { work: string; structure: string; occurrence: string }
+/** A member keeps anchors on at most this many active enclosing compositions
+ * (a series and an omnibus are two). Any further composition holds the member
+ * without an anchor, and resume there is unavailable rather than unread. */
+export const MAX_ENCLOSING_PLACEMENTS = 4;
 
-type EnclosingMembership =
-  | { kind: 'none' }
-  | { kind: 'one'; member: EnclosingMember }
-  | { kind: 'ambiguous'; structures: string[] };
+/** One composition that holds the member, directly or through another one. */
+export interface EnclosingComposition {
+  header: CompositionHeader;
+  /** The Structure whose Work this composition holds as a part. */
+  through: string;
+  /** That part's placement in this composition. */
+  occurrence: string;
+}
+export interface MemberEnclosure { compositions: EnclosingComposition[]; overflow: boolean }
 
-/** Active part placements of one Work. Two rows mean the Work has no single
- * series. A structure filter asks only whether one series is among them. */
-async function activePartPlacements(env: WorkActivationEnvironment, work: string, structure?: string) {
+/** Active part placements of one Work, in Structure order. A Structure filter
+ * asks only whether that composition is among them. */
+async function partPlacements(env: WorkActivationEnvironment, work: string, limit: number, structure?: string) {
   const only = structure ? `FILTER(?structure = ${iri(structure)})` : '';
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     # reading-position:enclosing-member
@@ -63,43 +65,47 @@ async function activePartPlacements(env: WorkActivationEnvironment, work: string
         ?work rv:mainVersion ?main .
         ${only}
       }
-    } LIMIT 2`);
-  return result.results?.bindings ?? [];
+    } ORDER BY ?structure LIMIT ${limit}`);
+  return (result.results?.bindings ?? []).flatMap(row => row.structure?.value && row.occurrence?.value
+    ? [{ structure: row.structure.value, occurrence: row.occurrence.value }] : []);
 }
 
-/** The single active part placement, or nothing. Two placements (a volume in a
- * series and an omnibus) are ambiguous: there is no one series to anchor, and
- * the reader's progress write still stands. */
-async function enclosingMembership(env: WorkActivationEnvironment, work: string): Promise<EnclosingMembership> {
-  const rows = await activePartPlacements(env, work);
-  if (rows.length > 1) {
-    return { kind: 'ambiguous', structures: rows.flatMap(row => row.structure?.value ? [row.structure.value] : []) };
+/** The compositions that hold this member Structure's Work, nearest first:
+ * every direct one, then the ones that hold those. At most
+ * MAX_ENCLOSING_PLACEMENTS in total, each found by one bounded placement
+ * read, so a volume in a thousand omnibuses costs the same as one in two. */
+export async function memberEnclosure(env: WorkActivationEnvironment, member: CompositionHeader): Promise<MemberEnclosure> {
+  const compositions: EnclosingComposition[] = [];
+  const seen = new Set([member.structure]);
+  let overflow = false, level = [{ structure: member.structure, work: member.work }];
+  for (let hop = 0; hop < CONTINUITY_INDEX_HOPS && level.length; hop++) {
+    const next: typeof level = [];
+    for (const from of level) {
+      const full = compositions.length >= MAX_ENCLOSING_PLACEMENTS;
+      const found = await partPlacements(env, from.work, full ? 1 : MAX_ENCLOSING_PLACEMENTS + 1);
+      for (const placement of found) {
+        if (seen.has(placement.structure)) continue;
+        if (compositions.length >= MAX_ENCLOSING_PLACEMENTS) { overflow = true; break; }
+        const header = await readCompositionHeader(env, placement.structure);
+        if (!header) continue;
+        seen.add(header.structure);
+        compositions.push({ header, through: from.structure, occurrence: placement.occurrence });
+        next.push({ structure: header.structure, work: header.work });
+      }
+    }
+    level = next;
   }
-  const row = rows[0];
-  if (!row?.work?.value || !row.structure?.value || !row.occurrence?.value) return { kind: 'none' };
-  return { kind: 'one', member: { work: row.work.value, structure: row.structure.value, occurrence: row.occurrence.value } };
+  return { compositions, overflow };
 }
 
-/** True when this Work belongs to more than one composition and this series is
- * one of them. The two-row sample can omit the series, so a miss is checked
- * against that series alone. */
-export async function memberSeriesIsAmbiguous(env: WorkActivationEnvironment, work: string, seriesStructure: string):
-  Promise<boolean> {
-  const membership = await enclosingMembership(env, work);
-  if (membership.kind !== 'ambiguous') return false;
-  if (membership.structures.includes(seriesStructure)) return true;
-  const placed = await activePartPlacements(env, work, seriesStructure);
-  return placed.some(row => row.structure?.value === seriesStructure);
-}
-
-/** The one Structure that holds this Work as a member, with its current head.
- * Nothing when the Work is not a member, or when more than one placement is
- * active: ambiguous membership has no single place to index. */
-export async function enclosingStructure(env: WorkActivationEnvironment, work: string):
-  Promise<CompositionHeader | undefined> {
-  const parent = await enclosingMembership(env, work);
-  if (parent.kind !== 'one') return undefined;
-  return await readCompositionHeader(env, parent.member.structure) ?? undefined;
+/** True when this composition holds the member as a direct part but is past
+ * the placements the member keeps anchors for. */
+export async function holdsWithoutAnchor(env: WorkActivationEnvironment, member: CompositionHeader,
+  composition: string): Promise<boolean> {
+  const placed = await partPlacements(env, member.work, MAX_ENCLOSING_PLACEMENTS + 1);
+  if (placed.length <= MAX_ENCLOSING_PLACEMENTS || placed.slice(0, MAX_ENCLOSING_PLACEMENTS)
+    .some(placement => placement.structure === composition)) return false;
+  return (await partPlacements(env, member.work, 1, composition)).length > 0;
 }
 
 function keyFits(key: string) {
@@ -107,37 +113,39 @@ function keyFits(key: string) {
     && key.split('\u0001').every(part => /^[0-9a-z]{1,32}\u0002[0-9a-z]{1,32}$/.test(part));
 }
 
-/** One bounded ancestor walk. Each hop is the part that contains this Work,
- * that part's entry in its prepared order, and the order already accumulated
- * inside the member. Sibling volumes are never listed. Ambiguous membership
- * records no series anchor; a chain past the hop bound is left for the resume
- * read to refuse, and does not fail the progress write. */
-export async function continuityAnchors(env: WorkActivationEnvironment, header: CompositionHeader,
-  occurrence: string, local: ProgressOrder | undefined): Promise<ContinuityAnchor[]> {
-  let work = header.work, key = local?.key ?? '', eligible = local?.eligible ?? false;
-  const anchors: ContinuityAnchor[] = [];
-  for (let hop = 0; hop < CONTINUITY_INDEX_HOPS; hop++) {
-    const parent = await enclosingMembership(env, work);
-    // This hop has no single series. Anchors already taken from a unique
-    // parent stay; the chapter write still records nothing for this one.
-    if (parent.kind !== 'one') return anchors;
-    const parentHeader = await readCompositionHeader(env, parent.member.structure);
-    if (!parentHeader) return anchors;
-    const member = local ? await readProgressOrder(env, parentHeader, parent.member.occurrence) : undefined;
-    if (local && !member) return anchors;
-    if (member) {
-      const next = `${member.key}\u0001${key}`;
-      // A key past the bound is not stored. Resume refuses that chain when it
-      // can see it; the write of the chapter itself still succeeds.
-      if (!keyFits(next)) return anchors;
-      key = next;
-      eligible = eligible && member.eligible;
-    }
-    anchors.push({ structure: parentHeader.structure, order: member
-      ? { revision: parentHeader.head, key, eligible } : null });
-    work = parentHeader.work;
+/** The occurrence indexed on each enclosing composition, under that
+ * composition's own continuity key: the member's place there, then the order
+ * already accumulated inside the member. Each composition reads one point
+ * lookup of its own; sibling volumes are never listed. A composition that no
+ * longer places the occurrence, or whose key is past the bound, gets a null
+ * order, which withdraws any anchor there. */
+export async function memberAnchors(env: WorkActivationEnvironment, member: CompositionHeader,
+  enclosure: MemberEnclosure, local: ProgressOrder | undefined): Promise<MemberAnchor[]> {
+  const below = new Map<string, { key: string; eligible: boolean } | null>([
+    [member.structure, local ? { key: local.key, eligible: local.eligible } : null]]);
+  const anchors: MemberAnchor[] = [];
+  for (const composition of enclosure.compositions) {
+    const inner = below.get(composition.through);
+    const place = inner ? await readProgressOrder(env, composition.header, composition.occurrence) : undefined;
+    const key = inner && place ? `${place.key}\u0001${inner.key}` : undefined;
+    const fits = key !== undefined && keyFits(key);
+    below.set(composition.header.structure, fits ? { key, eligible: inner!.eligible && place!.eligible } : null);
+    anchors.push({ structure: composition.header.structure, through: composition.through, order: fits
+      ? { revision: composition.header.head, key, eligible: inner!.eligible && place!.eligible } : null });
   }
   return anchors;
+}
+
+/** The anchoring a progress write carries. Anchoring never fails the write:
+ * a derivation that cannot finish (a chain too deep to store, a graph read
+ * that is down) is reported as unknown, which leaves the member's anchors
+ * unprepared for the background pass instead of vouching for them. */
+export async function memberAnchoring(env: WorkActivationEnvironment, member: CompositionHeader,
+  local: ProgressOrder | undefined): Promise<MemberAnchoring> {
+  try {
+    const enclosure = await memberEnclosure(env, member);
+    return { anchors: await memberAnchors(env, member, enclosure, local), overflow: enclosure.overflow };
+  } catch { return { unknown: true }; }
 }
 
 async function occurrenceHome(env: WorkActivationEnvironment, occurrence: string):
@@ -160,8 +168,8 @@ async function occurrenceHome(env: WorkActivationEnvironment, occurrence: string
   return { structure: row.structure.value, work: row.work.value };
 }
 
-/** Rebuild a series anchor from the chapter's own order plus each enclosing
- * member's prepared order, stopping at this Structure. */
+/** Rebuild an enclosing composition's anchor from the chapter's own order plus
+ * each enclosing member's prepared order, stopping at this Structure. */
 export async function readResumeOrder(env: WorkActivationEnvironment, header: CompositionHeader,
   occurrence: string): Promise<ProgressOrder | undefined> {
   const indexed = await readIndexedProgressOrder(env, header, occurrence);
@@ -172,19 +180,7 @@ export async function readResumeOrder(env: WorkActivationEnvironment, header: Co
   if (!homeHeader) return undefined;
   const local = await readIndexedProgressOrder(env, homeHeader, occurrence);
   if (!local) return undefined;
-  let work = homeHeader.work, key = local.key, eligible = local.eligible;
-  for (let hop = 0; hop < READING_POSITION_COST.workDepth; hop++) {
-    if (work === header.work) return { revision: header.head, key, eligible };
-    const parent = await enclosingMembership(env, work);
-    // Ambiguous or missing membership cannot rebuild one series order.
-    if (parent.kind !== 'one') return undefined;
-    const parentHeader = await readCompositionHeader(env, parent.member.structure);
-    if (!parentHeader) return undefined;
-    const member = await readProgressOrder(env, parentHeader, parent.member.occurrence);
-    if (!member) return undefined;
-    key = `${member.key}\u0001${key}`;
-    eligible = eligible && member.eligible;
-    work = parentHeader.work;
-  }
-  return undefined;
+  const anchors = await memberAnchors(env, homeHeader, await memberEnclosure(env, homeHeader), local);
+  const order = anchors.find(anchor => anchor.structure === header.structure)?.order;
+  return order ? { revision: order.revision, key: order.key, eligible: order.eligible ?? true } : undefined;
 }

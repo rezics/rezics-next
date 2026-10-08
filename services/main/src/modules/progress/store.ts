@@ -4,8 +4,8 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { ProgressOrderProjection } from './order-projection.ts';
-import { anchorBasis, applyAnchors, type MemberAnchor } from './anchors.ts';
-import { CONTINUITY_KEY_PARTS } from '../reading-position/continuity.ts';
+import { applyAnchors, prepareAnchorScope, type MemberAnchoring } from './anchors.ts';
+import { CONTINUITY_KEY_PARTS, MAX_ENCLOSING_PLACEMENTS } from '../reading-position/continuity.ts';
 
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const REVISION = /^urn:rezics:content:revision:[0-9a-f-]{36}$/;
@@ -55,8 +55,8 @@ export interface ProgressWrite {
   library?: { agent: string; work: string };
   /** Exact immutable ancestor keys, supplied by the authorized occurrence read. */
   order?: { revision: string; key: string; eligible?: boolean };
-  /** The same occurrence indexed on each enclosing series, under one continuity key. */
-  anchors?: MemberAnchor[];
+  /** The same occurrence indexed on each enclosing composition, each under its own continuity key. */
+  anchoring?: MemberAnchoring;
 }
 
 function validOrder(order: { revision: string; key: string; eligible?: boolean }) {
@@ -155,19 +155,17 @@ export class StructureProgressStore {
     more, next: more && last ? { occurrence: last.occurrence, selectedRevision: last.selection_key || null } : null };
   }
 
-  /** Structures where this reader has an eligible completion. The partial
-   * index progress_completed_seek serves the principal prefix in structure
-   * order and stops at one page. Callers use it to notice a book that also
-   * belongs to another composition, not to inventory a series. */
-  async resumeStructures(principal: VerifiedPrincipal): Promise<string[]> {
+  /** Member Structures this reader has progress in that are enclosed by more
+   * compositions than they keep anchors for. One index page on a partial
+   * index: a reader without any costs a single empty seek. More than a page
+   * is reported as one extra entry, so the caller refuses instead of guessing. */
+  async overflowMembers(principal: VerifiedPrincipal): Promise<string[]> {
     const result = await this.pool.query<{ structure: string }>(
-      `SELECT structure FROM structure.progress
-       WHERE principal_issuer = $1 AND principal_subject = $2
-         AND completed AND resume_eligible
-       ORDER BY structure, occurrence, selection_key
-       LIMIT $3`,
+      `SELECT structure FROM structure.progress_anchor_scope
+       WHERE principal_issuer = $1 AND principal_subject = $2 AND parent = ''
+       ORDER BY structure LIMIT $3`,
       [principal.issuer, principal.subject, STRUCTURE_PROGRESS_COST.resumeCandidates + 1]);
-    return [...new Set(result.rows.map(row => row.structure))];
+    return result.rows.map(row => row.structure);
   }
 
   /** Live reader-owned state, in primary-key order. Limit the indexed range
@@ -220,41 +218,63 @@ export class StructureProgressStore {
       input.principal.issuer, input.principal.subject, input.structure]);
   }
 
-  /** The anchors this write carries derive from one pair of heads. A scope it
-   * opens is prepared for exactly that pair. A prepared scope whose basis is
-   * another pair no longer vouches for its anchors, so it is unprepared until
-   * the background pass rewrites them. */
+  /** Each anchor this write carries derives from one pair of heads. A scope it
+   * opens is prepared for exactly those pairs. A prepared pair whose basis is
+   * another one, or that this write no longer places the member on, stops
+   * vouching for its anchors until the background pass rewrites or withdraws
+   * them. A derivation that failed vouches for nothing. */
   private async recordAnchorBasis(client: PoolClient, input: ProgressWrite, opened: boolean) {
-    if (!input.order || !input.anchors) return;
-    const basis = anchorBasis(input.order.revision, input.anchors);
-    const identity = [input.principal.issuer, input.principal.subject, input.structure];
+    const anchoring = input.anchoring;
+    if (!input.order || !anchoring) return;
+    const principal = [input.principal.issuer, input.principal.subject, input.structure];
+    const vouched = anchoring.unknown ? [] : anchoring.anchors.flatMap(anchor => anchor.order ? [{
+      parent: anchor.structure, parentRevision: anchor.order.revision }] : []);
     if (opened) {
-      await client.query(`UPDATE structure.progress_scope SET anchor_revision=$4, anchor_parent=$5,
-        anchor_parent_revision=$6, anchor_cursor=NULL
-        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3`,
-      [...identity, basis.revision, basis.parent, basis.parentRevision]);
+      for (const anchor of vouched) {
+        await prepareAnchorScope(client, input.principal, input.structure, anchor.parent, input.order.revision, anchor.parentRevision);
+      }
       return;
     }
-    await client.query(`UPDATE structure.progress_scope SET anchor_revision=NULL, anchor_parent=NULL,
-      anchor_parent_revision=NULL, anchor_cursor=NULL
-      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
-        AND anchor_revision IS NOT NULL AND (anchor_revision <> $4
-          OR anchor_parent <> $5 OR anchor_parent_revision <> $6)`,
-    [...identity, basis.revision, basis.parent, basis.parentRevision]);
+    await client.query(`UPDATE structure.progress_anchor_scope SET revision=NULL, parent_revision=NULL, cursor=NULL
+      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND parent <> ''
+        AND revision IS NOT NULL AND (parent, revision, parent_revision) NOT IN
+          (SELECT * FROM unnest($4::text[], $5::text[], $6::text[]))`,
+    [...principal, vouched.map(anchor => anchor.parent), vouched.map(() => input.order!.revision),
+      vouched.map(anchor => anchor.parentRevision)]);
+  }
+
+  /** The member's overflow mark follows what the write saw: present while it is
+   * enclosed by more compositions than it keeps anchors for and the reader has
+   * progress in it. */
+  private async recordOverflow(client: PoolClient, input: ProgressWrite) {
+    const anchoring = input.anchoring;
+    if (!anchoring || anchoring.unknown) return;
+    const identity = [input.principal.issuer, input.principal.subject, input.structure];
+    if (anchoring.overflow && input.completed) {
+      await client.query(`INSERT INTO structure.progress_anchor_scope
+        (principal_issuer, principal_subject, structure, parent) VALUES ($1,$2,$3,'')
+        ON CONFLICT DO NOTHING`, identity);
+      return;
+    }
+    await client.query(`DELETE FROM structure.progress_anchor_scope
+      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND parent=''
+        AND ($4 OR NOT EXISTS (SELECT 1 FROM structure.progress WHERE principal_issuer=$1
+          AND principal_subject=$2 AND structure=$3 AND completed LIMIT 1))`, [...identity, !anchoring.overflow]);
   }
 
   /** True when every earlier completion of this member Structure is indexed on
-   * its enclosing Structure for exactly these heads. One keyed row; otherwise
-   * the background pass is asked to prepare it. */
+   * this one enclosing composition for exactly these heads. One keyed row
+   * of that pair, whatever else encloses the member; otherwise the background
+   * pass is asked to prepare it. */
   async anchorsCurrent(principal: VerifiedPrincipal, member: { structure: string; revision: string },
     parent: { structure: string; revision: string }): Promise<boolean> {
     validIdentity(member.structure, member.structure, null);
     validIdentity(parent.structure, parent.structure, null);
     if (!ID.test(member.revision) || !ID.test(parent.revision)) throw new InvalidStructureProgress('progress order revision is invalid');
-    const ready = await this.pool.query(`SELECT 1 FROM structure.progress_scope
-      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND anchor_cursor IS NULL
-        AND anchor_revision=$4 AND anchor_parent=$5 AND anchor_parent_revision=$6`,
-    [principal.issuer, principal.subject, member.structure, member.revision, parent.structure, parent.revision]);
+    const ready = await this.pool.query(`SELECT 1 FROM structure.progress_anchor_scope
+      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND parent=$4
+        AND revision=$5 AND parent_revision=$6 AND cursor IS NULL`,
+    [principal.issuer, principal.subject, member.structure, parent.structure, member.revision, parent.revision]);
     if (ready.rows.length) return true;
     this.projection?.request(principal, member.structure);
     return false;
@@ -264,7 +284,9 @@ export class StructureProgressStore {
     const selectedRevision = input.selectedRevision ?? null;
     validIdentity(input.structure, input.occurrence, selectedRevision);
     if (input.order && !validOrder(input.order)) throw new InvalidStructureProgress('progress order key is invalid');
-    if (input.anchors?.some(anchor => !ID.test(anchor.structure) || anchor.order !== null && !validOrder(anchor.order))) {
+    if (input.anchoring && !input.anchoring.unknown && (input.anchoring.anchors.length > MAX_ENCLOSING_PLACEMENTS
+      || input.anchoring.anchors.some(anchor => !ID.test(anchor.structure) || !ID.test(anchor.through)
+        || anchor.order !== null && !validOrder(anchor.order)))) {
       throw new InvalidStructureProgress('progress order key is invalid');
     }
     if (!KEY.test(input.idempotencyKey) || !Number.isSafeInteger(input.expectedVersion)
@@ -356,7 +378,8 @@ export class StructureProgressStore {
           selectionKey, input.completed, input.position, next, input.order?.revision ?? null, input.order?.key ?? null, input.order ? input.order.eligible ?? true : null]);
       }
       await applyAnchors(client, input.principal, input.structure, input.occurrence, selectionKey,
-        input.completed, input.anchors ?? []);
+        input.completed, input.anchoring?.unknown ? [] : input.anchoring?.anchors ?? []);
+      await this.recordOverflow(client, input);
       await client.query(`INSERT INTO structure.progress_command
         (principal_issuer, principal_subject, idempotency_key, request_digest,
           structure, occurrence, selection_key, result_version, result_completed, result_position,

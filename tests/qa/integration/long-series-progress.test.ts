@@ -760,11 +760,11 @@ test('series resume anchors earlier completions in the background and follows a 
       operations: [part(seriesComposition.structure, volume2, '2')] }));
     expect((await json<Chooser>(await mine())).resolved).toBe('start');
     await converge(resolvedAs(second));
-    expect((await stack.contentPool.query<{ anchor_cursor: unknown; anchor_parent: string }>(
-      `SELECT anchor_cursor,anchor_parent FROM structure.progress_scope
+    expect((await stack.contentPool.query<{ cursor: unknown; parent: string }>(
+      `SELECT cursor,parent FROM structure.progress_anchor_scope
         WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3`,
-      [editor.principal.issuer, editor.principal.subject, book.structure])).rows[0])
-      .toEqual({ anchor_cursor: null, anchor_parent: seriesComposition.structure });
+      [editor.principal.issuer, editor.principal.subject, book.structure])).rows)
+      .toEqual([{ cursor: null, parent: seriesComposition.structure }]);
 
     // A series row naming a Content revision this chapter never selected is
     // the chapter's own disclosure to refuse, however high its key sorts.
@@ -797,5 +797,43 @@ test('series resume anchors earlier completions in the background and follows a 
     expect(await stale.json()).toMatchObject({ code: 'reading_resume_index_unavailable' });
     await converge(resolvedAs(second));
     expect(first).not.toBe(second);
+
+    // A second composition now holds the same volume. Its anchors are prepared
+    // beside the series' and the series' own are not touched.
+    const omnibus = await work('Anchored omnibus');
+    const omnibusComposition = await compose('work-composition', omnibus, structure => [part(structure, volume2, 'Omnibus 1')]);
+    const omnibusMine = () => call('GET', `/v1/reading-positions/${short(omnibus.work)}?${actorQuery}&position=mine&limit=1`);
+    const anchorPairs = async () => (await stack.contentPool.query<{ parent: string; cursor: unknown }>(
+      `SELECT parent,cursor FROM structure.progress_anchor_scope
+        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 ORDER BY parent`,
+    [editor.principal.issuer, editor.principal.subject, book.structure])).rows;
+    const convergeOmnibus = async (accept: (response: Response) => Promise<boolean>) => {
+      for (let step = 0; step < 80; step++) {
+        await projection.step();
+        if (await accept(await omnibusMine())) return;
+      }
+      throw new Error('Bounded background preparation did not reach the omnibus');
+    };
+    await convergeOmnibus(resolvedAs(second));
+    expect((await json<Chooser>(await mine())).resolved).toBe(second);
+    expect(await anchorPairs()).toEqual([seriesComposition.structure, omnibusComposition.structure].sort()
+      .map(parent => ({ parent, cursor: null })));
+
+    // Unticking the furthest chapter withdraws it from both compositions in
+    // the same write, without waiting for a background pass.
+    await json(await tick(second, false, 1));
+    expect((await json<Chooser>(await mine())).resolved).toBe(third);
+    expect((await json<Chooser>(await omnibusMine())).resolved).toBe(third);
+
+    // Taking the volume out of the omnibus withdraws its anchors there, and the
+    // pair is gone once they are. The series keeps its own.
+    await json<Changed>(await call('POST', `/v1/compositions/${short(omnibusComposition.structure)}/changes`, {
+      profile: 'work-composition', expectedHead: omnibusComposition.revision, actingSubject: person,
+      operations: [{ op: 'remove', occurrence: omnibusComposition.occurrences[0] }] }));
+    await convergeOmnibus(resolvedAs('start'));
+    expect(await anchorPairs()).toEqual([{ parent: seriesComposition.structure, cursor: null }]);
+    expect((await stack.contentPool.query(`SELECT 1 FROM structure.progress WHERE principal_issuer=$1 AND principal_subject=$2
+      AND structure=$3 AND completed`, [editor.principal.issuer, editor.principal.subject, omnibusComposition.structure])).rows).toEqual([]);
+    expect((await json<Chooser>(await mine())).resolved).toBe(third);
   } finally { await stack.stop(); }
 }, 300_000);
