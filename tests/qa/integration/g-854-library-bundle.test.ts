@@ -31,12 +31,14 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     const other = await home.provision('Fresh import reader',home.author.token);
     const files = new LibraryFileStore(stack.contentPool), imports = new ReaderLibraryImportStore(stack.contentPool);
     // Review retains a match only when the caller's login includes library write.
-    // That consent belongs to the reader who imports, not to every principal.
-    const readerLogin = await home.deps.account.verify(new Request('http://main.local/login',{
-      headers: { authorization: `Bearer ${home.reader.token}` } }));
-    const readerPrincipal = await readerLogin.currentAssertion?.();
-    if (!readerPrincipal) throw new Error('Import reader has no login principal');
-    Object.assign(readerPrincipal,{ accountScopes: ['work:read','library:write'] });
+    // Each person who imports carries that consent; no other principal does.
+    for (const token of [home.reader.token,home.author.token]) {
+      const login = await home.deps.account.verify(new Request('http://main.local/login',{
+        headers: { authorization: `Bearer ${token}` } }));
+      const principal = await login.currentAssertion?.();
+      if (!principal) throw new Error('Import reader has no login principal');
+      Object.assign(principal,{ accountScopes: ['work:read','library:write'] });
+    }
     const app = createMainApp(stack.fuseki,{ ...home.deps,libraryFiles: files,libraryImport: imports,
       mcp: { issuer: 'https://account.test/api/auth',resource: 'http://main.local' },
       accessPolicy: new AccessPolicyOwner(stack.accessPool),
