@@ -243,7 +243,8 @@ test('COMP03 owner schema: Content migrations install 030 empty and upgrade from
   const tables = await empty.query<{ table_name: string }>(`SELECT table_name FROM information_schema.tables
     WHERE table_schema = 'structure' ORDER BY table_name`);
   expect(tables.rows.map(row => row.table_name)).toEqual(
-    ['progress', 'progress_command', 'stage_job', 'stage_page']);
+    ['group_root', 'progress', 'progress_command', 'progress_reader', 'progress_scope',
+      'qualifier_root', 'stage_job', 'stage_page']);
 
   // An owner at the head before this task: every earlier migration plus retained rows.
   const upgraded = await database('structure_upgrade');
@@ -380,7 +381,13 @@ test('Populated libraries migrate to point revisions without rewriting saved sta
   await migrateContent(pool);
   await migrateContent(pool);
   expect((await pool.query('SELECT to_jsonb(saved) AS state FROM reader.library_status AS saved')).rows).toEqual(savedLibrary);
-  expect((await pool.query('SELECT to_jsonb(saved) AS state FROM structure.progress AS saved')).rows).toEqual(savedProgress);
+  // Order columns arrived after the saved row: every saved column is unchanged and legacy rows stay unindexed.
+  const orderColumns = ['order_key', 'order_revision', 'resume_eligible'];
+  expect((await pool.query(`SELECT to_jsonb(saved) - $1::text[] AS state FROM structure.progress AS saved`,
+    [orderColumns])).rows).toEqual(savedProgress);
+  expect((await pool.query(`SELECT to_jsonb(saved) -> 'order_key' AS order_key, to_jsonb(saved) -> 'order_revision' AS order_revision,
+    to_jsonb(saved) -> 'resume_eligible' AS resume_eligible FROM structure.progress AS saved`)).rows)
+    .toEqual([{ order_key: null, order_revision: null, resume_eligible: null }]);
   expect((await pool.query('SELECT agent FROM reader.library_status_revision')).rows).toEqual([]);
   const store = new ReaderLibraryStatusStore(pool);
   expect(await store.fence(agent)).toBe('0:0');
