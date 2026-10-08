@@ -3,6 +3,7 @@ import { restoreLoadBaseline } from '../load/restore.ts';
 import { buildFixture } from './build.ts';
 import { checkedSeed, DEFAULT_SEED, type FixtureProfile, PROFILES } from './corpus.ts';
 import { restoreFixture } from './restore.ts';
+import { redactCommandOutput } from './command-output.ts';
 import { prepareFixture } from './prepare.ts';
 
 const usage = `Usage:
@@ -50,6 +51,6 @@ try {
     } else await restoreLoadBaseline(values.from!, values['run-id']);
   } else throw new Error(usage);
 } catch (error) {
-  console.error(error instanceof Error ? error.message : error);
+  console.error(redactCommandOutput(error instanceof Error ? error.message : String(error)));
   process.exitCode = 1;
 }

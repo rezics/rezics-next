@@ -22,6 +22,7 @@ import {
 } from './container-reaper.ts';
 import { isolatedIntegrationFileList } from './isolated-integration-files.ts';
 import { waitForMemory, type MemoryNeed, type MemoryWaitOptions } from './memory-admission.ts';
+import { createCommandOutputRedactor, redactCommandOutput } from '../fixture/command-output.ts';
 
 export type Tier = 'static' | 'unit' | 'owner' | 'integration' | 'model' | 'fault/recovery' | 'e2e' | 'load';
 export const implementedTiers: Tier[] = ['static', 'unit', 'owner', 'integration', 'model', 'fault/recovery', 'e2e', 'load'];
@@ -101,7 +102,7 @@ export function command(root: string, name: string, args: string[], timeoutMs: n
     const elapsedMs = Date.now() - start;
     reapSpawnedTest(name, args, environment);
     return { ok: result.status === 0 && !result.error,
-    output: [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n'),
+    output: [result.stdout, result.stderr, result.error?.message].filter((part): part is string => Boolean(part)).map(part => redactCommandOutput(part)).join('\n'),
     elapsedMs };
   } finally { forgetChildScope(scope); }
 }
@@ -205,7 +206,8 @@ export function acquireFullLock(root: string, runId: string): () => void {
 export function xmlForCommand(tier: Tier, ok: boolean, elapsedMs: number, output: string): string {
   const escape = (value: string) => value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')
     .replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuite name="${escape(tier)}" tests="1" failures="${ok ? 0 : 1}" time="${elapsedMs / 1000}"><testcase name="${escape(tier)}" time="${elapsedMs / 1000}">${ok ? '' : `<failure message="command failed">${escape(output.slice(-4000))}</failure>`}</testcase></testsuite>\n`;
+  const safe = redactCommandOutput(output);
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<testsuite name="${escape(tier)}" tests="1" failures="${ok ? 0 : 1}" time="${elapsedMs / 1000}"><testcase name="${escape(tier)}" time="${elapsedMs / 1000}">${ok ? '' : `<failure message="command failed">${escape(safe.slice(-4000))}</failure>`}</testcase></testsuite>\n`;
 }
 
 function shardLines(tiers: { name: Tier; shards?: ShardRecord[] }[], isolation: IsolationRecord[]): string[] {
@@ -437,6 +439,8 @@ export async function commandAsync(root: string, name: string, args: string[], t
     stdio: ['ignore', 'pipe', 'pipe'] });
   if (child.pid) trackCommandProcess(child.pid);
   let stdout = '', stderr = '', timedOut = false;
+  const stdoutRedactor = createCommandOutputRedactor();
+  const stderrRedactor = createCommandOutputRedactor();
   const trackAdmission = options.runDeadline !== undefined || options.phaseDeadline !== undefined || env.REZICS_QA_MEMORY_EVENTS === '1';
   const waiting = new Set<string>();
   const admissionSpans: { start: number; end: number }[] = [];
@@ -472,13 +476,13 @@ export async function commandAsync(root: string, name: string, args: string[], t
         // Self-managed tests can start grandchildren; their request must reach the lifetime lease owner.
         if (env.REZICS_QA_STARTUP_SLOT_GATE && /^QA_STARTUP_SLOT_READY \S+ \S+ \d+$/.test(line)) console.log(line);
         observeAdmission(line);
-        onOutputLine?.(line);
+        onOutputLine?.(redactCommandOutput(line));
       }
     };
   };
   const observeStdout = observe(), observeStderr = observe();
-  child.stdout.on('data', chunk => { const value = String(chunk); stdout += value; observeStdout(value); });
-  child.stderr.on('data', chunk => { const value = String(chunk); stderr += value; observeStderr(value); });
+  child.stdout.on('data', chunk => { const value = String(chunk); stdout += stdoutRedactor.push(value); observeStdout(value); });
+  child.stderr.on('data', chunk => { const value = String(chunk); stderr += stderrRedactor.push(value); observeStderr(value); });
   const terminate = (signal: NodeJS.Signals) => {
     if (!child.pid) return;
     // Forced cancellation also covers parents that cannot run their signal
@@ -570,8 +574,10 @@ export async function commandAsync(root: string, name: string, args: string[], t
     reapSpawnedTest(name, args, environment);
     forgetChildScope(scope);
   }
+  stdout += stdoutRedactor.finish();
+  stderr += stderrRedactor.finish();
   return { ok: code === 0 && !timedOut, elapsedMs, activeElapsedMs: elapsedMs - admissionWaitMs, admissionWaitMs, timedOut,
-    output: [stdout, stderr, timeoutReason].filter(Boolean).join('\n') };
+    output: [stdout, stderr, redactCommandOutput(timeoutReason)].filter(Boolean).join('\n') };
 }
 
 /** Keep a burst of disposable stack starts below the Docker daemon's setup capacity. */

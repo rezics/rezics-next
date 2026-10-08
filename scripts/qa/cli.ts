@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { redactCommandOutput } from '../fixture/command-output.ts';
 import {
   acquireFullLock,
   acquireQaSlots,
@@ -428,7 +429,7 @@ async function runShardWork(
     }, reserve);
     const up = await (startStack ? startStack(upCommand) : upCommand()).catch(error => ({
       ok: false, timedOut: true, elapsedMs: Date.now() - preparationStartedAt,
-      output: error instanceof Error ? error.message : String(error),
+      output: redactCommandOutput(error instanceof Error ? error.message : String(error)),
     }));
     record.startupMs = 'activeElapsedMs' in up ? up.activeElapsedMs : 0;
     if (!up.ok) {
@@ -446,7 +447,7 @@ async function runShardWork(
         // Command-only files start a persistent stack in test mode too; check
         // the storage that stack:up was asked for, not the mode's default.
         try { assertQaResourceAllocation(resourceClass, JSON.parse(inspected.output), persistent ? 'scale' : 'test'); }
-        catch (error) { failure = error instanceof Error ? error.message : 'Invalid QA Fuseki allocation'; }
+        catch (error) { failure = redactCommandOutput(error instanceof Error ? error.message : 'Invalid QA Fuseki allocation'); }
       }
       if (failure) {
         writeFileSync(join(logs, `${label}-allocation.log`), failure);
@@ -499,7 +500,7 @@ async function runShardWork(
       if (startupProtocol) await admit('other', async () => {}, environment);
       else await admitRun(async () => {}, environment, reserve);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = redactCommandOutput(error instanceof Error ? error.message : String(error));
       errors.push(message);
       return finish({ ok: false, timedOut: true, noMatch: false,
         xml: xmlForCommand(tier, false, Date.now() - preparationStartedAt, message) });
@@ -1001,7 +1002,7 @@ try {
         const result = await admit('other', () => commandAsync(root, 'bun', ['scripts/fixture/cli.ts', 'restore',
           '--fixture', LOAD_FIXTURE_ID, '--run-id', item.runId], remainingPreparation(), process.env, noteMemory, { runDeadline })).catch(error => ({
             ok: false, timedOut: true, elapsedMs: Date.now() - preparationStarted,
-            output: error instanceof Error ? error.message : String(error),
+            output: redactCommandOutput(error instanceof Error ? error.message : String(error)),
           }));
         writeFileSync(join(logs, `${artifact}-restore-${item.caseId}.log`), result.output);
         return { ...item, ok: result.ok, elapsedMs: result.elapsedMs, timedOut: result.timedOut };
@@ -1044,7 +1045,7 @@ try {
     }
   }
 } catch (error) {
-  errors.push(error instanceof Error ? error.message : String(error));
+  errors.push(redactCommandOutput(error instanceof Error ? error.message : String(error)));
 } finally {
   for (const registry of childStackRegistries) {
     errors.push(...(await resetChildStacks(registry)).map(error => `QA child stack cleanup failed: ${error}`));

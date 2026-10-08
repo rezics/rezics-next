@@ -1,3 +1,4 @@
+import { redactCommandOutput } from '../../../scripts/fixture/command-output.ts';
 import { runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { spawnSync } from 'node:child_process';
@@ -25,7 +26,7 @@ export function requireFaultTier(): { runId: string; artifacts: string } {
 export async function rootCommand(args: string[], timeout: number): Promise<string> {
   const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status !== 0 || result.error) {
-    throw new Error(`yarn ${args[0]} failed: ${(result.stderr || result.stdout || result.error?.message || '').slice(-4000)}`);
+    throw new Error(`yarn ${args[0]} failed: ${redactCommandOutput(result.stderr || result.stdout || result.error?.message || '').slice(-4000)}`);
   }
   return result.stdout;
 }
@@ -34,13 +35,13 @@ export async function rootCommand(args: string[], timeout: number): Promise<stri
 export async function refusedRootCommand(args: string[], timeout: number): Promise<string> {
   const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), timeout);
   if (result.status === 0) throw new Error(`yarn ${args[0]} unexpectedly succeeded`);
-  return `${result.stdout}${result.stderr}`;
+  return redactCommandOutput(`${result.stdout}${result.stderr}`);
 }
 
 /** Runs a root command without blocking, so a test can probe the API meanwhile. */
 export async function backgroundRootCommand(args: string[]): Promise<string> {
   const result = await runQaAdmissionChildAsync(root, ...scriptCommand(args), 420_000);
-  if (!result.ok) throw new Error(`yarn ${args[0]} failed: ${result.output.slice(-4000)}`);
+  if (!result.ok) throw new Error(`yarn ${args[0]} failed: ${redactCommandOutput(result.output).slice(-4000)}`);
   return result.stdout;
 }
 
@@ -96,7 +97,7 @@ export function boundedComposeFailure(command: string, result: {
 }
 
 function redactCommandSecrets(text: string): string {
-  return text.replace(/\b([A-Z][A-Z0-9_]*(?:PASSWORD|SECRET|TOKEN|KEY))\s*=\s*\S+/g, '$1=[redacted]');
+  return redactCommandOutput(text);
 }
 
 export function qaStack(runId: string): QaStack {
@@ -113,7 +114,7 @@ export function qaStack(runId: string): QaStack {
       maxBuffer: 10_000_000, ...(privateInput !== undefined ? { input: privateInput } : {}) });
     return { status: result.status, signal: result.signal,
       error: result.error as NodeJS.ErrnoException | undefined,
-      output: `${result.stdout ?? ''}${result.stderr ?? ''}` };
+      output: redactCommandOutput(`${result.stdout ?? ''}${result.stderr ?? ''}`) };
   };
   const ok = (commandArgs: string[], timeout?: number, privateInput?: string) => {
     const result = compose(commandArgs, timeout, privateInput);

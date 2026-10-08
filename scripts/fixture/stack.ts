@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { devPorts } from '../dev/config.ts';
+import { createCommandOutputRedactor, redactCommandOutput } from './command-output.ts';
 import { loadDockerEnvironment } from '../load/docker-env.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 
@@ -27,11 +28,14 @@ export function dockerEnvironment(): NodeJS.ProcessEnv { return loadDockerEnviro
 export function run(command: string, args: string[], env: NodeJS.ProcessEnv, timeout = 120_000): string {
   const result = spawnSync(command, args, { cwd: root, env, encoding: 'utf8', timeout,
     maxBuffer: 64 * 1024 * 1024 });
+  const stdout = redactCommandOutput(result.stdout ?? '');
+  const stderr = redactCommandOutput(result.stderr ?? '');
+  const message = redactCommandOutput(result.error?.message ?? '');
   if (result.error || result.status !== 0) {
-    const detail = (result.stderr || result.stdout || result.error?.message || '').trim().slice(-2000);
-    throw new Error(`${command} ${args.slice(0, 6).join(' ')} failed${detail ? `: ${detail}` : ''}`);
+    const detail = (stderr || stdout || message).trim().slice(-2000);
+    throw new Error(redactCommandOutput(`${command} ${args.slice(0, 6).join(' ')} failed${detail ? `: ${detail}` : ''}`));
   }
-  return `${result.stdout}${result.stderr}`;
+  return `${stdout}${stderr}`;
 }
 
 /** Spawn with an optional streamed stdin; resolves with combined output or rejects with its tail. */
@@ -39,9 +43,15 @@ export async function stream(command: string, args: string[], env: NodeJS.Proces
   input?: AsyncIterable<string>, timeout = 600_000): Promise<string> {
   const child = spawn(command, args, { cwd: root, env, stdio: [input ? 'pipe' : 'ignore', 'pipe', 'pipe'] });
   let output = '';
-  const keep = (chunk: Buffer) => { output = (output + chunk.toString()).slice(-200_000); };
-  child.stdout!.on('data', keep);
-  child.stderr!.on('data', keep);
+  const stdoutRedactor = createCommandOutputRedactor();
+  const stderrRedactor = createCommandOutputRedactor();
+  // Redact each stream before the tail window. One scanner would glue the other
+  // pipe into a split assignment and could keep the value past the slice.
+  const keep = (redactor: ReturnType<typeof createCommandOutputRedactor>) => (chunk: Buffer) => {
+    output = (output + redactor.push(chunk.toString())).slice(-200_000);
+  };
+  child.stdout!.on('data', keep(stdoutRedactor));
+  child.stderr!.on('data', keep(stderrRedactor));
   const timer = setTimeout(() => child.kill('SIGKILL'), timeout);
   const exited = new Promise<number | null>((resolveExit, reject) => {
     child.once('error', reject);
@@ -67,7 +77,8 @@ export async function stream(command: string, args: string[], env: NodeJS.Proces
       if (!closed) stdin.end();
     }
     const code = await exited;
-    if (code !== 0) throw new Error(`${command} ${args.slice(0, 6).join(' ')} exited ${code}: ${output.slice(-2000)}`);
+    output = (output + stdoutRedactor.finish() + stderrRedactor.finish()).slice(-200_000);
+    if (code !== 0) throw new Error(redactCommandOutput(`${command} ${args.slice(0, 6).join(' ')} exited ${code}: ${output.slice(-2000)}`));
     return output;
   } finally { clearTimeout(timer); }
 }

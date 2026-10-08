@@ -18,6 +18,7 @@ import type { FixtureOwner } from './owners/types.ts';
 import { assertGraphReady, checkSamples } from './smoke.ts';
 import { VOLUME_KINDS, composeArgs, copyVolume, currentEngines, dockerEnvironment, fixtureDirectory, fixtureProject, fixtureRoot,
   freshPorts, projectRunning, root, volumeExists } from './stack.ts';
+import { redactCommandOutput } from './command-output.ts';
 
 export const RESTORE_DEADLINE_MS = 600_000;
 
@@ -139,7 +140,7 @@ export async function restoreFixture(id: string, target: string,
           composeArgs(`rezics-qa-${target}`, envFile,
             ['up', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])]),
           { cwd: root, env, encoding: 'utf8', timeout }));
-        const log = [up.stdout, up.stderr, up.error?.message].filter(Boolean).join('\n');
+        const log = [up.stdout, up.stderr, up.error?.message].filter((part): part is string => Boolean(part)).map(part => redactCommandOutput(part)).join('\n');
         writeFileSync(join(artifacts, attempt === 1 ? 'stack-up.log' : `stack-up-${attempt}.log`), log);
         if (!up.error && up.status === 0) return;
         const collision = /port is already allocated|address already in use|programming external connectivity/i.test(log);
@@ -165,7 +166,7 @@ export async function restoreFixture(id: string, target: string,
     evidence.samples = await phase('smoke', () => checkSamples(apps, manifest, pools!));
     remaining();
   } catch (error) {
-    evidence.failure = error instanceof Error ? error.message : String(error);
+    evidence.failure = redactCommandOutput(error instanceof Error ? error.message : String(error));
   } finally {
     if (pools) await Promise.all([pools.access.end(), pools.content.end()]);
   }
@@ -175,7 +176,7 @@ export async function restoreFixture(id: string, target: string,
     // A failed restore leaves no half-built writable copy behind; its logs stay as evidence.
     const logs = spawnSync('bun', ['scripts/dev/cli.ts', 'stack:logs', '--profile', 'qa', '--run-id', target, '--persistent'],
       { cwd: root, env: docker, encoding: 'utf8', timeout: 30_000 });
-    writeFileSync(join(artifacts, 'stack.log'), [logs.stdout, logs.stderr].filter(Boolean).join('\n'));
+    writeFileSync(join(artifacts, 'stack.log'), [logs.stdout, logs.stderr].filter(Boolean).map(part => redactCommandOutput(part)).join('\n'));
     spawnSync('bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', target, '--persistent'],
       { cwd: root, env: docker, encoding: 'utf8', timeout: 120_000 });
     for (const volume of targetVolumes) {

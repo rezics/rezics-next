@@ -13,6 +13,7 @@ import type { FixtureOwner, LoadTarget } from './owners/types.ts';
 import { assertGraphReady, checkSamples } from './smoke.ts';
 import { VOLUME_KINDS, composeArgs, currentEngines, dockerEnvironment, fixtureDirectory, fixtureProject,
   freshPorts, removeVolumes, root, run, stream, volumeBytes } from './stack.ts';
+import { redactCommandOutput } from './command-output.ts';
 
 const ONLINE_SERVICES = ['postgres', 'fuseki', 'rustfs'];
 
@@ -214,7 +215,7 @@ async function buildLocked(
     return manifest;
   } catch (error) {
     writeFileSync(join(evidence, 'failure.json'), `${JSON.stringify({ id, phases, loads,
-      failure: error instanceof Error ? error.message : String(error),
+      failure: redactCommandOutput(error instanceof Error ? error.message : String(error)),
       ...(error instanceof CommandRejected ? { command: error.result } : {}) }, null, 2)}\n`);
     if (pools) await Promise.all([pools.access.end(), pools.content.end()]).catch(() => undefined);
     // Cleanup still runs after the preparation deadline has elapsed.
