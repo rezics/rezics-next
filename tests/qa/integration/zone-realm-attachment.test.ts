@@ -19,13 +19,14 @@ async function arrange(home: Home) {
   const outsider = await home.provision('Zone owner', home.reader.token);
   const stewardPrincipal = { ...home.author.principal, emailVerified: true };
   const admin = new AccessRealmManagement(stack.accessPool);
-  const realmIn = async () => {
+  const realmFor = async (agent: string, token: string, principal: { issuer: string; subject: string }) => {
     const created = await json<{ realm: string; space: string }>(await call('POST', '/v1/spaces', {
       profile: 'space-realm-v1', name: `Realm ${randomUUID().slice(0, 8)}`, capabilities: ['realm'],
-      actingSubject: steward }, home.author.token), 201);
-    await admin.initialize(stewardPrincipal, created.realm, steward, stack.env);
+      actingSubject: agent }, token), 201);
+    await admin.initialize({ ...principal, emailVerified: true }, created.realm, agent, stack.env);
     return created;
   };
+  const realmIn = () => realmFor(steward, home.author.token, home.author.principal);
   const zoneIn = async (agent: string, token: string) => json<{ space: string; zone: string;
     navigationRevision: string; zoneRevision: string }>(await call('POST', '/v1/spaces', {
     profile: 'space-zone-v1', name: `Site ${randomUUID().slice(0, 8)}`, language: 'en',
@@ -61,8 +62,8 @@ async function arrange(home: Home) {
       `/v1/zones/${short(site.zone)}/site-publications`, await body(), home.author.token), 201);
     return Object.assign(run, { body });
   };
-  return { steward, outsider, stewardPrincipal, realmIn, zoneIn, configure, head, attach, withdraw, publicRealm,
-    editorRealm, publisher };
+  return { steward, outsider, stewardPrincipal, realmIn, realmFor, zoneIn, configure, head, attach, withdraw,
+    publicRealm, editorRealm, publisher };
 }
 
 test('a Zone attaches a Realm from another Space only with both authorities, and either side ends it at once', async () => {
@@ -305,8 +306,10 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     expect(hidden).not.toContain(realm.realm);
     expect(hidden).not.toContain(missing);
 
-    const empty = await a.realmIn();
-    expect(await read(empty.realm, home.author.token, a.steward)).toMatchObject({ status: 200, body: { items: [] } });
+    // The author's three monthly Spaces are the listed Realm, its Zone, and nothing
+    // further. The cap Realm and the two racing Zones belong to the other account.
+    const empty = await a.realmFor(a.outsider, home.reader.token, home.reader.principal);
+    expect(await read(empty.realm, home.reader.token, a.outsider)).toMatchObject({ status: 200, body: { items: [] } });
 
     const listed = async (limit = 24) => read(realm.realm, home.author.token, a.steward, limit);
     await listed();
@@ -364,7 +367,7 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     expect(wideItems).toHaveLength(50);
     expect(wideItems.some(item => item.zone === decoy)).toBe(false);
 
-    const thousand = Array.from({ length: 1000 }, (_, index) => {
+    const filled = Array.from({ length: 63 }, (_, index) => {
       const n = String(index).padStart(12, '0');
       return { zone: `https://rezics.com/id/00000000-0000-4000-8000-${n}`,
         space: `https://rezics.com/id/00000000-0000-4000-8001-${n}`,
@@ -374,34 +377,61 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} {
         ${iri(bulkDecoy)} a rv:Zone ; rv:defaultRealm ${iri(empty.realm)} ; rv:space ${iri(site.space)} .
-        ${thousand.map(item => `${iri(item.zone)} a rv:Zone ; rv:defaultRealm ${iri(empty.realm)} ;
+        ${filled.map(item => `${iri(item.zone)} a rv:Zone ; rv:defaultRealm ${iri(empty.realm)} ;
           rv:realmAttachment ${iri(item.receipt)} ; rv:space ${iri(item.space)} .`).join('\n')}
       }
       GRAPH ${iri(GRAPHS.receipts)} {
-        ${thousand.map(item => `${iri(item.receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        ${filled.map(item => `${iri(item.receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
           rv:realmAttachedAt "2026-10-08T03:04:05.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`).join('\n')}
       } }`);
-    const seen: string[] = [];
-    let cursor: string | null = null;
-    for (let page = 0; page < 40; page += 1) {
-      const path = cursor
-        ? `${listPath(empty.realm, a.steward, 50)}&after=${encodeURIComponent(cursor)}`
-        : listPath(empty.realm, a.steward, 50);
-      const response = await call('GET', path, undefined, home.author.token);
-      expect(response.status).toBe(200);
-      const body = await response.json() as { items: { zone: string }[]; next: string | null };
-      const zones = body.items.map(item => item.zone);
-      expect(zones).toEqual([...zones].sort());
-      if (cursor) expect(zones[0]! > cursor.slice(3)).toBe(true);
-      seen.push(...zones);
-      if (!body.next) break;
-      expect(zones).toHaveLength(50);
-      cursor = body.next;
-      if (page === 39) throw new Error('attachment pages did not end');
-    }
-    expect(seen).toEqual(thousand.map(item => item.zone));
-    expect(new Set(seen).size).toBe(seen.length);
-    expect(seen).not.toContain(bulkDecoy);
+    const left = await a.zoneIn(a.outsider, home.reader.token);
+    const right = await a.zoneIn(a.outsider, home.reader.token);
+    const [leftHead, rightHead] = await Promise.all([a.head(left.zone), a.head(right.zone)]);
+    const [leftAttach, rightAttach] = await Promise.all([
+      a.configure(left.zone, leftHead, { defaultRealm: empty.realm }, a.outsider, home.reader.token),
+      a.configure(right.zone, rightHead, { defaultRealm: empty.realm }, a.outsider, home.reader.token),
+    ]);
+    const leftBody = await leftAttach.json() as { code?: string };
+    const rightBody = await rightAttach.json() as { code?: string };
+    const raced = [{ status: leftAttach.status, body: leftBody, zone: left.zone },
+      { status: rightAttach.status, body: rightBody, zone: right.zone }];
+    expect(raced.filter(item => item.status === 200)).toHaveLength(1);
+    expect(raced.filter(item => item.status === 400)).toHaveLength(1);
+    expect(raced.find(item => item.status === 400)!.body).toMatchObject({
+      status: 400, code: 'realm_attachment_limit', title: 'This community is linked to the most sites it can be.' });
+    const winner = raced.find(item => item.status === 200)!.zone;
+    const pageAll = async () => {
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < 8; page += 1) {
+        const path = cursor
+          ? `${listPath(empty.realm, a.outsider, 50)}&after=${encodeURIComponent(cursor)}`
+          : listPath(empty.realm, a.outsider, 50);
+        const response = await call('GET', path, undefined, home.reader.token);
+        expect(response.status).toBe(200);
+        const body = await response.json() as { items: { zone: string }[]; next: string | null };
+        const zones = body.items.map(item => item.zone);
+        expect(zones).toEqual([...zones].sort());
+        if (cursor) expect(zones[0]! > cursor.slice(3)).toBe(true);
+        seen.push(...zones);
+        if (!body.next) break;
+        expect(zones).toHaveLength(50);
+        cursor = body.next;
+        if (page === 7) throw new Error('attachment pages did not end');
+      }
+      return seen;
+    };
+    const atCap = await pageAll();
+    expect(atCap).toEqual([...filled.map(item => item.zone), winner].sort());
+    expect(new Set(atCap).size).toBe(64);
+    expect(atCap).not.toContain(bulkDecoy);
+    const loser = raced.find(item => item.status === 400)!.zone;
+    const refused = await a.configure(loser, await a.head(loser), { defaultRealm: empty.realm },
+      a.outsider, home.reader.token);
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ code: 'realm_attachment_limit',
+      title: 'This community is linked to the most sites it can be.' });
+    expect(await pageAll()).toEqual(atCap);
 
     const opened = await listed(1);
     const openedPage = opened.body as { next: string | null };
