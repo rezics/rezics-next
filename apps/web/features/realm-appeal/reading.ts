@@ -16,17 +16,21 @@ export interface BanReading {
       state: 'decided';
       caseId: string;
       statement: string;
-      outcome: 'dismiss' | 'restore';
+      outcome: 'dismiss';
       rationale: string | null;
-      /** When the resolution was recorded. Absent until the appeal read carries it. */
+      /** When the resolution was recorded. The receipt appeal read omits it. */
       decidedAt: string | null;
+    }
+    | {
+      state: 'decided';
+      caseId: string;
+      statement: string;
+      outcome: 'reversed';
+      rationale: string | null;
+      decidedAt: string | null;
+      /** When the same decision lifted the ban. */
+      liftedAt: string | null;
     };
-  /**
-   * A reversed appeal lifts the ban in the same operation. Both are null unless
-   * the outcome is restore. The lifting receipt is not shown to the member.
-   */
-  liftedAt: string | null;
-  liftingReceiptId: string | null;
 }
 
 function stripIdentity(value: unknown): unknown {
@@ -45,10 +49,6 @@ function whenOf(value: unknown): string | null {
   return bounded(value, 64);
 }
 
-function idOf(value: unknown): string | null {
-  return typeof value === 'string' && uuid.test(value) ? value : null;
-}
-
 function appealOf(value: unknown): BanReading['appeal'] | null {
   if (!value || typeof value !== 'object') return null;
   const item = value as Record<string, unknown>;
@@ -57,11 +57,16 @@ function appealOf(value: unknown): BanReading['appeal'] | null {
   const statement = bounded(item.statement, 2000);
   if (!caseId || !statement) return null;
   if (item.state === 'open') return { state: 'open', caseId, statement };
-  if (item.state !== 'decided' || (item.outcome !== 'dismiss' && item.outcome !== 'restore')) return null;
+  if (item.state !== 'decided' || (item.outcome !== 'dismiss' && item.outcome !== 'reversed')) return null;
   const rationale = typeof item.rationale === 'string' && item.rationale.length > 0
     ? item.rationale.slice(0, 8000) : null;
   const decidedAt = whenOf(item.decidedAt);
-  return { state: 'decided', caseId, statement, outcome: item.outcome, rationale, decidedAt };
+  if (item.outcome === 'dismiss') return { state: 'decided', caseId, statement, outcome: 'dismiss', rationale, decidedAt };
+  // `liftReceiptId` names the unban receipt. The member sees when the ban lifted, not that id.
+  return {
+    state: 'decided', caseId, statement, outcome: 'reversed', rationale, decidedAt,
+    liftedAt: whenOf(item.liftedAt),
+  };
 }
 
 /**
@@ -84,27 +89,23 @@ export function parseBanReading(value: unknown): BanReading | null {
   const appeal = appealOf(item.appeal);
   if (item.action !== 'ban' || typeof item.realm !== 'string' || !receiptId || !reason || !happenedAt || !appeal)
     return null;
-  const appealRecord = item.appeal && typeof item.appeal === 'object' ? item.appeal as Record<string, unknown> : {};
-  const lifted = appeal.state === 'decided' && appeal.outcome === 'restore';
   const bannedUntil = item.bannedUntil === null || typeof item.bannedUntil === 'string' ? item.bannedUntil : null;
   return {
     realm: item.realm, receiptId, action: 'ban', reason, happenedAt, appeal,
     bannedUntil: typeof bannedUntil === 'string' ? bannedUntil : null,
     permanent: item.permanent === true || bannedUntil === null,
-    liftedAt: lifted ? whenOf(item.liftedAt) ?? whenOf(appealRecord.liftedAt) : null,
-    liftingReceiptId: lifted ? idOf(item.liftingReceiptId) ?? idOf(appealRecord.liftingReceiptId) : null,
   };
 }
 
-/** Strings the member is shown. Receipt and case ids, including the lifting receipt, stay off the page. */
+/** Strings the member is shown. Receipt and case ids, including the lift receipt, stay off the page. */
 export function memberFacingText(reading: BanReading): string[] {
   const parts = [reading.reason, reading.happenedAt];
   if (reading.bannedUntil) parts.push(reading.bannedUntil);
-  if (reading.liftedAt) parts.push(reading.liftedAt);
   if (reading.appeal.state !== 'none') parts.push(reading.appeal.statement);
   if (reading.appeal.state === 'decided') {
     if (reading.appeal.rationale) parts.push(reading.appeal.rationale);
     if (reading.appeal.decidedAt) parts.push(reading.appeal.decidedAt);
+    if (reading.appeal.outcome === 'reversed' && reading.appeal.liftedAt) parts.push(reading.appeal.liftedAt);
   }
   return parts;
 }

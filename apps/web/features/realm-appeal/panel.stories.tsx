@@ -8,17 +8,12 @@ import { RealmBanPanel, type AppealActions } from './panel.tsx';
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const receiptId = '00000000-0000-4000-8000-0000000000aa';
 const caseId = '00000000-0000-4000-8000-0000000000bb';
-const liftingReceiptId = '00000000-0000-4000-8000-0000000000dd';
 const reason = 'Posted the same chapter five times.';
 
-function ban(
-  appeal: BanReading['appeal'],
-  bannedUntil: string | null = null,
-  lift: Pick<BanReading, 'liftedAt' | 'liftingReceiptId'> = { liftedAt: null, liftingReceiptId: null },
-): BanReading {
+function ban(appeal: BanReading['appeal'], bannedUntil: string | null = null): BanReading {
   return {
     realm, receiptId, action: 'ban', reason, bannedUntil, permanent: bannedUntil === null,
-    happenedAt: '2026-10-01T12:00:00.000Z', appeal, ...lift,
+    happenedAt: '2026-10-01T12:00:00.000Z', appeal,
   };
 }
 
@@ -132,9 +127,10 @@ export const Upheld: Story = {
 export const Reversed: Story = {
   args: {
     reading: ban({
-      state: 'decided', caseId, statement: 'I posted it once.', outcome: 'restore',
+      state: 'decided', caseId, statement: 'I posted it once.', outcome: 'reversed',
       rationale: null, decidedAt: '2026-10-02T08:30:00.000Z',
-    }, null, { liftedAt: '2026-10-02T08:30:00.000Z', liftingReceiptId }),
+      liftedAt: '2026-10-02T08:30:00.000Z',
+    }),
   },
   globals: { viewport: { value: 'desktop' } },
   play: async ({ canvasElement }) => {
@@ -144,7 +140,6 @@ export const Reversed: Story = {
     await expect(canvas.queryByText(/stay banned/)).toBeNull();
     await expect(canvas.queryByText('What they shared')).toBeNull();
     await expect(canvas.queryByRole('button', { name: 'Send appeal' })).toBeNull();
-    await expect(canvasElement.textContent).not.toContain(liftingReceiptId);
     await fits(canvasElement);
   },
 };

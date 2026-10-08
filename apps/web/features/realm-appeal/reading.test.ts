@@ -53,7 +53,8 @@ test('one receipt offers one appeal, then the outcome and not another form', () 
     acting_subject: moderator,
   });
   const reversed = ban({
-    state: 'decided', caseId, statement: 'I posted it once.', outcome: 'restore', rationale: null,
+    state: 'decided', caseId, statement: 'I posted it once.', outcome: 'reversed', rationale: null,
+    liftedAt: null,
   });
   expect(offersAnotherAppeal(ban({ state: 'none' }))).toBe(true);
   expect(appealPresentation(open)).toEqual({ kind: 'received', statement: 'I posted it once.' });
@@ -62,28 +63,36 @@ test('one receipt offers one appeal, then the outcome and not another form', () 
     kind: 'upheld', decidedAt: '2026-10-02T08:00:00.000Z', rationale: 'The posts were the same chapter.',
   });
   expect(appealPresentation(reversed)).toMatchObject({
-    kind: 'reversed', rationale: null, decidedAt: null, liftedAt: null, liftingReceiptId: null,
+    kind: 'reversed', rationale: null, decidedAt: null, liftedAt: null,
   });
   expect(memberFacingText(upheld)).not.toContain(moderator);
   expect(memberFacingText(reversed)).not.toContain('acting_subject');
-  expect(upheld.liftedAt).toBeNull();
-  expect(upheld.liftingReceiptId).toBeNull();
+  expect(upheld.appeal).toMatchObject({ outcome: 'dismiss' });
+  expect('liftReceiptId' in upheld.appeal).toBe(false);
 });
 
-test('a reversed appeal records the lift and keeps the lifting receipt off the page', () => {
-  const liftingReceiptId = '00000000-0000-4000-8000-0000000000dd';
+test('a reversed appeal records the lift and keeps the lift receipt off the page', () => {
+  const liftReceiptId = '00000000-0000-4000-8000-0000000000dd';
   const reading = ban({
-    state: 'decided', caseId, statement: 'I posted it once.', outcome: 'restore', rationale: null,
-    decidedAt: '2026-10-02T08:00:00.000Z', liftedAt: '2026-10-02T08:05:00.000Z', liftingReceiptId,
-    decider: moderator,
+    state: 'decided', caseId, statement: 'I posted it once.', outcome: 'reversed', rationale: null,
+    decidedAt: '2026-10-02T08:00:00.000Z', liftedAt: '2026-10-02T08:05:00.000Z', liftReceiptId,
+    liftingReceiptId: '00000000-0000-4000-8000-0000000000ee', decider: moderator,
   });
-  expect(reading.liftedAt).toBe('2026-10-02T08:05:00.000Z');
-  expect(reading.liftingReceiptId).toBe(liftingReceiptId);
-  expect(appealPresentation(reading)).toMatchObject({ kind: 'reversed', liftedAt: reading.liftedAt, liftingReceiptId });
+  expect(reading.appeal).toMatchObject({ outcome: 'reversed', liftedAt: '2026-10-02T08:05:00.000Z' });
+  expect(JSON.stringify(reading)).not.toContain(liftReceiptId);
+  expect(JSON.stringify(reading)).not.toContain('liftReceiptId');
+  expect(appealPresentation(reading)).toMatchObject({ kind: 'reversed', liftedAt: '2026-10-02T08:05:00.000Z' });
   const shown = memberFacingText(reading).join('\n');
   expect(shown).toContain('2026-10-02T08:05:00.000Z');
-  expect(shown).not.toContain(liftingReceiptId);
+  expect(shown).not.toContain(liftReceiptId);
   expect(shown).not.toContain(moderator);
+  expect(parseBanReading({
+    realm: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
+    receiptId: receipt, action: 'ban', reason: 'Because', bannedUntil: null, permanent: true,
+    happenedAt: '2026-10-01T12:00:00.000Z',
+    appeal: { state: 'decided', caseId, statement: 'Please', outcome: 'restore', rationale: null,
+      liftedAt: '2026-10-02T08:05:00.000Z', liftReceiptId },
+  })).toBeNull();
   const english = materializeData(messages, { locale: 'en' });
   expect(english.lifted({ date: 'DATE' })).toBe('Your ban was lifted on DATE.');
   expect(english.upheld({ date: 'DATE' })).toBe('Moderators upheld the ban on DATE.');

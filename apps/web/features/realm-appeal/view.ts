@@ -32,7 +32,6 @@ export type AppealPresentation =
     rationale: string | null;
     decidedAt: string | null;
     liftedAt: string | null;
-    liftingReceiptId: string | null;
   };
 
 /** What the member can do next. A receipt offers one appeal, then only the outcome. */
@@ -44,8 +43,8 @@ export function appealPresentation(reading: BanReading): AppealPresentation {
     rationale: reading.appeal.rationale,
     decidedAt: reading.appeal.decidedAt,
   };
-  if (reading.appeal.outcome === 'restore') {
-    return { kind: 'reversed', ...decided, liftedAt: reading.liftedAt, liftingReceiptId: reading.liftingReceiptId };
+  if (reading.appeal.outcome === 'reversed') {
+    return { kind: 'reversed', ...decided, liftedAt: reading.appeal.liftedAt };
   }
   return { kind: 'upheld', ...decided };
 }

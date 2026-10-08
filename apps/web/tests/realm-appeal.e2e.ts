@@ -8,13 +8,13 @@ import { grantPlatformUse, platformAdministratorSession } from '../../../tests/q
 import { signInAtAccounts } from './account-sign-in.ts';
 
 // A moderator bans a member. The member sees the ban and the reason, appeals
-// once, and later sees the resolution. Someone who is not banned sees nothing.
+// once, and later sees that a reversal lifted the ban. Someone who is not banned sees nothing.
 
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 900 };
 const reason = 'Posted the same chapter five times.';
 const statement = 'I posted it once, from a bad connection.';
-const rationale = 'The repeated posts broke the discussion rules.';
+const rationale = 'The repeated posts were a connection error.';
 
 function fixture<T>(name: string): T {
   const path = process.env[name];
@@ -199,6 +199,7 @@ test('a banned member sees the reason, appeals once, and sees the resolution', a
   }
   expect(realm).toMatch(/^https:\/\/rezics\.com\/id\//);
   const realmId = realm.slice(-36);
+  // A reversal lifts the ban only when this actor holds both grants.
   await grant(`governance:realm:${realm}`, 'realm.members.manage', principalId, actingSubject);
   await grant(`governance:realm:${realm}`, 'governance.moderate', principalId, actingSubject);
 
@@ -243,23 +244,31 @@ test('a banned member sees the reason, appeals once, and sees the resolution', a
     const decision = await page.request.post('/api/main/v1/moderation/decisions', {
       headers: { 'idempotency-key': decisionKey },
       data: {
-        profile: 'moderation-decision-v1', outcome: 'dismiss', caseId, expectedGeneration: '0',
+        profile: 'moderation-decision-v1', outcome: 'restore', caseId, expectedGeneration: '0',
         actingSubject, targets: [], rule: { ref: 'urn:rule:unused', revision: '1', digest: 'a'.repeat(64) },
         evidenceDigest: 'b'.repeat(64), reversesDecisionId: null, answersStepId: null,
         rationale, disclosure: 'parties', idempotencyKey: decisionKey,
-        reasons: { facts: 'The statement was read.', scope: 'Realm membership', duration: 'The ban is unchanged.',
+        reasons: { facts: 'The statement was read.', scope: 'Realm membership', duration: 'The ban ends with this decision.',
           automation: false, appealRoute: '/v1/public-reports/{caseId}/correspondence', contentLanguage: 'en' },
       },
     });
     expect(decision.status(), await decision.text()).toBe(200);
+    const resolvedRead = await page.request.get(`/api/main/v1/realms/${realmId}/member-receipts/${receiptId}/appeal`);
+    expect(resolvedRead.status()).toBe(200);
+    const resolvedBody = await resolvedRead.json() as { appeal: { outcome: string; liftReceiptId: string } };
+    expect(resolvedBody.appeal.outcome).toBe('reversed');
+    expect(resolvedBody.appeal.liftReceiptId).toMatch(/^[0-9a-f-]{36}$/);
 
     await banned.page.reload();
     const resolved = banned.page.getByRole('region', { name: 'Your ban' });
-    await expect(resolved.getByRole('heading', { name: /Moderators upheld the ban/ })).toBeVisible();
+    await expect(resolved.getByRole('heading', { name: /Your ban was lifted/ })).toBeVisible();
+    await expect(resolved.getByRole('heading', { name: 'You are banned from this community' })).toHaveCount(0);
     await expect(resolved.getByText(rationale)).toBeVisible();
     await expect(resolved.getByRole('button', { name: 'Send appeal' })).toHaveCount(0);
-    expect(await banned.page.content()).not.toContain(actingSubject);
-    await shoot(banned.page, 'upheld', info);
+    const resolvedHtml = await banned.page.content();
+    expect(resolvedHtml).not.toContain(actingSubject);
+    expect(resolvedHtml).not.toContain(resolvedBody.appeal.liftReceiptId);
+    await shoot(banned.page, 'lifted', info);
 
     await page.goto(home);
     await expect(page.getByRole('heading', { level: 1, name: community })).toBeVisible();
