@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { revisionsWithOpenCommentSource } from '../../../../content/src/comments.ts';
 import { withPreservationFence, type PreservationAccess } from '../public-report/preservation.ts';
 import { graphErasureReceipt } from './graph.ts';
+import { MAX_ERASURE_TARGETS } from './journal.ts';
 
 export class ContentErasureInvalid extends Error {}
 /** A revision already pinned for graph publication needs graph suppression first. */
@@ -10,6 +11,17 @@ export class ContentErasureStale extends Error {}
 
 /** Same item ceiling as Content's exact batch read; one transaction locks at most this many rows. */
 export const MAX_CONTENT_ERASURE_TARGETS = 64;
+/** A journal entry written before the request cap may name up to its own bound; replay and
+ * probes accept that many and run 64-bound helpers in slices of one transaction. */
+const MAX_REPLAY_TARGETS = MAX_ERASURE_TARGETS;
+
+function slices<T>(items: readonly T[]): T[][] {
+  const out: T[][] = [];
+  for (let at = 0; at < items.length; at += MAX_CONTENT_ERASURE_TARGETS) {
+    out.push(items.slice(at, at + MAX_CONTENT_ERASURE_TARGETS));
+  }
+  return out;
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
@@ -23,8 +35,8 @@ interface TargetRow {
   erasure_epoch: string | null;
 }
 
-function checkIds(revisionIds: readonly string[]): void {
-  if (!revisionIds.length || revisionIds.length > MAX_CONTENT_ERASURE_TARGETS
+function checkIds(revisionIds: readonly string[], limit = MAX_CONTENT_ERASURE_TARGETS): void {
+  if (!revisionIds.length || revisionIds.length > limit
     || new Set(revisionIds).size !== revisionIds.length || revisionIds.some(id => !UUID.test(id))) {
     throw new ContentErasureInvalid('Content erasure targets are invalid');
   }
@@ -94,7 +106,8 @@ export interface ContentErasureCommand {
  */
 export async function applyContentErasure(content: Pool, command: ContentErasureCommand): Promise<{
   applied: number }> {
-  checkIds(command.revisionIds);
+  // New requests are capped at 64 before journaling; only a replay reaches the journal bound.
+  checkIds(command.revisionIds, MAX_REPLAY_TARGETS);
   if (!UUID.test(command.erasureId) || !/^[1-9][0-9]{0,18}$/.test(command.erasureEpoch)) {
     throw new ContentErasureInvalid('Content erasure journal identity is invalid');
   }
@@ -114,14 +127,25 @@ async function eraseContent(content: Pool, command: ContentErasureCommand): Prom
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
+    // One deadline for the whole transaction: it is recomputed before every operation, so no
+    // statement (or slice) runs with more than what is left of it.
+    const started = Date.now();
+    const withinDeadline = async () => {
+      const left = 5_000 - (Date.now() - started);
+      if (left < 1) throw new ContentErasureStale('Content erasure deadline passed');
+      await client.query("SELECT set_config('statement_timeout', $1, true)", [`${left}ms`]);
+    };
     // Serialize with settlement. Preparation itself locks the revision before
     // creating a pin, so no new pending pin can appear after these locks.
+    await withinDeadline();
     await client.query(`SELECT id FROM content.revision WHERE id = ANY($1::uuid[])
       ORDER BY id FOR UPDATE`, [command.revisionIds]);
+    await withinDeadline();
     const preparations = (await client.query<{ operation_id: string; revision_id: string;
       status: string; pin_active: boolean }>(`SELECT operation_id, revision_id, status, pin_active
       FROM content.publication_preparation WHERE revision_id = ANY($1::uuid[])
       ORDER BY operation_id FOR UPDATE`, [command.revisionIds])).rows;
+    await withinDeadline();
     const rows = await targetRows(client, command.revisionIds, false);
     assertTargets(rows, command.revisionIds, command.resourceId, command.erasureId,
       command.erasureEpoch, Boolean(command.graphProof));
@@ -131,11 +155,14 @@ async function eraseContent(content: Pool, command: ContentErasureCommand): Prom
     }
     const pending = rows.filter(row => !row.erasure_id).map(row => row.id);
     if (pending.length) {
+      await withinDeadline();
       await client.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
         SELECT unnest($1::uuid[]), $2, $3`, [pending, command.erasureId, command.erasureEpoch]);
+      await withinDeadline();
       await client.query(`UPDATE content.revision SET availability = 'erased',
           serialized_bytes = NULL, body = NULL
         WHERE id = ANY($1::uuid[]) AND availability = 'available'`, [pending]);
+      if (command.graphProof) await withinDeadline();
       if (command.graphProof) await client.query(`INSERT INTO content.publication_erasure_supersession
         (operation_id, revision_id, erasure_id, erasure_epoch,
          graph_receipt, graph_data_epoch, graph_sequence)
@@ -147,8 +174,16 @@ async function eraseContent(content: Pool, command: ContentErasureCommand): Prom
     }
     // Already-tombstoned revisions are not pending, but selectors that survived
     // an older erasure still clear under that same journal id and epoch.
-    await client.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, $3::bigint)',
+    for (const slice of slices(command.revisionIds)) {
+      await withinDeadline();
+      await client.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, $3::bigint)',
+        [slice, command.erasureId, command.erasureEpoch]);
+    }
+    // The evidence function takes the journal bound itself: one call, same id and epoch.
+    await withinDeadline();
+    await client.query('SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, $3::bigint)',
       [command.revisionIds, command.erasureId, command.erasureEpoch]);
+    await withinDeadline();
     await client.query('COMMIT');
     return { applied: pending.length };
   } catch (error) {
@@ -178,10 +213,12 @@ export async function probeContentErasure(content: Pool | PoolClient, erasureId:
  * this check: an erased revision can still hold exact, prefix or suffix. */
 export async function openCommentSourceRevisions(content: Pool | PoolClient,
   revisionIds: readonly string[]): Promise<string[]> {
-  if (revisionIds.length > MAX_CONTENT_ERASURE_TARGETS) {
+  if (revisionIds.length > MAX_REPLAY_TARGETS) {
     throw new ContentErasureInvalid('Content erasure probe is too large');
   }
-  return revisionsWithOpenCommentSource(content, revisionIds);
+  const open: string[] = [];
+  for (const slice of slices(revisionIds)) open.push(...await revisionsWithOpenCommentSource(content, slice));
+  return open;
 }
 
 /** The owning resource of journaled revisions; a completion retry rebuilds its Access scope. */

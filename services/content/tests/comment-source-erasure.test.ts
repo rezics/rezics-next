@@ -543,3 +543,242 @@ test('migration 1708 leaves a pre-existing quote in place until an erasure names
     rmSync(prior, { recursive: true, force: true });
   }
 }, 30_000);
+
+async function draftedRevision(pool: Pool) {
+  const content = new ContentCore(pool);
+  const work = workId();
+  const saved = await content.saveDraft({ operationId: `draft-${randomUUID()}`,
+    variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: work,
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+    expectedHead: null, model: 'content-shape-v1', sourceRevision: null, provenance: {},
+    serializedJson: JSON.stringify({ body: sourceText }) });
+  const revisionId = saved.revisionId!;
+  const variant = (await pool.query<{ variant_id: string }>(
+    'SELECT variant_id FROM content.revision WHERE id = $1', [revisionId])).rows[0]!.variant_id;
+  return { work, revisionId, variant };
+}
+
+test('a direct insert waits behind comment source erasure and then cannot add a selector', async () => {
+  const source = await cluster();
+  const { pool } = source;
+  try {
+    await migrateContent(pool);
+    const { work, revisionId, variant } = await draftedRevision(pool);
+    const erasure = randomUUID();
+    const erasing = await pool.connect();
+    const inserting = await pool.connect();
+    try {
+      await erasing.query('BEGIN');
+      await erasing.query(`UPDATE content.revision SET availability = 'erased',
+        serialized_bytes = NULL, body = NULL WHERE id = $1`, [revisionId]);
+      await erasing.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+        VALUES ($1, $2, 7)`, [revisionId, erasure]);
+      await erasing.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, 7)', [[revisionId], erasure]);
+      await inserting.query('BEGIN');
+      const insertingPid = (await inserting.query<{ pid: number }>(
+        'SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+      const commentId = randomUUID();
+      const operation = `content-comment:${randomUUID()}`;
+      const digest = 'ab'.repeat(32);
+      // The receipt's revision foreign key waits on the erasure lock before the
+      // comment insert reaches its own share lock. One promise covers both.
+      const outcome = (async () => {
+        await appendContentEvent(inserting, { operationId: operation, requestDigest: digest,
+          action: 'comment.create', outcome: 'succeeded', variantId: variant, revisionId,
+          eventType: 'content.comment.created', recipe: 'content-body-v1',
+          payload: { comment: commentId, revisionId } });
+        await inserting.query(`INSERT INTO content.comment
+          (id, operation_id, request_digest, revision_id, resource_id, variant_id,
+            author, exact, prefix, suffix, body)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pre', 'suf', $9)`,
+        [commentId, operation, digest, revisionId, work, variant, workId(), canary, annotation]);
+        return 'inserted';
+      })().catch((error: { code?: string }) => `rejected:${error.code}`);
+      let waiting = 0;
+      for (let attempt = 0; attempt < 200 && !waiting; attempt++) {
+        waiting = (await pool.query(`SELECT 1 FROM pg_stat_activity
+          WHERE pid = $1 AND wait_event_type = 'Lock'`, [insertingPid])).rowCount ?? 0;
+        if (!waiting) await Bun.sleep(10);
+      }
+      expect(waiting).toBe(1);
+      await erasing.query('COMMIT');
+      expect(await outcome).toBe('rejected:23514');
+      await inserting.query('ROLLBACK');
+    } finally {
+      await erasing.query('ROLLBACK').catch(() => undefined);
+      await inserting.query('ROLLBACK').catch(() => undefined);
+      erasing.release();
+      inserting.release();
+    }
+    expect((await pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM content.comment
+      WHERE revision_id = $1 AND (exact IS NOT NULL OR prefix IS NOT NULL OR suffix IS NOT NULL)`,
+    [revisionId])).rows[0]?.n).toBe(0);
+  } finally { await source.stop(); }
+}, 60_000);
+
+test('a lock on cleared comment history does not block replay and the update uses the open-source index', async () => {
+  const source = await cluster();
+  const { pool } = source;
+  try {
+    await migrateContent(pool);
+    const { work, revisionId, variant } = await draftedRevision(pool);
+    await pool.query(`INSERT INTO content.receipt
+      (operation_id, request_digest, action, outcome, variant_id, revision_id)
+      SELECT 'cleared-' || g, repeat('ab', 32), 'comment.create', 'succeeded', $1, $2
+      FROM generate_series(1, 40) g`, [variant, revisionId]);
+    await pool.query(`INSERT INTO content.comment
+      (id, operation_id, request_digest, revision_id, resource_id, variant_id, author, exact, prefix, suffix, body)
+      SELECT gen_random_uuid(), operation_id, request_digest, revision_id, $1, $2, $3, $4, 'pre', 'suf', $5
+      FROM content.receipt WHERE operation_id LIKE 'cleared-%'`,
+    [work, variant, workId(), canary, annotation]);
+    const erasure = randomUUID();
+    await pool.query(`UPDATE content.revision SET availability = 'erased', serialized_bytes = NULL, body = NULL
+      WHERE id = $1`, [revisionId]);
+    await pool.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+      VALUES ($1, $2, 8)`, [revisionId, erasure]);
+    expect((await pool.query<{ n: number }>(
+      'SELECT content.erase_comment_sources($1::uuid[], $2::uuid, 8) AS n', [[revisionId], erasure])).rows[0]?.n)
+      .toBe(40);
+    const cleared = (await pool.query<{ id: string }>(
+      'SELECT id FROM content.comment WHERE revision_id = $1 LIMIT 1', [revisionId])).rows[0]!.id;
+    const holder = await pool.connect();
+    const replay = await pool.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT 1 FROM content.comment WHERE id = $1 FOR UPDATE', [cleared]);
+      await replay.query('BEGIN');
+      await replay.query("SET LOCAL lock_timeout = '500ms'");
+      const result = await replay.query<{ n: number }>(
+        'SELECT content.erase_comment_sources($1::uuid[], $2::uuid, 8) AS n', [[revisionId], erasure]);
+      expect(result.rows[0]?.n).toBe(0);
+      await replay.query('COMMIT');
+    } finally {
+      await replay.query('ROLLBACK').catch(() => undefined);
+      await holder.query('ROLLBACK').catch(() => undefined);
+      replay.release();
+      holder.release();
+    }
+    const definition = (await pool.query<{ def: string; prosrc: string }>(`SELECT
+      pg_get_functiondef('content.erase_comment_sources(uuid[],uuid,bigint)'::regprocedure) AS def,
+      prosrc FROM pg_proc
+      WHERE oid = 'content.erase_comment_sources(uuid[],uuid,bigint)'::regprocedure`)).rows[0]!;
+    expect(definition.def).not.toContain('current_setting');
+    expect(definition.def).not.toContain('set_config');
+    expect(definition.prosrc).toContain("EXECUTE 'SHOW transaction_isolation' INTO isolation");
+    expect(definition.prosrc.slice(0, definition.prosrc.indexOf('UPDATE content.comment')))
+      .not.toContain('content.comment');
+    const update = definition.def.match(/UPDATE content\.comment[\s\S]*?;/)?.[0]
+      ?.replace(/\brevision_ids\b/g, '$1::uuid[]');
+    if (!update) throw new Error('comment source update statement is missing');
+    await pool.query('ANALYZE content.comment');
+    const planned = await pool.connect();
+    try {
+      await planned.query('BEGIN');
+      await planned.query('SET LOCAL enable_seqscan = off');
+      const plan = (await planned.query<Record<string, string>>(`EXPLAIN (ANALYZE, TIMING OFF) ${update}`,
+        [[revisionId]])).rows.map(row => row['QUERY PLAN']).join('\n');
+      expect(plan).toContain('comment_open_source_idx');
+      expect(plan).not.toContain('Seq Scan');
+      await planned.query('ROLLBACK');
+    } finally {
+      await planned.query('ROLLBACK').catch(() => undefined);
+      planned.release();
+    }
+  } finally { await source.stop(); }
+}, 60_000);
+
+test('repeatable read refuses after a revision lock wait instead of missing a quote committed during it', async () => {
+  const source = await cluster();
+  const { pool } = source;
+  try {
+    await migrateContent(pool);
+    const { work, revisionId, variant } = await draftedRevision(pool);
+    const lockRow = await draftedRevision(pool);
+    const erasure = randomUUID();
+    const holder = await pool.connect();
+    const early = await pool.connect();
+    try {
+      await holder.query('BEGIN');
+      await holder.query('SELECT id FROM content.revision WHERE id = $1 FOR UPDATE', [revisionId]);
+      await early.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      const earlyPid = (await early.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+      const started = Date.now();
+      await expect(early.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, 9)',
+        [[revisionId], erasure])).rejects.toMatchObject({ code: '25000' });
+      expect(Date.now() - started).toBeLessThan(1_000);
+      expect((await pool.query(`SELECT 1 FROM pg_stat_activity
+        WHERE pid = $1 AND wait_event_type = 'Lock'`, [earlyPid])).rowCount).toBe(0);
+      await early.query('ROLLBACK');
+    } finally {
+      await early.query('ROLLBACK').catch(() => undefined);
+      await holder.query('ROLLBACK').catch(() => undefined);
+      early.release();
+      holder.release();
+    }
+
+    // The waited row is a different revision, so committing the quote does not
+    // change the locked tuple. After the wait the snapshot still misses it.
+    const snapshot = await pool.connect();
+    const writer = await pool.connect();
+    const gate = await pool.connect();
+    try {
+      await snapshot.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      await snapshot.query('SELECT count(*)::int AS n FROM content.comment WHERE revision_id = $1', [revisionId]);
+      const snapshotPid = (await snapshot.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
+      await gate.query('BEGIN');
+      await gate.query('SELECT id FROM content.revision WHERE id = $1 FOR UPDATE', [lockRow.revisionId]);
+      const waitingLock = snapshot.query('SELECT id FROM content.revision WHERE id = $1 FOR UPDATE',
+        [lockRow.revisionId]);
+      let waiting = 0;
+      for (let attempt = 0; attempt < 200 && !waiting; attempt++) {
+        waiting = (await pool.query(`SELECT 1 FROM pg_stat_activity
+          WHERE pid = $1 AND wait_event_type = 'Lock'`, [snapshotPid])).rowCount ?? 0;
+        if (!waiting) await Bun.sleep(10);
+      }
+      expect(waiting).toBe(1);
+      const commentId = randomUUID();
+      const operation = `content-comment:${randomUUID()}`;
+      const digest = 'cd'.repeat(32);
+      await writer.query('BEGIN');
+      await appendContentEvent(writer, { operationId: operation, requestDigest: digest,
+        action: 'comment.create', outcome: 'succeeded', variantId: variant, revisionId,
+        eventType: 'content.comment.created', recipe: 'content-body-v1',
+        payload: { comment: commentId, revisionId } });
+      await writer.query(`INSERT INTO content.comment
+        (id, operation_id, request_digest, revision_id, resource_id, variant_id,
+          author, exact, prefix, suffix, body)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pre', 'suf', $9)`,
+      [commentId, operation, digest, revisionId, work, variant, workId(), canary, annotation]);
+      await writer.query(`UPDATE content.revision SET availability = 'erased',
+        serialized_bytes = NULL, body = NULL WHERE id = $1`, [revisionId]);
+      await writer.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+        VALUES ($1, $2, 9)`, [revisionId, erasure]);
+      await writer.query('COMMIT');
+      await gate.query('COMMIT');
+      await waitingLock;
+      expect((await snapshot.query<{ n: number }>(`SELECT count(*)::int AS n FROM content.comment
+        WHERE revision_id = $1 AND exact IS NOT NULL`, [revisionId])).rows[0]?.n).toBe(0);
+      expect((await pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM content.comment
+        WHERE revision_id = $1 AND exact IS NOT NULL`, [revisionId])).rows[0]?.n).toBe(1);
+      await expect(snapshot.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, 9)',
+        [[revisionId], erasure])).rejects.toMatchObject({ code: '25000' });
+      await snapshot.query('ROLLBACK');
+    } finally {
+      await snapshot.query('ROLLBACK').catch(() => undefined);
+      await writer.query('ROLLBACK').catch(() => undefined);
+      await gate.query('ROLLBACK').catch(() => undefined);
+      snapshot.release();
+      writer.release();
+      gate.release();
+    }
+    expect((await pool.query<{ exact: string; body: string }>(
+      'SELECT exact, body FROM content.comment WHERE revision_id = $1', [revisionId])).rows[0])
+      .toEqual({ exact: canary, body: annotation });
+    expect((await pool.query<{ n: number }>(
+      'SELECT content.erase_comment_sources($1::uuid[], $2::uuid, 9) AS n', [[revisionId], erasure])).rows[0]?.n)
+      .toBe(1);
+    expect((await pool.query<{ exact: string | null; body: string }>(
+      'SELECT exact, body FROM content.comment WHERE revision_id = $1', [revisionId])).rows[0])
+      .toEqual({ exact: null, body: annotation });
+  } finally { await source.stop(); }
+}, 60_000);

@@ -87,6 +87,29 @@ CREATE TRIGGER comment_source_terminal_update
   REFERENCING NEW TABLE AS comment_source_changed
   FOR EACH STATEMENT EXECUTE FUNCTION content.comment_source_terminal();
 
+-- A quote cannot be stored on an erased revision. The share lock waits for an erasure
+-- that holds the revision and then reads its committed state, so an insert that raced
+-- the erasure cannot commit a selector behind the update that clears them.
+CREATE FUNCTION content.comment_source_insert_guard() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $$
+DECLARE
+  revision_availability text;
+BEGIN
+  IF NEW.exact IS NOT NULL THEN
+    SELECT availability INTO revision_availability FROM content.revision
+      WHERE id = NEW.revision_id FOR SHARE;
+    IF revision_availability = 'erased' THEN
+      RAISE EXCEPTION 'erased revision cannot gain comment source text' USING ERRCODE = '23514';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER comment_source_insert_guard BEFORE INSERT ON content.comment
+  FOR EACH ROW EXECUTE FUNCTION content.comment_source_insert_guard();
+
 -- Stops the open-selector probe at the first remaining quote for a revision.
 CREATE INDEX comment_open_source_idx ON content.comment (revision_id)
   WHERE exact IS NOT NULL OR prefix IS NOT NULL OR suffix IS NOT NULL;
@@ -99,11 +122,22 @@ RETURNS integer
 LANGUAGE plpgsql AS $$
 DECLARE
   updated integer;
+  isolation text;
 BEGIN
+  -- Read isolation only, before any revision lock. A later level would keep a
+  -- snapshot from before a quote that committed while this call waited.
+  EXECUTE 'SHOW transaction_isolation' INTO isolation;
+  IF isolation IS DISTINCT FROM 'read committed' THEN
+    RAISE EXCEPTION 'comment source erasure needs read committed' USING ERRCODE = '25000';
+  END IF;
   IF revision_ids IS NULL OR cardinality(revision_ids) < 1 OR cardinality(revision_ids) > 64
      OR EXISTS (SELECT 1 FROM unnest(revision_ids) AS wanted(id) GROUP BY id HAVING count(*) > 1) THEN
     RAISE EXCEPTION 'comment source erasure targets are invalid' USING ERRCODE = '23514';
   END IF;
+  PERFORM 1 FROM content.revision
+    WHERE id = ANY (revision_ids)
+    ORDER BY id
+    FOR UPDATE;
   IF EXISTS (
     SELECT 1 FROM unnest(revision_ids) AS wanted(id)
     WHERE NOT EXISTS (
@@ -120,10 +154,8 @@ BEGIN
     RAISE EXCEPTION 'comment source erasure journal does not match the revision tombstone'
       USING ERRCODE = '23514';
   END IF;
-  PERFORM 1 FROM content.comment
-    WHERE revision_id = ANY (revision_ids)
-    ORDER BY id
-    FOR UPDATE;
+  -- Comments change only here, so the revision lock serializes every writer; the update
+  -- locks just the open rows, through comment_open_source_idx, not the cleared history.
   UPDATE content.comment
     SET exact = NULL, prefix = NULL, suffix = NULL
     WHERE revision_id = ANY (revision_ids)

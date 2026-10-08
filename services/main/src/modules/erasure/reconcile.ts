@@ -144,6 +144,11 @@ export async function verifyErasure(relay: Pool, owners: { content?: Pool; accou
     const targetRefs = report.targets.map(target => target.ref);
     const probes = await probeContentErasure(owners.content, erasureId, targetRefs);
     const openSources = new Set(await openCommentSourceRevisions(owners.content, targetRefs));
+    for (const row of (await owners.content.query<{ revision_id: string }>(
+      `SELECT revision_id::text FROM verification.open_evidence_source_revisions($1::uuid[])`,
+      [report.targets.filter(target => target.kind === 'content_revision').map(target => target.ref)])).rows) {
+      openSources.add(row.revision_id);
+    }
     for (const target of report.targets) {
       items.push({ owner: 'content', kind: 'revision', ref: target.ref,
         disposition: probes.get(target.ref) === 'erased' && !openSources.has(target.ref)
@@ -572,6 +577,11 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
       }
       const probes = await probeContentErasure(restored.content, entry.id, entry.refs);
       const openSources = new Set(await openCommentSourceRevisions(restored.content, entry.refs));
+      for (const row of (await restored.content.query<{ revision_id: string }>(
+        `SELECT revision_id::text FROM verification.open_evidence_source_revisions($1::uuid[])`,
+        [entry.refs])).rows) {
+        openSources.add(row.revision_id);
+      }
       const replayIds = entry.refs.filter(ref => probes.get(ref) === 'available'
         || (probes.get(ref) === 'erased' && openSources.has(ref)));
       if (replayIds.length && await postponeHeldMaterial(accessClient,

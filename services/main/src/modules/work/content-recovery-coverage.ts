@@ -325,18 +325,22 @@ async function assertErasedRevision(client: PoolClient, ref: GraphContentReferen
  */
 export async function assertReplayedCommentSourcesTerminal(client: Pool | PoolClient,
   revisionIds: readonly string[], erasureId: string, erasureEpoch: string): Promise<void> {
-  if (!revisionIds.length || revisionIds.length > 64) {
-    throw new ContentRecoveryConflict('comment source terminal check exceeds the retained target bound');
+  if (!revisionIds.length || revisionIds.length > 256) {
+    throw new ContentRecoveryConflict('source terminal check exceeds the retained target bound');
   }
   let open: string[];
   try {
     open = await openCommentSourceRevisions(client, revisionIds);
+    // Evidence selectors keep the same terminal rule: an erased revision has no open source row.
+    open.push(...(await client.query<{ revision_id: string }>(
+      'SELECT revision_id::text FROM verification.open_evidence_source_revisions($1::uuid[])',
+      [revisionIds])).rows.map(row => row.revision_id));
   } catch (error) {
-    throw new ContentRecoveryConflict('comment source terminal check exceeds the retained target bound',
+    throw new ContentRecoveryConflict('source terminal check exceeds the retained target bound',
       { cause: error });
   }
   if (open.length) {
-    throw new ContentRecoveryConflict(`erased comment source selectors remain: ${open[0]}`);
+    throw new ContentRecoveryConflict(`erased source selectors remain: ${open[0]}`);
   }
   const mismatch = (await client.query<{ mismatch: boolean }>(`SELECT EXISTS (
     SELECT 1 FROM unnest($1::uuid[]) AS wanted(id)

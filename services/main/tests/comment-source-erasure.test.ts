@@ -40,8 +40,9 @@ const repoRoot = resolve(import.meta.dir, '../../..');
 const canary = 'QUOTE-CANARY-ζ-source';
 const annotation = 'authored annotation stays';
 const sourceText = `Opening paragraph\n${canary}\nClosing paragraph`;
-/** Qualified Main image. Older and skip-test tags are not recovery evidence. */
-const qualifiedFuseki = 'rezics/fuseki:6.2.0-cmd0.5.39-5692ff6a9bb2';
+/** Qualified integer runtime. New runs use this pin. A prior run of this file on
+ * 5692ff6a9bb2 remains that run's evidence. */
+const qualifiedFuseki = 'rezics/fuseki:6.2.0-cmd0.5.39-835daa8774ac';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -448,7 +449,9 @@ async function applyMigrations(pool: Pool, owner: 'access' | 'relay') {
   }
 }
 
-test('authenticated recovery envelope replays the retained journal before admission opens', async () => {
+// Same live account, access, content, relay and graph. This does not take a
+// physical backup, restore an independent copy, or carry a held restore lineage.
+test('sealed envelope on the same captured owners stays closed until journal replay clears the quote', async () => {
   const state = join(root, '.temp', `comment-source-envelope-${randomUUID()}`);
   const data = join(state, 'pgdata');
   const socket = join(root, '.temp', 'pg-sock');
