@@ -442,3 +442,104 @@ await commandAsync(${JSON.stringify(directory)}, 'bun', ['test', ${JSON.stringif
     rmSync(directory, { recursive: true, force: true });
   }
 }, 30_000);
+
+test('SIGTERM to the dispatcher stops its child and removes that child\'s scope', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'reap-dispatch-'));
+  const bin = join(directory, 'bin');
+  mkdirSync(bin);
+  const log = join(directory, 'calls.jsonl');
+  const state = join(directory, 'containers.json');
+  const ready = join(directory, 'ready');
+  const pidFile = join(directory, 'child.pid');
+  const hang = join(directory, 'hang.test.ts');
+  writeFileSync(state, JSON.stringify({ containers: [{ id: 'ancestor', labels: [`${reapScopeLabel}.ancestor-scope=1`], removed: false }] }));
+  writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+const childState = () => {
+  try {
+    const stat = readFileSync('/proc/' + Number(readFileSync(process.env.PID_FILE, 'utf8')) + '/stat', 'utf8');
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0] || 'missing';
+  } catch { return 'missing'; }
+};
+const state = childState();
+appendFileSync(process.env.LOG, JSON.stringify({ args, childState: state, childAlive: ['R', 'S', 'D'].includes(state) }) + '\\n');
+const statePath = process.env.STATE;
+const load = () => JSON.parse(readFileSync(statePath, 'utf8'));
+const [command, ...rest] = args;
+if (command === 'run') {
+  const labels = [];
+  for (let i = 0; i < args.length; i++) if (args[i] === '--label') labels.push(args[i + 1]);
+  const saved = load();
+  saved.containers.push({ id: 'child-container', labels, removed: false });
+  writeFileSync(statePath, JSON.stringify(saved));
+  process.exit(0);
+}
+if (command === 'ps') {
+  const filter = rest[rest.indexOf('--filter') + 1] ?? '';
+  const key = filter.startsWith('label=') ? filter.slice('label='.length).split('=')[0] : '';
+  const saved = load();
+  console.log(saved.containers.filter(container => !container.removed && container.labels.some(label => label.split('=')[0] === key)).map(container => container.id).join('\\n'));
+  process.exit(0);
+}
+if (command === 'rm') {
+  const ids = new Set(rest.filter(id => id !== '-f'));
+  const saved = load();
+  for (const container of saved.containers) if (ids.has(container.id)) container.removed = true;
+  writeFileSync(statePath, JSON.stringify(saved));
+  process.exit(0);
+}
+process.exit(0);
+`);
+  chmodSync(join(bin, 'docker'), 0o755);
+  writeFileSync(hang, `import { test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+test('hang', () => {
+  process.on('SIGTERM', () => {});
+  writeFileSync(process.env.PID_FILE, String(process.pid));
+  const result = spawnSync('docker', ['run', '-d', '--name', 'rezics-reap-dispatch-child', 'alpine', 'sleep', '600'], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(result.stderr || result.stdout || 'docker run failed');
+  writeFileSync(process.env.READY, 'ready');
+  return new Promise(() => {});
+});
+`);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, READY: ready, LOG: log, STATE: state, PID_FILE: pidFile,
+    REZICS_REAP_OWNER: '4:4',
+  };
+  delete env.REZICS_REAP_SCOPE;
+  delete env.REZICS_REAP_SCOPES;
+  const dispatcher = spawn('bun', [join(root, 'scripts/qa/test.ts'), hang, '--timeout=60000'], {
+    cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stderr = '';
+  dispatcher.stderr?.on('data', chunk => { stderr += String(chunk); });
+  try {
+    const deadline = Date.now() + 15_000;
+    while (!existsSync(ready) && Date.now() < deadline) await Bun.sleep(20);
+    expect(existsSync(ready), stderr).toBe(true);
+    const signalled = Date.now();
+    dispatcher.kill('SIGTERM');
+    const closed = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
+      dispatcher.once('close', (code, signal) => resolve({ code, signal }));
+    });
+    expect(closed, stderr).toEqual({ code: 143, signal: null });
+    expect(Date.now() - signalled).toBeGreaterThanOrEqual(1_500);
+    const childPid = Number(readFileSync(pidFile, 'utf8'));
+    expect(() => process.kill(childPid, 0)).toThrow();
+    const calls = readFileSync(log, 'utf8').trim().split('\n').filter(Boolean)
+      .map(line => JSON.parse(line) as { args: string[]; childAlive: boolean; childState: string });
+    const run = calls.find(call => call.args[0] === 'run');
+    expect(run?.childAlive).toBe(true);
+    const scopeCalls = calls.filter(call => call.args.some(arg => arg.startsWith(`label=${reapScopeLabel}.`)));
+    expect(scopeCalls.length).toBeGreaterThan(0);
+    expect(scopeCalls.filter(call => call.childAlive)).toEqual([]);
+    const removed = calls.filter(call => call.args[0] === 'rm').flatMap(call => call.args.slice(2));
+    expect(removed).toContain('child-container');
+    expect(removed).not.toContain('ancestor');
+  } finally {
+    dispatcher.kill('SIGKILL');
+    rmSync(directory, { recursive: true, force: true });
+  }
+}, 30_000);

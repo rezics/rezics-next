@@ -302,6 +302,44 @@ export interface IsolationRecord { tier: Tier; file: string; afterProject: strin
   status: 'order-dependent' | 'infrastructure-dependent' | 'failed-alone' | 'not-run' }
 
 const commandProcessGroups = new Set<number>();
+/** A child that ignores SIGTERM is killed after this, before its scope is reaped. */
+const commandStopGraceMs = 1_000;
+
+export function trackCommandProcess(pid: number): void {
+  commandProcessGroups.add(pid);
+  bindAsyncCommandCleanup();
+}
+
+export function untrackCommandProcess(pid: number): void {
+  commandProcessGroups.delete(pid);
+  releaseAsyncCommandCleanup();
+}
+
+function signalProcessGroup(pid: number, signal: NodeJS.Signals): void {
+  try { process.kill(-pid, signal); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+}
+
+/** Descendants that called setsid are not in the registered group, so a group signal misses them. */
+function signalDetachedDescendants(groups: ReadonlySet<number>, signal: NodeJS.Signals): void {
+  if (!groups.size || !existsSync('/proc')) return;
+  for (const entry of readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) continue;
+    let pid = 0;
+    let group = 0;
+    try {
+      pid = Number(entry);
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+      const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+      group = Number(fields[2]);
+      if (!group || groups.has(group)) continue;
+      if (![...ancestors(pid)].some(ancestor => groups.has(ancestor))) continue;
+    } catch { continue; }
+    try { process.kill(pid === group ? -pid : pid, signal); }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+  }
+}
+
 function stopAsyncCommands(): void {
   stopAsyncCommandGroups(commandProcessGroups);
 }
@@ -345,6 +383,12 @@ function stopAsyncCommandGroups(groups: ReadonlySet<number>): void {
 
 let asyncCommandCleanupBound = false;
 function cancelAsyncCommands(signal: NodeJS.Signals): void {
+  if (commandProcessGroups.size) {
+    for (const pid of commandProcessGroups) signalProcessGroup(pid, 'SIGTERM');
+    signalDetachedDescendants(commandProcessGroups, 'SIGTERM');
+    // The child can still fork or start a container until the grace elapses.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, commandStopGraceMs);
+  }
   stopAsyncCommands();
   // commandAsync's finally does not run once this exits. Only this runner's live scopes.
   reapActiveChildScopes();
@@ -376,10 +420,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
   const child = spawn(name, args, { cwd: root, detached: true,
     env: environment,
     stdio: ['ignore', 'pipe', 'pipe'] });
-  if (child.pid) {
-    commandProcessGroups.add(child.pid);
-    bindAsyncCommandCleanup();
-  }
+  if (child.pid) trackCommandProcess(child.pid);
   let stdout = '', stderr = '', timedOut = false;
   const trackAdmission = options.runDeadline !== undefined || env.REZICS_QA_MEMORY_EVENTS === '1';
   const waiting = new Set<string>();
@@ -423,8 +464,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
     // Forced cancellation also covers parents that cannot run their signal
     // handler (for example, a test blocked in a synchronous subprocess).
     if (signal === 'SIGKILL') { stopAsyncCommandGroups(new Set([child.pid])); return; }
-    try { process.kill(-child.pid, signal); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+    signalProcessGroup(child.pid, signal);
   };
   let force: ReturnType<typeof setTimeout> | undefined;
   let timeoutReason = '';
@@ -435,7 +475,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
     // Kill the process group, including an in-progress child stack:up. Otherwise
     // it could recreate containers while the runner resets the recorded stacks.
     terminate('SIGTERM');
-    force = setTimeout(() => terminate('SIGKILL'), 1_000);
+    force = setTimeout(() => terminate('SIGKILL'), commandStopGraceMs);
   };
   function armTimer(): void {
     if (timer) clearTimeout(timer);
@@ -455,8 +495,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
     clearTimeout(timer);
     if (force) clearTimeout(force);
     if (timedOut) terminate('SIGKILL');
-    if (child.pid) commandProcessGroups.delete(child.pid);
-    releaseAsyncCommandCleanup();
+    if (child.pid) untrackCommandProcess(child.pid);
     reapSpawnedTest(name, args, environment);
     forgetChildScope(scope);
   }

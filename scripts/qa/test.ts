@@ -3,7 +3,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from './acceptance.ts';
 import { affectedPlan, affectedTiers, affectedUnitTierFiles, formatPlan, type AffectedPlan } from './affected.ts';
 import { forgetChildScope, noteChildScope, reapChildEnvironment, reapSettleMs, removeScopedContainers } from './container-reaper.ts';
-import { goalSlotDirectory, parseArgs } from './core.ts';
+import { goalSlotDirectory, parseArgs, trackCommandProcess, untrackCommandProcess } from './core.ts';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -125,8 +125,12 @@ async function run([program, args]: [string, string[]]): Promise<number> {
     : process.env;
   const scope = spawningTest ? env.REZICS_REAP_SCOPE : undefined;
   noteChildScope(scope);
+  // Its own process group, so cancellation can signal the child without signalling this dispatcher.
+  const child = Bun.spawn([program, ...args], {
+    cwd: root, env, detached: true, stdout: 'inherit', stderr: 'inherit',
+  });
+  if (child.pid) trackCommandProcess(child.pid);
   try {
-    const child = Bun.spawn([program, ...args], { cwd: root, env, stdout: 'inherit', stderr: 'inherit' });
     const code = await child.exited;
     if (scope) {
       try { removeScopedContainers(scope); } catch { /* the child's exit status still stands */ }
@@ -135,7 +139,10 @@ async function run([program, args]: [string, string[]]): Promise<number> {
       try { removeScopedContainers(scope); } catch { /* the child's exit status still stands */ }
     }
     return code;
-  } finally { forgetChildScope(scope); }
+  } finally {
+    if (child.pid) untrackCommandProcess(child.pid);
+    forgetChildScope(scope);
+  }
 }
 
 export interface TestDispatchOptions {
