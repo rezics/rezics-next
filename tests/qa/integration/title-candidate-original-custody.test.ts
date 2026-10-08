@@ -2,6 +2,7 @@ import { afterEach, expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { AccessAdmissionRegistry, AdmissionDenied, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
 import { issueHistoricalTitleCandidateAdmission, issueTitleCandidateAdmission, signTitleAdmission }
@@ -29,14 +30,16 @@ test('original SQL-issued human title candidate reaches native acceptance and re
   const key = Bun.env.FUSEKI_TITLE_ADMISSION_KEY;
   if (!key || !/^[0-9a-f]{64}$/.test(key) || !Bun.env.MAIN_S3_ENDPOINT) throw new Error('Run through the isolated QA integration tier');
   const stack = await startMediaStack('title-candidate-custody');
+  const presented = new Map<string, { subject: string; scope: string }>();
   const accountServer = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
     const url = new URL(request.url);
     if (url.pathname === '/jwks') return Response.json({ keys: [jwk] });
     const body = new URLSearchParams(await request.text());
+    const account = presented.get(body.get('token') ?? '');
     if (body.get('client_id') !== 'main-resource' || body.get('client_secret') !== 'title-candidate-secret'
-      || body.get('token') !== accountToken) return new Response('Unauthorized', { status: 401 });
-    return Response.json({ active: true, iss: member.principal.issuer, sub: member.principal.subject, aud: 'rezics-main',
-      scope: 'work:edit', exp: Math.floor(Date.now() / 1000) + 300 });
+      || !account) return new Response('Unauthorized', { status: 401 });
+    return Response.json({ active: true, iss: member.principal.issuer, sub: account.subject, aud: 'rezics-main',
+      scope: account.scope, exp: Math.floor(Date.now() / 1000) + 300 });
   } });
   const { privateKey, publicKey } = await generateKeyPair('RS256');
   const jwk = { ...await exportJWK(publicKey), kid: 'title-candidate-key', alg: 'RS256', use: 'sig' };
@@ -44,6 +47,12 @@ test('original SQL-issued human title candidate reaches native acceptance and re
   const accountToken = await new SignJWT({ scope: 'work:edit' }).setProtectedHeader({ alg: 'RS256', kid: jwk.kid })
     .setIssuer(member.principal.issuer).setAudience('rezics-main').setSubject(member.principal.subject)
     .setIssuedAt().setExpirationTime('5m').sign(privateKey);
+  const otherSubject = `title-candidate-other-${randomUUID()}`;
+  const otherToken = await new SignJWT({ scope: 'agent:create' }).setProtectedHeader({ alg: 'RS256', kid: jwk.kid })
+    .setIssuer(member.principal.issuer).setAudience('rezics-main').setSubject(otherSubject)
+    .setIssuedAt().setExpirationTime('5m').sign(privateKey);
+  presented.set(accountToken, { subject: member.principal.subject, scope: 'work:edit' });
+  presented.set(otherToken, { subject: otherSubject, scope: 'agent:create' });
   try {
     const account = new AccountAssertionVerifier({ issuer: member.principal.issuer, audience: 'rezics-main',
       jwksUrl: `http://127.0.0.1:${accountServer.port}/jwks`, introspectUrl: `http://127.0.0.1:${accountServer.port}/introspect`,
@@ -61,6 +70,17 @@ test('original SQL-issued human title candidate reaches native acceptance and re
     Object.assign(stack.env, { receiptCustody: new ReceiptCustody(new PostgresReceiptCustodyStore(stack.accessPool),
       workObjects, stack.fuseki, key, async () => { throw new Error('Private title custody must not retire a proof'); }) });
     const env = stack.env as WorkActivationEnvironment;
+    // The issuer compares the SQL actor with the signed frame. A missing principal fails the foreign key
+    // before that comparison. Register cannot create one, so Agent provisioning admits this Account subject.
+    const otherRequest = new Request('https://main.rezics.test/internal-other-principal', {
+      method: 'POST', headers: { authorization: `Bearer ${otherToken}` } });
+    const admittedOther = await new AgentProvisioning(stack.accessPool, env).provision(account, otherRequest,
+      { kind: 'person', displayName: 'Other title principal' }, `title-other-${randomUUID()}`);
+    if (admittedOther.state !== 'active') throw new Error('substitute Account principal was not admitted');
+    const otherPrincipalId = (await stack.accessPool.query<{ id: string }>(
+      `SELECT id FROM access.principal WHERE account_issuer = $1 AND account_subject = $2 AND active`,
+      [member.principal.issuer, otherSubject])).rows[0]?.id;
+    if (!otherPrincipalId || admittedOther.agent === member.actor) throw new Error('substitute Account principal was not admitted');
     const custody = env.receiptCustody!;
     const work = created.work, scope = `work:edit:${work}`;
     await member.grant(scope, 'work.edit');
@@ -136,7 +156,7 @@ test('original SQL-issued human title candidate reaches native acceptance and re
 
     // Tamper with the SQL side of the same original: the issuer rereads actor and retained bytes and signs nothing.
     await custody.verifyTitleCandidate(frame.receipt, async (verified, client) => {
-      for (const [column, wrong] of [['principal_id', randomUUID()], ['acting_subject', `https://rezics.com/id/${otherActor}`]] as const) {
+      for (const [column, wrong] of [['principal_id', otherPrincipalId], ['acting_subject', admittedOther.agent]] as const) {
         await client.query('BEGIN');
         try {
           await client.query(`UPDATE access.admission SET ${column} = $2 WHERE id = $1`, [claimed.id, wrong]);
