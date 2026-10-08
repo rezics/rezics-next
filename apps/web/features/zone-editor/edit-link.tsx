@@ -11,7 +11,8 @@ import { settle } from '../manage/read.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { zoneEditorPath } from './routes.ts';
 
-const editorOpen = cache(async (zoneId: string, actingSubject: string, token: string | undefined) => settle(
+/** The showcase-editor read. A refusal is no link. The Realm frame uses this same check. */
+export const showcaseEditorOpen = cache(async (zoneId: string, actingSubject: string, token: string | undefined) => settle(
   () => mainApiWithToken(token).v1.zones({ id: zoneId })['showcase-editor'].get({ query: { actingSubject } }),
   { management: true },
 ));
@@ -29,7 +30,7 @@ export async function ZoneEditLink({ zoneId, space, locale, className }: {
   const session = await readSession();
   if (!session || session.agent.status !== 'selected') return null;
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
-  const allowed = await editorOpen(zoneId, session.agent.agent.iri, token);
+  const allowed = await showcaseEditorOpen(zoneId, session.agent.agent.iri, token);
   if (!allowed.ok) return null;
   const { t } = await getTranslation('manage', [locale]);
   return <LocalizedLink href={zoneEditorPath(space)} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), className)}>
