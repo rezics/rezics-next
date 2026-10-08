@@ -461,6 +461,58 @@ describe('goalctl runtime policy', () => {
       });
     });
 
+    test('an introduced-failure refusal names the affected case when main fails a different one', () => {
+      const file = 'gate-shared.test.ts';
+      const branch = 'branch rejects the new payload';
+      const baseline = 'main rejects the old payload';
+      const evidence: UnitRunEvidence[] = [
+        { side: 'affected', kind: 'confirm', files: [{ file, output: '', cases: [{ test: branch, error: 'Expected: false\nReceived: true' }] }] },
+        { side: 'main', kind: 'first', files: [{ file, output: '', cases: [{ test: baseline, error: 'Expected: 1\nReceived: 2' }] }] },
+      ];
+      const refusal = unitGateRefusal('introduced unit failures; not merging:', [file], evidence);
+      const deciding = refusal.split('inherited on main:')[0] ?? refusal;
+      expect(deciding).toContain(`introduced unit failures; not merging:\n  ${file}`);
+      expect(deciding).toContain(`(fail) ${branch}`);
+      expect(deciding).toContain('Expected: false');
+      expect(deciding).not.toContain(baseline);
+      expect(refusal).toContain('inherited on main:');
+      expect(refusal.split('inherited on main:')[1]).toContain(`(fail) ${baseline}`);
+    });
+
+    test('a 30KB assertion error is truncated to the 20KB case cap', () => {
+      const file = 'gate-long-error.test.ts';
+      const blob = 'E'.repeat(30 * 1024);
+      const output = [`${file}:`, `error: ${blob}`, '(fail) huge assertion [1ms]'].join('\n');
+      const [kept] = unitFileEvidence(output, [file], [file], []);
+      expect(kept!.cases[0]?.test).toBe('huge assertion');
+      expect(kept!.cases[0]!.error.length).toBeLessThanOrEqual(20 * 1024);
+      expect(kept!.cases[0]!.error.startsWith('error:')).toBe(true);
+      expect(kept!.cases[0]!.error).toContain('[truncated to 20KB]');
+      expect(kept!.cases[0]!.error).not.toContain(blob);
+      const previous = process.env.GOAL_MERGE_LOG;
+      const directory = mkdtempSync(join(import.meta.dir, '../../.temp/unit-gate-evidence-'));
+      const log = join(directory, 'merge.log');
+      process.env.GOAL_MERGE_LOG = log;
+      try {
+        const runs: UnitRunEvidence[] = [{ side: 'affected', kind: 'first', files: [kept!] }];
+        const refusal = unitGateRefusal('introduced unit failures; not merging:', [file], runs);
+        const printedError = refusal.split('\n').filter(line => line.startsWith('      ')).map(line => line.slice(6)).join('\n');
+        expect(printedError.length).toBeLessThanOrEqual(20 * 1024);
+        expect(printedError).toContain('[truncated to 20KB]');
+        expect(refusal).not.toContain(blob);
+        const path = writeUnitEvidence(runs);
+        const stored = JSON.parse(readFileSync(path!, 'utf8')) as { runs: UnitRunEvidence[] };
+        const storedError = stored.runs[0]!.files[0]!.cases[0]!.error;
+        expect(storedError.length).toBeLessThanOrEqual(20 * 1024);
+        expect(storedError).toContain('[truncated to 20KB]');
+        expect(storedError).not.toContain(blob);
+      } finally {
+        if (previous === undefined) delete process.env.GOAL_MERGE_LOG;
+        else process.env.GOAL_MERGE_LOG = previous;
+        rmSync(directory, { recursive: true, force: true });
+      }
+    });
+
     test('keeps at most 20KB of a file transcript and 40 lines of each failure', () => {
       const file = 'gate-oversized.test.ts';
       const detail = Array.from({ length: 80 }, (_, index) => `detail ${index} ${'y'.repeat(200)}`);

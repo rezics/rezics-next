@@ -2476,12 +2476,31 @@ function runningTestName(section: string): string | undefined {
   return marked;
 }
 
+/** Case text shares the per-file 20KB cap with the transcript. A single assertion line can be far larger than 40 lines. */
+function capCaseErrors(cases: readonly UnitFailureCase[]): UnitFailureCase[] {
+  const marker = '\n[truncated to 20KB]';
+  let room = UNIT_GATE_FILE_OUTPUT_CAP;
+  const capped: UnitFailureCase[] = [];
+  for (const item of cases) {
+    if (room <= 0) break;
+    if (item.error.length <= room) {
+      capped.push(item);
+      room -= item.error.length;
+      continue;
+    }
+    const note = marker.length < room ? marker : '';
+    capped.push({ test: item.test, error: `${item.error.slice(0, room - note.length)}${note}` });
+    break;
+  }
+  return capped;
+}
+
 export function unitFileEvidence(output: string, scope: readonly string[], failing: readonly string[],
   timedOut: readonly string[], root?: string): UnitFileEvidence[] {
   const wanted = new Set([...failing, ...timedOut]);
   return scope.filter(file => wanted.has(file)).map(file => {
     const section = fileSection(output, file, root);
-    const evidence: UnitFileEvidence = { file, output: capFileOutput(section), cases: failureCases(section) };
+    const evidence: UnitFileEvidence = { file, output: capFileOutput(section), cases: capCaseErrors(failureCases(section)) };
     if (timedOut.includes(file)) {
       const running = runningTestName(section);
       if (running) evidence.runningTest = running;
@@ -2534,17 +2553,38 @@ function preferFileEvidence(previous: UnitFileEvidence | undefined, next: UnitFi
   return { ...previous, runningTest };
 }
 
-/** A refusal names the cases that decided it. File names alone are not evidence. */
-export function unitGateRefusal(message: string, files: readonly string[], runs: readonly UnitRunEvidence[]): string {
+/** Later runs replace earlier ones only within one side, so main cannot overwrite the branch's cases. */
+function evidenceForSide(runs: readonly UnitRunEvidence[], side: 'affected' | 'main',
+  files: readonly string[]): Map<string, UnitFileEvidence> {
   const chosen = new Map<string, UnitFileEvidence>();
-  for (const run of runs) for (const file of run.files) {
-    if (!files.includes(file.file)) continue;
-    chosen.set(file.file, preferFileEvidence(chosen.get(file.file), file));
+  for (const run of runs) {
+    if (run.side !== side) continue;
+    for (const file of run.files) {
+      if (!files.includes(file.file)) continue;
+      chosen.set(file.file, preferFileEvidence(chosen.get(file.file), file));
+    }
   }
-  return [message, ...files.map(file => {
+  return chosen;
+}
+
+/** A refusal names the cases from the side that decided it. File names alone are not evidence. */
+export function unitGateRefusal(message: string, files: readonly string[], runs: readonly UnitRunEvidence[],
+  side: 'affected' | 'main' = 'affected'): string {
+  const chosen = evidenceForSide(runs, side, files);
+  const lines = [message, ...files.map(file => {
     const found = chosen.get(file);
     return found ? formatFileEvidence(found) : `  ${file}`;
-  })].join('\n');
+  })];
+  // Main's cases stay visible under their own label when the branch case is what the refusal names.
+  if (side === 'affected') {
+    const inherited = evidenceForSide(runs, 'main', files);
+    const shown = files.filter(file => {
+      const found = inherited.get(file);
+      return found && (found.cases.length > 0 || found.runningTest);
+    });
+    if (shown.length) lines.push('inherited on main:', ...shown.map(file => formatFileEvidence(inherited.get(file)!)));
+  }
+  return lines.join('\n');
 }
 
 function mergeLogPath(): string | undefined {
@@ -3358,7 +3398,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, classificati
         const affecting = existing.filter(file => mainUnresolved.includes(file));
         if (affecting.length) {
           reportUnfinished('main', affecting);
-          return unitGateRefusal('unit gate remains inconclusive on main after isolated timeout retry:', affecting, evidence);
+          return unitGateRefusal('unit gate remains inconclusive on main after isolated timeout retry:', affecting, evidence, 'main');
         }
         for (const file of existing) {
           const mainDetails = mainRetry.failing.includes(file)
