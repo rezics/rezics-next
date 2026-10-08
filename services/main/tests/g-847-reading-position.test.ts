@@ -8,6 +8,7 @@ import { revelationReads } from '../src/modules/reading-position/read-registry.t
 import { WorkReadSession, WorkReadInvalid, WorkReadMissing, WorkReadMoved } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { createMainApp } from '../src/app.ts';
+import { bookResumeEnvironment, readingResumeOwner, type ResumeCompletion } from './reading-resume-owner.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const work = id(), volume1 = id(), volume2 = id(), chapter1 = id(), chapter2 = id(), chapter3 = id(), chapter4 = id();
@@ -25,7 +26,14 @@ function fixture(selection: string, principal = false) {
     lookedUp.push(records.length); return new Map(records.flatMap(record => rows.has(record) ? [[record, rows.get(record)!]] : []));
   }, required: async () => new Set(), generation: async () => version, privateSnapshot: async () => { privateReads++; return version; },
     completedPage: async () => ({ items: [chapter3], next: null }), finishedWorks: async () => new Set() };
-  const deps = { readingPositions: store, access: { canReadAsBaselineMember: async () => own } } as unknown as MainWorkDependencies;
+  const structure = composition.structures[0]!, head = id(), generation = id();
+  const book = bookResumeEnvironment({ work, structure, revision: head, generation,
+    chapters: composition.occurrences.map((item, index) => ({ occurrence: item.occurrence,
+      segmentKey: 'a', orderKey: String(index).padStart(4, '0') })) });
+  const completions: ResumeCompletion[] = [{ issuer: 'https://qa.test', subject: 'reader', structure, revision: head,
+    occurrence: chapter3, orderKey: 'a\u00020002' }];
+  const deps = { readingPositions: store, access: { canReadAsBaselineMember: async () => own },
+    progress: readingResumeOwner(completions), environment: book.environment } as unknown as MainWorkDependencies;
   const session = new WorkReadSession(deps, new Request(`http://main.local/v1/fixture?position=${encodeURIComponent(selection)}`),
     principal ? { actingSubject: id() } : {}, { dataEpoch: 'epoch', sequence: '1' });
   if (principal) session.principal = { issuer: 'https://qa.test', subject: 'reader', emailVerified: true };
@@ -36,9 +44,10 @@ function fixture(selection: string, principal = false) {
     const item = { ...composition.occurrences[index]!, segmentKey: 'a', orderKey: String(index).padStart(4, '0') };
     return { item, frames: [{ work, parent: work, after: item }] };
   };
-  boundary.traversalFor = () => ({ requireWork: async () => {}, requireLocation: async () => {},
-    recordsFor: async () => [], location: async (resource: string) => location(resource),
-    works: async function* () { yield [{ work, structure: composition.structures[0]!, revision: id(), generation: id() }]; },
+  boundary.traversalFor = () => ({ root: work, requireWork: async () => {}, requireLocation: async () => {},
+    recordsFor: async () => [], metadataFor: async () => ({ work, structure, revision: head, generation }),
+    location: async (resource: string) => location(resource),
+    works: async function* () { yield [{ work, structure, revision: head, generation }]; },
   }) as unknown as ReadingPositionTraversal;
   return { rows, boundary, lookedUp, privateReads: () => privateReads,
     move: () => { version = '2'; }, deny: () => { own = false; } };

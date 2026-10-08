@@ -369,6 +369,11 @@ test('missing progress owner reports resume unavailable without consulting histo
   f.session.deps.progress = undefined;
   await expect(chooserPosition(f.session, f.traversal(), 'mine', true, f.disclose)).rejects.toBeInstanceOf(ReadingResumeUnavailable);
   expect(f.measure().historyPages).toBe(0);
+  const omitted = await fixture();
+  delete omitted.session.deps.progress;
+  await expect(chooserPosition(omitted.session, omitted.traversal(), 'mine', true, omitted.disclose))
+    .rejects.toBeInstanceOf(ReadingResumeUnavailable);
+  expect(omitted.measure().historyPages).toBe(0);
 });
 
 test('order maintenance skips occurrence inventories by owner prefix and repairs only two rows per step', async () => {

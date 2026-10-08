@@ -14,8 +14,9 @@ import { READING_CHOOSER_COST } from '../src/modules/reading-position/traversal.
 import type { ReadRow } from '../src/modules/work/read-session.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
 import { COMPOSITION_PROFILE, orderTreeKey, placementIri } from '../src/modules/structure/graph.ts';
-import { STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, type OrderEntry } from '../src/modules/structure/format.ts';
+import { STRUCTURE_LIMITS, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, type OccurrenceRecord, type OrderEntry } from '../src/modules/structure/format.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
+import { readingResumeOwner, type ResumeCompletion } from './reading-resume-owner.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const work = id(), structure = id(), revision = id(), reader = id();
@@ -135,6 +136,15 @@ async function orderRoot(objects: ImmutableObjects, entries: readonly OrderEntry
 
 /** One revision names one structure. The counted tree refuses a shared revision
  * whose manifest would disagree with the selected generation. */
+/** Catalog chapters and structural groups the progress disclosure tree can admit. */
+function resumeRecord(item: ReadingOccurrence, introducedBy: string): OccurrenceRecord {
+  const record: OccurrenceRecord = { occurrence: item.occurrence, state: 'active', parent: item.parent,
+    segmentKey: item.segmentKey, orderKey: item.orderKey, role: item.role, labels: [], introducedBy };
+  if (item.role === 'group') return record;
+  return { ...record, target: item.target && /^[a-z][a-z0-9+.-]*:\S+$/.test(item.target)
+    ? item.target : 'https://schema.org/DigitalDocument' };
+}
+
 function separateSharedRevisions(metas: Map<string, ReadRow>,
   bind: (value: string) => { type: 'literal'; value: string }) {
   const owner = new Map<string, string>(), replacements = new Map<string, string>();
@@ -181,6 +191,8 @@ function fixture(inventory = chapters, leaves: string[] = []) {
   for (const row of rows) rowsByOccurrence.set(row.occurrence!.value, [...rowsByOccurrence.get(row.occurrence!.value) ?? [], row]);
   const stored = new Map<string, Uint8Array>();
   const manifestByRevision = new Map<string, string>();
+  const compositionHeaders = new Map<string, { component: string; revision: string; generation: string;
+    count: number; manifest: string; work: string }>();
   const objects: ImmutableObjects = { put: async body => {
     const digest = createHash('sha256').update(body).digest('hex'); stored.set(digest, body); return digest;
   }, get: async digest => {
@@ -208,10 +220,22 @@ function fixture(inventory = chapters, leaves: string[] = []) {
         entries.set(orderTreeKey(entry), entry);
       }
       const root = entries.size ? await orderRoot(objects, [...entries.values()]) : emptyOrder;
-      const manifest = { format: STRUCTURE_MANIFEST_FORMAT, structure: group.structure, structureOf: id(),
+      const chapterRecords = new Map(group.items.map(item => {
+        const record = resumeRecord(item, revision);
+        return [record.occurrence, record] as const;
+      }));
+      const recordRoot = chapterRecords.size
+        ? await recordTree(objects).apply(await recordTree(objects).empty(cost), chapterRecords, cost)
+        : records;
+      const component = id();
+      const manifest = { format: STRUCTURE_MANIFEST_FORMAT, structure: group.structure, structureOf: component,
         profile: 'book-composition' as const, generation: group.generation, pageFormat: STRUCTURE_PAGE_FORMAT,
-        records, order: root, placementCount: root.count, measures: [], model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE };
-      manifestByRevision.set(revision, await objects.put(new TextEncoder().encode(JSON.stringify(manifest))));
+        records: recordRoot, order: root, placementCount: root.count, measures: [], model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE };
+      const digest = await objects.put(new TextEncoder().encode(JSON.stringify(manifest)));
+      manifestByRevision.set(revision, digest);
+      const owner = [...metas.values()].find(meta => meta.structure?.value === group.structure)?.work?.value ?? work;
+      compositionHeaders.set(group.structure, { component, revision, generation: group.generation,
+        count: manifest.placementCount, manifest: `urn:rezics:sha256:${digest}`, work: owner });
     }
   })();
   const order = new Map<string, ReadingOccurrence[]>(), ordinals = new Map<string, number>();
@@ -228,6 +252,17 @@ function fixture(inventory = chapters, leaves: string[] = []) {
     return (order.get(parent!) ?? []).filter(item => item.structure === owner);
   };
   const execute = (sparql: string): ReadRow[] => {
+    if (sparql.includes('rv:structureHead') && sparql.includes('rv:placementCount')) {
+      const header = [...compositionHeaders.entries()].find(([structure]) => sparql.includes(`<${structure}>`));
+      if (!header) return [];
+      const [, row] = header;
+      return [{ component: binding(row.component), profile: binding(`${RV}BookComposition`), head: binding(row.revision),
+        generation: binding(row.generation), count: binding(String(row.count)), manifest: binding(row.manifest) }];
+    }
+    if (sparql.includes('SELECT ?owner')) {
+      const header = [...compositionHeaders.values()].find(row => sparql.includes(`<${row.component}>`));
+      return header ? [{ owner: binding(header.work) }] : [];
+    }
     if (sparql.includes('# reading-position:work\n')) {
       const resource = sparql.match(/BIND\(<([^>]+)> AS \?work\)/)![1]!;
       return metas.has(resource) ? [metas.get(resource)!] : [];
@@ -312,7 +347,37 @@ function fixture(inventory = chapters, leaves: string[] = []) {
     }
     return [control];
   };
-  const deps = { environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
+  const completions: ResumeCompletion[] = [];
+  const progress = readingResumeOwner(completions);
+  const placeKey = (item: ReadingOccurrence) => `${item.segmentKey}\u0002${item.orderKey}`;
+  const lastPlace = (owner: string) => inventory.filter(item => item.work === owner && item.role !== 'group')
+    .sort((a, b) => placeKey(a) < placeKey(b) ? -1 : placeKey(a) > placeKey(b) ? 1 : 0).at(-1);
+  const headFor = (structureId: string) => [...metas.values()].find(meta => meta.structure?.value === structureId)?.revision?.value;
+  // Mine reads the progress owner. Completions, a finished Work, and a pin whose
+  // revision still matches the chapter are stored there before the request.
+  const syncProgress = () => {
+    completions.length = 0;
+    const seen = new Set<string>();
+    const add = (item: ReadingOccurrence | undefined) => {
+      if (!item) return;
+      const revision = headFor(item.structure);
+      if (!revision || seen.has(`${item.structure}\0${item.occurrence}`)) return;
+      seen.add(`${item.structure}\0${item.occurrence}`);
+      completions.push({ issuer: 'https://qa.test', subject: 'reader', structure: item.structure, revision,
+        occurrence: item.occurrence, orderKey: placeKey(item) });
+    };
+    for (const occurrence of completed) add(inventory.find(item => item.occurrence === occurrence));
+    for (const finishedWork of finished) add(lastPlace(finishedWork));
+    for (const attempt of attempts) for (const selected of attempt.selections) {
+      const target = selected.target;
+      if (target.base === 'occurrence') {
+        const item = inventory.find(entry => entry.occurrence === target.resource);
+        if (item && item.revision === target.revision) add(item);
+      } else if (target.base === 'work') add(lastPlace(target.resource));
+      else if (target.base === 'realization' && target.work) add(lastPlace(target.work));
+    }
+  };
+  const deps = { environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, structureObjects: objects,
     fuseki: { commandHealth: async () => ({ instanceId: '11111111-1111-4111-8111-111111111111',
       publicSearchWriteEpoch: '0', publicSearchWriteActive: false, publicSearchDeltaAvailable: true }),
     searchDeltaSince: async () => ({ available: true, ordinal: '0', dataEpoch: 'epoch', sequence,
@@ -342,11 +407,15 @@ function fixture(inventory = chapters, leaves: string[] = []) {
         return { items: matches.slice(0, 50), next: matches.length > 50 ? matches[49]! : null };
       }, finishedWorks: async (_agent: string, works: string[]) => new Set(works.filter(resource => finished.has(resource))) },
     seriesSessions: { batch: async () => { historyReads++; return { items: attempts, next: null }; } },
+    progress,
   } as unknown as MainWorkDependencies;
   const app = new Elysia().use(readingPositionsRoutes(deps));
-  const call = (query: Record<string, string> = {}, token?: string) => app.handle(new Request(
-    `http://main.local/v1/reading-positions/${work.slice(-36)}?${new URLSearchParams(query)}`,
-    { headers: token ? { authorization: `Bearer ${token}` } : {} }));
+  const call = (query: Record<string, string> = {}, token?: string) => {
+    syncProgress();
+    return app.handle(new Request(
+      `http://main.local/v1/reading-positions/${work.slice(-36)}?${new URLSearchParams(query)}`,
+      { headers: token ? { authorization: `Bearer ${token}` } : {} }));
+  };
   return { call, recovery, rows, queries, completed, finished, attempts, historyReads: () => historyReads, queryCalls: () => queryCalls,
     maxRows: () => maxRows, own: () => { own = true; }, hideResource: (resource: string) => hidden.add(resource),
     denyReader: () => { own = false; },

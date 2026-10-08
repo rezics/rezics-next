@@ -8,12 +8,13 @@ import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import type { ReadingOrderIndex } from '../src/modules/reading-position/immutable-order.ts';
 import { backfillOccurrenceLabels } from '../src/modules/structure/label-index-backfill.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { bookResumeEnvironment, readingResumeOwner, type ResumeCompletion } from './reading-resume-owner.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const binding = (value: string) => ({ type: 'literal', value });
 test('G1022: wiki prefix resolves explicit and Mine boundaries with exact batches at 100, 1000 and 10000 chapters', async () => {
   for (const count of [100, 1000, 10000]) for (const selection of ['explicit', 'mine']) {
-    const work = id(), structure = id(), revision = id(), occurrence = id(), revealed = id(), record = id();
+    const work = id(), structure = id(), revision = id(), generation = id(), occurrence = id(), revealed = id(), record = id();
     const rows = new Map<string, ReadRow>([[occurrence, {
       work: binding(work), structure: binding(structure), revision: binding(revision), occurrence: binding(occurrence),
       parent: binding(structure), segmentKey: binding('z'), orderKey: binding(String(count).padStart(5, '0')),
@@ -23,18 +24,27 @@ test('G1022: wiki prefix resolves explicit and Mine boundaries with exact batche
       parent: binding(structure), segmentKey: binding('a'), orderKey: binding('00001'),
       role: binding('https://rezics.com/vocab/ChapterRole'),
     }]]);
+    const lateKey = String(count).padStart(5, '0');
+    const book = bookResumeEnvironment({ work, structure, revision, generation, chapters: [
+      { occurrence: revealed, segmentKey: 'a', orderKey: '00001' },
+      { occurrence, segmentKey: 'z', orderKey: lateKey },
+    ] });
+    const completions: ResumeCompletion[] = [{ issuer: 'https://qa.test', subject: 'reader', structure, revision,
+      occurrence, orderKey: `z\u0002${lateKey}` }];
     const deps = { readingPositions: {
       generation: async () => '1', privateSnapshot: async () => 'stable', required: async () => new Set(),
       lookup: async () => new Map([[record, [{ record, recordKind: 'entity', occurrence: revealed, continuityWork: work, receipt: 'r' }]]]),
       completedPage: async () => ({ items: [occurrence], next: null }), finishedWorks: async () => new Set(),
-    }, access: { canReadAsBaselineMember: async () => true } } as unknown as MainWorkDependencies;
+    }, access: { canReadAsBaselineMember: async () => true },
+      progress: readingResumeOwner(completions), environment: book.environment } as unknown as MainWorkDependencies;
     const session = new WorkReadSession(deps, new Request('http://main.local/fixture'), { actingSubject: id() }, { dataEpoch: 'epoch', sequence: '1' });
     session.principal = { issuer: 'https://qa.test', subject: 'reader', emailVerified: true };
     let calls = 0, returned = 0;
     session.query = async query => {
       calls++;
       expect(query).not.toContain('SELECT ?work ?structure ?revision ?placement');
-      if (query.includes('# reading-position:works')) return [{ work: binding(work), structure: binding(structure), revision: binding(revision), generation: binding(id()) }];
+      if (query.includes('# reading-position:work\n')) return [{ work: binding(work), structure: binding(structure), revision: binding(revision), generation: binding(generation) }];
+      if (query.includes('# reading-position:works')) return [{ work: binding(work), structure: binding(structure), revision: binding(revision), generation: binding(generation) }];
       expect(query).toContain('# reading-position:records');
       const values = query.match(/VALUES \?occurrence \{([^}]+)}/)![1]!;
       const selected = [...rows.entries()].filter(([resource]) => values.includes(resource)).map(([, row]) => row);
