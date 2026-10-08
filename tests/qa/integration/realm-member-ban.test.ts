@@ -183,8 +183,11 @@ test('a banned member reads their own ban and appeal, and every other caller get
     await decide(partiesCase, 'restore', 'parties', partiesRationale);
     const partiesRead = await own();
     expect(partiesRead.body).toMatchObject({ receiptId: partiesReceipt, reason: 'Parties reason', permanent: true,
-      appeal: { state: 'decided', caseId: partiesCase, statement: partiesStatement, outcome: 'restore',
+      appeal: { state: 'decided', caseId: partiesCase, statement: partiesStatement, outcome: 'reversed',
         rationale: partiesRationale, decidedAt: await decidedAt(partiesCase) } });
+    const partiesAppeal = partiesRead.body.appeal as { liftedAt: string; liftReceiptId: string };
+    expect(partiesAppeal.liftedAt).toEqual(expect.any(String));
+    expect(partiesAppeal.liftReceiptId).toMatch(/^[0-9a-f-]{36}$/);
     hidden(partiesRead.body);
     const summaryReceipt = await ban('Summary reason', null);
     const summaryStatement = 'A public summary is enough.';

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { GovernanceConflict, GovernanceDenied, GovernanceInvalid } from '../src/modules/governance/store.ts';
+import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceUnavailable } from '../src/modules/governance/store.ts';
 import { APPEAL_ALREADY_OPEN, appealStatement, appealView, idempotencyReplay, isBanReceipt, openAppealConflict,
   publicResolution, realmModerator, sanctionedPrincipal, uniqueAppealOutcome, visibleAppealRationale }
   from '../src/modules/governance/realm-sanction-appeal.ts';
@@ -54,21 +54,43 @@ test('sanction guards refuse the wrong principal, a second open appeal, and a hi
 });
 
 test('the appeal read drops the decider identity from the whole document', () => {
+  const liftReceiptId = '00000000-0000-4000-8000-000000000004';
   const view = appealView({
     realm: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
     receiptId: '00000000-0000-4000-8000-000000000002',
     reason: 'Repeated rule violations', bannedUntil: null, happenedAt: '2026-10-08T00:00:00.000Z',
     decisionActingSubject: decider,
+    lift: { liftedAt: '2026-10-09T03:04:00.000Z', liftReceiptId },
     appeal: { state: 'decided', caseId: '00000000-0000-4000-8000-000000000003', statement: 'I appeal.',
-      outcome: 'restore', rationale: 'The ban remains in place.' },
+      outcome: 'restore', rationale: 'The sanction is reversed.' },
   });
   const raw = JSON.stringify(publicResolution(view));
   expect(view.appeal).toEqual({ state: 'decided', caseId: '00000000-0000-4000-8000-000000000003',
-    statement: 'I appeal.', outcome: 'restore', rationale: 'The ban remains in place.' });
+    statement: 'I appeal.', outcome: 'reversed', rationale: 'The sanction is reversed.',
+    liftedAt: '2026-10-09T03:04:00.000Z', liftReceiptId });
   expect(keysOf(view).some(key => /acting.?subject|decider|moderator|principal/i.test(key))).toBe(false);
   expect(raw).not.toContain(decider);
   expect(raw).not.toContain('acting_subject');
   expect(raw).not.toContain('actingSubject');
+  const dismissed = appealView({
+    realm: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
+    receiptId: '00000000-0000-4000-8000-000000000002',
+    reason: 'Repeated rule violations', bannedUntil: null, happenedAt: '2026-10-08T00:00:00.000Z',
+    decisionActingSubject: decider, lift: null,
+    appeal: { state: 'decided', caseId: '00000000-0000-4000-8000-000000000003', statement: 'I appeal.',
+      outcome: 'dismiss', rationale: 'The ban remains.' },
+  });
+  expect(dismissed.appeal).toEqual({ state: 'decided', caseId: '00000000-0000-4000-8000-000000000003',
+    statement: 'I appeal.', outcome: 'dismiss', rationale: 'The ban remains.' });
+  expect(dismissed.appeal).not.toHaveProperty('liftedAt');
+  expect(() => appealView({
+    realm: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
+    receiptId: '00000000-0000-4000-8000-000000000002',
+    reason: 'Repeated rule violations', bannedUntil: null, happenedAt: '2026-10-08T00:00:00.000Z',
+    decisionActingSubject: null, lift: null,
+    appeal: { state: 'decided', caseId: '00000000-0000-4000-8000-000000000003', statement: 'I appeal.',
+      outcome: 'restore', rationale: 'The sanction is reversed.' },
+  })).toThrow(GovernanceUnavailable);
 });
 
 test('a private sanction rationale stays with the moderator', () => {

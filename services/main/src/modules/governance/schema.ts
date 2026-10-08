@@ -79,6 +79,13 @@ export const realmSanctionAppeal = access.table('realm_sanction_appeal', {
   openedAt: at('opened_at').notNull(),
 });
 
+/** One reversal's lift. Dismissal has no row. `receiptId` is the unban receipt. */
+export const realmSanctionLift = access.table('realm_sanction_lift', {
+  decisionId: uuid('decision_id').primaryKey(),
+  receiptId: uuid('receipt_id'),
+  liftedAt: at('lifted_at').notNull(),
+});
+
 export const governanceReport = access.table('governance_report', {
   id: uuid('id').primaryKey(),
   caseId: uuid('case_id').notNull(),
@@ -300,7 +307,7 @@ export const rightsCounterNotice = access.table('rights_counter_notice', {
 });
 
 export const governanceTables = [governanceRuleHead, governanceRuleRevision,
-  governanceCase, realmSanctionAppeal, governanceReport, governanceEvidence, rightsComplaint,
+  governanceCase, realmSanctionAppeal, realmSanctionLift, governanceReport, governanceEvidence, rightsComplaint,
   moderationDecision, moderationDecisionTarget, governanceProcessStep, governanceEnforcement,
   governanceRole, governanceCaseCredential, governanceCorrespondenceReceipt, governancePreservationHold,
   governanceErasurePostponement,

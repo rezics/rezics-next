@@ -15,16 +15,18 @@ function keysOf(value: unknown, keys: string[] = []): string[] {
 }
 
 test('a member ban keeps the resolution time and drops the decider', () => {
+  const liftReceiptId = '00000000-0000-4000-8000-000000000004';
   const view = memberBanView({
     realm, receiptId, reason: 'Repeated rule violations', bannedUntil: null, happenedAt: '2026-10-08T00:00:00.000Z',
     decisionActingSubject: decider, decidedAt: '2026-10-09T03:04:00.000Z',
-    appeal: { state: 'decided', caseId, statement: 'I appeal.', outcome: 'restore', rationale: 'The ban remains.' },
+    lift: { liftedAt: '2026-10-09T03:04:00.000Z', liftReceiptId },
+    appeal: { state: 'decided', caseId, statement: 'I appeal.', outcome: 'restore', rationale: 'The sanction is reversed.' },
   });
   expect(view).toEqual({
     realm, receiptId, action: 'ban', reason: 'Repeated rule violations', bannedUntil: null, permanent: true,
     happenedAt: '2026-10-08T00:00:00.000Z',
-    appeal: { state: 'decided', caseId, statement: 'I appeal.', outcome: 'restore', rationale: 'The ban remains.',
-      decidedAt: '2026-10-09T03:04:00.000Z' },
+    appeal: { state: 'decided', caseId, statement: 'I appeal.', outcome: 'reversed', rationale: 'The sanction is reversed.',
+      liftedAt: '2026-10-09T03:04:00.000Z', liftReceiptId, decidedAt: '2026-10-09T03:04:00.000Z' },
   });
   const raw = JSON.stringify(view);
   expect(keysOf(view).some(key => /acting.?subject|decider|moderator|principal/i.test(key))).toBe(false);
@@ -36,7 +38,7 @@ test('a member ban keeps the resolution time and drops the decider', () => {
 test('an open or absent appeal has no resolution time, and a timed ban is not permanent', () => {
   const open = memberBanView({
     realm, receiptId, reason: 'Repeated rule violations', bannedUntil: '2026-11-01T00:00:00.000Z',
-    happenedAt: '2026-10-08T00:00:00.000Z', decisionActingSubject: decider, decidedAt: null,
+    happenedAt: '2026-10-08T00:00:00.000Z', decisionActingSubject: decider, decidedAt: null, lift: null,
     appeal: { state: 'open', caseId, statement: 'I appeal.' },
   });
   expect(open.permanent).toBe(false);
@@ -46,7 +48,7 @@ test('an open or absent appeal has no resolution time, and a timed ban is not pe
   expect(JSON.stringify(open)).not.toContain(decider);
   const none = memberBanView({
     realm, receiptId, reason: 'Repeated rule violations', bannedUntil: null, happenedAt: '2026-10-08T00:00:00.000Z',
-    decisionActingSubject: null, decidedAt: null, appeal: { state: 'none' },
+    decisionActingSubject: null, decidedAt: null, lift: null, appeal: { state: 'none' },
   });
   expect(none.permanent).toBe(true);
   expect(none.appeal).toEqual({ state: 'none' });

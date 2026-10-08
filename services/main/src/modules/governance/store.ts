@@ -483,8 +483,8 @@ export class GovernanceStore {
    * since review is stale and nothing is written. Restricting outcomes advance
    * each target's enforcement fence; reverse and restore release only the
    * reversed decision's own targets.
-   * A realm sanction appeal is decided before that content profile: restore with
-   * no target is a resolution record, not an unban or a content effect.
+   * A realm sanction appeal is decided before that content profile. restore
+   * lifts the ban in that same transaction; dismiss leaves the ban in place.
    */
   async decide(principal: VerifiedPrincipal, input: DecisionInput,
     deferEffects = false,

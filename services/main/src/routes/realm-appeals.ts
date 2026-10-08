@@ -26,13 +26,15 @@ const opened = t.Object({
   realm: t.String(), receiptId: readUuid, caseId: readUuid,
   state: t.Union([t.Literal('open'), t.Literal('decided')]), replayed: t.Boolean(),
 }, { additionalProperties: false });
-const resolution = t.Union([t.Literal('dismiss'), t.Literal('restore')]);
+const dismissed = t.Object({ state: t.Literal('decided'), caseId: readUuid, statement,
+  outcome: t.Literal('dismiss'), rationale: t.Nullable(t.String()) }, { additionalProperties: false });
+const reversed = t.Object({ state: t.Literal('decided'), caseId: readUuid, statement,
+  outcome: t.Literal('reversed'), rationale: t.Nullable(t.String()),
+  liftedAt: t.String(), liftReceiptId: t.Nullable(readUuid) }, { additionalProperties: false });
 const appeal = t.Union([
   t.Object({ state: t.Literal('none') }, { additionalProperties: false }),
   t.Object({ state: t.Literal('open'), caseId: readUuid, statement }, { additionalProperties: false }),
-  t.Object({ state: t.Literal('decided'), caseId: readUuid, statement, outcome: resolution,
-    rationale: t.Nullable(t.String()) },
-    { additionalProperties: false }),
+  dismissed, reversed,
 ]);
 const reading = t.Object({
   realm: t.String(), receiptId: readUuid, action: t.Literal('ban'), reason: t.String(),
@@ -41,9 +43,11 @@ const reading = t.Object({
 const memberBanAppeal = t.Union([
   t.Object({ state: t.Literal('none') }, { additionalProperties: false }),
   t.Object({ state: t.Literal('open'), caseId: readUuid, statement }, { additionalProperties: false }),
-  t.Object({ state: t.Literal('decided'), caseId: readUuid, statement, outcome: resolution,
-    rationale: t.Nullable(t.String()), decidedAt: t.String() },
-    { additionalProperties: false }),
+  t.Object({ state: t.Literal('decided'), caseId: readUuid, statement, outcome: t.Literal('dismiss'),
+    rationale: t.Nullable(t.String()), decidedAt: t.String() }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('decided'), caseId: readUuid, statement, outcome: t.Literal('reversed'),
+    rationale: t.Nullable(t.String()), liftedAt: t.String(), liftReceiptId: t.Nullable(readUuid),
+    decidedAt: t.String() }, { additionalProperties: false }),
 ]);
 const memberBanReading = t.Object({
   realm: t.String(), receiptId: readUuid, action: t.Literal('ban'), reason: t.String(),
