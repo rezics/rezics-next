@@ -465,8 +465,10 @@ export class StatementSeek {
           after = page.rows.at(-1)!.statement_id;
         }
       }
-      if (await this.position() !== position) throw new WorkReadUnavailable('Statement index source moved');
-      await client.query('UPDATE access.statement_seek_coverage SET through_sequence=$2 WHERE data_epoch=$1',[epoch,through.toString()]);
+      // prior+1..through are already committed. A newer graph position replays
+      // on a later turn; discarding this batch would leave coverage behind it.
+      await client.query(`UPDATE access.statement_seek_coverage
+        SET through_sequence=GREATEST(through_sequence,$2::bigint) WHERE data_epoch=$1`,[epoch,through.toString()]);
       await client.query('COMMIT'); return true;
     } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
     finally { client.release(); }
