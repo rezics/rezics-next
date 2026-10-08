@@ -20,6 +20,11 @@ export function latestLane<I, R>(run: (input: I, newest: () => I) => Promise<R>,
   let running = false;
   let current: Task | null = null;
   let waiting: Task | null = null;
+  let idleWaiters: (() => void)[] = [];
+  const releaseIdle = () => {
+    if (running) return;
+    for (const resolve of idleWaiters.splice(0)) resolve();
+  };
   const newest = () => {
     if (waiting && current) {
       current = { input: merge(current.input, waiting.input), resolvers: [...current.resolvers, ...waiting.resolvers] };
@@ -41,9 +46,12 @@ export function latestLane<I, R>(run: (input: I, newest: () => I) => Promise<R>,
     }
     running = false;
     onChange();
+    releaseIdle();
   }
   return {
     busy: () => running,
+    /** Resolves once the record in flight, and the one newest slot behind it, have both settled. */
+    whenIdle: () => running ? new Promise<void>(resolve => { idleWaiters.push(resolve); }) : Promise.resolve(),
     submit: (input: I) => new Promise<R>(resolve => {
       if (!running) { void go({ input, resolvers: [resolve] }); return; }
       waiting = { input: waiting ? merge(waiting.input, input) : input, resolvers: [...(waiting?.resolvers ?? []), resolve] };
@@ -120,6 +128,7 @@ export function createDetailsSaver({ main, actingSubject, work, language, initia
     snapshot: () => snapshot,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     submit: (change: { title: string; description: string }) => lane.submit(change),
+    whenIdle: () => lane.whenIdle(),
   };
 }
 export type DetailsSaver = ReturnType<typeof createDetailsSaver>;
@@ -228,6 +237,7 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
   return {
     snapshot: () => snapshot,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    whenIdle: () => lane.whenIdle(),
     async save(body: string): Promise<SaveOutcome> {
       const outcome = await lane.submit({ body, publish: false });
       return outcome.kind === 'published' ? { kind: 'saved' } : outcome;

@@ -6,9 +6,8 @@ import { signInPath } from '../auth/paths.ts';
 import { readSession } from '../auth/session.ts';
 import { bodyText, editorValue } from '../document-editor/body.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
-import { detailsValues } from '../studio/details-api.ts';
 import { readStudioText, readWorkTexts } from '../studio/read.ts';
-import { canonicalLanguage, idOf, type MainClient, workKind } from '../studio/types.ts';
+import { idOf, type MainClient, workKind } from '../studio/types.ts';
 import { allowedActionsOf, mayEdit } from '../work-levels-edit/allowed.ts';
 import { readAllowedActions } from '../work-levels-edit/authority.ts';
 import { NoAuthority } from '../work-levels-edit/edit-frame.tsx';
@@ -16,7 +15,9 @@ import { copyOf as editCopy } from '../work-levels-edit/messages.ts';
 import { globalWorkHref } from '../work-page/route.ts';
 import { readWorkHeader, reader, settle, settleNullable } from '../work-page/read.ts';
 import { recipeActor } from './acting.ts';
+import { labelFromSummary, recipeLanguage } from './authored-language.ts';
 import { RecipeEditor } from './editor.tsx';
+import { initialDetails } from './initial-details.ts';
 import { copyOf, messages } from './messages.ts';
 import { type RecipePageLike, stateOf } from './model.ts';
 import { recipeEditHref } from './route.ts';
@@ -76,15 +77,32 @@ export async function RecipeEditPage({ workRef, id, locale, agentSegment = null 
   if (workKind(work.types) !== 'recipe') {
     return <EmptyState icon={ChefHatIcon} role="status" title={t.notRecipeTitle} description={t.notRecipeBody} />;
   }
-  const language = canonicalLanguage(work.title.language);
-  const [recipe, metadata, notes] = await Promise.all([
-    settleNullable(async () => main.v1.recipes.works({ id }).get({ query: { actingSubject } })),
+  const [summary, metadata] = await Promise.all([
+    settle(() => main.v1.resources({ resource: id }).get({ query: { actingSubject } })),
     main.v1.works({ id }).metadata.get({ query: { actingSubject } }),
+  ]);
+  const recorded = metadata.data ?? null;
+  // The label's language is the one the Work was written in. Once metadata has a title, the header title is chosen for display.
+  const summaryName = summary.ok ? labelFromSummary(summary.data) : null;
+  const language = recipeLanguage({
+    labelLanguage: summaryName?.language ?? null,
+    metadataTitles: Boolean(recorded?.localized?.some(row => row.title)),
+    headerTitleLanguage: work.title.language,
+  });
+  if (!language) {
+    return <EmptyState icon={ChefHatIcon} role="status" tone="destructive" title={t.unavailableTitle} description={t.unavailableBody} />;
+  }
+  const [recipe, notes] = await Promise.all([
+    settleNullable(async () => main.v1.recipes.works({ id }).get({ query: { actingSubject } })),
     readNotes(actingSubject, work.id, language),
   ]);
   if (!recipe.ok) return <EmptyState icon={ChefHatIcon} role="status" tone="destructive" title={t.unavailableTitle} description={t.unavailableBody} />;
+  const label = summaryName ?? { value: work.title.value, language: work.title.language };
   return <RecipeEditor work={work.id} mainVersion={work.mainVersion} language={language} actingSubject={actingSubject}
     workHref={globalWorkHref(workRef)} locale={locale} messages={messages[locale]}
     initial={{ recipe: stateOf(recipe.data as RecipePageLike | null), notes,
-      details: { head: metadata.data?.revision ?? null, values: detailsValues(metadata.data ?? null, language) } }} />;
+      details: { head: recorded?.revision ?? null, values: initialDetails(recorded, language, {
+        label, description: work.description, tagline: work.tagline, originalTitle: work.originalTitle,
+        completionStatus: work.completionStatus, mainVersionLabel: work.mainVersionLabel,
+      }) } }} />;
 }

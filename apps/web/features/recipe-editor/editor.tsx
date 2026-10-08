@@ -19,6 +19,7 @@ import { MethodSection } from './method.tsx';
 import { ingredients, type RecipeState, steps } from './model.ts';
 import { Preview } from './preview.tsx';
 import { missingBeforePublishing, PublishBar } from './publish.tsx';
+import { publishWhenSettled } from './publish-settled.ts';
 import { createDetailsSaver, createNotesWriter, entryOf, type NotesState } from './saves.ts';
 import { createRecipeStore } from './store.ts';
 import { materializeData } from 'native-i18n';
@@ -65,23 +66,28 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
   // What Main holds replaces the typed text once it is saved, as the field does.
   useEffect(() => setTypedNotes(written.notes.body), [written.notes.body]);
   const publish = async () => {
-    // The text in the field may not have been left yet: it is what gets published.
-    const outcome = await notes.publish((notesField.current?.value ?? written.notes.body).trim());
+    // A cooking time can be waiting behind preparation. Publication waits for every such write,
+    // then reads the notes field, which may not have been left yet.
+    const outcome = await publishWhenSettled({
+      recipe: store, details, notes,
+      body: () => (notesField.current?.value ?? notes.snapshot().notes.body).trim(),
+    });
     if (outcome.kind === 'published') setPublished(true);
   };
 
   return <div className="grid gap-6">
     <div className="sticky top-0 z-20 -mx-4 grid gap-2 border-border/60 border-b bg-background/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-b-2xl sm:px-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <Link href={workHref} className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'pointer-coarse:h-11' })}>
+        <Link href={workHref} aria-disabled={saving || undefined} onClick={event => { if (saving) event.preventDefault(); }}
+          className={buttonVariants({ variant: 'ghost', size: 'sm', className: 'pointer-coarse:h-11' })}>
           <ArrowLeftIcon aria-hidden="true" />{t.backToRecipe}</Link>
         <p role="status" aria-live="polite" className="flex items-center gap-1.5 text-muted-foreground text-sm">
           {saving ? <><LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />{t.saving}</>
             : <><CircleCheckIcon aria-hidden="true" className="size-4" />{t.allSaved}</>}</p>
       </div>
-      <PublishBar snapshot={written} missing={missing} onPublish={() => void publish()} workHref={workHref} t={t} />
+      <PublishBar snapshot={written} missing={missing} pending={saving} onPublish={() => void publish()} workHref={workHref} t={t} />
     </div>
-    {published && written.published ? <Alert variant="success" role="status"><CircleCheckIcon aria-hidden="true" />
+    {published && written.published && !saving ? <Alert variant="success" role="status"><CircleCheckIcon aria-hidden="true" />
       <AlertDescription>{t.publishedNotice}</AlertDescription></Alert> : null}
     {recipe.failure ? <FailureAlert t={t} refusal={recipe.failure.refusal}
       detail={'detail' in recipe.failure.refusal ? recipe.failure.refusal.detail : null}
