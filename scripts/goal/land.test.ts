@@ -370,11 +370,30 @@ describe('Goal landing', () => {
       expect(result.stderr).toContain('introduced unit failures');
       expect(result.stdout).toContain(`${file} timed out on main; rerunning alone`);
       const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { cwd: string; args: string[] });
-      expect(runs).toHaveLength(4);
-      expect(runs.slice(0, 2).every(run => run.cwd === r.worktree)).toBe(true);
-      expect(runs[2]!.cwd).not.toBe(r.worktree);
-      expect(runs[3]!.cwd).toBe(runs[2]!.cwd);
-      expect(runs.every(run => run.args.filter(arg => arg.endsWith('.test.ts')).join() === `./${file}`)).toBe(true);
+      // A shard line that follows an alone announcement is that isolated rerun. The confirm of the failing
+      // set stays one shard, then the branch-only classification runs the file alone on each side.
+      const modes: ('sharded' | 'alone')[] = [];
+      let announcedAlone = false;
+      for (const line of result.stdout.split('\n')) {
+        if (/rerunning alone|rerun alone on /.test(line)) announcedAlone = true;
+        else if (/ file\(s\) in \d+ shard\(s\)/.test(line)) {
+          modes.push(announcedAlone ? 'alone' : 'sharded');
+          announcedAlone = false;
+        }
+      }
+      const baseline = runs.find(run => run.cwd !== r.worktree)?.cwd;
+      expect(runs.map((run, index) => ({
+        side: run.cwd === r.worktree ? 'affected' : run.cwd === baseline ? 'main' : run.cwd,
+        mode: modes[index],
+        files: run.args.filter(arg => arg.endsWith('.test.ts')).map(arg => arg.slice(2)),
+      }))).toEqual([
+        { side: 'affected', mode: 'sharded', files: [file] },
+        { side: 'affected', mode: 'sharded', files: [file] },
+        { side: 'main', mode: 'sharded', files: [file] },
+        { side: 'main', mode: 'alone', files: [file] },
+        { side: 'affected', mode: 'alone', files: [file] },
+        { side: 'main', mode: 'alone', files: [file] },
+      ]);
       expect(r.ledger().tasks[r.task.id]!.state).toBe('conflict');
       expect(r.git(r.dir, 'rev-parse', 'main')).toBe(r.base);
     } finally { r.cleanup(); }
