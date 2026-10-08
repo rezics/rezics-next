@@ -233,6 +233,10 @@ export default {
   restartTimer: "Reiniciar temporizador",
   recipeNotes: "Notas",
   recipeUnstructured: "Esta receta aún no incluye cantidades medidas de los ingredientes.",
+  // Machine-drafted; needs native review.
+  showMoreRecipe: 'Mostrar el resto de esta receta', loadingMoreRecipe: 'Cargando más…',
+  recipeContinueFailed: 'No se pudo cargar el resto de esta receta. Lo que ya se muestra sigue aquí.',
+  recipeChanged: 'Esta receta cambió. Se vuelve a mostrar desde el principio.',
   promptText: "Prompt publicado",
   skillText: "Archivo SKILL.md publicado",
   promptPublished: "Copia el prompt publicado exactamente como aparece.",

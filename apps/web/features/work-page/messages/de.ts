@@ -234,6 +234,10 @@ export default {
   restartTimer: "Timer neu starten",
   recipeNotes: "Notizen",
   recipeUnstructured: "Für dieses Rezept wurden noch keine Zutatenmengen angegeben.",
+  // Machine-drafted; needs native review.
+  showMoreRecipe: 'Mehr von diesem Rezept zeigen', loadingMoreRecipe: 'Weiteres wird geladen…',
+  recipeContinueFailed: 'Der Rest dieses Rezepts konnte nicht geladen werden. Was schon zu sehen ist, bleibt.',
+  recipeChanged: 'Dieses Rezept hat sich geändert. Es wird wieder von Anfang an gezeigt.',
   promptText: "Veröffentlichter Prompt",
   skillText: "Veröffentlichte SKILL.md",
   promptPublished: "Den exakt veröffentlichten Prompt kopieren.",

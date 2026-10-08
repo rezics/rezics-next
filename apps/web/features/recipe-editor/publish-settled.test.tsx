@@ -72,7 +72,9 @@ test('publish waits for a title save that is still in flight', async () => {
 test('leaving the editor waits while a write is still outstanding', () => {
   const source = readFileSync(new URL('./editor.tsx', import.meta.url), 'utf8');
   expect(source).toContain('publishWhenSettled');
-  expect(source).toContain('pending={saving}');
+  // Saving withholds the published link. An unread remainder does too: publishing waits for the whole recipe.
+  expect(source).toContain('pending={saving || held}');
+  expect(source).toContain('held={held}');
   expect(source).toContain('if (saving) event.preventDefault()');
   expect(source).toContain('written.published && !saving');
   expect(source).not.toMatch(/await notes\.publish\(/);

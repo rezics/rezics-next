@@ -17,10 +17,12 @@ export function missingBeforePublishing({ title, ingredients, steps, notes }: { 
  * It stays enabled while a field's save is in flight: leaving the notes field to click it starts that
  * save, and the publish waits for it.
  */
-export function PublishBar({ snapshot, missing, onPublish, workHref, t, pending }: {
+export function PublishBar({ snapshot, missing, onPublish, workHref, t, pending, held = false }: {
   snapshot: NotesSnapshot; missing: ReturnType<typeof missingBeforePublishing>; onPublish: () => void; workHref: string; t: Copy;
   /** True while any recipe write is still in flight. Published, and the link that leaves, wait until it settles. */
   pending: boolean;
+  /** The recipe is not all here yet, so publishing would describe a recipe the editor has not read. */
+  held?: boolean;
 }) {
   const needs = [missing.title ? t.needTitle : null, missing.ingredients ? t.needIngredient : null,
     missing.steps ? t.needStep : null, missing.notes ? t.needNotes : null].filter((item): item is string => item !== null);
@@ -30,7 +32,7 @@ export function PublishBar({ snapshot, missing, onPublish, workHref, t, pending 
   return <div className="flex flex-wrap items-center gap-2">
     {released ? <Badge variant="success"><CircleCheckIcon aria-hidden="true" />{t.statePublished}</Badge>
       : <Badge variant="outline">{t.stateDraft}</Badge>}
-    <Button type="button" onClick={onPublish} disabled={blocked || snapshot.publishing}
+    <Button type="button" onClick={onPublish} disabled={blocked || held || snapshot.publishing}
       aria-describedby={blocked ? 'publish-needs' : undefined} className="pointer-coarse:h-11">
       <SendIcon aria-hidden="true" />{snapshot.publishing ? t.publishing : snapshot.published ? t.publishUpdate : t.publish}</Button>
     {released ? <Link href={workHref} className={buttonVariants({ variant: 'outline', className: 'pointer-coarse:h-11' })}>

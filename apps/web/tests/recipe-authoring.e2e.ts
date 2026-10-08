@@ -202,7 +202,20 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   await expect(async () => {
     await page.goto(workPath);
     await expect(page.getByRole('heading', { name: 'Lemon poppy muffins' }).first()).toBeVisible({ timeout: 5_000 });
-    await expect(page.getByRole('region', { name: 'Recipe', exact: true })).toContainText('Icing', { timeout: 5_000 });
+    const recipe = page.getByRole('region', { name: 'Recipe', exact: true });
+    // A section starts its own page, so the first response is the first heading. Continue until the
+    // later section is here; the button's name changes while that part is loading.
+    const more = recipe.getByRole('button', { name: 'Show more of this recipe' });
+    for (let guard = 0; guard < 8 && await more.count(); guard += 1) {
+      const before = await recipe.innerText();
+      await more.click();
+      await expect.poll(async () => {
+        const text = await recipe.innerText();
+        const loading = await recipe.getByRole('button', { name: 'Loading more…' }).count();
+        return text !== before && loading === 0;
+      }, { timeout: 15_000 }).toBe(true);
+    }
+    await expect(recipe).toContainText('Icing', { timeout: 5_000 });
   }).toPass({ timeout: 120_000 });
   mark('work page loaded');
   const recipe = page.getByRole('region', { name: 'Recipe', exact: true });

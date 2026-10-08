@@ -23,6 +23,10 @@ export default {
   cookThis: '开始烹饪', cookMode: '烹饪模式', closeCookMode: '退出烹饪模式',
   startTimer: '开始计时', pauseTimer: '暂停计时', restartTimer: '重新计时',
   recipeNotes: '备注', recipeUnstructured: '此食谱尚未添加可换算的食材用量。',
+  // Machine-drafted; needs native review.
+  showMoreRecipe: '显示这道食谱的其余部分', loadingMoreRecipe: '正在加载更多…',
+  recipeContinueFailed: '无法加载这道食谱的其余部分。已显示的内容仍在。',
+  recipeChanged: '这道食谱已更改，正从开头重新显示。',
   promptText: '已发布的提示词', skillText: '已发布的 SKILL.md',
   promptPublished: '复制已发布提示词的原文。', skillPublished: '复制已发布 SKILL.md 的原文。',
   copyPrompt: '复制提示词', copySkill: '复制 SKILL.md', copyFailed: '复制失败',

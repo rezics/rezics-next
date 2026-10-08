@@ -46,6 +46,8 @@ export interface RecipePageLike {
   occurrences: readonly { occurrence: string; parent: string; role: string; state: string;
     labels: readonly { value: string; language: string }[]; qualifier?: { type: string } }[];
   measures: readonly { kind: string; value: Rational; [more: string]: unknown }[];
+  /** Present when a later page of this revision is still unread. */
+  next?: string;
 }
 
 export function stateOf(page: RecipePageLike | null): RecipeState {

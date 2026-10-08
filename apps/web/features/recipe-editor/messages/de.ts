@@ -77,6 +77,12 @@ export default {
   failEmptyNotes: 'Anmerkungen dürfen nach dem Schreiben nicht leer sein. Bearbeite sie stattdessen.',
   mainSays: 'Grund',
 
+  loadingRest: 'Der Rest dieses Rezepts wird geladen…',
+  loadingRestCount: insert('{{count}} Teile geladen', { count: String }),
+  loadingRestFailed: 'Der Rest dieses Rezepts konnte nicht geladen werden, deshalb kann es noch nicht bearbeitet werden.',
+  recipeTooLong: 'Dieses Rezept ist zu lang, um es hier zu bearbeiten.',
+  recipeChangedWhileLoading: 'Dieses Rezept hat sich beim Laden geändert. Es wird neu geladen.',
+
   notRecipeTitle: 'Das ist kein Rezept',
   notRecipeBody: 'Der Rezept-Editor öffnet sich nur für Rezepte.',
   unavailableTitle: 'Das Rezept konnte nicht geladen werden',

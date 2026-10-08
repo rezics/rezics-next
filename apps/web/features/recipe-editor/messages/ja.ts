@@ -77,6 +77,12 @@ export default {
   failEmptyNotes: 'メモは、書いたあとに空にはできません。代わりに編集してください。',
   mainSays: '理由',
 
+  loadingRest: 'このレシピの続きを読み込んでいます…',
+  loadingRestCount: insert('{{count}} 件を読み込みました', { count: String }),
+  loadingRestFailed: 'このレシピの続きを読み込めなかったため、まだ編集できません。',
+  recipeTooLong: 'このレシピは長すぎて、ここでは編集できません。',
+  recipeChangedWhileLoading: '読み込み中にレシピが変更されました。読み込み直しています。',
+
   notRecipeTitle: 'これはレシピではありません',
   notRecipeBody: 'レシピエディターはレシピ専用です。',
   unavailableTitle: 'レシピを読み込めませんでした',

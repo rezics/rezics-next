@@ -8,6 +8,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'rea
 import type { UiLocale } from '../../../i18n/define.ts';
 import { browserMainApi } from '../../api/browser.ts';
 import { followHref } from '../../entity-page/href.ts';
+import { appendRecipePage, isStaleRecipePage, recipePageQuery } from '../../recipe-editor/pages.ts';
 import { formatMeasure } from '../../recipe-editor/quantity.ts';
 import Link from '../../shell/localized-link.tsx';
 import type { WorkPageMessages } from '../messages.ts';
@@ -83,27 +84,34 @@ function shownLine(item: ReadableIngredient, units: Units): string {
   return item.line ?? item.originalText;
 }
 
-/** Ingredients under their section headings; lines outside any section come first, unheaded. */
+/**
+ * Ingredients under their section headings. A section is opened when its group arrives, so a later
+ * page's lines join that heading instead of starting another. Lines outside any section come first.
+ */
 function sectioned(page: ReadableRecipe): { key: string; heading: string | null; items: ReadableIngredient[] }[] {
-  const labels = new Map(page.occurrences.filter(item => item.role === 'group').map(item => [item.occurrence, item.labels[0]?.value ?? '']));
+  const groups = page.occurrences.filter(item => item.role === 'group');
+  const labels = new Map(groups.map(item => [item.occurrence, item.labels[0]?.value ?? '']));
   const parents = new Map(page.occurrences.map(item => [item.occurrence, item.parent]));
-  const blocks: { key: string; heading: string | null; items: ReadableIngredient[] }[] = [];
+  const blocks: { key: string; heading: string | null; items: ReadableIngredient[] }[] = groups.map(group => ({
+    key: group.occurrence, heading: labels.get(group.occurrence) ?? '', items: [],
+  }));
   for (const item of page.ingredients) {
     const parent = parents.get(item.occurrence);
-    const heading = parent !== undefined && labels.has(parent) ? labels.get(parent)! : null;
-    const key = heading === null ? '' : parent!;
-    const block = blocks.find(candidate => candidate.key === key) ?? (blocks.push({ key, heading, items: [] }), blocks.at(-1)!);
+    const key = parent !== undefined && labels.has(parent) ? parent : '';
+    const block = blocks.find(candidate => candidate.key === key) ?? (blocks.push({
+      key, heading: key === '' ? null : labels.get(key) ?? '', items: [],
+    }), blocks.at(-1)!);
     block.items.push(item);
   }
-  return blocks.sort((a, b) => Number(a.key !== '') - Number(b.key !== ''));
+  return blocks.sort((left, right) => Number(left.key !== '') - Number(right.key !== ''));
 }
 
 function IngredientList({ page, units, messages: t }: {
   page: ReadableRecipe; units: Units; messages: WorkPageMessages;
 }) {
   return <div className="grid gap-4">{sectioned(page).map(block => <div key={block.key} className="grid gap-1">
-    {block.heading ? <h4 className="font-medium text-muted-foreground text-sm">{block.heading}</h4> : null}
-    <ul className="grid gap-2">{block.items.map(item => {
+    {block.heading !== null ? <h4 className="font-medium text-muted-foreground text-sm">{block.heading}</h4> : null}
+    {block.items.length ? <ul className="grid gap-2">{block.items.map(item => {
       const text = shownLine(item, units);
       const quiet = text !== item.originalText && (units !== 'written' || item.hint) ? item.originalText : null;
       const note = item.judgment ? t.scaleByTaste
@@ -114,7 +122,7 @@ function IngredientList({ page, units, messages: t }: {
         {quiet ? <span className="text-muted-foreground text-sm">{quiet}</span> : null}
         {note ? <span className="text-muted-foreground text-xs">{note}</span> : null}
       </li>;
-    })}</ul>
+    })}</ul> : null}
   </div>)}</div>;
 }
 
@@ -248,21 +256,40 @@ export function RecipeContent({ page, units, messages: t, notes, controls, colum
   </div>;
 }
 
-export function RecipeExperience({ initial, href, actingSubject, text, edit, messages: t }: {
+/** One page of a recipe. The cursor and a new serving count are never sent together. */
+export type RecipePageRead = (query: { cursor?: string; servings?: number }) => Promise<{
+  data: RecipeWorkPage | null; error: { status: number; value?: unknown } | null;
+}>;
+
+function wholeServings(page: RecipeWorkPage | null): number | null {
+  const value = page?.measures.find(item => item.kind === 'servings')?.value;
+  if (!value || value.denominator === 0) return null;
+  const amount = value.numerator / value.denominator;
+  return Number.isInteger(amount) && amount >= 1 && amount <= 100 ? amount : null;
+}
+
+export function RecipeExperience({ initial, href, actingSubject, text, edit, messages: t, readPage }: {
   initial: RecipeWorkPage | null; /** The recipe section's link in the Work's page projection. */ href: string;
   actingSubject: string | null; /** The way into the recipe editor, for a viewer who may edit it. */ edit?: { href: string; label: string } | null;
   text: string | null; locale: UiLocale; messages: WorkPageMessages;
+  /** Stories answer a later page without the network. The page itself asks only when someone continues. */
+  readPage?: RecipePageRead;
 }) {
   const [page, setPage] = useState(initial);
-  const [servings, setServings] = useState(() => {
-    const value = initial?.measures.find(item => item.kind === 'servings')?.value;
-    return value ? value.numerator / value.denominator : 1;
-  });
+  const [servings, setServings] = useState(() => wholeServings(initial) ?? 1);
   // Quantities show as the cook wrote them; converting is the reader's choice.
   const [units, setUnits] = useState<Units>('written');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [continuing, setContinuing] = useState(false);
+  const [continueFailed, setContinueFailed] = useState(false);
+  const [changed, setChanged] = useState(false);
   const [cooking, setCooking] = useState(false);
+  const applied = useRef(wholeServings(initial));
+  /** A newer scale or reload ignores a continuation that was already on its way. */
+  const generation = useRef(0);
+  const read = readPage ?? ((query: { cursor?: string; servings?: number }) => followHref<RecipeWorkPage | null>(
+    browserMainApi(), href, recipePageQuery(actingSubject, query))());
   useEffect(() => {
     const open = () => setCooking(true);
     window.addEventListener('rezics-cook', open);
@@ -275,14 +302,50 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
   const scale = async (event: FormEvent) => {
     event.preventDefault();
     if (!Number.isInteger(servings) || servings < 1 || servings > 100) return;
-    setBusy(true); setError(false);
+    const ticket = ++generation.current;
+    setContinuing(false);
+    setBusy(true);
+    setError(false);
     try {
-      const answer = await followHref<RecipeWorkPage | null>(browserMainApi(), href, {
-        actingSubject: actingSubject ?? undefined, servings })();
+      const answer = await read({ servings });
+      if (ticket !== generation.current) return;
       if (answer.error || !answer.data) throw new Error('scale');
+      applied.current = servings;
+      setChanged(false);
+      setContinueFailed(false);
       setPage(answer.data);
-    } catch { setError(true); }
-    finally { setBusy(false); }
+    } catch { if (ticket === generation.current) setError(true); }
+    finally { if (ticket === generation.current) setBusy(false); }
+  };
+  // The next page is read only from this control. A refusal leaves what is already shown.
+  const more = async () => {
+    const cursor = page?.next;
+    if (!cursor || continuing) return;
+    const ticket = generation.current;
+    setContinuing(true);
+    setContinueFailed(false);
+    try {
+      const answer = await read({ cursor });
+      if (ticket !== generation.current) return;
+      if (isStaleRecipePage(answer.error)) {
+        setChanged(true);
+        const again = await read(applied.current != null ? { servings: applied.current } : {});
+        if (ticket !== generation.current) return;
+        if (again.error || !again.data) setContinueFailed(true);
+        else {
+          applied.current = wholeServings(again.data) ?? applied.current;
+          setPage(again.data);
+        }
+        return;
+      }
+      if (answer.error || !answer.data) {
+        setContinueFailed(true);
+        return;
+      }
+      setChanged(false);
+      setPage(current => current ? appendRecipePage(current, answer.data!) : answer.data);
+    } catch { if (ticket === generation.current) setContinueFailed(true); }
+    finally { if (ticket === generation.current) setContinuing(false); }
   };
   const controls = <div className="flex flex-wrap items-end justify-between gap-4">
     <div className="flex flex-wrap items-end gap-4">
@@ -290,7 +353,7 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
         <label className="grid gap-1 text-sm" htmlFor="recipe-servings">{t.servings}
           <Input id="recipe-servings" type="number" min={1} max={100} step="any" value={servings}
             onChange={event => setServings(Number(event.target.value))} className="w-24" /></label>
-        <Button type="submit" variant="outline" disabled={busy || !Number.isInteger(servings)
+        <Button type="submit" variant="outline" disabled={busy || continuing || !Number.isInteger(servings)
           || servings < 1 || servings > 100}>
           {busy ? t.scaling : t.scaleRecipe}</Button>
       </form> : null}
@@ -300,10 +363,18 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
   </div>;
   return <Region id="recipe-experience" title={t.recipeMethod}>
     {page ? <>
-      <RecipeContent page={page} units={units} messages={t} notes={text} controls={<>
-        {controls}
-        {error ? <p role="alert" className="text-destructive text-sm">{t.scaleFailed}</p> : null}
-      </>} />
+      <div aria-busy={busy || continuing || undefined} className="grid gap-4">
+        <RecipeContent page={page} units={units} messages={t} notes={text} controls={<>
+          {controls}
+          {error ? <p role="alert" className="text-destructive text-sm">{t.scaleFailed}</p> : null}
+        </>} />
+        {page.next || changed || continueFailed ? <div className="grid justify-items-start gap-2">
+          {changed ? <p role="status">{t.recipeChanged}</p> : null}
+          {continueFailed ? <p role="alert" className="text-destructive text-sm">{t.recipeContinueFailed}</p> : null}
+          {page.next ? <Button type="button" variant="outline" disabled={continuing || busy} onClick={() => void more()}>
+            {continuing ? t.loadingMoreRecipe : t.showMoreRecipe}</Button> : null}
+        </div> : null}
+      </div>
       {cooking ? <CookMode page={page} messages={t} units={units}
         onClose={() => setCooking(false)} /> : null}
     </> : <>

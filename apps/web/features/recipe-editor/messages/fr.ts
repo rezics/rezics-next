@@ -77,6 +77,12 @@ export default {
   failEmptyNotes: 'Les notes ne peuvent pas être vides une fois écrites. Modifiez-les plutôt.',
   mainSays: 'Raison',
 
+  loadingRest: 'Chargement de la suite de cette recette…',
+  loadingRestCount: insert('{{count}} parties chargées', { count: String }),
+  loadingRestFailed: 'La suite de cette recette n’a pas pu être chargée, elle ne peut donc pas encore être modifiée.',
+  recipeTooLong: 'Cette recette est trop longue pour être modifiée ici.',
+  recipeChangedWhileLoading: 'Cette recette a changé pendant le chargement. Elle est rechargée.',
+
   notRecipeTitle: 'Ce n’est pas une recette',
   notRecipeBody: 'L’éditeur de recettes ne s’ouvre que pour des recettes.',
   unavailableTitle: 'La recette n’a pas pu être chargée',

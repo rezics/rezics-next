@@ -77,6 +77,12 @@ export default {
   failEmptyNotes: '備註寫下後就不能留空。請改為編輯。',
   mainSays: '原因',
 
+  loadingRest: '正在載入這道食譜的其餘部分…',
+  loadingRestCount: insert('已載入 {{count}} 個部分', { count: String }),
+  loadingRestFailed: '無法載入這道食譜的其餘部分，因此還不能編輯。',
+  recipeTooLong: '這道食譜太長，無法在這裡編輯。',
+  recipeChangedWhileLoading: '載入時這道食譜已變更，正在重新載入。',
+
   notRecipeTitle: '這不是食譜',
   notRecipeBody: '食譜編輯器只能開啟食譜。',
   unavailableTitle: '無法載入食譜',

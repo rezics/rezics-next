@@ -77,6 +77,12 @@ export default {
   failEmptyNotes: '备注写下后就不能留空。请改为编辑。',
   mainSays: '原因',
 
+  loadingRest: '正在加载这道食谱的其余部分…',
+  loadingRestCount: insert('已加载 {{count}} 个部分', { count: String }),
+  loadingRestFailed: '无法加载这道食谱的其余部分，因此还不能编辑。',
+  recipeTooLong: '这道食谱太长，无法在这里编辑。',
+  recipeChangedWhileLoading: '加载时这道食谱已更改，正在重新加载。',
+
   notRecipeTitle: '这不是食谱',
   notRecipeBody: '食谱编辑器只能打开食谱。',
   unavailableTitle: '无法加载食谱',

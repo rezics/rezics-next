@@ -233,6 +233,10 @@ export default {
   restartTimer: "Redémarrer le minuteur",
   recipeNotes: "Notes",
   recipeUnstructured: "Les quantités des ingrédients n’ont pas encore été ajoutées à cette recette.",
+  // Machine-drafted; needs native review.
+  showMoreRecipe: 'Afficher la suite de cette recette', loadingMoreRecipe: 'Chargement de la suite…',
+  recipeContinueFailed: 'La suite de cette recette n’a pas pu être chargée. Ce qui est déjà affiché reste en place.',
+  recipeChanged: 'Cette recette a changé. Elle s’affiche à nouveau depuis le début.',
   promptText: "Prompt publié",
   skillText: "Fichier SKILL.md publié",
   promptPublished: "Copiez le prompt publié à l’identique.",

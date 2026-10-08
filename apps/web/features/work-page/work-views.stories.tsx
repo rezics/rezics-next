@@ -374,6 +374,89 @@ export const UnitsAsWritten: Story = {
   },
 };
 
+const piece = (suffix: string) => `https://rezics.com/id/00000000-0000-0000-0000-0000000000${suffix}`;
+const sauceGroup = piece('a1');
+const tomatoId = piece('a2');
+const firstStep = piece('a3');
+const saltId = piece('a4');
+const secondStep = piece('a5');
+const laterPage = 'later-sauce-page';
+
+const recipeUse = (occurrence: string, role: 'group' | 'ingredient' | 'step', parent: string,
+  labels: { value: string; language: string }[],
+  qualifier?: RecipeWorkPage['occurrences'][number]['qualifier']): RecipeWorkPage['occurrences'][number] => ({
+  occurrence, state: 'active', parent, role, labels, introducedBy: fixture.work.revision, ...(qualifier ? { qualifier } : {}),
+});
+
+/** Page one of a section, then the lines and step that continue it. Nothing is fetched until Show more. */
+const continuedRecipe: RecipeWorkPage = {
+  ...recipeStory,
+  occurrences: [
+    recipeUse(sauceGroup, 'group', fixture.work.id, [{ value: 'Sauce', language: 'en' }]),
+    recipeUse(tomatoId, 'ingredient', sauceGroup, [], {
+      type: 'ingredient-line', originalText: { value: '1 cup tomato', language: 'en' },
+      amount: { numerator: 1, denominator: 1 }, unitText: 'cup', optional: false, scaling: 'linear',
+      substituteFor: [], parseStatus: 'parsed',
+    }),
+    recipeUse(firstStep, 'step', fixture.work.id, [], {
+      type: 'recipe-step', instructionText: { value: 'Stir the tomato.', language: 'en' },
+      usesIngredient: [], media: [], scaling: 'linear',
+    }),
+  ],
+  ingredients: [{
+    occurrence: tomatoId, originalText: '1 cup tomato', line: '1 cup tomato', unitText: 'cup',
+    amount: { numerator: 1, denominator: 1 }, scaled: false,
+  }],
+  next: laterPage,
+};
+
+const continuedRest: RecipeWorkPage = {
+  ...recipeStory,
+  occurrences: [
+    recipeUse(saltId, 'ingredient', sauceGroup, [], {
+      type: 'ingredient-line', originalText: { value: '1 teaspoon salt', language: 'en' },
+      amount: { numerator: 1, denominator: 1 }, unitText: 'teaspoon', optional: false, scaling: 'linear',
+      substituteFor: [], parseStatus: 'parsed',
+    }),
+    recipeUse(secondStep, 'step', fixture.work.id, [], {
+      type: 'recipe-step', instructionText: { value: 'Season and simmer.', language: 'en' },
+      usesIngredient: [], media: [], scaling: 'linear',
+    }),
+  ],
+  ingredients: [{
+    occurrence: saltId, originalText: '1 teaspoon salt', line: '1 teaspoon salt', unitText: 'teaspoon',
+    amount: { numerator: 1, denominator: 1 }, scaled: false,
+  }],
+};
+
+export const RecipeContinues: Story = {
+  parameters: at('overview'),
+  render: () => (
+    <Framed work={typedWork('https://schema.org/Recipe', 'Sunday sauce')}>
+      <RecipeExperience initial={continuedRecipe} href={`/v1/recipes/works/${fixture.workRef}`} actingSubject={null}
+        text={null} locale="en" messages={messages.en}
+        readPage={async query => query.cursor === laterPage
+          ? { data: continuedRest, error: null }
+          : { data: null, error: { status: 400, value: null } }} />
+    </Framed>
+  ),
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('1 cup tomato')).toBeVisible();
+    await expect(canvas.getByText('Stir the tomato.')).toBeVisible();
+    await expect(canvas.queryByText('1 teaspoon salt')).toBeNull();
+    await expect(canvas.queryByText('Season and simmer.')).toBeNull();
+    await expect(canvas.getAllByRole('heading', { name: /^Sauce$/ })).toHaveLength(1);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more of this recipe' }));
+    await expect(canvas.getByText('1 teaspoon salt')).toBeVisible();
+    await expect(canvas.getByText('Season and simmer.')).toBeVisible();
+    await expect(canvas.getAllByRole('heading', { name: /^Sauce$/ })).toHaveLength(1);
+    const method = canvas.getByRole('heading', { name: 'Method' }).parentElement!;
+    await expect(within(method).getAllByText(/^[12]$/).map(item => item.textContent)).toEqual(['1', '2']);
+    await expect(canvas.queryByRole('button', { name: 'Show more of this recipe' })).toBeNull();
+  },
+};
+
 export const PromptCopy: Story = {
   parameters: at('overview'),
   render: (_args, context) => {

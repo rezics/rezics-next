@@ -21,10 +21,16 @@ export type Refusal =
   | { kind: Reason };
 export type Outcome = { kind: 'saved' } | { kind: 'unchanged' } | { kind: 'refused'; refusal: Refusal } | { kind: 'busy' };
 
+export type RecipeLoadFailure = 'failed' | 'stale' | 'too-large';
+
 export interface Snapshot {
   state: RecipeState;
   /** True while a write is on its way to Main, or a slot is waiting for that write. */
   busy: boolean;
+  /** True while a later page is still being read. Saves wait, so a partial recipe is never written. */
+  loading: boolean;
+  /** Why the rest of the recipe could not be read. Saves stay closed. */
+  loadFailure: RecipeLoadFailure | null;
   /** What the last write ran into, until the next one starts. */
   failure: { intent: Intent; refusal: Refusal } | null;
 }
@@ -34,6 +40,12 @@ export interface RecipeStore {
   snapshot(): Snapshot;
   subscribe(listener: () => void): () => void;
   submit(intent: Intent): Promise<Outcome>;
+  /** The rest of the recipe is being read again. */
+  beginLoad(): void;
+  /** The recipe is complete. Replaces what was held from the first page, unless a save already landed. */
+  finishLoad(state: RecipeState): void;
+  /** The rest could not be read. The partial recipe stays unsaved. */
+  failLoad(kind: RecipeLoadFailure): void;
   /** Resolves once no write is in flight, so a form that adds something does not drop the person's Enter. */
   whenIdle(): Promise<void>;
   /** Resolves the last refusal. An unresolved command is sent again with its original key before it is replanned. */
@@ -66,15 +78,20 @@ const refusalOf = (answer: Extract<Answer<unknown>, { ok: false }>): Refusal => 
   }
 };
 
-export function createRecipeStore({ work, mainVersion, actingSubject, initial, main, newId = () => crypto.randomUUID() }: {
-  work: string; mainVersion: string; actingSubject: string; initial: RecipeState; main: () => MainClient; newId?: () => string;
+export function createRecipeStore({ work, mainVersion, actingSubject, initial, main, loading: startsLoading = false,
+  newId = () => crypto.randomUUID() }: {
+  work: string; mainVersion: string; actingSubject: string; initial: RecipeState; main: () => MainClient;
+  /** The first page is not the whole recipe. Saves stay closed until {@link RecipeStore.finishLoad}. */
+  loading?: boolean; newId?: () => string;
 }): RecipeStore {
   let state = initial;
+  let loading = startsLoading;
+  let loadFailure: RecipeLoadFailure | null = null;
   type Sent = Exclude<Plan, { kind: 'moot' } | { kind: 'invalid' }>;
   /** The command as it was sent. Retry resolves this before planning against a newer head. */
   type Flight = { plan: Sent; head: string };
   let failure: { intent: Intent; refusal: Refusal; id: string; key: string; command: CommandInstance; flight: Flight | null } | null = null;
-  let snapshot: Snapshot = { state, busy: false, failure: null };
+  let snapshot: Snapshot = { state, busy: false, loading, loadFailure, failure: null };
   let disposed = false;
   type Resolver = (outcome: Outcome) => void;
   type Entry = { key: string; intent: Intent; id: string; command: CommandInstance; flight: Flight | null; resolvers: Resolver[] };
@@ -94,7 +111,7 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   let draining = false;
   const outstanding = () => active > 0 || slots.size > 0;
   const notify = () => {
-    snapshot = { state, busy: outstanding(), failure: failure ? { intent: failure.intent, refusal: failure.refusal } : null };
+    snapshot = { state, busy: outstanding(), loading, loadFailure, failure: failure ? { intent: failure.intent, refusal: failure.refusal } : null };
     for (const listener of listeners) listener();
   };
   const wake = () => { if (!outstanding()) for (const resolve of idlers.splice(0)) resolve(); };
@@ -257,7 +274,8 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
   }
 
   function submit(intent: Intent, carried?: { id: string; command: CommandInstance; flight: Flight | null }): Promise<Outcome> {
-    if (disposed) return Promise.resolve({ kind: 'busy' });
+    // A plan built from the first page would drop every later section, step and link.
+    if (disposed || loading || loadFailure) return Promise.resolve({ kind: 'busy' });
     const id = carried?.id ?? newId();
     const command = carried?.command ?? commandInstance();
     const flight = carried?.flight ?? null;
@@ -274,6 +292,25 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
     snapshot: () => snapshot,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     submit: intent => submit(intent),
+    beginLoad() {
+      if (disposed || confirmed > 0) return;
+      loading = true;
+      loadFailure = null;
+      notify();
+    },
+    finishLoad(next: RecipeState) {
+      if (disposed || confirmed > 0) return;
+      state = next;
+      loading = false;
+      loadFailure = null;
+      notify();
+    },
+    failLoad(kind: RecipeLoadFailure) {
+      if (disposed) return;
+      loading = false;
+      loadFailure = kind;
+      notify();
+    },
     whenIdle: () => outstanding() ? new Promise<void>(resolve => { idlers.push(resolve); }) : Promise.resolve(),
     retry() {
       if (!failure) return Promise.resolve<Outcome>({ kind: 'unchanged' });

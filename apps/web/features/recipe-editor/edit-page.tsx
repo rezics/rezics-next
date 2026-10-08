@@ -100,7 +100,7 @@ export async function RecipeEditPage({ workRef, id, locale, agentSegment = null 
   const label = summaryName ?? { value: work.title.value, language: work.title.language };
   return <RecipeEditor work={work.id} mainVersion={work.mainVersion} language={language} actingSubject={actingSubject}
     workHref={globalWorkHref(workRef)} locale={locale} messages={messages[locale]}
-    initial={{ recipe: stateOf(recipe.data as RecipePageLike | null), notes,
+    initial={{ recipe: stateOf(recipe.data as RecipePageLike | null), next: (recipe.data as RecipePageLike | null)?.next ?? null, notes,
       details: { head: recorded?.revision ?? null, values: initialDetails(recorded, language, {
         label, description: work.description, tagline: work.tagline, originalTitle: work.originalTitle,
         completionStatus: work.completionStatus, mainVersionLabel: work.mainVersionLabel,

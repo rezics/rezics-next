@@ -72,6 +72,12 @@ const en = {
   publishNeeds: 'To publish:',
   needTitle: 'give it a title', needIngredient: 'add an ingredient', needStep: 'add a step', needNotes: 'write a note',
 
+  loadingRest: 'Loading the rest of this recipe…',
+  loadingRestCount: insert('{{count}} parts loaded', { count: String }),
+  loadingRestFailed: 'The rest of this recipe couldn’t be loaded, so it can’t be edited yet.',
+  recipeTooLong: 'This recipe is too long to edit here.',
+  recipeChangedWhileLoading: 'This recipe changed while it was loading. Loading it again.',
+
   retry: 'Try again', dismiss: 'Dismiss', reload: 'Show the latest',
   failSignIn: 'Sign in again to keep editing.',
   failDenied: 'You can’t change this recipe.',

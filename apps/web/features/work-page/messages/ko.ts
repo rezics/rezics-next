@@ -217,6 +217,10 @@ export default {
   closeCookMode: '요리 모드 닫기', startTimer: '타이머 시작', pauseTimer: '타이머 일시 정지',
   restartTimer: '타이머 다시 시작', recipeNotes: '메모',
   recipeUnstructured: '아직 환산할 수 있는 재료 분량이 없는 레시피예요.',
+  // Machine-drafted; needs native review.
+  showMoreRecipe: '이 레시피의 나머지 보기', loadingMoreRecipe: '더 불러오는 중…',
+  recipeContinueFailed: '이 레시피의 나머지를 불러오지 못했습니다. 이미 보이는 내용은 그대로입니다.',
+  recipeChanged: '이 레시피가 변경되어 처음부터 다시 보여 줍니다.',
   promptText: '게시된 프롬프트', skillText: '게시된 SKILL.md',
   promptPublished: '게시된 프롬프트 원문을 그대로 복사하세요.',
   skillPublished: '게시된 SKILL.md 원문을 그대로 복사하세요.',

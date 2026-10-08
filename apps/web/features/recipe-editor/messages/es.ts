@@ -77,6 +77,12 @@ export default {
   failEmptyNotes: 'Las notas no pueden quedar en blanco una vez escritas. Edítalas en su lugar.',
   mainSays: 'Motivo',
 
+  loadingRest: 'Cargando el resto de esta receta…',
+  loadingRestCount: insert('{{count}} partes cargadas', { count: String }),
+  loadingRestFailed: 'No se pudo cargar el resto de esta receta, así que todavía no se puede editar.',
+  recipeTooLong: 'Esta receta es demasiado larga para editarla aquí.',
+  recipeChangedWhileLoading: 'Esta receta cambió mientras se cargaba. Se está volviendo a cargar.',
+
   notRecipeTitle: 'Esto no es una receta',
   notRecipeBody: 'El editor de recetas solo se abre para recetas.',
   unavailableTitle: 'No se pudo cargar la receta',

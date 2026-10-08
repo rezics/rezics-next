@@ -77,6 +77,12 @@ export default {
   failEmptyNotes: '메모는 한번 쓰면 비워 둘 수 없습니다. 대신 편집하세요.',
   mainSays: '이유',
 
+  loadingRest: '이 레시피의 나머지를 불러오는 중…',
+  loadingRestCount: insert('{{count}}개 부분을 불러왔습니다', { count: String }),
+  loadingRestFailed: '이 레시피의 나머지를 불러오지 못해 아직 편집할 수 없습니다.',
+  recipeTooLong: '이 레시피는 너무 길어 여기서 편집할 수 없습니다.',
+  recipeChangedWhileLoading: '불러오는 동안 레시피가 변경되어 다시 불러옵니다.',
+
   notRecipeTitle: '레시피가 아닙니다',
   notRecipeBody: '레시피 편집기는 레시피에서만 열립니다.',
   unavailableTitle: '레시피를 불러오지 못했습니다',

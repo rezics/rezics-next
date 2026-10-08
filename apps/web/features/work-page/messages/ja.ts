@@ -216,6 +216,10 @@ export default {
   closeCookMode: '調理モードを閉じる', startTimer: 'タイマーを開始', pauseTimer: 'タイマーを一時停止',
   restartTimer: 'タイマーをリセット', recipeNotes: 'メモ',
   recipeUnstructured: 'このレシピには、換算できる材料の分量がまだありません。',
+  // Machine-drafted; needs native review.
+  showMoreRecipe: 'このレシピの続きを表示', loadingMoreRecipe: '続きを読み込み中…',
+  recipeContinueFailed: 'このレシピの続きを読み込めませんでした。表示中の内容はそのままです。',
+  recipeChanged: 'このレシピは変更されました。最初から表示し直します。',
   promptText: '公開済みプロンプト', skillText: '公開済み SKILL.md',
   promptPublished: '公開されたプロンプトをそのままコピーします。',
   skillPublished: '公開された SKILL.md をそのままコピーします。',
