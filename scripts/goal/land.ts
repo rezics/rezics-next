@@ -1,6 +1,6 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export interface LandReview {
@@ -35,8 +35,53 @@ export function handoffResult(text: string): string | undefined {
   return results.length === 1 ? /^RESULT:[ \t]*(\S+)[ \t]*$/.exec(results[0]![0])?.[1] : undefined;
 }
 
+/** Reviewers `GOAL_REVIEW_ENGINE` may select. Sol on the default Codex account is the norm; the others keep
+ * landing possible while that account is exhausted (program, 2026-10-08: Codex out for a week). */
+export const REVIEW_ENGINES = ['codex', 'codex-1', 'sonnet'] as const;
+export type ReviewEngine = typeof REVIEW_ENGINES[number];
+const SONNET_REVIEW_MODEL = 'claude-sonnet-5-5';
+// Bounds the diff embedded for a reviewer that cannot run git itself.
+const EMBEDDED_DIFF_LIMIT = 400_000;
+
+/** Program switches every Goal's reviewer by writing this file; `GOAL_REVIEW_ENGINE` overrides it for one run. */
+export const REVIEW_ENGINE_FILE = join(import.meta.dir, '../../.temp/goal-orchestration/review-engine');
+
+export function reviewEngine(env: NodeJS.ProcessEnv = process.env, file = REVIEW_ENGINE_FILE): ReviewEngine {
+  const engine = env.GOAL_REVIEW_ENGINE?.trim() || (existsSync(file) ? readFileSync(file, 'utf8').trim() : '') || 'codex';
+  if (!(REVIEW_ENGINES as readonly string[]).includes(engine)) {
+    throw new Error(`GOAL_REVIEW_ENGINE must be one of ${REVIEW_ENGINES.join(', ')}`);
+  }
+  return engine as ReviewEngine;
+}
+
+/** The findings object in a reviewer's final text: the whole text, or else its outermost braces. */
+export function findingsFromText(text: string): unknown {
+  const trimmed = text.trim();
+  try { return JSON.parse(trimmed); } catch { /* the reviewer wrapped it in prose or a fence */ }
+  const start = trimmed.indexOf('{');
+  const end = trimmed.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('reviewer text holds no JSON object');
+  return JSON.parse(trimmed.slice(start, end + 1));
+}
+
+function runReviewer(program: string, args: string[], request: LandReview, prompt: string): Promise<void> {
+  const stdout = openSync(join(request.directory, 'stdout.log'), 'w');
+  const stderr = openSync(join(request.directory, 'stderr.log'), 'w');
+  const child = spawn(program, args, { cwd: request.worktree, stdio: ['pipe', stdout, stderr] });
+  const exited = new Promise<number | null>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', resolve);
+  });
+  // Launch failures are reported by the child's error event, rather than an unhandled EPIPE.
+  child.stdin?.on('error', () => {});
+  child.stdin?.end(prompt);
+  return exited.then(code => {
+    if (code !== 0) throw new Error(`reviewer exited ${code}; see ${request.directory}`);
+  }).finally(() => { closeSync(stdout); closeSync(stderr); });
+}
+
 /** Keep the review independent of worker instructions and fail closed on malformed output. */
-export async function reviewBranch(request: LandReview): Promise<string[]> {
+export async function reviewBranch(request: LandReview, engine: ReviewEngine = reviewEngine()): Promise<string[]> {
   const schema = join(request.directory, 'schema.json');
   const output = join(request.directory, 'review.json');
   writeFileSync(schema, JSON.stringify({ type: 'object', additionalProperties: false,
@@ -58,26 +103,33 @@ ${request.brief}
 <handoff>
 ${request.handoff}
 </handoff>`;
-  writeFileSync(join(request.directory, 'prompt.md'), prompt);
-  const stdout = openSync(join(request.directory, 'stdout.log'), 'w');
-  const stderr = openSync(join(request.directory, 'stderr.log'), 'w');
-  try {
-    const child = spawn('codex', ['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high',
-      '-s', 'read-only', '--output-schema', schema, '--output-last-message', output, '-'],
-    { cwd: request.worktree, stdio: ['pipe', stdout, stderr] });
-    const exited = new Promise<number | null>((resolve, reject) => {
-      child.once('error', reject);
-      child.once('exit', resolve);
-    });
-    // Launch failures are reported by the child's error event, rather than an unhandled EPIPE.
-    child.stdin?.on('error', () => {});
-    child.stdin?.end(prompt);
-    const code = await exited;
-    if (code !== 0) throw new Error(`reviewer exited ${code}; see ${request.directory}`);
-  } finally {
-    closeSync(stdout); closeSync(stderr);
+  let result: unknown;
+  if (engine === 'sonnet') {
+    // Claude Code reviews with read-only tools and no shell, so the diff travels in the prompt.
+    const diff = spawnSync('git', ['diff', `${request.base}..${request.head}`], { cwd: request.worktree, encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024 });
+    if (diff.status !== 0) throw new Error(`git diff for the reviewer failed: ${diff.stderr}`);
+    const text = diff.stdout.length > EMBEDDED_DIFF_LIMIT
+      ? `${diff.stdout.slice(0, EMBEDDED_DIFF_LIMIT)}\n[diff truncated at ${EMBEDDED_DIFF_LIMIT} characters; read the remaining files directly]`
+      : diff.stdout;
+    const full = `${prompt}\n<diff>\n${text}\n</diff>\nReply with only the JSON object {"findings":[...]}.`;
+    writeFileSync(join(request.directory, 'prompt.md'), full);
+    await runReviewer('claude', ['-p', '--model', SONNET_REVIEW_MODEL, '--allowedTools', 'Read', 'Grep', 'Glob',
+      '--output-format', 'json', '--json-schema', readFileSync(schema, 'utf8')], request, full);
+    const reply = JSON.parse(readFileSync(join(request.directory, 'stdout.log'), 'utf8')) as
+      { result?: unknown; structured_output?: unknown; is_error?: boolean };
+    if (reply.is_error) throw new Error(`reviewer reported an error; see ${request.directory}`);
+    // The schema-validated object when the CLI returns one; otherwise the findings object in the final text.
+    if (reply.structured_output !== undefined) result = reply.structured_output;
+    else if (typeof reply.result === 'string') result = findingsFromText(reply.result);
+    else throw new Error(`reviewer returned no findings; see ${request.directory}`);
+    writeFileSync(output, JSON.stringify(result));
+  } else {
+    writeFileSync(join(request.directory, 'prompt.md'), prompt);
+    await runReviewer(engine, ['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high',
+      '-s', 'read-only', '--output-schema', schema, '--output-last-message', output, '-'], request, prompt);
+    result = JSON.parse(readFileSync(output, 'utf8'));
   }
-  const result: unknown = JSON.parse(readFileSync(output, 'utf8'));
   if (!result || typeof result !== 'object' || !('findings' in result)
     || !Array.isArray(result.findings) || !result.findings.every(item => typeof item === 'string' && item.trim())) {
     throw new Error(`reviewer returned an invalid findings report; see ${output}`);

@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
-import { handoffResult, land, reviewBranch } from './land.ts';
+import { findingsFromText, handoffResult, land, reviewBranch, reviewEngine } from './land.ts';
 import { parseBrief, validateBrief, type Ledger, type Task } from './goalctl.ts';
 
 function repo(options: { result?: string; auto?: boolean; files?: Record<string, string>; paths?: string[] } = {}) {
@@ -244,6 +244,58 @@ describe('Goal landing', () => {
       expect(existsSync(join(directory, 'stderr.log'))).toBe(true);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
+
+  test('the review engine comes from the override, then the program file, then codex', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'goal-review-engine-'));
+    const file = join(directory, 'review-engine');
+    try {
+      expect(reviewEngine({}, file)).toBe('codex');
+      writeFileSync(file, 'sonnet\n');
+      expect(reviewEngine({}, file)).toBe('sonnet');
+      expect(reviewEngine({ GOAL_REVIEW_ENGINE: 'codex-1' }, file)).toBe('codex-1');
+      expect(() => reviewEngine({ GOAL_REVIEW_ENGINE: 'grok' }, file)).toThrow('GOAL_REVIEW_ENGINE');
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+
+  test('a reviewer reply may wrap its findings object in prose or a fence', () => {
+    expect(findingsFromText('{"findings":[]}')).toEqual({ findings: [] });
+    expect(findingsFromText('Review done.\n```json\n{"findings":["a P1"]}\n```')).toEqual({ findings: ['a P1'] });
+    expect(() => findingsFromText('no object here')).toThrow();
+  });
+
+  test('the sonnet reviewer gets the diff in its prompt and its findings fail closed', async () => {
+    const r = repo();
+    const bin = mkdtempSync(join(tmpdir(), 'goal-review-bin-'));
+    const directory = mkdtempSync(join(tmpdir(), 'goal-review-'));
+    const path = process.env.PATH;
+    try {
+      writeFileSync(join(r.worktree, 'reviewed.txt'), 'reviewed change\n');
+      r.git(r.worktree, 'add', 'reviewed.txt');
+      r.git(r.worktree, 'commit', '-qm', 'Reviewed change');
+      const head = r.git(r.worktree, 'rev-parse', 'HEAD').trim();
+      const base = r.git(r.worktree, 'rev-parse', 'HEAD~1').trim();
+      // The stub copies its stdin aside and answers like `claude -p --output-format json`.
+      const reply = join(bin, 'reply.json');
+      writeFileSync(reply, JSON.stringify({ is_error: false, result: 'Done. {"findings":["P1 stub"]}' }));
+      writeFileSync(join(bin, 'claude'), `#!/bin/sh\ncat > "${directory}/stdin.txt"\ncat "${reply}"\n`);
+      chmodSync(join(bin, 'claude'), 0o755);
+      process.env.PATH = `${bin}:${path}`;
+      const findings = await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
+        base, head }, 'sonnet');
+      expect(findings).toEqual(['P1 stub']);
+      expect(readFileSync(join(directory, 'stdin.txt'), 'utf8')).toContain('+reviewed change');
+      // A schema-validated object from the CLI wins over the text.
+      writeFileSync(reply, JSON.stringify({ is_error: false, result: 'prose', structured_output: { findings: ['P2 structured'] } }));
+      expect(await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
+        base, head }, 'sonnet')).toEqual(['P2 structured']);
+      writeFileSync(reply, JSON.stringify({ is_error: true, result: 'limit' }));
+      await expect(reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
+        base, head }, 'sonnet')).rejects.toThrow('reported an error');
+    } finally {
+      process.env.PATH = path;
+      r.cleanup(); rmSync(bin, { recursive: true, force: true }); rmSync(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
 
   test('land accepts an unclaimed owner change and reports it after merge', () => {
     const r = repo();
