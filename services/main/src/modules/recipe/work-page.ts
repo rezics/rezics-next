@@ -17,12 +17,13 @@ export const RECIPE_WORK_PAGE_BYTES = 1_048_576;
 /** Opaque cursor, including its mac. Long enough for a depth-limited parent stack. */
 export const RECIPE_WORK_PAGE_CURSOR_MAX = 8192;
 /**
- * Reads in one call: one child composition page, one re-read of each cursor
- * ancestor (at most {@link STRUCTURE_LIMITS.maxDepth}), one empty child page
- * for each exhausted frame (at most maxDepth + 1), and one measure-manifest
- * read. That is `1 + maxDepth + (maxDepth + 1) + 1`.
+ * Reads in one call: one measure-manifest read, one re-read of each cursor
+ * ancestor (at most {@link STRUCTURE_LIMITS.maxDepth}), and at most maxDepth + 1
+ * child composition pages. Those child pages are spent filling depth-first
+ * across sections, or confirming a frame is exhausted. That is
+ * `1 + maxDepth + (maxDepth + 1)`.
  */
-export const RECIPE_WORK_PAGE_READ_BOUND = 2 * STRUCTURE_LIMITS.maxDepth + 3;
+export const RECIPE_WORK_PAGE_READ_BOUND = 2 * STRUCTURE_LIMITS.maxDepth + 2;
 
 /** Deepest cursor stack: the Structure root plus one frame per nesting level. */
 const MAX_STACK = STRUCTURE_LIMITS.maxDepth + 1;
@@ -42,6 +43,15 @@ function recipeCursorKey(): Buffer {
 }
 
 interface CursorFrame { parent: string; after?: string }
+/**
+ * Cursor frame plus the unread tail of the child page fetched during this call.
+ * The cursor does not carry the tail; a continuation reads again from `after`.
+ */
+interface WalkFrame extends CursorFrame {
+  pending?: OccurrenceRecord[];
+  at?: number;
+  more?: boolean;
+}
 interface RecipeCursor {
   v: 1;
   structure: string;
@@ -148,7 +158,8 @@ function scaled(records: readonly OccurrenceRecord[], factor: ExactRational) {
 }
 
 /**
- * One depth-first page of a pinned Recipe revision. See {@link RECIPE_WORK_PAGE_READ_BOUND}.
+ * One depth-first page of a pinned Recipe revision. The walk crosses sections
+ * until {@link RECIPE_WORK_PAGE_OCCURRENCES} occurrences or {@link RECIPE_WORK_PAGE_READ_BOUND}.
  * Every page returns the measure manifest. A continuation keeps the servings factor
  * stored in the cursor and still reads that manifest once for the response.
  */
@@ -161,7 +172,7 @@ export async function readRecipeHierarchyPage(input: {
   readMeasures?: () => Promise<{ measures: readonly RecipeMeasure[]; pagesRead: number }>;
   cursor?: string;
 } & RecipeHierarchyRead) {
-  let stack: CursorFrame[];
+  let stack: WalkFrame[];
   let factor: ExactRational;
   let pinnedServings: number | null;
   if (input.cursor) {
@@ -197,12 +208,14 @@ export async function readRecipeHierarchyPage(input: {
     throw new WorkReadUnavailable('Recipe measures exceed 64');
   }
   if (!input.cursor) factor = servingsFactor(measures, input.servings);
+  // Child pages share one pool. Depth + 1 covers a shallow recipe; the walk stops rather than exceeding it.
+  const childReadLimit = STRUCTURE_LIMITS.maxDepth + 1;
   const charge = (kind: 'parent' | 'empty' | 'data') => {
     if (kind === 'parent') parentReads += 1;
     else if (kind === 'empty') emptyReads += 1;
     else dataReads += 1;
     if (measureReads > 1 || parentReads > STRUCTURE_LIMITS.maxDepth
-      || emptyReads > STRUCTURE_LIMITS.maxDepth + 1 || dataReads > 1) {
+      || emptyReads + dataReads > childReadLimit) {
       throw new WorkReadLimit('Recipe page exceeds its read bound');
     }
   };
@@ -219,38 +232,39 @@ export async function readRecipeHierarchyPage(input: {
   const taken: OccurrenceRecord[] = [];
   while (stack.length > 0) {
     const frame = stack.at(-1)!;
-    const page = await input.readChildren({ parent: frame.parent, ...(frame.after ? { after: frame.after } : {}),
-      limit: RECIPE_WORK_PAGE_OCCURRENCES });
-    pagesRead += page.pagesRead;
-    if (page.occurrences.length === 0) {
-      charge('empty');
-      stack.pop();
+    const consumed = frame.at ?? 0;
+    if (!frame.pending || consumed >= frame.pending.length) {
+      // Pop a frame whose page is finished without another read, including after the occurrence cap,
+      // so the cursor is not left on an exhausted parent.
+      if (frame.pending && !frame.more) {
+        stack.pop();
+        continue;
+      }
+      if (taken.length >= RECIPE_WORK_PAGE_OCCURRENCES || emptyReads + dataReads >= childReadLimit) break;
+      const page = await input.readChildren({ parent: frame.parent, ...(frame.after ? { after: frame.after } : {}),
+        limit: RECIPE_WORK_PAGE_OCCURRENCES });
+      pagesRead += page.pagesRead;
+      const batch = page.occurrences.slice(0, RECIPE_WORK_PAGE_OCCURRENCES);
+      frame.pending = batch;
+      frame.at = 0;
+      frame.more = page.next != null || page.occurrences.length > RECIPE_WORK_PAGE_OCCURRENCES;
+      charge(batch.length === 0 ? 'empty' : 'data');
       continue;
     }
-    charge('data');
-    const batch = page.occurrences.slice(0, RECIPE_WORK_PAGE_OCCURRENCES);
-    let consumed = 0;
-    let descended = false;
-    for (const item of batch) {
-      if (!item.segmentKey || !item.orderKey || item.parent !== frame.parent) {
-        throw new WorkReadUnavailable('Recipe occurrence has no order');
-      }
-      consumed += 1;
-      taken.push(item);
-      frame.after = orderTreeKey({ parent: item.parent, segmentKey: item.segmentKey, orderKey: item.orderKey });
-      if (item.state === 'active' && item.role === 'group') {
-        if (stack.length > STRUCTURE_LIMITS.maxDepth) {
-          throw new WorkReadUnavailable('Recipe sections exceed depth 16');
-        }
-        stack.push({ parent: item.occurrence });
-        descended = true;
-        break;
-      }
-      if (taken.length >= RECIPE_WORK_PAGE_OCCURRENCES) break;
+    if (taken.length >= RECIPE_WORK_PAGE_OCCURRENCES) break;
+    const item = frame.pending[consumed]!;
+    if (!item.segmentKey || !item.orderKey || item.parent !== frame.parent) {
+      throw new WorkReadUnavailable('Recipe occurrence has no order');
     }
-    const hasMore = page.next != null || page.occurrences.length > RECIPE_WORK_PAGE_OCCURRENCES;
-    if (!descended && consumed === batch.length && !hasMore) stack.pop();
-    break;
+    frame.at = consumed + 1;
+    taken.push(item);
+    frame.after = orderTreeKey({ parent: item.parent, segmentKey: item.segmentKey, orderKey: item.orderKey });
+    if (item.state === 'active' && item.role === 'group') {
+      if (stack.length > STRUCTURE_LIMITS.maxDepth) {
+        throw new WorkReadUnavailable('Recipe sections exceed depth 16');
+      }
+      stack.push({ parent: item.occurrence });
+    }
   }
   const occurrences = taken.filter(item => item.state === 'active');
   const next = stack.length > 0 ? encodeCursor({ v: 1, structure: input.structure, revision: input.revision,

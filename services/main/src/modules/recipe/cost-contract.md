@@ -33,20 +33,23 @@ comparing retained source bytes, native occurrences and export output.
 
 The Work page read resolves the selected Main Version and Recipe Structure in
 bounded graph queries, then pins one revision. One call returns at most 100
-occurrences in depth-first order and, when the hierarchy continues, a signed
-cursor that pins the revision, the servings factor and the parent stack. A
-cursor whose revision is no longer current is a stale result and is not mixed
-into the new tree. A tampered cursor is refused. The cursor mac key is derived
-from the shared Fuseki maintenance capability, so a restart keeps outstanding
-cursors valid. Measures, at most 64, are read once on every page and returned
-with that page. A continuation still scales with the factor pinned in the
-cursor. The optional servings request is a whole number from 1 to 100. A page
-whose JSON exceeds 1 MiB is rejected; the call does not buffer the rest of the
-hierarchy. Each call reads one child composition page, re-reads the cursor's
-parents up to the depth limit, may read one empty child page per exhausted
-frame, and reads the measure manifest once. The reported cost is those reads,
-the object pages they touched and the occurrences returned. The kitchen line
-is computed in memory. The read repeats Work visibility checks after hydration.
+occurrences in depth-first order, crossing sections until that cap or the read
+bound, and, when the hierarchy continues, a signed cursor that pins the
+revision, the servings factor and the parent stack. The cursor may resume
+mid-section. A cursor whose revision is no longer current is a stale result
+and is not mixed into the new tree. A tampered cursor is refused. The cursor
+mac key is derived from the shared Fuseki maintenance capability, so a restart
+keeps outstanding cursors valid. Measures, at most 64, are read once on every
+page and returned with that page. A continuation still scales with the factor
+pinned in the cursor. The optional servings request is a whole number from 1
+to 100. A page whose JSON exceeds 1 MiB is rejected; the call does not buffer
+the rest of the hierarchy. Each call reads the measure manifest once, re-reads
+the cursor's parents up to the depth limit, and reads at most depth + 1 child
+composition pages (17 when depth is 16). That is at most 2 × depth + 2 reads.
+A shallow recipe finishes in one call; a longer or deeper one still pages at
+that same cost. The reported cost is those reads, the object pages they
+touched and the occurrences returned. The kitchen line is computed in memory.
+The read repeats Work visibility checks after hydration.
 
 The recipe operation unit tests cover rational bounds, exact aggregation and
 ambiguous-unit lexical retention. The integration test exercises a real Jena

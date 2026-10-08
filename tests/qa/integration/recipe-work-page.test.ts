@@ -163,11 +163,16 @@ test('a paged Recipe keeps depth-first order, the servings pin and a stale curso
     };
     const first = await load(undefined, 8);
     expect(first.revision).toBe(measured.revision);
-    expect(first.occurrences.map(item => item.role)).toEqual(['group']);
+    expect(first.occurrences[0]?.role).toBe('group');
     expect(first.occurrences[0]?.labels[0]?.value).toBe('Sauce');
+    expect(first.occurrences.slice(1, 3).map(item => item.qualifier?.originalText?.value))
+      .toEqual(['1 cup tomato', '1 cup salt']);
+    expect(first.occurrences.at(-1)?.qualifier?.originalText?.value).toBe('1 cup flour 96');
     expect(first.measures?.map(item => item.kind)).toEqual(expect.arrayContaining(['servings', 'nutrient']));
     expect(first.measures?.find(item => item.kind === 'nutrient')?.basis).toBe('per-serving');
-    expect(first.cost.occurrences).toBe(1);
+    expect(first.ingredients.slice(0, 2).map(item => item.amount)).toEqual([
+      { numerator: 2, denominator: 1 }, { numerator: 2, denominator: 1 }]);
+    expect(first.cost.occurrences).toBe(RECIPE_WORK_PAGE_OCCURRENCES);
     expect(first.cost.pages).toBeLessThanOrEqual(RECIPE_WORK_PAGE_READ_BOUND);
     expect(first.next).toBeString();
     const cursor = first.next!;
@@ -177,19 +182,16 @@ test('a paged Recipe keeps depth-first order, the servings pin and a stale curso
     expect((await f.call('GET', `${path}${query}&cursor=${encodeURIComponent(cursor)}&servings=3`)).status).toBe(400);
     const second = await load(cursor);
     expect(second.measures?.map(item => item.kind)).toEqual(expect.arrayContaining(['servings', 'nutrient']));
-    expect(second.occurrences.map(item => item.qualifier?.originalText?.value)).toEqual(['1 cup tomato', '1 cup salt']);
+    expect(second.occurrences.map(item => item.qualifier?.originalText?.value))
+      .toEqual(['1 cup flour 97', '1 cup flour 98', '1 cup flour 99']);
     expect(second.ingredients.map(item => item.amount)).toEqual([
-      { numerator: 2, denominator: 1 }, { numerator: 2, denominator: 1 }]);
+      { numerator: 2, denominator: 1 }, { numerator: 2, denominator: 1 }, { numerator: 2, denominator: 1 }]);
     expect(second.cost.occurrences).toBeLessThanOrEqual(RECIPE_WORK_PAGE_OCCURRENCES);
     const replay = await load(cursor);
-    expect(replay.occurrences.map(item => item.qualifier?.originalText?.value)).toEqual(['1 cup tomato', '1 cup salt']);
-    const third = await load(second.next);
-    expect(third.occurrences).toHaveLength(RECIPE_WORK_PAGE_OCCURRENCES);
-    expect(third.occurrences.every(item => item.qualifier?.originalText?.value?.startsWith('1 cup flour'))).toBe(true);
-    expect(third.ingredients[0]?.amount).toEqual({ numerator: 2, denominator: 1 });
-    expect(third.measures?.map(item => item.kind)).toEqual(expect.arrayContaining(['servings', 'nutrient']));
-    expect(third.next).toBeUndefined();
-    expect(third.cost.pages).toBeLessThanOrEqual(RECIPE_WORK_PAGE_READ_BOUND);
+    expect(replay.occurrences.map(item => item.qualifier?.originalText?.value))
+      .toEqual(['1 cup flour 97', '1 cup flour 98', '1 cup flour 99']);
+    expect(second.next).toBeUndefined();
+    expect(second.cost.pages).toBeLessThanOrEqual(RECIPE_WORK_PAGE_READ_BOUND);
     const added = await f.json<{ revision: string }>(await f.call('POST',
       `/v1/compositions/${shortId(created.structure)}/changes`, { profile: 'recipe-composition',
         expectedHead: measured.revision, actingSubject: f.actor,
@@ -198,5 +200,68 @@ test('a paged Recipe keeps depth-first order, the servings pin and a stale curso
       await f.call('GET', `${path}${query}&cursor=${encodeURIComponent(cursor)}`), 409);
     expect(stale).toEqual({ profile: 'recipe-work-page-stale', structure: created.structure,
       revision: added.revision, cursorRevision: measured.revision });
+  } finally { await f.close(); }
+}, 180_000);
+
+test('a two-section four-step recipe is one page', async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
+  const f = await authorCreditFixture(Bun.env as Record<string, string>,
+    resolve('.temp', `recipe-work-page-${randomUUID()}`));
+  const objects = new S3ImmutableObjects({ endpoint: Bun.env.MAIN_S3_ENDPOINT!,
+    bucket: Bun.env.MAIN_S3_BUCKET!, region: Bun.env.MAIN_S3_REGION!,
+    accessKeyId: Bun.env.MAIN_S3_ACCESS_KEY!, secretAccessKey: Bun.env.MAIN_S3_SECRET_KEY!,
+    prefix: 'semantic/structure/' });
+  await objects.initialize();
+  (f.env as typeof f.env & { structureObjects: ImmutableObjects }).structureObjects = objects;
+  try {
+    const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works', await f.authoredBody({
+      language: 'en', profile: 'metadata-only-v1', title: 'Layer cake',
+      semanticTypes: ['https://schema.org/Recipe'], actingSubject: f.actor,
+    })), 201);
+    await f.grant(`work:edit:${work.work}`, 'recipe.edit');
+    await f.grant(`work:read:${work.work}`, 'work.read');
+    const created = await f.json<{ structure: string; revision: string }>(await f.call('POST',
+      '/v1/compositions', { profile: 'recipe-composition', work: work.work, mainVersion: work.mainVersion,
+        actingSubject: f.actor }, `recipe-${randomUUID()}`), 201);
+    const step = (text: string, parent: string) => ({ op: 'insert' as const, parent, position: 'last' as const,
+      role: 'step' as const, qualifier: { type: 'recipe-step', instructionText: { value: text, language: 'en' },
+        usesIngredient: [], media: [], scaling: 'linear' } });
+    let revision = created.revision;
+    const change = async (operations: object[]) => {
+      const result = await f.json<{ revision: string; occurrences: string[] }>(await f.call('POST',
+        `/v1/compositions/${shortId(created.structure)}/changes`, { profile: 'recipe-composition',
+          expectedHead: revision, actingSubject: f.actor, operations }, `recipe-${randomUUID()}`), 200);
+      revision = result.revision;
+      return result.occurrences;
+    };
+    const [cake] = await change([{ op: 'insert', parent: created.structure, position: 'last', role: 'group',
+      label: { value: 'Cake', language: 'en' } }]);
+    await change([step('Mix.', cake!), step('Bake.', cake!)]);
+    const [frosting] = await change([{ op: 'insert', parent: created.structure, position: 'last', role: 'group',
+      label: { value: 'Frosting', language: 'en' } }]);
+    await change([step('Spread.', frosting!), step('Serve.', frosting!)]);
+    await f.json(await f.call('POST', `/v1/recipes/${shortId(created.structure)}/measures`, {
+      expectedHead: revision, actingSubject: f.actor,
+      yield: { value: { numerator: 8, denominator: 1 }, unitText: 'servings',
+        coverage: 'complete', provenance: 'declared' },
+      servings: { value: { numerator: 8, denominator: 1 },
+        coverage: 'complete', provenance: 'declared' },
+      nutrition: { basis: 'whole-recipe', inputs: [] },
+    }, `recipe-${randomUUID()}`), 200);
+    const path = `/v1/recipes/works/${shortId(work.work)}`;
+    const query = `?actingSubject=${encodeURIComponent(f.actor)}`;
+    const page = await f.json<{ occurrences: Array<{ role: string; parent: string;
+      labels: Array<{ value: string }>; qualifier?: { instructionText?: { value: string } } }>;
+      measures: Array<{ kind: string }>; next?: string;
+      cost: { pages: number; occurrences: number } }>(await f.call('GET', path + query), 200);
+    const label = (item: typeof page.occurrences[number]) => item.role === 'group'
+      ? item.labels[0]?.value : item.qualifier?.instructionText?.value;
+    expect(page.occurrences.map(label)).toEqual(['Cake', 'Mix.', 'Bake.', 'Frosting', 'Spread.', 'Serve.']);
+    expect(page.occurrences.map(item => item.parent)).toEqual([
+      created.structure, cake, cake, created.structure, frosting, frosting]);
+    expect(page.measures.map(item => item.kind)).toContain('servings');
+    expect(page.cost.occurrences).toBe(6);
+    expect(page.cost.pages).toBeLessThanOrEqual(RECIPE_WORK_PAGE_READ_BOUND);
+    expect(page).not.toHaveProperty('next');
   } finally { await f.close(); }
 }, 180_000);
