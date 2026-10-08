@@ -359,17 +359,21 @@ export class ReadingPositionTraversal {
       checkpoint = at(cursor.occurrence, false);
     } else if (meta.structure) frames.push({ work: this.root, parent: meta.structure });
     const items: ReadingOccurrence[] = [];
-    // Hidden skips stop after one scan window. A visible page is one index
-    // read of the requested page plus its lookahead, not that window.
-    let skipped = 0, examined = 0, widen = false;
-    const open = () => this.order ? skipped < READING_CHOOSER_COST.scanRows : examined < READING_CHOOSER_COST.scanRows;
+    // One scan window bounds a request. A visible page is one index read of the
+    // requested page plus its lookahead, which delivered rows do not spend.
+    // Everything else does: each frame visited (so descending into a group,
+    // popping it and an empty group all cost one) and each row that yields
+    // nothing. The window ends in a continuation, never a longer walk.
+    let spent = 0, examined = 0, widen = false;
+    const open = () => this.order ? spent < READING_CHOOSER_COST.scanRows : examined < READING_CHOOSER_COST.scanRows;
     while (frames.length && items.length <= input.limit && open()) {
       this.session.checkDeadline();
+      spent++;
       const frame = frames.at(-1)!, owner = await this.metadataFor(frame.work);
       try { await this.requireWork(frame.work); }
       catch (error) {
         if (!(error instanceof WorkReadMissing)) throw error;
-        frames.pop(); examined++; skipped++;
+        frames.pop(); examined++;
         const parent = frames.at(-1)?.after;
         if (parent) checkpoint = at(parent.occurrence, false);
         continue;
@@ -381,7 +385,7 @@ export class ReadingPositionTraversal {
       // disclosure for every hidden sibling and exhaust the work-read budget.
       const probe: number = this.order
         ? Math.min(READING_CHOOSER_COST.probe, widen
-          ? Math.max(room, READING_CHOOSER_COST.scanRows - skipped) : room)
+          ? Math.max(room, READING_CHOOSER_COST.scanRows - spent) : room)
         : Math.min(READING_CHOOSER_COST.probe, READING_CHOOSER_COST.scanRows - examined);
       if (probe < 1) break;
       const candidates = await this.range(owner, frame.parent, frame.after, q, false, probe);
@@ -409,7 +413,7 @@ export class ReadingPositionTraversal {
           break;
         }
       }
-      skipped += passed;
+      spent += passed;
       // Widen only while this frame still has unread siblings. An exhausted
       // frame pops, and the next sibling starts again at the page-sized probe.
       widen = !descended && (deliveredHere === 0

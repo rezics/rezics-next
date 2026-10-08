@@ -4,7 +4,7 @@ import { StructureProgressStore, InvalidStructureProgress, ProgressOrderUnavaila
 import { createHash, randomUUID } from 'node:crypto';
 import { ObjectUnavailable, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import { chooserPosition } from '../src/modules/reading-position/chooser-position.ts';
-import { ReadingPositionTraversal } from '../src/modules/reading-position/traversal.ts';
+import { ReadingPositionTraversal, READING_CHOOSER_COST } from '../src/modules/reading-position/traversal.ts';
 import { orderTree, recordTree } from '../src/modules/structure/change.ts';
 import { COMPOSITION_PROFILE, orderTreeKey, type CompositionHeader } from '../src/modules/structure/graph.ts';
 import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, type OccurrenceRecord } from '../src/modules/structure/format.ts';
@@ -1014,4 +1014,36 @@ test('anchor readiness is one keyed scope row, and an unprepared scope asks for 
   expect(calls[0]!.sql).toContain('cursor IS NULL');
   expect(calls[0]!.params).toEqual([principal.issuer, principal.subject, member.structure, parent.structure, member.revision, parent.revision]);
   await expect(store.anchorsCurrent(principal, { ...member, revision: 'invalid' }, parent)).rejects.toBeInstanceOf(InvalidStructureProgress);
+});
+
+test('hundreds of empty groups ahead of the first chapter cost a bounded window per request', async () => {
+  const groups = 300;
+  const f = await fixture(false, false, false, false, records => {
+    // Groups sort before the episodes and hold nothing.
+    const template = records.find(record => record.role === 'group')!, structure = records[0]!.parent;
+    for (let index = 0; index < groups; index++) {
+      records.push({ ...template, occurrence: id(), parent: structure, segmentKey: '0',
+        orderKey: (index + 1).toString(36).padStart(4, '0'), labels: [{ value: `Empty ${index}`, language: 'en' }] });
+    }
+  });
+  const bound = READING_CHOOSER_COST.scanRows;
+  let after: string | undefined, requests = 0;
+  for (; requests < groups; requests++) {
+    const before = f.measure();
+    const page = await f.traversal().page({ limit: 1, after });
+    const spent = f.measure();
+    // Each visited group is a bounded number of graph reads, and a request visits at most one scan window of them.
+    expect(spent.calls - before.calls).toBeLessThanOrEqual(bound);
+    expect(spent.rowsRead - before.rowsRead).toBeLessThanOrEqual(bound * 10);
+    if (page.items.length) {
+      expect(page.items[0]!.occurrence).toBe(f.episodes[0]!.occurrence);
+      break;
+    }
+    expect(page.complete).toBe(false);
+    expect(page.next).toBeString();
+    after = page.next!;
+  }
+  // The continuation walked past every empty group instead of one request doing it all.
+  expect(requests).toBeGreaterThan(Math.floor(groups / bound));
+  expect(requests).toBeLessThan(groups);
 });
