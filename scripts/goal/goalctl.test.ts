@@ -1155,6 +1155,47 @@ describe('goalctl runtime policy', () => {
     expect(names(unit)).toEqual(new Set([budget]));
   });
 
+  test('a file that passes in junit is not failing when stdout prints fail and error lines', async () => {
+    const file = 'scripts/goal/goalctl.test.ts';
+    const omitted = 'scripts/goal/load-missing.test.ts';
+    const junit = [
+      '<?xml version="1.0" encoding="UTF-8"?>', '<testsuites>',
+      `<testsuite name="${file}" file="${file}">`,
+      `<testcase name="prints a stub gate" file="${file}" />`,
+      '</testsuite>', '</testsuites>',
+    ].join('\n');
+    const output = [
+      `${file}:`,
+      '(fail) library public bounds reject an oversize page',
+      'error: id 111',
+      'Unit gate shard: 4 file(s), 1 failing in 1ms',
+      UNIT_JUNIT_MARKER, junit,
+    ].join('\n');
+    expect(failingTestFiles(output, [file, omitted])).toEqual([]);
+    expect(unitFailureDetails(output, [file, omitted])).toEqual([]);
+    expect(unitFileErrorDetails(output, [file, omitted])).toEqual([]);
+    expect(unitFileEvidence(output, [file], [file], []).find(item => item.file === file)?.fileError).toBeUndefined();
+    const timedOut = [
+      `${file}:`, '(fail) slow case', 'this test timed out after 5000ms',
+      UNIT_JUNIT_MARKER, junit,
+    ].join('\n');
+    expect(timedOutTestFiles(timedOut, [file])).toEqual([file]);
+    const load = [
+      `${omitted}:`, '# Unhandled error between tests', 'error: Cannot find module \'./missing.ts\'',
+      UNIT_JUNIT_MARKER, junit,
+    ].join('\n');
+    expect(failingTestFiles(load, [file, omitted])).toEqual([omitted]);
+    expect(unitFileErrorDetails(load, [file, omitted]).map(item => item.file)).toEqual([omitted]);
+    const runs: UnitRunEvidence[] = [];
+    const side = await runUnitSide('/repo', [file], 'affected', runs, async () => ({
+      done: true, failing: [file], timedOut: [], failures: [],
+      fileErrors: [{ file, detail: 'error: id 111' }],
+      runnerErrors: [], files: [file], output, ms: 1,
+    }));
+    expect(side.failing).toEqual([]);
+    expect(side.fileErrors).toEqual([]);
+  });
+
   test('the same permission case is inherited when only its subject text changes', () => {
     const file = 'tests/qa/unit/permissions.test.ts';
     const report = (...subjects: string[]): UnitFailureDetail[] => subjects.map(subject => ({ file,
@@ -3514,7 +3555,7 @@ process.exit(0);
       expect(passed.stdout).toContain('not merged');
       expect(r.git('rev-parse', 'main')).toBe(before);
       expect(r.ledger().tasks[task.id]!.state).toBe('exited');
-      expect(r.ledger().tasks[task.id]!.refusal).toBeUndefined();
+      expect(r.ledger().tasks[task.id]!.refusal).toBe('earlier refusal');
       expect(existsSync(join(r.dir, '.temp/goal-orchestration/merges.jsonl'))).toBe(false);
       const file = 'operation.test.ts';
       writeFileSync(join(task.worktree, file), `import { test, expect } from 'bun:test';\ntest('operation stays valid', () => expect(true).toBe(false));\n`);
@@ -3529,8 +3570,36 @@ process.exit(0);
       expect(failed.stderr).toContain('introduced unit failures');
       expect(failed.stderr).toContain('(fail) operation stays valid');
       expect(r.git('rev-parse', 'main')).toBe(before);
-      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+      expect(r.ledger().tasks[task.id]!.state).toBe('exited');
+      expect(r.ledger().tasks[task.id]!.refusal).toBe('earlier refusal');
       expect(existsSync(join(r.dir, '.temp/goal-orchestration/merges.jsonl'))).toBe(false);
+    } finally { r.cleanup(); }
+  }, 30_000);
+
+  test('gate prints a refusal without changing state, refusal, or a running worker', async () => {
+    const r = repo();
+    try {
+      const task = await r.start('G-001');
+      r.commit(task);
+      const pid = task.attempts.at(-1)!.pid;
+      expect(r.ledger().tasks[task.id]!.state).toBe('running');
+      expect(r.alive(pid)).toBe(true);
+      const file = 'operation.test.ts';
+      const ledger = r.ledger();
+      ledger.tasks[task.id]!.paths.push(file);
+      r.save(ledger);
+      writeFileSync(join(task.worktree, file), `import { test, expect } from 'bun:test';\ntest('operation stays valid', () => expect(true).toBe(false));\n`);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', file]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add a failing case']).status).toBe(0);
+      const plan = join(r.dir, '.temp/unit-plan');
+      writeFileSync(plan, `  unit: ${file}\n`);
+      const failed = r.run(['gate', task.id], { GOAL_TEST_PLAN: plan });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain('introduced unit failures');
+      expect(failed.stderr).toContain('(fail) operation stays valid');
+      expect(r.ledger().tasks[task.id]!.state).toBe('running');
+      expect(r.ledger().tasks[task.id]!.refusal).toBeUndefined();
+      expect(r.alive(pid)).toBe(true);
     } finally { r.cleanup(); }
   }, 30_000);
 
