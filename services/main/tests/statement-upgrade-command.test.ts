@@ -110,7 +110,7 @@ class CommandOnlyFuseki extends FusekiClient {
       return rows(covered ? [covered] : []);
     }
     if (sparql.includes('SELECT ?statement ?subject ?predicate')) return rows([...this.converted.values()].map(value => ({
-      statement: value.statement,subject: id(2),predicate: CLASSIFIED_AS,key: value.meaningKey})));
+      statement: value.statement,subject: id(2),predicate: CLASSIFIED_AS,key: value.meaningKey,head: value.revision})));
     if (sparql.includes('SELECT ?statement WHERE')) return rows([...this.converted.values()].map(value => ({statement: value.statement})));
     if (sparql.includes('SELECT ?sequence')) return rows([{sequence}]);
     if (sparql.includes(`GRAPH <${GRAPHS.receipts}>`)) {

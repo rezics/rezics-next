@@ -300,7 +300,8 @@ export class StatementSeek {
       AND (frame_key<>'*' OR subject<>$3 OR predicate<>$4 OR meaning_key<>$5)`,
     [epoch,ref.statementId,ref.subject,ref.predicate,ref.meaningKey]);
     const keys = ['*',...statementFrameKeys(ref.applicability)];
-    await client.query(`INSERT INTO access.statement_seek AS existing
+    await client.query(`INSERT INTO access.statement_seek
+      AS existing
       (data_epoch,subject,predicate,meaning_key,statement_id,frame_key,frame_refs,statement_head)
       SELECT $1,$2,$3,$4,$5,key,$7::jsonb,$8 FROM unnest($6::text[]) key
       ON CONFLICT (data_epoch,subject,frame_key,predicate,meaning_key,statement_id) DO UPDATE
