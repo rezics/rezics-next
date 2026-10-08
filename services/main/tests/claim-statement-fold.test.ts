@@ -967,17 +967,20 @@ function retainedRootFixture() {
               : [],
         },
       };
-    if (text.includes('SELECT ?statement ?subject ?predicate ?key ?app ?type')) {
+    if (text.includes('SELECT ?statement ?subject ?predicate ?key ?head ?app ?type')) {
+      // The converted Statement head is the revision this turn's receipt recorded.
+      const head = state.targetReplay?.revision ?? state.terminal?.revision;
       return {
         results: {
           bindings:
-            state.terminal && state.meaningKey
+            state.terminal && state.meaningKey && head
               ? [
                   {
                     statement: uri(claim),
                     subject: uri(input().subject),
                     predicate: uri(DATE_PUBLISHED_PREDICATE),
                     key: uri(state.meaningKey),
+                    head,
                   },
                 ]
               : [],
@@ -1234,7 +1237,14 @@ test('missing native policy is explicit and an eligible turn never declares popu
     entry.text.startsWith('DELETE FROM access.statement_seek'),
   );
   expect(replaced).toHaveLength(1);
-  expect(replaced[0]!.values).toEqual([f.env.lineage.dataEpoch, f.claim]);
+  // replace() keeps the live '*' tuple when subject, predicate and meaning still match.
+  expect(replaced[0]!.values).toEqual([
+    f.env.lineage.dataEpoch,
+    f.claim,
+    input().subject,
+    DATE_PUBLISHED_PREDICATE,
+    statementMeaningKey(prepareRetainedClaimStatementMeaning(input())),
+  ]);
   expect(f.sql.filter((entry) => entry.text.includes('statement_seek_coverage'))).toHaveLength(1);
   expect(
     f.sql.some((entry) => entry.text.startsWith('UPDATE access.statement_seek_coverage')),

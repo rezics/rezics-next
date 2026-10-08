@@ -221,7 +221,16 @@ beforeAll(async () => {
   execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
     '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
   server = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 2 });
-});
+  // Replaying Content through 869 is only the saved-state baseline. On a cold or
+  // loaded host that replay exceeds the five-second case budget before any assertion.
+  const libraryUpgrade = await database('library_revision_upgrade');
+  await libraryUpgrade.query(`CREATE SCHEMA content; CREATE TABLE content.schema_migration
+    (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
+  for (const name of schemaFiles(root, 'content').filter(name => migrationVersion(name) < 870)) {
+    await libraryUpgrade.query(readFileSync(join(migrations, name), 'utf8'));
+    await libraryUpgrade.query('INSERT INTO content.schema_migration(version) VALUES ($1)', [migrationVersion(name)]);
+  }
+}, 120_000);
 
 afterAll(async () => {
   await Promise.all([...pools, ...(server ? [server] : [])].map(pool => pool.end()));
@@ -364,13 +373,7 @@ test.each(['startup', 'artifact'])('Progress index migration commits library cha
 }, 30_000);
 
 test('Populated libraries migrate to point revisions without rewriting saved state; mutation, rollback and concurrent writes fence cursors', async () => {
-  const pool = await database('library_revision_upgrade');
-  await pool.query(`CREATE SCHEMA content; CREATE TABLE content.schema_migration
-    (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
-  for (const name of schemaFiles(root, 'content').filter(name => migrationVersion(name) < 870)) {
-    await pool.query(readFileSync(join(migrations, name), 'utf8'));
-    await pool.query('INSERT INTO content.schema_migration(version) VALUES ($1)', [migrationVersion(name)]);
-  }
+  const pool = pools.find(candidate => candidate.options.database === 'library_revision_upgrade')!;
   const agent = id(), work = id(), structure = id(), occurrence = id();
   await pool.query(`INSERT INTO reader.library_status(agent,work,status,version,title_key)
     VALUES ($1,$2,'reading',7,'saved title')`, [agent, work]);

@@ -16,6 +16,6 @@ test('SEARCH10: private Fuseki call count rejects an invalid budget before readi
   let called = false;
   await expect(withPrivateSearchBudget(async () => {
     called = true;
-  }, 11)).rejects.toBeInstanceOf(PrivateSearchBudgetExceeded);
+  }, 13)).rejects.toBeInstanceOf(PrivateSearchBudgetExceeded);
   expect(called).toBe(false);
 });

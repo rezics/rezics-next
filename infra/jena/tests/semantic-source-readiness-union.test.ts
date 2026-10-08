@@ -190,8 +190,9 @@ test('accepted semantic source prerequisites share one native TDB2 owner runtime
       counts[name] = Number(suite.tests);
       expect(counts[name]).toBe(cases.length);
     }
+    const authored = Object.values(methods).reduce((total, names) => total + names.length, 0);
     const observed = Object.values(counts).reduce((total, count) => total + count, 0);
-    expect(observed).toBe(225);
+    expect(observed).toBe(authored);
     writeFileSync(
       join(evidence, 'actual-xml-counts.json'),
       `${JSON.stringify({ classes: counts, tests: observed, failures: 0, errors: 0, skipped: 0 }, null, 2)}\n`,
