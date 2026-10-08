@@ -274,9 +274,7 @@ export interface SourceRemediationWindow {
  * comment partial index and the evidence open and terminal-repair partial indexes.
  * At most the journal bound; never a table scan.
  */
-async function openSources(content: Pool, revisionIds: readonly string[]): Promise<string[]> {
-  if (revisionIds.length > JOURNAL_TARGETS) throw new ContentErasureInvalid('Content erasure probe is too large');
-  return (await content.query<{ revision_id: string }>(`SELECT wanted.id::text AS revision_id
+export const OPEN_SOURCE_PROBE = `SELECT wanted.id::text AS revision_id
     FROM unnest($1::uuid[]) AS wanted(id)
     WHERE EXISTS (SELECT 1 FROM content.comment c WHERE c.revision_id = wanted.id
         AND (c.exact IS NOT NULL OR c.prefix IS NOT NULL OR c.suffix IS NOT NULL))
@@ -284,7 +282,12 @@ async function openSources(content: Pool, revisionIds: readonly string[]): Promi
         AND NOT i.source_terminal AND verification.evidence_selector_has_source(i.selector))
       OR EXISTS (SELECT 1 FROM verification.evidence_item i WHERE i.content_revision_id = wanted.id
         AND i.source_terminal AND verification.evidence_selector_has_source(i.selector))
-    ORDER BY wanted.id`, [revisionIds])).rows.map(row => row.revision_id);
+    ORDER BY wanted.id`;
+
+async function openSources(content: Pool, revisionIds: readonly string[]): Promise<string[]> {
+  if (revisionIds.length > JOURNAL_TARGETS) throw new ContentErasureInvalid('Content erasure probe is too large');
+  return (await content.query<{ revision_id: string }>(OPEN_SOURCE_PROBE, [revisionIds])).rows
+    .map(row => row.revision_id);
 }
 
 /**
@@ -293,14 +296,23 @@ async function openSources(content: Pool, revisionIds: readonly string[]): Promi
  * preservation fence and the exact graph proof; nothing is inferred from current heads
  * and no revision is erased for the first time here.
  */
+interface JournalRow {
+  id: string; epoch: string; kind: string; stage: string; suppression: string;
+  authority: string; operation: string; admission: string | null;
+}
+const JOURNAL_COLUMNS = `id, erasure_epoch::text AS epoch, kind, stage, suppression_status AS suppression,
+  authority, operation_id AS operation, admission_id::text AS admission`;
+
 async function remediateEntry(service: ErasureService, graph: WorkActivationEnvironment,
-  row: { id: string; epoch: string; kind: string; stage: string; suppression: string }):
-  Promise<SourceRemediationEntry> {
+  row: JournalRow): Promise<SourceRemediationEntry> {
   const done = (outcome: SourceRemediationOutcome, cleared: string[] = []): SourceRemediationEntry =>
     ({ erasureId: row.id, erasureEpoch: row.epoch, outcome, cleared });
   if (row.kind !== 'revision') return done('foreign');
   if (row.stage === 'blocked') return done('blocked');
   if (row.suppression !== 'suppressed') return done('pending');
+  // The retained intent: an Access-admitted entry whose operation is its own admission's.
+  if (row.authority !== 'access_admission' || !row.admission
+    || row.operation !== `erasure:${row.admission}`) return done('malformed');
   let ids: string[];
   try {
     const report = await readErasure(service.relay, row.id);
@@ -314,6 +326,7 @@ async function remediateEntry(service: ErasureService, graph: WorkActivationEnvi
     throw error;
   }
   try {
+    // Counts over this entry's own <= 256 ids: bounded by the journal entry, never a table count.
     const exact = (await service.content.query<{ n: number; unerased: number }>(`SELECT
       count(*) FILTER (WHERE e.erasure_id = $2::uuid AND e.erasure_epoch = $3::bigint
         AND r.availability = 'erased')::int AS n,
@@ -361,9 +374,7 @@ export async function remediateErasedContentSources(service: ErasureService,
   if (!EPOCH.test(after)) throw new ErasureInvalid('erasure cursor is invalid');
   const limit = Math.min(Math.max(Math.trunc(input.limit ?? SOURCE_REMEDIATION_WINDOW), 1),
     SOURCE_REMEDIATION_WINDOW);
-  const rows = (await service.relay.query<{ id: string; epoch: string; kind: string; stage: string;
-    suppression: string }>(`SELECT id, erasure_epoch::text AS epoch, kind, stage,
-      suppression_status AS suppression FROM relay.erasure
+  const rows = (await service.relay.query<JournalRow>(`SELECT ${JOURNAL_COLUMNS} FROM relay.erasure
     WHERE erasure_epoch > $1::bigint ORDER BY erasure_epoch LIMIT $2`, [after, limit + 1])).rows;
   const window = rows.slice(0, limit);
   const entries: SourceRemediationEntry[] = [];
@@ -374,18 +385,31 @@ export async function remediateErasedContentSources(service: ErasureService,
     unresolved: entries.filter(entry => !resolved.has(entry.outcome)).map(entry => entry.erasureId) };
 }
 
+/** One journaled entry by id, for a per-erasure owner operation. The committed intent is never rewritten. */
+export async function remediateErasedContentEntry(service: ErasureService, graph: WorkActivationEnvironment,
+  erasureId: string): Promise<SourceRemediationEntry> {
+  const row = (await service.relay.query<JournalRow>(
+    `SELECT ${JOURNAL_COLUMNS} FROM relay.erasure WHERE id = $1`, [erasureId])).rows[0];
+  if (!row) throw new ErasureNotFound('erasure is unavailable');
+  return remediateEntry(service, graph, row);
+}
+
 /**
- * The original requester's same-key replay also reaches an old completed entry.
- * Only a wrong tombstone and a clear that left a source are surfaced; a hold, an
- * unavailable graph proof or a 65..256-target entry keep the replay result as before.
+ * The original requester's same-key replay also reaches an old completed entry. A source that
+ * could not be cleared is never reported as success: the existing typed refusal is raised and
+ * the committed journal entry stays exactly as it was, so the same call can be retried.
  */
 async function reapplyForReplay(service: ErasureService, graph: WorkActivationEnvironment,
   erasureId: string): Promise<void> {
-  const row = (await service.relay.query<{ id: string; epoch: string; kind: string; stage: string;
-    suppression: string }>(`SELECT id, erasure_epoch::text AS epoch, kind, stage,
-      suppression_status AS suppression FROM relay.erasure WHERE id = $1`, [erasureId])).rows[0];
-  if (!row) return;
-  const entry = await remediateEntry(service, graph, row);
-  if (entry.outcome === 'stale') throw new ContentErasureStale('Content revision is no longer available to erase');
-  if (entry.outcome === 'failed') throw new ErasureUnavailable('Content sources remain after erasure');
+  const entry = await remediateErasedContentEntry(service, graph, erasureId);
+  switch (entry.outcome) {
+    case 'held': throw new ContentErasureStale('Content erasure is deferred');
+    case 'stale': case 'unapplied':
+      throw new ContentErasureStale('Content revision is no longer available to erase');
+    case 'native': case 'graph-limit':
+      throw new GraphErasureUnavailable('exact graph suppression proof is unavailable');
+    case 'malformed': throw new ErasureInvalid('erasure targets are unavailable or invalid');
+    case 'failed': throw new ErasureUnavailable('Content sources remain after erasure');
+    default: // cleared, clean, pending (finished above), blocked, foreign
+  }
 }
