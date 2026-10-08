@@ -754,6 +754,56 @@ test('a write vouches for its anchors only at the heads they were derived from',
   expect(calls).toHaveLength(2);
 });
 
+test('a volume placed in two compositions saves chapter progress without a series anchor', async () => {
+  const f = await volumeSeries();
+  const book = f.headers.get(f.book1)!;
+  const volume = book.work;
+  const omnibus = id(), omnibusStructure = id(), omnibusMember = id();
+  const native = f.env.fuseki.query.bind(f.env.fuseki);
+  f.env.fuseki.query = (async (q: string) => {
+    if (q.includes('# reading-position:enclosing-member') && q.includes(volume)) {
+      return { results: { bindings: [
+        { work: binding(f.series), structure: binding(f.seriesStructure), occurrence: binding(f.member1) },
+        { work: binding(omnibus), structure: binding(omnibusStructure), occurrence: binding(omnibusMember) },
+      ] } };
+    }
+    return native(q);
+  }) as typeof f.env.fuseki.query;
+  const local = { revision: book.head, key: 'a\u0002b', eligible: true };
+  // The progress route stores this list. Empty means the chapter write records
+  // no series anchor and does not fail.
+  await expect(continuityAnchors(f.env as never, book, f.reader, local)).resolves.toEqual([]);
+  const done = anchorClient(f, [{ occurrence: f.reader, selection_key: '', completed: true }]);
+  const projection = await anchorProjection(f, done.client);
+  await projection.step();
+  expect(done.writes.filter(write => write.sql.includes('structure.progress'))).toEqual([]);
+  expect(done.state()).toMatchObject({ anchor_parent: '', anchor_cursor: null });
+  // The chapter stands on its book. Series resume sees that book and refuses
+  // to treat the missing anchor as an unstarted series.
+  Object.assign(f.session.deps.progress!, { resumeStructures: async () => [book.structure] });
+  const traversal = new ReadingPositionTraversal(f.session, f.series, async resources => new Set(resources));
+  await expect(chooserPosition(f.session, traversal, 'mine', true, f.disclose as never))
+    .rejects.toThrow('A reading position belongs to more than one series');
+});
+
+test('eligible progress structures are one index page, not a series inventory', async () => {
+  const principal = { issuer: 'https://reader.test', subject: 'viewer' };
+  const structure = id();
+  const calls: Array<{ sql: string; params: unknown[] }> = [];
+  const pool = { query: async (sql: string, params: unknown[]) => {
+    calls.push({ sql, params });
+    return { rows: [{ structure }, { structure }] };
+  } } as unknown as Pool;
+  const store = new StructureProgressStore(pool);
+  expect(await store.resumeStructures(principal)).toEqual([structure]);
+  expect(calls).toHaveLength(1);
+  expect(calls[0]!.sql).toContain('FROM structure.progress');
+  expect(calls[0]!.sql).toContain('AND completed AND resume_eligible');
+  expect(calls[0]!.sql).toContain('ORDER BY structure, occurrence, selection_key');
+  expect(calls[0]!.sql).not.toContain('JOIN');
+  expect(calls[0]!.params).toEqual([principal.issuer, principal.subject, STRUCTURE_PROGRESS_COST.resumeCandidates + 1]);
+});
+
 test('anchor readiness is one keyed scope row, and an unprepared scope asks for preparation', async () => {
   const principal = { issuer: 'https://reader.test', subject: 'viewer' };
   const member = { structure: id(), revision: id() }, parent = { structure: id(), revision: id() };

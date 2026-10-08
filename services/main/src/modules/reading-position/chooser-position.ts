@@ -3,7 +3,7 @@ import { disclosedCompletedProgress } from '../progress/disclosure.ts';
 import { ProgressOrderUnavailable, type ResumePageKey } from '../progress/store.ts';
 import { WorkReadMissing, type WorkReadSession } from '../work/read-session.ts';
 import type { ReadingOccurrence } from './boundary.ts';
-import { continuityKey, CONTINUITY_MEMBER_BOUND } from './continuity.ts';
+import { continuityKey, memberSeriesIsAmbiguous, CONTINUITY_MEMBER_BOUND } from './continuity.ts';
 import { ReadingContinuityUnsupported, ReadingResumeContinuation, ReadingResumeUnavailable } from './errors.ts';
 import { type ReadingWork, type ReadingPositionTraversal } from './traversal.ts';
 
@@ -96,7 +96,27 @@ export async function chooserPosition(session: WorkReadSession, traversal: Readi
     }
   }
   if (candidates.more && candidates.next) throw new ReadingResumeContinuation(candidates.next);
+  // No series anchor was recorded: the chapter progress stands on its own book.
+  // If that book is a member of more than one composition, this series cannot
+  // claim the position, and it cannot pretend the reader has not started.
+  await unavailableIfAmbiguousMember(session, header);
   return 'start';
+}
+
+async function unavailableIfAmbiguousMember(session: WorkReadSession, header: { structure: string }) {
+  const { principal, deps } = session;
+  // Stubs that only answer a series candidate keep the unstarted result.
+  // Production reads this reader's own eligible structures, never the series.
+  if (!principal || !deps.progress || typeof deps.progress.resumeStructures !== 'function') return;
+  const structures = await deps.progress.resumeStructures(principal);
+  for (const structure of structures) {
+    if (structure === header.structure) continue;
+    const book = await readCompositionHeader(deps.environment, structure);
+    if (!book) continue;
+    if (await memberSeriesIsAmbiguous(deps.environment, book.work, header.structure)) {
+      throw new ReadingResumeUnavailable('A reading position belongs to more than one series');
+    }
+  }
 }
 
 function seriesAfter(after?: ResumePageKey): ResumePageKey | undefined {

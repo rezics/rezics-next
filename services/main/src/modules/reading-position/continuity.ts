@@ -41,7 +41,15 @@ export function continuityKey(location: ReadingLocation): string {
 
 interface EnclosingMember { work: string; structure: string; occurrence: string }
 
-async function enclosingMembers(env: WorkActivationEnvironment, work: string): Promise<EnclosingMember[]> {
+type EnclosingMembership =
+  | { kind: 'none' }
+  | { kind: 'one'; member: EnclosingMember }
+  | { kind: 'ambiguous'; structures: string[] };
+
+/** Active part placements of one Work. Two rows mean the Work has no single
+ * series. A structure filter asks only whether one series is among them. */
+async function activePartPlacements(env: WorkActivationEnvironment, work: string, structure?: string) {
+  const only = structure ? `FILTER(?structure = ${iri(structure)})` : '';
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     # reading-position:enclosing-member
     SELECT ?work ?structure ?occurrence WHERE {
@@ -53,59 +61,81 @@ async function enclosingMembers(env: WorkActivationEnvironment, work: string): P
           rv:selectedGeneration ?generation .
         ?generation rv:generationState rv:Active .
         ?work rv:mainVersion ?main .
+        ${only}
       }
     } LIMIT 2`);
-  const rows = result.results?.bindings ?? [];
+  return result.results?.bindings ?? [];
+}
+
+/** The single active part placement, or nothing. Two placements (a volume in a
+ * series and an omnibus) are ambiguous: there is no one series to anchor, and
+ * the reader's progress write still stands. */
+async function enclosingMembership(env: WorkActivationEnvironment, work: string): Promise<EnclosingMembership> {
+  const rows = await activePartPlacements(env, work);
   if (rows.length > 1) {
-    throw new ReadingContinuityUnsupported('A reading position belongs to more than one continuity');
+    return { kind: 'ambiguous', structures: rows.flatMap(row => row.structure?.value ? [row.structure.value] : []) };
   }
   const row = rows[0];
-  if (!row?.work?.value || !row.structure?.value || !row.occurrence?.value) return [];
-  return [{ work: row.work.value, structure: row.structure.value, occurrence: row.occurrence.value }];
+  if (!row?.work?.value || !row.structure?.value || !row.occurrence?.value) return { kind: 'none' };
+  return { kind: 'one', member: { work: row.work.value, structure: row.structure.value, occurrence: row.occurrence.value } };
 }
 
-/** The one Structure that holds this Work as a member, with its current head,
- * or nothing when the Work is not a member of another. */
+/** True when this Work belongs to more than one composition and this series is
+ * one of them. The two-row sample can omit the series, so a miss is checked
+ * against that series alone. */
+export async function memberSeriesIsAmbiguous(env: WorkActivationEnvironment, work: string, seriesStructure: string):
+  Promise<boolean> {
+  const membership = await enclosingMembership(env, work);
+  if (membership.kind !== 'ambiguous') return false;
+  if (membership.structures.includes(seriesStructure)) return true;
+  const placed = await activePartPlacements(env, work, seriesStructure);
+  return placed.some(row => row.structure?.value === seriesStructure);
+}
+
+/** The one Structure that holds this Work as a member, with its current head.
+ * Nothing when the Work is not a member, or when more than one placement is
+ * active: ambiguous membership has no single place to index. */
 export async function enclosingStructure(env: WorkActivationEnvironment, work: string):
   Promise<CompositionHeader | undefined> {
-  const [parent] = await enclosingMembers(env, work);
-  return parent ? await readCompositionHeader(env, parent.structure) ?? undefined : undefined;
+  const parent = await enclosingMembership(env, work);
+  if (parent.kind !== 'one') return undefined;
+  return await readCompositionHeader(env, parent.member.structure) ?? undefined;
 }
 
-function acceptKey(key: string) {
-  if (key.length > 1088 || key.split('\u0001').length > CONTINUITY_KEY_PARTS
-    || !key.split('\u0001').every(part => /^[0-9a-z]{1,32}\u0002[0-9a-z]{1,32}$/.test(part))) {
-    throw new ReadingContinuityUnsupported('A reading position is nested deeper than this continuity can resolve');
-  }
+function keyFits(key: string) {
+  return key.length <= 1088 && key.split('\u0001').length <= CONTINUITY_KEY_PARTS
+    && key.split('\u0001').every(part => /^[0-9a-z]{1,32}\u0002[0-9a-z]{1,32}$/.test(part));
 }
 
 /** One bounded ancestor walk. Each hop is the part that contains this Work,
  * that part's entry in its prepared order, and the order already accumulated
- * inside the member. Sibling volumes are never listed. */
+ * inside the member. Sibling volumes are never listed. Ambiguous membership
+ * records no series anchor; a chain past the hop bound is left for the resume
+ * read to refuse, and does not fail the progress write. */
 export async function continuityAnchors(env: WorkActivationEnvironment, header: CompositionHeader,
   occurrence: string, local: ProgressOrder | undefined): Promise<ContinuityAnchor[]> {
   let work = header.work, key = local?.key ?? '', eligible = local?.eligible ?? false;
   const anchors: ContinuityAnchor[] = [];
   for (let hop = 0; hop < CONTINUITY_INDEX_HOPS; hop++) {
-    const [parent] = await enclosingMembers(env, work);
-    if (!parent) return anchors;
-    const parentHeader = await readCompositionHeader(env, parent.structure);
+    const parent = await enclosingMembership(env, work);
+    // This hop has no single series. Anchors already taken from a unique
+    // parent stay; the chapter write still records nothing for this one.
+    if (parent.kind !== 'one') return anchors;
+    const parentHeader = await readCompositionHeader(env, parent.member.structure);
     if (!parentHeader) return anchors;
-    const member = local ? await readProgressOrder(env, parentHeader, parent.occurrence) : undefined;
+    const member = local ? await readProgressOrder(env, parentHeader, parent.member.occurrence) : undefined;
     if (local && !member) return anchors;
     if (member) {
-      key = `${member.key}\u0001${key}`;
+      const next = `${member.key}\u0001${key}`;
+      // A key past the bound is not stored. Resume refuses that chain when it
+      // can see it; the write of the chapter itself still succeeds.
+      if (!keyFits(next)) return anchors;
+      key = next;
       eligible = eligible && member.eligible;
-      acceptKey(key);
     }
     anchors.push({ structure: parentHeader.structure, order: member
       ? { revision: parentHeader.head, key, eligible } : null });
     work = parentHeader.work;
-  }
-  // A further ancestor would not be indexed, and a later read would look like
-  // the reader had not started. Refuse while the order is still being saved.
-  if (local && (await enclosingMembers(env, work)).length) {
-    throw new ReadingContinuityUnsupported('A reading position is nested deeper than this continuity can resolve');
   }
   return anchors;
 }
@@ -145,17 +175,12 @@ export async function readResumeOrder(env: WorkActivationEnvironment, header: Co
   let work = homeHeader.work, key = local.key, eligible = local.eligible;
   for (let hop = 0; hop < READING_POSITION_COST.workDepth; hop++) {
     if (work === header.work) return { revision: header.head, key, eligible };
-    let parents: EnclosingMember[];
-    try { parents = await enclosingMembers(env, work); }
-    catch (error) {
-      if (error instanceof ReadingContinuityUnsupported) return undefined;
-      throw error;
-    }
-    if (parents.length !== 1) return undefined;
-    const parent = parents[0]!;
-    const parentHeader = await readCompositionHeader(env, parent.structure);
+    const parent = await enclosingMembership(env, work);
+    // Ambiguous or missing membership cannot rebuild one series order.
+    if (parent.kind !== 'one') return undefined;
+    const parentHeader = await readCompositionHeader(env, parent.member.structure);
     if (!parentHeader) return undefined;
-    const member = await readProgressOrder(env, parentHeader, parent.occurrence);
+    const member = await readProgressOrder(env, parentHeader, parent.member.occurrence);
     if (!member) return undefined;
     key = `${member.key}\u0001${key}`;
     eligible = eligible && member.eligible;

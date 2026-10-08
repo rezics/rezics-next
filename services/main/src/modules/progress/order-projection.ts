@@ -145,7 +145,7 @@ export class ProgressOrderProjection {
     let parent: CompositionHeader | undefined;
     try { parent = await enclosingStructure(this.env, header.work); }
     catch (error) {
-      if (error instanceof ReadingContinuityUnsupported) return true; // Ambiguous membership has no single place to index.
+      if (error instanceof ReadingContinuityUnsupported) return true; // A refusal does not fail the pass. Ambiguous membership is a missing parent, below.
       throw error;
     }
     const want = { revision: header.head, parent: parent?.structure ?? '', parentRevision: parent?.head ?? '' };
@@ -163,6 +163,7 @@ export class ProgressOrderProjection {
         WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3`,
       [...identity, want.revision, want.parent, want.parentRevision, parent ? '{}' : null]);
     }
+    // No parent and ambiguous membership are the same: nothing is anchored.
     if (!parent) return true;
     const rows = (await client.query<{ occurrence: string; selection_key: string; completed: boolean }>(
       `SELECT occurrence,selection_key,completed FROM structure.progress
@@ -180,7 +181,7 @@ export class ProgressOrderProjection {
         if (local === null) continue;
         anchors = await continuityAnchors(environment, header, row.occurrence, local);
       } catch (error) {
-        // Nested past the supported bound: it stays unindexed, as a write of it is refused.
+        // A chain this walk will not store stays unindexed. The progress row itself remains.
         if (error instanceof ReadingContinuityUnsupported) continue;
         throw error;
       }

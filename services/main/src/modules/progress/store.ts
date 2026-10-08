@@ -155,6 +155,21 @@ export class StructureProgressStore {
     more, next: more && last ? { occurrence: last.occurrence, selectedRevision: last.selection_key || null } : null };
   }
 
+  /** Structures where this reader has an eligible completion. The partial
+   * index progress_completed_seek serves the principal prefix in structure
+   * order and stops at one page. Callers use it to notice a book that also
+   * belongs to another composition, not to inventory a series. */
+  async resumeStructures(principal: VerifiedPrincipal): Promise<string[]> {
+    const result = await this.pool.query<{ structure: string }>(
+      `SELECT structure FROM structure.progress
+       WHERE principal_issuer = $1 AND principal_subject = $2
+         AND completed AND resume_eligible
+       ORDER BY structure, occurrence, selection_key
+       LIMIT $3`,
+      [principal.issuer, principal.subject, STRUCTURE_PROGRESS_COST.resumeCandidates + 1]);
+    return [...new Set(result.rows.map(row => row.structure))];
+  }
+
   /** Live reader-owned state, in primary-key order. Limit the indexed range
    * before filtering completion: a sparse history must not scan the series.
    * Empty pages can carry a continuation, including through revision selections.
