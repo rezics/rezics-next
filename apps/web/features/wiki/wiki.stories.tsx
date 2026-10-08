@@ -225,6 +225,7 @@ export const ChapterReached: Story = {
     await expect(canvas.getByRole('link', { name: 'Fitzwilliam Darcy Character' })).toBeVisible();
     await expect(canvas.getByText('This list may be incomplete.')).toBeVisible();
     await expect(canvas.getByRole('link', { name: /Previous chapter/ })).toHaveAttribute('rel', 'prev');
+    await expect(canvas.getByRole('link', { name: /Next chapter/ })).toHaveAttribute('rel', 'next');
     await fits();
   },
 };

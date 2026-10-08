@@ -1,12 +1,11 @@
 import type { ZoneMember } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
 import { readEntityProjection } from '../entity-page/read.ts';
-import { iriOf } from '../work-page/route.ts';
 import type { ZoneRouteRead } from '../realm/types.ts';
 import type { ZoneSite } from './links.ts';
 import { readMembers } from './members.ts';
 import { readPositionedRoute } from './read.ts';
-import type { PositionState } from './state.ts';
+import { chaptersVisible, placedChapter, type PositionState } from './state.ts';
 
 // What a position adds. Main has no read for "the records revealed at this chapter", so these compare two answers
 // it did give, each already cut at its own position: the page of a record at the positions before and after, and a
@@ -25,7 +24,7 @@ const readable = async (id: string, position: string) => {
  * position the reader is at (the record is known to be visible there). Null when a read failed or none was found.
  */
 export async function firstSeen(id: string, state: PositionState): Promise<string | null> {
-  const chapters = state.chooser.items.filter(item => item.role === 'chapter');
+  const chapters = chaptersVisible(state);
   const ordered = chapters.length ? chapters : state.chooser.items;
   const reached = state.at ? ordered.findIndex(item => item.occurrence === state.at) : state.mode === 'all' ? ordered.length - 1 : -1;
   if (reached < 0) return null;
@@ -61,9 +60,9 @@ async function itemsAt(site: ZoneSite, segment: string, position: string | undef
  */
 export async function revealedAt(site: ZoneSite, state: PositionState, chapter: string, segment: string,
   locale: UiLocale): Promise<{ members: ZoneMember[]; complete: boolean }> {
-  const ordered = state.chooser.items.filter(item => item.role === 'chapter');
-  const index = ordered.findIndex(item => item.occurrence === iriOf(chapter));
-  if (index < 0) return { members: [], complete: false };
+  const place = placedChapter(state, chapter);
+  if (!place) return { members: [], complete: false };
+  const { ordered, index } = place;
   const here = { ...site, main: ordered[index]!.occurrence };
   const [now, before] = await Promise.all([itemsAt(here, segment, here.main),
     index ? itemsAt(here, segment, ordered[index - 1]!.occurrence) : { items: [], complete: true }]);

@@ -50,6 +50,8 @@ export interface Chooser {
   work: string;
   /** What the read resolved to for this reader: `all`, `start` or the occurrence they are up to. */
   resolved: string;
+  /** `resume` is only the chapter the reader is on. `positions` is a page of the disclosed order. */
+  scope?: 'resume' | 'positions';
   items: ChooserItem[];
   /** The Work has more positions than this read listed. */
   more: boolean;
@@ -73,6 +75,7 @@ export const readChooser = cache(
         data: {
           work,
           resolved: data.resolved,
+          scope: data.scope === 'resume' || data.scope === 'positions' ? data.scope : undefined,
           items: data.items,
           more: !data.complete,
           nextCursor: data.nextCursor,
@@ -86,6 +89,31 @@ export const readChooser = cache(
     }
   },
 );
+
+/** Pages of the disclosed order read for one chapter's neighbours (each page is at most 50 positions). */
+export const READING_ORDER_PAGES = 4;
+
+/**
+ * Chapters around one occurrence, in the order the positions read already discloses.
+ * The reader's own progress, requested with no position, is only that chapter. Passing the occurrence asks for the
+ * opening positions page, which omits a chapter the reader may not see. Stops once that chapter and one later
+ * chapter are listed, the work ends, or the page bound is reached. A failed read returns what was listed so far.
+ */
+export const readReadingOrder = cache(async (work: string, occurrence: string): Promise<ChooserItem[]> => {
+  const items: ChooserItem[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < READING_ORDER_PAGES; page++) {
+    const read = await readChooser(work, occurrence, cursor);
+    if (!read.ok || read.data.scope === 'resume') break;
+    items.push(...read.data.items);
+    const chapters = items.filter((item) => item.role === 'chapter');
+    const index = chapters.findIndex((item) => item.occurrence === occurrence);
+    const settled = index >= 0 && (index < chapters.length - 1 || !read.data.more);
+    if (settled || !read.data.nextCursor) break;
+    cursor = read.data.nextCursor;
+  }
+  return items;
+});
 
 /** A claim's source passage and what Main permits of it at `position`; a withheld quotation arrives as null. */
 export const readEvidence = cache(
