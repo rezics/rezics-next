@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawn, spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { command } from '../../../scripts/qa/core.ts';
 import {
@@ -43,14 +43,15 @@ writeFileSync(process.env.ARGV_FILE, JSON.stringify(['pinned', ...process.argv.s
     const env: NodeJS.ProcessEnv = { ...process.env, PATH: path, ARGV_FILE: captured, REZICS_REAL_DOCKER: join(pinnedDir, 'docker') };
     delete env.REZICS_REAP_OWNER;
     delete env.REZICS_REAP_SCOPE;
+    delete env.REZICS_REAP_SCOPES;
     if (labels?.owner !== undefined) env.REZICS_REAP_OWNER = labels.owner;
-    if (labels?.scope !== undefined) env.REZICS_REAP_SCOPE = labels.scope;
+    if (labels?.scope !== undefined) env.REZICS_REAP_SCOPES = labels.scope;
     const result = spawnSync(shim, args, { env, encoding: 'utf8' });
     expect(result.status, result.stderr).toBe(0);
     return JSON.parse(readFileSync(captured, 'utf8')) as string[];
   };
   try {
-    const both = ['--label', `${reapOwnerLabel}=9:8`, '--label', `${reapScopeLabel}=shard-a`];
+    const both = ['--label', `${reapOwnerLabel}=9:8`, '--label', `${reapScopeLabel}.shard-a=1`];
     const child = { owner: '9:8', scope: 'shard-a' };
     expect(run(['run', '--rm', 'alpine', 'sleep', '600'], child)).toEqual(['run', ...both, '--rm', 'alpine', 'sleep', '600']);
     expect(run(['create', '--name', 'box', 'alpine'], child)).toEqual(['create', ...both, '--name', 'box', 'alpine']);
@@ -60,6 +61,8 @@ writeFileSync(process.env.ARGV_FILE, JSON.stringify(['pinned', ...process.argv.s
       .toEqual(['--host', 'unix:///var/run/docker.sock', 'run', ...both, 'alpine']);
     expect(run(['-Hunix:///var/run/docker.sock', 'create'], child)).toEqual(['-Hunix:///var/run/docker.sock', 'create', ...both]);
     expect(run(['run', 'alpine'], { owner: '9:8' })).toEqual(['run', '--label', `${reapOwnerLabel}=9:8`, 'alpine']);
+    expect(run(['run', 'alpine'], { owner: '9:8', scope: 'parent,shard-a' })).toEqual(['run', '--label', `${reapOwnerLabel}=9:8`,
+      '--label', `${reapScopeLabel}.parent=1`, '--label', `${reapScopeLabel}.shard-a=1`, 'alpine']);
     expect(run(['ps', '-a'], child)).toEqual(['ps', '-a']);
     expect(run(['compose', 'up', '-d'], child)).toEqual(['compose', 'up', '-d']);
     expect(run(['compose', 'run', 'web'], child)).toEqual(['compose', 'run', 'web']);
@@ -68,6 +71,42 @@ writeFileSync(process.env.ARGV_FILE, JSON.stringify(['pinned', ...process.argv.s
     expect(run(['run', 'alpine'])).toEqual(['run', 'alpine']);
     expect(run(['ps'], undefined, `${dockerShimDirectory()}:${stubDir}:${dockerShimDirectory()}:${pinnedDir}:${process.env.PATH ?? ''}`)).toEqual(['ps']);
   } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('shim directories from different roots resolve to the docker after every shim', () => {
+  const rootA = mkdtempSync(join(root, '.temp', 'reap-shim-a-'));
+  const rootB = mkdtempSync(join(root, '.temp', 'reap-shim-b-'));
+  const stubDir = mkdtempSync(join(root, '.temp', 'reap-shim-real-'));
+  const captured = join(stubDir, 'argv.json');
+  const install = (directory: string) => {
+    const path = join(directory, 'docker');
+    copyFileSync(shim, path);
+    chmodSync(path, 0o755);
+    return path;
+  };
+  try {
+    const shimA = install(rootA);
+    const shimB = install(rootB);
+    writeFileSync(join(stubDir, 'docker'), `#!/usr/bin/env bun
+import { writeFileSync } from 'node:fs';
+writeFileSync(process.env.ARGV_FILE, JSON.stringify(process.argv.slice(2)));
+`);
+    chmodSync(join(stubDir, 'docker'), 0o755);
+    const env: NodeJS.ProcessEnv = {
+      ...process.env, PATH: `${rootB}:${rootA}:${stubDir}:${process.env.PATH ?? ''}`, ARGV_FILE: captured,
+    };
+    delete env.REZICS_REAP_OWNER;
+    delete env.REZICS_REAP_SCOPE;
+    delete env.REZICS_REAP_SCOPES;
+    const result = spawnSync(shimB, ['ps'], { env, encoding: 'utf8', timeout: 3_000 });
+    expect(result.status, result.stderr).toBe(0);
+    expect(JSON.parse(readFileSync(captured, 'utf8'))).toEqual(['ps']);
+    expect(shimA).not.toBe(shimB);
+  } finally {
+    rmSync(rootA, { recursive: true, force: true });
+    rmSync(rootB, { recursive: true, force: true });
+    rmSync(stubDir, { recursive: true, force: true });
+  }
 });
 
 test('the sweep removes dead and reused owners and never lists unlabelled containers', () => {
@@ -148,14 +187,14 @@ process.exit(0);
 test('a timed-out child removes only its scope and leaves a sibling container', () => {
   const directory = mkdtempSync(join(root, '.temp', 'reap-scope-'));
   const stub = dockerStub(directory, {
-    [`label=${reapScopeLabel}=shard-a`]: 'timed-out',
-    [`label=${reapScopeLabel}=shard-b`]: 'live-sibling',
+    [`label=${reapScopeLabel}.shard-a`]: 'timed-out',
+    [`label=${reapScopeLabel}.shard-b`]: 'live-sibling',
     [`label=${reapOwnerLabel}=9:8`]: 'timed-out\nlive-sibling',
   });
   try {
     stub.use(() => reapChildScope({ REZICS_REAP_OWNER: '9:8', REZICS_REAP_SCOPE: 'shard-a' }));
     const calls = readFileSync(stub.log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as string[]);
-    expect(calls.filter(call => call[0] === 'ps')).toEqual([['ps', '-aq', '--filter', `label=${reapScopeLabel}=shard-a`]]);
+    expect(calls.filter(call => call[0] === 'ps')).toEqual([['ps', '-aq', '--filter', `label=${reapScopeLabel}.shard-a`]]);
     expect(calls.filter(call => call[0] === 'rm')).toEqual([['rm', '-f', 'timed-out']]);
     expect(calls.flat()).not.toContain('live-sibling');
   } finally { rmSync(directory, { recursive: true, force: true }); }
@@ -205,13 +244,16 @@ test('the runner sets its owner on test processes and keeps an inherited owner',
 test('owner', () => {
   console.log('REAP_OWNER=' + process.env.REZICS_REAP_OWNER);
   console.log('REAP_SCOPE=' + process.env.REZICS_REAP_SCOPE);
+  console.log('REAP_SCOPES=' + process.env.REZICS_REAP_SCOPES);
   console.log('REAP_PATH=' + (process.env.PATH ?? '').split(':')[0]);
 });
 `);
   const env = { ...process.env };
   delete env.REZICS_REAP_OWNER;
   delete env.REZICS_REAP_SCOPE;
+  delete env.REZICS_REAP_SCOPES;
   const scopeOf = (output: string) => /^REAP_SCOPE=(.+)$/m.exec(output)?.[1];
+  const chainOf = (output: string) => /^REAP_SCOPES=(.+)$/m.exec(output)?.[1];
   try {
     const result = command(root, 'bun', ['test', probe], 30_000, env);
     expect(result.ok, result.output).toBe(true);
@@ -219,12 +261,16 @@ test('owner', () => {
     expect(result.output).toContain(`REAP_PATH=${dockerShimDirectory()}`);
     const firstScope = scopeOf(result.output);
     expect(firstScope).toMatch(/^[0-9a-f-]{36}$/);
+    expect(chainOf(result.output)).toBe(firstScope);
     const kept = command(root, 'bun', ['test', probe], 30_000, { ...env, REZICS_REAP_OWNER: '42:99' });
     expect(kept.ok, kept.output).toBe(true);
     expect(kept.output).toContain('REAP_OWNER=42:99');
     const secondScope = scopeOf(kept.output);
     expect(secondScope).toMatch(/^[0-9a-f-]{36}$/);
     expect(secondScope).not.toBe(firstScope);
+    const chained = command(root, 'bun', ['test', probe], 30_000, { ...env, REZICS_REAP_SCOPES: 'parent-scope' });
+    expect(chained.ok, chained.output).toBe(true);
+    expect(chainOf(chained.output)).toBe(`parent-scope,${scopeOf(chained.output)}`);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -245,13 +291,13 @@ const [command, ...rest] = args;
 if (command === 'ps') {
   const filter = rest[rest.indexOf('--filter') + 1] ?? '';
   const listed = {
-    'label=${reapScopeLabel}=extra-child': 'extra-child',
-    'label=${reapScopeLabel}=ancestor': 'ancestor',
-    'label=${reapScopeLabel}=sibling': 'sibling',
+    'label=${reapScopeLabel}.extra-child': 'extra-child',
+    'label=${reapScopeLabel}.ancestor': 'ancestor',
+    'label=${reapScopeLabel}.sibling': 'sibling',
   };
   const ids = filter.startsWith('label=${reapOwnerLabel}=')
     ? ['nested', 'ancestor', 'sibling']
-    : filter.startsWith('label=${reapScopeLabel}=') && !listed[filter]
+    : filter.startsWith('label=${reapScopeLabel}.') && !listed[filter]
       ? ['nested']
       : (listed[filter] ?? '').split('\\n');
   console.log(ids.filter(id => id && !removed.has(id)).join('\\n'));
@@ -275,6 +321,7 @@ await commandAsync(${JSON.stringify(directory)}, 'bun', ['test', ${JSON.stringif
 `);
   const env: NodeJS.ProcessEnv = { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, READY: ready, REZICS_REAP_OWNER: '4:4' };
   delete env.REZICS_REAP_SCOPE;
+  delete env.REZICS_REAP_SCOPES;
   const child = spawn('bun', [runner], { env, stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = '';
   child.stderr?.on('data', chunk => { stderr += String(chunk); });
@@ -299,3 +346,99 @@ await commandAsync(${JSON.stringify(directory)}, 'bun', ['test', ${JSON.stringif
     rmSync(directory, { recursive: true, force: true });
   }
 }, 20_000);
+
+test('cancelling a runner removes a container started by a nested runner', async () => {
+  const directory = mkdtempSync(join(root, '.temp', 'reap-chain-'));
+  const bin = join(directory, 'bin');
+  mkdirSync(bin);
+  const log = join(directory, 'calls.jsonl');
+  const state = join(directory, 'containers.json');
+  const ready = join(directory, 'ready');
+  const inner = join(directory, 'inner.test.ts');
+  const middle = join(directory, 'middle.test.ts');
+  const runner = join(directory, 'runner-a.ts');
+  writeFileSync(state, JSON.stringify({ containers: [{ id: 'ancestor', labels: [`${reapScopeLabel}.ancestor-scope=1`], removed: false }] }));
+  writeFileSync(join(bin, 'docker'), `#!/usr/bin/env bun
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(process.env.LOG, JSON.stringify(args) + '\\n');
+const statePath = process.env.STATE;
+const load = () => JSON.parse(readFileSync(statePath, 'utf8'));
+const [command, ...rest] = args;
+if (command === 'run') {
+  const labels = [];
+  for (let i = 0; i < args.length; i++) if (args[i] === '--label') labels.push(args[i + 1]);
+  const saved = load();
+  saved.containers.push({ id: 'grandchild', labels, removed: false });
+  writeFileSync(statePath, JSON.stringify(saved));
+  process.exit(0);
+}
+if (command === 'ps') {
+  const filter = rest[rest.indexOf('--filter') + 1] ?? '';
+  const key = filter.startsWith('label=') ? filter.slice('label='.length).split('=')[0] : '';
+  const saved = load();
+  console.log(saved.containers.filter(container => !container.removed && container.labels.some(label => label.split('=')[0] === key)).map(container => container.id).join('\\n'));
+  process.exit(0);
+}
+if (command === 'rm') {
+  const ids = new Set(rest.filter(id => id !== '-f'));
+  const saved = load();
+  for (const container of saved.containers) if (ids.has(container.id)) container.removed = true;
+  writeFileSync(statePath, JSON.stringify(saved));
+  process.exit(0);
+}
+process.exit(0);
+`);
+  chmodSync(join(bin, 'docker'), 0o755);
+  writeFileSync(inner, `import { test } from 'bun:test';
+import { spawnSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+test('container', () => {
+  const result = spawnSync('docker', ['run', '-d', '--name', 'rezics-reap-grandchild', 'alpine', 'sleep', '600'], { encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(result.stderr || result.stdout || 'docker run failed');
+  writeFileSync(process.env.READY, 'ready');
+  return new Promise(() => {});
+});
+`);
+  writeFileSync(middle, `import { test } from 'bun:test';
+import { command } from ${JSON.stringify(join(root, 'scripts/qa/core.ts'))};
+test('runner B', () => {
+  command(${JSON.stringify(directory)}, 'bun', ['test', ${JSON.stringify(inner)}, '--timeout=60000'], 60_000, process.env);
+});
+`);
+  writeFileSync(runner, `import { commandAsync } from ${JSON.stringify(join(root, 'scripts/qa/core.ts'))};
+await commandAsync(${JSON.stringify(directory)}, 'bun', ['test', ${JSON.stringify(middle)}, '--timeout=60000'], 60_000, process.env);
+`);
+  const env: NodeJS.ProcessEnv = {
+    ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, READY: ready, LOG: log, STATE: state, REZICS_REAP_OWNER: '4:4',
+  };
+  delete env.REZICS_REAP_SCOPE;
+  delete env.REZICS_REAP_SCOPES;
+  const child = spawn('bun', [runner], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+  let stderr = '';
+  child.stderr?.on('data', chunk => { stderr += String(chunk); });
+  try {
+    const deadline = Date.now() + 15_000;
+    while (!existsSync(ready) && Date.now() < deadline) await Bun.sleep(20);
+    expect(existsSync(ready), stderr).toBe(true);
+    child.kill('SIGTERM');
+    const closed = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
+      child.once('close', (code, signal) => resolve({ code, signal }));
+    });
+    expect(closed, stderr).toEqual({ code: 143, signal: null });
+    const calls = readFileSync(log, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as string[]);
+    const run = calls.find(call => call[0] === 'run');
+    const scopeLabels = (run ?? []).filter((arg, index, args) => args[index - 1] === '--label' && arg.startsWith(`${reapScopeLabel}.`));
+    expect(scopeLabels).toHaveLength(2);
+    const parentKey = scopeLabels[0]?.slice(0, scopeLabels[0].indexOf('='));
+    expect(calls.filter(call => call[0] === 'ps').some(call => call.includes(`label=${parentKey}`))).toBe(true);
+    const removed = calls.filter(call => call[0] === 'rm').flatMap(call => call.slice(2));
+    expect(removed).toContain('grandchild');
+    expect(removed).not.toContain('ancestor');
+    const saved = JSON.parse(readFileSync(state, 'utf8')) as { containers: { id: string; removed: boolean }[] };
+    expect(saved.containers.find(container => container.id === 'ancestor')?.removed).toBe(false);
+  } finally {
+    child.kill('SIGKILL');
+    rmSync(directory, { recursive: true, force: true });
+  }
+}, 30_000);

@@ -1,29 +1,30 @@
 #!/usr/bin/env bash
-# QA puts this directory first on PATH. run and create gain the reap-owner and,
-# when a child was given one, the reap-scope label. Every other docker command,
-# including compose, is executed unchanged.
-# The binary is the next docker on PATH that does not live in this directory.
-# A stub placed before or between copies of the shim is the one that runs.
+# rezics-docker-shim
+# QA puts this directory first on PATH. run and create gain the reap-owner label
+# and one key-only label for every scope in the runner chain. Every other docker
+# command, including compose, is executed unchanged.
+# The binary is the next docker on PATH whose file is not itself a shim. A stub
+# placed before or between shims is the one that runs, including a shim from
+# another worktree.
 set -euo pipefail
 
-self=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 real=
 IFS=':' read -r -a path_dirs <<< "${PATH-}"
 for dir in "${path_dirs[@]}"; do
   [[ -n $dir ]] || continue
-  resolved=$(cd "$dir" 2>/dev/null && pwd -P) || continue
-  [[ $resolved == "$self" ]] && continue
-  candidate=$resolved/docker
-  if [[ -x $candidate && ! -d $candidate ]]; then
-    real=$candidate
-    break
+  candidate=$dir/docker
+  [[ -x $candidate && ! -d $candidate ]] || continue
+  if grep -q -F -- '# rezics-docker-shim' "$candidate" 2>/dev/null; then
+    continue
   fi
+  real=$candidate
+  break
 done
 if [[ -z $real ]]; then
   printf '%s\n' 'docker shim: no docker on PATH after the shim' >&2
   exit 127
 fi
-if [[ -z ${REZICS_REAP_OWNER:-} && -z ${REZICS_REAP_SCOPE:-} ]]; then
+if [[ -z ${REZICS_REAP_OWNER:-} && -z ${REZICS_REAP_SCOPES:-} ]]; then
   exec "$real" "$@"
 fi
 
@@ -75,8 +76,12 @@ labels=()
 if [[ -n ${REZICS_REAP_OWNER:-} ]]; then
   labels+=(--label "rezics.reap-owner=${REZICS_REAP_OWNER}")
 fi
-if [[ -n ${REZICS_REAP_SCOPE:-} ]]; then
-  labels+=(--label "rezics.reap-scope=${REZICS_REAP_SCOPE}")
+if [[ -n ${REZICS_REAP_SCOPES:-} ]]; then
+  IFS=',' read -r -a scope_ids <<< "$REZICS_REAP_SCOPES"
+  for scope_id in "${scope_ids[@]}"; do
+    [[ -n $scope_id ]] || continue
+    labels+=(--label "rezics.reap-scope.${scope_id}=1")
+  done
 fi
 head=("${args[@]:0:index+1}")
 if (( index + 1 < ${#args[@]} )); then

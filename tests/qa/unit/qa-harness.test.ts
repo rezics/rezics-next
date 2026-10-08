@@ -117,7 +117,8 @@ function startupHarness(directory: string) {
     if (basename(process.argv[1]) === 'docker') {
       const filterAt = args.indexOf('--filter');
       const filter = filterAt >= 0 ? String(args[filterAt + 1] ?? '') : '';
-      const reapList = args[0] === 'ps' && filter.startsWith('label=rezics.reap-owner');
+      const reapList = args[0] === 'ps' && (filter.startsWith('label=rezics.reap-owner')
+        || filter.startsWith('label=rezics.reap-scope.'));
       // Ids come from that listing. A named rm is still resource startup.
       const reapRemove = args[0] === 'rm' && args[1] === '-f' && args.length > 2
         && args.slice(2).every(id => /^[0-9a-f]{12,64}$/.test(id));

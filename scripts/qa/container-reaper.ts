@@ -1,12 +1,18 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { accessSync, constants, readFileSync, realpathSync } from 'node:fs';
+import { accessSync, closeSync, constants, openSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 /** Containers started for QA carry this label. Compose stacks and the dev stack do not. */
 export const reapOwnerLabel = 'rezics.reap-owner';
-/** One id per spawned test child. Siblings do not share it, so one child's cleanup cannot see another's containers. */
+/**
+ * Key prefix. Each scope in a runner chain is its own label, `rezics.reap-scope.<id>=1`,
+ * so removing an ancestor matches every descendant container however deep.
+ * Siblings are not on each other's chain.
+ */
 export const reapScopeLabel = 'rezics.reap-scope';
+/** First line of scripts/qa/docker-shim/docker. PATH search skips every docker file that carries it. */
+const dockerShimMarker = '# rezics-docker-shim';
 const dockerTimeoutMs = 30_000;
 /** dockerd can commit a container after the client is gone and the first list has returned. */
 export const reapSettleMs = 1_000;
@@ -45,20 +51,40 @@ function canonicalDirectory(directory: string): string | undefined {
   try { return realpathSync(directory); } catch { return undefined; }
 }
 
-/** An executable named docker that is not another copy of this shim's directory. */
+function isDockerShimFile(candidate: string): boolean {
+  let opened: number | undefined;
+  try {
+    if (!statSync(candidate).isFile()) return false;
+    opened = openSync(candidate, 'r');
+    const buffer = Buffer.alloc(512);
+    const count = readSync(opened, buffer, 0, buffer.length, 0);
+    return buffer.subarray(0, count).includes(dockerShimMarker);
+  } catch {
+    return false;
+  } finally {
+    if (opened !== undefined) closeSync(opened);
+  }
+}
+
+/** An executable named docker whose file is not a shim from this or another worktree. */
 function dockerAfterShim(pathValue: string | undefined): string | undefined {
-  const shim = canonicalDirectory(dockerShimDirectory());
   for (const directory of (pathValue ?? '').split(':')) {
     if (!directory) continue;
-    const resolved = canonicalDirectory(directory);
-    if (!resolved || resolved === shim) continue;
-    const candidate = resolve(resolved, 'docker');
+    const candidate = resolve(directory, 'docker');
     try {
+      if (!statSync(candidate).isFile()) continue;
       accessSync(candidate, constants.X_OK);
-      return candidate;
-    } catch { /* keep looking */ }
+    } catch { continue; }
+    if (isDockerShimFile(candidate)) continue;
+    return candidate;
   }
   return undefined;
+}
+
+/** Inherited chain, then the id just minted. The new id is what this runner removes. */
+export function reapScopeChain(inherited: string | undefined, scope: string): string {
+  const prior = (inherited ?? '').split(',').map(part => part.trim()).filter(part => part.length > 0 && part !== scope);
+  return [...prior, scope].join(',');
 }
 
 /** Shim first on PATH, and this process as owner unless one was already assigned. */
@@ -82,13 +108,15 @@ export function newReapScope(): string {
 }
 
 /**
- * Owner stays whatever the caller already had. The scope is always new, so this child
- * cannot be cleaned up by a sibling's id.
+ * Owner stays whatever the caller already had. The new scope is appended to the
+ * inherited chain, so this child's containers also carry every ancestor scope.
  */
 export function reapChildEnvironment(env: NodeJS.ProcessEnv, pid = process.pid): NodeJS.ProcessEnv {
   const next = reapOwnerEnvironment(env, pid);
   if (!dockerAfterShim(next.PATH)) return next;
-  next.REZICS_REAP_SCOPE = newReapScope();
+  const scope = newReapScope();
+  next.REZICS_REAP_SCOPE = scope;
+  next.REZICS_REAP_SCOPES = reapScopeChain(env.REZICS_REAP_SCOPES, scope);
   return next;
 }
 
@@ -125,7 +153,7 @@ export function removeOwnedContainers(owner: string): void {
 
 export function removeScopedContainers(scope: string): void {
   if (!scope) return;
-  removeLabelledContainers(`label=${reapScopeLabel}=${scope}`);
+  removeLabelledContainers(`label=${reapScopeLabel}.${scope}`);
 }
 
 /** A finished or timed-out child. The owner label is not a filter: siblings share it. */

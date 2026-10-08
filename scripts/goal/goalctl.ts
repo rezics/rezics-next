@@ -7,7 +7,7 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtemp
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
-import { newReapScope, reapSettleMs, removeScopedContainers, sweepOrphanContainers } from '../qa/container-reaper.ts';
+import { newReapScope, reapScopeChain, reapSettleMs, removeScopedContainers, sweepOrphanContainers } from '../qa/container-reaper.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { parseAffectedArgs, selectTestCommand } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
@@ -2163,7 +2163,8 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   const scope = newReapScope();
   const child = spawn('task', ['goal:unit-files', '--', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
     ...files.map(file => `./${file}`)], {
-    cwd, env: { ...process.env, AGENT: '1', REZICS_REAP_PRELOAD: '1', REZICS_REAP_SCOPE: scope },
+    cwd, env: { ...process.env, AGENT: '1', REZICS_REAP_PRELOAD: '1',
+      REZICS_REAP_SCOPE: scope, REZICS_REAP_SCOPES: reapScopeChain(process.env.REZICS_REAP_SCOPES, scope) },
     stdio: ['ignore', 'pipe', 'pipe'], detached: true,
   });
   const stdout: string[] = [];
