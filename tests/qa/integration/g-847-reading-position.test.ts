@@ -47,8 +47,9 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     const store = new ReadingPositionStore(stack.contentPool);
     const objects = stack.objects('semantic/structure/'); await objects.initialize();
     let verifiedEmail = true;
+    const statementSeek = new StatementSeek(stack.accessPool, stack.env);
     const deps: MainWorkDependencies = { environment: stack.env, access: stack.access,
-      statementSeek: new StatementSeek(stack.accessPool, stack.env),
+      statementSeek,
       media: stack.media, mediaAccess: stack.mediaAccess, readingPositions: store, structureObjects: objects,
       progress: new StructureProgressStore(stack.contentPool), libraryStatus: library,
       seriesSessions: new SeriesSessionReader(stack.contentPool), sessions: new ConsumptionSessionStore(stack.contentPool, library),
@@ -139,6 +140,13 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
       await setStatementDecision(stack.env, stack.admission(person, decide.scope, decide.action, decide.digest), decision);
       return { statement: saved.component!, receipt: saved.receipt };
     };
+    // Production prepares Statement seek explicitly: a populated epoch has no coverage until rebuild completes.
+    const seekCurrent = async () => {
+      await statementSeek.rebuild();
+      for (let batch = 0; await statementSeek.projectOnce(); batch++) {
+        if (batch >= 1000) throw new Error('Statement seek did not become current within 1000 batches');
+      }
+    };
     const earlyFact = await statement('Early fact'), lateFact = await statement('Late fact');
     const relation = async () => json<{ occurrence: string; receipt: string }>(await call('POST', '/v1/relations/changes', {
       profile: 'relation-change-v1', expectedHead: null, definition: meaning.revision, actingSubject: person,
@@ -187,6 +195,7 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
       `/v1/compositions/${short(firstBook.structure)}/occurrences/${short(readerPosition)}/progress`,
       { actingSubject: person, expectedVersion: version, completed, position: null });
     await json(await progress(true, 0));
+    await seekCurrent();
     expect(Date.now() - preparation).toBeLessThan(600_000);
     const read = (path: string, position?: string, signed = true) => call('GET', `${path}${path.includes('?') ? '&' : '?'}${new URLSearchParams({
       ...(signed ? { actingSubject: person } : {}), ...(position ? { position } : {}) })}`, undefined, signed ? editor.token : '');
