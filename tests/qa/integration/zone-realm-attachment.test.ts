@@ -363,5 +363,45 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     const wideItems = (wide.body as { items: { zone: string }[]; next: string | null }).items;
     expect(wideItems).toHaveLength(50);
     expect(wideItems.some(item => item.zone === decoy)).toBe(false);
+
+    const bulk = await a.realmIn();
+    const thousand = Array.from({ length: 1000 }, (_, index) => {
+      const n = String(index).padStart(12, '0');
+      return { zone: `https://rezics.com/id/00000000-0000-4000-8000-${n}`,
+        space: `https://rezics.com/id/00000000-0000-4000-8001-${n}`,
+        receipt: `urn:rezics:receipt:${index.toString(16).padStart(64, '0')}` };
+    });
+    const bulkDecoy = `https://rezics.com/id/${randomUUID()}`;
+    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(bulkDecoy)} a rv:Zone ; rv:defaultRealm ${iri(bulk.realm)} ; rv:space ${iri(site.space)} .
+        ${thousand.map(item => `${iri(item.zone)} a rv:Zone ; rv:defaultRealm ${iri(bulk.realm)} ;
+          rv:realmAttachment ${iri(item.receipt)} ; rv:space ${iri(item.space)} .`).join('\n')}
+      }
+      GRAPH ${iri(GRAPHS.receipts)} {
+        ${thousand.map(item => `${iri(item.receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+          rv:realmAttachedAt "2026-10-08T03:04:05.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`).join('\n')}
+      } }`);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 40; page += 1) {
+      const path = cursor
+        ? `${listPath(bulk.realm, a.steward, 50)}&after=${encodeURIComponent(cursor)}`
+        : listPath(bulk.realm, a.steward, 50);
+      const response = await call('GET', path, undefined, home.author.token);
+      expect(response.status).toBe(200);
+      const body = await response.json() as { items: { zone: string }[]; next: string | null };
+      const zones = body.items.map(item => item.zone);
+      expect(zones).toEqual([...zones].sort());
+      if (cursor) expect(zones[0]! > cursor.slice(3)).toBe(true);
+      seen.push(...zones);
+      if (!body.next) break;
+      expect(zones).toHaveLength(50);
+      cursor = body.next;
+      if (page === 39) throw new Error('attachment pages did not end');
+    }
+    expect(seen).toEqual(thousand.map(item => item.zone));
+    expect(new Set(seen).size).toBe(seen.length);
+    expect(seen).not.toContain(bulkDecoy);
   } finally { await home.stop(); }
-}, 180_000);
+}, 240_000);
