@@ -431,8 +431,10 @@ async function volumeSeries() {
     labels: [], ...(role === 'part' ? { qualifier: { type: 'work-part' as const, displayLabel: orderKey, inclusion: 'required' as const } } : {}),
   });
   const seriesRecords = [record(member1, seriesStructure, 'a', 'part', volume1), record(member2, seriesStructure, 'b', 'part', volume2)];
-  const bookRecords = [record(early, book1, 'a', 'chapter', id()), record(reader, book1, 'b', 'chapter', id())];
-  const laterRecords = [record(late, book2, 'a', 'chapter', id())];
+  // Book chapters name a catalogue type, as the composition owner stores them.
+  const chapterTarget = 'https://schema.org/DigitalDocument';
+  const bookRecords = [record(early, book1, 'a', 'chapter', chapterTarget), record(reader, book1, 'b', 'chapter', chapterTarget)];
+  const laterRecords = [record(late, book2, 'a', 'chapter', chapterTarget)];
   const compose = async (structure: string, profile: 'work-composition' | 'book-composition', records: OccurrenceRecord[]) => {
     const cost = newCost();
     const entries = records.map(row => ({ parent: row.parent, segmentKey: row.segmentKey!, orderKey: row.orderKey!, occurrence: row.occurrence }));
@@ -474,7 +476,7 @@ async function volumeSeries() {
     }] : [{ owner: binding(header?.work ?? series) }] } };
   } } };
   const session = {
-    deps: { environment: env, progress: { readerVersion: async () => '1', resumeCandidates: async (_principal: unknown, structure: string) => ({
+    deps: { environment: env, progress: { readerVersion: async () => '1', anchorsCurrent: async () => true, resumeCandidates: async (_principal: unknown, structure: string) => ({
       items: saved.filter(row => row.structure === structure).map(row => ({ structure, occurrence: row.occurrence,
         selectedRevision: null, completed: true, position: null, version: 1 })),
       more: false, next: null,
@@ -565,4 +567,159 @@ test('a position nested past one volume is refused instead of completing as unre
   const boundary = new ReadingBoundary(f.session, 'mine');
   boundary.traversalFor = () => traversal;
   await expect(boundary.visible([record, 'untagged'])).rejects.toBeInstanceOf(ReadingContinuityUnsupported);
+});
+
+test('a nested chapter is disclosed by its own volume before it resumes anything', async () => {
+  const f = await volumeSeries();
+  f.saved.push({ structure: f.seriesStructure, occurrence: f.reader });
+  const hidden = new Set<string>();
+  const volumePolicy = async (_reader: WorkReadSession, selected: { structure: string }, rows: readonly { occurrence: string }[]) =>
+    rows.filter(row => f.placed.some(item => item.occurrence === row.occurrence
+      && item.structure === selected.structure && !hidden.has(item.occurrence)));
+  const traversal = new ReadingPositionTraversal(f.session, f.series, async resources => new Set(resources));
+  expect(await chooserPosition(f.session, traversal, 'mine', true, volumePolicy as never)).toBe(f.reader);
+  // Withholding the chapter's target is the same answer as never having saved it.
+  hidden.add(f.reader);
+  expect(await chooserPosition(f.session, traversal, 'mine', true, volumePolicy as never)).toBe('start');
+  f.saved.push({ structure: f.seriesStructure, occurrence: f.early });
+  expect(await chooserPosition(f.session, traversal, 'mine', true, volumePolicy as never)).toBe(f.early);
+});
+
+test('a continuation after a withheld scan window never carries a physical ordinal', async () => {
+  const f = await fixture();
+  // The first page ends exactly where the scan window does. The visible
+  // sibling that follows is physically the 33rd.
+  for (const row of f.episodes.slice(0, 32)) f.hidden.add(row.target!);
+  const first = await f.traversal().page({ limit: 1 });
+  expect(first.items).toEqual([]);
+  expect(first.next).not.toBeNull();
+  const second = await f.traversal().page({ limit: 1, after: first.next! });
+  expect(second.items.map(row => row.occurrence)).toEqual([f.episodes[32]!.occurrence]);
+  expect(Object.hasOwn(second.items[0]!, 'ordinal')).toBe(false);
+  // A page that never stepped over a withheld part keeps its ordinal.
+  const open = await fixture();
+  const opened = await open.traversal().page({ limit: 1 });
+  const carried = await open.traversal().page({ limit: 1, after: opened.next! });
+  expect(carried.items[0]!.ordinal).toBe(2);
+});
+
+test('an unstarted owner continues the opening page with a cursor the next request accepts', async () => {
+  const f = await fixture();
+  Object.assign(f.session.deps, { access: { canReadAsBaselineMember: async () => true } });
+  const traversal = f.traversal();
+  const mine = new ReadingBoundary(f.session, 'mine');
+  mine.traversalFor = () => traversal;
+  const first = await mine.chooser(f.work, 1);
+  expect(first).toMatchObject({ resolved: 'start', scope: 'positions' });
+  expect(first.items.map(row => row.occurrence)).toEqual([f.episodes[0]!.occurrence]);
+  expect(first.next).toBeString();
+  const second = await mine.chooser(f.work, 1, first.next!);
+  expect(second.items.map(row => row.occurrence)).toEqual([f.episodes[1]!.occurrence]);
+  expect(second.items.every(row => !Object.hasOwn(row, 'ordinal'))).toBe(true);
+  expect(second.next).toBeString();
+});
+
+test('a volume whose anchors are not prepared for the current heads makes series resume unavailable', async () => {
+  const f = await volumeSeries();
+  f.saved.push({ structure: f.seriesStructure, occurrence: f.reader });
+  const asked: unknown[] = [];
+  f.session.deps.progress!.anchorsCurrent = async (_principal, member, parent) => {
+    asked.push([member, parent]); return false;
+  };
+  const traversal = new ReadingPositionTraversal(f.session, f.series, async resources => new Set(resources));
+  // The stored key was derived from an earlier order of this volume. Reading it
+  // would resume at a chapter that is no longer the furthest.
+  await expect(chooserPosition(f.session, traversal, 'mine', true, f.disclose as never))
+    .rejects.toBeInstanceOf(ReadingResumeUnavailable);
+  expect(asked).toEqual([[{ structure: f.book1, revision: f.headers.get(f.book1)!.head },
+    { structure: f.seriesStructure, revision: f.headers.get(f.seriesStructure)!.head }]]);
+  f.session.deps.progress!.anchorsCurrent = async () => true;
+  expect(await chooserPosition(f.session, traversal, 'mine', true, f.disclose as never)).toBe(f.reader);
+});
+
+function anchorClient(f: Awaited<ReturnType<typeof volumeSeries>>, rows: Array<{ occurrence: string; selection_key: string; completed: boolean }>) {
+  const writes: Array<{ sql: string; params: unknown[] }> = [];
+  const head = f.headers.get(f.book1)!.head;
+  let basis: { anchor_revision: string | null; anchor_parent: string | null; anchor_parent_revision: string | null;
+    anchor_cursor: { occurrence?: string; selection?: string } | null } = { anchor_revision: null, anchor_parent: null,
+    anchor_parent_revision: null, anchor_cursor: null };
+  let rolledBack = false;
+  const client = { release: () => {}, query: async (sql: string, params: unknown[] = []) => {
+    if (sql.startsWith('SELECT order_revision')) return { rows: [{ ready: true, order_revision: head, invalidations: '0',
+      reindex_cursor: null, reindex_invalidations: null }] };
+    if (sql.startsWith('SELECT anchor_revision')) return { rows: [basis] };
+    if (sql.includes('UPDATE structure.progress_scope SET anchor_revision=$4')) {
+      basis = { anchor_revision: String(params[3]), anchor_parent: String(params[4]), anchor_parent_revision: String(params[5]),
+        anchor_cursor: params[6] === null ? null : JSON.parse(String(params[6])) };
+    } else if (sql.includes('UPDATE structure.progress_scope SET anchor_cursor')) {
+      basis = { ...basis, anchor_cursor: params[3] === null ? null : JSON.parse(String(params[3])) };
+    } else if (sql.startsWith('SELECT occurrence,selection_key,completed')) {
+      expect(sql).toContain('LIMIT 3');
+      const after = params[3] as string | undefined;
+      return { rows: rows.filter(row => !after || row.occurrence > after).slice(0, 3) };
+    } else if (sql.startsWith('ROLLBACK')) rolledBack = true;
+    else if (sql.includes('INSERT INTO structure.progress\n') || sql.includes('UPDATE structure.progress SET')) writes.push({ sql, params });
+    return { rows: [] };
+  } };
+  return { client, writes, state: () => basis, rolledBack: () => rolledBack };
+}
+
+async function anchorProjection(f: Awaited<ReturnType<typeof volumeSeries>>, client: unknown) {
+  const native = f.env.fuseki.query.bind(f.env.fuseki);
+  // The owner of a Structure is found through its component.
+  f.env.fuseki.query = async (q: string, bytes?: number) => {
+    if (/\bASK \{/.test(q)) return { boolean: true } as never;
+    const owner = q.startsWith('SELECT ?owner') ? [...f.headers.values()].find(header => q.includes(header.component)) : undefined;
+    return (owner ? { results: { bindings: [{ owner: binding(owner.work) }] } } : await native(q, bytes)) as never;
+  };
+  Object.assign(f.env, { lineage: { dataEpoch: 'test', routingEpoch: 'test' } });
+  const pool = { connect: async () => client, query: async () => ({ rows: [] }) } as unknown as Pool;
+  const projection = new ProgressOrderProjection(pool, f.env as never);
+  projection.request({ issuer: 'https://reader.test', subject: 'viewer' }, f.book1);
+  return projection;
+}
+
+test('earlier completions are anchored on the enclosing series two at a time, resumably', async () => {
+  const f = await volumeSeries();
+  const rows = [f.early, f.reader, id()].sort().map((occurrence, index) => ({ occurrence, selection_key: '', completed: index < 2 }));
+  const done = anchorClient(f, rows);
+  const projection = await anchorProjection(f, done.client);
+  const seriesHead = f.headers.get(f.seriesStructure)!.head;
+  await projection.step();
+  const anchored = () => done.writes.filter(write => write.sql.includes('INSERT INTO structure.progress\n'));
+  expect(done.state()).toMatchObject({ anchor_revision: f.headers.get(f.book1)!.head, anchor_parent: f.seriesStructure,
+    anchor_parent_revision: seriesHead, anchor_cursor: { occurrence: rows[1]!.occurrence } });
+  // Two rows per step; the third row is the lookahead that proves there is more.
+  expect(anchored().length + done.writes.filter(write => write.sql.includes('UPDATE structure.progress SET')).length).toBe(2);
+  expect(anchored().map(write => write.params[3])).toEqual(
+    rows.slice(0, 2).map(row => row.occurrence));
+  expect(anchored().every(write => write.params[2] === f.seriesStructure && write.params[5] === seriesHead)).toBe(true);
+  await projection.step();
+  expect(done.state().anchor_cursor).toBeNull();
+  // The incomplete third row withdraws any anchor it had; nothing is created.
+  expect(done.writes.at(-1)!.sql).toContain('UPDATE structure.progress SET completed = false');
+  // A prepared scope is not rewritten again until a head moves.
+  const before = done.writes.length;
+  await projection.step();
+  expect(done.writes.length).toBe(before);
+});
+
+test('a head that moves during an anchor page leaves the scope unprepared', async () => {
+  const f = await volumeSeries();
+  const done = anchorClient(f, [{ occurrence: f.reader, selection_key: '', completed: true }]);
+  const projection = await anchorProjection(f, done.client);
+  const book = f.headers.get(f.book1)!;
+  const native = f.env.fuseki.query.bind(f.env.fuseki);
+  let reads = 0;
+  f.env.fuseki.query = async (q: string, bytes?: number) => {
+    const value = await native(q, bytes) as { results?: { bindings: Array<Record<string, { value: string }>> } };
+    // The series head is read before the page and again before it commits.
+    if (q.includes('SELECT ?component') && q.includes(f.seriesStructure) && ++reads > 1) {
+      for (const binding of value.results?.bindings ?? []) binding.head = { value: id() };
+    }
+    return value as never;
+  };
+  await expect(projection.step()).rejects.toThrow('Progress anchor basis changed');
+  expect(done.rolledBack()).toBe(true);
+  expect(book.head).toBe(f.headers.get(f.book1)!.head);
 });

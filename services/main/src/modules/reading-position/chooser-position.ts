@@ -4,6 +4,7 @@ import { disclosedCompletedProgress } from '../progress/disclosure.ts';
 import { ProgressOrderUnavailable, type ResumePageKey } from '../progress/store.ts';
 import { parseStoredRelease } from '../release/schema.ts';
 import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import type { ReadingOccurrence } from './boundary.ts';
 import { continuityKey, CONTINUITY_MEMBER_BOUND } from './continuity.ts';
 import { READING_POSITION_COST } from './contract.ts';
 import { ReadingContinuityUnsupported, ReadingResumeContinuation, ReadingResumeUnavailable } from './errors.ts';
@@ -53,17 +54,38 @@ export async function chooserPosition(session: WorkReadSession, traversal: Readi
     if (error instanceof ProgressOrderUnavailable) throw new ReadingResumeUnavailable('Saved progress is being prepared for resume. Try again shortly.');
     throw error;
   }
-  const visible = await disclose(session, header, candidates.items);
-  const visibleIds = new Set(visible.map(row => row.occurrence));
-  const placed = visible.length < candidates.items.length
-    ? new Map((await traversal.recordsFor(candidates.items.map(row => row.occurrence))).map(item => [item.occurrence, item]))
-    : new Map();
+  const visibleIds = new Set((await disclose(session, header, candidates.items)).map(row => row.occurrence));
+  const placed = new Map<string, ReadingOccurrence>();
+  if (visibleIds.size < candidates.items.length) {
+    for (const item of await traversal.recordsFor(candidates.items.filter(row => !visibleIds.has(row.occurrence))
+      .map(row => row.occurrence))) placed.set(item.occurrence, item);
+  }
+  // A chapter inside a member volume is not in this Structure's manifest. Its
+  // volume owns its disclosure, so it is read through that volume's policy and
+  // only once the volume's anchors are prepared for the current heads.
+  const volumes = new Map<string, Promise<ReadonlySet<string>>>();
+  const volumeDisclosed = (anchor: ReadingOccurrence) => {
+    if (!volumes.has(anchor.structure)) volumes.set(anchor.structure, (async () => {
+      if (!await deps.progress!.anchorsCurrent(principal, { structure: anchor.structure, revision: anchor.revision },
+        { structure: meta.structure!, revision: header.head })) {
+        throw new ReadingResumeUnavailable('Saved progress is being prepared for resume. Try again shortly.');
+      }
+      const volume = await readCompositionHeader(deps.environment, anchor.structure);
+      if (!volume || volume.head !== anchor.revision) throw new ReadingResumeUnavailable('Resume order changed');
+      const rows = candidates.items.filter(row => placed.get(row.occurrence)?.structure === anchor.structure)
+        .map(row => ({ ...row, structure: anchor.structure }));
+      return new Set((await disclose(session, volume, rows)).map(row => row.occurrence));
+    })());
+    return volumes.get(anchor.structure)!;
+  };
   for (const row of candidates.items) {
     const anchor = placed.get(row.occurrence);
-    if (!visibleIds.has(row.occurrence) && (!anchor || anchor.structure === meta.structure)) continue;
+    const nested = !visibleIds.has(row.occurrence);
+    if (nested && (!anchor || anchor.structure === meta.structure)) continue;
     const location = await traversal.location(row.occurrence);
     if (!location) continue;
     continuityKey(location);
+    if (nested && !(await volumeDisclosed(anchor!)).has(row.occurrence)) continue;
     try {
       await traversal.requireLocation(location);
       if (location.item.role === 'part' && location.item.target) {

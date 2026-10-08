@@ -4,6 +4,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { ProgressOrderProjection } from './order-projection.ts';
+import { anchorBasis, applyAnchors, type MemberAnchor } from './anchors.ts';
 import { CONTINUITY_KEY_PARTS } from '../reading-position/continuity.ts';
 
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -55,7 +56,7 @@ export interface ProgressWrite {
   /** Exact immutable ancestor keys, supplied by the authorized occurrence read. */
   order?: { revision: string; key: string; eligible?: boolean };
   /** The same occurrence indexed on each enclosing series, under one continuity key. */
-  anchors?: Array<{ structure: string; order: { revision: string; key: string; eligible?: boolean } | null }>;
+  anchors?: MemberAnchor[];
 }
 
 function validOrder(order: { revision: string; key: string; eligible?: boolean }) {
@@ -204,6 +205,46 @@ export class StructureProgressStore {
       input.principal.issuer, input.principal.subject, input.structure]);
   }
 
+  /** The anchors this write carries derive from one pair of heads. A scope it
+   * opens is prepared for exactly that pair. A prepared scope whose basis is
+   * another pair no longer vouches for its anchors, so it is unprepared until
+   * the background pass rewrites them. */
+  private async recordAnchorBasis(client: PoolClient, input: ProgressWrite, opened: boolean) {
+    if (!input.order || !input.anchors) return;
+    const basis = anchorBasis(input.order.revision, input.anchors);
+    const identity = [input.principal.issuer, input.principal.subject, input.structure];
+    if (opened) {
+      await client.query(`UPDATE structure.progress_scope SET anchor_revision=$4, anchor_parent=$5,
+        anchor_parent_revision=$6, anchor_cursor=NULL
+        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3`,
+      [...identity, basis.revision, basis.parent, basis.parentRevision]);
+      return;
+    }
+    await client.query(`UPDATE structure.progress_scope SET anchor_revision=NULL, anchor_parent=NULL,
+      anchor_parent_revision=NULL, anchor_cursor=NULL
+      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
+        AND anchor_revision IS NOT NULL AND (anchor_revision <> $4
+          OR anchor_parent <> $5 OR anchor_parent_revision <> $6)`,
+    [...identity, basis.revision, basis.parent, basis.parentRevision]);
+  }
+
+  /** True when every earlier completion of this member Structure is indexed on
+   * its enclosing Structure for exactly these heads. One keyed row; otherwise
+   * the background pass is asked to prepare it. */
+  async anchorsCurrent(principal: VerifiedPrincipal, member: { structure: string; revision: string },
+    parent: { structure: string; revision: string }): Promise<boolean> {
+    validIdentity(member.structure, member.structure, null);
+    validIdentity(parent.structure, parent.structure, null);
+    if (!ID.test(member.revision) || !ID.test(parent.revision)) throw new InvalidStructureProgress('progress order revision is invalid');
+    const ready = await this.pool.query(`SELECT 1 FROM structure.progress_scope
+      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND anchor_cursor IS NULL
+        AND anchor_revision=$4 AND anchor_parent=$5 AND anchor_parent_revision=$6`,
+    [principal.issuer, principal.subject, member.structure, member.revision, parent.structure, parent.revision]);
+    if (ready.rows.length) return true;
+    this.projection?.request(principal, member.structure);
+    return false;
+  }
+
   async write(input: ProgressWrite): Promise<StructureProgress> {
     const selectedRevision = input.selectedRevision ?? null;
     validIdentity(input.structure, input.occurrence, selectedRevision);
@@ -233,12 +274,13 @@ export class StructureProgressStore {
       await client.query(`INSERT INTO structure.progress_reader VALUES ($1,$2,1)
         ON CONFLICT (principal_issuer,principal_subject) DO UPDATE
           SET version=structure.progress_reader.version`, [input.principal.issuer, input.principal.subject]);
-      await client.query(`INSERT INTO structure.progress_scope
+      const scope = await client.query<{ ready: boolean }>(`INSERT INTO structure.progress_scope
         (principal_issuer, principal_subject, structure, order_revision, ready, version)
         SELECT $1,$2,$3,$4,$5 AND NOT EXISTS (SELECT 1 FROM structure.progress
           WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND completed AND resume_eligible IS DISTINCT FROM false LIMIT 1),1
-        ON CONFLICT DO NOTHING`, [input.principal.issuer, input.principal.subject, input.structure,
+        ON CONFLICT DO NOTHING RETURNING ready`, [input.principal.issuer, input.principal.subject, input.structure,
         input.order?.revision ?? null, !!input.order]);
+      await this.recordAnchorBasis(client, input, scope.rows[0]?.ready === true);
       if (input.library) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
         [JSON.stringify(['library-status-work', input.library.agent, input.library.work])]);
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
@@ -298,33 +340,8 @@ export class StructureProgressStore {
         [input.principal.issuer, input.principal.subject, input.structure, input.occurrence,
           selectionKey, input.completed, input.position, next, input.order?.revision ?? null, input.order?.key ?? null, input.order ? input.order.eligible ?? true : null]);
       }
-      for (const anchor of input.anchors ?? []) {
-        if (anchor.structure === input.structure) continue;
-        const identity = [input.principal.issuer, input.principal.subject, anchor.structure, input.occurrence, selectionKey];
-        if (!anchor.order || !input.completed) {
-          await client.query(`UPDATE structure.progress SET completed = false, resume_eligible = false,
-            order_revision = NULL, order_key = NULL, version = version + 1, updated_at = clock_timestamp()
-            WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
-              AND occurrence = $4 AND selection_key = $5`, identity);
-          continue;
-        }
-        await client.query(`INSERT INTO structure.progress_scope
-          (principal_issuer, principal_subject, structure, order_revision, ready, version)
-          SELECT $1,$2,$3,$4,$5 AND NOT EXISTS (SELECT 1 FROM structure.progress
-            WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
-              AND completed AND resume_eligible IS DISTINCT FROM false LIMIT 1),1
-          ON CONFLICT DO NOTHING`, [input.principal.issuer, input.principal.subject, anchor.structure,
-          anchor.order.revision, true]);
-        await client.query(`INSERT INTO structure.progress
-          (principal_issuer, principal_subject, structure, occurrence, selection_key,
-            completed, position, version, order_revision, order_key, resume_eligible)
-          VALUES ($1,$2,$3,$4,$5,true,NULL,1,$6,$7,$8)
-          ON CONFLICT (principal_issuer, principal_subject, structure, occurrence, selection_key)
-          DO UPDATE SET completed = true, position = NULL, order_revision = EXCLUDED.order_revision,
-            order_key = EXCLUDED.order_key, resume_eligible = EXCLUDED.resume_eligible,
-            version = structure.progress.version + 1, updated_at = clock_timestamp()`,
-        [...identity, anchor.order.revision, anchor.order.key, anchor.order.eligible ?? true]);
-      }
+      await applyAnchors(client, input.principal, input.structure, input.occurrence, selectionKey,
+        input.completed, input.anchors ?? []);
       await client.query(`INSERT INTO structure.progress_command
         (principal_issuer, principal_subject, idempotency_key, request_digest,
           structure, occurrence, selection_key, result_version, result_completed, result_position,

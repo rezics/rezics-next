@@ -302,9 +302,12 @@ export class ReadingBoundary {
     const resumeOnly = ownMine && !q?.trim();
     let resumeAfter: ResumePageKey | undefined, browseAfter = after;
     if (resumeOnly) {
-      const cursor = after ? readingContinuation(after, 'resume') : null;
-      if (cursor && cursor.kind !== 'resume') throw new WorkReadInvalid('Reading continuation has another scope');
-      resumeAfter = cursor?.after;
+      // An owner who has not started browses the opening page, whose
+      // continuation is the search wrapper the same Mine request issued.
+      const cursor = after ? readingContinuation(after) : null;
+      if (cursor?.kind === 'resume') resumeAfter = cursor.after;
+      else if (cursor?.kind === 'search') { resumeAfter = cursor.resume ?? undefined; browseAfter = cursor.browse ?? undefined; }
+      else if (cursor) throw new WorkReadInvalid('Reading continuation has another scope');
     } else if (ownMine && after) {
       const cursor = readingContinuation(after, 'search');
       if (cursor.kind !== 'search') throw new WorkReadInvalid('Reading continuation has another scope');

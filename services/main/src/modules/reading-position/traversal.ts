@@ -14,9 +14,10 @@ import { browseContinuation, readingContinuation } from './continuation.ts';
 
 /** A delivered row continues by its occurrence, which the next read enters when
  * it has children. A hidden or exhausted row must not be re-entered, so that
- * checkpoint keeps the descend bit the occurrence alone cannot carry. */
-function positionCursor(occurrence: string, descend: boolean) {
-  return descend ? occurrence : browseContinuation(occurrence, false);
+ * checkpoint keeps the descend bit the occurrence alone cannot carry. Once a
+ * read has stepped over an undisclosed placement, every later checkpoint says so. */
+function positionCursor(occurrence: string, descend: boolean, withheld = false) {
+  return descend && !withheld ? occurrence : browseContinuation(occurrence, descend, withheld);
 }
 
 /** Bounded results and live traversal state, independent of chapter inventory.
@@ -336,11 +337,16 @@ export class ReadingPositionTraversal {
     const meta = await this.metadataFor(this.root);
     const frames: ReadingFrame[] = [];
     let checkpoint: string | null = null, lastDelivered: string | null = null;
+    // A sibling ordinal counts every earlier placement. It is only returned
+    // while every placement before this page was visited and disclosed.
+    let withheld = false;
+    const at = (occurrence: string, descend: boolean) => positionCursor(occurrence, descend, withheld);
     if (input.after) {
       const cursor = NATIVE_ID.test(input.after)
-        ? { kind: 'browse' as const, occurrence: input.after, descend: true }
+        ? { kind: 'browse' as const, occurrence: input.after, descend: true, withheld: undefined }
         : readingContinuation(input.after, 'browse');
       if (cursor.kind !== 'browse') throw new WorkReadInvalid('Reading continuation has another scope');
+      withheld = cursor.withheld === true;
       const previous = await this.navigation(cursor.occurrence);
       if (!previous) throw new WorkReadInvalid('Reading position cursor is invalid');
       frames.push(...previous.frames);
@@ -350,12 +356,12 @@ export class ReadingPositionTraversal {
         || (await this.disclose([previous.item.target])).has(previous.item.target))) {
         const child = await this.child(previous.item, frames); if (child) frames.push(child);
       }
-      checkpoint = positionCursor(cursor.occurrence, false);
+      checkpoint = at(cursor.occurrence, false);
     } else if (meta.structure) frames.push({ work: this.root, parent: meta.structure });
     const items: ReadingOccurrence[] = [];
     // Hidden skips stop after one scan window. A visible page is one index
     // read of the requested page plus its lookahead, not that window.
-    let skipped = 0, examined = 0, widen = false, withheld = false;
+    let skipped = 0, examined = 0, widen = false;
     const open = () => this.order ? skipped < READING_CHOOSER_COST.scanRows : examined < READING_CHOOSER_COST.scanRows;
     while (frames.length && items.length <= input.limit && open()) {
       this.session.checkDeadline();
@@ -365,7 +371,7 @@ export class ReadingPositionTraversal {
         if (!(error instanceof WorkReadMissing)) throw error;
         frames.pop(); examined++; skipped++;
         const parent = frames.at(-1)?.after;
-        if (parent) checkpoint = positionCursor(parent.occurrence, false);
+        if (parent) checkpoint = at(parent.occurrence, false);
         continue;
       }
       const room = input.limit - items.length + 1;
@@ -385,21 +391,21 @@ export class ReadingPositionTraversal {
       let descended = false, deliveredHere = 0, passed = 0;
       for (const candidate of candidates) {
         const item = candidate.item; frame.after = item;
-        checkpoint = positionCursor(item.occurrence, false);
-        if (item.role === 'part' && item.target && !disclosed.has(item.target)) {
-          withheld = true; passed++; continue;
-        }
+        const undisclosed = item.role === 'part' && item.target && !disclosed.has(item.target);
+        if (undisclosed) withheld = true;
+        checkpoint = at(item.occurrence, false);
+        if (undisclosed) { passed++; continue; }
         const redacted = item.target && NATIVE_ID.test(item.target) && !disclosed.has(item.target);
         if (item.role !== 'group' && candidate.matches && (!redacted || !q || String(item.ordinal) === q)) {
           items.push(redacted ? { ...item, target: null, labels: [] } : item);
           deliveredHere++;
-          if (items.length <= input.limit) lastDelivered = positionCursor(item.occurrence, true);
+          if (items.length <= input.limit) lastDelivered = at(item.occurrence, true);
         } else if (item.role !== 'group') passed++;
         if (items.length > input.limit) break;
         const child = await this.child(item, frames);
         if (child) {
           frames.push(child); descended = true;
-          checkpoint = positionCursor(item.occurrence, true);
+          checkpoint = at(item.occurrence, true);
           break;
         }
       }
@@ -411,14 +417,14 @@ export class ReadingPositionTraversal {
       if (!descended && candidates.length < probe && items.length <= input.limit) {
         frames.pop();
         const parent = frames.at(-1)?.after;
-        if (parent) checkpoint = positionCursor(parent.occurrence, false);
+        if (parent) checkpoint = at(parent.occurrence, false);
       }
     }
     const lookahead = items.length > input.limit;
     const complete = !lookahead && frames.length === 0;
     items.splice(input.limit);
-    // A sibling ordinal counts every earlier placement. Omit it once this
-    // request has stepped over an undisclosed part.
+    // Omit the ordinal once this read, or any read before it, has stepped over
+    // an undisclosed part.
     const delivered: ReadingOccurrence[] = withheld
       ? items.map(({ ordinal: _ordinal, ...item }) => item) : items;
     const next = complete ? null : lookahead ? lastDelivered : checkpoint;

@@ -64,6 +64,14 @@ async function enclosingMembers(env: WorkActivationEnvironment, work: string): P
   return [{ work: row.work.value, structure: row.structure.value, occurrence: row.occurrence.value }];
 }
 
+/** The one Structure that holds this Work as a member, with its current head,
+ * or nothing when the Work is not a member of another. */
+export async function enclosingStructure(env: WorkActivationEnvironment, work: string):
+  Promise<CompositionHeader | undefined> {
+  const [parent] = await enclosingMembers(env, work);
+  return parent ? await readCompositionHeader(env, parent.structure) ?? undefined : undefined;
+}
+
 function acceptKey(key: string) {
   if (key.length > 1088 || key.split('\u0001').length > CONTINUITY_KEY_PARTS
     || !key.split('\u0001').every(part => /^[0-9a-z]{1,32}\u0002[0-9a-z]{1,32}$/.test(part))) {
