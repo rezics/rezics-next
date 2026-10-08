@@ -1,7 +1,7 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { accessSync, closeSync, constants, openSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 /** Containers started for QA carry this label. Compose stacks and the dev stack do not. */
 export const reapOwnerLabel = 'rezics.reap-owner';
@@ -192,6 +192,19 @@ export function reapCreatedOwner(createdOwner: string | undefined): void {
   removeOwnedContainers(createdOwner);
 }
 
+/**
+ * The startup sweep is garbage collection. It runs in its own process so it does not
+ * block the runner, count as active time, or hold an exit or a deadline.
+ */
+export function startOrphanSweep(): void {
+  const env = { ...process.env };
+  delete env.REZICS_REAP_PRELOAD;
+  const child = spawn(process.execPath, [join(import.meta.dir, 'container-reaper.ts'), '--sweep-orphans'], {
+    detached: true, stdio: 'ignore', env,
+  });
+  child.unref();
+}
+
 /** Remove containers whose labelled process is gone or has a different start time. Unlabelled containers are never listed. */
 export function sweepOrphanContainers(): void {
   const listed = dockerOutput(['ps', '-aq', '--filter', `label=${reapOwnerLabel}`]);
@@ -232,3 +245,7 @@ export function bindReapOwnerExit(env: NodeJS.ProcessEnv = process.env): void {
 
 // Bun's unit-gate preload. A shard that inherited its owner must not remove the ancestor's containers.
 if (process.env.REZICS_REAP_PRELOAD === '1') bindReapOwnerExit();
+
+if (import.meta.main && process.argv[2] === '--sweep-orphans') {
+  try { sweepOrphanContainers(); } catch { /* a missed orphan is swept by the next runner */ }
+}

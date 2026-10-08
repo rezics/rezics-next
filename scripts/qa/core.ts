@@ -18,7 +18,7 @@ import { hostname } from 'node:os';
 import { acceptanceStatuses, parseJUnit, titleIds, type Case, type TestResult } from './acceptance.ts';
 import {
   bindReapOwnerExit, forgetChildScope, noteChildScope, reapActiveChildScopes, reapChildEnvironment, reapChildScope,
-  settleReap, sweepOrphanContainers,
+  settleReap, startOrphanSweep,
 } from './container-reaper.ts';
 import { isolatedIntegrationFileList } from './isolated-integration-files.ts';
 import { waitForMemory, type MemoryNeed, type MemoryWaitOptions } from './memory-admission.ts';
@@ -98,10 +98,11 @@ export function command(root: string, name: string, args: string[], timeoutMs: n
     const result = spawnSync(name, args, { cwd: root,
       env: environment, encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs,...(maxBuffer===undefined?{}:{maxBuffer}) });
+    const elapsedMs = Date.now() - start;
     reapSpawnedTest(name, args, environment);
     return { ok: result.status === 0 && !result.error,
     output: [result.stdout, result.stderr, result.error?.message].filter(Boolean).join('\n'),
-    elapsedMs: Date.now() - start };
+    elapsedMs };
   } finally { forgetChildScope(scope); }
 }
 
@@ -487,12 +488,15 @@ export async function commandAsync(root: string, name: string, args: string[], t
   }
   armTimer();
   let code: number | null;
+  let elapsedMs = 0;
   try {
     code = await new Promise<number | null>((resolve, reject) => {
       child.on('error', reject);
       child.on('close', resolve);
     });
   } finally {
+    elapsedMs = Date.now() - start;
+    if (waiting.size) admissionWaitMs += Date.now() - admissionStarted;
     clearTimeout(timer);
     if (force) clearTimeout(force);
     if (timedOut) terminate('SIGKILL');
@@ -500,8 +504,6 @@ export async function commandAsync(root: string, name: string, args: string[], t
     reapSpawnedTest(name, args, environment);
     forgetChildScope(scope);
   }
-  const elapsedMs = Date.now() - start;
-  if (waiting.size) admissionWaitMs += Date.now() - admissionStarted;
   return { ok: code === 0 && !timedOut, elapsedMs, activeElapsedMs: elapsedMs - admissionWaitMs, admissionWaitMs, timedOut,
     output: [stdout, stderr, timeoutReason].filter(Boolean).join('\n') };
 }
@@ -1091,7 +1093,7 @@ const qaRunnerEntries = new Set([
 function installQaRunnerReaper(): void {
   const entry = process.argv[1];
   if (!entry || !qaRunnerEntries.has(resolve(entry))) return;
-  try { sweepOrphanContainers(); }
+  try { startOrphanSweep(); }
   catch (error) { console.error(`QA container sweep failed: ${error instanceof Error ? error.message : error}`); }
   // A nested runner inherited its owner and must not remove that ancestor's containers.
   // Its own children's scopes still have to go when this process is cancelled.
