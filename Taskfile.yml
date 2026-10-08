@@ -679,6 +679,11 @@ tasks:
     cmds:
       - bun scripts/ops/restore.ts {{.CLI_ARGS}}
 
+  ops:tdb2-scan:
+    desc: Decode every TDB2 index tuple of a copied store and check pointers, indexes and node-to-id agreement.
+    cmds:
+      - bun infra/jena/tests/tdb2-integrity/scan.ts {{.CLI_ARGS}}
+
   ops:compact:
     desc: Compact stopped TDB2 with a retained recovery window, or explicitly rollback/retire it.
     cmds:
