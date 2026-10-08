@@ -10,7 +10,8 @@ import { MangaBrowseHeader, MangaCataloguePanel } from '../../zones/official/man
 import { captureCatalogueStory, CatalogueZoneFrame, catalogueFacts, catalogueLink, catalogueWork } from './catalogue-zone.tsx';
 
 // The Manga Zone's browse, fact panel and footer. Volume count is the recorded count.
-// A one-shot with no year says so, and chapter counts are never shown as volumes.
+// A card shows only recorded facts. The work page names a missing year or volume count.
+// Chapter counts are never shown as volumes.
 
 const longSeries = catalogueWork('m1', '長編漫画', 'ja', 'completed');
 const yearless = catalogueWork('m2', 'A single chapter', 'en', 'upcoming');
@@ -33,9 +34,11 @@ function Page({ locale, bounded = false }: { locale: UiLocale; bounded?: boolean
           <li>{card(cancelled, catalogueFacts('Manga', [1997], 3))}</li>
         </ul>
       </section>
-      <div className="p-4">
+      <div className="grid gap-4 p-4">
         <MangaCataloguePanel zone={zone} fallback={null} Link={catalogueLink} credits={null}
           work={longSeries} facts={catalogueFacts('Manga', [1995], 21)} />
+        <MangaCataloguePanel zone={zone} fallback={null} Link={catalogueLink} credits={null}
+          work={yearless} facts={catalogueFacts('One-shot', [], null)} />
       </div>
     </>}
   </CatalogueZoneFrame>;
@@ -54,13 +57,19 @@ type Story = StoryObj<typeof meta>;
 const fits = async () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 
 async function recorded(canvasElement: HTMLElement, copy: {
-  year: string; volumes: string; missing: string; cancelled: string; sibling: string; archive: string | RegExp;
+  year: string; volumes: string; cancelled: string; sibling: string; archive: string | RegExp;
+  cardOmits: readonly string[]; panelNames: readonly string[];
 }) {
   const canvas = within(canvasElement);
   await expect(canvas.getByLabelText(copy.year)).toBeVisible();
   await expect(canvas.getAllByText(copy.volumes).length).toBeGreaterThan(0);
-  await expect(canvas.getByText(copy.missing)).toBeVisible();
   await expect(canvas.getByText(copy.cancelled)).toBeVisible();
+  const oneShot = canvasElement.querySelectorAll('[data-catalogue-card]')[1];
+  const cardText = oneShot?.textContent ?? '';
+  for (const line of copy.cardOmits) await expect(cardText).not.toContain(line);
+  await expect(cardText).toContain(copy.panelNames[0]);
+  const gap = canvasElement.querySelectorAll('[data-catalogue-panel]')[1]?.textContent ?? '';
+  for (const line of copy.panelNames) await expect(gap).toContain(line);
   await expect(canvas.getByRole('link', { name: copy.sibling })).toBeVisible();
   await expect(canvas.getAllByText(copy.archive).length).toBeGreaterThan(0);
   await expect(canvas.queryByText(/\d+ episodes/)).toBeNull();
@@ -71,8 +80,10 @@ export const EnglishDesktop: Story = {
   parameters: { viewport: { defaultViewport: 'desktop' } },
   async play({ canvasElement }) {
     await recorded(canvasElement, {
-      year: 'Publication year', volumes: '21 volumes', missing: 'Year not recorded',
-      cancelled: 'Cancelled', sibling: 'Open the Anime Zone', archive: /Bangumi Archive wiki export/,
+      year: 'Publication year', volumes: '21 volumes', cancelled: 'Cancelled',
+      cardOmits: ['Year not recorded', 'Volume count not recorded'],
+      panelNames: ['One-shot', 'Year not recorded', 'Volume count not recorded', 'Upcoming'],
+      sibling: 'Open the Anime Zone', archive: /Bangumi Archive wiki export/,
     });
     await captureCatalogueStory(canvasElement, 'manga-en-desktop');
   },
@@ -82,8 +93,10 @@ export const EnglishPhone: Story = {
   parameters: { viewport: { defaultViewport: 'phone' } },
   async play({ canvasElement }) {
     await recorded(canvasElement, {
-      year: 'Publication year', volumes: '21 volumes', missing: 'Year not recorded',
-      cancelled: 'Cancelled', sibling: 'Open the Anime Zone', archive: /Bangumi Archive wiki export/,
+      year: 'Publication year', volumes: '21 volumes', cancelled: 'Cancelled',
+      cardOmits: ['Year not recorded', 'Volume count not recorded'],
+      panelNames: ['One-shot', 'Year not recorded', 'Volume count not recorded', 'Upcoming'],
+      sibling: 'Open the Anime Zone', archive: /Bangumi Archive wiki export/,
     });
     await captureCatalogueStory(canvasElement, 'manga-en-phone');
   },
@@ -95,8 +108,10 @@ export const JapaneseDesktop: Story = {
   parameters: { viewport: { defaultViewport: 'desktop' } },
   async play({ canvasElement }) {
     await recorded(canvasElement, {
-      year: '公開年', volumes: '21 巻', missing: '年は記録されていません',
-      cancelled: '中止', sibling: 'アニメゾーンを開く', archive: /Bangumi Archive/,
+      year: '公開年', volumes: '21 巻', cancelled: '中止',
+      cardOmits: ['年は記録されていません', '巻数は記録されていません'],
+      panelNames: ['One-shot', '年は記録されていません', '巻数は記録されていません', '未発売'],
+      sibling: 'アニメゾーンを開く', archive: /Bangumi Archive/,
     });
     await captureCatalogueStory(canvasElement, 'manga-ja-desktop');
   },
@@ -108,8 +123,10 @@ export const JapanesePhone: Story = {
   parameters: { viewport: { defaultViewport: 'phone' } },
   async play({ canvasElement }) {
     await recorded(canvasElement, {
-      year: '公開年', volumes: '21 巻', missing: '年は記録されていません',
-      cancelled: '中止', sibling: 'アニメゾーンを開く', archive: /Bangumi Archive/,
+      year: '公開年', volumes: '21 巻', cancelled: '中止',
+      cardOmits: ['年は記録されていません', '巻数は記録されていません'],
+      panelNames: ['One-shot', '年は記録されていません', '巻数は記録されていません', '未発売'],
+      sibling: 'アニメゾーンを開く', archive: /Bangumi Archive/,
     });
     await captureCatalogueStory(canvasElement, 'manga-ja-phone');
   },

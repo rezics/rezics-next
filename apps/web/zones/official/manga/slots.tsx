@@ -11,8 +11,9 @@ import type { ReactNode } from 'react';
 import { strings } from './strings.ts';
 
 // Slots of the official Manga Zone. They render only the facts the platform passes.
-// A missing year, format or volume count is said to be unrecorded. Nothing here is
-// taken from a title, a season or a chapter count. Credits stay empty until that read exists.
+// A card leaves out a fact that was not recorded, so an empty grid cell stays scannable.
+// The work page names each missing fact. Nothing is taken from a title, a season or a
+// chapter count. Credits stay empty until that read exists.
 
 type Strings = ReturnType<typeof strings>;
 
@@ -37,16 +38,20 @@ export function MangaFacts({ locale, work, facts, labelled }: {
   const t = strings(locale);
   if (!facts || facts.unavailable) return <p data-catalogue-unavailable="">{t.unavailable}</p>;
   const count = facts.count === null ? t.countMissing : t.volumes(new Intl.NumberFormat(locale).format(facts.count));
-  const rows: { key: string; label: string; value: ReactNode }[] = [
-    { key: 'format', label: t.formatLabel, value: facts.format
+  const rows: { key: string; label: string; value: ReactNode; recorded: boolean }[] = [
+    { key: 'format', label: t.formatLabel, recorded: facts.format !== null, value: facts.format
       ? <bdi lang={facts.format.lang || undefined} dir={facts.format.dir}>{facts.format.value}</bdi>
       : t.formatMissing },
-    { key: 'year', label: t.yearFactLabel, value: yearsText(facts.years, locale, t.yearMissing) },
-    { key: 'count', label: t.countLabel, value: count },
-    { key: 'status', label: t.statusLabel, value: statusWord(work.status, t) },
+    { key: 'year', label: t.yearFactLabel, recorded: facts.years.length > 0,
+      value: yearsText(facts.years, locale, t.yearMissing) },
+    { key: 'count', label: t.countLabel, recorded: facts.count !== null, value: count },
+    { key: 'status', label: t.statusLabel, recorded: work.status !== null, value: statusWord(work.status, t) },
   ];
+  // The work page names every gap. A card shows only what was recorded.
+  const shown = labelled ? rows : rows.filter(row => row.recorded);
+  if (!shown.length) return null;
   return <dl className="manga-facts" data-catalogue-facts="">
-    {rows.map(row => <div key={row.key} data-catalogue-fact={row.key}>
+    {shown.map(row => <div key={row.key} data-catalogue-fact={row.key}>
       <dt>{labelled ? row.label : <span className="manga-fact-label">{row.label}</span>}</dt>
       <dd>{row.value}</dd>
     </div>)}
@@ -64,7 +69,8 @@ export function MangaCard({ zone, work, facts, fallback }: WorkCardSlotProps) {
 /** The compact fact panel a Work's page leads with. */
 export function MangaCataloguePanel({ zone, work, facts }: CataloguePanelSlotProps) {
   const t = strings(zone.locale);
-  return <section aria-label={t.panelLabel} className="manga-panel" data-catalogue-panel="">
+  const name = work.title?.value ? `${t.panelLabel}: ${work.title.value}` : t.panelLabel;
+  return <section aria-label={name} className="manga-panel" data-catalogue-panel="">
     <h2 className="manga-panel-title">{t.panelLabel}</h2>
     <MangaFacts locale={zone.locale} work={work} facts={facts} labelled />
   </section>;
