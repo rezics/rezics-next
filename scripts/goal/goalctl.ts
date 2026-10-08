@@ -268,13 +268,20 @@ export function pathsOverlap(a: string, b: string): boolean {
   return globsIntersect(a.split('/'), 0, b.split('/'), 0);
 }
 
+/** Generator output under `generated/`. It is rewritten on every merge, so it is not a claim. */
+export function isGeneratedOutput(path: string): boolean {
+  return path === 'generated' || path.startsWith('generated/');
+}
+
 export function claimConflicts(brief: Brief, tasks: Task[]): string[] {
   const conflicts: string[] = [];
   for (const task of tasks) {
     if (task.id === brief.id || !HOLDING.includes(task.state)) continue;
     for (const id of brief.cases) if (task.cases.includes(id)) conflicts.push(`case ${id} is held by ${task.id}`);
     for (const path of brief.paths) {
+      if (isGeneratedOutput(path)) continue;
       for (const held of task.paths) {
+        if (isGeneratedOutput(held)) continue;
         if (pathsOverlap(path, held)) conflicts.push(`path ${path} overlaps ${task.id} ${held}`);
       }
     }
@@ -744,7 +751,17 @@ function handoffText(task: Task): string {
 
 function outOfClaimFiles(committed: string[], sharers: Task[]): string[] {
   const migrationOrigins = Object.assign({}, ...sharers.map(sharer => sharer.migrationOrigins ?? {})) as Record<string, string>;
-  return outOfScope(committed.map(file => migrationOrigins[file] ?? file), sharers.flatMap(sharer => sharer.paths));
+  const files = committed.map(file => migrationOrigins[file] ?? file).filter(file => !isGeneratedOutput(file));
+  return outOfScope(files, sharers.flatMap(sharer => sharer.paths));
+}
+
+/** Files outside the claim, and which of those another open task claims. `generated/` is never either. */
+export function landClaimScope(committed: readonly string[], claims: readonly string[],
+  otherClaims: readonly { id: string; paths: readonly string[] }[]): LandScope {
+  const outOfClaim = outOfScope(committed.filter(file => !isGeneratedOutput(file)), [...claims]);
+  const claimedByOthers = [...new Set(outOfClaim.filter(file => otherClaims.some(other => other.paths.some(pattern =>
+    !isGeneratedOutput(pattern) && (new Bun.Glob(pattern).match(file) || pathsOverlap(pattern, file))))))];
+  return { outOfClaim, claimedByOthers };
 }
 
 function scopeViolations(committed: string[], task: Task, sharers: Task[]): string[] {
@@ -766,9 +783,12 @@ async function landScope(id: string): Promise<LandScope> {
     const task = taskOf(ledger, id);
     assertOwner(task);
     const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree && HOLDING.includes(other.state));
-    const outOfClaim = outOfClaimFiles(changedFiles(task).committed, sharers);
-    const claimedByOthers = [...new Set(claimingTasks(ledger, outOfClaim, new Set([task.id])).map(item => item.file))];
-    return { outOfClaim, claimedByOthers };
+    const migrationOrigins = Object.assign({}, ...sharers.map(sharer => sharer.migrationOrigins ?? {})) as Record<string, string>;
+    const committed = changedFiles(task).committed.map(file => migrationOrigins[file] ?? file);
+    const others = Object.values(ledger.tasks)
+      .filter(other => other.id !== task.id && HOLDING.includes(other.state))
+      .map(other => ({ id: other.id, paths: other.paths }));
+    return landClaimScope(committed, sharers.flatMap(sharer => sharer.paths), others);
   });
 }
 
@@ -1138,7 +1158,8 @@ function branchChanges(task: Task): ChangedFile[] {
 
 function describe(task: Task): string {
   const { committed, dirty, ahead } = changedFiles(task);
-  const violations = outOfScope([...new Set([...committed, ...dirty])], task.paths);
+  const watched = [...new Set([...committed, ...dirty])].filter(file => !isGeneratedOutput(file));
+  const violations = outOfScope(watched, task.paths);
   return [
     `${task.branch}: ${ahead} commit(s) ahead of main; worktree ${dirty.length ? `DIRTY (${dirty.length} files)` : 'clean'}`,
     violations.length ? `scope: VIOLATIONS\n  ${violations.join('\n  ')}` : 'scope: ok',
@@ -2121,24 +2142,118 @@ export function mergeOwnerFiles(worktree: string, plan: string): string[] {
   return existingTestFiles(worktree, entries, whole).sort();
 }
 
-/** Files a failing bun run names: in AGENT mode bun prints a `path:` header only for files with failures or errors. */
-export function failingTestFiles(output: string, candidates: readonly string[], root?: string): string[] {
-  // bun prints a `path:` header before each file's results, including passing files next to a failure, so a
-  // file counts only when a `(fail)` line or an unhandled error appears in its own section.
+/** Separates the console transcript from the JUnit report appended for attribution. */
+export const UNIT_JUNIT_MARKER = '<!-- goal-unit-junit -->';
+
+/** Drop one bun summary. Its `(fail)` lines have no file header, so they belong to no file. */
+function dropRunSummary(text: string): string {
+  const lines: string[] = [];
+  for (const line of text.split('\n')) {
+    if (/^\d+ tests? failed:$/.test(line) || /^\s*\d+\s+pass\b/.test(line)) break;
+    lines.push(line);
+  }
+  return lines.join('\n');
+}
+
+/** Bun's end-of-run summary has `(fail)` lines and no file header. Those lines belong to no file.
+ * A unit JUnit block is removed per segment, so an owner transcript joined after it stays readable. */
+function beforeUnitSummary(output: string): string {
+  return output.split(UNIT_JUNIT_MARKER).map((part, index) => {
+    if (index === 0) return dropRunSummary(part);
+    const end = part.lastIndexOf('</testsuites>');
+    return dropRunSummary(end < 0 ? '' : part.slice(end + '</testsuites>'.length));
+  }).join('\n');
+}
+
+function decodeXml(text: string): string {
+  return text
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, digits: string) => String.fromCodePoint(Number(digits)))
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+function junitAttribute(attrs: string, name: string): string | undefined {
+  return new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1];
+}
+
+/** Files the appended JUnit report names, including ones whose cases passed.
+ * A file that is absent was not in that report, so its console cases still count. */
+function junitReportedFiles(output: string, candidates: readonly string[], root?: string): Set<string> {
+  const at = output.indexOf(UNIT_JUNIT_MARKER);
+  if (at < 0) return new Set();
+  const xml = output.slice(at + UNIT_JUNIT_MARKER.length);
   const known = new Set(candidates);
-  const found = new Set<string>();
+  const files = new Set<string>();
+  for (const match of xml.matchAll(/<testcase\b([^>]*?)(?:\/>|>)/g)) {
+    const fileAttr = junitAttribute(match[1]!, 'file');
+    if (!fileAttr) continue;
+    let file = decodeXml(fileAttr).replace(/^\.\//, '');
+    if (root && isAbsolute(file)) file = relative(root, file);
+    if (known.has(file)) files.add(file);
+  }
+  return files;
+}
+
+/** Named failures from the appended JUnit report. Undefined when that report is absent.
+ * A present report with no failures is an empty list, so the console summary cannot supply names. */
+function junitFailureDetails(output: string, candidates: readonly string[], root?: string): UnitFailureDetail[] | undefined {
+  const at = output.indexOf(UNIT_JUNIT_MARKER);
+  if (at < 0) return undefined;
+  const xml = output.slice(at + UNIT_JUNIT_MARKER.length);
+  const known = new Set(candidates);
+  const found: UnitFailureDetail[] = [];
+  const seen = new Set<string>();
+  // A passing testcase is `<testcase ... />`. `[^>]*` would treat that slash as attributes and
+  // swallow the next failing testcase, so the passing file would own the later failure.
+  for (const match of xml.matchAll(/<testcase\b([^>]*[^>/])>([\s\S]*?)<\/testcase>/g)) {
+    const body = match[2]!;
+    const failure = /<(?:failure|error)\b([^>]*)>/.exec(body);
+    if (!failure) continue;
+    const name = junitAttribute(match[1]!, 'name');
+    const fileAttr = junitAttribute(match[1]!, 'file');
+    if (!name || !fileAttr) continue;
+    let file = decodeXml(fileAttr).replace(/^\.\//, '');
+    if (root && isAbsolute(file)) file = relative(root, file);
+    if (!known.has(file)) continue;
+    const test = decodeXml(name);
+    const key = `${file}\0${test}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const message = junitAttribute(failure[1]!, 'message');
+    const detail = message ? normalizeUnitFileError(decodeXml(message), root) : undefined;
+    found.push({ file, test, ...(detail ? { detail } : {}) });
+  }
+  return found;
+}
+
+function consoleFailureKinds(output: string, candidates: readonly string[], root?: string): { fail: Set<string>; unhandled: Set<string> } {
+  const known = new Set(candidates);
+  const fail = new Set<string>();
+  const unhandled = new Set<string>();
   let current: string | undefined;
-  for (const line of output.split('\n')) {
+  for (const line of beforeUnitSummary(output).split('\n')) {
     const header = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/.exec(line);
     if (header) {
       let file = header[1]!.replace(/^\.\//, '');
       if (root && isAbsolute(file)) file = relative(root, file);
       current = known.has(file) ? file : undefined;
-    } else if (current && (/^\(fail\) /.test(line) || /^# Unhandled error/.test(line))) {
-      found.add(current);
-    }
+    } else if (current && /^\(fail\) /.test(line)) fail.add(current);
+    else if (current && /^# Unhandled error/.test(line)) unhandled.add(current);
   }
-  return [...found].sort();
+  return { fail, unhandled };
+}
+
+/** Files a failing bun run names. Named cases come from the JUnit report when the shard wrote one;
+ * a file-level error stays on the console header, because JUnit omits a file that failed to load. */
+export function failingTestFiles(output: string, candidates: readonly string[], root?: string): string[] {
+  const kinds = consoleFailureKinds(output, candidates, root);
+  const junit = junitFailureDetails(output, candidates, root);
+  if (!junit) return [...new Set([...kinds.fail, ...kinds.unhandled])].sort();
+  return [...new Set([...junit.map(item => item.file), ...kinds.unhandled])].sort();
 }
 
 function positiveInteger(name: string, fallback: number): number {
@@ -2216,7 +2331,7 @@ export type UnitShardRunner = (cwd: string, files: readonly string[], deadline: 
 
 function unitFileFromHeader(output: string, files: readonly string[], cwd: string): string | undefined {
   const known = new Set(files);
-  const headers = [...output.matchAll(/^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/gm)];
+  const headers = [...beforeUnitSummary(output).matchAll(/^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/gm)];
   for (let index = headers.length - 1; index >= 0; index--) {
     let file = headers[index]![1]!.replace(/^\.\//, '');
     if (isAbsolute(file)) file = relative(cwd, file);
@@ -2230,7 +2345,7 @@ export function timedOutTestFiles(output: string, candidates: readonly string[],
   const known = new Set(candidates);
   const found = new Set<string>();
   let current: string | undefined;
-  for (const line of output.split('\n')) {
+  for (const line of beforeUnitSummary(output).split('\n')) {
     const header = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/.exec(line);
     if (header) {
       current = header[1]!.replace(/^\.\//, '');
@@ -2256,11 +2371,14 @@ function isUnitErrorLine(line: string): boolean {
   return /^(?:error|Error|[A-Z][\w$]*(?:Error|Exception)):\s*/i.test(line.trim());
 }
 
-/** Capture each failed test's assertion detail without file-specific stack locations. */
+/** Capture each failed test's assertion detail without file-specific stack locations.
+ * A JUnit report names the file; the console summary after the last file does not. */
 export function unitFailureDetails(output: string, candidates: readonly string[], root?: string): UnitFailureDetail[] {
+  const reported = junitFailureDetails(output, candidates, root);
+  if (reported) return reported;
   const known = new Set(candidates);
   const found: UnitFailureDetail[] = [];
-  const plain = output.replace(/\u001b\[[\d;]*m/g, '');
+  const plain = beforeUnitSummary(output).replace(/\u001b\[[\d;]*m/g, '');
   let current: string | undefined;
   let errorLines: string[] | undefined;
   let collectingError = false;
@@ -2312,7 +2430,7 @@ export function unitFileErrorDetails(output: string, candidates: readonly string
   const known = new Set(candidates);
   const errors = new Map<string, string[][]>();
   const sections = new Map<string, string[]>();
-  const plain = output.replace(/\u001b\[[\d;]*m/g, '');
+  const plain = beforeUnitSummary(output).replace(/\u001b\[[\d;]*m/g, '');
   const namedFailures = new Set(unitFailureDetails(output, candidates, root).map(failure => failure.file));
   let current: string | undefined;
   let collecting = false;
@@ -2403,7 +2521,7 @@ function fileSection(output: string, file: string, root?: string): string {
   let current: string | undefined;
   let bucket: string[] = [];
   const flush = () => { if (current === file && bucket.length) chunks.push(bucket.join('\n')); };
-  for (const line of output.split('\n')) {
+  for (const line of beforeUnitSummary(output).split('\n')) {
     const header = UNIT_FILE_HEADER.exec(line);
     if (header) {
       flush();
@@ -2594,9 +2712,13 @@ export function unitFileEvidence(output: string, scope: readonly string[], faili
   timedOut: readonly string[], root?: string): UnitFileEvidence[] {
   // Classification omits a failure inside a shard the budget stopped. The transcript still names it.
   const classified = new Set([...failing, ...timedOut]);
+  const reported = junitFailureDetails(output, scope, root);
+  const covered = reported ? junitReportedFiles(output, scope, root) : undefined;
   return scope.flatMap(file => {
     const section = fileSection(output, file, root);
-    const parsed = failureCases(section);
+    const parsed = reported && covered!.has(file)
+      ? reported.filter(item => item.file === file).map(item => ({ test: item.test, error: item.detail ?? '' }))
+      : failureCases(section);
     // The fallback diagnostic repeats assertion text that already belongs to a named case.
     const kept = capCasesAndFileError(parsed, fileLevelError(section, failing.includes(file) && parsed.length === 0));
     const { cases } = kept;
@@ -2679,13 +2801,27 @@ function evidenceForSide(runs: readonly UnitRunEvidence[], side: 'affected' | 'm
   return chosen;
 }
 
-/** A refusal names the cases from the side that decided it. File names alone are not evidence. */
+/** A refusal names the cases from the side that decided it. File names alone are not evidence.
+ * When `introduced` is set, the deciding section names only the new cases and a new file-level error.
+ * Cases the main run already has stay under `inherited on main:`. */
 export function unitGateRefusal(message: string, files: readonly string[], runs: readonly UnitRunEvidence[],
-  side: 'affected' | 'main' = 'affected'): string {
+  side: 'affected' | 'main' = 'affected', introduced?: readonly IntroducedUnitFailure[]): string {
   const chosen = evidenceForSide(runs, side, files);
+  const introducedByFile = new Map((introduced ?? []).map(item => [item.file, item]));
   const lines = [message, ...files.map(file => {
     const found = chosen.get(file);
-    return found ? formatFileEvidence(found) : `  ${file}`;
+    if (!found) return `  ${file}`;
+    const item = side === 'affected' && introduced ? introducedByFile.get(file) : undefined;
+    if (!item) return formatFileEvidence(found);
+    const wanted = new Set(item.cases);
+    const present = found.cases.filter(entry => wanted.has(entry.test));
+    const missing = item.cases.filter(name => !present.some(entry => entry.test === name)).map(test => ({ test, error: '' }));
+    const filtered: UnitFileEvidence = {
+      file: found.file, output: found.output, cases: [...present, ...missing],
+      ...(found.runningTest && wanted.has(found.runningTest) ? { runningTest: found.runningTest } : {}),
+      ...(item.fileError && found.fileError ? { fileError: found.fileError } : {}),
+    };
+    return formatFileEvidence(filtered);
   })];
   // Main's cases stay visible under their own label when the branch case is what the refusal names.
   if (side === 'affected') {
@@ -2746,73 +2882,40 @@ export function writeUnitEvidence(runs: readonly UnitRunEvidence[]): string | un
   }
 }
 
-interface UnitFinding { path: string[]; text: string }
+export interface IntroducedUnitFailure { file: string; cases: string[]; fileError: boolean }
 
-function diffContainerKey(line: string): string | undefined {
-  const match = /^(?:"((?:\\.|[^"\\])*)"|'((?:\\.|[^'\\])*)'|([A-Za-z_$][\w$.-]*))\s*:\s*[\[{]\s*,?$/.exec(line.trim());
-  return match?.[1] ?? match?.[2] ?? match?.[3];
+/** The first meaningful line of a file-level error. Ports, ids and durations are not part of the key. */
+function fileErrorKey(detail: string): string {
+  const lines = normalizeUnitFileError(detail).split('\n').map(line => line.trim()).filter(Boolean);
+  return lines.find(line => !/^# Unhandled error\b/i.test(line) && !/^-{3,}$/.test(line)) ?? '';
 }
 
-function normalizedFindingLines(detail: string | undefined): UnitFinding[] {
-  if (!detail) return [];
-  const contexts: { indent: number; key: string }[] = [];
-  const findings: UnitFinding[] = [];
-  const updateContext = (indent: number, text: string) => {
-    if (/^[}\]],?$/.test(text.trim())) {
-      while (contexts.length && contexts.at(-1)!.indent >= indent) contexts.pop();
-      return;
-    }
-    const key = diffContainerKey(text);
-    if (!key) return;
-    while (contexts.length && contexts.at(-1)!.indent >= indent) contexts.pop();
-    contexts.push({ indent, key });
-  };
-  const normalizeText = (value: string) => value.replace(
-    /((?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+\.(?:tsx?|jsx?|sql|json)):\d+(?::\d+)?/g, '$1:<line>');
-  for (const line of detail.split('\n')) {
-    const diff = /^(\s*)([+-])(\s*)(.*)$/.exec(line);
-    if (diff) {
-      // Bun replaces a leading space with the diff marker; the subject indentation follows it.
-      const indent = diff[1]!.length + 1 + diff[3]!.length;
-      const text = diff[4]!.trim();
-      if (diff[2] === '+' && text && !/^(?:Received|Expected)(?:\s|$)/i.test(text)) {
-        findings.push({ path: contexts.filter(frame => frame.indent < indent).map(frame => frame.key),
-          text: normalizeText(text) });
-      }
-      updateContext(indent, text);
-      continue;
-    }
-    const whitespace = /^(\s*)/.exec(line)![1]!;
-    updateContext(whitespace.length, line.slice(whitespace.length));
-  }
-  return findings;
+function failingCaseNames(file: string, failures: readonly UnitFailureDetail[]): Set<string> {
+  return new Set(failures.filter(item => item.file === file).map(item => item.test));
 }
 
-function unitFailureSignatures(file: string, failures: readonly UnitFailureDetail[], errors: readonly UnitFileErrorDetail[]): Map<string, number> {
-  const signatures = new Map<string, number>();
-  const add = (signature: string) => signatures.set(signature, (signatures.get(signature) ?? 0) + 1);
-  for (const failure of failures.filter(item => item.file === file)) {
-    const findings = normalizedFindingLines(failure.detail);
-    if (findings.length) {
-      for (const finding of findings) add(JSON.stringify(['test-finding', failure.test, finding.path, finding.text]));
-    } else {
-      add(JSON.stringify(['test-error', failure.test, normalizeUnitFileError(failure.detail ?? '')]));
-    }
+function fileErrorKeys(file: string, errors: readonly UnitFileErrorDetail[]): Set<string> {
+  return new Set(errors.filter(item => item.file === file).map(error => fileErrorKey(error.detail)));
+}
+
+/** A file is introduced when it has a failing case name main does not, or a file-level error whose first line main does not.
+ * Differing error text for the same case is evidence, not a new failure. Duplicate case names count once. */
+export function introducedUnitFailures(branchFiles: readonly string[], branch: readonly UnitFailureDetail[],
+  main: readonly UnitFailureDetail[], branchErrors: readonly UnitFileErrorDetail[] = [],
+  mainErrors: readonly UnitFileErrorDetail[] = []): IntroducedUnitFailure[] {
+  const found: IntroducedUnitFailure[] = [];
+  for (const file of [...new Set(branchFiles)].sort()) {
+    const cases = [...failingCaseNames(file, branch)].filter(name => !failingCaseNames(file, main).has(name)).sort();
+    const fileError = [...fileErrorKeys(file, branchErrors)].some(key => !fileErrorKeys(file, mainErrors).has(key));
+    if (cases.length || fileError) found.push({ file, cases, fileError });
   }
-  for (const error of errors.filter(item => item.file === file)) {
-    add(JSON.stringify(['file-error', normalizeUnitFileError(error.detail)]));
-  }
-  return signatures;
+  return found;
 }
 
 export function introducedUnitFailureFiles(branchFiles: readonly string[], branch: readonly UnitFailureDetail[],
   main: readonly UnitFailureDetail[], branchErrors: readonly UnitFileErrorDetail[] = [],
   mainErrors: readonly UnitFileErrorDetail[] = []): string[] {
-  return [...new Set(branchFiles.filter(file => {
-    const mainSignatures = unitFailureSignatures(file, main, mainErrors);
-    const branchSignatures = unitFailureSignatures(file, branch, branchErrors);
-    return [...branchSignatures].some(([signature, count]) => count > (mainSignatures.get(signature) ?? 0));
-  }))].sort();
+  return introducedUnitFailures(branchFiles, branch, main, branchErrors, mainErrors).map(item => item.file);
 }
 
 interface ShardInvocation { args: string[]; label: string; env: NodeJS.ProcessEnv; progressFile?: string }
@@ -2820,6 +2923,17 @@ interface ShardInvocation { args: string[]; label: string; env: NodeJS.ProcessEn
 /** The QA CLI prints this when its own budget stops the tier. An ordinary test failure does not. */
 function harnessBudgetExpired(output: string): boolean {
   return /QA tier budget exceeded: \S+ \d+ms/.test(output);
+}
+
+function outputTail(text: string, lines = 40): string {
+  return text.trimEnd().split('\n').slice(-lines).join('\n').trim();
+}
+
+function relativizeJunitFiles(xml: string, cwd: string): string {
+  return xml.replace(/\bfile="([^"]*)"/g, (match, value: string) => {
+    const file = decodeXml(value);
+    return isAbsolute(file) ? `file="${relative(cwd, file)}"` : match;
+  });
 }
 
 async function runUnitShard(cwd: string, files: readonly string[], deadline: number, invocation?: ShardInvocation): Promise<UnitShardResult> {
@@ -2838,10 +2952,15 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   // so a shard stopped at its budget cannot leave containers behind.
   const env: NodeJS.ProcessEnv = { ...(invocation?.env ?? { ...process.env, AGENT: '1', REZICS_REAP_PRELOAD: '1' }),
     REZICS_REAP_SCOPE: scope, REZICS_REAP_SCOPES: reapScopeChain(process.env.REZICS_REAP_SCOPES, scope) };
-  // A colored parent makes Bun print "✗ name" instead of "(fail) name", and the gate
-  // would then blame every file in the shard. The plain reporter is what attribution reads.
+  // A colored parent makes Bun print "✗ name" instead of "(fail) name". Named cases come from
+  // the JUnit report; the plain console still supplies file-level errors and timeouts.
   delete env.FORCE_COLOR;
+  // Tests that mkdtemp under `.temp` need the directory. A git worktree does not check it out.
+  mkdirSync(join(cwd, '.temp'), { recursive: true });
+  const junitFile = invocation ? undefined : join(cwd, '.temp', 'unit-gate-junit', `${process.pid}-${randomUUID()}.xml`);
+  if (junitFile) mkdirSync(dirname(junitFile), { recursive: true });
   const child = spawn('task', invocation?.args ?? ['goal:unit-files', '--', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
+    ...junitFile ? ['--reporter=junit', `--reporter-outfile=${junitFile}`] : [],
     ...files.map(file => `./${file}`)], {
     cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
   });
@@ -2896,22 +3015,24 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
       return { ...unfinished(text, timedOut), ...outcome === 'timeout' ? { budgetExpired: true } : {} };
     }
     const text = output();
+    const reported = junitFile && existsSync(junitFile)
+      ? `${text}\n${UNIT_JUNIT_MARKER}\n${relativizeJunitFiles(readFileSync(junitFile, 'utf8'), cwd)}` : text;
     // The CLI stopped at its own budget and exited. That is an unfinished shard:
     // the file that was running is retried alone, and files with no header run again.
     if (harnessBudgetExpired(text))
       return { ...unfinished(text, shardTimeoutFiles(text, files, cwd)), budgetExpired: true };
-    const timedOut = timedOutTestFiles(text, files, cwd);
-    const failures = unitFailureDetails(text, files, cwd);
-    const namedFailing = outcome.code === 0 ? [] : failingTestFiles(text, files, cwd);
+    const timedOut = timedOutTestFiles(reported, files, cwd);
+    const failures = unitFailureDetails(reported, files, cwd);
+    const namedFailing = outcome.code === 0 ? [] : failingTestFiles(reported, files, cwd);
+    const fileErrors = unitFileErrorDetails(reported, files, cwd, [...namedFailing, ...failures.map(failure => failure.file)]);
     const failing = [...new Set([...namedFailing, ...timedOut,
-      ...failures.map(failure => failure.file)])];
-    const fileErrors = unitFileErrorDetails(text, files, cwd, failing);
-    const runnerErrors = outcome.code !== 0 && !namedFailing.length && !timedOut.length && !failures.length && !fileErrors.length
-      ? [{ files: [...files], diagnostic: text.trim() || `task ${label} exited with status ${outcome.code}` }]
+      ...failures.map(failure => failure.file), ...fileErrors.map(error => error.file)])];
+    // A non-zero exit with no case and no file error is the runner, not every file in the shard.
+    const runnerErrors = outcome.code !== 0 && !failing.length
+      ? [{ files: ['runner'], diagnostic: outputTail(text) || `task ${label} exited with status ${outcome.code}` }]
       : [];
-    // A failure bun did not attribute to a file counts against that shard.
-    return { done: true, failing: outcome.code !== 0 && !failing.length ? [...files] : failing, timedOut, failures, fileErrors,
-      runnerErrors, files: [...files], output: text,
+    return { done: true, failing, timedOut, failures, fileErrors,
+      runnerErrors, files: [...files], output: reported,
       ms: Date.now() - startedAt };
   } catch {
     // A shard that cannot be reaped is unfinished, not a merge-blocking failure.
@@ -2919,6 +3040,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     return unfinished(output());
   } finally {
     if (timer) clearTimeout(timer);
+    if (junitFile) rmSync(junitFile, { force: true });
     if (invocation?.progressFile) rmSync(invocation.progressFile, { force: true });
     try { removeScopedContainers(scope); } catch { /* the shard's status still stands */ }
   }
@@ -3017,6 +3139,32 @@ function fileDeclaredTimeout(cwd: string, file: string): DeclaredTestTimeout {
   }
 }
 
+/** A stub can return the last file's cases while the JUnit report in its output names each file.
+ * A unit report joined to an owner transcript covers only the files it names. The owner's cases stay. */
+function attributeShard(result: UnitShardResult): UnitShardResult {
+  if (!result.done || result.runnerErrors.length) return result;
+  const parsed = junitFailureDetails(result.output, result.files);
+  if (!parsed) return result;
+  const covered = junitReportedFiles(result.output, result.files);
+  const seen = new Set(parsed.map(item => `${item.file}\0${item.test}`));
+  const retained = result.failures.filter(item => {
+    if (covered.has(item.file)) return false;
+    const key = `${item.file}\0${item.test}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  const failures = [...parsed, ...retained];
+  const unhandled = [...consoleFailureKinds(result.output, result.files).unhandled].filter(file => !covered.has(file));
+  const failing = [...new Set([
+    ...failures.map(item => item.file),
+    ...result.fileErrors.filter(error => !covered.has(error.file) || !parsed.some(item => item.file === error.file)).map(error => error.file),
+    ...result.timedOut,
+    ...unhandled,
+  ])].sort();
+  return { ...result, failing, failures };
+}
+
 async function runUnitGatePass(cwd: string, files: readonly string[], shards: number | undefined,
   runShard: UnitShardRunner): Promise<{ result: UnitGateResult; shards: UnitShardResult[] }> {
   const empty: UnitGateResult = { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '', passes: [] };
@@ -3031,7 +3179,7 @@ async function runUnitGatePass(cwd: string, files: readonly string[], shards: nu
   const slowest = Math.max(budget, ...planned.shards.map(shard => shard.budgetMs));
   console.log(`Unit gate: ${files.length} file(s) in ${planned.shards.length} shard(s), slowest budget ${slowest}ms`);
   const started = Date.now();
-  const results = await Promise.all(planned.shards.map(shard => runShard(cwd, shard.files, started + shard.budgetMs)));
+  const results = (await Promise.all(planned.shards.map(shard => runShard(cwd, shard.files, started + shard.budgetMs)))).map(attributeShard);
   for (const result of results) {
     console.log(`Unit gate shard: ${result.files.length} file(s), ${result.done ? `${result.failing.length} failing` : 'unfinished'} in ${result.ms}ms`);
   }
@@ -3096,9 +3244,12 @@ function runnerErrorRefusal(side: 'affected' | 'main', errors: readonly UnitRunn
   return `unit gate inconclusive: unattributed ${side} runner failure; not merging:\n${detail}`;
 }
 
-/** Streams retain responsibility for failures from earlier merges, including shared-branch merges. */
+/** Inherited failures are classified against the main commit the merge targets, including after earlier merges of the same stream.
+ * Selection still widens to files those earlier merges changed. */
 export function streamUnitBaseline(events: readonly MergeEvent[], taskIds: readonly string[], current: string): string {
-  return events.find(event => event.before !== event.after && event.taskIds.some(id => taskIds.includes(id)))?.before ?? current;
+  void events;
+  void taskIds;
+  return current;
 }
 
 type RecordedMerge = MergeEvent & { files?: readonly string[] };
@@ -3182,39 +3333,38 @@ async function affectedPlanText(worktree: string, base: string, changed: readonl
   }
 }
 
-function runGenerateCheck(cwd: string): { ok: boolean; output: string } {
-  const run = spawnSync('bun', ['scripts/generate.ts', '--check'], { cwd, encoding: 'utf8', timeout: 180_000 });
-  return { ok: run.status === 0, output: `${run.stdout ?? ''}\n${run.stderr ?? ''}` };
+function generatorOutput(run: ReturnType<typeof spawnSync>): string {
+  return `${run.stdout ?? ''}\n${run.stderr ?? ''}${run.error ? `\n${run.error.message}` : ''}`.trim();
 }
 
-/** Stale generated artifacts block only when the main commit the branch was rebased onto still checks clean. */
-async function generatedArtifactRefusal(worktree: string, mainRoot: string, mainCommit: string): Promise<string | undefined> {
-  if (!existsSync(join(worktree, 'scripts/generate.ts'))) return undefined;
-  const branch = runGenerateCheck(worktree);
-  if (branch.ok) return undefined;
-  let directory: string | undefined;
-  try {
-    mkdirSync(join(mainRoot, '.temp'), { recursive: true });
-    directory = mkdtempSync(join(mainRoot, '.temp/gen-gate-'));
-    git(mainRoot, ['worktree', 'add', '--detach', directory, mainCommit]);
-    if (!existsSync(join(directory, 'scripts/generate.ts'))) {
-      console.log('Generated artifacts are stale on the branch and the baseline has no generator; reported, not blocking');
-      return undefined;
-    }
-    const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
-    if (install.status !== 0) throw new Error(`Generated artifact baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
-    const baseline = runGenerateCheck(directory);
-    if (!baseline.ok) {
-      console.log(`Generated artifacts are stale on main ${mainCommit.slice(0, 12)} as well; reported, not blocking\n${branch.output.trim().slice(-2_000)}`);
-      return undefined;
-    }
-  } finally {
-    if (directory) {
-      git(mainRoot, ['worktree', 'remove', '--force', directory], true);
-      rmSync(directory, { recursive: true, force: true });
+function resetGeneratedWorktree(worktree: string): void {
+  git(worktree, ['reset', '--hard', 'HEAD']);
+  git(worktree, ['clean', '-fd', '-e', '.temp'], true);
+}
+
+/** Regenerates outputs, commits whatever the generator changed, then verifies with `--check`.
+ * A fixture without `scripts/generate.ts` skips. The claim check uses the files from before this commit. */
+function regenerateGeneratedOutputs(merge: PreparedMerge): string | undefined {
+  if (!existsSync(join(merge.worktree, 'scripts/generate.ts'))) return undefined;
+  const generated = spawnSync('bun', ['scripts/generate.ts'], { cwd: merge.worktree, encoding: 'utf8', timeout: 180_000 });
+  if (generated.status !== 0) {
+    resetGeneratedWorktree(merge.worktree);
+    return `generated artifacts could not be regenerated; run task gen\n${generatorOutput(generated).slice(-4_000)}`;
+  }
+  if (git(merge.worktree, ['status', '--porcelain'], true)) {
+    git(merge.worktree, ['add', '-A']);
+    const commit = spawnSync('git', ['commit', '-q', '-m', 'Regenerate generated outputs (goalctl)'],
+      { cwd: merge.worktree, encoding: 'utf8' });
+    if (commit.status !== 0) {
+      resetGeneratedWorktree(merge.worktree);
+      return `generated artifacts could not be committed; run task gen\n${generatorOutput(commit).slice(-4_000)}`;
     }
   }
-  return `generated artifacts are stale; run task gen\n${branch.output.trim().slice(-4_000)}`;
+  const check = spawnSync('bun', ['scripts/generate.ts', '--check'], { cwd: merge.worktree, encoding: 'utf8', timeout: 180_000 });
+  if (check.status !== 0) return `generated artifacts are stale after regeneration; run task gen\n${generatorOutput(check).slice(-4_000)}`;
+  merge.after = git(merge.worktree, ['rev-parse', 'HEAD']);
+  merge.committed = git(merge.worktree, ['diff', '--name-only', 'main...HEAD'], true).split('\n').filter(Boolean);
+  return undefined;
 }
 
 /** Workspaces with a `<workspace>:typecheck` task, by the directories whose sources they check. Each task checks one
@@ -3346,6 +3496,12 @@ async function runTypecheck(cwd: string, workspace: string, deadline: number): P
   }
 }
 
+/** A classification checkout is a detached worktree, so git does not materialize the ignored `.temp` directory. */
+export function addGateWorktree(mainRoot: string, directory: string, commit: string): void {
+  git(mainRoot, ['worktree', 'add', '--detach', directory, commit]);
+  mkdirSync(join(directory, '.temp'), { recursive: true });
+}
+
 /** Type-checks the workspaces the branch touched before the unit gate, within the unit gate's per-side budget.
  * `only` narrows a rerun to workspaces whose `main` sources changed under the branch. */
 async function preMergeTypecheckGate(worktree: string, mainRoot: string, before: string, files: readonly string[],
@@ -3363,7 +3519,7 @@ async function preMergeTypecheckGate(worktree: string, mainRoot: string, before:
       if (!baseline) {
         mkdirSync(join(mainRoot, '.temp'), { recursive: true });
         baseline = mkdtempSync(join(mainRoot, '.temp/type-gate-'));
-        git(mainRoot, ['worktree', 'add', '--detach', baseline, before]);
+        addGateWorktree(mainRoot, baseline, before);
         const install = spawnSync('task', ['install'], { cwd: baseline, encoding: 'utf8', timeout: 120_000 });
         if (install.status !== 0) throw new Error(`Type check baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
       }
@@ -3468,9 +3624,9 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
   };
 }
 
-/** A branch failure is inherited only when the classification baseline has the same failing test and assertion detail.
- * Selection uses the candidate's own changes against current main, not that older baseline. */
-async function preMergeUnitGate(worktree: string, mainRoot: string, classificationBaseline: string, currentMain: string,
+/** A branch failure is inherited when current main already fails the same case, or the same file-level error's first line.
+ * Selection uses the candidate's own changes plus files from the stream's earlier merges. */
+async function preMergeUnitGate(worktree: string, mainRoot: string, currentMain: string,
   taskIds: readonly string[], skip: boolean, gatedFiles: Set<string>): Promise<string | undefined> {
   if (skip) {
     console.log('Unit gate skipped: --skip-unit-gate explicitly requested by the manager');
@@ -3478,14 +3634,13 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, classificati
   }
   const own = git(worktree, ['diff', '--name-only', '--no-renames', `${currentMain}...HEAD`]).split('\n').filter(Boolean);
   const changed = streamSelectionFiles(own, readMergeEvents(), taskIds, mainRoot);
-  console.log(`Pre-merge selection since ${currentMain.slice(0, 12)} (${changed.length} path(s)); classification baseline ${classificationBaseline.slice(0, 12)}\n  ${changed.join('\n  ')}`);
+  console.log(`Pre-merge selection since ${currentMain.slice(0, 12)} (${changed.length} path(s))\n  ${changed.join('\n  ')}`);
   const plan = await affectedPlanText(worktree, currentMain, changed);
   const unit = mergeUnitFiles(worktree, plan);
   const owner = new Set(mergeOwnerFiles(worktree, plan).filter(file => !unit.includes(file)));
   const files = [...unit, ...owner].sort();
   for (const file of files) gatedFiles.add(file);
-  // The first-merge boundary classifies inherited failures. It is not the selection base.
-  console.log(`Pre-merge unit gate: ${files.length} affected/guard file(s) against main ${classificationBaseline.slice(0, 12)}`);
+  console.log(`Pre-merge unit gate: ${files.length} affected/guard file(s) against main ${currentMain.slice(0, 12)}`);
   if (!files.length) return;
   const runShard = gateShardRunner(owner);
   const evidence: UnitRunEvidence[] = [];
@@ -3504,16 +3659,20 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, classificati
       console.log(`Unit gate: ${side.orderDependent.length} file(s) failed only across shards; order-dependent, reported, not blocking\n  ${side.orderDependent.join('\n  ')}`);
     }
     if (!side.failing.length) return;
-    const introduced = side.failing.filter(file =>
-      spawnSync('git', ['cat-file', '-e', `${classificationBaseline}:${file}`], { cwd: mainRoot }).status !== 0);
-    const existing = side.failing.filter(file => !introduced.includes(file));
+    // A file main does not have is entirely new. A file both sides have is introduced only for case names or
+    // file-level first lines the main run lacks; the refusal names those and leaves the shared cases below.
+    const absent = side.failing.filter(file =>
+      spawnSync('git', ['cat-file', '-e', `${currentMain}:${file}`], { cwd: mainRoot }).status !== 0);
+    const introduced: IntroducedUnitFailure[] = [];
+    const refusing = [...absent];
+    const existing = side.failing.filter(file => !absent.includes(file));
     let directory: string | undefined;
     try {
       if (existing.length) {
         // Keep the checkout shallow: owner unit gates bind PostgreSQL sockets below it.
         mkdirSync(join(mainRoot, '.temp'), { recursive: true });
         directory = mkdtempSync(join(mainRoot, '.temp/unit-gate-'));
-        git(mainRoot, ['worktree', 'add', '--detach', directory, classificationBaseline]);
+        addGateWorktree(mainRoot, directory, currentMain);
         // Own workspace links keep the baseline on HEAD even when main has local source edits.
         const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
         if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
@@ -3542,9 +3701,12 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, classificati
             ? mainRetry.fileErrors.filter(error => error.file === file)
             : mainRetry.passing.includes(file) ? []
             : main.fileErrors.filter(error => error.file === file && !main.timedOut.includes(error.file));
-          if (introducedUnitFailureFiles([file], side.failures.filter(failure => failure.file === file),
-            mainDetails, side.fileErrors.filter(error => error.file === file), mainFileErrors).includes(file)) introduced.push(file);
-          else console.log(`Unit gate: ${file} also fails on main ${classificationBaseline.slice(0, 12)} with identical failure details; reported, not blocking`);
+          const compared = introducedUnitFailures([file], side.failures.filter(failure => failure.file === file),
+            mainDetails, side.fileErrors.filter(error => error.file === file), mainFileErrors);
+          if (compared.length) {
+            introduced.push(...compared);
+            refusing.push(file);
+          } else console.log(`Unit gate: ${file} also fails on main ${currentMain.slice(0, 12)}; reported, not blocking`);
         }
       }
     } finally {
@@ -3553,13 +3715,18 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, classificati
         rmSync(directory, { recursive: true, force: true });
       }
     }
-    return introduced.length ? unitGateRefusal('introduced unit failures; not merging:', introduced.sort(), evidence) : undefined;
+    return refusing.length
+      ? unitGateRefusal('introduced unit failures; not merging:', refusing.sort(), evidence, 'affected', introduced) : undefined;
   } finally {
     writeUnitEvidence(evidence);
   }
 }
 
-export interface PreparedMerge { before: string; baseline: string; after: string; worktree: string; branch: string; sharers: string[]; committed: string[] }
+export interface PreparedMerge {
+  before: string; baseline: string; after: string; worktree: string; branch: string; sharers: string[]; committed: string[];
+  /** Files checked against claims. The regeneration commit is not one of them. */
+  scopeFiles?: string[];
+}
 
 /** The git operations a fast-forward needs, so a moving `main` can be played back without a repository. */
 export interface MainSync {
@@ -3577,6 +3744,8 @@ export interface MainSync {
 
 export type FastForward =
   | { kind: 'merged'; prepared: PreparedMerge }
+  /** The pre-merge gate passed and main was not fast-forwarded. */
+  | { kind: 'passed'; prepared: PreparedMerge }
   /** The unit gate and the type check both rerun on the rebased branch. */
   | { kind: 'regate'; prepared: PreparedMerge }
   /** Only the type check of these workspaces reruns: main changed their sources but none the unit gate selected. */
@@ -3591,7 +3760,7 @@ export interface FastForwardGates { gatedFiles: ReadonlySet<string>; regated: bo
  * touch the task's files or the files the gate selected. The type check reruns once, separately, when they touch any
  * source of a workspace it checked: a widened exported type breaks callers in files the branch never changed. */
 export function fastForwardMain(sync: MainSync, current: PreparedMerge, gates: FastForwardGates,
-  note: (text: string) => void = console.log): FastForward {
+  note: (text: string) => void = console.log, gateOnly = false): FastForward {
   let prepared = current;
   // The first rebase answers a moved main; the second answers one that moves again before the fast-forward lands.
   for (let rebases = 0; ; ) {
@@ -3625,6 +3794,7 @@ export function fastForwardMain(sync: MainSync, current: PreparedMerge, gates: F
       if (retype.length) return { kind: 'retypecheck', prepared, workspaces: retype };
       continue;
     }
+    if (gateOnly) return { kind: 'passed', prepared };
     const merge = sync.fastForward(prepared.after);
     if (merge.status === 0) return { kind: 'merged', prepared };
     // A main that moved after the check above is the same case, once more.
@@ -3647,7 +3817,7 @@ function clearRefusal(task: Task): void {
 }
 
 async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
-  reviewGuard?: (task: Task) => void, landPermittedFiles?: readonly string[]): Promise<void> {
+  reviewGuard?: (task: Task) => void, landPermittedFiles?: readonly string[], gateOnly = false): Promise<void> {
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
   const prepareMerge = (ledger: Ledger): string | PreparedMerge | undefined => {
@@ -3779,13 +3949,9 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     const events = existsSync(eventPath) ? readFileSync(eventPath, 'utf8').split('\n').filter(Boolean)
       .map(line => JSON.parse(line) as MergeEvent) : [];
     const baseline = streamUnitBaseline(events, sharers.map(sharer => sharer.id), before);
-    if (spawnSync('git', ['merge-base', '--is-ancestor', baseline, before], { cwd: root }).status !== 0) {
-      const message = `${task.id} first merge boundary ${baseline} is unavailable or outside main history; cannot classify inherited unit failures`;
-      markConflict(task, message);
-      return message;
-    }
+    const scopeFiles = changedFiles(task).committed;
     return { before, baseline, after, worktree: task.worktree, branch: task.branch,
-      sharers: sharers.map(sharer => sharer.id).sort(), committed: changedFiles(task).committed };
+      sharers: sharers.map(sharer => sharer.id).sort(), committed: scopeFiles, scopeFiles };
   };
   let preparedMerge = await withLedger(prepareMerge);
   // The reviewed head may be rewritten by our own rebase/normalization on a busy main.
@@ -3799,11 +3965,13 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   let retyped = false;
   const skipTypes = flags.has('--skip-type-gate');
   const typecheck = (merge: PreparedMerge, only?: readonly string[]) =>
-    preMergeTypecheckGate(merge.worktree, root, merge.baseline, merge.committed, skipTypes, only);
-  const gate = (merge: PreparedMerge) => typecheck(merge)
-    .then(refusal => refusal ?? generatedArtifactRefusal(merge.worktree, root, merge.before))
-    .then(refusal => refusal ?? preMergeUnitGate(merge.worktree, root, merge.baseline, merge.before, merge.sharers,
+    preMergeTypecheckGate(merge.worktree, root, merge.before, merge.committed, skipTypes, only);
+  const gate = async (merge: PreparedMerge): Promise<string | undefined> => {
+    const generated = regenerateGeneratedOutputs(merge);
+    if (generated) return generated;
+    return typecheck(merge).then(refusal => refusal ?? preMergeUnitGate(merge.worktree, root, merge.before, merge.sharers,
       flags.has('--skip-unit-gate'), gatedFiles));
+  };
   let gateFailure = await gate(preparedMerge);
   for (;;) {
     const current: PreparedMerge = preparedMerge;
@@ -3830,7 +3998,7 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
         return message;
       }
       if (landPermittedFiles !== undefined) {
-        const refusal = landScopeRefusal(ledger, task, sharers, changedFiles(task).committed, landPermittedFiles);
+        const refusal = landScopeRefusal(ledger, task, sharers, current.scopeFiles ?? changedFiles(task).committed, landPermittedFiles);
         if (refusal) {
           markConflict(task, refusal);
           return refusal;
@@ -3844,7 +4012,7 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
         changed: (from, to) => git(root, ['diff', '--name-only', '--no-renames', `${from}..${to}`]).split('\n').filter(Boolean),
         refresh: () => prepareMerge(ledger),
         fastForward: after => retryGitIndexLock(() => spawnSync('git', ['merge', '--ff-only', after], { cwd: root, encoding: 'utf8' })),
-      }, current, { gatedFiles, regated, retyped, typechecked: skipTypes ? [] : typecheckWorkspaces(current.committed) });
+      }, current, { gatedFiles, regated, retyped, typechecked: skipTypes ? [] : typecheckWorkspaces(current.committed) }, console.log, gateOnly);
       if (advance.kind === 'stopped') {
         if (advance.conflict && advance.message) {
           const message = `${task.id} ${advance.message}`;
@@ -3857,6 +4025,12 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
       const prepared = advance.prepared;
       if (advance.kind === 'regate') return { rerun: prepared };
       if (advance.kind === 'retypecheck') return { rerun: prepared, workspaces: advance.workspaces };
+      if (advance.kind === 'passed') {
+        clearRefusal(task);
+        if (task.state !== 'merged') task.state = 'exited';
+        console.log(`${task.id} pre-merge gate passed at ${prepared.after.slice(0, 12)}; not merged`);
+        return undefined;
+      }
       writeMergeEvent({ before: prepared.before, after: prepared.after, goal: task.goal ?? 'program',
         taskIds: prepared.sharers, at: new Date().toISOString() }, prepared.committed);
       for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = prepared.after; clearRefusal(sharer); }
@@ -4788,6 +4962,7 @@ async function main(argv: string[]): Promise<number> {
     case 'stop': await stopTask(positional[0] ?? ''); return 0;
     case 'scope': console.log(describe(taskOf(readLedger(), positional[0] ?? ''))); return 0;
     case 'merge': await mergeTask(positional[0] ?? '', flags); return 0;
+    case 'gate': await mergeTask(positional[0] ?? '', flags, undefined, undefined, undefined, true); return 0;
     case 'land': await landTask(positional[0] ?? ''); return 0;
     case 'close': await closeTasks(positional.slice(0, -1), positional.at(-1) ?? ''); return 0;
     case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? '', flags); return 0;
@@ -4795,12 +4970,18 @@ async function main(argv: string[]): Promise<number> {
       // Read-only: which open task claims a repository path (workers check before editing outside their claim).
       const path = positional[0] ?? '';
       const ledger = readLedger();
-      const holders = Object.values(ledger.tasks).filter(task => HOLDING.includes(task.state)
-        && task.paths.some(pattern => new Bun.Glob(pattern).match(path) || pathsOverlap(pattern, path)));
       const areas = Object.entries(areasOf(activeGoals(ledger)))
         .filter(([, globs]) => globs.some(glob => pathsOverlap(glob, path))).map(([slug]) => slug);
+      const areaNote = areas.length ? `; in Goal ${areas.join(', ')}'s area` : '';
+      if (isGeneratedOutput(path)) {
+        console.log(`${path}: unclaimed${areaNote}`);
+        return 0;
+      }
+      const holders = Object.values(ledger.tasks).filter(task => HOLDING.includes(task.state)
+        && task.paths.some(pattern => !isGeneratedOutput(pattern)
+          && (new Bun.Glob(pattern).match(path) || pathsOverlap(pattern, path))));
       console.log((holders.length ? `${path}: claimed by ${holders.map(task => `${task.id} (${task.state})`).join(', ')}`
-        : `${path}: unclaimed`) + (areas.length ? `; in Goal ${areas.join(', ')}'s area` : ''));
+        : `${path}: unclaimed`) + areaNote);
       return holders.length ? 1 : 0;
     }
     case 'status': await status(); return 0;
@@ -4858,6 +5039,7 @@ async function main(argv: string[]): Promise<number> {
         + ' | wait <id> | owner <path> | reclaim <id> <brief> [--allow-area] | resume <id> (-m <text> | --file <path>) [--effort e]'
         + ` [--engine ${ENGINES.join('|')}] [--fresh] [--force-usage]`
         + ' | stop <id> | scope <id> | land <id> | merge <id> [--allow-scope] [--allow-ids] [--landed] [--skip-unit-gate] [--skip-type-gate]'
+        + ' | gate <id> [--skip-unit-gate] [--skip-type-gate]'
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
         + ' | status | usage | regress [--at <rev>] [--resume <run-id>] [--only <tiers>] [--integration-batches <n>]'
         + ' | mail send <goal> --file <path> --key <key> | mail inbox [goal] | mail ack <id> [--goal <goal>]'

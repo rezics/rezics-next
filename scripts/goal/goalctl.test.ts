@@ -12,8 +12,8 @@ import { TmuxLauncher, processIdentity, tmuxServer, type LaunchDescriptor } from
 import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, declaredTestTimeout, migrationsBelowMain, mergeOwnerFiles, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, inheritedSharedLifecycleOwnership, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
-  codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
-  planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, runUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
+  addGateWorktree, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
+  planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, runUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
   mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
@@ -134,6 +134,19 @@ describe('goalctl claims', () => {
   test('reports changed files outside the claimed globs', () => {
     expect(outOfScope(['services/main/src/modules/poll/ballot.ts', 'services/main/src/app.ts'],
       parsed.paths)).toEqual(['services/main/src/app.ts']);
+  });
+
+  test('a generated file is not a claim and does not block land', () => {
+    const generated = 'generated/openapi/main/public.json';
+    const holder = held({ paths: [generated, 'services/main/src/modules/poll/**'] });
+    const claimant = parseBrief(brief.replace('paths: [services/main/src/modules/poll/**, tests/qa/integration/poll-*.test.ts]',
+      `paths: [${generated}]`));
+    expect(claimConflicts(claimant, [holder])).toEqual([]);
+    expect(claimConflicts(parsed, [held({ paths: ['**'] })])).toContain('path services/main/src/modules/poll/** overlaps G-039 **');
+    const scope = landClaimScope([generated, 'scripts/goal/goalctl.ts'], ['scripts/goal/**'], [{ id: 'other', paths: [generated] }]);
+    expect(scope).toEqual({ outOfClaim: [], claimedByOthers: [] });
+    const blocked = landClaimScope(['scripts/other.ts'], ['scripts/goal/**'], [{ id: 'other', paths: ['scripts/other.ts'] }]);
+    expect(blocked).toEqual({ outOfClaim: ['scripts/other.ts'], claimedByOthers: ['scripts/other.ts'] });
   });
 });
 
@@ -783,7 +796,7 @@ describe('goalctl runtime policy', () => {
     }]);
   });
 
-  test('G-1332 gate comparison blocks added findings but ignores removals and shifted line numbers', () => {
+  test('the same failing case is inherited when only its finding text changes', () => {
     const file = 'tests/qa/unit/serialization-points.test.ts';
     const report = (...findings: string[]): UnitFailureDetail[] => [{ file,
       test: 'service migrations and write paths introduce no unapproved serialization or gate upgrades',
@@ -796,13 +809,153 @@ describe('goalctl runtime policy', () => {
     const main = report(baseline, removed);
 
     expect(introducedUnitFailureFiles([file], report(baseline, removed), main)).toEqual([]);
-    expect(introducedUnitFailureFiles([file], report(baseline, removed, added), main)).toEqual([file]);
+    expect(introducedUnitFailureFiles([file], report(baseline, removed, added), main)).toEqual([]);
     expect(introducedUnitFailureFiles([file], report(baseline), main)).toEqual([]);
     expect(introducedUnitFailureFiles([file], report(shifted), report(baseline))).toEqual([]);
     expect(introducedUnitFailureFiles([file], report(baseline), [])).toEqual([file]);
+    const extra = [{ file, test: 'branch adds a finding', detail: 'error: id 86121887 port 54321' }];
+    expect(introducedUnitFailures([file], [...report(baseline), ...extra], report(baseline))).toEqual([
+      { file, cases: ['branch adds a finding'], fileError: false },
+    ]);
   });
 
-  test('permission diff signatures retain subject context and repeated counts', () => {
+  test('a case that fails on the branch and on current main is inherited when only the error text differs', () => {
+    const file = 'services/main/tests/nested-pool-checkout.test.ts';
+    const name = 'nested pool checkout releases the client';
+    const branch = [{ file, test: name, detail: 'error: id 86121887 port 54321' }];
+    const main = [{ file, test: name, detail: 'error: id 7a4431ed port 54399' }];
+    expect(introducedUnitFailureFiles([file], branch, main)).toEqual([]);
+    expect(introducedUnitFailures([file], branch, main)).toEqual([]);
+  });
+
+  test('a new failing case in a file main also fails is introduced and the refusal names it', () => {
+    const file = 'services/main/tests/library-public-bounds.test.ts';
+    const shared = 'library public bounds reject an oversize page';
+    const added = 'library public bounds reject a negative offset';
+    const branch = [
+      { file, test: shared, detail: 'error: id 111 port 1' },
+      { file, test: added, detail: 'error: id 222 port 2' },
+    ];
+    const main = [{ file, test: shared, detail: 'error: id 999 port 9' }];
+    expect(introducedUnitFailures([file], branch, main)).toEqual([{ file, cases: [added], fileError: false }]);
+    const runs: UnitRunEvidence[] = [
+      { side: 'affected', kind: 'confirm', files: [{ file, output: '', cases: branch.map(item => ({ test: item.test, error: item.detail! })) }] },
+      { side: 'main', kind: 'first', files: [{ file, output: '', cases: [{ test: shared, error: main[0]!.detail! }] }] },
+    ];
+    const refusal = unitGateRefusal('introduced unit failures; not merging:', [file], runs, 'affected',
+      [{ file, cases: [added], fileError: false }]);
+    const deciding = refusal.split('inherited on main:')[0] ?? refusal;
+    expect(deciding).toContain(`(fail) ${added}`);
+    expect(deciding).not.toContain(shared);
+    expect(refusal.split('inherited on main:')[1]).toContain(shared);
+  });
+
+  test('cases in one shard output are attributed to their own files', async () => {
+    const bounds = 'services/main/tests/library-public-bounds.test.ts';
+    const checkout = 'services/main/tests/nested-pool-checkout.test.ts';
+    const files = [bounds, checkout];
+    const junit = [
+      '<?xml version="1.0" encoding="UTF-8"?>', '<testsuites>',
+      `<testsuite name="${bounds}" file="${bounds}">`,
+      `<testcase name="library public bounds reject an oversize page" file="${bounds}">`,
+      '<failure type="AssertionError" message="error: id 111&#10;port 54321"></failure>', '</testcase>',
+      `<testcase name="library public bounds reject an oversize page" file="${bounds}">`,
+      '<failure type="AssertionError" message="error: duplicate id"></failure>', '</testcase>',
+      `<testcase name="library public bounds keep a passing case" file="${bounds}" />`,
+      '</testsuite>',
+      `<testsuite name="${checkout}" file="${checkout}">`,
+      `<testcase name="nested pool checkout releases the client" file="${checkout}">`,
+      '<failure type="AssertionError" message="error: id 222"></failure>', '</testcase>',
+      '</testsuite>', '</testsuites>',
+    ].join('\n');
+    const output = [
+      `${checkout}:`,
+      '(fail) library public bounds reject an oversize page [1.00ms]',
+      '(fail) nested pool checkout releases the client [2.00ms]',
+      '2 tests failed:',
+      '(fail) library public bounds reject an oversize page [1.00ms]',
+      '(fail) nested pool checkout releases the client [2.00ms]',
+      ' 0 pass', ' 2 fail',
+      UNIT_JUNIT_MARKER, junit,
+    ].join('\n');
+    expect(unitFailureDetails(output, files).map(item => [item.file, item.test])).toEqual([
+      [bounds, 'library public bounds reject an oversize page'],
+      [checkout, 'nested pool checkout releases the client'],
+    ]);
+    expect(unitFailureDetails(output, files)[0]?.detail).toContain('port 54321');
+    const evidence = unitFileEvidence(output, files, files, []);
+    expect(evidence.find(item => item.file === bounds)?.cases.map(item => item.test))
+      .toEqual(['library public bounds reject an oversize page']);
+    expect(evidence.find(item => item.file === checkout)?.cases.map(item => item.test))
+      .toEqual(['nested pool checkout releases the client']);
+    const summary = [
+      `${checkout}:`, '(pass) local case',
+      '2 tests failed:',
+      '(fail) library public bounds reject an oversize page [1.00ms]',
+      '(fail) nested pool checkout releases the client [2.00ms]',
+    ].join('\n');
+    expect(failingTestFiles(summary, files)).toEqual([]);
+    expect(unitFailureDetails(summary, files)).toEqual([]);
+    const runs: UnitRunEvidence[] = [];
+    const side = await runUnitSide('/repo', files, 'affected', runs, async () => ({
+      done: true, failing: [checkout], timedOut: [],
+      failures: [{ file: checkout, test: 'library public bounds reject an oversize page' }],
+      fileErrors: [], runnerErrors: [], files, output, ms: 1,
+    }));
+    expect(side.failing).toEqual(files);
+    const kept = runs.flatMap(run => run.files);
+    expect(kept.find(item => item.file === bounds)?.cases.map(item => item.test))
+      .toEqual(['library public bounds reject an oversize page']);
+    expect(kept.find(item => item.file === checkout)?.cases.map(item => item.test))
+      .toEqual(['nested pool checkout releases the client']);
+  });
+
+  test('owner cases stay with their files when unit junit shares the shard output', async () => {
+    const bounds = 'services/main/tests/library-public-bounds.test.ts';
+    const checkout = 'services/main/tests/nested-pool-checkout.test.ts';
+    const unit = 'tests/qa/unit/search-private-budget.test.ts';
+    const files = [bounds, checkout, unit];
+    const carried = 'A carried count stays approximate and never shows a Work hidden mid-walk';
+    const restore = 'restore reconciliation reuses the held access and relay connections';
+    const budget = 'SEARCH10: private Fuseki call count rejects an invalid budget before reading';
+    const junit = [
+      '<?xml version="1.0" encoding="UTF-8"?>', '<testsuites>',
+      `<testsuite name="${unit}" file="${unit}">`,
+      `<testcase name="${budget}" file="${unit}">`,
+      '<failure type="AssertionError" message="error: invalid budget"></failure>', '</testcase>',
+      `<testcase name="private budget accepts a limit" file="${unit}" />`,
+      '</testsuite>', '</testsuites>',
+    ].join('\n');
+    // Unit output, including its JUnit block, is joined ahead of the owner transcript.
+    const output = [
+      UNIT_JUNIT_MARKER, junit,
+      `${bounds}:`, `(fail) ${carried} [1.00ms]`,
+      `${checkout}:`, `(fail) ${restore} [2.00ms]`,
+      ' 2 fail',
+    ].join('\n');
+    const runs: UnitRunEvidence[] = [];
+    const side = await runUnitSide('/repo', files, 'affected', runs, async () => ({
+      done: true, failing: [unit], timedOut: [],
+      failures: [
+        { file: bounds, test: carried },
+        { file: checkout, test: restore },
+        { file: unit, test: 'console name the junit replaces' },
+      ],
+      fileErrors: [], runnerErrors: [], files, output, ms: 1,
+    }));
+    expect(side.failing).toEqual([...files].sort());
+    expect(side.failures.map(item => [item.file, item.test]).sort()).toEqual([
+      [bounds, carried], [checkout, restore], [unit, budget],
+    ].sort());
+    const names = (file: string) => new Set(runs.flatMap(run => run.files)
+      .filter(item => item.file === file).flatMap(item => item.cases.map(item => item.test)));
+    // Joined shard transcripts repeat a case; the name still belongs to its own file.
+    expect(names(bounds)).toEqual(new Set([carried]));
+    expect(names(checkout)).toEqual(new Set([restore]));
+    expect(names(unit)).toEqual(new Set([budget]));
+  });
+
+  test('the same permission case is inherited when only its subject text changes', () => {
     const file = 'tests/qa/unit/permissions.test.ts';
     const report = (...subjects: string[]): UnitFailureDetail[] => subjects.map(subject => ({ file,
       test: 'permission results preserve each subject path',
@@ -813,12 +966,12 @@ describe('goalctl runtime policy', () => {
     const branch = report('alice', 'bob');
     const repeatedMain = report('alice', 'alice');
 
-    expect(introducedUnitFailureFiles([file], differentSubject, main)).toEqual([file]);
-    expect(introducedUnitFailureFiles([file], branch, main)).toEqual([file]);
+    expect(introducedUnitFailureFiles([file], differentSubject, main)).toEqual([]);
+    expect(introducedUnitFailureFiles([file], branch, main)).toEqual([]);
     expect(introducedUnitFailureFiles([file], repeatedMain, repeatedMain)).toEqual([]);
   });
 
-  test('real Bun permission diffs distinguish changed subjects and inherit identical or removed findings', () => {
+  test('real Bun permission diffs inherit a case whose subject text changed', () => {
     const file = '.temp/goal-gate-subject/permissions.test.ts';
     const root = process.cwd();
     // Assertion blocks captured from Bun runs with alice, bob, or both denied; only the fixture path is unified.
@@ -844,8 +997,8 @@ describe('goalctl runtime policy', () => {
     expect(alice).toHaveLength(1);
     expect(bob).toHaveLength(1);
     expect(both).toHaveLength(1);
-    expect(introducedUnitFailureFiles([file], bob, alice)).toEqual([file]);
-    expect(introducedUnitFailureFiles([file], both, alice)).toEqual([file]);
+    expect(introducedUnitFailureFiles([file], bob, alice)).toEqual([]);
+    expect(introducedUnitFailureFiles([file], both, alice)).toEqual([]);
     expect(introducedUnitFailureFiles([file], alice, alice)).toEqual([]);
     expect(introducedUnitFailureFiles([file], both, both)).toEqual([]);
     expect(introducedUnitFailureFiles([file], alice, both)).toEqual([]);
@@ -853,7 +1006,7 @@ describe('goalctl runtime policy', () => {
     expect(introducedUnitFailureFiles([], [], alice)).toEqual([]);
   });
 
-  test('file-level load errors inherit only when normalized error text matches', () => {
+  test('file-level load errors inherit when the normalized first line matches', () => {
     const file = 'tests/qa/unit/load-failure.test.ts';
     const branchRoot = '/tmp/worktrees/worker';
     const mainRoot = '/tmp/unit-gate-baseline';
@@ -924,7 +1077,7 @@ describe('goalctl runtime policy', () => {
     }
   });
 
-  test('named scalar failures compare normalized error text when no finding diff exists', () => {
+  test('the same scalar case is inherited when only its message changes', () => {
     const file = 'tests/qa/unit/load-failure.test.ts';
     const branchRoot = '/tmp/worktrees/worker';
     const mainRoot = '/tmp/unit-gate-baseline';
@@ -936,7 +1089,9 @@ describe('goalctl runtime policy', () => {
     const same = unitFailureDetails(output(mainRoot, 'existing problem', 398, 21, 31), [file], mainRoot);
     const different = unitFailureDetails(output(mainRoot, 'new regression', 398, 21, 31), [file], mainRoot);
     expect(introducedUnitFailureFiles([file], branch, same)).toEqual([]);
-    expect(introducedUnitFailureFiles([file], branch, different)).toEqual([file]);
+    expect(introducedUnitFailureFiles([file], branch, different)).toEqual([]);
+    const added = [{ file, test: 'load guard > rejects a new caller', detail: different[0]?.detail }];
+    expect(introducedUnitFailureFiles([file], added, same)).toEqual([file]);
   });
 
   test('a removed named failure does not block when the file-level error remains identical', () => {
@@ -964,7 +1119,7 @@ describe('goalctl runtime policy', () => {
     expect(typeError[0]?.test).toBe('throws a native error');
     expect(typeError[0]?.detail).toContain('TypeError: native type failure probe');
     expect(referenceError[0]?.detail).toContain('ReferenceError: native reference failure probe');
-    expect(introducedUnitFailureFiles([file], referenceError, typeError)).toEqual([file]);
+    expect(introducedUnitFailureFiles([file], referenceError, typeError)).toEqual([]);
 
     const scalarFile = '.temp/goal-gate-probes/d-scalar.test.ts';
     const scalar = (expected: number, received: number) => [
@@ -978,7 +1133,7 @@ describe('goalctl runtime policy', () => {
     ].join('\n');
     const oldScalar = unitFailureDetails(scalar(1, 2), [scalarFile], root);
     const newScalar = unitFailureDetails(scalar(1, 3), [scalarFile], root);
-    expect(introducedUnitFailureFiles([scalarFile], newScalar, oldScalar)).toEqual([scalarFile]);
+    expect(introducedUnitFailureFiles([scalarFile], newScalar, oldScalar)).toEqual([]);
   });
 
   test('real Bun assertion, unhandled rejection, import error, and timeout output retain their findings', () => {
@@ -997,7 +1152,7 @@ describe('goalctl runtime policy', () => {
     const sameDiff = unitFailureDetails(diffOutput, [diffFile], root);
     const addedDiff = unitFailureDetails(diffOutput.replace('"restore": "new"', '"restore": "newer"'), [diffFile], root);
     expect(introducedUnitFailureFiles([diffFile], sameDiff, sameDiff)).toEqual([]);
-    expect(introducedUnitFailureFiles([diffFile], addedDiff, sameDiff)).toEqual([diffFile]);
+    expect(introducedUnitFailureFiles([diffFile], addedDiff, sameDiff)).toEqual([]);
 
     const rejectionFile = '.temp/goal-gate-probes/e-unhandled-rejection.test.ts';
     const rejection = (message: string) => [
@@ -1011,7 +1166,7 @@ describe('goalctl runtime policy', () => {
     const oldRejection = unitFailureDetails(rejection('unhandled rejection probe'), [rejectionFile], root);
     const newRejection = unitFailureDetails(rejection('new rejection regression'), [rejectionFile], root);
     expect(oldRejection[0]?.detail).toContain('error: unhandled rejection probe');
-    expect(introducedUnitFailureFiles([rejectionFile], newRejection, oldRejection)).toEqual([rejectionFile]);
+    expect(introducedUnitFailureFiles([rejectionFile], newRejection, oldRejection)).toEqual([]);
 
     const importFile = '.temp/goal-gate-probes/f-import-error.test.ts';
     const importOutput = (worktree: string, errors: string[]) => [
@@ -1495,6 +1650,7 @@ describe('goalctl reclaim', () => {
     expect(result.status).toBe(2);
     expect(result.stderr).toContain('reclaim <id> <brief> [--allow-area]');
     expect(result.stderr).toContain('dispatch <brief.md> [--dry-run] [--force-usage] [--allow-area]');
+    expect(result.stderr).toContain('gate <id> [--skip-unit-gate] [--skip-type-gate]');
   });
 });
 
@@ -2003,7 +2159,7 @@ ${edit}
     }, 30_000);
   }
 
-  test('a stream cannot inherit the guard failure its first merge introduced', async () => {
+  test('a later merge inherits a guard failure current main already has', async () => {
     const r = repo();
     try {
       const guard = repositoryGuards[0].file;
@@ -2012,7 +2168,6 @@ ${edit}
         + `test('inventory stays valid', () => expect(readFileSync('inventory.ts', 'utf8')).toBe('valid'));\n`);
       writeFileSync(join(r.dir, 'inventory.ts'), 'valid');
       r.git('add', '.'); r.git('commit', '-qm', 'Baseline inventory');
-      const baseline = r.git('rev-parse', 'main');
       const task = await r.start('G-001');
       const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push('inventory.ts'); r.save(ledger);
       r.commit(task);
@@ -2024,25 +2179,26 @@ ${edit}
       writeFileSync(join(task.worktree, 'inventory.ts'), 'still invalid');
       expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qam', 'Continue stream']).status).toBe(0);
       const result = r.run(['merge', task.id]);
-      expect(result.status).toBe(1);
-      expect(result.stdout).toContain(`against main ${baseline.slice(0, 12)}`);
-      expect(result.stderr).toContain(`introduced unit failures; not merging:\n  ${guard}`);
-      expect(r.git('rev-parse', 'main')).toBe(firstMerge);
-      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(`against main ${firstMerge.slice(0, 12)}`);
+      expect(result.stdout).toContain('also fails on main');
+      expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+      expect(r.git('rev-parse', 'main')).toBe(r.git('rev-parse', task.branch));
     } finally { r.cleanup(); }
   }, 30_000);
 
-  test('stream baselines include shared and landed events and keep the earliest merge', () => {
+  test('a stream classifies inherited failures against the current main commit', () => {
     const event = (before: string, after: string, taskIds: string[]) =>
       ({ before, after, taskIds, goal: 'alpha', at: '2026-10-07' });
     const events = [event('a', 'a', ['stream']), event('a', 'b', ['other']),
       event('b', 'c', ['peer', 'stream']), event('d', 'e', ['stream'])];
-    expect(streamUnitBaseline(events, ['stream'], 'head')).toBe('b');
-    expect(streamUnitBaseline(events, ['peer'], 'head')).toBe('b');
+    expect(streamUnitBaseline(events, ['stream'], 'head')).toBe('head');
+    expect(streamUnitBaseline(events, ['peer'], 'head')).toBe('head');
     expect(streamUnitBaseline(events, ['new'], 'head')).toBe('head');
   });
 
-  test('a stream selects its own commits plus earlier merge files, and the first merge only classifies inheritance', () => {
+  test('a stream selects its own commits plus earlier merge files and classifies inheritance against current main', () => {
     const own = ['services/main/src/stream-only.ts'];
     expect(streamSelectionFiles(own, [{ before: 'main-a', after: 'merged', goal: 'alpha', taskIds: ['stream'],
       files: ['services/main/src/earlier.ts'], at: 't0' }], ['stream']).sort())
@@ -2060,7 +2216,33 @@ ${edit}
     expect(plan([...own, 'infra/jena/Dockerfile']).tests.unit).toContain(nativeUnionTest);
     expect(streamUnitBaseline([{ before: 'first-main', after: 'merged', goal: 'alpha', taskIds: ['stream'], at: 't0' },
       { before: 'later-main', after: 'merged-2', goal: 'alpha', taskIds: ['stream'], at: 't1' }], ['stream'], 'current'))
-      .toBe('first-main');
+      .toBe('current');
+  });
+
+  test('a classification checkout includes .temp', () => {
+    const root = mkdtempSync(join(import.meta.dir, '../../.temp/gate-worktree-'));
+    const git = (...args: string[]) => {
+      const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+      if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+      return result.stdout.trim();
+    };
+    const checkout = join(root, '.temp', 'checkout');
+    try {
+      git('init', '-q', '-b', 'main');
+      git('config', 'user.email', 'goal@example.invalid');
+      git('config', 'user.name', 'goalctl test');
+      writeFileSync(join(root, 'keep.ts'), 'export const value = 1;\n');
+      git('add', 'keep.ts');
+      git('commit', '-qm', 'start');
+      mkdirSync(join(root, '.temp'));
+      addGateWorktree(root, checkout, 'HEAD');
+      expect(existsSync(join(checkout, '.temp'))).toBe(true);
+      expect(existsSync(join(checkout, 'keep.ts'))).toBe(true);
+      expect(spawnSync('git', ['-C', checkout, 'rev-parse', '--verify', 'HEAD'], { encoding: 'utf8' }).status).toBe(0);
+    } finally {
+      spawnSync('git', ['-C', root, 'worktree', 'remove', '--force', checkout]);
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   test('a merge record with no file list is recovered from its two commits', () => {
@@ -2261,9 +2443,13 @@ process.exit(0);
         const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(findings); r.save(ledger);
         r.commit(task);
         if (outcome === 'branch-adds-finding') {
-          writeFileSync(join(task.worktree, findings), 'existing finding\nbranch-only finding\n');
-          expect(spawnSync('git', ['-C', task.worktree, 'add', findings]).status).toBe(0);
-          expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add a guard finding']).status).toBe(0);
+          const source = readFileSync(join(task.worktree, guard), 'utf8');
+          writeFileSync(join(task.worktree, guard), `${source}test('branch adds a finding', () => expect(readFileSync(${JSON.stringify(findings)}, 'utf8')).toBe(''));\n`);
+          const claimed = r.ledger();
+          claimed.tasks[task.id]!.paths.push(guard);
+          r.save(claimed);
+          expect(spawnSync('git', ['-C', task.worktree, 'add', guard]).status).toBe(0);
+          expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add a failing guard case']).status).toBe(0);
         }
         await r.stopFixture(task.id);
         const plan = join(r.dir, '.temp/unit-plan');
@@ -2275,6 +2461,10 @@ process.exit(0);
         expect(result.status).toBe(introduced ? 1 : 0);
         if (introduced) {
           expect(result.stderr).toContain(`introduced unit failures; not merging:\n  ${guard}`);
+          const deciding = result.stderr.split('inherited on main:')[0] ?? '';
+          expect(deciding).toContain('(fail) branch adds a finding');
+          expect(deciding).not.toContain('inventory guard has no findings');
+          expect(result.stderr.split('inherited on main:')[1]).toContain('inventory guard has no findings');
           expect(r.git('rev-parse', 'main')).toBe(before);
           expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
         } else {
@@ -2843,10 +3033,37 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
-  test('stale generated artifacts block only when the rebased main still checks clean', async () => {
+  test('a failing generator blocks the merge and leaves the worktree clean', async () => {
     const r = repo();
     try {
-      const generator = `import { existsSync } from 'node:fs';\n`
+      const generator = `import { writeFileSync } from 'node:fs';\n`
+        + `writeFileSync('generated-scratch', 'dirty\\n');\nconsole.error('generator failed');\nprocess.exit(1);\n`;
+      mkdirSync(join(r.dir, 'scripts'), { recursive: true });
+      writeFileSync(join(r.dir, 'scripts/generate.ts'), generator);
+      r.git('add', 'scripts/generate.ts');
+      r.git('commit', '-qm', 'Add generator');
+      const task = await r.start('G-001');
+      r.commit(task);
+      await r.stopFixture(task.id);
+      const before = r.git('rev-parse', 'main');
+      const head = r.git('rev-parse', task.branch);
+      const blocked = r.run(['merge', task.id]);
+      expect(blocked.status).toBe(1);
+      expect(blocked.stderr).toContain('generated artifacts could not be regenerated; run task gen');
+      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+      expect(r.ledger().tasks[task.id]!.refusal).toContain('run task gen');
+      expect(r.git('rev-parse', 'main')).toBe(before);
+      expect(r.git('rev-parse', task.branch)).toBe(head);
+      expect(existsSync(join(task.worktree, 'generated-scratch'))).toBe(false);
+      expect(spawnSync('git', ['-C', task.worktree, 'status', '--porcelain'], { encoding: 'utf8' }).stdout).toBe('');
+    } finally { r.cleanup(); }
+  });
+
+  test('regeneration that repairs stale output then passes check does not block the merge', async () => {
+    const r = repo();
+    try {
+      const generator = `import { existsSync, unlinkSync } from 'node:fs';\n`
+        + `if (!process.argv.includes('--check') && existsSync('stale-generated')) unlinkSync('stale-generated');\n`
         + `if (process.argv.includes('--check') && existsSync('stale-generated')) { console.error('generated output is stale'); process.exit(1); }\n`;
       mkdirSync(join(r.dir, 'scripts'), { recursive: true });
       writeFileSync(join(r.dir, 'scripts/generate.ts'), generator);
@@ -2860,20 +3077,20 @@ process.exit(0);
       expect(spawnSync('git', ['-C', task.worktree, 'add', 'stale-generated']).status).toBe(0);
       expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Leave generated output stale']).status).toBe(0);
       await r.stopFixture(task.id);
-      const before = r.git('rev-parse', 'main');
-      const blocked = r.run(['merge', task.id]);
-      expect(blocked.status).toBe(1);
-      expect(blocked.stderr).toContain('run task gen');
-      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
-      expect(r.ledger().tasks[task.id]!.refusal).toContain('run task gen');
-      expect(r.git('rev-parse', 'main')).toBe(before);
+      const result = r.run(['merge', task.id, '--skip-unit-gate', '--skip-type-gate']);
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+      expect(existsSync(join(r.dir, 'stale-generated'))).toBe(false);
+      expect(r.git('log', '-1', '--format=%s')).toBe('Regenerate generated outputs (goalctl)');
     } finally { r.cleanup(); }
   });
 
-  test('generated artifacts already stale on main do not block the merge', async () => {
+  test('a check that still fails after regeneration blocks even when main is already stale', async () => {
     const r = repo();
     try {
-      const generator = `import { existsSync } from 'node:fs';\n`
+      const generator = `import { existsSync, writeFileSync } from 'node:fs';\n`
+        + `if (!process.argv.includes('--check')) writeFileSync('generated-note', 'regenerated\\n');\n`
         + `if (process.argv.includes('--check') && existsSync('stale-generated')) { console.error('generated output is stale'); process.exit(1); }\n`;
       mkdirSync(join(r.dir, 'scripts'), { recursive: true });
       writeFileSync(join(r.dir, 'scripts/generate.ts'), generator);
@@ -2883,13 +3100,85 @@ process.exit(0);
       const task = await r.start('G-001');
       r.commit(task);
       await r.stopFixture(task.id);
+      const before = r.git('rev-parse', 'main');
       const result = r.run(['merge', task.id]);
-      expect(result.stderr).toBe('');
-      expect(result.status).toBe(0);
-      expect(result.stdout).toContain('stale on main');
-      expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('generated artifacts are stale after regeneration; run task gen');
+      expect(result.stderr).not.toContain('stale on main');
+      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+      expect(r.git('rev-parse', 'main')).toBe(before);
+      expect(r.git('log', '-1', '--format=%s', task.branch)).toBe('Regenerate generated outputs (goalctl)');
+      expect(readFileSync(join(task.worktree, 'generated-note'), 'utf8')).toBe('regenerated\n');
     } finally { r.cleanup(); }
   });
+
+  test('a generated file claimed by another task does not block the merge', async () => {
+    const r = repo();
+    try {
+      const holder = await r.start('G-001');
+      await r.stopFixture(holder.id);
+      const generated = 'generated/openapi/main/public.json';
+      const ledger = r.ledger();
+      ledger.tasks[holder.id]!.paths = ['**', generated];
+      r.save(ledger);
+      const owner = r.run(['owner', generated]);
+      expect(owner.status).toBe(0);
+      expect(owner.stdout).toContain(`${generated}: unclaimed`);
+      ledger.tasks[holder.id]!.paths = [generated];
+      r.save(ledger);
+      const task = await r.start('G-002');
+      r.commit(task);
+      mkdirSync(join(task.worktree, 'generated/openapi/main'), { recursive: true });
+      writeFileSync(join(task.worktree, generated), '{}\n');
+      expect(spawnSync('git', ['-C', task.worktree, 'add', generated]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Refresh generated output']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const result = r.run(['merge', task.id, '--skip-unit-gate', '--skip-type-gate']);
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+      expect(readFileSync(join(r.dir, generated), 'utf8')).toBe('{}\n');
+    } finally { r.cleanup(); }
+  });
+
+  test('gate runs the pre-merge checks without fast-forwarding main', async () => {
+    const r = repo();
+    try {
+      const task = await r.start('G-001');
+      r.commit(task);
+      await r.stopFixture(task.id);
+      const ledger = r.ledger();
+      ledger.tasks[task.id]!.refusal = 'earlier refusal';
+      r.save(ledger);
+      const before = r.git('rev-parse', 'main');
+      const plan = join(r.dir, '.temp/unit-plan');
+      writeFileSync(plan, '');
+      const passed = r.run(['gate', task.id], { GOAL_TEST_PLAN: plan });
+      expect(passed.stderr).toBe('');
+      expect(passed.status).toBe(0);
+      expect(passed.stdout).toContain(`pre-merge gate passed at`);
+      expect(passed.stdout).toContain('not merged');
+      expect(r.git('rev-parse', 'main')).toBe(before);
+      expect(r.ledger().tasks[task.id]!.state).toBe('exited');
+      expect(r.ledger().tasks[task.id]!.refusal).toBeUndefined();
+      expect(existsSync(join(r.dir, '.temp/goal-orchestration/merges.jsonl'))).toBe(false);
+      const file = 'operation.test.ts';
+      writeFileSync(join(task.worktree, file), `import { test, expect } from 'bun:test';\ntest('operation stays valid', () => expect(true).toBe(false));\n`);
+      const claimed = r.ledger();
+      claimed.tasks[task.id]!.paths.push(file);
+      r.save(claimed);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', file]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add a failing case']).status).toBe(0);
+      writeFileSync(plan, `  unit: ${file}\n`);
+      const failed = r.run(['gate', task.id], { GOAL_TEST_PLAN: plan });
+      expect(failed.status).toBe(1);
+      expect(failed.stderr).toContain('introduced unit failures');
+      expect(failed.stderr).toContain('(fail) operation stays valid');
+      expect(r.git('rev-parse', 'main')).toBe(before);
+      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+      expect(existsSync(join(r.dir, '.temp/goal-orchestration/merges.jsonl'))).toBe(false);
+    } finally { r.cleanup(); }
+  }, 30_000);
 
   test('an owner-tier plan file runs through task test and a branch-only failure blocks', async () => {
     const r = repo();
@@ -2921,7 +3210,7 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
-  test('a later merge selects the stream\'s own files and classifies failures from the first merge', async () => {
+  test('a later merge selects the stream\'s own files and classifies failures against current main', async () => {
     const r = repo();
     try {
       const task = await r.start('G-001');
@@ -2936,6 +3225,7 @@ process.exit(0);
       writeFileSync(join(r.dir, 'infra/jena/Dockerfile'), 'FROM scratch\n');
       r.git('add', 'infra/jena/Dockerfile');
       r.git('commit', '-qm', 'Main changes the native image');
+      const current = r.git('rev-parse', 'main');
       writeFileSync(join(task.worktree, 'stream-only.ts'), `export const stream = true;\n`);
       expect(spawnSync('git', ['-C', task.worktree, 'add', 'stream-only.ts']).status).toBe(0);
       expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Stream-only change']).status).toBe(0);
@@ -2944,8 +3234,9 @@ process.exit(0);
       const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan });
       expect(result.stderr).toBe('');
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain(`classification baseline ${baseline.slice(0, 12)}`);
-      expect(result.stdout).toContain(`against main ${baseline.slice(0, 12)}`);
+      expect(result.stdout).toContain(`against main ${current.slice(0, 12)}`);
+      expect(result.stdout).not.toContain('classification baseline');
+      expect(result.stdout).not.toContain(baseline.slice(0, 12));
       expect(result.stdout).toContain('stream-only.ts');
       expect(result.stdout).toContain('worker-001.ts');
       expect(result.stdout).not.toContain('infra/jena/Dockerfile');
