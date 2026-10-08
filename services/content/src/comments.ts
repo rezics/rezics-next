@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
-import type { ContentCommentTarget } from '../../../packages/model/src/locator.ts';
+import { type ContentCommentQuoteTarget, type ContentCommentTarget }
+  from '../../../packages/model/src/locator.ts';
 import type { ContentPosition } from './core.ts';
 import { ContentConflict, ContentUnavailable } from './errors.ts';
 import { appendContentEvent, contentEventPosition } from './event-sequencer.ts';
@@ -149,7 +150,7 @@ export function resolveParagraphSelector(
   text: string,
   exact: string,
   document?: unknown,
-): ContentCommentTarget['selector'] {
+): ContentCommentQuoteTarget['selector'] {
   if (document !== undefined && !checkDocument(document))
     throw new ContentCommentInvalid('invalid document source');
   const paragraphs = checkDocument(document)
@@ -181,6 +182,27 @@ export function resolveParagraphSelector(
   };
 }
 
+/** A cleared source anchor has no selector. Callers must not rebuild the quote. */
+export function commentTargetHasSource(
+  target: ContentCommentTarget,
+): target is ContentCommentQuoteTarget {
+  return 'selector' in target;
+}
+
+function commentTarget(row: Record<string, any>): ContentCommentTarget {
+  const source = `urn:rezics:content:revision:${row.revision_id}`;
+  const cleared = row.exact == null && row.prefix == null && row.suffix == null;
+  if (cleared) return { type: 'SpecificResource', source };
+  if (row.exact == null || row.prefix == null || row.suffix == null) {
+    throw new ContentCommentInvalid('comment source selector is partial');
+  }
+  return {
+    type: 'SpecificResource',
+    source,
+    selector: { type: 'TextQuoteSelector', exact: row.exact, prefix: row.prefix, suffix: row.suffix },
+  };
+}
+
 function asComment(row: Record<string, any>, replayed: boolean): ContentComment {
   return {
     type: 'Annotation',
@@ -192,16 +214,7 @@ function asComment(row: Record<string, any>, replayed: boolean): ContentComment 
     revisionId: row.revision_id,
     byteDigest: row.byte_digest,
     body: row.comment_body,
-    target: {
-      type: 'SpecificResource',
-      source: `urn:rezics:content:revision:${row.revision_id}`,
-      selector: {
-        type: 'TextQuoteSelector',
-        exact: row.exact,
-        prefix: row.prefix,
-        suffix: row.suffix,
-      },
-    },
+    target: commentTarget(row),
     sourcePosition: { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence },
     replayed,
   };

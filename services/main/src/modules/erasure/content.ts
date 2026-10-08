@@ -19,6 +19,7 @@ interface TargetRow {
   pending_pin: boolean;
   active_pin: boolean;
   erasure_id: string | null;
+  erasure_epoch: string | null;
 }
 
 function checkIds(revisionIds: readonly string[]): void {
@@ -37,7 +38,7 @@ async function targetRows(client: Pool | PoolClient, revisionIds: readonly strin
         WHERE p.revision_id = r.id AND p.pin_active AND p.status = 'active'
           AND NOT EXISTS (SELECT 1 FROM content.publication_erasure_supersession s
             WHERE s.operation_id = p.operation_id)) AS active_pin,
-      t.erasure_id
+      t.erasure_id, t.erasure_epoch::text AS erasure_epoch
     FROM content.revision r JOIN content.variant v ON v.id = r.variant_id
     LEFT JOIN content.revision_erasure t ON t.revision_id = r.id
     WHERE r.id = ANY($1::uuid[]) ORDER BY r.id${lock ? ' FOR UPDATE OF r' : ''}`,
@@ -45,11 +46,13 @@ async function targetRows(client: Pool | PoolClient, revisionIds: readonly strin
 }
 
 function assertTargets(rows: readonly TargetRow[], revisionIds: readonly string[],
-  resourceId: string, erasureId: string | null, allowActivePin: boolean): void {
+  resourceId: string, erasureId: string | null, erasureEpoch: string | null,
+  allowActivePin: boolean): void {
   if (rows.length !== revisionIds.length || rows.some(row => row.resource_id !== resourceId)) {
     throw new ContentErasureInvalid('Content erasure targets are unavailable');
   }
-  if (rows.some(row => row.erasure_id ? row.erasure_id !== erasureId
+  if (rows.some(row => row.erasure_id
+    ? row.erasure_id !== erasureId || (erasureEpoch !== null && row.erasure_epoch !== erasureEpoch)
     : row.availability !== 'available')) {
     throw new ContentErasureStale('Content revision is no longer available to erase');
   }
@@ -63,7 +66,7 @@ function assertTargets(rows: readonly TargetRow[], revisionIds: readonly string[
 export async function checkContentErasureTargets(content: Pool, resourceId: string,
   revisionIds: readonly string[], allowActivePin = false): Promise<void> {
   checkIds(revisionIds);
-  assertTargets(await targetRows(content, revisionIds, false), revisionIds, resourceId, null,
+  assertTargets(await targetRows(content, revisionIds, false), revisionIds, resourceId, null, null,
     allowActivePin);
 }
 
@@ -120,7 +123,7 @@ async function eraseContent(content: Pool, command: ContentErasureCommand): Prom
       ORDER BY operation_id FOR UPDATE`, [command.revisionIds])).rows;
     const rows = await targetRows(client, command.revisionIds, false);
     assertTargets(rows, command.revisionIds, command.resourceId, command.erasureId,
-      Boolean(command.graphProof));
+      command.erasureEpoch, Boolean(command.graphProof));
     if (preparations.some(p => p.status === 'pending' && p.pin_active)
       || preparations.some(p => p.status === 'active' && p.pin_active) && !command.graphProof) {
       throw new ContentErasureGraphRequired('published Content needs graph suppression');
@@ -141,6 +144,10 @@ async function eraseContent(content: Pool, command: ContentErasureCommand): Prom
       [pending, command.erasureId, command.erasureEpoch, command.graphProof.receipt,
         command.graphProof.dataEpoch, command.graphProof.sequence]);
     }
+    // Already-tombstoned revisions are not pending, but selectors that survived
+    // an older erasure still clear under that same journal id and epoch.
+    await client.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, $3::bigint)',
+      [command.revisionIds, command.erasureId, command.erasureEpoch]);
     await client.query('COMMIT');
     return { applied: pending.length };
   } catch (error) {
@@ -163,6 +170,20 @@ export async function probeContentErasure(content: Pool | PoolClient, erasureId:
   return new Map(rows.map(row => [row.id, row.availability === null ? 'absent'
     : row.erasure_id === erasureId && row.availability === 'erased' ? 'erased'
       : row.availability === 'available' && !row.erasure_id ? 'available' : 'foreign']));
+}
+
+/** Revisions whose comments still store source selectors. Probe completion is
+ * not this check: an erased revision can still hold exact, prefix or suffix. */
+export async function openCommentSourceRevisions(content: Pool | PoolClient,
+  revisionIds: readonly string[]): Promise<string[]> {
+  if (revisionIds.length > 256) throw new ContentErasureInvalid('Content erasure probe is too large');
+  if (!revisionIds.length) return [];
+  const rows = (await content.query<{ revision_id: string }>(`SELECT DISTINCT revision_id::text
+    AS revision_id FROM content.comment
+    WHERE revision_id = ANY($1::uuid[])
+      AND (exact IS NOT NULL OR prefix IS NOT NULL OR suffix IS NOT NULL)
+    ORDER BY revision_id`, [revisionIds])).rows;
+  return rows.map(row => row.revision_id);
 }
 
 /** The owning resource of journaled revisions; a completion retry rebuilds its Access scope. */

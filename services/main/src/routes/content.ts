@@ -1,6 +1,7 @@
 import { languageTagSchema } from '../modules/display-language/schema.ts';
 import { Elysia, t } from 'elysia';
-import { ContentCommentInvalid, resolveParagraphSelector } from '../../../content/src/comments.ts';
+import { commentTargetHasSource, ContentCommentInvalid, resolveParagraphSelector }
+  from '../../../content/src/comments.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { editAdmittedMetadataWork } from '../modules/work/edit-admitted.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
@@ -159,7 +160,19 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         if (current.boolean !== true) return problem(404, 'comment_unavailable', 'Comment is unavailable');
         const exact = (await work.content.readExactBatch([comment.revisionId],
           async ids => new Set(ids)))[0];
-        if (exact?.status === 'denied' || exact?.status === 'erased') {
+        if (exact?.status === 'denied') {
+          return problem(404, 'comment_unavailable', 'Comment is unavailable');
+        }
+        if (!commentTargetHasSource(comment.target)) {
+          if (exact?.status !== 'erased') {
+            return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
+          }
+          // The authored annotation stays. The revision quote is already gone,
+          // so this response has no selector and no resolved text.
+          await work.access.assertRecoveryOpen();
+          return Response.json(comment, { headers: { 'cache-control': 'no-store' } });
+        }
+        if (exact?.status === 'erased') {
           return problem(404, 'comment_unavailable', 'Comment is unavailable');
         }
         if (exact?.status !== 'available' || exact.reference.resourceId !== comment.resourceId
@@ -224,7 +237,22 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         }
         const exact = (await work.content.readExactBatch([params.revision],
           async ids => new Set(ids)))[0];
-        if (exact?.status === 'denied' || exact?.status === 'erased') {
+        if (exact?.status === 'denied') {
+          return problem(404, 'comment_unavailable', 'Comments are unavailable');
+        }
+        if (page.comments.length > 0 && page.comments.every(comment => !commentTargetHasSource(comment.target))) {
+          if (exact?.status !== 'erased') {
+            return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
+          }
+          await work.access.assertRecoveryOpen();
+          const payload = { ...page, comments: page.comments };
+          if (Buffer.byteLength(JSON.stringify(payload), 'utf8') > 1_048_576) {
+            return problem(422, 'comment_page_budget_exceeded',
+              'Comment page is too large; request fewer comments');
+          }
+          return Response.json(payload, { headers: { 'cache-control': 'no-store' } });
+        }
+        if (exact?.status === 'erased') {
           return problem(404, 'comment_unavailable', 'Comments are unavailable');
         }
         if (exact?.status !== 'available' || exact.reference.resourceId !== resourceId) {
@@ -242,6 +270,9 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           if (comment.resourceId !== resourceId
             || comment.variantId !== exact.reference.variantId
             || comment.byteDigest !== exact.reference.byteDigest) {
+            return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
+          }
+          if (!commentTargetHasSource(comment.target)) {
             return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
           }
           const selector = comment.target.selector;

@@ -105,13 +105,19 @@ export const exactContentRevision = t.Object({
   body: t.Record(t.String(), t.Any()),
 });
 
+const contentCommentQuoteTarget = t.Object({
+  type: t.Literal('SpecificResource'), source: ref,
+  selector: t.Object({ type: t.Literal('TextQuoteSelector'), exact: t.String(),
+    prefix: t.String(), suffix: t.String() }),
+});
+const contentCommentErasedTarget = t.Object({
+  type: t.Literal('SpecificResource'), source: ref,
+});
 export const contentCommentResult = t.Object({
   type: t.Literal('Annotation'), motivation: t.Literal('commenting'),
   comment: ref, author: ref, resourceId: ref, variantId: ref, revisionId: ref,
   byteDigest: t.String({ pattern: '^[0-9a-f]{64}$' }), body: t.String(),
-  target: t.Object({ type: t.Literal('SpecificResource'), source: ref,
-    selector: t.Object({ type: t.Literal('TextQuoteSelector'), exact: t.String(),
-      prefix: t.String(), suffix: t.String() }) }),
+  target: t.Union([contentCommentQuoteTarget, contentCommentErasedTarget]),
   resolvedText: t.Optional(t.String()),
   sourcePosition: t.Object({ owner: t.Literal('content'), dataEpoch: t.String(),
     sequence: t.String() }),
