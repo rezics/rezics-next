@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
@@ -313,6 +313,8 @@ test('comment source selectors clear once with the revision and cannot be restor
     expect(commentTargetHasSource(page.comments[0]!.target)).toBe(false);
     expect(JSON.stringify(page)).not.toContain(canary);
 
+    // Negative component only: replica role skips triggers and puts the quote back.
+    // It is not a backup, a retained journal, or a signed coverage replay.
     await pool.query('BEGIN');
     await pool.query(`SET LOCAL session_replication_role = replica`);
     await pool.query(`UPDATE content.comment SET exact = $2, prefix = 'Opening paragraph', suffix = 'Closing'
@@ -331,5 +333,213 @@ test('comment source selectors clear once with the revision and cannot be restor
   } finally {
     await access.end();
     await source.stop();
+  }
+}, 30_000);
+
+test('two journals in one transaction bind their own tombstones, and rollback restores both quotes', async () => {
+  const source = await cluster();
+  const { pool } = source;
+  const access = new Pool({ ...pool.options });
+  try {
+    await migrateContent(pool);
+    await pool.query(`CREATE SCHEMA access;
+      CREATE TABLE access.governance_preservation_hold (
+        id uuid PRIMARY KEY, target_resource text NOT NULL, reason text NOT NULL, released_at timestamptz);
+      CREATE TABLE access.governance_erasure_postponement (
+        hold_id uuid NOT NULL, operation_id text NOT NULL, material_ref text NOT NULL,
+        reason text NOT NULL, PRIMARY KEY (hold_id, operation_id, material_ref))`);
+    const content = new ContentCore(pool);
+    const comments = new ContentComments(pool);
+    const place = async () => {
+      const work = workId();
+      const saved = await content.saveDraft({ operationId: `draft-${randomUUID()}`,
+        variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: work,
+          language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+        expectedHead: null, model: 'content-shape-v1', sourceRevision: null, provenance: {},
+        serializedJson: JSON.stringify({ body: sourceText }) });
+      const input = { revisionId: saved.revisionId!, resourceId: work, author: workId(), exact: canary,
+        body: annotation };
+      const comment = await comments.create({ ...input, admissionId: randomUUID(), authorityEpoch: '3',
+        scope: `content:comment:${work}`, requestDigest: contentCommentIntentDigest(input) });
+      return { work, revisionId: saved.revisionId!, commentId: comment.comment.split('/').at(-1)! };
+    };
+    const first = await place();
+    const second = await place();
+    const erasureA = randomUUID();
+    const erasureB = randomUUID();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+        VALUES ($1, $2, 11), ($3, $4, 12)`, [first.revisionId, erasureA, second.revisionId, erasureB]);
+      await client.query(`UPDATE content.revision SET availability = 'erased', serialized_bytes = NULL, body = NULL
+        WHERE id = ANY($1::uuid[])`, [[first.revisionId, second.revisionId]]);
+      await client.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, $3::bigint)',
+        [[first.revisionId], erasureA, 11]);
+      await client.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, $3::bigint)',
+        [[second.revisionId], erasureB, 12]);
+      await client.query(`SELECT set_config('rezics.comment_source_erasure_id', $1, true)`, [randomUUID()]);
+      await client.query('ROLLBACK');
+    } finally { client.release(); }
+    for (const item of [first, second]) {
+      const row = (await pool.query<{ exact: string | null; body: string }>(
+        'SELECT exact, body FROM content.comment WHERE id = $1', [item.commentId])).rows[0]!;
+      expect(row.exact).toBe(canary);
+      expect(row.body).toBe(annotation);
+    }
+    const committed = await pool.connect();
+    try {
+      await committed.query('BEGIN');
+      await committed.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+        VALUES ($1, $2, 11), ($3, $4, 12)`, [first.revisionId, erasureA, second.revisionId, erasureB]);
+      await committed.query(`UPDATE content.revision SET availability = 'erased', serialized_bytes = NULL, body = NULL
+        WHERE id = ANY($1::uuid[])`, [[first.revisionId, second.revisionId]]);
+      await committed.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, $3::bigint)',
+        [[first.revisionId], erasureA, 11]);
+      await expect(committed.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, $3::bigint)',
+        [[first.revisionId], erasureB, 12])).rejects.toMatchObject({ code: '23514' });
+      await committed.query('ROLLBACK');
+      await committed.query('BEGIN');
+      await committed.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+        VALUES ($1, $2, 11), ($3, $4, 12)`, [first.revisionId, erasureA, second.revisionId, erasureB]);
+      await committed.query(`UPDATE content.revision SET availability = 'erased', serialized_bytes = NULL, body = NULL
+        WHERE id = ANY($1::uuid[])`, [[first.revisionId, second.revisionId]]);
+      await committed.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, $3::bigint)',
+        [[first.revisionId], erasureA, 11]);
+      await committed.query('SELECT content.erase_comment_sources($1::uuid[], $2::uuid, $3::bigint)',
+        [[second.revisionId], erasureB, 12]);
+      await committed.query('COMMIT');
+    } finally { committed.release(); }
+    for (const item of [first, second]) {
+      const row = (await pool.query<{ exact: string | null; body: string; request_digest: string }>(
+        'SELECT exact, body, request_digest FROM content.comment WHERE id = $1', [item.commentId])).rows[0]!;
+      expect(row.exact).toBeNull();
+      expect(row.body).toBe(annotation);
+      expect(row.request_digest).toMatch(/^[0-9a-f]{64}$/);
+    }
+    const definition = (await pool.query<{ def: string }>(
+      `SELECT pg_get_functiondef('content.erase_comment_sources(uuid[],uuid,bigint)'::regprocedure) AS def`)).rows[0]!.def;
+    expect(definition).not.toContain('current_setting');
+    expect(definition).not.toContain('set_config');
+    expect((await pool.query(`SELECT 1 FROM pg_indexes WHERE indexname = 'comment_open_source_idx'`)).rowCount).toBe(1);
+  } finally {
+    await access.end();
+    await source.stop();
+  }
+}, 30_000);
+
+test('many comments clear under the erasure deadline, and a statement timeout rolls the tombstone back', async () => {
+  const source = await cluster();
+  const { pool } = source;
+  const access = new Pool({ ...pool.options });
+  try {
+    await migrateContent(pool);
+    await pool.query(`CREATE SCHEMA access;
+      CREATE TABLE access.governance_preservation_hold (
+        id uuid PRIMARY KEY, target_resource text NOT NULL, reason text NOT NULL, released_at timestamptz);
+      CREATE TABLE access.governance_erasure_postponement (
+        hold_id uuid NOT NULL, operation_id text NOT NULL, material_ref text NOT NULL,
+        reason text NOT NULL, PRIMARY KEY (hold_id, operation_id, material_ref))`);
+    const content = new ContentCore(pool);
+    const work = workId();
+    const saved = await content.saveDraft({ operationId: `draft-${randomUUID()}`,
+      variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: work,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+      expectedHead: null, model: 'content-shape-v1', sourceRevision: null, provenance: {},
+      serializedJson: JSON.stringify({ body: sourceText }) });
+    const revisionId = saved.revisionId!;
+    const variant = (await pool.query<{ id: string }>('SELECT id FROM content.variant')).rows[0]!.id;
+    await pool.query(`INSERT INTO content.receipt (operation_id, request_digest, action, outcome, variant_id, revision_id)
+      SELECT 'fanout-' || g, repeat('ab', 32), 'comment.create', 'succeeded', $1, $2
+      FROM generate_series(1, 100) g`, [variant, revisionId]);
+    await pool.query(`INSERT INTO content.comment
+      (id, operation_id, request_digest, revision_id, resource_id, variant_id, author, exact, prefix, suffix, body)
+      SELECT gen_random_uuid(), operation_id, request_digest, revision_id, $1, $2, $3, $4, 'pre', 'suf', $5
+      FROM content.receipt WHERE operation_id LIKE 'fanout-%'`,
+    [work, variant, workId(), canary, annotation]);
+    const started = Date.now();
+    expect(await applyContentErasure(pool, { preservationAccess: access, erasureId: randomUUID(),
+      erasureEpoch: '5', resourceId: work, revisionIds: [revisionId] })).toEqual({ applied: 1 });
+    expect(Date.now() - started).toBeLessThan(5_000);
+    const cleared = await pool.query<{ open: number; bodies: number }>(`SELECT
+      count(*) FILTER (WHERE exact IS NOT NULL OR prefix IS NOT NULL OR suffix IS NOT NULL)::int AS open,
+      count(*) FILTER (WHERE body = $2)::int AS bodies
+      FROM content.comment WHERE revision_id = $1`, [revisionId, annotation]);
+    expect(cleared.rows[0]).toEqual({ open: 0, bodies: 100 });
+
+    const slowSaved = await content.saveDraft({ operationId: `draft-${randomUUID()}`,
+      variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: workId(),
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+      expectedHead: null, model: 'content-shape-v1', sourceRevision: null, provenance: {},
+      serializedJson: JSON.stringify({ body: sourceText }) });
+    const slowVariant = (await pool.query<{ id: string; resource_id: string }>(
+      'SELECT v.id, v.resource_id FROM content.variant v JOIN content.revision r ON r.variant_id = v.id WHERE r.id = $1',
+      [slowSaved.revisionId])).rows[0]!;
+    await pool.query(`INSERT INTO content.receipt (operation_id, request_digest, action, outcome, variant_id, revision_id)
+      VALUES ($1, repeat('cd', 32), 'comment.create', 'succeeded', $2, $3)`,
+    [`slow-${randomUUID()}`, slowVariant.id, slowSaved.revisionId]);
+    const slowReceipt = (await pool.query<{ operation_id: string; request_digest: string }>(
+      `SELECT operation_id, request_digest FROM content.receipt WHERE revision_id = $1 AND operation_id LIKE 'slow-%'`,
+      [slowSaved.revisionId])).rows[0]!;
+    await pool.query(`INSERT INTO content.comment
+      (id, operation_id, request_digest, revision_id, resource_id, variant_id, author, exact, prefix, suffix, body)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pre', 'suf', $9)`,
+    [randomUUID(), slowReceipt.operation_id, slowReceipt.request_digest, slowSaved.revisionId,
+      slowVariant.resource_id, slowVariant.id, workId(), canary, annotation]);
+    await pool.query(`CREATE FUNCTION content.comment_source_delay() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN PERFORM pg_sleep(6); RETURN NEW; END $$`);
+    await pool.query(`CREATE TRIGGER comment_source_delay BEFORE UPDATE ON content.comment
+      FOR EACH ROW EXECUTE FUNCTION content.comment_source_delay()`);
+    const slowErasure = randomUUID();
+    await expect(applyContentErasure(pool, { preservationAccess: access, erasureId: slowErasure,
+      erasureEpoch: '6', resourceId: slowVariant.resource_id, revisionIds: [slowSaved.revisionId!] }))
+      .rejects.toMatchObject({ code: '57014' });
+    expect((await pool.query('SELECT 1 FROM content.revision_erasure WHERE erasure_id = $1',
+      [slowErasure])).rowCount).toBe(0);
+    expect((await pool.query<{ exact: string; availability: string }>(`SELECT c.exact, r.availability
+      FROM content.comment c JOIN content.revision r ON r.id = c.revision_id
+      WHERE c.revision_id = $1`, [slowSaved.revisionId])).rows[0]).toEqual({ exact: canary, availability: 'available' });
+  } finally {
+    await pool.query('DROP TRIGGER IF EXISTS comment_source_delay ON content.comment').catch(() => undefined);
+    await pool.query('DROP FUNCTION IF EXISTS content.comment_source_delay()').catch(() => undefined);
+    await access.end();
+    await source.stop();
+  }
+}, 30_000);
+
+test('migration 1708 leaves a pre-existing quote in place until an erasure names its tombstone', async () => {
+  const source = await cluster();
+  const { pool } = source;
+  const prior = join(root, '.temp', `comment-source-prior-${randomUUID()}`);
+  try {
+    mkdirSync(prior, { recursive: true });
+    const migrations = join(root, 'services/content/migrations');
+    for (const name of readdirSync(migrations)) {
+      if (name === '1708_comment_source_erasure.sql') continue;
+      cpSync(join(migrations, name), join(prior, name));
+    }
+    await migrateContent(pool, prior);
+    const content = new ContentCore(pool);
+    const comments = new ContentComments(pool);
+    const work = workId();
+    const saved = await content.saveDraft({ operationId: `draft-${randomUUID()}`,
+      variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: work,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr' },
+      expectedHead: null, model: 'content-shape-v1', sourceRevision: null, provenance: {},
+      serializedJson: JSON.stringify({ body: sourceText }) });
+    const input = { revisionId: saved.revisionId!, resourceId: work, author: workId(), exact: canary,
+      body: annotation };
+    const created = await comments.create({ ...input, admissionId: randomUUID(), authorityEpoch: '1',
+      scope: `content:comment:${work}`, requestDigest: contentCommentIntentDigest(input) });
+    const id = created.comment.split('/').at(-1)!;
+    await pool.query(readFileSync(join(migrations, '1708_comment_source_erasure.sql'), 'utf8'));
+    const row = (await pool.query<{ exact: string; body: string }>(
+      'SELECT exact, body FROM content.comment WHERE id = $1', [id])).rows[0]!;
+    expect(row.exact).toBe(canary);
+    expect(row.body).toBe(annotation);
+    expect((await pool.query(`SELECT 1 FROM content.schema_migration WHERE version = 1708`)).rowCount).toBe(0);
+  } finally {
+    await source.stop();
+    rmSync(prior, { recursive: true, force: true });
   }
 }, 30_000);

@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { sequenceContentEvents } from '../../../../content/src/event-sequencer.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri, lit } from './activate.ts';
-import { probeContentErasure } from '../erasure/content.ts';
+import { openCommentSourceRevisions, probeContentErasure } from '../erasure/content.ts';
 import { readErasure } from '../erasure/journal.ts';
 import { readRetainedNativeGraphSuppressionProof } from '../erasure/custody.ts';
 import { publicationSupersessionsMatch } from '../erasure/replay-supersessions.ts';
@@ -313,6 +313,46 @@ async function assertErasedRevision(client: PoolClient, ref: GraphContentReferen
   }
   if (await transactionIdentity(relay, 'read committed') !== transaction) {
     throw new ContentRecoveryConflict('retained erasure transaction changed');
+  }
+}
+
+/**
+ * Call only after signed coverage comparison and erasure replay.
+ * assertErasedRevision does not call this: a pre-replay cut may still hold
+ * selectors. Success is the existing tombstone row plus indexed absence of an
+ * open selector. It does not read the cleared-comment population, and an empty
+ * target list is not a completed source erasure.
+ */
+export async function assertReplayedCommentSourcesTerminal(client: Pool | PoolClient,
+  revisionIds: readonly string[], erasureId: string, erasureEpoch: string): Promise<void> {
+  if (!revisionIds.length || revisionIds.length > 64) {
+    throw new ContentRecoveryConflict('comment source terminal check exceeds the retained target bound');
+  }
+  let open: string[];
+  try {
+    open = await openCommentSourceRevisions(client, revisionIds);
+  } catch (error) {
+    throw new ContentRecoveryConflict('comment source terminal check exceeds the retained target bound',
+      { cause: error });
+  }
+  if (open.length) {
+    throw new ContentRecoveryConflict(`erased comment source selectors remain: ${open[0]}`);
+  }
+  const mismatch = (await client.query<{ mismatch: boolean }>(`SELECT EXISTS (
+    SELECT 1 FROM unnest($1::uuid[]) AS wanted(id)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM content.revision_erasure e
+      JOIN content.revision r ON r.id = e.revision_id
+      WHERE e.revision_id = wanted.id
+        AND e.erasure_id = $2::uuid
+        AND e.erasure_epoch = $3::bigint
+        AND r.availability = 'erased'
+        AND r.serialized_bytes IS NULL
+        AND r.body IS NULL
+    )
+  ) AS mismatch`, [revisionIds, erasureId, erasureEpoch])).rows[0];
+  if (mismatch?.mismatch !== false) {
+    throw new ContentRecoveryConflict('comment source terminal does not match the revision tombstone');
   }
 }
 

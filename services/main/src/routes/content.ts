@@ -240,19 +240,22 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         if (exact?.status === 'denied') {
           return problem(404, 'comment_unavailable', 'Comments are unavailable');
         }
-        if (page.comments.length > 0 && page.comments.every(comment => !commentTargetHasSource(comment.target))) {
-          if (exact?.status !== 'erased') {
-            return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
-          }
-          await work.access.assertRecoveryOpen();
-          const payload = { ...page, comments: page.comments };
-          if (Buffer.byteLength(JSON.stringify(payload), 'utf8') > 1_048_576) {
-            return problem(422, 'comment_page_budget_exceeded',
-              'Comment page is too large; request fewer comments');
-          }
-          return Response.json(payload, { headers: { 'cache-control': 'no-store' } });
+        const pageCleared = page.comments.every(comment => !commentTargetHasSource(comment.target));
+        if (page.comments.length > 0 && pageCleared && exact?.status !== 'erased') {
+          return problem(503, 'revision_unavailable', 'Comment source bytes are unavailable');
         }
         if (exact?.status === 'erased') {
+          // An empty continuation is a normal last page once no quote remains.
+          // A quote still stored for this revision keeps the whole page unavailable.
+          if (pageCleared && !await work.comments.hasOpenCommentSource(params.revision)) {
+            await work.access.assertRecoveryOpen();
+            const payload = { ...page, comments: page.comments };
+            if (Buffer.byteLength(JSON.stringify(payload), 'utf8') > 1_048_576) {
+              return problem(422, 'comment_page_budget_exceeded',
+                'Comment page is too large; request fewer comments');
+            }
+            return Response.json(payload, { headers: { 'cache-control': 'no-store' } });
+          }
           return problem(404, 'comment_unavailable', 'Comments are unavailable');
         }
         if (exact?.status !== 'available' || exact.reference.resourceId !== resourceId) {

@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { revisionsWithOpenCommentSource } from '../../../../content/src/comments.ts';
 import { withPreservationFence, type PreservationAccess } from '../public-report/preservation.ts';
 import { graphErasureReceipt } from './graph.ts';
 
@@ -172,18 +173,15 @@ export async function probeContentErasure(content: Pool | PoolClient, erasureId:
       : row.availability === 'available' && !row.erasure_id ? 'available' : 'foreign']));
 }
 
-/** Revisions whose comments still store source selectors. Probe completion is
- * not this check: an erased revision can still hold exact, prefix or suffix. */
+/** Revisions whose comments still store source selectors. One indexed existence
+ * probe per revision, at most the erasure target bound. Probe completion is not
+ * this check: an erased revision can still hold exact, prefix or suffix. */
 export async function openCommentSourceRevisions(content: Pool | PoolClient,
   revisionIds: readonly string[]): Promise<string[]> {
-  if (revisionIds.length > 256) throw new ContentErasureInvalid('Content erasure probe is too large');
-  if (!revisionIds.length) return [];
-  const rows = (await content.query<{ revision_id: string }>(`SELECT DISTINCT revision_id::text
-    AS revision_id FROM content.comment
-    WHERE revision_id = ANY($1::uuid[])
-      AND (exact IS NOT NULL OR prefix IS NOT NULL OR suffix IS NOT NULL)
-    ORDER BY revision_id`, [revisionIds])).rows;
-  return rows.map(row => row.revision_id);
+  if (revisionIds.length > MAX_CONTENT_ERASURE_TARGETS) {
+    throw new ContentErasureInvalid('Content erasure probe is too large');
+  }
+  return revisionsWithOpenCommentSource(content, revisionIds);
 }
 
 /** The owning resource of journaled revisions; a completion retry rebuilds its Access scope. */

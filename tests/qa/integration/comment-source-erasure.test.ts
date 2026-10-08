@@ -78,6 +78,7 @@ test('journal replay clears restored comment quotes and the comment API does not
     const erasureId = randomUUID();
     expect(await applyContentErasure(pool, { preservationAccess: access, erasureId, erasureEpoch: '2',
       resourceId: work, revisionIds: [saved.revisionId!] })).toEqual({ applied: 1 });
+    // Component only: this graph answers every ASK, and access is a stub.
     const graph = new OpenGraph();
     const app = createMainApp(graph, { environment: { fuseki: graph, objectDirectory: state,
       lineage: { dataEpoch: 'epoch', routingEpoch: '1' } },
@@ -91,6 +92,8 @@ test('journal replay clears restored comment quotes and the comment API does not
       { headers: { authorization: 'Bearer reader' } }));
     expect(response.status).toBe(200);
     expect(await response.text()).not.toContain(canary);
+    // Negative component only: replica role skips triggers. It is not a backup,
+    // a retained journal, or a signed coverage replay.
     await pool.query('BEGIN');
     await pool.query(`SET LOCAL session_replication_role = replica`);
     await pool.query(`UPDATE content.comment SET exact = $2, prefix = 'Opening paragraph', suffix = 'Closing'

@@ -13,7 +13,8 @@ import { accountCredentialsPresent } from './account.ts';
 import { postponeHeldMaterial } from '../public-report/preservation.ts';
 import { assertRetainedAuthorityCoverage, type RetainedAuthorityCoverage } from './authority.ts';
 import { applyContentErasure, ContentErasureGraphRequired, contentErasureResource,
-  ContentErasureStale, probeContentErasure } from './content.ts';
+  ContentErasureStale, openCommentSourceRevisions, probeContentErasure } from './content.ts';
+import { assertReplayedCommentSourcesTerminal } from '../work/content-recovery-coverage.ts';
 import { ErasureUnavailable, readErasure, relayTransaction, sha256 } from './journal.ts';
 import { readGraphErasureProof, type GraphSuppressionProof, type HeldGraphErasureReplay } from './graph.ts';
 import { assertGraphErasure, graphLineageSequence, replayGraphErasure } from './replay-graph.ts';
@@ -140,10 +141,13 @@ export async function verifyErasure(relay: Pool, owners: { content?: Pool; accou
     }
   } else {
     if (!owners.content) throw new ErasureUnavailable('Content owner is required');
-    const probes = await probeContentErasure(owners.content, erasureId, report.targets.map(target => target.ref));
+    const targetRefs = report.targets.map(target => target.ref);
+    const probes = await probeContentErasure(owners.content, erasureId, targetRefs);
+    const openSources = new Set(await openCommentSourceRevisions(owners.content, targetRefs));
     for (const target of report.targets) {
       items.push({ owner: 'content', kind: 'revision', ref: target.ref,
-        disposition: probes.get(target.ref) === 'erased' ? 'erased' : 'conflict' });
+        disposition: probes.get(target.ref) === 'erased' && !openSources.has(target.ref)
+          ? 'erased' : 'conflict' });
     }
   }
   for (const disposition of report.dispositions) {
@@ -567,11 +571,17 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
         continue;
       }
       const probes = await probeContentErasure(restored.content, entry.id, entry.refs);
-      const available = entry.refs.filter(ref => probes.get(ref) === 'available');
-      if (available.length && await postponeHeldMaterial(accessClient,
-        await contentErasureResource(restored.content, available), entry.id)) {
-        for (const ref of entry.refs) content.push({ owner: 'content', kind: 'revision', ref,
-          disposition: ['erased', 'absent'].includes(probes.get(ref) ?? '') ? 'erased' : 'conflict' });
+      const openSources = new Set(await openCommentSourceRevisions(restored.content, entry.refs));
+      const replayIds = entry.refs.filter(ref => probes.get(ref) === 'available'
+        || (probes.get(ref) === 'erased' && openSources.has(ref)));
+      if (replayIds.length && await postponeHeldMaterial(accessClient,
+        await contentErasureResource(restored.content, replayIds), entry.id)) {
+        for (const ref of entry.refs) {
+          const open = openSources.has(ref);
+          content.push({ owner: 'content', kind: 'revision', ref,
+            disposition: ['erased', 'absent'].includes(probes.get(ref) ?? '') && !open
+              ? 'erased' : 'conflict' });
+        }
         if (restored.graph) graph.push({ owner: 'graph', kind: 'erasure', ref: entry.id, disposition: 'conflict' });
         continue;
       }
@@ -594,11 +604,11 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
         graph.push({ owner: 'graph', kind: 'erasure', ref: entry.id, disposition });
       }
       let replayed = false;
-      if (available.length && replayAllowed) {
+      if (replayIds.length && replayAllowed) {
         try {
           await applyContentErasure(restored.content, { erasureId: entry.id, erasureEpoch: entry.epoch,
-            resourceId: await contentErasureResource(restored.content, available),
-            revisionIds: available, preservationAccess: accessClient, ...(graphProof ? { graphProof } : {}) });
+            resourceId: await contentErasureResource(restored.content, replayIds),
+            revisionIds: replayIds, preservationAccess: accessClient, ...(graphProof ? { graphProof } : {}) });
           replayed = true;
         } catch (error) {
           if (!(error instanceof ContentErasureGraphRequired || error instanceof ContentErasureStale)) throw error;
@@ -606,9 +616,10 @@ export async function reconcileRestoredErasures(relay: Pool, restored: RestoredO
       }
       for (const ref of entry.refs) {
         const probe = probes.get(ref);
+        const open = openSources.has(ref);
         content.push({ owner: 'content', kind: 'revision', ref,
-          disposition: probe === 'erased' || probe === 'absent' ? 'erased'
-            : probe === 'available' && replayed ? 'replayed' : 'conflict' });
+          disposition: (probe === 'erased' || probe === 'absent') && !open ? 'erased'
+            : (probe === 'available' || open) && replayed ? 'replayed' : 'conflict' });
       }
       if (!await publicationSupersessionsMatch(restored.content, entry.refs,
         entry.id, entry.epoch, graphProof)) {
@@ -789,6 +800,10 @@ async function assertRestoredErasuresCurrent(relay: PoolClient, restored: Restor
       const probes = await probeContentErasure(restored.content, entry.id, entry.refs);
       if (entry.refs.some(ref => !['erased', 'absent'].includes(probes.get(ref) ?? 'foreign'))) {
         throw new ErasureRestoreHold('restored Content still exposes an erased revision');
+      }
+      const erasedRefs = entry.refs.filter(ref => probes.get(ref) === 'erased');
+      if (erasedRefs.length) {
+        await assertReplayedCommentSourcesTerminal(restored.content, erasedRefs, entry.id, entry.epoch);
       }
       let graphProof: GraphSuppressionProof | null = null;
       if (restored.graph) {

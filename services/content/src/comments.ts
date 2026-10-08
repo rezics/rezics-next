@@ -182,6 +182,22 @@ export function resolveParagraphSelector(
   };
 }
 
+/** Indexed existence of a remaining quote, at most one probe per revision. */
+export async function revisionsWithOpenCommentSource(pool: Pool | PoolClient,
+  revisionIds: readonly string[]): Promise<string[]> {
+  if (revisionIds.length > 64) throw new ContentCommentInvalid('comment source check is too large');
+  if (!revisionIds.length) return [];
+  const rows = (await pool.query<{ revision_id: string }>(`SELECT wanted.id::text AS revision_id
+    FROM unnest($1::uuid[]) AS wanted(id)
+    WHERE EXISTS (
+      SELECT 1 FROM content.comment c
+      WHERE c.revision_id = wanted.id
+        AND (c.exact IS NOT NULL OR c.prefix IS NOT NULL OR c.suffix IS NOT NULL)
+    )
+    ORDER BY wanted.id`, [revisionIds])).rows;
+  return rows.map(row => row.revision_id);
+}
+
 /** A cleared source anchor has no selector. Callers must not rebuild the quote. */
 export function commentTargetHasSource(
   target: ContentCommentTarget,
@@ -383,6 +399,11 @@ export class ContentComments {
       prefix,
       suffix,
     };
+  }
+
+  /** One revision's open-source probe. An empty page is not proof the quotes are gone. */
+  hasOpenCommentSource(revisionId: string): Promise<boolean> {
+    return revisionsWithOpenCommentSource(this.pool, [revisionId]).then(open => open.length > 0);
   }
 
   async read(commentId: string): Promise<ContentComment | null> {
