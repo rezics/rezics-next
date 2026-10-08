@@ -25,9 +25,6 @@ export const LIBRARY_IMPORT_BODY_BYTES = FILE_IMPORT_COST.bytes+16384;
 const IMPORT_TRANSFER_MS = 30_000;
 class LibraryImportTooLarge extends Error {}
 class LibraryImportTimedOut extends Error {}
-class LibraryImportIntakeRefused extends Error {
-  constructor(readonly response: Response) { super('Library import intake refused'); }
-}
 function cancelImportBody(request: Request) {
   if (request.body && !request.body.locked) void request.body.cancel().catch(() => undefined);
 }
@@ -142,6 +139,7 @@ function failure(error: unknown): Response {
 export function libraryImportsRoutes(deps: MainWorkDependencies) {
   const worker=deps.libraryFiles && deps.libraryImport ? getLibraryImportApplyWorker(deps.libraryFiles,deps.libraryImport) : null;
   const intakePrincipals = new WeakMap<Request,VerifiedAccountAssertion>();
+  const intakes = new WeakMap<Request,unknown>();
   async function own(request: Request, agent: string, write = false, verified?: VerifiedAccountAssertion) {
     const key = request.headers.get('idempotency-key') ?? '';
     if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(key)) throw new ReaderImportInvalid('A valid Idempotency-Key is required');
@@ -152,6 +150,22 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
   }
   return new Elysia()
     .cleanup(async () => { await worker?.stop(); })
+    // Preserve the authored request schema while supplying its body only after
+    // bounded intake. Global upload-budget admission then precedes the
+    // handler's actor check and every format adapter (including CSV preview).
+    // A refusal is returned here rather than thrown: an application-level error
+    // hook would otherwise answer it before this route's own could.
+    .request(async ({ request }) => {
+      if (request.method !== 'POST' || new URL(request.url).pathname !== base) return;
+      try {
+        checkImportLength(request);
+        intakes.set(request,await readLibraryImportBody(request,IMPORT_TRANSFER_MS,async () => {
+          const principal = await deps.account.verify(request,['work:read','library:write']);
+          intakePrincipals.set(request,principal);
+        }));
+      } catch (error) { return failure(error); }
+      finally { cancelImportBody(request); }
+    })
     .delete(`${base}/:id`, { params: t.Object({ id: readUuid }),
       query: t.Object({ actingSubject: readId },closed),response: { 200: t.Object({ deleted: t.Literal(true) }),...errors },
     },async ({ request,params,query }) => {
@@ -165,21 +179,10 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
       format: t.Union([t.Literal('goodreads'),t.Literal('storygraph'),t.Literal('generic-csv'),t.Literal('vndb'),t.Literal('mal'),t.Literal('rezics')]),
       file: t.String({ maxLength: FILE_IMPORT_COST.bytes }),mapping: t.Optional(csvMapping) },closed),
       parse: 'none',
-      // Preserve the authored request schema while supplying its body only
-      // after bounded intake. Global upload-budget admission then precedes the
-      // handler's actor check and every format adapter (including CSV preview).
-      transform: async context => {
-        try {
-          checkImportLength(context.request);
-          context.body = await readLibraryImportBody(context.request,IMPORT_TRANSFER_MS,async () => {
-            const principal = await deps.account.verify(context.request,['work:read','library:write']);
-            intakePrincipals.set(context.request,principal);
-          }) as typeof context.body;
-        } catch (error) { throw new LibraryImportIntakeRefused(failure(error)); }
-        finally { cancelImportBody(context.request); }
-      },
+      // The bounded intake runs in the request phase (see above), so the body
+      // reaches validation already read and Account-verified.
+      transform: context => { context.body = intakes.get(context.request) as typeof context.body; },
       error: ({ error }) => {
-        if (error instanceof LibraryImportIntakeRefused) return error.response;
         if (error instanceof ValidationError) return problem(400,'invalid_request','Request does not match the Work contract');
       },
       response: { 201: t.Object({ id: readUuid,total: t.Integer({ minimum: 1,maximum: 5000 }) }),

@@ -226,8 +226,19 @@ test('library consent fences personal owners while read consent retains every re
     const importPath = `/v1/me/library-imports/${upload.id}`;
     expect(await write('PUT', `${importPath}/rows/0`, { ...own, expectedVersion: 1, choice: 'private' }))
       .toMatchObject({ resolved: true });
-    expect(await write('POST', `${importPath}/apply`, { ...own, context: null, language: 'en' }))
-      .toMatchObject({ completed: 1, issues: 0, pending: false });
+    // Apply accepts the job (202) and finishes in the background; the final
+    // progress is read back through the same personal API.
+    expect(await write('POST', `${importPath}/apply`, { ...own, context: null, language: 'en' }, 202))
+      .toMatchObject({ total: 1, pending: true });
+    const applied = async () => {
+      const deadline = Date.now() + 30_000;
+      for (;;) {
+        const progress = await json<{ state: string }>(await call('GET', `${importPath}/apply?actingSubject=${encoded}`));
+        if (progress.state !== 'pending' || Date.now() > deadline) return progress;
+        await Bun.sleep(200);
+      }
+    };
+    expect(await applied()).toMatchObject({ completed: 1, issues: 0, pending: false });
     await denied('POST', `${importPath}/rows/0/adoptions`, { ...own, workId: 'OL45804W' });
 
     // An unmatched retained row gets its read view without persisting a match
