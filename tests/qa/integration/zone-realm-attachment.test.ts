@@ -403,5 +403,15 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     expect(seen).toEqual(thousand.map(item => item.zone));
     expect(new Set(seen).size).toBe(seen.length);
     expect(seen).not.toContain(bulkDecoy);
+
+    const opened = await listed(1);
+    const openedPage = opened.body as { next: string | null };
+    expect(openedPage.next).toMatch(/^v1:https:\/\/rezics\.com\/id\//);
+    await stack.accessPool.query(`UPDATE access.permission_grant SET active = false
+      WHERE scope_id = $1 AND recipient_subject = $2`, [`governance:realm:${realm.realm}`, a.steward]);
+    const lost = await call('GET', `${listPath(realm.realm, a.steward, 1)}&after=${encodeURIComponent(openedPage.next!)}`,
+      undefined, home.author.token);
+    expect(lost.status).toBe(404);
+    expect(await lost.json()).toEqual(absent.body);
   } finally { await home.stop(); }
 }, 240_000);
