@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { publicWork } from './public-patterns.ts';
@@ -101,9 +102,9 @@ export class SerialStatisticsProjection {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = withWorkerTelemetry('main.serial.projection', () => this.tick(), count => ({
+      this.running = runWorkerTick('main.serial.projection', () => withWorkerTelemetry('main.serial.projection', () => this.tick(), count => ({
         outcome: count ? 'worked' : 'idle', processed: count, unit: 'batch',
-      }))
+      })))
         .catch((error) => {
           logWorkerFault('main.serial.projection', error);
         })

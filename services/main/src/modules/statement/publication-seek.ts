@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { lockAccessKey } from '../access/scope-gates.ts';
 import { WorkReadUnavailable } from '../work/read-session.ts';
 import type { StatementSeekCandidate } from './seek.ts';
@@ -101,6 +102,12 @@ export class StatementPublicationSeek {
   private async transaction<T>(basis: StatementPublicationBasis, write: boolean,
     operation: (client: PoolClient) => Promise<T>): Promise<T> {
     validateBasis(basis);
+    // connect() would otherwise leave its hold on the Statement seek tick that
+    // called this step, and on every worker that continues in that context.
+    return runWorkerTick('statement-publication-seek', () => this.transact(basis, write, operation));
+  }
+  private async transact<T>(basis: StatementPublicationBasis, write: boolean,
+    operation: (client: PoolClient) => Promise<T>): Promise<T> {
     const client = await this.pool.connect();
     try {
       // FOR SHARE keeps the existing recovery fence stable through this bounded read.

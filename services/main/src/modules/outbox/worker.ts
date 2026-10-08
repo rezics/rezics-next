@@ -1,6 +1,8 @@
 import { RelayEventBlocked } from './relay.ts';
+import { runWorkerTick } from '../../worker-tick.ts';
 
 export const RELAY_RETRY_COST = { initialMs: 500, maximumMs: 30_000 } as const;
+const TICK_NAME = /^[A-Za-z][\w.:-]{0,80}$/;
 
 /** The durable checkpoint makes retries safe, including failure after delivery. */
 export async function runMainRelay(once: () => Promise<boolean>, running: () => boolean, intervalMs: number,
@@ -9,10 +11,11 @@ export async function runMainRelay(once: () => Promise<boolean>, running: () => 
   const sleep = options.sleep ?? Bun.sleep;
   const random = options.random ?? Math.random;
   const log = options.log ?? console.error;
+  const tick = options.consumer && TICK_NAME.test(options.consumer) ? options.consumer : 'main.relay';
   let failures = 0;
   while (running()) {
     try {
-      const delivered = await once();
+      const delivered = await runWorkerTick(tick, once);
       failures = 0;
       if (!delivered && running()) await sleep(intervalMs);
     } catch (error) {

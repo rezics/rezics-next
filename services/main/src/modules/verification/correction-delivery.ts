@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { logWorkerFault } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { NotificationStore, type EnqueuedItem } from '../notification/store.ts';
 import type { NotificationSubjectReader } from '../notification/dispatcher.ts';
 import { nativeId, type VerificationStore } from './store.ts';
@@ -51,9 +52,9 @@ export class VerificationCorrectionWorker {
     if (this.timer) throw new Error('correction worker is already started');
     const poll = () => {
       if (this.running) return;
-      this.running = withWorkerTelemetry('main.verification.correction', () => this.publisher.runOnce(this.owner), result => ({
+      this.running = runWorkerTick('main.verification.correction', () => withWorkerTelemetry('main.verification.correction', () => this.publisher.runOnce(this.owner), result => ({
         outcome: result.pages ? 'worked' : 'idle', processed: result.recipients, unit: 'recipient',
-      })).then(() => undefined)
+      }))).then(() => undefined)
         .catch(error => { logWorkerFault('main.verification.correction', error); })
         .finally(() => { this.running = null; });
     };

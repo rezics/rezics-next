@@ -1,6 +1,7 @@
 import { NotificationUnavailable } from './store.ts';
 import { logWorkerFault } from '@rezics/observability/log';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { NotificationDispatcher, DISPATCH_LIMITS } from './dispatcher.ts';
 
 /** Periodic bounded runner; database rows remain the durable schedule. */
@@ -26,7 +27,7 @@ export class NotificationDeliveryWorker {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = withWorkerTelemetry('main.notification.delivery', () => this.tick()).catch(error => {
+      this.running = runWorkerTick('main.notification.delivery', () => withWorkerTelemetry('main.notification.delivery', () => this.tick())).catch(error => {
         if (!(error instanceof NotificationUnavailable)) {
           logWorkerFault('main.notification.delivery', error);
         }

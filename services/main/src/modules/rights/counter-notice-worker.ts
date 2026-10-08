@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { GovernanceUnavailable, type GovernanceStore } from '../governance/store.ts';
 import { requireAccessOpen } from '../notification/store.ts';
 import { COUNTER_NOTICE_COST, type CounterDeclaration } from './counter-notice.ts';
@@ -202,8 +203,8 @@ export class RightsCounterNoticeWorker {
     if (this.timer) throw new Error('Rights counter-notice worker already started');
     const poll = () => {
       if (this.running) return;
-      this.running = this.notices
-        .runPage()
+      this.running = runWorkerTick('main.rights.counter-notice', () => this.notices
+        .runPage())
         .then((result) => {
           if (result.deferred)
             console.warn('Rights counter-notice work deferred:', result.deferred);

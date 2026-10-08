@@ -1,6 +1,7 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { logWorkerFault } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { standingContextPattern } from '../rating/contexts.ts';
 import {
   digest,
@@ -376,7 +377,7 @@ export class DiscoveryRefreshWorker {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = withWorkerTelemetry(
+      this.running = runWorkerTick('main.discovery.refresh', () => withWorkerTelemetry(
         'main.discovery.refresh',
         () => this.tick(),
         (outcome) => ({
@@ -390,7 +391,7 @@ export class DiscoveryRefreshWorker {
                 ? 'worked'
                 : outcome,
         }),
-      )
+      ))
         .catch((error) => {
           logWorkerFault('main.discovery.refresh', error);
         })

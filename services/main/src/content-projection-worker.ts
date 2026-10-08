@@ -1,6 +1,7 @@
 import type { ContentProjectionResult } from './modules/content-publication/relay.ts';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { logWorkerFault } from '@rezics/observability/log';
+import { runWorkerTick } from './worker-tick.ts';
 
 function waitForPoll(intervalMs: number, signal: AbortSignal): Promise<void> {
   if (signal.aborted) return Promise.resolve();
@@ -28,7 +29,9 @@ export class ContentProjectionWorker {
     }
   }
 
-  pollOnce(): Promise<ContentProjectionResult | null> { return this.poll(); }
+  pollOnce(): Promise<ContentProjectionResult | null> {
+    return runWorkerTick('main.content.projection', () => this.poll());
+  }
 
   start(): void {
     if (this.task || this.stopSignal.signal.aborted) throw new Error('Content projection worker already started or stopped');

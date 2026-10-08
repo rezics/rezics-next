@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
+import { runWorkerTick } from '../../worker-tick.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { workRead, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
 import { FEED_COST } from './contract.ts';
@@ -63,9 +64,9 @@ export class FeedRefreshWorker {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = withWorkerTelemetry('main.feed.refresh', () => this.tick(), outcome => ({
+      this.running = runWorkerTick('main.feed.refresh', () => withWorkerTelemetry('main.feed.refresh', () => this.tick(), outcome => ({
         outcome: outcome === 'relay-behind' ? 'deferred' : outcome === 'advanced' ? 'worked' : 'current',
-      })).catch(error => {
+      }))).catch(error => {
         if (!(error instanceof WorkReadMoved)) logWorkerFault('main.feed.refresh', error);
       }).finally(() => { this.running = undefined; });
     }, FEED_COST.intervalMs);

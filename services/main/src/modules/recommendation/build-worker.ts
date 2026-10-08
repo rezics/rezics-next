@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { RecommendationNotReady, RecommendationStale, RecommendationUnavailable }
   from './derived-generation.ts';
 import { RankingGenerations } from './ranking.ts';
@@ -67,7 +68,7 @@ export class RankingBuildWorker {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = withWorkerTelemetry('main.ranking.build', () => this.tick()).catch(error => {
+      this.running = runWorkerTick('main.ranking.build', () => withWorkerTelemetry('main.ranking.build', () => this.tick())).catch(error => {
         logWorkerFault('main.ranking.build', error);
       }).finally(() => { this.running = undefined; });
     }, this.intervalMs);

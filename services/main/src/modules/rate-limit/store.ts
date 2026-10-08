@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
 import type { Pool } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
+import { runWorkerTick } from '../../worker-tick.ts';
 import type { VerifiedAccountAssertion } from '../account/verify-assertion.ts';
 import type { Budget, PrincipalClass, RateLimitFamily } from './budgets.ts';
 
@@ -151,7 +152,7 @@ export class PostgresRateLimitStore implements RateLimitStore {
     if (this.expiryTimer) return;
     const tick = () => {
       if (this.expiryPending) return;
-      this.expiryPending = this.sweepExpired().then(() => undefined)
+      this.expiryPending = runWorkerTick('main.rate-limit.expiry', () => this.sweepExpired()).then(() => undefined)
         .catch(error => { logWorkerFault('main.rate-limit.expiry', error); })
         .finally(() => { this.expiryPending = undefined; });
     };

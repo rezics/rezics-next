@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { WorkReadUnavailable, type ReadPosition } from '../work/read-session.ts';
 
@@ -29,10 +30,10 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     if (this.timer) return;
     this.timer = setInterval(() => {
       if (this.running) return;
-      this.running = withWorkerTelemetry<number | void>('main.zone-browse.projection', async () => this.ready ? this.catchUp() : this.backfill(), count => ({
+      this.running = runWorkerTick('main.zone-browse.projection', () => withWorkerTelemetry<number | void>('main.zone-browse.projection', async () => this.ready ? this.catchUp() : this.backfill(), count => ({
         outcome: count === undefined ? 'completed' : count ? 'worked' : 'idle',
         ...(count === undefined ? {} : { processed: count, unit: 'event' as const }),
-      }))
+      })))
         .catch(error => { logWorkerFault('main.zone-browse.projection', error); })
         .finally(() => { this.running = undefined; });
     }, ZONE_BROWSE_PROJECTION_COST.pollMs);

@@ -1,5 +1,6 @@
 import { setTimeout, clearTimeout } from 'node:timers';
 import type { Pool, PoolClient } from 'pg';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { readCompositionHeader, type CompositionHeader } from '../structure/graph.ts';
 import { structureObjects } from '../structure/change.ts';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
@@ -29,7 +30,7 @@ export class ProgressOrderProjection {
   start() {
     const tick = async () => {
       if (this.stopped || this.pool.ending || this.pool.ended) return;
-      try { await this.step(); }
+      try { await runWorkerTick('main.progress-order.projection', () => this.step()); }
       catch { this.pending = undefined; } // A refused basis stays unavailable and retries on the next scope cycle.
       if (!this.stopped && !this.pool.ending && !this.pool.ended) {
         this.timer = setTimeout(() => { void tick(); }, 100);

@@ -1,3 +1,4 @@
+import { runWorkerTick } from '../../worker-tick.ts';
 import { readEventObservationReceipt, sealEventObservationAdmission } from './observation.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -130,6 +131,12 @@ export class EventTemporalProjection {
     private readonly env: WorkActivationEnvironment) {}
 
   async tick(): Promise<number> {
+    // connect() publishes its hold on the caller's async resource. This tick
+    // keeps that hold off the content projection loop and every later worker.
+    return runWorkerTick('event-temporal-projection', () => this.advance());
+  }
+
+  private async advance(): Promise<number> {
     const client = await this.access.connect();
     try {
       await client.query('BEGIN');

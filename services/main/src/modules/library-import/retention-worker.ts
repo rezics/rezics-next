@@ -1,6 +1,7 @@
 import type { Pool } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { expireLibraryUploads, eraseLibraryImportsForPrincipals } from './privacy.ts';
 import { pruneOrderedReadChanges } from '../safety-queue/retention.ts';
 import { LibraryImportJobStore } from './job-store.ts';
@@ -38,7 +39,7 @@ export class LibraryImportRetentionWorker {
   }
   private async run() {
     while (!this.controller.signal.aborted) {
-      try { await withWorkerTelemetry('main.library-import.retention', () => this.poll()); } catch (error) { logWorkerFault('main.library-import.retention', error); }
+      try { await runWorkerTick('main.library-import.retention', () => withWorkerTelemetry('main.library-import.retention', () => this.poll())); } catch (error) { logWorkerFault('main.library-import.retention', error); }
       if (this.controller.signal.aborted) break;
       await new Promise<void>(resolve => {
         const finish = () => { clearTimeout(timer);this.controller.signal.removeEventListener('abort',finish);resolve(); };

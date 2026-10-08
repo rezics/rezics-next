@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
+import { runWorkerTick } from '../../worker-tick.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import type { NotificationEvent, NotificationStore } from '../notification/store.ts';
@@ -587,7 +588,7 @@ export class NotificationProducerWorker {
     if (this.timer) throw new Error('notification producer worker is already started');
     const poll = () => {
       if (this.running) return;
-      this.running = withWorkerTelemetry('main.notification.producer', async () => {
+      this.running = runWorkerTick('main.notification.producer', () => withWorkerTelemetry('main.notification.producer', async () => {
         await this.producer.observeLag().catch(() => {
           console.warn('Horizon lag observation unavailable');
           recordWorkerOutcome({ outcome: 'deferred' });
@@ -599,7 +600,7 @@ export class NotificationProducerWorker {
         try { matched = await this.producer.runSavedViewsRelayOnce(); }
         catch (error) { logWorkerFault('main.notification.saved-views', error); recordWorkerOutcome({ outcome: 'deferred' }); }
         return access + relay + matched;
-      }, count => ({ outcome: count ? 'worked' : 'idle', processed: count, unit: 'item' }))
+      }, count => ({ outcome: count ? 'worked' : 'idle', processed: count, unit: 'item' })))
         .then(() => undefined).catch(error => { logWorkerFault('main.notification.producer', error); })
         .finally(() => { this.running = null; });
     };

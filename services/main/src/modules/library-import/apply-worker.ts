@@ -1,5 +1,6 @@
 import { logWorkerFault } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { applyLibraryFile } from './apply.ts';
 import type { LibraryFileStore, ApplyIntent } from './file-store.ts';
 import { ImportJobLeaseLost } from './job-store.ts';
@@ -27,17 +28,20 @@ export class LibraryImportApplyWorker {
     const watchdog=setInterval(() => {
       if (checking) return;
       checking=true;
-      void this.files.jobs.status(agent,id).then(job => {
+      void runWorkerTick('main.library-import.apply-lease', () => this.files.jobs.status(agent,id)).then(job => {
         if (job?.state!=='pending' || job.lease_token!==token) controller.abort(new ImportJobLeaseLost('Import worker lease expired'));
       }).catch(error => logWorkerFault('main.library-import.apply',error)).finally(() => { checking=false; });
     },1000);
     try {
       while (!controller.signal.aborted) {
-        await this.files.jobs.renew(agent,id,token);
-        const result=await abortable(withImportJobProgress(() => this.files.jobs.progress(agent,id,token),
-          () => applyLibraryFile(this.files,this.imports,request,agent,id,intent,token)),controller.signal);
-        if (result.completed===result.total) { await this.files.jobs.finish(agent,id,token,'completed');return; }
-        if (result.state!=='pending') return;
+        const finished = await runWorkerTick('main.library-import.apply', async () => {
+          await this.files.jobs.renew(agent,id,token);
+          const result=await abortable(withImportJobProgress(() => this.files.jobs.progress(agent,id,token),
+            () => applyLibraryFile(this.files,this.imports,request,agent,id,intent,token)),controller.signal);
+          if (result.completed===result.total) { await this.files.jobs.finish(agent,id,token,'completed');return true; }
+          return result.state!=='pending';
+        });
+        if (finished) return;
         await abortable(new Promise<void>(resolve => setTimeout(resolve,1000)),controller.signal);
       }
     } catch (error) {
