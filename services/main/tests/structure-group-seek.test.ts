@@ -48,6 +48,11 @@ async function retainedGroupFixture() {
   const digest = await objects.put(encode(manifest));
   const graph = { query: async (query: string) => {
     const uri = (value: string) => ({ type: 'uri', value });
+    if (query.includes('SELECT ?manifest ?component ?generation ?count')) return { results: { bindings: [{
+      manifest: uri(`urn:rezics:sha256:${digest}`), component: uri(manifest.structure),
+      generation: uri(manifest.generation), count: { type: 'literal', value: String(manifest.placementCount),
+        datatype: 'http://www.w3.org/2001/XMLSchema#integer' },
+    }] } };
     if (query.includes('SELECT ?graph ?subject ?manifest')) return { results: { bindings: [{
       graph: uri(GRAPHS.revisions), subject: uri(id(4)), manifest: uri(`urn:rezics:sha256:${digest}`),
     }] } };
