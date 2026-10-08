@@ -82,6 +82,8 @@ CREATE FUNCTION verification.evidence_item_source_guard() RETURNS trigger
 LANGUAGE plpgsql
 SET search_path = pg_catalog
 AS $$
+DECLARE
+  revision_availability text;
 BEGIN
   IF TG_OP = 'DELETE' THEN
     RAISE EXCEPTION 'immutable verification record' USING ERRCODE = '23514';
@@ -91,12 +93,14 @@ BEGIN
       RAISE EXCEPTION 'immutable verification record' USING ERRCODE = '23514';
     END IF;
     IF NEW.content_revision_id IS NOT NULL
-       AND verification.evidence_selector_has_source(NEW.selector)
-       AND EXISTS (
-         SELECT 1 FROM content.revision
-         WHERE id = NEW.content_revision_id AND availability = 'erased'
-       ) THEN
-      RAISE EXCEPTION 'erased revision cannot gain source text' USING ERRCODE = '23514';
+       AND verification.evidence_selector_has_source(NEW.selector) THEN
+      -- The share lock waits for an erasure holding the revision, then reads its committed
+      -- state, so a source-bearing row cannot commit behind the erasure's update.
+      SELECT availability INTO revision_availability FROM content.revision
+        WHERE id = NEW.content_revision_id FOR SHARE;
+      IF revision_availability = 'erased' THEN
+        RAISE EXCEPTION 'erased revision cannot gain source text' USING ERRCODE = '23514';
+      END IF;
     END IF;
     RETURN NEW;
   END IF;
@@ -149,6 +153,12 @@ CREATE INDEX evidence_item_open_source ON verification.evidence_item (content_re
     AND NOT source_terminal
     AND verification.evidence_selector_has_source(selector);
 
+-- Empty unless a terminal row regained source text outside the guard; keeps that repair indexed.
+CREATE INDEX evidence_item_terminal_source ON verification.evidence_item (content_revision_id)
+  WHERE content_revision_id IS NOT NULL
+    AND source_terminal
+    AND verification.evidence_selector_has_source(selector);
+
 DO $$
 DECLARE legacy record;
 BEGIN
@@ -171,7 +181,8 @@ ALTER TABLE verification.evidence_item ADD CONSTRAINT evidence_item_selector_bou
 
 -- Clears source text on the locked revisions. The journal arguments are written
 -- onto each changed row; a later call in the same transaction cannot replace them.
--- The revision must already be erased. Callers lock it before a concurrent insert.
+-- The revision must already be erased. The insert guard and the store share-lock the
+-- revision, so a concurrent insert either commits first or sees the erasure.
 CREATE FUNCTION verification.erase_evidence_sources(revision_ids uuid[], erasure uuid, epoch bigint)
 RETURNS integer
 LANGUAGE plpgsql
@@ -179,10 +190,16 @@ SET search_path = pg_catalog
 AS $$
 DECLARE
   updated integer;
+  repaired integer;
 BEGIN
   IF erasure IS NULL OR epoch IS NULL OR epoch < 1 OR revision_ids IS NULL
      OR cardinality(revision_ids) > 256 THEN
     RAISE EXCEPTION 'evidence source erasure journal identity is invalid' USING ERRCODE = '23514';
+  END IF;
+  -- The updates below must see every row a writer committed before it released the
+  -- revision lock; a transaction-long snapshot would not.
+  IF pg_catalog.current_setting('transaction_isolation') <> 'read committed' THEN
+    RAISE EXCEPTION 'evidence source erasure needs read committed' USING ERRCODE = '25000';
   END IF;
   PERFORM 1 FROM content.revision
     WHERE id = ANY (revision_ids)
@@ -203,19 +220,27 @@ BEGIN
     RAISE EXCEPTION 'evidence source erasure journal does not match the revision tombstone'
       USING ERRCODE = '23514';
   END IF;
-  PERFORM 1 FROM verification.evidence_item
-    WHERE content_revision_id = ANY (revision_ids)
-    ORDER BY revision_id, ordinal
-    FOR UPDATE;
+  -- Item rows change only here, so the revision locks serialize every writer and no
+  -- row lock is taken ahead of the update. Each update reads and locks only open rows,
+  -- through evidence_item_open_source and evidence_item_terminal_source.
   UPDATE verification.evidence_item
     SET selector = verification.evidence_selector_retained(selector),
         source_terminal = true,
         source_erasure_id = erasure,
         source_erasure_epoch = epoch
     WHERE content_revision_id = ANY (revision_ids)
+      AND NOT source_terminal
       AND verification.evidence_selector_has_source(selector);
   GET DIAGNOSTICS updated = ROW_COUNT;
-  RETURN updated;
+  UPDATE verification.evidence_item
+    SET selector = verification.evidence_selector_retained(selector),
+        source_erasure_id = erasure,
+        source_erasure_epoch = epoch
+    WHERE content_revision_id = ANY (revision_ids)
+      AND source_terminal
+      AND verification.evidence_selector_has_source(selector);
+  GET DIAGNOSTICS repaired = ROW_COUNT;
+  RETURN updated + repaired;
 END $$;
 
 -- One indexed existence check per requested revision. The journal stores at most
