@@ -43,6 +43,7 @@ function fixture(inventory: readonly ReadingOccurrence[], works: readonly Compos
     occurrence: binding(item.occurrence), parent: binding(item.parent), segmentKey: binding(item.segmentKey),
     orderKey: binding(item.orderKey), role: binding(`${RV}${item.role === 'chapter' ? 'ChapterRole' : item.role === 'part' ? 'PartRole' : 'GroupRole'}`),
     ...(item.target ? { target: binding(item.target) } : {}),
+    ...(item.displayLabel ? { displayLabel: binding(item.displayLabel) } : {}),
     ...(item.labels?.[0] ? { label: { ...binding(item.labels[0].value), 'xml:lang': item.labels[0].language } } : {}) });
   const byOccurrence = new Map(inventory.map(item => [item.occurrence, item]));
   const manifests = new Map<string, string>();
@@ -86,8 +87,12 @@ function fixture(inventory: readonly ReadingOccurrence[], works: readonly Compos
         revision: binding(composed.revision), generation: binding(composed.structure) }] : [{ work: binding(resource) }];
     }
     if (sparql.includes('# reading-position:records')) {
+      // The real records read selects no label or display label: one row per occurrence.
       const values = sparql.match(/VALUES \?occurrence \{([^}]+)}/)![1]!;
-      return inventory.filter(item => values.includes(item.occurrence)).map(row);
+      return inventory.filter(item => values.includes(item.occurrence)).map(item => {
+        const { label: _label, displayLabel: _displayLabel, ...record } = row(item);
+        return record;
+      });
     }
     if (sparql.includes('# reading-position:parent-work')) {
       const target = sparql.match(/schema:item <([^>]+)>/)![1]!;
@@ -102,6 +107,19 @@ function fixture(inventory: readonly ReadingOccurrence[], works: readonly Compos
         const item = byOccurrence.get(occurrence!);
         return item ? [row(item)] : [];
       });
+    }
+    if (sparql.includes('# reading-position:chapter-labels')) {
+      const occurrence = sparql.match(/BIND\(<([^>]+)> AS \?occurrence\)/)?.[1];
+      const item = occurrence ? byOccurrence.get(occurrence) : undefined;
+      if (!item) return [];
+      const labels = item.labels ?? [];
+      const named = (label?: { value: string; language: string }): ReadRow => {
+        const record: ReadRow = {};
+        if (label) record.label = { ...binding(label.value), 'xml:lang': label.language };
+        if (item.displayLabel) record.displayLabel = binding(item.displayLabel);
+        return record;
+      };
+      return labels.length ? labels.map(label => named(label)) : [named()];
     }
     if (sparql.includes('SELECT ?epoch ?sequence ?hold ?r')) {
       const resources = [...sparql.match(/VALUES \?r \{([^}]+)}/)![1]!.matchAll(/<([^>]+)>/g)].map(match => match[1]!);
@@ -326,7 +344,8 @@ test('a record first appears at the chapter it is revealed in, or the first one 
   const hiddenTarget = id();
   const chapters: ReadingOccurrence[] = Array.from({ length: 300 }, (_, index) => ({ occurrence: id(), work, structure, revision,
     parent: structure, segmentKey: 'a', orderKey: key(index + 1), role: 'chapter',
-    target: index + 1 === 100 ? hiddenTarget : 'https://schema.org/DigitalDocument' }));
+    target: index + 1 === 100 ? hiddenTarget : 'https://schema.org/DigitalDocument',
+    labels: [{ value: `Chapter ${index + 1}`, language: 'en' }], displayLabel: `Chapter ${index + 1}` }));
   const at = (chapter: number) => chapters[chapter - 1]!.occurrence;
   const [plain, withheld, spoiler, unplaced, early, late] = [id(), id(), id(), id(), id(), id()];
   const f = fixture(chapters, [{ work, structure, revision }], [
@@ -338,6 +357,12 @@ test('a record first appears at the chapter it is revealed in, or the first one 
   expect(first.status).toBe(200);
   expect(first.body).toMatchObject({ scope: 'first-appearance', resolved: at(250), appearance: { status: 'found', occurrence: at(40) } });
   expect(first.body.items.map((item: ReadingOccurrence) => item.occurrence)).toEqual([at(40)]);
+  expect(first.body.items[0].labels).toEqual([{ value: 'Chapter 40', language: 'en' }]);
+  expect(first.body.items[0].displayLabel).toBe('Chapter 40');
+  const beside = await f.call({ around: at(40) });
+  const earlier = beside.body.items.find((item: ReadingOccurrence) => item.occurrence === at(39));
+  expect(earlier.labels).toEqual([{ value: 'Chapter 39', language: 'en' }]);
+  expect(earlier.displayLabel).toBe('Chapter 39');
   expect((await seen(withheld, at(250))).body.appearance).toEqual({ status: 'found', occurrence: at(101) });
   // A record not yet shown at the reader's position, or not placed in this Work, answers as one that does not exist.
   const ahead = await seen(spoiler, at(250));

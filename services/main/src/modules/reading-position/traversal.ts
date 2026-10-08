@@ -462,11 +462,53 @@ export class ReadingPositionTraversal {
     if (!location) return null;
     const frames = location.frames.map(frame => ({ ...frame }));
     if (await this.seen(location)) {
-      if (location.item.role === 'chapter') return { status: 'found', item: bare(location.item) };
+      if (location.item.role === 'chapter') return { status: 'found', item: await this.labelled(location.item) };
       const child = await this.child(location.item, frames);
       if (child) frames.push(child);
     }
     return this.scan(frames, false);
+  }
+
+  /** The labels and display label a scan-path item carries (`range`, `hydrate`), for one chapter `recordsFor`
+   * already located. That read is one row per occurrence, so it cannot carry the label rows. One query, capped
+   * at the label limit: the cost does not grow with the Work or the chapter's place. */
+  private async labelled(item: ReadingOccurrence): Promise<ReadingOccurrence> {
+    const rows = await this.session.query(`# reading-position:chapter-labels
+      SELECT ?label ?displayLabel WHERE {
+        GRAPH ${current} {
+          BIND(${iri(item.occurrence)} AS ?occurrence)
+          ?occurrence rv:structure ?structure .
+          ?work rv:mainVersion ?main .
+          ?structure a rv:Structure ; rv:structureOf ?main ; rv:structureProfile ?profile ;
+            rv:structureHead ?revision ; rv:selectedGeneration ?generation .
+          FILTER(?profile IN (rv:WorkComposition, rv:BookComposition))
+          ?generation rv:generationState rv:Active .
+          ${placementPattern('?generation')}
+          OPTIONAL { ?placement rv:occurrenceLabel ?label }
+          OPTIONAL { ?placement rv:qualifier/rv:displayLabel ?displayLabel }
+        }
+      } LIMIT ${READING_POSITION_COST.labels}`, READING_POSITION_COST.labels);
+    if (!rows.length) throw new WorkReadUnavailable('Reading placement is unavailable');
+    const named = bare(item);
+    delete named.labels;
+    delete named.displayLabel;
+    for (const row of rows) {
+      if (row.displayLabel) {
+        if (named.displayLabel && named.displayLabel !== row.displayLabel.value) {
+          throw new WorkReadUnavailable('Reading placement is ambiguous');
+        }
+        named.displayLabel = row.displayLabel.value;
+      }
+      if (!row.label) continue;
+      const language = row.label['xml:lang'];
+      if (!language) throw new WorkReadUnavailable('Reading label language is unavailable');
+      named.labels ??= [];
+      if (!named.labels.some(label => label.value === row.label!.value && label.language === language)) {
+        named.labels.push({ value: row.label.value, language });
+      }
+      if (named.labels.length > READING_POSITION_COST.labels) throw new WorkReadUnavailable('Reading labels exceed their cost');
+    }
+    return named;
   }
 
   /** Whether the reader may see this place: every Work on its path is readable and so is what the placement targets. */
