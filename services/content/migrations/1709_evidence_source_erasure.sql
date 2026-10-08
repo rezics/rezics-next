@@ -142,8 +142,12 @@ CREATE UNIQUE INDEX evidence_item_identity ON verification.evidence_item (
   selector
 ) WHERE NOT source_terminal;
 
+-- Source-free coordinates and terminal rows are not open. The predicate is the
+-- indexed test, so an absence does not visit every non-terminal selector.
 CREATE INDEX evidence_item_open_source ON verification.evidence_item (content_revision_id)
-  WHERE content_revision_id IS NOT NULL AND NOT source_terminal;
+  WHERE content_revision_id IS NOT NULL
+    AND NOT source_terminal
+    AND verification.evidence_selector_has_source(selector);
 
 DO $$
 DECLARE legacy record;
@@ -172,14 +176,12 @@ CREATE FUNCTION verification.erase_evidence_sources(revision_ids uuid[], erasure
 RETURNS integer
 LANGUAGE plpgsql
 SET search_path = pg_catalog
-SET lock_timeout = '2s'
-SET statement_timeout = '5s'
 AS $$
 DECLARE
   updated integer;
 BEGIN
   IF erasure IS NULL OR epoch IS NULL OR epoch < 1 OR revision_ids IS NULL
-     OR cardinality(revision_ids) > 64 THEN
+     OR cardinality(revision_ids) > 256 THEN
     RAISE EXCEPTION 'evidence source erasure journal identity is invalid' USING ERRCODE = '23514';
   END IF;
   PERFORM 1 FROM content.revision
@@ -216,15 +218,15 @@ BEGIN
   RETURN updated;
 END $$;
 
--- Bounded probe: one indexed existence check per requested revision, at most 64.
+-- One indexed existence check per requested revision. The journal stores at most
+-- 256 targets; a shorter list is not what keeps the scan bounded.
 CREATE FUNCTION verification.open_evidence_source_revisions(revision_ids uuid[])
 RETURNS TABLE (revision_id uuid)
 LANGUAGE plpgsql STABLE
 SET search_path = pg_catalog
-SET statement_timeout = '5s'
 AS $$
 BEGIN
-  IF revision_ids IS NULL OR cardinality(revision_ids) > 64 THEN
+  IF revision_ids IS NULL OR cardinality(revision_ids) > 256 THEN
     RAISE EXCEPTION 'evidence source probe exceeds its bound' USING ERRCODE = '23514';
   END IF;
   RETURN QUERY

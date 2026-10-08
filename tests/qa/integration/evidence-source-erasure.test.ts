@@ -6,7 +6,11 @@ import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
+import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { VerificationStore } from '../../../services/main/src/modules/verification/store.ts';
+import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
+  graphContentReferences } from '../../../services/main/src/modules/work/content-recovery-coverage.ts';
+import { cloneQaOwnerDatabases } from '../support/fake-delivery.ts';
 
 // A pre-erasure dump is an ordinary backup, not a destroyed original. Restoring
 // it and replaying the same journal entry is what removes the source text.
@@ -111,6 +115,62 @@ test('an original backup keeps source text until the same journal entry is repla
       '-d', database, '--no-owner', '--no-privileges', '-f', after]);
     expect(readFileSync(after, 'utf8')).not.toContain(canary);
     expect(readFileSync(after, 'utf8')).toContain(receiptBefore);
+
+    const runId = Bun.env.REZICS_QA_RUN_ID;
+    const fusekiUrl = Bun.env.FUSEKI_URL;
+    if (!runId || !fusekiUrl) throw new Error('signed catalog comparison requires the qualified native stack');
+    const databases = await cloneQaOwnerDatabases(runId, ['content']);
+    const contentPool = new Pool({ connectionString: databases.urls.content, max: 2 });
+    let snapshot: Pool | undefined;
+    try {
+      await migrateContent(contentPool);
+      const fuseki = new FusekiClient(fusekiUrl);
+      const references = await graphContentReferences(fuseki);
+      const signedRevision = randomUUID();
+      const signedVariant = `urn:rezics:variant:${randomUUID()}`;
+      const signedBytes = Buffer.from(JSON.stringify({ text: canary }));
+      const signedDigest = createHash('sha256').update(signedBytes).digest('hex');
+      await contentPool.query(`INSERT INTO content.variant (id, resource_id, language_kind, direction)
+        VALUES ($1, $2, 'zxx', 'none')`, [signedVariant, `urn:rezics:work:${randomUUID()}`]);
+      await contentPool.query(`INSERT INTO content.revision (id, variant_id, operation_id, format, model, provenance,
+        byte_digest, byte_length, serialized_bytes, body)
+        VALUES ($1, $2, $3, 'rezics-content-json-v1', 'fixture', '{}', $4, $5, $6, $7::jsonb)`,
+      [signedRevision, signedVariant, `op-${signedRevision}`, signedDigest, signedBytes.length, signedBytes,
+        JSON.stringify({ text: canary })]);
+      const signedEvidence = await new VerificationStore(contentPool).recordEvidence(randomUUID(),
+        `signed-${randomUUID()}`, native(), { claimRevision: native(), expectedHead: null, items: [
+          { stance: 'supports', contentRevision: signedRevision,
+            selector: { exact: canary, start: 1, digest }, availability: 'available' }] });
+      const signedId = signedEvidence.evidence.revision.split('/').at(-1)!;
+      const signedCut = await captureContentRecoveryCoverage(contentPool, references);
+      const snapshotUrl = await databases.snapshot('content', () => contentPool.end());
+      snapshot = new Pool({ connectionString: snapshotUrl, max: 2 });
+      await assertContentRecoveryCoverage(snapshot, fuseki, signedCut);
+      const signedErasure = randomUUID();
+      const signedClient = await snapshot.connect();
+      try {
+        await signedClient.query('BEGIN');
+        await signedClient.query(`UPDATE content.revision SET availability = 'erased', serialized_bytes = NULL, body = NULL
+          WHERE id = $1 AND availability = 'available'`, [signedRevision]);
+        await signedClient.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+          VALUES ($1, $2, 9)`, [signedRevision, signedErasure]);
+        await signedClient.query(`SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, 9)`,
+          [[signedRevision], signedErasure]);
+        await signedClient.query('COMMIT');
+      } catch (error) {
+        await signedClient.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      } finally { signedClient.release(); }
+      const signedRead = await new VerificationStore(snapshot).readEvidence(signedId);
+      expect(JSON.stringify(signedRead)).not.toContain(canary);
+      expect(signedRead?.manifestDigest).toBe(signedEvidence.evidence.manifestDigest);
+      await expect(assertContentRecoveryCoverage(snapshot, fuseki, signedCut))
+        .rejects.toThrow('restored Content owner differs from captured cut');
+    } finally {
+      await snapshot?.end();
+      await contentPool.end().catch(() => undefined);
+      await databases.close();
+    }
   } finally {
     await restored?.end();
     await source.stop();

@@ -8,7 +8,6 @@ import { Pool, type PoolClient } from 'pg';
 import { migrateContent } from '../src/migrate.ts';
 import { evidenceDigestKeys, evidenceSourceTextKeys } from '../../main/src/modules/verification/schema.ts';
 import { VerificationInvalid, VerificationStore } from '../../main/src/modules/verification/store.ts';
-import { captureContentRecoveryCoverage } from '../../main/src/modules/work/content-recovery-coverage.ts';
 import { AccessAdmissionRegistry, AdmissionUnavailable, engageAccessRecoveryFence,
   releaseAccessRecoveryFence } from '../../main/src/modules/access/admission.ts';
 import { postponeHeldMaterial, withPreservationFence } from '../../main/src/modules/public-report/preservation.ts';
@@ -301,7 +300,6 @@ test('content-bound source text clears once under the revision journal and canno
     const kept = await store.recordEvidence(principal, randomUUID(), native(), {
       claimRevision, expectedHead: null, items: [{ stance: 'supports', contentRevision: unrelated,
         selector: { exact: otherCanary, start: 2 }, availability: 'available' }] });
-    const beforeCut = await captureContentRecoveryCoverage(pool, []);
     const before = join(source.state, 'before.sql');
     execFileSync('pg_dump', ['-h', '127.0.0.1', '-p', String(source.port), '-U', source.user,
       '-d', 'postgres', '--no-owner', '--no-privileges', '-f', before]);
@@ -315,12 +313,6 @@ test('content-bound source text clears once under the revision journal and canno
     const restored = new Pool({ host: '127.0.0.1', port: source.port, user: source.user,
       database: restoredName, max: 2 });
     try {
-      const restoredCut = await captureContentRecoveryCoverage(restored, []);
-      expect(restoredCut.catalogDigest).toBe(beforeCut.catalogDigest);
-      expect(restoredCut.tables['verification.evidence_set_revision']).toEqual(
-        beforeCut.tables['verification.evidence_set_revision']);
-      expect(restoredCut.tables['verification.evidence_item']).toEqual(
-        beforeCut.tables['verification.evidence_item']);
       const replay = randomUUID();
       const client = await restored.connect();
       try {
@@ -341,12 +333,6 @@ test('content-bound source text clears once under the revision journal and canno
       expect((await restored.query<{ request_digest: string }>(
         `SELECT request_digest FROM verification.receipt WHERE result_id = $1`,
         [evidenceId])).rows[0]?.request_digest).toBe(receiptBefore);
-      const replayedCut = await captureContentRecoveryCoverage(restored, []);
-      expect(replayedCut.catalogDigest).toBe(beforeCut.catalogDigest);
-      expect(replayedCut.tables['verification.evidence_set_revision']).toEqual(
-        beforeCut.tables['verification.evidence_set_revision']);
-      expect(replayedCut.tables['verification.evidence_item']?.digest).not.toBe(
-        beforeCut.tables['verification.evidence_item']?.digest);
     } finally { await restored.end(); }
     const erasureId = randomUUID();
     expect(await erase(pool, cited, erasureId, '7')).toBeGreaterThan(0);
@@ -412,8 +398,14 @@ test('content-bound source text clears once under the revision journal and canno
     expect((await pool.query<{ open: string[] | null }>(
       `SELECT array_agg(revision_id::text) AS open FROM verification.open_evidence_source_revisions($1::uuid[])`,
       [[cited]])).rows[0]?.open).toBeNull();
-    await expect(pool.query(`SELECT verification.open_evidence_source_revisions(
-      ARRAY(SELECT gen_random_uuid() FROM generate_series(1, 65)))`)).rejects.toMatchObject({ code: '23514' });
+    const withinJournal = Array.from({ length: 256 }, () => randomUUID());
+    withinJournal[0] = cited;
+    expect((await pool.query<{ open: string[] | null }>(
+      `SELECT array_agg(revision_id::text) AS open
+       FROM verification.open_evidence_source_revisions($1::uuid[])`, [withinJournal])).rows[0]?.open)
+      .toBeNull();
+    await expect(pool.query(`SELECT verification.open_evidence_source_revisions($1::uuid[])`,
+      [[...withinJournal, randomUUID()]])).rejects.toMatchObject({ code: '23514' });
     const copies = (await pool.query<{ relation: string }>(`SELECT table_schema || '.' || table_name AS relation
       FROM information_schema.columns WHERE column_name = 'selector'
         AND table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY 1`)).rows.map(row => row.relation);
@@ -421,6 +413,121 @@ test('content-bound source text clears once under the revision journal and canno
     expect((await pool.query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns
       WHERE table_schema = 'verification' AND table_name = 'receipt'
         AND column_name IN ('selector', 'request_digest')`)).rows.map(row => row.column_name)).toEqual(['request_digest']);
+
+    const quietRevision = await revision(pool, 'quiet-coordinates');
+    const terminalRevision = await revision(pool, 'terminal-quotes');
+    const openRevision = await revision(pool, 'still-open-quote');
+    const population = await pool.connect();
+    try {
+      await population.query('BEGIN');
+      for (const [contentRevision, source] of [[quietRevision, false], [terminalRevision, true]] as const) {
+        for (let set = 0; set < 16; set++) {
+          const id = randomUUID();
+          const operation = randomUUID();
+          await population.query(`INSERT INTO verification.receipt
+            (id, principal_id, action, idempotency_key, request_digest, outcome, result_id)
+            VALUES ($1, $2, 'evidence.record', $3, $4, 'succeeded', $5)`,
+          [operation, principal, `bulk-${id}`, digest, id]);
+          await population.query(`INSERT INTO verification.evidence_set_revision (id, claim, claim_revision, purpose,
+            predecessor, item_count, manifest_digest, operation_id, principal_id)
+            VALUES ($1, $2, $3, 'challenge', NULL, 32, $4, $5, $6)`,
+          [id, claim, claimRevision, digest, operation, principal]);
+          await population.query(`INSERT INTO verification.evidence_item
+            (revision_id, ordinal, stance, content_revision_id, selector, availability)
+            SELECT $1, g, 'supports', $2,
+              CASE WHEN $3 THEN jsonb_build_object('exact', 'bulk-source', 'start', g)
+                   ELSE jsonb_build_object('start', g) END,
+              'available'
+            FROM generate_series(0, 31) AS g`, [id, contentRevision, source]);
+        }
+      }
+      await population.query('COMMIT');
+    } catch (error) {
+      await population.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally { population.release(); }
+    const populationErasure = randomUUID();
+    expect(await erase(pool, terminalRevision, populationErasure, '13')).toBe(512);
+    const openEvidence = await store.recordEvidence(principal, randomUUID(), native(), {
+      claimRevision, expectedHead: null, items: [{ stance: 'supports', contentRevision: openRevision,
+        selector: { exact: 'still-open-quote', start: 1 }, availability: 'available' }] });
+    await pool.query('ANALYZE verification.evidence_item');
+    const predicate = (await pool.query<{ expression: string }>(`SELECT pg_get_expr(i.indpred, i.indrelid) AS expression
+      FROM pg_index i JOIN pg_class c ON c.oid = i.indexrelid
+      WHERE c.relname = 'evidence_item_open_source'`)).rows[0]?.expression ?? '';
+    expect(predicate).toContain('evidence_selector_has_source');
+    expect(predicate).toContain('source_terminal');
+    const openCount = (await pool.query<{ n: number }>(`SELECT count(*)::int AS n FROM verification.evidence_item
+      WHERE content_revision_id = ANY($1::uuid[]) AND NOT source_terminal
+        AND verification.evidence_selector_has_source(selector)`,
+    [[quietRevision, terminalRevision, openRevision]])).rows[0]!.n;
+    expect(openCount).toBe(1);
+    const planned = await pool.connect();
+    try {
+      await planned.query('BEGIN');
+      await planned.query("SET LOCAL lock_timeout = '2s'");
+      await planned.query("SET LOCAL statement_timeout = '5s'");
+      await planned.query('SET LOCAL enable_seqscan = off');
+      const plan = (await planned.query<Record<string, string>>(`EXPLAIN (ANALYZE, FORMAT TEXT)
+        SELECT i.revision_id FROM verification.evidence_item i
+        WHERE i.content_revision_id = $1 AND NOT i.source_terminal
+          AND verification.evidence_selector_has_source(i.selector)`, [quietRevision])).rows
+        .map(row => row['QUERY PLAN']).join('\n');
+      expect(plan).toContain('evidence_item_open_source');
+      expect(plan).not.toContain('Seq Scan');
+      expect(plan).not.toMatch(/Rows Removed by Filter: [1-9]/);
+      const probed = (await planned.query<{ open: string[] | null }>(
+        `SELECT array_agg(revision_id::text) AS open
+         FROM verification.open_evidence_source_revisions($1::uuid[])`,
+        [[quietRevision, terminalRevision, openRevision]])).rows[0]?.open;
+      expect(probed).toEqual([openRevision]);
+      await planned.query('COMMIT');
+    } finally {
+      await planned.query('ROLLBACK').catch(() => undefined);
+      planned.release();
+    }
+    expect(openEvidence.evidence.items[0]?.selector).toMatchObject({ exact: 'still-open-quote' });
+
+    const deadlineRevision = await revision(pool, 'deadline-source');
+    const deadlineEvidence = await store.recordEvidence(principal, randomUUID(), native(), {
+      claimRevision, expectedHead: null, items: [{ stance: 'supports', contentRevision: deadlineRevision,
+        selector: { exact: 'deadline-source', start: 1 }, availability: 'available' }] });
+    const deadlineId = deadlineEvidence.evidence.revision.split('/').at(-1)!;
+    const heldLock = await pool.connect();
+    const lockWait = await pool.connect();
+    const statementWait = await pool.connect();
+    try {
+      await heldLock.query('BEGIN');
+      await heldLock.query('SELECT id FROM content.revision WHERE id = $1 FOR UPDATE', [deadlineRevision]);
+      await lockWait.query('BEGIN');
+      await lockWait.query("SET LOCAL lock_timeout = '400ms'");
+      await lockWait.query("SET LOCAL statement_timeout = '30s'");
+      const lockStarted = Date.now();
+      await expect(lockWait.query(`SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, 1)`,
+        [[deadlineRevision], randomUUID()])).rejects.toMatchObject({ code: '55P03' });
+      expect(Date.now() - lockStarted).toBeLessThan(1500);
+      await lockWait.query('ROLLBACK');
+      await statementWait.query('BEGIN');
+      await statementWait.query("SET LOCAL lock_timeout = '30s'");
+      await statementWait.query("SET LOCAL statement_timeout = '400ms'");
+      const statementStarted = Date.now();
+      await expect(statementWait.query(`SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, 1)`,
+        [[deadlineRevision], randomUUID()])).rejects.toMatchObject({ code: '57014' });
+      expect(Date.now() - statementStarted).toBeLessThan(1500);
+      await statementWait.query('ROLLBACK');
+    } finally {
+      await lockWait.query('ROLLBACK').catch(() => undefined);
+      await statementWait.query('ROLLBACK').catch(() => undefined);
+      await heldLock.query('ROLLBACK').catch(() => undefined);
+      lockWait.release();
+      statementWait.release();
+      heldLock.release();
+    }
+    expect((await pool.query<{ availability: string; exact: string; source_terminal: boolean }>(
+      `SELECT r.availability, i.selector->>'exact' AS exact, i.source_terminal
+       FROM content.revision r JOIN verification.evidence_item i ON i.content_revision_id = r.id
+       WHERE i.revision_id = $1`, [deadlineId])).rows[0]).toEqual({
+      availability: 'available', exact: 'deadline-source', source_terminal: false });
 
     const twinRevision = await revision(pool, canary);
     const twinErasure = randomUUID();
