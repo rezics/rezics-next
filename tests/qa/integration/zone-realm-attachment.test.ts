@@ -99,6 +99,10 @@ test('a Zone attaches a Realm from another Space only with both authorities, and
     expect(await a.publicRealm(site.zone)).toEqual({ routes: null, presentation: null });
     await publish();
     expect(await a.publicRealm(site.zone)).toEqual({ routes: realm.realm, presentation: realm.realm });
+    // Re-submitting the attached Realm keeps its record as granted.
+    await json(await a.configure(site.zone, await a.head(site.zone), { defaultRealm: realm.realm },
+      a.steward, home.author.token));
+    expect(await a.publicRealm(site.zone)).toEqual({ routes: realm.realm, presentation: realm.realm });
     const unrelated = await json<{ revision: string }>(await a.configure(site.zone, await a.head(site.zone),
       { name: 'Renamed site', language: 'en' }, a.steward, home.author.token));
     expect(await a.publicRealm(site.zone)).toEqual({ routes: realm.realm, presentation: realm.realm });

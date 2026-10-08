@@ -497,7 +497,9 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
     // under the Realm steward's own authority. Every refusal reads alike, so a
     // missing, invisible or someone else's Realm cannot be told apart.
     let attach: { realm: string } | undefined;
-    const realmPatched = input.operation !== 'publish' && patch?.defaultRealm !== undefined;
+    // Naming the Realm already attached changes nothing: the record stands as granted.
+    const realmPatched = input.operation !== 'publish' && patch?.defaultRealm !== undefined
+      && patch.defaultRealm !== head.attachment?.realm;
     if (config.defaultRealm && input.operation !== 'publish') {
       const unavailable = () => invalid(new InvalidZoneConfiguration('default Realm is unavailable'));
       const realm = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space WHERE { GRAPH ${iri(GRAPHS.current)} {
@@ -505,9 +507,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
       4096)).results?.bindings ?? [];
       if (realm.length !== 1 || !realm[0]?.space?.value) return unavailable();
       if (realm[0].space.value !== head.space) {
-        const kept = head.attachment?.realm === config.defaultRealm
-          && (!realmPatched || patch?.defaultRealm === head.attachment.realm);
-        if (!kept) {
+        if (head.attachment?.realm !== config.defaultRealm) {
           if (!realmPatched || !await realmAttachHeld(access, realmAttachRequest(principal, input.actingSubject,
             config.defaultRealm))) return unavailable();
           attach = { realm: config.defaultRealm };

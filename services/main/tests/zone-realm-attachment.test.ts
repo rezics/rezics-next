@@ -189,6 +189,33 @@ test('an unrelated edit keeps a live cross-Space attachment without asking the s
   });
 });
 
+test('re-submitting the attached Realm keeps its record, asks no steward and leaves later edits and withdrawal working', async () => {
+  await inDirectory(async directory => {
+    const w = world(directory, { realms: { [foreignRealm]: id(99) }, stored: foreignRealm,
+      link: { realm: foreignRealm, attachment: { by: actor } } });
+    await configure(w, { defaultRealm: foreignRealm });
+    expect(w.state.attachChecks).toEqual([]);
+    expect(w.state.ownerChecks).toEqual([]);
+    const resubmitted = w.state.envelopes[0]!.update;
+    expect(resubmitted).toContain(`<${zone}> rv:defaultRealm <${foreignRealm}>`);
+    expect(resubmitted).not.toContain('rv:realmAttached');
+    expect(resubmitted).not.toContain('rv:realmAttachment');
+    // The record is untouched, so the next unrelated edit still succeeds.
+    w.state.terminal = undefined; // the fake keeps one receipt per command
+    await changeZoneConfiguration(w.env, w.account, w.access, request(), { zone, expectedHead: head,
+      actingSubject: actor, idempotencyKey: 'rename', operation: 'configure', patch: { name: 'Renamed' } });
+    expect(w.state.attachChecks).toEqual([]);
+    expect(w.state.envelopes).toHaveLength(2);
+    // A steward can still withdraw it.
+    w.state.terminal = undefined;
+    const result = await withdrawZoneRealmAttachment(w.env, w.account, w.access, request(),
+      { zone, realm: foreignRealm, actingSubject: actor, idempotencyKey: 'withdraw' });
+    expect(result).toMatchObject({ zone, realm: foreignRealm });
+    const gone = world(directory, { realms: { [foreignRealm]: id(99) }, stored: foreignRealm, link: {} });
+    expect((await readZoneConfiguration(gone.env, zone)).configuration.defaultRealm).toBeUndefined();
+  });
+});
+
 test('a Zone editor removes the Realm and the link with it', async () => {
   await inDirectory(async directory => {
     const w = world(directory, { realms: { [foreignRealm]: id(99) }, stored: foreignRealm,
