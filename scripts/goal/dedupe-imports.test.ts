@@ -3,8 +3,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { expect, test } from 'bun:test';
+import { COMPOSITION_ROOTS } from './composition-roots.ts';
 
-const roots = ['services/main/src/app.ts', 'services/main/src/index.ts', 'services/main/src/routes/dependencies.ts'];
+const roots = [...COMPOSITION_ROOTS];
 
 test('import de-duplication preserves type/value kinds, aliases and hoisting', () => {
   const dir = mkdtempSync(join(tmpdir(), 'dedupe-imports-'));
@@ -50,4 +51,11 @@ test('import de-duplication preserves type/value kinds, aliases and hoisting', (
     expect(again.status).toBe(0);
     expect(again.stdout).toBe('');
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('every composition root is a union-merge attribute', () => {
+  const attributes = readFileSync(join(import.meta.dir, '../../.gitattributes'), 'utf8');
+  const union = [...attributes.matchAll(/^(\S+) merge=union$/gm)].map(match => match[1]);
+  const mainRoots = union.filter(path => path?.startsWith('services/main/'));
+  expect(mainRoots.sort()).toEqual([...COMPOSITION_ROOTS].sort());
 });

@@ -4,6 +4,7 @@ services/main/src/app.ts merge=union
 scripts/api/generate.ts merge=union
 # Composition roots: Goal branches add dependency wiring and fields; keep both sides.
 services/main/src/index.ts merge=union
+services/main/src/composition.ts merge=union
 services/main/src/routes/dependencies.ts merge=union
 # Web feature registries: slices add one line each (message catalogs, navigation entries).
 apps/web/i18n/catalogs.ts merge=union

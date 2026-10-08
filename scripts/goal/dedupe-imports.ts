@@ -1,10 +1,12 @@
 // Union merges of composition roots can keep an older single-line import beside its updated form.
 // Drop an import only when another supplies every name with the same type/value kind; report changes.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { COMPOSITION_ROOTS } from './composition-roots.ts';
 
-const roots = ['services/main/src/app.ts', 'services/main/src/index.ts', 'services/main/src/routes/dependencies.ts'];
 const pattern = /^import (type )?\{ ([^}]+) \} from '([^']+)';$/;
-for (const file of roots) {
+for (const file of COMPOSITION_ROOTS) {
+  // A branch rebased onto main has every root. A fixture that predates one does not.
+  if (!existsSync(file)) continue;
   // Union merges can place a branch's new import lines inside later code; hoist them to the header.
   const raw = readFileSync(file, 'utf8').split('\n');
   const firstCode = raw.findIndex(line => line.trim() && !line.startsWith('import ') && !line.startsWith('//')

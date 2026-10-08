@@ -22,7 +22,8 @@ function repo(options: { result?: string; auto?: boolean; files?: Record<string,
   };
   write('.gitignore', '.temp/\n');
   write('scripts/goal/dedupe-imports.ts', readFileSync(join(import.meta.dir, 'dedupe-imports.ts'), 'utf8'));
-  for (const file of ['app.ts', 'index.ts', 'routes/dependencies.ts']) write(`services/main/src/${file}`, 'export {};\n');
+  write('scripts/goal/composition-roots.ts', readFileSync(join(import.meta.dir, 'composition-roots.ts'), 'utf8'));
+  for (const file of ['app.ts', 'index.ts', 'composition.ts', 'routes/dependencies.ts']) write(`services/main/src/${file}`, 'export {};\n');
   for (const [path, content] of Object.entries(options.files ?? {})) write(path, content);
   const paths = options.paths ?? ['value.ts', 'value.test.ts'];
   const brief = 'docs/goals/alpha/tasks/G-001.md';

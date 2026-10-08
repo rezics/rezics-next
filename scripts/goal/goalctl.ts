@@ -14,6 +14,7 @@ import { repositoryGuards } from '../qa/repository-guards.ts';
 import { parseAffectedArgs, selectTestCommand } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
 import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
+import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { land, type LandScope } from './land.ts';
 import { GoalMailStore } from './mail.ts';
 import { GoalCoordinator, claudeConfigHome, claudeNativeSession, claudeWakeArgs, nativeSession, processIdentity, tmuxServer,
@@ -1504,13 +1505,7 @@ async function stopTask(id: string): Promise<void> {
   console.log(`${id.toUpperCase()} stopped; its worktree and claims remain until close`);
 }
 
-// Main's union-merged composition roots (.gitattributes). `normalize-app.ts` is not used: it rebuilds
-// function signatures and dropped `mountedReads` after the G-629 rebase (ee678f81, 2026-10-01).
-export const COMPOSITION_ROOTS = [
-  'services/main/src/app.ts',
-  'services/main/src/index.ts',
-  'services/main/src/routes/dependencies.ts',
-] as const;
+export { COMPOSITION_ROOTS };
 
 interface Lex {
   depth: number; block: boolean; single: boolean; double: boolean; template: boolean;

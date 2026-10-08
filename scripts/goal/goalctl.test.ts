@@ -2286,7 +2286,8 @@ describe('goalctl shared lifecycle and launch gates', () => {
     git('config', 'user.name', 'goalctl test');
     mkdirSync(join(dir, 'scripts/goal'), { recursive: true });
     copyFileSync(join(import.meta.dir, 'dedupe-imports.ts'), join(dir, 'scripts/goal/dedupe-imports.ts'));
-    for (const root of ['app.ts', 'index.ts', 'routes/dependencies.ts']) {
+    copyFileSync(join(import.meta.dir, 'composition-roots.ts'), join(dir, 'scripts/goal/composition-roots.ts'));
+    for (const root of ['app.ts', 'index.ts', 'composition.ts', 'routes/dependencies.ts']) {
       mkdirSync(join(dir, 'services/main/src/routes'), { recursive: true });
       writeFileSync(join(dir, 'services/main/src', root), 'export {};\n');
     }
