@@ -3,6 +3,7 @@ import { fusekiReadBudget, type FusekiClient, type TemplateIndexDelta, type Temp
   type WorkScopeDirectoryPage, type WorkScopeDirectoryRefusal } from '../../infrastructure/fuseki.ts';
 import { WorkReadUnavailable, WorkReadMoved, WorkReadLimit, readDependencyToken } from '../work/read-session.ts';
 import { controlRead, controlTransaction } from '../access/topology-control.ts';
+import { runWorkerTick } from '../../worker-tick.ts';
 import { FIRST_PUBLICATION_TYPE, invertedPublicationYear } from './year-fact.ts';
 
 export interface SeekSelector { graph: string; predicate: string; type: string; root: 'work' | 'main'; }
@@ -177,7 +178,8 @@ export class TemplateSeekIndex {
     if(this.recoveryTimer) return;
     this.recoveryTimer=setInterval(()=> {
       if(this.recoveryRun) return;
-      this.recoveryRun=this.recover(epoch).catch(error=>{console.error('Template pending recovery deferred',error);})
+      this.recoveryRun=runWorkerTick('main.template.recovery',()=>this.recover(epoch))
+        .catch(error=>{console.error('Template pending recovery deferred',error);})
         .finally(()=>{this.recoveryRun=undefined;});
     },TEMPLATE_DIRECTORY_COST.recoveryPollMs);
   }

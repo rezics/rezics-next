@@ -92,17 +92,15 @@ test('a worker tick name is a short identifier', async () => {
  * - `POLLERS` lists while-loops and repeating `setTimeout` ticks that are not
  *   `setInterval`. Add a new poller here.
  *
- * Template directory recovery (`modules/query/seek-index.ts`) and realm-policy
- * recovery (`modules/access/realm-management-recovery.ts`) still schedule
- * outside the wrapper. Other open tasks hold those files. services/content/src
- * has no worker scheduler.
+ * Realm-policy recovery (`modules/access/realm-management-recovery.ts`) still
+ * schedules outside the wrapper. Another open task holds that file.
+ * services/content/src has no worker scheduler.
  */
 const NON_WORKER_TIMERS = new Map<string, string>([
   ['services/main/src/modules/notification/realtime.ts',
     'The LISTEN connection is retained for the process lifetime and already runs inside its own AsyncResource. The retry timer only re-enters that resource.'],
 ]);
 const HELD_SCHEDULERS = [
-  'services/main/src/modules/query/seek-index.ts',
   'services/main/src/modules/access/realm-management-recovery.ts',
 ];
 const POLLERS = [
@@ -146,6 +144,8 @@ test('worker schedulers run their tick through the wrapper', () => {
     .toContain("runWorkerTick('event-temporal-projection'");
   expect(readFileSync(resolve(root, 'services/main/src/modules/statement/publication-seek.ts'), 'utf8'))
     .toContain("runWorkerTick('statement-publication-seek'");
+  expect(readFileSync(resolve(root, 'services/main/src/modules/query/seek-index.ts'), 'utf8'))
+    .toContain("runWorkerTick('main.template.recovery'");
   const content = sourceFiles(resolve(root, 'services/content/src')).map(repoPath)
     .filter((file) => /setInterval\(|runMainRelay\(/.test(readFileSync(resolve(root, file), 'utf8')));
   expect(content).toEqual([]);

@@ -70,7 +70,8 @@ test('Directory preparation deadline includes native I/O and never marks an inte
   try {
     const epoch=stack.env.lineage.dataEpoch;
     let nativeReadStarted=false;
-    const fake={attachTemplateIndexWriter:()=>{},commandHealth:async()=>({instanceId:randomUUID()}),templateIndex:async()=> {
+    const fake={attachTemplateIndexWriter:()=>{},commandHealth:async()=>({instanceId:randomUUID()}),
+      prepareWorkScopeDirectory:async()=>({status:'unavailable' as const,reason:'writer-not-exclusive'}),templateIndex:async()=> {
       nativeReadStarted=true;
       const signal=fusekiReadBudget.getStore()!.signal;
       await delay(60_000,undefined,{signal});throw new Error('deadline should abort native read');
