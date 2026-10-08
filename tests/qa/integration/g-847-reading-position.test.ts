@@ -381,7 +381,8 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     await json(await progress(false, 1));
     await json(await call('POST', '/v1/me/sessions', { actingSubject: person, target: firstBook.occurrences[0], expectedVersion: 0, state: 'finished' }), 201);
     expect((await read(entityPath(early.component))).status).toBe(200);
-    await json(await progress(true, 2));
+    // The finished Session's Library-read projection already completed this chapter, so the reader writes at version 3.
+    await json(await progress(true, 3));
     expect((await read(entityPath(early.component))).status).toBe(200);
     expect((await read(`${memberPath}?after=${encodeURIComponent(narrowed.next!)}`)).status).toBe(400);
     const otherReader = await json<{ items: { id: string }[] }>(await call('GET', `${zonePath}&actingSubject=${encodeURIComponent(person)}`, undefined, outsider.token));
