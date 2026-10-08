@@ -17,6 +17,8 @@ import { contentPrivateSearchRoutes } from '../../../services/main/src/routes/co
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { authorCreditFixture } from '../fixtures/author-credit.ts';
 
+// Fixture setup, the first semantic write and three private-delivery sockets take
+// 7-11 s on a cold shared stack, beyond Bun's 5 s default.
 test('Selected capability gates retain closed refusals through HTTP owners and recheck private delivery after grant revocation', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>, resolve('.temp', `selected-capability-${randomUUID()}`),
@@ -169,4 +171,4 @@ test('Selected capability gates retain closed refusals through HTTP owners and r
     await app.stop(true);
     await f.close();
   }
-});
+}, 60_000);

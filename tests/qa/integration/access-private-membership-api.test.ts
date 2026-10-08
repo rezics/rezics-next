@@ -10,6 +10,7 @@ import { createAccountApp } from '../../../services/account/src/app.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccessGroups } from '../../../services/main/src/modules/access/groups.ts';
@@ -17,6 +18,7 @@ import { AccessPrivateMemberships } from '../../../services/main/src/modules/acc
 import { AccessPrivateRecipients } from '../../../services/main/src/modules/access/private-recipients.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { accessStateCoverage } from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { cloneQaAccountAccessDatabases } from '../support/databases.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -138,6 +140,9 @@ test('IAM06/IAM10/IAM33/IAM34: private membership binds exact direct, group and 
       (id, principal_id, agent_subject, action, valid_until)
       VALUES ($1,$2,$3,'work.create',now() + interval '1 hour')`,
     [randomUUID(), recipientId, attribution]);
+    for (const principalId of [managerId, recipientId, outsiderId]) {
+      await grantRecordedPlatformUse(accessPool, principalId, ['organization-authority']);
+    }
     const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
     const admission = new AccessAdmissionRegistry(accessPool);
     const main = createMainApp(fuseki, { environment: { fuseki,
@@ -147,7 +152,7 @@ test('IAM06/IAM10/IAM33/IAM34: private membership binds exact direct, group and 
       audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
       introspectUrl: `${base}/api/auth/oauth2/introspect`,
       clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
-    access: admission, actingContexts: new AccessActingContexts(accessPool),
+    access: admission, platformAccess: new AccessExposure(accessPool), actingContexts: new AccessActingContexts(accessPool),
     groups: new AccessGroups(accessPool),
     privateMemberships: new AccessPrivateMemberships(accessPool),
     privateRecipients: new AccessPrivateRecipients(accessPool) });
