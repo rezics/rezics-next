@@ -2162,14 +2162,19 @@ export function mergeOwnerFiles(worktree: string, plan: string): string[] {
 /** Separates the console transcript from the JUnit report appended for attribution. */
 export const UNIT_JUNIT_MARKER = '<!-- goal-unit-junit -->';
 
-/** Drop one bun summary. Its `(fail)` lines have no file header, so they belong to no file. */
+const UNIT_SUMMARY_LINE = /^(?:\d+ tests? failed:|\s*\d+\s+pass\b)/;
+
+/** Drop the bun summary at the end of one segment. Its `(fail)` lines have no file header, so they belong to no file.
+ * A test can print the same words in the middle; that copy is followed by a later `(pass)` or file header and stays. */
 function dropRunSummary(text: string): string {
-  const lines: string[] = [];
-  for (const line of text.split('\n')) {
-    if (/^\d+ tests? failed:$/.test(line) || /^\s*\d+\s+pass\b/.test(line)) break;
-    lines.push(line);
+  const lines = text.split('\n');
+  const fileHeader = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/;
+  for (let index = 0; index < lines.length; index++) {
+    if (!UNIT_SUMMARY_LINE.test(lines[index]!)) continue;
+    const continued = lines.slice(index + 1).some(line => fileHeader.test(line) || /^\((?:pass|skip|todo)\) /.test(line));
+    if (!continued) return lines.slice(0, index).join('\n');
   }
-  return lines.join('\n');
+  return text;
 }
 
 /** Bun's end-of-run summary has `(fail)` lines and no file header. Those lines belong to no file.
@@ -2464,7 +2469,7 @@ export function unitFileErrorDetails(output: string, candidates: readonly string
     if (header) {
       current = header[1]!.replace(/^\.\//, '');
       if (root && isAbsolute(current)) current = relative(root, current);
-      if (!known.has(current) || reportedByJunit.has(current)) current = undefined;
+      if (!known.has(current)) current = undefined;
       if (current) sections.set(current, []);
       collecting = false;
       continue;
@@ -2477,6 +2482,8 @@ export function unitFileErrorDetails(output: string, candidates: readonly string
       errors.set(current, bucket);
       collecting = true;
     } else if (isUnitErrorLine(line)) {
+      // A report that names this file already judged it. A bare `error:` line is its transcript.
+      if (reportedByJunit.has(current) && !collecting) continue;
       if (collecting || !namedFailures.has(current)) {
         const bucket = errors.get(current) ?? [];
         if (!collecting) bucket.push([]);
