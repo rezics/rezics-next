@@ -167,7 +167,8 @@ write refuses the release and rolls Access back. Only the two identity values th
 CAS consumed are read from the post-state. The finding is HMAC-bound under the
 recovery key to the durable qualification, native receipt, retained head and
 journal. A later completion accepts live Access only if it still equals that
-recorded coverage, so it proves stability since the commit, not that nothing
+recorded coverage, and the authority comparison takes that coverage only from the
+verified finding of the referenced outer operation, never from a caller value, so it proves stability since the commit, not that nothing
 outside the fence wrote Access, and a late retry may be refused. A refused
 completion cannot close a release that already committed: the operation settles
 as held and owner logins and the verified restore evidence stay closed.

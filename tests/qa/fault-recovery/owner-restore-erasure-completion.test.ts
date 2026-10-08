@@ -54,7 +54,7 @@ test(
         },
         {
           label: 'newer-frontier',
-          reason: /differs from its durable release binding/,
+          reason: /signed Access coverage is not retained/,
           tamper: async (copy) =>
             retainRecoveryCoverageHead(
               copy.retainedRelay,

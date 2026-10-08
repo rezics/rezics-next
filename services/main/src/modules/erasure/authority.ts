@@ -1,10 +1,12 @@
+import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
 import { accessOutboxCoverage, accessStateCoverage } from '../work/access-recovery-coverage.ts';
-import { readRestoredGraphReleaseProof, type RecoveryCoverage,
+import { readRestoredGraphReleaseProof, RestoreLineageConflict, type RecoveryCoverage,
   type RestoredGraphReleaseExpectation } from '../work/restore-lineage.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { assertCurrentRecoveryCoverageHead } from '../outbox/recovery-coverage-head.ts';
+import { verifyReleasedRestore } from '../owner/restore-release-binding.ts';
 
 export class ErasureAuthorityCoverageConflict extends Error {}
 
@@ -23,7 +25,14 @@ export interface RetainedAuthorityCoverage {
 export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, access: Pool,
   consumer: string, evidence: RetainedAuthorityCoverage, accessClient?: PoolClient,
   release?: { fuseki: FusekiClient; graphRelease: RestoredGraphReleaseExpectation;
-    capturedGeneration: string }): Promise<void> {
+    capturedGeneration: string;
+    /**
+     * The running outer operation whose HMAC-bound qualification and release
+     * findings authorize the opened captured+1 phase. The comparison below is
+     * then against the coverage that verified finding recorded, never a caller
+     * value. Without it the opened phase still compares to the signed coverage.
+     */
+    binding?: { outerReconciliationId: string; erasuresReconciliationId?: string } }): Promise<void> {
   const graphRelease = release ? structuredClone(release.graphRelease) : undefined;
   let coverage: RecoveryCoverage;
   try { coverage = openRecoveryPayload<RecoveryCoverage>(
@@ -69,12 +78,35 @@ export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, 
     : fence.open !== false || release && fence.generation !== release.capturedGeneration)) {
     throw new ErasureAuthorityCoverageConflict('restored Access recovery fence is open');
   }
+  let expected = { outboxCount: coverage.accessOutboxCount, outboxDigest: coverage.accessOutboxDigest,
+    stateCount: coverage.accessStateCount, stateDigest: coverage.accessStateDigest };
+  if (release?.binding) {
+    if (fence.open !== true) {
+      throw new ErasureAuthorityCoverageConflict('a release binding needs the opened Access fence');
+    }
+    try {
+      const post = await verifyReleasedRestore({ relay, fuseki: release.fuseki, key: evidence.hmacKey,
+        outerId: release.binding.outerReconciliationId,
+        ...(release.binding.erasuresReconciliationId === undefined ? {}
+          : { erasuresReconciliationId: release.binding.erasuresReconciliationId }),
+        expectation: graphRelease!, coverage,
+        authority: createHash('sha256').update(evidence.sealedCoverage).digest('hex'),
+        capturedGeneration: release.capturedGeneration });
+      expected = { outboxCount: post.outbox.count, outboxDigest: post.outbox.digest,
+        stateCount: post.state.count, stateDigest: post.state.digest };
+    } catch (error) {
+      if (error instanceof RestoreLineageConflict) throw new ErasureAuthorityCoverageConflict(error.message);
+      throw error;
+    }
+  }
   const [outbox, state] = accessClient
     ? [await accessOutboxCoverage(access, accessClient), await accessStateCoverage(access, accessClient)]
     : await Promise.all([accessOutboxCoverage(access), accessStateCoverage(access)]);
-  if (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest
-    || state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest) {
-    throw new ErasureAuthorityCoverageConflict('restored Access authority differs from retained coverage');
+  if (outbox.count !== expected.outboxCount || outbox.digest !== expected.outboxDigest
+    || state.count !== expected.stateCount || state.digest !== expected.stateDigest) {
+    throw new ErasureAuthorityCoverageConflict(release?.binding
+      ? 'Access differs from the coverage its release binding recorded'
+      : 'restored Access authority differs from retained coverage');
   }
   if (release && !(await readRestoredGraphReleaseProof(release.fuseki, graphRelease!))) {
     throw new ErasureAuthorityCoverageConflict('native release changed during authority comparison');

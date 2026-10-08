@@ -452,33 +452,59 @@ export async function recordRelease(
 }
 
 /**
- * Complete a lost outer outcome after both owners committed. Read-only. The
- * release finding must verify under the recovery key against the durable
- * `:erasures` record, the exact native receipt, the retained head and journal
- * and the independently current authority; live Access must still equal the
- * coverage that finding recorded after its proven transition. Any difference is
- * a definitive conflict; nothing is held again, replayed or re-signed.
+ * Authenticate the opened-phase release of a running outer restore operation
+ * and return the Access coverage its proven transition recorded. Read-only. The
+ * qualification and release findings must verify under the recovery key against
+ * the durable `:erasures` record of THIS outer operation (derived from its own
+ * record), the exact native receipt, the retained head and journal and the
+ * independently current authority, at the generation after the captured one.
+ * Any difference is a definitive conflict; nothing is held again, replayed or
+ * re-signed. The caller still compares live Access to the returned coverage.
  */
 export async function verifyReleasedRestore(input: {
-  relay: PoolClient;
+  relay: Pool | PoolClient;
   fuseki: FusekiClient;
   key: string;
   outerId: string;
-  erasuresOperationId: string;
+  /** When given, the `:erasures` record the caller authenticates must be the derived one. */
+  erasuresReconciliationId?: string;
   expectation: RestoredGraphReleaseExpectation;
   coverage: RecoveryCoverage;
   authority: string;
   capturedGeneration: string;
-  requestDigests: readonly string[];
-  live: () => Promise<AccessCoverage>;
-}): Promise<void> {
+}): Promise<AccessCoverage> {
   const { relay, fuseki, key, expectation, capturedGeneration } = input;
   const consumer = input.coverage.relay.consumer;
-  const erasures = await readErasuresRecord(relay, input.erasuresOperationId);
+  const outer = (
+    await relay.query<{
+      operation_id: string;
+      kind: string;
+      state: string;
+      consumer: string | null;
+    }>('SELECT operation_id, kind, state, consumer FROM relay.owner_reconciliation WHERE id = $1', [
+      input.outerId,
+    ])
+  ).rows[0];
+  if (
+    !outer ||
+    outer.kind !== 'restore' ||
+    outer.state !== 'running' ||
+    outer.consumer !== consumer ||
+    !outer.operation_id.startsWith('owner:reconcile:') ||
+    outer.operation_id.endsWith(':erasures')
+  ) {
+    throw new RestoreLineageConflict('restore completion names another outer operation');
+  }
+  const erasures = await readErasuresRecord(relay, `${outer.operation_id}:erasures`);
   if (
     !erasures ||
     erasures.consumer !== consumer ||
-    !input.requestDigests.includes(erasures.requestDigest)
+    (input.erasuresReconciliationId !== undefined &&
+      erasures.id !== input.erasuresReconciliationId) ||
+    ![false, true].some(
+      (replay) =>
+        sha256Text(`${consumer}\0${replay}\0${input.authority}`) === erasures.requestDigest,
+    )
   ) {
     throw new RestoreLineageConflict('restore completion has no matching retained erasure record');
   }
@@ -515,13 +541,9 @@ export async function verifyReleasedRestore(input: {
   ) {
     throw new RestoreLineageConflict('restore completion differs from its durable release binding');
   }
-  const live = await input.live();
-  if (
-    !sameCoverage(live.state, release.post.state) ||
-    !sameCoverage(live.outbox, release.post.outbox)
-  ) {
-    throw new RestoreLineageConflict(
-      'Access differs from the coverage its release binding recorded',
-    );
-  }
+  return release.post;
+}
+
+function sha256Text(value: string): string {
+  return createHash('sha256').update(value).digest('hex');
 }
