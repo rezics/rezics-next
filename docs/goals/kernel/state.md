@@ -26,6 +26,19 @@ still depends on authentic Claim closure and physical C6 recovery qualification.
   then naturally expire. Long10000s fixture lease alone does not solve full test
   ordering. No full-package exclusion, renewed authority or untested tag allowed;
   matching native21e remains unbuilt, joined Title test3a159 remains unexecuted.
+- Program external-fixture decisionc1b426 acted/acknowledged: image package runs
+  every non-external class; original runtime-issued Title class runs unchanged in
+  existing native wrapper at same native pin. Unit guard prevents exclusion from
+  both. Existing JUnit4 Category marker avoids test dependency/migration; Docker
+  one-line category exclusion is Program loan. This supersedes blanket package
+  inclusion prerequisite above; activation requires BOTH same-pin proof sets.
+- G1282 Grok30 PID1371035 implements exact category/guard/wrapper sequencing and
+  composes accepted0f eight TS paths with native8853 atomically. G1290 narrowed
+  to joined QA test only. Corrected quoted native reclaim paths; actual scope
+  transferred with existing Trust issuer loan. Attempt29 intentionally stopped
+  after reclaim conflict before dependent edits. Program32cc requests ONLY
+  generated native pin loan while G1417 holds toolchain; worker freezes/stages/
+  restores that file pending reconciliation, no tool/version change.
 - G1345 Sonnet18 d84 component evidence actual55/1008 owner (original51/957),
   original integration21/704 and isolated inventory1/35. Review found unsigned
   all-done progress can skip all native/history calls, and final awaited owner
