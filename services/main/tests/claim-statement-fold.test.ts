@@ -59,6 +59,14 @@ import {
   convertEligibleClaimsTurn,
   executeClaimStatementFold,
   prepareClaimStatementFold,
+  CLAIM_FOLD_ORIGINAL_LINKAGE,
+  receiveClaimFoldOriginalInventoryTurn,
+  type ClaimFoldInventoryPage,
+  type ClaimFoldInventoryRequest,
+  type ClaimFoldMaintenanceTransport,
+  type ClaimFoldMembersRequest,
+  type ClaimFoldOriginalInventoryInput,
+  type ClaimFoldOriginalInventoryProgress,
 } from '../src/modules/verification/claim-fold.ts';
 import {
   assessAdmittedClaim,
@@ -2780,10 +2788,12 @@ const historyRow = (producer: AssessmentProducerRecord, patch: Record<string, un
 /** A SQL seam for the real history reader: it filters the id keyset only, never owner state. */
 function auditAccessClient(rows: Record<string, unknown>[], isolation = 'read committed') {
   const queries: { sql: string; values: unknown[] }[] = [];
+  const released = { count: 0 };
   const client = {
     query: async (sql: string, values: unknown[] = []) => {
       queries.push({ sql, values });
-      if (/^(?:SAVEPOINT|RELEASE SAVEPOINT)\b/.test(sql)) return { rows: [], rowCount: 0 };
+      if (/^(?:SAVEPOINT|RELEASE SAVEPOINT|BEGIN|ROLLBACK)\b/.test(sql))
+        return { rows: [], rowCount: 0 };
       if (sql === 'SHOW transaction_isolation')
         return { rows: [{ transaction_isolation: isolation }], rowCount: 1 };
       if (/FROM access\.recovery_fence/.test(sql))
@@ -2799,8 +2809,11 @@ function auditAccessClient(rows: Record<string, unknown>[], isolation = 'read co
       }
       throw new Error(`Audit attempted unexpected Access SQL: ${sql}`);
     },
+    release: () => {
+      released.count++;
+    },
   } as unknown as PoolClient;
-  return { client, queries };
+  return { client, queries, released };
 }
 
 function auditContentClient(
@@ -2810,10 +2823,13 @@ function auditContentClient(
 ) {
   const permit = auditPermit();
   const queries: { sql: string; values: unknown[] }[] = [];
+  const released = { count: 0 };
+  const gate = { generation: gateGeneration };
   const client = {
     query: async (sql: string, values: unknown[] = []) => {
       queries.push({ sql, values });
-      if (/^(?:SAVEPOINT|RELEASE SAVEPOINT)\b/.test(sql)) return { rows: [], rowCount: 0 };
+      if (/^(?:SAVEPOINT|RELEASE SAVEPOINT|BEGIN|ROLLBACK)\b/.test(sql))
+        return { rows: [], rowCount: 0 };
       if (sql === 'SHOW transaction_isolation')
         return { rows: [{ transaction_isolation: isolation }], rowCount: 1 };
       if (/\bFROM reading_position\.generation\b/.test(sql))
@@ -2824,7 +2840,7 @@ function auditContentClient(
             {
               mode: permit.mode,
               job: permit.job,
-              generation: gateGeneration,
+              generation: gate.generation,
               restore_epoch: permit.restoreEpoch,
             },
           ],
@@ -2838,8 +2854,11 @@ function auditContentClient(
       }
       throw new Error(`Audit attempted unexpected Content SQL: ${sql}`);
     },
+    release: () => {
+      released.count++;
+    },
   } as unknown as PoolClient;
-  return { client, queries, permit };
+  return { client, queries, permit, released, gate };
 }
 
 type NativeAuditMode = 'succeeded' | 'cancelled' | 'absent';
@@ -3343,4 +3362,380 @@ test('a deadline that expires while Content originals are read refuses the whole
   );
   expect(tighter.local.signal.aborted).toBe(false);
   expect(tighter.durations).toEqual([10_000]);
+});
+
+// -------------------------------------------------- original inventory receiver
+
+/** A native stand-in with the accepted inventory/member CAS, replay and conflict semantics. */
+function nativeInventoryFake(
+  count: number,
+  faults: { loseInventoryPage?: number; invalidMemberProgress?: boolean } = {},
+) {
+  const rows = Array.from({ length: count }, (_, index) => ({
+    claim: id(10_000 + index),
+    head: id(20_000 + index),
+    witness: hash(`witness-${index}`),
+  }));
+  const results = new Map<string, { input: string; page: ClaimFoldInventoryPage }>();
+  const state = {
+    attempt: '',
+    page: 0,
+    hash: '',
+    after: 0,
+    total: 0,
+    sourceCut: '',
+    sealed: false,
+  };
+  const calls = {
+    inventory: [] as ClaimFoldInventoryRequest[],
+    members: [] as ClaimFoldMembersRequest[],
+    executed: 0,
+  };
+  let lost = false,
+    invalidated = false;
+  const transport: ClaimFoldMaintenanceTransport = {
+    async claimFoldInventory(request) {
+      calls.inventory.push(structuredClone(request));
+      const input = JSON.stringify(request);
+      const retained = results.get(request.requestId);
+      let page: ClaimFoldInventoryPage;
+      if (retained) {
+        page =
+          retained.input === input
+            ? structuredClone(retained.page)
+            : { status: 'conflict', error: 'inventory request identity differs' };
+        return page;
+      }
+      const fresh =
+        request.page === 0 && request.previous === '' && state.attempt !== request.attempt;
+      if (
+        !fresh &&
+        (state.sealed ||
+          request.attempt !== state.attempt ||
+          request.page !== state.page ||
+          request.previous !== state.hash)
+      )
+        return { status: 'conflict', error: 'inventory checkpoint CAS differs' };
+      if (fresh)
+        Object.assign(state, {
+          attempt: request.attempt,
+          page: 0,
+          hash: '',
+          after: 0,
+          total: 0,
+          sealed: false,
+          sourceCut: hash(`cut:${request.attempt}`),
+        });
+      const slice = rows.slice(state.after, state.after + 127);
+      const eof = state.after + slice.length >= rows.length;
+      const next = eof ? '' : hash(`after:${state.after + slice.length}`);
+      const pageHash = hash(
+        JSON.stringify([request.attempt, request.page, request.previous, slice]),
+      );
+      page = {
+        status: 'committed',
+        sourceComplete: eof,
+        attempt: request.attempt,
+        page: request.page,
+        next,
+        hash: pageHash,
+        total: state.total + slice.length,
+        rows: slice,
+        sourceCut: state.sourceCut,
+      };
+      Object.assign(state, {
+        page: state.page + 1,
+        hash: pageHash,
+        after: state.after + slice.length,
+        total: state.total + slice.length,
+        sealed: eof,
+      });
+      results.set(request.requestId, { input, page: structuredClone(page) });
+      calls.executed++;
+      if (faults.loseInventoryPage === request.page && !lost) {
+        lost = true;
+        throw new Error('Lost durable native acknowledgement');
+      }
+      return page;
+    },
+    async claimFoldMembers(request) {
+      calls.members.push(structuredClone(request));
+      if (!state.sealed || request.sourceCut !== state.sourceCut || request.seal !== state.hash)
+        return { status: 'invalid', error: 'Claim member source cut/version unavailable' };
+      if (faults.invalidMemberProgress && request.progress && !invalidated) {
+        invalidated = true;
+        return { status: 'invalid', error: 'member progress is not native authority' };
+      }
+      const start = request.progress ? Number(request.progress) : 0;
+      const slice = rows.slice(start, start + 127);
+      const end = start + slice.length;
+      return {
+        status: 'read',
+        directoryEOF: end >= rows.length,
+        sourceCut: state.sourceCut,
+        seal: state.hash,
+        count: end,
+        rows: slice,
+        progress: end >= rows.length ? '' : String(end),
+      };
+    },
+  };
+  return { transport, rows, calls, state, results };
+}
+
+function inventoryHarness(
+  options: {
+    claims?: number;
+    access?: Record<string, unknown>[];
+    faults?: Parameters<typeof nativeInventoryFake>[1];
+  } = {},
+) {
+  const f = retainedRootFixture();
+  const accessSide = auditAccessClient(options.access ?? []);
+  const contentSide = auditContentClient([]);
+  const access = { generation: '7', pending: false };
+  const pool = {
+    query: async (text: string, values: unknown[] = []) => {
+      if (text.includes('generation::text'))
+        return { rows: [{ open: false, generation: access.generation }], rowCount: 1 };
+      if (text.includes('FROM access.admission'))
+        return { rows: access.pending ? [{ pending: 1 }] : [], rowCount: access.pending ? 1 : 0 };
+      return f.pool.query(text, values);
+    },
+    connect: async () => accessSide.client,
+  } as unknown as Pool;
+  const native = nativeInventoryFake(options.claims ?? 130, options.faults);
+  const store = new VerificationStore({} as Pool);
+  const input = (
+    progress?: ClaimFoldOriginalInventoryProgress,
+  ): ClaimFoldOriginalInventoryInput => ({
+    ...f.target,
+    job: f.fence.job,
+    transport: native.transport,
+    contentPool: { connect: async () => contentSide.client } as unknown as Pool,
+    store,
+    permit: contentSide.permit,
+    progress,
+  });
+  return { ...f, pool, native, input, accessSide, contentSide, access };
+}
+
+test('the original inventory receiver captures native I and its member directory under the held owner cuts without closure authority', async () => {
+  const producers = [1, 2, 3].map((ordinal) => assessmentAuditRow(ordinal, 'activated').producer);
+  const h = inventoryHarness({ access: producers.map((producer) => historyRow(producer)) });
+  const turn = await receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input());
+  if (turn.status !== 'captured') throw new Error(`Expected capture, received ${turn.status}`);
+  expect(turn).toMatchObject({ complete: false, release: 'denied' });
+  expect(turn.original).toMatchObject({
+    total: 130,
+    directory: { count: 130 },
+    access: { generation: '7' },
+    content: { job: h.contentSide.permit.job, generation: '8', restoreEpoch: '3' },
+    job: { marker: h.fence.marker, mapDigest: h.fence.mapDigest, job: h.fence.job },
+    linkage: CLAIM_FOLD_ORIGINAL_LINKAGE,
+  });
+  expect(Object.values(turn.original.linkage)).toEqual([
+    'unresolved',
+    'unresolved',
+    'unresolved',
+    'unresolved',
+  ]);
+  expect(turn.original.job.acquireReceipt).toMatch(
+    /^urn:rezics:name-migration:claim-statement-fold:acquire:[0-9a-f]{64}$/,
+  );
+  // The original assessment history stays unresolved: no Content intent was retained for these admissions.
+  expect(turn.original.assessmentHistory).toMatchObject({
+    windows: 1,
+    entries: 3,
+    counts: { 'unresolved:content-missing': 3 },
+  });
+  expect(turn.original.directory.accumulator).toBe(turn.progress.inventory.accumulator);
+  expect(turn.original.sourceCut).toBe(h.native.state.sourceCut);
+  expect(turn.original.seal).toBe(h.native.state.hash);
+  // Two exact inventory pages chained by hash, then the directory, with no native write or Access/Content mutation.
+  expect(h.native.calls.inventory.map((request) => [request.page, request.previous])).toEqual([
+    [0, ''],
+    [1, h.native.results.get(h.native.calls.inventory[0]!.requestId)!.page.hash!],
+  ]);
+  expect(h.native.calls.members.map((request) => request.progress)).toEqual(['', '127']);
+  expect(h.commands).toEqual([]);
+  expect(h.sql.every((entry) => !/^(?:INSERT|UPDATE|DELETE)/.test(entry.text))).toBe(true);
+  for (const side of [h.accessSide, h.contentSide])
+    expect(side.queries.every((query) => !/^(?:INSERT|UPDATE|DELETE|COMMIT)/.test(query.sql))).toBe(
+      true,
+    );
+  // Every borrowed client's one read-only transaction was rolled back and its connection returned.
+  for (const side of [h.accessSide, h.contentSide]) {
+    const began = side.queries.filter((query) => query.sql.startsWith('BEGIN')).length;
+    expect(began).toBeGreaterThan(0);
+    expect(side.queries.filter((query) => query.sql === 'ROLLBACK')).toHaveLength(began);
+    expect(side.released.count).toBe(began);
+  }
+});
+
+test('a lost inventory page acknowledgement reissues the exact request without rescanning or advancing', async () => {
+  const h = inventoryHarness({ faults: { loseInventoryPage: 1 } });
+  const first = await receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input());
+  expect(first).toMatchObject({
+    status: 'partial',
+    reason: 'retry-exact-request',
+    complete: false,
+  });
+  if (first.status !== 'partial') throw new Error('Expected a retry');
+  expect(first.progress.inventory).toMatchObject({ page: 1, total: 127 });
+  const lostRequest = h.native.calls.inventory.at(-1)!;
+  expect(lostRequest.page).toBe(1);
+  const second = await receiveClaimFoldOriginalInventoryTurn(
+    h.env,
+    h.pool,
+    h.input(first.progress),
+  );
+  expect(second.status).toBe('captured');
+  const retried = h.native.calls.inventory.at(-1)!;
+  expect(retried).toEqual(lostRequest);
+  // One execution per page: the retry replayed the retained result.
+  expect(h.native.calls.executed).toBe(2);
+  expect(h.native.calls.inventory).toHaveLength(3);
+  expect(h.native.state.total).toBe(130);
+  // Audit history already read in the first turn is not repeated.
+  expect(first.progress.audit.windows).toBe(1);
+  if (second.status === 'captured') expect(second.original.assessmentHistory.windows).toBe(1);
+});
+
+test('the receiver bounds each turn, resumes the same Access cursor and refuses a changed cut or progress', async () => {
+  const producers = Array.from(
+    { length: 140 },
+    (_, index) => assessmentAuditRow(index + 1, 'activated').producer,
+  );
+  const h = inventoryHarness({ access: producers.map((producer) => historyRow(producer)) });
+  const first = await receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input());
+  if (first.status !== 'partial') throw new Error('Expected a bounded turn');
+  expect(first.reason).toBe('turn-bound');
+  expect(first.progress.audit).toMatchObject({ windows: 4, entries: 128, done: false });
+  expect(first.progress.audit.cursor).toEqual({
+    after: producers[127]!.admission,
+    recoveryGeneration: '7',
+  });
+  expect(h.native.calls.inventory).toEqual([]);
+  const second = await receiveClaimFoldOriginalInventoryTurn(
+    h.env,
+    h.pool,
+    h.input(first.progress),
+  );
+  expect(second.status).toBe('captured');
+  if (second.status !== 'captured') return;
+  expect(second.original.assessmentHistory).toMatchObject({ windows: 5, entries: 140 });
+  expect(second.original.assessmentHistory.counts).toEqual({ 'unresolved:content-missing': 140 });
+  // Another progress, Access generation, Content permit generation or pending admission invalidates the capture.
+  const progress = second.progress;
+  await expect(
+    receiveClaimFoldOriginalInventoryTurn(
+      h.env,
+      h.pool,
+      h.input({ ...progress, marker: 'urn:other' }),
+    ),
+  ).rejects.toBeInstanceOf(ClaimStatementFoldStale);
+  await expect(
+    receiveClaimFoldOriginalInventoryTurn(
+      h.env,
+      h.pool,
+      h.input({ ...progress, content: { ...progress.content, generation: '9' } }),
+    ),
+  ).rejects.toBeInstanceOf(ClaimStatementFoldStale);
+  h.access.generation = '8';
+  await expect(
+    receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input(progress)),
+  ).rejects.toBeInstanceOf(ClaimStatementFoldStale);
+  h.access.generation = '7';
+  h.contentSide.gate.generation = '9';
+  await expect(
+    receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input(progress)),
+  ).rejects.toBeInstanceOf(VerificationStale);
+  h.contentSide.gate.generation = '8';
+  h.access.pending = true;
+  await expect(
+    receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input(progress)),
+  ).rejects.toBeInstanceOf(ClaimStatementFoldUnavailable);
+  h.access.pending = false;
+  h.state.accessOpen = true;
+  const open = {
+    ...h.pool,
+    query: async (text: string) =>
+      text.includes('generation::text')
+        ? { rows: [{ open: true, generation: '7' }], rowCount: 1 }
+        : h.pool.query(text),
+  } as unknown as Pool;
+  await expect(
+    receiveClaimFoldOriginalInventoryTurn(h.env, open, h.input(progress)),
+  ).rejects.toThrow();
+  const ordinary = { ...h.contentSide.permit, mode: 'ordinary' as const, job: null };
+  await expect(
+    receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, {
+      ...h.input(progress),
+      permit: ordinary,
+    }),
+  ).rejects.toBeInstanceOf(ClaimStatementFoldUnavailable);
+});
+
+test('native refusals, wrong page identity and a forged directory never become a captured population', async () => {
+  const refuse = async (
+    mutate: (h: ReturnType<typeof inventoryHarness>) => void,
+    match: RegExp,
+  ) => {
+    const h = inventoryHarness();
+    mutate(h);
+    await expect(receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input())).rejects.toThrow(
+      match,
+    );
+    return h;
+  };
+  await refuse((h) => {
+    h.native.transport.claimFoldInventory = async () => ({
+      status: 'invalid',
+      error: "inventory must precede this job's first conversion",
+    });
+  }, /first conversion/);
+  await refuse((h) => {
+    const transport = h.native.transport.claimFoldInventory.bind(h.native.transport);
+    h.native.transport.claimFoldInventory = async (request) => ({
+      ...(await transport(request)),
+      page: 5,
+    });
+  }, /exact request/);
+  await refuse((h) => {
+    const transport = h.native.transport.claimFoldInventory.bind(h.native.transport);
+    h.native.transport.claimFoldInventory = async (request) => ({
+      ...(await transport(request)),
+      total: 1,
+    });
+  }, /exact request/);
+  await refuse((h) => {
+    const transport = h.native.transport.claimFoldInventory.bind(h.native.transport);
+    h.native.transport.claimFoldInventory = async (request) => {
+      const page = await transport(request);
+      return {
+        ...page,
+        rows: [...page.rows!.slice(0, -1), { ...page.rows!.at(-1)!, claim: 'urn:not-native' }],
+      };
+    };
+  }, /fixed shape/);
+  await refuse((h) => {
+    const transport = h.native.transport.claimFoldMembers.bind(h.native.transport);
+    h.native.transport.claimFoldMembers = async (request) => {
+      const page = await transport(request);
+      return page.directoryEOF
+        ? {
+            ...page,
+            rows: page
+              .rows!.slice(0, -1)
+              .concat({ ...page.rows!.at(-1)!, witness: 'f'.repeat(64) }),
+          }
+        : page;
+    };
+  }, /sealed inventory/);
+  // A rotated native member credential only restarts the read-only directory scan.
+  const h = inventoryHarness({ faults: { invalidMemberProgress: true } });
+  const turn = await receiveClaimFoldOriginalInventoryTurn(h.env, h.pool, h.input());
+  expect(turn.status).toBe('captured');
+  expect(h.native.calls.members.map((request) => request.progress)).toEqual(['', '127', '', '127']);
 });

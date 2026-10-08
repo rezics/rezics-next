@@ -1,4 +1,5 @@
-import type { Pool } from 'pg';
+import { createHash, randomUUID } from 'node:crypto';
+import type { Pool, PoolClient } from 'pg';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import {
@@ -30,7 +31,11 @@ import {
   type StatementMeaning,
   type StatementRetainedClaimProvenance,
 } from '../statement/schema.ts';
+import type { AssessmentHistoryCursor } from '../access/assessment-history.ts';
 import { native, CLAIM_PROFILE, ADMISSIONS, receiptIri } from './graph.ts';
+import type { AssessmentProducerPermit } from './assessment-producer.ts';
+import { ASSESSMENT_HISTORY_AUDIT_COST, auditAssessmentHistoryWindow } from './operations.ts';
+import type { VerificationStore } from './store.ts';
 import {
   assertClaimFoldCustodyText,
   readClaimFoldCustody,
@@ -813,22 +818,14 @@ export async function convertEligibleClaimsTurn(
   );
 }
 
-async function convertEligibleClaimsTurnAtBudget(
+/** Acquire or resume this job's owned graph hold and closed Access writer fence, then recheck drained admissions. */
+async function acquireClaimFoldFence(
   env: WorkActivationEnvironment,
   pool: Pool,
-  input: ClaimStatementFoldMap & {
-    job: string;
-    claims: readonly { claim: string; claimRevision: string }[];
-  },
+  input: ClaimStatementFoldMap,
+  fence: ClaimStatementFoldFence,
   deadline: number,
 ) {
-  if (
-    input.claims.length > CLAIM_STATEMENT_FOLD_COST.claims ||
-    new Set(input.claims.map((item) => item.claim)).size !== input.claims.length
-  ) {
-    throw new ClaimStatementFoldUnavailable('Claim fold turn exceeds its explicit target bound');
-  }
-  const fence = claimStatementFoldFence(env, input, input.job);
   const graphHeld =
     (
       await env.fuseki.query(
@@ -912,6 +909,25 @@ async function convertEligibleClaimsTurnAtBudget(
   await ownFence(env, fence);
   // Closure waits for in-flight Access transactions; the pre-acquire check alone cannot prove this cut.
   await assertClaimFoldAdmissionsDrained(pool);
+}
+
+async function convertEligibleClaimsTurnAtBudget(
+  env: WorkActivationEnvironment,
+  pool: Pool,
+  input: ClaimStatementFoldMap & {
+    job: string;
+    claims: readonly { claim: string; claimRevision: string }[];
+  },
+  deadline: number,
+) {
+  if (
+    input.claims.length > CLAIM_STATEMENT_FOLD_COST.claims ||
+    new Set(input.claims.map((item) => item.claim)).size !== input.claims.length
+  ) {
+    throw new ClaimStatementFoldUnavailable('Claim fold turn exceeds its explicit target bound');
+  }
+  const fence = claimStatementFoldFence(env, input, input.job);
+  await acquireClaimFoldFence(env, pool, input, fence, deadline);
   const converted: Awaited<ReturnType<typeof executeClaimStatementFold>>[] = [];
   const retained: { claim: string; reason: string }[] = [];
   for (let index = 0; index < input.claims.length; index++) {
@@ -986,5 +1002,526 @@ async function convertEligibleClaimsTurnAtBudget(
     converted,
     retained,
     remaining: [],
+  };
+}
+
+// ------------------------------------------------------------ original inventory
+
+export const CLAIM_FOLD_ORIGINAL_INVENTORY_COST = {
+  auditWindows: 4,
+  inventoryPages: 16,
+  memberPages: 16,
+  deadlineMs: 30_000,
+  /** One wall-clock attempt window. Native work still bounds each page to 30 seconds. */
+  attemptMs: 60 * 60 * 1000,
+} as const;
+
+/** Fixed native maintenance DTOs. The transport adds only capability, size and budget handling. */
+export interface ClaimFoldInventoryJob {
+  dataEpoch: string;
+  routingEpoch: string;
+  marker: string;
+  mapDigest: string;
+  job: string;
+  acquireReceipt: string;
+}
+export interface ClaimFoldInventoryRow {
+  claim: string;
+  head: string;
+  witness: string;
+}
+export interface ClaimFoldInventoryRequest {
+  job: ClaimFoldInventoryJob;
+  attempt: string;
+  page: number;
+  previous: string;
+  requestId: string;
+  deadline: number;
+}
+export interface ClaimFoldInventoryPage {
+  status: string;
+  sourceComplete?: boolean;
+  attempt?: string;
+  page?: number;
+  next?: string;
+  hash?: string;
+  total?: number;
+  rows?: ClaimFoldInventoryRow[];
+  sourceCut?: string;
+  error?: string;
+}
+export interface ClaimFoldMembersRequest {
+  job: ClaimFoldInventoryJob;
+  sourceCut: string;
+  seal: string;
+  progress: string;
+  deadline: number;
+}
+export interface ClaimFoldMembersPage {
+  status: string;
+  directoryEOF?: boolean;
+  sourceCut?: string;
+  seal?: string;
+  count?: number;
+  rows?: ClaimFoldInventoryRow[];
+  progress?: string;
+  error?: string;
+}
+export interface ClaimFoldMaintenanceTransport {
+  claimFoldInventory(
+    request: ClaimFoldInventoryRequest,
+    signal?: AbortSignal,
+  ): Promise<ClaimFoldInventoryPage>;
+  claimFoldMembers(
+    request: ClaimFoldMembersRequest,
+    signal?: AbortSignal,
+  ): Promise<ClaimFoldMembersPage>;
+}
+
+export interface ClaimFoldOriginalInventoryProgress {
+  marker: string;
+  accessGeneration: string;
+  content: { job: string; generation: string; restoreEpoch: string };
+  audit: {
+    cursor: AssessmentHistoryCursor | null;
+    done: boolean;
+    windows: number;
+    entries: number;
+    counts: Record<string, number>;
+    digest: string;
+  };
+  inventory: {
+    attempt: string;
+    deadline: number;
+    page: number;
+    previous: string;
+    total: number;
+    sourceCut: string | null;
+    seal: string | null;
+    sealed: boolean;
+    accumulator: string;
+  };
+  members: { progress: string; count: number; accumulator: string; done: boolean };
+}
+export interface ClaimFoldOriginalInventoryInput extends ClaimStatementFoldMap {
+  job: string;
+  transport: ClaimFoldMaintenanceTransport;
+  contentPool: Pool;
+  store: VerificationStore;
+  /** A permit from the existing maintenance closure of Content1704; this turn never closes it. */
+  permit: AssessmentProducerPermit;
+  progress?: ClaimFoldOriginalInventoryProgress;
+}
+/** What a captured original population still does not establish. Nothing here is closure or release. */
+export const CLAIM_FOLD_ORIGINAL_LINKAGE = {
+  creatorAcknowledgement: 'unresolved',
+  evidenceToRevision: 'unresolved',
+  retainedBodyCustody: 'unresolved',
+  seekReconciliation: 'unresolved',
+} as const;
+export type ClaimFoldOriginalInventoryTurn =
+  | {
+      status: 'partial';
+      complete: false;
+      release: 'denied';
+      reason: 'turn-bound' | 'budget-expired' | 'retry-exact-request';
+      progress: ClaimFoldOriginalInventoryProgress;
+    }
+  | {
+      status: 'captured';
+      complete: false;
+      release: 'denied';
+      progress: ClaimFoldOriginalInventoryProgress;
+      original: {
+        job: ClaimFoldInventoryJob;
+        attempt: string;
+        sourceCut: string;
+        seal: string;
+        total: number;
+        directory: { count: number; accumulator: string };
+        access: { generation: string };
+        content: { job: string; generation: string; restoreEpoch: string };
+        assessmentHistory: {
+          windows: number;
+          entries: number;
+          counts: Record<string, number>;
+          digest: string;
+        };
+        linkage: typeof CLAIM_FOLD_ORIGINAL_LINKAGE;
+      };
+    };
+
+const NATIVE_ID = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
+const HEX64 = /^[0-9a-f]{64}$/;
+const ZERO64 = '0'.repeat(64);
+const INVENTORY_ROWS = 127;
+
+const memberHash = (row: ClaimFoldInventoryRow) =>
+  hash(`${row.claim}\n${row.head}\n${row.witness}`);
+const xorHex = (left: string, right: string) => {
+  const a = Buffer.from(left, 'hex'),
+    b = Buffer.from(right, 'hex');
+  return Buffer.from(a.map((byte, index) => byte ^ b[index]!)).toString('hex');
+};
+/** The same request must reproduce the same identity after a lost acknowledgement. */
+const inventoryRequestId = (
+  job: ClaimFoldInventoryJob,
+  attempt: string,
+  page: number,
+  previous: string,
+) => {
+  const digest = createHash('sha256')
+    .update(JSON.stringify(['claim-fold-inventory-request-v1', job, attempt, page, previous]))
+    .digest('hex');
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-4${digest.slice(13, 16)}-8${digest.slice(17, 20)}-${digest.slice(20, 32)}`;
+};
+function checkedRows(value: unknown): ClaimFoldInventoryRow[] {
+  if (!Array.isArray(value) || value.length > INVENTORY_ROWS)
+    throw new ClaimStatementFoldUnavailable('Claim inventory rows exceed their native bound');
+  const claims = new Set<string>();
+  return value.map((row: unknown) => {
+    const item = row as Record<string, unknown> | null;
+    if (
+      !item ||
+      Object.keys(item).sort().join() !== 'claim,head,witness' ||
+      typeof item.claim !== 'string' ||
+      !NATIVE_ID.test(item.claim) ||
+      typeof item.head !== 'string' ||
+      !NATIVE_ID.test(item.head) ||
+      typeof item.witness !== 'string' ||
+      !HEX64.test(item.witness) ||
+      claims.has(item.claim)
+    )
+      throw new ClaimStatementFoldUnavailable('Claim inventory row differs from its fixed shape');
+    claims.add(item.claim);
+    return { claim: item.claim, head: item.head, witness: item.witness };
+  });
+}
+
+async function closedAccessGeneration(pool: Pick<Pool, 'query'>) {
+  const fence = (
+    await pool.query<{ open: boolean; generation: string }>(
+      'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id',
+    )
+  ).rows[0];
+  if (fence?.open !== false)
+    throw new ClaimStatementFoldUnavailable(
+      'Claim inventory requires its closed Access generation',
+    );
+  return fence.generation;
+}
+
+/** Borrow one client per owner for a single read-only transaction each: Access first, then Content. */
+async function withOwnerSnapshots<T>(
+  pool: Pool,
+  contentPool: Pool,
+  work: (access: PoolClient, content: PoolClient) => Promise<T>,
+): Promise<T> {
+  const access = await pool.connect();
+  try {
+    const content = await contentPool.connect();
+    try {
+      await access.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+      await content.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      return await work(access, content);
+    } finally {
+      await content.query('ROLLBACK').catch(() => undefined);
+      content.release();
+    }
+  } finally {
+    await access.query('ROLLBACK').catch(() => undefined);
+    access.release();
+  }
+}
+
+/** Re-prove the closed Access generation, drained admissions and exact Content1704 permit. */
+async function recheckOwnerCuts(
+  pool: Pool,
+  input: ClaimFoldOriginalInventoryInput,
+  progress: ClaimFoldOriginalInventoryProgress,
+) {
+  if ((await closedAccessGeneration(pool)) !== progress.accessGeneration)
+    throw new ClaimStatementFoldStale('Claim inventory Access generation changed');
+  await assertClaimFoldAdmissionsDrained(pool);
+  await withOwnerSnapshots(pool, input.contentPool, async (_access, content) => {
+    await input.store.readAssessmentProducerOriginals(content, input.permit, []);
+  });
+}
+
+/**
+ * Capture the ORIGINAL native Claim inventory before any conversion, under the
+ * closed Access generation and the closed Content1704 permit, and join it to a
+ * read-only audit of the retained assessment history. The result is evidence
+ * only: creator acknowledgement, E to R, retained body custody and seek
+ * reconciliation stay unresolved and no completion or release is granted.
+ * A lost page acknowledgement is retried with the identical request.
+ */
+export async function receiveClaimFoldOriginalInventoryTurn(
+  env: WorkActivationEnvironment,
+  pool: Pool,
+  input: ClaimFoldOriginalInventoryInput,
+): Promise<ClaimFoldOriginalInventoryTurn> {
+  const cost = CLAIM_FOLD_ORIGINAL_INVENTORY_COST;
+  return fusekiReadBudget.run(
+    {
+      signal: AbortSignal.timeout(cost.deadlineMs),
+      callsLeft:
+        cost.auditWindows * ASSESSMENT_HISTORY_AUDIT_COST.nativeCalls +
+        cost.inventoryPages +
+        cost.memberPages +
+        16,
+      bytesLeft:
+        cost.auditWindows * ASSESSMENT_HISTORY_AUDIT_COST.nativeBytes +
+        (cost.inventoryPages + cost.memberPages) * 512 * 1024,
+    },
+    () => receiveAtBudget(env, pool, input, performance.now() + cost.deadlineMs),
+  );
+}
+
+async function receiveAtBudget(
+  env: WorkActivationEnvironment,
+  pool: Pool,
+  input: ClaimFoldOriginalInventoryInput,
+  deadline: number,
+): Promise<ClaimFoldOriginalInventoryTurn> {
+  const cost = CLAIM_FOLD_ORIGINAL_INVENTORY_COST;
+  const fence = claimStatementFoldFence(env, input, input.job);
+  const acquire = envelope(env, 'acquire', fence);
+  const job: ClaimFoldInventoryJob = {
+    dataEpoch: env.lineage.dataEpoch,
+    routingEpoch: env.lineage.routingEpoch,
+    marker: fence.marker,
+    mapDigest: fence.mapDigest,
+    job: fence.job,
+    acquireReceipt: acquire.receipt,
+  };
+  const permit = input.permit;
+  if (permit.mode !== 'maintenance' || typeof permit.job !== 'string')
+    throw new ClaimStatementFoldUnavailable(
+      'Claim inventory requires the closed Content1704 permit',
+    );
+  await acquireClaimFoldFence(env, pool, input, fence, deadline);
+  const generation = await closedAccessGeneration(pool);
+  const content = {
+    job: permit.job,
+    generation: permit.generation,
+    restoreEpoch: permit.restoreEpoch,
+  };
+  let progress: ClaimFoldOriginalInventoryProgress = structuredClone(
+    input.progress ?? {
+      marker: fence.marker,
+      accessGeneration: generation,
+      content,
+      audit: { cursor: null, done: false, windows: 0, entries: 0, counts: {}, digest: ZERO64 },
+      inventory: {
+        attempt: randomUUID(),
+        deadline: Date.now() + cost.attemptMs,
+        page: 0,
+        previous: '',
+        total: 0,
+        sourceCut: null,
+        seal: null,
+        sealed: false,
+        accumulator: ZERO64,
+      },
+      members: { progress: '', count: 0, accumulator: ZERO64, done: false },
+    },
+  );
+  if (
+    progress.marker !== fence.marker ||
+    progress.accessGeneration !== generation ||
+    JSON.stringify(progress.content) !== JSON.stringify(content)
+  )
+    throw new ClaimStatementFoldStale('Claim inventory progress belongs to another cut');
+  await recheckOwnerCuts(pool, input, progress);
+  const signal = fusekiReadBudget.getStore()!.signal;
+  const expired = () => performance.now() >= deadline || signal.aborted;
+  const partial = (
+    reason: 'turn-bound' | 'budget-expired' | 'retry-exact-request',
+  ): ClaimFoldOriginalInventoryTurn => ({
+    status: 'partial',
+    complete: false,
+    release: 'denied',
+    reason,
+    progress,
+  });
+  // Original assessment history first: unresolved entries are counted, never repaired.
+  for (let windows = 0; !progress.audit.done; windows++) {
+    if (windows >= cost.auditWindows) return partial('turn-bound');
+    if (expired()) return partial('budget-expired');
+    const page = await withOwnerSnapshots(pool, input.contentPool, (access, contentClient) =>
+      auditAssessmentHistoryWindow(
+        { env, store: input.store },
+        {
+          access,
+          content: contentClient,
+          permit,
+          history: progress.audit.cursor
+            ? { cursor: progress.audit.cursor }
+            : { recoveryGeneration: progress.accessGeneration },
+        },
+      ),
+    );
+    if (
+      page.access.cut.state !== 'held' ||
+      page.access.cut.recoveryGeneration !== progress.accessGeneration
+    )
+      throw new ClaimStatementFoldStale('Claim inventory Access history cut is not held');
+    const counts = { ...progress.audit.counts };
+    for (const entry of page.entries) {
+      const outcome = entry.outcome;
+      const key = outcome.status === 'unresolved' ? `unresolved:${outcome.reason}` : outcome.status;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    progress.audit = {
+      cursor: page.access.next,
+      done: page.access.next === null,
+      windows: progress.audit.windows + 1,
+      entries: progress.audit.entries + page.entries.length,
+      counts,
+      digest: hash(`${progress.audit.digest}\n${JSON.stringify(page.entries)}`),
+    };
+  }
+  // Original native population: the exact request is reissued until its response is validated.
+  for (let pages = 0; !progress.inventory.sealed; pages++) {
+    if (pages >= cost.inventoryPages) return partial('turn-bound');
+    if (expired()) return partial('budget-expired');
+    const state = progress.inventory;
+    const request: ClaimFoldInventoryRequest = {
+      job,
+      attempt: state.attempt,
+      page: state.page,
+      previous: state.previous,
+      requestId: inventoryRequestId(job, state.attempt, state.page, state.previous),
+      deadline: state.deadline,
+    };
+    let result: ClaimFoldInventoryPage;
+    try {
+      result = await input.transport.claimFoldInventory(request, signal);
+    } catch {
+      return partial('retry-exact-request');
+    }
+    if (result.status === 'deadline' && Date.now() < state.deadline)
+      return partial('retry-exact-request');
+    if (result.status !== 'committed')
+      throw new ClaimStatementFoldUnavailable(
+        `Claim inventory ${result.status}: ${result.error ?? 'refused'}; begin a new attempt only before conversion`,
+      );
+    const rows = checkedRows(result.rows);
+    if (
+      result.attempt !== state.attempt ||
+      result.page !== state.page ||
+      typeof result.hash !== 'string' ||
+      !HEX64.test(result.hash) ||
+      typeof result.sourceCut !== 'string' ||
+      !HEX64.test(result.sourceCut) ||
+      (state.sourceCut !== null && result.sourceCut !== state.sourceCut) ||
+      typeof result.sourceComplete !== 'boolean' ||
+      typeof result.next !== 'string' ||
+      !/^(?:[0-9a-f]{64})?$/.test(result.next) ||
+      result.total !== state.total + rows.length
+    )
+      throw new ClaimStatementFoldUnavailable(
+        'Claim inventory page differs from its exact request',
+      );
+    progress.inventory = {
+      ...state,
+      page: state.page + 1,
+      previous: result.hash,
+      total: result.total,
+      sourceCut: result.sourceCut,
+      seal: result.sourceComplete ? result.hash : null,
+      sealed: result.sourceComplete,
+      accumulator: rows.reduce((value, row) => xorHex(value, memberHash(row)), state.accumulator),
+    };
+  }
+  const sealed = progress.inventory;
+  // The native directory must enumerate exactly the pages this receiver saw.
+  for (let pages = 0; !progress.members.done; pages++) {
+    if (pages >= cost.memberPages) return partial('turn-bound');
+    if (expired()) return partial('budget-expired');
+    const state = progress.members;
+    let result: ClaimFoldMembersPage;
+    try {
+      result = await input.transport.claimFoldMembers(
+        {
+          job,
+          sourceCut: sealed.sourceCut!,
+          seal: sealed.seal!,
+          progress: state.progress,
+          deadline: sealed.deadline,
+        },
+        signal,
+      );
+    } catch {
+      return partial('retry-exact-request');
+    }
+    if (
+      result.status === 'invalid' &&
+      /not native authority/.test(result.error ?? '') &&
+      state.progress
+    ) {
+      // Native progress is a process-local credential; restart the read-only directory scan.
+      progress.members = { progress: '', count: 0, accumulator: ZERO64, done: false };
+      continue;
+    }
+    if (result.status === 'deadline') return partial('retry-exact-request');
+    if (result.status !== 'read')
+      throw new ClaimStatementFoldUnavailable(
+        `Claim member directory ${result.status}: ${result.error ?? 'refused'}`,
+      );
+    const rows = checkedRows(result.rows);
+    const count = state.count + rows.length;
+    if (
+      result.sourceCut !== sealed.sourceCut ||
+      result.seal !== sealed.seal ||
+      result.count !== count ||
+      typeof result.directoryEOF !== 'boolean' ||
+      typeof result.progress !== 'string' ||
+      (result.directoryEOF ? result.progress !== '' : result.progress === '')
+    )
+      throw new ClaimStatementFoldUnavailable(
+        'Claim member directory differs from its exact request',
+      );
+    const accumulator = rows.reduce(
+      (value, row) => xorHex(value, memberHash(row)),
+      state.accumulator,
+    );
+    if (result.directoryEOF && (count !== sealed.total || accumulator !== sealed.accumulator))
+      throw new ClaimStatementFoldUnavailable(
+        'Claim member directory differs from the sealed inventory',
+      );
+    progress.members = {
+      progress: result.progress,
+      count,
+      accumulator,
+      done: result.directoryEOF,
+    };
+  }
+  // A late producer, Access generation change or Content gate change after capture invalidates it.
+  await ownFence(env, fence);
+  await recheckOwnerCuts(pool, input, progress);
+  return {
+    status: 'captured',
+    complete: false,
+    release: 'denied',
+    progress,
+    original: {
+      job,
+      attempt: sealed.attempt,
+      sourceCut: sealed.sourceCut!,
+      seal: sealed.seal!,
+      total: sealed.total,
+      directory: { count: progress.members.count, accumulator: progress.members.accumulator },
+      access: { generation: progress.accessGeneration },
+      content: progress.content,
+      assessmentHistory: {
+        windows: progress.audit.windows,
+        entries: progress.audit.entries,
+        counts: progress.audit.counts,
+        digest: progress.audit.digest,
+      },
+      linkage: CLAIM_FOLD_ORIGINAL_LINKAGE,
+    },
   };
 }

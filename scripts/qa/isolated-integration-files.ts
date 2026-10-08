@@ -169,6 +169,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/platform-bootstrap.test.ts',
   // Online-index cancellation probes mutate owner migration receipts and create disposable schemas.
   'tests/qa/integration/concurrent-index-migrations.test.ts',
+  // The original Claim inventory is captured before any conversion, so it needs an unfolded graph and its own holds.
+  'tests/qa/integration/claim-fold-original-inventory.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */

@@ -1357,6 +1357,16 @@ test('real closed Access and Content cuts classify original assessment history f
       )
     ).rows,
   ).toEqual(contentBefore);
+  // Leave the shared Content owner as found: settle the one pending intent through the closed
+  // permit and reopen this isolated database's gate, as the producer integration file does.
+  await staging.withAssessmentProducerEffects(pending.id, f.digest, permit, async () => ({
+    status: 'cancelled',
+    receipt: `urn:rezics:receipt:${hash(`${pending.id}\0claim-assess`)}`,
+    assessment: null,
+    activation: { status: 'cancelled' },
+  }));
+  await contentPool.query(`UPDATE verification.assessment_producer_gate SET mode = 'ordinary', job = NULL,
+    restore_epoch = (SELECT version FROM reading_position.generation WHERE singleton) WHERE singleton`);
   console.log(
     JSON.stringify({
       case: 'original-assessment-history-window',
