@@ -269,6 +269,22 @@ test('owner Mine omits ordinals while a public page of the same order keeps them
   expect('ordinal' in openedItem && openedItem.ordinal).toBe(1);
 });
 
+test('a filled page reads its withheld lookahead in one scan window', async () => {
+  const f = await fixture();
+  for (const row of f.episodes.slice(1, 40)) f.hidden.add(row.target!);
+  const before = f.measure();
+  const page = await f.traversal().page({ limit: 1 });
+  expect(page.items.map(row => row.occurrence)).toEqual([f.episodes[0]!.occurrence]);
+  expect(page.complete).toBe(false);
+  expect(page.next).toBeString();
+  // The first probe is the item plus one hidden lookahead. The rest of the
+  // scan window is one widened read, not a disclosure per hidden sibling.
+  expect(f.measure().calls - before.calls).toBeLessThan(8);
+  expect(f.measure().rowsRead - before.rowsRead).toBeLessThan(40);
+  const next = await f.traversal().page({ limit: 1, after: page.next! });
+  expect(next.items.every(row => row.occurrence !== f.episodes[0]!.occurrence)).toBe(true);
+});
+
 test('a visible last sibling never returns a physical ordinal over 999 hidden items', async () => {
   const f = await fixture();
   for (const row of f.episodes.slice(0, 999)) f.hidden.add(row.target!);

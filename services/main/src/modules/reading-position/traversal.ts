@@ -369,8 +369,12 @@ export class ReadingPositionTraversal {
         continue;
       }
       const room = input.limit - items.length + 1;
-      const probe = this.order
-        ? Math.min(READING_CHOOSER_COST.probe, widen && items.length === 0
+      // A visible page is one read of `room` (the page plus its lookahead).
+      // A withheld run after that — or a probe that delivered nothing — is one
+      // read of the rest of the scan window. One-row probes would repeat
+      // disclosure for every hidden sibling and exhaust the work-read budget.
+      const probe: number = this.order
+        ? Math.min(READING_CHOOSER_COST.probe, widen
           ? Math.max(room, READING_CHOOSER_COST.scanRows - skipped) : room)
         : Math.min(READING_CHOOSER_COST.probe, READING_CHOOSER_COST.scanRows - examined);
       if (probe < 1) break;
@@ -400,7 +404,10 @@ export class ReadingPositionTraversal {
         }
       }
       skipped += passed;
-      widen = deliveredHere === 0 && !descended;
+      // Widen only while this frame still has unread siblings. An exhausted
+      // frame pops, and the next sibling starts again at the page-sized probe.
+      widen = !descended && (deliveredHere === 0
+        || items.length === input.limit && candidates.length === probe);
       if (!descended && candidates.length < probe && items.length <= input.limit) {
         frames.pop();
         const parent = frames.at(-1)?.after;
