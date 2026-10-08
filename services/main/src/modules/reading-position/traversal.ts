@@ -337,8 +337,8 @@ export class ReadingPositionTraversal {
     const meta = await this.metadataFor(this.root);
     const frames: ReadingFrame[] = [];
     let checkpoint: string | null = null, lastDelivered: string | null = null;
-    // A sibling ordinal counts every earlier placement. It is only returned
-    // while every placement before this page was visited and disclosed.
+    // Once a read has stepped over an undisclosed placement, every later
+    // checkpoint says so.
     let withheld = false;
     const at = (occurrence: string, descend: boolean) => positionCursor(occurrence, descend, withheld);
     if (input.after) {
@@ -423,10 +423,9 @@ export class ReadingPositionTraversal {
     const lookahead = items.length > input.limit;
     const complete = !lookahead && frames.length === 0;
     items.splice(input.limit);
-    // Omit the ordinal once this read, or any read before it, has stepped over
-    // an undisclosed part.
-    const delivered: ReadingOccurrence[] = withheld
-      ? items.map(({ ordinal: _ordinal, ...item }) => item) : items;
+    // A physical ordinal can count placements this reader cannot see, so no
+    // page returns one; it only serves the ordinal search above.
+    const delivered: ReadingOccurrence[] = items.map(({ ordinal: _ordinal, ...item }) => item);
     const next = complete ? null : lookahead ? lastDelivered : checkpoint;
     if (!complete && !next) throw new WorkReadUnavailable('Reading continuation is unavailable');
     return { items: delivered, next, complete: complete && !this.labelsIndexing,

@@ -254,7 +254,7 @@ test('search plus Mine resumes its pending window before advancing search pages'
   expect(second.items.every(row => !Object.hasOwn(row, 'ordinal'))).toBe(true);
 });
 
-test('owner Mine omits ordinals while a public page of the same order keeps them', async () => {
+test('owner Mine and a public page of the same order both omit ordinals', async () => {
   const f = await fixture();
   Object.assign(f.session.deps, { access: { canReadAsBaselineMember: async () => true } });
   const traversal = f.traversal();
@@ -266,8 +266,8 @@ test('owner Mine omits ordinals while a public page of the same order keeps them
   const opened = new ReadingBoundary(f.session, 'start');
   opened.traversalFor = () => traversal;
   const publicPage = await opened.chooser(f.work, 1);
-  const openedItem = publicPage.items[0]!;
-  expect('ordinal' in openedItem && openedItem.ordinal).toBe(1);
+  expect(publicPage.items.map(row => row.occurrence)).toEqual([f.episodes[0]!.occurrence]);
+  expect(publicPage.items.every(row => !Object.hasOwn(row, 'ordinal'))).toBe(true);
 });
 
 test('a filled page reads its withheld lookahead in one scan window', async () => {
@@ -623,11 +623,12 @@ test('a continuation after a withheld scan window never carries a physical ordin
   const second = await f.traversal().page({ limit: 1, after: first.next! });
   expect(second.items.map(row => row.occurrence)).toEqual([f.episodes[32]!.occurrence]);
   expect(Object.hasOwn(second.items[0]!, 'ordinal')).toBe(false);
-  // A page that never stepped over a withheld part keeps its ordinal.
+  // A page that never stepped over a withheld part has no ordinal either.
   const open = await fixture();
   const opened = await open.traversal().page({ limit: 1 });
   const carried = await open.traversal().page({ limit: 1, after: opened.next! });
-  expect(carried.items[0]!.ordinal).toBe(2);
+  expect(carried.items.map(row => row.occurrence)).toEqual([open.episodes[1]!.occurrence]);
+  expect(Object.hasOwn(carried.items[0]!, 'ordinal')).toBe(false);
 });
 
 test('an unstarted owner continues the opening page with a cursor the next request accepts', async () => {

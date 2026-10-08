@@ -338,14 +338,7 @@ export class ReadingBoundary {
     await this.fence();
     // Keep the resume window while advancing search, so each subsequent page
     // does not restart at the withheld end of the completion index.
-    // The owner's Mine counts private completions. A sibling ordinal includes
-    // placements this reader cannot see, including ones a title seek jumps
-    // over, so this view never returns one. A public or anonymous page still
-    // does: every placement it counts was disclosed.
-    const items = ownMine
-      ? page.items.map(({ ordinal: _ordinal, ...item }) => item)
-      : page.items;
-    return { work, resolved, ...page, items,
+    return { work, resolved, ...page,
       next: page.next && ownMine
         ? searchContinuation(page.next, resumeAfter ?? null) : page.next,
       scope: 'positions' as const };

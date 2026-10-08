@@ -243,7 +243,7 @@ test('COMP03 owner schema: Content migrations install 030 empty and upgrade from
   const tables = await empty.query<{ table_name: string }>(`SELECT table_name FROM information_schema.tables
     WHERE table_schema = 'structure' ORDER BY table_name`);
   expect(tables.rows.map(row => row.table_name)).toEqual(
-    ['group_root', 'progress', 'progress_command', 'progress_reader', 'progress_scope',
+    ['group_root', 'progress', 'progress_anchor_scope', 'progress_command', 'progress_reader', 'progress_scope',
       'qualifier_root', 'stage_job', 'stage_page']);
 
   // An owner at the head before this task: every earlier migration plus retained rows.
