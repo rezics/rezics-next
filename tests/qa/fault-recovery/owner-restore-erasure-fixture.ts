@@ -7,8 +7,10 @@ import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync 
 import { join, resolve } from 'node:path';
 import { Client, Pool } from 'pg';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
+import { ContentComments, contentCommentIntentDigest } from '../../../services/content/src/comments.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
+import { VerificationStore } from '../../../services/main/src/modules/verification/store.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import {
   ObjectIntegrityError,
@@ -527,6 +529,41 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       availableBeforeErasure.reference.byteLength,
     );
     expect(availableBeforeErasure.serializedJson).toContain('erased native HTTP fixture payload');
+    // The quote is part of the signed original cut: the cited revision's own
+    // text, before the recovery fence, coverage capture and physical backup.
+    const cited = JSON.parse(availableBeforeErasure.serializedJson) as { body?: unknown };
+    if (typeof cited.body !== 'string' || cited.body.includes('\n')
+      || !cited.body.includes('erased native HTTP fixture payload')) {
+      throw new Error('cited revision is not one quotable paragraph of the published source');
+    }
+    const quotedExact = cited.body;
+    const quotedBody = 'authored annotation stays';
+    const quotedInput = { revisionId, resourceId: created.work, author: actor,
+      exact: quotedExact, body: quotedBody };
+    const quoted = await new ContentComments(source.content).create({ ...quotedInput,
+      admissionId: randomUUID(), authorityEpoch: '1', scope: `content:comment:${created.work}`,
+      requestDigest: contentCommentIntentDigest(quotedInput) });
+    if (!('selector' in quoted.target) || quoted.target.selector.exact !== quotedExact) {
+      throw new Error('comment core did not quote the cited revision');
+    }
+    const claim = `https://rezics.com/id/${randomUUID()}`;
+    const claimRevision = `https://rezics.com/id/${randomUUID()}`;
+    await new VerificationStore(source.content).recordEvidence(principalId, `quote:${randomUUID()}`, claim, {
+      claimRevision, expectedHead: null, items: [{ stance: 'supports', contentRevision: revisionId,
+        selector: { exact: quotedExact, start: 0, end: quotedExact.length }, availability: 'available' }],
+    });
+    const evidence = (await source.content.query<{ id: string; manifest_digest: string;
+      request_digest: string }>(`SELECT e.id::text AS id, e.manifest_digest, r.request_digest
+        FROM verification.evidence_set_revision e
+        JOIN verification.receipt r ON r.id = e.operation_id
+        WHERE e.claim = $1`, [claim])).rows[0];
+    if (!evidence) throw new Error('cited evidence receipt is unavailable');
+    const quotedCommentId = quoted.comment.split('/').at(-1)!;
+    const quotedSource = { commentId: quotedCommentId, revisionId, exact: quotedExact, body: quotedBody,
+      prefix: quoted.target.selector.prefix, suffix: quoted.target.selector.suffix,
+      evidenceRevisionId: evidence.id, manifestDigest: evidence.manifest_digest,
+      requestDigest: evidence.request_digest, start: 0, end: quotedExact.length };
+    await drain(source.relay);
     const generation = await engageAccessRecoveryFence(source.access);
     let coverage: RecoveryCoverage | undefined;
     for (let attempt = 0; attempt < 8 && !coverage; attempt++) {
@@ -913,6 +950,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       original,
       erased,
       revisionId,
+      quotedSource,
       availableBeforeErasure,
       laterRevisionId,
       work: created.work,
