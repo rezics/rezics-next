@@ -14,6 +14,7 @@ import { assertMergeCoverage, discoverMergeHandlers } from '../../../services/ma
 import { PERSON_STATE_MERGE_EXCLUSIONS } from '../../../services/main/src/modules/identity-merge/person-state-coverage.ts';
 import type { CanonicalRow } from '../../../services/main/src/modules/library-import/formats/contract.ts';
 import { startHomeStack } from './feed-read-support.ts';
+import { pollLibraryImportApply } from './library-import-apply-support.ts';
 import { DEFAULT_PERSON_CHOICES } from '../../../services/main/src/modules/preferences/store.ts';
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 
@@ -264,8 +265,9 @@ test('private exact-release copies and overdue loans preserve replay, CAS, concu
       `/v1/me/library-imports/${uploaded.id}/rows?actingSubject=${encodeURIComponent(other)}`, undefined, randomUUID(), home.author.token));
     for (const row of importRows.rows) await json(await call('PUT', `/v1/me/library-imports/${uploaded.id}/rows/${row.index}`,
       { actingSubject: other, expectedVersion: row.version, choice: 'private' }, randomUUID(), home.author.token));
-    await json(await call('POST', `/v1/me/library-imports/${uploaded.id}/apply`,
-      { actingSubject: other, context: null, language: 'en' }, randomUUID(), home.author.token));
+    await pollLibraryImportApply(() => call('GET', `/v1/me/library-imports/${uploaded.id}/apply?actingSubject=${encodeURIComponent(other)}`,
+      undefined, randomUUID(), home.author.token), { started: call('POST', `/v1/me/library-imports/${uploaded.id}/apply`,
+      { actingSubject: other, context: null, language: 'en' }, randomUUID(), home.author.token) });
     const roundTrip = await exportPage(other, home.author.token);
     const bySource = (rows: CanonicalRow[]) => [...rows].sort((a,b) => a.sourceId.localeCompare(b.sourceId));
     expect(bySource(roundTrip.rows.filter(row => row.raw.libraryCopy || row.raw.libraryLoan))).toEqual(bySource(native));
