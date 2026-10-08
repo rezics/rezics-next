@@ -186,7 +186,11 @@ test('every served Main route, including transports, has a reviewed exposure', (
   expect(publicOperations).toContain('postV1ZonesByIdRealm-attachment-withdrawals');
   expect(matrix.find(entry => entry.path === '/v1/zones/{id}/realm-attachment-withdrawals' && entry.method === 'post'))
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'write', bearer: true });
-  expect(publicOperations).toHaveLength(524);
+  // Launch-declared public within the first public scope under trust-ops' standing consent (2026-10-07): a Realm's stewards list the Zones attached to it, optional bearer, read family; others read it as a missing Realm.
+  expect(publicOperations).toContain('getV1RealmsByRealmZone-attachments');
+  expect(matrix.find(entry => entry.path === '/v1/realms/{realm}/zone-attachments' && entry.method === 'get'))
+    .toMatchObject({ exposure: 'public', rateLimitFamily: 'read' });
+  expect(publicOperations).toHaveLength(525);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
