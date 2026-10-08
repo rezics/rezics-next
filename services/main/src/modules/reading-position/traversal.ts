@@ -9,6 +9,7 @@ import { ReadingOrderIndex, readingOrderRead } from './immutable-order.ts';
 import { searchOccurrenceLabels } from './label-index.ts';
 import { readingWorkScope } from './work-scope.ts';
 import { ReadingSeekUnavailable } from './errors.ts';
+import { continuityKey } from './continuity.ts';
 import { browseContinuation, readingContinuation } from './continuation.ts';
 
 /** Bounded results and live traversal state, independent of chapter inventory.
@@ -27,13 +28,10 @@ export interface ReadingLocation { item: ReadingOccurrence; frames: ReadingFrame
 interface Candidate { item: ReadingOccurrence; matches: boolean }
 type Disclose = (resources: string[]) => Promise<ReadonlySet<string>>;
 
-function tuple(item: ReadingOccurrence) { return `${item.segmentKey}\0${item.orderKey}`; }
+/** One continuity key: series order, then order within the enclosing member. */
 export function compareReadingLocations(a: ReadingLocation, b: ReadingLocation): number {
-  const left = a.frames.map(frame => tuple(frame.after!)), right = b.frames.map(frame => tuple(frame.after!));
-  for (let at = 0; at < Math.min(left.length, right.length); at++) {
-    if (left[at] !== right[at]) return left[at]! < right[at]! ? -1 : 1;
-  }
-  return left.length - right.length;
+  const left = continuityKey(a), right = continuityKey(b);
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function placementPattern(generation: string, parent?: string) {
@@ -230,7 +228,10 @@ export class ReadingPositionTraversal {
 
   async recordsFor(occurrences: readonly string[]): Promise<ReadingOccurrence[]> {
     if (occurrences.length > READING_CHOOSER_COST.workBatch) throw new WorkReadInvalid('Reading lookup batch exceeds its cost');
-    const wanted = occurrences.filter(record => !this.records.has(record));
+    // One progress window can name the same occurrence twice (a published row
+    // and a withheld selection). Repeating it in VALUES makes one placement
+    // look like two.
+    const wanted = [...new Set(occurrences.filter(record => !this.records.has(record)))];
     if (wanted.length) {
       const rows = await this.session.query(`# reading-position:records
         SELECT ?work ?structure ?revision ?occurrence ?parent ?segmentKey ?orderKey ?role ?target WHERE {

@@ -5,6 +5,7 @@ import { MediaUnavailable } from '../modules/media/store.ts';
 import { ContextCommandUnavailable } from '../modules/context/command.ts';
 import { SearchSnapshotMoved } from '../modules/work/search-readiness.ts';
 import { TargetNotBound, TargetUnavailable } from '../modules/target/resolve.ts';
+import { ReadingContinuityUnsupported } from '../modules/reading-position/errors.ts';
 import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   workRead } from '../modules/work/read-session.ts';
 import { readWorkHeader } from '../modules/work/read-header.ts';
@@ -34,6 +35,7 @@ export function workReadError(error: unknown): Response {
     return problem(409, 'read_basis_changed', 'Restart the read from its first page');
   }
   if (error instanceof WorkReadLimit) return problem(422, 'work_read_budget_exceeded', 'Work read exceeds its budget');
+  if (error instanceof ReadingContinuityUnsupported) return problem(503, 'reading_continuity_unsupported', error.message);
   if (error instanceof WorkReadUnavailable || error instanceof MediaUnavailable || error instanceof ContextCommandUnavailable) {
     return problem(503, 'work_read_unavailable', 'Work read is unavailable');
   }

@@ -6,7 +6,7 @@ import { normalizePositionQuery } from '../modules/reading-position/store.ts';
 import { readingPositionPage, readingPositionQuery } from '../modules/reading-position/contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
-import { ReadingResumeUnavailable, ReadingSeekUnavailable } from '../modules/reading-position/errors.ts';
+import { ReadingContinuityUnsupported, ReadingResumeUnavailable, ReadingSeekUnavailable } from '../modules/reading-position/errors.ts';
 import { problem } from './problems.ts';
 
 export { readingPositionQuery } from '../modules/reading-position/contract.ts';
@@ -42,6 +42,7 @@ export function readingPositionsRoutes(work: MainWorkDependencies) {
     } catch (error) {
       if (error instanceof ReadingSeekUnavailable) return problem(503, 'reading_seek_unavailable', error.message);
       if (error instanceof ReadingResumeUnavailable) return problem(503, 'reading_resume_index_unavailable', error.message);
+      if (error instanceof ReadingContinuityUnsupported) return problem(503, 'reading_continuity_unsupported', error.message);
       return workReadError(error);
     }
   });

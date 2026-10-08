@@ -22,6 +22,8 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 import { pageFields } from '../modules/work/read-contract.ts';
 import { disclosedCompletedProgress, publishedProgressSelections } from '../modules/progress/disclosure.ts';
 import { readProgressOrder } from '../modules/progress/order.ts';
+import { continuityAnchors } from '../modules/reading-position/continuity.ts';
+import { ReadingContinuityUnsupported } from '../modules/reading-position/errors.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const contentRevision = t.String({ pattern: '^urn:rezics:content:revision:[0-9a-f-]{36}$' });
@@ -39,6 +41,7 @@ export const openApiOperations = {
 } as const;
 
 function failure(error: unknown): Response {
+  if (error instanceof ReadingContinuityUnsupported) return problem(503, 'reading_continuity_unsupported', error.message);
   if (error instanceof InvalidStructureProgress) return problem(400, 'invalid_progress', error.message);
   if (error instanceof StaleStructureProgress) return problem(409, 'stale_progress', error.message);
   if (error instanceof StructureProgressConflict) return problem(409, 'progress_conflict', error.message);
@@ -89,7 +92,8 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       }
       const canonical = (await resolveTargets(session, [header.work], 'discussion'))[0]!.resource;
       const order = write ? await readProgressOrder(work.environment, header, occurrence) : undefined;
-      return { work: canonical, order };
+      const anchors = write ? await continuityAnchors(work.environment, header, occurrence, order) : undefined;
+      return { work: canonical, order, anchors };
     });
     return { principal, ...visible };
   };
@@ -186,7 +190,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
           body.actingSubject, body.selectedRevision ?? null, true);
         const value = await work.progress.write({ principal: visible.principal, structure, occurrence,
           library: { agent: body.actingSubject, work: visible.work },
-          order: visible.order,
+          order: visible.order, anchors: visible.anchors,
           selectedRevision: body.selectedRevision ?? null, completed: body.completed,
           position: body.position, expectedVersion: body.expectedVersion, idempotencyKey });
         return Response.json(value, { headers: { 'cache-control': 'private, no-store' } });

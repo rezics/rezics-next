@@ -5,7 +5,7 @@ import { structureObjects } from '../structure/change.ts';
 import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
-import { readProgressOrder } from './order.ts';
+import { readResumeOrder } from '../reading-position/continuity.ts';
 
 interface Scope { principal_issuer: string; principal_subject: string; structure: string }
 interface IndexState { order_revision: string | null; ready: boolean; invalidations: string;
@@ -104,7 +104,7 @@ export class ProgressOrderProjection {
       const page = rows.slice(0, PROGRESS_ORDER_PROJECTION_COST.rows);
       for (const row of page) {
         if (!row.completed) continue;
-        const order = await readProgressOrder(environment, header, row.occurrence);
+        const order = await readResumeOrder(environment, header, row.occurrence);
         await client.query(`UPDATE structure.progress SET order_revision=$6,order_key=$7,resume_eligible=$8
           WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND occurrence=$4 AND selection_key=$5`,
         [...identity, row.occurrence, row.selection_key, order?.revision ?? null, order?.key ?? null, order?.eligible ?? false]);

@@ -5,7 +5,7 @@ import { AccountAssertionDenied } from '../../../services/main/src/modules/accou
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
-import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
+import { RV, activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { startMediaStack } from './media-support.ts';
 import { readCompositionHeader } from '../../../services/main/src/modules/structure/graph.ts';
@@ -495,3 +495,179 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
     expect((await call(second, 'GET', completedPath)).status).toBe(401);
   } finally { await stack.stop(); }
 }, 600_000);
+
+test('a chapter inside a volume resumes and discloses across the series, and a deeper nest is refused', async () => {
+  const stack = await startMediaStack('volume-series-progress');
+  try {
+    const editor = await stack.member('volume-reader');
+    const objects = stack.objects('semantic/structure/');
+    await objects.initialize();
+    const queryGraph = stack.fuseki.query.bind(stack.fuseki);
+    let graphCalls = 0;
+    stack.fuseki.query = async (sparql, bytes) => {
+      if (!stack.fuseki.isBackgroundContext) graphCalls++;
+      return queryGraph(sparql, bytes);
+    };
+    const progress = new StructureProgressStore(stack.contentPool, { automaticOrderProjection: false });
+    const revelations = new ReadingPositionStore(stack.contentPool);
+    const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      media: stack.media, mediaAccess: stack.mediaAccess, structureObjects: objects,
+      progress, readingPositions: revelations,
+      agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
+      account: { verify: async request => {
+        if (request.headers.get('authorization') !== `Bearer ${editor.token}`) throw new AccountAssertionDenied('Unknown bearer');
+        const principal = { ...editor.principal, emailVerified: true };
+        return { ...principal, currentAssertion: async () => principal };
+      } } });
+    const call = (method: string, path: string, body?: object, token: string | null = editor.token) => app.handle(new Request(`http://main.local${path}`, {
+      method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), 'idempotency-key': randomUUID(),
+        ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }));
+    const person = (await json<{ agent: string }>(await call('POST', '/v1/agents', {
+      profile: 'agent-provision-v1', kind: 'person', displayName: 'Volume reader' }), 201)).agent;
+    const grant = async (scope: string, action: string) => {
+      await stack.accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
+      await stack.accessPool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+        VALUES ($1,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), editor.principalId, person, action]);
+      await stack.accessPool.query(`INSERT INTO access.permission_grant (id,issuer_subject,recipient_subject,scope_id,action,valid_until)
+        VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), person, scope, action]);
+    };
+    const work = async (title: string) => {
+      const semanticTypes = ['https://schema.org/Book'];
+      const result = await activateMetadataWork(stack.env, { title, semanticTypes,
+        admission: stack.admission(person, 'work:create:root', 'work.create', metadataWorkRequestDigest(title, semanticTypes)) });
+      const text = await stack.contribution(result.work, person, 'en', title);
+      const selection = { context: { kind: 'main-version-default' as const, id: result.mainVersion }, work: result.work,
+        contribution: text.contribution, publicationDecision: text.decision, expectedSelectionHead: null,
+        selectionBasis: 'main-maintainer' as const, actingSubject: person };
+      await selectMainDefault(stack.env, stack.admission(person, `publication:select:${result.mainVersion}`,
+        'publication.select', mainSelectionDigest(selection)), selection);
+      await grant(`work:read:${result.work}`, 'work.read');
+      await grant(`work:edit:${result.work}`, 'work.edit');
+      return result;
+    };
+    const compose = async (profile: 'work-composition' | 'book-composition', owner: { work: string; mainVersion: string },
+      operations: (structure: string) => object[]) => {
+      const base = await json<Composition>(await call('POST', '/v1/compositions', {
+        profile, work: owner.work, mainVersion: owner.mainVersion, actingSubject: person }), 201);
+      const changed = await json<Changed>(await call('POST', `/v1/compositions/${short(base.structure)}/changes`, {
+        profile, expectedHead: base.revision, actingSubject: person, operations: operations(base.structure) }));
+      return { structure: base.structure, revision: changed.revision, occurrences: changed.occurrences };
+    };
+    const actorQuery = `actingSubject=${encodeURIComponent(person)}`;
+    const secret = 'private playback position: after the volume reveal';
+    const series = await work('Volume series'), volume1 = await work('Volume one'), volume2 = await work('Volume two');
+    const seriesComposition = await compose('work-composition', series, structure => [volume1, volume2].map((volume, index) => ({
+      op: 'insert', role: 'part', parent: structure, position: 'last', target: volume.work,
+      displayLabel: String(index + 1), inclusion: 'required' })));
+    const chapters = (volume: typeof volume1) => compose('book-composition', volume, structure => [1, 2, 3].map(index => ({
+      op: 'insert', role: 'chapter', parent: structure, position: 'last',
+      target: 'https://schema.org/DigitalDocument', label: { value: `Chapter ${index}`, language: 'en' } })));
+    const firstBook = await chapters(volume1), secondBook = await chapters(volume2);
+    const volumePart = seriesComposition.occurrences[0]!;
+    const earlyPosition = firstBook.occurrences[1]!, readerPosition = firstBook.occurrences[2]!, latePosition = secondBook.occurrences[0]!;
+    await grant('semantic:create:root', 'semantic.change');
+    const name = (value: string) => ({ predicate: 'https://schema.org/name', value: { kind: 'language-string', lexical: value, language: 'en' } });
+    const entity = async (label: string) => {
+      const result = await json<{ component: string }>(await call('POST', '/v1/semantic/changes', {
+        profile: 'semantic-change-v1', expectedHead: null, actingSubject: person,
+        state: { component: 'resource', types: [`${RV}Character`], properties: [name(label),
+          { predicate: `${RV}semanticWork`, value: { kind: 'resource', ref: series.work } }] } }), 201);
+      await grant(`semantic:read:${result.component}`, 'semantic.read');
+      return result.component;
+    };
+    const early = await entity('Early character'), unchanged = await entity('Catalogue character'), late = await entity('Late character');
+    const reveal = async (record: string, continuityWork: string, occurrence: string) => {
+      const client = await stack.contentPool.connect();
+      try {
+        await client.query('BEGIN');
+        await revelations.write(client, { record, recordKind: 'entity', continuityWork, occurrence, receipt: 'reviewed-publication' }, null);
+        await client.query('COMMIT');
+      } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+    };
+    await reveal(early, series.work, earlyPosition);
+    await reveal(late, series.work, latePosition);
+    const collection = `https://rezics.com/id/${randomUUID()}`;
+    await grant(`collection:edit:${collection}`, 'collection.edit');
+    await grant(`semantic:read:${collection}`, 'semantic.read');
+    const members = await json<Composition>(await call('POST', '/v1/collections', {
+      collection, name: 'Characters', disclosure: 'public', actingSubject: person }), 201);
+    await json(await call('POST', `/v1/collections/${short(collection)}/changes`, {
+      expectedHead: members.revision, actingSubject: person,
+      operations: [early, unchanged, late].map(target => ({ op: 'insert', role: 'member', parent: members.structure,
+        position: 'last', target, selection: { mode: 'follow-context' } })) }));
+    const tick = (structure: string, occurrence: string, completed: boolean, expectedVersion: number, position: string | null = null) =>
+      call('PUT', `/v1/compositions/${short(structure)}/occurrences/${short(occurrence)}/progress`,
+        { actingSubject: person, completed, expectedVersion, position });
+    await json(await tick(firstBook.structure, readerPosition, true, 0, secret));
+    const before = graphCalls;
+    const resume = await json<Chooser>(await call('GET', `/v1/reading-positions/${short(series.work)}?${actorQuery}&position=mine&limit=1`));
+    expect(graphCalls - before).toBeLessThan(40);
+    expect(resume.resolved).toBe(readerPosition);
+    expect(resume.items.map(item => item.occurrence)).toEqual([readerPosition]);
+    const seriesProgress = await json<Completed>(await call('GET',
+      `/v1/compositions/${short(seriesComposition.structure)}/progress?${actorQuery}&limit=50`));
+    expect(seriesProgress.items).toEqual([]);
+    expect(JSON.stringify(seriesProgress)).not.toContain(secret);
+    expect(JSON.stringify(seriesProgress)).not.toContain(readerPosition);
+    const seriesHeader = await readCompositionHeader(stack.env, seriesComposition.structure);
+    const bookHeader = await readCompositionHeader(stack.env, firstBook.structure);
+    if (!seriesHeader || !bookHeader) throw new Error('Missing volume continuity structures');
+    const memberOrder = await readProgressOrder(stack.env, seriesHeader, volumePart);
+    const chapterOrder = await readProgressOrder(stack.env, bookHeader, readerPosition);
+    const anchor = await stack.contentPool.query<{ order_key: string; position: string | null; completed: boolean }>(
+      `SELECT order_key, position, completed FROM structure.progress
+        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND occurrence = $4`,
+      [editor.principal.issuer, editor.principal.subject, seriesComposition.structure, readerPosition]);
+    expect(anchor.rows).toEqual([{ order_key: `${memberOrder.key}\u0001${chapterOrder.key}`, position: null, completed: true }]);
+    const listed = async (signed: boolean, position?: string) => {
+      const query = new URLSearchParams({ ...(signed ? { actingSubject: person } : {}), ...(position ? { position } : {}) });
+      const suffix = query.size ? `?${query}` : '';
+      return json<{ occurrences: Array<{ target: string }> }>(await call('GET',
+        `/v1/collections/${short(collection)}${suffix}`, undefined, signed ? editor.token : null));
+    };
+    expect((await listed(false)).occurrences.map(item => item.target)).toEqual([unchanged]);
+    expect((await listed(true, 'start')).occurrences.map(item => item.target)).toEqual([unchanged]);
+    expect((await listed(true)).occurrences.map(item => item.target)).toEqual([early, unchanged]);
+    expect((await listed(true, 'all')).occurrences.map(item => item.target)).toEqual([early, unchanged, late]);
+    await json(await tick(secondBook.structure, latePosition, true, 0, secret));
+    expect((await json<Chooser>(await call('GET', `/v1/reading-positions/${short(series.work)}?${actorQuery}&position=mine&limit=1`))).resolved)
+      .toBe(latePosition);
+    expect((await listed(true)).occurrences.map(item => item.target)).toEqual([early, unchanged, late]);
+    await json(await tick(secondBook.structure, latePosition, false, 1));
+    expect((await json<Chooser>(await call('GET', `/v1/reading-positions/${short(series.work)}?${actorQuery}&position=mine&limit=1`))).resolved)
+      .toBe(readerPosition);
+    expect((await listed(true)).occurrences.map(item => item.target)).toEqual([early, unchanged]);
+
+    const outer = await work('Outer series'), mid = await work('Middle volume'), inner = await work('Inner book');
+    const outerComposition = await compose('work-composition', outer, structure => [{
+      op: 'insert', role: 'part', parent: structure, position: 'last', target: mid.work,
+      displayLabel: '1', inclusion: 'required' }]);
+    await compose('work-composition', mid, structure => [{
+      op: 'insert', role: 'part', parent: structure, position: 'last', target: inner.work,
+      displayLabel: '1', inclusion: 'required' }]);
+    const innerBook = await chapters(inner);
+    const deepChapter = innerBook.occurrences[2]!;
+    await json(await tick(innerBook.structure, deepChapter, true, 0, secret));
+    const refused = await call('GET', `/v1/reading-positions/${short(outer.work)}?${actorQuery}&position=mine&limit=1`);
+    expect(refused.status).toBe(503);
+    expect(await refused.json()).toMatchObject({ code: 'reading_continuity_unsupported' });
+    const deepEarly = await entity('Deep early character');
+    await reveal(deepEarly, outer.work, deepChapter);
+    const deepCollection = `https://rezics.com/id/${randomUUID()}`;
+    await grant(`collection:edit:${deepCollection}`, 'collection.edit');
+    await grant(`semantic:read:${deepCollection}`, 'semantic.read');
+    const deepMembers = await json<Composition>(await call('POST', '/v1/collections', {
+      collection: deepCollection, name: 'Deep characters', disclosure: 'public', actingSubject: person }), 201);
+    await json(await call('POST', `/v1/collections/${short(deepCollection)}/changes`, {
+      expectedHead: deepMembers.revision, actingSubject: person,
+      operations: [deepEarly, unchanged].map(target => ({ op: 'insert', role: 'member', parent: deepMembers.structure,
+        position: 'last', target, selection: { mode: 'follow-context' } })) }));
+    const deepPage = await call('GET', `/v1/collections/${short(deepCollection)}?${actorQuery}`);
+    expect(deepPage.status).toBe(503);
+    expect(await deepPage.json()).toMatchObject({ code: 'reading_continuity_unsupported' });
+    const outerProgress = await json<Completed>(await call('GET',
+      `/v1/compositions/${short(outerComposition.structure)}/progress?${actorQuery}&limit=50`));
+    expect(JSON.stringify(outerProgress)).not.toContain(deepChapter);
+    expect(JSON.stringify(outerProgress)).not.toContain(secret);
+  } finally { await stack.stop(); }
+}, 300_000);

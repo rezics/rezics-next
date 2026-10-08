@@ -15,8 +15,10 @@ export const resumeContinuation = (after: ResumePageKey) =>
 export const searchContinuation = (browse: string | null, resume: ResumePageKey | null) =>
   JSON.stringify({ version: 1, kind: 'search', browse, resume } satisfies ReadingContinuation);
 function validResume(key: ResumePageKey) {
-  return key && NATIVE_ID.test(key.occurrence) && (key.selectedRevision === null
-    || /^urn:rezics:content:revision:[0-9a-f-]{36}$/.test(key.selectedRevision));
+  return !!key && NATIVE_ID.test(key.occurrence) && (key.selectedRevision === null
+    || /^urn:rezics:content:revision:[0-9a-f-]{36}$/.test(key.selectedRevision))
+    && (key.structure === undefined || NATIVE_ID.test(key.structure))
+    && (key.seriesOccurrence === undefined || NATIVE_ID.test(key.seriesOccurrence));
 }
 export function readingContinuation(value: string, kind: ReadingContinuation['kind']): ReadingContinuation {
   let cursor: ReadingContinuation;

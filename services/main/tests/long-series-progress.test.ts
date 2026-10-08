@@ -11,7 +11,8 @@ import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, type OccurrenceRecord
 import { newCost } from '../src/modules/structure/tree.ts';
 import { WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
-import { ReadingSeekUnavailable, ReadingResumeUnavailable, ReadingResumeContinuation } from '../src/modules/reading-position/errors.ts';
+import { ReadingSeekUnavailable, ReadingResumeUnavailable, ReadingResumeContinuation, ReadingContinuityUnsupported } from '../src/modules/reading-position/errors.ts';
+import { continuityAnchors } from '../src/modules/reading-position/continuity.ts';
 import { disclosedCompletedProgress } from '../src/modules/progress/disclosure.ts';
 import { ReadingPositionStore } from '../src/modules/reading-position/store.ts';
 import { ProgressOrderProjection } from '../src/modules/progress/order-projection.ts';
@@ -376,4 +377,158 @@ test('ambiguous terminal metadata fails closed and cannot masquerade as an admit
   const f = await fixture();
   f.ambiguous();
   await expect(f.traversal().metadataFor(f.episodes[0]!.target!)).rejects.toBeInstanceOf(WorkReadUnavailable);
+});
+
+async function volumeSeries() {
+  const series = id(), volume1 = id(), volume2 = id(), seriesStructure = id(), book1 = id(), book2 = id();
+  const seriesRevision = id(), bookRevision = id(), generation = id();
+  const member1 = id(), member2 = id(), early = id(), reader = id(), late = id();
+  const stored = new Map<string, Uint8Array>();
+  const objects = { put: async (body: Uint8Array) => {
+    const digest = createHash('sha256').update(body).digest('hex');
+    stored.set(digest, body); return digest;
+  }, get: async (digest: string) => {
+    const body = stored.get(digest);
+    if (!body) throw new ObjectUnavailable('missing order object');
+    return body;
+  } };
+  const record = (occurrence: string, parent: string, orderKey: string, role: 'part' | 'chapter', target: string): OccurrenceRecord => ({
+    occurrence, state: 'active', parent, segmentKey: 'a', orderKey, role, target, introducedBy: seriesRevision,
+    labels: [], ...(role === 'part' ? { qualifier: { type: 'work-part' as const, displayLabel: orderKey, inclusion: 'required' as const } } : {}),
+  });
+  const seriesRecords = [record(member1, seriesStructure, 'a', 'part', volume1), record(member2, seriesStructure, 'b', 'part', volume2)];
+  const bookRecords = [record(early, book1, 'a', 'chapter', id()), record(reader, book1, 'b', 'chapter', id())];
+  const laterRecords = [record(late, book2, 'a', 'chapter', id())];
+  const compose = async (structure: string, profile: 'work-composition' | 'book-composition', records: OccurrenceRecord[]) => {
+    const cost = newCost();
+    const entries = records.map(row => ({ parent: row.parent, segmentKey: row.segmentKey!, orderKey: row.orderKey!, occurrence: row.occurrence }));
+    const manifest = { format: STRUCTURE_MANIFEST_FORMAT, structure, structureOf: id(), profile, generation,
+      pageFormat: STRUCTURE_PAGE_FORMAT, placementCount: records.length, measures: [], model: COMPOSITION_PROFILE, shape: COMPOSITION_PROFILE,
+      records: await recordTree(objects).apply(await recordTree(objects).empty(cost), new Map(records.map(row => [row.occurrence, row])), cost),
+      order: await orderTree(objects).apply(await orderTree(objects).empty(cost), new Map(entries.map(entry => [orderTreeKey(entry), entry])), cost) };
+    const digest = await objects.put(new TextEncoder().encode(JSON.stringify(manifest)));
+    const work = structure === seriesStructure ? series : structure === book1 ? volume1 : volume2;
+    const header: CompositionHeader = { structure, profile, owner: work, component: manifest.structureOf, mainVersion: manifest.structureOf,
+      work, head: structure === seriesStructure ? seriesRevision : bookRevision, generation, placementCount: records.length,
+      manifest: `urn:rezics:sha256:${digest}` };
+    return header;
+  };
+  const headers = new Map([
+    [seriesStructure, await compose(seriesStructure, 'work-composition', seriesRecords)],
+    [book1, await compose(book1, 'book-composition', bookRecords)],
+    [book2, await compose(book2, 'book-composition', laterRecords)],
+  ]);
+  const placed = [
+    { occurrence: member1, structure: seriesStructure, work: series, parent: seriesStructure, segmentKey: 'a', orderKey: 'a', role: 'part' as const, target: volume1 },
+    { occurrence: member2, structure: seriesStructure, work: series, parent: seriesStructure, segmentKey: 'a', orderKey: 'b', role: 'part' as const, target: volume2 },
+    { occurrence: early, structure: book1, work: volume1, parent: book1, segmentKey: 'a', orderKey: 'a', role: 'chapter' as const, target: bookRecords[0]!.target! },
+    { occurrence: reader, structure: book1, work: volume1, parent: book1, segmentKey: 'a', orderKey: 'b', role: 'chapter' as const, target: bookRecords[1]!.target! },
+    { occurrence: late, structure: book2, work: volume2, parent: book2, segmentKey: 'a', orderKey: 'a', role: 'chapter' as const, target: laterRecords[0]!.target! },
+  ];
+  const saved: Array<{ structure: string; occurrence: string }> = [{ structure: book1, occurrence: reader }];
+  const env = { structureObjects: objects, fuseki: { query: async (q: string) => {
+    if (q.includes('# reading-position:enclosing-member')) {
+      const child = q.match(/schema:item <([^>]+)>/)![1]!;
+      const member = child === volume1 ? member1 : child === volume2 ? member2 : '';
+      return { results: { bindings: member ? [{ work: binding(series), structure: binding(seriesStructure), occurrence: binding(member) }] : [] } };
+    }
+    const structure = [...headers.keys()].find(value => q.includes(value));
+    const header = structure ? headers.get(structure) : undefined;
+    return { results: { bindings: q.includes('SELECT ?component') && header ? [{
+      component: binding(header.component), profile: binding(`https://rezics.com/vocab/${header.profile === 'book-composition' ? 'BookComposition' : 'WorkComposition'}`),
+      head: binding(header.head), generation: binding(generation), count: binding(String(header.placementCount)), manifest: binding(header.manifest),
+    }] : [{ owner: binding(header?.work ?? series) }] } };
+  } } };
+  const session = {
+    deps: { environment: env, progress: { readerVersion: async () => '1', resumeCandidates: async (_principal: unknown, structure: string) => ({
+      items: saved.filter(row => row.structure === structure).map(row => ({ structure, occurrence: row.occurrence,
+        selectedRevision: null, completed: true, position: null, version: 1 })),
+      more: false, next: null,
+    }) }, readingPositions: { lookup: async () => new Map(), required: async () => new Set(), generation: async () => '1',
+      privateSnapshot: async () => '1' }, access: { canReadAsBaselineMember: async () => true } },
+    principal: { issuer: 'https://reader.test', subject: 'viewer', emailVerified: true },
+    options: { actingSubject: id() }, checkDeadline: () => {},
+    query: async (query: string) => {
+      if (query.includes('# reading-position:work\n')) {
+        const resource = query.match(/BIND\(<([^>]+)> AS \?work\)/)![1]!;
+        const structure = resource === series ? seriesStructure : resource === volume1 ? book1 : resource === volume2 ? book2 : '';
+        const revision = structure === seriesStructure ? seriesRevision : bookRevision;
+        return structure ? [{ work: binding(resource), structure: binding(structure), revision: binding(revision), generation: binding(generation) }] : [{ work: binding(resource) }];
+      }
+      if (query.includes('# reading-position:parent-work')) {
+        const child = query.match(/schema:item <([^>]+)>/)![1]!;
+        const member = child === volume1 ? member1 : child === volume2 ? member2 : '';
+        return member ? [{ occurrence: binding(member) }] : [];
+      }
+      if (query.includes('# reading-position:records')) {
+        const wanted = query.match(/VALUES [^{]+\{([^}]+)}/)![1]!;
+        return placed.filter(row => wanted.includes(row.occurrence)).map(row => ({
+          work: binding(row.work), structure: binding(row.structure),
+          revision: binding(row.structure === seriesStructure ? seriesRevision : bookRevision),
+          occurrence: binding(row.occurrence), parent: binding(row.parent), segmentKey: binding(row.segmentKey),
+          orderKey: binding(row.orderKey), role: binding(`https://rezics.com/vocab/${row.role === 'part' ? 'PartRole' : 'ChapterRole'}`),
+          target: binding(row.target),
+        }));
+      }
+      return [];
+    },
+  } as unknown as WorkReadSession;
+  const disclose = async (_reader: WorkReadSession, selected: { structure: string }, rows: readonly { occurrence: string }[]) =>
+    rows.filter(row => placed.some(item => item.occurrence === row.occurrence && item.structure === selected.structure));
+  return { series, seriesStructure, book1, member1, early, reader, late, saved, headers, env, session, disclose, placed };
+}
+
+test('a chapter inside volume 1 resumes across the series and keeps only earlier introductions', async () => {
+  const f = await volumeSeries();
+  const local = { revision: f.headers.get(f.book1)!.head, key: 'a\u0002b', eligible: true };
+  const anchors = await continuityAnchors(f.env as never, f.headers.get(f.book1)!, f.reader, local);
+  expect(anchors).toEqual([{ structure: f.seriesStructure, order: { revision: f.headers.get(f.seriesStructure)!.head,
+    key: 'a\u0002a\u0001a\u0002b', eligible: true } }]);
+  f.saved.push({ structure: f.seriesStructure, occurrence: f.reader });
+  const traversal = new ReadingPositionTraversal(f.session, f.series, async resources => new Set(resources));
+  expect(await chooserPosition(f.session, traversal, 'mine', true, f.disclose as never)).toBe(f.reader);
+  const earlyRecord = id(), lateRecord = id();
+  f.session.deps.readingPositions!.lookup = async (records: readonly string[]) => new Map(records.flatMap(record =>
+    record === earlyRecord ? [[record, [{ record, recordKind: 'entity' as const, continuityWork: f.series, occurrence: f.early, receipt: 'publication' }]]]
+      : record === lateRecord ? [[record, [{ record, recordKind: 'entity' as const, continuityWork: f.series, occurrence: f.late, receipt: 'publication' }]]] : []));
+  const boundary = new ReadingBoundary(f.session, 'mine');
+  boundary.traversalFor = () => traversal;
+  expect([...(await boundary.visible([earlyRecord, lateRecord, 'untagged']))]).toEqual([earlyRecord, 'untagged']);
+});
+
+test('a completed volume part resumes at the chapter inside that volume', async () => {
+  const f = await volumeSeries();
+  f.saved.length = 0;
+  f.saved.push({ structure: f.seriesStructure, occurrence: f.member1 }, { structure: f.book1, occurrence: f.reader });
+  const traversal = new ReadingPositionTraversal(f.session, f.series, async resources => new Set(resources));
+  expect(await chooserPosition(f.session, traversal, 'mine', true, f.disclose as never)).toBe(f.reader);
+});
+
+test('a position nested past one volume is refused instead of completing as unread', async () => {
+  const f = await volumeSeries();
+  const inner = id(), innerPart = id();
+  f.placed.push({ occurrence: innerPart, structure: f.book1, work: f.headers.get(f.book1)!.work, parent: f.book1,
+    segmentKey: 'a', orderKey: 'c', role: 'part', target: inner });
+  f.saved.length = 0;
+  f.saved.push({ structure: f.seriesStructure, occurrence: f.member1 }, { structure: f.book1, occurrence: innerPart });
+  const native = f.session.query.bind(f.session);
+  f.session.query = async (query: string, limit: number) => {
+    if (query.includes('# reading-position:work\n') && query.includes(inner)) {
+      return [{ work: binding(inner), structure: binding(id()), revision: binding(id()), generation: binding(id()) }];
+    }
+    return native(query, limit);
+  };
+  const traversal = new ReadingPositionTraversal(f.session, f.series, async resources => new Set(resources));
+  await expect(chooserPosition(f.session, traversal, 'mine', true, f.disclose as never)).rejects.toBeInstanceOf(ReadingContinuityUnsupported);
+  // The same refusal must fail the wiki read. Swallowing it would publish the
+  // page as though the reader had not reached the introduction.
+  f.session.deps.progress!.resumeCandidates = async () => {
+    throw new ReadingContinuityUnsupported('A reading position is nested deeper than this continuity can resolve');
+  };
+  const record = id();
+  f.session.deps.readingPositions!.lookup = async () => new Map([[record, [{ record, recordKind: 'entity' as const,
+    continuityWork: f.series, occurrence: f.early, receipt: 'publication' }]]]);
+  const boundary = new ReadingBoundary(f.session, 'mine');
+  boundary.traversalFor = () => traversal;
+  await expect(boundary.visible([record, 'untagged'])).rejects.toBeInstanceOf(ReadingContinuityUnsupported);
 });
