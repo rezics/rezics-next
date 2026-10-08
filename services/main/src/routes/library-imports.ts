@@ -1,5 +1,5 @@
-import { Elysia, t, ValidationError } from 'elysia';
-import type { VerifiedAccountAssertion } from '../modules/account/verify-assertion.ts';
+import { Elysia, t } from 'elysia';
+import { AccountAssertionDenied, type VerifiedAccountAssertion } from '../modules/account/verify-assertion.ts';
 import { problemResult } from '../api-contract.ts';
 import { readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
 import { canonicalRow, csvMapping, FILE_IMPORT_COST, FileImportInvalid, FileImportUnsupported } from '../modules/library-import/formats/contract.ts';
@@ -11,7 +11,7 @@ import { adoptLibrarySource, searchLibrarySource } from '../modules/library-impo
 import { getLibraryImportApplyWorker } from '../modules/library-import/apply-worker.ts';
 import { ReaderImportConflict, ReaderImportInvalid, ReaderImportUnavailable } from '../modules/library-import/reader-import.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
-import { problem } from './problems.ts';
+import { LibraryImportTimedOut, LibraryImportTooLarge, problem } from './problems.ts';
 import { workReadError } from './work-reads.ts';
 import { workRead } from '../modules/work/read-session.ts';
 import { resolveTargets, TargetNotBound } from '../modules/target/resolve.ts';
@@ -23,8 +23,6 @@ const errors = Object.fromEntries([400,401,403,404,409,422,503].map(status => [s
 const base = '/v1/me/library-imports';
 export const LIBRARY_IMPORT_BODY_BYTES = FILE_IMPORT_COST.bytes+16384;
 const IMPORT_TRANSFER_MS = 30_000;
-class LibraryImportTooLarge extends Error {}
-class LibraryImportTimedOut extends Error {}
 function cancelImportBody(request: Request) {
   if (request.body && !request.body.locked) void request.body.cancel().catch(() => undefined);
 }
@@ -127,8 +125,6 @@ const applyProgress = t.Object({ total: t.Integer(),completed: t.Integer(),issue
   reason: t.Nullable(t.Union(['no-progress','lease-expired','owner-refused','apply-failed','worker-stopped'].map(value => t.Literal(value)))),
   receipt: t.Optional(t.String()) });
 function failure(error: unknown): Response {
-  if (error instanceof LibraryImportTooLarge) return problem(413,'library_import_too_large','Import body exceeds 2 MiB plus the 16 KiB request envelope');
-  if (error instanceof LibraryImportTimedOut) return problem(408,'library_import_timeout','Import transfer timed out');
   if (error instanceof LibraryFileMissing) return problem(404,'library_import_missing',error.message);
   if (error instanceof FileImportInvalid || error instanceof ReaderImportInvalid || error instanceof TargetNotBound) return problem(400,'invalid_library_file',error.message);
   if (error instanceof FileImportUnsupported) return problem(422,'library_format_unavailable',error.message);
@@ -153,8 +149,9 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
     // Preserve the authored request schema while supplying its body only after
     // bounded intake. Global upload-budget admission then precedes the
     // handler's actor check and every format adapter (including CSV preview).
-    // A refusal is returned here rather than thrown: an application-level error
-    // hook would otherwise answer it before this route's own could.
+    // Size, transfer and Account refusals are thrown so the app error hook's
+    // shared table is what the client sees. Other intake failures stay
+    // responses from this hook.
     .request(async ({ request }) => {
       if (request.method !== 'POST' || new URL(request.url).pathname !== base) return;
       try {
@@ -163,7 +160,11 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
           const principal = await deps.account.verify(request,['work:read','library:write']);
           intakePrincipals.set(request,principal);
         }));
-      } catch (error) { return failure(error); }
+      } catch (error) {
+        if (error instanceof LibraryImportTooLarge || error instanceof LibraryImportTimedOut
+          || error instanceof AccountAssertionDenied) throw error;
+        return failure(error);
+      }
       finally { cancelImportBody(request); }
     })
     .delete(`${base}/:id`, { params: t.Object({ id: readUuid }),
@@ -182,9 +183,6 @@ export function libraryImportsRoutes(deps: MainWorkDependencies) {
       // The bounded intake runs in the request phase (see above), so the body
       // reaches validation already read and Account-verified.
       transform: context => { context.body = intakes.get(context.request) as typeof context.body; },
-      error: ({ error }) => {
-        if (error instanceof ValidationError) return problem(400,'invalid_request','Request does not match the Work contract');
-      },
       response: { 201: t.Object({ id: readUuid,total: t.Integer({ minimum: 1,maximum: 5000 }) }),
         200: t.Object({ headers: t.Array(t.String(),{ maxItems: 64 }),distinctValues: t.Record(t.String(),t.Array(t.String(),{ maxItems: 50 })) }),
         ...errors,408: problemResult(408),413: problemResult(413),429: problemResult(429) },

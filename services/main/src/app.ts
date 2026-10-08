@@ -55,7 +55,7 @@ import { packageModRoutes } from './routes/package-mods.ts';
 import { pollRoutes } from './routes/polls.ts';
 import { proposalRoutes } from './routes/proposals.ts';
 import { judgmentRoutes } from './routes/judgments.ts';
-import { problem } from './routes/problems.ts';
+import { problem, typedRefusal } from './routes/problems.ts';
 import { protectionRoutes } from './routes/protection.ts';
 import { publicationRoutes } from './routes/publication.ts';
 import { reportRoutes } from './routes/reports.ts';
@@ -331,7 +331,6 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
   // Registered first so it also handles every plugin route mounted below.
   const app = new Elysia()
     .use(httpTelemetry())
-    .error(({ error, request }) => wikiSchemaError(error, request))
     .request(async ({ request }) => {
       if (new URL(request.url).pathname.startsWith('/health/')) return;
       try { await work?.types?.refresh(); }
@@ -340,13 +339,18 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
           return problem(503, 'types_unavailable', 'Type registry is unavailable');
       }
     })
-    .error(({ error }) => {
+    .error(({ error, request }) => {
+      const wikiProblem = wikiSchemaError(error, request);
+      if (wikiProblem) return wikiProblem;
       if (error instanceof ValidationError || error instanceof ParseError) {
         return problem(400, 'invalid_request', 'Request does not match the Work contract');
       }
       // Unknown paths and unsupported methods on known paths.
       if (error instanceof NotFound) return problem(404, 'not_found', 'No such operation');
-      return problem(500, 'internal_error', 'Request could not be processed');
+      // One table. A route-local error hook never runs: this hook is registered
+      // first and Elysia stops at the first response. Unknown errors stay an
+      // opaque 500 so a thrown message, stack or query cannot reach the client.
+      return typedRefusal(error) ?? problem(500, 'internal_error', 'Request could not be processed');
     })
     .use(healthRoutes(fuseki, work));
   if (work) {

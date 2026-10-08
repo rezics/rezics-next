@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
-import { Elysia } from 'elysia';
+import { Elysia, ParseError, ValidationError } from 'elysia';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
 import { RATE_LIMIT_V1 } from '../src/modules/rate-limit/budgets.ts';
 import { rateLimitHook } from '../src/modules/rate-limit/hook.ts';
@@ -8,6 +8,7 @@ import { FILE_IMPORT_COST, FileImportInvalid, emptyRow, type LibraryFileFormat }
 import { inspectGenericCsv } from '../src/modules/library-import/formats/generic-csv.ts';
 import { importJsonBytes } from '../src/modules/library-import/formats/bounds.ts';
 import { libraryImportsRoutes, LIBRARY_IMPORT_BODY_BYTES, readLibraryImportBody } from '../src/routes/library-imports.ts';
+import { problem, typedRefusal } from '../src/routes/problems.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const agent = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
@@ -55,7 +56,12 @@ function fixture(options: { denied?: boolean; own?: boolean; budget?: boolean } 
       } },
     },
   } as unknown as MainWorkDependencies;
-  const app = new Elysia().use(rateLimitHook(deps.account,deps.rateLimit)).use(libraryImportsRoutes(deps));
+  // Thrown intake refusals use the shared table. Schema failures use the same
+  // 400 the app hook returns; this plugin no longer carries its own error hook.
+  const app = new Elysia().error(({ error }) => typedRefusal(error)
+    ?? (error instanceof ValidationError || error instanceof ParseError
+      ? problem(400, 'invalid_request', 'Request does not match the Work contract') : undefined))
+    .use(rateLimitHook(deps.account,deps.rateLimit)).use(libraryImportsRoutes(deps));
   return { app,events };
 }
 

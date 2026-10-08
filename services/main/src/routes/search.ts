@@ -9,8 +9,7 @@ import { PrivateSearchConnection, privateSearchProblem, type PrivateSearchSocket
   from '../modules/contribution/private-search-socket.ts';
 import { queryPublicMainClassifiedPhrase, queryPublicMainPhrase, queryPublicRealmClassifiedPhrase,
   queryPublicRealmPhrase } from '../modules/work/search-public.ts';
-import { InvalidSearchContinuation, pageCompletePublicRelation, SearchContinuationRestart }
-  from '../modules/work/search-continuation.ts';
+import { pageCompletePublicRelation } from '../modules/work/search-continuation.ts';
 import { queryPublicRealmClassifiedRatedPhrase } from '../modules/work/search-joined.ts';
 import { queryPublicMainTitleBody } from '../modules/work/search-multifield.ts';
 import { queryPublicDisclosedFields } from '../modules/work/search-disclosed-fields.ts';
@@ -252,13 +251,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           return hydrated;
         }));
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) {
-        if (error instanceof SearchContinuationRestart) return problem(409, 'search_restart_required',
-          'Public search changed; restart at page one');
-        if (error instanceof InvalidSearchContinuation) return problem(422, 'invalid_search_continuation',
-          'Public search continuation is invalid');
-        return commandError(error);
-      }
+      } catch (error) { return commandError(error); }
     })
     .get('/v1/search/typeahead', {
       query: t.Object({ prefix: t.String({ minLength: 1, maxLength: 80 }),
@@ -630,12 +623,6 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
         return Response.json(page,
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
-        if (error instanceof SearchContinuationRestart) {
-          return problem(409, 'search_restart_required', 'Public search changed; restart at page one');
-        }
-        if (error instanceof InvalidSearchContinuation) {
-          return problem(422, 'invalid_search_continuation', 'Public search continuation is invalid');
-        }
         logLoadSearchFailure(body.profile, error, diagnostics);
         return commandError(error);
       }

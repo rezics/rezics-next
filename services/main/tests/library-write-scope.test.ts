@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { Elysia } from 'elysia';
 import { AccountAssertionInsufficientScope } from '../src/modules/account/verify-assertion.ts';
 import { emptyRow } from '../src/modules/library-import/formats/contract.ts';
 import type { StoredSourceRow } from '../src/modules/library-import/file-store.ts';
@@ -9,6 +10,7 @@ import { libraryImportsRoutes, openApiOperations as importOperations, capabiliti
 import { sessionsRoutes, openApiOperations as sessionOperations } from '../src/routes/sessions.ts';
 import { readingSettingsRoutes, openApiOperations as settingsOperations } from '../src/routes/reading-settings.ts';
 import { progressRoutes, openApiOperations as progressOperations } from '../src/routes/progress.ts';
+import { typedRefusal } from '../src/routes/problems.ts';
 
 const id = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
 const agent = id(1), work = id(2), release = id(3), record = id(4), file = id(5).slice(-36);
@@ -66,6 +68,12 @@ const mutations: Mutation[] = [
     body: { ...command, completed: true, position: null } },
 ];
 
+function respond(plugin: { handle(request: Request): Promise<Response> }, incoming: Request) {
+  // Library import intake throws its Account refusal. The composition root maps
+  // it; a plugin mounted alone needs the same table in front.
+  return new Elysia().error(({ error }) => typedRefusal(error)).use(plugin as never).handle(incoming);
+}
+
 function request(operation: Pick<Mutation, 'method' | 'path' | 'body' | 'query'>) {
   const path = operation.path.replaceAll('{id}', record.slice(-36)).replaceAll('{row}', '0')
     .replaceAll('{occurrence}', id(7).slice(-36));
@@ -119,7 +127,7 @@ test.each(mutations)('$method $path refuses read-only consent before ownership, 
       commandWithReceipt: async () => { graphWrites++; throw new Error('Unexpected graph write'); },
     } },
   } : {});
-  const response = await families[operation.family].routes(state.deps).handle(request(operation));
+  const response = await respond(families[operation.family].routes(state.deps), request(operation));
   // Main's existing Account denial mapper represents missing scope as 401.
   expect(response.status).toBe(401);
   expect(await response.json()).toMatchObject({ code: 'account_assertion_denied' });
@@ -172,7 +180,7 @@ test.each(ownerAdmissions)('$method $path admits writer consent to its owner', a
     sessions: { write: save('sessions', session) },
     readingSettings: { write: save('settings', { profile: 'reader-settings-v1', ...settings, version: 1 }) },
   });
-  const response = await families[operation.family].routes(state.deps).handle(request(operation));
+  const response = await respond(families[operation.family].routes(state.deps), request(operation));
   expect(response.status).toBe(operation.method === 'POST' && !operation.path.includes('{id}') ? 201 : 200);
   expect(state.required).toEqual([['work:read', 'library:write']]);
   expect(state.touched).toEqual(['access.ownPerson']);
@@ -195,7 +203,7 @@ test.each(reads)('read-only consent still reads $path', async operation => {
     sessions: { page: async () => ({ items: [], nextCursor: null }) },
     readingSettings: { read: async () => ({ profile: 'reader-settings-v1', ...settings, version: 0 }) },
   });
-  const response = await families[operation.family].routes(state.deps).handle(request({ ...operation,
+  const response = await respond(families[operation.family].routes(state.deps), request({ ...operation,
     method: 'GET', query: operation.query ?? `actingSubject=${agent}` }));
   expect(response.status).toBe(200);
   expect(state.required.length).toBeGreaterThan(0);
@@ -219,7 +227,7 @@ test.each([false, true])('import row reads retain a discovered match only with w
       },
     },
   });
-  const response = await libraryImportsRoutes(state.deps).handle(request({ method: 'GET',
+  const response = await respond(libraryImportsRoutes(state.deps), request({ method: 'GET',
     path: '/v1/me/library-imports/{id}/rows', query: `actingSubject=${agent}` }));
   expect(response.status).toBe(200);
   expect(await response.json()).toMatchObject({ rows: [{ index: 0, version: write ? 2 : 1,
@@ -241,7 +249,7 @@ test('import match retention rechecks write consent before saving a row', async 
     libraryFiles: { page: async () => ({ rows: [structuredClone(stored)], more: false }),
       saveMatch: async () => { saves++; } },
   });
-  const response = await libraryImportsRoutes(state.deps).handle(request({ method: 'GET',
+  const response = await respond(libraryImportsRoutes(state.deps), request({ method: 'GET',
     path: '/v1/me/library-imports/{id}/rows', query: `actingSubject=${agent}` }));
   expect(response.status).toBe(401);
   expect(saves).toBe(0);
@@ -265,7 +273,7 @@ test('retained row adoption admits library writers only with catalogue creation 
       },
       sourceIntake: { replay: async () => null },
     });
-    const response = await libraryImportsRoutes(state.deps).handle(request(operation));
+    const response = await respond(libraryImportsRoutes(state.deps), request(operation));
     expect(response.status).toBe(createConsent ? 200 : 401);
     expect(adoptedLookups).toBe(createConsent ? 1 : 0);
     expect(state.required).toEqual([['work:read', 'library:write'], ['work:read', 'work:create']]);

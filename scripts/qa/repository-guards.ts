@@ -88,4 +88,9 @@ export const repositoryGuards = [
     reason:
       'Every wiki toolkit source import must stay local or declared and avoid networking/runtime dependencies.',
   },
+  {
+    file: 'tests/qa/unit/app-error-hook.test.ts',
+    reason:
+      'Route modules mounted by createMainApp must not declare a local error hook the app hook would hide.',
+  },
 ] as const;

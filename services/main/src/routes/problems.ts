@@ -92,6 +92,8 @@ import { InvalidPublicQuery, PublicQueryBudgetExceeded, PublicQueryUnavailable,
   PublicRealmUnavailable } from '../modules/work/search-public.ts';
 import { SearchIndexBudgetExceeded, SearchIndexUnavailable }
   from '../modules/work/search-readiness.ts';
+import { InvalidSearchContinuation, SearchContinuationRestart }
+  from '../modules/work/search-continuation.ts';
 import { ContentProjectionGap, ContentProjectionProfileUnavailable, ContentProjectionUnavailable }
   from '../modules/content-publication/relay.ts';
 import { ContentSearchBudgetExceeded, InvalidContentPhrase }
@@ -123,6 +125,12 @@ import { InvalidRatingObservationInput, RatingObservationUnavailable, StaleRatin
   from '../modules/rating/observation.ts';
 import { InvalidRatingAggregateQuery, RatingAggregateBudgetExceeded, RatingAggregateUnavailable }
   from '../modules/rating/aggregate.ts';
+import { WikiRejected } from '../modules/wiki/errors.ts';
+
+/** Library file intake bounds. Thrown from the import route; the status lives here
+ * so a hook that escapes the handler cannot become an opaque 500. */
+export class LibraryImportTooLarge extends Error {}
+export class LibraryImportTimedOut extends Error {}
 
 export function problem(status: number, code: string, title: string, headers?: HeadersInit): Response {
   return Response.json({ type: `https://rezics.com/problems/${code}`, title, status, code }, {
@@ -131,6 +139,13 @@ export function problem(status: number, code: string, title: string, headers?: H
 }
 
 export function commandError(error: unknown): Response {
+  return typedRefusal(error)
+    ?? problem(503, 'dependency_unavailable', 'Work operation could not be completed', { 'retry-after': '1' });
+}
+
+/** Status and problem for a typed refusal. Unrecognized errors return undefined;
+ * callers choose the fallback (route handlers use 503, the app hook uses 500). */
+export function typedRefusal(error: unknown): Response | undefined {
   if (error instanceof PlatformClosed) return platformExposureProblem(error);
   if (error instanceof TranslationBasisRequired) return problem(409, error.code, error.message);
   if (error instanceof SourceIntakeInvalid) {
@@ -534,5 +549,20 @@ export function commandError(error: unknown): Response {
     return problem(503, 'dependency_unavailable', 'A required authority service is unavailable',
       { 'retry-after': '1' });
   }
-  return problem(503, 'dependency_unavailable', 'Work operation could not be completed', { 'retry-after': '1' });
+  if (error instanceof LibraryImportTooLarge) {
+    return problem(413, 'library_import_too_large', 'Import body exceeds 2 MiB plus the 16 KiB request envelope');
+  }
+  if (error instanceof LibraryImportTimedOut) {
+    return problem(408, 'library_import_timeout', 'Import transfer timed out');
+  }
+  if (error instanceof SearchContinuationRestart) {
+    return problem(409, 'search_restart_required', 'Public search changed; restart at page one');
+  }
+  if (error instanceof InvalidSearchContinuation) {
+    return problem(422, 'invalid_search_continuation', 'Public search continuation is invalid');
+  }
+  if (error instanceof WikiRejected) {
+    return problem(error.status, error.code, 'Wiki extraction intake did not accept this request');
+  }
+  return undefined;
 }

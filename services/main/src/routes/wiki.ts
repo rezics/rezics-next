@@ -56,8 +56,8 @@ export function wikiError(error: unknown): Response {
   }
   return workReadError(error);
 }
-/** Main's first error hook preserves wiki policy outcomes when framework body
- * validation runs before the domain handler. No other route's errors change. */
+/** The app error hook calls this when framework body validation runs before the
+ * domain handler. Other routes are unchanged: a non-wiki validation returns undefined. */
 export function wikiSchemaError(error: unknown, request: Request): Response | undefined {
   if (!(error instanceof ValidationError) || new URL(request.url).pathname !== '/v1/wiki/validations'
     || error.type !== 'body') return;
@@ -69,12 +69,6 @@ export function wikiSchemaError(error: unknown, request: Request): Response | un
 }
 export function wikiRoutes(_fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
-    .error(({ error, request }) => {
-      const policyProblem = wikiSchemaError(error, request);
-      if (policyProblem) return policyProblem;
-      if (!(error instanceof ValidationError)) return;
-      return problem(400, 'invalid_request', 'Request does not match the wiki intake contract');
-    })
     .post('/v1/wiki/candidates', { body: candidatesRequest, response: { 200: candidateResult, ...problems } },
       async ({ request, body }) => {
         try {
