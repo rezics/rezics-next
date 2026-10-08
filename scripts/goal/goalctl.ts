@@ -4124,8 +4124,8 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     for (const sharer of sharers) {
       if (sharer.goal !== task.goal) throw new Error(`${sharer.id} belongs to another Goal; cannot merge a shared branch`);
       if (sharer.branch !== task.branch) throw new Error(`${sharer.id} uses another branch in ${task.worktree}`);
-      // A gate prints a result. It does not stop a live worker or wait for one to exit.
-      if (!gateOnly && running(sharer)) throw new Error(`${sharer.id} is still running`);
+      // Rebase, renumber and regeneration write this worktree. A live worker still owns it.
+      if (running(sharer)) throw new Error(`${sharer.id} is still running; stop it first`);
     }
     if (!gateOnly && !['exited', 'conflict', 'stopped', 'merged'].includes(task.state)) throw new Error(`${task.id} is ${task.state}`);
     const recordMerged = (commit: string, before?: string, files: readonly string[] = []) => {

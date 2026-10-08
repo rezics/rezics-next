@@ -3179,7 +3179,7 @@ process.exit(0);
       const before = r.git('rev-parse', 'main');
       const result = r.run(['merge', first.id]);
       expect(result.status).toBe(1);
-      expect(result.stderr).toContain('G-002 is still running');
+      expect(result.stderr).toContain('G-002 is still running; stop it first');
       expect(r.git('rev-parse', 'main')).toBe(before);
     } finally { r.cleanup(); }
   });
@@ -3576,7 +3576,7 @@ process.exit(0);
     } finally { r.cleanup(); }
   }, 30_000);
 
-  test('gate prints a refusal without changing state, refusal, or a running worker', async () => {
+  test('gate refuses a running worker before it touches the worktree', async () => {
     const r = repo();
     try {
       const task = await r.start('G-001');
@@ -3584,24 +3584,20 @@ process.exit(0);
       const pid = task.attempts.at(-1)!.pid;
       expect(r.ledger().tasks[task.id]!.state).toBe('running');
       expect(r.alive(pid)).toBe(true);
-      const file = 'operation.test.ts';
-      const ledger = r.ledger();
-      ledger.tasks[task.id]!.paths.push(file);
-      r.save(ledger);
-      writeFileSync(join(task.worktree, file), `import { test, expect } from 'bun:test';\ntest('operation stays valid', () => expect(true).toBe(false));\n`);
-      expect(spawnSync('git', ['-C', task.worktree, 'add', file]).status).toBe(0);
-      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add a failing case']).status).toBe(0);
-      const plan = join(r.dir, '.temp/unit-plan');
-      writeFileSync(plan, `  unit: ${file}\n`);
-      const failed = r.run(['gate', task.id], { GOAL_TEST_PLAN: plan });
+      const head = spawnSync('git', ['-C', task.worktree, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+      writeFileSync(join(task.worktree, 'uncommitted.ts'), 'export {};\n');
+      const failed = r.run(['gate', task.id]);
       expect(failed.status).toBe(1);
-      expect(failed.stderr).toContain('introduced unit failures');
-      expect(failed.stderr).toContain('(fail) operation stays valid');
+      expect(failed.stderr).toContain(`${task.id} is still running; stop it first`);
+      expect(failed.stderr).not.toContain('uncommitted');
+      expect(failed.stdout).not.toContain('Unit gate');
+      expect(spawnSync('git', ['-C', task.worktree, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim()).toBe(head);
+      expect(spawnSync('git', ['-C', task.worktree, 'status', '--porcelain'], { encoding: 'utf8' }).stdout).toContain('uncommitted.ts');
       expect(r.ledger().tasks[task.id]!.state).toBe('running');
       expect(r.ledger().tasks[task.id]!.refusal).toBeUndefined();
       expect(r.alive(pid)).toBe(true);
     } finally { r.cleanup(); }
-  }, 30_000);
+  });
 
   test('an owner-tier plan file runs through task test and a branch-only failure blocks', async () => {
     const r = repo();
