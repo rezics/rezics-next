@@ -52,7 +52,8 @@ export async function primaryDiscoveryCreditBatch(session: WorkReadSession, work
       agent: null, displayName: null, handle: null }));
     const reported = reports.get(work) ?? [];
     const confirmedKeys = new Set(confirmed.flatMap(credit => credit.key !== null ? [credit.key] : []));
-    result.set(work, [...confirmed, ...reported.filter(credit => !confirmedKeys.has(credit.key))]
+    result.set(work, [...confirmed, ...reported.filter(credit =>
+      credit.participantKind === 'external-reference' && !confirmedKeys.has(credit.key))]
       .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
       .slice(0, DISCOVERY_COST.primaryCredits));
   }

@@ -1,6 +1,7 @@
 PREFIX rv: <https://rezics.com/vocab/>
 PREFIX schema: <https://schema.org/>
-SELECT ?id ?key ?ordinal ?confirmation WHERE {
+# An unbound _role reads author, director, artist and animation-studio. The seek key supplies that order.
+SELECT ?id ?key ?ordinal ?confirmation ?role ?participantKind ?provider ?agent WHERE {
   VALUES (?_work_iri ?_main_iri) {}
   VALUES (?id ?_sort) {}
   {
@@ -13,9 +14,29 @@ SELECT ?id ?key ?ordinal ?confirmation WHERE {
     GRAPH <urn:rezics:graph:revisions> {
       ?revision a rv:AuthorCreditRevision ; rv:component ?id ; rv:work ?_work_iri ; rv:externalKey ?key ; schema:position ?ordinal .
     }
+    BIND("author" AS ?role)
+    BIND("external-reference" AS ?participantKind)
+    BIND("open-library" AS ?provider)
+    FILTER(!BOUND(?_role) || ?_role = "author")
+  } UNION {
+    GRAPH <urn:rezics:graph:current> {
+      ?id a rv:NativeAgentCredit ; rv:work ?_work_iri ; rv:creditRevision ?revision ;
+        rv:agent ?agent ; schema:roleName ?role .
+    }
+    GRAPH <urn:rezics:graph:revisions> {
+      ?revision a rv:NativeAgentCreditRevision ; rv:component ?id ; rv:work ?_work_iri ;
+        rv:agent ?agent ; schema:roleName ?role .
+    }
+    BIND("agent" AS ?participantKind)
+    FILTER(?role = "author" || ?role = "director" || ?role = "artist" || ?role = "animation-studio")
+    FILTER(!BOUND(?_role) || ?role = ?_role)
   } UNION {
     VALUES (?id ?key ?ordinal ?_work_iri ?_source_confirmed) {}
     FILTER(!?_source_confirmed)
+    FILTER(!BOUND(?_role) || ?_role = "author")
     BIND("source-reported" AS ?confirmation)
+    BIND("author" AS ?role)
+    BIND("external-reference" AS ?participantKind)
+    BIND("open-library" AS ?provider)
   }
 }

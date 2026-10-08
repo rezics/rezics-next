@@ -72,12 +72,40 @@ export const versionItem = t.Object({ id: readId,
   contribution: readId, revision: readId, selected: t.Boolean() });
 export const adoptionItem = t.Object({ realm: readId, name: readName, selection: readId,
   contribution: readId, language: t.String() });
-export const creditItem = t.Object({ id: readId, role: t.Literal('author'),
-  participantKind: t.Literal('external-reference'), provider: t.Literal('open-library'),
-  key: t.String(), ordinal: t.Integer(), agent: t.Null(),
-  displayName: t.Nullable(t.String({ minLength: 1, maxLength: 200 })), handle: t.Null(),
+/** Stored native-agent roles. Translator and editor stay writable and are not on the public credit page. */
+export const NATIVE_CREDIT_ROLES = ['author', 'translator', 'editor', 'director', 'artist', 'animation-studio'] as const;
+/** Public credit page order. The seek ranks in seek-index.ts start with this sequence. */
+export const WORK_CREDIT_ROLES = ['author', 'director', 'artist', 'animation-studio'] as const;
+export type NativeCreditRole = typeof NATIVE_CREDIT_ROLES[number];
+export type WorkCreditRole = typeof WORK_CREDIT_ROLES[number];
+export const nativeCreditRole = t.Union([
+  t.Literal('author'), t.Literal('translator'), t.Literal('editor'),
+  t.Literal('director'), t.Literal('artist'), t.Literal('animation-studio'),
+]);
+export const workCreditRole = t.Union([
+  t.Literal('author'), t.Literal('director'), t.Literal('artist'), t.Literal('animation-studio'),
+]);
+export function isNativeCreditRole(role: string): role is NativeCreditRole {
+  return (NATIVE_CREDIT_ROLES as readonly string[]).includes(role);
+}
+const creditName = {
+  displayName: t.Nullable(t.String({ minLength: 1, maxLength: 200 })),
+  handle: t.Null(),
   nameSource: t.Optional(authorNameProvenance),
-  confirmation: t.Optional(t.Literal('source-reported')) });
+  confirmation: t.Optional(t.Literal('source-reported')),
+};
+export const creditItem = t.Union([
+  t.Object({
+    id: readId, role: workCreditRole,
+    participantKind: t.Literal('external-reference'), provider: t.Literal('open-library'),
+    key: t.String(), ordinal: t.Integer(), agent: t.Null(), ...creditName,
+  }),
+  t.Object({
+    id: readId, role: workCreditRole,
+    participantKind: t.Literal('agent'), provider: t.Null(),
+    key: t.Null(), ordinal: t.Null(), agent: readId, ...creditName,
+  }),
+]);
 export const classificationItem = t.Object({ sense: readId, concept: readId, name: readName,
   relevanceRevision: t.Nullable(readId),
   relevanceStatus: t.Union([t.Literal('unrecorded'), t.Literal('recorded'), t.Literal('stale'), t.Literal('withdrawn')]),

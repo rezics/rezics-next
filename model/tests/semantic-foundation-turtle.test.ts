@@ -27,7 +27,7 @@ const originalPins = {
   'semantic-annotation-v1': 'd195472baf5db656b7086c576e95e0f17f057c95ebd766e3789bdecf033835a8',
   'definition-presentation-v1': 'e4aa036bbed4bb52762f8c0ec858120e86586d3d795cfd44fd21c6bd8fe6e3a7',
   'value-exact-v1': '839d218f826651e984ec804d15a856d40f9c08126e88cf2f67585656be83c2e4',
-  'native-agent-credit-v1': '5e40e324be6ea9a9aa0503e265264685ee72d858060aeedb0701db93b7f96dea',
+  'native-agent-credit-v1': '307be7d1ac523958e6b5e9c83210288214ce2bf53a2046202b8c2f7e35d3c0de',
 } as const;
 
 const focusRoles = {

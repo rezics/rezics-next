@@ -314,6 +314,48 @@ export const relationLexiconSeed = [
     ],
   },
   {
+    key: 'credit-director',
+    roles: ['work', 'contributor'],
+    labels: [
+      ['en', 'Director', 'Directors', 'Director of', 'Works directed'],
+      ['zh-Hant', '導演', '導演', '執導作品', '執導作品'],
+      ['zh-Hans', '导演', '导演', '执导作品', '执导作品'],
+      ['ja', '監督', '監督', '監督作品', '監督作品'],
+      ['ko', '감독', '감독', '연출 작품', '연출 작품'],
+      ['de', 'Regisseur', 'Regisseure', 'Regisseur von', 'Inszenierte Werke'],
+      ['fr', 'Réalisateur', 'Réalisateurs', 'Réalisateur de', 'Œuvres réalisées'],
+      ['es', 'Director', 'Directores', 'Director de', 'Obras dirigidas'],
+    ],
+  },
+  {
+    key: 'credit-artist',
+    roles: ['work', 'contributor'],
+    labels: [
+      ['en', 'Artist', 'Artists', 'Artist of', 'Works as artist'],
+      ['zh-Hant', '美術', '美術', '美術作品', '美術作品'],
+      ['zh-Hans', '美术', '美术', '美术作品', '美术作品'],
+      ['ja', '美術', '美術', '美術担当作品', '美術担当作品'],
+      ['ko', '미술', '미술', '미술 작품', '미술 작품'],
+      ['de', 'Künstler', 'Künstler', 'Künstler von', 'Werke als Künstler'],
+      ['fr', 'Artiste', 'Artistes', 'Artiste de', 'Œuvres comme artiste'],
+      ['es', 'Artista', 'Artistas', 'Artista de', 'Obras como artista'],
+    ],
+  },
+  {
+    key: 'credit-animation-studio',
+    roles: ['work', 'contributor'],
+    labels: [
+      ['en', 'Animation studio', 'Animation studios', 'Animation studio of', 'Works produced'],
+      ['zh-Hant', '動畫工作室', '動畫工作室', '製作作品', '製作作品'],
+      ['zh-Hans', '动画工作室', '动画工作室', '制作作品', '制作作品'],
+      ['ja', 'アニメーションスタジオ', 'アニメーションスタジオ', '制作作品', '制作作品'],
+      ['ko', '애니메이션 스튜디오', '애니메이션 스튜디오', '제작 작품', '제작 작품'],
+      ['de', 'Animationsstudio', 'Animationsstudios', 'Animationsstudio von', 'Produzierte Werke'],
+      ['fr', 'Studio d\'animation', 'Studios d\'animation', 'Studio d\'animation de', 'Œuvres produites'],
+      ['es', 'Estudio de animación', 'Estudios de animación', 'Estudio de animación de', 'Obras producidas'],
+    ],
+  },
+  {
     key: 'credit-concept-supervision',
     roles: ['work', 'contributor'],
     labels: [

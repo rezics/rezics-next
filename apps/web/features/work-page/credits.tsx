@@ -38,7 +38,8 @@ export function WorkCredits({ agentCredits, credits, locale, messages }: {
     <RetryButton label={t.retry} pendingLabel={t.retrying} />
   </div> : null;
   const native = agentCredits.ok ? agentCredits.data.items : [];
-  const external = credits.ok ? [...credits.data.items].sort((a, b) => a.ordinal - b.ordinal) : [];
+  const external = credits.ok ? credits.data.items.filter(credit => credit.participantKind === 'external-reference')
+    .sort((a, b) => a.ordinal - b.ordinal) : [];
   if (!native.length && !external.length) return retry;
   const more = (agentCredits.ok && agentCredits.data.nextCursor) || (credits.ok && credits.data.nextCursor);
   const authors = native.filter(credit => credit.role === 'author');

@@ -7,7 +7,7 @@ import { workHref } from '../work-page/route.ts';
 import type { ProfileMessages } from './messages.ts';
 import type { AgentWorksPage, CreditedWork, CreditRole, ShelfCard } from './types.ts';
 
-const roleOrder: readonly CreditRole[] = ['author', 'translator', 'editor'];
+const roleOrder = ['author', 'translator', 'editor'] as const;
 
 /**
  * How a work row credits the profile's Agent, as Goodreads writes

@@ -1,6 +1,6 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { namedDiscoveryCredits } from '../discovery/credits.ts';
-import { DISCOVERY_COST, type DiscoveryCredit, type ProjectedCredit } from '../discovery/contract.ts';
+import { DISCOVERY_COST, namedAuthorCredit, type DiscoveryCredit, type ProjectedCredit } from '../discovery/contract.ts';
 import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { WorkReadUnavailable, workRead, type WorkReadSession } from '../work/read-session.ts';
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
@@ -129,7 +129,8 @@ export async function searchPageCredits(session: WorkReadSession, works: readonl
   for (const [work, candidates] of reported ?? []) {
     const confirmed = result.get(work)!;
     const confirmedKeys = new Set(confirmed.flatMap(credit => credit.key !== null ? [credit.key] : []));
-    result.set(work, [...confirmed, ...candidates.filter(credit => !confirmedKeys.has(credit.key))]
+    result.set(work, [...confirmed, ...candidates.filter(credit =>
+      credit.participantKind === 'external-reference' && !confirmedKeys.has(credit.key))]
       .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
       .slice(0, DISCOVERY_COST.primaryCredits));
   }
@@ -157,7 +158,8 @@ export async function searchPageAuthors(session: WorkReadSession, works: readonl
     if (credit.participantKind === 'external-reference') return [{ ...credit,
       ...(preview ? { displayName: null, nameSource: undefined } : {}), ...sourceNames?.get(credit.key) }];
     const name = names?.get(credit.agent);
-    return name ? [{ ...credit, ...name }] : [];
+    const named = name && namedAuthorCredit(credit, name);
+    return named ? [named] : [];
   })]));
   if (preview) for (const [work, own] of values) {
     if (!Value.Check(discoveryItem.properties.primaryCredits, own)) { values.delete(work); unavailable.add(work); }

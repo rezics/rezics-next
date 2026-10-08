@@ -1,5 +1,5 @@
 import { t } from 'elysia';
-import { readAvatar, readId, readName, readPosition, WORK_READ_COST } from '../work/read-contract.ts';
+import { nativeCreditRole, readAvatar, readId, readName, readPosition, WORK_READ_COST } from '../work/read-contract.ts';
 import { serialStatus } from '../work/metadata-schema.ts';
 import { discoveryRating } from '../discovery/contract.ts';
 import { VANITY_HANDLE_PATTERN } from '../agent/vanity.ts';
@@ -10,7 +10,7 @@ import { resourceListing } from '../realm-admin/contract.ts';
 export const profileHandle = t.Nullable(t.String({ pattern: VANITY_HANDLE_PATTERN }));
 export const agentRevision = t.String({ pattern:
   '^https://rezics\\.com/id/[0-9a-f-]{36}(?:-agent-revision)?$' });
-export const creditRole = t.Union([t.Literal('author'), t.Literal('translator'), t.Literal('editor')]);
+export const creditRole = nativeCreditRole;
 export const agentProfile = t.Object({ profile: t.Literal('agent-read-v1'), id: readId,
   displayName: t.String({ minLength: 1, maxLength: 200 }),
   displayNameInfo: t.Optional(t.Nullable(readName)),

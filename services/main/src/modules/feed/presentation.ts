@@ -81,7 +81,8 @@ export async function feedWorkAuthors(session: WorkReadSession, works: readonly 
   for (const work of ids) {
     const own = confirmed.get(work)!;
     const keys = new Set(own.flatMap(credit => credit.key ? [credit.key] : []));
-    authors.set(work, [...own, ...(reported.get(work) ?? []).filter(credit => !keys.has(credit.key))]
+    authors.set(work, [...own, ...(reported.get(work) ?? []).filter(credit =>
+      credit.participantKind === 'external-reference' && !keys.has(credit.key))]
       .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
       .slice(0, DISCOVERY_COST.primaryCredits).map(credit => ({ agent: credit.agent, key: credit.key })));
   }
@@ -241,7 +242,7 @@ export async function feedWorkPresentations(session: WorkReadSession, works: rea
     const confirmed = credits.get(work) ?? [];
     const confirmedKeys = new Set(confirmed.flatMap(credit => credit.key !== null ? [credit.key] : []));
     const merged = [...confirmed, ...(reported.get(work) ?? []).filter(credit =>
-      !confirmedKeys.has(credit.key))]
+      credit.participantKind === 'external-reference' && !confirmedKeys.has(credit.key))]
       .sort((a, b) => (a.ordinal ?? -1) - (b.ordinal ?? -1) || a.id.localeCompare(b.id))
       .slice(0, DISCOVERY_COST.primaryCredits);
     const authors = merged.flatMap(credit => {

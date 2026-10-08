@@ -10,16 +10,17 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { fenceWorkBasis, readWorkBasis } from '../work/read-header.ts';
 import { pageResult, unerased, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
+import { isNativeCreditRole, type NativeCreditRole } from '../work/read-contract.ts';
 import { field, nextPage, pageBasis, publicAgent, readAgent } from './read.ts';
 
 const PROFILE = 'https://rezics.com/definition/native-agent-credit-v1';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export interface NativeCreditInput { work: string; credit: string; agent: string;
-  role: 'author' | 'translator' | 'editor'; expectedWorkHead: string; actingSubject: string }
+  role: NativeCreditRole; expectedWorkHead: string; actingSubject: string }
 
 export function nativeCreditDigest(input: NativeCreditInput) {
   if (![input.work, input.credit, input.agent, input.expectedWorkHead, input.actingSubject].every(id => nativeId.test(id))
-    || !['author', 'translator', 'editor'].includes(input.role)) throw new WorkReadInvalid('Invalid native Agent credit');
+    || !isNativeCreditRole(input.role)) throw new WorkReadInvalid('Invalid native Agent credit');
   return hash(JSON.stringify({ profile: 'native-agent-credit-v1', work: input.work, credit: input.credit,
     agent: input.agent, role: input.role, expectedWorkHead: input.expectedWorkHead, actingSubject: input.actingSubject }));
 }
@@ -130,7 +131,7 @@ export async function readNativeCredits(session: WorkReadSession, work: string) 
   const items = [];
   for (const row of rows.slice(0, limit)) {
     const role = field(row, 'role');
-    if (!['author', 'translator', 'editor'].includes(role)) throw new WorkReadUnavailable('Invalid credit role');
+    if (!isNativeCreditRole(role)) throw new WorkReadUnavailable('Invalid credit role');
     try {
       const agent = await readAgent(session, field(row, 'agent'));
       items.push({ id: field(row, 'id'), role: role as NativeCreditInput['role'],

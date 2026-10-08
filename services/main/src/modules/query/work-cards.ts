@@ -4,7 +4,7 @@ import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { RATING_STANDING_CADENCE } from '../rating/context.ts';
 import { readAgentCards } from '../profiles/read.ts';
 import { conceptCountBasis } from '../discovery/concepts.ts';
-import type { DiscoveryCredit, OwnedDiscoveryBasis } from '../discovery/contract.ts';
+import { namedAuthorCredit, type DiscoveryCredit, type OwnedDiscoveryBasis } from '../discovery/contract.ts';
 import { RESOURCE_WORK_CARD_COST, resourceProjectedCard, type ResourceWorkCard } from './resource-contract.ts';
 import { Value } from 'typebox/value';
 import type { Static } from 'typebox';
@@ -75,7 +75,8 @@ export async function resourceWorkCards(session: WorkReadSession, works: readonl
         return [{ ...credit, ...name, displayName: name?.displayName ?? null }];
       }
       const agent = agents?.get(credit.agent);
-      return agent ? [{ ...credit, displayName: agent.displayName, handle: agent.handle }] : [];
+      const named = agent && namedAuthorCredit(credit, { displayName: agent.displayName, handle: agent.handle });
+      return named ? [named] : [];
     });
     // Missing data supplies a zero lower bound, never an exact empty inventory.
     result.set(work, { primaryCredits, creditCount: { value: preview?.length ?? 0,

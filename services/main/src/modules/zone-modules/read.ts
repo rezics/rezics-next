@@ -2,7 +2,7 @@ import { zoneCards } from './cards.ts';
 import { zoneAdoption } from './adoption.ts';
 import { readEpochOrder } from '../discovery/lineage.ts';
 import { namedDiscoveryCredits, primaryDiscoveryCredits } from '../discovery/credits.ts';
-import type { DiscoveryCredit, ProjectedCredit } from '../discovery/contract.ts';
+import { namedAuthorCredit, type DiscoveryCredit, type ProjectedCredit } from '../discovery/contract.ts';
 import { readAuthorNames } from '../source/author-name-read.ts';
 import { readRealmDecisions } from '../realm-reads/public-decision-index.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
@@ -37,7 +37,8 @@ export function displayZoneCredits(credits: ProjectedCredit[],
     if (credit.participantKind === 'external-reference') return [{ ...credit,
       displayName: null, nameSource: undefined, ...sourceNames.get(credit.key) }];
     const name = names.get(credit.agent);
-    return name ? [{ ...credit, ...name }] : [];
+    const named = name && namedAuthorCredit(credit, name);
+    return named ? [named] : [];
   });
 }
 

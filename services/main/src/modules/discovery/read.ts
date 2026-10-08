@@ -2,7 +2,7 @@ import { AccountAssertionDenied } from '../account/verify-assertion.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadLimit, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import type { Static } from 'typebox';
-import { DISCOVERY_COST, discoveryItem, discoveryRating, type DiscoveryCredit, type DiscoveryQuery, type OwnedDiscoveryBasis,
+import { DISCOVERY_COST, discoveryItem, discoveryRating, namedAuthorCredit, type DiscoveryCredit, type DiscoveryQuery, type OwnedDiscoveryBasis,
   type DiscoveryPayload, type DiscoveryRow, type PopularTermsQuery } from './contract.ts';
 import { MAX_SUMMARY_BATCH, type ResourceSummary } from '../media/summary.ts';
 import { admitDiscoveryBasis } from './source.ts';
@@ -131,7 +131,8 @@ export async function discoveryCards(session: WorkReadSession, page: readonly Di
         if (credit.participantKind === 'external-reference') return [{ ...credit,
           displayName: null, nameSource: undefined, ...sourceNames?.get(credit.key) }];
         const name = creditNames?.get(credit.agent);
-        return name ? [{ ...credit, ...name }] : [];
+        const named = name && namedAuthorCredit(credit, name);
+        return named ? [named] : [];
       }),
       classifications: (payload.classifications ?? []).flatMap(tag => { const item = named(tag); return item ? [item] : []; }),
       match: { publication: 'public-main' as const, type, classification } }];

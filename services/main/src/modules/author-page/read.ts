@@ -110,8 +110,9 @@ async function workAuthors(session: WorkReadSession, key: string, works: readonl
     if (confirmed.some(credit => credit.agent === null && (!credit.key || !Number.isSafeInteger(credit.ordinal)))) {
       throw new WorkReadUnavailable('Author credits are ambiguous');
     }
-    const keys = new Set(confirmed.map(credit => credit.key));
-    const all = [...confirmed, ...(reported.get(work) ?? []).filter(credit => !keys.has(credit.key))
+    const reportedRows = (reported.get(work) ?? []).filter(credit => credit.participantKind === 'external-reference');
+    const keys = new Set(confirmed.flatMap(credit => credit.key ? [credit.key] : []));
+    const all = [...confirmed, ...reportedRows.filter(credit => !keys.has(credit.key))
       .map(credit => ({ agent: null, key: credit.key, ordinal: credit.ordinal }))]
       .sort((a, b) => a.ordinal - b.ordinal || (a.agent ?? a.key ?? '').localeCompare(b.agent ?? b.key ?? ''));
     const unique = all.filter((credit, index) => all.findIndex(other => other.agent === credit.agent

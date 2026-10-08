@@ -52,7 +52,7 @@ test('G238: profiles and library have concrete web-style treaty response types',
     const resolved = await client.v1.handles({ handle: `agent-${id}` }).get();
     const name: string | undefined = resolved.data?.displayName;
     const works = await client.v1.agents({ id }).works.get({ query: { limit: 1 } });
-    const role: 'author' | 'translator' | 'editor' | undefined = works.data?.items[0]?.attribution[0]?.role;
+    const role: 'author' | 'translator' | 'editor' | 'director' | 'artist' | 'animation-studio' | undefined = works.data?.items[0]?.attribution[0]?.role;
     const shelves = await client.v1.agents({ id }).collections.get();
     const kind: 'static' | 'captured' | undefined = shelves.data?.items[0]?.kind;
     const statusShelf = await client.v1.agents({ id }).shelves.status({ status: 'reading' }).works.get();

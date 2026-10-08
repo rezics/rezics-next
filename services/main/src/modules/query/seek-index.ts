@@ -6,6 +6,16 @@ import { controlRead, controlTransaction } from '../access/topology-control.ts';
 import { runWorkerTick } from '../../worker-tick.ts';
 import { FIRST_PUBLICATION_TYPE, invertedPublicationYear } from './year-fact.ts';
 
+/** Same sequence as TemplateIndexService.CREDIT_ROLES. Translator and editor sort after the public page. */
+export const CREDIT_SEEK_ROLES = ['author', 'director', 'artist', 'animation-studio', 'translator', 'editor'] as const;
+/** Role rank, then a three-digit ordinal, then the credit id. An unknown role or a non 1–3 digit ordinal is not posted. */
+export function creditSeekKey(role: string, ordinal: string | number | null | undefined, id: string): string | null {
+  const rank = CREDIT_SEEK_ROLES.indexOf(role as typeof CREDIT_SEEK_ROLES[number]);
+  if (rank < 0 || !id) return null;
+  const raw = ordinal === undefined || ordinal === null || ordinal === '' ? '0' : String(ordinal);
+  if (!/^\d{1,3}$/.test(raw)) return null;
+  return `${rank}:${raw.padStart(3, '0')}:${id}`;
+}
 export interface SeekSelector { graph: string; predicate: string; type: string; root: 'work' | 'main'; }
 export interface SeekCandidate { id: string; key: string; root: string; terms: Record<string,string[]> }
 const RV = 'https://rezics.com/vocab/';
@@ -147,8 +157,13 @@ export class TemplateSeekIndex {
               continue;
             }
             if(type===`${RV}AuthorCredit` && entity.terms.retiredBy?.length) continue;
+            const creditType = type===`${RV}AuthorCredit` || type===`${RV}NativeAgentCredit`;
+            // Author credits written before creditKey existed still post. Native credits require the ranked key.
             const key = type===`${RV}RealmPublicationSlot` ? entity.terms.realm?.[0]
-              :type===`${RV}AuthorCredit`?`${String(entity.terms.ordinal?.[0] ?? '').padStart(3,'0')}:${entity.id}`:entity.id;
+              : creditType ? entity.terms.creditKey?.[0] ?? (type===`${RV}AuthorCredit`
+                ? creditSeekKey('author', entity.terms.ordinal?.[0] ?? '', entity.id) ?? undefined : undefined)
+              : entity.id;
+            if (creditType && !key) continue;
             if (!key) throw new WorkReadUnavailable('Physical slot lacks its Realm');
             await client.query(`INSERT INTO access.template_seek_entry(epoch,graph,predicate,anchor,type,key,id,external_key)
               VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING`,
@@ -220,7 +235,9 @@ export class TemplateSeekIndex {
       await controlTransaction(this.pool,async client=> {
         await this.deadline(client,deadline);
         await client.query('UPDATE access.template_seek_checkpoint SET cursor=$1,complete=$2 WHERE epoch=$3 AND instance=$4',
-          [{ phase,after:delta.next ?? '' },phase===5,epoch,instance]);
+          // Phases 0–4 are the indexed types, 5 is first publication, and 6 is complete.
+          // FixedRelease remains phase 3 so that pass still reads the revisions graph.
+          [{ phase,after:delta.next ?? '' },phase===6,epoch,instance]);
       });
     }
     throw new WorkReadUnavailable('Template directory preparation exceeds 600 seconds');

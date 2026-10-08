@@ -22,7 +22,12 @@ import org.apache.jena.dboe.base.record.RecordFactory;
 final class TemplateIndexService {
     static final String RV = "https://rezics.com/vocab/", CURRENT = CommandPolicy.CURRENT,
         REVISIONS = CommandPolicy.REVISIONS, STATE = "urn:rezics:graph:template-index";
-    static final List<String> TYPES = List.of("TextContribution", "RealmPublicationSlot", "AuthorCredit", "FixedRelease");
+    /** FixedRelease stays at index 3: backfill reads that phase from the revisions graph.
+     * NativeAgentCredit follows it. The first-publication sentinel is the phase after this list. */
+    static final List<String> TYPES = List.of("TextContribution", "RealmPublicationSlot", "AuthorCredit", "FixedRelease", "NativeAgentCredit");
+    /** Same sequence as CREDIT_SEEK_ROLES in the TypeScript seek index.
+     * Translator and editor sort after the public credit page so that page completes first. */
+    static final List<String> CREDIT_ROLES = List.of("author", "director", "artist", "animation-studio", "translator", "editor");
     /** One sentinel for every accepted first-publication year. The key is the
      * fixed-width inverted calendar year, so the existing ascending seek is newest first. */
     static final String FIRST_PUBLICATION = RV + "FirstPublication",
@@ -60,6 +65,14 @@ final class TemplateIndexService {
         terms.put("type",types);
         if (!types.isEmpty()) for (String property : PROPERTIES) terms.put(property,values(data,graph,id,RV+property));
         if(types.contains(RV+"AuthorCredit")) terms.put("ordinal",values(data,graph,id,"https://schema.org/position"));
+        if(types.contains(RV+"AuthorCredit") || types.contains(RV+"NativeAgentCredit")) {
+            List<String> roles = values(data,graph,id,"https://schema.org/roleName");
+            terms.put("roleName", roles);
+            String ordinal = types.contains(RV+"AuthorCredit")
+                ? (terms.getOrDefault("ordinal", List.of()).isEmpty() ? "" : terms.get("ordinal").get(0)) : "0";
+            String creditKey = creditSeekKey(roles.isEmpty() ? "" : roles.get(0), ordinal, id);
+            if (creditKey != null) terms.put("creditKey", List.of(creditKey));
+        }
         for(String head : terms.getOrDefault("publicationHead",List.of())) terms.put("publicationDraft",values(data,REVISIONS,head,RV+"selectedDraft"));
         for(String head : terms.getOrDefault("selectionHead",List.of())) {
             terms.put("selectionContribution",values(data,REVISIONS,head,RV+"contribution"));
@@ -179,6 +192,12 @@ final class TemplateIndexService {
         } else return null;
         if (year < 1 || year > 9999 || !calendarDay(year, month, day) || hour > 23 || minute > 59 || second > 59) return null;
         return year;
+    }
+    /** Rank, a three-digit ordinal, then the credit id. An unknown role is not posted. */
+    static String creditSeekKey(String role, String ordinal, String id) {
+        int rank = CREDIT_ROLES.indexOf(role);
+        if (rank < 0 || id == null || id.isEmpty() || ordinal == null || !ordinal.matches("\\d{1,3}")) return null;
+        return rank + ":" + String.format("%03d", Integer.parseInt(ordinal)) + ":" + id;
     }
     static String invertedPublicationYear(int year) {
         if (year < 1 || year > 9999) throw new IllegalArgumentException("publication year is outside 1..9999");

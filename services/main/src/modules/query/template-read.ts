@@ -12,8 +12,8 @@ import { readAuthorNames, sourceCreditReferences } from '../source/author-name-r
 import { resolveConcepts } from '../concept-page/read.ts';
 import { discoveryStorage } from '../discovery/store.ts';
 import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
-import { TEMPLATE_COST, type ReviewedTemplate, type TemplateInput } from './template-schema.ts';
-import type { SeekCandidate } from './seek-index.ts';
+import { closedStringEnum, TEMPLATE_COST, type ReviewedTemplate, type TemplateInput } from './template-schema.ts';
+import { creditSeekKey, type SeekCandidate } from './seek-index.ts';
 import { FIRST_PUBLICATION_ANCHOR, keepPublicationRow, publicationRowKey, publicationYearBoundsError, publicationYearFromKey } from './year-fact.ts';
 
 export const templateRequests=t.Union(templates.map(template=>template.request) as [typeof templates[number]['request'],...typeof templates[number]['request'][]]);
@@ -55,6 +55,14 @@ async function admit(session:WorkReadSession, rootKind:Template['root'], roots:s
 export async function executeTemplate(deps:MainWorkDependencies,request:Request,input:TemplateInput):Promise<Response> {
   const template=templates.find(template=>template.query===input.query && template.revision===input.revision) as Template|undefined;
   if(!template || !Value.Check(template.request,input)) throw new WorkReadInvalid('Unknown or invalid reviewed template');
+  let allowedRoles: readonly string[] | undefined;
+  try { allowedRoles = closedStringEnum(template.request, 'role'); }
+  catch (error) { throw new WorkReadInvalid(error instanceof Error ? error.message : 'Template parameter role must be a closed list'); }
+  const role = input.parameters.role;
+  if (role !== undefined) {
+    if (!allowedRoles?.includes(role)) throw new WorkReadInvalid('Unknown template role');
+    if (!template.serverBoundInputs.includes('_role')) throw new WorkReadInvalid('Template role parameter is not bound');
+  }
   const yearPage=template.eligibility.kind==='first-publication';
   const bounds=publicationYearBoundsError(input.parameters.fromYear,input.parameters.toYear);
   if(yearPage && bounds) throw new WorkReadInvalid(bounds);
@@ -67,6 +75,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       : await admit(session,template.root,roots);
     const normalized={query:template.query,revision:template.revision,text:readDependencyToken(template.sparql),roots,
       contentLanguage:input.parameters.contentLanguage?.toLowerCase() ?? '',kind:input.parameters.kind ?? '',
+      role:role ?? '',
       fromYear:input.parameters.fromYear ?? null,toYear:input.parameters.toYear ?? null,
       languages:session.displayLanguages,actor:session.options.actingSubject ?? null,limit};
     const refs=template.sourceCredits ? await sourceCreditReferences(session,roots) : [];
@@ -133,7 +142,11 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
     const source=refs.map(ref=>({...ref,confirmed:confirmed.has(`${ref.work}\0${ref.key}`)}));
     if(template.sourceCredits) {
       const cutoff=candidates.at(-1)?.key;
-      const added=source.map(ref=>({...ref,sort:`${String(ref.ordinal).padStart(3,'0')}:${ref.id}`}))
+      const added=source.map(ref=>{
+        const sort=creditSeekKey('author',ref.ordinal,ref.id);
+        if(!sort) throw new WorkReadUnavailable('Source credit order is unavailable');
+        return {...ref,sort};
+      })
         .filter(ref=>!ref.confirmed && (!after || ref.sort>after.key) && (!physicalMore || !cutoff || ref.sort<=cutoff))
         .map(ref=>({id:ref.id,key:ref.sort,root:ref.work,terms:{}}));
       // An exhausted graph window has no later ordering boundary; include its source tail.
@@ -149,8 +162,12 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       {columns:['id','_sort'],rows:candidates.map(row=>[uri(row.id),literal(row.key)])}];
     if(template.sourceCredits) tables.push({columns:['id','key','ordinal','_work_iri','_source_confirmed'],
       rows:source.map(row=>[uri(row.id),literal(row.key),integer(row.ordinal),uri(row.work),bool(row.confirmed)])});
-    const bindings:Record<string,TemplateTerm>=template.serverBoundInputs.includes('_contentLanguage') ? {
-      _contentLanguage:literal(normalized.contentLanguage),_kind:literal(normalized.kind) } : {};
+    const bindings:Record<string,TemplateTerm>={};
+    if(template.serverBoundInputs.includes('_contentLanguage')) {
+      bindings._contentLanguage=literal(normalized.contentLanguage);
+      bindings._kind=literal(normalized.kind);
+    }
+    if(role!==undefined) bindings._role=literal(role);
     const candidateBindings=candidates.map(candidate=> {
       const main=admission.rows.find(row=>row.root===candidate.root)?.main;
       const terms:Record<string,TemplateTerm>={id:uri(candidate.id),_sort:literal(candidate.key),_work_iri:uri(candidate.root),

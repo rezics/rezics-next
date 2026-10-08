@@ -17,6 +17,7 @@ import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { discardUnpublishedWorkObjects, stagedWorkObjectCandidates, type StagedWorkObjectCandidates } from './object-gc.ts';
 import { sealMetadataWorkAdmission } from './seal.ts';
 import { readWorkTerminalReceipt, workReceiptIri, type WorkTerminalReceipt } from './receipt.ts';
+import { nativeCreditRole } from './read-contract.ts';
 import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit,
   metadataWorkRequestDigest, normalizeWorkSemanticTypes, prepareComponentWithCandidates, prepareWorkComponentWithCandidates, type WorkActivationEnvironment } from './activate.ts';
 
@@ -41,7 +42,7 @@ export const catalogueImportInput = t.Object({
   aliases: t.Array(namedText, { maxItems: 8 }),
   semanticTypes: t.Array(t.String(), { maxItems: 3, uniqueItems: true }),
   credits: t.Array(t.Object({ agent: native, expectedAgentHead: t.Optional(native),
-    role: t.Union([t.Literal('author'), t.Literal('translator'), t.Literal('editor')]) }, closed), { maxItems: 8 }),
+    role: nativeCreditRole }, closed), { maxItems: 8 }),
   classifications: t.Array(t.Object({ concept: native, definition: native,
     expectedDecisionHead: t.Null(), outcome: t.Union([t.Literal('accepted'), t.Literal('rejected')]) }, closed), { maxItems: 8 }),
 }, closed);

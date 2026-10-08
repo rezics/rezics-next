@@ -15,6 +15,7 @@ import {
   type ReadRow,
 } from '../work/read-session.ts';
 import type { shelfWork } from './read-contract.ts';
+import { isNativeCreditRole, type NativeCreditRole } from '../work/read-contract.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
 import { readWorkRating } from '../work/read-rating.ts';
@@ -438,9 +439,9 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
       .filter((row) => field(row, 'work') === id)
       .map((row) => {
         const role = field(row, 'role');
-        if (!['author', 'translator', 'editor'].includes(role))
+        if (!isNativeCreditRole(role))
           throw new WorkReadUnavailable('Invalid credit role');
-        return { credit: field(row, 'credit'), role: role as 'author' | 'translator' | 'editor' };
+        return { credit: field(row, 'credit'), role: role as NativeCreditRole };
       });
     if (
       !attribution.length ||

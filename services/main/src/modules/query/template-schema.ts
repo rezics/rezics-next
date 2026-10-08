@@ -18,8 +18,19 @@ export function templateResponse<const I extends string, S extends TSchema>(quer
     items:t.Array(item,{maxItems:64}),complete:t.Boolean(),...pageFields});
 }
 export interface TemplateInput { profile:'template-query-v1'; query:string;revision:1;
-  parameters:{ roots?:string[];contentLanguage?:string;kind?:'text-variant'|'release';fromYear?:number;toYear?:number };
+  parameters:{ roots?:string[];contentLanguage?:string;kind?:'text-variant'|'release';fromYear?:number;toYear?:number;role?:string };
   presentation?:{language?:string;actingSubject?:string};limit?:number;cursor?:string }
+interface ClosedEnumOption { type?: string; const?: unknown; anyOf?: ClosedEnumOption[] }
+interface ClosedEnumSchema { properties?: { parameters?: { properties?: Record<string, ClosedEnumOption> } } }
+/** A template parameter is admitted only as a closed list of string constants. A free string is refused. */
+export function closedStringEnum(schema: TSchema, parameter: string): readonly string[] | undefined {
+  const property = (schema as ClosedEnumSchema).properties?.parameters?.properties?.[parameter];
+  if (!property) return undefined;
+  const options = property.anyOf ?? (property.const !== undefined ? [property] : undefined);
+  if (!options?.length || options.some(option => option.type !== 'string' || typeof option.const !== 'string'))
+    throw new Error(`Template parameter ${parameter} must be a closed list`);
+  return options.map(option => String(option.const));
+}
 export type TemplateField = { term:string; valueType?:'boolean'|'integer'; nullable?:boolean;optional?:boolean }
   | { constant: string | number | boolean | null }
   | { summary:string; path:'name' }

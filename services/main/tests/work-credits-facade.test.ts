@@ -7,7 +7,7 @@ import {
 } from '../src/infrastructure/fuseki.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { template } from '../src/modules/query/templates/work-credits.schema.ts';
-import type { SeekCandidate } from '../src/modules/query/seek-index.ts';
+import { creditSeekKey, type SeekCandidate } from '../src/modules/query/seek-index.ts';
 import { WORK_READ_COST } from '../src/modules/work/read-contract.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -44,7 +44,7 @@ function fixture() {
     { id: id(12), key: '/authors/OL2A', ordinal: 2 },
   ];
   const candidates: SeekCandidate[] = credits.map(credit => ({
-    id: credit.id, key: `${String(credit.ordinal).padStart(3, '0')}:${credit.id}`, root: work,
+    id: credit.id, key: creditSeekKey('author', credit.ordinal, credit.id)!, root: work,
     terms: { creditRevision: [id(credit.ordinal + 30)] },
   }));
   const meter = () => {
@@ -83,6 +83,7 @@ function fixture() {
       const bindings = envelope.candidates!.map(candidate => {
         const credit = [...credits, ...state.refs].find(item => item.id === candidate.id!.value)!;
         return { id: uri(credit.id), key: literal(credit.key), ordinal: literal(String(credit.ordinal)),
+          role: literal('author'), participantKind: literal('external-reference'), provider: literal('open-library'),
           ...(!credits.some(item => item.id === credit.id) ? { confirmation: literal('source-reported') } : {}) };
       });
       const change = state.afterTemplate;
@@ -105,7 +106,7 @@ function fixture() {
     templateSeek: {
       keys: async () => [{ revision: state.membership }],
       candidates: async (_epoch: string, keys: unknown[], after: { key: string; id: string } | null, limit: number) => {
-        expect(keys).toHaveLength(1);
+        expect(keys).toHaveLength(2);
         expect(limit).toBeLessThanOrEqual(21);
         const remaining = state.emptyGraph ? [] : candidates.slice(0, state.nativeCount)
           .filter(row => !after || row.key > after.key);

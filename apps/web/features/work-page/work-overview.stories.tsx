@@ -54,7 +54,8 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
   const author = agentCredits.ok ? agentCredits.data.items.find(credit => credit.role === 'author') : undefined;
   const authors = [...agentCredits.ok ? agentCredits.data.items.filter(credit => credit.role === 'author')
     .map(credit => ({ name: credit.displayName, href: authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent }) })) : [],
-  ...credits.ok ? credits.data.items.filter(credit => credit.role === 'author')
+  ...credits.ok ? credits.data.items.filter(credit => credit.participantKind === 'external-reference')
+    .filter(credit => credit.role === 'author')
     .map(credit => ({ name: credit.displayName ?? credit.key,
       href: authorHref({ kind: 'external', key: credit.key }) })) : []];
   return <WorkFrame workRef={fixture.workRef} work={work} authors={authors} locale={locale} messages={t}

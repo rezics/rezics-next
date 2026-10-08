@@ -82,6 +82,19 @@ export const discoveryCredit = t.Union([
   }),
 ]);
 export type DiscoveryCredit = Static<typeof discoveryCredit>;
+
+/** A card names an author Agent. Other roles stay on the credit read. */
+export function namedAuthorCredit(
+  credit: { id: string; role: string; agent: string | null },
+  name: { displayName: string; handle: string | null; address?: Static<typeof canonicalAddress> },
+): DiscoveryCredit | undefined {
+  if (credit.role !== 'author' || !credit.agent) return undefined;
+  return {
+    id: credit.id, role: 'author', participantKind: 'agent', provider: null, key: null, ordinal: null,
+    agent: credit.agent, displayName: name.displayName, handle: name.handle,
+    ...(name.address ? { address: name.address } : {}),
+  };
+}
 export type ProjectedCredit =
   | Static<typeof creditItem>
   | {
