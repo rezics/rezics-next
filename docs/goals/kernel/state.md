@@ -2,6 +2,18 @@
 
 ## Handover (2026-10-08)
 
+Late update04:27 UTC: G1282 Grok30 TERMINAL, commit8a73d6c1cce35517513ccbac605445bfea2f2e48,
+clean tree. Manager independently read original native XML8+2+8+34+9 =61/0fail/
+error/skip; wrapper132.27s, original SQL2/71 and guard5 reported. Source/category/
+wrapper guard still needs review. New pin972ae0d9c953 UNBUILT; toolchain exact
+hunk `.temp/worktrees/g-1282/.temp/goal/external-fixture-pin-hunk.diff` staged,
+restored file intentionally stale inventory, gencheck passes. Loanfa887 already
+approved. Next: source review, reconcile exact pin, same-pin non-external full
+package PLUS tagged wrapper, normal merge and mandatory refresh. No new task
+started. Structure0404 andschemafixture0410 gate handles still independently
+LIVE; worker G1345 live. Coordinator still enrolled Codex-1 native session as
+of this follow-up; Program must finish handover/unenroll to prevent more wakes.
+
 Program mailc2e493 requests immediate Codex→Sonnet manager handover at this
 turn's exit; both Codex accounts near exhaustion, banked reset forbidden. Goal
 ACTIVE, C4–C6/full completion unproven. Start no duplicate jobs. Current facts
