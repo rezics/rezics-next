@@ -16,12 +16,15 @@ function Text({ text }: { text: ZoneText }) {
 
 /**
  * A withheld credit is not a name the package was given. The platform sets `withheldCredit` to the page
- * where that name may be read; this package supplies the label, and never prints an empty name or the reference.
+ * where that name may be read: a root-relative path, the same shape as every other page address the SDK
+ * passes (`href`). An empty value or a reference is not that path, so this package never prints it and
+ * never links it; it supplies only the label.
  */
 function withheldCredit(other: object): string | null | undefined {
   if (!('withheldCredit' in other)) return undefined;
   const value = (other as { withheldCredit?: unknown }).withheldCredit;
-  if (typeof value === 'string' && value && !value.startsWith('https://rezics.com/id/')) return value;
+  // A single leading slash is a page path. `//` is a scheme-relative reference, not a page on this site.
+  if (typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')) return value;
   if (value === null || typeof value === 'string') return null;
   return undefined;
 }

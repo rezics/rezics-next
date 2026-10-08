@@ -81,7 +81,7 @@ test('Saved Filters page within one summary batch and are not a stored count', (
   expect(SAVED_FILTER_COST.page).toBe(SUMMARY_PAGE_COST.batch);
   expect(SAVED_FILTER_COST.page).toBeLessThanOrEqual(SUMMARY_PAGE_COST.batch);
   expect(SAVED_FILTER_COST.pinned).toBe(8);
-  const migration = readFileSync(join(import.meta.dir, '../migrations/access/1331_saved_filter_inventory.sql'), 'utf8');
+  const migration = readFileSync(join(import.meta.dir, '../migrations/access/1428_saved_filter_inventory.sql'), 'utf8');
   expect(migration).toContain('DROP COLUMN named_count');
   expect(migration.includes('BETWEEN 0 AND 50')).toBe(false);
 });
