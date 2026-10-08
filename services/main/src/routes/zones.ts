@@ -18,7 +18,7 @@ import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/s
 import { createAdmittedOwner } from '../modules/zone/owner-create.ts';
 import { ZoneName, readZoneName } from '../modules/zone/read-name.ts';
 import { languageTag } from '../modules/display-language/schema.ts';
-import { changeZoneConfiguration, readZoneConfiguration, publishZoneSite,
+import { changeZoneConfiguration, readZoneConfiguration, publishZoneSite, RealmAttachmentLimit,
   ZoneOfficialDenied, ZoneStale, ZoneUnavailable, ZonePublicationUnavailable } from '../modules/zone/configuration.ts';
 import { InvalidZoneConfiguration, ZoneSitePublicationSelection, ZoneSitePublishSelection } from '../modules/zone/config-format.ts';
 import { DEFAULT_ZONE_PRESENTATION, ZoneCampaignArt, ZonePresentation, zoneRenderTokens }
@@ -113,6 +113,7 @@ function routeError(error: unknown): Response {
   if (error instanceof WorkReadUnavailable || error instanceof WorkReadLimit) {
     return problem(503, 'zone_route_unavailable', 'Zone route is unavailable');
   }
+  if (error instanceof RealmAttachmentLimit) return problem(400, 'realm_attachment_limit', error.message);
   if (error instanceof InvalidZoneConfiguration) return problem(400, 'invalid_zone_configuration', error.message);
   if (error instanceof ZoneOfficialDenied) return problem(403, 'official_zone_denied', error.message);
   if (error instanceof ZoneQueryBudgetExceeded) return problem(503, 'zone_query_budget', error.message);

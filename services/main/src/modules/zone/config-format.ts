@@ -14,6 +14,10 @@ export const ZONE_CONFIG_FORMAT = 'rezics-zone-config-v1';
 export const ZONE_LIMITS = { configBytes: 65_536, advancedBytes: 262_144, queryBlocks: 32,
   queryNesting: 4, queryBudgetMs: 2_000, queryBudgetRows: 1_000 } as const;
 
+/** Cross-Space attachments on one Realm. A same-Space Realm and a repeat of the
+ * Realm already attached do not count. */
+export const REALM_ATTACHMENT_CAP = 64;
+
 const nativeId = Type.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const contentRevisionId = Type.String({
   pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',

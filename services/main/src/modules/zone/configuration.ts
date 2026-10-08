@@ -9,8 +9,8 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readWorkComponentState } from '../work/history.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from '../work/activate.ts';
-import { checkZoneConfiguration, checkStoredZoneConfiguration, InvalidZoneConfiguration, ZONE_CONFIG_FORMAT,
-  ZONE_LIMITS, ZONE_PROFILE, ZONE_SITE_PUBLICATION_COST, checkZoneSitePublication,
+import { checkZoneConfiguration, checkStoredZoneConfiguration, InvalidZoneConfiguration, REALM_ATTACHMENT_CAP,
+  ZONE_CONFIG_FORMAT, ZONE_LIMITS, ZONE_PROFILE, ZONE_SITE_PUBLICATION_COST, checkZoneSitePublication,
   zonePublishedPageBinding, type ZoneSitePublicationSelection,
   type ZoneConfiguration, type ZoneQueryBlock } from './config-format.ts';
 import { activeDefinitionDependenciesGuard } from '../context/definition-state.ts';
@@ -35,6 +35,54 @@ export class ZoneUnavailable extends Error {}
 export class ZoneStale extends Error {}
 export class ZoneOfficialDenied extends Error {}
 export class ZonePublicationUnavailable extends Error {}
+
+/** A cross-Space Realm already has REALM_ATTACHMENT_CAP Zones attached. */
+export class RealmAttachmentLimit extends Error {
+  constructor() {
+    super('This community is linked to the most sites it can be.');
+  }
+}
+
+/** At most 65 attachment rows, so a full Realm is visible without counting the rest. */
+function realmAttachmentCountQuery(realm: string): string {
+  return `PREFIX rv: <${RV}>
+    SELECT (COUNT(?realmAttachmentSlot) AS ?realmAttachmentTaken) WHERE {
+      { SELECT ?realmAttachmentSlot WHERE {
+          GRAPH ${iri(GRAPHS.current)} {
+            ?realmAttachmentSlot rv:defaultRealm ${iri(realm)} ;
+              rv:realmAttachment ?realmAttachmentLink .
+          }
+          GRAPH ${iri(GRAPHS.receipts)} {
+            ?realmAttachmentLink rv:outcome rv:Succeeded .
+          }
+        } LIMIT ${REALM_ATTACHMENT_CAP + 1} }
+    }`;
+}
+
+/** The same bounded count inside the attach update, so a second attach sees the first. */
+function realmAttachmentCapConstraint(realm: string): string {
+  return `{
+      SELECT (COUNT(?realmAttachmentSlot) AS ?realmAttachmentTaken) WHERE {
+        { SELECT ?realmAttachmentSlot WHERE {
+            GRAPH ${iri(GRAPHS.current)} {
+              ?realmAttachmentSlot rv:defaultRealm ${iri(realm)} ;
+                rv:realmAttachment ?realmAttachmentLink .
+            }
+            GRAPH ${iri(GRAPHS.receipts)} {
+              ?realmAttachmentLink rv:outcome rv:Succeeded .
+            }
+          } LIMIT ${REALM_ATTACHMENT_CAP + 1} }
+      }
+    }
+    FILTER(?realmAttachmentTaken < ${REALM_ATTACHMENT_CAP})`;
+}
+
+async function realmAttachmentRoom(graph: { query: (sparql: string, budget?: number) => Promise<{ results?: { bindings: Record<string, { value: string }>[] } }> },
+  realm: string): Promise<boolean> {
+  const taken = Number((await graph.query(realmAttachmentCountQuery(realm), 4096)).results?.bindings?.[0]
+    ?.realmAttachmentTaken?.value ?? '0');
+  return taken < REALM_ATTACHMENT_CAP;
+}
 
 interface ZoneHead {
   zone: string; space: string; navigation: string; revision: string; manifest: string;
@@ -513,6 +561,11 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
         if (head.attachment?.realm !== config.defaultRealm) {
           if (!realmPatched || !await realmAttachHeld(access, realmAttachRequest(principal, input.actingSubject,
             config.defaultRealm))) return unavailable();
+          if (!await realmAttachmentRoom(env.fuseki, config.defaultRealm)) {
+            const cancelled = await sealStructureAdmissionCancellation(env, admission);
+            await access.recordGraphOutcome(admission.id, cancelled);
+            throw new RealmAttachmentLimit();
+          }
           attach = { realm: config.defaultRealm };
         }
       }
@@ -655,6 +708,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(themeSelection.activation)} rv:revocation ?themeRevocation } }` : ''}
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+        ${attach ? realmAttachmentCapConstraint(attach.realm) : ''}
         BIND(?n + 1 AS ?next) }`;
     const validations = await profileValidations(env.fuseki, 'zone-capability-v1', [
       { shape: `${ZONE_PROFILE}/zone-shape`, focus: [input.zone],
@@ -713,6 +767,11 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
         const cancelled = await sealStructureAdmissionCancellation(env, admission);
         await access.recordGraphOutcome(admission.id, cancelled);
         throw new ZoneStale('Zone head changed');
+      }
+      if (attach && !await realmAttachmentRoom(env.fuseki, attach.realm)) {
+        const cancelled = await sealStructureAdmissionCancellation(env, admission);
+        await access.recordGraphOutcome(admission.id, cancelled);
+        throw new RealmAttachmentLimit();
       }
     }
   }

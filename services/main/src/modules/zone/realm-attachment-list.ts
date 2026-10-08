@@ -8,7 +8,7 @@ import { canonicalLanguage, direction } from '../display-language/tag.ts';
 import type { SparqlResult } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { InvalidZoneConfiguration } from './config-format.ts';
+import { InvalidZoneConfiguration, REALM_ATTACHMENT_CAP } from './config-format.ts';
 import { duringAttachmentPage } from './realm-attachment-authority.ts';
 import { realmAttachHeld, realmAttachRequest } from './realm-attachment.ts';
 
@@ -18,10 +18,11 @@ export class RealmAttachmentListMissing extends Error {}
 
 /** One bound page. The grant check is the existing `realm.attach` lookup and is
  * not repeated per row; this page is that lookup's graph read, so the share
- * lock covers it. Jena can find `rv:defaultRealm` for this Realm through POS.
- * An IRI `>` filter matches nothing in Jena 6, so the cursor stays STR(?zone)
- * and that posting is sorted rather than seeked. */
-export const ZONE_ATTACHMENT_LIST_COST = { graphReads: 1, sqlReads: 1, pageSize: 24 } as const;
+ * lock covers it. Each page sorts only that Realm's attachments and cuts the
+ * Zone IRIs with STR(?zone) before the label and receipt joins, so its cost is
+ * bounded by REALM_ATTACHMENT_CAP. */
+export const ZONE_ATTACHMENT_LIST_COST = { graphReads: 1, sqlReads: 1, pageSize: 24,
+  attachmentCap: REALM_ATTACHMENT_CAP } as const;
 
 const CURSOR = /^v1:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const WHEN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
@@ -86,17 +87,28 @@ function attachmentPageQuery(realm: string, after: string | undefined, limit: nu
         BIND("open" AS ?open)
       }
       OPTIONAL {
+        {
+          SELECT ?zone WHERE {
+            GRAPH ${iri(GRAPHS.current)} {
+              ?zone rv:defaultRealm ${iri(realm)} .
+              ?zone a rv:Zone ; rv:realmAttachment ?link ; rv:space ?holder .
+              ${cursor}
+            }
+          }
+          ORDER BY STR(?zone)
+          LIMIT ${limit + 1}
+        }
         GRAPH ${iri(GRAPHS.current)} {
-          ?zone a rv:Zone ; rv:defaultRealm ${iri(realm)} ; rv:realmAttachment ?receipt ; rv:space ?space .
+          ?zone rv:space ?space ; rv:realmAttachment ?receipt .
           OPTIONAL { ?zone rdfs:label ?name . BIND(LANG(?name) AS ?language) }
         }
         GRAPH ${iri(GRAPHS.receipts)} {
           ?receipt rv:outcome rv:Succeeded .
           OPTIONAL { ?receipt rv:realmAttachedAt ?attachedAt }
         }
-        ${cursor}
       }
-    } ORDER BY STR(?zone) LIMIT ${limit + 1}`;
+    }
+    ORDER BY STR(?zone)`;
 }
 
 function collapse<T extends { zone?: { value: string } }>(rows: T[]): T[] {

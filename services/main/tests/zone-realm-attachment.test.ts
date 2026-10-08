@@ -11,7 +11,7 @@ import { baselineTarget } from '../src/modules/access/baseline.ts';
 import { RV, prepareComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { ZONE_CONFIG_FORMAT, ZONE_LIMITS, ZONE_PROFILE, InvalidZoneConfiguration } from '../src/modules/zone/config-format.ts';
 import { changeZoneConfiguration, readZoneConfiguration, readZoneRevisionConfiguration, publishZoneSite,
-  ZoneStale, ZoneUnavailable } from '../src/modules/zone/configuration.ts';
+  RealmAttachmentLimit, ZoneStale, ZoneUnavailable } from '../src/modules/zone/configuration.ts';
 import { attachmentPagePending, realmAttachAllowed } from '../src/modules/zone/realm-attachment-authority.ts';
 import { withdrawZoneRealmAttachment } from '../src/modules/zone/realm-attachment-withdrawal.ts';
 import { listRealmZoneAttachments, RealmAttachmentListMissing } from '../src/modules/zone/realm-attachment-list.ts';
@@ -49,6 +49,7 @@ function world(directory: string, fixture: Fixture = {}) {
     attachAuthority: 'held' as 'held' | 'denied' | 'expired', ownerAuthority: 'held' as 'held' | 'denied',
     attachmentLive: true,
     attachments: [] as Record<string, ReturnType<typeof lit>>[],
+    attachmentCount: 0,
     /** begin, the page read, end: the page is inside the grant admission. */
     grantWindow: [] as string[],
     /** Runs once, as a command reaches the graph: the race window after the editor read the head. */
@@ -75,6 +76,9 @@ function world(directory: string, fixture: Fixture = {}) {
       if (query.includes('SELECT ?space WHERE')) {
         const realm = Object.keys(state.realms).find(candidate => query.includes(`<${candidate}>`));
         return rows(realm ? [{ space: lit(state.realms[realm]!) }] : []);
+      }
+      if (query.includes('COUNT(?realmAttachmentSlot)')) {
+        return rows([{ realmAttachmentTaken: lit(String(state.attachmentCount)) }]);
       }
       if (query.includes('rv:realmAttachment ?receipt')) {
         state.grantWindow.push('page');
@@ -186,6 +190,18 @@ test('attaching a Realm from another Space needs both authorities and records a 
     expect(inserted).toMatch(new RegExp(`<${zone}> rv:realmAttachedBy <${actor}> ;\\s+rv:realmAttachment <urn:rezics:receipt:[0-9a-f]{64}> \\.`));
     expect(inserted).toMatch(/rv:realmAttachedAt "\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z"\^\^<http:\/\/www\.w3\.org\/2001\/XMLSchema#dateTime>/);
     expect(update.slice(update.indexOf('DELETE'), update.indexOf('INSERT'))).toContain('rv:realmAttachment ?oldAttachment');
+    expect(update.slice(update.indexOf('WHERE'))).toContain('LIMIT 65');
+    expect(update.slice(update.indexOf('WHERE'))).toContain('FILTER(?realmAttachmentTaken < 64)');
+  });
+});
+
+test('a Realm that already has 64 attachments is refused and writes nothing', async () => {
+  await inDirectory(async directory => {
+    const w = world(directory, { realms: { [foreignRealm]: id(99) } });
+    w.state.attachmentCount = 64;
+    await expect(configure(w, { defaultRealm: foreignRealm })).rejects.toBeInstanceOf(RealmAttachmentLimit);
+    expect(w.state.envelopes.every(envelope => envelope.update.includes('rv:Cancelled'))).toBe(true);
+    expect(w.state.envelopes.every(envelope => !envelope.update.includes('rv:realmAttachedBy'))).toBe(true);
   });
 });
 
@@ -197,6 +213,8 @@ test('a Realm in the Zone\'s own Space keeps today\'s rule and asks no steward',
     expect(w.state.ownerChecks).toEqual([]);
     expect(w.state.envelopes[0]!.update).not.toContain('rv:ZoneRealmAttachment');
     expect(w.state.envelopes[0]!.update).not.toContain('rv:realmAttachedAt');
+    expect(w.state.envelopes[0]!.update).not.toContain('realmAttachmentTaken');
+    expect(w.state.queries.some(query => query.includes('COUNT(?realmAttachmentSlot)'))).toBe(false);
   });
 });
 
@@ -256,6 +274,8 @@ test('re-submitting the attached Realm keeps its record, asks no steward and lea
     const resubmitted = w.state.envelopes[0]!.update;
     expect(resubmitted).toContain(`<${zone}> rv:defaultRealm <${foreignRealm}>`);
     expect(resubmitted.slice(0, resubmitted.indexOf('WHERE'))).not.toContain('rv:realmAttach');
+    expect(resubmitted).not.toContain('realmAttachmentTaken');
+    expect(w.state.queries.some(query => query.includes('COUNT(?realmAttachmentSlot)'))).toBe(false);
     expect(resubmitted.slice(resubmitted.indexOf('WHERE'))).toContain(`rv:realmAttachedBy <${actor}>`);
     // The record is untouched, so the next unrelated edit still succeeds.
     w.state.terminal = undefined; // the fake keeps one receipt per command
@@ -474,6 +494,9 @@ test('a steward lists attached Zones; a stranger and an anonymous reader get the
     expect(asked).toHaveLength(1);
     expect(asked[0]).toContain(`<${foreignRealm}>`);
     expect(asked[0]).toContain('LIMIT 25');
+    expect(asked[0]!.indexOf('LIMIT 25')).toBeLessThan(asked[0]!.indexOf('rdfs:label'));
+    expect(asked[0]!.indexOf('LIMIT 25')).toBeLessThan(asked[0]!.indexOf('rv:realmAttachedAt'));
+    expect(asked[0]).toContain('ORDER BY STR(?zone)');
     expect(asked[0]).toContain('BIND("open" AS ?open)');
     expect(asked[0]).toContain('rv:realmState rv:Active');
     expect(asked[0]).not.toContain('ASK');
