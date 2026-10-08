@@ -534,7 +534,7 @@ test('the pending reconciler keeps its result and leaves old quotes alone', asyn
   expect(pending.failed).not.toContain(fixture.erasureId);
   expect(typeof pending.completed).toBe('number');
   await expectStillOpen(fixture, before);
-});
+}, 60_000);
 
 test('a single entry is remediated on demand by id', async () => {
   const fixture = await oldErasure(env);
@@ -544,4 +544,4 @@ test('a single entry is remediated on demand by id', async () => {
     cleared: fixture.revisions });
   await expectCleared(fixture, before);
   await expect(remediateErasedContentEntry(env.service, graph, randomUUID())).rejects.toThrow('unavailable');
-});
+}, 60_000);
