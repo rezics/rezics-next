@@ -1,9 +1,37 @@
 # State
 
-Checkpoint: 2026-10-08 02:20 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-08 02:58 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
+
+## Latest ready-work checkpoint
+
+Whole Goal active; this section supersedes pending status below.
+
+- G1379 supervised normal merge exited201: native isolated rerun passed742677ms,
+  but original core.test.ts timed out again isolated8164ms. No landing or skipped
+  gate. Program tracks Core flakiness/per-case retry output through G1410.
+- G1373 serial supervised111-file normal gate remains live in user unit
+  rezics-kernel-ready-gates-0216.service; MainPID244783, outside coordinator cgroup.
+  No duplicate merge. Terminal self-mail wakes manager; verify actual verdict.
+- G1290 source4eac3d37e independently reviewed: actual24/246/0fail owner XML,
+  committed bytes reconstruct EXACT original dirty QA fingerprint6475dca142e7.
+  Transport assertions EXACT accepteddb64 patch/c904e68e bytes, no Grok repairs.
+  Selected issuer50db loan and immutable Range retain original v1/Signal/Budget.
+  Native dispatcher remains missing in this TS candidate, not activation authority.
+- G1282 Grok27 mechanically composes accepted Claim plus Title native on actual
+  Main, preserving G1397 ANY-hold Module and integer Docker patch. Only fixed
+  additive Core hooks; original focused56+61 evidence required, no image retag.
+  G1290 Grok27 prepares exact TS-only candidate independently. Ownership released
+  from landed G1330/G1300 common files, then narrowed/reclaimed before dispatch.
+- G1345 Sonnet18 admitted for correctness-critical original-I owner preparation/
+  receiver under actual Access/Content cuts and original history. Fixed facade
+  only staged temporary while G1290 live. Missing creator/intent/E-to-R stays
+  unresolved; complete/release denied. Native56 alone cannot prove owner closure.
+- Default workers Grok during Cursor HTTP2 outage; no new Sol/Luna/forced usage.
+  Manager codex-1 observed97%; conserve reserve. Coordinator audit confirmed
+  healthy finite-turn relaunch, no duplicate manager. Both new mails acknowledged.
 
 ## Current checkpoint corrections
 
