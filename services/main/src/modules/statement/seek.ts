@@ -3,11 +3,16 @@ import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '.
 import { WorkReadUnavailable } from '../work/read-session.ts';
 import { dimensionOfTypes, slotOf, type Coordinate } from '../projection/dimension.ts';
 import { runMainRelay } from '../outbox/worker.ts';
+import { lockAccessKey } from '../access/scope-gates.ts';
+import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/global.ts';
+import { StatementPublicationSeek, type StatementPublicationBasis,
+  type StatementPublicationReference, type StatementPublicationPhysicalCursor } from './publication-seek.ts';
+import type { StatementPublicationNativeResult } from '../../infrastructure/fuseki.ts';
 
 export const STATEMENT_SEEK_COST = { candidates: 20, frameChannels: 256, visitedRows: 4096,
   projectionSequences: 64, rebuildBatch: 128, projectionReferences: 8192, responseBytes: 1024 * 1024 } as const;
 export interface StatementSeekReference { subject: string; predicate: string; meaningKey: string;
-  statementId: string; applicability: { slot: string; iri: string }[] | null }
+  statementId: string; head: string; applicability: { slot: string; iri: string }[] | null }
 export interface StatementSeekOrder { predicate: string; meaningKey: string; statementId: string; score: number }
 export interface StatementSeekCandidate extends StatementSeekOrder {}
 interface Row { subject: string; predicate: string; meaning_key: string; statement_id: string;
@@ -56,7 +61,9 @@ export function statementFrameChannels(frames: readonly Coordinate[]) {
  * Frame postings use the same ordering inside each fixed reference channel;
  * their bounded merge retains specificity before predicate/meaning/Statement. */
 export class StatementSeek {
-  constructor(private readonly pool: Pool,private readonly env: WorkActivationEnvironment) {}
+  constructor(private readonly pool: Pool,private readonly env: WorkActivationEnvironment) {
+    this.publication = new StatementPublicationSeek(pool);
+  }
   /** One receipted Claim fold adds one exact reference on its held, unchanged cut. */
   async projectClaimFold(claim: string, revision: string, marker: string, mapDigest: string,
     deadline = performance.now()+30_000) {
@@ -90,6 +97,143 @@ export class StatementSeek {
     } catch (error) { await client.query('ROLLBACK'); throw error; }
     finally { client.release(); }
   }
+  private readonly publication: StatementPublicationSeek;
+  private publicationAfter = '';
+
+  async capturePublicationBasis(subject: string): Promise<StatementPublicationBasis | null> {
+    const rows = (await this.env.fuseki.query(`PREFIX rv: <${RV}>
+      SELECT ?membership ?globalFacts WHERE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
+          rv:routingEpoch ${lit(this.env.lineage.routingEpoch)} .
+          FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
+        OPTIONAL { GRAPH ${iri(GRAPHS.control)} {
+          ${iri(subject)} rv:statementPublicationMembershipHead ?membership } }
+        BIND(EXISTS { { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ?anyPredicate ?anyObject } }
+          UNION { ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ?anyPredicate ?anyObject } } AS ?globalFacts)
+      } LIMIT 2`, 8192)).results?.bindings ?? [];
+    if (rows.length !== 1 || !['true','false'].includes(rows[0]?.globalFacts?.value ?? '')
+      || rows[0]?.membership && rows[0].membership.type !== 'uri')
+      throw new WorkReadUnavailable('Publication source basis is unavailable');
+    if (rows[0]!.globalFacts!.value !== 'false') return null;
+    const fence = (await this.pool.query<{generation: string; open: boolean}>(
+      'SELECT generation::text,open FROM access.recovery_fence WHERE id=true')).rows[0];
+    if (!fence?.open || !/^(0|[1-9][0-9]*)$/.test(fence.generation))
+      throw new WorkReadUnavailable('Publication recovery basis is unavailable');
+    const source = {dataEpoch: this.env.lineage.dataEpoch,subject,membershipHead: rows[0]!.membership?.value ?? null};
+    const native = await this.nativePublicationPage(source,'basis');
+    if (native.complete || native.after !== null || native.examined !== 0 || native.references.length)
+      throw new WorkReadUnavailable('Publication source capture is invalid');
+    return {...source,recoveryBasis: fence.generation,global: 'no-current-facts',sourceStore: native.basis.storage};
+  }
+  private samePublicationBasis(left: StatementPublicationBasis, right: StatementPublicationBasis | null) {
+    return right !== null && left.dataEpoch === right.dataEpoch && left.subject === right.subject
+      && left.membershipHead === right.membershipHead && left.recoveryBasis === right.recoveryBasis
+      && left.sourceStore === right.sourceStore
+      && right.global === 'no-current-facts';
+  }
+  async requirePublicationCoverage(basis: StatementPublicationBasis) {
+    const current = await this.publication.checkpoint(basis);
+    if (current?.complete) {
+      await this.verifyPublicationEof(basis,current.physicalAfter);
+      return;
+    }
+    await this.publication.begin(basis);
+    throw new WorkReadUnavailable('Publication subject reconstruction is pending');
+  }
+  async seekPotentialPublication(basis: StatementPublicationBasis, after: StatementSeekOrder | null) {
+    return this.publication.seek(basis,after);
+  }
+  async fencePublicationBasis(basis: StatementPublicationBasis) {
+    if (!this.samePublicationBasis(basis,await this.capturePublicationBasis(basis.subject)))
+      throw new WorkReadUnavailable('Publication source basis moved');
+    const current = await this.publication.checkpoint(basis);
+    if (!current?.complete) throw new WorkReadUnavailable('Publication local coverage moved');
+    await this.verifyPublicationEof(basis,current.physicalAfter);
+  }
+
+  private async nativePublicationPage(basis: Pick<StatementPublicationBasis,'dataEpoch' | 'subject' | 'membershipHead'>,
+    after: StatementPublicationPhysicalCursor | 'basis' | null): Promise<StatementPublicationNativeResult> {
+    try {
+      const page = await this.env.fuseki.templateIndex({operation: 'statement-publication-page',
+        dataEpoch: basis.dataEpoch,routingEpoch: this.env.lineage.routingEpoch,subject: basis.subject,
+        membershipHead: basis.membershipHead,after});
+      if (page.basis?.dataEpoch !== basis.dataEpoch || page.basis.routingEpoch !== this.env.lineage.routingEpoch
+        || page.basis.subject !== basis.subject || page.basis.membershipHead !== basis.membershipHead
+        || typeof page.basis.storage !== 'string' || !page.basis.storage || page.basis.storage.length > 500
+        || !Number.isInteger(page.examined) || page.examined < 0 || page.examined > 128
+        || !Number.isInteger(page.witnessTuples) || page.witnessTuples < 0 || page.witnessTuples > 8192
+        || !Array.isArray(page.references) || page.references.length > 127 || typeof page.complete !== 'boolean'
+        || after !== 'basis' && (!page.after || page.after.storage !== page.basis.storage))
+        throw new WorkReadUnavailable('Publication native page is invalid');
+      return page;
+    } catch (error) {
+      if (error instanceof WorkReadUnavailable) throw error;
+      throw new WorkReadUnavailable('Publication native source is unavailable');
+    }
+  }
+  private async verifyPublicationEof(basis: StatementPublicationBasis, token: StatementPublicationPhysicalCursor | null) {
+    if (!token || token.phase !== 2 || token.storage !== basis.sourceStore)
+      throw new WorkReadUnavailable('Publication native EOF is missing');
+    const page = await this.nativePublicationPage(basis,token);
+    if (!page.complete || page.examined !== 0 || page.references.length || page.basis.storage !== basis.sourceStore
+      || page.after?.storage !== token.storage || page.after.phase !== token.phase
+      || page.after.key !== token.key || page.after.seal !== token.seal)
+      throw new WorkReadUnavailable('Publication native EOF moved');
+  }
+  /** Native prefix progress is independent from SQL candidate result ordering. */
+  private async publicationSourcePage(basis: StatementPublicationBasis, after: StatementPublicationPhysicalCursor | null) {
+    const page = await this.nativePublicationPage(basis,after);
+    if (page.basis.storage !== basis.sourceStore || !page.after)
+      throw new WorkReadUnavailable('Publication source store moved');
+    const unique = new Map(page.references.map(ref => [ref.statementId,ref]));
+    const raw = new Map((await this.readReferences([...unique.keys()])).map(ref => [ref.statementId,ref]));
+    const entries = [...unique.values()].map((row): StatementPublicationReference => {
+      const ref = raw.get(row.statementId);
+      if (!ref || ref.subject !== basis.subject || row.subject !== basis.subject || ref.predicate !== row.predicate
+        || ref.meaningKey !== row.meaningKey || ref.head !== row.head
+        || JSON.stringify([...row.applicability].sort()) !== JSON.stringify((ref.applicability ?? []).map(value => value.iri).sort()))
+        throw new WorkReadUnavailable('Publication current references differ');
+      return {subject: ref.subject,predicate: ref.predicate,meaningKey: ref.meaningKey,statementId: ref.statementId,
+        head: ref.head,source: row.source,hasEvidence: row.hasEvidence,frameRefs: ref.applicability ?? []};
+    });
+    return {entries,after: page.after,rawExamined: page.examined,exhausted: page.complete};
+  }
+  /** One local checkpoint step per existing worker tick; raw replay cannot
+   * prevent it because this step commits before the raw projector is attempted. */
+  async projectPublicationOnce(): Promise<boolean> {
+    let pending = (await this.pool.query<{subject: string}>(`SELECT subject
+      FROM access.statement_publication_seek_coverage WHERE data_epoch=$1 AND NOT complete AND subject>$2
+      ORDER BY subject LIMIT 1`,[this.env.lineage.dataEpoch,this.publicationAfter])).rows[0];
+    if (!pending && this.publicationAfter) {
+      this.publicationAfter = '';
+      pending = (await this.pool.query<{subject: string}>(`SELECT subject
+        FROM access.statement_publication_seek_coverage WHERE data_epoch=$1 AND NOT complete AND subject>$2
+        ORDER BY subject LIMIT 1`,[this.env.lineage.dataEpoch,this.publicationAfter])).rows[0];
+    }
+    if (!pending) return false;
+    this.publicationAfter = pending.subject;
+    const basis = await this.capturePublicationBasis(pending.subject);
+    if (!basis) return false;
+    const checkpoint = await this.publication.begin(basis);
+    if (checkpoint.complete) return false;
+    if (checkpoint.phase === 'clearing') await this.publication.clearBatch(checkpoint);
+    else {
+      const page = await this.publicationSourcePage(basis,checkpoint.physicalAfter);
+      await this.publication.append(checkpoint,page.entries,page,async () => {
+        if (!this.samePublicationBasis(basis,await this.capturePublicationBasis(basis.subject))) return false;
+        if (page.exhausted) await this.verifyPublicationEof(basis,page.after);
+        return true;
+      });
+    }
+    return true;
+  }
+  async projectWithPublication(): Promise<boolean> {
+    const publication = await this.projectPublicationOnce();
+    const raw = await this.projectOnce();
+    return publication || raw;
+  }
+
   async coverage() {
     const result = await this.pool.query<{ through_sequence: string; complete: boolean }>(
       'SELECT through_sequence::text,complete FROM access.statement_seek_coverage WHERE data_epoch=$1',[this.env.lineage.dataEpoch]);
@@ -149,22 +293,33 @@ export class StatementSeek {
     } finally { client.release(); }
   }
   private async replace(client: PoolClient,ref: StatementSeekReference,epoch: string) {
-    await client.query('DELETE FROM access.statement_seek WHERE data_epoch=$1 AND statement_id=$2',[epoch,ref.statementId]);
+    await lockAccessKey(client,`statement-publication:${JSON.stringify([epoch,ref.subject])}`);
+    // Recreate frame postings, but retain the local helper's publication attrs
+    // on the exact live '*' tuple. Clearing must not be undone by raw replay.
+    await client.query(`DELETE FROM access.statement_seek WHERE data_epoch=$1 AND statement_id=$2
+      AND (frame_key<>'*' OR subject<>$3 OR predicate<>$4 OR meaning_key<>$5)`,
+    [epoch,ref.statementId,ref.subject,ref.predicate,ref.meaningKey]);
     const keys = ['*',...statementFrameKeys(ref.applicability)];
-    await client.query(`INSERT INTO access.statement_seek
-      (data_epoch,subject,predicate,meaning_key,statement_id,frame_key,frame_refs)
-      SELECT $1,$2,$3,$4,$5,key,$7::jsonb FROM unnest($6::text[]) key`,
-    [epoch,ref.subject,ref.predicate,ref.meaningKey,ref.statementId,keys,JSON.stringify(ref.applicability ?? [])]);
+    await client.query(`INSERT INTO access.statement_seek AS existing
+      (data_epoch,subject,predicate,meaning_key,statement_id,frame_key,frame_refs,statement_head)
+      SELECT $1,$2,$3,$4,$5,key,$7::jsonb,$8 FROM unnest($6::text[]) key
+      ON CONFLICT (data_epoch,subject,frame_key,predicate,meaning_key,statement_id) DO UPDATE
+        SET frame_refs=excluded.frame_refs,statement_head=CASE
+          WHEN existing.publication_source IS NOT NULL OR existing.publication_evidence
+          THEN existing.statement_head ELSE excluded.statement_head END`,
+    [epoch,ref.subject,ref.predicate,ref.meaningKey,ref.statementId,keys,
+      JSON.stringify(ref.applicability ?? []),ref.head]);
   }
   private async readReferences(ids: readonly string[]): Promise<StatementSeekReference[]> {
     if (!ids.length) return [];
     const rows = (await this.env.fuseki.query(`PREFIX rv: <${RV}> PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-      SELECT ?statement ?subject ?predicate ?key ?app ?type WHERE {
+      SELECT ?statement ?subject ?predicate ?key ?head ?app ?type WHERE {
         VALUES ?statement { ${ids.map(iri).join(' ')} }
         GRAPH ${iri(GRAPHS.current)} { ?statement a rdf:Statement ; rv:statementState rv:Active .
           OPTIONAL { ?statement rdf:subject ?subject }
           OPTIONAL { ?statement rdf:predicate ?predicate }
-          OPTIONAL { ?statement rv:meaningKey ?key } }
+          OPTIONAL { ?statement rv:meaningKey ?key }
+          OPTIONAL { ?statement rv:head ?head } }
         OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?statement rv:applicability ?app }
           OPTIONAL { { GRAPH ${iri(GRAPHS.current)} { ?app a ?type } }
             UNION { GRAPH ${iri(GRAPHS.revisions)} { ?app a rv:FixedRelease } BIND(rv:FixedRelease AS ?type) } } }
@@ -173,8 +328,8 @@ export class StatementSeek {
     for (const id of ids) {
       const own = rows.filter(row => row.statement?.value === id);
       if (!own.length) continue;
-      if (['subject','predicate','key'].some(key => new Set(own.map(row => row[key]?.value)).size !== 1)
-        || own.some(row => !row.subject || !row.predicate || !row.key)) throw new WorkReadUnavailable('Statement index source is ambiguous');
+      if (['subject','predicate','key','head'].some(key => new Set(own.map(row => row[key]?.value)).size !== 1)
+        || own.some(row => !row.subject || !row.predicate || !row.key || !row.head)) throw new WorkReadUnavailable('Statement index source is ambiguous');
       const apps = [...new Set(own.flatMap(row => row.app?.value ?? []))];
       const applicability: NonNullable<StatementSeekReference['applicability']> = [];
       if (apps.length > 8) throw new WorkReadUnavailable('Statement applicability exceeds its reference bound');
@@ -183,7 +338,7 @@ export class StatementSeek {
         applicability.push({slot: dimension ? slotOf(dimension) : 'unknown',iri: app});
       }
       refs.set(id,{statementId: id,subject: own[0]!.subject!.value,predicate: own[0]!.predicate!.value,
-        meaningKey: own[0]!.key!.value,applicability});
+        meaningKey: own[0]!.key!.value,head: own[0]!.head!.value,applicability});
     }
     return [...refs.values()];
   }
@@ -202,6 +357,13 @@ export class StatementSeek {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      // Explicit full raw rebuild: exclude helper writers before snapshot/delete,
+      // preserving the existing recovery basis rather than inventing a marker.
+      await client.query('SELECT generation FROM access.recovery_fence WHERE id=true FOR UPDATE');
+      await client.query(`CREATE TEMPORARY TABLE statement_publication_rebuild_attrs ON COMMIT DROP AS
+        SELECT data_epoch,subject,predicate,meaning_key,statement_id,statement_head,publication_source,publication_evidence
+        FROM access.statement_seek WHERE data_epoch=$1 AND frame_key='*' AND statement_head IS NOT NULL
+          AND (publication_source IS NOT NULL OR publication_evidence)`,[epoch]);
       await client.query(`INSERT INTO access.statement_seek_coverage VALUES ($1,0,false)
         ON CONFLICT (data_epoch) DO UPDATE SET complete=false`,[epoch]);
       await client.query('DELETE FROM access.statement_seek WHERE data_epoch=$1',[epoch]);
@@ -215,6 +377,14 @@ export class StatementSeek {
         if (rows.length < STATEMENT_SEEK_COST.rebuildBatch) break;
         after = rows.at(-1)!.statement!.value;
       }
+      // Only actually active rebuilt '*' tuples with the same exact current head
+      // regain helper attrs; retired/stale refs never return to raw inventory.
+      await client.query(`UPDATE access.statement_seek current SET
+        publication_source=old.publication_source,publication_evidence=old.publication_evidence
+        FROM statement_publication_rebuild_attrs old WHERE current.data_epoch=old.data_epoch
+          AND current.subject=old.subject AND current.frame_key='*' AND current.predicate=old.predicate
+          AND current.meaning_key=old.meaning_key AND current.statement_id=old.statement_id
+          AND current.statement_head=old.statement_head`);
       if (await this.position(true) !== position) throw new WorkReadUnavailable('Statement index rebuild position moved');
       await client.query('UPDATE access.statement_seek_coverage SET complete=true,through_sequence=$2 WHERE data_epoch=$1',[epoch,position]);
       await client.query('COMMIT');
@@ -239,8 +409,9 @@ export class StatementSeek {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
+      await client.query('SELECT generation FROM access.recovery_fence WHERE id=true FOR SHARE');
       const coverage = await client.query<{through_sequence: string; complete: boolean}>(
-        'SELECT through_sequence::text,complete FROM access.statement_seek_coverage WHERE data_epoch=$1 FOR UPDATE',[epoch]);
+        'SELECT through_sequence::text,complete FROM access.statement_seek_coverage WHERE data_epoch=$1 FOR NO KEY UPDATE',[epoch]);
       const prior = coverage.rows[0];
       if (!prior?.complete || BigInt(prior.through_sequence) >= BigInt(position)) { await client.query('COMMIT'); return false; }
       const through = BigInt(position) < BigInt(prior.through_sequence)+BigInt(STATEMENT_SEEK_COST.projectionSequences)
@@ -260,8 +431,13 @@ export class StatementSeek {
         throw new WorkReadUnavailable('Statement projection exceeds its reference bound');
       for (let offset=0;offset<ids.length;offset+=STATEMENT_SEEK_COST.rebuildBatch) {
         const page = ids.slice(offset,offset+STATEMENT_SEEK_COST.rebuildBatch);
-        await client.query('DELETE FROM access.statement_seek WHERE data_epoch=$1 AND statement_id=ANY($2::text[])',[epoch,page]);
-        for (const ref of await this.readReferences(page)) await this.replace(client,ref,epoch);
+        const references = await this.readReferences(page);
+        // The source withdrawal head fences omission; only actually retired IDs
+        // are removed wholesale. Live tuples preserve publication attrs in replace.
+        await client.query(`DELETE FROM access.statement_seek WHERE data_epoch=$1
+          AND statement_id=ANY($2::text[]) AND NOT (statement_id=ANY($3::text[]))`,
+        [epoch,page,references.map(ref => ref.statementId)]);
+        for (const ref of references) await this.replace(client,ref,epoch);
       }
       // Applicability types belong to their coordinate owner. A semantic edit
       // can move a coordinate between slots without revising the Statement.
@@ -300,7 +476,7 @@ export class StatementSeekWorker {
   private running = false;
   private task: Promise<void> | undefined;
   constructor(private readonly seek: StatementSeek) {}
-  start() { this.running = true; this.task ??= runMainRelay(() => this.seek.projectOnce(),() => this.running,1000,
+  start() { this.running = true; this.task ??= runMainRelay(() => this.seek.projectWithPublication(),() => this.running,1000,
     {consumer: 'statement-seek'}).finally(() => {this.task = undefined;}); }
   async stop() {this.running = false; await this.task;}
 }

@@ -168,9 +168,16 @@ export async function readSubjectStatements(
   const scope = await acceptanceScope(session, context);
   const seek = session.deps.statementSeek;
   if (!seek) throw new WorkReadUnavailable('Statement seek owner is unavailable');
-  const indexed = await seek.coverage();
-  if (!indexed?.complete || indexed.through_sequence !== session.position.sequence)
-    throw new WorkReadUnavailable('Statement seek coverage is unavailable');
+  // A null active-policy match is not absence: the owning basis query requires
+  // no current Global facts of any predicate before enabling this narrow branch.
+  const publicationBasis = !frames && !scope && context === GLOBAL_CLASSIFICATION_CONTEXT
+    ? await seek.capturePublicationBasis(resource) : null;
+  if (publicationBasis) await seek.requirePublicationCoverage(publicationBasis);
+  else {
+    const indexed = await seek.coverage();
+    if (!indexed?.complete || indexed.through_sequence !== session.position.sequence)
+      throw new WorkReadUnavailable('Statement seek coverage is unavailable');
+  }
   const limit = session.options.limit ?? SUBJECT_STATEMENT_COST.pageSize;
   if (!Number.isInteger(limit) || limit < 1 || limit > SUBJECT_STATEMENT_COST.pageSize) {
     throw new WorkReadInvalid('Statement page size is invalid');
@@ -300,7 +307,9 @@ export async function readSubjectStatements(
       while (page.length < batchSize && (pending.length || !rawExhausted)) {
         if (!pending.length) {
           session.checkDeadline();
-          const sought = await seek.seek(session.position,resource,statementAfter,frames);
+          const sought = publicationBasis
+            ? await seek.seekPotentialPublication(publicationBasis,statementAfter)
+            : await seek.seek(session.position,resource,statementAfter,frames);
           const rows: ReadRow[] = sought.candidates.map((row) => ({
             statement: {type: 'uri',value: row.statementId},predicate: {type: 'uri',value: row.predicate},
             key: {type: 'uri',value: row.meaningKey},specificity: {type: 'literal',value: String(row.score)},
@@ -588,6 +597,7 @@ export async function readSubjectStatements(
     if (!(await canReadPrivate(ctx))) throw new WorkReadMissing('Context is unavailable');
   await resolveTargets(session, [resource], 'discussion');
   await boundary.fence();
+  if (publicationBasis) await seek.fencePublicationBasis(publicationBasis);
   const groups = new Map<string, Item[]>();
   for (const item of items)
     groups.set(item.predicate, [...(groups.get(item.predicate) ?? []), item]);

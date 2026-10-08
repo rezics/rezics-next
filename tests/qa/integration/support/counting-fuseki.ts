@@ -1,4 +1,6 @@
-import { FusekiClient, type SparqlResult, type TemplateQueryEnvelope } from '../../../../services/main/src/infrastructure/fuseki.ts';
+import { FusekiClient, type SparqlResult, type TemplateQueryEnvelope,
+  type StatementPublicationNativeRequest, type StatementPublicationNativeResult,
+  type TemplateIndexDelta } from '../../../../services/main/src/infrastructure/fuseki.ts';
 import { isForegroundOperation, runBackgroundOperation } from './operation-cost.ts';
 
 /** Compatibility entry point for fixtures that previously installed only the
@@ -28,8 +30,11 @@ export class CountingFuseki extends FusekiClient {
     if(!this.isBackgroundContext) this.queries++;
     return super.templateQuery(input,maxBytes);
   }
-  override async templateIndex(input:Parameters<FusekiClient['templateIndex']>[0]) {
+  override async templateIndex(input:StatementPublicationNativeRequest):Promise<StatementPublicationNativeResult>;
+  override async templateIndex(input:Parameters<FusekiClient['templateIndex']>[0]):Promise<TemplateIndexDelta>;
+  override async templateIndex(input:StatementPublicationNativeRequest | Parameters<FusekiClient['templateIndex']>[0]) {
     if(!this.isBackgroundContext) this.queries++;
+    if(input.operation==='statement-publication-page') return super.templateIndex(input);
     return super.templateIndex(input);
   }
 }

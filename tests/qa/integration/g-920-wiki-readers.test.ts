@@ -16,7 +16,9 @@ import { nativeId, shortId } from '../fixtures/author-credit.ts';
 import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { prideExample } from '../../../packages/wiki-toolkit/skill/examples/pride.ts';
 import { submitWikiBundle } from '../../../packages/wiki-toolkit/src/submit.ts';
-import { RV } from '../../../services/main/src/modules/work/activate.ts';
+import { DATASET, GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { WorkReadUnavailable } from '../../../services/main/src/modules/work/read-session.ts';
+import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_ISOLATE_POLICY } from '../../../services/main/src/modules/classification/global.ts';
 import { type ResourceSummary } from '../../../services/main/src/modules/media/summary.ts';
 import { type Static } from 'typebox';
 import { subjectStatementPage } from '../../../services/main/src/modules/entity-page/contract.ts';
@@ -26,11 +28,39 @@ import {
 } from '../../../services/main/src/modules/relation/change.ts';
 import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 import { startMediaStack } from './media-support.ts';
+import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
 
 test('G-920: published franchise entities, contradictory claims and relations disclose evidence and names at the reader position', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration QA tier');
   const directory = resolve('.temp', `g-920-${randomUUID()}`);
   const f = await startMediaStack('g-920', { profileCredits: true });
+  const nativeCommand = f.env.fuseki.command.bind(f.env.fuseki);
+  f.env.fuseki.command = async envelope => {
+    const result = await nativeCommand(envelope);
+    if (result.status === 'invalid') {
+      mkdirSync(resolve('.temp/goal'), {recursive: true});
+      writeFileSync(resolve('.temp/goal/g920-native-refusal.json'), JSON.stringify({receipt: envelope.receipt,result},null,2));
+    }
+    return result;
+  };
+  const sourceIndex = f.env.fuseki.templateIndex.bind(f.env.fuseki);
+  f.env.fuseki.templateIndex = (async (...args: Parameters<typeof sourceIndex>) => {
+    try { return await sourceIndex(...args); }
+    catch (error) {
+      const input = args[0] as {operation:string};
+      if (input.operation === 'statement-publication-page') {
+        const response = await fetch(new URL('command',Bun.env.FUSEKI_URL!), {
+          method: 'POST', headers: {'content-type':'application/json',authorization:`Bearer ${Bun.env.FUSEKI_COMMAND_TOKEN!}`},
+          body: JSON.stringify({templateIndex: input}),
+        });
+        mkdirSync(resolve('.temp/goal'), {recursive: true});
+        writeFileSync(resolve('.temp/goal/g920-native-source-refusal.json'),JSON.stringify({
+          input,status: response.status,body: await response.text(),
+        },null,2));
+      }
+      throw error;
+    }
+  }) as typeof f.env.fuseki.templateIndex;
   const holder = await f.member('holder');
   const reviewerA = await f.member('reviewer-a');
   const reviewerB = await f.member('reviewer-b');
@@ -292,6 +322,9 @@ test('G-920: published franchise entities, contradictory claims and relations di
       }),
       201,
     );
+    const membership = await normalizeStoredMembership(f.env);
+    expect(membership.complete).toBe(true);
+    expect((await f.env.fuseki.membershipPreparationStatus()).needsPreparation).toBe(false);
     for (const [routeSegment, target] of Object.entries(collections)) {
       navigation = await json(
         await call('POST', `/v1/zones/${shortId(zone)}/mounts`, {
@@ -580,6 +613,52 @@ test('G-920: published franchise entities, contradictory claims and relations di
         ),
         201,
       );
+    // Run the existing owner's local checkpoint steps, without starting another
+    // worker or treating global raw replay as publication coverage.
+    const sourcePages: Array<{examined: number;witnessTuples: number;complete: boolean;
+      after: {storage: string;phase: number;key: string};references: number}> = [];
+    const completePublication = async () => {
+      const basis = await f.statementSeek.capturePublicationBasis(entity);
+      expect(basis).not.toBeNull();
+      if (!basis) throw new Error('Wiki fixture unexpectedly initialized Global');
+      for (let step = 0; step < 40; step++) {
+        try {
+          await f.statementSeek.requirePublicationCoverage(basis);
+          return basis;
+        } catch (error) {
+          if (!(error instanceof WorkReadUnavailable)) throw error;
+        }
+        const nativeIndex = f.env.fuseki.templateIndex.bind(f.env.fuseki);
+        f.env.fuseki.templateIndex = (async (...args: Parameters<typeof nativeIndex>) => {
+          const result = await nativeIndex(...args);
+          if (args[0].operation === 'statement-publication-page') {
+            const page = result as unknown as {examined: number;witnessTuples: number;complete: boolean;
+              after: {storage: string;phase: number;key: string} | null;references: unknown[]};
+            expect(page.examined).toBeGreaterThanOrEqual(0);
+            expect(page.examined).toBeLessThanOrEqual(128);
+            expect(page.witnessTuples).toBeGreaterThanOrEqual(0);
+            expect(page.witnessTuples).toBeLessThanOrEqual(8192);
+            expect(page.references.length).toBeLessThanOrEqual(127);
+            if (page.complete) {
+              expect(page.after?.phase).toBe(2);
+              expect(page.after?.key).toBe('');
+            }
+            // Basis-only capture and sealed EOF rechecks do not advance the
+            // physical stream; retain only traversal turns for lookahead totals.
+            const requestedAfter = (args[0] as {after: 'basis' | {phase: number} | null}).after;
+            if (requestedAfter !== 'basis' && requestedAfter?.phase !== 2) {
+              if (!page.after) throw new Error('Native publication page has no physical continuation');
+              sourcePages.push({examined: page.examined,witnessTuples: page.witnessTuples,
+                complete: page.complete,after: page.after,references: page.references.length});
+            }
+          }
+          return result;
+        }) as typeof f.env.fuseki.templateIndex;
+        try { expect(await f.statementSeek.projectPublicationOnce()).toBe(true); }
+        finally { f.env.fuseki.templateIndex = nativeIndex; }
+      }
+      throw new Error('Publication reconstruction did not finish its bounded steps');
+    };
 
     // A real owner write lands after the summary's first graph probe. Both
     // transports replay the read, retaining one Account verification.
@@ -626,6 +705,13 @@ test('G-920: published franchise entities, contradictory claims and relations di
     // seek index at the current position, so catch that index up before the
     // first statement page and again after later statement writes.
     await f.statementSeek.rebuild();
+    expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+    await completePublication();
+    // Raw writes cannot manufacture default-only source storage. The native
+    // controlled TDB preparation test covers that imported representation and
+    // its missing named reference witness; preserve this transport refusal.
+    await expect(f.env.fuseki.update(`INSERT DATA {
+      ${iri(statement)} <${RV}defaultSourceFixture> true }`)).rejects.toThrow('Fuseki update returned');
     for (const signed of [false, true]) {
       expect((await at(`/v1/resources/${shortId(entity)}/page`, undefined, signed)).status).toBe(
         404,
@@ -845,16 +931,23 @@ test('G-920: published franchise entities, contradictory claims and relations di
     // candidates. Page cost stays independent of this subject's proposal count.
     const countRead = async () => {
       const query = f.env.fuseki.query.bind(f.env.fuseki);
+      const nativeIndex = f.env.fuseki.templateIndex.bind(f.env.fuseki);
       const seek = f.statementSeek.seek.bind(f.statementSeek);
+      const publicationSeek = f.statementSeek.seekPotentialPublication.bind(f.statementSeek);
       let calls = 0,
-        inventories = 0;
+        inventories = 0,
+        globalCoverageReads = 0,
+        responseJsonBytes = 0;
       const rawBatches: { after: Parameters<typeof seek>[2]; rows: number; visited: number }[] = [];
+      const publicationBatches: { rows: number; visited: number }[] = [];
       const rawSql: { text: string; values: unknown[] }[] = [];
       const originalQueries = new Map<PoolClient,PoolClient['query']>();
       const acquire = (client: PoolClient) => {
         const original = client.query;
         originalQueries.set(client,original);
         client.query = ((...args: unknown[]) => {
+          if (isForegroundOperation() && typeof args[0] === 'string'
+            && args[0].includes('FROM access.statement_seek_coverage WHERE')) globalCoverageReads++;
           if (isForegroundOperation() && typeof args[0] === 'string'
             && args[0].includes('FROM access.statement_seek WHERE')) {
             rawSql.push({text: args[0],values: [...args[1] as unknown[]]});
@@ -874,6 +967,11 @@ test('G-920: published franchise entities, contradictory claims and relations di
         if (isForegroundOperation()) rawBatches.push({ after: args[2], rows: result.candidates.length, visited: result.visitedRows });
         return result;
       };
+      f.statementSeek.seekPotentialPublication = async (...args) => {
+        const result = await publicationSeek(...args);
+        if (isForegroundOperation()) publicationBatches.push({rows: result.candidates.length,visited: result.visitedRows});
+        return result;
+      };
       f.env.fuseki.query = async (sparql, maxBytes) => {
         if (isForegroundOperation()) {
           calls++;
@@ -881,9 +979,18 @@ test('G-920: published franchise entities, contradictory claims and relations di
           // Raw StatementSeek work is measured separately below.
           if (sparql.includes('GROUP_CONCAT(DISTINCT STR(?evidence)')) inventories++;
         }
-        return query(sparql, maxBytes);
+        const result = await query(sparql, maxBytes);
+        if (isForegroundOperation()) responseJsonBytes += Buffer.byteLength(JSON.stringify(result));
+        return result;
       };
+      f.env.fuseki.templateIndex = (async (...args: Parameters<typeof nativeIndex>) => {
+        if (isForegroundOperation()) calls++;
+        const result = await nativeIndex(...args);
+        if (isForegroundOperation()) responseJsonBytes += Buffer.byteLength(JSON.stringify(result));
+        return result;
+      }) as typeof f.env.fuseki.templateIndex;
       try {
+        const started = performance.now();
         const page = await json<Static<typeof subjectStatementPage>>(
           await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false),
         );
@@ -893,48 +1000,268 @@ test('G-920: published franchise entities, contradictory claims and relations di
             .flatMap((item) => (item.kind === 'statement' ? [item.statement] : []))
             .sort(),
         ).toEqual([statement, laterStatement].sort());
-        return { calls, inventories, rawBatches, rawSql,
+        expect(calls).toBeLessThanOrEqual(160);
+        expect(responseJsonBytes).toBeLessThanOrEqual(4 * 1024 * 1024);
+        const elapsedMs = performance.now()-started;
+        expect(elapsedMs).toBeLessThan(10_000);
+        return { calls, inventories, rawBatches, rawSql,publicationBatches,globalCoverageReads,
+          responseJsonBytes,elapsedMs,
           rawRows: rawBatches.reduce((sum,batch) => sum+batch.rows,0),
           rawVisited: rawBatches.reduce((sum,batch) => sum+batch.visited,0),
         };
       } finally {
         f.env.fuseki.query = query;
+        f.env.fuseki.templateIndex = nativeIndex;
         f.statementSeek.seek = seek;
+        f.statementSeek.seekPotentialPublication = publicationSeek;
         f.accessPool.off('acquire',acquire);
         f.accessPool.off('release',release);
         for (const [client,original] of originalQueries) client.query = original;
       }
     };
+    // Keep the natural planner's baseline representative of a populated store;
+    // these distant leaves never belong to this subject's candidate range.
+    await f.accessPool.query(`INSERT INTO access.statement_seek
+      (data_epoch,subject,predicate,meaning_key,statement_id,frame_key,frame_refs,
+       statement_head,publication_source,publication_evidence)
+      SELECT $1,$2,$3,'urn:rezics:meaning:' || lpad(n::text,64,'0'),id,'*','[]'::jsonb,
+        $4,$5,false FROM unnest($6::text[]) WITH ORDINALITY AS item(id,n)`,
+      [f.env.lineage.dataEpoch,nativeId(),predicate.component,nativeId(),createdWork.work,
+        Array.from({length: 4096},() => nativeId())]);
     const beforeProposals = await countRead();
+    const beforePhysical = await explainRead(beforeProposals);
+    const beforeMembership = await f.statementSeek.capturePublicationBasis(entity);
     for (let index = 0; index < 320; index++) await recordProposal(index);
-    await f.statementSeek.rebuild();
+    expect(await f.statementSeek.capturePublicationBasis(entity)).toEqual(beforeMembership);
+    // Leave global raw coverage behind the real source commits. Local coverage
+    // is complete, so both old sequence gates must be bypassed on this channel.
     const afterProposals = await countRead();
+    const afterPhysical = await explainRead(afterProposals);
     expect(afterProposals.inventories).toBe(1);
     expect(afterProposals.calls).toBeLessThanOrEqual(beforeProposals.calls + 2);
-    // Two published claims plus the two proposals from the earlier GET/POST races.
-    expect(beforeProposals.rawRows).toBe(4);
-    expect(afterProposals.rawRows).toBe(324);
-    expect(afterProposals.rawVisited).toBe(324);
-    expect(afterProposals.rawBatches).toHaveLength(17);
-    expect(afterProposals.rawSql).toHaveLength(17);
+    for (const read of [beforeProposals,afterProposals]) {
+      expect(read.rawBatches).toHaveLength(0);
+      expect(read.globalCoverageReads).toBe(0);
+      expect(read.publicationBatches).toEqual([{rows: 2,visited: 2}]);
+      expect(read.rawSql).toHaveLength(1);
+    }
 
-    // This leaf eliminates hydration debt, not the raw physical inventory scan.
-    // Probe the same real SQL pages outside the measured API read, with the
-    // planner's natural choices and without forcing an index or changing costs.
-    const rawPlans: unknown[] = [];
-    for (const sql of afterProposals.rawSql) {
+    // Force this subject's existing local owner to reconstruct from the actual
+    // native source after the 320 API writes. Ordinary proposals preserve the
+    // membership head, so a warm seek alone would not exercise cold traversal.
+    const sourcePopulation = await f.env.fuseki.query(`SELECT (COUNT(?statement) AS ?count) WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ?statement <http://www.w3.org/1999/02/22-rdf-syntax-ns#subject> ${iri(entity)} }
+    }`);
+    const sourceCount = Number(sourcePopulation.results?.bindings[0]?.count?.value);
+    expect(sourceCount).toBe(324);
+    await f.accessPool.query(`DELETE FROM access.statement_publication_seek_coverage
+      WHERE data_epoch=$1 AND subject=$2`,[f.env.lineage.dataEpoch,entity]);
+    expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+    const coldStart = sourcePages.length;
+    await completePublication();
+    const coldSourcePages = sourcePages.slice(coldStart);
+    expect(coldSourcePages.length).toBeGreaterThanOrEqual(3);
+    expect(coldSourcePages.at(-1)?.complete).toBe(true);
+    expect(coldSourcePages.filter(page => !page.complete).every(page => page.examined === 128)).toBe(true);
+    expect(coldSourcePages.reduce((sum,page) => sum+page.examined,0)).toBe(
+      sourceCount+coldSourcePages.filter(page => !page.complete).length);
+    expect((await countRead()).publicationBatches).toEqual([{rows: 2,visited: 2}]);
+
+    // Every current fact disables this optimization. Null active-policy matches
+    // include withdrawn and malformed Global, so neither is an absence proof.
+    for (const globalFacts of [
+      `a <${RV}ClassificationContext> ; <${RV}contextState> <${RV}Active> ;
+        <${RV}inheritancePolicy> ${iri(CLASSIFICATION_ISOLATE_POLICY)}`,
+      `a <${RV}ClassificationContext> ; <${RV}contextState> <${RV}Withdrawn>`,
+      `<${RV}malformedFixture> true`,
+    ]) {
+      await f.env.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ${globalFacts} } }`);
+      try {
+        expect(await f.statementSeek.capturePublicationBasis(entity)).toBeNull();
+        expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+      } finally {
+        await f.env.fuseki.update(`DELETE WHERE { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ?predicate ?object } }`);
+      }
+    }
+    await f.env.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.control)} {
+      ${iri(DATASET)} <${RV}restoreHold> true } }`);
+    try {
+      await expect(f.statementSeek.capturePublicationBasis(entity)).rejects.toBeInstanceOf(WorkReadUnavailable);
+      expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+    } finally {
+      await f.env.fuseki.update(`DELETE WHERE { GRAPH ${iri(GRAPHS.control)} {
+        ${iri(DATASET)} <${RV}restoreHold> ?hold } }`);
+    }
+
+    // Replay actual Statement source effects through the existing projector.
+    // Force the ordinary raw cursor before these revisions as an isolated SQL
+    // fixture; local membership/completed coverage retain their exact basis.
+    const revisions = (await f.env.fuseki.query(`SELECT ?sequence WHERE {
+      GRAPH ${iri(GRAPHS.current)} { VALUES ?statement { ${iri(statement)} ${iri(laterStatement)} }
+        ?statement <${RV}head> ?head }
+      GRAPH ${iri(GRAPHS.revisions)} { ?head <${RV}sequence> ?sequence }
+    }`)).results?.bindings ?? [];
+    expect(revisions).toHaveLength(2);
+    const earliest = revisions.reduce((min,row) => {
+      const value = BigInt(row.sequence!.value); return value < min ? value : min;
+    },BigInt(revisions[0]!.sequence!.value));
+    await f.accessPool.query(`UPDATE access.statement_seek_coverage SET through_sequence=$2
+      WHERE data_epoch=$1`,[f.env.lineage.dataEpoch,(earliest-1n).toString()]);
+    expect(await f.statementSeek.projectOnce()).toBe(true);
+    expect((await countRead()).publicationBatches).toEqual([{rows: 2,visited: 2}]);
+
+    // A moved final source position rolls the whole raw rebuild back, including
+    // its metadata snapshot/delete/restore. Fault injection changes only the
+    // second read result; it does not weaken any production fence.
+    const positionQuery = f.env.fuseki.query.bind(f.env.fuseki);
+    let positionReads = 0;
+    f.env.fuseki.query = async (sparql,maxBytes) => {
+      const result = await positionQuery(sparql,maxBytes);
+      if (sparql.includes('SELECT ?sequence WHERE') && sparql.includes('rv:dataEpoch')) {
+        positionReads++;
+        if (positionReads === 2) {
+          const sequence = result.results?.bindings[0]?.sequence;
+          if (!sequence) throw new Error('Raw rebuild fixture position is missing');
+          sequence.value = (BigInt(sequence.value)+1n).toString();
+        }
+      }
+      return result;
+    };
+    try {
+      await expect(f.statementSeek.rebuild()).rejects.toBeInstanceOf(WorkReadUnavailable);
+      expect(positionReads).toBe(2);
+    } finally { f.env.fuseki.query = positionQuery; }
+    expect((await countRead()).publicationBatches).toEqual([{rows: 2,visited: 2}]);
+
+    // Raw projection replay must preserve the independently covered metadata.
+    await f.statementSeek.rebuild();
+    const replayed = await countRead();
+    const replayPhysical = await explainRead(replayed);
+    expect(replayed.publicationBatches).toEqual(afterProposals.publicationBatches);
+    expect(await f.statementSeek.capturePublicationBasis(entity)).toEqual(beforeMembership);
+
+    // Scale the real Access owner's raw neighborhood and distant partial-index
+    // leaves. The 320 source operations above use the native command lifecycle;
+    // these additional rows are SQL fixture population, not native source proof.
+    const scaleStatements = Array.from({length: 4096},() => nativeId());
+    const distantSubject = nativeId();
+    await f.accessPool.query(`INSERT INTO access.statement_seek
+      (data_epoch,subject,predicate,meaning_key,statement_id,frame_key,frame_refs,
+       statement_head,publication_source,publication_evidence)
+      SELECT $1,$2,$3,'urn:rezics:meaning:' || lpad(n::text,64,'0'),id,'*','[]'::jsonb,
+        $4,NULL,false FROM unnest($5::text[]) WITH ORDINALITY AS item(id,n)`,
+      [f.env.lineage.dataEpoch,entity,predicate.component,nativeId(),scaleStatements]);
+    await f.accessPool.query(`INSERT INTO access.statement_seek
+      (data_epoch,subject,predicate,meaning_key,statement_id,frame_key,frame_refs,
+       statement_head,publication_source,publication_evidence)
+      SELECT $1,$2,$3,'urn:rezics:meaning:' || lpad(n::text,64,'0'),id,'*','[]'::jsonb,
+        $4,$5,false FROM unnest($6::text[]) WITH ORDINALITY AS item(id,n)`,
+      [f.env.lineage.dataEpoch,distantSubject,predicate.component,nativeId(),createdWork.work,
+        Array.from({length: 4096},() => nativeId())]);
+    const scaled = await countRead();
+    const scalePhysical = await explainRead(scaled);
+    expect(scaled.inventories).toBe(1);
+    expect(scaled.rawBatches).toHaveLength(0);
+    expect(scaled.globalCoverageReads).toBe(0);
+    expect(scaled.publicationBatches).toEqual([{rows: 2,visited: 2}]);
+    expect(scaled.rawSql).toHaveLength(1);
+
+    // EXPLAIN the exact SQL captured from each actual application request, with
+    // natural planner choices. Do not infer physical locality from LIMIT alone.
+    async function explainRead(read: Awaited<ReturnType<typeof countRead>>) {
+      const rawPlans: unknown[] = [];
+      const physical: {executorRows: number;filteredRows: number;recheckedRows: number;buffers: number}[] = [];
+      for (const sql of read.rawSql) {
       const result = await f.accessPool.query(`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON, TIMING OFF) ${sql.text}`,sql.values);
       rawPlans.push(result.rows[0]!['QUERY PLAN']);
+      type Plan = {'Node Type': string;'Index Name'?: string;'Actual Rows': number;'Actual Loops': number;
+        'Rows Removed by Filter'?: number;'Rows Removed by Index Recheck'?: number;'Shared Hit Blocks'?: number;
+        'Shared Read Blocks'?: number;Plans?: Plan[]};
+      const top = result.rows[0]!['QUERY PLAN'][0].Plan as Plan;
+      const nodes: Plan[] = [];
+      const visit = (node: Plan) => { nodes.push(node); for (const child of node.Plans ?? []) visit(child); };
+      visit(top);
+      const scan = nodes.find(node => node['Index Name'] === 'statement_publication_subject_seek');
+      expect(scan).toBeDefined();
+      expect(nodes.some(node => node['Node Type'].includes('Sort'))).toBe(false);
+      if (!scan) throw new Error('Application publication seek did not use its partial B-tree');
+      const metric = {executorRows: scan['Actual Rows'] * scan['Actual Loops'],
+        filteredRows: nodes.reduce((sum,node) => sum+(node['Rows Removed by Filter'] ?? 0)*node['Actual Loops'],0),
+        recheckedRows: nodes.reduce((sum,node) => sum+(node['Rows Removed by Index Recheck'] ?? 0)*node['Actual Loops'],0),
+        buffers: (top['Shared Hit Blocks'] ?? 0)+(top['Shared Read Blocks'] ?? 0)};
+      expect(metric.executorRows).toBe(2);
+      expect(metric.filteredRows).toBe(0);
+      expect(metric.recheckedRows).toBe(0);
+      expect(metric.buffers).toBeLessThanOrEqual(32);
+      physical.push(metric);
+      }
+      return {rawPlans,physical};
     }
     mkdirSync(resolve(root,'.temp/goal'),{recursive: true});
     const locality = { before: { graphCalls: beforeProposals.calls, hydrations: beforeProposals.inventories,
         seekBatches: beforeProposals.rawBatches.length, rawRows: beforeProposals.rawRows, visitedRows: beforeProposals.rawVisited },
       after: { graphCalls: afterProposals.calls, hydrations: afterProposals.inventories,
         seekBatches: afterProposals.rawBatches.length, rawRows: afterProposals.rawRows, visitedRows: afterProposals.rawVisited },
-      rawPlans };
+      physical: [beforePhysical,afterPhysical,replayPhysical,scalePhysical],scaled: {graphCalls: scaled.calls,hydrations: scaled.inventories,
+        candidateRows: scaled.publicationBatches.reduce((sum,batch) => sum+batch.rows,0),
+        responseJsonBytes: scaled.responseJsonBytes,elapsedMs: scaled.elapsedMs},
+      nativeSourceProposals: 320,coldNativeSourcePopulation: sourceCount,coldSourcePages,
+      additionalRawSqlFixtureRows: 4096,
+      baselineDistantPositiveSqlFixtureRows: 4096,additionalDistantPositiveSqlFixtureRows: 4096 };
     // Persist outside the fixture directory, which its finally block removes.
     writeFileSync(resolve(root,'.temp/goal/statement-subject-locality.json'),JSON.stringify(locality,null,2));
     console.log(`subject Statement locality ${JSON.stringify({before: locality.before,after: locality.after})}`);
+
+    // Legacy/delta Statements have citation evidence without a rv:source hint.
+    // They remain potential before Content's claim binding arrives. The binding
+    // is live authority, so no membership/index update is needed to disclose it.
+    const delayedEvidence = nativeId();
+    await f.contentPool.query(`INSERT INTO wiki.evidence
+      (id,representation_sha256,locator,quote,method,submitter,rights_basis,source_work,
+       applied_receipt,modality,claim,claim_kind)
+      SELECT $1,representation_sha256,locator,quote,method,submitter,rights_basis,source_work,
+        applied_receipt || ':delayed',modality,NULL,NULL FROM wiki.evidence WHERE id=$2`,
+      [delayedEvidence,evidenceIds[0]]);
+    const legacy = await json<{statement: string;revision: string}>(await call('POST','/v1/statements',{
+      profile: 'statement-v1',speaker: {kind: 'personal'},subject: entity,
+      predicate: predicate.component,relationDefinition: predicate.revision,
+      value: {kind: 'literal',lexical: 'Evidence-only delayed citation',language: 'en',datatype: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#langString'},
+      applicability: [],interpretation: {kind: 'selected'},evidence: [delayedEvidence],
+      actingSubject: reviewerB.actor,
+    },reviewerB.token),201);
+    expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+    const legacyBasis = await completePublication();
+    const legacyRows = (await f.accessPool.query<{publication_source: string | null;publication_evidence: boolean}>(
+      `SELECT publication_source,publication_evidence FROM access.statement_seek
+       WHERE data_epoch=$1 AND subject=$2 AND statement_id=$3 AND frame_key='*'`,
+      [f.env.lineage.dataEpoch,entity,legacy.statement])).rows;
+    expect(legacyRows).toEqual([{publication_source: null,publication_evidence: true}]);
+    const statementIds = async () => (await json<Static<typeof subjectStatementPage>>(
+      await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false),
+    )).groups.flatMap(group => group.items).flatMap(item => item.kind === 'statement' ? [item.statement] : []).sort();
+    expect(await statementIds()).toEqual([statement,laterStatement].sort());
+    // A continuation minted behind the late bind's frontier cannot outlive it.
+    const delayedPath = `/v1/resources/${shortId(entity)}/statements?limit=1`;
+    const beforeBind = await json<Static<typeof subjectStatementPage>>(await at(delayedPath,'all',false));
+    expect(beforeBind.nextCursor).toBeString();
+    const beforeBindCursor = `${delayedPath}&cursor=${encodeURIComponent(beforeBind.nextCursor!)}`;
+    expect((await at(beforeBindCursor,'all',false)).status).toBe(200);
+    await deps.wikiEvidence!.reveal(createdWork.work,[],[
+      {evidence: [delayedEvidence],claim: legacy.statement,kind: 'statement'},
+    ],[]);
+    expect((await at(beforeBindCursor,'all',false)).status).toBe(400);
+    expect(await f.statementSeek.capturePublicationBasis(entity)).toEqual(legacyBasis);
+    expect(await statementIds()).toEqual([statement,laterStatement,legacy.statement].sort());
+    await reviewerB.grant(`statement:speak:${reviewerB.actor}`, 'statement.withdraw');
+    await json(await call('POST',`/v1/statements/${shortId(legacy.statement)}/withdrawals`,{
+      profile: 'statement-v1',expectedHead: legacy.revision,speaker: {kind: 'personal'},
+      actingSubject: reviewerB.actor,
+    },reviewerB.token),201);
+    expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
+    await completePublication();
+    expect(await statementIds()).toEqual([statement,laterStatement].sort());
 
     const statementPath = `/v1/resources/${shortId(entity)}/statements?limit=1`;
     const first = await json<Static<typeof subjectStatementPage>>(
@@ -1047,7 +1374,11 @@ test('G-920: published franchise entities, contradictory claims and relations di
       ),
       201,
     );
+    const afterWithdrawalBasis = await f.statementSeek.capturePublicationBasis(entity);
+    expect(afterWithdrawalBasis?.membershipHead).not.toBe(beforeMembership?.membershipHead);
+    expect((await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false)).status).toBe(503);
     await f.statementSeek.rebuild();
+    await completePublication();
     const withdrawn = await json<Static<typeof subjectStatementPage>>(
       await at(`/v1/resources/${shortId(entity)}/statements`, 'all', false),
     );

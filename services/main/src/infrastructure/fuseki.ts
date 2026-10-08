@@ -71,6 +71,19 @@ export interface CommandEnvelope {
 
 export interface CommandPosition { datasetId: string; dataEpoch: string; sequence: string }
 export interface TemplateIndexKey { graph: string; predicate: string; anchor: string; type: string }
+/** Private fixed source-page continuation. Physical order is not delivery order. */
+export interface StatementPublicationNativeCursor { storage: string; phase: 0 | 1 | 2; key: string; seal: string }
+export interface StatementPublicationNativeRequest {
+  operation: 'statement-publication-page'; dataEpoch: string; routingEpoch: string;
+  subject: string; membershipHead: string | null;
+  after: 'basis' | StatementPublicationNativeCursor | null;
+}
+export interface StatementPublicationNativeResult {
+  basis: { dataEpoch: string; routingEpoch: string; subject: string; membershipHead: string | null; storage: string };
+  after: StatementPublicationNativeCursor | null; complete: boolean; examined: number; witnessTuples: number;
+  references: { subject: string; predicate: string; meaningKey: string; statementId: string; head: string;
+    source: string | null; hasEvidence: boolean; applicability: string[] }[];
+}
 export interface TemplateIndexDelta {
   position: { dataEpoch: string; sequence: string };
   entities?: { graph: string; id: string; terms: Record<string,string[]> }[];
@@ -241,8 +254,11 @@ export class FusekiClient {
     return boundedJson<SparqlResult>(response, maxResponseBytes, signal);
   }
 
+  async templateIndex(input: StatementPublicationNativeRequest): Promise<StatementPublicationNativeResult>;
   async templateIndex(input: { operation: 'basis'; keys: TemplateIndexKey[] }
-    | { operation: 'backfill'; phase: number; after: string }): Promise<TemplateIndexDelta> {
+    | { operation: 'backfill'; phase: number; after: string }): Promise<TemplateIndexDelta>;
+  async templateIndex(input: StatementPublicationNativeRequest | { operation: 'basis'; keys: TemplateIndexKey[] }
+    | { operation: 'backfill'; phase: number; after: string }): Promise<TemplateIndexDelta | StatementPublicationNativeResult> {
     if (!this.commandCapability?.match(/^[0-9a-f]{64}$/)) throw new Error('Template index capability is required');
     const signal = readSignal(this.preparationSignal);
     signal.throwIfAborted();
@@ -252,7 +268,7 @@ export class FusekiClient {
       body: JSON.stringify({ templateIndex: input }), signal,
     });
     if (!response.ok) throw new Error(`Template index returned ${response.status}`);
-    return boundedJson<TemplateIndexDelta>(response,1024*1024, signal);
+    return boundedJson<TemplateIndexDelta | StatementPublicationNativeResult>(response,1024*1024, signal);
   }
 
   async membershipPreparationStatus(): Promise<{ needsPreparation: boolean }> {

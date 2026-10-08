@@ -24,6 +24,7 @@ import { RV, activateMetadataWork, metadataWorkRequestDigest } from '../../../se
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { ensureGlobalClassificationContext } from '../../../services/main/src/modules/classification/global.ts';
 import { recordStatement, recordStatementRequest, setStatementDecision, statementDecisionRequest } from '../../../services/main/src/modules/statement/graph.ts';
+import { WikiEvidenceStore } from '../../../services/main/src/modules/wiki/evidence.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { startMediaStack } from './media-support.ts';
 
@@ -117,9 +118,14 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     const early = await entity('Early character', [alias, lateName]), unchanged = await entity('Catalogue character'), late = await entity('Late character');
     await grant(`statement:speak:${person}`, 'statement.record'); await grant('classification:decide:global', 'statement.decide');
     await ensureGlobalClassificationContext(stack.env);
+    const meaning = await json<Changed>(await call('POST', '/v1/semantic/changes', {
+      profile: 'semantic-change-v1', expectedHead: null, actingSubject: person,
+      state: { component: 'definition', kind: 'relation', workSubjectRole: 'work',
+        roles: ['work', 'character'].map(key => ({ key, minParticipants: 1, maxParticipants: 1, ordered: false })) } }), 201);
+    await grant(`semantic:read:${meaning.component}`, 'semantic.read');
     const statement = async (text: string) => {
       const input = { speaker: { kind: 'personal' as const }, subject: early.component,
-        predicate: 'https://example.org/plotFact', relationDefinition: 'https://example.org/definition',
+        predicate: meaning.component, relationDefinition: meaning.revision,
         value: { kind: 'literal' as const, lexical: text, language: null, datatype: 'http://www.w3.org/2001/XMLSchema#string' },
         applicability: [], interpretation: { kind: 'selected' as const }, evidence: [], actingSubject: person };
       const request = recordStatementRequest(input);
@@ -132,11 +138,6 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
       return { statement: saved.component!, receipt: saved.receipt };
     };
     const earlyFact = await statement('Early fact'), lateFact = await statement('Late fact');
-    const meaning = await json<Changed>(await call('POST', '/v1/semantic/changes', {
-      profile: 'semantic-change-v1', expectedHead: null, actingSubject: person,
-      state: { component: 'definition', kind: 'relation', workSubjectRole: 'work',
-        roles: ['work', 'character'].map(key => ({ key, minParticipants: 1, maxParticipants: 1, ordered: false })) } }), 201);
-    await grant(`semantic:read:${meaning.component}`, 'semantic.read');
     const relation = async () => json<{ occurrence: string; receipt: string }>(await call('POST', '/v1/relations/changes', {
       profile: 'relation-change-v1', expectedHead: null, definition: meaning.revision, actingSubject: person,
       participations: [{ role: 'work', participant: { kind: 'resource', ref: series.work } },
@@ -431,3 +432,76 @@ test('G847: real wiki reads withhold later records before delivery, counts and c
     });
   } finally { await stack.stop(); }
 }, 600_000);
+
+test('G847: a late Wiki claim binding advances the reading generation once, in its own transaction', async () => {
+  const stack = await startMediaStack('g-847-claim-generation');
+  try {
+    const pool = stack.contentPool, store = new ReadingPositionStore(pool), evidence = new WikiEvidenceStore(pool);
+    const work = native();
+    const evidenceRow = async () => {
+      const id = native();
+      await pool.query(`INSERT INTO wiki.evidence (id,representation_sha256,locator,quote,method,submitter,rights_basis,
+        source_work,applied_receipt,modality) VALUES ($1,repeat('a',64),'{}'::jsonb,'quote','{}'::jsonb,'submitter','unknown',
+        $2,'urn:rezics:wiki-evidence:fixture:1','narrated')`, [id, work]);
+      return id;
+    };
+    const changes = async () => Number((await pool.query<{ count: string }>('SELECT count(*) FROM reading_position.change')).rows[0]!.count);
+    const bind = (ids: string[], claim: string) => evidence.reveal(work, [], [{ evidence: ids, claim, kind: 'statement' }], []);
+    const session = new WorkReadSession({ readingPositions: store } as unknown as MainWorkDependencies,
+      new Request('http://main.local/v1/fixture'), {}, { dataEpoch: stack.env.lineage.dataEpoch, sequence: '0' });
+
+    // A first bind is observed; an identical replay and a refused conflict are not.
+    const [one, two, three] = [await evidenceRow(), await evidenceRow(), await evidenceRow()];
+    const claim = native();
+    let generation = await store.generation(), count = await changes();
+    await bind([one], claim);
+    expect(await store.generation()).not.toBe(generation);
+    expect(await changes()).toBe(count + 1);
+    generation = await store.generation(); count = await changes();
+    await bind([one], claim);
+    await expect(bind([one], native())).rejects.toThrow('Wiki evidence claim binding changed');
+    expect(await store.generation()).toBe(generation);
+    expect(await changes()).toBe(count);
+
+    // Several binds plus a revelation write are one signal; a rollback leaves none.
+    const revealed: Revelation = { record: claim, recordKind: 'statement', continuityWork: work, occurrence: native(), receipt: 'fixture' };
+    count = await changes();
+    const [other, third] = [native(), native()];
+    await evidence.reveal(work, [revealed], [{ evidence: [two], claim: other, kind: 'statement' },
+      { evidence: [three], claim: third, kind: 'relation' }]);
+    expect(await changes()).toBe(count + 1);
+    expect((await pool.query('SELECT claim FROM wiki.evidence WHERE id = ANY($1) ORDER BY claim', [[two, three]])).rows.map(row => row.claim).sort())
+      .toEqual([other, third].sort());
+    const unbound = await evidenceRow();
+    generation = await store.generation(); count = await changes();
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('UPDATE wiki.evidence SET claim = $2, claim_kind = $3 WHERE id = $1', [unbound, native(), 'statement']);
+      await client.query('ROLLBACK');
+    } finally { client.release(); }
+    expect(await store.generation()).toBe(generation);
+    expect(await changes()).toBe(count);
+
+    // A reader that captured its generation before a bind commits must refuse at the final fence,
+    // including when the binder began (lower XID) before the capture and commits after it.
+    const boundary = new ReadingBoundary(session, 'start');
+    await boundary.binding();
+    await boundary.fence();
+    await bind([unbound], native());
+    await expect(boundary.fence()).rejects.toBeInstanceOf(WorkReadMoved);
+    const held = await evidenceRow(), binder = await pool.connect();
+    const racing = new ReadingBoundary(session, 'start');
+    try {
+      await binder.query('BEGIN');
+      await binder.query('UPDATE wiki.evidence SET claim = $2, claim_kind = $3 WHERE id = $1', [held, native(), 'statement']);
+      await racing.binding();
+      await racing.fence();
+      await binder.query('COMMIT');
+    } finally { binder.release(); }
+    await expect(racing.fence()).rejects.toBeInstanceOf(WorkReadMoved);
+    const settled = new ReadingBoundary(session, 'start');
+    await settled.binding();
+    await settled.fence();
+  } finally { await stack.stop(); }
+}, 300_000);

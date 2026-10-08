@@ -25,6 +25,7 @@ import { WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import { pageRegistry } from '../src/modules/entity-page/read.ts';
 import { readSubjectStatements, SUBJECT_STATEMENT_COST } from '../src/modules/statement/subject-read.ts';
 import type { StatementSeekCandidate, StatementSeekOrder } from '../src/modules/statement/seek.ts';
+import type { StatementPublicationBasis } from '../src/modules/statement/publication-seek.ts';
 import { CLASSIFICATION_INHERIT_POLICY, GLOBAL_CLASSIFICATION_CONTEXT }
   from '../src/modules/classification/context.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
@@ -291,6 +292,7 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
   const hydration: string[][] = [];
   const wikiBatches: string[][] = [];
   const seekAfter: Array<StatementSeekOrder | null> = [];
+  const publicationAfter: Array<StatementSeekOrder | null> = [];
   const events: string[] = [];
   const acceptances = new Map<string, 'accepted' | 'unavailable' | 'rejected'>();
   const currentSources = new Map(evidence.filter(row => row.claim)
@@ -300,6 +302,20 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
   const missingHeads = new Set<string>();
   const hiddenReferences = new Set<string>();
   let hasAcceptanceScope = false;
+  let acceptanceRealm: string | null = null;
+  let globalFacts = true;
+  let rawCoverageComplete = true;
+  let rawCoverageSequence = '1';
+  let rawSeekSequence = '1';
+  let localComplete = true;
+  let membershipHead = subjectId(81);
+  let recoveryBasis = '1';
+  let sourceStore = 'native-incarnation-a';
+  let recoveryOpen = true;
+  let publicationCaptures = 0;
+  let publicationFences = 0;
+  let rawCoverageReads = 0;
+  const sourceHints = new Set<string>();
   let sourcePublic = true;
   let sourceBound = true;
   let claimVisible = true;
@@ -315,7 +331,8 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
   };
   graph.query = async query => {
     if (query.includes('SELECT ?policy ?realm')) return { results: { bindings: hasAcceptanceScope
-      ? [{ policy: iriTerm(CLASSIFICATION_INHERIT_POLICY) }] : [] } };
+      ? [{ policy: iriTerm(CLASSIFICATION_INHERIT_POLICY),
+        ...(acceptanceRealm ? { realm: iriTerm(acceptanceRealm) } : {}) }] : [] } };
     if (query.includes('SELECT ?epoch ?sequence ?context ?policy')) return { results: { bindings: [{
       epoch: term('epoch'), sequence: term(sequence), context: iriTerm(GLOBAL_CLASSIFICATION_CONTEXT),
       policy: iriTerm(CLASSIFICATION_INHERIT_POLICY),
@@ -401,10 +418,40 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
       withheld: async () => new Set<string>(),
     },
     statementSeek: {
-      coverage: async () => ({ complete: true, through_sequence: '1' }),
-      seek: async (_position: unknown, subject: string, after: StatementSeekOrder | null) => {
+      coverage: async () => { rawCoverageReads++; return {
+        complete: rawCoverageComplete, through_sequence: rawCoverageSequence,
+      }; },
+      capturePublicationBasis: async (subject: string): Promise<StatementPublicationBasis | null> => {
+        expect(subject).toBe(resource);
+        publicationCaptures++;
+        if (globalFacts) return null;
+        if (!recoveryOpen) throw new WorkReadUnavailable('Publication recovery basis is unavailable');
+        return { dataEpoch: 'epoch', subject, membershipHead, recoveryBasis, sourceStore,
+          global: 'no-current-facts' };
+      },
+      requirePublicationCoverage: async (_basis: StatementPublicationBasis) => {
+        if (!localComplete) throw new WorkReadUnavailable('Publication subject reconstruction is pending');
+      },
+      seekPotentialPublication: async (basis: StatementPublicationBasis, after: StatementSeekOrder | null) => {
+        expect(basis.subject).toBe(resource);
+        publicationAfter.push(after);
+        if (!localComplete) throw new WorkReadUnavailable('Publication local coverage moved');
+        const potential = candidates.filter(row => sourceHints.has(row.statementId)
+          || (currentSources.get(row.statementId)?.length ?? 0) > 0);
+        const index = after ? potential.findIndex(row => row.statementId === after.statementId) + 1 : 0;
+        return { candidates: potential.slice(index, index + SUBJECT_STATEMENT_COST.candidates) };
+      },
+      fencePublicationBasis: async (basis: StatementPublicationBasis) => {
+        publicationFences++;
+        if (globalFacts || membershipHead !== basis.membershipHead || recoveryBasis !== basis.recoveryBasis
+          || sourceStore !== basis.sourceStore
+          || !recoveryOpen) throw new WorkReadUnavailable('Publication source basis moved');
+        if (!localComplete) throw new WorkReadUnavailable('Publication local coverage moved');
+      },
+      seek: async (position: { sequence: string }, subject: string, after: StatementSeekOrder | null) => {
         expect(subject).toBe(resource);
         seekAfter.push(after);
+        if (rawSeekSequence !== position.sequence) throw new WorkReadUnavailable('Statement seek coverage is unavailable');
         const index = after ? candidates.findIndex(row => row.statementId === after.statementId) + 1 : 0;
         return { candidates: candidates.slice(index, index + SUBJECT_STATEMENT_COST.candidates) };
       },
@@ -418,8 +465,24 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
     return result;
   };
   return { resource, hydration, wikiBatches, seekAfter, events, acceptances, currentSources,
-    privateMeanings, hydrationChanges, missingHeads, hiddenReferences, session,
+    privateMeanings, hydrationChanges, missingHeads, hiddenReferences, sourceHints, publicationAfter, session,
     scope() { hasAcceptanceScope = true; },
+    realmScope() { hasAcceptanceScope = true; acceptanceRealm = subjectId(50); },
+    absentGlobal() { globalFacts = false; },
+    globalPresent() { globalFacts = true; },
+    rawLag(leaf = true, seek = true) {
+      if (leaf) rawCoverageSequence = '0';
+      if (seek) rawSeekSequence = '0';
+    },
+    incompleteRaw() { rawCoverageComplete = false; },
+    incompleteLocal() { localComplete = false; },
+    moveMembership() { membershipHead = subjectId(82); },
+    moveRecovery() { recoveryBasis = '2'; },
+    reopenSourceStore() { sourceStore = 'native-incarnation-b'; },
+    holdRecovery() { recoveryOpen = false; },
+    get publicationCaptures() { return publicationCaptures; },
+    get publicationFences() { return publicationFences; },
+    get rawCoverageReads() { return rawCoverageReads; },
     privateSource() { sourcePublic = false; },
     unboundSource() { sourceBound = false; },
     grant(value: boolean) { privateGrant = value; },
@@ -431,7 +494,7 @@ function subjectReader(candidates: StatementSeekCandidate[], evidence: WikiEvide
   };
 }
 
-test('absent Global acceptance hydrates no ordinary proposals and advances a full raw batch', async () => {
+test('missing active Global policy retains the raw fallback and advances ordinary proposal batches', async () => {
   const candidates = Array.from({ length: 320 }, (_, index) => statementCandidate(100 + index));
   const run = subjectReader(candidates);
   const page = await readSubjectStatements(run.session(), run.resource);
@@ -442,6 +505,118 @@ test('absent Global acceptance hydrates no ordinary proposals and advances a ful
     candidates[(index + 1) * SUBJECT_STATEMENT_COST.candidates - 1])]);
   expect(run.wikiBatches[0]).toEqual(candidates.slice(0, SUBJECT_STATEMENT_COST.candidates)
     .map(row => row.statementId));
+});
+
+test('truly absent Global with complete local coverage bypasses both lagging raw gates and preserves disclosed cursors', async () => {
+  const candidates = Array.from({ length: 322 }, (_, index) => statementCandidate(100 + index));
+  const published = candidates.slice(-2);
+  const evidence = published.map((row, index) => wikiCitation(row.statementId, 500 + index));
+  const run = subjectReader(candidates, evidence);
+  run.absentGlobal();
+  run.rawLag();
+  run.incompleteRaw();
+  const first = await readSubjectStatements(run.session(), run.resource);
+  expect(run.rawCoverageReads).toBe(0);
+  expect(run.seekAfter).toEqual([]);
+  expect(run.publicationAfter).toEqual([null]);
+  expect(run.hydration).toEqual([published.map(row => row.statementId)]);
+  expect(first.groups[0]?.items).toMatchObject([{ statement: published[0]!.statementId,
+    acceptance: null, publication: { kind: 'wiki-bundle', works: [subjectId(2)] },
+    evidence: [{ id: evidence[0]!.id, quoteWithheld: false }] }]);
+  expect(first.nextCursor).not.toBeNull();
+  const second = await readSubjectStatements(run.session(first.nextCursor!), run.resource);
+  expect(run.publicationAfter.at(-1)?.statementId).toBe(published[0]!.statementId);
+  expect(second.groups[0]?.items).toMatchObject([{ statement: published[1]!.statementId }]);
+  expect(second.nextCursor).toBeNull();
+  expect(run.publicationFences).toBe(2);
+});
+
+test('complete locally empty subject hydrates no ordinary proposals while raw coverage lags', async () => {
+  const run = subjectReader(Array.from({ length: 4096 }, (_, index) => statementCandidate(100 + index)));
+  run.absentGlobal();
+  run.rawLag();
+  const page = await readSubjectStatements(run.session(), run.resource);
+  expect(page.groups).toEqual([]);
+  expect(page.nextCursor).toBeNull();
+  expect(run.hydration).toEqual([]);
+  expect(run.wikiBatches).toEqual([]);
+  expect(run.publicationAfter).toEqual([null]);
+  expect(run.publicationFences).toBe(1);
+});
+
+for (const guard of ['missing-policy-leaf', 'missing-policy-seek', 'active-global', 'framed', 'realm'] as const) {
+  test(`${guard} preserves the raw global gate instead of selecting locally covered publication`, async () => {
+    const run = subjectReader([statementCandidate(100)]);
+    if (guard === 'active-global') run.scope();
+    if (guard === 'framed' || guard === 'realm') run.absentGlobal();
+    if (guard === 'realm') run.realmScope();
+    run.rawLag(guard !== 'missing-policy-seek', true);
+    const session = run.session();
+    const realms: string[] = [];
+    session.realm = async realm => {
+      realms.push(realm);
+      return { visibility: 'public', reviewMode: 'open', revision: null,
+        space: subjectId(53), realmRevision: null, listing: 'listed', history: 'everything', admission: 'open' };
+    };
+    await expect(readSubjectStatements(session, run.resource,
+      guard === 'realm' ? subjectId(51) : GLOBAL_CLASSIFICATION_CONTEXT,
+      guard === 'framed' ? [{ iri: subjectId(52), dimension: 'work' }] : undefined))
+      .rejects.toThrow('Statement seek coverage is unavailable');
+    expect(run.rawCoverageReads).toBe(1);
+    expect(run.publicationAfter).toEqual([]);
+    expect(run.publicationFences).toBe(0);
+    expect(run.hydration).toEqual([]);
+    expect(run.seekAfter).toHaveLength(guard === 'missing-policy-seek' ? 1 : 0);
+    expect(run.publicationCaptures).toBe(guard.startsWith('missing-policy') ? 1 : 0);
+    if (guard === 'realm') expect(realms).toEqual([subjectId(50)]);
+  });
+}
+
+test('local incompleteness refuses before candidate and Wiki reads despite healthy raw coverage', async () => {
+  const candidate = statementCandidate(100);
+  const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
+  run.absentGlobal();
+  run.incompleteLocal();
+  await expect(readSubjectStatements(run.session(), run.resource))
+    .rejects.toThrow('Publication subject reconstruction is pending');
+  expect(run.rawCoverageReads).toBe(0);
+  expect(run.publicationAfter).toEqual([]);
+  expect(run.wikiBatches).toEqual([]);
+  expect(run.hydration).toEqual([]);
+});
+
+for (const race of ['membership', 'Global-current-facts', 'recovery-generation', 'restore-hold', 'local-coverage', 'source-reopen'] as const) {
+  test(`${race} after hydration refuses the final locally covered page`, async () => {
+    const candidate = statementCandidate(100);
+    const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
+    run.absentGlobal();
+    run.rawLag();
+    run.afterHydration(() => {
+      if (race === 'membership') run.moveMembership();
+      if (race === 'Global-current-facts') run.globalPresent();
+      if (race === 'recovery-generation') run.moveRecovery();
+      if (race === 'restore-hold') run.holdRecovery();
+      if (race === 'local-coverage') run.incompleteLocal();
+      if (race === 'source-reopen') run.reopenSourceStore();
+    });
+    await expect(readSubjectStatements(run.session(), run.resource))
+      .rejects.toThrow(race === 'local-coverage' ? 'Publication local coverage moved' : 'Publication source basis moved');
+    expect(run.hydration).toEqual([[candidate.statementId]]);
+    expect(run.publicationFences).toBe(1);
+    expect(run.rawCoverageReads).toBe(0);
+  });
+}
+
+test('source hint alone remains only a candidate and cannot publish a Statement without live Wiki evidence', async () => {
+  const candidate = statementCandidate(100);
+  const run = subjectReader([candidate]);
+  run.absentGlobal();
+  run.sourceHints.add(candidate.statementId);
+  const page = await readSubjectStatements(run.session(), run.resource);
+  expect(run.publicationAfter).toEqual([null]);
+  expect(run.wikiBatches).toEqual([[candidate.statementId]]);
+  expect(run.hydration).toEqual([]);
+  expect(page.groups).toEqual([]);
 });
 
 test('a full ineligible raw batch still fills a published Wiki page and its disclosed cursor', async () => {
@@ -510,6 +685,8 @@ for (const hidden of ['private-source', 'unbound-source', 'unbound-claim', 'stal
   test(`${hidden} Wiki evidence does not disclose an otherwise unaccepted Statement`, async () => {
     const candidate = statementCandidate(100);
     const run = subjectReader([candidate], [wikiCitation(hidden === 'unbound-claim' ? null : candidate.statementId, 300)]);
+    run.absentGlobal();
+    run.sourceHints.add(candidate.statementId);
     if (hidden === 'private-source') run.privateSource();
     if (hidden === 'unbound-source') run.unboundSource();
     if (hidden === 'stale-reference') run.currentSources.set(candidate.statementId, []);
@@ -522,6 +699,7 @@ for (const hidden of ['private-source', 'unbound-source', 'unbound-claim', 'stal
 test('published Wiki provenance never grants a private meaning Context', async () => {
   const candidate = statementCandidate(100);
   const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
+  run.absentGlobal();
   run.privateMeanings.add(candidate.statementId);
   expect((await readSubjectStatements(run.session(), run.resource)).groups).toEqual([]);
   run.grant(true);
@@ -534,6 +712,7 @@ for (const race of ['evidence-withdrawal', 'claim-permission', 'private-context-
   test(`${race} during eligible hydration refuses the final Wiki page`, async () => {
     const candidate = statementCandidate(100);
     const run = subjectReader([candidate], [wikiCitation(candidate.statementId, 300)]);
+    run.absentGlobal();
     if (race === 'evidence-withdrawal') run.withdrawWiki(2);
     if (race === 'claim-permission') run.afterHydration(() => run.hideClaim());
     if (race === 'graph-position') run.afterHydration(() => run.moveGraph());
@@ -592,6 +771,7 @@ test('exact qualified Wiki facts require every native scope and preserve their s
   const candidate = { ...statementCandidate(100), meaningKey: statementMeaningKey(meaning) };
   const citation = wikiCitation(candidate.statementId, 300);
   const run = subjectReader([candidate], [citation]);
+  run.absentGlobal();
   const scratch = join(resolve(import.meta.dir, '../../..'), '.temp');
   mkdirSync(scratch, { recursive: true });
   const directory = mkdtempSync(join(scratch, 'wiki-subject-qualification-'));
