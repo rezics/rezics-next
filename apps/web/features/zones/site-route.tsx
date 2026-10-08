@@ -47,6 +47,7 @@ import { EntityPage } from '../entity-page/entity-page.tsx';
 import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
 import { zoneTheme } from './theme.ts';
 import { MemberList } from './site-pages.tsx';
+import { ZoneHomeDocument, zoneHomeDocument } from '../zone-editor/home-document.tsx';
 import type { ZoneContext } from '@rezics/zone-sdk';
 import { cookies, headers } from 'next/headers';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
@@ -466,7 +467,15 @@ async function standaloneSite(
     </ZoneFrame>
   );
   const read = route.data;
-  if (read.kind === 'home')
+  if (read.kind === 'home') {
+    // The published home page is its Content document. Mounts stay in the site navigation.
+    // Until a document is published, the page keeps the list of those mounts.
+    const document = zoneHomeDocument(read.page);
+    if (document) return frame(
+      <PageContainer>
+        <ZoneHomeDocument document={document} className="max-w-3xl text-pretty leading-7" />
+      </PageContainer>,
+    );
     return frame(
       <PageContainer>
         <MemberList
@@ -479,6 +488,7 @@ async function standaloneSite(
         />
       </PageContainer>,
     );
+  }
   if (read.kind === 'index')
     return frame(
       <PageContainer className="grid gap-6">
