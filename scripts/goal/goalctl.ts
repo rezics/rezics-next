@@ -1120,6 +1120,20 @@ function launchGates(tasks: Task[], engine: Engine, forceUsage: boolean) {
   return { live, limit, usage, account };
 }
 
+/** A manager wake is one turn, and a Goal only advances through its manager.
+ * Claude usage and the live-worker cap slow workers; they stay visible here and do not refuse the wake.
+ * The memory floor and a reached Codex account for this engine still do. */
+export function managerWakeGates(engine: Engine): { live: number; limit: number; claude: UsageLevel } {
+  const live = Object.values(readLedger().tasks).filter(running).length;
+  const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
+  const memory = memoryFloorRefusal(readFileSync('/proc/meminfo', 'utf8'), Number(process.env.GOAL_MEMORY_FLOOR_GIB ?? 12));
+  if (memory) throw new Error(memory);
+  const claude = currentUsage().level;
+  const account = codexAccounts().find(candidate => candidate.engines.includes(engine));
+  if (account?.reached) throw new Error(`${describeAccount(account)}; use another engine or pass --force-usage`);
+  return { live, limit, claude };
+}
+
 export function workerSessionEnvironment(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const env = { ...parent };
   // A new worker has its own native session; inherited manager IDs misidentify it and its tools as that session's owner.
@@ -5159,7 +5173,7 @@ async function coordinatorCommand(args: string[]): Promise<void> {
       if (!activeGoals(eventLedger(directory)).includes(descriptor.goal)) throw new Error('Enrolled Goal is no longer active');
       const home = descriptor.engine === 'claude' ? realpathSync(claudeConfigHome()) : engineEnv(descriptor.engine).CODEX_HOME;
       if (!home || realpathSync(home) !== descriptor.home) throw new Error('Selected engine account home changed; handover required');
-      launchGates(Object.values(readLedger().tasks),descriptor.engine,false);
+      managerWakeGates(descriptor.engine);
     }});
   try {
     const [action, ...rest] = args;

@@ -3234,6 +3234,77 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
+  function claudeUsage(week: number, fiveHour = 10) {
+    const now = Math.floor(Date.now() / 1000);
+    return JSON.stringify({ at: now, rate_limits: {
+      five_hour: { used_percentage: fiveHour, resets_at: now + 3600 },
+      seven_day: { used_percentage: week, resets_at: now + 160 * 3600 } } });
+  }
+
+  function admitWake(dir: string, env: NodeJS.ProcessEnv, engine: string) {
+    return spawnSync(process.execPath, ['-e',
+      `import { managerWakeGates } from ${JSON.stringify(join(import.meta.dir, 'goalctl.ts'))};\n`
+      + `console.log(JSON.stringify(managerWakeGates(${JSON.stringify(engine)})));\n`],
+      { cwd: dir, encoding: 'utf8', env, timeout: 30_000 });
+  }
+
+  test('a Claude manager wake is admitted at restricted and critical usage while workers are at the cap', async () => {
+    const r = repo();
+    try {
+      await r.start('G-001');
+      const env = { ...r.env, GOAL_MAX_WORKERS: '1' };
+      for (const [week, level] of [[12, 'restricted'], [96, 'critical']] as const) {
+        writeFileSync(r.env.GOAL_USAGE_FILE!, claudeUsage(week));
+        const result = admitWake(r.dir, env, 'claude');
+        expect(result.status, result.stderr).toBe(0);
+        expect(JSON.parse(result.stdout)).toMatchObject({ live: 1, limit: 1, claude: level });
+      }
+    } finally { r.cleanup(); }
+  });
+
+  test('a Claude worker dispatch is still refused at restricted usage', () => {
+    const r = repo();
+    try {
+      writeFileSync(r.env.GOAL_USAGE_FILE!, claudeUsage(12));
+      const result = r.run(['dispatch', r.brief('G-001', { engine: 'claude' }), '--dry-run']);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('Claude usage is restricted');
+      expect(result.stderr).toContain('7d projected');
+      expect(r.ledger().tasks['G-001']).toBeUndefined();
+    } finally { r.cleanup(); }
+  });
+
+  test('a manager wake is refused below the memory floor and when its Codex account is reached', () => {
+    const r = repo();
+    try {
+      writeFileSync(r.env.GOAL_USAGE_FILE!, claudeUsage(12));
+      const memory = admitWake(r.dir, { ...r.env, GOAL_MEMORY_FLOOR_GIB: '1000000000' }, 'claude');
+      expect(memory.status).toBe(1);
+      expect(memory.stderr).toContain('Memory floor reached: host MemAvailable');
+      expect(memory.stderr).toContain('GOAL_MEMORY_FLOOR_GIB=1000000000');
+      for (const home of [r.env.GOAL_CODEX_HOME!, r.env.GOAL_CODEX_1_HOME!]) {
+        const sessions = join(home, 'sessions/2026/10/07');
+        mkdirSync(sessions, { recursive: true });
+        writeFileSync(join(sessions, 'rollout.jsonl'), JSON.stringify({ type: 'event_msg', payload: {
+          type: 'token_count', rate_limits: { primary: { used_percent: 100, window_minutes: 10080,
+            resets_at: Date.now() / 1000 + 3600 } } } }));
+      }
+      // The second account stays open, so only the manager's own reached account refuses the wake.
+      writeFileSync(join(r.env.GOAL_CODEX_1_HOME!, 'sessions/2026/10/07/rollout.jsonl'), JSON.stringify({
+        type: 'event_msg', payload: { type: 'token_count', rate_limits: { primary: { used_percent: 10,
+          window_minutes: 10080, resets_at: Date.now() / 1000 + 3600 } } } }));
+      for (const engine of ['codex', 'luna']) {
+        const result = admitWake(r.dir, r.env, engine);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain('EXHAUSTED');
+        expect(result.stderr).not.toContain('Claude usage is restricted');
+      }
+      const other = admitWake(r.dir, { ...r.env, GOAL_MAX_WORKERS: '0' }, 'codex-1');
+      expect(other.status, other.stderr).toBe(0);
+      expect(JSON.parse(other.stdout)).toMatchObject({ live: 0, limit: 0, claude: 'restricted' });
+    } finally { r.cleanup(); }
+  });
+
   test('status shows the rounded weekly range while Claude dispatch uses its low end', () => {
     const r = repo();
     try {
