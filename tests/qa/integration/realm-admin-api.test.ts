@@ -145,9 +145,10 @@ test('Realm settings: atomic rule CAS, localization, submission restrictions and
   try {
     const empty = await s.call('GET', `/settings${s.actorQuery()}`);
     expect(empty.status).toBe(200);
-    expect(empty.body).toMatchObject({ generation: '0', settings: { visibility: 'public', reviewRequired: true,
-      whoMaySubmit: 'granted', rules: [] }, ruleBasis: { revision: null } });
-    const input = { actingSubject: s.owner.actor, expectedGeneration: '0', expectedRulesRevision: null,
+    expect(empty.body).toMatchObject({ generation: '1', settings: { visibility: 'public', reviewRequired: true,
+      reviewMode: 'mandatory', selfJoin: false, whoMaySubmit: 'granted', rules: [] },
+      ruleBasis: { revision: '1' } });
+    const input = { actingSubject: s.owner.actor, expectedGeneration: '1', expectedRulesRevision: '1',
       reason: 'Require community membership', settings: { visibility: 'public', reviewRequired: true,
         whoMaySubmit: 'members', rules: [{ id: 'kindness', title: { original: 'ja', labels: { ja: '親切に', ko: '친절하게' } },
           body: { original: 'ja', labels: { ja: '読者を尊重する', ko: '독자를 존중하세요' } }, governanceRule: null }] } };
@@ -214,7 +215,8 @@ test('Realm owner enrollment: server receipt binds creator; repeat enrollment ne
     expect((await s.call('POST', '/management', { actingSubject: s.owner.actor }, s.outsider.token)).status).toBe(403);
     const initialized = await s.call('POST', '/management', { actingSubject: s.owner.actor });
     expect(initialized.status).toBe(200);
-    expect(initialized.body.replayed).toBe(false);
+    // Space creation already enrolled the founder through the same Access initialization.
+    expect(initialized.body.replayed).toBe(true);
     await s.stack.accessPool.query(`UPDATE access.permission_grant SET active = false
       WHERE scope_id = $1 AND action = 'realm.roles.manage'`, [s.scope]);
     const replay = await s.call('POST', '/management', { actingSubject: s.owner.actor });
@@ -238,7 +240,7 @@ test('Realm role complexity: an oversized impact fails without applying a partia
     const input = await s.command({ kind: 'role', roleId, name: 'Large team', permissions: ['governance.moderate'] });
     expect((await s.call('POST', '/role-impact', input)).status).toBe(422);
     expect((await s.call('POST', '/role-changes', { ...input, impactDigest: 'a'.repeat(64) })).status).toBe(422);
-    expect((await s.roles()).generation).toBe('1');
+    expect((await s.roles()).generation).toBe('2');
     expect((await s.stack.accessPool.query(`SELECT count(*)::int AS n FROM access.realm_admin_role_grant
       WHERE realm = $1`, [s.realm])).rows[0].n).toBe(0);
   } finally { await s.stack.stop(); }
@@ -254,7 +256,7 @@ test('Realm queue: escalation is scoped, receipted, visible in queue and audit, 
     [id, s.scope, s.realm, `https://rezics.com/id/${randomUUID()}`]);
     const before = await s.call('GET', `/moderation${s.actorQuery()}&limit=1`);
     expect(before.status).toBe(200);
-    const input = { actingSubject: s.owner.actor, expectedGeneration: '0', reason: 'Owner review required',
+    const input = { actingSubject: s.owner.actor, expectedGeneration: '1', reason: 'Owner review required',
       itemKind: 'report', itemId: cases[0], expectedItemGeneration: '0' };
     const key = randomUUID();
     const escalated = await s.call('POST', '/escalations', input, s.owner.token, key);
@@ -266,22 +268,26 @@ test('Realm queue: escalation is scoped, receipted, visible in queue and audit, 
     expect((await s.call('GET', `/moderation${s.actorQuery()}&limit=1&cursor=${String(before.body.nextCursor)}`)).status).toBe(409);
     const audit = await s.call('GET', `/audit${s.actorQuery()}&kind=realm_management`);
     expect(audit.status).toBe(200);
-    expect(audit.body.items).toMatchObject([{ id: escalated.body.receiptId, reason: input.reason }]);
-    expect((await s.call('POST', '/escalations', { ...input, expectedGeneration: '1', itemId: randomUUID() })).status).toBe(409);
-    expect((await s.call('POST', '/escalations', { ...input, expectedGeneration: '1', itemKind: 'submission' })).status).toBe(403);
+    expect(audit.body.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: escalated.body.receiptId, reason: input.reason })]));
+    expect((await s.call('POST', '/escalations', { ...input, expectedGeneration: '0', itemId: randomUUID() })).status).toBe(409);
+    const generation = (await s.roles()).generation;
+    // Founder enrollment grants review.decide, so a report id sent as a submission is a missing queue item.
+    expect((await s.call('POST', '/escalations', { ...input, expectedGeneration: generation, itemKind: 'submission' })).status).toBe(409);
     const count = await s.stack.accessPool.query('SELECT count(*)::int AS n FROM access.realm_admin_receipt WHERE realm = $1', [s.realm]);
-    expect(count.rows[0].n).toBe(1);
+    expect(count.rows[0].n).toBe(2);
   } finally { await s.stack.stop(); }
 }, 120_000);
 
 test('Realm members: recipient consent, dated roster, removal, temporary bans and immutable audit', async () => {
   const s = await setup();
   try {
-    await s.stack.accessPool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'institution')`, [s.realm]);
-    await s.stack.accessPool.query(`INSERT INTO access.membership_policy
-      (kind,owner_subject,revision,terms_revision) VALUES ('realm',$1,1,'terms-v1')`, [s.realm]);
+    await s.stack.accessPool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'institution')
+      ON CONFLICT DO NOTHING`, [s.realm]);
+    await s.stack.accessPool.query(`UPDATE access.membership_policy
+      SET revision = 1, terms_revision = 'terms-v1' WHERE kind = 'realm' AND owner_subject = $1`, [s.realm]);
     await s.moderator.grant('work:create:root', 'access.membership.consent');
-    const input = { actingSubject: s.owner.actor, member: s.moderator.actor, expectedGeneration: '0',
+    const input = { actingSubject: s.owner.actor, member: s.moderator.actor, expectedGeneration: '1',
       expectedMembershipGeneration: '0', reason: 'Join the community', action: 'add',
       consent: randomUUID(), durationSeconds: null };
     expect((await s.call('POST', '/members', input)).status).toBe(403);
@@ -301,7 +307,7 @@ test('Realm members: recipient consent, dated roster, removal, temporary bans an
     const pending = await s.stack.access.register({ principal: s.moderator.principal,
       actingSubject: s.moderator.actor, action: 'reply.place', scope: `reply:place:${s.realm}`,
       idempotencyKey: randomUUID(), requestDigest: 'b'.repeat(64) });
-    const ban = { ...input, action: 'ban', expectedGeneration: '1', expectedMembershipGeneration: '1',
+    const ban = { ...input, action: 'ban', expectedGeneration: '2', expectedMembershipGeneration: '1',
       consent: null, durationSeconds: 60, reason: 'Repeated rule violations' };
     const banned = await s.call('POST', '/members', ban);
     expect(banned.status).toBe(201);
@@ -315,15 +321,15 @@ test('Realm members: recipient consent, dated roster, removal, temporary bans an
         WHERE kind = 'realm' AND owner_subject = $1`, [s.realm]);
       expect(await realmMemberProof(client, s.realm, s.moderator.principalId, s.moderator.actor)).toStartWith('agent:');
     } finally { client.release(); }
-    expect((await s.call('POST', '/members', { ...ban, durationSeconds: null, expectedGeneration: '2' })).status).toBe(201);
+    expect((await s.call('POST', '/members', { ...ban, durationSeconds: null, expectedGeneration: '3' })).status).toBe(201);
     const unbanned = await s.call('POST', '/members', { ...ban, action: 'unban', durationSeconds: null,
-      expectedGeneration: '3' });
+      expectedGeneration: '4' });
     expect(unbanned.status).toBe(201);
     expect(unbanned.body.banned).toBe(false);
     expect((await s.call('POST', '/members', { ...ban, action: 'remove', durationSeconds: null,
-      expectedGeneration: '4' })).status).toBe(201);
+      expectedGeneration: '5' })).status).toBe(201);
     const receipts = await s.stack.accessPool.query(`SELECT count(*)::int AS n FROM access.realm_admin_receipt WHERE realm = $1`, [s.realm]);
-    expect(receipts.rows[0].n).toBe(5);
+    expect(receipts.rows[0].n).toBe(6);
     await expect(s.stack.accessPool.query(`DELETE FROM access.realm_admin_receipt WHERE realm = $1`, [s.realm]))
       .rejects.toMatchObject({ code: '23514' });
   } finally { await s.stack.stop(); }
