@@ -25,10 +25,12 @@ import org.apache.jena.vocabulary.RDF;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.junit.Test;
 import org.junit.FixMethodOrder;
+import org.junit.experimental.categories.Category;
 import org.junit.runners.MethodSorters;
 
 /** Account/SQL/custody-issued bytes cross the actual command and HTTP branches.
  * The fixture is emitted by the owned SQL acceptance test, never signed here. */
+@Category(ExternalFixture.class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class TitleCandidateCommandTest {
     private static final String TOKEN = "2".repeat(64);

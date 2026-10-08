@@ -126,7 +126,8 @@ export class S3ImmutableObjects implements ImmutableObjects {
     const key = this.key(digest);
     let response: Response;
     try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`,
-      { method: 'GET', signal: signal ?? this.readSignal?.() }); }
+      { method: 'GET', signal: signal ?? this.readSignal?.(),
+        ...(maxBytes === undefined ? {} : { headers: { range: `bytes=0-${maxBytes}` } }) }); }
     catch { throw new ObjectUnavailable('committed immutable object is unavailable'); }
     if (!response.ok) throw new ObjectUnavailable(`committed immutable object is unavailable (${response.status})`);
     let bytes: Uint8Array;

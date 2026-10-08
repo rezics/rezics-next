@@ -67,7 +67,24 @@ export interface CommandEnvelope {
   validations: CommandValidation[];
   deadlineMs: number;
   titleAdmission?: { payload: string; signature: string };
+  titleCandidate?: never;
 }
+
+/** Private retained title acceptance; it never dispatches the ordinary SPARQL command. */
+export type TitleCandidateCommandEnvelope = Omit<CommandEnvelope,
+  'update' | 'validations' | 'deadlineMs' | 'titleAdmission' | 'titleCandidate'> & {
+  update: '';
+  validations: [];
+  deadlineMs: 10000;
+  titleAdmission: { payload: string; signature: string };
+  titleCandidate: { frame: string; custodySha256: string; mode: 'accept' | 'lookup' };
+};
+export type InternalCommandEnvelope = CommandEnvelope | TitleCandidateCommandEnvelope;
+export type TitleCandidateResult =
+  | { status: 'accepted' | 'historical'; receipt: string; digest: string; record: string }
+  | { status: 'terminal'; receipt: string; digest: string; outcome: 'succeeded' | 'cancelled' }
+  | { status: 'conflict'; reason?: string }
+  | { status: 'deadline' };
 
 export interface CommandPosition { datasetId: string; dataEpoch: string; sequence: string }
 export interface TemplateIndexKey { graph: string; predicate: string; anchor: string; type: string }
@@ -440,6 +457,88 @@ export class FusekiClient {
     if (result.status === 'committed' && result.templateIndex && this.templateIndexWriter) {
       try { await this.templateIndexWriter(result.templateIndex); }
       catch (error) { throw new CommandOutcomeUnknown('Graph committed; template index needs receipt replay', { cause:error }); }
+    }
+    return result;
+  }
+
+  /** Resolve a lost acceptance reply against its exact retained record, never terminal absence. */
+  async commandTitleCandidate(envelope: TitleCandidateCommandEnvelope): Promise<TitleCandidateResult> {
+    try { return await this.dispatchTitleCandidate(envelope); }
+    catch (error) {
+      if (!(error instanceof CommandOutcomeUnknown)) throw error;
+      return this.dispatchTitleCandidate({ ...envelope,
+        titleCandidate: { ...envelope.titleCandidate, mode: 'lookup' } });
+    }
+  }
+
+  private async dispatchTitleCandidate(envelope: TitleCandidateCommandEnvelope): Promise<TitleCandidateResult> {
+    safeIri(envelope.receipt);
+    const candidate = envelope.titleCandidate, proof = envelope.titleAdmission;
+    const hasKeys = (value: object, keys: readonly string[]): boolean =>
+      Object.keys(value).length === keys.length && keys.every(key => Object.hasOwn(value, key));
+    if (!hasKeys(envelope, ['receipt', 'digest', 'update', 'validations', 'deadlineMs', 'titleCandidate', 'titleAdmission'])
+      || envelope.update !== '' || !Array.isArray(envelope.validations) || envelope.validations.length !== 0
+      || envelope.deadlineMs !== 10000 || !/^[0-9a-f]{64}$/.test(envelope.digest)
+      || !candidate || !hasKeys(candidate, ['frame', 'custodySha256', 'mode'])
+      || typeof candidate.frame !== 'string' || Buffer.byteLength(candidate.frame) > 32768
+      || !/^[0-9a-f]{64}$/.test(candidate.custodySha256) || !['accept', 'lookup'].includes(candidate.mode)
+      || !proof || !hasKeys(proof, ['payload', 'signature']) || typeof proof.payload !== 'string'
+      || Buffer.byteLength(proof.payload) > 8192 || !/^[0-9a-f]{64}$/.test(proof.signature)) {
+      throw new Error('invalid Fuseki title candidate envelope');
+    }
+    if (!this.commandCapability?.match(/^[0-9a-f]{64}$/)) {
+      throw new Error('Fuseki admitted command capability is required');
+    }
+    let response: Response;
+    try {
+      response = await fetch(new URL('command', this.baseUrl), {
+        method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json',
+          authorization: `Bearer ${this.commandCapability}` },
+        body: JSON.stringify(envelope), signal: AbortSignal.timeout(envelope.deadlineMs + 2_000),
+      });
+    } catch (error) {
+      throw new CommandOutcomeUnknown('Fuseki title acceptance transport outcome unknown', { cause: error });
+    }
+    if (response.status === 403) throw new CommandForbidden('Fuseki title acceptance capability rejected');
+    if (response.status === 400) {
+      const rejected = await boundedJson<{ message?: string }>(response, 4096);
+      throw new Error(`Fuseki title acceptance rejected: ${rejected.message ?? 'bad request'}`);
+    }
+    if (!response.ok) throw new CommandOutcomeUnknown(`Fuseki title acceptance returned ${response.status}`);
+    let result: TitleCandidateResult;
+    try { result = await boundedJson<TitleCandidateResult>(response, 262144); }
+    catch (error) {
+      throw new CommandOutcomeUnknown('Fuseki title acceptance response incomplete', { cause: error });
+    }
+    if (!result || typeof result !== 'object' || Object.hasOwn(result, 'changed')) {
+      throw new CommandOutcomeUnknown('Fuseki title acceptance response malformed');
+    }
+    switch (result.status) {
+      case 'accepted':
+      case 'historical':
+        if (!hasKeys(result, ['status', 'receipt', 'digest', 'record']) || result.receipt !== envelope.receipt
+          || result.digest !== envelope.digest || typeof result.record !== 'string'
+          || result.record.length > 98304 || Buffer.byteLength(result.record) > 196608) {
+          throw new CommandOutcomeUnknown('Fuseki retained title acceptance differs');
+        }
+        break;
+      case 'terminal':
+        if (!hasKeys(result, ['status', 'receipt', 'digest', 'outcome']) || result.receipt !== envelope.receipt
+          || result.digest !== envelope.digest || !['succeeded', 'cancelled'].includes(result.outcome)) {
+          throw new CommandOutcomeUnknown('Fuseki title terminal receipt differs');
+        }
+        break;
+      case 'conflict':
+        if ((!hasKeys(result, ['status']) && !hasKeys(result, ['status', 'reason']))
+          || (result.reason !== undefined && typeof result.reason !== 'string')) {
+          throw new CommandOutcomeUnknown('Fuseki title acceptance conflict malformed');
+        }
+        break;
+      case 'deadline':
+        if (!hasKeys(result, ['status'])) throw new CommandOutcomeUnknown('Fuseki title acceptance deadline malformed');
+        break;
+      default:
+        throw new CommandOutcomeUnknown('Fuseki title acceptance status malformed');
     }
     return result;
   }

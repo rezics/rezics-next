@@ -1,19 +1,24 @@
+import { readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import type { PoolClient } from 'pg';
+import type { VerifiedTitleCandidate } from '../outbox/receipt-custody.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry, type RegisteredAdmission } from '../access/admission.ts';
-import type { TitleAction } from '../access/title-admission.ts';
-import { CommandRejected, type CommandEnvelope } from '../../infrastructure/fuseki.ts';
+import { issueTitleCandidateAdmission, issueHistoricalTitleCandidateAdmission, type TitleAction } from '../access/title-admission.ts';
+import { CommandRejected, type CommandEnvelope, type CommandValidation, type TitleCandidateResult } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit, metadataWorkRequestDigest,
   normalizeWorkSemanticTypes, prepareComponent, prepareWorkComponent, workMetadataValidations,
   IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
 import { PendingAdmittedWork } from './create-admitted.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
-import { readWorkPayloadForRevision, RevisionCorrupt } from './history.ts';
+import { readWorkPayloadForRevision, readWorkComponentState, RevisionCorrupt } from './history.ts';
 import { sameScalar, scalarFromBinding, SCALAR_PREDICATE } from './scalar-value.ts';
 import { validEditorialControlBasis, type EditorialControlBasis } from '../protection/field-control.ts';
 import { catalogueNameProjection } from '../search/names.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
+import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 
 export const TITLE_PROFILE_V1 = 'https://rezics.com/definition/work-title-control-v1';
 export const TITLE_PROFILE = 'https://rezics.com/definition/work-title-control-v2';
@@ -47,6 +52,469 @@ export class TitleControlConflict extends Error {
 export class TitleControlInvalid extends Error {}
 export class TitleControlUnavailable extends Error {}
 export const titleControlReceiptIri = (admission: string) => `urn:rezics:receipt:${hash(`${admission}\0edit-metadata-work`)}`;
+
+const CANDIDATE_NATIVE = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+export interface TitleCandidateFrame {
+  format: 'rezics-human-title-candidate-frame-v1';
+  receipt: string;
+  digest: string;
+  admission: {
+    id: string;
+    action: 'work.edit';
+    scope: string;
+    authorityEpoch: string;
+    expiresAt: string;
+  };
+  actor: { principalId: string; actingSubject: string | null };
+  intent: TitleControlIntent & { action: 'work.edit'; language: string; source: null };
+  planned: { revision: string; control: string; operation: string };
+  originalManifest: string;
+  workManifest: string;
+  controlManifest: string;
+  mainVersion: string;
+  dataEpoch: string;
+  routingEpoch: string;
+  deadlineMs: 10000;
+  validations: (CommandValidation & { binding: Record<string, string> })[];
+}
+const candidateKeys = (value: unknown, keys: readonly string[]): Record<string, unknown> => {
+  if (
+    !value ||
+    typeof value !== 'object' ||
+    Array.isArray(value) ||
+    Object.keys(value).length !== keys.length ||
+    keys.some((key) => !Object.hasOwn(value, key))
+  )
+    throw new TitleControlInvalid('Title candidate fields differ from the closed frame');
+  return value as Record<string, unknown>;
+};
+const candidateString = (value: unknown, maximum = 256): value is string =>
+  typeof value === 'string' &&
+  value.length > 0 &&
+  value.length <= maximum &&
+  !/[\u0000-\u001f\u007f]/u.test(value);
+const candidateUuid = (value: unknown): value is string =>
+  typeof value === 'string' &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
+const candidateCanonical = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(candidateCanonical);
+  if (value && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, child]) => [key, candidateCanonical(child)]),
+    );
+  return value;
+};
+/** One private title frame; no caller recipe, readiness, actor assertion or update language. */
+export function checkedTitleCandidateFrame(value: unknown): TitleCandidateFrame {
+  const frame = candidateKeys(value, [
+    'format',
+    'receipt',
+    'digest',
+    'admission',
+    'actor',
+    'intent',
+    'planned',
+    'originalManifest',
+    'workManifest',
+    'controlManifest',
+    'mainVersion',
+    'dataEpoch',
+    'routingEpoch',
+    'deadlineMs',
+    'validations',
+  ]);
+  const admission = candidateKeys(frame.admission, [
+    'id',
+    'action',
+    'scope',
+    'authorityEpoch',
+    'expiresAt',
+  ]);
+  const actor = candidateKeys(frame.actor, ['principalId', 'actingSubject']);
+  const intent = candidateKeys(frame.intent, [
+    'work',
+    'expectedHead',
+    'basis',
+    'action',
+    'title',
+    'language',
+    'source',
+  ]);
+  const basis = candidateKeys(intent.basis, ['head', 'epoch', 'protection']);
+  const planned = candidateKeys(frame.planned, ['revision', 'control', 'operation']);
+  if (
+    frame.format !== 'rezics-human-title-candidate-frame-v1' ||
+    frame.deadlineMs !== 10000 ||
+    !candidateUuid(admission.id) ||
+    admission.action !== 'work.edit' ||
+    !candidateString(admission.authorityEpoch, 19) ||
+    !/^(0|[1-9][0-9]{0,18})$/.test(admission.authorityEpoch) ||
+    !candidateString(admission.expiresAt, 40) ||
+    !Number.isFinite(Date.parse(admission.expiresAt)) ||
+    new Date(admission.expiresAt).toISOString() !== admission.expiresAt ||
+    !candidateUuid(actor.principalId) ||
+    (actor.actingSubject !== null &&
+      (!candidateString(actor.actingSubject) || !CANDIDATE_NATIVE.test(actor.actingSubject))) ||
+    intent.action !== 'work.edit' ||
+    intent.source !== null ||
+    !candidateString(intent.language, 35) ||
+    canonicalLanguage(intent.language) !== intent.language ||
+    !candidateString(intent.title, 200) ||
+    !candidateString(intent.work) ||
+    !CANDIDATE_NATIVE.test(intent.work) ||
+    !candidateString(intent.expectedHead) ||
+    !CANDIDATE_NATIVE.test(intent.expectedHead) ||
+    admission.scope !== `work:edit:${intent.work}` ||
+    frame.receipt !== titleControlReceiptIri(admission.id) ||
+    !validEditorialControlBasis(basis as unknown as TitleControlBasis) ||
+    (basis.head !== null && (!candidateString(basis.head) || !CANDIDATE_NATIVE.test(basis.head))) ||
+    (basis.protection !== null &&
+      (!candidateString(basis.protection) || !CANDIDATE_NATIVE.test(basis.protection))) ||
+    !candidateString(frame.mainVersion) ||
+    !CANDIDATE_NATIVE.test(frame.mainVersion) ||
+    !candidateString(frame.dataEpoch, 128) ||
+    !candidateString(frame.routingEpoch, 128)
+  )
+    throw new TitleControlInvalid('Title candidate is not one exact human v2 title intent');
+  for (const name of ['revision', 'control', 'operation'])
+    if (!candidateString(planned[name]) || !CANDIDATE_NATIVE.test(planned[name] as string))
+      throw new TitleControlInvalid('Title candidate identities differ');
+  if (
+    new Set([
+      planned.revision,
+      planned.control,
+      planned.operation,
+      intent.work,
+      intent.expectedHead,
+    ]).size !== 5 ||
+    [planned.revision, planned.control, planned.operation].some(value => [basis.head, basis.protection, frame.mainVersion].includes(value))
+  )
+    throw new TitleControlInvalid('Title candidate planned identities are not fresh and distinct');
+  for (const name of ['originalManifest', 'workManifest', 'controlManifest'])
+    if (
+      typeof frame[name] !== 'string' ||
+      !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(frame[name] as string)
+    )
+      throw new TitleControlInvalid('Title candidate immutable manifests differ');
+  if (frame.digest !== titleControlDigest(intent as unknown as TitleControlIntent))
+    throw new TitleControlInvalid('Title candidate intent digest differs');
+  if (!Array.isArray(frame.validations) || frame.validations.length !== 3)
+    throw new TitleControlInvalid('Title candidate validation closure differs');
+  const expected = [
+    [
+      'work-metadata-v1',
+      profileRegistry['work-metadata-v1'].shapes[0],
+      intent.work,
+      [GRAPHS.current],
+    ],
+    [
+      'work-metadata-v1',
+      profileRegistry['work-metadata-v1'].shapes[1],
+      frame.mainVersion,
+      [GRAPHS.current],
+    ],
+    [
+      'work-title-control-v2',
+      `${TITLE_PROFILE}/control-shape`,
+      planned.control,
+      [GRAPHS.current, GRAPHS.revisions],
+    ],
+  ] as const;
+  for (let index = 0; index < expected.length; index++) {
+    const entry = candidateKeys(frame.validations[index], [
+      'profile',
+      'sha256',
+      'shape',
+      'focus',
+      'graphs',
+      'binding',
+    ]);
+    const [profile, shape, focus, graphs] = expected[index]!;
+    if (
+      entry.profile !== profile ||
+      entry.sha256 !== profileRegistry[profile].sha256 ||
+      entry.shape !== shape ||
+      JSON.stringify(entry.focus) !== JSON.stringify([focus]) ||
+      JSON.stringify(entry.graphs) !== JSON.stringify(graphs) ||
+      Object.keys(candidateKeys(entry.binding, [])).length !== 0
+    )
+      throw new TitleControlInvalid('Title candidate pinned validation differs');
+  }
+  if (Buffer.byteLength(JSON.stringify(candidateCanonical(frame)), 'utf8') > 32768)
+    throw new TitleControlInvalid('Title candidate exceeds its fixed frame byte bound');
+  return structuredClone(frame) as unknown as TitleCandidateFrame;
+}
+export function canonicalTitleCandidateFrame(value: TitleCandidateFrame): string {
+  return JSON.stringify(candidateCanonical(checkedTitleCandidateFrame(value)));
+}
+
+/** Prepares exact immutable title bytes without constructing or querying the legacy PUBLIC update. */
+export async function prepareHumanTitleCandidate(
+  env: WorkActivationEnvironment,
+  admission: RegisteredAdmission,
+  unchecked: TitleControlIntent,
+): Promise<TitleCandidateFrame> {
+  if (!env.workObjects || !env.receiptCustody)
+    throw new TitleControlUnavailable('Title acceptance custody is unavailable');
+  const intent = structuredClone(unchecked);
+  candidateKeys(intent, ['work', 'expectedHead', 'basis', 'action', 'title', 'language', 'source']);
+  candidateKeys(intent.basis, ['head', 'epoch', 'protection']);
+  const digest = titleControlDigest(intent);
+  if (
+    intent.action !== 'work.edit' ||
+    intent.source !== null ||
+    !intent.language ||
+    canonicalLanguage(intent.language) !== intent.language ||
+    admission.action !== 'work.edit' ||
+    admission.scope !== `work:edit:${intent.work}` ||
+    admission.requestDigest !== digest ||
+    admission.state !== 'claimed'
+  )
+    throw new TitleControlInvalid(
+      'Only claimed explicit-language human title intent can be prepared',
+    );
+  const rows =
+    (
+      await env.fuseki.query(
+        `PREFIX rv: <${RV}> SELECT ?main ?type ?scalar ?manifest WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ; rv:mainVersion ?main ; a ?type .
+      OPTIONAL { ${iri(intent.work)} <${SCALAR_PREDICATE}> ?scalar } }
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(intent.expectedHead)} a rv:RevisionAnchor ; rv:component ${iri(intent.work)} ;
+      rv:manifest ?manifest ; rv:modelRevision ${iri(PROFILE)} ; rv:shapeRevision ${iri(PROFILE)} . }
+  } LIMIT 10`,
+        8192,
+      )
+    ).results?.bindings ?? [];
+  const main = rows[0]?.main?.value,
+    manifest = rows[0]?.manifest?.value;
+  if (
+    !main ||
+    !manifest ||
+    rows.length === 10 ||
+    rows.some((row) => row.main?.value !== main || row.manifest?.value !== manifest)
+  )
+    throw new TitleControlUnavailable('Title candidate Work basis is unavailable');
+  const objects = env.workObjects;
+  const boundedEnv = {
+    ...env,
+    workObjects: {
+      put: (bytes: Uint8Array) => objects.put(bytes),
+      get: async (digest: string) => {
+        // Acceptance requires the actual selected immutable store; migration fallback cannot supply custody truth.
+        try {
+          const bytes = await objects.get(digest, 65_536);
+          if (bytes.byteLength > 65_536)
+            throw new RevisionCorrupt(
+              'Title candidate Work evidence exceeds its custody byte bound',
+            );
+          return bytes;
+        } catch (error) {
+          if (error instanceof RevisionCorrupt) throw error;
+          throw new RevisionCorrupt(
+            'Title candidate selected Work evidence is unavailable or corrupt',
+          );
+        }
+      },
+    },
+  };
+  const prior = await readWorkPayloadForRevision(boundedEnv, manifest, intent.work);
+  const raw = await readWorkComponentState(boundedEnv, manifest, intent.work);
+  const types = normalizeWorkSemanticTypes(
+    rows.map((row) => row.type!.value).filter((type) => type !== 'https://schema.org/CreativeWork'),
+    true,
+  );
+  const scalars = rows.map((row) => row.scalar).filter((row) => row !== undefined);
+  if (
+    new Set(scalars.map((row) => JSON.stringify(row))).size > 1 ||
+    prior.mainVersion !== main ||
+    !sameScalar(prior.scalarValue, scalarFromBinding(scalars[0])) ||
+    JSON.stringify(types) !== JSON.stringify(normalizeWorkSemanticTypes(prior.semanticTypes, true))
+  )
+    throw new RevisionCorrupt('Title candidate retained Work state differs from its graph basis');
+  const planned = {
+    revision: ID + Bun.randomUUIDv7(),
+    control: ID + Bun.randomUUIDv7(),
+    operation: ID + Bun.randomUUIDv7(),
+  };
+  const workManifest = await prepareWorkComponent(
+    env.workObjects,
+    intent.work,
+    { ...raw, title: intent.title, language: intent.language },
+    PROFILE,
+  );
+  const controlManifest = await prepareWorkComponent(
+    env.workObjects,
+    intent.work,
+    {
+      intent,
+      language: intent.language,
+      control: planned.control,
+      revision: planned.revision,
+      operation: planned.operation,
+    },
+    TITLE_PROFILE,
+  );
+  const validations = [
+    ...(await workMetadataValidations(env, intent.work, main)),
+    ...(await profileValidations(env.fuseki, 'work-title-control-v2', [
+      {
+        shape: `${TITLE_PROFILE}/control-shape`,
+        focus: [planned.control],
+        graphs: [GRAPHS.current, GRAPHS.revisions],
+      },
+    ])),
+  ];
+  // Retain just this fixed two-profile closure; acceptance never enumerates the model inventory.
+  for (const profile of ['work-metadata-v1', 'work-title-control-v2'] as const) {
+    const pinned = profileRegistry[profile];
+    const file = join(import.meta.dir, '../../../../../generated/model', pinned.file);
+    if (statSync(file).size > 4_194_304)
+      throw new RevisionCorrupt('Title candidate shape exceeds its custody byte bound');
+    const bytes = readFileSync(file);
+    if (hash(bytes) !== pinned.sha256 || (await env.workObjects.put(bytes)) !== pinned.sha256)
+      throw new RevisionCorrupt('Title candidate shape differs from its reviewed pin');
+  }
+  return checkedTitleCandidateFrame({
+    format: 'rezics-human-title-candidate-frame-v1',
+    receipt: titleControlReceiptIri(admission.id),
+    digest,
+    admission: {
+      id: admission.id,
+      action: 'work.edit',
+      scope: admission.scope,
+      authorityEpoch: admission.authorityEpoch,
+      expiresAt: admission.expiresAt,
+    },
+    actor: { principalId: admission.principalId, actingSubject: admission.actingSubject ?? null },
+    intent,
+    planned,
+    originalManifest: manifest,
+    workManifest: `urn:rezics:sha256:${workManifest}`,
+    controlManifest: `urn:rezics:sha256:${controlManifest}`,
+    mainVersion: main,
+    dataEpoch: env.lineage.dataEpoch,
+    routingEpoch: env.lineage.routingEpoch,
+    deadlineMs: 10000,
+    validations: validations.map((entry) => ({ ...entry, binding: entry.binding ?? {} })),
+  });
+}
+
+/** Private acceptance only. The public title mutation continues to use its existing terminal path. */
+export async function acceptHumanTitleCandidate(
+  env: WorkActivationEnvironment,
+  account: Pick<AccountAssertionVerifier, 'verify'>,
+  access: Pick<AccessAdmissionRegistry, 'register' | 'claim'>,
+  request: Request,
+  input: TitleControlIntent & { actingSubject: string; idempotencyKey: string },
+): Promise<TitleCandidateResult> {
+  candidateKeys(input, [
+    'work',
+    'expectedHead',
+    'basis',
+    'action',
+    'title',
+    'language',
+    'source',
+    'actingSubject',
+    'idempotencyKey',
+  ]);
+  const { work, expectedHead, basis, action, title, language, source } = input;
+  const intent: TitleControlIntent = { work, expectedHead, basis, action, title, language, source };
+  candidateKeys(basis, ['head', 'epoch', 'protection']);
+  if (
+    action !== 'work.edit' ||
+    source !== null ||
+    typeof language !== 'string' ||
+    canonicalLanguage(language) !== language
+  )
+    throw new TitleControlInvalid(
+      'Private title acceptance requires one explicit canonical language',
+    );
+  const digest = titleControlDigest(intent);
+  if (!env.receiptCustody || !env.workObjects)
+    throw new TitleControlUnavailable('Title acceptance custody is unavailable');
+  const principal = await account.verify(request, ['work:edit']);
+  let admission = await access.register({
+    principal,
+    actingSubject: input.actingSubject,
+    action,
+    scope: `work:edit:${work}`,
+    idempotencyKey: input.idempotencyKey,
+    requestDigest: digest,
+  });
+  let fresh = false;
+  if (admission.dispatchEligible && admission.state !== 'sealed') {
+    try {
+      admission = await access.claim(admission.id, digest, principal);
+      fresh = true;
+    } catch (error) {
+      if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error;
+    }
+  }
+  const dispatch = async (
+    candidate: VerifiedTitleCandidate,
+    client: PoolClient,
+  ): Promise<TitleCandidateResult> => {
+    const retained = candidate.frame;
+    // Compare request and the actual registered SQL identity before either fresh dispatch or historical lookup.
+    if (
+      retained.digest !== digest ||
+      titleControlDigest(retained.intent) !== digest ||
+      retained.admission.id !== admission.id ||
+      retained.admission.scope !== admission.scope ||
+      retained.admission.authorityEpoch !== admission.authorityEpoch ||
+      retained.admission.expiresAt !== admission.expiresAt ||
+      retained.actor.principalId !== admission.principalId ||
+      retained.actor.actingSubject !== (admission.actingSubject ?? null)
+    )
+      throw new TitleControlConflict(
+        'Retained title acceptance differs from the original admission',
+      );
+    let mode: 'accept' | 'lookup' = fresh ? 'accept' : 'lookup';
+    let proof;
+    try {
+      proof = fresh
+        ? await issueTitleCandidateAdmission(client, candidate, env.titleAdmissionKey)
+        : await issueHistoricalTitleCandidateAdmission(client, candidate, env.titleAdmissionKey);
+    } catch (error) {
+      if (!fresh || !(error instanceof AdmissionDenied || error instanceof AdmissionExpired))
+        throw error;
+      // Expiry during preparation permits only the original authenticated history; lookup creates nothing.
+      mode = 'lookup';
+      proof = await issueHistoricalTitleCandidateAdmission(
+        client,
+        candidate,
+        env.titleAdmissionKey,
+      );
+    }
+    return env.fuseki.commandTitleCandidate({
+      receipt: retained.receipt,
+      digest,
+      update: '',
+      validations: [],
+      deadlineMs: 10000,
+      titleCandidate: { frame: candidate.frameJson, custodySha256: candidate.custodySha256, mode },
+      titleAdmission: proof,
+    });
+  };
+  const receipt = titleControlReceiptIri(admission.id);
+  const retained = await env.receiptCustody.verifyTitleCandidate(receipt, dispatch);
+  if (retained) return retained;
+  if (!fresh) throw new PendingAdmittedWork(admission.id, 'work-edit');
+  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  const frame = await prepareHumanTitleCandidate(env, admission, intent);
+  try {
+    return await env.receiptCustody.prepareTitleCandidate(frame, dispatch);
+  } catch (error) {
+    if (!(error instanceof CommandRejected) || error.result.status !== 'conflict') throw error;
+    // A concurrent identical request may have retained its planned identities first. Read those exact bytes once.
+    const raced = await env.receiptCustody.verifyTitleCandidate(receipt, dispatch);
+    if (raced) return raced;
+    throw error;
+  }
+}
 
 export function titleControlDigest(intent: TitleControlIntent): string {
   if (!NATIVE.test(intent.work) || !NATIVE.test(intent.expectedHead)

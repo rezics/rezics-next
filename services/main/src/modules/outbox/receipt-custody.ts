@@ -8,6 +8,8 @@ import { checkedEditionV2, checkedMetadataState, editionV2Digest, metadataDigest
   type MetadataEditionState, type MetadataEditionStateV2 } from '../work/metadata-schema.ts';
 import type { CustodiedOutbox, CustodiedOutboxSource, MainOutboxBatch } from './relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from './relay-position.ts';
+import { checkedTitleCandidateFrame, canonicalTitleCandidateFrame,
+  type TitleCandidateFrame } from '../work/title-control.ts';
 
 const RV = 'https://rezics.com/vocab/';
 const RECEIPTS = 'urn:rezics:graph:receipts';
@@ -60,6 +62,8 @@ export interface CustodyRow {
   reconciled: boolean; retired: boolean;
 }
 export interface ReceiptCustodySession {
+  /** The already borrowed receipt-lock client; issuing must never check out another one. */
+  readonly client?: PoolClient;
   read(): Promise<CustodyRow | null>;
   prepare(row: CustodyRow): Promise<void>;
   reconcile(terminal: CustodiedReceipt, outbox: Record<string, unknown>): Promise<void>;
@@ -98,6 +102,7 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
         }
       };
       return await operation({
+        client,
         read: async () => {
           const row = (await client.query<{ receipt: string; request_digest: string; payload_sha256: string;
             payload: Buffer; revision: string; terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null;
@@ -142,12 +147,169 @@ const canonicalJson = (value: unknown): string => JSON.stringify(value, (_key, m
   member && typeof member === 'object' && !Array.isArray(member)
     ? Object.fromEntries(Object.entries(member).sort(([a], [b]) => a.localeCompare(b))) : member);
 
+export interface PreparedTitleCandidate {
+  format: 'rezics-human-title-candidate-custody-v1';
+  frame: TitleCandidateFrame;
+}
+declare const verifiedTitleCandidate: unique symbol;
+export interface VerifiedTitleCandidate {
+  readonly [verifiedTitleCandidate]: true;
+  readonly frame: TitleCandidateFrame;
+  readonly frameJson: string;
+  readonly frameSha256: string;
+  readonly custodySha256: string;
+}
+const verifiedTitleBindings = new WeakMap<VerifiedTitleCandidate, {
+  client: PoolClient; payload: Buffer;
+}>();
+
+/** Runtime custody provenance, including the held SQL session, cannot be supplied by a cast. */
+export function titleCandidateIssuerBindings(value: VerifiedTitleCandidate, client: PoolClient): {
+  frame: TitleCandidateFrame; frameJson: string; frameSha256: string; custodySha256: string; payload: Buffer;
+} {
+  const binding = verifiedTitleBindings.get(value);
+  if (!binding || binding.client !== client) throw new ObjectIntegrityError('Title custody is not verified on this receipt session');
+  return { frame: structuredClone(value.frame), frameJson: value.frameJson,
+    frameSha256: value.frameSha256, custodySha256: value.custodySha256, payload: Buffer.from(binding.payload) };
+}
+
+function freezeTitleValue<T>(value: T): T {
+  if (value && typeof value === 'object') {
+    for (const child of Object.values(value)) freezeTitleValue(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+function exactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+    && Object.keys(value).sort().join('\0') === [...keys].sort().join('\0');
+}
+function titleCustodyPayload(row: CustodyRow): PreparedTitleCandidate {
+  if (row.payload.byteLength > CUSTODY_RECOVERY_COST.stateBytes || sha256(row.payload) !== row.payloadSha256) {
+    throw new ObjectIntegrityError('Title custody bytes differ');
+  }
+  let value: unknown;
+  try { value = JSON.parse(Buffer.from(row.payload).toString('utf8')); }
+  catch { throw new ObjectIntegrityError('Title custody is not JSON'); }
+  if (!exactKeys(value, ['format', 'frame']) || value.format !== 'rezics-human-title-candidate-custody-v1') {
+    throw new ObjectIntegrityError('Title custody discriminant differs');
+  }
+  const frame = checkedTitleCandidateFrame(value.frame);
+  if (canonicalJson({ format: value.format, frame }) !== Buffer.from(row.payload).toString('utf8')
+    || frame.receipt !== row.receipt || frame.digest !== row.requestDigest || frame.planned.revision !== row.revision
+    || row.terminal !== null || row.outbox !== null || row.reconciled || row.retired) {
+    throw new ObjectIntegrityError('Title custody binding differs');
+  }
+  return { format: 'rezics-human-title-candidate-custody-v1', frame };
+}
+
 /** Extends the existing receipt path; the graph proof is never the only copy of command intent. */
 export class ReceiptCustody implements CustodiedOutboxSource {
   constructor(private readonly store: ReceiptCustodyStore, private readonly objects: ImmutableObjects,
     private readonly fuseki: Pick<FusekiClient, 'query'>, private readonly retirementKey: string,
     private readonly sendRetirement: (evidence: ProofRetirement) => Promise<void>) {
     if (!/^[0-9a-f]{64}$/.test(retirementKey)) throw new Error('Independent custody signing key is required');
+  }
+
+  private async exactTitleComponent(manifestIri: string, component: string, profile: string): Promise<Record<string, unknown>> {
+    if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifestIri)) throw new ObjectIntegrityError('Title component manifest reference differs');
+    const digest = manifestIri.slice(-64);
+    const bytes = await this.objects.get(digest, CUSTODY_RECOVERY_COST.stateBytes);
+    if (bytes.byteLength > CUSTODY_RECOVERY_COST.stateBytes || sha256(bytes) !== digest) {
+      throw new ObjectIntegrityError('Title component manifest bytes differ');
+    }
+    const manifest: unknown = JSON.parse(Buffer.from(bytes).toString('utf8'));
+    if (!exactKeys(manifest, ['format', 'component', 'payload', 'payloadBytes', 'mediaType', 'model', 'shape'])
+      || manifest.format !== 'rezics-manifest-v1' || manifest.component !== component
+      || manifest.model !== profile || manifest.shape !== profile || manifest.mediaType !== 'application/json'
+      || typeof manifest.payload !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(manifest.payload)
+      || typeof manifest.payloadBytes !== 'number' || !Number.isSafeInteger(manifest.payloadBytes)
+      || manifest.payloadBytes <= 0 || manifest.payloadBytes > CUSTODY_RECOVERY_COST.stateBytes) {
+      throw new ObjectIntegrityError('Title component manifest binding differs');
+    }
+    const payload = await this.objects.get(manifest.payload.slice(7), manifest.payloadBytes);
+    if (payload.byteLength !== manifest.payloadBytes || sha256(payload) !== manifest.payload.slice(7)) {
+      throw new ObjectIntegrityError('Title component payload bytes differ');
+    }
+    const stored: unknown = JSON.parse(Buffer.from(payload).toString('utf8'));
+    if (!exactKeys(stored, ['format', 'component', 'state']) || stored.format !== 'rezics-component-v1'
+      || stored.component !== component || !stored.state || typeof stored.state !== 'object' || Array.isArray(stored.state)) {
+      throw new ObjectIntegrityError('Title component payload binding differs');
+    }
+    return stored.state as Record<string, unknown>;
+  }
+
+  private async exactTitleObject(row: CustodyRow): Promise<PreparedTitleCandidate> {
+    const prepared = titleCustodyPayload(row), frame = prepared.frame;
+    const bytes = await this.objects.get(row.payloadSha256, CUSTODY_RECOVERY_COST.stateBytes);
+    if (sha256(bytes) !== row.payloadSha256 || !Buffer.from(bytes).equals(Buffer.from(row.payload))) {
+      throw new ObjectIntegrityError('Title custody immutable bytes differ');
+    }
+    const workProfile = 'https://rezics.com/definition/work-metadata-v1';
+    const original = await this.exactTitleComponent(frame.originalManifest, frame.intent.work, workProfile);
+    const proposed = await this.exactTitleComponent(frame.workManifest, frame.intent.work, workProfile);
+    const control = await this.exactTitleComponent(frame.controlManifest, frame.intent.work,
+      'https://rezics.com/definition/work-title-control-v2');
+    if (original.mainVersion !== frame.mainVersion || proposed.mainVersion !== frame.mainVersion
+      || typeof original.title !== 'string' || typeof original.language !== 'string'
+      || proposed.title !== frame.intent.title || proposed.language !== frame.intent.language
+      || canonicalJson(proposed) !== canonicalJson({ ...original, title: frame.intent.title, language: frame.intent.language })
+      || canonicalJson(control) !== canonicalJson({ intent: frame.intent, language: frame.intent.language,
+        control: frame.planned.control, revision: frame.planned.revision, operation: frame.planned.operation })) {
+      throw new ObjectIntegrityError('Title candidate does not preserve the exact original Work payload or control intent');
+    }
+    for (const digest of new Set(frame.validations.map(validation => validation.sha256))) {
+      const shape = await this.objects.get(digest, CUSTODY_RECOVERY_COST.shapeBytes);
+      if (shape.byteLength > CUSTODY_RECOVERY_COST.shapeBytes || sha256(shape) !== digest) {
+        throw new ObjectIntegrityError('Title candidate validation artifact differs');
+      }
+    }
+    return prepared;
+  }
+
+  private async withVerifiedTitleCandidate<T>(row: CustodyRow, session: ReceiptCustodySession,
+    operation: (candidate: VerifiedTitleCandidate, client: PoolClient) => Promise<T>): Promise<T> {
+    if (!session.client) throw new ObjectIntegrityError('Title custody requires its existing SQL receipt session');
+    const prepared = await this.exactTitleObject(row);
+    const frameJson = canonicalTitleCandidateFrame(prepared.frame);
+    const verified = freezeTitleValue({ frame: prepared.frame, frameJson,
+      frameSha256: sha256(frameJson), custodySha256: row.payloadSha256 }) as VerifiedTitleCandidate;
+    verifiedTitleBindings.set(verified, { client: session.client, payload: Buffer.from(row.payload) });
+    try { return await operation(verified, session.client); }
+    finally { verifiedTitleBindings.delete(verified); }
+  }
+
+  /** Durable nonterminal custody retains the first exact planned identities before dispatch. */
+  async prepareTitleCandidate<T>(value: TitleCandidateFrame,
+    operation: (candidate: VerifiedTitleCandidate, client: PoolClient) => Promise<T>): Promise<T> {
+    const frame = checkedTitleCandidateFrame(value), frameJson = canonicalTitleCandidateFrame(frame);
+    return this.store.withReceipt(frame.receipt, async session => {
+      let row = await session.read();
+      if (row) {
+        const retained = titleCustodyPayload(row);
+        if (canonicalTitleCandidateFrame(retained.frame) !== frameJson) throw new CommandRejected({ status: 'conflict' });
+      } else {
+        const payload = Buffer.from(canonicalJson({ format: 'rezics-human-title-candidate-custody-v1', frame }));
+        row = { receipt: frame.receipt, requestDigest: frame.digest, payloadSha256: sha256(payload), payload,
+          revision: frame.planned.revision, terminal: null, outbox: null, reconciled: false, retired: false };
+        // Verify the manifest closure before making durable authority-bearing bytes.
+        const digest = await this.objects.put(payload);
+        if (digest !== row.payloadSha256) throw new ObjectIntegrityError('Title command storage returned a different digest');
+        await this.exactTitleObject(row);
+        await session.prepare(row);
+      }
+      return this.withVerifiedTitleCandidate(row, session, operation);
+    });
+  }
+
+  /** Retained retries read exact custody under the same lock; this creates no objects or terminal outcome. */
+  async verifyTitleCandidate<T>(receipt: string,
+    operation: (candidate: VerifiedTitleCandidate, client: PoolClient) => Promise<T>): Promise<T | null> {
+    nativeIri(receipt);
+    return this.store.withReceipt(receipt, async session => {
+      const row = await session.read();
+      return row ? this.withVerifiedTitleCandidate(row, session, operation) : null;
+    });
   }
 
   private prepared(row: CustodyRow): PreparedCommand {
@@ -258,6 +420,11 @@ export class ReceiptCustody implements CustodiedOutboxSource {
   }
 
   private async reconcile(row: CustodyRow, session: ReceiptCustodySession): Promise<CustodiedReceipt | null> {
+    // Private acceptance custody has no terminal/outbox proof to reconcile. Cancellation still holds this lock.
+    if (JSON.parse(Buffer.from(row.payload).toString('utf8')).format === 'rezics-human-title-candidate-custody-v1') {
+      titleCustodyPayload(row);
+      return null;
+    }
     if (row.reconciled) return this.committedTerminal(row);
     const proof = await this.proof(row.receipt);
     if (!proof) return null;
