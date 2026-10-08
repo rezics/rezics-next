@@ -5,6 +5,29 @@ Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
 
+## Latest fixture review
+
+Whole Goal active; this section supersedes older worker/gate statuses below.
+
+- G1352 Sonnet20 done8863f075b. Independently reviewed exact current8-table
+  expectation and saved progress comparison: every original column unchanged,
+  new order_key/order_revision/resume_eligible all null. Actual QA040540-74b0c3
+  XML14/249/0fail/0skip,28.8s; original14cases unchanged, one added assertion.
+  Normal supervised gate schema-fixture0410 PID1406081 live,557files/5shards,
+  automatic native970s because this stream includes its prior union merges.
+- G1379 structure0404 PID1320796 and G1373 reader0400 PID1311135 independently
+  revalidated live. No timeout observation treated as terminal or new restart.
+- Launch94e8 residual mail acted/acknowledged: exact originalG847 fixture needs
+  StatementSeek production dependency. Loan sent Launchb3868, preserve all cases/
+  assertions/caps, no startup worker/fallback. Original physicalG847 still pending.
+- Manager corrected graph-position expected batch ceiling38->41 with actual
+  schema calculation65*(5+8+2*9)+1 records /50, preserving production limits.
+  Original focused3/45/0fail pass via Task, diffcheck clean; direct test-only Main
+  correction, no native/model/migration change or refresh prerequisite.
+- G1282 Grok30 PID1371035 and G1345 Sonnet19 PID1247628 revalidated live.
+  Manager Codex-1 fresh98% weekly, default88%; mailed Program85df continuity
+  request before exhaustion. No new Codex worker admitted, Goal remains active.
+
 ## Current ready-work checkpoint
 
 Whole Goal active; this section supersedes older live statuses below. Completion
