@@ -2427,7 +2427,12 @@ export function introducedUnitFailureFiles(branchFiles: readonly string[], branc
   }))].sort();
 }
 
-interface ShardInvocation { args: string[]; label: string; env: NodeJS.ProcessEnv }
+interface ShardInvocation { args: string[]; label: string; env: NodeJS.ProcessEnv; progressFile?: string }
+
+/** The QA CLI prints this when its own budget stops the tier. An ordinary test failure does not. */
+function harnessBudgetExpired(output: string): boolean {
+  return /QA tier budget exceeded: \S+ \d+ms/.test(output);
+}
 
 async function runUnitShard(cwd: string, files: readonly string[], deadline: number, invocation?: ShardInvocation): Promise<UnitShardResult> {
   const startedAt = Date.now();
@@ -2445,6 +2450,9 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   // so a shard stopped at its budget cannot leave containers behind.
   const env: NodeJS.ProcessEnv = { ...(invocation?.env ?? { ...process.env, AGENT: '1', REZICS_REAP_PRELOAD: '1' }),
     REZICS_REAP_SCOPE: scope, REZICS_REAP_SCOPES: reapScopeChain(process.env.REZICS_REAP_SCOPES, scope) };
+  // A colored parent makes Bun print "✗ name" instead of "(fail) name", and the gate
+  // would then blame every file in the shard. The plain reporter is what attribution reads.
+  delete env.FORCE_COLOR;
   const child = spawn('task', invocation?.args ?? ['goal:unit-files', '--', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
     ...files.map(file => `./${file}`)], {
     cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
@@ -2464,7 +2472,11 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   child.stdout?.on('data', take(stdout));
   child.stderr?.on('data', take(stderr));
   const output = () => {
-    const text = `${stdout.join('')}\n${stderr.join('')}`;
+    const parts = [`${stdout.join('')}\n${stderr.join('')}`];
+    // Written as each file starts, so an outer kill still names the file that was running.
+    if (invocation?.progressFile && existsSync(invocation.progressFile))
+      parts.push(readFileSync(invocation.progressFile, 'utf8'));
+    const text = parts.join('\n');
     // The owner tier keeps bun's transcript in its artifact log. Failure comparison needs that transcript.
     const artifacts = /QA artifacts: (\S+)/.exec(text);
     if (!artifacts || /\.(?:test|spec)\.[cm]?[jt]sx?:$/m.test(text)) return text;
@@ -2496,6 +2508,10 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
       return { ...unfinished(text, timedOut), ...outcome === 'timeout' ? { budgetExpired: true } : {} };
     }
     const text = output();
+    // The CLI stopped at its own budget and exited. That is an unfinished shard:
+    // the file that was running is retried alone, and files with no header run again.
+    if (harnessBudgetExpired(text))
+      return { ...unfinished(text, shardTimeoutFiles(text, files, cwd)), budgetExpired: true };
     const timedOut = timedOutTestFiles(text, files, cwd);
     const failures = unitFailureDetails(text, files, cwd);
     const namedFailing = outcome.code === 0 ? [] : failingTestFiles(text, files, cwd);
@@ -2515,14 +2531,21 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     return unfinished(output());
   } finally {
     if (timer) clearTimeout(timer);
+    if (invocation?.progressFile) rmSync(invocation.progressFile, { force: true });
     try { removeScopedContainers(scope); } catch { /* the shard's status still stands */ }
   }
 }
 
-/** Owner files go through `task test`, the same command as the owner tier, so their environment matches. */
-function runOwnerShard(cwd: string, files: readonly string[], deadline: number): Promise<UnitShardResult> {
-  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !['AGENT', 'CLAUDECODE', 'REPL_ID'].includes(key)));
-  return runUnitShard(cwd, files, deadline, { args: ['test', '--', ...files], label: 'test', env });
+/** Owner files go through `task test`, the same command as the owner tier, so their environment matches.
+ * The CLI's budget is this shard's remaining deadline; without it the tier stops at its own 600s ceiling. */
+export function runOwnerShard(cwd: string, files: readonly string[], deadline: number): Promise<UnitShardResult> {
+  const budgetMs = Math.max(1, deadline - Date.now());
+  const progressFile = join(cwd, '.temp', 'owner-shard-progress', `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+  mkdirSync(dirname(progressFile), { recursive: true });
+  const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !['AGENT', 'CLAUDECODE', 'REPL_ID'].includes(key)));
+  env.REZICS_QA_OWNER_BUDGET_MS = String(budgetMs);
+  env.REZICS_QA_PROGRESS_FILE = progressFile;
+  return runUnitShard(cwd, files, deadline, { args: ['test', '--', ...files], label: 'test', env, progressFile });
 }
 
 function gateShardRunner(owner: ReadonlySet<string>): UnitShardRunner {
@@ -2679,10 +2702,12 @@ export function streamUnitBaseline(events: readonly MergeEvent[], taskIds: reado
 
 type RecordedMerge = MergeEvent & { files?: readonly string[] };
 
-/** The candidate's own changes plus files this stream changed in earlier recorded merges. */
-export function streamSelectionFiles(own: readonly string[], events: readonly RecordedMerge[], taskIds: readonly string[]): string[] {
+/** The candidate's own changes plus files this stream changed in earlier recorded merges.
+ * A record written before `files` existed is read back from the two commits. */
+export function streamSelectionFiles(own: readonly string[], events: readonly RecordedMerge[], taskIds: readonly string[],
+  root?: string): string[] {
   const earlier = events.filter(event => event.before !== event.after && event.taskIds.some(id => taskIds.includes(id)))
-    .flatMap(event => event.files ?? []);
+    .flatMap(event => event.files ?? (root ? git(root, ['diff', '--name-only', '--no-renames', event.before, event.after]).split('\n').filter(Boolean) : []));
   return [...new Set([...own, ...earlier])].sort();
 }
 
@@ -2959,7 +2984,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, classificati
     return;
   }
   const own = git(worktree, ['diff', '--name-only', '--no-renames', `${currentMain}...HEAD`]).split('\n').filter(Boolean);
-  const changed = streamSelectionFiles(own, readMergeEvents(), taskIds);
+  const changed = streamSelectionFiles(own, readMergeEvents(), taskIds, mainRoot);
   console.log(`Pre-merge selection since ${currentMain.slice(0, 12)} (${changed.length} path(s)); classification baseline ${classificationBaseline.slice(0, 12)}\n  ${changed.join('\n  ')}`);
   const plan = await affectedPlanText(worktree, currentMain, changed);
   const unit = mergeUnitFiles(worktree, plan);

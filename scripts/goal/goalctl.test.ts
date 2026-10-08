@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { processRunning } from '../../tests/qa/support/process-liveness.ts';
 import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
+import { ownerTierBudgetMs } from '../qa/owner-tier-budget.ts';
 import { nativeUnionTest, planAffected } from '../qa/affected.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { TmuxLauncher, processIdentity, tmuxServer, type LaunchDescriptor } from './coordinator.ts';
@@ -12,7 +13,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, inheritedSharedLifecycleOwnership, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
-  planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runUnitGate, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, withRecovery, withSlot,
+  planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, withRecovery, withSlot,
   mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
@@ -1655,6 +1656,144 @@ ${edit}
       { before: 'later-main', after: 'merged-2', goal: 'alpha', taskIds: ['stream'], at: 't1' }], ['stream'], 'current'))
       .toBe('first-main');
   });
+
+  test('a merge record with no file list is recovered from its two commits', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'goalctl-merge-files-'));
+    const git = (...args: string[]) => {
+      const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+      if (result.status !== 0) throw new Error(result.stderr);
+      return result.stdout.trim();
+    };
+    try {
+      git('init', '-q', '-b', 'main');
+      git('config', 'user.email', 'goal@example.invalid');
+      git('config', 'user.name', 'goalctl test');
+      writeFileSync(join(dir, 'base.ts'), 'export const value = 1;\n');
+      git('add', 'base.ts');
+      git('commit', '-qm', 'base');
+      const before = git('rev-parse', 'HEAD');
+      writeFileSync(join(dir, 'base.ts'), 'export const value = 2;\n');
+      writeFileSync(join(dir, 'added.ts'), 'export const added = true;\n');
+      git('add', 'base.ts', 'added.ts');
+      git('commit', '-qm', 'change');
+      const after = git('rev-parse', 'HEAD');
+      const own = ['services/main/src/stream-only.ts'];
+      const event = { before, after, goal: 'alpha', taskIds: ['stream'], at: 't0' };
+      expect(streamSelectionFiles(own, [event], ['stream'], dir)).toEqual(
+        ['added.ts', 'base.ts', 'services/main/src/stream-only.ts']);
+      // No checkout to read: a missing list cannot invent paths.
+      expect(streamSelectionFiles(own, [event], ['stream'])).toEqual(own);
+      expect(streamSelectionFiles(own, [{ ...event, files: ['kept.ts'] }], ['stream'], dir)).toEqual(
+        ['kept.ts', 'services/main/src/stream-only.ts']);
+      // An explicit empty list is a merge that changed nothing.
+      expect(streamSelectionFiles(own, [{ ...event, files: [] }], ['stream'], dir)).toEqual(own);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  /** A `task` that stands in for the owner tier, plus a docker that does not touch the daemon. */
+  async function withOwnerStub(mode: 'budget' | 'fail' | 'hang', deadlineMs: number): Promise<{
+    result: UnitShardResult; budget: string; args: string[];
+  }> {
+    const directory = mkdtempSync(join(tmpdir(), 'goalctl-owner-shard-'));
+    const bin = join(directory, 'bin');
+    const log = join(directory, 'stub.log');
+    mkdirSync(bin);
+    writeFileSync(join(bin, 'task'), `#!/usr/bin/env bun
+import { appendFileSync } from 'node:fs';
+const record = process.env.GOAL_STUB_LOG;
+if (record) appendFileSync(record, JSON.stringify({ args: process.argv.slice(2), budget: process.env.REZICS_QA_OWNER_BUDGET_MS ?? '' }) + '\\n');
+const mode = process.env.GOAL_STUB_MODE;
+if (mode === 'hang') {
+  const progress = process.env.REZICS_QA_PROGRESS_FILE;
+  if (progress) appendFileSync(progress, 'slow.test.ts:\\n');
+  await Bun.sleep(60_000);
+}
+if (mode === 'budget') {
+  process.stderr.write('slow.test.ts:\\nQA tier budget exceeded: owner 970000ms\\n');
+  process.exit(1);
+}
+if (mode === 'fail') {
+  process.stderr.write('slow.test.ts:\\n(fail) breaks\\n');
+  process.exit(1);
+}
+process.exit(0);
+`);
+    writeFileSync(join(bin, 'docker'), '#!/bin/sh\nexit 0\n');
+    chmodSync(join(bin, 'task'), 0o755);
+    chmodSync(join(bin, 'docker'), 0o755);
+    const previous = { PATH: process.env.PATH, mode: process.env.GOAL_STUB_MODE, log: process.env.GOAL_STUB_LOG };
+    process.env.PATH = `${bin}:${process.env.PATH ?? ''}`;
+    process.env.GOAL_STUB_MODE = mode;
+    process.env.GOAL_STUB_LOG = log;
+    try {
+      const result = await runOwnerShard(directory, ['slow.test.ts', 'later.test.ts'], Date.now() + deadlineMs);
+      const recorded = JSON.parse(readFileSync(log, 'utf8')) as { args: string[]; budget: string };
+      return { result, budget: recorded.budget, args: recorded.args };
+    } finally {
+      if (previous.PATH === undefined) delete process.env.PATH;
+      else process.env.PATH = previous.PATH;
+      if (previous.mode === undefined) delete process.env.GOAL_STUB_MODE;
+      else process.env.GOAL_STUB_MODE = previous.mode;
+      if (previous.log === undefined) delete process.env.GOAL_STUB_LOG;
+      else process.env.GOAL_STUB_LOG = previous.log;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
+
+  test('an owner command that stops at its own budget leaves the shard unfinished', async () => {
+    expect(ownerTierBudgetMs({})).toBe(600_000);
+    expect(ownerTierBudgetMs({ REZICS_QA_OWNER_BUDGET_MS: '' })).toBe(600_000);
+    expect(ownerTierBudgetMs({ REZICS_QA_OWNER_BUDGET_MS: '970000' })).toBe(970_000);
+    expect(() => ownerTierBudgetMs({ REZICS_QA_OWNER_BUDGET_MS: '600s' })).toThrow('positive integer');
+    const stopped = await withOwnerStub('budget', 970_000);
+    expect(stopped.args).toEqual(['test', '--', 'slow.test.ts', 'later.test.ts']);
+    expect(Number(stopped.budget)).toBeGreaterThan(900_000);
+    expect(Number(stopped.budget)).toBeLessThanOrEqual(970_000);
+    // The running file is retried alone. The file with no header runs again with the rest of the shard.
+    expect(stopped.result).toMatchObject({
+      done: false, budgetExpired: true, timedOut: ['slow.test.ts'], files: ['slow.test.ts', 'later.test.ts'], failing: [],
+    });
+    const failed = await withOwnerStub('fail', 970_000);
+    expect(failed.result.done).toBe(true);
+    expect(failed.result.budgetExpired).toBeUndefined();
+    expect(failed.result.failing).toEqual(['slow.test.ts']);
+  }, 20_000);
+
+  test('an outer kill names the owner file that was running', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'goalctl-owner-progress-'));
+    const progress = join(directory, 'progress.txt');
+    mkdirSync(join(directory, 'nested'));
+    writeFileSync(join(directory, 'nested/slow.test.ts'), `import { beforeAll, test } from 'bun:test';\n`
+      + `beforeAll(async () => { await Bun.sleep(5_000); });\ntest('holds', () => {});\n`);
+    const env = { ...process.env, CI: 'true', REZICS_QA_PROGRESS_FILE: progress };
+    delete env.AGENT;
+    const child = spawn(process.execPath, ['test', '--preload', join(import.meta.dir, '../qa/owner-shard-progress.ts'),
+      'nested/slow.test.ts'], { cwd: directory, env, stdio: 'ignore' });
+    try {
+      const deadline = Date.now() + 1_000;
+      let text = '';
+      while (Date.now() < deadline) {
+        if (existsSync(progress)) text = readFileSync(progress, 'utf8');
+        if (text.includes('nested/slow.test.ts:')) break;
+        await Bun.sleep(20);
+      }
+      // Recorded while beforeAll is still running, which is before the reporter would finish.
+      expect(text).toContain('nested/slow.test.ts:');
+    } finally {
+      const closed = new Promise<void>(resolve => {
+        if (child.exitCode !== null || child.signalCode !== null) { resolve(); return; }
+        child.once('close', () => resolve());
+      });
+      child.kill('SIGKILL');
+      await closed;
+      rmSync(directory, { recursive: true, force: true });
+    }
+    const killed = await withOwnerStub('hang', 2_000);
+    expect(killed.result.done).toBe(false);
+    expect(killed.result.budgetExpired).toBe(true);
+    expect(killed.result.timedOut).toEqual(['slow.test.ts']);
+    expect(killed.result.files).toEqual(['slow.test.ts', 'later.test.ts']);
+  }, 20_000);
 
   for (const outcome of ['introduced', 'inherited'] as const) {
     test(`a guard absent from the affected plan has its ${outcome} failure compared with committed main`, async () => {

@@ -68,6 +68,7 @@ import { planIntegrationShards } from './integration-shards.ts';
 import { completeFileResults, lastStartedTestFile } from './file-results.ts';
 import { qaStackEnvironment, qaStackMode } from './stack-environment.ts';
 
+import { ownerTierBudgetMs } from './owner-tier-budget.ts';
 import { assertQaResourceAllocation, integrationResourceClass, integrationTierBudget, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -289,13 +290,26 @@ interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMat
 // Bun owner suites install signal handlers too; enforce the wall deadline on
 // their process group so a handled SIGTERM cannot keep QA capacity indefinitely.
 async function runBunTier(name: Tier, program: string, args: string[], budget: number) {
+  const logPath = join(logs, `${name}.log`);
+  const progress = process.env.REZICS_QA_PROGRESS_FILE;
+  // CI makes Bun omit file headers, so the preload records the current file.
+  // Lines that do arrive are written as they come, before an outer kill.
+  const programArgs = progress
+    ? [...args, `--preload=${join(import.meta.dir, 'owner-shard-progress.ts')}`]
+    : args;
+  const onLine = (line: string) => {
+    noteMemory(line);
+    appendFileSync(logPath, `${line}\n`);
+    if (progress) appendFileSync(progress, `${line}\n`);
+  };
   const result = await admitRun(
-    () => commandAsync(root, program, args, budget, process.env, noteMemory, { runDeadline }));
+    () => commandAsync(root, program, programArgs, budget, process.env, onLine, { runDeadline }));
   const ok = result.ok && result.activeElapsedMs <= budget;
   tiers.push({ name, status: ok ? 'passed' : 'failed', elapsedMs: result.activeElapsedMs });
   if (!ok) {
-    writeFileSync(join(logs, `${name}.log`), result.output);
+    writeFileSync(logPath, result.output);
     errors.push(`${name} failed or exceeded ${budget / 1000}s (see logs/${name}.log)`);
+    if (result.timedOut) console.error(`QA tier budget exceeded: ${name} ${budget}ms`);
   }
   return ok;
 }
@@ -765,7 +779,7 @@ try {
           '--reporter=junit',
           `--reporter-outfile=${join(directory, `${tier}.xml`)}`,
         ],
-        tier === 'owner' ? 600_000 : 180_000,
+        tier === 'owner' ? ownerTierBudgetMs() : 180_000,
       );
     if (tier === 'model') {
       const projectRunId = `${runId}-m`;
