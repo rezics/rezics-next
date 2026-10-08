@@ -155,7 +155,8 @@ test('a long recipe shows its first part, continues with its sections whole, and
   await expect(opened.getByText('1 cup sauce-40')).toBeVisible();
   await expect(opened.getByRole('heading', { name: 'Dough', exact: true })).toHaveCount(1);
   await expect(opened.getByRole('heading', { name: 'Sauce', exact: true })).toHaveCount(1);
-  await expect(opened).not.toContainText('Step 1');
+  // One filled page holds both sections and the first steps; the recipe continues past it.
+  await expect(opened).not.toContainText('Step 40');
   await expect(more()).toBeVisible();
   await shoot(page, 'recipe-long-first', info);
   await continueAll();
