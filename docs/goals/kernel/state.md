@@ -1,9 +1,36 @@
 # State
 
-Checkpoint: 2026-10-08 03:10 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-08 03:30 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
+
+## Latest review and gate blocker
+
+Whole Goal active; this section supersedes live gate status below.
+
+- Program maile73b acknowledged: Core timeout is G1407 cleanup on empty scopes,
+  G1418 fixes proportional cleanup without changing five-second test/assertions.
+  Root intentionally stopped only G1379/G1373 fresh gate units; both now inactive,
+  no passing/skipped verdict. Retry after Program mails G1418 landed.
+- Partial G1379 owner XML retained in `.temp/kernel/owner-gate-partial-0319/`:
+  37 failed cases across16 files, not all Core and not baseline-classified.
+  Program mailed cross-Goal routing; Kernel retains own fixture/source review.
+- G1379 original group-only fixture lacked generation/count descriptor reply.
+  Manager9e6aa7441 adds only original unchanged manifest fields, assertions/bytes
+  preserved. Actual owner QA032438-771ce9 independently XML2/9/0fail/0skip,
+  source stable; normal merge still required, no Episode completeness claim.
+- Original Statement conversion fake lacked converted revision head. Fixed it
+  and restored SQL audit anchor with whitespace only; native/publication semantics
+  unchanged. Original12/139 pass via Task goal:unit-files. Earlier owner run
+  QA032437-8efcc2 failed11/1 and source moved; retained, never pass-inferred.
+- G1290 Sonnet28 admitted in correctness lane2: real original SQL-issued custody
+  through matching native acceptance and read-only lost-ACK lookup. Prepare test,
+  hold physical proof until matching qualified union image; no handmade authority
+  or untested tag/promotion. Grok27 TS source0f remains accepted unchanged.
+- G1282 Grok27 native composition and G1345 Sonnet18 owner receiver remain live.
+  G1345 provisional capture explicitly leaves creator/E-to-R/seek linkage
+  unresolved; this cannot qualify authentic owner closure or release.
 
 ## Current gate policy and live work
 
