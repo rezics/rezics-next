@@ -681,7 +681,9 @@ async function anchorProjection(f: Awaited<ReturnType<typeof volumeSeries>>, cli
 
 test('earlier completions are anchored on the enclosing series two at a time, resumably', async () => {
   const f = await volumeSeries();
-  const rows = [f.early, f.reader, id()].sort().map((occurrence, index) => ({ occurrence, selection_key: '', completed: index < 2 }));
+  // The last key sorts after any generated identity: an incomplete row nothing is anchored for.
+  const unplaced = 'https://rezics.com/id/ffffffff-ffff-ffff-ffff-ffffffffffff';
+  const rows = [...[f.early, f.reader].sort(), unplaced].map(occurrence => ({ occurrence, selection_key: '', completed: occurrence !== unplaced }));
   const done = anchorClient(f, rows);
   const projection = await anchorProjection(f, done.client);
   const seriesHead = f.headers.get(f.seriesStructure)!.head;
