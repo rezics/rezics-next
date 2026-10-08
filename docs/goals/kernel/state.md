@@ -17,6 +17,13 @@ The unit gate classifies inherited failures against the stream's first-merge bas
 - G-1352 structure-schema fixture, G-1379 Structure object-coverage group descriptor, G-1373 contribution draft/history original-create receipt reader, G-1345 Claim fold original-inventory receiver (authenticated progress, final deadline recheck; it also repairs four `claim-statement-fold` tests that fail on `main`).
 - G-1282 native Claim fold plus Title candidate union with the `ExternalFixture` JUnit category (package excludes it, the existing native wrapper runs it), pin `rezics/fuseki:6.2.0-cmd0.5.39-972ae0d9c953`. Proof: image package 388 tests, 0 failures, wrapper 61 tests, 0 failures, TS 24/24, guard 5/5. Shared stack refreshed and healthy.
 
+- Later the same day (all with the branch's own tests and per-case proof against main): G-1423 private Contribution reads reconcile the original create/edit receipts and read the edit actor through the Access module, fail closed (8a4a1cd76); G-1430 anti-silo CreativeWork count restored (aa213b9ba); G-1290 native `workScopeDirectory` prepare command plus tolerant startup caller, original Title custody acceptance passes on the exclusive-writer stack, pin ad8fad6e2794, stack refreshed (532a753e3); G-1433 Recipe work page in 100-occurrence signed-cursor pages, `measures` on every page (73c92bad9).
+
+## In flight
+
+- G-1435 (grok): Bangumi-like facts as data (format concept scheme, declared counts, status `upcoming`/`cancelled`, importer). G-1437 (grok): year literal-fact read template with a native posting in `access.template_seek_entry` (sentinel anchor, inverted year key); native, needs image rebuild, pin, `dev:refresh`. G-1436 (credit roles studio/director/artist, brief written, not dispatched) waits for G-1435 to release `scripts/dev/seed/relation-lexicon-data.ts`. Board tags (Launch P1 class 9) come after these. Mail Launch after each landing.
+- Landing checklist: branch's own tests, `task gen` committed in the worktree (the merge does not regenerate), `--skip-unit-gate --allow-scope` with the per-case proof named in the mail, `task dev:refresh -- --wait` for native/model changes (retry once on an `approve-zones` timeout), then close verified.
+
 ## Open work
 
 - **G-1290 joined test** (`tests/qa/integration/title-candidate-original-custody.test.ts`): original SQL-issued Title custody through native acceptance and lost-ACK lookup. Now runnable on the new image; branch `goal/g-1290` holds only this test.
