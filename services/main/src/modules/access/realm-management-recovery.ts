@@ -4,6 +4,7 @@ import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { RealmAdminInvalid, RealmAdminUnavailable } from '../realm-admin/contract.ts';
 import { deliverRealmPolicy, type RealmPolicyDelivery } from '../space/policy.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { runWorkerTick } from '../../worker-tick.ts';
 
 export const REALM_POLICY_RECOVERY_COST = { page: 10, maxPage: 50, lockTimeoutMs: 2_000,
   statementTimeoutMs: 5_000, graphCommandsPerRealm: 1, intervalMs: 30_000 } as const;
@@ -83,10 +84,12 @@ export class RealmPolicyRecoveryWorker {
     this.tick();
   }
   private tick() {
-    this.running = withWorkerTelemetry('main.realm-policy.recovery', () => recoverRealmPolicies(this.pool, this.env, this.after), page => ({
+    // The page may hold a pooled client across awaits. A fresh async resource
+    // keeps that hold off later workers that share the startup context.
+    this.running = runWorkerTick('main.realm-policy.recovery', () => withWorkerTelemetry('main.realm-policy.recovery', () => recoverRealmPolicies(this.pool, this.env, this.after), page => ({
       outcome: page.items.some(item => item.status === 'pending') ? 'retry' : page.items.length ? 'worked' : 'idle',
       processed: page.items.filter(item => item.status === 'completed').length, unit: 'item',
-    })).then(page => {
+    }))).then(page => {
       this.after = page.nextCursor ?? undefined;
     }).catch(error => { logWorkerFault('main.realm-policy.recovery', error); }).finally(() => {
       if (!this.stopped) this.timer = setTimeout(() => { this.tick(); }, REALM_POLICY_RECOVERY_COST.intervalMs);
