@@ -1,3 +1,4 @@
+import { AsyncResource } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import { logWorkerFault, telemetryLog } from '@rezics/observability/log';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
@@ -104,6 +105,18 @@ export interface LibraryBackfillOptions {
  */
 export async function prepareLibraryShelves(content: Pool, access: Pool, graph: FusekiClient,
   options: LibraryBackfillOptions = {}) {
+  // The scan retains this checkout after startup continues. Its owning context
+  // must not become the startup caller's or the content projection worker's hold.
+  const resource = new AsyncResource('library-shelf-backfill');
+  try {
+    return await resource.runInAsyncScope(() => scanLibraryShelves(content, access, graph, options));
+  } finally {
+    resource.emitDestroy();
+  }
+}
+
+async function scanLibraryShelves(content: Pool, access: Pool, graph: FusekiClient,
+  options: LibraryBackfillOptions) {
   configureLibraryShelves(content, access, graph);
   // The row names an Agent and a Work. The log keeps counts, duration, and the error class and code.
   const onRowError = (row: { agent: string; work: string }, error: unknown) => {
