@@ -6,8 +6,19 @@ import { targetSummaryReader } from '../target/resolve.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { readWikiClaimEvidence, projectWikiEvidence } from '../wiki/evidence-read.ts';
+import type { SemanticDisclosure } from '../access/semantic-disclosure.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
 import type { Coordinate } from '../projection/dimension.ts';
+
+/** A page label is the reviewed presentation. Draft wording is included only
+ * when Access granted that definition privately, so a public relation keeps
+ * one label for a signed-in reader and an anonymous one. */
+export function includeDraftRelationPresentations(
+  disclosure: SemanticDisclosure | ReadonlySet<string>,
+  definition: string,
+): boolean {
+  return 'granted' in disclosure && disclosure.granted.has(definition);
+}
 
 /** The same incidence inventory for a subject page and a projection page. All
  * Access, publication, disclosure and reading-position gates stay in owner reads. */
@@ -36,7 +47,7 @@ export async function readPageRelations(session: WorkReadSession, resource: stri
     canReadDraftPresentations: async definition => {
       if (!principal || !actor || !deps.mediaAccess) return false;
       const disclosure = await deps.mediaAccess.canReadSemantics(principal, actor, [definition], deps.environment.fuseki);
-      return 'granted' in disclosure && disclosure.granted.has(definition);
+      return includeDraftRelationPresentations(disclosure, definition);
     }, summarize, visibleRecords: visible,
     readingPosition: JSON.stringify([principal, actor, await boundary.binding()]),
   });

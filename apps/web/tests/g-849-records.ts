@@ -236,7 +236,8 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
   }
 
   // Definitions the bundle's claims use: a property, and two relations with labels in English and Japanese.
-  // Lexicon presentation writes are closed under platform-admin.
+  // Lexicon presentation writes are closed under platform-admin. A page label is the reviewed
+  // presentation in the reader's language; a draft is never that label.
   await openFixturePlatformGroup(holder.principalId, 'platform-admin');
   await holder.grant('semantic:create:root', 'semantic.change'); await steward.grant('semantic:create:root', 'semantic.change');
   await steward.grant('relation:create:root', 'relation.change');
@@ -255,14 +256,14 @@ export async function seedWiki(stack: Stack, reader: Reader | null): Promise<See
         { key: 'object', minParticipants: 1, maxParticipants: 1, ordered: false }] } }, holder.token,
     fixtureKey(`relation:${key}`)), 201);
     await holder.grant(`semantic:read:${made.component}`, 'semantic.read');
-    await holder.grant(`semantic:edit:${made.component}`, 'lexicon.presentation.change');
+    await holder.grant(`semantic:edit:${made.component}`, 'lexicon.presentation.review');
     for (const [language, [noun, heading]] of Object.entries(labels)) {
       for (const [fromRole, toRole] of [['subject', 'object'], ['object', 'subject']] as const) {
         await json(await wiki('POST', '/v1/lexicon/presentations', { profile: 'definition-presentation-v1', actingSubject: holder.actor,
           expectedHead: null, state: { definition: made.component, meaningRevision: made.revision, fromRole, toRole, language,
             noun, heading, plurals: { ...language === 'en' ? { one: noun } : {}, other: heading }, grammaticalForms: [],
             source: 'https://rezics.com/definition/relation-lexicon-seed-v1',
-            licence: 'https://creativecommons.org/publicdomain/zero/1.0/', reviewStatus: 'draft' } }, holder.token,
+            licence: 'https://creativecommons.org/publicdomain/zero/1.0/', reviewStatus: 'reviewed' } }, holder.token,
         fixtureKey(`lexicon:${key}:${language}:${fromRole}:${toRole}`)), 201);
       }
     }
