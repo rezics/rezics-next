@@ -155,10 +155,22 @@ A pass interrupted after its retained-erasure qualification committed (an owner
 connection lost after the native release, or the outcome write failing after both
 owners committed) is not a held result. The operation stays running and the same
 command with the same idempotency key resumes from that durable qualification and
-the exact native release receipt, or completes the lost outcome from the Access
-state bound at the opening. It never replays, holds again or compares the replayed
-copy to the original base again; any difference in the bound evidence settles the
-operation as held. Only a definitive refusal settles it as held at once.
+the exact native receipt, or completes the lost outcome. It never replays, holds
+again or compares the replayed copy to the original base again.
+
+The release records a proven transition, not an observation. On the locked Access
+and relay clients, the full Access coverage before the captured-generation CAS must
+equal the signed authority, and the coverage after it must equal that coverage plus
+exactly one new row in each of `discovery_source_change` and
+`also_enjoyed_source_change` (the CAS's reviewed invalidations); any other Access
+write refuses the release and rolls Access back. Only the two identity values the
+CAS consumed are read from the post-state. The finding is HMAC-bound under the
+recovery key to the durable qualification, native receipt, retained head and
+journal. A later completion accepts live Access only if it still equals that
+recorded coverage, so it proves stability since the commit, not that nothing
+outside the fence wrote Access, and a late retry may be refused. A refused
+completion cannot close a release that already committed: the operation settles
+as held and owner logins and the verified restore evidence stay closed.
 
 After verified release, start Main, relay and consumers on the restored project,
 resume at the retained, verified checkpoints, then route traffic. Do not serve

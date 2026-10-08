@@ -11,8 +11,10 @@ import { ErasureUnavailable } from '../erasure/journal.ts';
 import { GraphErasureConflict } from '../erasure/graph.ts';
 import { AccountDeletionJournalConflict } from '../outbox/account-deletion-journal.ts';
 import { RecoveryCoverageHeadConflict } from '../outbox/recovery-coverage-head.ts';
-import { readBindings, readErasuresRecord, recordQualification, recordRelease,
-  requireQualification, verifyReleasedRestore } from './restore-release-binding.ts';
+import { captureReleaseBasis, proveReleaseTransition, readBindings, readErasuresRecord,
+  recordQualification, recordRelease, requireQualification, verifyReleasedRestore }
+  from './restore-release-binding.ts';
+import { accessOutboxCoverage, accessStateCoverage } from '../work/access-recovery-coverage.ts';
 import type { RestoredGraphCustody } from '../erasure/custody.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
@@ -23,7 +25,8 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { readExactWorkRevision, RevisionCorrupt, RevisionNotFound, RevisionUnavailable }
   from '../work/history.ts';
 import { readRestoredGraphReleaseExpectation, releaseRestoredGraphHold, RestoreInterrupted,
-  RestoreLineageConflict, type RecoveryCoverage, type RestoredReleaseClients }
+  RestoreLineageConflict, type RecoveryCoverage, type RestoredGraphReleaseExpectation,
+  type RestoredReleaseClients }
   from '../work/restore-lineage.ts';
 import { heldErasureMaintenanceClient } from '../erasure/graph.ts';
 import type { OwnerReconciliationRow, OwnerRelocationRow } from './schema.ts';
@@ -275,8 +278,8 @@ export class OwnerOperations {
             if (!bindings?.release) {
               throw new RestoreLineageConflict('Access is open without this restore\'s release binding');
             }
-            await this.completeReleasedRestore(client, resources, erasures, coverage, input.sealedCoverage,
-              row.id, `${operationId}:erasures`);
+            await this.completeReleasedRestore(client, resources, erasures, row.id,
+              `${operationId}:erasures`);
           } else await releaseRestoredGraphHold(this.environment.fuseki, resources.accessPool,
             this.relay, this.environment.lineage, { sealedCoverage: input.sealedCoverage,
               hmacKey: resources.hmacKey, accountPool: resources.accountPool,
@@ -352,6 +355,37 @@ export class OwnerOperations {
     } finally { await close(); }
   }
 
+  /** The restored owners with the held-erasure configuration bound to one captured Access generation. */
+  private restoredOwners(resources: RestoreResources, erasures: NonNullable<RestoreResources['erasures']>,
+    graphRelease: RestoredGraphReleaseExpectation, fenceGeneration: string): RestoredOwners {
+    if (erasures.originalSource === 'retained-native-event' && 'originalGraph' in erasures) {
+      throw new RestoreLineageConflict('retained original proof source is ambiguous');
+    }
+    const originalSource = erasures.originalSource === 'retained-native-event'
+      ? { originalSource: 'retained-native-event' as const }
+      : erasures.originalSource === 'original-graph' && erasures.originalGraph
+        ? { originalSource: 'original-graph' as const, originalGraph: erasures.originalGraph }
+        : undefined;
+    if (!originalSource) throw new RestoreLineageConflict('independently retained original proof source is unavailable');
+    const restoredObjects = resources.objectStore.structureObjects
+      ? { ...resources.objectStore, structureGroupRoots: new StructureGroupRootStore(
+        resources.contentPool, resources.objectStore.structureObjects),
+        structureQualifierRoots: new StructureQualifierRootStore(
+          resources.contentPool, resources.objectStore.structureObjects) } : resources.objectStore;
+    const restored: RestoredOwners = { account: resources.accountPool,
+      access: resources.accessPool, content: resources.contentPool, objects: restoredObjects,
+      graph: { fuseki: this.environment.fuseki, lineage: this.environment.lineage,
+        ...(this.environment.receiptCustody ? { receiptCustody: this.environment.receiptCustody } : {}),
+        // The marker's saved sequence is what the held cut names; a reconciled
+        // cursor, if any, is the effective cut of graphRelease.
+        heldErasure: { cut: { ...this.environment.lineage,
+          restoreCutover: graphRelease.restoreCutover,
+          priorDataEpoch: graphRelease.saved.dataEpoch, priorSequence: graphRelease.saved.graphSequence },
+        accessHoldGeneration: fenceGeneration, signingKey: erasures.signingKey,
+        maintenance: erasures.maintenance, ...originalSource } } };
+    return restored;
+  }
+
   /**
    * Qualify the retained erasures and commit that record while both holds are
    * closed, then release graph and Access in fresh transactions on the same
@@ -362,15 +396,8 @@ export class OwnerOperations {
     erasures: NonNullable<RestoreResources['erasures']>, coverage: RecoveryCoverage,
     operationId: string, outerId: string, resume: boolean, clients: RestoredReleaseClients,
     releaseGraph: () => Promise<void>): Promise<void> {
-    if (erasures.originalSource === 'retained-native-event' && 'originalGraph' in erasures) {
-      throw new RestoreLineageConflict('retained original proof source is ambiguous');
-    }
-    const originalSource = erasures.originalSource === 'retained-native-event'
-      ? { originalSource: 'retained-native-event' as const }
-      : erasures.originalSource === 'original-graph' && erasures.originalGraph
-        ? { originalSource: 'original-graph' as const, originalGraph: erasures.originalGraph }
-        : undefined;
-    if (!originalSource) throw new RestoreLineageConflict('independently retained original proof source is unavailable');
+    const { graphRelease } = clients;
+    const restored = this.restoredOwners(resources, erasures, graphRelease, clients.fenceGeneration);
     let current: RecoveryCoverage;
     try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
       erasures.authority.hmacKey, 'graph-recovery-coverage'); }
@@ -381,23 +408,6 @@ export class OwnerOperations {
     try { await assertRetainedAuthorityCoverage(clients.relayClient, resources.accessPool,
       current.relay.consumer, erasures.authority, clients.accessClient); }
     catch (error) { throw new RestoreLineageConflict('Access differs from independently current authority', { cause: error }); }
-    const restoredObjects = resources.objectStore.structureObjects
-      ? { ...resources.objectStore, structureGroupRoots: new StructureGroupRootStore(
-        resources.contentPool, resources.objectStore.structureObjects),
-        structureQualifierRoots: new StructureQualifierRootStore(
-          resources.contentPool, resources.objectStore.structureObjects) } : resources.objectStore;
-    const { graphRelease } = clients;
-    const restored: RestoredOwners = { account: resources.accountPool,
-      access: resources.accessPool, content: resources.contentPool, objects: restoredObjects,
-      graph: { fuseki: this.environment.fuseki, lineage: this.environment.lineage,
-        ...(this.environment.receiptCustody ? { receiptCustody: this.environment.receiptCustody } : {}),
-        // The marker's saved sequence is what the held cut names; a reconciled
-        // cursor, if any, is the effective cut of graphRelease.
-        heldErasure: { cut: { ...this.environment.lineage,
-          restoreCutover: graphRelease.restoreCutover,
-          priorDataEpoch: graphRelease.saved.dataEpoch, priorSequence: graphRelease.saved.graphSequence },
-        accessHoldGeneration: clients.fenceGeneration, signingKey: erasures.signingKey,
-        maintenance: erasures.maintenance, ...originalSource } } };
     const erasuresOperation = `${operationId}:erasures`;
     let committed = resume;
     try {
@@ -413,18 +423,25 @@ export class OwnerOperations {
         if (!record || record.id !== result.reconciliationId) {
           throw new RestoreLineageConflict('retained erasure reconciliation record is unavailable');
         }
-        await recordQualification(clients.relayClient, outerId, record, clients.fenceGeneration, graphRelease);
+        await recordQualification(clients.relayClient, resources.hmacKey, outerId, record,
+          clients.fenceGeneration, graphRelease);
         await clients.commitQualification();
         committed = true;
       }
       const record = await readErasuresRecord(clients.relayClient, erasuresOperation);
       if (!record) throw new RestoreLineageConflict('retained erasure reconciliation record is unavailable');
-      await requireQualification(clients.relayClient, outerId, record, clients.fenceGeneration, graphRelease);
+      await requireQualification(clients.relayClient, resources.hmacKey, outerId, record,
+        clients.fenceGeneration, graphRelease);
+      // The signed pre-release Access coverage, pinned on the locked client before the CAS.
+      const basis = await captureReleaseBasis(resources.accessPool, clients.accessClient, current);
       await releaseErasureRestoreHold(this.relay, restored, record.id, clients.fenceGeneration,
         erasures.authority, { clients: { relayClient: clients.relayClient, accessClient: clients.accessClient,
           graphRelease }, beforeAccessRelease: releaseGraph });
-      await recordRelease(clients.relayClient, resources.accessPool, clients.accessClient,
-        this.environment.fuseki, outerId, record, clients.fenceGeneration, graphRelease);
+      const transition = await proveReleaseTransition(resources.accessPool, clients.accessClient, basis,
+        clients.fenceGeneration);
+      await recordRelease(clients.relayClient, resources.hmacKey, this.environment.fuseki, outerId, record,
+        clients.fenceGeneration, graphRelease, createHash('sha256').update(erasures.authority.sealedCoverage)
+          .digest('hex'), transition);
     } catch (error) {
       // Once the qualification is durable, only a definitive refusal settles
       // the operation as held; an owner interruption leaves it resumable.
@@ -435,23 +452,45 @@ export class OwnerOperations {
     }
   }
 
-  /** Complete the outer outcome after both owners committed, without any owner effect. */
+  /**
+   * Complete the outer outcome after both owners committed, without any owner
+   * effect: the HMAC-bound qualification and proven release findings, the native
+   * receipt, the retained frontier and the independently current authority are
+   * authenticated, and live Access must still equal the coverage the proven
+   * transition recorded. The original-event, historical-root and remaining
+   * erased-closure reread waits for the owner seam; see transition-proof-request.md.
+   */
   private async completeReleasedRestore(client: PoolClient, resources: RestoreResources,
-    erasures: NonNullable<RestoreResources['erasures']>, coverage: RecoveryCoverage,
-    sealedCoverage: string, outerId: string, erasuresOperation: string): Promise<void> {
+    erasures: NonNullable<RestoreResources['erasures']>, outerId: string,
+    erasuresOperation: string): Promise<void> {
+    let current: RecoveryCoverage;
+    try { current = openRecoveryPayload<RecoveryCoverage>(erasures.authority.sealedCoverage,
+      erasures.authority.hmacKey, 'graph-recovery-coverage'); }
+    catch { throw new RestoreLineageConflict('independently current authority capture is invalid'); }
+    if (!current?.relay?.consumer) {
+      throw new RestoreLineageConflict('independently current authority capture is unavailable');
+    }
+    const authority = createHash('sha256').update(erasures.authority.sealedCoverage).digest('hex');
     const accessClient = await resources.accessPool.connect();
     try {
       await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
       await client.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
       await accessClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
-      const expectation = await readRestoredGraphReleaseExpectation(this.environment.fuseki,
-        this.environment.lineage, coverage);
-      await verifyReleasedRestore({ relay: client, accessPool: resources.accessPool, accessClient,
-        fuseki: this.environment.fuseki, outerId, erasuresOperationId: erasuresOperation,
-        authority: erasures.authority, expectation, consumer: coverage.relay.consumer,
+      await accessClient.query("SET LOCAL TIME ZONE 'UTC'");
+      const fence = (await accessClient.query<{ open: boolean; generation: string }>(
+        'SELECT open, generation::text AS generation FROM access.recovery_fence WHERE id = true')).rows[0];
+      if (fence?.open !== true || BigInt(fence.generation) < 1n) {
+        throw new RestoreLineageConflict('Access is not open for this restore completion');
+      }
+      await verifyReleasedRestore({ relay: client, fuseki: this.environment.fuseki, key: resources.hmacKey,
+        outerId, erasuresOperationId: erasuresOperation,
+        expectation: await readRestoredGraphReleaseExpectation(this.environment.fuseki,
+          this.environment.lineage, current),
+        coverage: current, authority, capturedGeneration: (BigInt(fence.generation) - 1n).toString(),
         requestDigests: [false, true].map(replay => createHash('sha256').update(
-          `${coverage.relay.consumer}\0${replay}\0${createHash('sha256').update(
-            erasures.authority.sealedCoverage).digest('hex')}`).digest('hex')) });
+          `${current.relay.consumer}\0${replay}\0${authority}`).digest('hex')),
+        live: async () => ({ state: await accessStateCoverage(resources.accessPool, accessClient),
+          outbox: await accessOutboxCoverage(resources.accessPool, accessClient) }) });
       await client.query('COMMIT');
       await accessClient.query('COMMIT');
     } catch (error) {

@@ -52,6 +52,9 @@ import {
 } from '../../../services/main/src/modules/owner/operations.ts';
 import { ensureModelGeneration } from '../../../services/main/src/modules/semantic/command.ts';
 import {
+  DATASET,
+  GRAPHS,
+  RV,
   hash,
   initializeFreshGraph,
   type WorkActivationEnvironment,
@@ -72,7 +75,15 @@ import {
   type RecoveryCoverage,
 } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
-import type { OperatorRestoreReleaseContext, RestoreChecks } from '../../../scripts/ops/restore.ts';
+import {
+  accessOutboxCoverage,
+  accessStateCoverage,
+} from '../../../services/main/src/modules/work/access-recovery-coverage.ts';
+import {
+  finishOperatorRestore,
+  type OperatorRestoreReleaseContext,
+  type RestoreChecks,
+} from '../../../scripts/ops/restore.ts';
 import { RecoveryBudget } from '../../../scripts/ops/recovery-set.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { healthRoutes } from '../../../services/main/src/routes/health.ts';
@@ -952,4 +963,191 @@ export async function ownerLogins(copy: Copy) {
       "SELECT rolname,rolcanlogin FROM pg_roles WHERE rolname IN ('account','access','content','relay') ORDER BY rolname",
     )
   ).rows;
+}
+
+export async function outerOperation(copy: Copy, key: string) {
+  const record = (
+    await copy.retainedRelay.query<{ id: string; state: string; hold_reason: string | null }>(
+      'SELECT id,state,hold_reason FROM relay.owner_reconciliation WHERE operation_id=$1',
+      ['owner:reconcile:' + key],
+    )
+  ).rows[0]!;
+  const bindings = (
+    await copy.retainedRelay.query<{ item_ref: string }>(
+      `SELECT item_ref FROM relay.owner_reconciliation_item WHERE reconciliation_id=$1
+       AND item_ref ~ '^restore-(qualification|release):' ORDER BY ordinal`,
+      [record.id],
+    )
+  ).rows.map((row) => row.item_ref);
+  const erasures = (
+    await copy.retainedRelay.query<{ id: string; state: string; outcome_digest: string }>(
+      'SELECT id,state,outcome_digest FROM relay.owner_reconciliation WHERE operation_id=$1',
+      ['owner:reconcile:' + key + ':erasures'],
+    )
+  ).rows[0];
+  return {
+    ...record,
+    erasures,
+    qualifications: bindings.filter((ref) => ref.startsWith('restore-qualification:')),
+    releases: bindings.filter((ref) => ref.startsWith('restore-release:')),
+  };
+}
+
+export async function graphReleased(copy: Copy) {
+  return (
+    await copy.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH <${GRAPHS.control}> {
+      <${DATASET}> rv:dataEpoch "${copy.lineage.dataEpoch}" ; rv:sequence 0 .
+      FILTER NOT EXISTS { <${DATASET}> rv:restoreHold true } } }`)
+  ).boolean;
+}
+
+export async function accessFence(copy: Copy) {
+  return (
+    await copy.owners.access.query<{ open: boolean; generation: string }>(
+      'SELECT open,generation::text AS generation FROM access.recovery_fence WHERE id=true',
+    )
+  ).rows;
+}
+
+/** Same operator command and key for every attempt; only the reconcile call may fail. */
+export function operatorAttempt(fixture: Fixture, copy: Copy, key: string) {
+  return finishOperatorRestore(
+    operatorContext(fixture, copy),
+    { reconcile: (_context, body, attempt) => copy.request(attempt, undefined, body) },
+    key,
+    () => {},
+  );
+}
+
+export async function failOuterOutcome(copy: Copy, key: string) {
+  await copy.faultRetained([
+    {
+      sql: `CREATE FUNCTION relay.g1351_fail_outer_outcome() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN
+          IF NEW.state = 'reconciled' AND NEW.operation_id = 'owner:reconcile:${key}' THEN
+            RAISE EXCEPTION 'fault: outer restore outcome write' USING ERRCODE = 'XX000';
+          END IF;
+          RETURN NEW;
+        END $$`,
+    },
+    {
+      sql: `CREATE TRIGGER g1351_fail_outer_outcome BEFORE UPDATE ON relay.owner_reconciliation
+        FOR EACH ROW EXECUTE FUNCTION relay.g1351_fail_outer_outcome()`,
+    },
+  ]);
+}
+
+export async function repairOuterOutcome(copy: Copy) {
+  await copy.faultRetained([
+    { sql: 'DROP TRIGGER g1351_fail_outer_outcome ON relay.owner_reconciliation' },
+    { sql: 'DROP FUNCTION relay.g1351_fail_outer_outcome()' },
+  ]);
+}
+
+export const FAILED = /Owner reconciliation did not verify the restore \(50[0-9]/;
+
+/** A lost outer outcome: both owners committed and only the outcome write failed. */
+export async function lostOutcome(fixture: Fixture, copy: Copy) {
+  const key = randomUUID();
+  await failOuterOutcome(copy, key);
+  await expect(operatorAttempt(fixture, copy, key)).rejects.toThrow(FAILED);
+  await repairOuterOutcome(copy);
+  const lost = await outerOperation(copy, key);
+  expect(lost).toMatchObject({ state: 'running' });
+  expect(lost.releases).toHaveLength(1);
+  expect(await accessFence(copy)).toEqual([
+    { open: true, generation: (BigInt(fixture.generation) + 1n).toString() },
+  ]);
+  return { key, lost };
+}
+
+/**
+ * A refused completion cannot close a release that already committed, so the
+ * actual surfaces are asserted: the operation settles as held, the verified
+ * restore evidence and owner logins stay closed, the operator command fails and
+ * Access/graph keep the committed release.
+ */
+export async function expectRefusedCompletion(
+  fixture: Fixture,
+  copy: Copy,
+  key: string,
+  reason: RegExp,
+) {
+  const response = await copy.request(key);
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ state: 'held', disposition: 'conflict' });
+  const held = await outerOperation(copy, key);
+  expect(held.state).toBe('held');
+  expect(held.hold_reason).toMatch(reason);
+  await expect(operatorAttempt(fixture, copy, key)).rejects.toThrow(
+    'Owner reconciliation did not verify the restore',
+  );
+  expect((await ownerLogins(copy)).map((row) => row.rolcanlogin)).toEqual([
+    false,
+    false,
+    false,
+    false,
+  ]);
+  expect(await graphReleased(copy)).toBe(true);
+  expect(await accessFence(copy)).toEqual([
+    { open: true, generation: (BigInt(fixture.generation) + 1n).toString() },
+  ]);
+  expect((await copy.ready()).status).toBe(200);
+  await expect(
+    new AccessAdmissionRegistry(copy.owners.access).activePrincipalId(fixture.principal),
+  ).resolves.toBeDefined();
+  return held;
+}
+
+export async function replicaAccess(copy: Copy, sql: string, values: unknown[] = []) {
+  const client = await copy.owners.access.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL session_replication_role = replica');
+    const result = await client.query(sql, values);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+export async function failAccessCommit(copy: Copy) {
+  const client = await copy.owners.access.connect();
+  try {
+    await client.query(`CREATE FUNCTION access.g1351_fail_commit() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'fault: Access commit' USING ERRCODE = 'XX000'; END $$`);
+    await client.query(`CREATE CONSTRAINT TRIGGER g1351_fail_commit AFTER UPDATE ON access.recovery_fence
+      DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.open) EXECUTE FUNCTION access.g1351_fail_commit()`);
+  } finally {
+    client.release();
+  }
+}
+
+export async function repairAccessCommit(copy: Copy) {
+  const client = await copy.owners.access.connect();
+  try {
+    await client.query('DROP TRIGGER g1351_fail_commit ON access.recovery_fence');
+    await client.query('DROP FUNCTION access.g1351_fail_commit()');
+  } finally {
+    client.release();
+  }
+}
+
+export async function liveAccess(copy: Copy) {
+  const client = await copy.owners.access.connect();
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const state = await accessStateCoverage(copy.owners.access, client);
+    const outbox = await accessOutboxCoverage(copy.owners.access, client);
+    await client.query('COMMIT');
+    return { state, outbox };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
 }
