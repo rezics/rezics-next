@@ -1,5 +1,6 @@
 import type { CommunityMessages } from '../messages.ts';
 
+// private, privateHelp: machine-drafted from the English; needs native review.
 export default {
   title: '社区',
   intro: '找到一起阅读和讨论的伙伴。',
@@ -45,6 +46,8 @@ export default {
   publicHelp: '任何人都可以阅读、加入和发帖。',
   restricted: '受限',
   restrictedHelp: '任何人都可以阅读，你决定谁能加入和发帖。',
+  private: '私密',
+  privateHelp: '只有成员可以阅读，你决定谁能加入和发帖。',
   rules: '社区规则',
   ruleTitle: '规则标题',
   ruleBody: '这条规则是什么意思？',

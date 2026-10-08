@@ -34,6 +34,7 @@ import { serverRead } from './features/api/server-read.ts';
 import { SERVER_DEADLINE_HEADER, SERVER_READ_LIMITS } from './features/api/server-fetch.ts';
 import { mainPosition, parsePosition } from './features/wiki/position.ts';
 import { WORK_MISSING_HEADER } from './features/work-page/admission.ts';
+import { SPACE_MISSING_HEADER } from './features/realm/missing.ts';
 
 // Refreshes the session before any page, Server Action, route handler or BFF
 // call reads it, so each request refreshes at most once and nothing
@@ -75,6 +76,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     Date.now() + (transfer ? SERVER_READ_LIMITS.transfer : SERVER_READ_LIMITS.page);
   const incoming = new Headers(request.headers);
   incoming.delete(WORK_MISSING_HEADER);
+  incoming.delete(SPACE_MISSING_HEADER);
   incoming.set(SERVER_DEADLINE_HEADER, String(deadlineAt));
   const pathname = request.nextUrl.pathname;
   const locale =
@@ -283,6 +285,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (missingWork)
     addressed = { kind: 'pass' };
   let discoveryHeaders: Record<string, string> = {};
+  let missingSpace = false;
   // Resolve denied Space reads through Main's limited landing page. A missing
   // resolver answer alone neither admits a page nor invents its capabilities.
   if (path?.lookup.scope === 'space' && (addressed.kind !== 'error' || addressed.status === 404)) {
@@ -325,6 +328,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       discoveryHeaders = discovery ? spaceDiscoveryHeaders(discovery) : {};
       if (addressed.kind === 'error') addressed = { kind: 'pass' };
     } else if (page.kind === 'unavailable') addressed = { kind: 'error', status: 503 };
+    else if (addressed.kind === 'error') {
+      // Missing and unreadable share one 404 with the page's own "isn't here" screen.
+      missingSpace = true;
+      addressed = { kind: 'pass' };
+    }
   }
   if (addressed.kind === 'redirect') {
     const response = NextResponse.redirect(
@@ -360,6 +368,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
   const headers = incoming;
   if (missingWork) headers.set(WORK_MISSING_HEADER, '1');
+  if (missingSpace) headers.set(SPACE_MISSING_HEADER, '1');
   headers.delete(ADDRESS_HEADER);
   // HTTP header values are bytes; native-script names need an ASCII envelope.
   if ('data' in addressed && addressed.data)
@@ -381,11 +390,13 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     headers.set('content-security-policy', policy);
     headers.set(ZONE_NONCE_HEADER, nonce);
   }
-  const response = NextResponse.next({ request: { headers }, ...(missingWork ? { status: 404 } : {}) });
-  if (missingWork) {
+  const response = NextResponse.next({ request: { headers },
+    ...(missingWork || missingSpace ? { status: 404 } : {}) });
+  if (missingWork || missingSpace) {
     response.headers.set('cache-control', 'no-store');
     response.headers.set('x-robots-tag', 'noindex');
   }
+  if (missingSpace) response.headers.set('referrer-policy', 'no-referrer');
   for (const [name, value] of Object.entries(discoveryHeaders)) response.headers.set(name, value);
   if (policy) response.headers.set('content-security-policy', policy);
   // A case's private page keeps its credential in the address; no request it makes may carry that address on.

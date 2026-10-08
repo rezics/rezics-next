@@ -1,5 +1,6 @@
 import type { CommunityMessages } from '../messages.ts';
 
+// private, privateHelp: machine-drafted from the English; needs native review.
 export default {
   title: 'Communautés',
   intro: 'Trouvez des personnes qui lisent et discutent de ce que vous aimez.',
@@ -45,6 +46,8 @@ export default {
   publicHelp: 'Tout le monde peut lire, rejoindre et publier.',
   restricted: 'Restreinte',
   restrictedHelp: 'Tout le monde peut lire. Vous décidez qui peut rejoindre et publier.',
+  private: 'Privée',
+  privateHelp: 'Seuls les membres peuvent lire. Vous décidez qui peut rejoindre et publier.',
   rules: 'Règles de la communauté',
   ruleTitle: 'Titre de la règle',
   ruleBody: 'Que signifie cette règle ?',

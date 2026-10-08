@@ -14,9 +14,11 @@ const input: CommunityCreationIntent = { profile: 'space-realm-v2', name: 'Reade
   initialSettings: initialCommunitySettings('restricted', rules) };
 const succeeded = { data: { realm }, error: null } as CreationResponse;
 
-test('The restricted choice submits private disclosure and initial rules with admission in the create command', () => {
-  expect(input.initialSettings).toEqual({ visibility: 'private', reviewRequired: true, reviewMode: 'mandatory',
+test('Each choice submits the API visibility of the same name, with initial rules and admission in the create command', () => {
+  expect(input.initialSettings).toEqual({ visibility: 'restricted', reviewRequired: true, reviewMode: 'mandatory',
     whoMaySubmit: 'granted', selfJoin: false, rules });
+  expect(initialCommunitySettings('private', rules)).toEqual({ visibility: 'private', reviewRequired: true,
+    reviewMode: 'mandatory', whoMaySubmit: 'granted', selfJoin: false, rules });
   expect(initialCommunitySettings('public', rules)).toEqual({ visibility: 'public', reviewRequired: false,
     reviewMode: 'open', whoMaySubmit: 'members', selfJoin: true, rules });
   const source = readFileSync(new URL('./create-form.tsx', import.meta.url), 'utf8');

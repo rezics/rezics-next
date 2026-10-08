@@ -3,6 +3,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
 import { operationOpen } from '../api/platform-access.ts';
 import { idOf } from './route.ts';
+import { SPACE_MISSING_HEADER } from './missing.ts';
 import { resolveAddress } from '../address/server.ts';
 import { addressKey } from '../address/path.ts';
 import type { ResolvedAddress } from '../address/client.ts';
@@ -94,6 +95,8 @@ export const readRealmHeader = cache(
  */
 export const resolveRealm = cache(
   async (ref: string, locale: UiLocale): Promise<RealmResolution> => {
+    // The edge already found nothing this reader may see; no second read can say more.
+    if ((await headers()).get(SPACE_MISSING_HEADER) === '1') return { kind: 'missing' };
     const resolved = await resolveAddress('space', ref, locale);
     if (resolved.kind !== 'resolved') {
       if (resolved.kind !== 'missing')
@@ -140,6 +143,7 @@ export type SiteResolution =
 
 /** Site resolution never guesses a Zone segment or requires a Realm capability. */
 export const resolveSite = cache(async (ref: string, locale: UiLocale): Promise<SiteResolution> => {
+  if ((await headers()).get(SPACE_MISSING_HEADER) === '1') return { kind: 'missing' };
   const resolved = await resolveAddress('space', ref, locale);
   if (resolved.kind !== 'resolved') {
     if (resolved.kind !== 'missing')

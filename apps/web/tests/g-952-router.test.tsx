@@ -22,6 +22,7 @@ import {
   siteHref,
   tabOf,
 } from '../features/realm/route.ts';
+import { SPACE_MISSING_HEADER } from '../features/realm/missing.ts';
 import type { RealmHeader } from '../features/realm/types.ts';
 import { SpaceDiscovery, spaceDiscoveryHeaders } from '../features/space-access/discovery.tsx';
 import { realmRefFromPageUrl } from '../features/zones/page-missing.tsx';
@@ -182,6 +183,8 @@ describe('G-952 private Space landing admission', () => {
       expect(response.status).toBe(404);
       expect(response.headers.get('x-robots-tag')).toBe('noindex');
       expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+      // The page renders its own "isn't here" screen; the edge never answers with an empty body.
+      expect(response.headers.get(`x-middleware-request-${SPACE_MISSING_HEADER}`)).toBe('1');
       const slash = await beforePathNormalization(
         new Request(`https://rezics.test/en/${surface}/${uuidToSid(realm)}/`),
       );

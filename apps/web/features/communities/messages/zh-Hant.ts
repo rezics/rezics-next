@@ -1,5 +1,6 @@
 import type { CommunityMessages } from '../messages.ts';
 
+// private, privateHelp: machine-drafted from the English; needs native review.
 export default {
   title: '社群', intro: '尋找和你一樣喜歡閱讀與討論作品的人。', search: '搜尋社群', searchAction: '搜尋',
   topics: '主題', topicSearch: '尋找主題', topicApply: '套用主題', topicRemove: '移除主題',
@@ -17,6 +18,8 @@ export default {
   description: '說明', visibility: '誰可以參與？', public: '公開',
   publicHelp: '任何人都可以閱讀、加入和發文。', restricted: '受限',
   restrictedHelp: '任何人都可以閱讀；由你決定誰可以加入和發文。',
+  private: '私人',
+  privateHelp: '只有成員可以閱讀；由你決定誰可以加入和發文。',
   rules: '社群規則', ruleTitle: '規則標題', ruleBody: '這條規則代表什麼？', addRule: '新增規則', removeRule: '移除規則',
   icon: '社群圖示', banner: '橫幅圖片', imageHelp: '選填，支援最大 4 MB 的 JPEG、PNG 或 WebP 圖片。',
   imageDrop: '將圖片拖放到這裡', imageChoose: '或從你的裝置選取圖片',

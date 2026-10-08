@@ -1,5 +1,6 @@
 import type { CommunityMessages } from '../messages.ts';
 
+// private, privateHelp: machine-drafted from the English; needs native review.
 export default {
   title: '커뮤니티', intro: '좋아하는 작품을 읽고 이야기하는 사람들을 찾아보세요.',
   search: '커뮤니티 검색', searchAction: '검색', topics: '주제', topicSearch: '주제 찾기',
@@ -21,6 +22,8 @@ export default {
   description: '설명', visibility: '누가 참여할 수 있나요?', public: '공개',
   publicHelp: '누구나 읽고, 가입하고, 게시할 수 있습니다.', restricted: '제한됨',
   restrictedHelp: '누구나 읽을 수 있습니다. 가입과 게시를 허용할 사람은 직접 정합니다.',
+  private: '비공개',
+  privateHelp: '회원만 읽을 수 있습니다. 가입과 게시를 허용할 사람은 직접 정합니다.',
   rules: '커뮤니티 규칙', ruleTitle: '규칙 제목', ruleBody: '이 규칙은 어떤 의미인가요?',
   addRule: '규칙 추가', removeRule: '규칙 삭제', icon: '커뮤니티 아이콘', banner: '배너 이미지',
   imageHelp: '선택 사항: 4 MB 이하의 JPEG, PNG, WebP 이미지.', imageDrop: '이미지를 여기에 놓으세요',

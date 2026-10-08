@@ -52,6 +52,8 @@ const en = {
   publicHelp: 'Anyone can read, join and post.',
   restricted: 'Restricted',
   restrictedHelp: 'Anyone can read. You decide who can join and post.',
+  private: 'Private',
+  privateHelp: 'Only members can read. You decide who can join and post.',
   rules: 'Community rules',
   ruleTitle: 'Rule title',
   ruleBody: 'What does this rule mean?',

@@ -24,18 +24,19 @@ import { CommunityUploadField, type UploadOutcome } from './upload-field.tsx';
 
 type Rule = { key: string; title: string; body: string };
 type Translation = NameTranslation & { key: string };
-type Visibility = 'public' | 'restricted';
+const VISIBILITIES = ['public', 'restricted', 'private'] as const;
+type Visibility = typeof VISIBILITIES[number];
 type SpacePost = ReturnType<typeof browserMainApi>['v1']['spaces']['post'];
 export type CommunityCreationIntent = Extract<Parameters<SpacePost>[0], { profile: 'space-realm-v2' }>;
 type CreationResponse = Awaited<ReturnType<SpacePost>>;
 
 export function initialCommunitySettings(visibility: Visibility,
   rules: NonNullable<CommunityCreationIntent['initialSettings']>['rules']): NonNullable<CommunityCreationIntent['initialSettings']> {
-  // The form promises member-only disclosure. API "restricted" exposes public
-  // headers; "private" is the API policy that fulfills this choice.
-  return { visibility: visibility === 'restricted' ? 'private' : 'public',
-    reviewRequired: visibility === 'restricted', reviewMode: visibility === 'restricted' ? 'mandatory' : 'open',
-    whoMaySubmit: visibility === 'restricted' ? 'granted' : 'members', selfJoin: visibility === 'public', rules };
+  // Each choice is the API visibility of the same name. Restricted and private
+  // share the founder-decides admission; only reading differs.
+  const open = visibility === 'public';
+  return { visibility, reviewRequired: !open, reviewMode: open ? 'open' : 'mandatory',
+    whoMaySubmit: open ? 'members' : 'granted', selfJoin: open, rules };
 }
 
 /** Replay the same command to read its receipt and settle pending initialization.
@@ -316,10 +317,11 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
     <fieldset className="grid gap-2" disabled={Boolean(creationIntent.current)}>
       <legend className="mb-2 text-sm font-semibold">{words.visibility[locale]}</legend>
       <RadioGroup value={visibility} onValueChange={details => {
-        if (details.value === 'public' || details.value === 'restricted') setVisibility(details.value);
+        const choice = VISIBILITIES.find(item => item === details.value);
+        if (choice) setVisibility(choice);
       }}>
         <RadioGroupLabel className="sr-only">{words.visibility[locale]}</RadioGroupLabel>
-        {(['public', 'restricted'] as const).map(choice => <RadioGroupItem key={choice} value={choice}>
+        {VISIBILITIES.map(choice => <RadioGroupItem key={choice} value={choice}>
           <span className="grid gap-0.5"><span className="font-medium">{words[choice][locale]}</span>
             <span className="text-muted-foreground text-sm">{words[`${choice}Help`][locale]}</span></span>
         </RadioGroupItem>)}

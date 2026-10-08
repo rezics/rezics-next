@@ -1,5 +1,6 @@
 import type { CommunityMessages } from '../messages.ts';
 
+// private, privateHelp: machine-drafted from the English; needs native review.
 export default {
   title: 'コミュニティ', intro: '好きな作品を読んだり語ったりしている人を探しましょう。',
   search: 'コミュニティを検索', searchAction: '検索', topics: 'トピック', topicSearch: 'トピックを探す',
@@ -22,6 +23,8 @@ export default {
   description: '説明', visibility: '誰が参加できますか？', public: '公開',
   publicHelp: '誰でも読んだり、参加したり、投稿したりできます。', restricted: '制限付き',
   restrictedHelp: '誰でも読めます。参加や投稿を許可する人はあなたが決めます。',
+  private: '非公開',
+  privateHelp: 'メンバーだけが読めます。参加や投稿を許可する人はあなたが決めます。',
   rules: 'コミュニティのルール', ruleTitle: 'ルールのタイトル', ruleBody: 'このルールは何を意味しますか？',
   addRule: 'ルールを追加', removeRule: 'ルールを削除', icon: 'コミュニティのアイコン', banner: 'バナー画像',
   imageHelp: '任意。JPEG、PNG、WebP（4 MB以下）に対応しています。', imageDrop: 'ここに画像をドロップ',
