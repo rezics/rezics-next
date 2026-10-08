@@ -14,11 +14,18 @@ export class PrivateSearchUnavailable extends Error {}
 export class PrivateSearchBudgetExceeded extends Error {}
 
 export const PRIVATE_SEARCH_REQUEST_MS = 1_500;
-export const PRIVATE_SEARCH_FUSEKI_CALLS = 10;
+/** Position, exact head (anchor, identity, receipt discovery, receipt triples),
+ * projection, wildcard posting, phrase, and the closing position. Health is not a SPARQL call. */
+export const PRIVATE_SEARCH_FUSEKI_CALLS = 12;
 export const PRIVATE_SEARCH_FINAL_FUSEKI_CALLS = 2;
 export const PRIVATE_SEARCH_FUSEKI_BYTES = 1_048_576;
 const MAX_RESULT_BYTES = 1_048_576;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+
+/** Jena returns the stored language tag with a canonical region (`en-us` as `en-US`). */
+function sameStoredLanguage(stored: string | undefined, admitted: string): boolean {
+  return stored !== undefined && stored.toLowerCase() === admitted.toLowerCase();
+}
 
 function privatePhrase(input: PrivateContributionPhraseInput): string {
   const phrase = input.phrase.normalize('NFC').trim().replace(/\s+/gu, ' ');
@@ -110,7 +117,7 @@ async function queryPrivateContributionPhraseCandidate(env: WorkActivationEnviro
   }`, 262_144);
   const projected = projection.results?.bindings ?? [];
   if (projected.length !== 1 || projected[0]?.body?.value !== exact.body
-    || projected[0].body['xml:lang'] !== exact.language) {
+    || !sameStoredLanguage(projected[0].body['xml:lang'], exact.language)) {
     throw new PrivateSearchUnavailable('private projection differs from exact source');
   }
   // The independent wildcard probe distinguishes a genuine phrase miss from a
@@ -123,7 +130,7 @@ async function queryPrivateContributionPhraseCandidate(env: WorkActivationEnviro
     } }`, 262_144);
   const postings = indexed.results?.bindings ?? [];
   if (postings.length !== 1 || postings[0]?.literal?.value !== exact.body
-    || postings[0].literal['xml:lang'] !== exact.language
+    || !sameStoredLanguage(postings[0].literal['xml:lang'], exact.language)
     || postings[0].graph?.value !== PRIVATE_SEARCH_GRAPH
     || postings[0].predicate?.value !== `${RV}privateSearchBody`) {
     throw new PrivateSearchUnavailable('private Lucene posting is unavailable');

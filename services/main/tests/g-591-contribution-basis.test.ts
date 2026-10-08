@@ -5,13 +5,17 @@ import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts
 import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { publishTextContribution, textPublicationDigest } from '../src/modules/contribution/publish.ts';
-import { CONTRIBUTION_PROFILE } from '../src/modules/contribution/draft.ts';
+import { CONTRIBUTION_PROFILE, textContributionDigest, textContributionReceiptIri }
+  from '../src/modules/contribution/draft.ts';
 import { DATASET, prepareComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { TranslationBasisRequired } from '../src/modules/work/translation-links.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
+const basisAdmission = '00000000-0000-4000-8000-0000000000a1';
 const uri = (value: string) => ({ type: 'uri', value });
 const literal = (value: string) => ({ type: 'literal', value });
+const plain = (value: string) => ({ type: 'literal', value, datatype: 'http://www.w3.org/2001/XMLSchema#string' });
+const integer = (value: string) => ({ type: 'literal', value, datatype: 'http://www.w3.org/2001/XMLSchema#integer' });
 
 test('G-591: another author’s translation basis is checked before a text publication writes', async () => {
   const contribution = id(), work = id(), author = id(), head = id();
@@ -44,6 +48,32 @@ test('G-591: another author’s translation basis is checked before a text publi
         dataset: uri(DATASET), epoch: literal('epoch'), sequence: literal('1'),
       }] } };
       if (query.includes('ASK') && query.includes('a rv:TextContribution')) return { boolean: true };
+      if (query.includes('SELECT ?receipt')) return { results: { bindings: [{
+        receipt: uri(textContributionReceiptIri(basisAdmission)),
+      }] } };
+      if (query.includes('SELECT ?p ?o')) {
+        const digest = textContributionDigest({ work, language: 'zh', actingSubject: author, body: '译文正文' });
+        const rv = 'https://rezics.com/vocab/';
+        const terms: Record<string, { type: string; value: string; datatype?: string }> = {
+          'http://www.w3.org/1999/02/22-rdf-syntax-ns#type': uri(`${rv}OperationReceipt`),
+          [`${rv}operation`]: uri(author),
+          [`${rv}requestDigest`]: plain(digest),
+          [`${rv}admissionId`]: plain(basisAdmission),
+          [`${rv}authorityEpoch`]: plain('0'),
+          [`${rv}admittedScope`]: plain(`contribution:create:${work}`),
+          [`${rv}outcome`]: uri(`${rv}Succeeded`),
+          [`${rv}work`]: uri(work),
+          [`${rv}contribution`]: uri(contribution),
+          [`${rv}draftRevision`]: uri(head),
+          [`${rv}language`]: plain('zh'),
+          [`${rv}author`]: uri(author),
+          [`${rv}datasetId`]: uri(DATASET),
+          [`${rv}dataEpoch`]: plain('epoch'),
+          [`${rv}sequence`]: integer('1'),
+        };
+        return { results: { bindings: Object.entries(terms).map(([predicate, object]) => ({
+          p: uri(predicate), o: object })) } };
+      }
       return { boolean: false, results: { bindings: [] } };
     }
     override async commandWithReceipt(): Promise<never> {

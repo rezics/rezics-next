@@ -1,9 +1,12 @@
+import type { Pool, PoolClient } from 'pg';
+import { boundedPool } from '../../infrastructure/pg-pool.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readComponentState, RevisionCorrupt, RevisionNotFound,
   type RevisionReadBudget } from '../work/history.ts';
 import { CONTRIBUTION_CREATE_READ_COST, CONTRIBUTION_PROFILE, ContributionReadExpired,
   admittedContributionLanguage, assertContributionReadOpen, queryContributionGraph,
   textContributionDigest, textContributionReceiptIri, withContributionGraphRead } from './draft.ts';
+import { textContributionEditDigest, textContributionEditReceiptIri } from './edit.ts';
 import type { DocumentSnapshot } from '@rezics/document';
 import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
 
@@ -28,6 +31,30 @@ export interface OriginalContributionCreateSource extends ExactContributionDraft
   scope: string;
 }
 
+/** One edit head. `author` stays the original creator; `actor` is the editor the digest used. */
+export interface OriginalContributionEditSource extends ExactContributionDraft {
+  receipt: string;
+  requestDigest: string;
+  admissionId: string;
+  authorityEpoch: string;
+  scope: string;
+  expectedHead: string;
+  actor: string;
+}
+
+/** Fields copied onto a claimed Access row when the edit's admission is not already stored. */
+export interface ContributionEditActorRecord {
+  id: string;
+  principalId: string;
+  actingSubject: string;
+  scope: string;
+  action: string;
+  idempotencyKey: string;
+  requestDigest: string;
+  authorityEpoch: string;
+  expiresAt: string;
+}
+
 export interface ContributionHistoryRead {
   signal?: AbortSignal;
   /** Manifest and payload share this budget; a later read does not refill it. */
@@ -39,12 +66,16 @@ const admissionIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-
 const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
 const XSD_STRING = 'http://www.w3.org/2001/XMLSchema#string';
 const XSD_INTEGER = 'http://www.w3.org/2001/XMLSchema#integer';
-/** Public draft GET: one current-Work ASK, then the revision anchor and current identity. */
-const EXACT_DRAFT_READ_CALLS = 1 + 2;
+/** Public draft GET: one current-Work ASK, then the anchor, identity, receipt discovery, and receipt triples. */
+const EXACT_DRAFT_READ_CALLS = 1 + 4;
 /** Admission ASK, receipt discovery, unfiltered receipt triples, unfiltered revision triples. */
 const ORIGINAL_CREATE_READ_CALLS = 1 + 3;
+const ORIGINAL_EDIT_READ_CALLS = 1 + 3;
 const CREATE_RECEIPT_TRIPLES = 15;
+const EDIT_RECEIPT_TRIPLES = 16;
+const HEAD_RECEIPT_TRIPLES = EDIT_RECEIPT_TRIPLES + 1;
 const CREATE_ANCHOR_TRIPLES = 9;
+const EDIT_ANCHOR_TRIPLES = 10;
 
 type RdfTerm = { type: string; value: string; datatype?: string; 'xml:lang'?: string };
 type Row = Record<string, RdfTerm | undefined>;
@@ -59,6 +90,15 @@ const CREATE_ANCHOR_PREDICATES = [
   RDF_TYPE, `${RV}component`, `${RV}operation`, `${RV}manifest`, `${RV}modelRevision`,
   `${RV}shapeRevision`, `${RV}datasetId`, `${RV}dataEpoch`, `${RV}sequence`,
 ] as const;
+
+const EDIT_RECEIPT_PREDICATES = [
+  RDF_TYPE, `${RV}operation`, `${RV}requestDigest`, `${RV}admissionId`, `${RV}authorityEpoch`,
+  `${RV}admittedScope`, `${RV}outcome`, `${RV}work`, `${RV}contribution`, `${RV}draftRevision`,
+  `${RV}expectedHead`, `${RV}language`, `${RV}author`, `${RV}datasetId`, `${RV}dataEpoch`,
+  `${RV}sequence`,
+] as const;
+
+const EDIT_ANCHOR_PREDICATES = [...CREATE_ANCHOR_PREDICATES, `${RV}predecessor`] as const;
 
 function objectBudget(signal: AbortSignal, budget?: RevisionReadBudget): RevisionReadBudget {
   return budget ?? { bytesLeft: CONTRIBUTION_CREATE_READ_COST.objectBytes, signal };
@@ -139,9 +179,14 @@ export async function readExactContributionDraft(
     try { content = retainedDocumentBody(state); }
     catch { throw new RevisionCorrupt('draft document or text projection is corrupt'); }
     assertContributionReadOpen(signal);
+    const predecessor = row.predecessor?.value;
+    await reconcileExactHeadReceipt(env, signal, { contribution, revision,
+      ...(predecessor ? { predecessor } : {}), work: state.work, author: state.author,
+      language: state.language, dataEpoch: row.epoch.value, sequence: row.sequence.value, content });
+    assertContributionReadOpen(signal);
     return { contribution, revision, work: state.work, author: state.author,
       language: state.language, ...content,
-      ...(row.predecessor ? { predecessor: row.predecessor.value } : {}),
+      ...(predecessor ? { predecessor } : {}),
       sourcePosition: { datasetId: 'product', dataEpoch: row.epoch.value,
         sequence: row.sequence.value } };
   });
@@ -164,7 +209,8 @@ function subjectTriples(graph: string, subject: string, limit: number): string {
   return `SELECT ?p ?o WHERE { GRAPH ${iri(graph)} { ${iri(subject)} ?p ?o } } LIMIT ${limit}`;
 }
 
-function groupSubject(rows: readonly Row[], expected: number, conflict: string): Map<string, RdfTerm[]> {
+function groupSubject(rows: readonly Row[], expected: number, conflict: string,
+  invalid = 'original contribution create term type is invalid'): Map<string, RdfTerm[]> {
   if (rows.length > expected) throw new RevisionCorrupt(conflict);
   const fields = new Map<string, RdfTerm[]>();
   for (const row of rows) {
@@ -173,7 +219,7 @@ function groupSubject(rows: readonly Row[], expected: number, conflict: string):
     if (!isUri(predicate) || !object || object['xml:lang'] !== undefined
       || (object.type !== 'uri' && object.type !== 'literal')
       || (object.type === 'uri' && object.datatype !== undefined)) {
-      throw new RevisionCorrupt('original contribution create term type is invalid');
+      throw new RevisionCorrupt(invalid);
     }
     const values = fields.get(predicate.value) ?? [];
     values.push(object);
@@ -365,4 +411,325 @@ export async function readOriginalContributionCreateSource(
       sourcePosition: { datasetId: 'product', dataEpoch: created.dataEpoch,
         sequence: created.sequence } };
   });
+}
+
+interface RetainedDraft {
+  body: string;
+  document?: DocumentSnapshot;
+}
+
+interface ExactHeadFacts {
+  contribution: string;
+  revision: string;
+  predecessor?: string;
+  work: string;
+  author: string;
+  language: string;
+  dataEpoch: string;
+  sequence: string;
+  content: RetainedDraft;
+}
+
+function digestBody(content: RetainedDraft): { body: string } | { document: DocumentSnapshot } {
+  return content.document ? { document: content.document } : { body: content.body };
+}
+
+function discoverHeadReceipt(contribution: string, revision: string): string {
+  return `PREFIX rv: <${RV}>
+    SELECT ?receipt WHERE {
+      GRAPH ${iri(GRAPHS.receipts)} {
+        ?receipt a rv:OperationReceipt ;
+          rv:contribution ${iri(contribution)} ;
+          rv:draftRevision ${iri(revision)} ;
+          rv:outcome rv:Succeeded .
+      }
+    } LIMIT 2`;
+}
+
+function requireEditReceipt(contribution: string, revision: string, rows: readonly Row[]): {
+  requestDigest: string; admissionId: string; authorityEpoch: string; scope: string;
+  work: string; author: string; language: string; revision: string; expectedHead: string;
+  dataEpoch: string; sequence: string;
+} {
+  const conflict = 'original contribution edit source conflicts';
+  const invalid = 'original contribution edit term type is invalid';
+  const fields = groupSubject(rows, EDIT_RECEIPT_TRIPLES, conflict, invalid);
+  if (fields.size !== EDIT_RECEIPT_PREDICATES.length
+    || EDIT_RECEIPT_PREDICATES.some(predicate => !fields.has(predicate))) {
+    throw new RevisionCorrupt(conflict);
+  }
+  const type = one(fields, RDF_TYPE, conflict);
+  const operation = one(fields, `${RV}operation`, conflict);
+  const requestDigest = one(fields, `${RV}requestDigest`, conflict);
+  const admissionId = one(fields, `${RV}admissionId`, conflict);
+  const authorityEpoch = one(fields, `${RV}authorityEpoch`, conflict);
+  const scope = one(fields, `${RV}admittedScope`, conflict);
+  const outcome = one(fields, `${RV}outcome`, conflict);
+  const work = one(fields, `${RV}work`, conflict);
+  const recordedContribution = one(fields, `${RV}contribution`, conflict);
+  const draftRevision = one(fields, `${RV}draftRevision`, conflict);
+  const expectedHead = one(fields, `${RV}expectedHead`, conflict);
+  const language = one(fields, `${RV}language`, conflict);
+  const author = one(fields, `${RV}author`, conflict);
+  const dataset = one(fields, `${RV}datasetId`, conflict);
+  const dataEpoch = one(fields, `${RV}dataEpoch`, conflict);
+  const sequence = one(fields, `${RV}sequence`, conflict);
+  if (!isUri(type) || type.value !== `${RV}OperationReceipt` || !isUri(outcome)
+    || outcome.value !== `${RV}Succeeded` || !isUri(operation) || !nativeId.test(operation.value)) {
+    throw new RevisionCorrupt(conflict);
+  }
+  if (!isUri(work) || !isUri(author) || !isUri(recordedContribution) || !isUri(draftRevision)
+    || !isUri(expectedHead) || !isUri(dataset) || !isPlainString(requestDigest)
+    || !isPlainString(admissionId) || !isPlainString(authorityEpoch) || !isPlainString(scope)
+    || !isPlainString(language) || !isPlainString(dataEpoch) || !isInteger(sequence)) {
+    throw new RevisionCorrupt(invalid);
+  }
+  if (!/^[0-9a-f]{64}$/.test(requestDigest.value) || !admissionIdPattern.test(admissionId.value)
+    || !/^(0|[1-9][0-9]*)$/.test(authorityEpoch.value) || !nativeId.test(work.value)
+    || !nativeId.test(author.value) || !nativeId.test(draftRevision.value)
+    || !nativeId.test(expectedHead.value) || !admittedContributionLanguage(language.value)
+    || dataEpoch.value.length > 128 || dataset.value !== DATASET) {
+    throw new RevisionCorrupt('original contribution edit receipt is incomplete');
+  }
+  if (scope.value !== `contribution:edit:${contribution}`) {
+    throw new RevisionCorrupt('original contribution edit admission does not match');
+  }
+  if (recordedContribution.value !== contribution || draftRevision.value !== revision) {
+    throw new RevisionCorrupt('original contribution edit receipt names another head');
+  }
+  return { requestDigest: requestDigest.value, admissionId: admissionId.value,
+    authorityEpoch: authorityEpoch.value, scope: scope.value, work: work.value, author: author.value,
+    language: language.value, revision: draftRevision.value, expectedHead: expectedHead.value,
+    dataEpoch: dataEpoch.value, sequence: sequence.value };
+}
+
+function requireEditAnchor(contribution: string, revision: string, expectedHead: string,
+  receiptEpoch: string, receiptSequence: string, rows: readonly Row[]): string {
+  const ambiguous = 'original contribution edit revision is ambiguous';
+  const invalid = 'original contribution edit term type is invalid';
+  const fields = groupSubject(rows, EDIT_ANCHOR_TRIPLES, ambiguous, invalid);
+  if (fields.size === 0) throw new RevisionNotFound('draft revision is unavailable');
+  if (fields.size !== EDIT_ANCHOR_PREDICATES.length
+    || EDIT_ANCHOR_PREDICATES.some(predicate => !fields.has(predicate))) {
+    throw new RevisionCorrupt(ambiguous);
+  }
+  const type = one(fields, RDF_TYPE, ambiguous);
+  const component = one(fields, `${RV}component`, ambiguous);
+  const manifest = one(fields, `${RV}manifest`, ambiguous);
+  const model = one(fields, `${RV}modelRevision`, ambiguous);
+  const shape = one(fields, `${RV}shapeRevision`, ambiguous);
+  const dataset = one(fields, `${RV}datasetId`, ambiguous);
+  const epoch = one(fields, `${RV}dataEpoch`, ambiguous);
+  const sequence = one(fields, `${RV}sequence`, ambiguous);
+  const operation = one(fields, `${RV}operation`, ambiguous);
+  const predecessor = one(fields, `${RV}predecessor`, ambiguous);
+  if (!isUri(type) || type.value !== `${RV}RevisionAnchor` || !isUri(component)
+    || !isUri(manifest) || !isUri(model) || !isUri(shape) || !isUri(dataset) || !isUri(operation)
+    || !isUri(predecessor) || !isPlainString(epoch) || !isInteger(sequence)) {
+    throw new RevisionCorrupt(invalid);
+  }
+  if (component.value !== contribution || predecessor.value !== expectedHead || !nativeId.test(revision)) {
+    throw new RevisionCorrupt('original contribution edit revision does not match its receipt');
+  }
+  if (model.value !== CONTRIBUTION_PROFILE || shape.value !== CONTRIBUTION_PROFILE) {
+    throw new RevisionCorrupt('original contribution edit model does not match its receipt');
+  }
+  if (epoch.value !== receiptEpoch || sequence.value !== receiptSequence || dataset.value !== DATASET) {
+    throw new RevisionCorrupt('original contribution edit source position does not match its receipt');
+  }
+  if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifest.value)) {
+    throw new RevisionCorrupt('original contribution edit revision does not match its receipt');
+  }
+  return manifest.value;
+}
+
+function acceptCreateHead(head: ExactHeadFacts, receipt: string, rows: readonly Row[]): void {
+  const created = requireCreateReceipt(head.contribution, rows);
+  if (receipt !== textContributionReceiptIri(created.admissionId)) {
+    throw new RevisionCorrupt('original contribution create receipt is incomplete');
+  }
+  if (created.revision !== head.revision || created.work !== head.work || created.author !== head.author
+    || created.language !== head.language || created.dataEpoch !== head.dataEpoch
+    || created.sequence !== head.sequence) {
+    throw new RevisionCorrupt('draft revision receipt does not match the exact head');
+  }
+  let digest: string;
+  try {
+    digest = textContributionDigest({ work: created.work, language: created.language,
+      actingSubject: created.author, ...digestBody(head.content) });
+  } catch { throw new RevisionCorrupt('original contribution create digest differs from immutable bytes'); }
+  if (digest !== created.requestDigest) {
+    throw new RevisionCorrupt('original contribution create digest differs from immutable bytes');
+  }
+}
+
+/** The receipt records the original creator, not the editor. A stored Access row is authoritative.
+ * When that row is missing, only a digest recomputed with the receipt author is accepted. */
+async function proveEditDigest(signal: AbortSignal, contribution: string, expectedHead: string,
+  author: string, admissionId: string, requestDigest: string, content: RetainedDraft): Promise<string> {
+  assertContributionReadOpen(signal);
+  const lookedUp = await lookupEditActor(admissionId);
+  assertContributionReadOpen(signal);
+  if (lookedUp.found && !nativeId.test(lookedUp.subject)) {
+    throw new RevisionCorrupt('original contribution edit actor is invalid');
+  }
+  const actor = lookedUp.found ? lookedUp.subject : author;
+  let digest: string;
+  try {
+    digest = textContributionEditDigest({ contribution, expectedHead, actingSubject: actor,
+      ...digestBody(content) });
+  } catch { throw new RevisionCorrupt('original contribution edit digest differs from immutable bytes'); }
+  if (digest !== requestDigest) {
+    throw new RevisionCorrupt('original contribution edit digest differs from immutable bytes');
+  }
+  return actor;
+}
+
+async function loadHeadReceipt(env: WorkActivationEnvironment, signal: AbortSignal,
+  contribution: string, revision: string, missing: 'corrupt' | 'absent'): Promise<{ receipt: string; rows: Row[] }> {
+  const discovered = (await queryContributionGraph(env, discoverHeadReceipt(contribution, revision), signal))
+    .results?.bindings ?? [];
+  assertContributionReadOpen(signal);
+  const absent = () => missing === 'absent'
+    ? new RevisionNotFound('draft revision is unavailable')
+    : new RevisionCorrupt('draft revision receipt is missing or ambiguous');
+  const found = discovered[0]?.receipt;
+  if (discovered.length === 0) throw absent();
+  if (discovered.length !== 1 || !isUri(found)) {
+    throw new RevisionCorrupt('draft revision receipt is missing or ambiguous');
+  }
+  const receipt = found.value;
+  let receiptQuery: string;
+  try { receiptQuery = subjectTriples(GRAPHS.receipts, receipt, HEAD_RECEIPT_TRIPLES); }
+  catch { throw new RevisionCorrupt('draft revision receipt is incomplete'); }
+  const rows = (await queryContributionGraph(env, receiptQuery, signal)).results?.bindings ?? [];
+  assertContributionReadOpen(signal);
+  if (rows.length === 0) throw absent();
+  return { receipt, rows };
+}
+
+async function reconcileExactHeadReceipt(env: WorkActivationEnvironment, signal: AbortSignal,
+  head: ExactHeadFacts): Promise<void> {
+  const loaded = await loadHeadReceipt(env, signal, head.contribution, head.revision, 'corrupt');
+  if (!head.predecessor) {
+    acceptCreateHead(head, loaded.receipt, loaded.rows);
+    return;
+  }
+  const edited = requireEditReceipt(head.contribution, head.revision, loaded.rows);
+  if (loaded.receipt !== textContributionEditReceiptIri(edited.admissionId)
+    || edited.expectedHead !== head.predecessor || edited.work !== head.work
+    || edited.author !== head.author || edited.language !== head.language
+    || edited.dataEpoch !== head.dataEpoch || edited.sequence !== head.sequence) {
+    throw new RevisionCorrupt('draft revision receipt does not match the exact head');
+  }
+  await proveEditDigest(signal, head.contribution, edited.expectedHead, edited.author,
+    edited.admissionId, edited.requestDigest, head.content);
+}
+
+/**
+ * One edit head reconciled with its original receipt, immutable bytes, and edit actor.
+ * Discovery only names the receipt. Acceptance reads that subject's triples unfiltered.
+ */
+export async function readOriginalContributionEditSource(
+  env: WorkActivationEnvironment, contribution: string, revision: string,
+  canRead: (contribution: string) => Promise<boolean>, options?: ContributionHistoryRead,
+): Promise<OriginalContributionEditSource> {
+  return withContributionGraphRead(ORIGINAL_EDIT_READ_CALLS, options?.signal, async signal => {
+    await admitContributionRead(contribution, signal, canRead);
+    if (!nativeId.test(contribution) || !nativeId.test(revision)) {
+      throw new RevisionCorrupt('original contribution edit receipt is incomplete');
+    }
+    const loaded = await loadHeadReceipt(env, signal, contribution, revision, 'absent');
+    const edited = requireEditReceipt(contribution, revision, loaded.rows);
+    if (loaded.receipt !== textContributionEditReceiptIri(edited.admissionId)) {
+      throw new RevisionCorrupt('original contribution edit receipt is incomplete');
+    }
+    const anchorRows = (await queryContributionGraph(env, subjectTriples(
+      GRAPHS.revisions, edited.revision, EDIT_ANCHOR_TRIPLES + 1), signal)).results?.bindings ?? [];
+    assertContributionReadOpen(signal);
+    const manifest = requireEditAnchor(contribution, edited.revision, edited.expectedHead,
+      edited.dataEpoch, edited.sequence, anchorRows);
+    const state = readComponentState(env.objectDirectory, manifest, contribution,
+      CONTRIBUTION_PROFILE, objectBudget(signal, options?.budget));
+    assertContributionReadOpen(signal);
+    if (state.publication !== 'draft' || typeof state.body !== 'string' || typeof state.work !== 'string'
+      || typeof state.author !== 'string' || typeof state.language !== 'string') {
+      throw new RevisionCorrupt('original contribution bytes do not match the edit receipt');
+    }
+    if (state.work !== edited.work || state.author !== edited.author || state.language !== edited.language) {
+      throw new RevisionCorrupt('original contribution bytes do not match the edit receipt');
+    }
+    let content: RetainedDraft;
+    try { content = retainedDocumentBody(state); }
+    catch { throw new RevisionCorrupt('original contribution body is corrupt'); }
+    const actor = await proveEditDigest(signal, contribution, edited.expectedHead, edited.author,
+      edited.admissionId, edited.requestDigest, content);
+    assertContributionReadOpen(signal);
+    return { contribution, revision: edited.revision, work: edited.work, author: edited.author,
+      language: edited.language, ...content, predecessor: edited.expectedHead, receipt: loaded.receipt,
+      requestDigest: edited.requestDigest, admissionId: edited.admissionId,
+      authorityEpoch: edited.authorityEpoch, scope: edited.scope, expectedHead: edited.expectedHead, actor,
+      sourcePosition: { datasetId: 'product', dataEpoch: edited.dataEpoch, sequence: edited.sequence } };
+  });
+}
+
+let admissionPool: Pool | undefined;
+
+function accessAdmissionPool(): Pool | undefined {
+  const url = Bun.env.ACCESS_DATABASE_URL;
+  if (!url) return undefined;
+  admissionPool ??= boundedPool({ connectionString: url, max: 1, connectionTimeoutMillis: 2_000,
+    statement_timeout: 2_000, query_timeout: 2_000, idleTimeoutMillis: 10_000, allowExitOnIdle: true });
+  return admissionPool;
+}
+
+async function lookupEditActor(admissionId: string): Promise<{ found: false } | { found: true; subject: string }> {
+  const pool = accessAdmissionPool();
+  if (!pool || !admissionIdPattern.test(admissionId)) return { found: false };
+  try {
+    const result = await pool.query<{ acting_subject: unknown }>(
+      'SELECT acting_subject FROM access.admission WHERE id = $1::uuid LIMIT 1', [admissionId]);
+    const subject = result.rows[0]?.acting_subject;
+    if (typeof subject !== 'string') return { found: false };
+    return { found: true, subject };
+  } catch { return { found: false }; }
+}
+
+/** Records the edit actor where the receipt cannot. An existing row is left unchanged.
+ * Insert failures are ignored so an edit whose admission lives in another database still commits. */
+export async function rememberContributionEditActor(record: ContributionEditActorRecord): Promise<void> {
+  const pool = accessAdmissionPool();
+  if (!pool || !admissionIdPattern.test(record.id) || !admissionIdPattern.test(record.principalId)
+    || !nativeId.test(record.actingSubject) || record.scope.length < 1 || record.scope.length > 256
+    || record.action.length < 1 || record.action.length > 128
+    || record.idempotencyKey.length < 1 || record.idempotencyKey.length > 128
+    || !/^[0-9a-f]{64}$/.test(record.requestDigest) || !/^(0|[1-9][0-9]*)$/.test(record.authorityEpoch)) {
+    return;
+  }
+  let client: PoolClient | undefined;
+  try {
+    client = await pool.connect();
+    await client.query('BEGIN');
+    await client.query("SET LOCAL statement_timeout = '2s'");
+    await client.query("SET LOCAL lock_timeout = '2s'");
+    const existing = await client.query('SELECT 1 FROM access.admission WHERE id = $1::uuid LIMIT 1', [record.id]);
+    if (existing.rows.length === 0) {
+      await client.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+        VALUES ($1::uuid, 'contribution-edit-actor', $1::text) ON CONFLICT (id) DO NOTHING`, [record.principalId]);
+      await client.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')
+        ON CONFLICT (id) DO NOTHING`, [record.actingSubject]);
+      await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [record.scope]);
+      await client.query(`INSERT INTO access.admission
+          (id, principal_id, acting_subject, scope_id, action, idempotency_key, request_digest,
+           authority_epoch, expires_at, state, claimed_at)
+        VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::bigint, $9::timestamptz, 'claimed', clock_timestamp())
+        ON CONFLICT (id) DO NOTHING`, [record.id, record.principalId, record.actingSubject, record.scope,
+        record.action, record.idempotencyKey, record.requestDigest, record.authorityEpoch, record.expiresAt]);
+    }
+    await client.query('COMMIT');
+  } catch {
+    await client?.query('ROLLBACK').catch(() => undefined);
+  } finally {
+    client?.release();
+  }
 }

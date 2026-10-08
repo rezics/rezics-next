@@ -7,9 +7,9 @@ import { FusekiClient, fusekiReadBudget, FusekiReadBudgetExceeded }
 import { canonicalLanguage } from '../src/modules/display-language/select.ts';
 import { CONTRIBUTION_CREATE_READ_COST, CONTRIBUTION_PROFILE, ContributionReadExpired,
   textContributionDigest, textContributionReceiptIri } from '../src/modules/contribution/draft.ts';
-import { textContributionEditDigest } from '../src/modules/contribution/edit.ts';
-import { readExactContributionDraft, readOriginalContributionCreateSource }
-  from '../src/modules/contribution/history.ts';
+import { textContributionEditDigest, textContributionEditReceiptIri } from '../src/modules/contribution/edit.ts';
+import { readExactContributionDraft, readOriginalContributionCreateSource,
+  readOriginalContributionEditSource } from '../src/modules/contribution/history.ts';
 import { GRAPHS, RV, iri, prepareComponent, type WorkActivationEnvironment }
   from '../src/modules/work/activate.ts';
 import { RevisionCorrupt, RevisionNotFound, RevisionReadBudgetExceeded, RevisionUnavailable,
@@ -83,7 +83,8 @@ function receiptTriples(digest: string, extra: Triple[] = [], objects: Record<st
     graph: GRAPHS.receipts, subject, predicate, object })), ...extra];
 }
 
-function anchorTriples(manifestDigest: string, extra: Triple[] = [], objects: Record<string, Term> = {}): Triple[] {
+function anchorTriples(manifestDigest: string, extra: Triple[] = [], objects: Record<string, Term> = {},
+  subject = revision): Triple[] {
   const terms: Record<string, Term> = {
     [RDF_TYPE]: uri(`${RV}RevisionAnchor`),
     [`${RV}component`]: uri(contribution),
@@ -97,7 +98,7 @@ function anchorTriples(manifestDigest: string, extra: Triple[] = [], objects: Re
     ...objects,
   };
   return [...Object.entries(terms).map(([predicate, object]) => ({
-    graph: GRAPHS.revisions, subject: revision, predicate, object })), ...extra];
+    graph: GRAPHS.revisions, subject, predicate, object })), ...extra];
 }
 
 /** Discovery returns receipt IRIs only. A subject read returns every stored triple. */
@@ -420,6 +421,21 @@ function anchorRow(manifestDigest: string, overrides: Record<string, string> = {
   return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, term(value)]));
 }
 
+function exactRespond(anchor: Record<string, { value: string }>, triples: readonly Triple[]) {
+  const subjects = [...new Set(triples.filter(item => item.graph === GRAPHS.receipts).map(item => item.subject))];
+  return (sparql: string) => {
+    if (sparql.includes('ASK')) return { boolean: true };
+    if (sparql.includes('SELECT ?receipt')) {
+      return { results: { bindings: subjects.map(receipt => ({ receipt: uri(receipt) })) } };
+    }
+    if (sparql.includes('SELECT ?p ?o')) {
+      return { results: { bindings: triples.filter(item => item.graph === GRAPHS.receipts)
+        .map(item => ({ p: uri(item.predicate), o: item.object })) } };
+    }
+    return { results: { bindings: [anchor] } };
+  };
+}
+
 function projection(directory: string, respond: (sparql: string) => { results?: { bindings: Record<string, { value: string }>[] }; boolean?: boolean },
   onQuery?: (sparql: string) => void) {
   const seen: { sparql: string; max?: number }[] = [];
@@ -449,12 +465,23 @@ test('exact draft history stays authorized, bounded, and able to read an edited 
     const files = store(directory, { work, author, language, body: edited, publication: 'draft' });
     const row = anchorRow(files.manifestDigest);
     row.predecessor = term(revision);
-    const { env, seen } = projection(directory, sparql => sparql.includes('ASK')
-      ? { boolean: true } : { results: { bindings: [row] } });
+    const editAdmission = randomUUID();
+    const editDigest = textContributionEditDigest({ contribution, expectedHead: revision,
+      actingSubject: author, body: edited });
+    const triples = receiptTriples(editDigest, [], {
+      [`${RV}admissionId`]: plain(editAdmission),
+      [`${RV}admittedScope`]: plain(`contribution:edit:${contribution}`),
+      [`${RV}draftRevision`]: uri(currentHead),
+      [`${RV}expectedHead`]: uri(revision),
+    }, textContributionEditReceiptIri(editAdmission));
+    const { env, seen } = projection(directory, exactRespond(row, triples));
     const draft = await readExactContributionDraft(env, contribution, currentHead, async () => true);
     expect(draft).toMatchObject({ body: edited, predecessor: revision, author, language,
       sourcePosition: { datasetId: 'product', dataEpoch: epoch, sequence } });
-    expect(seen.some(query => query.sparql.includes('rv:OperationReceipt'))).toBe(false);
+    expect(seen.some(query => query.sparql.includes('rv:OperationReceipt'))).toBe(true);
+    const identityAt = seen.findIndex(query => query.sparql.includes('ASK') && query.sparql.includes('rv:author'));
+    const receiptAt = seen.findIndex(query => query.sparql.includes('SELECT ?receipt'));
+    expect(receiptAt).toBeGreaterThan(identityAt);
     expect(seen.some(query => query.sparql.includes('ASK'))).toBe(true);
 
     const budget: RevisionReadBudget = { bytesLeft: 1, signal: new AbortController().signal };
@@ -478,7 +505,7 @@ test('exact draft history stays authorized, bounded, and able to read an edited 
   });
 });
 
-test('exact draft GET composes one current-work admission and two owner reads on one deadline', async () => {
+test('exact draft GET composes one current-work admission and the head receipt reads on one deadline', async () => {
   await withDirectory(async directory => {
     const files = store(directory, { work, author, language, body, publication: 'draft' });
     const row = anchorRow(files.manifestDigest);
@@ -522,30 +549,112 @@ test('exact draft GET composes one current-work admission and two owner reads on
       expect(opened.seen).toHaveLength(3);
     } finally { timeout.mockRestore(); }
 
+    const digest = textContributionDigest({ work, language, actingSubject: author, body });
+    const receipt = textContributionReceiptIri(admission);
+    const triples = receiptTriples(digest);
     const bodies: string[] = [];
     const transport = spyOn(globalThis, 'fetch').mockImplementation(asFetch(async (_url, init) => {
       const sparql = String(init?.body ?? '');
       bodies.push(sparql);
-      const result = sparql.includes('rv:RevisionAnchor')
-        ? { results: { bindings: [row] } }
-        : { boolean: true };
+      const result = sparql.includes('SELECT ?receipt')
+        ? { results: { bindings: [{ receipt: uri(receipt) }] } }
+        : sparql.includes('SELECT ?p ?o')
+          ? { results: { bindings: triples.map(item => ({ p: uri(item.predicate), o: item.object })) } }
+          : sparql.includes('rv:RevisionAnchor')
+            ? { results: { bindings: [row] } }
+            : { boolean: true };
       const payload = Buffer.from(JSON.stringify(result));
       return new Response(payload, { headers: { 'content-type': 'application/sparql-results+json',
         'content-length': String(payload.length) } });
     }));
     try {
-      const parent = { signal: new AbortController().signal, callsLeft: 3, bytesLeft: 200_000 };
+      const parent = { signal: new AbortController().signal, callsLeft: 5, bytesLeft: 200_000 };
       const env = { fuseki: new FusekiClient('http://contribution-draft.invalid/'),
         objectDirectory: directory } as WorkActivationEnvironment;
       const draft = await fusekiReadBudget.run(parent, () => readExactContributionDraft(
         env, contribution, revision, currentWorkAdmission(env)));
       expect(draft.body).toBe(body);
       expect(draft.language).toBe(language);
-      expect(bodies).toHaveLength(3);
+      expect(bodies).toHaveLength(5);
       expect(parent.callsLeft).toBe(0);
-      const short = { signal: new AbortController().signal, callsLeft: 2, bytesLeft: 200_000 };
+      const short = { signal: new AbortController().signal, callsLeft: 4, bytesLeft: 200_000 };
       await expect(fusekiReadBudget.run(short, () => readExactContributionDraft(
         env, contribution, revision, currentWorkAdmission(env)))).rejects.toBeInstanceOf(FusekiReadBudgetExceeded);
     } finally { transport.mockRestore(); }
+  });
+});
+
+test('exact draft refuses a forged edit digest, a different editor without an Access row, and a removed create receipt', async () => {
+  await withDirectory(async directory => {
+    const edited = '改稿';
+    const files = store(directory, { work, author, language, body: edited, publication: 'draft' });
+    const row = anchorRow(files.manifestDigest);
+    row.predecessor = term(revision);
+    const forged = receiptTriples('0'.repeat(64), [], {
+      [`${RV}admittedScope`]: plain(`contribution:edit:${contribution}`),
+      [`${RV}draftRevision`]: uri(currentHead),
+      [`${RV}expectedHead`]: uri(revision),
+    }, textContributionEditReceiptIri(admission));
+    const forgedHead = projection(directory, exactRespond(row, forged));
+    await expect(readExactContributionDraft(forgedHead.env, contribution, currentHead, async () => true))
+      .rejects.toBeInstanceOf(RevisionCorrupt);
+
+    const other = randomUUID();
+    const editorDigest = textContributionEditDigest({ contribution, expectedHead: revision,
+      actingSubject: editor, body: edited });
+    const mismatched = receiptTriples(editorDigest, [], {
+      [`${RV}admissionId`]: plain(other),
+      [`${RV}admittedScope`]: plain(`contribution:edit:${contribution}`),
+      [`${RV}draftRevision`]: uri(currentHead),
+      [`${RV}expectedHead`]: uri(revision),
+    }, textContributionEditReceiptIri(other));
+    const otherEditor = projection(directory, exactRespond(row, mismatched));
+    await expect(readExactContributionDraft(otherEditor.env, contribution, currentHead, async () => true))
+      .rejects.toBeInstanceOf(RevisionCorrupt);
+
+    const createFiles = store(directory);
+    const missing = projection(directory, exactRespond(anchorRow(createFiles.manifestDigest), []));
+    await expect(readExactContributionDraft(missing.env, contribution, revision, async () => true))
+      .rejects.toBeInstanceOf(RevisionCorrupt);
+  });
+});
+
+test('original edit source reconciles one edit receipt with its predecessor and actor', async () => {
+  await withDirectory(async directory => {
+    const edited = '改稿';
+    const files = store(directory, { work, author, language, body: edited, publication: 'draft' });
+    const editAdmission = randomUUID();
+    const digest = textContributionEditDigest({ contribution, expectedHead: revision,
+      actingSubject: author, body: edited });
+    const receiptObjects = {
+      [`${RV}admissionId`]: plain(editAdmission),
+      [`${RV}admittedScope`]: plain(`contribution:edit:${contribution}`),
+      [`${RV}draftRevision`]: uri(currentHead),
+      [`${RV}expectedHead`]: uri(revision),
+    };
+    const anchorObjects = { [`${RV}predecessor`]: uri(revision) };
+    const triples = [...receiptTriples(digest, [], receiptObjects, textContributionEditReceiptIri(editAdmission)),
+      ...anchorTriples(files.manifestDigest, [], anchorObjects, currentHead)];
+    const { env, seen } = environment(directory, triples);
+    const source = await readOriginalContributionEditSource(env, contribution, currentHead, async () => true);
+    expect(source).toMatchObject({ contribution, revision: currentHead, work, author, language, body: edited,
+      predecessor: revision, expectedHead: revision, actor: author,
+      receipt: textContributionEditReceiptIri(editAdmission), requestDigest: digest, admissionId: editAdmission,
+      scope: `contribution:edit:${contribution}`,
+      sourcePosition: { datasetId: 'product', dataEpoch: epoch, sequence } });
+    expect(seen).toHaveLength(3);
+    expect(seen[0]!.sparql).toContain('SELECT ?receipt');
+    expect(seen[0]!.sparql).toContain('LIMIT 2');
+    expect(seen[1]!.sparql).toContain('LIMIT 17');
+    expect(seen[2]!.sparql).toContain('LIMIT 11');
+
+    const forged = environment(directory, [
+      ...receiptTriples('0'.repeat(64), [], receiptObjects, textContributionEditReceiptIri(editAdmission)),
+      ...anchorTriples(files.manifestDigest, [], anchorObjects, currentHead)]);
+    await expect(readOriginalContributionEditSource(forged.env, contribution, currentHead, async () => true))
+      .rejects.toBeInstanceOf(RevisionCorrupt);
+    const gone = environment(directory, anchorTriples(files.manifestDigest, [], anchorObjects, currentHead));
+    await expect(readOriginalContributionEditSource(gone.env, contribution, currentHead, async () => true))
+      .rejects.toBeInstanceOf(RevisionNotFound);
   });
 });

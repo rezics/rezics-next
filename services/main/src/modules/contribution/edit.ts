@@ -221,6 +221,9 @@ export async function editTextContributionDraft(
     || admission.requestDigest !== digest) {
     throw new IdempotencyConflict('Contribution edit admission differs from intent');
   }
+  // The receipt's rv:author is the original creator. The editor is this admission's acting subject.
+  const { rememberContributionEditActor } = await import('./history.ts');
+  await rememberContributionEditActor(admission);
   await assertNotInvalidProfileReceipt(env.fuseki, textContributionEditReceiptIri(admission.id));
   const existing = await readTextContributionEditReceipt(env, admission.id);
   if (existing) return checkedTextContributionEditReceipt(existing, admission, input, digest);

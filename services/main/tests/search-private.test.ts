@@ -44,6 +44,15 @@ test('SEARCH11 concrete private subject is bound before matching and a missing p
   } finally { run.cleanup(); }
 });
 
+test('private phrase keeps the admitted language spelling when the index tag differs in case', async () => {
+  const run = fixture({ admitted: 'en-us', storedTag: 'en-US' });
+  try {
+    const result = await queryPrivateContributionPhrase(run.env, { contribution, phrase: 'nebula phrase' });
+    expect(result.total).toBe(1);
+    expect(result.results[0]?.language).toBe('en-us');
+  } finally { run.cleanup(); }
+});
+
 test('SEARCH12 moved head or missing exact projection cannot become a complete empty result', async () => {
   const run = fixture();
   try {
