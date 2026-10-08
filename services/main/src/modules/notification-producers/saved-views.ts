@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { logWorkerFault } from '@rezics/observability/log';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { FilterDocument } from '../../../../../model/definitions/filter-document-v1.ts';
 import { relationshipEligible } from '../follows/recipients.ts';
@@ -147,7 +148,7 @@ export class SavedViewNotifications implements NotificationSubjectReader {
           if (!(error instanceof QueryRejected)) throw error;
           // A saved document can outlive an executable template. Its typed
           // refusal must not stall unrelated followers behind it.
-          console.warn('Saved view notification refused', view.id, error.refusal);
+          logWorkerFault('main.notification.saved-views', Object.assign(error, { code: error.refusal }));
           continue;
         }
         if (!subject) continue;

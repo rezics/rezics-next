@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import { logWorkerFault } from '@rezics/observability/log';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -399,7 +400,7 @@ export class ReaderLibraryStatusStore {
     // delivery. Supplied transactions are recovered from their standing slots.
     if (!transaction) {
       try { await followWriters.get(this.pool)?.(input.agent,input.work); }
-      catch (error) { console.warn('Library follow deferred to recovery', error); }
+      catch (error) { logWorkerFault('main.library.follow', error); }
     }
     return result;
   }

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import { logWorkerFault } from '@rezics/observability/log';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { controlTransaction } from '../access/topology-control.ts';
 import { baselineMemberProof } from '../access/baseline.ts';
@@ -106,7 +107,7 @@ export async function recoverSpaceFollows(pool: Pool, graph: Pick<FusekiClient, 
         ],
       );
       });
-    } catch (error) { console.warn('Space follow recovery row deferred',error); }
+    } catch (error) { logWorkerFault('main.follows.space-recovery', error); }
     await pool.query('UPDATE access.relationship_recovery_cursor SET space_after_principal=$1,space_after_target=$2 WHERE id',
       [row.principal_id,row.target]);
   }
@@ -165,7 +166,7 @@ export async function recoverSpaceFollows(pool: Pool, graph: Pick<FusekiClient, 
           true,
         );
       });
-    } catch (error) { console.warn('Membership follow recovery row deferred',error); }
+    } catch (error) { logWorkerFault('main.follows.membership-recovery', error); }
     await pool.query('UPDATE access.relationship_recovery_cursor SET member_after=$1 WHERE id',[member.id]);
   }
   if (!members.length) await pool.query('UPDATE access.relationship_recovery_cursor SET member_after=NULL WHERE id');

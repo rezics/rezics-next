@@ -1,4 +1,5 @@
 import { NotificationUnavailable } from './store.ts';
+import { logWorkerFault } from '@rezics/observability/log';
 import { recordWorkerOutcome, withWorkerTelemetry } from '@rezics/observability/runtime';
 import { NotificationDispatcher, DISPATCH_LIMITS } from './dispatcher.ts';
 
@@ -27,7 +28,7 @@ export class NotificationDeliveryWorker {
       if (this.running) return;
       this.running = withWorkerTelemetry('main.notification.delivery', () => this.tick()).catch(error => {
         if (!(error instanceof NotificationUnavailable)) {
-          console.error('notification delivery tick failed', error);
+          logWorkerFault('main.notification.delivery', error);
         }
       }).finally(() => { this.running = undefined; });
     }, this.intervalMs);

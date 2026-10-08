@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { logWorkerFault } from '@rezics/observability/log';
 import { withWorkerTelemetry } from '@rezics/observability/runtime';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { WorkReadUnavailable, type ReadPosition } from '../work/read-session.ts';
@@ -32,7 +33,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
         outcome: count === undefined ? 'completed' : count ? 'worked' : 'idle',
         ...(count === undefined ? {} : { processed: count, unit: 'event' as const }),
       }))
-        .catch(error => { console.error('Zone browse projection deferred', error); })
+        .catch(error => { logWorkerFault('main.zone-browse.projection', error); })
         .finally(() => { this.running = undefined; });
     }, ZONE_BROWSE_PROJECTION_COST.pollMs);
   }
@@ -98,7 +99,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
         if (realm && work) examined.push({ realm, work });
         if (!realm || !work || !ID.test(realm) || !ID.test(work)
           || !/^\d{1,38}$/.test(row.sequence?.value ?? '') || !/^\d+$/.test(row.epochOrder?.value ?? '')) {
-          console.error('Zone browse backfill skipped malformed adoption', { realm, work });
+          logWorkerFault('main.zone-browse.projection', { code: 'malformed_adoption' });
           continue;
         }
         const order = BigInt(row.sequence!.value) + BigInt(row.epochOrder!.value) * 10n ** 38n;
@@ -166,19 +167,19 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     const epochs = rows.length ? await this.epochs() : '';
     for (const row of rows) {
       if (!row.envelope || typeof row.envelope.type !== 'string') {
-        console.error('Zone browse relay skipped malformed event', { event: row.event_id, sequence: row.sequence });
+        console.error('Zone browse relay skipped malformed event');
         continue;
       }
       const receipt = row.envelope.data?.receipt;
       if (/(?:realm\.selection-changed|realm\.publication-suppressed|realm\.submission-selected|realm\.resource-selected)/.test(row.envelope.type)
         && !receipt?.outcome) {
-        console.error('Zone browse relay skipped missing receipt', { event: row.event_id, sequence: row.sequence });
+        console.error('Zone browse relay skipped missing receipt');
         continue;
       }
       if (/(?:realm\.selection-changed|realm\.publication-suppressed|realm\.submission-selected|realm\.resource-selected)/.test(row.envelope?.type ?? '')
         && receipt?.outcome === 'succeeded') {
         if (!receipt.realm || !receipt.work || !ID.test(receipt.realm) || !ID.test(receipt.work)) {
-          console.error('Zone browse relay skipped malformed adoption', { event: row.event_id, sequence: row.sequence });
+          console.error('Zone browse relay skipped malformed adoption');
           continue;
         }
         const values = `VALUES (?realm ?work) { (${iri(receipt.realm)} ${iri(receipt.work)}) }`;

@@ -1,4 +1,5 @@
 import { Elysia } from 'elysia';
+import { logWorkerFault } from '@rezics/observability/log';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { workRead, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
@@ -43,7 +44,7 @@ export class RealmDirectoryWorker {
         this.running = this.tick().then(complete => { incomplete = !complete; }).catch(error => {
           if (this.deps.access.realmDirectory?.closed) { this.clearTimers(); return; }
           if (!(error instanceof WorkReadMoved || error instanceof WorkReadUnavailable)) {
-            console.error('Realm directory refresh failed', error);
+            logWorkerFault('main.realm-directory.refresh', error);
           }
         }).finally(() => {
           this.running = undefined;

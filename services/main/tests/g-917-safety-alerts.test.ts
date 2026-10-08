@@ -105,7 +105,14 @@ test('G917: missing responders and safety timeouts leave Access, editorial and r
       worker.start();
       await worker.stop();
       expect(calls).toEqual(['access', 'editorial', 'safety', 'relay']);
-      expect(logged).toHaveBeenLastCalledWith('Safety alerts:', failure);
+      const line = String(logged.mock.calls.at(-1)?.[0]);
+      expect(JSON.parse(line)).toEqual({
+        level: 'error',
+        event: 'worker_fault',
+        'rezics.worker.name': 'main.notification.safety-alerts',
+        'error.class': 'Error',
+      });
+      expect(line).not.toContain(message);
     }
   } finally {
     logged.mockRestore();

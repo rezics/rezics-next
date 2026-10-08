@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { logWorkerFault } from '@rezics/observability/log';
 import { baselineMemberProof } from '../access/baseline.ts';
 import { controlTransaction } from '../access/topology-control.ts';
 import { automaticFollow } from '../follows/store.ts';
@@ -85,7 +86,7 @@ export async function recoverLibraryFollows(content: Pool, access: Pool) {
   ).rows;
   for (const row of rows) {
     try { await projectLibraryFollow(content, access, row.agent, row.work); }
-    catch (error) { console.warn('Library follow recovery row deferred', error); }
+    catch (error) { logWorkerFault('main.library.follow-recovery', error); }
     await access.query('UPDATE access.relationship_recovery_cursor SET library_agent=$1,library_work=$2 WHERE id',
       [row.agent,row.work]);
   }
