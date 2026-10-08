@@ -322,6 +322,7 @@ export const serializationAllowlist: SerializationAllowance[] = [
     writers: [
       'services/main/migrations/relay/010_erasure_journal.sql',
       main + 'modules/erasure/reconcile.ts',
+      main + 'modules/owner/operations.ts',
       main + 'modules/work/restore-lineage.ts',
     ],
   },
