@@ -153,7 +153,7 @@ export async function startHomeStack(label: string, options: {
   Object.assign(stack.env, { structureObjects });
   const consumer = `feed-${randomUUID()}`;
   const feed = new FeedStore(stack.accessPool);
-  const deps = { environment: stack.env, access: stack.access,
+  const deps = { ...stack.composition.dependencies, environment: stack.env, access: stack.access,
     judgments: new AccessJudgments(stack.accessPool),
     contextSelections: new PrivateContextSelections(stack.accessPool),
     platformAccess: new AccessExposure(stack.accessPool), account, feed,

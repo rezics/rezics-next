@@ -6,28 +6,15 @@ import { CountingPool, isForegroundOperation } from './support/operation-cost.ts
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
-import { AliasRegistry } from '../../../services/main/src/modules/address/registry.ts';
-import { createMainApp } from '../../../services/main/src/app.ts';
+import { mainConfig } from '../../../services/main/src/config.ts';
+import { composeMain } from '../../../services/main/src/composition.ts';
 import { attributeDirectoryRefreshQueries, CountingFuseki } from './support/counting-fuseki.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
-import { AccessAdmissionRegistry, type RegisteredAdmission, type VerifiedPrincipal }
+import { type RegisteredAdmission, type VerifiedPrincipal }
   from '../../../services/main/src/modules/access/admission.ts';
-import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
-import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
-import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
-import { AccessGrants } from '../../../services/main/src/modules/access/grants.ts';
-import { AccessDownloadLeases } from '../../../services/main/src/modules/access/download-leases.ts';
-import { AccessPolicyOwner } from '../../../services/main/src/modules/access/policy-owner.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
-import { AccessActingContexts } from '../../../services/main/src/modules/access/contexts.ts';
-import { PrivateContextSelections } from '../../../services/main/src/modules/context/private-selection.ts';
-import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
-import { StatementSeek } from '../../../services/main/src/modules/statement/seek.ts';
-import { AccessManagedOrganizations } from '../../../services/main/src/modules/access/managed-organizations.ts';
-import { AccessVotes } from '../../../services/main/src/modules/vote/access.ts';
-import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
 import { activateTextContribution, textContributionDigest }
   from '../../../services/main/src/modules/contribution/draft.ts';
 import { publishTextContribution, textPublicationDigest }
@@ -39,12 +26,6 @@ import { MediaStore } from '../../../services/main/src/modules/media/store.ts';
 import { activateMetadataWork, GRAPHS, ID, RV, iri, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
-import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
-import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
-import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
-import { RightsStore } from '../../../services/main/src/modules/rights/store.ts';
-import { ProjectionStore } from '../../../services/main/src/modules/projection/store.ts';
-import { TemplateSeekIndex } from '../../../services/main/src/modules/query/seek-index.ts';
 import { requiredMatcherMode, requiredSafetyMatcher } from '../../../services/main/src/modules/media-screen/required-matcher.ts';
 import { readUuid } from '../../../services/main/src/modules/work/read-contract.ts';
 
@@ -97,10 +78,7 @@ export async function startMediaStack(label: string, options: { contentProjectio
   attributeDirectoryRefreshQueries();
   // The graph is shared by the shard, so immutable manifests must survive this
   // fixture too. The runner removes both owners when it resets the QA stack.
-  const env: WorkActivationEnvironment = { fuseki, objectDirectory: Bun.env.MAIN_OBJECT_DIRECTORY,
-    lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH } };
   const accessPool = new CountingPool({ connectionString: options.ownerUrls?.access ?? Bun.env.ACCESS_DATABASE_URL });
-  env.addresses = new AliasRegistry(accessPool);
   const contentPool = new CountingPool({ connectionString: options.ownerUrls?.content ?? Bun.env.CONTENT_DATABASE_URL });
   const relayPool = new CountingPool({ connectionString: options.ownerUrls?.relay ?? Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   await migrateContent(contentPool);
@@ -115,47 +93,43 @@ export async function startMediaStack(label: string, options: { contentProjectio
   await objects('media/').initialize();
   const media: MediaDependencies = { store, content, objects,
     matcher: options.matchUploads === false ? undefined : requiredSafetyMatcher(matcherMode) };
-  const access = new AccessAdmissionRegistry(accessPool);
-  access.configureBaseline(fuseki);
-  const grants = new AccessGrants(accessPool);
-  const actingContexts = new AccessActingContexts(accessPool);
-  const managedOrganizations = new AccessManagedOrganizations(accessPool);
-  const downloadLeases = new AccessDownloadLeases(accessPool);
-  const accessPolicy = new AccessPolicyOwner(accessPool);
   const issuer = `https://qa-${label}.test`;
   const tokens = new Map<string, { issuer: string; subject: string }>();
   const mediaAccess = new CountingMediaAccess(accessPool);
-  const votes = new AccessVotes(accessPool);
-  const contextSelections = new PrivateContextSelections(accessPool);
-  const erasures = new ErasureService(relayPool, contentPool, accessPool);
-  const statementSeek = new StatementSeek(accessPool,env);
-  const templateSeek = new TemplateSeekIndex(accessPool,fuseki);
+  // The same dependency object the process builds. The harness replaces the
+  // Account verifier, the counted media reader, and this stack's media store.
+  // Write budgets stay open: one shared database serves the whole shard.
+  const wide = { maximum: 100_000, seconds: 60 };
+  const daily = { maximum: 100_000, seconds: 86_400 };
+  const rateRow = { write: wide, upload: daily, report: daily, correspondence: daily,
+    provider: wide, search: wide, address: wide };
+  const config = { ...mainConfig(), MAIN_RATE_LIMIT_BUDGETS: JSON.stringify({
+    anonymous: rateRow, 'new-account': rateRow, member: rateRow, trusted: rateRow, service: rateRow }) };
+  const composition = await composeMain({
+    config, fuseki, accessPool, contentPool, relayPool, erasureRelayPool: relayPool,
+    ownerRelayPool: relayPool, recommendationRelayPool: relayPool,
+    overrides: {
+      media, mediaAccess,
+      account: { verify: async request => {
+        const token = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
+        const principal = tokens.get(token);
+        if (!principal) throw new Error('unknown QA bearer');
+        if (!options.library) return principal;
+        // A baseline member claim re-reads the Account assertion. The library
+        // flag is that verified reader, so the re-read stays the same principal.
+        const verified = { ...principal, emailVerified: true as const };
+        return { ...verified, currentAssertion: async () => verified };
+      } },
+      ...(options.contentProjection ? { dependencies: { contentProjection: { content, cursor: contentCursor,
+        consumer: contentConsumer } } } : {}),
+    },
+  });
+  const env: WorkActivationEnvironment = composition.environment;
+  const access = composition.access;
+  const main = composition.app;
+  const statementSeek = composition.dependencies.statementSeek!;
+  const templateSeek = composition.templateSeek;
   await templateSeek.backfill(env.lineage.dataEpoch);
-  // Closed routes refuse every caller when this is absent, before any grant is read.
-  // The running Main carries the same exposure, so a fixture principal's grant is visible here.
-  const main = createMainApp(fuseki, { environment: env, access, grants, downloadLeases, accessPolicy,
-    platformAccess: new AccessExposure(accessPool),
-    statementSeek, templateSeek, judgments: new AccessJudgments(accessPool),
-    content, contentAuthoring: content, media, votes, erasures,
-    ...(options.profileCredits ? { profiles: new ProfilesAccess(accessPool), personPreferences: new PersonPreferencesStore(accessPool) } : {}),
-    ...(options.contentProjection ? { contentProjection: { content, cursor: contentCursor,
-      consumer: contentConsumer } } : {}),
-    mediaAccess, actingContexts, managedOrganizations, contextSelections, projections: new ProjectionStore(accessPool),
-    ...(options.agents ? { agentProvisioning: new AgentProvisioning(accessPool, env) } : {}),
-    ...(options.library ? { libraryStatus: new ReaderLibraryStatusStore(contentPool),
-      profiles: new ProfilesAccess(accessPool), personPreferences: new PersonPreferencesStore(accessPool),
-      libraryRatings: new ReaderLibraryRatings(accessPool) } : {}),
-    ...(options.rights ? { rights: { store: new RightsStore(contentPool, accessPool) } } : {}),
-    account: { verify: async request => {
-      const token = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
-      const principal = tokens.get(token);
-      if (!principal) throw new Error('unknown QA bearer');
-      if (!options.library) return principal;
-      // A baseline member claim re-reads the Account assertion. The library
-      // flag is that verified reader, so the re-read stays the same principal.
-      const verified = { ...principal, emailVerified: true as const };
-      return { ...verified, currentAssertion: async () => verified };
-    } } });
 
   // Existing media journeys use an explicitly deterministic benign screen.
   // Screening acceptance disables this fixture convenience to observe every state.
@@ -322,10 +296,11 @@ export async function startMediaStack(label: string, options: { contentProjectio
 
   const stop = async () => {
     await templateSeek.stopRecovery();
+    await main.stop();
     await Promise.all([accessPool.end(), contentPool.end(), relayPool.end()]);
     rmSync(directory, { recursive: true, force: true });
   };
-  return { env, fuseki, main, call, member, stableAdmission, access, mediaAccess, accessPool, contentPool, content,
+  return { env, fuseki, main, composition, call, member, stableAdmission, access, mediaAccess, accessPool, contentPool, content,
     statementSeek, templateSeek,
     contentCursor, contentConsumer, store, objects,
     media, admission, catalogueWork, privateWork, publicWork, contribution, stop };
