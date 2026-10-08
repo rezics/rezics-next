@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import type { CommandEnvelope } from '../src/infrastructure/fuseki.ts';
 import { AdmissionDenied, AdmissionExpired } from '../src/modules/access/admission.ts';
+import { AccountAssertionDenied, AccountAssertionUnavailable } from '../src/modules/account/verify-assertion.ts';
 import { fromPlainText } from '@rezics/document';
 import type { ContentCore } from '../../content/src/core.ts';
 import { baselineTarget } from '../src/modules/access/baseline.ts';
@@ -13,6 +14,7 @@ import { changeZoneConfiguration, readZoneConfiguration, readZoneRevisionConfigu
   ZoneStale, ZoneUnavailable } from '../src/modules/zone/configuration.ts';
 import { realmAttachAllowed } from '../src/modules/zone/realm-attachment-authority.ts';
 import { withdrawZoneRealmAttachment } from '../src/modules/zone/realm-attachment-withdrawal.ts';
+import { listRealmZoneAttachments, RealmAttachmentListMissing } from '../src/modules/zone/realm-attachment-list.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const zone = id(1), zoneSpace = id(2), navigation = id(3), head = id(4), actor = id(5);
@@ -46,6 +48,7 @@ function world(directory: string, fixture: Fixture = {}) {
     attachChecks: [] as string[], ownerChecks: [] as string[], recorded: [] as string[],
     attachAuthority: 'held' as 'held' | 'denied' | 'expired', ownerAuthority: 'held' as 'held' | 'denied',
     attachmentLive: true,
+    attachments: [] as Record<string, ReturnType<typeof lit>>[],
     /** Runs once, as a command reaches the graph: the race window after the editor read the head. */
     beforeApply: undefined as undefined | (() => void),
     /** Graph state after the guarded updates the fake applied. */
@@ -70,6 +73,14 @@ function world(directory: string, fixture: Fixture = {}) {
       if (query.includes('SELECT ?space WHERE')) {
         const realm = Object.keys(state.realms).find(candidate => query.includes(`<${candidate}>`));
         return rows(realm ? [{ space: lit(state.realms[realm]!) }] : []);
+      }
+      if (query.includes('rv:realmAttachment ?receipt')) {
+        const after = /STR\(\?zone\) > "([^"]*)"/.exec(query)?.[1];
+        const limit = Number(/LIMIT (\d+)/.exec(query)?.[1] ?? '0');
+        return rows([...state.attachments]
+          .filter(row => !after || row.zone!.value > after)
+          .sort((left, right) => left.zone!.value < right.zone!.value ? -1 : 1)
+          .slice(0, limit));
       }
       if (query.includes('rv:realmAttachment ?attachment ;')) return { boolean: state.attachmentLive };
       if (query.includes('ASK')) {
@@ -158,6 +169,7 @@ test('attaching a Realm from another Space needs both authorities and records a 
     const inserted = update.slice(update.indexOf('INSERT'), update.indexOf('WHERE'));
     expect(inserted).toContain(`<${zone}> rv:defaultRealm <${foreignRealm}>`);
     expect(inserted).toMatch(new RegExp(`<${zone}> rv:realmAttachedBy <${actor}> ;\\s+rv:realmAttachment <urn:rezics:receipt:[0-9a-f]{64}> \\.`));
+    expect(inserted).toMatch(/rv:realmAttachedAt "\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z"\^\^<http:\/\/www\.w3\.org\/2001\/XMLSchema#dateTime>/);
     expect(update.slice(update.indexOf('DELETE'), update.indexOf('INSERT'))).toContain('rv:realmAttachment ?oldAttachment');
   });
 });
@@ -169,6 +181,7 @@ test('a Realm in the Zone\'s own Space keeps today\'s rule and asks no steward',
     expect(w.state.attachChecks).toEqual([]);
     expect(w.state.ownerChecks).toEqual([]);
     expect(w.state.envelopes[0]!.update).not.toContain('rv:ZoneRealmAttachment');
+    expect(w.state.envelopes[0]!.update).not.toContain('rv:realmAttachedAt');
   });
 });
 
@@ -420,4 +433,88 @@ test('realm.attach is a baseline target only on its own scope and judged on the 
   expect(await realmAttachAllowed(client(false), graph(true), actor, foreignRealm)).toBe(false);
   expect(await realmAttachAllowed(client(true), graph(false), actor, foreignRealm)).toBe(false);
   expect(await realmAttachAllowed(client(true), undefined, actor, foreignRealm)).toBe(false);
+});
+
+const attachedZone = (n: number, when: string | null = '2026-10-08T03:04:05.000Z') => ({
+  zone: lit(id(n)), space: lit(zoneSpace), name: lit(`Site ${n}`), language: lit('en'),
+  ...(when ? { attachedAt: lit(when) } : {}),
+});
+
+const list = (w: ReturnType<typeof world>, input: { actingSubject?: string; after?: string; limit: number } = { actingSubject: actor, limit: 24 }) =>
+  listRealmZoneAttachments(w.env, w.account, w.access, new Request('http://main.test/v1/realms'),
+    { realm: foreignRealm, ...input });
+
+test('a steward lists attached Zones; a stranger and an anonymous reader get the missing Realm', async () => {
+  await inDirectory(async directory => {
+    const w = world(directory, { realms: { [foreignRealm]: id(99) } });
+    w.state.attachments = [attachedZone(30), attachedZone(31, null)];
+    const page = await list(w);
+    expect(page.items.map(item => item.name)).toEqual(['Site 30', 'Site 31']);
+    expect(page.items[0]).toMatchObject({ zone: id(30), language: 'en', direction: 'ltr',
+      attachedAt: '2026-10-08T03:04:05.000Z', address: { prefix: '/z/' },
+      withdraw: { method: 'POST', path: `/v1/zones/${id(30).slice(-36)}/realm-attachment-withdrawals` } });
+    expect(page.items[1]!.attachedAt).toBeNull();
+    expect(page.cost).toEqual({ graphReads: 1, sqlReads: 1, rows: 2 });
+    const asked = w.state.queries.filter(query => query.includes('rv:realmAttachment ?receipt'));
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toContain(`<${foreignRealm}>`);
+    expect(asked[0]).toContain('LIMIT 25');
+
+    for (const arrange of [
+      (held: ReturnType<typeof world>) => { held.state.attachAuthority = 'denied'; },
+      (held: ReturnType<typeof world>) => { held.state.attachAuthority = 'expired'; },
+    ]) {
+      const held = world(directory, { realms: { [foreignRealm]: id(99) } });
+      held.state.attachments = [attachedZone(30)];
+      arrange(held);
+      await expect(list(held)).rejects.toBeInstanceOf(RealmAttachmentListMissing);
+      expect(held.state.queries.some(query => query.includes('rv:realmAttachment ?receipt'))).toBe(false);
+    }
+
+    const anonymous = world(directory);
+    anonymous.state.attachments = [attachedZone(30)];
+    anonymous.account = { verify: async () => { throw new AccountAssertionDenied('signed out'); } };
+    await expect(list(anonymous)).rejects.toBeInstanceOf(RealmAttachmentListMissing);
+    expect(anonymous.state.queries.some(query => query.includes('rv:realmAttachment ?receipt'))).toBe(false);
+    expect(anonymous.state.attachChecks).toEqual([]);
+
+    const down = world(directory);
+    down.account = { verify: async () => { throw new AccountAssertionUnavailable('down'); } };
+    await expect(list(down)).rejects.toBeInstanceOf(AccountAssertionUnavailable);
+
+    const unsigned = world(directory);
+    await expect(list(unsigned, { limit: 24 })).rejects.toBeInstanceOf(RealmAttachmentListMissing);
+    expect(unsigned.state.attachChecks).toEqual([]);
+  });
+});
+
+test('the attachment list pages past the first Zone and costs the same query at 1 and 50', async () => {
+  await inDirectory(async directory => {
+    const w = world(directory);
+    w.state.attachments = [attachedZone(30), attachedZone(31), attachedZone(32)];
+    const first = await list(w, { actingSubject: actor, limit: 1 });
+    expect(first.items.map(item => item.zone)).toEqual([id(30)]);
+    expect(first.next).toBe(`v1:${id(30)}`);
+    const second = await list(w, { actingSubject: actor, limit: 1, after: first.next! });
+    expect(second.items.map(item => item.zone)).toEqual([id(31)]);
+    expect(second.next).toBe(`v1:${id(31)}`);
+    await expect(list(w, { actingSubject: actor, limit: 1, after: 'nope' })).rejects.toBeInstanceOf(InvalidZoneConfiguration);
+
+    const costOf = async (count: number) => {
+      const scale = world(directory);
+      scale.state.attachments = Array.from({ length: count }, (_, index) => attachedZone(100 + index));
+      const before = scale.state.queries.length;
+      const page = await list(scale, { actingSubject: actor, limit: 24 });
+      return { queries: scale.state.queries.length - before, graphReads: page.cost.graphReads,
+        shown: page.items.length };
+    };
+    const one = await costOf(1);
+    const fifty = await costOf(50);
+    expect(one.queries).toBe(fifty.queries);
+    expect(one.graphReads).toBe(1);
+    expect(fifty.graphReads).toBe(1);
+    expect(one.shown).toBe(1);
+    expect(fifty.shown).toBe(24);
+    expect(one.queries).toBeGreaterThan(0);
+  });
 });

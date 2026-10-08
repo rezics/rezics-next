@@ -580,6 +580,9 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           rv:realmAttachedBy ${iri(head.attachment.by)} ; rv:realmAttachment ?linkedAttachment . }` : '';
     const kind = input.operation === 'retire' ? 'ZoneRetire'
       : input.operation === 'recover' ? 'ZoneRecover' : 'ZoneConfigure';
+    // The receipt keeps when this edit attached the Realm. A withdrawal does not
+    // need the triple: older attachments predate it and still withdraw.
+    const attachedAt = attach ? new Date().toISOString() : null;
     const update = `PREFIX rv: <${RV}>
       DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
         GRAPH ${iri(GRAPHS.current)} { ${iri(input.zone)} rv:zoneHead ${iri(input.expectedHead)} ;
@@ -617,6 +620,7 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
           rv:admittedScope ${lit(scope)} ; rv:outcome rv:Succeeded ;
           rv:structureOwner ${iri(input.zone)} ; rv:structureRevision ${iri(revision)} ;
           rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+          ${attachedAt ? `${iri(receipt)} rv:realmAttachedAt ${lit(attachedAt)}^^<http://www.w3.org/2001/XMLSchema#dateTime> .` : ''}
           ${publicationFields} }
         GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ;
           rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ;

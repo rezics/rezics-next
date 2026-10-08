@@ -271,3 +271,97 @@ test('a withdrawal landing before an edit or publish commits is not undone by it
     expect(ownerEvents.length).toBeGreaterThan(0);
   } finally { await home.stop(); }
 }, 180_000);
+
+test('a steward lists attached Zones page by page; anyone else gets the missing Realm, at the same cost for 1 and 50', async () => {
+  const home = await startHomeStack('zone-realm-attachment-list', { projectionStart: 'current' });
+  try {
+    const { stack, call } = home;
+    const a = await arrange(home);
+    const realm = await a.realmIn();
+    const site = await a.zoneIn(a.steward, home.author.token);
+    await a.attach(site.zone, realm.realm);
+    const listPath = (id: string, tokenSubject?: string, limit?: number) => {
+      const search = new URLSearchParams();
+      if (tokenSubject) search.set('actingSubject', tokenSubject);
+      if (limit) search.set('limit', String(limit));
+      const query = search.toString();
+      return `/v1/realms/${short(id)}/zone-attachments${query ? `?${query}` : ''}`;
+    };
+    const read = async (id: string, token?: string, subject?: string, limit?: number) => {
+      const response = await call('GET', listPath(id, subject, limit), undefined, token);
+      return { status: response.status, body: await response.json() as Record<string, unknown> };
+    };
+    const missing = randomUUID();
+    const [anonymous, outsider, absent] = await Promise.all([
+      read(realm.realm),
+      read(realm.realm, home.reader.token, a.outsider),
+      read(missing, home.author.token, a.steward),
+    ]);
+    expect(anonymous.status).toBe(404);
+    expect(anonymous.body).toEqual(outsider.body);
+    expect(anonymous.body).toEqual(absent.body);
+    expect(anonymous.body).toMatchObject({ status: 404, code: 'realm_unavailable', title: 'Realm is unavailable' });
+    const hidden = JSON.stringify([anonymous.body, outsider.body, absent.body]);
+    expect(hidden).not.toContain(realm.realm);
+    expect(hidden).not.toContain(missing);
+
+    const empty = await a.realmIn();
+    expect(await read(empty.realm, home.author.token, a.steward)).toMatchObject({ status: 200, body: { items: [] } });
+
+    const listed = async (limit = 24) => read(realm.realm, home.author.token, a.steward, limit);
+    await listed();
+    const before = stack.fuseki.queries;
+    const one = await listed();
+    const atOne = stack.fuseki.queries - before;
+    expect(one.status).toBe(200);
+    const page = one.body as { items: { zone: string; name: string | null; attachedAt: string | null;
+      address: { prefix: string }; withdraw: { method: string; path: string } }[];
+      next: string | null; cost: { graphReads: number } };
+    expect(page.items.map(item => item.zone)).toContain(site.zone);
+    const row = page.items.find(item => item.zone === site.zone)!;
+    expect(row.name).toEqual(expect.any(String));
+    expect(row.name!.length).toBeGreaterThan(0);
+    expect(row.attachedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(row.address.prefix).toBe('/z/');
+    expect(row.withdraw).toEqual({ method: 'POST', path: `/v1/zones/${short(site.zone)}/realm-attachment-withdrawals` });
+    expect(page.cost.graphReads).toBe(1);
+
+    const decoy = `https://rezics.com/id/${randomUUID()}`;
+    const extras = Array.from({ length: 49 }, (_, index) => {
+      const hex = `${randomUUID().replaceAll('-', '')}${randomUUID().replaceAll('-', '')}`;
+      return { zone: `https://rezics.com/id/${randomUUID()}`, space: `https://rezics.com/id/${randomUUID()}`,
+        receipt: `urn:rezics:receipt:${hex}`, label: `Extra ${index}` };
+    });
+    const current = [
+      `${iri(decoy)} a rv:Zone ; rv:defaultRealm ${iri(realm.realm)} ; rv:space ${iri(site.space)} .`,
+      ...extras.map(item => `${iri(item.zone)} a rv:Zone ; rv:defaultRealm ${iri(realm.realm)} ;
+        rv:realmAttachment ${iri(item.receipt)} ; rv:space ${iri(item.space)} ;
+        <http://www.w3.org/2000/01/rdf-schema#label> ${JSON.stringify(item.label)}@en .`),
+    ].join('\n');
+    const receipts = extras.map(item => `${iri(item.receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+      rv:realmAttachedAt "2026-10-08T03:04:05.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .`).join('\n');
+    await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${current} }
+      GRAPH ${iri(GRAPHS.receipts)} { ${receipts} } }`);
+    const mid = stack.fuseki.queries;
+    const fifty = await listed();
+    expect(stack.fuseki.queries - mid).toBe(atOne);
+    expect(atOne).toBeGreaterThan(0);
+    expect((fifty.body as { cost: { graphReads: number } }).cost.graphReads).toBe(page.cost.graphReads);
+
+    const first = await listed(1);
+    const firstPage = first.body as { items: { zone: string }[]; next: string | null };
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.next).toMatch(/^v1:https:\/\/rezics\.com\/id\//);
+    const secondResponse = await call('GET', `${listPath(realm.realm, a.steward, 1)}&after=${encodeURIComponent(firstPage.next!)}`,
+      undefined, home.author.token);
+    expect(secondResponse.status).toBe(200);
+    const second = await secondResponse.json() as { items: { zone: string }[] };
+    expect(second.items).toHaveLength(1);
+    expect(second.items[0]!.zone).not.toBe(firstPage.items[0]!.zone);
+    const wide = await listed(50);
+    const wideItems = (wide.body as { items: { zone: string }[]; next: string | null }).items;
+    expect(wideItems).toHaveLength(50);
+    expect(wideItems.some(item => item.zone === decoy)).toBe(false);
+  } finally { await home.stop(); }
+}, 180_000);

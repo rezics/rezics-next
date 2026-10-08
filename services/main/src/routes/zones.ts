@@ -57,6 +57,8 @@ import { zoneDocumentShowcase, zonePagePresentation, ZONE_SHOWCASE_BLOCK_DEFINIT
 import { withZoneContentAuthority } from '../modules/content-publication/draft.ts';
 import { configureZoneShowcaseDisclosure } from '../modules/zone/showcase-disclosure.ts';
 import { withdrawZoneRealmAttachment } from '../modules/zone/realm-attachment-withdrawal.ts';
+import { listRealmZoneAttachments, RealmAttachmentListMissing, ZONE_ATTACHMENT_LIST_COST }
+  from '../modules/zone/realm-attachment-list.ts';
 import { documentSnapshotSchema } from '../api-document.ts';
 import { parseDocument } from '@rezics/document';
 import { discloseContent } from '../modules/disclosure/assembly.ts';
@@ -91,6 +93,7 @@ export const openApiOperations = {
   '/v1/zones/{id}/query-blocks': { get: { rateLimitFamily: 'read', exposure: 'platform:saved-views', bearer: true } },
   '/v1/zones/{id}/retirements': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/zones/{id}/realm-attachment-withdrawals': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
+  '/v1/realms/{realm}/zone-attachments': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: 'optional' } },
   '/v1/zones/{id}/recoveries': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/zones/{id}/site-publications': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
 } as const;
@@ -153,6 +156,14 @@ const sitePublicationWrite = t.Object({ ...ZoneSitePublicationSelection.properti
 const officialZone = t.Object({ zone: ref, realm: ref, routeSegment: t.String(), address: canonicalAddress });
 const officialPage = t.Object({ items: t.Array(officialZone), next: t.Nullable(t.String()),
   cost: t.Object({ graphReads: t.Integer(), rows: t.Integer() }) });
+const zoneAttachment = t.Object({ zone: ref, name: t.Nullable(t.String()), language: languageTag,
+  direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]), address: canonicalAddress,
+  attachedAt: t.Nullable(t.String()),
+  withdraw: t.Object({ method: t.Literal('POST'),
+    path: t.String({ pattern: '^/v1/zones/[0-9a-f-]{36}/realm-attachment-withdrawals$' }) },
+  { additionalProperties: false }) }, { additionalProperties: false });
+const zoneAttachmentPage = t.Object({ realm: ref, items: t.Array(zoneAttachment), next: t.Nullable(t.String()),
+  cost: t.Object({ graphReads: t.Integer(), sqlReads: t.Integer(), rows: t.Integer() }) });
 const execution = t.Union([
   t.Object({ state: t.Literal('fallback'), reason: t.Union([
     t.Literal('safe_mode'), t.Literal('viewer_opt_out'), t.Literal('none_approved'),
@@ -668,6 +679,24 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           replayed: result.replayed, sourcePosition: { datasetId: 'product', dataEpoch: result.dataEpoch,
             sequence: result.sequence } }, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
+    })
+    .get('/v1/realms/:realm/zone-attachments', { params: t.Object({ realm: groupUuid }),
+      query: t.Object({ actingSubject: t.Optional(ref),
+        after: t.Optional(t.String({ maxLength: 128 })),
+        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 50 })) }, { additionalProperties: false }),
+      response: { 200: zoneAttachmentPage, ...errors } },
+    async ({ request, params, query }) => {
+      try {
+        return Response.json(await listRealmZoneAttachments(work.environment, work.account, work.access,
+          request, { realm: `https://rezics.com/id/${params.realm}`,
+            ...(query.actingSubject ? { actingSubject: query.actingSubject } : {}),
+            ...(query.after ? { after: query.after } : {}),
+            limit: query.limit ?? ZONE_ATTACHMENT_LIST_COST.pageSize }),
+        { headers: { 'cache-control': 'private, no-store' } });
+      } catch (error) {
+        if (error instanceof RealmAttachmentListMissing) return problem(404, 'realm_unavailable', 'Realm is unavailable');
+        return routeError(error);
+      }
     })
     .post('/v1/zones/:id/recoveries', { params: t.Object({ id: groupUuid }),
       body: t.Object({ expectedHead: ref, actingSubject: ref }, { additionalProperties: false }),
