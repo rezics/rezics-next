@@ -1,14 +1,12 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
-import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { StructureStageStore, type StructureStage } from '../../../services/main/src/modules/structure/stage.ts';
 import type { CompositionCost } from '../../../services/main/src/modules/structure/change.ts';
 import { evenKeys } from '../../../services/main/src/modules/structure/order-key.ts';
 import { readCompositionHeader } from '../../../services/main/src/modules/structure/graph.ts';
-import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 import { startMediaStack } from './media-support.ts';
 
 type Composition = { structure: string; revision: string; occurrences: string[]; cost: CompositionCost };
@@ -22,11 +20,8 @@ test('G1014: one occurrence write at 100, 1000 and 10000 chapters touches only i
   const stack = await startMediaStack('g-1014-write-cost');
   try {
     const member = await stack.member('structure-importer');
-    // Stage routes are catalogue-import. The app reads that grant through its exposure.
-    await grantRecordedPlatformUse(stack.accessPool, member.principalId, ['catalogue-import']);
     const objects = stack.objects('semantic/structure/'); await objects.initialize();
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
-      platformAccess: new AccessExposure(stack.accessPool),
       structureObjects: objects, structureStages: new StructureStageStore(stack.contentPool, objects),
       account: { verify: async (request: Request) => {
         if (request.headers.get('authorization') !== `Bearer ${member.token}`) throw new AccountAssertionDenied('Unknown bearer');
