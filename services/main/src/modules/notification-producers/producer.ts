@@ -18,6 +18,7 @@ import { resourceNotification } from './resources.ts';
 import { normalizeAddressAlias } from '@rezics/model/address/aliases';
 import type { SavedViewNotifications } from './saved-views.ts';
 import { notificationProducerEventsSql } from './access-log.ts';
+import { membershipSanction } from './membership-sanction.ts';
 import { observeHorizonLag } from '../horizon/lag.ts';
 
 /** One indexed commit-safe source page and at most 256 inbox writes per audience batch. */
@@ -187,10 +188,14 @@ export class NotificationProducer {
         },
       };
     }
-    const row = (await client.query<{ realm: string; principal_id: string;
-      acting_subject: string }>(`SELECT realm, principal_id, acting_subject
+    const row = (await client.query<{ realm: string; principal_id: string; acting_subject: string;
+      member_action: string | null; result: { banned?: unknown; bannedUntil?: unknown } | null }>(
+      `SELECT realm, principal_id, acting_subject, member_action, result
       FROM access.realm_admin_receipt WHERE id = $1`, [event.event_id])).rows[0];
     if (!row) return null;
+    // acting_subject chooses who is notified. A ban or unban does not copy it
+    // into the stored display: the member-facing notice must not name the moderator.
+    const sanction = event.kind === 'realm_membership_change' ? membershipSanction(row) : null;
     const relationshipPlan: RelationshipRecipients = { targets: [], highlights: false,
       authorityAudience: { kind: 'realm', receipt: event.event_id,
         actor: row.principal_id, actingSubject: row.acting_subject } };
@@ -199,7 +204,7 @@ export class NotificationProducer {
         ? 'realm-role-change' : 'realm-membership-change',
       subject: { owner: 'access', ref: event.event_id, revision: null },
       disclosureBasis: 'realm-role-change-v1', recipients: [], relationshipPlan,
-      display: { kind: 'realm_role_change', actorAgent: row.acting_subject,
+      display: { kind: 'realm_role_change', actorAgent: sanction ? null : row.acting_subject,
         realm: row.realm, groupKey: row.realm } };
   }
 

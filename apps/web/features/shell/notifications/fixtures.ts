@@ -62,6 +62,20 @@ export const roleTaken: StreamItem = item(114, { kind: 'realm_role_change', acto
   realm: iri(901), ...fiction, roleName: 'Community moderators', roleChange: 'taken', groupKey: null,
   target: target(null, null, iri(901)) });
 
+function sanction(sequence: number, action: 'ban' | 'unban', reason: string,
+  until: string | null, permanent: boolean): StreamItem {
+  return { ...item(sequence, { kind: 'realm_role_change', actor: null, realm: iri(901), ...fiction,
+    membershipAction: action, membershipReason: reason, membershipUntil: until, membershipPermanent: permanent,
+    groupKey: null, target: target(null, null, iri(901)) }), purpose: 'governance', topic: 'realm-membership-change' };
+}
+
+/** A timed ban, a permanent ban, and a lifted ban. None names the moderator. */
+export const banNotices: StreamItem[] = [
+  sanction(115, 'ban', 'Repeated rule violations', '2026-11-01T00:00:00.000Z', false),
+  sanction(116, 'ban', 'Harassment after a warning', null, true),
+  sanction(117, 'unban', 'The report was withdrawn', null, false),
+];
+
 /** An open invitation from Daniel to join Fiction. */
 export const invitations: PendingInvitation[] = [{ id: id(501), realm: iri(901), realmName: 'Fiction · 小说',
   realmLanguage: 'en', realmIcon: { kind: 'fallback', key: 'fiction' }, realmHref: spaceHref('fiction', 'community'), inviterName: 'Daniel Chen',

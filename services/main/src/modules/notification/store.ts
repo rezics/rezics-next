@@ -4,7 +4,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import { deliveryChannels, notificationKinds, notificationPurposes, optionalPurposes,
   preferenceChannels } from './schema.ts';
 import type { NotificationSubjectReader, SubjectResolution } from './dispatcher.ts';
-import { notificationNewWorkDisplay } from './display.ts';
+import { notificationNewWorkDisplay, sanctionFromFields } from './display.ts';
 import { disclosurePoolReader, type DisclosureChannel } from '../disclosure/read.ts';
 import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
@@ -159,6 +159,10 @@ export interface StreamItem {
     kind: NotificationKind | 'new_work'; actor: NotificationAgentSummary | null;
     realmName: string | null; realmRouteSegment: string | null; roleName: string | null;
     roleChange: 'given' | 'taken' | null;
+    membershipAction?: 'ban' | 'unban' | null;
+    membershipReason?: string | null;
+    membershipUntil?: string | null;
+    membershipPermanent?: boolean | null;
     target: { title: string | null; excerpt: string | null;
     language: string | null; linkTarget: string | null; reviewId: string | null;
     topicName?: string | null; href?: string | null } }) | null;
@@ -729,18 +733,22 @@ export class NotificationStore {
           items.push(base); continue;
         }
       }
+      const sanction = sanctionFromFields(fields);
       const display: StreamItem['display'] = raw.kind || newWork ? { kind: newWork ? 'new_work' : raw.kind!,
         actor: null as NotificationAgentSummary | null, realm: fields.realm ?? null,
         realmName: fields.realmName ?? null, realmRouteSegment: fields.realmRouteSegment ?? null,
         roleName: fields.roleName ?? null,
         roleChange: fields.roleChange === 'given' || fields.roleChange === 'taken' ? fields.roleChange : null,
+        ...sanction,
         groupKey: raw.group_key, target: {
           title: fields.title ?? null, excerpt: fields.excerpt ?? null,
           language: fields.language ?? null, linkTarget: fields.linkTarget ?? null,
           reviewId: fields.reviewId ?? null,
+          ...(fields.href ? { href: fields.href } : {}),
           ...(newWork ?? {}),
         } } : null;
-      if (display && raw.actor_agent) pendingActors.push({ display, agent: raw.actor_agent });
+      // A stored actor from an older ban row is not rendered once the receipt is a sanction.
+      if (display && raw.actor_agent && !sanction.membershipAction) pendingActors.push({ display, agent: raw.actor_agent });
       items.push({ ...base,
         reason: raw.reason,
         proposal: raw.proposal ? { id: raw.proposal, revision: raw.proposal_revision! } : null,

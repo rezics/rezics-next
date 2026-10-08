@@ -24,6 +24,14 @@ export interface NotificationSubjectReader {
     recipientReason?: ProposalSubscriptionReason | null }): Promise<SubjectResolution>;
 }
 
+/** Mail and a disclosed push carry the current subject fields. A lock screen
+ * that has not opted into private text stays the content-free activity notice. */
+export function renderedDeliveryPayload(fields: Readonly<Record<string, string>>, channel: 'email' | 'push',
+  options: { private: boolean; lockScreenDisclosure: boolean }): Record<string, string> {
+  if (channel === 'push' && options.private && !options.lockScreenDisclosure) return { notice: 'new-activity' };
+  return { ...fields };
+}
+
 export interface ProviderSend {
   /** Stable across retries; the provider must treat it as its idempotency key. */
   deliveryId: string; channel: 'email' | 'push'; address: string | null; addressDigest: string;
@@ -258,9 +266,8 @@ export class NotificationDispatcher {
     if (!resolved) return { kind: 'cancel', reason: 'undisclosed' };
     if (resolved.status === 'erased') return { kind: 'cancel', reason: 'subject_erased' };
     if (resolved.status !== 'available') return { kind: 'cancel', reason: 'undisclosed' };
-    // Push without lock-screen disclosure carries no private subject fields.
-    const payload: Record<string, string> = row.channel === 'push' && resolved.subject.private
-      && !context.lock_screen_disclosure ? { notice: 'new-activity' } : { ...resolved.subject.fields };
+    const payload = renderedDeliveryPayload(resolved.subject.fields, row.channel, {
+      private: resolved.subject.private, lockScreenDisclosure: context.lock_screen_disclosure });
     return { kind: 'send', address: context.address, addressDigest: context.address_digest, payload,
       disclosureDigest: sha256(JSON.stringify(Object.entries(payload).sort())) };
   }

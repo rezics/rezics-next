@@ -13,9 +13,11 @@ import {
   NOW,
   reviews,
   newWorks,
+  banNotices,
   roleTaken,
   streamId,
 } from './fixtures.ts';
+import { sanctionSentence } from './sanction.ts';
 import { RealmInvitations } from './invitations.tsx';
 import { NotificationsUnavailable, NotificationsView } from './notifications-view.tsx';
 
@@ -155,6 +157,26 @@ export const InvitationNotification: Story = {
     await expect(await canvas.findByRole('status')).toHaveTextContent('You joined Fiction · 小说.');
     await expect(canvas.queryByText('Unread')).toBeNull();
     await expect(args.calls).toEqual(['accept:00000901:00000501:false']);
+  },
+};
+
+/** A ban states the Realm, the reason and the end, and links to the Realm page. It does not name a moderator. */
+export const Ban: Story = {
+  args: { ...args(), initial: inboxWindow(banNotices, '0', '117') },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const timed = sanctionSentence('en', { action: 'ban', realm: 'Fiction · 小说',
+      reason: 'Repeated rule violations', until: '2026-11-01T00:00:00.000Z', permanent: false });
+    const permanent = sanctionSentence('en', { action: 'ban', realm: 'Fiction · 小说',
+      reason: 'Harassment after a warning', until: null, permanent: true });
+    const lifted = sanctionSentence('en', { action: 'unban', realm: 'Fiction · 小说',
+      reason: 'The report was withdrawn', until: null, permanent: false });
+    const realm = localizedPath(spaceHref('fiction', 'community'), 'en');
+    await expect(canvas.getByRole('link', { name: timed })).toHaveAttribute('href', realm);
+    await expect(canvas.getByRole('link', { name: permanent })).toHaveAttribute('href', realm);
+    await expect(canvas.getByRole('link', { name: lifted })).toHaveAttribute('href', realm);
+    await expect(canvasElement.textContent).not.toContain('Daniel Chen');
+    await expect(canvasElement.textContent).not.toContain('daniel_chen');
   },
 };
 

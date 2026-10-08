@@ -9,6 +9,20 @@ import { uuidToSid } from '@rezics/model/address/sid';
 
 const native = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/;
 
+/** Inbox fields for a ban or unban. Absent unless the subject named that action. */
+export function sanctionFromFields(fields: Readonly<Record<string, string>>): {
+  membershipAction: 'ban' | 'unban' | null;
+  membershipReason: string | null;
+  membershipUntil: string | null;
+  membershipPermanent: boolean | null;
+} {
+  const action = fields.action === 'ban' || fields.action === 'unban' ? fields.action : null;
+  if (!action) return { membershipAction: null, membershipReason: null, membershipUntil: null,
+    membershipPermanent: null };
+  return { membershipAction: action, membershipReason: fields.reason ?? null,
+    membershipUntil: fields.bannedUntil ?? null, membershipPermanent: fields.permanent === 'true' };
+}
+
 /** Current, recipient-authorized presentation. Call only after subject disclosure succeeds. */
 export async function notificationRealmDisplay(env: WorkActivationEnvironment, realm: string) {
   const match = native.exec(realm);

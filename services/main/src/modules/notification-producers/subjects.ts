@@ -9,6 +9,7 @@ import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activat
 import { reviewSubject } from '../notification/producer-review.ts';
 import { notificationRealmDisplay, notificationRoleName, notificationWorkTitle }
   from '../notification/display.ts';
+import { membershipSanction } from './membership-sanction.ts';
 import { relationshipEligible } from '../follows/recipients.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -223,11 +224,13 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
         );
       }
       if (input.disclosureBasis === 'realm-role-change-v1') {
-      const row = (await access.query<{ realm: string; result: unknown }>(`
-        SELECT realm, result FROM access.realm_admin_receipt WHERE id = $1
+      const row = (await access.query<{ realm: string; result: unknown; member_action: string | null;
+        reason: string }>(`
+        SELECT realm, result, member_action, reason FROM access.realm_admin_receipt WHERE id = $1
           AND action IN ('realm.roles.manage', 'realm.members.manage')`, [input.ref])).rows[0];
       if (!row || row.realm !== input.realm) return hidden;
-      const result = row.result as { member?: unknown; impact?: { changes?: { member?: unknown }[] };
+      const result = row.result as { member?: unknown; banned?: unknown; bannedUntil?: unknown;
+        impact?: { changes?: { member?: unknown }[] };
         notificationRole?: unknown; auditDetail?: { kind?: unknown; member?: unknown; assigned?: unknown } };
       const member = (await access.query<{ member: string }>(`
         SELECT DISTINCT r.subject_id AS member,impact.ordinal FROM access.representation r
@@ -252,6 +255,20 @@ export function notificationProducerSubjectReader(access: Pool, content: Pool,
         ORDER BY impact.ordinal NULLS LAST,r.subject_id LIMIT 1`,
       [input.principalId, input.ref])).rows[0]?.member;
       if (!member) return hidden;
+      const sanction = membershipSanction({ member_action: row.member_action, result });
+      if (sanction) {
+        const fields: Record<string, string> = {
+          linkTarget: row.realm, realm: row.realm, action: sanction.action, reason: row.reason,
+          permanent: sanction.permanent ? 'true' : 'false',
+          ...(sanction.bannedUntil ? { bannedUntil: sanction.bannedUntil } : {}),
+        };
+        const presented = await present({ status: 'available', subject: { private: true, fields } }, row.realm);
+        if (presented.status !== 'available') return presented;
+        const segment = presented.subject.fields.realmRouteSegment
+          || row.realm.match(/[0-9a-f-]{36}$/)?.[0] || row.realm;
+        return { status: 'available', subject: { private: true, fields: {
+          ...presented.subject.fields, href: `/r/${encodeURIComponent(segment)}` } } };
+      }
       const roleName = await notificationRoleName(access, row.realm, member, result.notificationRole);
       return present({ status: 'available', subject: { private: true,
         fields: { linkTarget: row.realm, realm: row.realm,

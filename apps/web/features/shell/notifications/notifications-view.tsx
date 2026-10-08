@@ -13,6 +13,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { materializeData } from 'native-i18n';
 import { messages as newWorkMessages } from './messages.ts';
+import { sanctionSentence } from './sanction.ts';
 import type { UiLocale } from '../../../i18n/define.ts';
 import { useRef, useState } from 'react';
 import { localizedPath } from '../../../i18n/locale.ts';
@@ -68,6 +69,11 @@ function sentence(item: StreamItem, t: T, locale: UiLocale): string {
   const name = display.actor?.name ?? t.someone;
   const title = display.target.title;
   const realm = display.realmName;
+  if (display.membershipAction === 'ban' || display.membershipAction === 'unban') {
+    return sanctionSentence(locale, { action: display.membershipAction, realm: realm ?? '',
+      reason: display.membershipReason ?? '', until: display.membershipUntil ?? null,
+      permanent: display.membershipPermanent === true });
+  }
   switch (display.kind) {
     case 'reply': return item.topic === 'mention' ? t.mentionedYou({ name })
       : title ? t.repliedOn({ name, title }) : t.replied({ name });
@@ -146,7 +152,10 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, tr
   const [failed, setFailed] = useState(false);
   const attempt = useRef<{ action: 'accept' | 'decline'; listed: boolean; key: string } | null>(null);
   const display = item.display;
-  const Icon = display ? icons[display.kind] : item.proposal ? FilePenLineIcon : BellIcon;
+  // A sanction never shows the person who recorded it.
+  const actor = display?.membershipAction ? null : display?.actor;
+  const Icon = display?.membershipAction ? ShieldIcon : display ? icons[display.kind]
+    : item.proposal ? FilePenLineIcon : BellIcon;
   const href = destination(item);
   const text = sentence(item, t, locale);
   const where = place(item, t);
@@ -170,11 +179,11 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, tr
   return <li className={cn('relative flex gap-3 px-4 py-3.5 transition-colors hover:bg-accent/30',
     !item.read && 'bg-primary/4')}>
     <span className="relative mt-0.5 shrink-0">
-      {display?.actor ? <CommunityIcon name={display.actor.name ?? t.someone} size="md" avatarQuery={avatarQuery} person
-        icon={display.actor.avatar ? { kind: 'image', url: display.actor.avatar } : null} />
+      {actor ? <CommunityIcon name={actor.name ?? t.someone} size="md" avatarQuery={avatarQuery} person
+        icon={actor.avatar ? { kind: 'image', url: actor.avatar } : null} />
         : <span className="grid size-9 place-items-center rounded-full bg-muted text-muted-foreground">
           <Icon aria-hidden="true" className="size-4.5" /></span>}
-      {display?.actor ? <span className="absolute -end-1 -bottom-1 grid size-5 place-items-center rounded-full border
+      {actor ? <span className="absolute -end-1 -bottom-1 grid size-5 place-items-center rounded-full border
         border-background bg-card text-muted-foreground"><Icon aria-hidden="true" className="size-3" /></span> : null}
     </span>
     <div className="grid min-w-0 flex-1 gap-1">
