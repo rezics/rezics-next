@@ -5,9 +5,11 @@ import { identityCanonical } from '../address/canonical.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable,
   type AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { canonicalLanguage, direction } from '../display-language/tag.ts';
+import type { SparqlResult } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { InvalidZoneConfiguration } from './config-format.ts';
+import { duringAttachmentPage } from './realm-attachment-authority.ts';
 import { realmAttachHeld, realmAttachRequest } from './realm-attachment.ts';
 
 /** The same answer as a Realm that is not there. Callers cannot tell a missing
@@ -15,8 +17,10 @@ import { realmAttachHeld, realmAttachRequest } from './realm-attachment.ts';
 export class RealmAttachmentListMissing extends Error {}
 
 /** One bound page. The grant check is the existing `realm.attach` lookup and is
- * not repeated per row. Jena can find `rv:defaultRealm` for this Realm through
- * POS, then sorts that Realm's matches; an ordered posting would seek the page. */
+ * not repeated per row; this page is that lookup's graph read, so the share
+ * lock covers it. Jena can find `rv:defaultRealm` for this Realm through POS.
+ * An IRI `>` filter matches nothing in Jena 6, so the cursor stays STR(?zone)
+ * and that posting is sorted rather than seeked. */
 export const ZONE_ATTACHMENT_LIST_COST = { graphReads: 1, sqlReads: 1, pageSize: 24 } as const;
 
 const CURSOR = /^v1:https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -51,25 +55,15 @@ export async function listRealmZoneAttachments(env: WorkActivationEnvironment,
     if (error instanceof AccountAssertionDenied) throw new RealmAttachmentListMissing('Realm is unavailable');
     throw error;
   }
-  if (!input.actingSubject || !await realmAttachHeld(access,
-    realmAttachRequest(principal, input.actingSubject, input.realm))) {
-    throw new RealmAttachmentListMissing('Realm is unavailable');
-  }
+  if (!input.actingSubject) throw new RealmAttachmentListMissing('Realm is unavailable');
+  const read: { query: string; budget: number; result?: SparqlResult } = {
+    query: attachmentPageQuery(input.realm, input.after, input.limit), budget: 64 * 1024 };
+  const held = await duringAttachmentPage(read, () => realmAttachHeld(access,
+    realmAttachRequest(principal, input.actingSubject!, input.realm)));
+  if (!held) throw new RealmAttachmentListMissing('Realm is unavailable');
+  if (!read.result) throw new Error('Realm attachment page was not read with the grant');
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
-  const after = input.after ? `FILTER(STR(?zone) > ${lit(input.after.slice(3))})` : '';
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
-    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-    SELECT ?zone ?space ?name ?language ?attachedAt WHERE {
-      GRAPH ${iri(GRAPHS.current)} {
-        ?zone a rv:Zone ; rv:defaultRealm ${iri(input.realm)} ; rv:realmAttachment ?receipt ; rv:space ?space .
-        OPTIONAL { ?zone rdfs:label ?name . BIND(LANG(?name) AS ?language) }
-      }
-      GRAPH ${iri(GRAPHS.receipts)} {
-        ?receipt rv:outcome rv:Succeeded .
-        OPTIONAL { ?receipt rv:realmAttachedAt ?attachedAt }
-      }
-      ${after}
-    } ORDER BY STR(?zone) LIMIT ${input.limit + 1}`, 64 * 1024)).results?.bindings ?? [];
+  const rows = read.result.results?.bindings?.filter(row => row.zone?.value) ?? [];
   const selected = collapse(rows).slice(0, input.limit);
   const spaces = [...new Set(selected.map(row => row.space!.value))];
   const names = spaces.length ? await env.addresses?.currents(spaces).catch(() => new Map()) : new Map();
@@ -79,6 +73,30 @@ export async function listRealmZoneAttachments(env: WorkActivationEnvironment,
     next: more && items.length ? `v1:${items.at(-1)!.zone}` : null,
     cost: { graphReads: ZONE_ATTACHMENT_LIST_COST.graphReads,
       sqlReads: ZONE_ATTACHMENT_LIST_COST.sqlReads, rows: rows.length } };
+}
+
+function attachmentPageQuery(realm: string, after: string | undefined, limit: number): string {
+  const cursor = after ? `FILTER(STR(?zone) > ${lit(after.slice(3))})` : '';
+  return `PREFIX rv: <${RV}>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+    SELECT ?open ?zone ?space ?name ?language ?attachedAt WHERE {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ; rv:space ?realmSpace .
+        FILTER NOT EXISTS { ${iri(realm)} rv:protectionHead ?protection }
+        BIND("open" AS ?open)
+      }
+      OPTIONAL {
+        GRAPH ${iri(GRAPHS.current)} {
+          ?zone a rv:Zone ; rv:defaultRealm ${iri(realm)} ; rv:realmAttachment ?receipt ; rv:space ?space .
+          OPTIONAL { ?zone rdfs:label ?name . BIND(LANG(?name) AS ?language) }
+        }
+        GRAPH ${iri(GRAPHS.receipts)} {
+          ?receipt rv:outcome rv:Succeeded .
+          OPTIONAL { ?receipt rv:realmAttachedAt ?attachedAt }
+        }
+        ${cursor}
+      }
+    } ORDER BY STR(?zone) LIMIT ${limit + 1}`;
 }
 
 function collapse<T extends { zone?: { value: string } }>(rows: T[]): T[] {

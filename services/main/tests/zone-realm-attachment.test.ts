@@ -12,7 +12,7 @@ import { RV, prepareComponent, type WorkActivationEnvironment } from '../src/mod
 import { ZONE_CONFIG_FORMAT, ZONE_LIMITS, ZONE_PROFILE, InvalidZoneConfiguration } from '../src/modules/zone/config-format.ts';
 import { changeZoneConfiguration, readZoneConfiguration, readZoneRevisionConfiguration, publishZoneSite,
   ZoneStale, ZoneUnavailable } from '../src/modules/zone/configuration.ts';
-import { realmAttachAllowed } from '../src/modules/zone/realm-attachment-authority.ts';
+import { attachmentPagePending, realmAttachAllowed } from '../src/modules/zone/realm-attachment-authority.ts';
 import { withdrawZoneRealmAttachment } from '../src/modules/zone/realm-attachment-withdrawal.ts';
 import { listRealmZoneAttachments, RealmAttachmentListMissing } from '../src/modules/zone/realm-attachment-list.ts';
 
@@ -49,6 +49,8 @@ function world(directory: string, fixture: Fixture = {}) {
     attachAuthority: 'held' as 'held' | 'denied' | 'expired', ownerAuthority: 'held' as 'held' | 'denied',
     attachmentLive: true,
     attachments: [] as Record<string, ReturnType<typeof lit>>[],
+    /** begin, the page read, end: the page is inside the grant admission. */
+    grantWindow: [] as string[],
     /** Runs once, as a command reaches the graph: the race window after the editor read the head. */
     beforeApply: undefined as undefined | (() => void),
     /** Graph state after the guarded updates the fake applied. */
@@ -75,12 +77,17 @@ function world(directory: string, fixture: Fixture = {}) {
         return rows(realm ? [{ space: lit(state.realms[realm]!) }] : []);
       }
       if (query.includes('rv:realmAttachment ?receipt')) {
+        state.grantWindow.push('page');
         const after = /STR\(\?zone\) > "([^"]*)"/.exec(query)?.[1];
         const limit = Number(/LIMIT (\d+)/.exec(query)?.[1] ?? '0');
-        return rows([...state.attachments]
+        const selected = [...state.attachments]
           .filter(row => !after || row.zone!.value > after)
           .sort((left, right) => left.zone!.value < right.zone!.value ? -1 : 1)
-          .slice(0, limit));
+          .slice(0, limit);
+        if (!query.includes('BIND("open" AS ?open)')) return rows(selected);
+        return rows(selected.length
+          ? selected.map(row => ({ open: lit('open'), ...row }))
+          : [{ open: lit('open') }]);
       }
       if (query.includes('rv:realmAttachment ?attachment ;')) return { boolean: state.attachmentLive };
       if (query.includes('ASK')) {
@@ -127,10 +134,18 @@ function world(directory: string, fixture: Fixture = {}) {
     async recordGraphOutcome(admission: string, proof: { outcome: string }) {
       state.recorded.push(`${admission}:${proof.outcome}`);
     },
-    async assertAuthority(request: { action: string; scope: string }) {
+    async assertAuthority(request: { action: string; scope: string; actingSubject?: string }) {
       state.attachChecks.push(`${request.action}@${request.scope}`);
       if (state.attachAuthority === 'denied') throw new AdmissionDenied('permission is not granted');
       if (state.attachAuthority === 'expired') throw new AdmissionExpired('grant expired');
+      if (!attachmentPagePending()) return;
+      state.grantWindow.push('begin');
+      try {
+        const allowed = await realmAttachAllowed({
+          async query() { return { rowCount: 1, rows: [] }; },
+        } as never, fuseki, request.actingSubject ?? actor, request.scope.slice('realm:attach:'.length));
+        if (!allowed) throw new AdmissionDenied('permission is not granted');
+      } finally { state.grantWindow.push('end'); }
     },
     async activePrincipalId() { return 'principal'; },
     async canMarkOfficialZone() { return true; },
@@ -459,6 +474,11 @@ test('a steward lists attached Zones; a stranger and an anonymous reader get the
     expect(asked).toHaveLength(1);
     expect(asked[0]).toContain(`<${foreignRealm}>`);
     expect(asked[0]).toContain('LIMIT 25');
+    expect(asked[0]).toContain('BIND("open" AS ?open)');
+    expect(asked[0]).toContain('rv:realmState rv:Active');
+    expect(asked[0]).not.toContain('ASK');
+    expect(w.state.grantWindow).toEqual(['begin', 'page', 'end']);
+    expect(w.state.queries.filter(query => query.includes('ASK') && query.includes('rv:realmState'))).toEqual([]);
 
     for (const arrange of [
       (held: ReturnType<typeof world>) => { held.state.attachAuthority = 'denied'; },
