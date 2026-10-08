@@ -30,15 +30,14 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     const agent = await home.provision('Import reader',home.reader.token);
     const other = await home.provision('Fresh import reader',home.author.token);
     const files = new LibraryFileStore(stack.contentPool), imports = new ReaderLibraryImportStore(stack.contentPool);
-    const app = createMainApp(stack.fuseki,{ ...home.deps,
-      // The QA bearer records no consent scopes. Review keeps a computed match
-      // only when library:write is present, which this reader already uses.
-      account: { verify: async (request,required) => {
-        const principal = await home.deps.account.verify(request,required);
-        return principal.accountScopes?.includes('library:write') ? principal
-          : { ...principal,accountScopes: ['work:read','library:write'] };
-      } },
-      libraryFiles: files,libraryImport: imports,
+    // Review retains a match only when the caller's login includes library write.
+    // That consent belongs to the reader who imports, not to every principal.
+    const readerLogin = await home.deps.account.verify(new Request('http://main.local/login',{
+      headers: { authorization: `Bearer ${home.reader.token}` } }));
+    const readerPrincipal = await readerLogin.currentAssertion?.();
+    if (!readerPrincipal) throw new Error('Import reader has no login principal');
+    Object.assign(readerPrincipal,{ accountScopes: ['work:read','library:write'] });
+    const app = createMainApp(stack.fuseki,{ ...home.deps,libraryFiles: files,libraryImport: imports,
       mcp: { issuer: 'https://account.test/api/auth',resource: 'http://main.local' },
       accessPolicy: new AccessPolicyOwner(stack.accessPool),
       libraryBundle: new LibraryBundleExporter(stack.contentPool,stack.accessPool),
