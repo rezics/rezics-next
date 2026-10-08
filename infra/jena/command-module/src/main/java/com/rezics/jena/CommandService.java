@@ -181,6 +181,21 @@ final class CommandService extends ActionService {
                 action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
                 respond(action, 200, result); return;
             }
+            if (body.get("workScopeDirectory") != null) {
+                // Capability before the closed envelope, same as the other maintenance commands.
+                if (!authorized(action, maintenanceCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                if (!body.keys().equals(Set.of("workScopeDirectory")) || !body.get("workScopeDirectory").isObject()
+                    || !body.get("workScopeDirectory").getAsObject().keys().isEmpty())
+                    throw new IllegalArgumentException("invalid work scope directory envelope");
+                // One existing page. The 10-second command budget is not widened.
+                long deadline = System.nanoTime() + 10_000_000_000L;
+                Map<String, Object> result = runWorkScopeDirectory(action.getDataService().getDataset(), deadline);
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, 200, result); return;
+            }
             if (body.get("claimFoldMembers") != null) {
                 if (!authorized(action, maintenanceCapability)) {
                     respond(action, 403, Map.of("status", "forbidden")); return;
@@ -403,6 +418,28 @@ final class CommandService extends ActionService {
     record Slim(String payloadSha256, String component, String revision) {}
     record Retirement(String receipt, String digest, String payloadSha256, String dataEpoch,
                       String sequence, String streamSequence, String signature) {}
+
+    /** One bounded directory page. The caller retains the cursor and repeats until phase complete. */
+    private static Map<String, Object> runWorkScopeDirectory(DatasetGraph dataset, long deadline) {
+        synchronized (dataset) {
+            dataset.begin(org.apache.jena.query.ReadWrite.WRITE);
+            boolean commit = false;
+            try {
+                TemplateIndexService.workScopeBudget(deadline);
+                PublicNameProjection.prepareWorkScopeDirectory(dataset, deadline);
+                String phase = PublicNameProjection.workScopeDirectoryPhase(dataset);
+                TemplateIndexService.workScopeBudget(deadline);
+                dataset.commit();
+                commit = true;
+                return Map.of("status", "prepared", "phase", phase, "more", !"complete".equals(phase));
+            } catch (java.util.concurrent.CancellationException cancelled) {
+                return Map.of("status", "deadline", "phase", "absent", "more", true);
+            } finally {
+                try { if (!commit) dataset.abort(); }
+                finally { dataset.end(); }
+            }
+        }
+    }
 
     /** Closed private acceptance; no source mutation or terminal receipt dispatch. */
     Map<String, Object> runTitleCandidate(DatasetGraph dataset, String receipt, String digest,

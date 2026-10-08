@@ -347,6 +347,14 @@ final class PublicNameProjection {
         if (!page.more()) scopeState(data, WORK_SCOPE, "scopePhase", NodeFactory.createLiteralString("complete"));
         TemplateIndexService.workScopeBudget(deadline); return page.owners().size();
     }
+    /** Reads the phase the preparer just committed. It does not choose or change that phase. */
+    static String workScopeDirectoryPhase(DatasetGraph data) {
+        scopeWrite(data);
+        Node phase = scopeState(data, WORK_SCOPE, "scopePhase");
+        if (phase == null) return "absent";
+        if (!phase.isLiteral()) throw new IllegalStateException("Work name scope phase is unavailable");
+        return phase.getLiteralLexicalForm();
+    }
     record ScopeOwner(Node slot, Node work, Node main, Node realm, Node head) {}
     private static ScopeOwner scopeOwner(DatasetGraph data, Node slot) {
         if (!data.contains(CURRENT, slot, RDF.type.asNode(), p("RealmPublicationSlot"))) return null;

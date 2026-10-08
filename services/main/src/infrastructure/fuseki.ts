@@ -127,6 +127,12 @@ export type MembershipPreparationResult =
   | { status: 'committed'; complete: boolean; placements: number; receipts: string[];
       examined: number; phase: number; after: string; restarted: boolean }
   | Exclude<CommandResult, { status: 'committed' }>;
+/** One native Work-name directory page. The command keeps its own page size and ten-second budget. */
+export interface WorkScopeDirectoryPage {
+  status: 'prepared' | 'deadline';
+  phase: 'absent' | 'owners' | 'complete';
+  more: boolean;
+}
 export interface CommandHealth { moduleVersion: string; instanceId: string;
   publicSearchWriteEpoch: string; publicSearchWriteActive: boolean;
   privateSearchWriteEpoch?: string; privateSearchWriteActive?: boolean;
@@ -196,6 +202,23 @@ const MAINTENANCE_RECEIPTS = [
   'urn:rezics:receipt:content-rebuild:', 'urn:rezics:receipt:chapter-search-index:',
   'urn:rezics:receipt:catalogue-search-index:',
 ] as const;
+
+function workScopeDirectoryPage(value: unknown): WorkScopeDirectoryPage {
+  if (!value || typeof value !== 'object') throw new Error('Malformed work name scope preparation');
+  const page = value as WorkScopeDirectoryPage;
+  const keys = Object.keys(page);
+  if (keys.length !== 3 || !keys.includes('status') || !keys.includes('phase') || !keys.includes('more')
+    || (page.status !== 'prepared' && page.status !== 'deadline')
+    || (page.phase !== 'absent' && page.phase !== 'owners' && page.phase !== 'complete')
+    || typeof page.more !== 'boolean') throw new Error('Malformed work name scope preparation');
+  if (page.status === 'deadline') {
+    if (page.phase !== 'absent' || page.more !== true) throw new Error('Malformed work name scope preparation');
+    return page;
+  }
+  if (page.phase === 'complete' && page.more === false) return page;
+  if (page.phase === 'owners' && page.more === true) return page;
+  throw new Error('Malformed work name scope preparation');
+}
 
 function safeIri(value: string): string {
   if (!/^(https?:\/\/[^<>\s"{}|\\^`]+|urn:[A-Za-z0-9][A-Za-z0-9:._-]+)$/.test(value)) {
@@ -361,6 +384,52 @@ export class FusekiClient {
       }
     }
     throw new CommandOutcomeUnknown('Membership preparation outcome unknown');
+  }
+
+  /** One bounded Work-name directory page. The maintenance capability is required; the body carries no cursor or budget. */
+  async prepareWorkScopeDirectory(signal?: AbortSignal): Promise<WorkScopeDirectoryPage> {
+    if (!this.maintenanceCapability?.match(/^[0-9a-f]{64}$/)) {
+      throw new Error('Fuseki maintenance capability is required');
+    }
+    const budget = fusekiReadBudget.getStore();
+    // Twelve seconds lets the fixed ten-second native budget return its deadline page.
+    const requestSignal = AbortSignal.any([
+      AbortSignal.timeout(12_000),
+      ...(signal ? [signal] : []),
+      ...(this.preparationSignal ? [this.preparationSignal] : []),
+      ...(budget?.signal ? [budget.signal] : []),
+    ]);
+    requestSignal.throwIfAborted();
+    takeReadCall();
+    let response: Response;
+    try {
+      response = await fetch(new URL('command', this.baseUrl), {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json',
+          authorization: `Bearer ${this.maintenanceCapability}`,
+        },
+        body: JSON.stringify({ workScopeDirectory: {} }),
+        signal: requestSignal,
+      });
+    } catch (error) {
+      requestSignal.throwIfAborted();
+      throw new CommandOutcomeUnknown('Work name scope transport outcome unknown', { cause: error });
+    }
+    if (response.status === 403) throw new CommandForbidden('Work name scope capability rejected');
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error(`Work name scope preparation returned ${response.status}`);
+    }
+    let result: unknown;
+    try { result = await boundedJson<unknown>(response, 4096, requestSignal); }
+    catch (error) {
+      requestSignal.throwIfAborted();
+      if (error instanceof FusekiQueryResponseTooLarge || error instanceof FusekiReadBudgetExceeded) throw error;
+      throw new CommandOutcomeUnknown('Work name scope response incomplete', { cause: error });
+    }
+    return workScopeDirectoryPage(result);
   }
 
   /** Legacy write surface; remaining domain and recovery adapters must migrate before P0.2 exit. */

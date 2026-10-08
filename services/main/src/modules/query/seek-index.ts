@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
-import { fusekiReadBudget, type FusekiClient, type TemplateIndexDelta, type TemplateIndexKey } from '../../infrastructure/fuseki.ts';
+import { fusekiReadBudget, type FusekiClient, type TemplateIndexDelta, type TemplateIndexKey,
+  type WorkScopeDirectoryPage } from '../../infrastructure/fuseki.ts';
 import { WorkReadUnavailable, WorkReadMoved, WorkReadLimit, readDependencyToken } from '../work/read-session.ts';
 import { controlRead, controlTransaction } from '../access/topology-control.ts';
 
@@ -7,6 +8,29 @@ export interface SeekSelector { graph: string; predicate: string; type: string; 
 export interface SeekCandidate { id: string; key: string; root: string; terms: Record<string,string[]> }
 const RV = 'https://rezics.com/vocab/';
 export const TEMPLATE_DIRECTORY_COST = { reconciliation:128, rebuildMs:600_000, recoveryPollMs:500 } as const;
+
+/** Pages the native Work-name directory until it is complete. Each command keeps its page and ten-second budget. */
+export async function prepareWorkNameScope(
+  fuseki: Pick<FusekiClient, 'prepareWorkScopeDirectory'>,
+  deadline: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  while (Date.now() < deadline) {
+    signal?.throwIfAborted();
+    let page: WorkScopeDirectoryPage;
+    try {
+      page = await fuseki.prepareWorkScopeDirectory(signal);
+    } catch (error) {
+      if (Date.now() >= deadline) throw new WorkReadUnavailable('Work name scope preparation exceeds 600 seconds');
+      throw error;
+    }
+    if (page.status === 'deadline') continue;
+    if (page.phase === 'complete' && page.more === false) return;
+    if (page.phase === 'owners' && page.more === true) continue;
+    throw new WorkReadUnavailable('Work name scope preparation is unqualified');
+  }
+  throw new WorkReadUnavailable('Work name scope preparation exceeds 600 seconds');
+}
 const anchorKey=(basis:TemplateIndexKey)=>readDependencyToken([basis.graph,basis.predicate,basis.anchor,basis.type]);
 interface Pending {id:string;sequence:string;delta:TemplateIndexDelta}
 type PendingPosition={sequence:string;id:string};
@@ -145,6 +169,7 @@ export class TemplateSeekIndex {
     const started=Date.now(),deadline=started+budgetMs;
     const signal=AbortSignal.timeout(budgetMs);
     return fusekiReadBudget.run({signal,callsLeft:Number.MAX_SAFE_INTEGER,bytesLeft:Number.MAX_SAFE_INTEGER},async()=> {
+    await prepareWorkNameScope(this.fuseki, deadline, signal);
     let batches=0,entities=0;
     const instance = (await this.fuseki.commandHealth()).instanceId;
     await controlTransaction(this.pool, async client => {
