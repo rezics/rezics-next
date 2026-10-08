@@ -2384,8 +2384,10 @@ export interface UnitFailureDetail { file: string; test: string; detail?: string
 export interface UnitFileErrorDetail { file: string; detail: string }
 export interface UnitRunnerError { files: string[]; diagnostic: string }
 
+/** Bun prints a load or assertion diagnostic at column 0. A passing test indents the same words
+ * when it logs a gate transcript (`      error: id 111`); that copy is not this file's error. */
 function isUnitErrorLine(line: string): boolean {
-  return /^(?:error|Error|[A-Z][\w$]*(?:Error|Exception)):\s*/i.test(line.trim());
+  return /^(?:error|Error|[A-Z][\w$]*(?:Error|Exception)):\s*/i.test(line);
 }
 
 /** Capture each failed test's assertion detail without file-specific stack locations.

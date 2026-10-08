@@ -1227,6 +1227,37 @@ describe('goalctl runtime policy', () => {
     expect(introducedUnitFailureFiles([file], [], [], branch, different)).toEqual([file]);
   });
 
+  test('a passing file that prints an indented gate transcript is not a file-level error', () => {
+    const file = 'scripts/goal/goalctl.test.ts';
+    const output = [
+      `${file}:`,
+      '(pass) unit gate evidence for classified runs > names each case [1.20ms]',
+      'Unit gate: 5 file(s) in 1 shard(s), slowest budget 720000ms',
+      'Unit gate shard: 1 file(s), 1 failing in 1ms',
+      'Unit gate evidence (affected, first):',
+      '  services/main/tests/library-public-bounds.test.ts',
+      '    (fail) library public bounds reject an oversize page',
+      '      error: id 111',
+      '      port 54321',
+      '  services/main/tests/nested-pool-checkout.test.ts',
+      '    (fail) nested pool checkout releases the client',
+      '      error: id 222',
+      '(pass) the same file keeps passing [0.40ms]',
+      ' 2 pass',
+      ' 0 fail',
+      'Ran 2 tests across 1 file. [4.00ms]',
+    ].join('\n');
+    expect(unitFileErrorDetails(output, [file])).toEqual([]);
+    expect(failingTestFiles(output, [file])).toEqual([]);
+    expect(timedOutTestFiles(output, [file])).toEqual([]);
+    expect(unitFailureDetails(output, [file])).toEqual([]);
+    expect(unitFileEvidence(output, [file], [], [])).toEqual([]);
+    const load = [`${file}:`, "error: Cannot find module './missing-probe-import.ts'", ' 0 pass', ' 1 fail'].join('\n');
+    expect(unitFileErrorDetails(load, [file])).toEqual([
+      { file, detail: "error: Cannot find module './missing-probe-import.ts'" },
+    ]);
+  });
+
   test('a branch-only unhandled error blocks beside an inherited named test failure', () => {
     const file = 'tests/qa/unit/load-failure.test.ts';
     const root = '/tmp/worktrees/worker';
