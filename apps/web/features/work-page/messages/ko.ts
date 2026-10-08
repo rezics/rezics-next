@@ -25,7 +25,7 @@ export default {
   originalTitle: '원제', about: '작품 소개',
   showMore: '더 보기', showLess: '접기',
   translatedBy: '번역', editedBy: '편집',
-  ongoing: '연재 중', completed: '완결', hiatus: '휴재 중',
+  ongoing: '연재 중', completed: '완결', hiatus: '휴재 중', upcoming: '연재 예정', cancelled: '취소됨',
   chapters: plural({ one: insert('챕터 {{count}}개'), other: insert('챕터 {{count}}개') }, { count: asValue(number()) }),
   words: plural({ one: insert('단어 {{count}}개'), other: insert('단어 {{count}}개') }, { count: asValue(number()) }),
   moreCredits: '표시된 것보다 참여자가 더 많습니다.',

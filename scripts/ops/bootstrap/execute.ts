@@ -4,7 +4,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { BootstrapApi } from './api.ts';
 import { BootstrapJournal, digest } from './journal.ts';
 import { inside, type BootstrapPlan, type ZoneManifest } from './plan.ts';
-import { seedRelationLexicon, seedVariantKindConcepts, seedCanonicity } from '../../dev/seed/relation-lexicon.ts';
+import { seedRelationLexicon, seedVariantKindConcepts, seedCanonicity, seedWorkFormat } from '../../dev/seed/relation-lexicon.ts';
 import { relationLexiconSeed } from '../../dev/seed/relation-lexicon-data.ts';
 import { seedScopedSubjectQuestions, scopedSubjectQuestions, scopedSubjectLocales,
   type GlobalQuestions } from '../../dev/seed/scoped-subjects-questions.ts';
@@ -31,7 +31,8 @@ export interface BootstrapResult {
   counts: Record<string, number>;
   zones: { id: string; zone: string; realm: string; collections: Record<string, string> }[];
   definitions: { key: string; component: string; revision: string }[];
-  vocabulary?: { variantKinds: Record<string, string>; canonicity: Awaited<ReturnType<typeof seedCanonicity>> };
+  vocabulary?: { variantKinds: Record<string, string>; canonicity: Awaited<ReturnType<typeof seedCanonicity>>;
+    workFormat: Awaited<ReturnType<typeof seedWorkFormat>> };
   questions: GlobalQuestions;
   sources: {
     id: string;
@@ -328,7 +329,8 @@ export async function executeBootstrap(input: {
     variantKinds,
   );
   result.vocabulary = { variantKinds,
-    canonicity: await seedCanonicity(vocabularyClient, actor, plan.namespace) };
+    canonicity: await seedCanonicity(vocabularyClient, actor, plan.namespace),
+    workFormat: await seedWorkFormat(vocabularyClient, actor) };
   const effects: { target: string; receipt: string }[] = [];
   for (const source of plan.sources.filter((source) => source.enabled)) {
     const imported: BootstrapResult['sources'][number] = {
@@ -531,7 +533,9 @@ export async function verifyBootstrap(
     }
   }
   if (result.vocabulary) {
-    for (const concept of [...Object.values(result.vocabulary.variantKinds), ...Object.values(result.vocabulary.canonicity.concepts)]) {
+    for (const concept of [...Object.values(result.vocabulary.variantKinds),
+      ...Object.values(result.vocabulary.canonicity.concepts),
+      ...Object.values(result.vocabulary.workFormat.concepts).map(item => item.concept)]) {
       await api.read(`/v1/resources/${short(concept)}`, true);
     }
   }

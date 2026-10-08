@@ -59,6 +59,7 @@ export const messages = {
   facetStatus: 'Status', facetLength: 'Length', facetConcept: 'Tags', facetType: 'Type',
   envClient: 'Client', envServer: 'Server', envBoth: 'Client and server',
   statusOngoing: 'Ongoing', statusCompleted: 'Completed', statusHiatus: 'On hiatus',
+  statusUpcoming: 'Upcoming', statusCancelled: 'Cancelled',
   length0: 'Under 100k words', length1: '100k–300k words', length2: '300k–1M words', length3: 'Over 1M words',
   updated: insert('Updated {{ago}}', { ago: String }),
   chapters: plural({ one: insert('{{count}} chapter'), other: insert('{{count}} chapters') }, { count: asValue(number()) }),

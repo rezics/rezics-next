@@ -55,6 +55,7 @@ export default {
   facetStatus: '状态', facetLength: '字数', facetConcept: '标签', facetType: '种类',
   envClient: '客户端', envServer: '服务端', envBoth: '客户端和服务端',
   statusOngoing: '连载中', statusCompleted: '已完结', statusHiatus: '暂停更新',
+  statusUpcoming: '即将连载', statusCancelled: '已取消',
   length0: '10万字以下', length1: '10万–30万字', length2: '30万–100万字', length3: '100万字以上',
   updated: insert('{{ago}}更新', { ago: String }),
   chapters: plural({ other: insert('{{count}} 章') }, { count: asValue(number()) }),

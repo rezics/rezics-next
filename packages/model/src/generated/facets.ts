@@ -869,6 +869,50 @@ export const facetRegistry = {
       "graphReads": 1
     },
     "digest": "51275e8dc39d61531d594b5806b7e620d3bc8111bd366a85bb0759b188b12375",
+    "current": false
+  },
+  "https://rezics.com/definition/facet-status-v2": {
+    "id": "https://rezics.com/definition/facet-status-v2",
+    "name": "status",
+    "version": 2,
+    "appliesTo": "resource",
+    "subject": "https://schema.org/CreativeWork",
+    "path": [
+      {
+        "kind": "triple",
+        "predicate": "https://rezics.com/vocab/completionStatus"
+      }
+    ],
+    "values": [
+      {
+        "kind": "datatype",
+        "datatype": "http://www.w3.org/2001/XMLSchema#string",
+        "pattern": "^(ongoing|completed|hiatus|upcoming|cancelled)$"
+      }
+    ],
+    "operators": [
+      "any",
+      "none"
+    ],
+    "source": "global",
+    "parameters": [],
+    "qualifiers": [],
+    "occurrence": false,
+    "labels": {
+      "en": "Status",
+      "zh-Hant": "狀態",
+      "zh-Hans": "状态",
+      "ja": "状態",
+      "ko": "상태",
+      "de": "Status",
+      "fr": "Statut",
+      "es": "Estado"
+    },
+    "cost": {
+      "maxValues": 5,
+      "graphReads": 1
+    },
+    "digest": "e0112fe950994feb1a575b1565c5d78203c9b7def82b95a7905181f670e04ee7",
     "current": true
   },
   "https://rezics.com/definition/facet-type-v1": {
@@ -918,4 +962,4 @@ export const facetRegistry = {
 } as const;
 export type FacetRef = keyof typeof facetRegistry;
 /** Changes whenever any admitted Facet does. */
-export const facetRegistryDigest = "292fa7831b1ca44bfc8f26a6308c163d4935f6563d067dfad8fe519573b14960";
+export const facetRegistryDigest = "58731d3f6c76831716bce55a8d8e56652d8de89f9e9342c57bb84e8cac606b9e";

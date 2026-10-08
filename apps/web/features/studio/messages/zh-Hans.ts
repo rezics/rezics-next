@@ -77,6 +77,7 @@ export default {
   workMissing: '此身份无法访问这部作品。',
   workFailed: '无法加载这部作品。',
   completionOngoing: '连载中', completionCompleted: '已完结', completionHiatus: '暂停更新',
+  completionUpcoming: '即将连载', completionCancelled: '已取消',
 
   chaptersHelp: '读者按这个顺序、一卷一卷地阅读章节。拖动章节左侧的手柄来移动，也可以用“移动”按钮通过键盘完成同样的操作。每一章在你发布之前都只有你能看到。',
   noChapters: '还没有章节。在下方添加第一章。',

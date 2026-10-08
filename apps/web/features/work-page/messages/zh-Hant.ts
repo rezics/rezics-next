@@ -25,7 +25,7 @@ export default {
   originalTitle: '原始標題', about: '作品簡介',
   showMore: '展開', showLess: '收合',
   translatedBy: '翻譯者', editedBy: '編輯者',
-  ongoing: '連載中', completed: '已完結', hiatus: '暫停更新',
+  ongoing: '連載中', completed: '已完結', hiatus: '暫停更新', upcoming: '即將連載', cancelled: '已取消',
   chapters: plural({ one: insert('{{count}} 章'), other: insert('{{count}} 章') }, { count: asValue(number()) }),
   words: plural({ one: insert('{{count}} 字'), other: insert('{{count}} 字') }, { count: asValue(number()) }),
   moreCredits: '此處未顯示所有署名。',

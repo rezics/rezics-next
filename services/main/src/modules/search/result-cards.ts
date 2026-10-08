@@ -6,7 +6,7 @@ import { WorkReadUnavailable, workRead, type WorkReadSession } from '../work/rea
 import { currentDisclosureViewer } from '../disclosure/viewer.ts';
 import { publicLanguageRequest } from '../display-language/public-request.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
-import { metadataComponent, METADATA_PROFILE } from '../work/metadata-schema.ts';
+import { metadataComponent, METADATA_PROFILE, type SerialStatus } from '../work/metadata-schema.ts';
 import { parsedMetadataState, selectedMetadata } from '../work/metadata-read.ts';
 import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { readAuthorNames, sourceReportedCredits } from '../source/author-name-read.ts';
@@ -34,7 +34,7 @@ export const SEARCH_CARD_COST = { works: 64, creditsPerWork: 3,
 export async function searchPageSerial(session: WorkReadSession, works: readonly string[], preview = false) {
   if (works.length > SEARCH_CARD_COST.works) throw new WorkReadUnavailable('Search serial page exceeds its bound');
   const result = new Map<string, { tagline: ReturnType<typeof selectedMetadata>['tagline'];
-    completionStatus: 'ongoing' | 'completed' | 'hiatus' | null;
+    completionStatus: SerialStatus | null;
     chapterCount: number | null; wordCount: number | null; lastUpdatedAt: string | null;
     unavailablePreviews?: ['serial'] }>();
   if (!works.length) return result;

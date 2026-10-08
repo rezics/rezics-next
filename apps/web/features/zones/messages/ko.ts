@@ -53,6 +53,7 @@ export default {
   facetStatus: '상태', facetLength: '분량', facetConcept: '태그', facetType: '유형',
   envClient: '클라이언트', envServer: '서버', envBoth: '클라이언트와 서버',
   statusOngoing: '연재 중', statusCompleted: '완결', statusHiatus: '휴재 중',
+  statusUpcoming: '연재 예정', statusCancelled: '취소됨',
   length0: '단어 10만 개 미만', length1: '단어 10만~30만 개', length2: '단어 30만~100만 개', length3: '단어 100만 개 초과',
   updated: insert('{{ago}} 업데이트', { ago: String }),
   chapters: plural({ other: insert('챕터 {{count}}개') }, { count: asValue(number()) }),

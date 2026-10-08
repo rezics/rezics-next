@@ -77,6 +77,8 @@ export default {
   statusOngoing: "Laufend",
   statusCompleted: "Abgeschlossen",
   statusHiatus: "Pausiert",
+  statusUpcoming: "Bevorstehend",
+  statusCancelled: "Abgebrochen",
   length0: "Unter 100.000 Wörter",
   length1: "100.000–300.000 Wörter",
   length2: "300.000–1 Mio. Wörter",

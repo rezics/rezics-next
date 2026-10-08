@@ -33,6 +33,7 @@ const admittedMeanings: Record<string, string> = {
   'facet-role-v1': '50a1601af2fce441d8eb60d8f56b6a98b7492e64569836477536dbeec4c18229',
   'facet-statement-v1': '834feca0b51901b385dad5fd3e6a78195c048e391ad4ece66c87b64850ec2986',
   'facet-status-v1': '51275e8dc39d61531d594b5806b7e620d3bc8111bd366a85bb0759b188b12375',
+  'facet-status-v2': 'e0112fe950994feb1a575b1565c5d78203c9b7def82b95a7905181f670e04ee7',
   'facet-type-v1': '053c6b68d9822f3089323503b30c71269c0dd9a52cab3384ac8a35949e9405c5',
 };
 
@@ -106,7 +107,8 @@ test('Facets: the admitted set covers what readers filter by today', () => {
       population: 'https://rezics.com/definition/rating-account-principal-population-v1' }] });
   expect(facet('status')).toMatchObject({ source: 'global', operators: ['any', 'none'],
     path: [{ kind: 'triple', predicate: `${rv}completionStatus` }],
-    values: [{ datatype: 'http://www.w3.org/2001/XMLSchema#string', pattern: '^(ongoing|completed|hiatus)$' }] });
+    values: [{ datatype: 'http://www.w3.org/2001/XMLSchema#string',
+      pattern: '^(ongoing|completed|hiatus|upcoming|cancelled)$' }] });
   expect(facet('length')).toMatchObject({ source: 'global', operators: ['range'],
     path: [{ kind: 'units', unit: `${rv}Word` }],
     values: [{ datatype: 'http://www.w3.org/2001/XMLSchema#integer', min: '0' }] });

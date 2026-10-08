@@ -79,6 +79,7 @@ export default {
   workMissing: 'Cette œuvre n’est pas accessible à cette identité.',
   workFailed: 'Impossible de charger cette œuvre.',
   completionOngoing: 'En cours', completionCompleted: 'Terminée', completionHiatus: 'En pause',
+  completionUpcoming: 'À venir', completionCancelled: 'Annulée',
 
   chaptersHelp: 'Les lecteurs reçoivent les chapitres dans cet ordre, tome par tome. Faites glisser un chapitre par sa poignée, ou choisissez le bouton « Déplacer » pour les mêmes déplacements au clavier. Chaque chapitre reste privé jusqu’à ce que vous le publiiez.',
   noChapters: 'Aucun chapitre pour le moment. Ajoutez le premier ci-dessous.',

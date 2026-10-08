@@ -1,4 +1,5 @@
-import { relationLexiconSeed, variantKindConcepts, canonicityConcepts, type LexiconSeedDefinition } from './relation-lexicon-data.ts';
+import { relationLexiconSeed, variantKindConcepts, canonicityConcepts, workFormatConcepts,
+  declaredCountProperties, type LexiconSeedDefinition, type WorkFormatKey } from './relation-lexicon-data.ts';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import type { DefinitionState } from '../../../services/main/src/modules/semantic/change.ts';
@@ -202,4 +203,40 @@ export async function seedCanonicity(client: Pick<SeedLexiconClient, 'post' | 'a
   await client.authorizeDefinition(definition);
   return { definition, scheme: scheme!.id,
     concepts: concepts as Record<(typeof canonicityConcepts)[number]['key'], string> };
+}
+
+export interface WorkFormatConceptSeed { concept: string; definitionRevision: string }
+export interface WorkFormatSeed {
+  scheme: string;
+  concepts: Record<WorkFormatKey, WorkFormatConceptSeed>;
+  counts: Record<(typeof declaredCountProperties)[number]['notation'], SeedLexiconReceipt>;
+}
+
+/**
+ * One format scheme and the two declared-count properties, shared by bootstrap and import.
+ * Keys stay fixed: a notation is unique, and a second key would register a second property.
+ * The scheme cannot say "at most one concept"; the importer admits a single format.
+ */
+export async function seedWorkFormat(client: Pick<SeedLexiconClient, 'post' | 'authorizeDefinition'>,
+  actingSubject: string): Promise<WorkFormatSeed> {
+  const concepts = {} as WorkFormatSeed['concepts'];
+  let scheme: { id: string; expectedHead: string } | null = null;
+  for (const concept of workFormatConcepts) {
+    const created: { scheme: string; schemeHead: string; concept: string; definitionRevision: string } =
+      await client.post('/v1/classification-vocabulary', {
+      profile: 'classification-proposition-v2', scheme, labels: [...concept.labels], alternativeLabels: [],
+      broader: [], narrower: [], actingSubject }, `work-format:v1:concept:${concept.key}`);
+    concepts[concept.key] = { concept: created.concept, definitionRevision: created.definitionRevision };
+    scheme = { id: created.scheme, expectedHead: created.schemeHead };
+  }
+  const counts = {} as WorkFormatSeed['counts'];
+  for (const property of declaredCountProperties) {
+    const definition = await client.post<SeedLexiconReceipt>('/v1/semantic/changes', {
+      profile: 'semantic-change-v1', actingSubject, expectedHead: null,
+      state: { component: 'definition', kind: 'property', notation: property.notation, roles: [] } },
+    `work-format:v1:property:${property.notation}`);
+    await client.authorizeDefinition(definition);
+    counts[property.notation] = definition;
+  }
+  return { scheme: scheme!.id, concepts, counts };
 }

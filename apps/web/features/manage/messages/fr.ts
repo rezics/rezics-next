@@ -396,6 +396,7 @@ export default {
   typeChapter: 'Chapitre',
   byAuthors: insert('par {{authors}}', { authors: String }),
   statusOngoing: 'En cours', statusCompleted: 'Terminée', statusHiatus: 'En pause',
+  statusUpcoming: 'À venir', statusCancelled: 'Annulée',
   chapterCount: plural({ one: insert('{{count}} chapitre'), other: insert('{{count}} chapitres') },
     { count: asValue(number()) }),
   hookLabel: 'Accroche',

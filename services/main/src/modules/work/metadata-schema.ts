@@ -20,7 +20,13 @@ export const recordedText = t.Object({ value: text(500), language }, closed);
 export const localizedMetadata = t.Object({ language, title: t.Nullable(text(500)),
   description: t.Nullable(text(4000)), mainVersionLabel: t.Nullable(text(200)),
   tagline: t.Optional(t.Nullable(text(180))) }, closed);
-export const serialStatus = t.Union([t.Literal('ongoing'), t.Literal('completed'), t.Literal('hiatus')]);
+/** Closed completion values. `upcoming` and `cancelled` sit beside the original three. */
+export const serialStatuses = ['ongoing', 'completed', 'hiatus', 'upcoming', 'cancelled'] as const;
+export type SerialStatus = (typeof serialStatuses)[number];
+export const serialStatus = t.Union([
+  t.Literal(serialStatuses[0]), t.Literal(serialStatuses[1]), t.Literal(serialStatuses[2]),
+  t.Literal(serialStatuses[3]), t.Literal(serialStatuses[4]),
+]);
 export const metadataHeaderState = t.Object({ kind: t.Literal('header'),
   originalTitle: t.Nullable(recordedText),
   completionStatus: t.Optional(t.Nullable(serialStatus)),

@@ -26,7 +26,7 @@ export type ReviewOutcome = 'approve' | 'request_changes' | 'comment';
 export interface LocalizedFacts { language: string; title: string | null; description: string | null;
   mainVersionLabel: string | null; tagline?: string | null }
 export interface HeaderState { kind: 'header'; originalTitle: { value: string; language: string } | null;
-  completionStatus?: 'ongoing' | 'completed' | 'hiatus' | null; localized: LocalizedFacts[] }
+  completionStatus?: 'ongoing' | 'completed' | 'hiatus' | 'upcoming' | 'cancelled' | null; localized: LocalizedFacts[] }
 
 /** What a correction names: the exact resource revision and the component heads it was written against. */
 export interface CorrectionBasis {

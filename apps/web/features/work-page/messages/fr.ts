@@ -25,7 +25,7 @@ export default {
   originalTitle: 'Titre original', about: 'À propos de cette œuvre',
   showMore: 'Afficher plus', showLess: 'Afficher moins',
   translatedBy: 'Traduit par', editedBy: 'Édité par',
-  ongoing: 'En cours', completed: 'Terminée', hiatus: 'En pause',
+  ongoing: 'En cours', completed: 'Terminée', hiatus: 'En pause', upcoming: 'À venir', cancelled: 'Annulée',
   chapters: plural({ one: insert('{{count}} chapitre'), other: insert('{{count}} chapitres') }, { count: asValue(number()) }),
   words: plural({ one: insert('{{count}} mot'), other: insert('{{count}} mots') }, { count: asValue(number()) }),
   moreCredits: 'D’autres crédits existent, mais ne sont pas affichés ici.',

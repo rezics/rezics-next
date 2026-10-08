@@ -25,7 +25,7 @@ export default {
   originalTitle: '原題', about: '作品紹介',
   showMore: 'もっと見る', showLess: '閉じる',
   translatedBy: '翻訳者', editedBy: '編集者',
-  ongoing: '連載中', completed: '完結', hiatus: '休載中',
+  ongoing: '連載中', completed: '完結', hiatus: '休載中', upcoming: '連載予定', cancelled: '中止',
   chapters: plural({ one: insert('{{count}} 章'), other: insert('{{count}} 章') }, { count: asValue(number()) }),
   words: plural({ one: insert('{{count}} 語'), other: insert('{{count}} 語') }, { count: asValue(number()) }),
   moreCredits: 'ここに表示されていないクレジットもあります。',

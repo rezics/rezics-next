@@ -25,7 +25,7 @@ export default {
   originalTitle: 'Originaltitel', about: 'Über dieses Werk',
   showMore: 'Mehr anzeigen', showLess: 'Weniger anzeigen',
   translatedBy: 'Übersetzt von', editedBy: 'Herausgegeben von',
-  ongoing: 'Laufend', completed: 'Abgeschlossen', hiatus: 'Pausiert',
+  ongoing: 'Laufend', completed: 'Abgeschlossen', hiatus: 'Pausiert', upcoming: 'Bevorstehend', cancelled: 'Abgebrochen',
   chapters: plural({ one: insert('{{count}} Kapitel'), other: insert('{{count}} Kapitel') }, { count: asValue(number()) }),
   words: plural({ one: insert('{{count}} Wort'), other: insert('{{count}} Wörter') }, { count: asValue(number()) }),
   moreCredits: 'Es gibt mehr Mitwirkende als hier angezeigt werden.',

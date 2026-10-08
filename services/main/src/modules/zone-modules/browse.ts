@@ -8,6 +8,7 @@ import { compileQuery, QueryRejected } from '../query/compile.ts';
 import { RecommendationUnavailable } from '../recommendation/derived-generation.ts';
 import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, WORK_SEMANTIC_TYPES, iri } from '../work/activate.ts';
+import { serialStatuses, type SerialStatus } from '../work/metadata-schema.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, publicWork, WorkReadInvalid, WorkReadUnavailable,
   type WorkReadSession, type ReadRow } from '../work/read-session.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
@@ -16,7 +17,7 @@ import { displayZoneCredits, zoneCreditNames } from './read.ts';
 
 type Query = Static<typeof zoneBrowseQuery> & { excludeStatus?: Status[] };
 type BrowseFacet = keyof Static<typeof import('./contract.ts').zoneBrowsePage>['facets'];
-type Status = 'ongoing' | 'completed' | 'hiatus';
+type Status = SerialStatus;
 
 /** One batch candidate with what its Conditions and sorts read. */
 export interface BrowseCandidate {
@@ -190,7 +191,7 @@ async function readBrowseBatch(session: WorkReadSession, realm: string, ids: str
   } LIMIT ${ids.length + 1}`, ids.length);
   if (rows.some(row => !row.work || !row.head || !row.main || !row.evidence || !row.revisionEpoch
     || !/^\d+$/.test(row.sequence?.value ?? '')
-    || row.status && !['ongoing', 'completed', 'hiatus'].includes(row.status.value))
+    || row.status && !(serialStatuses as readonly string[]).includes(row.status.value))
     || new Set(rows.map(row => row.work!.value)).size !== rows.length) {
     throw new WorkReadUnavailable('Zone browse candidates are ambiguous');
   }

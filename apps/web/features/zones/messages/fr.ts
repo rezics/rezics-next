@@ -77,6 +77,8 @@ export default {
   statusOngoing: "En cours",
   statusCompleted: "Terminée",
   statusHiatus: "En pause",
+  statusUpcoming: "À venir",
+  statusCancelled: "Annulée",
   length0: "Moins de 100 000 mots",
   length1: "100 000–300 000 mots",
   length2: "300 000–1 million de mots",

@@ -52,6 +52,7 @@ export default {
   facetStatus: '狀態', facetLength: '篇幅', facetConcept: '標籤', facetType: '類型',
   envClient: '用戶端', envServer: '伺服器端', envBoth: '用戶端與伺服器端',
   statusOngoing: '連載中', statusCompleted: '已完結', statusHiatus: '暫停連載',
+  statusUpcoming: '即將連載', statusCancelled: '已取消',
   length0: '10 萬字以下', length1: '10 萬至 30 萬字', length2: '30 萬至 100 萬字', length3: '100 萬字以上',
   updated: insert('更新於 {{ago}}', { ago: String }),
   chapters: plural({ other: insert('{{count}} 章') }, { count: asValue(number()) }),

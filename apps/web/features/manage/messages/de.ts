@@ -396,6 +396,7 @@ export default {
   typeChapter: 'Kapitel',
   byAuthors: insert('von {{authors}}', { authors: String }),
   statusOngoing: 'Laufend', statusCompleted: 'Abgeschlossen', statusHiatus: 'Pausiert',
+  statusUpcoming: 'Bevorstehend', statusCancelled: 'Abgebrochen',
   chapterCount: plural({ one: insert('{{count}} Kapitel'), other: insert('{{count}} Kapitel') },
     { count: asValue(number()) }),
   hookLabel: 'Aufhänger',

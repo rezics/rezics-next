@@ -61,7 +61,7 @@ export default {
   originalTitle: '原标题', about: '作品简介',
   showMore: '展开', showLess: '收起',
   translatedBy: '译者', editedBy: '编辑',
-  ongoing: '连载中', completed: '已完结', hiatus: '暂停更新',
+  ongoing: '连载中', completed: '已完结', hiatus: '暂停更新', upcoming: '即将连载', cancelled: '已取消',
   chapters: plural({ other: insert('{{count}} 章') }, { count: asValue(number()) }),
   words: plural({ other: insert('{{count}} 字') }, { count: asValue(number()) }),
   moreCredits: '还有更多署名未在此显示。',

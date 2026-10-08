@@ -1,4 +1,5 @@
 import { GRAPHS, iri } from './activate.ts';
+import type { SerialStatus } from './metadata-schema.ts';
 import { readMetadataHeader, selectedMetadata } from './metadata-read.ts';
 import { WorkReadUnavailable, type WorkReadSession } from './read-session.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
@@ -9,7 +10,7 @@ export const EMPTY_SERIAL_SUMMARY = { tagline: null, completionStatus: null,
 /** Metadata is editor-owned; numeric facts are from the durable relay projection. */
 export async function readSerialSummaries(session: WorkReadSession, works: readonly string[], preview = false) {
   const result = new Map<string, { tagline: ReturnType<typeof selectedMetadata>['tagline'];
-    completionStatus: 'ongoing' | 'completed' | 'hiatus' | null;
+    completionStatus: SerialStatus | null;
     chapterCount: number | null; wordCount: number | null; lastUpdatedAt: string | null;
     unavailablePreviews?: ['serial'] }>();
   if (!works.length) return result;

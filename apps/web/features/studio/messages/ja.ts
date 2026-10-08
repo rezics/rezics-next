@@ -77,6 +77,7 @@ export default {
   workMissing: 'このエージェントではこの作品を利用できません。',
   workFailed: 'この作品を読み込めませんでした。',
   completionOngoing: '連載中', completionCompleted: '完結', completionHiatus: '休載中',
+  completionUpcoming: '連載予定', completionCancelled: '中止',
 
   chaptersHelp: '読者はこの順番で、巻ごとに章を読みます。章のつまみをドラッグするか、「移動」ボタンでキーボードからも同じ操作ができます。各章は公開するまで非公開のままです。',
   noChapters: 'まだ章がありません。下から最初の章を追加しましょう。',

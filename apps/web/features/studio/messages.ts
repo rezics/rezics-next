@@ -86,6 +86,7 @@ export const messages = {
   workMissing: 'This work isn’t available to this identity.',
   workFailed: 'Couldn’t load this work.',
   completionOngoing: 'Ongoing', completionCompleted: 'Completed', completionHiatus: 'On hiatus',
+  completionUpcoming: 'Upcoming', completionCancelled: 'Cancelled',
 
   // Chapters
   chaptersHelp: 'Readers get the chapters in this order, volume by volume. Drag a chapter by its grip, or choose its Move button for the same moves by keyboard. Each chapter stays private until you publish it.',

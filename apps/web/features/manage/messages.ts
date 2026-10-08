@@ -224,6 +224,7 @@ export const messages = {
   typeChapter: 'Chapter',
   byAuthors: insert('by {{authors}}', { authors: String }),
   statusOngoing: 'Ongoing', statusCompleted: 'Completed', statusHiatus: 'On hiatus',
+  statusUpcoming: 'Upcoming', statusCancelled: 'Cancelled',
   chapterCount: plural({ one: insert('{{count}} chapter'), other: insert('{{count}} chapters') },
     { count: asValue(number()) }),
   hookLabel: 'Hook',

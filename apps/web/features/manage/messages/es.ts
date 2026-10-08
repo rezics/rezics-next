@@ -393,6 +393,7 @@ export default {
   typeChapter: 'Capítulo',
   byAuthors: insert('de {{authors}}', { authors: String }),
   statusOngoing: 'En curso', statusCompleted: 'Completada', statusHiatus: 'En pausa',
+  statusUpcoming: 'Próximamente', statusCancelled: 'Cancelada',
   chapterCount: plural({ one: insert('{{count}} capítulo'), other: insert('{{count}} capítulos') },
     { count: asValue(number()) }),
   hookLabel: 'Gancho',

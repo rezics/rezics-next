@@ -433,3 +433,60 @@ export const canonicityConcepts = [
   { key: 'non-canon', labels: [{ language: 'en', value: 'Non-canon' }] },
 ] as const;
 export const CANONICITY_PROPERTY = 'https://rezics.com/vocab/canonicity';
+
+/**
+ * One format for a Work, classified like a genre. The scheme cannot say "at most one";
+ * the importer admits a single value and leaves an unknown source unclassified.
+ * Year and season are not concepts here: they are read from the first-publication date.
+ */
+export const workFormatConcepts = [
+  { key: 'tv', labels: [
+    { language: 'en', value: 'TV' }, { language: 'zh-Hant', value: '電視' },
+    { language: 'zh-Hans', value: '电视' }, { language: 'ja', value: 'テレビ' },
+    { language: 'ko', value: 'TV' }, { language: 'de', value: 'TV' },
+    { language: 'fr', value: 'TV' }, { language: 'es', value: 'TV' },
+  ] },
+  { key: 'movie', labels: [
+    { language: 'en', value: 'Movie' }, { language: 'zh-Hant', value: '劇場版' },
+    { language: 'zh-Hans', value: '剧场版' }, { language: 'ja', value: '劇場版' },
+    { language: 'ko', value: '극장판' }, { language: 'de', value: 'Film' },
+    { language: 'fr', value: 'Film' }, { language: 'es', value: 'Película' },
+  ] },
+  { key: 'ova', labels: [
+    { language: 'en', value: 'OVA' }, { language: 'zh-Hant', value: 'OVA' },
+    { language: 'zh-Hans', value: 'OVA' }, { language: 'ja', value: 'OVA' },
+    { language: 'ko', value: 'OVA' }, { language: 'de', value: 'OVA' },
+    { language: 'fr', value: 'OVA' }, { language: 'es', value: 'OVA' },
+  ] },
+  { key: 'ona', labels: [
+    { language: 'en', value: 'ONA' }, { language: 'zh-Hant', value: 'ONA' },
+    { language: 'zh-Hans', value: 'ONA' }, { language: 'ja', value: 'ONA' },
+    { language: 'ko', value: 'ONA' }, { language: 'de', value: 'ONA' },
+    { language: 'fr', value: 'ONA' }, { language: 'es', value: 'ONA' },
+  ] },
+  { key: 'special', labels: [
+    { language: 'en', value: 'Special' }, { language: 'zh-Hant', value: '特別篇' },
+    { language: 'zh-Hans', value: '特别篇' }, { language: 'ja', value: 'スペシャル' },
+    { language: 'ko', value: '스페셜' }, { language: 'de', value: 'Special' },
+    { language: 'fr', value: 'Spécial' }, { language: 'es', value: 'Especial' },
+  ] },
+  { key: 'manga', labels: [
+    { language: 'en', value: 'Manga' }, { language: 'zh-Hant', value: '漫畫' },
+    { language: 'zh-Hans', value: '漫画' }, { language: 'ja', value: '漫画' },
+    { language: 'ko', value: '만화' }, { language: 'de', value: 'Manga' },
+    { language: 'fr', value: 'Manga' }, { language: 'es', value: 'Manga' },
+  ] },
+  { key: 'one-shot', labels: [
+    { language: 'en', value: 'One-shot' }, { language: 'zh-Hant', value: '單篇' },
+    { language: 'zh-Hans', value: '单篇' }, { language: 'ja', value: '読切' },
+    { language: 'ko', value: '단편' }, { language: 'de', value: 'One-shot' },
+    { language: 'fr', value: 'One-shot' }, { language: 'es', value: 'One-shot' },
+  ] },
+] as const;
+export type WorkFormatKey = (typeof workFormatConcepts)[number]['key'];
+
+/** Declared size of an anime or a manga. Chapter count, season and magazine are not properties. */
+export const declaredCountProperties = [
+  { notation: 'episode-count', formats: ['tv', 'movie', 'ova', 'ona', 'special'] },
+  { notation: 'volume-count', formats: ['manga', 'one-shot'] },
+] as const satisfies readonly { notation: string; formats: readonly WorkFormatKey[] }[];

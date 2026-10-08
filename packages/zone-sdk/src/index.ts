@@ -74,7 +74,7 @@ export interface ZoneWork {
   authorHref?: string | null;
   /** The one-line hook shown under the cover, separate from the synopsis. */
   tagline: ZoneText | null;
-  status: 'ongoing' | 'completed' | 'hiatus' | null;
+  status: 'ongoing' | 'completed' | 'hiatus' | 'upcoming' | 'cancelled' | null;
   chapters: number | null;
   words: number | null;
   /** ISO date-time of the last published chapter or revision. */

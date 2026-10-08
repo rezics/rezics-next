@@ -69,7 +69,7 @@ const en = {
   originalTitle: 'Original title', about: 'About this Work',
   showMore: 'Show more', showLess: 'Show less',
   translatedBy: 'Translated by', editedBy: 'Edited by',
-  ongoing: 'Ongoing', completed: 'Completed', hiatus: 'On hiatus',
+  ongoing: 'Ongoing', completed: 'Completed', hiatus: 'On hiatus', upcoming: 'Upcoming', cancelled: 'Cancelled',
   chapters: plural({ one: insert('{{count}} chapter'), other: insert('{{count}} chapters') }, { count: asValue(number()) }),
   words: plural({ one: insert('{{count}} word'), other: insert('{{count}} words') }, { count: asValue(number()) }),
   moreCredits: 'More credits exist than are shown here.',

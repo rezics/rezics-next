@@ -137,6 +137,8 @@ function completionText(status: Work['header']['completionStatus'], t: T): strin
     case 'ongoing': return t.completionOngoing;
     case 'completed': return t.completionCompleted;
     case 'hiatus': return t.completionHiatus;
+    case 'upcoming': return t.completionUpcoming;
+    case 'cancelled': return t.completionCancelled;
     default: return null;
   }
 }

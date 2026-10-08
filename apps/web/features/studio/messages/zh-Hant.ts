@@ -77,6 +77,7 @@ export default {
   workMissing: '此身分無法存取這部作品。',
   workFailed: '無法載入這部作品。',
   completionOngoing: '連載中', completionCompleted: '已完結', completionHiatus: '暫停更新',
+  completionUpcoming: '即將連載', completionCancelled: '已取消',
 
   chaptersHelp: '讀者會依這個順序、一卷一卷地閱讀章節。拖曳章節的控點來移動，或用「移動」按鈕，以鍵盤做同樣的調整。每一章在你發布之前，都只有你看得到。',
   noChapters: '還沒有章節。在下方新增第一章。',

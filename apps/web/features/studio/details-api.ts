@@ -3,7 +3,7 @@ import type { DetailsEntry, DetailsState, DetailsValues } from './details-form.t
 import type { MainClient, WorkMetadata } from './types.ts';
 
 const tag = /^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/i;
-const completion = new Set(['ongoing', 'completed', 'hiatus']);
+const completion = new Set(['ongoing', 'completed', 'hiatus', 'upcoming', 'cancelled']);
 
 /** Rows a save sends: those with any value, trimmed. */
 function detailsToSave(values: DetailsValues): DetailsValues {

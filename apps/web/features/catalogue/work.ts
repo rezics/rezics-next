@@ -26,7 +26,7 @@ export interface CatalogueWork {
   /** A one-line pitch in the reader's language, set under the title. */
   tagline?: WorkName | null;
   /** Serial state; only unfinished serials are marked on the cover. */
-  completion?: 'ongoing' | 'completed' | 'hiatus' | null;
+  completion?: 'ongoing' | 'completed' | 'hiatus' | 'upcoming' | 'cancelled' | null;
 }
 
 export interface CatalogueAuthor { name: string; href: string | null }

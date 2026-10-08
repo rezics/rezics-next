@@ -3,7 +3,7 @@ import { displayLanguageBasis } from '../display-language/schema.ts';
 import type { PersonPreferencesStore } from '../preferences/store.ts';
 import { authorNameProvenance } from '../source/author-name.ts';
 import type { Viewer } from '../suitability/policy.ts';
-import { recordedText, recordedRelevance } from './metadata-schema.ts';
+import { recordedText, recordedRelevance, serialStatus } from './metadata-schema.ts';
 
 export const readId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 export const readUuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
@@ -47,7 +47,7 @@ export const workCard = t.Object({ id: readId, revision: readId, mainVersion: re
   verification: t.Optional(t.Union([t.Literal('unverified'), t.Literal('verified')])),
   title: readName, cover: readAvatar, types: t.Array(t.String(), { maxItems: 8 }),
   tagline: t.Nullable(readName),
-  completionStatus: t.Nullable(t.Union([t.Literal('ongoing'), t.Literal('completed'), t.Literal('hiatus')])),
+  completionStatus: t.Nullable(serialStatus),
   chapterCount: t.Nullable(t.Integer({ minimum: 0 })),
   wordCount: t.Nullable(t.Integer({ minimum: 0 })),
   lastUpdatedAt: t.Nullable(t.String({ format: 'date-time' })) });

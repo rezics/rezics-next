@@ -94,7 +94,8 @@ export function WorkFacts({ work, locale, messages, className }: {
   const ago = at ? agoText(at, locale) : null;
   const facts = [
     work.status ? { key: 'status', text: { ongoing: messages.statusOngoing, completed: messages.statusCompleted,
-      hiatus: messages.statusHiatus }[work.status] } : null,
+      hiatus: messages.statusHiatus, upcoming: messages.statusUpcoming,
+      cancelled: messages.statusCancelled }[work.status] } : null,
     work.chapters ? { key: 'chapters', text: t.chapters(work.chapters) } : null,
     work.words ? { key: 'words', text: t.words({ count: new Intl.NumberFormat(locale, { notation: 'compact' })
       .format(work.words) }) } : null,

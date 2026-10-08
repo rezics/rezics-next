@@ -58,6 +58,8 @@ export function completionText(status: WorkSummary['completionStatus'], t: T): s
     case 'ongoing': return t.statusOngoing;
     case 'completed': return t.statusCompleted;
     case 'hiatus': return t.statusHiatus;
+    case 'upcoming': return t.statusUpcoming;
+    case 'cancelled': return t.statusCancelled;
     default: return null;
   }
 }

@@ -60,7 +60,8 @@ export function valueLabel(facet: BrowseFacet, value: string, name: ZoneText | n
     }
     case 'status': {
       const word = { ongoing: messages.statusOngoing, completed: messages.statusCompleted,
-        hiatus: messages.statusHiatus }[value as 'ongoing'];
+        hiatus: messages.statusHiatus, upcoming: messages.statusUpcoming,
+        cancelled: messages.statusCancelled }[value as 'ongoing' | 'completed' | 'hiatus' | 'upcoming' | 'cancelled'];
       return word ? plain(word, locale) : plain(value);
     }
     case 'length': {

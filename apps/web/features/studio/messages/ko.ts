@@ -77,6 +77,7 @@ export default {
   workMissing: '이 프로필로는 이 작품을 볼 수 없습니다.',
   workFailed: '이 작품을 불러오지 못했습니다.',
   completionOngoing: '연재 중', completionCompleted: '완결', completionHiatus: '휴재 중',
+  completionUpcoming: '연재 예정', completionCancelled: '취소됨',
 
   chaptersHelp: '독자는 이 순서대로, 권별로 챕터를 읽습니다. 챕터의 손잡이를 끌어 옮기거나 ‘이동’ 버튼으로 키보드에서도 같은 이동을 할 수 있습니다. 각 챕터는 공개하기 전까지 나만 볼 수 있습니다.',
   noChapters: '아직 챕터가 없습니다. 아래에서 첫 챕터를 추가하세요.',

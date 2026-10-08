@@ -4,7 +4,7 @@ import { SeedApiError, type SeedApi } from './api.ts';
 import { catalogueResourceId, loadCatalogue, type CatalogueResponse } from '../../../tests/fixtures/catalogue/load.ts';
 import { grantCuratedCollectionSeed, grantHomeSeedAuthority, type LocalOperatorInput } from './operator.ts';
 import { relationLexiconSeed } from './relation-lexicon-data.ts';
-import { seedRelationLexicon, seedVariantKindConcepts, seedCanonicity } from './relation-lexicon.ts';
+import { seedRelationLexicon, seedVariantKindConcepts, seedCanonicity, seedWorkFormat } from './relation-lexicon.ts';
 import type { SeedState } from './state.ts';
 import type { DefinitionState } from '../../../services/main/src/modules/semantic/change.ts';
 
@@ -39,6 +39,7 @@ export async function seedFranchises(state: SeedState): Promise<void> {
     };
     await seedVariantKindConcepts(vocabularyClient, session.actingSubject, 'catalogue-dev');
     await seedCanonicity(vocabularyClient, session.actingSubject, 'catalogue-dev');
+    await seedWorkFormat(vocabularyClient, session.actingSubject);
     await loadCatalogue({ actingSubject: session.actingSubject,
       request: (method, path, body, key) => seedRequest(state, session.token, method, path, body, key),
       grant: async (scope, action) => {

@@ -106,7 +106,7 @@ export interface WorkSummary { iri: string; title: LocalizedName; cover: Avatar;
   types: readonly string[];
   /** The one-line hook, in the reader's language when Main has one. */
   tagline?: LocalizedName | null;
-  completionStatus?: 'ongoing' | 'completed' | 'hiatus' | null;
+  completionStatus?: 'ongoing' | 'completed' | 'hiatus' | 'upcoming' | 'cancelled' | null;
   chapterCount?: number | null }
 
 /** A chapter as the queue names and previews it: its label in its Book's contents and the start of its text. */

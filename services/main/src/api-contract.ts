@@ -3,6 +3,7 @@ import './modules/types/registry.ts';
 import { registryWorkType } from './modules/types/contract.ts';
 import { discoveryCredit, discoveryItem, discoveryRating } from './modules/discovery/contract.ts';
 import { readAvatar, readName } from './modules/work/read-contract.ts';
+import { serialStatus } from './modules/work/metadata-schema.ts';
 import { mergedIdentity } from './modules/identity-merge/resolution.ts';
 
 export const sourcePosition = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),
@@ -101,8 +102,7 @@ export const phraseMatch = t.Object({
   ratingStatus: t.Optional(t.Union([t.Literal('available'), t.Literal('unrated'), t.Literal('no-context'),
     t.Literal('context-required'), t.Literal('unavailable')])),
   unavailablePreviews: discoveryItem.properties.unavailablePreviews,
-  completionStatus: t.Optional(t.Nullable(t.Union([t.Literal('ongoing'),
-    t.Literal('completed'), t.Literal('hiatus')]))),
+  completionStatus: t.Optional(t.Nullable(serialStatus)),
   chapterCount: t.Optional(t.Nullable(t.Integer({ minimum: 0 }))),
   wordCount: t.Optional(t.Nullable(t.Integer({ minimum: 0 }))),
   lastUpdatedAt: t.Optional(t.Nullable(t.String({ format: 'date-time' }))),

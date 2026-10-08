@@ -1,5 +1,6 @@
 import { t } from 'elysia';
 import { readAvatar, readId, readName, readPosition, WORK_READ_COST } from '../work/read-contract.ts';
+import { serialStatus } from '../work/metadata-schema.ts';
 import { discoveryRating } from '../discovery/contract.ts';
 import { VANITY_HANDLE_PATTERN } from '../agent/vanity.ts';
 import { canonicalAddress } from '../address/schema.ts';
@@ -35,7 +36,7 @@ export const agentProfile = t.Object({ profile: t.Literal('agent-read-v1'), id: 
 export const shelfWork = t.Object({ id: readId, title: readName, cover: readAvatar,
   types: t.Array(t.String(), { maxItems: 8 }) });
 export const creditedWork = t.Object({ ...shelfWork.properties, tagline: t.Nullable(readName),
-  completionStatus: t.Nullable(t.Union([t.Literal('ongoing'), t.Literal('completed'), t.Literal('hiatus')])),
+  completionStatus: t.Nullable(serialStatus),
   rating: t.Nullable(discoveryRating),
   attribution: t.Array(t.Object({ credit: readId, role: creditRole }), { maxItems: 3 }) });
 export const shelfCollection = t.Object({ id: readId, revision: readId, name: t.String({ maxLength: 300 }),

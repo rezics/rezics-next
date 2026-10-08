@@ -202,6 +202,7 @@ export default {
   typeChapter: '章节',
   byAuthors: insert('{{authors}} 著', { authors: String }),
   statusOngoing: '连载中', statusCompleted: '已完结', statusHiatus: '暂停更新',
+  statusUpcoming: '即将连载', statusCancelled: '已取消',
   chapterCount: plural({ other: insert('{{count}} 章') }, { count: asValue(number()) }),
   hookLabel: '一句话简介',
   readChapter: '阅读这一章',

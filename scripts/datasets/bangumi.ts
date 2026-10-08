@@ -1,6 +1,9 @@
 import { createReadStream } from 'node:fs';
 import { basename } from 'node:path';
 import { Unzip, UnzipInflate, type AsyncFlateStreamHandler } from 'fflate';
+import { declaredCountProperties, workFormatConcepts, type WorkFormatKey }
+  from '../dev/seed/relation-lexicon-data.ts';
+import type { SerialStatus } from '../../services/main/src/modules/work/metadata-schema.ts';
 import { MissingRemote, type Acquisition } from './network.ts';
 import { blobPath, canonical, sha256 } from './store.ts';
 import type { DatasetEdge, DatasetRecord, DatasetSource } from './types.ts';
@@ -789,4 +792,220 @@ export async function fetchBangumi(acquisition: Acquisition): Promise<DatasetSou
       ],
     },
   });
+}
+
+const animePlatform: Record<string, WorkFormatKey> = {
+  '1': 'tv', TV: 'tv',
+  '2': 'ova', OVA: 'ova',
+  '3': 'movie', '剧场版': 'movie',
+  '4': 'special', '短片': 'special',
+  '5': 'ona', WEB: 'ona',
+};
+const bookPlatform: Record<string, WorkFormatKey> = { '1001': 'manga', '漫画': 'manga' };
+const statusTags: Record<string, SerialStatus> = {
+  '已完结': 'completed', '完结': 'completed',
+  '连载中': 'ongoing', '放送中': 'ongoing',
+  '停播': 'hiatus', '休止': 'hiatus', '休载': 'hiatus',
+  '未放送': 'upcoming', '未发售': 'upcoming', '未开播': 'upcoming',
+  '取消': 'cancelled', '腰斩': 'cancelled', '作废': 'cancelled',
+};
+const formatKeys = new Set<string>(workFormatConcepts.map((item) => item.key));
+const integerDatatype = 'http://www.w3.org/2001/XMLSchema#integer';
+
+/** A captured subject row or a dataset record whose `data` is that row. */
+export interface BangumiFactSource {
+  externalId?: unknown;
+  id?: unknown;
+  data?: unknown;
+  type?: unknown;
+  platform?: unknown;
+  eps?: unknown;
+  volumes?: unknown;
+  infobox?: unknown;
+  meta_tags?: unknown;
+  api_subject?: unknown;
+}
+export interface BangumiDeclaredCount { notation: 'episode-count' | 'volume-count'; lexical: string }
+export interface BangumiWorkFacts {
+  subjectId: string;
+  format: WorkFormatKey | null;
+  count: BangumiDeclaredCount | null;
+  status: SerialStatus | null;
+}
+export interface BangumiFactsClient {
+  post<T>(path: string, body: object, key: string): Promise<T>;
+  put<T>(path: string, body: object, key: string): Promise<T>;
+  authorizeDefinition(receipt: { component: string; revision: string }): Promise<void>;
+}
+
+/**
+ * The scheme cannot say "at most one". The importer admits a single known format
+ * and leaves a second, different format or an unknown token refused.
+ */
+export function admitWorkFormat(current: WorkFormatKey | null, next: string | null): WorkFormatKey | null {
+  if (next === null) return current;
+  if (!formatKeys.has(next)) throw new Error('unknown work format');
+  if (current !== null && current !== next) throw new Error('a Work admits one format');
+  return next as WorkFormatKey;
+}
+
+/** Official subject type plus platform. A numeric platform without a type is refused
+ * rather than guessed. Other subject types stay unclassified even when a platform
+ * string looks familiar. One-shot has no Bangumi field. */
+function bangumiFormat(type: unknown, platform: unknown): WorkFormatKey | null {
+  if (typeof platform !== 'number' && typeof platform !== 'string') return null;
+  if (typeof platform === 'number' && typeof type !== 'number') {
+    throw new Error('Bangumi numeric platform needs a subject type');
+  }
+  const token = String(platform);
+  if (type === 2) return animePlatform[token] ?? null;
+  if (type === 1) return bookPlatform[token] ?? null;
+  if (typeof type === 'number') return null;
+  if (typeof platform === 'number') return null;
+  return animePlatform[token] ?? bookPlatform[token] ?? null;
+}
+
+function positiveInteger(value: unknown): string | null {
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return String(value);
+  if (typeof value === 'string' && /^[1-9][0-9]*$/.test(value.trim())) return String(Number(value.trim()));
+  return null;
+}
+
+/** `|话数=` and `|册数=` only. Edition notes such as `[册数|6卷既刊]` are not the declared count. */
+function infoboxCount(infobox: unknown, key: '话数' | '册数'): string | null {
+  if (typeof infobox === 'string') {
+    const match = infobox.match(new RegExp(`\\|${key}=([^\\r\\n]*)`));
+    return match ? positiveInteger(match[1]) : null;
+  }
+  if (!Array.isArray(infobox)) return null;
+  const row = infobox.find((item) => !!item && typeof item === 'object' && (item as Row).key === key) as
+    | Row
+    | undefined;
+  return row ? positiveInteger(row.value) : null;
+}
+
+function tagName(tag: unknown): string | null {
+  if (typeof tag === 'string') return tag;
+  if (tag && typeof tag === 'object' && typeof (tag as Row).name === 'string') return (tag as Row).name as string;
+  return null;
+}
+
+/** Exact meta-tag match. `完结` is not read out of `已完结`. Two different statuses are unknown. */
+function statusFromTags(tags: unknown): SerialStatus | null {
+  if (!Array.isArray(tags)) return null;
+  const found = new Set<SerialStatus>();
+  for (const tag of tags) {
+    const name = tagName(tag);
+    const status = name ? statusTags[name] : undefined;
+    if (status) found.add(status);
+  }
+  return found.size === 1 ? [...found][0]! : null;
+}
+
+function subjectRow(record: BangumiFactSource): Row {
+  const data = record.data;
+  if (data && typeof data === 'object' && !Array.isArray(data) && ('type' in data || 'platform' in data)) {
+    return data as Row;
+  }
+  return record as Row;
+}
+
+function subjectId(record: BangumiFactSource, data: Row): string {
+  for (const value of [record.externalId, data.id, record.id]) {
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return String(value);
+    if (typeof value === 'string' && /^[1-9][0-9]*$/.test(value)) return value;
+  }
+  throw new Error('Bangumi subject id is missing');
+}
+
+/**
+ * Format, declared count and completion for one subject. Year and season are not
+ * stored; they are read from the first-publication date. An unclassified subject
+ * has no count. Anime counts episodes; manga counts volumes.
+ */
+export function bangumiWorkFacts(record: BangumiFactSource): BangumiWorkFacts {
+  const data = subjectRow(record);
+  const archiveFormat = bangumiFormat(data.type, data.platform);
+  const api = data.api_subject;
+  const apiRow = api && typeof api === 'object' && !Array.isArray(api) ? api as Row : null;
+  let format = archiveFormat;
+  if (apiRow && apiRow.platform !== undefined && apiRow.platform !== null) {
+    const apiFormat = bangumiFormat(apiRow.type ?? data.type, apiRow.platform);
+    if (apiFormat !== archiveFormat) throw new Error('Bangumi archive and API disagree on format');
+    format = apiFormat;
+  }
+  const archiveStatus = statusFromTags(data.meta_tags);
+  const apiStatus = apiRow ? statusFromTags(apiRow.meta_tags) : null;
+  const status = archiveStatus && apiStatus && archiveStatus !== apiStatus ? null : apiStatus ?? archiveStatus;
+  const chosen = format;
+  const notation = chosen
+    ? declaredCountProperties.find((item) => (item.formats as readonly WorkFormatKey[]).includes(chosen))?.notation
+    : undefined;
+  let count: BangumiDeclaredCount | null = null;
+  if (chosen && notation) {
+    const field = notation === 'episode-count' ? 'eps' : 'volumes';
+    const boxKey = notation === 'episode-count' ? '话数' : '册数';
+    const box = apiRow && (typeof apiRow.infobox === 'string' || Array.isArray(apiRow.infobox))
+      ? apiRow.infobox : data.infobox;
+    const lexical = (apiRow ? positiveInteger(apiRow[field]) : null)
+      ?? positiveInteger(data[field]) ?? infoboxCount(box, boxKey);
+    if (lexical) count = { notation, lexical };
+  }
+  return { subjectId: subjectId(record, data), format, count, status };
+}
+
+/**
+ * Write one subject's facts through the public API: one classified format on the
+ * Main version, one integer count on the Work, and completion when a tag maps.
+ * Keys stay fixed so a replay writes the same scheme the bootstrap seed created.
+ */
+export async function importBangumiWorkFacts(client: BangumiFactsClient, actingSubject: string,
+  work: { work: string; mainVersion: string }, record: BangumiFactSource): Promise<{
+  facts: BangumiWorkFacts; concept: string | null; countPredicate: string | null;
+}> {
+  const { seedWorkFormat } = await import('../dev/seed/relation-lexicon.ts');
+  const helpers = await import('../dev/seed/classified-statement.ts');
+  const facts = bangumiWorkFacts(record);
+  const format = admitWorkFormat(null, facts.format);
+  const seeded = await seedWorkFormat(client, actingSubject);
+  const post: <T>(path: string, body: unknown, token: string, key: string) => Promise<T> =
+    (path, body, _token, key) => client.post(path, body as object, key);
+  const context = await helpers.shareClassificationContext(
+    post, '', actingSubject,
+    workFormatConcepts.map((item) => seeded.concepts[item.key]), 'work-format:v1:context');
+  // An unknown spoiler hint hides the concept from search. A format is not a spoiler.
+  for (const item of workFormatConcepts) {
+    await helpers.discloseClassificationConcept(post, '', actingSubject, seeded.concepts[item.key].concept,
+      `work-format:v1:hint:${item.key}`);
+  }
+  const prefix = `work-format:v1:${work.work.slice(-36)}:${facts.subjectId}`;
+  let concept: string | null = null;
+  if (format) {
+    concept = seeded.concepts[format].concept;
+    const statement = await client.post<{ statement: string; meaningKey: string }>('/v1/statements',
+      helpers.classifiedStatementBody(actingSubject, work.mainVersion, concept, context), `${prefix}:format`);
+    await client.post('/v1/statement-decisions', helpers.statementDecisionBody(
+      actingSubject, statement, { kind: 'global' }, 'accepted', null), `${prefix}:format-decision`);
+  }
+  let countPredicate: string | null = null;
+  if (facts.count) {
+    const definition = seeded.counts[facts.count.notation];
+    countPredicate = definition.component;
+    const statement = await client.post<{ statement: string; meaningKey: string }>('/v1/statements', {
+      profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work.work,
+      predicate: definition.component, relationDefinition: definition.revision,
+      value: { kind: 'literal', lexical: facts.count.lexical, datatype: integerDatatype, language: null },
+      applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject,
+    }, `${prefix}:${facts.count.notation}`);
+    await client.post('/v1/statement-decisions', helpers.statementDecisionBody(
+      actingSubject, statement, { kind: 'global' }, 'accepted', null),
+    `${prefix}:${facts.count.notation}:decision`);
+  }
+  if (facts.status) {
+    await client.put(`/v1/works/${work.work.slice(-36)}/metadata`, {
+      profile: 'work-metadata-details-v1', expectedHead: null, actingSubject,
+      state: { kind: 'header', originalTitle: null, completionStatus: facts.status, localized: [] },
+    }, `${prefix}:status`);
+  }
+  return { facts, concept, countPredicate };
 }

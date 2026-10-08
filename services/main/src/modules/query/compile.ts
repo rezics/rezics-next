@@ -5,6 +5,7 @@ import type { ResourceQuery as ResourceQueryV2 }
 import { checkedFilter, InvalidFilter } from '../facets/schema.ts';
 import { resolveFacet } from '../facets/registry.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
+import type { SerialStatus } from '../work/metadata-schema.ts';
 import { ZONE_BROWSE_COST } from '../zone-modules/contract.ts';
 import { CONCEPT_WORKS_COST, type ConceptWorksQuery, type FilteredWorksQuery } from '../concept-page/contract.ts';
 import { compileReleaseQuery, relatedCondition, type ReleaseQuery } from '../facets/release-query.ts';
@@ -32,7 +33,7 @@ type SearchRequest = { profile: string; phrase?: string; titleTerm?: string; bod
 
 type ZoneRequest = { q?: string; sort: 'relevance' | 'newest' | 'updated'; type?: string[];
   concept?: string[]; excludeConcept?: string[];
-  status?: ('ongoing' | 'completed' | 'hiatus')[]; excludeStatus?: ('ongoing' | 'completed' | 'hiatus')[];
+  status?: SerialStatus[]; excludeStatus?: SerialStatus[];
   length?: string; language?: string; limit: number; cursor?: string };
 type ConceptSelection = { operator: 'include' | 'exclude'; value: string; revision?: string };
 

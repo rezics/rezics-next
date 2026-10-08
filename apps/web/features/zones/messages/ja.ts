@@ -53,6 +53,7 @@ export default {
   facetStatus: '状態', facetLength: '長さ', facetConcept: 'タグ', facetType: '種類',
   envClient: 'クライアント', envServer: 'サーバー', envBoth: 'クライアントとサーバー',
   statusOngoing: '連載中', statusCompleted: '完結', statusHiatus: '休載中',
+  statusUpcoming: '連載予定', statusCancelled: '中止',
   length0: '10万語未満', length1: '10万～30万語', length2: '30万～100万語', length3: '100万語超',
   updated: insert('{{ago}}に更新', { ago: String }),
   chapters: plural({ other: insert('{{count}}章') }, { count: asValue(number()) }),

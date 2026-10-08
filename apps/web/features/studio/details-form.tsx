@@ -24,7 +24,7 @@ export interface DetailsEntry {
 export interface DetailsValues {
   originalTitle: string; originalLanguage: string;
   /** A serial's state; empty when the writer has not said. */
-  completion: '' | 'ongoing' | 'completed' | 'hiatus';
+  completion: '' | 'ongoing' | 'completed' | 'hiatus' | 'upcoming' | 'cancelled';
   entries: DetailsEntry[];
 }
 
@@ -86,7 +86,8 @@ export function DetailsForm({ agent, work, book, initialState, save = saveWorkDe
       <FieldLabel>{t.completionStatus}</FieldLabel>
       <ChoiceSelect value={completion} onValueChange={value => setCompletion(value as DetailsValues['completion'])}
         options={[{ value: '', label: t.completionUnset }, { value: 'ongoing', label: t.completionOngoing },
-          { value: 'completed', label: t.completionCompleted }, { value: 'hiatus', label: t.completionHiatus }]} />
+          { value: 'completed', label: t.completionCompleted }, { value: 'hiatus', label: t.completionHiatus },
+          { value: 'upcoming', label: t.completionUpcoming }, { value: 'cancelled', label: t.completionCancelled }]} />
       <FieldHelper>{t.completionHelp}</FieldHelper>
     </Field> : null}
     <ul className="grid gap-4">

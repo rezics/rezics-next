@@ -18,7 +18,7 @@ export type BrowseFacet = (typeof browseFacets)[number];
 export const facetParams: Record<BrowseFacet, string> = { concept: 'concept', status: 'status',
   length: 'length', type: 'type' };
 
-const statuses = ['ongoing', 'completed', 'hiatus'] as const;
+const statuses = ['ongoing', 'completed', 'hiatus', 'upcoming', 'cancelled'] as const;
 /** Main's length bands (`zoneLengthBands`), in words or CJK characters. */
 export const lengthBands = ['0-99999', '100000-299999', '300000-999999', '1000000-'] as const;
 /** Namespaces a type IRI is shortened to in the URL (`schema:Book`): prefixes, not a table of type names. */

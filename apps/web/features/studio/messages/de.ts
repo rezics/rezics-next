@@ -79,6 +79,7 @@ export default {
   workMissing: 'Dieses Werk ist für diese Identität nicht verfügbar.',
   workFailed: 'Dieses Werk konnte nicht geladen werden.',
   completionOngoing: 'Laufend', completionCompleted: 'Abgeschlossen', completionHiatus: 'Pausiert',
+  completionUpcoming: 'Bevorstehend', completionCancelled: 'Abgebrochen',
 
   chaptersHelp: 'Leser bekommen die Kapitel in dieser Reihenfolge, Band für Band. Zieh ein Kapitel an seinem Griff, oder wähle die Schaltfläche „Verschieben“ für dieselben Bewegungen per Tastatur. Jedes Kapitel bleibt privat, bis du es veröffentlichst.',
   noChapters: 'Noch keine Kapitel. Füge unten das erste hinzu.',

@@ -47,7 +47,7 @@ export interface SearchHit {
   authors: CatalogueAuthor[];
   rating: { mean: number; count: number; max: number } | null;
   tagline: WorkName | null;
-  completion: 'ongoing' | 'completed' | 'hiatus' | null;
+  completion: 'ongoing' | 'completed' | 'hiatus' | 'upcoming' | 'cancelled' | null;
   reasons: MatchReasons;
 }
 
