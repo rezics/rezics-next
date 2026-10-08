@@ -97,6 +97,7 @@ import { realmDirectoryRoutes } from './routes/realm-directory.ts';
 import { realmSubmissionRoutes } from './routes/realm-submissions.ts';
 import { conceptRoutes } from './routes/concepts.ts';
 import { realmAdminRoutes } from './routes/realm-admin.ts';
+import { realmAppealRoutes } from './routes/realm-appeals.ts';
 import { workContentsRoutes } from './routes/work-contents.ts';
 import { readingSettingsRoutes } from './routes/reading-settings.ts';
 import { preferencesRoutes } from './routes/preferences.ts';
@@ -215,6 +216,7 @@ function domainRoutes(fuseki: FusekiClient, work: SearchRouteDependencies) {
 function extraRoutes1(fuseki: FusekiClient, work: SearchRouteDependencies) {
   return new Elysia()
     .use(realmAdminRoutes(work))
+    .use(realmAppealRoutes(work))
     .use(entityPageRoutes(work))
     .use(memberReplyRoutes(work))
     .use(workMaintainerRoutes(work))

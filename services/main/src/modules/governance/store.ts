@@ -460,16 +460,39 @@ export class GovernanceStore {
     });
   }
 
+  async openRealmSanctionAppeal(principal: VerifiedPrincipal, input: {
+    realm: string; receiptId: string; statement: string; idempotencyKey: string;
+  }) {
+    const { openRealmSanctionAppeal } = await import('./realm-sanction-appeal.ts');
+    return openRealmSanctionAppeal(principal, input, work => this.transaction(work));
+  }
+
+  async readRealmSanctionAppeal(principal: VerifiedPrincipal, input: { realm: string; receiptId: string }) {
+    const { readRealmSanctionAppeal } = await import('./realm-sanction-appeal.ts');
+    return readRealmSanctionAppeal(principal, input, work => this.transaction(work, true));
+  }
+
   /**
    * Append the next decision to a case under CAS on its generation. Target
    * heads and the rule basis are re-read from their owners first; any change
    * since review is stale and nothing is written. Restricting outcomes advance
    * each target's enforcement fence; reverse and restore release only the
    * reversed decision's own targets.
+   * A realm sanction appeal is decided before that content profile: restore with
+   * no target is a resolution record, not an unban or a content effect.
    */
   async decide(principal: VerifiedPrincipal, input: DecisionInput,
     deferEffects = false,
   ): Promise<DecisionResult> {
+    if (uuidPattern.test(input.caseId)) {
+      const kind = await this.transaction(async client => (await client.query<{ kind: string }>(
+        'SELECT kind FROM access.governance_case WHERE id = $1', [input.caseId])).rows[0]?.kind ?? null, true);
+      if (kind === 'realm_sanction_appeal') {
+        const { decideRealmSanctionAppeal } = await import('./realm-sanction-appeal.ts');
+        return decideRealmSanctionAppeal(principal, input, work => this.transaction(work),
+          (client, actingSubject, scopeId) => this.decider(client, principal, actingSubject, scopeId, 'governance.moderate'));
+      }
+    }
     if (!uuidPattern.test(input.caseId) || !/^(0|[1-9][0-9]{0,18})$/.test(input.expectedGeneration)
       || !agentPattern.test(input.actingSubject) || !(decisionOutcomes as readonly string[]).includes(input.outcome)
       || input.outcome === 'reject' || !keyPattern.test(input.idempotencyKey)

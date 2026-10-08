@@ -13,7 +13,12 @@ export const evidenceStates = ['available', 'empty', 'unavailable', 'erased', 'u
 export const authorityKinds = ['platform', 'realm', 'resource_owner'] as const;
 export const disclosures = ['private', 'parties', 'public_summary'] as const;
 export const decisionKinds = ['organization_publication_rejection', 'content_moderation',
-  'rights_disposition'] as const;
+  'rights_disposition', 'realm_sanction_resolution'] as const;
+// Membership sanctions are case targets only. Evidence, enforcement and decision
+// targets stay on the content owners above.
+export const caseKinds = ['content_report', 'rights_complaint', 'realm_sanction_appeal'] as const;
+export const caseTargetOwners = [...governanceOwners, 'membership'] as const;
+export const caseTargetComponents = [...governanceComponents, 'sanction'] as const;
 export const decisionOutcomes = ['reject', 'restrict', 'interim_restrict', 'final_restrict', 'dismiss',
   'restore', 'reverse'] as const;
 export const enforcementEffects = ['disclosure', 'publication', 'participation', 'capability', 'search',
@@ -45,13 +50,13 @@ export const governanceRuleRevision = access.table('governance_rule_revision', {
 
 export const governanceCase = access.table('governance_case', {
   id: uuid('id').primaryKey(),
-  kind: text('kind', { enum: ['content_report', 'rights_complaint'] }).notNull(),
+  kind: text('kind', { enum: caseKinds }).notNull(),
   authorityKind: text('authority_kind', { enum: authorityKinds }).notNull(),
   authorityScopeId: text('authority_scope_id').notNull(),
   context: text('context').notNull(),
-  targetOwner: text('target_owner', { enum: governanceOwners }).notNull(),
+  targetOwner: text('target_owner', { enum: caseTargetOwners }).notNull(),
   targetResource: text('target_resource').notNull(),
-  targetComponent: text('target_component', { enum: governanceComponents }).notNull(),
+  targetComponent: text('target_component', { enum: caseTargetComponents }).notNull(),
   disclosure: text('disclosure', { enum: disclosures }).notNull(),
   state: text('state', { enum: ['open', 'closed'] }).notNull(),
   generation: bigint('generation', { mode: 'bigint' }).notNull(),
@@ -60,6 +65,18 @@ export const governanceCase = access.table('governance_case', {
   closedAt: at('closed_at'),
   urgent: boolean('urgent').notNull(),
   reviewPending: boolean('review_pending').notNull(),
+});
+
+export const realmSanctionAppeal = access.table('realm_sanction_appeal', {
+  caseId: uuid('case_id').primaryKey(),
+  receiptId: uuid('receipt_id').notNull(),
+  realm: text('realm').notNull(),
+  principalId: uuid('principal_id').notNull(),
+  memberSubject: text('member_subject').notNull(),
+  idempotencyKey: text('idempotency_key').notNull(),
+  requestDigest: text('request_digest').notNull(),
+  statement: text('statement').notNull(),
+  openedAt: at('opened_at').notNull(),
 });
 
 export const governanceReport = access.table('governance_report', {
@@ -283,7 +300,7 @@ export const rightsCounterNotice = access.table('rights_counter_notice', {
 });
 
 export const governanceTables = [governanceRuleHead, governanceRuleRevision,
-  governanceCase, governanceReport, governanceEvidence, rightsComplaint,
+  governanceCase, realmSanctionAppeal, governanceReport, governanceEvidence, rightsComplaint,
   moderationDecision, moderationDecisionTarget, governanceProcessStep, governanceEnforcement,
   governanceRole, governanceCaseCredential, governanceCorrespondenceReceipt, governancePreservationHold,
   governanceErasurePostponement,

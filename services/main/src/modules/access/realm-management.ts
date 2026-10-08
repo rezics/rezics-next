@@ -146,7 +146,7 @@ export class AccessRealmManagement {
   private async write<T extends Receipt>(principal: VerifiedPrincipal, realm: string,
     input: { actingSubject: string; expectedGeneration: string; reason: string }, key: string,
     action: string, run: (client: PoolClient, principalId: string, id: string, generation: string,
-      ceiling: Date) => Promise<T>): Promise<T> {
+      ceiling: Date) => Promise<T>, memberAction: 'add' | 'remove' | 'ban' | 'unban' | null = null): Promise<T> {
     if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(key) || !input.reason.trim()) throw new RealmAdminInvalid('Invalid command');
     const intent = digest({ realm, action, input });
     return this.transaction(realm, async (client, generation) => {
@@ -165,9 +165,10 @@ export class AccessRealmManagement {
       if (action === 'realm.settings.manage') await client.query(`UPDATE access.scope_gate
         SET authority_epoch = authority_epoch + 1 WHERE id = $1`, [realmAdminScope(realm)]);
       await client.query(`INSERT INTO access.realm_admin_receipt
-        (id, realm, principal_id, acting_subject, idempotency_key, request_digest, action, reason, result)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [id, realm, actor.id, input.actingSubject, key, intent, action, input.reason, result]);
+        (id, realm, principal_id, acting_subject, idempotency_key, request_digest, action, reason, result,
+          member_action)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [id, realm, actor.id, input.actingSubject, key, intent, action, input.reason, result, memberAction]);
       return result;
     });
   }
@@ -181,7 +182,7 @@ export class AccessRealmManagement {
         if (identity) await registerFollowSpace(client,identity);
         return { receiptId, generation, replayed: false,
           ...await changeRealmMember(client, realm, input, principalId, receiptId, env, historyAdmission) };
-      });
+      }, input.action);
   }
 
   private async settlePolicy(realm: string, env?: WorkActivationEnvironment) {
