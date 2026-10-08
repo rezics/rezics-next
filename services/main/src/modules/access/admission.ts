@@ -1868,6 +1868,33 @@ export class AccessAdmissionRegistry {
     return this.deactivatePrincipal(principal.id, principal.enforcement_epoch, true);
   }
 
+  /** One bounded row. The caller proves an edit digest with this actor and no other. */
+  async admittedActingSubject(admissionId: string): Promise<string> {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(admissionId)) {
+      throw new AdmissionDenied('unknown admission');
+    }
+    const client = await admissionClient(this.pool);
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '2s'");
+      await client.query("SET LOCAL statement_timeout = '2s'");
+      const result = await client.query<{ acting_subject: unknown }>(
+        'SELECT acting_subject FROM access.admission WHERE id = $1::uuid LIMIT 1', [admissionId]);
+      await client.query('COMMIT');
+      const subject = result.rows[0]?.acting_subject;
+      if (result.rows.length !== 1 || typeof subject !== 'string') {
+        throw new AdmissionDenied('unknown admission');
+      }
+      return subject;
+    } catch (error) {
+      await rollback(client);
+      if (error instanceof AdmissionDenied || error instanceof AdmissionUnavailable) throw error;
+      throw admissionError(error);
+    } finally {
+      client.release();
+    }
+  }
+
   async listUnsealedPrincipal(principalId: string, limit = 100): Promise<RegisteredAdmission[]> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new AdmissionDenied('invalid seal batch limit');
     const result = await this.pool.query<AdmissionRow>(

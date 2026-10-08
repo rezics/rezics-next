@@ -1,7 +1,7 @@
-import type { Pool, PoolClient } from 'pg';
-import { boundedPool } from '../../infrastructure/pg-pool.ts';
+import type { Pool } from 'pg';
+import { AccessAdmissionRegistry, AdmissionDenied } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
-import { readComponentState, RevisionCorrupt, RevisionNotFound,
+import { readComponentState, RevisionCorrupt, RevisionNotFound, RevisionUnavailable,
   type RevisionReadBudget } from '../work/history.ts';
 import { CONTRIBUTION_CREATE_READ_COST, CONTRIBUTION_PROFILE, ContributionReadExpired,
   admittedContributionLanguage, assertContributionReadOpen, queryContributionGraph,
@@ -40,19 +40,6 @@ export interface OriginalContributionEditSource extends ExactContributionDraft {
   scope: string;
   expectedHead: string;
   actor: string;
-}
-
-/** Fields copied onto a claimed Access row when the edit's admission is not already stored. */
-export interface ContributionEditActorRecord {
-  id: string;
-  principalId: string;
-  actingSubject: string;
-  scope: string;
-  action: string;
-  idempotencyKey: string;
-  requestDigest: string;
-  authorityEpoch: string;
-  expiresAt: string;
 }
 
 export interface ContributionHistoryRead {
@@ -563,17 +550,30 @@ function acceptCreateHead(head: ExactHeadFacts, receipt: string, rows: readonly 
   }
 }
 
-/** The receipt records the original creator, not the editor. A stored Access row is authoritative.
- * When that row is missing, only a digest recomputed with the receipt author is accepted. */
-async function proveEditDigest(signal: AbortSignal, contribution: string, expectedHead: string,
-  author: string, admissionId: string, requestDigest: string, content: RetainedDraft): Promise<string> {
+/** Main's Access registry, or the Access pool already attached to this process.
+ * Contribution does not open a pool and does not write Access tables. */
+function editAccess(env: WorkActivationEnvironment): Pick<AccessAdmissionRegistry, 'admittedActingSubject'> {
+  const attached = (env as { accessAdmission?: Pick<AccessAdmissionRegistry, 'admittedActingSubject'> })
+    .accessAdmission;
+  if (attached) return attached;
+  const pool = (env as { eventTemporalAccess?: Pool }).eventTemporalAccess;
+  if (pool) return new AccessAdmissionRegistry(pool);
+  throw new RevisionUnavailable('Access admission store could not be reached');
+}
+
+/** The receipt records the original creator. The editor is only the Access admission's acting subject. */
+async function proveEditDigest(env: WorkActivationEnvironment, signal: AbortSignal, contribution: string,
+  expectedHead: string, admissionId: string, requestDigest: string, content: RetainedDraft): Promise<string> {
   assertContributionReadOpen(signal);
-  const lookedUp = await lookupEditActor(admissionId);
-  assertContributionReadOpen(signal);
-  if (lookedUp.found && !nativeId.test(lookedUp.subject)) {
-    throw new RevisionCorrupt('original contribution edit actor is invalid');
+  let actor: string;
+  try { actor = await editAccess(env).admittedActingSubject(admissionId); }
+  catch (error) {
+    if (error instanceof RevisionUnavailable) throw error;
+    if (error instanceof AdmissionDenied) throw new RevisionCorrupt('original contribution edit actor is unavailable');
+    throw new RevisionUnavailable('Access admission store could not be reached');
   }
-  const actor = lookedUp.found ? lookedUp.subject : author;
+  assertContributionReadOpen(signal);
+  if (!nativeId.test(actor)) throw new RevisionCorrupt('original contribution edit actor is invalid');
   let digest: string;
   try {
     digest = textContributionEditDigest({ contribution, expectedHead, actingSubject: actor,
@@ -622,7 +622,7 @@ async function reconcileExactHeadReceipt(env: WorkActivationEnvironment, signal:
     || edited.dataEpoch !== head.dataEpoch || edited.sequence !== head.sequence) {
     throw new RevisionCorrupt('draft revision receipt does not match the exact head');
   }
-  await proveEditDigest(signal, head.contribution, edited.expectedHead, edited.author,
+  await proveEditDigest(env, signal, head.contribution, edited.expectedHead,
     edited.admissionId, edited.requestDigest, head.content);
 }
 
@@ -662,7 +662,7 @@ export async function readOriginalContributionEditSource(
     let content: RetainedDraft;
     try { content = retainedDocumentBody(state); }
     catch { throw new RevisionCorrupt('original contribution body is corrupt'); }
-    const actor = await proveEditDigest(signal, contribution, edited.expectedHead, edited.author,
+    const actor = await proveEditDigest(env, signal, contribution, edited.expectedHead,
       edited.admissionId, edited.requestDigest, content);
     assertContributionReadOpen(signal);
     return { contribution, revision: edited.revision, work: edited.work, author: edited.author,
@@ -671,65 +671,4 @@ export async function readOriginalContributionEditSource(
       authorityEpoch: edited.authorityEpoch, scope: edited.scope, expectedHead: edited.expectedHead, actor,
       sourcePosition: { datasetId: 'product', dataEpoch: edited.dataEpoch, sequence: edited.sequence } };
   });
-}
-
-let admissionPool: Pool | undefined;
-
-function accessAdmissionPool(): Pool | undefined {
-  const url = Bun.env.ACCESS_DATABASE_URL;
-  if (!url) return undefined;
-  admissionPool ??= boundedPool({ connectionString: url, max: 1, connectionTimeoutMillis: 2_000,
-    statement_timeout: 2_000, query_timeout: 2_000, idleTimeoutMillis: 10_000, allowExitOnIdle: true });
-  return admissionPool;
-}
-
-async function lookupEditActor(admissionId: string): Promise<{ found: false } | { found: true; subject: string }> {
-  const pool = accessAdmissionPool();
-  if (!pool || !admissionIdPattern.test(admissionId)) return { found: false };
-  try {
-    const result = await pool.query<{ acting_subject: unknown }>(
-      'SELECT acting_subject FROM access.admission WHERE id = $1::uuid LIMIT 1', [admissionId]);
-    const subject = result.rows[0]?.acting_subject;
-    if (typeof subject !== 'string') return { found: false };
-    return { found: true, subject };
-  } catch { return { found: false }; }
-}
-
-/** Records the edit actor where the receipt cannot. An existing row is left unchanged.
- * Insert failures are ignored so an edit whose admission lives in another database still commits. */
-export async function rememberContributionEditActor(record: ContributionEditActorRecord): Promise<void> {
-  const pool = accessAdmissionPool();
-  if (!pool || !admissionIdPattern.test(record.id) || !admissionIdPattern.test(record.principalId)
-    || !nativeId.test(record.actingSubject) || record.scope.length < 1 || record.scope.length > 256
-    || record.action.length < 1 || record.action.length > 128
-    || record.idempotencyKey.length < 1 || record.idempotencyKey.length > 128
-    || !/^[0-9a-f]{64}$/.test(record.requestDigest) || !/^(0|[1-9][0-9]*)$/.test(record.authorityEpoch)) {
-    return;
-  }
-  let client: PoolClient | undefined;
-  try {
-    client = await pool.connect();
-    await client.query('BEGIN');
-    await client.query("SET LOCAL statement_timeout = '2s'");
-    await client.query("SET LOCAL lock_timeout = '2s'");
-    const existing = await client.query('SELECT 1 FROM access.admission WHERE id = $1::uuid LIMIT 1', [record.id]);
-    if (existing.rows.length === 0) {
-      await client.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
-        VALUES ($1::uuid, 'contribution-edit-actor', $1::text) ON CONFLICT (id) DO NOTHING`, [record.principalId]);
-      await client.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')
-        ON CONFLICT (id) DO NOTHING`, [record.actingSubject]);
-      await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [record.scope]);
-      await client.query(`INSERT INTO access.admission
-          (id, principal_id, acting_subject, scope_id, action, idempotency_key, request_digest,
-           authority_epoch, expires_at, state, claimed_at)
-        VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6, $7, $8::bigint, $9::timestamptz, 'claimed', clock_timestamp())
-        ON CONFLICT (id) DO NOTHING`, [record.id, record.principalId, record.actingSubject, record.scope,
-        record.action, record.idempotencyKey, record.requestDigest, record.authorityEpoch, record.expiresAt]);
-    }
-    await client.query('COMMIT');
-  } catch {
-    await client?.query('ROLLBACK').catch(() => undefined);
-  } finally {
-    client?.release();
-  }
 }

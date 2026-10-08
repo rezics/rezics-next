@@ -1589,8 +1589,10 @@ recovery_target_action = 'promote'
     expect((await reconcileRetainedContributionDraftEdit(
       { ...olderEnv, objectDirectory: liveObjects }, latestAccess.pool,
       journal.pool, laterRelay, '10')).replayed).toBe(true);
+    const recoveredEditedEnv = { ...olderEnv, objectDirectory: liveObjects };
+    Object.assign(recoveredEditedEnv, { accessAdmission: new AccessAdmissionRegistry(latestAccess.pool) });
     const recoveredEditedDraft = await readExactContributionDraft(
-      { ...olderEnv, objectDirectory: liveObjects }, laterDraft.contribution!,
+      recoveredEditedEnv, laterDraft.contribution!,
       laterDraftEdit.draftRevision!, async () => true);
     expect(recoveredEditedDraft.body).toBe(laterDraftEditInput.body);
     expect(recoveredEditedDraft.predecessor).toBe(laterDraft.draftRevision);

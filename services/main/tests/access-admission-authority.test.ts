@@ -141,6 +141,52 @@ test('C1: an unreachable Access store is unavailable at both admission boundarie
   );
 });
 
+test('one admission id returns its acting subject; a missing or unreadable row stays closed', async () => {
+  const id = '00000000-0000-4000-8000-0000000000aa';
+  const actor = 'https://rezics.com/id/00000000-0000-4000-8000-0000000000ab';
+  const queries: string[] = [];
+  const pool = {
+    connect: async () => ({
+      query: async (sql: string, values?: unknown[]) => {
+        queries.push(sql);
+        if (sql === 'BEGIN' || sql.startsWith('SET LOCAL') || sql === 'COMMIT' || sql === 'ROLLBACK') {
+          return { rows: [], rowCount: 0 };
+        }
+        expect(sql).toContain('SELECT acting_subject');
+        expect(sql).toContain('LIMIT 1');
+        expect(values).toEqual([id]);
+        return { rows: [{ acting_subject: actor }], rowCount: 1 };
+      },
+      release() {},
+    }),
+  } as unknown as Pool;
+  expect(await new AccessAdmissionRegistry(pool).admittedActingSubject(id)).toBe(actor);
+  expect(queries.filter(sql => sql.includes('SELECT acting_subject'))).toHaveLength(1);
+
+  const missing = { connect: async () => ({
+    query: async () => ({ rows: [], rowCount: 0 }),
+    release() {},
+  }) } as unknown as Pool;
+  await expect(new AccessAdmissionRegistry(missing).admittedActingSubject(id))
+    .rejects.toBeInstanceOf(AdmissionDenied);
+  await expect(new AccessAdmissionRegistry(pool).admittedActingSubject('not-a-uuid'))
+    .rejects.toBeInstanceOf(AdmissionDenied);
+
+  const refused = { connect: async () => { throw new Error('connection refused'); } } as unknown as Pool;
+  await expect(new AccessAdmissionRegistry(refused).admittedActingSubject(id))
+    .rejects.toBeInstanceOf(AdmissionUnavailable);
+
+  const broken = { connect: async () => ({
+    query: async (sql: string) => {
+      if (sql.includes('SELECT')) throw Object.assign(new Error('timeout'), { code: '57014' });
+      return { rows: [], rowCount: 0 };
+    },
+    release() {},
+  }) } as unknown as Pool;
+  await expect(new AccessAdmissionRegistry(broken).admittedActingSubject(id))
+    .rejects.toBeInstanceOf(AdmissionUnavailable);
+});
+
 test('C1: selected role claims read only the saved binding and revision without rediscovering alternatives', async () => {
   const queries: string[] = [];
   const client = {

@@ -11,7 +11,9 @@ import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync
   from 'node:fs';
 import { join, resolve } from 'node:path';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
-import type { RegisteredAdmission } from '../../../services/main/src/modules/access/admission.ts';
+import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
+import { AccessAdmissionRegistry, type RegisteredAdmission }
+  from '../../../services/main/src/modules/access/admission.ts';
 import { activateTextContribution, textContributionDigest, textContributionReceiptIri }
   from '../../../services/main/src/modules/contribution/draft.ts';
 import { editTextContributionDraft, textContributionEditDigest, textContributionEditReceiptIri }
@@ -37,13 +39,17 @@ function requireStack(): void {
 
 async function fixture() {
   requireStack();
+  const databaseUrl = Bun.env.ACCESS_DATABASE_URL;
+  if (!databaseUrl) throw new Error('ACCESS_DATABASE_URL is required');
   const directory = join(root, '.temp', `private-original-source-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const env: WorkActivationEnvironment = {
+  const accessPool = boundedPool({ connectionString: databaseUrl, max: 1 });
+  const access = new AccessAdmissionRegistry(accessPool);
+  const env: WorkActivationEnvironment = Object.assign({
     fuseki: new FusekiClient(Bun.env.FUSEKI_URL!),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! },
     objectDirectory: join(directory, 'objects'),
-  };
+  }, { accessAdmission: access });
   const creator = ID + randomUUID();
   const editor = ID + randomUUID();
   const admission = (actor: string, scope: string, action: string,
@@ -67,13 +73,33 @@ async function fixture() {
   if (!first.contribution || !first.draftRevision) throw new Error('create receipt is incomplete');
   const editInput = { contribution: first.contribution, expectedHead: first.draftRevision,
     body: `Edited ${secondTerm} 编辑 body`, actingSubject: editor };
-  const editAdmission = admission(editor, `contribution:edit:${first.contribution}`,
-    'contribution.edit', textContributionEditDigest(editInput));
+  const editDigest = textContributionEditDigest(editInput);
+  const editScope = `contribution:edit:${first.contribution}`;
+  const principalId = randomUUID();
+  const principal = { issuer: 'https://qa-private-original.test', subject: randomUUID() };
+  await accessPool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+    VALUES ($1,$2,$3)`, [principalId, principal.issuer, principal.subject]);
+  await accessPool.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')`, [editor]);
+  await accessPool.query('INSERT INTO access.scope_gate (id) VALUES ($1)', [editScope]);
+  await accessPool.query(`INSERT INTO access.representation
+    (id, principal_id, subject_id, action, valid_until)
+    VALUES ($1,$2,$3,'contribution.edit', now() + interval '1 hour')`,
+  [randomUUID(), principalId, editor]);
+  await accessPool.query(`INSERT INTO access.permission_grant
+    (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
+    VALUES ($1,$2,$2,$3,'contribution.edit', now() + interval '1 hour')`,
+  [randomUUID(), editor, editScope]);
+  const editAdmission = await access.register({ principal, actingSubject: editor, scope: editScope,
+    action: 'contribution.edit', idempotencyKey: `private-original-${randomUUID()}`,
+    requestDigest: editDigest });
   const edited = await editTextContributionDraft(env, editAdmission, editInput);
   if (!edited.draftRevision) throw new Error('edit receipt is incomplete');
   return { env, directory, creator, editor, firstInput, createAdmission, first, editInput,
     editAdmission, edited, contribution: first.contribution!, firstTerm, secondTerm,
-    cleanup: () => rmSync(directory, { recursive: true, force: true }) };
+    cleanup: async () => {
+      rmSync(directory, { recursive: true, force: true });
+      await accessPool.end();
+    } };
 }
 
 async function graphSnapshot(env: WorkActivationEnvironment, contribution: string) {
@@ -148,7 +174,7 @@ test('private original source: create then edit keeps the original CREATE source
       ?u <${RV}contribution> <${contribution}> ; <${RV}revision> ?r } }`)).results?.bindings ?? [];
     expect(units.map(row => [row.u!.value, row.r!.value])).toEqual(
       [[privateDraftUnit(f.edited.draftRevision!), f.edited.draftRevision]]);
-  } finally { f.cleanup(); }
+  } finally { await f.cleanup(); }
 }, 120_000);
 
 test('private original source: lost-ACK replay of CREATE and EDIT is read-only', async () => {
@@ -163,7 +189,7 @@ test('private original source: lost-ACK replay of CREATE and EDIT is read-only',
     expect(edit).toEqual(f.edited);
     expect(await graphSnapshot(env, f.contribution)).toBe(graph);
     expect(objectFiles(env)).toEqual(objects);
-  } finally { f.cleanup(); }
+  } finally { await f.cleanup(); }
 }, 120_000);
 
 test('private original source: corrupt or missing selected immutable bytes are refused per head', async () => {
@@ -216,7 +242,7 @@ test('private original source: corrupt or missing selected immutable bytes are r
     expect(objectFiles(env)).toEqual(before);
     await expect(readExactContributionDraft(env, contribution, ID + randomUUID(), allow))
       .rejects.toBeInstanceOf(RevisionNotFound);
-  } finally { f.cleanup(); }
+  } finally { await f.cleanup(); }
 }, 120_000);
 
 // ---- Falsifiers: these are expected to FAIL until the named production hooks exist. ----
@@ -245,7 +271,7 @@ test('FALSIFIER: a selected EDIT head whose edit receipt is gone or digest-forge
     await env.fuseki.update(`DELETE WHERE { GRAPH <${GRAPHS.receipts}> { <${receipt}> ?p ?o } }`);
     await expect(readExactContributionDraft(env, contribution, f.edited.draftRevision!, allow))
       .rejects.toBeInstanceOf(RevisionCorrupt);
-  } finally { f.cleanup(); }
+  } finally { await f.cleanup(); }
 }, 120_000);
 
 test('FALSIFIER: a selected CREATE head whose create receipt is gone is refused by the head reader', async () => {

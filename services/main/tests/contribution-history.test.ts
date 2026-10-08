@@ -10,6 +10,7 @@ import { CONTRIBUTION_CREATE_READ_COST, CONTRIBUTION_PROFILE, ContributionReadEx
 import { textContributionEditDigest, textContributionEditReceiptIri } from '../src/modules/contribution/edit.ts';
 import { readExactContributionDraft, readOriginalContributionCreateSource,
   readOriginalContributionEditSource } from '../src/modules/contribution/history.ts';
+import { AdmissionDenied, AdmissionUnavailable } from '../src/modules/access/admission.ts';
 import { GRAPHS, RV, iri, prepareComponent, type WorkActivationEnvironment }
   from '../src/modules/work/activate.ts';
 import { RevisionCorrupt, RevisionNotFound, RevisionReadBudgetExceeded, RevisionUnavailable,
@@ -141,6 +142,15 @@ function environment(directory: string, triples: readonly Triple[], onQuery?: (s
     return evaluate(sparql, triples);
   } }, objectDirectory: directory } as unknown as WorkActivationEnvironment;
   return { env, seen };
+}
+
+/** Unit stand-in for AccessAdmissionRegistry.admittedActingSubject. Null is a missing row. */
+function admitActor(env: WorkActivationEnvironment, actor: string | null | 'unavailable'): void {
+  Object.assign(env, { accessAdmission: { admittedActingSubject: async () => {
+    if (actor === 'unavailable') throw new AdmissionUnavailable('Access admission store could not be reached');
+    if (actor === null) throw new AdmissionDenied('unknown admission');
+    return actor;
+  } } });
 }
 
 function currentWorkAdmission(env: WorkActivationEnvironment): (target: string) => Promise<boolean> {
@@ -475,6 +485,7 @@ test('exact draft history stays authorized, bounded, and able to read an edited 
       [`${RV}expectedHead`]: uri(revision),
     }, textContributionEditReceiptIri(editAdmission));
     const { env, seen } = projection(directory, exactRespond(row, triples));
+    admitActor(env, author);
     const draft = await readExactContributionDraft(env, contribution, currentHead, async () => true);
     expect(draft).toMatchObject({ body: edited, predecessor: revision, author, language,
       sourcePosition: { datasetId: 'product', dataEpoch: epoch, sequence } });
@@ -596,6 +607,7 @@ test('exact draft refuses a forged edit digest, a different editor without an Ac
       [`${RV}expectedHead`]: uri(revision),
     }, textContributionEditReceiptIri(admission));
     const forgedHead = projection(directory, exactRespond(row, forged));
+    admitActor(forgedHead.env, author);
     await expect(readExactContributionDraft(forgedHead.env, contribution, currentHead, async () => true))
       .rejects.toBeInstanceOf(RevisionCorrupt);
 
@@ -609,8 +621,13 @@ test('exact draft refuses a forged edit digest, a different editor without an Ac
       [`${RV}expectedHead`]: uri(revision),
     }, textContributionEditReceiptIri(other));
     const otherEditor = projection(directory, exactRespond(row, mismatched));
+    admitActor(otherEditor.env, null);
     await expect(readExactContributionDraft(otherEditor.env, contribution, currentHead, async () => true))
       .rejects.toBeInstanceOf(RevisionCorrupt);
+    const unavailable = projection(directory, exactRespond(row, mismatched));
+    admitActor(unavailable.env, 'unavailable');
+    await expect(readExactContributionDraft(unavailable.env, contribution, currentHead, async () => true))
+      .rejects.toBeInstanceOf(RevisionUnavailable);
 
     const createFiles = store(directory);
     const missing = projection(directory, exactRespond(anchorRow(createFiles.manifestDigest), []));
@@ -636,6 +653,7 @@ test('original edit source reconciles one edit receipt with its predecessor and 
     const triples = [...receiptTriples(digest, [], receiptObjects, textContributionEditReceiptIri(editAdmission)),
       ...anchorTriples(files.manifestDigest, [], anchorObjects, currentHead)];
     const { env, seen } = environment(directory, triples);
+    admitActor(env, author);
     const source = await readOriginalContributionEditSource(env, contribution, currentHead, async () => true);
     expect(source).toMatchObject({ contribution, revision: currentHead, work, author, language, body: edited,
       predecessor: revision, expectedHead: revision, actor: author,
@@ -651,6 +669,7 @@ test('original edit source reconciles one edit receipt with its predecessor and 
     const forged = environment(directory, [
       ...receiptTriples('0'.repeat(64), [], receiptObjects, textContributionEditReceiptIri(editAdmission)),
       ...anchorTriples(files.manifestDigest, [], anchorObjects, currentHead)]);
+    admitActor(forged.env, author);
     await expect(readOriginalContributionEditSource(forged.env, contribution, currentHead, async () => true))
       .rejects.toBeInstanceOf(RevisionCorrupt);
     const gone = environment(directory, anchorTriples(files.manifestDigest, [], anchorObjects, currentHead));
