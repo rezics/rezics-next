@@ -135,10 +135,14 @@ test('matcher configuration defaults to none in every environment and production
   expect(() =>
     mainConfig({ ...env, MAIN_REQUIRED_MEDIA_MATCHER: local, NODE_ENV: 'production' }),
   ).toThrow('Production forbids local');
-  // Check even a combined environment whose selected role does not consume Main config.
-  expect(() => checkProductionEnv({ ...env, MAIN_REQUIRED_MEDIA_MATCHER: local }, ['web'])).toThrow(
-    'Production forbids local',
-  );
+  // Main processes media, so a role set that includes it refuses a local corpus.
+  // A web-only role has no matcher duty.
+  expect(() =>
+    checkProductionEnv({ ...env, MAIN_REQUIRED_MEDIA_MATCHER: local }, ['main']),
+  ).toThrow('Production forbids local');
+  expect(
+    checkProductionEnv({ ...env, MAIN_REQUIRED_MEDIA_MATCHER: local }, ['web']).isProduction,
+  ).toBe(true);
   expect(() => checkProductionEnv({ ...env, MAIN_REQUIRED_MEDIA_MATCHER: 'unexpected' })).toThrow(
     'must be none',
   );

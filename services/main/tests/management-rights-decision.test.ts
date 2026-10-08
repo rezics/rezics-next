@@ -29,7 +29,10 @@ test('rights complaint restriction outcomes reach the governance owner through t
             revision: 'revision-1', expectedHead: 'revision-1', effect: 'disclosure' }],
           rule: { ref: 'urn:policy:rights', revision: '1', digest: 'a'.repeat(64) },
           evidenceDigest: 'b'.repeat(64), reversesDecisionId: null, answersStepId: null,
-          rationale: null, disclosure: 'parties', idempotencyKey: key }),
+          rationale: null, disclosure: 'parties', reasons: { facts: 'The complaint identifies the exact title.',
+            scope: 'That title revision.', duration: 'Until staff reconsider.', automation: false,
+            appealRoute: '/v1/public-reports/{caseId}/correspondence', contentLanguage: 'en' },
+          idempotencyKey: key }),
       }));
       expect(response.status).toBe(state === 'completed' ? 200 : 202);
       expect(await response.json()).toMatchObject({ outcome, operation: { status: state } });

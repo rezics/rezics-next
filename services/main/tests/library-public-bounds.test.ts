@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { libraryRoutes } from '../src/routes/library.ts';
+import { recoveryAccess } from './support/recovery-access.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { readPublicShelves, readPublicStatusShelf, PUBLIC_SHELF_COST } from '../src/modules/library/public.ts';
 import { readShelfPage } from '../src/modules/library/shelf-page.ts';
@@ -58,7 +59,7 @@ function httpFixture(home: ReturnType<typeof fixture>) {
   const template = home.session();
   const app = libraryRoutes({ ...template.deps, libraryStatus: home.store,
     account: { verify: async () => ({ issuer: 'issuer', subject: 'subject' }) },
-    access: { activePrincipalId: async () => 'reader', canReadAsBaselineMember: async () => true },
+    access: { ...recoveryAccess(), activePrincipalId: async () => 'reader', canReadAsBaselineMember: async () => true },
     personPreferences: { ...template.deps.personPreferences, languagesForReader: async () => [] },
     environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, fuseki: {
       query: async (sql: string) => ({ results: { bindings: sql.includes('SELECT ?epoch ?sequence')

@@ -45,11 +45,13 @@ function expectFault(line: string | undefined, worker: string, code?: string) {
 
 test('pool and checked-out client error listeners retain bounded database diagnostics', async () => {
   const pool = boundedPool({ allowExitOnIdle: true });
-  const client = new EventEmitter() as unknown as PoolClient;
+  const connection = new EventEmitter();
+  const client = Object.assign(new EventEmitter(), { connection }) as unknown as PoolClient;
   try {
     const lines = await capture(() => {
       expect(pool.emit('error', new DatabaseError('08006'))).toBe(true);
       pool.emit('connect', client);
+      expect(connection.listenerCount('errorMessage')).toBe(1);
       expect(client.listenerCount('error')).toBe(1);
       expect(client.emit('error', new DatabaseError('25P03'))).toBe(true);
       expect(client.emit('error', new DatabaseError('57P01'))).toBe(true);

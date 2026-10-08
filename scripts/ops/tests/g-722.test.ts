@@ -7,6 +7,7 @@ import { COMMAND_MODULE_VERSION } from '../../../services/main/src/infrastructur
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { productionExample } from './g-722-fixture.ts';
+import { recoveryAccess } from '../../../services/main/tests/support/recovery-access.ts';
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { str } from 'envalid';
@@ -164,6 +165,7 @@ describe('G-722 release readiness', () => {
     }
     const work = {
       environment: { lineage: { dataEpoch: 'epoch-a', routingEpoch: 'routing-a' } },
+      access: recoveryAccess(),
     } as unknown as MainWorkDependencies;
     const app = healthRoutes(new AheadOfProjection(), work);
     const request = (path: string) => app.handle(new Request(`http://localhost${path}`));

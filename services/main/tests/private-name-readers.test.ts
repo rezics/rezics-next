@@ -15,6 +15,7 @@ import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { recoveryAccess } from './support/recovery-access.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const privateAgent = id(1);
@@ -301,7 +302,7 @@ test('a private creator name never matches or appears for an anonymous catalogue
       throw new Error(`unexpected catalogue query: ${sparql.slice(0, 160)}`);
     },
   };
-  const deps = { environment: { fuseki, lineage, objectDirectory: '.temp/private-names' },
+  const deps = { access: recoveryAccess(), environment: { fuseki, lineage, objectDirectory: '.temp/private-names' },
     personPreferences: gate.preferences } as unknown as MainWorkDependencies;
   const input = { profile: 'catalogue-candidates-v1' as const, originalTitle: { value: 'Rain', language: 'en' },
     aliases: [], romanizations: [], creators: [privateName], dates: [], identifiers: [] };
