@@ -44,15 +44,31 @@ export function resolveStudioAgent(segment: string, options: readonly AgentOptio
 
 export type WorkTab = 'chapters' | 'text' | 'details' | 'realms';
 
+/** A text Studio can reopen, or none when that language has not been written yet. */
+export interface EditingTarget {
+  language: string;
+  text?: { id: string; revision?: string | null } | null;
+  /** This opens a book's own text, its introduction, rather than its chapters. */
+  introduction?: boolean;
+}
+
 /**
- * Where Studio opens a Work it has just created. A book starts on its chapters,
- * a recipe in the recipe editor, and anything else on its text.
+ * Where Studio opens a Work for editing. A recipe always opens in the recipe
+ * editor. A book opens on its chapters, unless this is its introduction. Any
+ * other Work opens the named text, or a new one in `language`.
  */
+export function editingHref(agent: Pick<AgentOption, 'iri' | 'handle'>, work: string, kind: string,
+  target: EditingTarget): string {
+  if (kind === 'recipe') return recipeEditHref(work);
+  if (kind === 'book' && !target.introduction) return workHref(agent, work, 'chapters');
+  if (target.text) return textHref(agent, work, target.text.id, target.text.revision);
+  return `${studioHref(agent, `/works/${idOf(work)}/write`)}?language=${encodeURIComponent(target.language)}`;
+}
+
+/** Where Studio opens a Work it has just created. */
 export function createdWorkPath(agent: Pick<AgentOption, 'iri' | 'handle'>, work: string, presentation: string,
   language: string): string {
-  if (presentation === 'book') return workHref(agent, work, 'chapters');
-  if (presentation === 'recipe') return recipeEditHref(work);
-  return `${studioHref(agent, `/works/${idOf(work)}/write`)}?language=${encodeURIComponent(language)}`;
+  return editingHref(agent, work, presentation, { language });
 }
 
 /** A Work's Studio page, on one of its tabs. */

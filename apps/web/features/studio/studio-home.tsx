@@ -9,13 +9,13 @@ import { relativeTime } from '../feed/time.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer, PageHeader } from '../shell/page.tsx';
-import { studioHref, textHref, workHref } from './agent.ts';
+import { editingHref, studioHref, workHref } from './agent.ts';
 import type { StudioMessages } from './messages.ts';
 import { Failure, formatDate, kindLabel, languageName, openStates, reviewModeText, StateBadge, SubmissionBadge } from './parts.tsx';
 import type { BookChapters, InventoryView, ReviewPage } from './read.ts';
 import { StudioCover } from './studio-cover.tsx';
 import { studioAgentName } from './studio-frame.tsx';
-import { canonicalLanguage, idOf, type InventoryState, type InventoryWork, type Loaded, workKind }
+import { canonicalLanguage, type InventoryState, type InventoryWork, type Loaded, workKind }
   from './types.ts';
 
 type T = ContractOf<StudioMessages>;
@@ -35,8 +35,12 @@ function WorkItem({ work, chapters, agent, now, locale, t }: {
   const kind = workKind(work.types);
   const open = work.submissions.filter(item => openStates.has(item.state as never)).length;
   const own = work.relationship === 'authored';
-  // A book is written chapter by chapter; the Agent's other Works go straight back to their latest text.
+  // A book is written chapter by chapter; a recipe opens in its editor; other Works reopen their latest text.
   const latest = kind === 'book' || !own ? undefined : work.texts[0];
+  const editHref = editingHref(agent, work.id, kind, {
+    language: canonicalLanguage(work.title.language),
+    text: latest ? { id: latest.contribution, revision: latest.draftHead } : null,
+  });
   const languages = [...new Set(work.texts.map(text => languageName(text.language, locale)))];
   return <li className="grid grid-cols-[4rem_minmax(0,1fr)] items-start gap-x-4 gap-y-3 rounded-2xl border
     border-border/60 bg-card p-3 shadow-(--aura-shadow-card) sm:grid-cols-[4rem_minmax(0,1fr)_auto] sm:items-center sm:p-4">
@@ -63,14 +67,9 @@ function WorkItem({ work, chapters, agent, now, locale, t }: {
     </div>
     <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-1 sm:justify-end">
       {!own ? <Link href={workHref(agent, work.id)} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-        {t.openWork}</Link> : kind === 'book' ? <Link href={workHref(agent, work.id, 'chapters')}
-        className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-        <ListOrderedIcon aria-hidden="true" />{t.tabChapters}</Link>
-        : <Link href={latest ? textHref(agent, work.id, latest.contribution, latest.draftHead)
-          : `${studioHref(agent, `/works/${idOf(work.id)}/write`)}?language=${
-            encodeURIComponent(canonicalLanguage(work.title.language))}`}
-        className={buttonVariants({ variant: 'outline', size: 'sm' })}>
-          <PenLineIcon aria-hidden="true" />{latest ? t.continueWriting : t.writeFirst}</Link>}
+        {t.openWork}</Link> : <Link href={editHref} className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+        {kind === 'book' ? <><ListOrderedIcon aria-hidden="true" />{t.tabChapters}</>
+          : <><PenLineIcon aria-hidden="true" />{latest ? t.continueWriting : t.writeFirst}</>}</Link>}
     </div>
   </li>;
 }

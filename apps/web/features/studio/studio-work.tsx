@@ -13,7 +13,7 @@ import { localizedPath } from '../../i18n/locale.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
-import { studioHref, textHref, type WorkTab, workHref } from './agent.ts';
+import { editingHref, studioHref, type WorkTab, workHref } from './agent.ts';
 import { ChapterList, type ChapterListProps } from './chapter-list.tsx';
 import { CoverEditor, type CoverEditorProps } from './cover-editor.tsx';
 import { type DetailsState, DetailsForm, type SaveDetails } from './details-form.tsx';
@@ -59,10 +59,14 @@ function Texts({ agent, work, language, texts, book, locale, t }: {
   agent: AgentOption; work: Work; language: string; texts: Loaded<MyText[]>; book: boolean; locale: UiLocale; t: T;
 }) {
   const { header } = work;
+  const kind = workKind(header.types);
   const list = texts.ok ? texts.data : [];
   const written = new Set(list.map(text => text.language.toLowerCase()));
   const next = [language, locale, ...writingLanguages].find(tag => !written.has(tag.toLowerCase())) ?? 'en';
-  const writeHref = studioHref(agent, `/works/${idOf(header.id)}/write`);
+  const edit = (textLanguage: string, text?: { id: string; revision?: string | null } | null) =>
+    editingHref(agent, header.id, kind, { language: textLanguage, text, introduction: book });
+  // The language form adds its own query. A recipe has one editor, so the form opens that directly.
+  const writeHref = kind === 'recipe' ? edit(next) : studioHref(agent, `/works/${idOf(header.id)}/write`);
   const state = (text: MyText) => text.publication === 'public' ? <Badge variant="success">{t.statePublished}</Badge>
     : text.publication === 'private' ? <Badge variant="secondary">{t.statePrivate}</Badge>
       : <Badge variant="outline">{t.stateDraft}</Badge>;
@@ -73,12 +77,12 @@ function Texts({ agent, work, language, texts, book, locale, t }: {
       justify-between gap-3 rounded-2xl border border-border/60 bg-card p-4">
       <span className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{languageName(text.language, locale)}</span>{state(text)}</span>
-      <Link href={textHref(agent, header.id, text.id, text.revision)} className={buttonVariants({ size: 'sm' })}>
+      <Link href={edit(text.language, { id: text.id, revision: text.revision })} className={buttonVariants({ size: 'sm' })}>
         <PenLineIcon aria-hidden="true" />{t.continueWriting}</Link>
     </li>)}</ul> : texts.ok ? <div className="grid justify-items-start gap-3 rounded-2xl border border-border/80
       border-dashed p-6">
       <p className="text-muted-foreground text-sm">{book ? t.noIntroduction : t.noText}</p>
-      <Link href={`${writeHref}?language=${encodeURIComponent(next)}`} className={buttonVariants()}>
+      <Link href={edit(next)} className={buttonVariants()}>
         <PenLineIcon aria-hidden="true" />{book ? t.writeIntroduction : t.writeFirst}</Link>
     </div> : null}
     {/* A plain GET form, so writing in another language works before the page hydrates. */}
