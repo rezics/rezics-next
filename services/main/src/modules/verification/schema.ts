@@ -27,8 +27,9 @@ const evidenceStances = ['supports', 'contradicts', 'uncertain'] as const;
 const evidenceAvailability = ['available', 'inaccessible', 'withdrawn', 'erased'] as const;
 
 /** Content-bound admission keys. Migration 1709's inventory functions return these same lists.
- * A stored string under any other key is source text. Separately authored notes stay on
- * `verification.note` columns, such as a challenge reason, and are not selector fields. */
+ * A stored string under any other key is source text, including a 64-hex quote. Separately
+ * authored notes stay on `verification.note` columns, such as a challenge reason. The
+ * terminal journal lives in `source_terminal` and its erasure columns, not in the selector. */
 export const evidenceSourceTextKeys = ['exact', 'prefix', 'suffix', 'quote'] as const;
 export const evidenceDigestKeys = ['digest', 'byteDigest', 'sha256', 'representationSha256',
   'locatorDigest', 'quoteDigest', 'requestDigest'] as const;
@@ -85,6 +86,7 @@ interface EvidenceItemRow {
   revision_id: string; ordinal: number; stance: Of<typeof evidenceStances>; observation_id: string | null;
   content_revision_id: string | null; graph_reference: string | null; selector: Record<string, unknown>;
   availability: Of<typeof evidenceAvailability>;
+  source_terminal: boolean; source_erasure_id: string | null; source_erasure_epoch: string | null;
 }
 interface EvidenceHeadRow {
   claim: string; head: string; head_purpose: 'claim-head'; updated_at: Date;
@@ -231,7 +233,8 @@ export const verificationColumns = {
   evidence_set_revision: ['id', 'claim', 'claim_revision', 'purpose', 'predecessor', 'item_count',
     'manifest_digest', 'operation_id', 'principal_id', 'created_at'] satisfies (keyof EvidenceSetRevisionRow)[],
   evidence_item: ['revision_id', 'ordinal', 'stance', 'observation_id', 'content_revision_id',
-    'graph_reference', 'selector', 'availability'] satisfies (keyof EvidenceItemRow)[],
+    'graph_reference', 'selector', 'availability', 'source_terminal', 'source_erasure_id',
+    'source_erasure_epoch'] satisfies (keyof EvidenceItemRow)[],
   evidence_head: ['claim', 'head', 'head_purpose', 'updated_at'] satisfies (keyof EvidenceHeadRow)[],
   observation_disposition: ['id', 'observation_id', 'predecessor', 'state', 'reason',
     'operation_id', 'principal_id', 'created_at'] satisfies (keyof ObservationDispositionRow)[],

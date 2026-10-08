@@ -8,6 +8,12 @@ import { Pool, type PoolClient } from 'pg';
 import { migrateContent } from '../src/migrate.ts';
 import { evidenceDigestKeys, evidenceSourceTextKeys } from '../../main/src/modules/verification/schema.ts';
 import { VerificationInvalid, VerificationStore } from '../../main/src/modules/verification/store.ts';
+import { captureContentRecoveryCoverage } from '../../main/src/modules/work/content-recovery-coverage.ts';
+import { AccessAdmissionRegistry, AdmissionUnavailable, engageAccessRecoveryFence,
+  releaseAccessRecoveryFence } from '../../main/src/modules/access/admission.ts';
+import { postponeHeldMaterial, withPreservationFence } from '../../main/src/modules/public-report/preservation.ts';
+import { migrationVersion } from '../../../scripts/lib/migration-order.ts';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const canary = 'QUOTE-CANARY-ζ-evidence';
@@ -295,6 +301,7 @@ test('content-bound source text clears once under the revision journal and canno
     const kept = await store.recordEvidence(principal, randomUUID(), native(), {
       claimRevision, expectedHead: null, items: [{ stance: 'supports', contentRevision: unrelated,
         selector: { exact: otherCanary, start: 2 }, availability: 'available' }] });
+    const beforeCut = await captureContentRecoveryCoverage(pool, []);
     const before = join(source.state, 'before.sql');
     execFileSync('pg_dump', ['-h', '127.0.0.1', '-p', String(source.port), '-U', source.user,
       '-d', 'postgres', '--no-owner', '--no-privileges', '-f', before]);
@@ -308,6 +315,12 @@ test('content-bound source text clears once under the revision journal and canno
     const restored = new Pool({ host: '127.0.0.1', port: source.port, user: source.user,
       database: restoredName, max: 2 });
     try {
+      const restoredCut = await captureContentRecoveryCoverage(restored, []);
+      expect(restoredCut.catalogDigest).toBe(beforeCut.catalogDigest);
+      expect(restoredCut.tables['verification.evidence_set_revision']).toEqual(
+        beforeCut.tables['verification.evidence_set_revision']);
+      expect(restoredCut.tables['verification.evidence_item']).toEqual(
+        beforeCut.tables['verification.evidence_item']);
       const replay = randomUUID();
       const client = await restored.connect();
       try {
@@ -328,6 +341,12 @@ test('content-bound source text clears once under the revision journal and canno
       expect((await restored.query<{ request_digest: string }>(
         `SELECT request_digest FROM verification.receipt WHERE result_id = $1`,
         [evidenceId])).rows[0]?.request_digest).toBe(receiptBefore);
+      const replayedCut = await captureContentRecoveryCoverage(restored, []);
+      expect(replayedCut.catalogDigest).toBe(beforeCut.catalogDigest);
+      expect(replayedCut.tables['verification.evidence_set_revision']).toEqual(
+        beforeCut.tables['verification.evidence_set_revision']);
+      expect(replayedCut.tables['verification.evidence_item']?.digest).not.toBe(
+        beforeCut.tables['verification.evidence_item']?.digest);
     } finally { await restored.end(); }
     const erasureId = randomUUID();
     expect(await erase(pool, cited, erasureId, '7')).toBeGreaterThan(0);
@@ -338,23 +357,31 @@ test('content-bound source text clears once under the revision journal and canno
     expect(await erase(pool, cited, erasureId, '7')).toBe(0);
 
     const stored = (await pool.query<{ ordinal: number; stance: string; selector: Record<string, unknown>;
-      content_revision_id: string | null }>(`SELECT ordinal, stance, selector, content_revision_id::text
+      content_revision_id: string | null; source_terminal: boolean; source_erasure_id: string | null }>(
+      `SELECT ordinal, stance, selector, content_revision_id::text, source_terminal, source_erasure_id::text
       FROM verification.evidence_item WHERE revision_id = $1 ORDER BY ordinal`, [evidenceId])).rows;
     expect(stored.map(row => [row.ordinal, row.stance, row.content_revision_id])).toEqual([
       [0, 'supports', null], [1, 'supports', cited], [2, 'contradicts', cited], [3, 'uncertain', null],
     ]);
     expect(stored[0]?.selector).toEqual({ field: 'releaseDate' });
-    expect(stored[1]?.selector).toEqual({ start: 4, end: 20, range: { start: 4, end: 20 }, digest, sourceTerminal: true });
-    expect(stored[2]?.selector).toMatchObject({ start: 4, end: 20, digest, sourceTerminal: true });
+    expect(stored[0]?.source_terminal).toBe(false);
+    expect(stored[1]?.selector).toEqual({ start: 4, end: 20, range: { start: 4, end: 20 }, digest });
+    expect(stored[2]?.selector).toEqual({ start: 4, end: 20, range: { start: 4, end: 20 }, digest });
+    expect(stored[1]?.source_terminal).toBe(true);
+    expect(stored[2]?.source_terminal).toBe(true);
+    expect(stored[1]?.source_erasure_id).toBe(erasureId);
+    expect(stored[2]?.source_erasure_id).toBe(erasureId);
     expect(JSON.stringify(stored[1]?.selector)).not.toContain(canary);
     expect(JSON.stringify(stored[2]?.selector)).not.toContain(canary);
     expect(stored[3]?.selector).toEqual({ label: nestedCanary });
-    const legacy = (await pool.query<{ selector: Record<string, unknown>; manifest_digest: string }>(
-      `SELECT i.selector, r.manifest_digest FROM verification.evidence_item i
+    expect(stored[3]?.source_terminal).toBe(false);
+    const legacy = (await pool.query<{ selector: Record<string, unknown>; manifest_digest: string;
+      source_terminal: boolean }>(
+      `SELECT i.selector, i.source_terminal, r.manifest_digest FROM verification.evidence_item i
        JOIN verification.evidence_set_revision r ON r.id = i.revision_id WHERE i.revision_id = $1`,
       [legacyId])).rows[0]!;
-    expect(legacy.selector).toEqual({ start: 11, end: 30, digest, flag: true, locator: { position: 7 },
-      sourceTerminal: true });
+    expect(legacy.selector).toEqual({ start: 11, end: 30, digest, flag: true, locator: { position: 7 } });
+    expect(legacy.source_terminal).toBe(true);
     expect(legacy.manifest_digest).toBe(legacyDigest);
     expect((await pool.query(`SELECT manifest_digest FROM verification.evidence_set_revision WHERE id = $1`,
       [evidenceId])).rows[0]?.manifest_digest).toBe(manifestBefore);
@@ -385,6 +412,172 @@ test('content-bound source text clears once under the revision journal and canno
     expect((await pool.query<{ open: string[] | null }>(
       `SELECT array_agg(revision_id::text) AS open FROM verification.open_evidence_source_revisions($1::uuid[])`,
       [[cited]])).rows[0]?.open).toBeNull();
+    await expect(pool.query(`SELECT verification.open_evidence_source_revisions(
+      ARRAY(SELECT gen_random_uuid() FROM generate_series(1, 65)))`)).rejects.toMatchObject({ code: '23514' });
+    const copies = (await pool.query<{ relation: string }>(`SELECT table_schema || '.' || table_name AS relation
+      FROM information_schema.columns WHERE column_name = 'selector'
+        AND table_schema NOT IN ('pg_catalog', 'information_schema') ORDER BY 1`)).rows.map(row => row.relation);
+    expect(copies).toEqual(['verification.evidence_item']);
+    expect((await pool.query<{ column_name: string }>(`SELECT column_name FROM information_schema.columns
+      WHERE table_schema = 'verification' AND table_name = 'receipt'
+        AND column_name IN ('selector', 'request_digest')`)).rows.map(row => row.column_name)).toEqual(['request_digest']);
+
+    const twinRevision = await revision(pool, canary);
+    const twinErasure = randomUUID();
+    const twin = await store.recordEvidence(principal, randomUUID(), native(), {
+      claimRevision, expectedHead: null, items: [
+        { stance: 'supports', contentRevision: twinRevision,
+          selector: { quote: `${canary}-1`, start: 1, digest }, availability: 'available' },
+        { stance: 'supports', contentRevision: twinRevision,
+          selector: { quote: `${canary}-2`, start: 1, digest }, availability: 'available' },
+      ] });
+    expect(await erase(pool, twinRevision, twinErasure, '6')).toBe(2);
+    const twins = (await pool.query<{ ordinal: number; selector: Record<string, unknown>; source_terminal: boolean }>(
+      `SELECT ordinal, selector, source_terminal FROM verification.evidence_item
+       WHERE revision_id = $1 ORDER BY ordinal`, [twin.evidence.revision.split('/').at(-1)])).rows;
+    expect(twins).toHaveLength(2);
+    expect(twins[0]?.selector).toEqual({ start: 1, digest });
+    expect(twins[1]?.selector).toEqual(twins[0]?.selector);
+    expect(twins.every(row => row.source_terminal)).toBe(true);
+    const duplicate = randomUUID();
+    const duplicateOperation = randomUUID();
+    await expect(withClient(pool, async client => {
+      await client.query(`INSERT INTO verification.receipt
+        (id, principal_id, action, idempotency_key, request_digest, outcome, result_id)
+        VALUES ($1, $2, 'evidence.record', $3, $4, 'succeeded', $5)`,
+      [duplicateOperation, principal, `duplicate-${duplicate}`, digest, duplicate]);
+      await client.query(`INSERT INTO verification.evidence_set_revision (id, claim, claim_revision, purpose,
+        predecessor, item_count, manifest_digest, operation_id, principal_id)
+        VALUES ($1, $2, $3, 'challenge', NULL, 2, $4, $5, $6)`,
+      [duplicate, claim, claimRevision, digest, duplicateOperation, principal]);
+      await client.query(`INSERT INTO verification.evidence_item (revision_id, ordinal, stance, content_revision_id,
+        selector, availability) VALUES ($1, 0, 'supports', $2, $3::jsonb, 'available')`,
+      [duplicate, cited, JSON.stringify({ start: 1, digest })]);
+      await client.query(`INSERT INTO verification.evidence_item (revision_id, ordinal, stance, content_revision_id,
+        selector, availability) VALUES ($1, 1, 'supports', $2, $3::jsonb, 'available')`,
+      [duplicate, cited, JSON.stringify({ start: 1, digest })]);
+    })).rejects.toMatchObject({ code: '23505' });
+    await expect(pool.query(`UPDATE verification.evidence_item SET stance = 'uncertain'
+      WHERE revision_id = $1 AND ordinal = 1`, [evidenceId])).rejects.toMatchObject({ code: '23514' });
+
+    const hexRevision = await revision(pool, digest);
+    const hexErasure = randomUUID();
+    const hex = await store.recordEvidence(principal, randomUUID(), native(), {
+      claimRevision, expectedHead: null, items: [{ stance: 'supports', contentRevision: hexRevision,
+        selector: { exact: digest, prefix: digest, suffix: digest, quote: digest, start: 9, digest },
+        availability: 'available' }] });
+    expect(await erase(pool, hexRevision, hexErasure, '11')).toBe(1);
+    expect((await pool.query<{ selector: Record<string, unknown>; source_terminal: boolean }>(
+      `SELECT selector, source_terminal FROM verification.evidence_item WHERE revision_id = $1`,
+      [hex.evidence.revision.split('/').at(-1)])).rows[0]).toEqual({
+      selector: { start: 9, digest }, source_terminal: true });
+
+    const markerRevision = await revision(pool, 'marker');
+    const markerId = randomUUID();
+    const markerOperation = randomUUID();
+    const markerErasure = randomUUID();
+    await withClient(pool, async client => {
+      await client.query(`INSERT INTO verification.receipt
+        (id, principal_id, action, idempotency_key, request_digest, outcome, result_id)
+        VALUES ($1, $2, 'evidence.record', $3, $4, 'succeeded', $5)`,
+      [markerOperation, principal, `marker-${markerId}`, digest, markerId]);
+      await client.query(`INSERT INTO verification.evidence_set_revision (id, claim, claim_revision, purpose,
+        predecessor, item_count, manifest_digest, operation_id, principal_id)
+        VALUES ($1, $2, $3, 'challenge', NULL, 2, $4, $5, $6)`,
+      [markerId, claim, claimRevision, digest, markerOperation, principal]);
+      await client.query(`INSERT INTO verification.evidence_item (revision_id, ordinal, stance, content_revision_id,
+        selector, availability) VALUES
+        ($1, 0, 'supports', $2, '{"sourceTerminal":true,"start":1}'::jsonb, 'available'),
+        ($1, 1, 'contradicts', $2, $3::jsonb, 'available')`,
+      [markerId, markerRevision, JSON.stringify({ sourceTerminal: true, exact: 'legacy-marker-quote', start: 2 })]);
+    });
+    await withClient(pool, async client => {
+      await client.query(`UPDATE content.revision SET availability = 'erased', serialized_bytes = NULL, body = NULL
+        WHERE id = $1`, [markerRevision]);
+      await client.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+        VALUES ($1, $2, 12)`, [markerRevision, markerErasure]);
+      await client.query(`SELECT set_config('rezics.evidence_source_erasure_id', $1, true)`, [randomUUID()]);
+      await client.query(`SELECT set_config('rezics.evidence_source_erasure_epoch', '99', true)`);
+      const cleared = await client.query<{ cleared: number }>(
+        `SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, 12) AS cleared`,
+        [[markerRevision], markerErasure]);
+      expect(cleared.rows[0]?.cleared).toBe(1);
+    });
+    const marked = (await pool.query<{ ordinal: number; selector: Record<string, unknown>;
+      source_terminal: boolean; source_erasure_id: string | null; source_erasure_epoch: string | null }>(
+      `SELECT ordinal, selector, source_terminal, source_erasure_id::text, source_erasure_epoch::text
+       FROM verification.evidence_item WHERE revision_id = $1 ORDER BY ordinal`, [markerId])).rows;
+    expect(marked[0]).toMatchObject({ selector: { sourceTerminal: true, start: 1 }, source_terminal: false,
+      source_erasure_id: null, source_erasure_epoch: null });
+    expect(marked[1]).toMatchObject({ selector: { sourceTerminal: true, start: 2 }, source_terminal: true,
+      source_erasure_id: markerErasure, source_erasure_epoch: '12' });
+
+    const journalA = await revision(pool, 'journal-a');
+    const journalB = await revision(pool, 'journal-b');
+    const journalErasureA = randomUUID();
+    const journalErasureB = randomUUID();
+    const journals = await store.recordEvidence(principal, randomUUID(), native(), {
+      claimRevision, expectedHead: null, items: [
+        { stance: 'supports', contentRevision: journalA, selector: { exact: 'journal-a-source', start: 1 },
+          availability: 'available' },
+        { stance: 'supports', contentRevision: journalB, selector: { exact: 'journal-b-source', start: 1 },
+          availability: 'available' },
+      ] });
+    const journalId = journals.evidence.revision.split('/').at(-1)!;
+    const journalClient = await pool.connect();
+    try {
+      await journalClient.query('BEGIN');
+      await journalClient.query(`UPDATE content.revision SET availability = 'erased', serialized_bytes = NULL, body = NULL
+        WHERE id = ANY($1::uuid[])`, [[journalA, journalB]]);
+      await journalClient.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+        VALUES ($1, $2, 3), ($3, $4, 4)`, [journalA, journalErasureA, journalB, journalErasureB]);
+      await journalClient.query(`SELECT set_config('rezics.evidence_source_erasure_id', $1, true)`, [journalErasureB]);
+      await journalClient.query(`SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, 3)`,
+        [[journalA], journalErasureA]);
+      await journalClient.query('SAVEPOINT wrong_journal');
+      await expect(journalClient.query(`SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, 3)`,
+        [[journalB], journalErasureA])).rejects.toMatchObject({ code: '23514' });
+      await journalClient.query('ROLLBACK TO SAVEPOINT wrong_journal');
+      await journalClient.query(`SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, 4)`,
+        [[journalB], journalErasureB]);
+      await journalClient.query('COMMIT');
+    } catch (error) {
+      await journalClient.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally { journalClient.release(); }
+    const journalRows = (await pool.query<{ content_revision_id: string; source_erasure_id: string;
+      source_erasure_epoch: string; exact: string | null }>(
+      `SELECT content_revision_id::text, source_erasure_id::text, source_erasure_epoch::text, selector->>'exact' AS exact
+       FROM verification.evidence_item WHERE revision_id = $1 ORDER BY ordinal`, [journalId])).rows;
+    expect(journalRows).toEqual([
+      { content_revision_id: journalA, source_erasure_id: journalErasureA, source_erasure_epoch: '3', exact: null },
+      { content_revision_id: journalB, source_erasure_id: journalErasureB, source_erasure_epoch: '4', exact: null },
+    ]);
+
+    const rollbackRevision = await revision(pool, 'rollback-source');
+    const rollbackEvidence = await store.recordEvidence(principal, randomUUID(), native(), {
+      claimRevision, expectedHead: null, items: [{ stance: 'supports', contentRevision: rollbackRevision,
+        selector: { exact: 'rollback-source', start: 1 }, availability: 'available' }] });
+    const rollbackId = rollbackEvidence.evidence.revision.split('/').at(-1)!;
+    const rollbackErasure = randomUUID();
+    const rollingClear = await pool.connect();
+    try {
+      await rollingClear.query('BEGIN');
+      await rollingClear.query(`UPDATE content.revision SET availability = 'erased', serialized_bytes = NULL, body = NULL
+        WHERE id = $1`, [rollbackRevision]);
+      await rollingClear.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+        VALUES ($1, $2, 8)`, [rollbackRevision, rollbackErasure]);
+      await rollingClear.query(`SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, 8)`,
+        [[rollbackRevision], rollbackErasure]);
+      expect((await rollingClear.query(`SELECT selector->>'exact' AS exact FROM verification.evidence_item
+        WHERE revision_id = $1`, [rollbackId])).rows[0]?.exact).toBeNull();
+      await rollingClear.query('ROLLBACK');
+    } finally { rollingClear.release(); }
+    expect((await pool.query<{ availability: string; exact: string; source_terminal: boolean }>(
+      `SELECT r.availability, i.selector->>'exact' AS exact, i.source_terminal
+       FROM content.revision r JOIN verification.evidence_item i ON i.content_revision_id = r.id
+       WHERE i.revision_id = $1`, [rollbackId])).rows[0]).toEqual({
+      availability: 'available', exact: 'rollback-source', source_terminal: false });
 
     await pool.query('BEGIN');
     await pool.query(`SET LOCAL session_replication_role = replica`);
@@ -404,5 +597,67 @@ test('content-bound source text clears once under the revision journal and canno
     expect(readFileSync(dump, 'utf8')).not.toContain(canary);
     expect(readFileSync(dump, 'utf8')).toContain(authoredNote);
     expect(readFileSync(dump, 'utf8')).toContain(otherCanary);
+
+    const access = await pool.connect();
+    try {
+      await access.query('BEGIN');
+      for (const file of schemaFiles(root, 'access')) {
+        if (migrationVersion(file) > 931) continue;
+        try {
+          await access.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
+        } catch (error) {
+          throw new Error(`access migration ${file} failed: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error });
+        }
+      }
+      await access.query('COMMIT');
+    } catch (error) {
+      await access.query('ROLLBACK').catch(() => undefined);
+      throw error;
+    } finally { access.release(); }
+    const heldResource = `urn:rezics:held-revision:${randomUUID()}`;
+    const caseId = randomUUID();
+    await pool.query(`INSERT INTO access.governance_case
+      (id, kind, authority_kind, authority_scope_id, context, target_owner,
+        target_resource, target_component, disclosure)
+      VALUES ($1, 'content_report', 'platform', 'governance:platform',
+        'urn:rezics:context:global', 'content', $2, 'body', 'private')`, [caseId, heldResource]);
+    await pool.query(`INSERT INTO access.governance_preservation_hold
+      (id, case_id, target_resource, reason) VALUES ($1, $2, $3, 'retained safety evidence')`,
+    [randomUUID(), caseId, heldResource]);
+    let heldWriteRan = false;
+    expect(await withPreservationFence(pool, heldResource, randomUUID(), async () => {
+      heldWriteRan = true;
+      return 'wrote';
+    })).toEqual({ held: true });
+    expect(heldWriteRan).toBe(false);
+    expect(await postponeHeldMaterial(pool, heldResource, randomUUID())).toBe(true);
+    const heldRevision = await revision(pool, 'held-source');
+    const heldEvidence = await store.recordEvidence(principal, randomUUID(), native(), {
+      claimRevision, expectedHead: null, items: [{ stance: 'supports', contentRevision: heldRevision,
+        selector: { exact: 'held-source', start: 1 }, availability: 'available' }] });
+    await expect(pool.query(`SELECT verification.erase_evidence_sources($1::uuid[], $2::uuid, 1)`,
+      [[heldRevision], randomUUID()])).rejects.toMatchObject({ code: '23514' });
+    expect((await pool.query<{ availability: string; exact: string; source_terminal: boolean }>(
+      `SELECT r.availability, i.selector->>'exact' AS exact, i.source_terminal
+       FROM content.revision r JOIN verification.evidence_item i ON i.content_revision_id = r.id
+       WHERE i.revision_id = $1`, [heldEvidence.evidence.revision.split('/').at(-1)])).rows[0]).toEqual({
+      availability: 'available', exact: 'held-source', source_terminal: false });
+
+    const registry = new AccessAdmissionRegistry(pool);
+    const absent = { issuer: 'https://account.example', subject: randomUUID() };
+    const generation = await engageAccessRecoveryFence(pool);
+    await expect(registry.activePrincipalId(absent)).rejects.toBeInstanceOf(AdmissionUnavailable);
+    await releaseAccessRecoveryFence(pool, generation);
+    expect(await registry.activePrincipalId(absent)).toBeNull();
+    const inactiveSubject = randomUUID();
+    await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject, active)
+      VALUES ($1, 'https://account.example', $2, false)`, [randomUUID(), inactiveSubject]);
+    expect(await registry.activePrincipalId({ issuer: 'https://account.example', subject: inactiveSubject })).toBeNull();
+    const activeId = randomUUID();
+    const activeSubject = randomUUID();
+    await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject, active)
+      VALUES ($1, 'https://account.example', $2, true)`, [activeId, activeSubject]);
+    expect(await registry.activePrincipalId({ issuer: 'https://account.example', subject: activeSubject })).toBe(activeId);
   } finally { await source.stop(); }
-}, 90_000);
+}, 180_000);
