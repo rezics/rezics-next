@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { closeSync, existsSync, fchmodSync, openSync, readFileSync, readlinkSync,
+import { closeSync, existsSync, fchmodSync, openSync, readFileSync, readlinkSync, writeSync,
   realpathSync,
   renameSync,
   rmSync, statSync, writeFileSync ,
@@ -507,10 +507,31 @@ export function printRefreshPlan(snapshot: Awaited<ReturnType<typeof inspectRefr
   for (const blocker of snapshot.plan.blockers) console.log(`  BLOCKED: ${blocker}`);
 }
 
+/** A failing build step (dev:prepare, dev:seed) keeps its output in an owner-only
+ * log beside the staged revisions and the error names that log. Describe and
+ * Compose output stays hidden: `command` never records it. */
+export function refreshBuildStepLog(candidate: string, args: string[], output: string, now = new Date()): string {
+  const directory = resolve(candidate, '..', '..');
+  const name = `refresh-build-${args.slice(0, 1).join('').replace(/[^A-Za-z0-9:_-]/g, '_')}-${
+    now.toISOString().replace(/[^0-9TZ]/g, '')}.log`;
+  const path = join(directory, name);
+  const fd = openSync(path, 'w', 0o600);
+  try {
+    fchmodSync(fd, 0o600);
+    writeSync(fd, output);
+  } finally { closeSync(fd); }
+  return path;
+}
+
 function refreshBuildTask(candidate: string, args: string[], env = process.env): void {
-  command(candidate, 'bun', [join(candidate, 'scripts/qa/host-admission.ts'),
+  const result = spawnSync('bun', [join(candidate, 'scripts/qa/host-admission.ts'),
     '--gib', '4', '--', 'task', ...args,
-  ], env, 600_000);
+  ], { cwd: candidate, env, encoding: 'utf8', timeout: 600_000, maxBuffer: 8 * 1024 * 1024,
+    stdio: ['ignore', 'pipe', 'pipe'] });
+  if (!result.error && result.status === 0) return;
+  const log = refreshBuildStepLog(candidate, args,
+    `${result.stdout ?? ''}\n${result.stderr ?? ''}\n${result.error ? String(result.error) : ''}`);
+  throw new Error(`task ${args[0]} failed (exit ${result.status ?? 'timeout/error'}); output in ${log}`);
 }
 
 /** Storage up may build an absent image, including during maintenance retry

@@ -24,7 +24,7 @@ import { inspectRefresh, inspectRefreshAppHost, refreshMembershipCurrent, lostRe
   refreshLifecycleLockHeld, refreshIsCurrent, refreshLoadedEnvironmentChanges, refreshProcessAlive,
   buildRefreshImage, imageBuildBudgetMs,
   refreshStorageDefinitionChanged, rehearseRefreshMigrations, waitRefreshReady} from '../refresh-stack.ts';
-import { refreshSharedStack, prepareRefreshStorage, seedRefreshZones } from '../refresh-stack.ts';
+import { refreshSharedStack, prepareRefreshStorage, seedRefreshZones, refreshBuildStepLog } from '../refresh-stack.ts';
 import { inspectOfficialZoneApprovals } from '../seed/official-zones-step.ts';
 import { officialPackageSlugs, officialSourceDigest } from '../seed/official-theme-step.ts';
 import { officialTheme } from '../seed/official-plan.ts';
@@ -1476,5 +1476,21 @@ describe('refresh image build', () => {
       expect(statSync(log).size).toBeGreaterThan(20 * 1024 * 1024);
       expect(readFileSync(log, 'utf8').endsWith('done\n')).toBe(true);
     } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+describe('refresh build step output', () => {
+  test('a failing build step keeps its output in an owner-only log in the stack directory', () => {
+    const stack = mkdtempSync(join(root, '.temp/refresh-build-log-'));
+    try {
+      const candidate = join(stack, 'backend-revisions', 'abc123');
+      mkdirSync(candidate, { recursive: true });
+      const path = refreshBuildStepLog(candidate, ['dev:seed', '--', '--themes-only'],
+        'seed failed: Main HTTP 503\n', new Date('2026-10-08T13:00:00.000Z'));
+      expect(dirname(path)).toBe(stack);
+      expect(path).toContain('refresh-build-dev:seed-20261008T130000000Z.log');
+      expect(statSync(path).mode & 0o777).toBe(0o600);
+      expect(readFileSync(path, 'utf8')).toBe('seed failed: Main HTTP 503\n');
+    } finally { rmSync(stack, { recursive: true, force: true }); }
   });
 });
