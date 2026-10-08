@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   acquireFullLock,
@@ -71,8 +71,9 @@ import { qaStackEnvironment, qaStackMode } from './stack-environment.ts';
 import { ownerTierBudgetMs } from './owner-tier-budget.ts';
 import { assertQaResourceAllocation, integrationResourceClass, integrationTierBudget, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
 import {
-  CAMPAIGN_OPERATION_ACTIVE_MS, CAMPAIGN_PREPARATION_ACTIVE_MS, campaignQualificationShard,
-  campaignShardActiveMs, runCampaignEnvelopeProcess, type CampaignEnvelopeFailure,
+  campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard, campaignShardActiveMs,
+  childStackCleanupCommand, classifyCampaignEvidence, currentSuppliedRunIds, phaseCommandOptions,
+  type CommandPhaseSample,
 } from './campaign-envelope.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -264,9 +265,31 @@ async function startRunStack(args: string[], budget: number, env: NodeJS.Process
 
 const release = options.tier || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 
+function loadCampaignEvidence(projectRunId: string, commandStartedAt: number, sample: CommandPhaseSample) {
+  const evidencePath = join(directory, 'erasure-campaign-qualification.json');
+  const observedAt = Date.now();
+  if (!existsSync(evidencePath)) {
+    return classifyCampaignEvidence({
+      parsed: undefined, readError: false, modifiedAt: commandStartedAt, commandStartedAt,
+      projectRunId, activeElapsedMs: sample.activeElapsedMs, observedAt,
+    });
+  }
+  let parsed: unknown, readError = false;
+  try { parsed = JSON.parse(readFileSync(evidencePath, 'utf8')); }
+  catch { readError = true; }
+  return classifyCampaignEvidence({
+    parsed, readError, modifiedAt: statSync(evidencePath).mtimeMs, commandStartedAt,
+    projectRunId, activeElapsedMs: sample.activeElapsedMs, observedAt,
+  });
+}
+
 async function resetChildStacks(registry: string): Promise<string[]> {
+  // Only ids validated from the current source list keep their volumes. Timeout and
+  // the final cleanup both come through here. A caller-owned copy is stopped, not reset.
+  const supplied = currentSuppliedRunIds(process.env.ERASURE_CAMPAIGN_SOURCES);
   const failures = await cleanupQaStacks(registry, async args => {
-    const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', ...args], 120_000);
+    const command = childStackCleanupCommand(args, supplied);
+    const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', command, ...args], 120_000);
     if (!down.ok) throw new Error(down.output);
   });
   if (!failures.length) childStackRegistries.delete(registry);
@@ -290,14 +313,6 @@ async function runTier(name: Tier, program: string, args: string[], budget: numb
 type StackTier = 'integration' | 'fault/recovery';
 interface ShardRun { record: ShardRecord; xml?: string; timedOut: boolean; noMatch: boolean;
   ok: boolean; testStart?: number; testEnd?: number }
-
-function campaignTimeoutReason(failure: CampaignEnvelopeFailure | undefined): string {
-  if (failure === 'preparation') {
-    return `Campaign preparation exceeded ${CAMPAIGN_PREPARATION_ACTIVE_MS} ms of active work`;
-  }
-  if (failure === 'deadline') return 'Campaign envelope reached its run deadline';
-  return 'Shard timed out before this file completed';
-}
 
 // Bun owner suites install signal handlers too; enforce the wall deadline on
 // their process group so a handled SIGTERM cannot keep QA capacity indefinitely.
@@ -499,8 +514,9 @@ async function runShardWork(
   const fileDurations: Record<string, number> = {};
   let commandOk = true,
     timedOut = false,
-    noMatch = true,
-    campaignFailure: CampaignEnvelopeFailure | undefined;
+    noMatch = true;
+  const envelope = campaignQualificationShard(files);
+  const activeCeiling = envelope ? campaignShardActiveMs() : budget;
   for (let index = 0; index < batches.length; index++) {
     let resetMs = 0;
     if (activeTestMs() >= budget) {
@@ -537,21 +553,26 @@ async function runShardWork(
       root, 'bun', ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
       Math.max(1, budget - activeTestMs()), environment, onLine, { runDeadline });
     const campaign = campaignQualificationShard(batch);
+    const commandStartedAt = Date.now();
+    const phaseDeadline = (sample: CommandPhaseSample) => campaignPhaseDeadline(sample, loadCampaignEvidence(
+      projectRunId, commandStartedAt, sample));
     const result = campaign
-      ? await runCampaignEnvelopeProcess({
-        root, command: 'bun',
-        args: ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
-        env: testEnvironment(), evidencePath: join(directory, 'erasure-campaign-qualification.json'),
-        runDeadline, onLine: noteMemory,
-      })
+      ? await commandAsync(root, 'bun', ['test', ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`],
+        Math.max(1, budget - activeTestMs()), testEnvironment(), noteMemory,
+        phaseCommandOptions({ runDeadline, phaseDeadline }))
       : await (startupProtocol ? withStartupSlot(testEnvironment(), runBatch, reserve)
         : runBatch(testEnvironment(), noteMemory));
     if (campaign) {
-      campaignFailure = result.envelopeFailure;
-      record.budgetMs = result.envelopeFailure === 'preparation' ? CAMPAIGN_PREPARATION_ACTIVE_MS
-        : result.envelopeFailure === 'operation' ? CAMPAIGN_OPERATION_ACTIVE_MS
-          : campaignShardActiveMs();
-      writeFileSync(join(directory, 'campaign-envelope.json'), `${JSON.stringify(result.report, null, 2)}\n`);
+      const sample = { activeElapsedMs: result.activeElapsedMs, admissionOpen: false };
+      const accepted = campaignCommandAccepted({
+        exitOk: result.ok, timedOut: result.timedOut, sample,
+        evidence: loadCampaignEvidence(projectRunId, commandStartedAt, sample),
+      });
+      if (!accepted.ok) commandOk = false;
+      writeFileSync(join(directory, 'campaign-envelope.json'), `${JSON.stringify({
+        projectRunId, commandStartedAt, activeElapsedMs: result.activeElapsedMs,
+        admissionWaitMs: result.admissionWaitMs, ...accepted,
+      }, null, 2)}\n`);
     }
     childAdmissionMs += result.admissionWaitMs;
     output.push(result.output);
@@ -567,7 +588,7 @@ async function runShardWork(
         filtered: flags.includes('-t'),
         interrupted: result.timedOut,
         incompleteFiles: result.timedOut ? [lastStartedTestFile(result.output)].filter((file): file is string => Boolean(file)) : [],
-        reason: result.timedOut ? campaignTimeoutReason(campaignFailure) : undefined,
+        reason: result.timedOut ? 'Shard timed out before this file completed' : undefined,
       },
     );
     commandOk &&= !results.missing.length;
@@ -585,15 +606,15 @@ async function runShardWork(
   const results = completeFileResults(mergeJUnit(suites, record.elapsedMs), files, tier, {
     filtered: flags.includes('-t'),
     interrupted: timedOut || !commandOk,
-    reason: campaignFailure === 'preparation' || campaignFailure === 'deadline'
-      ? campaignTimeoutReason(campaignFailure)
-      : timedOut
-        ? 'Shard timed out; file did not complete'
-        : 'Shard stopped before this file produced results',
+    reason: timedOut
+      ? 'Shard timed out; file did not complete'
+      : 'Shard stopped before this file produced results',
   });
   record.missingFiles = results.missing;
+  // The campaign command timeout stays budget. activeCeiling only admits a run whose
+  // phase callback already enforced 600ms preparation and 360ms operation.
   const ok =
-    commandOk && !results.missing.length && record.elapsedMs <= budget && !cleanupFailures.length;
+    commandOk && !results.missing.length && record.elapsedMs <= activeCeiling && !cleanupFailures.length;
   // Retain successful logs too: they supply durations when a later command or
   // another project prevents the tier's merged reporter from being written.
   writeFileSync(join(logs, `${label}.log`), output.join('\n'));
@@ -718,7 +739,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
             `${runId}-${prefix}${index + 1}`,
             projects[index]!,
             flags,
-            projectBudget(projects[index]!),
+            budget,
             false,
             startInitialStack,
             integration?.[index]?.batches,
