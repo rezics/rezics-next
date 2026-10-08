@@ -127,16 +127,25 @@ export const readWorkHeader = cache(async (id: string, _locale: UiLocale): Promi
 /**
  * A Work's recipe section, read from the link its `entity-page-v1` projection gave.
  * The first response follows `next` within the reader budget, so a recipe that fits is whole.
- * A later call that fails still returns the pages already read.
+ * A thrown or failed first page is this region's failure. A later page that throws or fails
+ * leaves the pages already read, still continuing from the last good cursor.
  */
 export async function readRecipeWorkPage(href: string, servings?: number): Promise<Loaded<RecipeWorkPage | null>> {
-  const { main, actingSubject } = await reader();
-  const filled = await fillRecipePages(
-    query => followHref<RecipeWorkPage | null>(main, href, recipePageQuery(actingSubject, query))(),
-    servings === undefined ? {} : { servings });
-  if (filled.page) return { ok: true, data: filled.page };
-  if (!filled.ok) return { ok: false, failure: failureOf(filled.error.status ?? 0) };
-  return { ok: true, data: null };
+  try {
+    const { main, actingSubject } = await reader();
+    const filled = await fillRecipePages(async query => {
+      try {
+        return await followHref<RecipeWorkPage | null>(main, href, recipePageQuery(actingSubject, query))();
+      } catch {
+        return { data: null, error: { status: 0 } };
+      }
+    }, servings === undefined ? {} : { servings });
+    if (filled.page) return { ok: true, data: filled.page };
+    if (!filled.ok) return { ok: false, failure: failureOf(filled.error.status ?? 0) };
+    return { ok: true, data: null };
+  } catch {
+    return { ok: false, failure: 'unavailable' };
+  }
 }
 
 /** A Work's prompt or skill section, read from the link its projection gave. */
