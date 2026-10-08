@@ -13,6 +13,7 @@ import { newReapScope, reapScopeChain, reapSettleMs, removeScopedContainers, swe
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { parseAffectedArgs, selectTestCommand } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
+import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { land, type LandScope } from './land.ts';
 import { GoalMailStore } from './mail.ts';
 import { GoalCoordinator, claudeConfigHome, claudeNativeSession, claudeWakeArgs, nativeSession, processIdentity, tmuxServer,
@@ -268,7 +269,9 @@ export function pathsOverlap(a: string, b: string): boolean {
   return globsIntersect(a.split('/'), 0, b.split('/'), 0);
 }
 
-/** Generator output under `generated/`. It is rewritten on every merge, so it is not a claim. */
+/** Generator output under `generated/`. It is rewritten on every merge, so it is not a claim.
+ * A regeneration commit can also write paths outside that prefix. Those are exempt one file at a time,
+ * from the commit that wrote them, not by widening this prefix. */
 export function isGeneratedOutput(path: string): boolean {
   return path === 'generated' || path.startsWith('generated/');
 }
@@ -677,6 +680,8 @@ export function treeMentions(repo: string, needles: readonly string[],
   return found.split('\n').filter(Boolean);
 }
 
+// The common git directory is the main checkout even when this process started inside a linked worktree.
+// `--show-toplevel` would be that worktree and would nest `.temp/worktrees` and unit-gate trees past the socket limit.
 const root = dirname(git(process.cwd(), ['rev-parse', '--path-format=absolute', '--git-common-dir']));
 const stateDir = join(root, '.temp', 'goal-orchestration');
 const ledgerPath = join(stateDir, 'ledger.json');
@@ -749,26 +754,33 @@ function handoffText(task: Task): string {
       + `${attempt.startedAt})`, '', readResult(attempt).text.trim(), ''])].join('\n');
 }
 
-function outOfClaimFiles(committed: string[], sharers: Task[]): string[] {
+function outOfClaimFiles(committed: string[], sharers: Task[], regenerated: readonly string[] = []): string[] {
+  const exempt = new Set(regenerated);
   const migrationOrigins = Object.assign({}, ...sharers.map(sharer => sharer.migrationOrigins ?? {})) as Record<string, string>;
-  const files = committed.map(file => migrationOrigins[file] ?? file).filter(file => !isGeneratedOutput(file));
+  const files = committed.flatMap(file => {
+    const name = migrationOrigins[file] ?? file;
+    if (isGeneratedOutput(file) || isGeneratedOutput(name) || exempt.has(file) || exempt.has(name)) return [];
+    return [name];
+  });
   return outOfScope(files, sharers.flatMap(sharer => sharer.paths));
 }
 
-/** Files outside the claim, and which of those another open task claims. `generated/` is never either. */
+/** Files outside the claim, and which of those another open task claims.
+ * `generated/` is never either. `regenerated` is the exact paths a regeneration commit wrote. */
 export function landClaimScope(committed: readonly string[], claims: readonly string[],
-  otherClaims: readonly { id: string; paths: readonly string[] }[]): LandScope {
-  const outOfClaim = outOfScope(committed.filter(file => !isGeneratedOutput(file)), [...claims]);
+  otherClaims: readonly { id: string; paths: readonly string[] }[], regenerated: readonly string[] = []): LandScope {
+  const exempt = new Set(regenerated);
+  const outOfClaim = outOfScope(committed.filter(file => !isGeneratedOutput(file) && !exempt.has(file)), [...claims]);
   const claimedByOthers = [...new Set(outOfClaim.filter(file => otherClaims.some(other => other.paths.some(pattern =>
     !isGeneratedOutput(pattern) && (new Bun.Glob(pattern).match(file) || pathsOverlap(pattern, file))))))];
   return { outOfClaim, claimedByOthers };
 }
 
-function scopeViolations(committed: string[], task: Task, sharers: Task[]): string[] {
+function scopeViolations(committed: string[], task: Task, sharers: Task[], regenerated: readonly string[] = []): string[] {
   const union = new Set(committed.filter(file =>
     git(root, ['check-attr', 'merge', '--', file], true).endsWith(': merge: union')));
   const sharedTree = !!task.worktreeName || sharers.length > 1;
-  return outOfClaimFiles(committed.filter(file => sharedTree || !union.has(file)), sharers);
+  return outOfClaimFiles(committed.filter(file => sharedTree || !union.has(file)), sharers, regenerated);
 }
 
 function claimingTasks(ledger: Ledger, files: readonly string[], excludedIds: ReadonlySet<string>): { file: string; id: string }[] {
@@ -788,12 +800,14 @@ async function landScope(id: string): Promise<LandScope> {
     const others = Object.values(ledger.tasks)
       .filter(other => other.id !== task.id && HOLDING.includes(other.state))
       .map(other => ({ id: other.id, paths: other.paths }));
-    return landClaimScope(committed, sharers.flatMap(sharer => sharer.paths), others);
+    const regenerated = regenerationOnlyFiles(task.worktree).map(file => migrationOrigins[file] ?? file);
+    return landClaimScope(committed, sharers.flatMap(sharer => sharer.paths), others, regenerated);
   });
 }
 
-function landScopeRefusal(ledger: Ledger, task: Task, sharers: Task[], committed: string[], permittedFiles: readonly string[]): string | undefined {
-  const violations = outOfClaimFiles(committed, sharers);
+function landScopeRefusal(ledger: Ledger, task: Task, sharers: Task[], committed: string[], permittedFiles: readonly string[],
+  regenerated: readonly string[] = []): string | undefined {
+  const violations = outOfClaimFiles(committed, sharers, regenerated);
   const permitted = new Set(permittedFiles);
   const noLongerUnclaimed = permittedFiles.filter(file => !violations.includes(file));
   const unreviewed = violations.filter(file => !permitted.has(file));
@@ -1158,7 +1172,8 @@ function branchChanges(task: Task): ChangedFile[] {
 
 function describe(task: Task): string {
   const { committed, dirty, ahead } = changedFiles(task);
-  const watched = [...new Set([...committed, ...dirty])].filter(file => !isGeneratedOutput(file));
+  const exempt = new Set(existsSync(task.worktree) ? regenerationOnlyFiles(task.worktree) : []);
+  const watched = [...new Set([...committed.filter(file => !exempt.has(file)), ...dirty])].filter(file => !isGeneratedOutput(file));
   const violations = outOfScope(watched, task.paths);
   return [
     `${task.branch}: ${ahead} commit(s) ahead of main; worktree ${dirty.length ? `DIRTY (${dirty.length} files)` : 'clean'}`,
@@ -1237,6 +1252,8 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     const { live, limit, usage, account } = launchGates(tasks, engine, flags.has('--force-usage'));
     const name = brief.worktree ? `${goal ?? 'legacy'}-${brief.worktree}` : brief.id.toLowerCase();
     const worktree = join(root, '.temp', 'worktrees', name);
+    const socket = postgresSocketRefusal(physicalPath(worktree));
+    if (socket) throw new Error(socket);
     const branch = `goal/${name}`;
     if (brief.worktree && tasks.some(task => task.worktree === worktree && HOLDING.includes(task.state) && task.goal !== goal)) {
       throw new Error(`${worktree} has open tasks belonging to another Goal; use a different shared worktree`);
@@ -3342,8 +3359,32 @@ function resetGeneratedWorktree(worktree: string): void {
   git(worktree, ['clean', '-fd', '-e', '.temp'], true);
 }
 
+/** Subject of the commit that records generator output. Scope checks recognise it by this text. */
+export const REGENERATION_COMMIT_SUBJECT = 'Regenerate generated outputs (goalctl)';
+
+/** Paths whose every change on the branch since `main` is from a regeneration commit.
+ * A path the task's own commit also changed stays in the claim check. */
+export function regenerationOnlyFiles(repo: string): string[] {
+  if (!existsSync(repo)) return [];
+  const log = git(repo, ['log', '--name-only', '--pretty=format:%H%x09%s', 'main..HEAD']);
+  const regen = new Set<string>();
+  const own = new Set<string>();
+  let bucket: Set<string> | undefined;
+  for (const line of log.split('\n')) {
+    const header = /^[0-9a-f]{40}\t(.*)$/.exec(line);
+    if (header) {
+      bucket = header[1] === REGENERATION_COMMIT_SUBJECT ? regen : own;
+      continue;
+    }
+    if (!line) { bucket = undefined; continue; }
+    bucket?.add(line);
+  }
+  return [...regen].filter(file => !own.has(file)).sort();
+}
+
 /** Regenerates outputs, commits whatever the generator changed, then verifies with `--check`.
- * A fixture without `scripts/generate.ts` skips. The claim check uses the files from before this commit. */
+ * A fixture without `scripts/generate.ts` skips. Land, merge and refresh exempt exactly the files
+ * this commit wrote, including after main advances and prepareMerge runs again. */
 function regenerateGeneratedOutputs(merge: PreparedMerge): string | undefined {
   if (!existsSync(join(merge.worktree, 'scripts/generate.ts'))) return undefined;
   const generated = spawnSync('bun', ['scripts/generate.ts'], { cwd: merge.worktree, encoding: 'utf8', timeout: 180_000 });
@@ -3353,7 +3394,7 @@ function regenerateGeneratedOutputs(merge: PreparedMerge): string | undefined {
   }
   if (git(merge.worktree, ['status', '--porcelain'], true)) {
     git(merge.worktree, ['add', '-A']);
-    const commit = spawnSync('git', ['commit', '-q', '-m', 'Regenerate generated outputs (goalctl)'],
+    const commit = spawnSync('git', ['commit', '-q', '-m', REGENERATION_COMMIT_SUBJECT],
       { cwd: merge.worktree, encoding: 'utf8' });
     if (commit.status !== 0) {
       resetGeneratedWorktree(merge.worktree);
@@ -3624,10 +3665,10 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
   };
 }
 
-/** A start failure of the test process, not a product assertion. The step is what the refusal names. */
-export type InfrastructureStep = 'pg_ctl start' | 'embedded PostgreSQL' | 'port bind' | 'process start';
+/** A recognised infrastructure start failure. The step is what the report names. */
+export type InfrastructureStep = 'pg_ctl start' | 'embedded PostgreSQL' | 'port bind';
 
-/** The step a process or infrastructure start failure names. Assertion text that merely differs is not one. */
+/** The step a pg_ctl start, embedded PostgreSQL, or port bind names. The argument is the error itself. */
 export function infrastructureStep(text: string): InfrastructureStep | undefined {
   if (/\bpg_ctl\b/.test(text) && (/could not start server|stopped waiting|Is server running\?|\bPID file\b/i.test(text)
     || /Command failed: pg_ctl\b[\s\S]{0,800}?\bstart\b/.test(text))) return 'pg_ctl start';
@@ -3640,22 +3681,34 @@ interface AloneFileResult {
   passed: boolean;
   failures: UnitFailureDetail[];
   fileErrors: UnitFileErrorDetail[];
-  /** Set when the file produced no product failure and the process could not start. */
+  /** Set when the file's own errors are only a recognised start failure. */
   step?: InfrastructureStep;
+  /** A non-zero exit with no case and no file error, other than a recognised start failure. */
+  runnerErrors?: UnitRunnerError[];
   unfinished: boolean;
 }
 
-/** A crash after a failed start, such as `pool.end` on a pool the start never created.
- * An assertion in the same text stays a product failure. */
-function startFallout(detail: string): boolean {
+/** Fallout of a recognised start failure in this same detail, such as `pool.end` on a pool that never connected.
+ * A TypeError or "is not a function" is not fallout unless this detail is that `pool.end` crash and the file's
+ * own errors already name a start failure. The rest of the transcript is not consulted. */
+function startFallout(detail: string, startInFile: boolean): boolean {
   if (infrastructureStep(detail)) return true;
   if (/\b(?:expect\(|Expected\b|Received\b|AssertionError)\b/.test(detail)) return false;
-  return /\b(?:TypeError|ReferenceError)\b/.test(detail)
-    || /is not an object|is not a function|Cannot read propert/i.test(detail);
+  return startInFile && /pool\.end/.test(detail);
 }
 
-/** Drops infrastructure start failures out of the case list. A file whose only failures are those,
- * or a crash that follows that failed start, is a runner error. A product assertion beside the start failure stays. */
+function fileStartStep(failures: readonly UnitFailureDetail[], fileErrors: readonly UnitFileErrorDetail[],
+  runnerErrors: readonly UnitRunnerError[]): InfrastructureStep | undefined {
+  for (const text of [...failures.map(item => item.detail ?? ''), ...fileErrors.map(item => item.detail),
+    ...runnerErrors.map(item => item.diagnostic)]) {
+    const step = infrastructureStep(text);
+    if (step) return step;
+  }
+  return undefined;
+}
+
+/** Drops a recognised start failure out of the case list. `pool.end` after that failure is the same report.
+ * Any other non-zero exit with no case and no file error stays a runner error. */
 function aloneFileResult(result: UnitGateResult, file: string): AloneFileResult {
   if (!result.done || result.timedOut.includes(file) || result.unfinished.includes(file)) {
     return { passed: false, failures: [], fileErrors: [], unfinished: true };
@@ -3664,17 +3717,21 @@ function aloneFileResult(result: UnitGateResult, file: string): AloneFileResult 
   const fileErrors = result.fileErrors.filter(item => item.file === file);
   const failing = result.failing.includes(file) || failures.length > 0 || fileErrors.length > 0 || result.runnerErrors.length > 0;
   if (!failing) return { passed: true, failures: [], fileErrors: [], unfinished: false };
-  const text = [...failures.map(item => item.detail ?? ''), ...fileErrors.map(item => item.detail),
-    ...result.runnerErrors.map(item => item.diagnostic), result.output].join('\n');
-  const step = infrastructureStep(text) ?? (result.runnerErrors.length ? 'process start' : undefined);
+  const crashes = result.runnerErrors.filter(error => !infrastructureStep(error.diagnostic));
+  if (crashes.length && !failures.length && !fileErrors.length) {
+    return { passed: false, failures: [], fileErrors: [], unfinished: false, runnerErrors: crashes };
+  }
+  const step = fileStartStep(failures, fileErrors, result.runnerErrors);
   if (step) {
-    const productFailures = failures.filter(item => !startFallout(item.detail ?? ''));
-    const productErrors = fileErrors.filter(item => !startFallout(item.detail));
-    if (!productFailures.length && !productErrors.length) {
+    const productFailures = failures.filter(item => !startFallout(item.detail ?? '', true));
+    const productErrors = fileErrors.filter(item => !startFallout(item.detail, true));
+    if (!productFailures.length && !productErrors.length && !crashes.length) {
       return { passed: false, failures: [], fileErrors: [], unfinished: false, step };
     }
+    if (crashes.length) return { passed: false, failures: [], fileErrors: [], unfinished: false, runnerErrors: crashes };
     return { passed: false, failures: productFailures, fileErrors: productErrors, unfinished: false };
   }
+  if (crashes.length) return { passed: false, failures: [], fileErrors: [], unfinished: false, runnerErrors: crashes };
   if (failures.length || fileErrors.length) return { passed: false, failures, fileErrors, unfinished: false };
   return { passed: false, failures: [], fileErrors: [{ file, detail: '' }], unfinished: false };
 }
@@ -3685,6 +3742,8 @@ export interface BranchOnlyClassification {
   /** Still fail alone on the branch, and alone on main with the same cases and file-level errors. */
   matched: string[];
   inconclusive: { file: string; side: 'affected' | 'main'; step: string }[];
+  /** Non-zero exits with no case and no file error. These refuse, including when both sides crash. */
+  runnerErrors: { side: 'affected' | 'main'; errors: UnitRunnerError[] }[];
 }
 
 async function runFileAlone(cwd: string, file: string, side: 'affected' | 'main', runShard: UnitShardRunner | undefined,
@@ -3693,8 +3752,8 @@ async function runFileAlone(cwd: string, file: string, side: 'affected' | 'main'
   let result = await runUnitGate(cwd, [file], 1, runShard);
   onRun?.(side, result);
   let judged = aloneFileResult(result, file);
-  if (!judged.step) return judged;
-  // One retry. A second start failure is inconclusive and is not an introduced case.
+  if (!judged.step || judged.runnerErrors?.length) return judged;
+  // One retry. A second recognised start failure is inconclusive and is not an introduced case.
   console.log(`Unit gate: ${file} failed to start ${judged.step} on ${side}; retrying alone`);
   result = await runUnitGate(cwd, [file], 1, runShard);
   onRun?.(side, result);
@@ -3711,10 +3770,23 @@ export async function classifyBranchOnlyFailures(files: readonly string[], absen
   const orderDependent: string[] = [];
   const matched: string[] = [];
   const inconclusive: BranchOnlyClassification['inconclusive'] = [];
+  const runnerErrors: BranchOnlyClassification['runnerErrors'] = [];
+  const noteRunner = (side: 'affected' | 'main', errors: readonly UnitRunnerError[] | undefined) => {
+    if (errors?.length) runnerErrors.push({ side, errors: [...errors] });
+  };
   for (const file of [...new Set(files)].sort()) {
     const branch = await runFileAlone(branchCwd, file, 'affected', runShard, onRun);
     if (branch.unfinished) {
       inconclusive.push({ file, side: 'affected', step: 'unfinished run' });
+      continue;
+    }
+    if (branch.runnerErrors?.length) {
+      noteRunner('affected', branch.runnerErrors);
+      if (!absent.has(file) && mainCwd) {
+        const main = await runFileAlone(mainCwd, file, 'main', runShard, onRun);
+        if (main.unfinished) inconclusive.push({ file, side: 'main', step: 'unfinished run' });
+        else noteRunner('main', main.runnerErrors);
+      }
       continue;
     }
     if (branch.step) {
@@ -3734,6 +3806,10 @@ export async function classifyBranchOnlyFailures(files: readonly string[], absen
       inconclusive.push({ file, side: 'main', step: 'unfinished run' });
       continue;
     }
+    if (main.runnerErrors?.length) {
+      noteRunner('main', main.runnerErrors);
+      continue;
+    }
     if (main.step) {
       inconclusive.push({ file, side: 'main', step: main.step });
       continue;
@@ -3742,14 +3818,15 @@ export async function classifyBranchOnlyFailures(files: readonly string[], absen
     if (compared.length) introduced.push(...compared);
     else matched.push(file);
   }
-  return { introduced, orderDependent, matched, inconclusive };
+  return { introduced, orderDependent, matched, inconclusive, runnerErrors };
 }
 
-/** A repeated infrastructure start failure is reported by the caller and does not refuse the merge.
- * An unfinished alone run still does. A new case found in the same pass still does. */
+/** A repeated recognised start failure is reported by the caller and does not refuse the merge.
+ * An unfinished alone run still does. A runner crash still does. A new case found in the same pass still does. */
 export function branchOnlyRefusal(classified: BranchOnlyClassification, evidence: readonly UnitRunEvidence[]): string | undefined {
   const unfinished = classified.inconclusive.filter(item => item.step === 'unfinished run');
   const parts: string[] = [];
+  for (const item of classified.runnerErrors ?? []) parts.push(runnerErrorRefusal(item.side, item.errors));
   if (unfinished.length) {
     const named = unfinished.map(item => `${item.file} (${item.step})`).join('; ');
     parts.push(unitGateRefusal(`unit gate remains inconclusive after an isolated rerun: ${named}:`,
@@ -3760,6 +3837,13 @@ export function branchOnlyRefusal(classified: BranchOnlyClassification, evidence
       classified.introduced.map(item => item.file), evidence, 'affected', classified.introduced));
   }
   return parts.length ? parts.join('\n') : undefined;
+}
+
+/** Refuses a task worktree or unit-gate baseline whose PostgreSQL socket path exceeds the Linux limit.
+ * The baseline name matches `mkdtemp`'s six-character suffix. The result names the path and its byte length. */
+export function gateTreeRefusal(worktree: string, mainRoot: string): string | undefined {
+  const baseline = join(mainRoot, '.temp', 'unit-gate-xxxxxx');
+  return postgresSocketRefusal(physicalPath(worktree)) ?? postgresSocketRefusal(physicalPath(baseline));
 }
 
 /** A branch failure is inherited when current main already fails the same case, or the same file-level error's first line.
@@ -3780,6 +3864,8 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, currentMain:
   for (const file of files) gatedFiles.add(file);
   console.log(`Pre-merge unit gate: ${files.length} affected/guard file(s) against main ${currentMain.slice(0, 12)}`);
   if (!files.length) return;
+  const configured = gateTreeRefusal(worktree, mainRoot);
+  if (configured) return configured;
   const runShard = gateShardRunner(owner);
   const evidence: UnitRunEvidence[] = [];
   try {
@@ -3810,7 +3896,13 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, currentMain:
       if (existing.length) {
         // Keep the checkout shallow: owner unit gates bind PostgreSQL sockets below it.
         mkdirSync(join(mainRoot, '.temp'), { recursive: true });
-        directory = mkdtempSync(join(mainRoot, '.temp/unit-gate-'));
+        const created = mkdtempSync(join(mainRoot, '.temp/unit-gate-'));
+        const deep = postgresSocketRefusal(physicalPath(created));
+        if (deep) {
+          rmSync(created, { recursive: true, force: true });
+          return deep;
+        }
+        directory = created;
         addGateWorktree(mainRoot, directory, currentMain);
         // Own workspace links keep the baseline on HEAD even when main has local source edits.
         const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
@@ -3868,12 +3960,14 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, currentMain:
             console.log(`Unit gate inconclusive: ${item.file} failed ${item.step} when run alone on ${item.side}; reported, not blocking`);
           }
         }
-        const refusal = branchOnlyRefusal(classified, evidence);
-        if (refusal && classified.inconclusive.some(item => item.step === 'unfinished run')) {
+        const blocking = classified.runnerErrors.length > 0
+          || classified.inconclusive.some(item => item.step === 'unfinished run');
+        if (blocking) {
           for (const item of classified.inconclusive.filter(entry => entry.step === 'unfinished run')) {
             console.log(`Unit gate inconclusive: ${item.file} failed ${item.step} when run alone on ${item.side}`);
           }
-          return refusal;
+          const refusal = branchOnlyRefusal(classified, evidence);
+          if (refusal) return refusal;
         }
         introduced.push(...classified.introduced);
         refusing.push(...classified.introduced.map(item => item.file));
@@ -4040,9 +4134,10 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     }
     // Single-task branches may append to union registries without a claim; shared branches use their full claim union.
     const migrationOrigins = Object.assign({}, ...sharers.map(sharer => sharer.migrationOrigins ?? {})) as Record<string, string>;
-    const violations = scopeViolations(committed, task, sharers);
+    const regenerated = regenerationOnlyFiles(task.worktree);
+    const violations = scopeViolations(committed, task, sharers, regenerated);
     if (landPermittedFiles !== undefined) {
-      const refusal = landScopeRefusal(ledger, task, sharers, committed, landPermittedFiles);
+      const refusal = landScopeRefusal(ledger, task, sharers, committed, landPermittedFiles, regenerated);
       if (refusal) throw new Error(refusal);
     } else if (violations.length && !flags.has('--allow-scope')) {
       throw new Error(`${task.id} changed files outside its claim:\n  ${violations.join('\n  ')}`);
@@ -4118,9 +4213,11 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     const events = existsSync(eventPath) ? readFileSync(eventPath, 'utf8').split('\n').filter(Boolean)
       .map(line => JSON.parse(line) as MergeEvent) : [];
     const baseline = streamUnitBaseline(events, sharers.map(sharer => sharer.id), before);
-    const scopeFiles = changedFiles(task).committed;
+    const committedNow = changedFiles(task).committed;
+    const exempt = new Set(regenerationOnlyFiles(task.worktree));
+    const scopeFiles = committedNow.filter(file => !exempt.has(file));
     return { before, baseline, after, worktree: task.worktree, branch: task.branch,
-      sharers: sharers.map(sharer => sharer.id).sort(), committed: scopeFiles, scopeFiles };
+      sharers: sharers.map(sharer => sharer.id).sort(), committed: committedNow, scopeFiles };
   };
   let preparedMerge = await withLedger(prepareMerge);
   // The reviewed head may be rewritten by our own rebase/normalization on a busy main.
@@ -4167,7 +4264,8 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
         return message;
       }
       if (landPermittedFiles !== undefined) {
-        const refusal = landScopeRefusal(ledger, task, sharers, current.scopeFiles ?? changedFiles(task).committed, landPermittedFiles);
+        const refusal = landScopeRefusal(ledger, task, sharers, current.scopeFiles ?? changedFiles(task).committed,
+          landPermittedFiles, regenerationOnlyFiles(task.worktree));
         if (refusal) {
           markConflict(task, refusal);
           return refusal;

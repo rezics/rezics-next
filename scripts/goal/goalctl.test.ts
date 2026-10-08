@@ -1,7 +1,7 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { processRunning } from '../../tests/qa/support/process-liveness.ts';
 import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
@@ -12,12 +12,13 @@ import { TmuxLauncher, processIdentity, tmuxServer, type LaunchDescriptor } from
 import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, declaredTestTimeout, migrationsBelowMain, mergeOwnerFiles, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, inheritedSharedLifecycleOwnership, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
-  addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
+  addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
   planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, runUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
   mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
+import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
 
 const brief = `---
 id: G-040
@@ -147,6 +148,14 @@ describe('goalctl claims', () => {
     expect(scope).toEqual({ outOfClaim: [], claimedByOthers: [] });
     const blocked = landClaimScope(['scripts/other.ts'], ['scripts/goal/**'], [{ id: 'other', paths: ['scripts/other.ts'] }]);
     expect(blocked).toEqual({ outOfClaim: ['scripts/other.ts'], claimedByOthers: ['scripts/other.ts'] });
+    const compose = 'infra/dev/compose.yaml';
+    const shape = 'packages/model/src/generated/shape.ts';
+    const sibling = 'packages/model/src/generated/other.ts';
+    const exempt = landClaimScope([compose, shape, sibling, 'scripts/goal/goalctl.ts'], ['scripts/goal/**'],
+      [{ id: 'other', paths: ['infra/dev/**', 'packages/model/src/generated/**'] }], [compose, shape]);
+    expect(exempt).toEqual({ outOfClaim: [sibling], claimedByOthers: [sibling] });
+    const own = landClaimScope([compose], ['scripts/goal/**'], [{ id: 'other', paths: ['infra/dev/**'] }]);
+    expect(own).toEqual({ outOfClaim: [compose], claimedByOthers: [compose] });
   });
 });
 
@@ -937,7 +946,7 @@ describe('goalctl runtime policy', () => {
     expect(crashCalls).toEqual(['/branch', '/branch']);
     expect(branchOnlyRefusal(fallout, [])).toBeUndefined();
     const unfinished = {
-      introduced: [], orderDependent: [], matched: [],
+      introduced: [], orderDependent: [], matched: [], runnerErrors: [],
       inconclusive: [{ file: crashed, side: 'affected' as const, step: 'unfinished run' }],
     };
     expect(branchOnlyRefusal(unfinished, [])).toContain('unit gate remains inconclusive after an isolated rerun');
@@ -960,6 +969,85 @@ describe('goalctl runtime policy', () => {
     });
     expect(typedOnly.introduced).toEqual([{ file: typed, cases: ['pool end runs'], fileError: false }]);
     expect(typedOnly.inconclusive).toEqual([]);
+  });
+
+  test('a branch-only crash refuses and a crash on both sides stays a runner error', async () => {
+    const crash = (diagnostic: string): UnitShardResult => ({
+      done: true, failing: [], timedOut: [], failures: [], fileErrors: [],
+      runnerErrors: [{ files: ['runner'], diagnostic }], files: ['runner'], output: 'pg_ctl: could not start server\nCommand failed: pg_ctl start', ms: 1,
+    });
+    const file = 'services/main/tests/branch-crash.test.ts';
+    const tail = 'process.exit(1)\nbranch crashed before a case';
+    const calls: string[] = [];
+    const branchOnly = await classifyBranchOnlyFailures([file], new Set(), '/branch', '/main', async (cwd, files) => {
+      calls.push(cwd);
+      const only = files[0]!;
+      if (cwd === '/main') return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], files: [only], output: '', ms: 1 };
+      return crash(tail);
+    });
+    expect(calls).toEqual(['/branch', '/main']);
+    expect(branchOnly.introduced).toEqual([]);
+    expect(branchOnly.inconclusive).toEqual([]);
+    expect(branchOnly.matched).toEqual([]);
+    const refusal = branchOnlyRefusal(branchOnly, []);
+    expect(refusal).toContain('unattributed affected runner failure; not merging');
+    expect(refusal).toContain(tail);
+    expect(refusal).not.toContain('not blocking');
+    const both = 'services/main/tests/both-crash.test.ts';
+    const bothSides = await classifyBranchOnlyFailures([both], new Set(), '/branch', '/main', async cwd => crash(`${cwd} process.exit(1)`));
+    expect(bothSides.introduced).toEqual([]);
+    expect(bothSides.matched).toEqual([]);
+    expect(bothSides.inconclusive).toEqual([]);
+    expect(bothSides.runnerErrors.map(item => item.side)).toEqual(['affected', 'main']);
+    const bothRefusal = branchOnlyRefusal(bothSides, []) ?? '';
+    expect(bothRefusal).toContain('unattributed affected runner failure; not merging');
+    expect(bothRefusal).toContain('unattributed main runner failure; not merging');
+    expect(bothRefusal).toContain('/branch process.exit(1)');
+    expect(bothRefusal).toContain('/main process.exit(1)');
+    expect(bothRefusal).not.toContain(both);
+  });
+
+  test('a transcript that mentions a start step does not hide a product crash', async () => {
+    const file = 'services/main/tests/not-a-function.test.ts';
+    const transcript = 'Command failed: pg_ctl -D data -w start\npg_ctl: could not start server';
+    const classified = await classifyBranchOnlyFailures([file], new Set(), '/branch', '/main', async (cwd, files) => {
+      const name = files[0]!;
+      if (cwd === '/main') return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], files: [name], output: '', ms: 1 };
+      return {
+        done: true, failing: [name], timedOut: [],
+        failures: [{ file: name, test: 'load is not a function', detail: 'TypeError: load is not a function' }],
+        fileErrors: [], runnerErrors: [], files: [name], output: transcript, ms: 1,
+      };
+    });
+    expect(classified.inconclusive).toEqual([]);
+    expect(classified.introduced).toEqual([{ file, cases: ['load is not a function'], fileError: false }]);
+    const pooled = 'services/main/tests/pool-transcript.test.ts';
+    const fromTranscript = await classifyBranchOnlyFailures([pooled], new Set(), '/branch', '/main', async (cwd, files) => {
+      const name = files[0]!;
+      if (cwd === '/main') return { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], files: [name], output: '', ms: 1 };
+      return {
+        done: true, failing: [name], timedOut: [],
+        failures: [{ file: name, test: 'pool end runs', detail: "TypeError: undefined is not an object (evaluating 'pool.end')" }],
+        fileErrors: [], runnerErrors: [], files: [name], output: transcript, ms: 1,
+      };
+    });
+    expect(fromTranscript.inconclusive).toEqual([]);
+    expect(fromTranscript.introduced).toEqual([{ file: pooled, cases: ['pool end runs'], fileError: false }]);
+  });
+
+  test('the unit gate refuses a checkout too deep for a PostgreSQL socket', () => {
+    const taskTree = dirname(dirname(import.meta.dir));
+    const main = dirname(dirname(dirname(taskTree)));
+    const normal = join(main, '.temp/worktrees/g-1000');
+    expect(gateTreeRefusal(normal, main)).toBeUndefined();
+    expect(gateTreeRefusal(taskTree, main)).toBeUndefined();
+    const nested = join(taskTree, '.temp/gate-scratch');
+    const refusal = gateTreeRefusal(nested, main);
+    expect(refusal).toBe(postgresSocketRefusal(physicalPath(nested)));
+    expect(refusal).toContain(physicalPath(nested));
+    expect(refusal).toContain('bytes');
+    expect(refusal).not.toContain('inconclusive');
+    expect(Number(/(\d+) bytes/.exec(refusal ?? '')?.[1])).toBeGreaterThan(107);
   });
 
   test('cases in one shard output are attributed to their own files', async () => {
@@ -3306,6 +3394,73 @@ process.exit(0);
       expect(result.status).toBe(0);
       expect(r.ledger().tasks[task.id]!.state).toBe('merged');
       expect(readFileSync(join(r.dir, generated), 'utf8')).toBe('{}\n');
+    } finally { r.cleanup(); }
+  });
+
+  test('files a regeneration commit wrote stay inside the claim check when merge prepares again', async () => {
+    const r = repo();
+    try {
+      const task = await r.start('G-001');
+      r.commit(task);
+      const compose = 'infra/dev/compose.yaml';
+      const shape = 'packages/model/src/generated/shape.ts';
+      mkdirSync(join(task.worktree, 'infra/dev'), { recursive: true });
+      mkdirSync(join(task.worktree, 'packages/model/src/generated'), { recursive: true });
+      writeFileSync(join(task.worktree, compose), 'name: dev\n');
+      writeFileSync(join(task.worktree, shape), 'export {};\n');
+      expect(spawnSync('git', ['-C', task.worktree, 'add', compose, shape]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', REGENERATION_COMMIT_SUBJECT]).status).toBe(0);
+      await r.stopFixture(task.id);
+      const scope = r.run(['scope', task.id]);
+      expect(scope.status).toBe(0);
+      expect(scope.stdout).toContain('scope: ok');
+      expect(scope.stdout).not.toContain(compose);
+      const result = r.run(['merge', task.id, '--skip-unit-gate', '--skip-type-gate']);
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+      expect(readFileSync(join(r.dir, compose), 'utf8')).toBe('name: dev\n');
+      expect(readFileSync(join(r.dir, shape), 'utf8')).toBe('export {};\n');
+    } finally { r.cleanup(); }
+  });
+
+  test('a task commit of an unclaimed path stays in the claim check after regeneration rewrites it', async () => {
+    const r = repo();
+    try {
+      const task = await r.start('G-001');
+      const compose = 'infra/dev/compose.yaml';
+      const shape = 'packages/model/src/generated/shape.ts';
+      mkdirSync(join(task.worktree, 'infra/dev'), { recursive: true });
+      mkdirSync(join(task.worktree, 'packages/model/src/generated'), { recursive: true });
+      writeFileSync(join(task.worktree, compose), 'name: task\n');
+      expect(spawnSync('git', ['-C', task.worktree, 'add', compose]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Edit the dev compose file']).status).toBe(0);
+      writeFileSync(join(task.worktree, compose), 'name: regen\n');
+      writeFileSync(join(task.worktree, shape), 'export {};\n');
+      expect(spawnSync('git', ['-C', task.worktree, 'add', compose, shape]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', REGENERATION_COMMIT_SUBJECT]).status).toBe(0);
+      await r.stopFixture(task.id);
+      const result = r.run(['merge', task.id, '--skip-unit-gate', '--skip-type-gate']);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('changed files outside its claim');
+      expect(result.stderr).toContain(compose);
+      expect(result.stderr).not.toContain(shape);
+    } finally { r.cleanup(); }
+  });
+
+  test('dispatch from a linked worktree keeps the new checkout on the main checkout', async () => {
+    const r = repo();
+    try {
+      const first = await r.start('G-001');
+      await r.stopFixture(first.id);
+      const result = spawnSync('bun', [join(import.meta.dir, 'goalctl.ts'), 'dispatch', r.brief('G-002')], {
+        cwd: first.worktree, encoding: 'utf8', env: r.env,
+      });
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      const second = r.ledger().tasks['G-002']!;
+      expect(second.worktree).toBe(join(r.dir, '.temp/worktrees/g-002'));
+      expect(second.worktree.startsWith(first.worktree)).toBe(false);
     } finally { r.cleanup(); }
   });
 

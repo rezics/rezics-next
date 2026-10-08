@@ -8,6 +8,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
 import { newRunId, type Tier } from '../qa/core.ts';
+import { physicalPath, POSTGRES_SOCKET_LIMIT, postgresSocketByteLength } from './postgres-socket.ts';
 
 export type RegressionTier = 'unit' | 'owner' | 'model' | 'integration' | 'fault/recovery' | 'e2e' | 'accounts:storybook' | 'jena:check';
 export type Classification = 'infrastructure' | 'resource' | 'deadline' | 'order-dependent' | 'flaky' | 'deterministic';
@@ -106,20 +107,12 @@ function git(repo: string, args: string[]): string {
 const ancestor = (repo: string, before: string, after: string): boolean =>
   spawnSync('git', ['merge-base', '--is-ancestor', before, after], { cwd: repo }).status === 0;
 const validId = (id: string): boolean => /^[a-z0-9][a-z0-9-]{0,60}$/.test(id);
-// Owner gates start local PostgreSQL under the checkout. Linux sun_path is 108 bytes including NUL.
-// https://man7.org/linux/man-pages/man7/unix.7.html
-const postgresSocketSuffix = '/.temp/pg-sock/.s.PGSQL.65535';
 // Linux superblock magic values: /usr/include/linux/magic.h.
 export function isRamBackedFileSystem(type: number | bigint): boolean {
   return [0x01021994, 0x858458f6, 0x958458f6].includes(Number(type) >>> 0);
 }
 type FileSystemType = (path: string) => number | bigint;
 const fileSystemType: FileSystemType = path => filesystem.statfsSync(path).type;
-function physicalPath(path: string): string {
-  let parent = resolve(path);
-  while (!existsSync(parent)) parent = dirname(parent);
-  return resolve(realpathSync(parent), relative(parent, resolve(path)));
-}
 function within(root: string, path: string): boolean {
   const child = relative(root, path);
   return child !== '..' && !child.startsWith('../') && !isAbsolute(child);
@@ -145,7 +138,8 @@ export function regressionCheckoutRoot(repo: string, override?: string, probe: F
 }
 
 export function checkoutNameLength(checkoutRoot: string): number {
-  const length = Math.min(16, 107 - Buffer.byteLength(physicalPath(checkoutRoot)) - Buffer.byteLength(postgresSocketSuffix) - 1);
+  // One byte remains for the slash between the checkout root and the short name.
+  const length = Math.min(16, POSTGRES_SOCKET_LIMIT - postgresSocketByteLength(physicalPath(checkoutRoot)) - 1);
   if (length < 2) throw new Error('Regression checkout root is too deep for PostgreSQL sockets; set GOAL_REGRESS_CHECKOUT_ROOT to a shorter disk path');
   return length;
 }
@@ -462,7 +456,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         let existing = candidate;
         while (!existsSync(existing)) existing = dirname(existing);
         if (isRamBackedFileSystem(fileSystemType(realpathSync(existing)))
-          || Buffer.byteLength(physical + postgresSocketSuffix) > 107) {
+          || postgresSocketByteLength(physical) > POSTGRES_SOCKET_LIMIT) {
           checkout = undefined;
         } else {
           checkout = physical; treeMap[key] = checkout;
@@ -503,7 +497,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       for (const batch of manifest.batches) if (batch.state === 'running') batch.state = 'pending';
       // Older runs nested the full run ID and SHA, which prevented owner gates from binding PostgreSQL sockets.
       // Preserve verified passes and void only batches that actually failed to start pg_ctl under that long path.
-      if (manifest.checkout !== checkout && Buffer.byteLength(manifest.checkout + postgresSocketSuffix) > 107) {
+      if (manifest.checkout !== checkout && postgresSocketByteLength(manifest.checkout) > POSTGRES_SOCKET_LIMIT) {
         for (const batch of manifest.batches) {
           const result = batch.attempts.at(-1);
           if (batch.state !== 'done' || !result?.code || !/pg_ctl[\s\S]*pg-sock/.test(result.evidence ?? '')) continue;
