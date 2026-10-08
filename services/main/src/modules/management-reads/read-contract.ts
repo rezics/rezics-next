@@ -13,7 +13,8 @@ export const managementQuery = { actingSubject: readId,
 
 export const moderationKind = t.Union([t.Literal('content_report'), t.Literal('rights_complaint'),
   t.Literal('contribution_submission'), t.Literal('correction_submission'),
-  t.Literal('work_submission'), t.Literal('content-publication_submission')]);
+  t.Literal('work_submission'), t.Literal('content-publication_submission'),
+  t.Literal('realm_sanction_appeal')]);
 export const moderationItem = t.Object({ id: readUuid, kind: moderationKind,
   state: t.Union([t.Literal('open'), t.Literal('closed')]),
   generation: t.String(), decisionHead: t.Nullable(readUuid), openedAt: t.String(),
@@ -28,9 +29,11 @@ export const moderationItem = t.Object({ id: readUuid, kind: moderationKind,
 /** A report reason code (`routes/reports.ts`); the queue can be narrowed to cases one report gave it for. */
 export const reportReason = t.String({ pattern: '^[a-z][a-z0-9_.-]{0,63}$' });
 
+export const auditKind = t.Union([t.Literal('content_moderation'), t.Literal('rights_disposition'),
+  t.Literal('organization_publication_rejection'), t.Literal('realm_management'),
+  t.Literal('realm_sanction_resolution')]);
 export const auditItem = t.Object({ id: readUuid, caseId: t.Nullable(readUuid),
-  kind: t.Union([t.Literal('content_moderation'), t.Literal('rights_disposition'),
-    t.Literal('organization_publication_rejection'), t.Literal('realm_management')]),
+  kind: auditKind,
   /** A moderation decision's rationale, or a management change's reason. */
   reason: t.Nullable(t.String()),
   /** What a moderation decision's case was about; null for management changes and publication rejections. */

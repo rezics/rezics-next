@@ -19,12 +19,14 @@ const organizationScope = (realm: string) => `publication:reject:${realm}`;
 
 interface Options { actingSubject: string; limit?: number; cursor?: string }
 interface CaseRow { id: string; kind: 'content_report' | 'rights_complaint'
-  | 'contribution_submission' | 'correction_submission' | 'work_submission' | 'content-publication_submission'; state: 'open' | 'closed';
+  | 'contribution_submission' | 'correction_submission' | 'work_submission' | 'content-publication_submission'
+  | 'realm_sanction_appeal'; state: 'open' | 'closed';
   generation: string; decision_head: string | null; opened_at: Date; opened_key: string; target_owner: string;
   target_resource: string; target_component: string; context: string; author_agent: string | null;
   reason_code: string | null; submission: unknown | null; escalation: unknown | null }
 interface DecisionRow { id: string; case_id: string | null; kind: 'content_moderation' | 'rights_disposition'
-  | 'organization_publication_rejection' | 'realm_management'; outcome: string; acting_subject: string; decided_at: Date;
+  | 'organization_publication_rejection' | 'realm_management' | 'realm_sanction_resolution';
+  outcome: string; acting_subject: string; decided_at: Date;
   reason: string | null; detail: unknown | null; target: { owner: string; resource: string; component: string } | null;
   decided_key: string;
   case_sequence: string | null }

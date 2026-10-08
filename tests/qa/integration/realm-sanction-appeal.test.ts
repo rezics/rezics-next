@@ -1,10 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
+import { Value } from 'typebox/value';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { AccessRealmManagement, realmAdminScope } from '../../../services/main/src/modules/access/realm-management.ts';
 import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { GovernanceStore } from '../../../services/main/src/modules/governance/store.ts';
+import { auditItem, moderationItem } from '../../../services/main/src/modules/management-reads/read-contract.ts';
+import { ManagementReadStore } from '../../../services/main/src/modules/management-reads/read-store.ts';
 import { startMediaStack } from './media-support.ts';
 
 function keysOf(value: unknown, keys: string[] = []): string[] {
@@ -58,6 +61,7 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
       { current: async () => { throw new Error('sanction appeals do not read rules'); } });
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
       realmAdmin: new AccessRealmManagement(pool), platformAccess: new AccessExposure(pool),
+      managementReads: new ManagementReadStore(pool, stack.env),
       governance: { store }, account: { verify: async request => {
         const token = request.headers.get('authorization')?.replace(/^Bearer /, '');
         const member = members.find(candidate => candidate.token === token);
@@ -75,6 +79,19 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
       return { status: response.status, body: text ? JSON.parse(text) as Record<string, unknown> : {} };
     };
     const appeal = `${root}/member-receipts`;
+    const queueActivity = async () => {
+      const row = (await pool.query<{ open_reports: string; report_activity: string | null }>(
+        `SELECT open_reports::text AS open_reports,
+           to_char(report_activity AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS report_activity
+         FROM access.realm_management_activity WHERE realm = $1`, [realm])).rows[0];
+      return { open_reports: row?.open_reports ?? '0', report_activity: row?.report_activity ?? null };
+    };
+    const listed = (body: Record<string, unknown>) =>
+      Array.isArray(body.items) ? body.items as Array<Record<string, unknown>> : [];
+    const moderation = (suffix = '') => call('GET',
+      `${root}/moderation?actingSubject=${encodeURIComponent(owner.actor)}${suffix}`, undefined, owner.token);
+    const audit = (suffix = '') => call('GET',
+      `${root}/audit?actingSubject=${encodeURIComponent(owner.actor)}${suffix}`, undefined, owner.token);
     const hidden = (body: unknown) => {
       expect(keysOf(body).filter(key => /acting.?subject|decider|moderator|principal/i.test(key))).toEqual([]);
       const raw = JSON.stringify(body);
@@ -106,6 +123,7 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
     expect(before.body.appeal).toEqual({ state: 'none' });
     hidden(before.body);
     const key = randomUUID();
+    const reportsBefore = await queueActivity();
     const opened = await call('POST', path, { statement: 'I was banned in error.' }, banned.token, key);
     expect({ status: opened.status, body: opened.body }).toMatchObject({ status: 201, body: { replayed: false, state: 'open' } });
     const caseId = String(opened.body.caseId);
@@ -124,6 +142,25 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
       bannedUntil: null, permanent: true, appeal: { state: 'open', caseId, statement: 'I was banned in error.' } });
     expect(typeof reading.body.happenedAt).toBe('string');
     hidden(reading.body);
+    const appealTarget = { owner: 'membership', resource: receiptId, component: 'sanction' };
+    const openQueue = await moderation();
+    const openFiltered = await moderation('&type=realm_sanction_appeal');
+    const auditBefore = await audit();
+    const resolutionBefore = await audit('&kind=realm_sanction_resolution');
+    const appealItem = listed(openQueue.body).find(item => item.id === caseId);
+    expect(openQueue.status).toBe(200);
+    expect(appealItem).toMatchObject({ kind: 'realm_sanction_appeal', state: 'open', context: realm,
+      target: appealTarget, authorAgent: null, reasonCode: null, submission: null, decisionHead: null });
+    expect(Value.Check(moderationItem, appealItem)).toBe(true);
+    expect(JSON.stringify(openQueue.body).includes('I was banned in error.')).toBe(false);
+    expect(openFiltered.status).toBe(200);
+    expect(listed(openFiltered.body).filter(item => item.kind === 'realm_sanction_appeal').map(item => item.id))
+      .toEqual([caseId]);
+    expect(auditBefore.status).toBe(200);
+    expect(listed(auditBefore.body).some(item => item.kind === 'realm_sanction_resolution')).toBe(false);
+    expect(resolutionBefore.status).toBe(200);
+    expect(listed(resolutionBefore.body)).toEqual([]);
+    expect(await queueActivity()).toEqual(reportsBefore);
     const decisionKey = randomUUID();
     const staleKey = randomUUID();
     const decision = { profile: 'moderation-decision-v1', outcome: 'restore', caseId, expectedGeneration: '0',
@@ -149,6 +186,26 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
     expect(banRow.rows[0]).toEqual({ active: true, reason_ref: receiptId });
     const again = await call('POST', path, { statement: 'I was banned in error.' }, banned.token, key);
     expect(again.body).toMatchObject({ caseId, replayed: true, state: 'decided' });
+    const stillOpen = await moderation();
+    const closedQueue = await moderation('&state=closed');
+    const auditAfter = await audit();
+    const resolutionAfter = await audit('&kind=realm_sanction_resolution');
+    const closedItem = listed(closedQueue.body).find(item => item.id === caseId);
+    const resolution = listed(resolutionAfter.body).find(item => item.caseId === caseId);
+    expect(stillOpen.status).toBe(200);
+    expect(listed(stillOpen.body).some(item => item.id === caseId)).toBe(false);
+    expect(closedQueue.status).toBe(200);
+    expect(closedItem).toMatchObject({ kind: 'realm_sanction_appeal', state: 'closed', context: realm,
+      target: appealTarget });
+    expect(Value.Check(moderationItem, closedItem)).toBe(true);
+    expect(JSON.stringify(closedQueue.body).includes('I was banned in error.')).toBe(false);
+    expect(auditAfter.status).toBe(200);
+    expect(resolutionAfter.status).toBe(200);
+    expect(resolution).toMatchObject({ kind: 'realm_sanction_resolution', outcome: 'restore',
+      reason: 'The ban remains in place.', target: appealTarget, actingSubject: owner.actor });
+    expect(Value.Check(auditItem, resolution)).toBe(true);
+    expect(JSON.stringify(auditAfter.body).includes('I was banned in error.')).toBe(false);
+    expect(await queueActivity()).toEqual(reportsBefore);
     await otherModerator.grant(`agent:control:${otherModerator.actor}`, 'agent.control');
     const sanction = async (member: typeof other) => {
       const generation = await pool.query<{ generation: string }>(

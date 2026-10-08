@@ -2,8 +2,8 @@ import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems } from '../api-responses.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable } from '../modules/account/verify-assertion.ts';
-import { auditPage, managementQuery, MODERATION_CONTEXT_COST, moderationContext, moderationKind, moderationPage,
-  reportReason } from '../modules/management-reads/read-contract.ts';
+import { auditKind, auditPage, managementQuery, MODERATION_CONTEXT_COST, moderationContext, moderationKind,
+  moderationPage, reportReason } from '../modules/management-reads/read-contract.ts';
 import { idList, readWorkContext } from '../modules/management-reads/context.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
 import { workReadError } from './work-reads.ts';
@@ -117,8 +117,7 @@ export function managementReadRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/realms/:realm/audit', { params, detail,
       query: t.Object({ ...managementQuery,
-        kind: t.Optional(t.Union([t.Literal('content_moderation'), t.Literal('rights_disposition'),
-          t.Literal('organization_publication_rejection'), t.Literal('realm_management')])) }, { additionalProperties: false }),
+        kind: t.Optional(auditKind) }, { additionalProperties: false }),
       response: { 200: auditPage, ...problems },
     }, async ({ request, params: path, query }) => {
       try {

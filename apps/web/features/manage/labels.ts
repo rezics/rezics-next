@@ -17,6 +17,8 @@ export function kindLabel(kind: ModerationItem['kind'], t: T): string {
     case 'correction_submission': return t.kindCorrection;
     case 'work_submission': return t.kindWork;
     case 'content-publication_submission': return t.kindPublication;
+    // The Realm screen has no catalog words for this kind yet, so the queue names it from the code.
+    case 'realm_sanction_appeal': return readableCode(kind);
   }
 }
 
@@ -242,6 +244,7 @@ export function auditKindLabel(kind: AuditItem['kind'], t: T): string {
     case 'rights_disposition': return t.auditRights;
     case 'organization_publication_rejection': return t.auditPublication;
     case 'realm_management': return t.auditManagement;
+    case 'realm_sanction_resolution': return readableCode(kind);
   }
 }
 
