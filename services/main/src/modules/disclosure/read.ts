@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { GovernanceComponent, GovernanceOwner } from '../governance/store.ts';
 import { GLOBAL_CONTEXT, governanceOwners, governanceComponents } from '../governance/schema.ts';
@@ -7,6 +7,7 @@ import { ANONYMOUS_VIEWER, eligible, validLabels, type Labels, type Viewer } fro
 import { mediaVisibility } from '../media/visibility.ts';
 import { nameOwnerPolicySql } from '../preferences/store.ts';
 import { BASELINE_MEMBER_POLICY } from '../access/baseline.ts';
+import { currentAccessClient } from '../access/topology-control.ts';
 import { namePolicyViewerPrincipal } from './name-policy.ts';
 
 export type DisclosureChannel = 'read' | 'summary' | 'thread' | 'feed' | 'search' | 'typeahead'
@@ -77,16 +78,18 @@ export class DisclosureStore implements DisclosureReader {
     else poolEnvironments.delete(this.pool);
   }
 
-  async read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel) {
-    return (await this.readDecisions(targets, viewer, channel, false)).decisions;
+  async read(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
+    client?: PoolClient) {
+    return (await this.readDecisions(targets, viewer, channel, false, client)).decisions;
   }
 
-  readWithAnonymousNames(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel) {
-    return this.readDecisions(targets, viewer, channel, true);
+  readWithAnonymousNames(targets: readonly DisclosureTarget[], viewer: Viewer, channel: DisclosureChannel,
+    client?: PoolClient) {
+    return this.readDecisions(targets, viewer, channel, true, client);
   }
 
   private async readDecisions(targets: readonly DisclosureTarget[], viewer: Viewer,
-    channel: DisclosureChannel, anonymousNames: boolean): Promise<DisclosureWithAnonymousNames> {
+    channel: DisclosureChannel, anonymousNames: boolean, client?: PoolClient): Promise<DisclosureWithAnonymousNames> {
     if (targets.length > DISCLOSURE_COST.batch || !DISCLOSURE_CHANNELS.includes(channel)
       || targets.some(target => !ownerReference.test(target.resource)
         || !governanceOwners.includes(target.owner) || !governanceComponents.includes(target.component)
@@ -100,6 +103,7 @@ export class DisclosureStore implements DisclosureReader {
     }
     if (!targets.length) return { decisions: [], anonymousNames: [] };
     const suitabilityDefault = usesSuitabilityDefault(channel);
+    const source = client ?? currentAccessClient() ?? this.pool;
     try {
       const nameOwners = new Map<string, string>();
       const resources = [...new Set(targets.filter(target => target.owner === 'graph'
@@ -124,7 +128,7 @@ export class DisclosureStore implements DisclosureReader {
       } else if (resources.length) {
         // Pool-only owner consumers still enforce privacy. Include inactive
         // Agents so they cannot inherit a public name after revocation.
-        const rows = (await this.pool.query<{ agent: string }>(`SELECT id AS agent
+        const rows = (await source.query<{ agent: string }>(`SELECT id AS agent
           FROM access.authority_subject WHERE id = ANY($1::text[]) AND kind = 'agent'`, [resources])).rows;
         if (rows.length > resources.length || new Set(rows.map(row => row.agent)).size !== rows.length
           || rows.some(row => !resources.includes(row.agent))) throw new DisclosureUnavailable('Name ownership is unavailable');
@@ -135,7 +139,7 @@ export class DisclosureStore implements DisclosureReader {
       const principal = namePolicyViewerPrincipal(viewer, channel);
       // The recovery lock lives until this autocommit statement finishes;
       // policy and the fence share one snapshot, without six protocol calls.
-      const rows = (await this.pool.query<{ ordinal: number;
+      const rows = (await source.query<{ ordinal: number;
           open: boolean; restricted: boolean; assessments: Labels[]; nameVisible: boolean; publicNameVisible: boolean
         }>(`
           -- The boolean primary key/check makes this a singleton. Spell out its

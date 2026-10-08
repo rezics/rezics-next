@@ -36,7 +36,8 @@ import { checkEditorialAdmission, registerEditorialAdmission, withCommandOwnerAu
 import { platformAdministratorAction, platformAdministratorTargetAllowed, platformAdministratorProof,
   savedPlatformAdministratorProof, savePlatformAdministratorProof,
   platformAdministratorProofCurrent } from './platform-administrator.ts';
-import { controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable } from './topology-control.ts';
+import { controlTransaction,requirePrincipal,requireMandate,ControlConflict,ControlDenied,ControlUnavailable,
+  ownAccessTransaction, releaseOwnedAccessTransaction, runInsideAccessTransaction, takeAccessClient } from './topology-control.ts';
 import { realmTransaction,realmManager } from './realm-management-authority.ts';
 import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.ts';
 import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof, ratingConfigurationAction } from './realm-roles-rating.ts';
@@ -289,6 +290,61 @@ async function requireRecoveryOpen(client: PoolClient): Promise<string> {
   return result.rows[0]!.generation;
 }
 
+async function baselineMemberDecision(client: PoolClient, principal: VerifiedPrincipal,
+  actingSubject: string): Promise<boolean> {
+  await requireRecoveryOpen(client);
+  const identity = await client.query<{ id: string }>(`SELECT id FROM access.principal
+    WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
+  [principal.issuer, principal.subject]);
+  return !!identity.rows[0] && !!await baselineMemberProof(client, identity.rows[0].id, actingSubject);
+}
+
+async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
+  principal: VerifiedPrincipal, actingSubject: string, scope: string, action: string): Promise<boolean> {
+  await requireRecoveryOpen(client);
+  const gate = await client.query<{ open: boolean }>(
+    'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
+  if (gate.rows[0]?.open === false) return false;
+  const identity = await client.query<{ id: string }>(
+    `SELECT id FROM access.principal WHERE account_issuer = $1 AND account_subject = $2
+      AND active FOR SHARE`, [principal.issuer, principal.subject]);
+  const principalId = identity.rows[0]?.id;
+  if (!principalId) return false;
+  if (platformAdministratorAction(action, scope)
+    && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
+    && await platformAdministratorProof(client, principalId, actingSubject)
+    && await platformAdministratorTargetAllowed(client, graph, principalId, actingSubject, action, scope)) {
+    return true;
+  }
+  const readKind = action === 'work.read' ? 'work' : action === 'semantic.read' ? 'collection'
+    : action === 'contribution.read' ? 'contribution' : null;
+  const targetId = scope.slice(scope.indexOf(':', scope.indexOf(':') + 1) + 1);
+  if (action === 'semantic.read'
+    && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
+    && await zoneSpaceCreatorAllowed(client, graph, principalId, actingSubject, targetId)) {
+    return true;
+  }
+  if (readKind && principal.emailVerified === true
+    && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
+    && await baselineMemberProof(client, principalId, actingSubject)
+    && await baselineTargetAllowed(client, graph, principalId, actingSubject,
+      { kind: readKind, id: targetId }, false)) {
+    return true;
+  }
+  if (!gate.rows[0]?.open) return false;
+  const subject = await client.query(
+    'SELECT id FROM access.authority_subject WHERE id = $1 AND active FOR SHARE', [actingSubject]);
+  const represented = await client.query(
+    `SELECT id FROM access.representation WHERE principal_id = $1 AND subject_id = $2
+      AND action = $3 AND active AND valid_until > clock_timestamp()
+      ORDER BY id LIMIT 1 FOR SHARE`, [principalId, actingSubject, action]);
+  const granted = await client.query(
+    `SELECT id FROM access.permission_grant WHERE recipient_subject = $1 AND scope_id = $2
+      AND action = $3 AND active AND valid_until > clock_timestamp()
+      ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject, scope, action]);
+  return subject.rowCount === 1 && represented.rowCount === 1 && granted.rowCount === 1;
+}
+
 /** Operator-only fence. The update waits for in-flight ordinary Access transactions. */
 export async function engageAccessRecoveryFence(pool: Pool): Promise<string> {
   const result = await pool.query<{ generation: string }>(
@@ -421,27 +477,32 @@ export class AccessAdmissionRegistry {
     return this.canReadScopedResource(principal, actingSubject, `work:read:${work}`, 'work.read');
   }
 
-  /** Current person-Agent baseline for private reader state on public chapters. */
-  async canReadAsBaselineMember(principal: VerifiedPrincipal, actingSubject: string): Promise<boolean> {
+  /** Current person-Agent baseline for private reader state on public chapters.
+   * A client the caller already holds is queried and left open. */
+  async canReadAsBaselineMember(principal: VerifiedPrincipal, actingSubject: string,
+    client?: PoolClient): Promise<boolean> {
     if (!principal.emailVerified || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(actingSubject)) {
       return false;
     }
-    const client = await this.pool.connect();
+    const taken = await takeAccessClient(this.pool, client);
     try {
-      await client.query(READ_BEGIN);
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '5s'");
-      await requireRecoveryOpen(client);
-      const identity = await client.query<{ id: string }>(`SELECT id FROM access.principal
-        WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
-      [principal.issuer, principal.subject]);
-      const allowed = !!identity.rows[0] && !!await baselineMemberProof(client, identity.rows[0].id, actingSubject);
-      await client.query('COMMIT');
+      if (!taken.joined) {
+        await taken.client.query(READ_BEGIN);
+        await taken.client.query("SET LOCAL lock_timeout = '2s'");
+        await taken.client.query("SET LOCAL statement_timeout = '5s'");
+        ownAccessTransaction(taken.client);
+      }
+      const allowed = await runInsideAccessTransaction(taken.client, () =>
+        baselineMemberDecision(taken.client, principal, actingSubject));
+      if (!taken.joined) await taken.client.query('COMMIT');
       return allowed;
     } catch (error) {
-      await rollback(client);
+      if (!taken.joined) await rollback(taken.client);
       throw error;
-    } finally { client.release(); }
+    } finally {
+      if (!taken.joined) releaseOwnedAccessTransaction(taken.client);
+      taken.release();
+    }
   }
 
   /** Current disclosure decision for a semantic Resource or relation occurrence. */
@@ -788,72 +849,26 @@ export class AccessAdmissionRegistry {
 
   private async canReadScopedResource(
     principal: VerifiedPrincipal, actingSubject: string, scope: string, action: string,
+    client?: PoolClient,
   ): Promise<boolean> {
-    const client = await this.pool.connect();
+    const taken = await takeAccessClient(this.pool, client);
     try {
-      await client.query(READ_BEGIN);
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '5s'");
-      await requireRecoveryOpen(client);
-      const gate = await client.query<{ open: boolean }>(
-        'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
-      if (gate.rows[0]?.open === false) {
-        await client.query('COMMIT');
-        return false;
+      if (!taken.joined) {
+        await taken.client.query(READ_BEGIN);
+        await taken.client.query("SET LOCAL lock_timeout = '2s'");
+        await taken.client.query("SET LOCAL statement_timeout = '5s'");
+        ownAccessTransaction(taken.client);
       }
-      const identity = await client.query<{ id: string }>(
-        `SELECT id FROM access.principal WHERE account_issuer = $1 AND account_subject = $2
-          AND active FOR SHARE`, [principal.issuer, principal.subject]);
-      const principalId = identity.rows[0]?.id;
-      if (!principalId) {
-        await client.query('COMMIT');
-        return false;
-      }
-      if (platformAdministratorAction(action, scope)
-        && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
-        && await platformAdministratorProof(client, principalId, actingSubject)
-        && await platformAdministratorTargetAllowed(client, this.baselineGraph, principalId, actingSubject, action, scope)) {
-        await client.query('COMMIT');
-        return true;
-      }
-      const readKind = action === 'work.read' ? 'work' : action === 'semantic.read' ? 'collection'
-        : action === 'contribution.read' ? 'contribution' : null;
-      const targetId = scope.slice(scope.indexOf(':', scope.indexOf(':') + 1) + 1);
-      if (action === 'semantic.read'
-        && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
-        && await zoneSpaceCreatorAllowed(client, this.baselineGraph, principalId, actingSubject, targetId)) {
-        await client.query('COMMIT');
-        return true;
-      }
-      if (readKind && principal.emailVerified === true
-        && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [scope])).rowCount
-        && await baselineMemberProof(client, principalId, actingSubject)
-        && await baselineTargetAllowed(client, this.baselineGraph, principalId, actingSubject,
-          { kind: readKind, id: targetId }, false)) {
-        await client.query('COMMIT');
-        return true;
-      }
-      if (!gate.rows[0]?.open) {
-        await client.query('COMMIT');
-        return false;
-      }
-      const subject = await client.query(
-        'SELECT id FROM access.authority_subject WHERE id = $1 AND active FOR SHARE', [actingSubject]);
-      const represented = await client.query(
-        `SELECT id FROM access.representation WHERE principal_id = $1 AND subject_id = $2
-          AND action = $3 AND active AND valid_until > clock_timestamp()
-          ORDER BY id LIMIT 1 FOR SHARE`, [principalId, actingSubject, action]);
-      const granted = await client.query(
-        `SELECT id FROM access.permission_grant WHERE recipient_subject = $1 AND scope_id = $2
-          AND action = $3 AND active AND valid_until > clock_timestamp()
-          ORDER BY id LIMIT 1 FOR SHARE`, [actingSubject, scope, action]);
-      await client.query('COMMIT');
-      return subject.rowCount === 1 && represented.rowCount === 1 && granted.rowCount === 1;
+      const allowed = await runInsideAccessTransaction(taken.client, () =>
+        scopedResourceDecision(taken.client, this.baselineGraph, principal, actingSubject, scope, action));
+      if (!taken.joined) await taken.client.query('COMMIT');
+      return allowed;
     } catch (error) {
-      await rollback(client);
+      if (!taken.joined) await rollback(taken.client);
       throw error;
     } finally {
-      client.release();
+      if (!taken.joined) releaseOwnedAccessTransaction(taken.client);
+      taken.release();
     }
   }
 

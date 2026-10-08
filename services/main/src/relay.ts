@@ -7,7 +7,8 @@ import { cleanEnv } from 'envalid';
 import { relaySpec } from './config.ts';
 import { runMainRelay } from './modules/outbox/worker.ts';
 import { S3ImmutableObjects } from './infrastructure/immutable-objects.ts';
-import { PostgresReceiptCustodyStore, ReceiptCustody } from './modules/outbox/receipt-custody.ts';
+import { ReceiptCustody } from './modules/outbox/receipt-custody.ts';
+import { HeldAccessReceiptCustodyStore } from './modules/access/held-receipt-custody.ts';
 import { proofRetirementSender } from './modules/graph/slim-command.ts';
 
 const config = cleanEnv(process.env, relaySpec);
@@ -19,7 +20,7 @@ if (!Number.isInteger(interval) || interval < 100 || interval > 60_000) {
 const fuseki = new FusekiClient(config.FUSEKI_URL, config.FUSEKI_MAINTENANCE_TOKEN, config.FUSEKI_COMMAND_TOKEN);
 const pool = boundedPool({ connectionString: config.MAIN_RELAY_DATABASE_URL });
 const accessPool = boundedPool({ connectionString: config.ACCESS_DATABASE_URL });
-const ownerOutbox = config.MAIN_S3_ENDPOINT ? new ReceiptCustody(new PostgresReceiptCustodyStore(accessPool),
+const ownerOutbox = config.MAIN_S3_ENDPOINT ? new ReceiptCustody(new HeldAccessReceiptCustodyStore(accessPool),
   new S3ImmutableObjects({ endpoint: config.MAIN_S3_ENDPOINT, bucket: config.MAIN_S3_BUCKET,
     region: config.MAIN_S3_REGION, accessKeyId: config.MAIN_S3_ACCESS_KEY!,
     secretAccessKey: config.MAIN_S3_SECRET_KEY!, prefix: 'semantic/work/' }), fuseki,
