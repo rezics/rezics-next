@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { logWorkerFault } from '@rezics/observability/log';
 import { AdmissionConflict, AdmissionDenied, AdmissionExpired } from '../modules/access/admission.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable }
   from '../modules/account/verify-assertion.ts';
@@ -68,8 +69,8 @@ function themeError(error: unknown): Response {
     'The activation has not finished. Retry with the same Idempotency-Key.');
   if (error instanceof ThemeUnavailable) return problem(503, 'theme_unavailable',
     'The current theme approval state could not be verified. Try again later.');
-  // An error no branch above names is a defect, not an outage: keep it in the log.
-  console.error('Theme approval failed unexpectedly', error);
+  // An error no branch above names is a defect, not an outage: log its class only.
+  logWorkerFault('main.theme.approval', error);
   return problem(503, 'theme_unavailable', 'Theme approval service is unavailable');
 }
 
