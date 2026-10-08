@@ -1,3 +1,4 @@
+// sql-relations-allow: reader.library_import_source_erasure_probe -- Test-only foreign-key probe that blocks one source deletion to prove the agent transaction rolls back.
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
