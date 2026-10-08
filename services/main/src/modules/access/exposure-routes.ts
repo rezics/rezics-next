@@ -72,6 +72,10 @@ export function bindPlatformExposure(
         : [];
       hooks.beforeHandle = [
         async function enforcePlatformExposure({ request }: { request: Request }) {
+          // An anonymous probe of a member's own ban must get the same absence as
+          // no ban. platform_closed would be a different answer.
+          const memberBan = request.method === 'GET'
+            && /\/v1\/realms\/[^/]+\/member-ban$/.test(new URL(request.url).pathname);
           if (exposure === 'public') return;
           try {
             if (!exposure || !work.platformAccess) throw new PlatformClosed();
@@ -80,6 +84,8 @@ export function bindPlatformExposure(
               : undefined;
             await work.platformAccess.require(principal, exposure, operationId);
           } catch (error) {
+            if (memberBan && error instanceof PlatformClosed)
+              return problem(404, 'appeal_unavailable', 'Appeal is unavailable');
             return platformExposureProblem(error);
           }
         },

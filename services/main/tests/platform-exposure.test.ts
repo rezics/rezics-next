@@ -194,9 +194,14 @@ test('every served Main route, including transports, has a reviewed exposure', (
   const closedOperations = matrix
     .filter((entry) => entry.exposure !== 'public')
     .map((entry) => exposureOperationId(entry.method, entry.path));
-  expect(closedOperations).toHaveLength(246);
+  expect(closedOperations).toHaveLength(247);
   expect(closedOperations).toContain('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal');
   expect(closedOperations).toContain('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal');
+  // Closed own-ban read. The controller sees that ban; every other caller gets the same absence.
+  // Trust-ops keeps platform:realm-appeals shut until a later grant opens it.
+  expect(closedOperations).toContain('getV1RealmsByRealmMember-ban');
+  expect(matrix.find((entry) => entry.path === '/v1/realms/{realm}/member-ban' && entry.method === 'get'))
+    .toMatchObject({ exposure: 'platform:realm-appeals', rateLimitFamily: 'read', bearer: true });
   expect(
     matrix.find(
       (entry) =>

@@ -472,6 +472,11 @@ export class GovernanceStore {
     return readRealmSanctionAppeal(principal, input, work => this.transaction(work, true));
   }
 
+  async readRealmMemberBan(principal: VerifiedPrincipal, input: { realm: string; actingSubject: string }) {
+    const { readRealmMemberBan } = await import('./realm-sanction-appeal.ts');
+    return readRealmMemberBan(principal, input, work => this.transaction(work, true));
+  }
+
   /**
    * Append the next decision to a case under CAS on its generation. Target
    * heads and the rule basis are re-read from their owners first; any change

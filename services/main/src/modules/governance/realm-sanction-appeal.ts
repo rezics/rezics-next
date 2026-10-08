@@ -127,6 +127,27 @@ export function appealView(source: AppealSource): AppealRead {
   });
 }
 
+export interface MemberBanRead {
+  realm: string; receiptId: string; action: 'ban'; reason: string; bannedUntil: string | null;
+  permanent: boolean; happenedAt: string;
+  appeal: { state: 'none' } | { state: 'open'; caseId: string; statement: string }
+    | { state: 'decided'; caseId: string; statement: string; outcome: 'dismiss' | 'restore';
+      rationale: string | null; decidedAt: string };
+}
+
+/** The member's own ban. A decided appeal carries when it was decided; the decider does not. */
+export function memberBanView(source: AppealSource & { decidedAt: string | null }): MemberBanRead {
+  const base = {
+    realm: source.realm, receiptId: source.receiptId, action: 'ban' as const, reason: source.reason,
+    bannedUntil: source.bannedUntil, permanent: source.bannedUntil === null, happenedAt: source.happenedAt,
+  };
+  if (source.appeal.state !== 'decided') return publicResolution({ ...base, appeal: source.appeal });
+  if (!source.decidedAt) throw new GovernanceUnavailable('sanction resolution is unavailable');
+  return publicResolution({ ...base, appeal: {
+    ...source.appeal, decidedAt: source.decidedAt, acting_subject: source.decisionActingSubject,
+  } });
+}
+
 async function loadBan(client: PoolClient, realm: string, receiptId: string, lock: boolean): Promise<BanReceipt | null> {
   const row = (await client.query<{ reason: string; member_action: string | null; legacy_ban: boolean; created_at: Date;
     result: { member?: unknown; banned?: unknown; bannedUntil?: unknown } | null }>(
@@ -270,6 +291,52 @@ export async function readRealmSanctionAppeal(principal: VerifiedPrincipal,
     return appealView({ realm: input.realm, receiptId: input.receiptId, reason: ban.reason,
       bannedUntil: ban.bannedUntil, happenedAt: ban.happenedAt,
       decisionActingSubject: row?.acting_subject ?? null, appeal });
+  });
+}
+
+/**
+ * The principal who controls `actingSubject` reads that subject's current ban.
+ * Not controlling them, no ban, and an expired ban are one absence. The latest
+ * ban receipt is the one still in force; a passed `expires_at` is no ban.
+ * Private rationale stays outcome-only, the same rule as the appeal read.
+ */
+export async function readRealmMemberBan(principal: VerifiedPrincipal,
+  input: { realm: string; actingSubject: string }, transaction: AppealTransaction): Promise<MemberBanRead> {
+  if (!realmPattern.test(input.realm) || !agentPattern.test(input.actingSubject))
+    throw new GovernanceInvalid('invalid member ban');
+  return transaction(async client => {
+    sanctionedPrincipal(await controlsMember(client, principal, input.actingSubject, false));
+    const ban = (await client.query<{ id: string; reason: string; created_at: Date;
+      result: { bannedUntil?: unknown } | null }>(
+      `SELECT r.id, r.reason, r.result, r.created_at
+       FROM access.realm_admin_receipt r
+       WHERE r.realm = $1 AND r.result->>'member' = $2
+         AND (r.member_action = 'ban' OR (r.member_action IS NULL AND r.result->>'banned' = 'true'
+           AND EXISTS (SELECT 1 FROM access.membership_ban cited WHERE cited.kind = 'realm'
+             AND cited.owner_subject = r.realm AND cited.member_subject = $2 AND cited.reason_ref = r.id::text
+             AND cited.active AND (cited.expires_at IS NULL OR cited.expires_at > clock_timestamp()))))
+         AND EXISTS (SELECT 1 FROM access.membership_ban b WHERE b.kind = 'realm' AND b.owner_subject = $1
+           AND b.member_subject = $2 AND b.active
+           AND (b.expires_at IS NULL OR b.expires_at > clock_timestamp()))
+       ORDER BY r.created_at DESC, r.id DESC LIMIT 1`, [input.realm, input.actingSubject])).rows[0];
+    if (!ban) throw new GovernanceDenied('appeal is unavailable');
+    const row = (await client.query<{ case_id: string; statement: string; state: string; outcome: string | null;
+      rationale: string | null; disclosure: string | null; acting_subject: string | null; decided_at: Date | null }>(
+      `SELECT a.case_id, a.statement, c.state, d.outcome, d.rationale, d.disclosure, d.acting_subject, d.decided_at
+       FROM access.realm_sanction_appeal a JOIN access.governance_case c ON c.id = a.case_id
+       LEFT JOIN access.moderation_decision d ON d.id = c.decision_head
+       WHERE a.receipt_id = $1 ORDER BY a.opened_at DESC LIMIT 1`, [ban.id])).rows[0];
+    if (row && row.state !== 'open' && (row.outcome !== 'dismiss' && row.outcome !== 'restore' || !row.rationale || !row.decided_at))
+      throw new GovernanceUnavailable('sanction resolution is unavailable');
+    const appeal = !row ? { state: 'none' as const }
+      : row.state === 'open' ? { state: 'open' as const, caseId: row.case_id, statement: row.statement }
+        : { state: 'decided' as const, caseId: row.case_id, statement: row.statement,
+          outcome: row.outcome as 'dismiss' | 'restore',
+          rationale: visibleAppealRationale(false, row.disclosure, row.rationale) };
+    return memberBanView({ realm: input.realm, receiptId: ban.id, reason: ban.reason,
+      bannedUntil: typeof ban.result?.bannedUntil === 'string' ? ban.result.bannedUntil : null,
+      happenedAt: ban.created_at.toISOString(), decisionActingSubject: row?.acting_subject ?? null,
+      decidedAt: row?.decided_at?.toISOString() ?? null, appeal });
   });
 }
 

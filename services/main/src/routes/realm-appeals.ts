@@ -4,14 +4,18 @@ import { problemResult } from '../api-contract.ts';
 import { APPEAL_ALREADY_OPEN } from '../modules/governance/realm-sanction-appeal.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale,
   GovernanceUnavailable } from '../modules/governance/store.ts';
-import { readUuid } from '../modules/work/read-contract.ts';
+import { readId, readUuid } from '../modules/work/read-contract.ts';
 import { commandError, problem } from './problems.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 
 const appealPath = '/v1/realms/{realm}/member-receipts/{receiptId}/appeal';
+const memberBanPath = '/v1/realms/{realm}/member-ban';
 export const openApiOperations = {
   [appealPath]: {
     post: { exposure: 'platform:realm-appeals', rateLimitFamily: 'write', bearer: true, idempotencyKey: true },
+    get: { exposure: 'platform:realm-appeals', rateLimitFamily: 'read', bearer: true },
+  },
+  [memberBanPath]: {
     get: { exposure: 'platform:realm-appeals', rateLimitFamily: 'read', bearer: true },
   },
 } as const;
@@ -33,6 +37,17 @@ const appeal = t.Union([
 const reading = t.Object({
   realm: t.String(), receiptId: readUuid, action: t.Literal('ban'), reason: t.String(),
   bannedUntil: t.Nullable(t.String()), permanent: t.Boolean(), happenedAt: t.String(), appeal,
+}, { additionalProperties: false });
+const memberBanAppeal = t.Union([
+  t.Object({ state: t.Literal('none') }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('open'), caseId: readUuid, statement }, { additionalProperties: false }),
+  t.Object({ state: t.Literal('decided'), caseId: readUuid, statement, outcome: resolution,
+    rationale: t.Nullable(t.String()), decidedAt: t.String() },
+    { additionalProperties: false }),
+]);
+const memberBanReading = t.Object({
+  realm: t.String(), receiptId: readUuid, action: t.Literal('ban'), reason: t.String(),
+  bannedUntil: t.Nullable(t.String()), permanent: t.Boolean(), happenedAt: t.String(), appeal: memberBanAppeal,
 }, { additionalProperties: false });
 const noStore = { headers: { 'cache-control': 'no-store' } };
 const realmOf = (id: string) => `https://rezics.com/id/${id}`;
@@ -79,6 +94,18 @@ export function realmAppealRoutes(work: MainWorkDependencies) {
         if (!work.governance?.store) return unavailable();
         return Response.json(await work.governance.store.readRealmSanctionAppeal(principal, {
           realm: realmOf(path.realm), receiptId: path.receiptId }), noStore);
+      } catch (error) { return appealError(error); }
+    })
+    .get('/v1/realms/:realm/member-ban', {
+      params: t.Object({ realm: readUuid }),
+      query: t.Object({ actingSubject: readId }, { additionalProperties: false }),
+      response: { 200: memberBanReading, ...authorizedReadProblems },
+    }, async ({ request, params: path, query }) => {
+      try {
+        const principal = await work.account.verify(request, []);
+        if (!work.governance?.store) return unavailable();
+        return Response.json(await work.governance.store.readRealmMemberBan(principal, {
+          realm: realmOf(path.realm), actingSubject: query.actingSubject }), noStore);
       } catch (error) { return appealError(error); }
     });
 }
