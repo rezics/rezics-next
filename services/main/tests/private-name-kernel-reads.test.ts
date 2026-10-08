@@ -46,6 +46,11 @@ function nameVisible(owner: string | null, issuer: unknown, subject: unknown, pu
     || (owner === privateAgent && (published || (issuer === controller.issuer && subject === controller.subject)));
 }
 
+/** Anonymous classification of the same name. A controller grant does not make it public. */
+function publicNameVisible(owner: string | null, published: boolean) {
+  return nameVisible(owner, null, null, published);
+}
+
 function policyGraph(summary: (query: string) => Row[] | null, manifest?: string) {
   let published = false;
   const graph = new FusekiClient('http://graph.invalid');
@@ -74,7 +79,8 @@ function policyGraph(summary: (query: string) => Row[] | null, manifest?: string
     if (!sql.includes('requested AS')) return { rows: [] };
     const targets = JSON.parse(String(args?.[0])) as (DisclosureTarget & { ordinal: number; nameOwner: string | null })[];
     return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true, restricted: false, assessments: [],
-      nameVisible: nameVisible(target.nameOwner, args?.[4], args?.[5], published) })) };
+      nameVisible: nameVisible(target.nameOwner, args?.[4], args?.[5], published),
+      publicNameVisible: publicNameVisible(target.nameOwner, published) })) };
   } } as unknown as Pool;
   const environment = { fuseki: graph, objectDirectory: directory,
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as WorkActivationEnvironment;
@@ -338,7 +344,9 @@ test('an authorized private-name summary is restricted, and an anonymous one sta
     { viewer: disclosureViewer(controller) }, { ...input, resources: [privateAgent] });
   expect(authorized.summaries[0]).toMatchObject({ reference: privateAgent, status: 'available', type: 'agent',
     disclosure: 'restricted', name: { value: privateName } });
-  expect(authorized.cost.graphQueries).toBe(4);
+  // The paired owner statement classifies the anonymous name in the same batch,
+  // so the separate name-owner probe is not a fourth graph query.
+  expect(authorized.cost.graphQueries).toBe(3);
   kind = 'public';
   const published = await readResourceSummaries(closed.environment, undefined, {},
     { ...input, resources: [publicAgent] });
