@@ -399,6 +399,13 @@ test('a wrong tombstone, an unerased target or a missing native proof fails befo
     WHERE id = $1`, [wrongEpoch.revisions[0]]);
   await env.pool.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
     VALUES ($1, $2, $3)`, [wrongEpoch.revisions[0], wrongEpoch.erasureId, String(BigInt(wrongEpoch.epoch) + 1000n)]);
+  // The same epoch fault on an entry that stores no quote: stale at remediation all the same.
+  const wrongEpochClean = await oldErasure(env, { quotes: false, tombstone: false });
+  await env.pool.query(`UPDATE content.revision SET availability = 'erased', serialized_bytes = NULL, body = NULL
+    WHERE id = $1`, [wrongEpochClean.revisions[0]]);
+  await env.pool.query(`INSERT INTO content.revision_erasure (revision_id, erasure_id, erasure_epoch)
+    VALUES ($1, $2, $3)`, [wrongEpochClean.revisions[0], wrongEpochClean.erasureId,
+    String(BigInt(wrongEpochClean.epoch) + 1000n)]);
   const unapplied = await oldErasure(env, { tombstone: false });
   const nativeGone = await oldErasure(env);
   nativeSuppressed.delete(nativeGone.revisions[0]!);
@@ -408,6 +415,7 @@ test('a wrong tombstone, an unerased target or a missing native proof fails befo
     { after: String(BigInt(wrongId.epoch) - 1n), limit: 100 });
   expect(entryOf(window, wrongId).outcome).toBe('stale');
   expect(entryOf(window, wrongEpoch).outcome).toBe('stale');
+  expect(entryOf(window, wrongEpochClean).outcome).toBe('stale');
   expect(entryOf(window, unapplied).outcome).toBe('unapplied');
   expect(entryOf(window, nativeGone).outcome).toBe('native');
   for (const [fixture, before] of befores) {
@@ -534,6 +542,25 @@ test('the pending reconciler keeps its result and leaves old quotes alone', asyn
   expect(pending.failed).not.toContain(fixture.erasureId);
   expect(typeof pending.completed).toBe('number');
   await expectStillOpen(fixture, before);
+}, 60_000);
+
+test('an owner holding the only relay connection remediates through it, never checking out a second', async () => {
+  const fixture = await oldErasure(env);
+  const before = await snapshot(fixture);
+  const single = new Pool({ ...cluster, database: 'remediation_main', max: 1 });
+  const client = await single.connect();
+  try {
+    const owned = new ErasureService(single, env.pool, env.pool);
+    const entry = await Promise.race([remediateErasedContentEntry(owned, graph, fixture.erasureId, client),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('journal read waited for the pool')), 15_000))]);
+    expect(entry.outcome).toBe('cleared');
+    await expectCleared(fixture, before);
+    // The helper leaves the borrowed client usable and in the caller's hands.
+    expect((await client.query('SELECT 1 AS ok')).rows[0]?.ok).toBe(1);
+  } finally {
+    client.release();
+    await single.end();
+  }
 }, 60_000);
 
 test('a single entry is remediated on demand by id', async () => {

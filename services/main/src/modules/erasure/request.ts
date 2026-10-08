@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
 import { ERASURE_DEFERRED_REASON } from './schema.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry,
@@ -303,8 +303,11 @@ interface JournalRow {
 const JOURNAL_COLUMNS = `id, erasure_epoch::text AS epoch, kind, stage, suppression_status AS suppression,
   authority, operation_id AS operation, admission_id::text AS admission`;
 
+/** A relay pool, or a client the caller borrowed and whose transaction and lifetime it owns. */
+type Relay = Pool | PoolClient;
+
 async function remediateEntry(service: ErasureService, graph: WorkActivationEnvironment,
-  row: JournalRow): Promise<SourceRemediationEntry> {
+  row: JournalRow, relay: Relay = service.relay): Promise<SourceRemediationEntry> {
   const done = (outcome: SourceRemediationOutcome, cleared: string[] = []): SourceRemediationEntry =>
     ({ erasureId: row.id, erasureEpoch: row.epoch, outcome, cleared });
   if (row.kind !== 'revision') return done('foreign');
@@ -315,7 +318,7 @@ async function remediateEntry(service: ErasureService, graph: WorkActivationEnvi
     || row.operation !== `erasure:${row.admission}`) return done('malformed');
   let ids: string[];
   try {
-    const report = await readErasure(service.relay, row.id);
+    const report = await readErasure(relay, row.id);
     ids = report.targets.map(target => target.ref);
     if (!ids.length || ids.length > JOURNAL_TARGETS || new Set(ids).size !== ids.length
       || report.targets.some(target => target.owner !== 'content' || target.kind !== 'content_revision'
@@ -385,13 +388,18 @@ export async function remediateErasedContentSources(service: ErasureService,
     unresolved: entries.filter(entry => !resolved.has(entry.outcome)).map(entry => entry.erasureId) };
 }
 
-/** One journaled entry by id, for a per-erasure owner operation. The committed intent is never rewritten. */
+/**
+ * One journaled entry by id, for a per-erasure owner operation. The committed intent is never
+ * rewritten. An owner that already holds a relay client (for example under an advisory lock)
+ * passes it as `relay`: every journal read then uses that client, never a second checkout from
+ * the pool, and the helper never begins, ends or releases it.
+ */
 export async function remediateErasedContentEntry(service: ErasureService, graph: WorkActivationEnvironment,
-  erasureId: string): Promise<SourceRemediationEntry> {
-  const row = (await service.relay.query<JournalRow>(
+  erasureId: string, relay: Relay = service.relay): Promise<SourceRemediationEntry> {
+  const row = (await relay.query<JournalRow>(
     `SELECT ${JOURNAL_COLUMNS} FROM relay.erasure WHERE id = $1`, [erasureId])).rows[0];
   if (!row) throw new ErasureNotFound('erasure is unavailable');
-  return remediateEntry(service, graph, row);
+  return remediateEntry(service, graph, row, relay);
 }
 
 /**
