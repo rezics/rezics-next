@@ -364,7 +364,6 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     expect(wideItems).toHaveLength(50);
     expect(wideItems.some(item => item.zone === decoy)).toBe(false);
 
-    const bulk = await a.realmIn();
     const thousand = Array.from({ length: 1000 }, (_, index) => {
       const n = String(index).padStart(12, '0');
       return { zone: `https://rezics.com/id/00000000-0000-4000-8000-${n}`,
@@ -374,8 +373,8 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     const bulkDecoy = `https://rezics.com/id/${randomUUID()}`;
     await stack.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/> INSERT DATA {
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(bulkDecoy)} a rv:Zone ; rv:defaultRealm ${iri(bulk.realm)} ; rv:space ${iri(site.space)} .
-        ${thousand.map(item => `${iri(item.zone)} a rv:Zone ; rv:defaultRealm ${iri(bulk.realm)} ;
+        ${iri(bulkDecoy)} a rv:Zone ; rv:defaultRealm ${iri(empty.realm)} ; rv:space ${iri(site.space)} .
+        ${thousand.map(item => `${iri(item.zone)} a rv:Zone ; rv:defaultRealm ${iri(empty.realm)} ;
           rv:realmAttachment ${iri(item.receipt)} ; rv:space ${iri(item.space)} .`).join('\n')}
       }
       GRAPH ${iri(GRAPHS.receipts)} {
@@ -386,8 +385,8 @@ test('a steward lists attached Zones page by page; anyone else gets the missing 
     let cursor: string | null = null;
     for (let page = 0; page < 40; page += 1) {
       const path = cursor
-        ? `${listPath(bulk.realm, a.steward, 50)}&after=${encodeURIComponent(cursor)}`
-        : listPath(bulk.realm, a.steward, 50);
+        ? `${listPath(empty.realm, a.steward, 50)}&after=${encodeURIComponent(cursor)}`
+        : listPath(empty.realm, a.steward, 50);
       const response = await call('GET', path, undefined, home.author.token);
       expect(response.status).toBe(200);
       const body = await response.json() as { items: { zone: string }[]; next: string | null };
