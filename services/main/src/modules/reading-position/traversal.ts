@@ -369,16 +369,15 @@ export class ReadingPositionTraversal {
     // Everything else does: each frame visited (so descending into a group,
     // popping it and an empty group all cost one) and each row that yields
     // nothing. The window ends in a continuation, never a longer walk.
-    let spent = 0, examined = 0, widen = false;
-    const open = () => this.order ? spent < READING_CHOOSER_COST.scanRows : examined < READING_CHOOSER_COST.scanRows;
-    while (frames.length && items.length <= input.limit && open()) {
+    let spent = 0, widen = false;
+    while (frames.length && items.length <= input.limit && spent < READING_CHOOSER_COST.scanRows) {
       this.session.checkDeadline();
       spent++;
       const frame = frames.at(-1)!, owner = await this.metadataFor(frame.work);
       try { await this.requireWork(frame.work); }
       catch (error) {
         if (!(error instanceof WorkReadMissing)) throw error;
-        frames.pop(); examined++;
+        frames.pop();
         const parent = frames.at(-1)?.after;
         if (parent) checkpoint = at(parent.occurrence, false);
         continue;
@@ -388,13 +387,9 @@ export class ReadingPositionTraversal {
       // A withheld run after that — or a probe that delivered nothing — is one
       // read of the rest of the scan window. One-row probes would repeat
       // disclosure for every hidden sibling and exhaust the work-read budget.
-      const probe: number = this.order
-        ? Math.min(READING_CHOOSER_COST.probe, widen
-          ? Math.max(room, READING_CHOOSER_COST.scanRows - spent) : room)
-        : Math.min(READING_CHOOSER_COST.probe, READING_CHOOSER_COST.scanRows - examined);
-      if (probe < 1) break;
+      const probe = Math.min(READING_CHOOSER_COST.probe, widen
+        ? Math.max(room, READING_CHOOSER_COST.scanRows - spent) : room);
       const candidates = await this.range(owner, frame.parent, frame.after, q, false, probe);
-      examined += Math.max(1, candidates.length);
       const targets = [...new Set(candidates.flatMap(row => row.item.target && NATIVE_ID.test(row.item.target) ? [row.item.target] : []))];
       const disclosed = await this.disclose(targets);
       let descended = false, deliveredHere = 0, passed = 0;
