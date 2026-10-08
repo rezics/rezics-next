@@ -1,8 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
-import { resourceHref } from '../features/address/path.ts';
 import { studioHref } from '../features/studio/agent.ts';
-import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 
 // A cook creates a recipe in Studio and writes it in the recipe editor: two ingredient sections that
@@ -35,8 +33,8 @@ async function createRecipe(page: Page, title: string): Promise<string> {
   }).toPass({ timeout: 30_000 });
   await english.click();
   await page.getByRole('button', { name: /^Create as / }).click();
-  await page.waitForURL(/\/works\/[0-9a-f-]{36}\/write\?language=en$/);
-  return /\/works\/([0-9a-f-]{36})\//.exec(page.url())![1]!;
+  await page.waitForURL(/\/en\/w\/[1-9A-HJ-NP-Za-km-z]{22}\/edit\/recipe$/);
+  return new URL(page.url()).pathname.replace(/\/edit\/recipe$/, '');
 }
 
 const phone = { width: 390, height: 844 };
@@ -86,11 +84,9 @@ test('a cook writes a recipe with sections and linked steps, edits it from two t
   const member = fixture<{ member: { email: string; password: string } }>('REZICS_WEB_AUTH_PRIVATE_PATH').member;
   await signInAtAccounts(page, sessionStudio(), member);
   await page.setViewportSize(desktop);
-  const id = await createRecipe(page, 'Lemon muffins');
+  const workPath = await createRecipe(page, 'Lemon muffins');
   mark('created');
-  const workPath = localizedPath(resourceHref('/w/', id), 'en');
   const editorPath = `${workPath}/edit/recipe`;
-  await page.goto(editorPath);
   await expect(page.getByRole('heading', { name: 'About this recipe' })).toBeVisible();
   mark('editor open');
 
