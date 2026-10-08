@@ -14,7 +14,8 @@ import { checkStructureManifest, STRUCTURE_MANIFEST_FORMAT, STRUCTURE_INDEXED_MA
   from '../../../services/main/src/modules/structure/format.ts';
 import { readCompositionHeader } from '../../../services/main/src/modules/structure/graph.ts';
 import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
-import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
+import { readZoneConfiguration, type ZoneSitePublicationReceipt }
+  from '../../../services/main/src/modules/zone/configuration.ts';
 import type { ZoneRoute } from '../../../services/main/src/modules/zone/route.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
@@ -22,12 +23,12 @@ import { isForegroundOperation } from './support/operation-cost.ts';
 
 // Exercise the published route HTTP operation against admitted Jena state and
 // real S3 bytes. Empty Collection hydration cannot hide a navigation scan.
-// The sizes stop at 200 because native publication refuses a navigation whose
-// reverse dependency footprint exceeds 256 (ModelMutationPolicy, HTTP 403), so
-// 1,000 mounts cannot be published yet; raise the larger size once kernel lifts
-// that cap. Equal cost at two published sizes shows cost ignores navigation size.
+// Native publication still refuses a navigation whose reverse dependency
+// footprint exceeds 256. An unchanged canonical Zone identity is exempt from
+// that inbound scan, so a 1,000-mount navigation publishes. Equal cost at 16
+// and 1,000 shows cost ignores navigation size.
 const costs = new Map<number, Record<'first' | 'middle' | 'last' | 'absent', number>>();
-for (const mountCount of [16, 200]) test(`published Zone routes seek one retained key across ${mountCount} mounts and fail closed without coverage`, async () => {
+for (const mountCount of [16, 1000]) test(`published Zone routes seek one retained key across ${mountCount} mounts and fail closed without coverage`, async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const prepared = performance.now();
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
@@ -35,10 +36,12 @@ for (const mountCount of [16, 200]) test(`published Zone routes seek one retaine
     'openid work:create work:edit work:read space:create zone:edit collection:edit semantic:read');
   const originalQuery = f.nativeFuseki.query.bind(f.nativeFuseki);
   const originalCommand = f.nativeFuseki.commandWithReceipt.bind(f.nativeFuseki);
+  let publicationCommits = 0;
   f.nativeFuseki.commandWithReceipt = async envelope => {
     const result = await originalCommand(envelope);
-    if (envelope.update.includes('rv:sitePublicationRevision') && result.status !== 'committed') {
-      console.error('Route fixture publication rejected', result.status,
+    if (envelope.update.includes('rv:sitePublicationRevision')) {
+      if (result.status === 'committed') publicationCommits += 1;
+      else console.error('Route fixture publication rejected', result.status,
         'report' in result ? result.report : '');
     }
     return result;
@@ -105,10 +108,11 @@ for (const mountCount of [16, 200]) test(`published Zone routes seek one retaine
     let zone = '';
     const app = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier,
       access: f.access, content, contentAuthoring: content, catalogueIntake: f.catalogueIntake });
-    const call = (method: string, path: string, body?: object, authenticated = true) =>
+    const call = (method: string, path: string, body?: object, authenticated = true,
+      idempotencyKey = randomUUID()) =>
       app.handle(new Request(`http://main.local${path}`, { method,
         headers: { ...(authenticated ? { authorization: `Bearer ${f.account.tokenA}` } : {}),
-          'idempotency-key': randomUUID(), ...(body ? { 'content-type': 'application/json' } : {}) },
+          'idempotency-key': idempotencyKey, ...(body ? { 'content-type': 'application/json' } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}),
       }));
     await f.grant('space:create:root', 'space.create');
@@ -148,12 +152,16 @@ for (const mountCount of [16, 200]) test(`published Zone routes seek one retaine
       await call('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: zone,
         variantId, expectedHead: null, document: fromPlainText('Published keyed route home', 'blocks'),
         language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: f.actor }), 201);
-    const publish = async () => f.json(await call('POST', `${root}/site-publications`, {
+    const sitePublication = async () => ({
       routesRevision: head, navigationRevision: head,
       expectedHead: (await readZoneConfiguration(f.env, zone)).revision, actingSubject: f.actor,
       pages: [{ page: zone, variantId, revisionId: saved.revisionId,
         byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch }],
-    }), 201);
+    });
+    const publishAt = async (idempotencyKey: string, body: Awaited<ReturnType<typeof sitePublication>>,
+      status: number) => f.json<ZoneSitePublicationReceipt & { replayed: boolean }>(
+      await call('POST', `${root}/site-publications`, body, true, idempotencyKey), status);
+    const publish = async () => publishAt(randomUUID(), await sitePublication(), 201);
     await publish();
     let firstOccurrence = '';
     for (let offset = 0; offset < mountCount; offset += 16) {
@@ -161,7 +169,25 @@ for (const mountCount of [16, 200]) test(`published Zone routes seek one retaine
         mount(`route-${offset + index}`, offset + index === 0 ? 'alias' : 'id')));
       if (offset === 0) firstOccurrence = changed.occurrences![0]!;
     }
-    await publish();
+    if (mountCount === 1000) {
+      const idempotencyKey = randomUUID();
+      const body = await sitePublication();
+      const commits = publicationCommits;
+      const published = await publishAt(idempotencyKey, body, 201);
+      expect(published.replayed).toBe(false);
+      expect(publicationCommits).toBeGreaterThan(commits);
+      const written = publicationCommits;
+      const contentCut = await content.ownerPosition();
+      const replayed = await publishAt(idempotencyKey, body, 200);
+      expect(replayed).toEqual({ ...published, replayed: true });
+      expect(publicationCommits).toBe(written);
+      expect(await content.ownerPosition()).toEqual(contentCut);
+      const receipts = await f.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?receipt WHERE {
+        GRAPH ${iri(GRAPHS.receipts)} { ?receipt rv:sitePublicationRevision ${iri(published.revision)} ;
+          rv:structureOwner ${iri(zone)} . }
+      } LIMIT 3`, 4096);
+      expect(receipts.results?.bindings).toHaveLength(1);
+    } else await publish();
     expect(performance.now() - prepared).toBeLessThan(600_000);
     const header = (await readCompositionHeader(f.env, created.navigation))!;
     retainedManifest = header.manifest.slice(-64);
@@ -258,7 +284,10 @@ for (const mountCount of [16, 200]) test(`published Zone routes seek one retaine
         mount: { key: 'id' }, resource: { id: work.work } });
     }
     await missing(await route(`/${lastSegment}/${alias}`));
-    await missing(await route('/private-mount'));
+    const concealed = await f.json(await route('/private-mount'), 404);
+    const unknownKey = await f.json(await route('/missing-key'), 404);
+    expect(concealed).toEqual(missingProblem);
+    expect(unknownKey).toEqual(concealed);
     expect((await route('/private-mount', true)).status).toBe(200);
     // A published key admits membership, while delivery still checks the
     // Collection's current disclosure after resource hydration.
@@ -279,10 +308,10 @@ for (const mountCount of [16, 200]) test(`published Zone routes seek one retaine
     f.nativeFuseki.commandWithReceipt = originalCommand;
     await f.close();
   }
-}, 600_000);
+}, mountCount === 1000 ? 900_000 : 600_000);
 
 test('published Zone route cost is identical at both navigation sizes', () => {
-  const small = costs.get(16), large = costs.get(200);
+  const small = costs.get(16), large = costs.get(1000);
   if (!small || !large) throw new Error('Run the sized route tests before comparing their cost');
   expect(large).toEqual(small);
 });
