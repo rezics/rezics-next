@@ -1,10 +1,10 @@
 import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { readEntityProjection, readRelations, readStatements, sectionOf } from '../entity-page/read.ts';
-import type { RelationsPage, StatementPage } from '../entity-page/types.ts';
+import type { RelationsPage } from '../entity-page/types.ts';
 import type { WorkPageMessages } from './messages.ts';
 import type { Loaded } from './types.ts';
-import { wikiRealmOf } from './wiki.ts';
+import { wikiZoneRead } from './wiki.ts';
 import { WikiSectionView, WikiShortcutView } from './wiki.tsx';
 
 // The wiki section's reads: the Zone a Work's statements name, then its relations. Stories draw the views alone.
@@ -12,11 +12,8 @@ import { WikiSectionView, WikiShortcutView } from './wiki.tsx';
 /** The Zone a Work's statements name, read once per request for the shortcut and the section. */
 const readWikiZone = cache(async (id: string): Promise<Loaded<string | null>> => {
   const page = await readEntityProjection(id);
-  if (!page.ok) return page;
-  const statements = sectionOf(page.data, 'statements');
-  if (!statements) return { ok: true, data: null };
-  const read: Loaded<StatementPage> = await readStatements(statements, undefined);
-  return read.ok ? { ok: true, data: wikiRealmOf(read.data.groups) } : read;
+  const statements = page.ok ? sectionOf(page.data, 'statements') : undefined;
+  return wikiZoneRead(page, statements ? await readStatements(statements, undefined) : undefined);
 });
 
 export async function WikiSection({ id, locale, messages }: { id: string; locale: UiLocale; messages: WorkPageMessages }) {

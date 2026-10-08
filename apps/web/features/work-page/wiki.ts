@@ -3,12 +3,26 @@ import type { StatementGroup } from '../entity-page/types.ts';
 import type { AvailableSummary, RelationsPage } from '../work-levels/types.ts';
 import { relationRows } from '../work-levels/relation-rows.ts';
 import { idOf } from './route.ts';
+import type { Loaded } from './types.ts';
 
 // How a Work finds its wiki. A franchise Work carries one Statement whose predicate is below and whose value is
 // the wiki Zone's Realm, which the franchise wiki starter writes (G-849) and any holder's wiki may write the same
 // way. The hub reads it; it never guesses a wiki from a name.
 
 export const WIKI_ZONE_PREDICATE = 'https://rezics.com/vocab/wikiZone';
+
+/**
+ * The Realm the two wiki reads name. A Work whose projection has no Statements section, or whose
+ * statements name no wiki Zone, has no wiki. A failed read stays that failure: an outage is not absence.
+ */
+export function wikiZoneRead(
+  page: Loaded<unknown>,
+  statements: Loaded<{ groups: readonly StatementGroup[] }> | undefined,
+): Loaded<string | null> {
+  if (!page.ok) return page;
+  if (!statements) return { ok: true, data: null };
+  return statements.ok ? { ok: true, data: wikiRealmOf(statements.data.groups) } : statements;
+}
 
 /** The Realm of the wiki Zone a Work's statements name, or null when they name none. */
 export function wikiRealmOf(groups: readonly StatementGroup[]): string | null {
