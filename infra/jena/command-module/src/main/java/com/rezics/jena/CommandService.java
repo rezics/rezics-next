@@ -194,7 +194,8 @@ final class CommandService extends ActionService {
                 Map<String, Object> result = runWorkScopeDirectory(action.getDataService().getDataset(), deadline);
                 action.getResponse().setHeader("Server-Timing", work.serverTiming());
                 action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
-                respond(action, 200, result); return;
+                // The exclusive-writer refusal is a typed conflict. Prepared and deadline pages stay successful.
+                respond(action, "unavailable".equals(result.get("status")) ? 409 : 200, result); return;
             }
             if (body.get("claimFoldMembers") != null) {
                 if (!authorized(action, maintenanceCapability)) {
@@ -434,6 +435,10 @@ final class CommandService extends ActionService {
                 return Map.of("status", "prepared", "phase", phase, "more", !"complete".equals(phase));
             } catch (java.util.concurrent.CancellationException cancelled) {
                 return Map.of("status", "deadline", "phase", "absent", "more", true);
+            } catch (IllegalStateException refused) {
+                // Only the native exclusive-writer refusal. Every other state failure aborts and stays fatal.
+                if (!"Work name scope requires exclusive native writer admission".equals(refused.getMessage())) throw refused;
+                return Map.of("status", "unavailable", "reason", "writer-not-exclusive");
             } finally {
                 try { if (!commit) dataset.abort(); }
                 finally { dataset.end(); }

@@ -63,7 +63,7 @@ import { runQaStartupChildAsync } from './stack-startup.ts';
 import { allocateWebPort, webOrigin } from './e2e.ts';
 import { discoverJourneyPreparations, preparationBudgetMs, selectJourneyPreparations } from './e2e-preparation.ts';
 import { cleanupQaStacks, QA_STACK_REGISTRY, QA_STACK_TIER } from './stack-ownership.ts';
-import { commandOnlyIntegrationFiles } from './isolated-integration-files.ts';
+import { commandOnlyIntegrationFiles, exclusiveWriterStartupFiles } from './isolated-integration-files.ts';
 import { planIntegrationShards } from './integration-shards.ts';
 import { completeFileResults, lastStartedTestFile } from './file-results.ts';
 import { qaStackEnvironment, qaStackMode } from './stack-environment.ts';
@@ -476,6 +476,22 @@ async function runShardWork(
       writeFileSync(join(logs, `${label}-bootstrap.log`), bootstrap.output);
       return finish({ ok: false, timedOut: bootstrap.timedOut, noMatch: false,
         xml: xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output) });
+    }
+    // Writer admission is part of Fuseki startup. Bootstrap has now stored the
+    // text generation, so one recreate lets that startup admit the exclusive writer.
+    if (files.some(file => exclusiveWriterStartupFiles.has(file))) {
+      const restarted = await commandAsync(root, 'docker', [
+        'compose', '--env-file', join(stackDir, 'compose.env'),
+        '-f', 'infra/dev/compose.yaml',
+        '--project-name', `rezics-qa-${projectRunId}`,
+        'up', '-d', '--wait', '--force-recreate', '--no-deps', 'fuseki',
+      ], 180_000, environment);
+      if (!restarted.ok) {
+        errors.push(`${tier} exclusive writer startup failed: ${projectRunId} (see logs/${label}-startup.log)`);
+        writeFileSync(join(logs, `${label}-startup.log`), restarted.output);
+        return finish({ ok: false, timedOut: restarted.timedOut, noMatch: false,
+          xml: xmlForCommand(tier, false, restarted.elapsedMs, restarted.output) });
+      }
     }
   }
   if (!needsStack) {

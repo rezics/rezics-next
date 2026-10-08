@@ -133,6 +133,11 @@ export interface WorkScopeDirectoryPage {
   phase: 'absent' | 'owners' | 'complete';
   more: boolean;
 }
+/** Typed refusal when this stack's writer is not the exclusive directory writer. */
+export interface WorkScopeDirectoryRefusal {
+  status: 'unavailable';
+  reason: 'writer-not-exclusive';
+}
 export interface CommandHealth { moduleVersion: string; instanceId: string;
   publicSearchWriteEpoch: string; publicSearchWriteActive: boolean;
   privateSearchWriteEpoch?: string; privateSearchWriteActive?: boolean;
@@ -218,6 +223,17 @@ function workScopeDirectoryPage(value: unknown): WorkScopeDirectoryPage {
   if (page.phase === 'complete' && page.more === false) return page;
   if (page.phase === 'owners' && page.more === true) return page;
   throw new Error('Malformed work name scope preparation');
+}
+
+function workScopeDirectoryRefusal(value: unknown): WorkScopeDirectoryRefusal {
+  if (!value || typeof value !== 'object') throw new Error('Malformed work name scope preparation');
+  const page = value as WorkScopeDirectoryRefusal;
+  const keys = Object.keys(page);
+  if (keys.length !== 2 || !keys.includes('status') || !keys.includes('reason')
+    || page.status !== 'unavailable' || page.reason !== 'writer-not-exclusive') {
+    throw new Error('Malformed work name scope preparation');
+  }
+  return page;
 }
 
 function safeIri(value: string): string {
@@ -387,7 +403,7 @@ export class FusekiClient {
   }
 
   /** One bounded Work-name directory page. The maintenance capability is required; the body carries no cursor or budget. */
-  async prepareWorkScopeDirectory(signal?: AbortSignal): Promise<WorkScopeDirectoryPage> {
+  async prepareWorkScopeDirectory(signal?: AbortSignal): Promise<WorkScopeDirectoryPage | WorkScopeDirectoryRefusal> {
     if (!this.maintenanceCapability?.match(/^[0-9a-f]{64}$/)) {
       throw new Error('Fuseki maintenance capability is required');
     }
@@ -418,6 +434,16 @@ export class FusekiClient {
       throw new CommandOutcomeUnknown('Work name scope transport outcome unknown', { cause: error });
     }
     if (response.status === 403) throw new CommandForbidden('Work name scope capability rejected');
+    if (response.status === 409) {
+      let refused: unknown;
+      try { refused = await boundedJson<unknown>(response, 4096, requestSignal); }
+      catch (error) {
+        requestSignal.throwIfAborted();
+        if (error instanceof FusekiQueryResponseTooLarge || error instanceof FusekiReadBudgetExceeded) throw error;
+        throw new CommandOutcomeUnknown('Work name scope response incomplete', { cause: error });
+      }
+      return workScopeDirectoryRefusal(refused);
+    }
     if (!response.ok) {
       await response.body?.cancel();
       throw new Error(`Work name scope preparation returned ${response.status}`);

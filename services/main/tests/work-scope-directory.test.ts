@@ -127,3 +127,51 @@ test('a page that is neither an owner continuation nor complete is unqualified',
     prepareWorkScopeDirectory: async () => ({ status: 'prepared', phase: 'absent', more: false }),
   }, Date.now() + 60_000)).rejects.toThrow('Work name scope preparation is unqualified');
 });
+
+test('an exclusive-writer refusal is a typed conflict and is not retried', async () => {
+  const fetch = fetchStub(async () => Response.json(
+    { status: 'unavailable', reason: 'writer-not-exclusive' }, { status: 409 }));
+  expect(await client().prepareWorkScopeDirectory()).toEqual({ status: 'unavailable', reason: 'writer-not-exclusive' });
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+test('any other directory refusal stays fatal', async () => {
+  const responses = [
+    () => Response.json({ status: 'unavailable', reason: 'writer-not-exclusive', phase: 'absent' }, { status: 409 }),
+    () => Response.json({ status: 'unavailable', reason: 'closed' }, { status: 409 }),
+    () => new Response('no', { status: 500 }),
+  ];
+  let index = 0;
+  fetchStub(async () => responses[index++]!());
+  const fuseki = client();
+  await expect(fuseki.prepareWorkScopeDirectory()).rejects.toThrow('Malformed work name scope preparation');
+  await expect(fuseki.prepareWorkScopeDirectory()).rejects.toThrow('Malformed work name scope preparation');
+  await expect(fuseki.prepareWorkScopeDirectory()).rejects.toThrow('Work name scope preparation returned 500');
+});
+
+test('a non-exclusive writer is not prepared on this stack and startup continues', async () => {
+  const warnings: unknown[][] = [];
+  const warn = spyOn(console, 'warn').mockImplementation((...args: unknown[]) => { warnings.push(args); });
+  restores.push(() => warn.mockRestore());
+  let calls = 0;
+  await prepareWorkNameScope({
+    prepareWorkScopeDirectory: async () => {
+      calls++;
+      return { status: 'unavailable', reason: 'writer-not-exclusive' };
+    },
+  }, Date.now() + 60_000);
+  expect(calls).toBe(1);
+  expect(warnings).toEqual([['Work name scope is not prepared on this stack']]);
+});
+
+test('a different unavailable reason and a transport failure stay fatal', async () => {
+  const warn = spyOn(console, 'warn').mockImplementation(() => {});
+  restores.push(() => warn.mockRestore());
+  await expect(prepareWorkNameScope({
+    prepareWorkScopeDirectory: async () => ({ status: 'unavailable', reason: 'closed' }),
+  }, Date.now() + 60_000)).rejects.toThrow('Work name scope preparation is unqualified');
+  await expect(prepareWorkNameScope({
+    prepareWorkScopeDirectory: async () => { throw new Error('Work name scope preparation returned 500'); },
+  }, Date.now() + 60_000)).rejects.toThrow('Work name scope preparation returned 500');
+  expect(warn).not.toHaveBeenCalled();
+});

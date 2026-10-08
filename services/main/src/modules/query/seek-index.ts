@@ -1,6 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import { fusekiReadBudget, type FusekiClient, type TemplateIndexDelta, type TemplateIndexKey,
-  type WorkScopeDirectoryPage } from '../../infrastructure/fuseki.ts';
+  type WorkScopeDirectoryPage, type WorkScopeDirectoryRefusal } from '../../infrastructure/fuseki.ts';
 import { WorkReadUnavailable, WorkReadMoved, WorkReadLimit, readDependencyToken } from '../work/read-session.ts';
 import { controlRead, controlTransaction } from '../access/topology-control.ts';
 
@@ -9,20 +9,34 @@ export interface SeekCandidate { id: string; key: string; root: string; terms: R
 const RV = 'https://rezics.com/vocab/';
 export const TEMPLATE_DIRECTORY_COST = { reconciliation:128, rebuildMs:600_000, recoveryPollMs:500 } as const;
 
-/** Pages the native Work-name directory until it is complete. Each command keeps its page and ten-second budget. */
+type WorkScopeDirectoryOutcome = WorkScopeDirectoryPage | WorkScopeDirectoryRefusal | {
+  status: 'unavailable';
+  reason: string;
+};
+
+/** Pages the native Work-name directory until it is complete. Each command keeps its page and ten-second budget.
+ * An exclusive-writer refusal means this stack cannot prepare the directory. That one reason is logged once
+ * and left for a later exclusive startup; readiness continues. Any other failure stays fatal. */
 export async function prepareWorkNameScope(
-  fuseki: Pick<FusekiClient, 'prepareWorkScopeDirectory'>,
+  fuseki: { prepareWorkScopeDirectory(signal?: AbortSignal): Promise<WorkScopeDirectoryOutcome> },
   deadline: number,
   signal?: AbortSignal,
 ): Promise<void> {
   while (Date.now() < deadline) {
     signal?.throwIfAborted();
-    let page: WorkScopeDirectoryPage;
+    let page: WorkScopeDirectoryOutcome;
     try {
       page = await fuseki.prepareWorkScopeDirectory(signal);
     } catch (error) {
       if (Date.now() >= deadline) throw new WorkReadUnavailable('Work name scope preparation exceeds 600 seconds');
       throw error;
+    }
+    if (page.status === 'unavailable') {
+      if (page.reason === 'writer-not-exclusive') {
+        console.warn('Work name scope is not prepared on this stack');
+        return;
+      }
+      throw new WorkReadUnavailable('Work name scope preparation is unqualified');
     }
     if (page.status === 'deadline') continue;
     if (page.phase === 'complete' && page.more === false) return;

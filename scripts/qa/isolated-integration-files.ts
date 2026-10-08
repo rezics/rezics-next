@@ -177,4 +177,13 @@ export const isolatedIntegrationFileList = [
 export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/g-1038-catalogue-scale.test.ts',
   'tests/qa/integration/growth-search-refresh.test.ts',
+  // Original title custody needs the exclusive product writer so startup can finish the Work-name directory.
+  'tests/qa/integration/title-candidate-original-custody.test.ts',
+]);
+
+/** Fresh bootstrap writes the text generation after the first Fuseki process.
+ * These files restart that process once so qualifyAtStartup can admit the exclusive writer. */
+export const exclusiveWriterStartupFiles: ReadonlySet<string> = new Set([
+  // Original title custody prepares the Work-name directory only after that admission.
+  'tests/qa/integration/title-candidate-original-custody.test.ts',
 ]);

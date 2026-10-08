@@ -48,7 +48,8 @@ public class WorkScopeDirectoryCommandTest {
         final DatasetGraph data = org.apache.jena.tdb2.TDB2Factory.createDataset().asDatasetGraph();
         final FusekiServer server;
         final HttpClient http = HttpClient.newHttpClient();
-        Endpoint(int owners) {
+        Endpoint(int owners) { this(owners, true); }
+        Endpoint(int owners, boolean admitWriter) {
             data.begin(ReadWrite.WRITE);
             try {
                 data.add(CONTROL, PRODUCT, p("dataEpoch"), text("11111111-1111-4111-8111-111111111111"));
@@ -58,7 +59,7 @@ public class WorkScopeDirectoryCommandTest {
                 data.add(CURRENT, MAIN, RDF.type.asNode(), p("MainVersion"));
                 data.add(CURRENT, MAIN, p("work"), WORK);
                 for (int number = 0; number < owners; number++) owner(data, number);
-                PublicNameProjection.workScopeExclusiveStartup(data);
+                if (admitWriter) PublicNameProjection.workScopeExclusiveStartup(data);
                 data.commit();
             } catch (RuntimeException | Error failure) {
                 data.abort(); throw failure;
@@ -106,6 +107,27 @@ public class WorkScopeDirectoryCommandTest {
             }
             var open = endpoint.post("{\"workScopeDirectory\":{\"page\":1}}", MAINTENANCE);
             assertEquals(open.body(), 400, open.statusCode());
+            assertEquals(before, endpoint.quads());
+        }
+    }
+
+    @Test public void refusesTheDirectoryPageWhenTheWriterIsNotExclusive() throws Exception {
+        try (Endpoint endpoint = new Endpoint(0, false)) {
+            Set<Quad> before = endpoint.quads();
+            var anonymous = endpoint.post(BODY, null);
+            assertEquals(anonymous.body(), 403, anonymous.statusCode());
+            assertEquals("forbidden", status(JSON.parse(anonymous.body())));
+            var response = endpoint.post(BODY, MAINTENANCE);
+            assertEquals(response.body(), 409, response.statusCode());
+            JsonObject body = JSON.parse(response.body());
+            assertEquals("unavailable", status(body));
+            assertEquals("writer-not-exclusive", body.get("reason").getAsString().value());
+            assertFalse(body.hasKey("phase"));
+            assertFalse(body.hasKey("more"));
+            assertTrue(response.headers().firstValue("X-Rezics-Command-Work").isPresent());
+            assertEquals(before, endpoint.quads());
+            var again = endpoint.post(BODY, MAINTENANCE);
+            assertEquals(again.body(), 409, again.statusCode());
             assertEquals(before, endpoint.quads());
         }
     }
