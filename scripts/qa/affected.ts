@@ -61,6 +61,8 @@ export interface AffectedPlan {
   widened: { tier: AffectedTier; because: string }[];
   deferred: { file: string; reason: string }[];
   ignored: { path: string; reason: string }[];
+  /** Set when the Dockerfile text is available: whether the native union test was selected. */
+  nativeUnion?: 'selected' | 'not selected';
 }
 
 const codeFile = /\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/;
@@ -69,6 +71,40 @@ const stackTiers: AffectedTier[] = ['model', 'integration', 'fault/recovery'];
 // Inputs staged or read by jena-cli.ts, including the pinned image definition.
 const jenaCheckInput = /^infra\/jena\/|^(?:model\/definitions|generated\/model\/shapes)\/.*\.ttl$|^tests\/fixtures\/jena-cli\/scratch\.trig$|^services\/main\/src\/modules\/query\/templates\/work-versions\.(?:rq|fixture\.json)$|^scripts\/qa\/jena-cli\.ts$|^infra\/dev\/compose\.yaml$/;
 const sharedStackSmoke = 'tests/qa/integration/shared-stack.test.ts';
+export const nativeUnionTest = 'infra/jena/tests/semantic-source-readiness-union.test.ts';
+export const nativeUnionDockerfile = 'infra/jena/Dockerfile';
+/** Shown on the affected plan so a gate can see why this unit file was or was not chosen. */
+export const nativeModuleCopyInputs = 'native module COPY inputs';
+
+export interface NativeModuleCopy {
+  source: string;
+  destination: string;
+}
+
+/** First Dockerfile stage: the native module build the union test reproduces. */
+export function nativeModuleStage(dockerfile: string): string {
+  return dockerfile.split(/\nFROM /, 1)[0] ?? '';
+}
+
+/** Module-stage COPY instructions. Unsupported syntax fails closed, matching the union test. */
+export function nativeModuleCopies(dockerfile: string): NativeModuleCopy[] {
+  const copies: NativeModuleCopy[] = [];
+  for (const line of nativeModuleStage(dockerfile).split('\n')) {
+    if (!/^COPY\s/.test(line)) continue;
+    const copy = /^COPY (\S+) (\/build\/\S+)$/.exec(line);
+    if (!copy) throw new Error(`unsupported native module COPY: ${line}`);
+    copies.push({ source: copy[1]!, destination: copy[2]! });
+  }
+  return copies;
+}
+
+function coversNativeUnionInput(path: string, copies: readonly NativeModuleCopy[]): boolean {
+  if (path === nativeUnionDockerfile || path === nativeUnionTest) return true;
+  return copies.some(({ source }) => {
+    const directory = source.endsWith('/') ? source : `${source}/`;
+    return path === source || path === source.replace(/\/$/, '') || path.startsWith(directory);
+  });
+}
 // The registered unit tier: `tests/qa/unit` plus its gate files.
 const registeredUnit = [...testArgs('unit'), ...unitHarnessFiles];
 const inRegisteredUnit = (path: string) =>
@@ -201,6 +237,8 @@ export function planAffected(input: {
   sources: Map<string, string>;
   exists: (path: string) => boolean;
   scriptOnlyManifests?: ReadonlySet<string>;
+  /** Dockerfile text. When present, the native union test follows its module-stage COPY inputs. */
+  nativeUnionDockerfile?: string;
 }): AffectedPlan {
   const reverse = new Map<string, Set<string>>();
   const unresolvedImporters = new Map<string, Set<string>>();
@@ -235,7 +273,14 @@ export function planAffected(input: {
     return checks;
   };
   const seeds = new Set<string>();
+  // The union test reproduces the Dockerfile's first-stage COPY set. Stack-tier
+  // widening for infra/jena stays in place; this unit file follows that COPY set.
+  const nativeCopies = input.nativeUnionDockerfile === undefined
+    ? undefined
+    : nativeModuleCopies(input.nativeUnionDockerfile);
+  let nativeUnionTouched = false;
   for (const path of plan.changed) {
+    if (nativeCopies && coversNativeUnionInput(path, nativeCopies)) nativeUnionTouched = true;
     if (jenaCheckInput.test(path) && !plan.tasks.some(check => check.task === 'jena:check'))
       plan.tasks.push({ task: 'jena:check', because: `${path}: pinned Jena CLI input` });
     // A root script edit changes command wiring, not installed dependencies.
@@ -284,6 +329,7 @@ export function planAffected(input: {
     }
     for (const source of references) seeds.add(source);
   }
+  if (nativeUnionTouched && input.exists(nativeUnionTest)) seeds.add(nativeUnionTest);
   const affected = new Set<string>();
   const queue = [...seeds];
   while (queue.length) {
@@ -293,6 +339,8 @@ export function planAffected(input: {
     for (const importer of reverse.get(current) ?? [])
       if (!affected.has(importer)) queue.push(importer);
   }
+  if (nativeCopies && !nativeUnionTouched) affected.delete(nativeUnionTest);
+  if (nativeCopies) plan.nativeUnion = nativeUnionTouched && input.exists(nativeUnionTest) ? 'selected' : 'not selected';
   // A widened tier runs its registered default selection, which for unit is
   // `tests/qa/unit` plus gate files; affected unit tests outside it still run.
   const unitWidened = plan.widened.some((item) => item.tier === 'unit');
@@ -470,6 +518,7 @@ export function affectedPlan(root: string, ref?: string): AffectedPlan {
     if (codeFile.test(module.source) && existsSync(path))
       sources.set(module.source, readFileSync(path, 'utf8'));
   }
+  const dockerfile = join(root, nativeUnionDockerfile);
   return planAffected({
     base,
     changed,
@@ -477,12 +526,14 @@ export function affectedPlan(root: string, ref?: string): AffectedPlan {
     sources,
     exists: (path) => existsSync(resolve(root, path)),
     scriptOnlyManifests: manifests,
+    nativeUnionDockerfile: existsSync(dockerfile) ? readFileSync(dockerfile, 'utf8') : '',
   });
 }
 
 export function formatPlan(plan: AffectedPlan): string {
   const lines = [`Affected since ${plan.base.slice(0, 12)}: ${plan.changed.length} changed paths`];
   for (const { task, because } of plan.tasks) lines.push(`  task ${task} (${because})`);
+  if (plan.nativeUnion) lines.push(`  ${nativeModuleCopyInputs}: ${plan.nativeUnion}`);
   for (const { tier, because } of plan.widened) lines.push(`  ${tier}: whole tier (${because})`);
   for (const tier of affectedTiers) {
     for (const file of plan.tests[tier]) lines.push(`  ${tier}: ${file}`);

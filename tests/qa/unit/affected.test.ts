@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { classify, formatPlan, needsGraph, planAffected, routeTest, type GraphModule } from '../../../scripts/qa/affected.ts';
+import { readFileSync } from 'node:fs';
+import { classify, formatPlan, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, type GraphModule } from '../../../scripts/qa/affected.ts';
 import { affectedCommands, parseAffectedArgs, runAffected } from '../../../scripts/qa/test.ts';
 
 const edge = (resolved: string, module = resolved) => ({ module, resolved, couldNotResolve: false, coreModule: false });
@@ -266,6 +267,55 @@ test('frontend workspace metadata does not schedule stacks through broad directo
   expect(affectedCommands(result).map(item => item.command)).toEqual([['task', ['ui:typecheck']]]);
 });
 
+
+const nativeDockerfile = `
+FROM maven:pinned AS module
+COPY infra/jena/command-module/pom.xml /build/pom.xml
+COPY infra/jena/command-module/src /build/src
+COPY services/main/src/modules/query/templates /build/src/test/resources/query-templates/
+COPY generated/model/ /build/profiles/
+COPY infra/jena/fuseki-text.ttl /build/fuseki-text.ttl
+FROM maven:pinned AS distribution
+COPY infra/jena/fuseki-text-qa.ttl /opt/qa.ttl
+`.trim();
+
+test('the native union test follows the Dockerfile module-stage COPY inputs', () => {
+  const real = readFileSync(new URL('../../../infra/jena/Dockerfile', import.meta.url), 'utf8');
+  const copied = nativeModuleCopies(real).map(copy => copy.source);
+  expect(copied).toContain('infra/jena/command-module/src');
+  expect(copied).toContain('services/main/src/modules/query/templates');
+  expect(copied).toContain('generated/model/');
+  expect(copied).not.toContain('infra/jena/fuseki-text-qa.ttl');
+  const unionSource = readFileSync(new URL('../../../infra/jena/tests/semantic-source-readiness-union.test.ts', import.meta.url), 'utf8');
+  expect(unionSource).toContain('dockerfile.split(/\\nFROM /, 1)[0]');
+  expect(unionSource).toContain('/^COPY (\\S+) (\\/build\\/\\S+)$/');
+  const exists = (path: string) => files.has(path) || path === nativeUnionTest;
+  const imported = plan(['services/main/src/access.ts', 'services/main/src/rating.ts'], {
+    nativeUnionDockerfile: nativeDockerfile,
+    graph: [...graph, { source: nativeUnionTest, dependencies: [edge('services/main/src/access.ts')] }],
+    sources: new Map([...sources, [nativeUnionTest, "readFileSync(join(root, 'services/main/src/access.ts'))"]]),
+    exists,
+  });
+  expect(Object.values(imported.tests).flat()).not.toContain(nativeUnionTest);
+  expect(formatPlan(imported)).toContain(`${nativeModuleCopyInputs}: not selected`);
+  expect(formatPlan(imported)).not.toContain(nativeUnionTest);
+  expect(imported.tests.integration).toEqual(['tests/qa/integration/access-api.test.ts']);
+  for (const path of ['infra/jena/Dockerfile', 'infra/jena/command-module/pom.xml',
+    'infra/jena/command-module/src/main/java/com/rezics/jena/SemanticSourceBasis.java',
+    'services/main/src/modules/query/templates/work-versions.schema.ts',
+    'generated/model/shapes/entity.ttl', nativeUnionTest]) {
+    const result = plan([path], { nativeUnionDockerfile: nativeDockerfile, exists });
+    expect(result.tests.unit, path).toContain(nativeUnionTest);
+    expect(result.nativeUnion, path).toBe('selected');
+    expect(formatPlan(result)).toContain(`${nativeModuleCopyInputs}: selected`);
+  }
+  const laterStage = plan(['infra/jena/fuseki-text-qa.ttl'], { nativeUnionDockerfile: nativeDockerfile, exists });
+  expect(laterStage.tests.unit).not.toContain(nativeUnionTest);
+  expect(laterStage.widened.map(item => item.tier)).toEqual(['model', 'integration', 'fault/recovery']);
+  const dockerfile = plan(['infra/jena/Dockerfile'], { nativeUnionDockerfile: nativeDockerfile, exists });
+  expect(dockerfile.widened.map(item => item.tier)).toEqual(['model', 'integration', 'fault/recovery']);
+  expect(dockerfile.tasks[0]!.task).toBe('jena:check');
+});
 
 test('affected selection defers the explicitly excluded live browser fixture', () => {
   expect(routeTest('apps/web/tests/g-944-shared-browser.test.ts')).toEqual({
