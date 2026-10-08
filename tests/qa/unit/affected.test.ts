@@ -317,6 +317,16 @@ test('the native union test follows the Dockerfile module-stage COPY inputs', ()
   expect(dockerfile.tasks[0]!.task).toBe('jena:check');
 });
 
+test('an unsupported module-stage COPY selects the native union test without breaking planning', () => {
+  const dockerfile = 'FROM maven AS module\nCOPY --chmod=0755 x /build/x\n';
+  expect(() => nativeModuleCopies(dockerfile)).toThrow('unsupported native module COPY:');
+  const exists = (path: string) => files.has(path) || path === nativeUnionTest;
+  const result = plan(['services/main/src/access.ts'], { nativeUnionDockerfile: dockerfile, exists });
+  expect(result.tests.unit).toContain(nativeUnionTest);
+  expect(result.nativeUnion).toBe('unsupported COPY syntax, selected');
+  expect(formatPlan(result)).toContain(`${nativeModuleCopyInputs}: unsupported COPY syntax, selected`);
+});
+
 test('affected selection defers the explicitly excluded live browser fixture', () => {
   expect(routeTest('apps/web/tests/g-944-shared-browser.test.ts')).toEqual({
     deferred: 'Live shared-stack Playwright fixture requires running web, Accounts and Main services; run it explicitly through goalctl rather than the isolated Bun unit tier.',

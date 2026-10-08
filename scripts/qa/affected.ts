@@ -62,7 +62,7 @@ export interface AffectedPlan {
   deferred: { file: string; reason: string }[];
   ignored: { path: string; reason: string }[];
   /** Set when the Dockerfile text is available: whether the native union test was selected. */
-  nativeUnion?: 'selected' | 'not selected';
+  nativeUnion?: 'selected' | 'not selected' | 'unsupported COPY syntax, selected';
 }
 
 const codeFile = /\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/;
@@ -86,7 +86,7 @@ export function nativeModuleStage(dockerfile: string): string {
   return dockerfile.split(/\nFROM /, 1)[0] ?? '';
 }
 
-/** Module-stage COPY instructions. Unsupported syntax fails closed, matching the union test. */
+/** Module-stage COPY instructions. Unsupported syntax throws; the union test depends on that refusal. */
 export function nativeModuleCopies(dockerfile: string): NativeModuleCopy[] {
   const copies: NativeModuleCopy[] = [];
   for (const line of nativeModuleStage(dockerfile).split('\n')) {
@@ -275,9 +275,17 @@ export function planAffected(input: {
   const seeds = new Set<string>();
   // The union test reproduces the Dockerfile's first-stage COPY set. Stack-tier
   // widening for infra/jena stays in place; this unit file follows that COPY set.
-  const nativeCopies = input.nativeUnionDockerfile === undefined
-    ? undefined
-    : nativeModuleCopies(input.nativeUnionDockerfile);
+  // An unreadable COPY line fails closed by selecting the test, so planning itself still finishes.
+  let nativeCopies: readonly NativeModuleCopy[] | undefined;
+  let nativeUnionUnsupported = false;
+  if (input.nativeUnionDockerfile !== undefined) {
+    try {
+      nativeCopies = nativeModuleCopies(input.nativeUnionDockerfile);
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.startsWith('unsupported native module COPY:')) throw error;
+      nativeUnionUnsupported = true;
+    }
+  }
   let nativeUnionTouched = false;
   for (const path of plan.changed) {
     if (nativeCopies && coversNativeUnionInput(path, nativeCopies)) nativeUnionTouched = true;
@@ -329,6 +337,7 @@ export function planAffected(input: {
     }
     for (const source of references) seeds.add(source);
   }
+  if (nativeUnionUnsupported) nativeUnionTouched = true;
   if (nativeUnionTouched && input.exists(nativeUnionTest)) seeds.add(nativeUnionTest);
   const affected = new Set<string>();
   const queue = [...seeds];
@@ -340,7 +349,11 @@ export function planAffected(input: {
       if (!affected.has(importer)) queue.push(importer);
   }
   if (nativeCopies && !nativeUnionTouched) affected.delete(nativeUnionTest);
-  if (nativeCopies) plan.nativeUnion = nativeUnionTouched && input.exists(nativeUnionTest) ? 'selected' : 'not selected';
+  if (input.nativeUnionDockerfile !== undefined) {
+    plan.nativeUnion = nativeUnionUnsupported
+      ? 'unsupported COPY syntax, selected'
+      : nativeUnionTouched && input.exists(nativeUnionTest) ? 'selected' : 'not selected';
+  }
   // A widened tier runs its registered default selection, which for unit is
   // `tests/qa/unit` plus gate files; affected unit tests outside it still run.
   const unitWidened = plan.widened.some((item) => item.tier === 'unit');
