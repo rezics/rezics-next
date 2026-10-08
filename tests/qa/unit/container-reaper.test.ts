@@ -20,15 +20,27 @@ function absentPid(): number {
 
 test('the docker shim adds the reap owner only to run and create', () => {
   const directory = mkdtempSync(join(root, '.temp', 'reap-shim-'));
-  const stub = join(directory, 'docker-stub');
+  const stubDir = join(directory, 'stub');
+  const pinnedDir = join(directory, 'pinned');
+  mkdirSync(stubDir);
+  mkdirSync(pinnedDir);
   const captured = join(directory, 'argv.json');
-  writeFileSync(stub, `#!/usr/bin/env bun
+  const writeDocker = (dir: string, body: string) => {
+    const path = join(dir, 'docker');
+    writeFileSync(path, body);
+    chmodSync(path, 0o755);
+  };
+  writeDocker(stubDir, `#!/usr/bin/env bun
 import { writeFileSync } from 'node:fs';
 writeFileSync(process.env.ARGV_FILE, JSON.stringify(process.argv.slice(2)));
 `);
-  chmodSync(stub, 0o755);
-  const run = (args: string[], labels?: { owner?: string; scope?: string }) => {
-    const env: NodeJS.ProcessEnv = { ...process.env, REZICS_REAL_DOCKER: stub, ARGV_FILE: captured };
+  writeDocker(pinnedDir, `#!/usr/bin/env bun
+import { writeFileSync } from 'node:fs';
+writeFileSync(process.env.ARGV_FILE, JSON.stringify(['pinned', ...process.argv.slice(2)]));
+`);
+  const run = (args: string[], labels?: { owner?: string; scope?: string },
+    path = `${stubDir}:${dockerShimDirectory()}:${pinnedDir}:${process.env.PATH ?? ''}`) => {
+    const env: NodeJS.ProcessEnv = { ...process.env, PATH: path, ARGV_FILE: captured, REZICS_REAL_DOCKER: join(pinnedDir, 'docker') };
     delete env.REZICS_REAP_OWNER;
     delete env.REZICS_REAP_SCOPE;
     if (labels?.owner !== undefined) env.REZICS_REAP_OWNER = labels.owner;
@@ -54,6 +66,7 @@ writeFileSync(process.env.ARGV_FILE, JSON.stringify(process.argv.slice(2)));
     expect(run(['container', 'ls'], child)).toEqual(['container', 'ls']);
     expect(run(['context', 'create', 'local'], child)).toEqual(['context', 'create', 'local']);
     expect(run(['run', 'alpine'])).toEqual(['run', 'alpine']);
+    expect(run(['ps'], undefined, `${dockerShimDirectory()}:${stubDir}:${dockerShimDirectory()}:${pinnedDir}:${process.env.PATH ?? ''}`)).toEqual(['ps']);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
@@ -149,9 +162,7 @@ test('a timed-out child removes only its scope and leaves a sibling container', 
 });
 
 test('a nested runner exit keeps its ancestor containers', () => {
-  const nested = reapOwnerAssignment({
-    PATH: process.env.PATH, REZICS_REAL_DOCKER: '/usr/bin/docker', REZICS_REAP_OWNER: '7:7',
-  });
+  const nested = reapOwnerAssignment({ PATH: process.env.PATH, REZICS_REAP_OWNER: '7:7' });
   expect(nested.createdOwner).toBeUndefined();
   expect(nested.environment.REZICS_REAP_OWNER).toBe('7:7');
   const directory = mkdtempSync(join(root, '.temp', 'reap-nested-'));
@@ -164,7 +175,7 @@ test('a nested runner exit keeps its ancestor containers', () => {
 
 test('the owner exit removes every scope it minted', () => {
   const start = processStartTime(process.pid);
-  const created = reapOwnerAssignment({ PATH: process.env.PATH, REZICS_REAL_DOCKER: '/usr/bin/docker' });
+  const created = reapOwnerAssignment({ PATH: process.env.PATH });
   expect(created.createdOwner).toBe(`${process.pid}:${start}`);
   const directory = mkdtempSync(join(root, '.temp', 'reap-owner-exit-'));
   const stub = dockerStub(directory, { [`label=${reapOwnerLabel}=${created.createdOwner}`]: 'scope-a\nscope-b' });
@@ -183,7 +194,7 @@ test('the runner sets its owner on test processes and keeps an inherited owner',
   const assigned = reapOwnerEnvironment({ PATH: process.env.PATH, REZICS_REAL_DOCKER: '/usr/bin/docker' });
   expect(assigned.REZICS_REAP_OWNER).toBe(`${process.pid}:${start}`);
   expect(assigned.PATH?.startsWith(`${dockerShimDirectory()}:`)).toBe(true);
-  expect(assigned.REZICS_REAL_DOCKER).toBe('/usr/bin/docker');
+  expect(assigned.REZICS_REAL_DOCKER).toBeUndefined();
   const inherited = reapOwnerEnvironment({ ...assigned, REZICS_REAP_OWNER: '42:99' });
   expect(inherited.REZICS_REAP_OWNER).toBe('42:99');
   expect(inherited.PATH?.startsWith(`${dockerShimDirectory()}:`)).toBe(true);

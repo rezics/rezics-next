@@ -114,7 +114,15 @@ function startupHarness(directory: string) {
     import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
     import { basename, dirname, join } from 'node:path';
     const args = process.argv.slice(2);
-    if (basename(process.argv[1]) === 'docker' && args[0] === 'ps' && args[1] === '-a') process.exit(0);
+    if (basename(process.argv[1]) === 'docker') {
+      const filterAt = args.indexOf('--filter');
+      const filter = filterAt >= 0 ? String(args[filterAt + 1] ?? '') : '';
+      const reapList = args[0] === 'ps' && filter.startsWith('label=rezics.reap-owner');
+      // Ids come from that listing. A named rm is still resource startup.
+      const reapRemove = args[0] === 'rm' && args[1] === '-f' && args.length > 2
+        && args.slice(2).every(id => /^[0-9a-f]{12,64}$/.test(id));
+      if ((args[0] === 'ps' && args[1] === '-a') || reapList || reapRemove) process.exit(0);
+    }
     const control = process.env.QA_HARNESS_CONTROL;
     const name = process.env.QA_HARNESS_NAME;
     writeFileSync(join(control, name + '-resource-attempt'), '');

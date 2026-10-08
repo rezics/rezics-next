@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { accessSync, constants, readFileSync } from 'node:fs';
+import { accessSync, constants, readFileSync, realpathSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
 /** Containers started for QA carry this label. Compose stacks and the dev stack do not. */
@@ -41,11 +41,18 @@ export function reapOwnerAlive(owner: string): boolean {
   return processStartTime(Number(match[1])) === match[2];
 }
 
-function resolveRealDocker(pathValue: string | undefined): string | undefined {
-  const shim = dockerShimDirectory();
+function canonicalDirectory(directory: string): string | undefined {
+  try { return realpathSync(directory); } catch { return undefined; }
+}
+
+/** An executable named docker that is not another copy of this shim's directory. */
+function dockerAfterShim(pathValue: string | undefined): string | undefined {
+  const shim = canonicalDirectory(dockerShimDirectory());
   for (const directory of (pathValue ?? '').split(':')) {
-    if (!directory || directory === shim) continue;
-    const candidate = resolve(directory, 'docker');
+    if (!directory) continue;
+    const resolved = canonicalDirectory(directory);
+    if (!resolved || resolved === shim) continue;
+    const candidate = resolve(resolved, 'docker');
     try {
       accessSync(candidate, constants.X_OK);
       return candidate;
@@ -54,14 +61,14 @@ function resolveRealDocker(pathValue: string | undefined): string | undefined {
   return undefined;
 }
 
-/** Shim first on PATH, the real docker binary, and this process as owner unless one was already assigned. */
+/** Shim first on PATH, and this process as owner unless one was already assigned. */
 export function reapOwnerEnvironment(env: NodeJS.ProcessEnv, pid = process.pid): NodeJS.ProcessEnv {
   const next: NodeJS.ProcessEnv = { ...env };
-  const real = next.REZICS_REAL_DOCKER || resolveRealDocker(env.PATH);
-  if (!real) return next;
-  next.REZICS_REAL_DOCKER = real;
+  delete next.REZICS_REAL_DOCKER;
+  if (!dockerAfterShim(env.PATH)) return next;
   const shim = dockerShimDirectory();
-  const directories = (next.PATH ?? '').split(':').filter(directory => directory && directory !== shim);
+  const shimCanonical = canonicalDirectory(shim);
+  const directories = (next.PATH ?? '').split(':').filter(directory => directory && canonicalDirectory(directory) !== shimCanonical);
   next.PATH = [shim, ...directories].join(':');
   if (!next.REZICS_REAP_OWNER) {
     const start = processStartTime(pid);
@@ -80,7 +87,7 @@ export function newReapScope(): string {
  */
 export function reapChildEnvironment(env: NodeJS.ProcessEnv, pid = process.pid): NodeJS.ProcessEnv {
   const next = reapOwnerEnvironment(env, pid);
-  if (!next.REZICS_REAL_DOCKER) return next;
+  if (!dockerAfterShim(next.PATH)) return next;
   next.REZICS_REAP_SCOPE = newReapScope();
   return next;
 }
@@ -172,7 +179,7 @@ export function sweepOrphanContainers(): void {
 
 function adoptReapEnvironment(environment: NodeJS.ProcessEnv): void {
   if (environment.PATH) process.env.PATH = environment.PATH;
-  if (environment.REZICS_REAL_DOCKER) process.env.REZICS_REAL_DOCKER = environment.REZICS_REAL_DOCKER;
+  delete process.env.REZICS_REAL_DOCKER;
   if (environment.REZICS_REAP_OWNER) process.env.REZICS_REAP_OWNER = environment.REZICS_REAP_OWNER;
 }
 
