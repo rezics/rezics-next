@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
+import type { PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
@@ -79,12 +80,47 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
       return { status: response.status, body: text ? JSON.parse(text) as Record<string, unknown> : {} };
     };
     const appeal = `${root}/member-receipts`;
-    const queueActivity = async () => {
-      const row = (await pool.query<{ open_reports: string; report_activity: string | null }>(
-        `SELECT open_reports::text AS open_reports,
+    const queueActivity = async (db: PoolClient | typeof pool = pool) => {
+      const row = (await db.query<{ open_reports: string; escalated_reports: string; report_activity: string | null }>(
+        `SELECT open_reports::text AS open_reports, escalated_reports::text AS escalated_reports,
            to_char(report_activity AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS report_activity
          FROM access.realm_management_activity WHERE realm = $1`, [realm])).rows[0];
-      return { open_reports: row?.open_reports ?? '0', report_activity: row?.report_activity ?? null };
+      return {
+        open_reports: row?.open_reports ?? '0',
+        escalated_reports: row?.escalated_reports ?? '0',
+        report_activity: row?.report_activity ?? null,
+      };
+    };
+    const realmGeneration = async () => (await pool.query<{ generation: string }>(
+      `SELECT generation::text FROM access.realm_admin_revision WHERE realm = $1`, [realm])).rows[0]?.generation ?? '0';
+    const escalateAppeal = async (itemId: string) => call('POST', `${root}/escalations`, {
+      actingSubject: owner.actor, expectedGeneration: await realmGeneration(),
+      reason: 'This appeal is not a report', expectedItemGeneration: '0',
+      itemKind: 'report', itemId,
+    }, owner.token, randomUUID());
+    // The product refuses the escalation. A stored row must still leave the report counters alone,
+    // because closing the appeal does not subtract a count it never added.
+    const storedEscalation = async (itemId: string) => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const id = randomUUID();
+        await client.query(`INSERT INTO access.realm_admin_receipt
+          (id,realm,principal_id,acting_subject,idempotency_key,request_digest,action,reason,result)
+          VALUES ($1::uuid,$2,$3,$4,$5,$6,'governance.moderate','Stored appeal escalation','{}'::jsonb)`,
+        [id, realm, owner.principalId, owner.actor, id, createHash('sha256').update(id).digest('hex')]);
+        await client.query(`INSERT INTO access.realm_admin_escalation
+          (id,realm,item_kind,item_id,reason,acting_subject)
+          VALUES ($1,$2,'report',$3,'Stored appeal escalation',$4)`,
+        [id, realm, itemId, owner.actor]);
+        expect(await queueActivity(client)).toEqual(reportsBefore);
+        await client.query('ROLLBACK');
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
     };
     const listed = (body: Record<string, unknown>) =>
       Array.isArray(body.items) ? body.items as Array<Record<string, unknown>> : [];
@@ -160,6 +196,14 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
     expect(listed(auditBefore.body).some(item => item.kind === 'realm_sanction_resolution')).toBe(false);
     expect(resolutionBefore.status).toBe(200);
     expect(listed(resolutionBefore.body)).toEqual([]);
+    expect(await queueActivity()).toEqual(reportsBefore);
+    const refused = await escalateAppeal(caseId);
+    expect(refused.status).toBe(409);
+    expect(refused.body.code).toBe('appeal_not_escalable');
+    expect((await pool.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM access.realm_admin_escalation WHERE item_id = $1`, [caseId])).rows[0]?.n).toBe(0);
+    expect(await queueActivity()).toEqual(reportsBefore);
+    await storedEscalation(caseId);
     expect(await queueActivity()).toEqual(reportsBefore);
     const decisionKey = randomUUID();
     const staleKey = randomUUID();
@@ -252,5 +296,17 @@ test('a banned member appeals once, moderators resolve it without unbanning, and
       same: { created: 1, replayed: 7, conflicts: 0, serverErrors: 0, appeals: 1, cases: 1, sharedCase: true },
       closed: { created: 0, replayed: 0, conflicts: 8, serverErrors: 0, appeals: 1, cases: 1 },
     });
+    const dismissedCase = String(distinct.results.find(result => result.status === 201)?.body.caseId);
+    const refusedAgain = await escalateAppeal(dismissedCase);
+    expect(refusedAgain.status).toBe(409);
+    expect(refusedAgain.body.code).toBe('appeal_not_escalable');
+    expect(await queueActivity()).toEqual(reportsBefore);
+    const dismissKey = randomUUID();
+    const dismissed = await call('POST', '/v1/moderation/decisions', { ...decision, outcome: 'dismiss',
+      caseId: dismissedCase, idempotencyKey: dismissKey, rationale: 'The appeal is dismissed.' },
+    owner.token, dismissKey);
+    expect({ status: dismissed.status, body: dismissed.body }).toMatchObject({ status: 200,
+      body: { outcome: 'dismiss', replayed: false } });
+    expect(await queueActivity()).toEqual(reportsBefore);
   } finally { await stack.stop(); }
 }, 180_000);

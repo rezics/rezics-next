@@ -1,5 +1,6 @@
--- A sanction appeal is its own queue kind. It is not a content report, so opening
--- or closing one must not move open_reports, escalated_reports or report activity.
+-- A sanction appeal is its own queue kind. It is not a content report, so opening,
+-- escalating, deciding, dismissing or restoring one must not move open_reports,
+-- escalated_reports or report activity.
 -- The management read revision still advances, because the queue page changed.
 -- A close cannot decrement a count this kind never raised.
 --
@@ -55,23 +56,34 @@ BEGIN
     EXECUTE $event$
       CREATE OR REPLACE FUNCTION access.realm_event_activity() RETURNS trigger LANGUAGE plpgsql AS $$
       DECLARE r text; report_time timestamptz; submission_time timestamptz; admin_time timestamptz;
-        report_delta integer := 0; submission_delta integer := 0;
+        report_delta integer := 0; submission_delta integer := 0; appeal boolean;
       BEGIN
         IF TG_TABLE_NAME = 'governance_report' THEN
           SELECT context INTO r FROM access.governance_case WHERE id = NEW.case_id AND authority_kind = 'realm'
-            AND authority_scope_id = 'governance:realm:' || context;
-          report_time := NEW.received_at;
+            AND authority_scope_id = 'governance:realm:' || context
+            AND kind IS DISTINCT FROM 'realm_sanction_appeal';
+          IF r IS NOT NULL THEN report_time := NEW.received_at; END IF;
         ELSIF TG_TABLE_NAME = 'moderation_decision' THEN
           IF NEW.authority_kind = 'realm' AND NEW.authority_scope_id = 'governance:realm:' || NEW.context THEN r := NEW.context; END IF;
-          -- A sanction resolution is not report activity. The revision still moves.
-          IF NEW.kind IS DISTINCT FROM 'realm_sanction_resolution' THEN report_time := NEW.decided_at; END IF;
+          -- A sanction appeal is not report activity, whatever outcome closes it.
+          -- The revision still moves.
+          IF NEW.kind IS DISTINCT FROM 'realm_sanction_resolution'
+            AND NOT EXISTS (SELECT 1 FROM access.governance_case
+              WHERE id = NEW.case_id AND kind = 'realm_sanction_appeal')
+          THEN report_time := NEW.decided_at; END IF;
         ELSIF TG_TABLE_NAME = 'realm_admin_escalation' THEN
           r := NEW.realm;
           IF NEW.item_kind = 'report' THEN
-            SELECT count(*)::integer INTO report_delta FROM access.governance_case
-              WHERE id = NEW.item_id AND authority_kind = 'realm' AND context = r
-                AND authority_scope_id = 'governance:realm:' || r AND state = 'open' AND review_pending;
-            report_time := NEW.escalated_at;
+            -- Closing an appeal never subtracts a report escalation, so this
+            -- insert must not add one either. Other cases keep the prior count.
+            SELECT CASE WHEN c.kind IS DISTINCT FROM 'realm_sanction_appeal' AND c.state = 'open' AND c.review_pending THEN 1 ELSE 0 END,
+              c.kind = 'realm_sanction_appeal'
+              INTO report_delta, appeal
+            FROM access.governance_case c
+            WHERE c.id = NEW.item_id AND c.authority_kind = 'realm' AND c.context = r
+              AND c.authority_scope_id = 'governance:realm:' || r;
+            report_delta := COALESCE(report_delta, 0);
+            IF NOT COALESCE(appeal, false) THEN report_time := NEW.escalated_at; END IF;
           ELSE
             SELECT count(*)::integer INTO submission_delta FROM access.realm_submission WHERE id = NEW.item_id AND state IN ('pending','deciding');
             submission_time := NEW.escalated_at;
@@ -117,22 +129,28 @@ BEGIN
     EXECUTE $event$
       CREATE OR REPLACE FUNCTION access.realm_event_activity() RETURNS trigger LANGUAGE plpgsql AS $$
       DECLARE r text; report_time timestamptz; submission_time timestamptz; admin_time timestamptz;
-        report_delta integer := 0; submission_delta integer := 0;
+        report_delta integer := 0; submission_delta integer := 0; appeal boolean;
       BEGIN
         IF TG_TABLE_NAME = 'governance_report' THEN
           SELECT context INTO r FROM access.governance_case WHERE id = NEW.case_id AND authority_kind = 'realm'
-            AND authority_scope_id = 'governance:realm:' || context;
-          report_time := NEW.received_at;
+            AND authority_scope_id = 'governance:realm:' || context
+            AND kind IS DISTINCT FROM 'realm_sanction_appeal';
+          IF r IS NOT NULL THEN report_time := NEW.received_at; END IF;
         ELSIF TG_TABLE_NAME = 'moderation_decision' THEN
           IF NEW.authority_kind = 'realm' AND NEW.authority_scope_id = 'governance:realm:' || NEW.context THEN r := NEW.context; END IF;
-          IF NEW.kind IS DISTINCT FROM 'realm_sanction_resolution' THEN report_time := NEW.decided_at; END IF;
+          IF NEW.kind IS DISTINCT FROM 'realm_sanction_resolution'
+            AND NOT EXISTS (SELECT 1 FROM access.governance_case
+              WHERE id = NEW.case_id AND kind = 'realm_sanction_appeal')
+          THEN report_time := NEW.decided_at; END IF;
         ELSIF TG_TABLE_NAME = 'realm_admin_escalation' THEN
           r := NEW.realm;
           IF NEW.item_kind = 'report' THEN
-            SELECT count(*)::integer INTO report_delta FROM access.governance_case
-              WHERE id = NEW.item_id AND state = 'open' AND decision_head IS NULL
-                AND kind <> 'realm_sanction_appeal';
-            report_time := NEW.escalated_at;
+            SELECT CASE WHEN kind <> 'realm_sanction_appeal' AND state = 'open' AND decision_head IS NULL THEN 1 ELSE 0 END,
+              kind = 'realm_sanction_appeal'
+              INTO report_delta, appeal
+            FROM access.governance_case WHERE id = NEW.item_id;
+            report_delta := COALESCE(report_delta, 0);
+            IF NOT COALESCE(appeal, false) THEN report_time := NEW.escalated_at; END IF;
           ELSE
             SELECT count(*)::integer INTO submission_delta FROM access.realm_submission WHERE id = NEW.item_id AND state IN ('pending','deciding');
             submission_time := NEW.escalated_at;
@@ -168,12 +186,12 @@ BEGIN
     UPDATE access.realm_management_activity a SET
       open_reports = (SELECT count(*) FROM access.governance_case c WHERE c.context = a.realm
         AND c.authority_kind = 'realm' AND c.authority_scope_id = 'governance:realm:' || a.realm
-        AND c.kind <> 'realm_sanction_appeal' AND c.state = 'open' AND c.review_pending),
+        AND c.kind IS DISTINCT FROM 'realm_sanction_appeal' AND c.state = 'open' AND c.review_pending),
       escalated_reports = (SELECT count(*) FROM access.realm_admin_escalation e
         JOIN access.governance_case c ON c.id = e.item_id
         WHERE e.realm = a.realm AND e.item_kind = 'report' AND c.context = a.realm
           AND c.authority_kind = 'realm' AND c.authority_scope_id = 'governance:realm:' || a.realm
-          AND c.kind <> 'realm_sanction_appeal' AND c.state = 'open' AND c.review_pending)
+          AND c.kind IS DISTINCT FROM 'realm_sanction_appeal' AND c.state = 'open' AND c.review_pending)
       WHERE EXISTS (SELECT 1 FROM access.governance_case c WHERE c.context = a.realm
         AND c.kind = 'realm_sanction_appeal'
         AND c.authority_kind = 'realm' AND c.authority_scope_id = 'governance:realm:' || a.realm);

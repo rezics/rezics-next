@@ -33,6 +33,13 @@ interface Grant { id: string; recipient_subject: string; action: RealmPermission
   generation: string; valid_until: Date; role_id: string | null }
 interface Receipt { receiptId: string; generation: string; replayed: boolean }
 
+/** A sanction appeal is its own case. It is not a content report and has no owner escalation. */
+export class AppealNotEscalable extends Error {
+  constructor() {
+    super('A sanction appeal cannot be escalated as a report');
+  }
+}
+
 /** Access is the authority for both impact computation and role grant writes.
  * Realm roles are institutional bundles: editing a bundle updates its live
  * assignments atomically. Other direct grants remain independent. */
@@ -63,7 +70,8 @@ export class AccessRealmManagement {
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       if (error instanceof RealmAdminDenied || error instanceof RealmAdminInvalid || error instanceof RealmAdminLimit
-        || error instanceof RealmAdminStale || error instanceof RealmAdminConflict || error instanceof RealmAdminUnavailable) throw error;
+        || error instanceof RealmAdminStale || error instanceof RealmAdminConflict || error instanceof RealmAdminUnavailable
+        || error instanceof AppealNotEscalable) throw error;
       if ((error as { code?: string }).code === '23505') throw new RealmAdminConflict('Identity is already in use');
       throw new RealmAdminUnavailable('Realm management could not complete');
     } finally { client.release(); }
@@ -481,14 +489,18 @@ export class AccessRealmManagement {
           WHERE g.scope_id = $1 AND g.action = 'realm.owner' AND g.active
             AND g.valid_until > clock_timestamp() LIMIT 1 FOR SHARE OF g, a`, [realmAdminScope(realm)]);
         if (!owner.rowCount) throw new RealmAdminDenied('Realm owner authority is unavailable');
-        const item = input.itemKind === 'report'
-          ? await client.query(`SELECT id FROM access.governance_case WHERE id = $1 AND context = $2
+        if (input.itemKind === 'report') {
+          const item = await client.query<{ kind: string }>(`SELECT kind FROM access.governance_case WHERE id = $1 AND context = $2
               AND authority_kind = 'realm' AND authority_scope_id = $3 AND state = 'open'
               AND generation = $4 FOR UPDATE`,
-            [input.itemId, realm, realmAdminScope(realm), input.expectedItemGeneration])
-          : await client.query(`SELECT id FROM access.realm_submission WHERE id = $1 AND realm = $2
+            [input.itemId, realm, realmAdminScope(realm), input.expectedItemGeneration]);
+          if (!item.rowCount) throw new RealmAdminStale('Queue item is unavailable or already decided');
+          if (item.rows[0]!.kind === 'realm_sanction_appeal') throw new AppealNotEscalable();
+        } else {
+          const item = await client.query(`SELECT id FROM access.realm_submission WHERE id = $1 AND realm = $2
               AND state = 'pending' AND generation = $3 FOR UPDATE`, [input.itemId, realm, input.expectedItemGeneration]);
-        if (!item.rowCount) throw new RealmAdminStale('Queue item is unavailable or already decided');
+          if (!item.rowCount) throw new RealmAdminStale('Queue item is unavailable or already decided');
+        }
         const row = (await client.query<{ escalated_at: Date }>(`INSERT INTO access.realm_admin_escalation
           (id,realm,item_kind,item_id,reason,acting_subject) VALUES ($1,$2,$3,$4,$5,$6) RETURNING escalated_at`,
         [receiptId, realm, input.itemKind, input.itemId, input.reason, input.actingSubject])).rows[0]!;

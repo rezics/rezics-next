@@ -9,6 +9,7 @@ import { spaceSettingsCommand, spaceSettingsReceipt, spaceSettingsView } from '.
 import { invitationPage } from '../modules/access/realm-management-joining-contract.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
+import { AppealNotEscalable } from '../modules/access/realm-management.ts';
 import { commandError, problem } from './problems.ts';
 import { joinRequestBasis, joinRequestCommand, joinRequestReceipt, joinRequestPage, joinRequestWithdraw,
   joinRequestDecision, joinRequestDecisionReceipt, RealmJoinRequestMissing, joinRequestQuery,
@@ -43,6 +44,7 @@ function errorResponse(error: unknown) {
   if (error instanceof RealmJoinRequestMissing) return problem(404, 'realm_unavailable', 'Realm is unavailable');
   if (error instanceof RealmAdminDenied) return problem(403, 'realm_management_denied', error.message);
   if (error instanceof RealmAdminInvalid) return problem(400, 'invalid_realm_management_request', error.message);
+  if (error instanceof AppealNotEscalable) return problem(409, 'appeal_not_escalable', error.message);
   if (error instanceof RealmAdminStale) return problem(409, 'stale_realm_management_basis', error.message);
   if (error instanceof RealmAdminConflict) return problem(409, 'idempotency_conflict', error.message);
   if (error instanceof RealmAdminLimit) return problem(422, 'realm_management_budget_exceeded', error.message);
