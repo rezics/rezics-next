@@ -32,7 +32,8 @@ test('statement graph positions accept the common selection and reject malformed
   }
   expect(() => checkedStatementGraphQuery({ ...request, position: 'chapter 3' })).toThrow(InvalidGraphQuery);
   expect(GRAPH_QUERY_COST.statementPage.projectionPartQueries).toBe(1);
-  expect(GRAPH_QUERY_COST.statementPage.revelationBatches).toBe(38);
+  // Each candidate expands interpretation context and edition scope: 65 * (5 + 8 + 2 * 9) + 1 records.
+  expect(GRAPH_QUERY_COST.statementPage.revelationBatches).toBe(41);
 });
 
 test('statement graph filters the Statement and both endpoints in one batch before counting', async () => {
