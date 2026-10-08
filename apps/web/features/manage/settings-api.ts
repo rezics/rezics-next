@@ -1,7 +1,7 @@
 import { browserMainApi } from '../api/browser.ts';
 import { newKey, send, type Outcome } from './commands.ts';
 import { readAgents } from './read.ts';
-import { type AgentSummary, type MainClient, uuidOf } from './types.ts';
+import { type AgentSummary, type MainClient, type SettingsView, uuidOf } from './types.ts';
 
 // These types come from the served Main contract. A changed command or receipt
 // must break this adapter instead of silently passing through an old boundary.
@@ -14,6 +14,10 @@ type Request = ReturnType<Requests>;
 export type SpaceSettingsView = Ok<Space['settings']['get']>;
 export type SpaceSettings = SpaceSettingsView['settings'];
 export type SettingsCommand = Body<Space['settings']['put']>;
+/** Realm participation (`public`, `restricted` or `private`). Space visibility is its public/private projection. */
+export type RealmSettingsView = SettingsView;
+export type RealmSettingsCommand = Body<Realm['settings']['put']>;
+export type RealmSettingsReceipt = Ok<Realm['settings']['put']>;
 export type ListingState = Ok<ReturnType<MainClient['v1']['agents']>['listing']['get']>;
 export type JoinBasis = Ok<Requests['basis']['get']>;
 export type RequestPage = Ok<Requests['get']>;
@@ -32,6 +36,8 @@ const keyed = (key: string) => ({ headers: { 'idempotency-key': key } });
 export interface SpaceAccessApi {
   settings(): Promise<Outcome<SpaceSettingsView>>;
   save(command: SettingsCommand, key: string): Promise<Outcome<SpaceSettingsView>>;
+  realm(): Promise<Outcome<RealmSettingsView>>;
+  saveRealm(command: RealmSettingsCommand, key: string): Promise<Outcome<RealmSettingsReceipt>>;
   requests(cursor: string | null, q?: string): Promise<Outcome<RequestPage>>;
   mine(cursor: string | null): Promise<Outcome<OwnRequestPage>>;
   names(iris: readonly string[]): Promise<Record<string, AgentSummary>>;
@@ -44,6 +50,8 @@ export function spaceAccessApi(main: () => MainClient, space: string, realm: str
   return {
     settings: () => send(() => main().v1.spaces({ space: uuidOf(space) }).settings.get({ query: { actingSubject } })),
     save: (command, key) => send(() => main().v1.spaces({ space: uuidOf(space) }).settings.put(command, keyed(key))),
+    realm: () => send(() => main().v1.realms({ realm: uuidOf(realm) }).settings.get({ query: { actingSubject } })),
+    saveRealm: (command, key) => send(() => main().v1.realms({ realm: uuidOf(realm) }).settings.put(command, keyed(key))),
     requests: (cursor, q = '') => send(() => main().v1.realms({ realm: uuidOf(realm) })['join-requests'].get({
       query: { actingSubject, limit: 50, q, ...cursor ? { cursor } : {} } })),
     mine: cursor => send(() => main().v1.realms({ realm: uuidOf(realm) })['join-requests'].mine.get({

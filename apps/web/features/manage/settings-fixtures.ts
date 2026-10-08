@@ -1,11 +1,17 @@
 import { direction } from '@rezics/main/language';
-import type { OwnRequestPage, JoinPage, JoinRequest, RequestPage, SpaceAccessApi, SpaceSettingsView } from './settings-api.ts';
+import type { OwnRequestPage, JoinPage, JoinRequest, RealmSettingsView, RequestPage, SpaceAccessApi, SpaceSettingsView } from './settings-api.ts';
 
 export const accessActor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000011';
 export const accessInitial: SpaceSettingsView = {
   space: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
   realm: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002', generation: '12',
   settings: { visibility: 'public', listing: 'listed', history: 'everything', admission: 'request' },
+};
+/** Realm participation. Restricted reads as public on the Space projection and still opens here as restricted. */
+export const realmAccessInitial: RealmSettingsView = {
+  generation: accessInitial.generation,
+  settings: { visibility: 'public', reviewRequired: false, reviewMode: 'open', whoMaySubmit: 'members', selfJoin: true, rules: [] },
+  ruleBasis: { ref: `urn:rezics:realm-rules:${accessInitial.realm}`, revision: '3', digest: null },
 };
 export const requestFixture: JoinRequest = { id: '00000000-0000-4000-8000-000000000021', member: accessActor,
   requestGeneration: '0', termsRevision: 'rules-3', membershipGeneration: '4', policyRevision: '12',
@@ -32,6 +38,9 @@ export function accessFixtureApi(overrides: Partial<SpaceAccessApi> = {}, initia
   return {
     settings: async () => ({ ok: true, data: accessInitial }),
     save: async command => ({ ok: true, data: { ...accessInitial, settings: command.settings, generation: '13' } }),
+    realm: async () => ({ ok: true, data: realmAccessInitial }),
+    saveRealm: async command => ({ ok: true, data: { generation: '13', settings: command.settings, receiptId: '00000000-0000-4000-8000-000000000099',
+      replayed: false, ruleBasis: { ...realmAccessInitial.ruleBasis, revision: '4' } } }),
     requests: async () => ({ ok: true, data: { generation: '12', items: [{ ...requestFixture, id: '00000000-0000-4000-8000-000000000022',
       member: 'https://rezics.com/id/00000000-0000-4000-8000-000000000012', reason: 'A request on the next page.' }], nextCursor: null, complete: true } }),
     mine: async () => ({ ok: true, data: own }),
