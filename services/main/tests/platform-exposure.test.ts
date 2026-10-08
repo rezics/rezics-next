@@ -182,7 +182,11 @@ test('every served Main route, including transports, has a reviewed exposure', (
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'read', bearer: false });
   // Recipe timings add one public write, reviewed with the measures route it extends.
   expect(publicOperations).toContain('postV1RecipesByIdTimings');
-  expect(publicOperations).toHaveLength(523);
+  // Trust-ops approved public on 2026-10-08 11:10 UTC (G-1439 review): a current Realm steward withdraws a cross-Space attachment, bearer, write family, idempotency key.
+  expect(publicOperations).toContain('postV1ZonesByIdRealm-attachment-withdrawals');
+  expect(matrix.find(entry => entry.path === '/v1/zones/{id}/realm-attachment-withdrawals' && entry.method === 'post'))
+    .toMatchObject({ exposure: 'public', rateLimitFamily: 'write', bearer: true });
+  expect(publicOperations).toHaveLength(524);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );
