@@ -9,6 +9,11 @@ import type { HomeInterestKind } from '../onboarding-interests/contract.ts';
 
 export type WorkPrimaryAction = (typeof workTypeEntries)[number]['primaryAction'];
 
+/** Generic type every native Work carries. Descriptive kinds are additional admitted types. */
+const registeredGenericWork = admittedTypes.find((entry) => entry.base === 'work' && entry.default);
+if (!registeredGenericWork) throw new Error('The type registry admits no generic Work type');
+export const genericWorkType = registeredGenericWork.type;
+
 /** Native Posts own Content under Work custody, independently of catalogue kinds.
  * This owner bridge does not admit a Post as a descriptive Work type. */
 export const nativePostType = 'https://rezics.com/vocab/Post';

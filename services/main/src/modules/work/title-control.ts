@@ -10,6 +10,7 @@ import { profileValidations } from '../../infrastructure/profile.ts';
 import { CONTINUITY, DATASET, GRAPHS, ID, PROFILE, RV, hash, iri, lit, metadataWorkRequestDigest,
   normalizeWorkSemanticTypes, prepareComponent, prepareWorkComponent, workMetadataValidations,
   IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
+import { genericWorkType } from './work-kinds.ts';
 import { PendingAdmittedWork } from './create-admitted.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { readWorkPayloadForRevision, readWorkComponentState, RevisionCorrupt } from './history.ts';
@@ -322,7 +323,7 @@ export async function prepareHumanTitleCandidate(
   const prior = await readWorkPayloadForRevision(boundedEnv, manifest, intent.work);
   const raw = await readWorkComponentState(boundedEnv, manifest, intent.work);
   const types = normalizeWorkSemanticTypes(
-    rows.map((row) => row.type!.value).filter((type) => type !== 'https://schema.org/CreativeWork'),
+    rows.map((row) => row.type!.value).filter((type) => type !== genericWorkType),
     true,
   );
   const scalars = rows.map((row) => row.scalar).filter((row) => row !== undefined);

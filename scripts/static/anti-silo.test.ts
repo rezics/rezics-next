@@ -408,7 +408,10 @@ function readBaseline(): Baseline {
 }
 
 function withTree(files: Record<string, string>, run: (tree: string) => void) {
-  const tree = mkdtempSync(join(root, '.temp/anti-silo-'));
+  // mkdtemp requires its parent; a fresh tree copy does not already have .temp.
+  const scratch = join(root, '.temp');
+  mkdirSync(scratch, { recursive: true });
+  const tree = mkdtempSync(join(scratch, 'anti-silo-'));
   try {
     for (const [path, body] of Object.entries(files)) {
       const absolute = join(tree, path);
