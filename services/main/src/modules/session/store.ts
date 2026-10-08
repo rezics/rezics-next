@@ -3,7 +3,8 @@ import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
-import { ReaderLibraryStatusStore } from '../library/status.ts';
+import { libraryCompletionSource, ReaderLibraryStatusStore } from '../library/status.ts';
+import { progressCompletion, type CompletionSource } from '../progress/completion.ts';
 import { decodeReadCursor, encodeReadCursor } from '../work/read-session.ts';
 import { readId } from '../work/read-contract.ts';
 import { InvalidSession, SESSION_COST, SessionConflict, SessionMissing, StaleSession,
@@ -17,6 +18,7 @@ export interface SessionCommand extends SessionOwner {
   expectedVersion: number; idempotencyKey: string;
 }
 type Row = { state: SessionState; attempt_order: string };
+const NONE = { occurrences: [], lastOfWorks: [] };
 type Resolve = (current: SessionState | null) => Promise<SessionSelection[]>;
 const hash = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 function owner(input: SessionOwner) {
@@ -100,6 +102,7 @@ export class ConsumptionSessionStore {
     const operation = `session:${hash([...identity.slice(0, 2), input.idempotencyKey])}`;
     const client = await this.pool.connect();
     let saved: SessionState;
+    let wasFinished = false, libraryProjected = false;
     try {
       await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
@@ -111,6 +114,8 @@ export class ConsumptionSessionStore {
       if (prior.rows[0]) {
         if (prior.rows[0].request_digest !== digest) throw new SessionConflict('Idempotency key has another session intent');
         await client.query('COMMIT');
+        // The first run may have stopped before its completions; they are state-based.
+        await this.complete(input, prior.rows[0].result, prior.rows[0].result.state === 'finished');
         return { ...prior.rows[0].result, replayed: true };
       }
       let current: SessionState | null = null;
@@ -129,6 +134,7 @@ export class ConsumptionSessionStore {
         const locked = await client.query<Row>(`SELECT state, attempt_order::text FROM reader.consumption_session
           WHERE principal_issuer = $1 AND principal_subject = $2 AND agent = $3 AND id = $4 FOR UPDATE`, [...identity, input.id]);
         current = checked(locked.rows[0]!);
+        wasFinished = current.state === 'finished';
         if (current.version !== input.expectedVersion) {
           throw new StaleSession(current, { ...c, expectedVersion: input.expectedVersion });
         }
@@ -161,6 +167,7 @@ export class ConsumptionSessionStore {
       if (latest.rows[0]?.id === result.id && (!previousProjection
         || projection.some((value, index) => value !== previousProjection[index]))) {
         await this.project(client, input, result);
+        libraryProjected = true;
       }
       if (input.changes.position) {
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
@@ -182,7 +189,22 @@ export class ConsumptionSessionStore {
     } catch (error) { await client.query('ROLLBACK'); throw error; }
     finally { client.release(); }
     await settledContentPosition(this.pool, operation);
+    await this.complete(input, saved, libraryProjected || saved.state === 'finished', wasFinished);
     return { ...saved, replayed: false };
+  }
+
+  /** The Session's finish, and the Library status it projected, reach the
+   * reader's resume record once the command has committed. Both reconcile to
+   * the committed state, so a retry after a failure repairs them. */
+  private async complete(input: SessionCommand, state: SessionState, library: boolean, wasFinished = false) {
+    const completion = progressCompletion(this.pool);
+    if (!completion) return;
+    if (state.state === 'finished' || wasFinished) {
+      await completion.reconcile(sessionCompletionSource(input, state.id));
+    }
+    if (library && state.target.work) {
+      await completion.reconcile(libraryCompletionSource(input.principal, input.agent, state.target.work));
+    }
   }
 
   private async project(client: PoolClient, input: SessionCommand, state: SessionState) {
@@ -197,4 +219,20 @@ export class ConsumptionSessionStore {
       expectedVersion: current!.version,
       idempotencyKey: `session.${hash([input.principal.issuer, input.principal.subject, input.idempotencyKey])}` }, client);
   }
+}
+
+/** A finished Session finishes what it names: each occurrence it pinned, and
+ * the end of each Work it covers. */
+export function sessionCompletionSource(input: SessionOwner, id: string): CompletionSource {
+  return { principal: input.principal, source: `session:${id}`, demand: async client => {
+    const found = await client.query<Row>(`SELECT state, attempt_order::text FROM reader.consumption_session
+      WHERE principal_issuer = $1 AND principal_subject = $2 AND agent = $3 AND id = $4`,
+    [input.principal.issuer, input.principal.subject, input.agent, id]);
+    const state = found.rows[0] && checked(found.rows[0]);
+    if (state?.state !== 'finished') return NONE;
+    const targets = state.selections.map(selection => selection.target);
+    return { occurrences: targets.filter(target => target.base === 'occurrence').map(target => target.resource),
+      lastOfWorks: [...new Set(targets.flatMap(target => target.base === 'work' ? [target.resource]
+        : target.base === 'realization' && target.work ? [target.work] : []))] };
+  } };
 }

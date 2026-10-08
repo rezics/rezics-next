@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { progressCompletion, type CompletionSource } from '../progress/completion.ts';
 
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const KEY = /^[A-Za-z0-9:_./-]{1,128}$/;
@@ -30,10 +31,21 @@ export interface StatusCommand { agent: string; work: string; status: ReadingSta
   startedOn?: string | null; finishedOn?: string | null; expectedVersion: number; idempotencyKey: string;
   /** Internal session owner only, within the same Content transaction. */
   sessionProjection?: string;
+  /** The verified reader, when the caller has one: a Work marked read then
+   * finishes the Work's end in their resume record. Not part of the intent. */
+  principal?: VerifiedPrincipal;
   /** Internal sort keys, excluded from user intent and receipts. */
   shelfMetadata?: ShelfMetadata; titleKey?: string }
 export interface WorkProgress { structure: string; occurrence: string; selectedRevision: string | null;
   completed: boolean; position: string | null; version: number; changedAt: string }
+/** Read finishes the whole Work: the last placement of its composition. */
+export function libraryCompletionSource(principal: VerifiedPrincipal, agent: string, work: string): CompletionSource {
+  return { principal, source: `library:${agent}:${work}`, demand: async client => {
+    const found = await client.query<{ status: ReadingStatus | null }>(`SELECT status FROM reader.library_status
+      WHERE agent = $1 AND work = $2`, [agent, work]);
+    return { occurrences: [], lastOfWorks: found.rows[0]?.status === 'read' ? [work] : [] };
+  } };
+}
 export class InvalidLibraryStatus extends Error {}
 export class StaleLibraryStatus extends Error {}
 export class LibraryStatusConflict extends Error {}
@@ -401,6 +413,10 @@ export class ReaderLibraryStatusStore {
     if (!transaction) {
       try { await followWriters.get(this.pool)?.(input.agent,input.work); }
       catch (error) { logWorkerFault('main.library.follow', error); }
+      // Not best effort: a failure surfaces so the retry, a replay, repairs it.
+      if (input.principal) {
+        await progressCompletion(this.pool)?.reconcile(libraryCompletionSource(input.principal, input.agent, input.work));
+      }
     }
     return result;
   }

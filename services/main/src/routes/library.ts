@@ -213,7 +213,8 @@ export function libraryRoutes(work: MainWorkDependencies) {
         return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       }
       try {
-        if (!await reader(request, body.actingSubject, true)) return problem(403, 'reader_library_denied', 'Reader library is unavailable');
+        const principal = await reader(request, body.actingSubject, true);
+        if (!principal) return problem(403, 'reader_library_denied', 'Reader library is unavailable');
         const workId = `https://rezics.com/id/${params.id}`;
         const basis = await workRead(work, request, { actingSubject: body.actingSubject },
           async session => {
@@ -223,7 +224,7 @@ export function libraryRoutes(work: MainWorkDependencies) {
           });
         const result = await work.libraryStatus.write({ agent: body.actingSubject, work: basis.work,
           status: body.status, titleKey: basis.title, startedOn: body.startedOn, finishedOn: body.finishedOn,
-          expectedVersion: body.expectedVersion, idempotencyKey });
+          expectedVersion: body.expectedVersion, idempotencyKey, principal });
         return Response.json(result, { headers: privateHeaders });
       } catch (error) {
         if (error instanceof InvalidLibraryStatus || error instanceof StaleLibraryStatus

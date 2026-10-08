@@ -22,6 +22,7 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 import { pageFields } from '../modules/work/read-contract.ts';
 import { disclosedCompletedProgress, publishedProgressSelections } from '../modules/progress/disclosure.ts';
 import { readProgressOrder } from '../modules/progress/order.ts';
+import { configureGraphCompletion } from '../modules/progress/completion-plan.ts';
 import { memberAnchoring } from '../modules/reading-position/continuity.ts';
 import { ReadingContinuityUnsupported } from '../modules/reading-position/errors.ts';
 
@@ -62,6 +63,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       .structureObjects = work.structureObjects;
   }
   work.progress?.configureOrderProjection?.(work.environment);
+  if (work.progress?.owner) configureGraphCompletion(work.progress, work);
   const visibleOccurrence = async (request: Request, structure: string, occurrence: string,
     actingSubject: string, selectedRevision: string | null, write = false) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);

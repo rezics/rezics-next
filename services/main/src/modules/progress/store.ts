@@ -15,6 +15,8 @@ export class InvalidStructureProgress extends Error {}
 export class StaleStructureProgress extends Error {}
 export class StructureProgressConflict extends Error {}
 export class ProgressOrderUnavailable extends Error {}
+/** Receipts under this key prefix are the projection owner's ledger. */
+export const PROJECTION_KEY_PREFIX = 'projection:';
 export const STRUCTURE_PROGRESS_COST = { latestRows: 1,
   pageRows: 51,
   resumeCandidates: 16,
@@ -91,6 +93,8 @@ export class StructureProgressStore {
     this.projection.start();
   }
   stopOrderProjection() { this.projection?.stop(); }
+  /** The Content pool this owner writes to, which keys the cross-owner hooks. */
+  get owner(): Pool { return this.pool; }
 
   async readerVersion(principal: VerifiedPrincipal): Promise<string> {
     const value = await this.pool.query<{ version: string }>(`SELECT version::text AS version
@@ -280,7 +284,9 @@ export class StructureProgressStore {
     return false;
   }
 
-  async write(input: ProgressWrite): Promise<StructureProgress> {
+  /** Validates a command and fixes its receipt intent. Shared by the reader's
+   * write and the projection owner's, which run it inside its own transaction. */
+  prepareWrite(input: ProgressWrite) {
     const selectedRevision = input.selectedRevision ?? null;
     validIdentity(input.structure, input.occurrence, selectedRevision);
     if (input.order && !validOrder(input.order)) throw new InvalidStructureProgress('progress order key is invalid');
@@ -299,103 +305,28 @@ export class StructureProgressStore {
     if (input.library && (!ID.test(input.library.agent) || !ID.test(input.library.work))) {
       throw new InvalidStructureProgress('library identity is invalid');
     }
-    const identity = { structure: input.structure, occurrence: input.occurrence, selectedRevision };
     const selectionKey = selectedRevision ?? '';
     const digest = createHash('sha256').update(JSON.stringify([input.structure, input.occurrence,
       selectionKey, input.completed, input.position, input.expectedVersion])).digest('hex');
+    return { selectedRevision, selectionKey, digest,
+      identity: { structure: input.structure, occurrence: input.occurrence, selectedRevision } };
+  }
+
+  async write(input: ProgressWrite): Promise<StructureProgress> {
+    // Projection receipts are the owner's ledger; a reader's key never names one.
+    if (input.idempotencyKey.startsWith(PROJECTION_KEY_PREFIX)) {
+      throw new InvalidStructureProgress('progress command is invalid');
+    }
+    const prepared = this.prepareWrite(input);
     const client = await this.pool.connect();
     let saved: StructureProgress;
     let operation: string | null = null;
     try {
       await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
-      await client.query(`INSERT INTO structure.progress_reader VALUES ($1,$2,1)
-        ON CONFLICT (principal_issuer,principal_subject) DO UPDATE
-          SET version=structure.progress_reader.version`, [input.principal.issuer, input.principal.subject]);
-      const scope = await client.query<{ ready: boolean }>(`INSERT INTO structure.progress_scope
-        (principal_issuer, principal_subject, structure, order_revision, ready, version)
-        SELECT $1,$2,$3,$4,$5 AND NOT EXISTS (SELECT 1 FROM structure.progress
-          WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND completed AND resume_eligible IS DISTINCT FROM false LIMIT 1),1
-        ON CONFLICT DO NOTHING RETURNING ready`, [input.principal.issuer, input.principal.subject, input.structure,
-        input.order?.revision ?? null, !!input.order]);
-      await this.recordAnchorBasis(client, input, scope.rows[0]?.ready === true);
-      if (input.library) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
-        [JSON.stringify(['library-status-work', input.library.agent, input.library.work])]);
-      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-        [JSON.stringify(['structure-progress', input.principal.issuer,
-          input.principal.subject, input.idempotencyKey])]);
-      const prior = await client.query<{ request_digest: string; structure: string; occurrence: string;
-        selection_key: string; result_completed: boolean; result_position: string | null;
-        result_version: string }>(
-        `SELECT request_digest, structure, occurrence, selection_key, result_completed, result_position,
-           result_version::text AS result_version FROM structure.progress_command
-         WHERE principal_issuer = $1 AND principal_subject = $2 AND idempotency_key = $3`,
-        [input.principal.issuer, input.principal.subject, input.idempotencyKey]);
-      if (prior.rows[0]) {
-        const row = prior.rows[0];
-        if (row.request_digest !== digest || row.structure !== input.structure
-          || row.occurrence !== input.occurrence || row.selection_key !== selectionKey) {
-          throw new StructureProgressConflict('progress idempotency key has another intent');
-        }
-        await this.projectLibrary(client, input);
-        await client.query('COMMIT');
-        return { ...state(identity, { completed: row.result_completed,
-          position: row.result_position, version: row.result_version }), replayed: true };
-      }
-      // Serialize selections for one chapter so each reader contributes at most
-      // one read and one finish, even with concurrent revision-specific writes.
-      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-        [JSON.stringify(['structure-progress-chapter', input.principal.issuer,
-          input.principal.subject, input.structure, input.occurrence])]);
-      const first = await client.query<{ read: boolean; finished: boolean }>(
-        `SELECT NOT EXISTS (SELECT 1 FROM structure.progress_command
-          WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND occurrence = $4)
-            AS read,
-          NOT EXISTS (SELECT 1 FROM structure.progress_command
-          WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND occurrence = $4
-            AND result_completed) AS finished`,
-        [input.principal.issuer, input.principal.subject, input.structure, input.occurrence]);
-      const current = await client.query<{ version: string }>(
-        `SELECT version::text AS version FROM structure.progress
-         WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
-           AND occurrence = $4 AND selection_key = $5 FOR UPDATE`,
-        [input.principal.issuer, input.principal.subject, input.structure, input.occurrence, selectionKey]);
-      const version = Number(current.rows[0]?.version ?? 0);
-      if (version !== input.expectedVersion) throw new StaleStructureProgress('progress version changed');
-      const next = version + 1;
-      operation = `structure.progress:${createHash('sha256').update(JSON.stringify([
-        input.principal.issuer, input.principal.subject, input.idempotencyKey])).digest('hex')}`;
-      if (version === 0) {
-        await client.query(`INSERT INTO structure.progress
-          (principal_issuer, principal_subject, structure, occurrence, selection_key,
-            completed, position, version, order_revision, order_key, resume_eligible) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-        [input.principal.issuer, input.principal.subject, input.structure, input.occurrence,
-          selectionKey, input.completed, input.position, next, input.order?.revision ?? null, input.order?.key ?? null, input.order ? input.order.eligible ?? true : null]);
-      } else {
-        await client.query(`UPDATE structure.progress SET completed = $6, position = $7,
-          version = $8, order_revision = $9, order_key = $10, resume_eligible = $11, updated_at = clock_timestamp() WHERE principal_issuer = $1
-          AND principal_subject = $2 AND structure = $3 AND occurrence = $4 AND selection_key = $5`,
-        [input.principal.issuer, input.principal.subject, input.structure, input.occurrence,
-          selectionKey, input.completed, input.position, next, input.order?.revision ?? null, input.order?.key ?? null, input.order ? input.order.eligible ?? true : null]);
-      }
-      await applyAnchors(client, input.principal, input.structure, input.occurrence, selectionKey,
-        input.completed, input.anchoring?.unknown ? [] : input.anchoring?.anchors ?? []);
-      await this.recordOverflow(client, input);
-      await client.query(`INSERT INTO structure.progress_command
-        (principal_issuer, principal_subject, idempotency_key, request_digest,
-          structure, occurrence, selection_key, result_version, result_completed, result_position,
-          content_operation, first_read, first_finish)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-      [input.principal.issuer, input.principal.subject, input.idempotencyKey, digest,
-        input.structure, input.occurrence, selectionKey, next, input.completed, input.position,
-        operation, first.rows[0]!.read, input.completed && first.rows[0]!.finished]);
-      await advanceContentSequence(client, { operationId: operation, requestDigest: digest,
-        action: 'structure.progress', outcome: 'succeeded', eventType: 'structure.progress.written',
-        recipe: 'structure-progress-v1', payload: { structure: input.structure, occurrence: input.occurrence,
-          read: first.rows[0]!.read, finished: input.completed && first.rows[0]!.finished } });
-      await this.projectLibrary(client, input);
+      const written = await this.writeWithin(client, input, prepared);
+      operation = written.operation;
       await client.query('COMMIT');
-      saved = { ...state(identity, { completed: input.completed,
-        position: input.position, version: next }), replayed: false };
+      saved = written.saved;
     } catch (error) {
       await client.query('ROLLBACK');
       if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
@@ -405,7 +336,101 @@ export class StructureProgressStore {
     } finally { client.release(); }
     // The save is acknowledged once its event is numbered, so ordered consumers
     // (rankings, relays) see it before the reader's next request.
-    await settledContentPosition(this.pool, operation!);
+    if (operation) await settledContentPosition(this.pool, operation);
     return saved;
+  }
+
+  /** The write inside a transaction the caller opened and will commit. A
+   * replayed command has no new event, so its operation is null. */
+  async writeWithin(client: PoolClient, input: ProgressWrite,
+    prepared: ReturnType<StructureProgressStore['prepareWrite']> = this.prepareWrite(input)):
+    Promise<{ saved: StructureProgress; operation: string | null }> {
+    const { selectionKey, digest, identity } = prepared;
+    await client.query(`INSERT INTO structure.progress_reader VALUES ($1,$2,1)
+      ON CONFLICT (principal_issuer,principal_subject) DO UPDATE
+        SET version=structure.progress_reader.version`, [input.principal.issuer, input.principal.subject]);
+    const scope = await client.query<{ ready: boolean }>(`INSERT INTO structure.progress_scope
+      (principal_issuer, principal_subject, structure, order_revision, ready, version)
+      SELECT $1,$2,$3,$4,$5 AND NOT EXISTS (SELECT 1 FROM structure.progress
+        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND completed AND resume_eligible IS DISTINCT FROM false LIMIT 1),1
+      ON CONFLICT DO NOTHING RETURNING ready`, [input.principal.issuer, input.principal.subject, input.structure,
+      input.order?.revision ?? null, !!input.order]);
+    await this.recordAnchorBasis(client, input, scope.rows[0]?.ready === true);
+    if (input.library) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
+      [JSON.stringify(['library-status-work', input.library.agent, input.library.work])]);
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      [JSON.stringify(['structure-progress', input.principal.issuer,
+        input.principal.subject, input.idempotencyKey])]);
+    const prior = await client.query<{ request_digest: string; structure: string; occurrence: string;
+      selection_key: string; result_completed: boolean; result_position: string | null;
+      result_version: string }>(
+      `SELECT request_digest, structure, occurrence, selection_key, result_completed, result_position,
+         result_version::text AS result_version FROM structure.progress_command
+       WHERE principal_issuer = $1 AND principal_subject = $2 AND idempotency_key = $3`,
+      [input.principal.issuer, input.principal.subject, input.idempotencyKey]);
+    if (prior.rows[0]) {
+      const row = prior.rows[0];
+      if (row.request_digest !== digest || row.structure !== input.structure
+        || row.occurrence !== input.occurrence || row.selection_key !== selectionKey) {
+        throw new StructureProgressConflict('progress idempotency key has another intent');
+      }
+      await this.projectLibrary(client, input);
+      return { saved: { ...state(identity, { completed: row.result_completed,
+        position: row.result_position, version: row.result_version }), replayed: true }, operation: null };
+    }
+    // Serialize selections for one chapter so each reader contributes at most
+    // one read and one finish, even with concurrent revision-specific writes.
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+      [JSON.stringify(['structure-progress-chapter', input.principal.issuer,
+        input.principal.subject, input.structure, input.occurrence])]);
+    const first = await client.query<{ read: boolean; finished: boolean }>(
+      `SELECT NOT EXISTS (SELECT 1 FROM structure.progress_command
+        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND occurrence = $4)
+          AS read,
+        NOT EXISTS (SELECT 1 FROM structure.progress_command
+        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND occurrence = $4
+          AND result_completed) AS finished`,
+      [input.principal.issuer, input.principal.subject, input.structure, input.occurrence]);
+    const current = await client.query<{ version: string }>(
+      `SELECT version::text AS version FROM structure.progress
+       WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
+         AND occurrence = $4 AND selection_key = $5 FOR UPDATE`,
+      [input.principal.issuer, input.principal.subject, input.structure, input.occurrence, selectionKey]);
+    const version = Number(current.rows[0]?.version ?? 0);
+    if (version !== input.expectedVersion) throw new StaleStructureProgress('progress version changed');
+    const next = version + 1;
+    const operation = `structure.progress:${createHash('sha256').update(JSON.stringify([
+      input.principal.issuer, input.principal.subject, input.idempotencyKey])).digest('hex')}`;
+    if (version === 0) {
+      await client.query(`INSERT INTO structure.progress
+        (principal_issuer, principal_subject, structure, occurrence, selection_key,
+          completed, position, version, order_revision, order_key, resume_eligible) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      [input.principal.issuer, input.principal.subject, input.structure, input.occurrence,
+        selectionKey, input.completed, input.position, next, input.order?.revision ?? null, input.order?.key ?? null, input.order ? input.order.eligible ?? true : null]);
+    } else {
+      await client.query(`UPDATE structure.progress SET completed = $6, position = $7,
+        version = $8, order_revision = $9, order_key = $10, resume_eligible = $11, updated_at = clock_timestamp() WHERE principal_issuer = $1
+        AND principal_subject = $2 AND structure = $3 AND occurrence = $4 AND selection_key = $5`,
+      [input.principal.issuer, input.principal.subject, input.structure, input.occurrence,
+        selectionKey, input.completed, input.position, next, input.order?.revision ?? null, input.order?.key ?? null, input.order ? input.order.eligible ?? true : null]);
+    }
+    await applyAnchors(client, input.principal, input.structure, input.occurrence, selectionKey,
+      input.completed, input.anchoring?.unknown ? [] : input.anchoring?.anchors ?? []);
+    await this.recordOverflow(client, input);
+    await client.query(`INSERT INTO structure.progress_command
+      (principal_issuer, principal_subject, idempotency_key, request_digest,
+        structure, occurrence, selection_key, result_version, result_completed, result_position,
+        content_operation, first_read, first_finish)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+    [input.principal.issuer, input.principal.subject, input.idempotencyKey, digest,
+      input.structure, input.occurrence, selectionKey, next, input.completed, input.position,
+      operation, first.rows[0]!.read, input.completed && first.rows[0]!.finished]);
+    await advanceContentSequence(client, { operationId: operation, requestDigest: digest,
+      action: 'structure.progress', outcome: 'succeeded', eventType: 'structure.progress.written',
+      recipe: 'structure-progress-v1', payload: { structure: input.structure, occurrence: input.occurrence,
+        read: first.rows[0]!.read, finished: input.completed && first.rows[0]!.finished } });
+    await this.projectLibrary(client, input);
+    return { saved: { ...state(identity, { completed: input.completed,
+      position: input.position, version: next }), replayed: false }, operation };
   }
 }
