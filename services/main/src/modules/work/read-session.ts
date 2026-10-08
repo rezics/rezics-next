@@ -147,6 +147,10 @@ export class WorkReadSession {
   }
   stale = false;
   private readonly realmProofs = new Map<string, string>();
+  /** Cutover priors from the opening graph position. Null when that position
+   * was already known and this read has not loaded the chain. An empty map
+   * means the opening read proved there is no restore cutover. */
+  restorePriors: ReadonlyMap<string, string> | null = null;
 
   async realm(realm: string) {
     const policy = await readRealmPolicy(this.deps.environment, realm);
@@ -269,20 +273,36 @@ export class WorkReadSession {
   checkDeadline(): void { fusekiReadBudget.getStore()?.signal.throwIfAborted(); }
 }
 
-async function position(deps: MainWorkDependencies, fresh = false): Promise<ReadPosition> {
-  await deps.access.assertRecoveryOpen();
+async function position(deps: MainWorkDependencies, fresh = false): Promise<ReadPosition & {
+  priors: ReadonlyMap<string, string> | null;
+}> {
   const env = deps.environment;
   const known = knownSearchPosition(env.fuseki, env.lineage);
-  if (known && !fresh) return { dataEpoch: known.dataEpoch, sequence: known.sequence };
-  const rows = (await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence WHERE {
+  if (known && !fresh) return { dataEpoch: known.dataEpoch, sequence: known.sequence, priors: null };
+  // Restore lineage rides this fence. New discussion order needs the chain,
+  // and a second round trip would push that page over its request cap.
+  const rows = (await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence ?cutEpoch ?prior WHERE {
     GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
-      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } } } LIMIT 2`, 8192)).results?.bindings ?? [];
-  if (rows.length !== 1 || !rows[0]?.epoch || !/^\d+$/.test(rows[0].sequence?.value ?? '')) {
+      FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
+      OPTIONAL { ?cutover a rv:RestoreCutover ; rv:dataEpoch ?cutEpoch ; rv:priorDataEpoch ?prior } } } LIMIT 34`, 8192)).results?.bindings ?? [];
+  const epoch = rows[0]?.epoch?.value, sequence = rows[0]?.sequence?.value ?? '';
+  if (!rows.length || !epoch || !/^\d+$/.test(sequence)
+    || rows.some(row => row.epoch?.value !== epoch || row.sequence?.value !== sequence)) {
     throw new WorkReadUnavailable('Graph is unavailable');
   }
-  return { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence!.value };
+  const priors = new Map<string, string>();
+  for (const row of rows) {
+    if (!row.cutEpoch && !row.prior) continue;
+    const cut = row.cutEpoch?.value, previous = row.prior?.value;
+    if (!cut || !previous || priors.has(cut) && priors.get(cut) !== previous) {
+      throw new WorkReadUnavailable('Restore lineage is ambiguous');
+    }
+    priors.set(cut, previous);
+  }
+  if (priors.size > 32) throw new WorkReadUnavailable('Restore lineage exceeds its bound');
+  return { dataEpoch: epoch, sequence, priors };
 }
 
 /** Public inventories retain live Account age/preferences without adopting bearer authority. */
@@ -324,7 +344,10 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
         && url.pathname.startsWith('/v1/') ? WORK_READ_COST.attempts : 1;
       for (let attempt = 0; ; attempt++) {
         try {
-          const session = new WorkReadSession(deps, request, options, await position(deps, options.localBasis), true);
+          const located = await position(deps, options.localBasis);
+          const session = new WorkReadSession(deps, request, options,
+            { dataEpoch: located.dataEpoch, sequence: located.sequence }, true);
+          session.restorePriors = located.priors;
           if (request.headers.has('authorization')) {
             if (!options.actingSubject) throw new WorkReadInvalid('actingSubject is required for authenticated reads');
             session.principal = await deps.account.verify(request, ['work:read']);

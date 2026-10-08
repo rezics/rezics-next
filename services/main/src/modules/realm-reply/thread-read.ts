@@ -195,7 +195,8 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
     }
   }
   const history =
-    sort === 'new' ? await realmHistoryOriginFilter(session, realm, 'placement', '?slot') : '';
+    sort === 'new' && basis.visibility === 'private' && basis.history === 'from-admission'
+      ? await realmHistoryOriginFilter(session, realm, 'placement', '?slot') : '';
   const limit = query.limit ?? REALM_THREAD_COST.pageSize;
   const binding = ['realm-threads-v1', realm, sort, sort === 'top' ? window : null,
     ...(population ? [population] : []),
@@ -305,7 +306,9 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
       vote: votes.get(row.placement) ?? closed,
       replies: { value: counted.counts.get(row.reply) ?? 0, kind: counted.complete ? 'exact' : 'lower-bound' } }];
   });
-  await readRealmBasis(session, realm);
+  // Opening basis already admitted the Realm. The closing graph position and
+  // private membership fence reject a move during hydration; a second policy
+  // query would only repeat that check.
   const currentTargets = await works(session, page);
   if (
     (await threads.rankingRevision(session.position.dataEpoch, realm)) !== (rankedPage?.revision ?? newRevision)
@@ -325,9 +328,10 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
  */
 export async function readRealmThread(session: WorkReadSession, realm: string, focus: string, sort: Sort = 'best', encoded?: string):
   Promise<Static<typeof realmThread>> {
-  await readRealmBasis(session, realm);
+  const basis = await readRealmBasis(session, realm);
   const threads = store(session);
-  const history = await realmHistoryOriginFilter(session, realm, 'placement', '?slot');
+  const history = basis.visibility === 'private' && basis.history === 'from-admission'
+    ? await realmHistoryOriginFilter(session, realm, 'placement', '?slot') : '';
   const binding = (parent: string) => ['realm-thread-siblings-v1', realm, parent, sort, hash(history), session.displayLanguages,
     session.principal ? { issuer: session.principal.issuer, subject: session.principal.subject,
       actingSubject: session.options.actingSubject } : null];
@@ -483,7 +487,8 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
   if (blockedNow.size !== blocked.size || [...blocked].some((author) => !blockedNow.has(author))) {
     throw new WorkReadMoved('Reader blocks changed during the thread read');
   }
-  await readRealmBasis(session, realm);
+  // Same closing fences as the list: graph position and private membership,
+  // not a second Realm policy query.
   await threads.assertThreadProjection(session);
   if (!(await works(session, [focused])).has(focused.work)) throw new WorkReadMissing('Thread target is unavailable');
   const response: Static<typeof realmThread> = { profile: 'realm-thread-v1' as const, realm, thread, focus, sort, work: about,

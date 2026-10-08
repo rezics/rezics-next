@@ -113,7 +113,9 @@ export class GovernanceRules implements RuleBasis {
       await this.pool.query<{
         open: boolean
         document: unknown
-        heads: { ref: string; revision: string; digest: string }[];
+        heads: { ref: string; revision: string; digest: string }[]
+        member_value: string | null
+        member_revision: string | null
       }>(
         `WITH fence AS MATERIALIZED (
         SELECT open FROM access.recovery_fence WHERE id FOR SHARE
@@ -128,9 +130,11 @@ export class GovernanceRules implements RuleBasis {
         UNION SELECT rule#>>'{governanceRule,ref}' FROM jsonb_array_elements($3::jsonb) rule
       ) SELECT fence.open,(SELECT document FROM document) AS document,
         COALESCE((SELECT jsonb_agg(jsonb_build_object('ref',h.ref,'revision',h.revision::text,'digest',h.digest))
-          FROM access.governance_rule_head h WHERE h.scope_id=$2 AND h.ref IN (SELECT ref FROM refs)), '[]'::jsonb) AS heads
+          FROM access.governance_rule_head h WHERE h.scope_id=$2 AND h.ref IN (SELECT ref FROM refs)), '[]'::jsonb) AS heads,
+        (SELECT value::text FROM access.realm_member_count WHERE realm=$4) AS member_value,
+        (SELECT revision::text FROM access.realm_member_count WHERE realm=$4) AS member_revision
       FROM fence`,
-        [realmRulesRef(realm), `governance:realm:${realm}`, JSON.stringify(fallback ?? [])],
+        [realmRulesRef(realm), `governance:realm:${realm}`, JSON.stringify(fallback ?? []), realm],
       )
     ).rows[0];
     if (!row?.open) throw new GovernanceUnavailable('Access is held for recovery');
@@ -144,7 +148,8 @@ export class GovernanceRules implements RuleBasis {
     } catch (error) {
       if (!(error instanceof GovernanceInvalid)) throw error;
     }
-    return { rules, heads: new Map(row.heads.map((head) => [head.ref, head])) };
+    return { rules, heads: new Map(row.heads.map((head) => [head.ref, head])),
+      memberValue: row.member_value, memberRevision: row.member_revision };
   }
 
   /** Only the explicit public profile crosses into Realm home reads. Generic

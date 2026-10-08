@@ -18,8 +18,10 @@ export async function realmTransaction<T>(pool: Pool, realm: string | null, writ
   const client = await pool.connect().catch(() => { throw new RealmAdminUnavailable('Access is unavailable'); });
   try {
     await client.query('BEGIN');
-    await client.query("SET LOCAL lock_timeout = '2s'");
-    await client.query("SET LOCAL statement_timeout = '5s'");
+    // Both session limits are one statement. A second round trip would put the
+    // public roster over its request cap.
+    await client.query(`SELECT set_config('lock_timeout', '2s', true),
+      set_config('statement_timeout', '5s', true)`);
     if (!(await client.query('SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE')).rowCount) {
       throw new RealmAdminUnavailable('Access recovery is in progress');
     }

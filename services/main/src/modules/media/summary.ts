@@ -468,13 +468,13 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   const unique = [...new Set(input.resources.filter(resource => nativeId.test(resource)))];
   const graph = await graphRows(env, unique, input.localBasis);
   const cost = { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 0 };
-  const noteNameProbe = (batch: readonly Pick<DisclosureTarget, 'owner' | 'component'>[]) => {
+  const noteNameProbe = (batch: readonly Pick<DisclosureTarget, 'owner' | 'component' | 'nameOwnerResolved'>[]) => {
     if (!hasDisclosure(env)) return;
     // Covers share the transport batch with names. Count each owner batch
     // containing names, rather than packing names across those boundaries.
     for (let offset = 0; offset < batch.length; offset += DISCLOSURE_COST.batch) {
       if (batch.slice(offset, offset + DISCLOSURE_COST.batch).some(target => target.owner === 'graph'
-        && (target.component === 'name' || target.component === 'title'))) {
+        && (target.component === 'name' || target.component === 'title') && !target.nameOwnerResolved)) {
         cost.graphQueries += DISCLOSURE_COST.nameOwnerQueries;
       }
     }
@@ -482,11 +482,15 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
   // Check the entire requested batch, including missing identities, before
   // Access/name/avatar hydration. Rated and absent rows then have the same
   // media generation and cost envelope as well as the same unavailable item.
+  // The graph row's type already proves a non-Agent has no agent name owner.
+  const settledNameOwner = (row: GraphRow | undefined) =>
+    row !== undefined && row.type !== 'agent' ? { nameOwnerResolved: true as const } : {};
   const initialTargets = unique.map(reference => {
     const row = graph.rows.get(reference);
     return { owner: 'graph' as const, resource: reference, component: 'name' as const,
       revision: reference === row?.work ? row.head : null, work: row?.work,
-      workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context };
+      workRevision: row?.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
+      ...settledNameOwner(row) };
   });
   const initialDecisions = await discloseInventory(env, initialTargets, reader.viewer ?? ANONYMOUS_VIEWER,
     input.channel ?? 'summary', client);
@@ -712,7 +716,8 @@ async function readSummaryPage(env: WorkActivationEnvironment, media: SummaryMed
     nameIndexes.set(reference, targets.length);
     targets.push({ owner: 'graph', resource: reference, component: 'name',
       revision: reference === row.work ? row.head : null, work: row.work,
-      workRevision: row.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context });
+      workRevision: row.head, context: input.context === DEFAULT_MEDIA_CONTEXT ? undefined : input.context,
+      ...settledNameOwner(row) });
     const asset = avatars.get(reference)?.asset;
     if (asset) {
       assetIndexes.set(reference, targets.length);

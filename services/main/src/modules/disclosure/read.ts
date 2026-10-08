@@ -28,6 +28,9 @@ export interface DisclosureTarget {
   /** Owner-established Agent whose name this occurrence carries. Readability
    * of resource or work does not grant permission to disclose this name. */
   nameOwner?: string;
+  /** The caller already settled name ownership, including proof that this
+   * resource is not an Agent. The name-owner probe would only repeat that. */
+  nameOwnerResolved?: boolean;
 }
 export type DisclosureDecision = 'visible' | 'tombstone' | 'hidden';
 export interface DisclosureWithAnonymousNames {
@@ -107,7 +110,8 @@ export class DisclosureStore implements DisclosureReader {
     try {
       const nameOwners = new Map<string, string>();
       const resources = [...new Set(targets.filter(target => target.owner === 'graph'
-        && ['name', 'title'].includes(target.component) && !target.nameOwner).map(target => target.resource))];
+        && ['name', 'title'].includes(target.component) && !target.nameOwner
+        && !target.nameOwnerResolved).map(target => target.resource))];
       if (resources.length && this.environment) {
         // Resolve only the exact named resources. Never walk credits, Works or
         // dependent Concepts to discover whether an Agent's name is private.

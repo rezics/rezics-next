@@ -1,5 +1,6 @@
-import type { RealmVisibility, RealmReviewMode } from '../space/policy.ts';
+import type { RealmVisibility, RealmReviewMode, RealmHistory } from '../space/policy.ts';
 import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { AdmissionUnavailable } from '../access/admission.ts';
 import { chosenModerators, readCurrentProfile } from '../realm-profile/commands.ts';
 import { AVATAR_POLICY, avatarImageEligible, DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { fallbackAvatar } from '../media/summary.ts';
@@ -9,14 +10,16 @@ import { readRealmPolicy } from '../space/policy.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 
 export interface RealmBasis { id: string; space: string; revision: string;
-  visibility: RealmVisibility; reviewMode: RealmReviewMode; policyRevision: string | null }
+  visibility: RealmVisibility; reviewMode: RealmReviewMode; policyRevision: string | null;
+  history: RealmHistory }
 
 /** A private Realm and an absent Realm have the same public answer. */
 export async function readRealmBasis(session: WorkReadSession, realm: string): Promise<RealmBasis> {
   const policy = await session.realm(realm);
   if (!policy.realmRevision) throw new WorkReadUnavailable('Realm basis is incomplete');
   return { id: realm, space: policy.space, revision: policy.realmRevision,
-    visibility: policy.visibility, reviewMode: policy.reviewMode, policyRevision: policy.revision };
+    visibility: policy.visibility, reviewMode: policy.reviewMode, policyRevision: policy.revision,
+    history: policy.history };
 }
 
 export async function readRealmHeader(session: WorkReadSession, realm: string) {
@@ -62,11 +65,23 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
     }
     return { id: rule.id, title: selected(rule.title), body: selected(rule.body), governanceRule };
   }) : null;
-  if (profile?.count.kind === 'exact' && !session.deps.access.publicRealmCount) {
+  if (profile?.count.kind === 'exact' && !snapshot && !session.deps.access.publicRealmCount) {
     throw new WorkReadUnavailable('Realm count owner is unavailable');
   }
+  // The header rules statement already read this count on the recovery snapshot.
+  // A second statement would put a ruled Realm over its request cap.
+  const counted = snapshot
+    ? Number(snapshot.memberValue ?? '0')
+    : null;
+  if (profile?.count.kind === 'exact' && snapshot
+    && (counted === null || !Number.isSafeInteger(counted) || counted < 0)) {
+    throw new AdmissionUnavailable('Realm count is unavailable');
+  }
   const count = profile?.count.kind === 'exact'
-    ? await session.deps.access.publicRealmCount!(realm) : profile?.count ?? { kind: 'unknown' as const, value: null };
+    ? snapshot
+      ? { kind: 'exact' as const, value: counted!, revision: snapshot.memberRevision ?? '0' }
+      : await session.deps.access.publicRealmCount!(realm)
+    : profile?.count ?? { kind: 'unknown' as const, value: null };
   // Recheck live disclosure after all profile, media and governance hydration.
   // The enclosing read also fences the graph position and private membership.
   const policy = await session.realm(realm);
