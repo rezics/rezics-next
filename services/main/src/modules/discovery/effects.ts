@@ -55,6 +55,7 @@ export const DISCOVERY_EFFECTS: Readonly<Record<string, DiscoveryEffect>> = {
   'agent.compensate': 'irrelevant',
   'agent.profile.change': 'irrelevant',
   'zone.edit': 'irrelevant',
+  'realm.attach': 'irrelevant',
   'collection.edit': 'irrelevant',
   'relation.change': 'irrelevant',
   'projection.create': 'irrelevant',

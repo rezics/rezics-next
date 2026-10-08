@@ -28,12 +28,14 @@ interface Fixture {
   link?: { realm?: string; attachment?: { by: string } };
   /** The Zone's stored configuration also names this Realm. */
   stored?: string;
+  official?: boolean;
 }
 
 function world(directory: string, fixture: Fixture = {}) {
   const configuration = { format: ZONE_CONFIG_FORMAT, zone, space: zoneSpace, navigation,
     state: 'active', disclosure: 'public', budget: { timeMs: ZONE_LIMITS.queryBudgetMs, rows: ZONE_LIMITS.queryBudgetRows },
-    queryBlocks: [], model: ZONE_PROFILE, ...(fixture.stored ? { defaultRealm: fixture.stored } : {}) };
+    queryBlocks: [], model: ZONE_PROFILE, ...(fixture.stored ? { defaultRealm: fixture.stored } : {}),
+    ...(fixture.official ? { official: {} } : {}) };
   const manifest = prepareComponent(directory, zone, { configuration, name: 'Site', language: 'en' }, ZONE_PROFILE);
   const state = {
     realms: { [sameSpaceRealm]: zoneSpace, ...fixture.realms } as Record<string, string>,
@@ -59,6 +61,7 @@ function world(directory: string, fixture: Fixture = {}) {
           manifest: lit(`urn:rezics:sha256:${manifest}`), state: lit(RV + 'Active'),
           disclosure: lit(RV + 'Public'), spaceDisclosure: lit(RV + 'Public'),
           ...(realm ? { realm: lit(realm) } : {}),
+          ...(fixture.official ? { official: lit('true') } : {}),
           ...(linked ? { attachedBy: lit(linked.by) } : {}) }]);
       }
       if (query.includes('SELECT DISTINCT ?type')) return rows([{ type: lit(RV + 'Zone') }]);
@@ -119,6 +122,7 @@ function world(directory: string, fixture: Fixture = {}) {
       if (state.attachAuthority === 'expired') throw new AdmissionExpired('grant expired');
     },
     async activePrincipalId() { return 'principal'; },
+    async canMarkOfficialZone() { return true; },
     async withOwnerAuthority<T>(request: { action: string; scope: string }, operation: (client: never) => Promise<T>) {
       // Content's page pin is exercised by its own tests; here it only has to succeed.
       if (request.action === 'content.publish') return {
@@ -288,6 +292,27 @@ test('a withdrawal that lands between a publish\'s read and commit cannot be und
     await publish(guarded).catch(() => undefined);
     const update = guarded.state.envelopes.find(envelope => envelope.update.includes('rv:Succeeded'))!.update;
     expect(update.slice(update.indexOf('WHERE'))).toContain(`rv:realmAttachedBy <${actor}>`);
+  });
+});
+
+test('an official Zone takes only a Realm of its own Space, so no withdrawal can invalidate it', async () => {
+  await inDirectory(async directory => {
+    const refusal = new InvalidZoneConfiguration('default Realm is unavailable');
+    // A cross-Space Realm is refused before any steward is asked.
+    const official = world(directory, { realms: { [foreignRealm]: id(99) }, stored: sameSpaceRealm, official: true,
+      link: { realm: sameSpaceRealm } });
+    await expect(configure(official, { defaultRealm: foreignRealm })).rejects.toThrow(refusal);
+    expect(official.state.attachChecks).toEqual([]);
+    expect(official.state.applied).toEqual([]);
+    // A Zone that already holds a cross-Space attachment cannot be marked official.
+    const attached = attachedWorld(directory);
+    await expect(configure(attached, { official: {} })).rejects.toThrow(refusal);
+    expect(attached.state.applied).toEqual([]);
+    // The Zone's own Space stays open to official Zones.
+    const own = world(directory, { realms: { [foreignRealm]: id(99) }, stored: sameSpaceRealm, official: true,
+      link: { realm: sameSpaceRealm } });
+    await configure(own, { defaultRealm: sameSpaceRealm });
+    expect(own.state.applied).toHaveLength(1);
   });
 });
 

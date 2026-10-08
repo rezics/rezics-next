@@ -507,6 +507,9 @@ export async function changeZoneConfiguration(env: WorkActivationEnvironment,
       4096)).results?.bindings ?? [];
       if (realm.length !== 1 || !realm[0]?.space?.value) return unavailable();
       if (realm[0].space.value !== head.space) {
+        // An official Zone needs a default Realm to stay valid, and a steward may
+        // withdraw an attachment at any time: it takes only a Realm of its own Space.
+        if (config.official) return unavailable();
         if (head.attachment?.realm !== config.defaultRealm) {
           if (!realmPatched || !await realmAttachHeld(access, realmAttachRequest(principal, input.actingSubject,
             config.defaultRealm))) return unavailable();
