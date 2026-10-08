@@ -50,3 +50,21 @@ test('an English display title does not replace the Japanese title the Work stor
   expect(values.entries.find(entry => entry.language === 'ja')).toMatchObject({ tagline: '', label: null });
   expect(entryOf(values, 'en').title).toBe('Lemon muffins');
 });
+
+test('upcoming and cancelled stay on the header when the cook saves a description', async () => {
+  for (const completionStatus of ['upcoming', 'cancelled'] as const) {
+    for (const source of ['metadata', 'work'] as const) {
+      const values = initialDetails(
+        { localized: [], originalTitle: null, completionStatus: source === 'metadata' ? completionStatus : null },
+        'en',
+        { label: { value: 'Lemon muffins', language: 'en' }, ...blank, completionStatus: source === 'work' ? completionStatus : null },
+      );
+      expect(values.completion).toBe(completionStatus);
+      const fake = fakeMain({ recipe: startRecipe, details: values, metadataHead: id(700) });
+      const saver = createDetailsSaver({ main: fake.main, actingSubject, work, language: 'en', initial: { head: id(700), values } });
+      expect(await saver.submit({ title: 'Lemon muffins', description: 'Bright and tender.' })).toEqual({ kind: 'saved' });
+      const saved = fake.calls.filter(call => call.name === 'details').at(-1)?.body as { state: { completionStatus: string | null } };
+      expect(saved.state.completionStatus).toBe(completionStatus);
+    }
+  }
+});

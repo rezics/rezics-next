@@ -9,7 +9,7 @@ export interface RecipeWorkFields {
   description: { value: string; language: string } | null;
   tagline: { value: string; language: string } | null;
   originalTitle: { value: string; language: string } | null;
-  completionStatus: 'ongoing' | 'completed' | 'hiatus' | null;
+  completionStatus: 'ongoing' | 'completed' | 'hiatus' | 'upcoming' | 'cancelled' | null;
   mainVersionLabel: { value: string; language: string } | null;
 }
 
@@ -17,7 +17,7 @@ type MetadataLike = {
   localized?: readonly { language: string; title?: string | null; description?: string | null;
     tagline?: string | null; mainVersionLabel?: string | null }[];
   originalTitle?: { value: string; language: string } | null;
-  completionStatus?: 'ongoing' | 'completed' | 'hiatus' | null;
+  completionStatus?: 'ongoing' | 'completed' | 'hiatus' | 'upcoming' | 'cancelled' | null;
 } | null;
 
 /** A header field's text when it is already in the recipe's language; otherwise nothing to copy. */
@@ -50,7 +50,8 @@ export function initialDetails(metadata: MetadataLike, language: string, work: R
     ...values,
     originalTitle: values.originalTitle || work.originalTitle?.value || '',
     originalLanguage: values.originalLanguage || work.originalTitle?.language || '',
-    completion: completion === 'ongoing' || completion === 'completed' || completion === 'hiatus' ? completion : '',
+    // This editor never changes status, and a save rewrites the whole header, so a status it did not edit goes back as read.
+    completion,
     entries,
   };
 }
