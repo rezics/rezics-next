@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { accessSync, closeSync, constants, openSync, readFileSync, readSync, realpathSync, statSync } from 'node:fs';
+import { accessSync, closeSync, constants, openSync, readdirSync, readFileSync, readSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 /** Containers started for QA carry this label. Compose stacks and the dev stack do not. */
@@ -17,9 +17,79 @@ const dockerTimeoutMs = 30_000;
 /** dockerd can commit a container after the client is gone and the first list has returned. */
 export const reapSettleMs = 1_000;
 
-export function settleReap(): void {
+/**
+ * Armed only when a scope marker proved a container may exist. Callers always
+ * invoke the settle between two listings; without a marker there is nothing to wait for.
+ */
+let settleArmed = false;
+
+function waitForDockerd(): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, reapSettleMs);
 }
+
+export function settleReap(): void {
+  if (!settleArmed) return;
+  settleArmed = false;
+  waitForDockerd();
+}
+
+/** Directory the shim fills with one empty file per scope it labels, plus `.owner` when it labels an owner. */
+export function reapStateDirectory(owner: string): string | undefined {
+  if (!/^\d+:\d+$/.test(owner)) return undefined;
+  return join(resolve(import.meta.dir, '../..'), '.temp', 'reap', owner);
+}
+
+function reapStateRoot(): string {
+  return join(resolve(import.meta.dir, '../..'), '.temp', 'reap');
+}
+
+function safeScopeName(scope: string): boolean {
+  return /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(scope);
+}
+
+function stateDirectories(): string[] {
+  const dirs: string[] = [];
+  if (process.env.REZICS_REAP_STATE) dirs.push(process.env.REZICS_REAP_STATE);
+  try {
+    for (const name of readdirSync(reapStateRoot())) {
+      if (/^\d+:\d+$/.test(name)) dirs.push(join(reapStateRoot(), name));
+    }
+  } catch { /* no runner has minted an owner yet */ }
+  return [...new Set(dirs)];
+}
+
+function scopeMarkerPaths(scope: string): string[] {
+  if (!safeScopeName(scope)) return [];
+  const paths: string[] = [];
+  for (const dir of stateDirectories()) {
+    const path = join(dir, scope);
+    try {
+      if (statSync(path).isFile()) paths.push(path);
+    } catch { /* this owner did not label the scope */ }
+  }
+  return paths;
+}
+
+function ownerHasMarkers(owner: string): boolean {
+  const dir = reapStateDirectory(owner);
+  if (!dir) return false;
+  try { return readdirSync(dir).length > 0; } catch { return false; }
+}
+
+function deleteScopeMarkers(scope: string): void {
+  for (const path of scopeMarkerPaths(scope)) {
+    try { rmSync(path); } catch { /* the second pass already removed it */ }
+  }
+}
+
+function deleteOwnerState(owner: string): void {
+  const dir = reapStateDirectory(owner);
+  if (!dir) return;
+  try { rmSync(dir, { recursive: true, force: true }); } catch { /* the sweep retries */ }
+}
+
+/** Scopes whose first listing has run and whose marker must survive until the second listing. */
+const scopeSecondPass = new Set<string>();
 
 /** Repository path of the executable placed first on a test process PATH. */
 export const dockerShimExecutable = 'scripts/qa/docker-shim/docker';
@@ -100,6 +170,11 @@ export function reapOwnerEnvironment(env: NodeJS.ProcessEnv, pid = process.pid):
     const start = processStartTime(pid);
     if (start) next.REZICS_REAP_OWNER = `${pid}:${start}`;
   }
+  // The minter publishes the directory; a child that already inherited it keeps that path.
+  if (next.REZICS_REAP_OWNER && !next.REZICS_REAP_STATE) {
+    const state = reapStateDirectory(next.REZICS_REAP_OWNER);
+    if (state) next.REZICS_REAP_STATE = state;
+  }
   return next;
 }
 
@@ -151,9 +226,29 @@ export function removeOwnedContainers(owner: string): void {
   removeLabelledContainers(`label=${reapOwnerLabel}=${owner}`);
 }
 
-export function removeScopedContainers(scope: string): void {
-  if (!scope) return;
+/**
+ * One listing. The first call for a marked scope returns true so the caller
+ * settles and lists again; the second call deletes the marker. No marker means
+ * no container was labelled, so this returns without calling Docker.
+ */
+export function removeScopedContainers(scope: string): boolean {
+  if (!scope) return false;
+  const repeat = scopeSecondPass.has(scope);
+  const markers = scopeMarkerPaths(scope);
+  if (!repeat && markers.length === 0) return false;
+  if (!markers.length) {
+    scopeSecondPass.delete(scope);
+    return false;
+  }
   removeLabelledContainers(`label=${reapScopeLabel}.${scope}`);
+  if (repeat) {
+    scopeSecondPass.delete(scope);
+    deleteScopeMarkers(scope);
+    return false;
+  }
+  scopeSecondPass.add(scope);
+  settleArmed = true;
+  return true;
 }
 
 /** A finished or timed-out child. The owner label is not a filter: siblings share it. */
@@ -181,9 +276,22 @@ export function reapActiveChildScopes(): void {
   const scopes = [...activeChildScopes];
   if (!scopes.length) return;
   for (const scope of scopes) activeChildScopes.delete(scope);
-  for (const scope of scopes) removeScopedContainers(scope);
+  let marked = false;
+  for (const scope of scopes) {
+    if (removeScopedContainers(scope)) marked = true;
+  }
+  if (!marked) return;
   settleReap();
   for (const scope of scopes) removeScopedContainers(scope);
+}
+
+/** Owner exit. An empty state directory means this process labelled nothing. */
+function reapMarkedOwner(createdOwner: string): void {
+  if (!ownerHasMarkers(createdOwner)) return;
+  reapCreatedOwner(createdOwner);
+  waitForDockerd();
+  reapCreatedOwner(createdOwner);
+  deleteOwnerState(createdOwner);
 }
 
 /** Exit of the process that minted the owner. A nested runner passes no owner and removes nothing. */
@@ -205,23 +313,37 @@ export function startOrphanSweep(): void {
   child.unref();
 }
 
+function removeDeadOwnerState(): void {
+  let names: string[];
+  try { names = readdirSync(reapStateRoot()); } catch { return; }
+  for (const name of names) {
+    if (!/^\d+:\d+$/.test(name) || reapOwnerAlive(name)) continue;
+    try { rmSync(join(reapStateRoot(), name), { recursive: true, force: true }); } catch { /* the next sweep retries */ }
+  }
+}
+
 /** Remove containers whose labelled process is gone or has a different start time. Unlabelled containers are never listed. */
 export function sweepOrphanContainers(): void {
-  const listed = dockerOutput(['ps', '-aq', '--filter', `label=${reapOwnerLabel}`]);
-  if (listed === undefined) return;
-  const stale: string[] = [];
-  for (const id of containerIds(listed)) {
-    const owner = dockerOutput(['inspect', '--format', `{{index .Config.Labels "${reapOwnerLabel}"}}`, id]);
-    if (owner === undefined) continue;
-    if (!reapOwnerAlive(owner.trim())) stale.push(id);
+  try {
+    const listed = dockerOutput(['ps', '-aq', '--filter', `label=${reapOwnerLabel}`]);
+    if (listed === undefined) return;
+    const stale: string[] = [];
+    for (const id of containerIds(listed)) {
+      const owner = dockerOutput(['inspect', '--format', `{{index .Config.Labels "${reapOwnerLabel}"}}`, id]);
+      if (owner === undefined) continue;
+      if (!reapOwnerAlive(owner.trim())) stale.push(id);
+    }
+    if (stale.length) spawnSync('docker', ['rm', '-f', ...stale], { encoding: 'utf8', timeout: dockerTimeoutMs });
+  } finally {
+    removeDeadOwnerState();
   }
-  if (stale.length) spawnSync('docker', ['rm', '-f', ...stale], { encoding: 'utf8', timeout: dockerTimeoutMs });
 }
 
 function adoptReapEnvironment(environment: NodeJS.ProcessEnv): void {
   if (environment.PATH) process.env.PATH = environment.PATH;
   delete process.env.REZICS_REAL_DOCKER;
   if (environment.REZICS_REAP_OWNER) process.env.REZICS_REAP_OWNER = environment.REZICS_REAP_OWNER;
+  if (environment.REZICS_REAP_STATE) process.env.REZICS_REAP_STATE = environment.REZICS_REAP_STATE;
 }
 
 /**
@@ -236,9 +358,7 @@ export function bindReapOwnerExit(env: NodeJS.ProcessEnv = process.env): void {
     try {
       reapActiveChildScopes();
       if (!createdOwner) return;
-      reapCreatedOwner(createdOwner);
-      settleReap();
-      reapCreatedOwner(createdOwner);
+      reapMarkedOwner(createdOwner);
     } catch { /* the process is already leaving */ }
   });
 }

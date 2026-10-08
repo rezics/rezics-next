@@ -133,10 +133,15 @@ async function run([program, args]: [string, string[]]): Promise<number> {
   try {
     const code = await child.exited;
     if (scope) {
-      try { removeScopedContainers(scope); } catch { /* the child's exit status still stands */ }
-      // dockerd can commit the container after this list, once the killed client is gone.
-      await Bun.sleep(reapSettleMs);
-      try { removeScopedContainers(scope); } catch { /* the child's exit status still stands */ }
+      // A scope with no marker never started a container: skip the settle and the second list.
+      let again = false;
+      let failed = false;
+      try { again = removeScopedContainers(scope); } catch { failed = true; }
+      if (again || failed) {
+        // dockerd can commit the container after this list, once the killed client is gone.
+        await Bun.sleep(reapSettleMs);
+        try { removeScopedContainers(scope); } catch { /* the child's exit status still stands */ }
+      }
     }
     return code;
   } finally {

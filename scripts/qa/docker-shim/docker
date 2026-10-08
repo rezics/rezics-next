@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # rezics-docker-shim
 # QA puts this directory first on PATH. run and create gain the reap-owner label
-# and one key-only label for every scope in the runner chain. Every other docker
-# command, including compose, is executed unchanged.
+# and one key-only label for every scope in the runner chain. Before those
+# labels are added, an empty marker file is created for each scope (and `.owner`
+# when the owner label is added) under REZICS_REAP_STATE, so cleanup can see
+# that a container was actually requested. Every other docker command, including
+# compose, is executed unchanged.
 # The binary is the next docker on PATH whose file is not itself a shim. A stub
 # placed before or between shims is the one that runs, including a shim from
 # another worktree.
@@ -73,14 +76,21 @@ if (( index < 0 )); then
 fi
 
 labels=()
+if [[ -n ${REZICS_REAP_STATE:-} ]]; then
+  mkdir -p -- "$REZICS_REAP_STATE"
+fi
 if [[ -n ${REZICS_REAP_OWNER:-} ]]; then
   labels+=(--label "rezics.reap-owner=${REZICS_REAP_OWNER}")
+  if [[ -n ${REZICS_REAP_STATE:-} ]]; then : > "${REZICS_REAP_STATE}/.owner"; fi
 fi
 if [[ -n ${REZICS_REAP_SCOPES:-} ]]; then
   IFS=',' read -r -a scope_ids <<< "$REZICS_REAP_SCOPES"
   for scope_id in "${scope_ids[@]}"; do
     [[ -n $scope_id ]] || continue
     labels+=(--label "rezics.reap-scope.${scope_id}=1")
+    if [[ -n ${REZICS_REAP_STATE:-} && $scope_id =~ ^[A-Za-z0-9][A-Za-z0-9_.-]*$ ]]; then
+      : > "${REZICS_REAP_STATE}/${scope_id}"
+    fi
   done
 fi
 head=("${args[@]:0:index+1}")
