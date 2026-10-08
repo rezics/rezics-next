@@ -168,7 +168,7 @@ test('a paged Recipe keeps depth-first order, the servings pin and a stale curso
     expect(first.measures?.map(item => item.kind)).toEqual(expect.arrayContaining(['servings', 'nutrient']));
     expect(first.measures?.find(item => item.kind === 'nutrient')?.basis).toBe('per-serving');
     expect(first.cost.occurrences).toBe(1);
-    expect(first.cost.pages).toBeLessThanOrEqual(RECIPE_WORK_PAGE_READ_BOUND + 1);
+    expect(first.cost.pages).toBeLessThanOrEqual(RECIPE_WORK_PAGE_READ_BOUND);
     expect(first.next).toBeString();
     const cursor = first.next!;
     const tampered = `${cursor.slice(0, -1)}${cursor.endsWith('a') ? 'b' : 'a'}`;
@@ -176,7 +176,7 @@ test('a paged Recipe keeps depth-first order, the servings pin and a stale curso
       .toBe(400);
     expect((await f.call('GET', `${path}${query}&cursor=${encodeURIComponent(cursor)}&servings=3`)).status).toBe(400);
     const second = await load(cursor);
-    expect(second).not.toHaveProperty('measures');
+    expect(second.measures?.map(item => item.kind)).toEqual(expect.arrayContaining(['servings', 'nutrient']));
     expect(second.occurrences.map(item => item.qualifier?.originalText?.value)).toEqual(['1 cup tomato', '1 cup salt']);
     expect(second.ingredients.map(item => item.amount)).toEqual([
       { numerator: 2, denominator: 1 }, { numerator: 2, denominator: 1 }]);
@@ -187,7 +187,7 @@ test('a paged Recipe keeps depth-first order, the servings pin and a stale curso
     expect(third.occurrences).toHaveLength(RECIPE_WORK_PAGE_OCCURRENCES);
     expect(third.occurrences.every(item => item.qualifier?.originalText?.value?.startsWith('1 cup flour'))).toBe(true);
     expect(third.ingredients[0]?.amount).toEqual({ numerator: 2, denominator: 1 });
-    expect(third).not.toHaveProperty('measures');
+    expect(third.measures?.map(item => item.kind)).toEqual(expect.arrayContaining(['servings', 'nutrient']));
     expect(third.next).toBeUndefined();
     expect(third.cost.pages).toBeLessThanOrEqual(RECIPE_WORK_PAGE_READ_BOUND);
     const added = await f.json<{ revision: string }>(await f.call('POST',

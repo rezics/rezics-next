@@ -36,15 +36,17 @@ bounded graph queries, then pins one revision. One call returns at most 100
 occurrences in depth-first order and, when the hierarchy continues, a signed
 cursor that pins the revision, the servings factor and the parent stack. A
 cursor whose revision is no longer current is a stale result and is not mixed
-into the new tree. A tampered cursor is refused. Measures, at most 64, are read
-once and returned on the first page only. Each page scales its own occurrences
-with that pinned factor. The optional servings request is a whole number from
-1 to 100. A page whose JSON exceeds 1 MiB is rejected; the call does not buffer
-the rest of the hierarchy. Each call reads one child composition page, re-reads
-the cursor's parents up to the depth limit, and may read one empty child page
-per exhausted frame. The reported cost is those reads, the object pages they
-touched and the occurrences returned. The kitchen line is computed in memory.
-The read repeats Work visibility checks after hydration.
+into the new tree. A tampered cursor is refused. The cursor mac key is derived
+from the shared Fuseki maintenance capability, so a restart keeps outstanding
+cursors valid. Measures, at most 64, are read once on every page and returned
+with that page. A continuation still scales with the factor pinned in the
+cursor. The optional servings request is a whole number from 1 to 100. A page
+whose JSON exceeds 1 MiB is rejected; the call does not buffer the rest of the
+hierarchy. Each call reads one child composition page, re-reads the cursor's
+parents up to the depth limit, may read one empty child page per exhausted
+frame, and reads the measure manifest once. The reported cost is those reads,
+the object pages they touched and the occurrences returned. The kitchen line
+is computed in memory. The read repeats Work visibility checks after hydration.
 
 The recipe operation unit tests cover rational bounds, exact aggregation and
 ambiguous-unit lexical retention. The integration test exercises a real Jena

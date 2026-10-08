@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { fenceWorkBasis, readWorkBasis } from '../work/read-header.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
@@ -17,17 +17,29 @@ export const RECIPE_WORK_PAGE_BYTES = 1_048_576;
 /** Opaque cursor, including its mac. Long enough for a depth-limited parent stack. */
 export const RECIPE_WORK_PAGE_CURSOR_MAX = 8192;
 /**
- * Composition reads in one call: one child page, plus one re-read of each
- * cursor ancestor (at most {@link STRUCTURE_LIMITS.maxDepth}), plus one empty
- * child page for each exhausted frame popped (at most maxDepth + 1, the root
- * plus that many groups). The first page also reads the measure manifest once.
+ * Reads in one call: one child composition page, one re-read of each cursor
+ * ancestor (at most {@link STRUCTURE_LIMITS.maxDepth}), one empty child page
+ * for each exhausted frame (at most maxDepth + 1), and one measure-manifest
+ * read. That is `1 + maxDepth + (maxDepth + 1) + 1`.
  */
-export const RECIPE_WORK_PAGE_READ_BOUND = 2 * STRUCTURE_LIMITS.maxDepth + 2;
+export const RECIPE_WORK_PAGE_READ_BOUND = 2 * STRUCTURE_LIMITS.maxDepth + 3;
 
 /** Deepest cursor stack: the Structure root plus one frame per nesting level. */
 const MAX_STACK = STRUCTURE_LIMITS.maxDepth + 1;
-// Restart-local mac. A cursor is a continuation address, not an authorization grant.
-const cursorKey = randomBytes(32);
+/**
+ * Separates Recipe page cursors from the Fuseki maintenance capability.
+ * The capability is the HMAC key Main and the relay already share; the derived
+ * key is not that bearer and stays the same across processes.
+ */
+const RECIPE_CURSOR_DOMAIN = 'rezics-recipe-work-page-cursor-v1';
+
+function recipeCursorKey(): Buffer {
+  const capability = Bun.env.FUSEKI_MAINTENANCE_TOKEN;
+  if (typeof capability !== 'string' || !/^[0-9a-f]{64}$/.test(capability)) {
+    throw new WorkReadUnavailable('Recipe cursor signing secret is unavailable');
+  }
+  return createHmac('sha256', Buffer.from(capability, 'hex')).update(RECIPE_CURSOR_DOMAIN).digest();
+}
 
 interface CursorFrame { parent: string; after?: string }
 interface RecipeCursor {
@@ -60,7 +72,7 @@ export interface RecipeHierarchyRead {
 const invalidCursor = () => new WorkReadInvalid('Recipe cursor is invalid');
 
 function macOf(body: string): string {
-  return createHmac('sha256', cursorKey).update(body).digest('base64url');
+  return createHmac('sha256', recipeCursorKey()).update(body).digest('base64url');
 }
 
 function encodeCursor(cursor: RecipeCursor): string {
@@ -136,15 +148,17 @@ function scaled(records: readonly OccurrenceRecord[], factor: ExactRational) {
 }
 
 /**
- * One depth-first page of a pinned Recipe revision. See {@link RECIPE_WORK_PAGE_READ_BOUND}
- * for the composition-read ceiling. Measures are returned only when `cursor` is absent;
- * a continuation uses the factor stored in the cursor and does not read them again.
+ * One depth-first page of a pinned Recipe revision. See {@link RECIPE_WORK_PAGE_READ_BOUND}.
+ * Every page returns the measure manifest. A continuation keeps the servings factor
+ * stored in the cursor and still reads that manifest once for the response.
  */
 export async function readRecipeHierarchyPage(input: {
   structure: string;
   revision: string;
   servings?: number;
   measures?: readonly RecipeMeasure[];
+  /** One manifest read for this page. Used by the route; unit fixtures may pass `measures` instead. */
+  readMeasures?: () => Promise<{ measures: readonly RecipeMeasure[]; pagesRead: number }>;
   cursor?: string;
 } & RecipeHierarchyRead) {
   let stack: CursorFrame[];
@@ -163,23 +177,32 @@ export async function readRecipeHierarchyPage(input: {
     factor = cursor.factor;
     pinnedServings = cursor.servings;
   } else {
-    const measures = input.measures ?? [];
-    if (measures.length > STRUCTURE_LIMITS.measures) {
-      throw new WorkReadUnavailable('Recipe measures exceed 64');
-    }
     stack = [{ parent: input.structure }];
-    factor = servingsFactor(measures, input.servings);
     pinnedServings = input.servings ?? null;
+    factor = exactRational(1n, 1n);
   }
+  let measures = [...(input.measures ?? [])];
+  let measureReads = 0;
   let parentReads = 0;
   let emptyReads = 0;
   let dataReads = 0;
   let pagesRead = 0;
+  if (input.readMeasures) {
+    const measured = await input.readMeasures();
+    measures = [...measured.measures];
+    measureReads = 1;
+    pagesRead += measured.pagesRead;
+  }
+  if (measures.length > STRUCTURE_LIMITS.measures) {
+    throw new WorkReadUnavailable('Recipe measures exceed 64');
+  }
+  if (!input.cursor) factor = servingsFactor(measures, input.servings);
   const charge = (kind: 'parent' | 'empty' | 'data') => {
     if (kind === 'parent') parentReads += 1;
     else if (kind === 'empty') emptyReads += 1;
     else dataReads += 1;
-    if (parentReads > STRUCTURE_LIMITS.maxDepth || emptyReads > STRUCTURE_LIMITS.maxDepth + 1 || dataReads > 1) {
+    if (measureReads > 1 || parentReads > STRUCTURE_LIMITS.maxDepth
+      || emptyReads > STRUCTURE_LIMITS.maxDepth + 1 || dataReads > 1) {
       throw new WorkReadLimit('Recipe page exceeds its read bound');
     }
   };
@@ -233,9 +256,9 @@ export async function readRecipeHierarchyPage(input: {
   const next = stack.length > 0 ? encodeCursor({ v: 1, structure: input.structure, revision: input.revision,
     servings: pinnedServings, factor, stack }) : undefined;
   const result = { profile: 'recipe-work-page-v1' as const, structure: input.structure, revision: input.revision,
-    occurrences, ...(input.cursor ? {} : { measures: [...(input.measures ?? [])] }),
-    ingredients: scaled(occurrences, factor), ...(next ? { next } : {}),
-    cost: { pages: parentReads + emptyReads + dataReads, pagesRead, occurrences: occurrences.length } };
+    occurrences, measures, ingredients: scaled(occurrences, factor), ...(next ? { next } : {}),
+    cost: { pages: measureReads + parentReads + emptyReads + dataReads, pagesRead,
+      occurrences: occurrences.length } };
   if (Buffer.byteLength(JSON.stringify(result)) > RECIPE_WORK_PAGE_BYTES) {
     throw new WorkReadLimit('Recipe page exceeds 1 MiB');
   }
@@ -259,7 +282,6 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
     || header.component !== basis.card.mainVersion) {
     throw new WorkReadUnavailable('Recipe Structure differs from selected Work');
   }
-  const measured = cursor ? null : await readStructureMeasures(session.deps.environment, { structure, revision: header.head });
   const env = session.deps.environment;
   const composition = (query: { parent?: string; occurrence?: string; after?: string; limit: number }) =>
     readCompositionPage(env, { structure, revision: header.head,
@@ -269,8 +291,11 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
       limit: query.limit, canReadTarget: async () => false });
   const page = await readRecipeHierarchyPage({ structure, revision: header.head,
     ...(servings !== undefined ? { servings } : {}),
-    ...(measured ? { measures: measured.measures } : {}),
     ...(cursor ? { cursor } : {}),
+    readMeasures: async () => {
+      const measured = await readStructureMeasures(env, { structure, revision: header.head });
+      return { measures: measured.measures, pagesRead: measured.cost.pagesRead };
+    },
     readChildren: async query => {
       const result = await composition({ parent: query.parent, ...(query.after ? { after: query.after } : {}),
         limit: query.limit });
@@ -291,11 +316,9 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
     await fenceWorkBasis(session, basis);
     return page;
   }
-  const result = measured ? { ...page, cost: { ...page.cost, pages: page.cost.pages + 1,
-    pagesRead: page.cost.pagesRead + measured.cost.pagesRead } } : page;
-  if (Buffer.byteLength(JSON.stringify(result)) > RECIPE_WORK_PAGE_BYTES) {
+  if (Buffer.byteLength(JSON.stringify(page)) > RECIPE_WORK_PAGE_BYTES) {
     throw new WorkReadLimit('Recipe page exceeds 1 MiB');
   }
   await fenceWorkBasis(session, basis);
-  return result;
+  return page;
 }

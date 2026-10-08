@@ -198,8 +198,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       detail: { security: [{}, { bearerAuth: [] }] },
       response: { 200: t.Nullable(t.Object({ profile: t.Literal('recipe-work-page-v1'), structure: ref,
         revision: ref, occurrences: t.Array(OccurrenceRecord),
-        /** Present on the first page only. A continuation pins the servings factor in `cursor`. */
-        measures: t.Optional(t.Array(RecipeMeasure)),
+        measures: t.Array(RecipeMeasure),
         ingredients: t.Array(t.Object({ occurrence: ref, originalText: t.String(),
           sourceLexical: t.Optional(t.String()), amount: t.Optional(rational),
           amountUpper: t.Optional(rational), unitText: t.Optional(t.String()), scaled: t.Boolean(),

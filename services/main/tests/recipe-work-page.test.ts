@@ -5,6 +5,10 @@ import { WorkReadInvalid, WorkReadLimit, WorkReadUnavailable } from '../src/modu
 import { STRUCTURE_LIMITS, type OccurrenceRecord, type RecipeMeasure } from '../src/modules/structure/format.ts';
 import { orderTreeKey } from '../src/modules/structure/graph.ts';
 
+if (!/^[0-9a-f]{64}$/.test(Bun.env.FUSEKI_MAINTENANCE_TOKEN ?? '')) {
+  Bun.env.FUSEKI_MAINTENANCE_TOKEN = 'ab'.repeat(32);
+}
+
 const structure = 'https://rezics.com/id/00000000-0000-4000-8000-000000000010';
 const revision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000011';
 const otherRevision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000012';
@@ -96,22 +100,27 @@ async function walk(records: readonly OccurrenceRecord[], options?: { servings?:
   let pages = 0;
   do {
     source.reset();
+    let measureReads = 0;
     const page = await readRecipeHierarchyPage({ structure, revision, ...(cursor ? { cursor } : {}),
       ...(options?.servings !== undefined && !cursor ? { servings: options.servings } : {}),
-      ...(!cursor && options?.measures ? { measures: options.measures } : {}),
+      readMeasures: async () => {
+        measureReads += 1;
+        return { measures: options?.measures ?? [], pagesRead: 1 };
+      },
       readChildren: source.readChildren, readParent: source.readParent });
     expect(page.profile).toBe('recipe-work-page-v1');
     if (page.profile !== 'recipe-work-page-v1') break;
     pages += 1;
     expect(page.occurrences.length).toBeLessThanOrEqual(RECIPE_WORK_PAGE_OCCURRENCES);
     expect(page.cost.occurrences).toBe(page.occurrences.length);
-    expect(page.cost.pages).toBe(source.stats.parent + source.stats.data + source.stats.empty);
+    expect(measureReads).toBe(1);
+    expect(page.measures).toEqual(options?.measures ?? []);
+    expect(page.cost.pages).toBe(source.stats.parent + source.stats.data + source.stats.empty + 1);
     expect(source.stats.data).toBeLessThanOrEqual(1);
     expect(source.stats.parent).toBeLessThanOrEqual(STRUCTURE_LIMITS.maxDepth);
     expect(source.stats.empty).toBeLessThanOrEqual(STRUCTURE_LIMITS.maxDepth + 1);
-    expect(source.stats.parent + source.stats.data + source.stats.empty).toBeLessThanOrEqual(RECIPE_WORK_PAGE_READ_BOUND);
+    expect(page.cost.pages).toBeLessThanOrEqual(RECIPE_WORK_PAGE_READ_BOUND);
     expect(source.stats.limits.every(limit => limit === RECIPE_WORK_PAGE_OCCURRENCES)).toBe(true);
-    if (cursor) expect(page).not.toHaveProperty('measures');
     seen.push(...page.occurrences.map(item => item.occurrence));
     cursor = page.next;
   } while (cursor);
@@ -158,7 +167,7 @@ test('a nested recipe pages depth-first and pins servings across the cursor', as
     measures: [servingsMeasure(1)], readChildren: source.readChildren, readParent: source.readParent });
   expect(second.profile).toBe('recipe-work-page-v1');
   if (second.profile !== 'recipe-work-page-v1') return;
-  expect(second).not.toHaveProperty('measures');
+  expect(second.measures).toEqual([servingsMeasure(1)]);
   expect(second.occurrences.map(item => item.occurrence)).toEqual([tomato.occurrence, salt.occurrence]);
   expect(second.ingredients.map(item => item.amount)).toEqual([
     { numerator: 2, denominator: 1 }, { numerator: 2, denominator: 1 }]);
@@ -235,4 +244,5 @@ test('a single page over 1 MiB is refused and more than 64 measures are refused'
     readParent: () => { throw new Error('measure bound is checked before the walk'); } }))
     .rejects.toThrow('Recipe measures exceed 64');
   expect(RECIPE_WORK_PAGE_BYTES).toBe(1_048_576);
+  expect(RECIPE_WORK_PAGE_READ_BOUND).toBe(2 * STRUCTURE_LIMITS.maxDepth + 3);
 });
