@@ -12,7 +12,7 @@ const readiness = new WeakMap<WorkReadSession, Promise<unknown>>();
 export const OCCURRENCE_SEARCH_COST = { keyChars: 134, normalizedQueryChars: 4000, probe: 101, directories: 2, visits: 4096 } as const;
 export async function searchOccurrenceLabels(session: WorkReadSession, order: ReadingOrderIndex,
   meta: ReadingWork, parent: string, q: string, after: ReadingOccurrence | undefined,
-  limit: number, numbered: string | null): Promise<{ candidates: Array<{ item: ReadingOccurrence; matches: boolean }>; current: boolean }> {
+  limit: number, numbered: string | { occurrence: string; segmentKey: string; orderKey: string } | null): Promise<{ candidates: Array<{ item: ReadingOccurrence; matches: boolean }>; current: boolean }> {
   if (session.deps?.environment) {
     if (!readiness.has(session)) readiness.set(session,
       assertPublicTextReady(session.deps.environment.fuseki, session.deps.environment.lineage));
@@ -42,27 +42,35 @@ export async function searchOccurrenceLabels(session: WorkReadSession, order: Re
     previous = key(item);
   }
   const entries = result.items.map(entry => ({ ...entry, parent }));
-  if (numbered && !entries.some(entry => entry.occurrence === numbered)) {
-    // Numeric sibling rank is another exact counted-tree seek. Bind its
-    // placement identity; this is never an OFFSET or a label inventory read.
-    const records = await session.query(`# reading-position:numbered-placement
-      SELECT ?segmentKey ?orderKey WHERE { GRAPH ${iri(GRAPHS.current)} {
-        BIND(${iri(placementIri(meta.generation!, numbered))} AS ?placement)
-        ?placement rv:generation ${iri(meta.generation!)} ; rv:occurrence ${iri(numbered)} ;
-          rv:orderSegment ?segment ; rv:orderKey ?orderKey .
-        ?segment rv:parent ${iri(parent)} ; rv:segmentKey ?segmentKey .
-        FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
-      } } LIMIT 2`, 2);
-    if (records.length !== 1 || !records[0]?.segmentKey || !records[0]?.orderKey) {
-      throw new WorkReadUnavailable('Numbered placement is unavailable');
+  const numberedOccurrence = typeof numbered === 'string' ? numbered : numbered?.occurrence ?? null;
+  if (numberedOccurrence && !entries.some(entry => entry.occurrence === numberedOccurrence)) {
+    // The counted tree already names this sibling's keys. A graph placement
+    // read is only the fallback when the caller has the occurrence alone.
+    let segmentKey: string | undefined, orderKey: string | undefined;
+    if (numbered && typeof numbered !== 'string') {
+      segmentKey = numbered.segmentKey;
+      orderKey = numbered.orderKey;
+    } else {
+      const records = await session.query(`# reading-position:numbered-placement
+        SELECT ?segmentKey ?orderKey WHERE { GRAPH ${iri(GRAPHS.current)} {
+          BIND(${iri(placementIri(meta.generation!, numberedOccurrence))} AS ?placement)
+          ?placement rv:generation ${iri(meta.generation!)} ; rv:occurrence ${iri(numberedOccurrence)} ;
+            rv:orderSegment ?segment ; rv:orderKey ?orderKey .
+          ?segment rv:parent ${iri(parent)} ; rv:segmentKey ?segmentKey .
+          FILTER NOT EXISTS { ?placement rv:removedBy ?removed }
+        } } LIMIT 2`, 2);
+      if (records.length !== 1 || !records[0]?.segmentKey || !records[0]?.orderKey) {
+        throw new WorkReadUnavailable('Numbered placement is unavailable');
+      }
+      segmentKey = records[0].segmentKey.value;
+      orderKey = records[0].orderKey.value;
     }
-    const entry = { parent, occurrence: numbered, segmentKey: records[0].segmentKey.value,
-      orderKey: records[0].orderKey.value, matches: true };
+    const entry = { parent, occurrence: numberedOccurrence, segmentKey, orderKey, matches: true };
     if (key(entry) > afterKey) entries.push(entry);
   }
   entries.sort((a, b) => key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0);
   entries.splice(limit);
-  const matches = new Set(entries.filter(entry => entry.matches || entry.occurrence === numbered).map(entry => entry.occurrence));
+  const matches = new Set(entries.filter(entry => entry.matches || entry.occurrence === numberedOccurrence).map(entry => entry.occurrence));
   const items = await order.hydrate(meta, entries, true);
   return { candidates: items.map(item => ({ item, matches: matches.has(item.occurrence) })), current: result.current };
 }

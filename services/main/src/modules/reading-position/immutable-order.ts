@@ -130,7 +130,8 @@ export class ReadingOrderIndex {
         || row.orderKey?.value !== entry.orderKey || !['ChapterRole', 'PartRole', 'GroupRole'].includes(role ?? '')) {
         throw new WorkReadUnavailable('Reading order and placement differ');
       }
-      const item: ReadingOccurrence = { work: meta.work, structure: meta.structure!, revision: meta.revision!, ...entry,
+      const item: ReadingOccurrence = { work: meta.work, structure: meta.structure!, revision: meta.revision!,
+        occurrence: entry.occurrence, parent: entry.parent, segmentKey: entry.segmentKey, orderKey: entry.orderKey,
         role: role === 'ChapterRole' ? 'chapter' : role === 'PartRole' ? 'part' : 'group',
         target: row.target?.value ?? null, ...(row.displayLabel ? { displayLabel: row.displayLabel.value } : {}) };
       const previous = records.get(item.occurrence);

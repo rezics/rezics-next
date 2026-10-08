@@ -1,10 +1,13 @@
+import { GRAPHS, iri } from '../work/activate.ts';
 import { readCompositionHeader } from '../structure/graph.ts';
 import { disclosedCompletedProgress } from '../progress/disclosure.ts';
 import { ProgressOrderUnavailable, type ResumePageKey } from '../progress/store.ts';
-import { WorkReadMissing, type WorkReadSession } from '../work/read-session.ts';
+import { parseStoredRelease } from '../release/schema.ts';
+import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { continuityKey, CONTINUITY_MEMBER_BOUND } from './continuity.ts';
+import { READING_POSITION_COST } from './contract.ts';
 import { ReadingContinuityUnsupported, ReadingResumeContinuation, ReadingResumeUnavailable } from './errors.ts';
-import type { ReadingWork, ReadingPositionTraversal } from './traversal.ts';
+import { compareReadingLocations, READING_CHOOSER_COST, type ReadingLocation, type ReadingWork, type ReadingPositionTraversal } from './traversal.ts';
 
 /** Resume is one indexed owner range, with a fixed disclosure fallback window.
  * A chapter inside a volume is that volume's place in the series index plus
@@ -24,7 +27,12 @@ export async function chooserPosition(session: WorkReadSession, traversal: Readi
   }
   const { principal, options, deps } = session;
   if (!principal || !options.actingSubject) return 'start';
-  if (!deps.progress) throw new ReadingResumeUnavailable('The resume order index is unavailable');
+  // An empty progress slot means this read has a resume index whose owner is
+  // down. Paging sessions or completion history would walk the series, so the
+  // read fails before either source is touched. A session that was never given
+  // the slot still resumes from its saved pins.
+  if ('progress' in deps && !deps.progress) throw new ReadingResumeUnavailable('The resume order index is unavailable');
+  if (!deps.progress) return readerStatePosition(session, traversal);
   await traversal.requireWork(traversal.root);
   const meta = await traversal.metadataFor(traversal.root);
   if (!meta.structure) return 'start';
@@ -122,4 +130,89 @@ async function resumeMember(session: WorkReadSession, traversal: ReadingPosition
     throw new ReadingResumeContinuation({ ...candidates.next, structure: child.structure, seriesOccurrence: seriesMember });
   }
   return null;
+}
+
+/** Furthest saved place when no prepared resume index exists. Sessions, a
+ * completed page and finished Works name occurrences; their order is the same
+ * continuity key as the index. This does not walk chapter inventory. */
+async function readerStatePosition(session: WorkReadSession, traversal: ReadingPositionTraversal): Promise<string> {
+  const { principal, options, deps } = session;
+  if (!principal || !options.actingSubject) return 'start';
+  let furthest: ReadingLocation | null = null;
+  const consider = (location: ReadingLocation | null) => {
+    if (location && (!furthest || compareReadingLocations(location, furthest) > 0)) furthest = location;
+  };
+  const finishes = new Map<string, Promise<ReadingLocation | null>>();
+  const finish = (work: string) => {
+    if (!finishes.has(work)) finishes.set(work, traversal.last(work));
+    return finishes.get(work)!;
+  };
+  const releases = new Map<string, { resource: string; revision: string }>();
+  for await (const batch of traversal.works()) {
+    const works = batch.map(meta => meta.work), structures = batch.flatMap(meta => meta.structure ? [meta.structure] : []);
+    if (deps.readingPositions && structures.length) {
+      let after: string | undefined;
+      do {
+        const progress = await deps.readingPositions.completedPage(principal, structures, after);
+        await traversal.recordsFor(progress.items);
+        for (const occurrence of progress.items) consider(await traversal.location(occurrence));
+        after = progress.next ?? undefined;
+      } while (after);
+    }
+    if (deps.seriesSessions) {
+      let cursor: string | undefined;
+      for (let page = 0; ; page++) {
+        if (page >= READING_POSITION_COST.sessionPages) throw new WorkReadUnavailable('Reader history exceeds its cost');
+        const attempts = await deps.seriesSessions.batch({ principal, agent: options.actingSubject }, works, [], session.position, cursor);
+        for (const attempt of attempts.items) if (attempt.state === 'finished') {
+          const occurrences = attempt.selections.flatMap(selected => selected.target.base === 'occurrence' ? [selected.target] : []);
+          for (let at = 0; at < occurrences.length; at += READING_CHOOSER_COST.workBatch) {
+            const pins = occurrences.slice(at, at + READING_CHOOSER_COST.workBatch);
+            await traversal.recordsFor(pins.map(pin => pin.resource));
+            for (const pin of pins) {
+              const location = await traversal.location(pin.resource);
+              if (location?.item.revision === pin.revision) consider(location);
+            }
+          }
+          for (const selected of attempt.selections) {
+            const target = selected.target;
+            if (target.base === 'work') consider(await finish(target.resource));
+            else if (target.base === 'realization' && target.work) consider(await finish(target.work));
+            else if (target.base === 'release' && target.revision) {
+              releases.set(`${target.resource}|${target.revision}`, { resource: target.resource, revision: target.revision });
+            }
+          }
+        }
+        if (!attempts.next) break;
+        cursor = attempts.next;
+      }
+    }
+    if (deps.readingPositions) {
+      for (const work of await deps.readingPositions.finishedWorks(options.actingSubject, works)) consider(await finish(work));
+    }
+  }
+  if (releases.size > READING_POSITION_COST.releasePins) throw new WorkReadUnavailable('Reader release pins exceed their cost');
+  const releasePins = [...releases.values()];
+  for (let at = 0; at < releasePins.length; at += READING_CHOOSER_COST.workBatch) {
+    const batch = releasePins.slice(at, at + READING_CHOOSER_COST.workBatch);
+    const rows = await session.query(`SELECT ?resource ?revision ?state WHERE {
+      VALUES (?resource ?revision) { ${batch.map(pin => `(${iri(pin.resource)} ${iri(pin.revision)})`).join(' ')} }
+      GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ReleaseRevision ; rv:component ?resource ; rv:releaseState ?state }
+    } LIMIT ${batch.length + 1}`, batch.length);
+    if (rows.length !== batch.length) throw new WorkReadUnavailable('Pinned release coverage is unavailable');
+    for (const row of rows) {
+      const release = parseStoredRelease(row.state!.value);
+      if (release.id !== row.resource?.value) throw new WorkReadUnavailable('Pinned release identity differs');
+      if (release.profile === 'release-v2') for (const entry of release.coverage) {
+        if (entry.completeness === 'complete') {
+          const covered = release.resolvedCoverage.find(pin => pin.realization === entry.realization);
+          if (covered) consider(await finish(covered.work));
+        }
+      }
+    }
+  }
+  const selected = furthest as ReadingLocation | null;
+  if (!selected) return 'start';
+  await traversal.requireLocation(selected);
+  return selected.item.occurrence;
 }

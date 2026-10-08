@@ -12,6 +12,13 @@ import { ReadingSeekUnavailable } from './errors.ts';
 import { continuityKey } from './continuity.ts';
 import { browseContinuation, readingContinuation } from './continuation.ts';
 
+/** A delivered row continues by its occurrence, which the next read enters when
+ * it has children. A hidden or exhausted row must not be re-entered, so that
+ * checkpoint keeps the descend bit the occurrence alone cannot carry. */
+function positionCursor(occurrence: string, descend: boolean) {
+  return descend ? occurrence : browseContinuation(occurrence, false);
+}
+
 /** Bounded results and live traversal state, independent of chapter inventory.
  * Each seek returns <=101 placements, with <=16 labels each. Configured stores
  * use immutable counted trees for ranges, numeric rank and ordinals. Graph-only
@@ -119,11 +126,12 @@ export class ReadingPositionTraversal {
     }
   }
 
-  /** Numeric chapter selection requires the counted immutable index. */
-  private async numbered(meta: ReadingWork, parent: string, q: string): Promise<string | null> {
+  /** Numeric chapter selection requires the counted immutable index. The entry
+   * carries its order keys, so the label page does not re-read the placement. */
+  private async numbered(meta: ReadingWork, parent: string, q: string) {
     if (!/^[1-9]\d*$/.test(q) || !Number.isSafeInteger(Number(q)) || Number(q) > STRUCTURE_LIMITS.maxPlacements) return null;
     if (!this.order) throw new ReadingSeekUnavailable('An indexed reading-position seek is unavailable');
-    return readingOrderRead(() => this.order!.numbered(meta, parent, Number(q)));
+    return readingOrderRead(() => this.order!.numberedEntry(meta, parent, Number(q)));
   }
 
   private async range(meta: ReadingWork, parent: string, after: ReadingOccurrence | undefined,
@@ -342,54 +350,70 @@ export class ReadingPositionTraversal {
         || (await this.disclose([previous.item.target])).has(previous.item.target))) {
         const child = await this.child(previous.item, frames); if (child) frames.push(child);
       }
-      checkpoint = browseContinuation(cursor.occurrence, false);
+      checkpoint = positionCursor(cursor.occurrence, false);
     } else if (meta.structure) frames.push({ work: this.root, parent: meta.structure });
     const items: ReadingOccurrence[] = [];
-    let examined = 0;
-    while (frames.length && items.length <= input.limit && examined < READING_CHOOSER_COST.scanRows) {
+    // Hidden skips stop after one scan window. A visible page is one index
+    // read of the requested page plus its lookahead, not that window.
+    let skipped = 0, examined = 0, widen = false, withheld = false;
+    const open = () => this.order ? skipped < READING_CHOOSER_COST.scanRows : examined < READING_CHOOSER_COST.scanRows;
+    while (frames.length && items.length <= input.limit && open()) {
       this.session.checkDeadline();
       const frame = frames.at(-1)!, owner = await this.metadataFor(frame.work);
       try { await this.requireWork(frame.work); }
       catch (error) {
         if (!(error instanceof WorkReadMissing)) throw error;
-        frames.pop(); examined++;
+        frames.pop(); examined++; skipped++;
         const parent = frames.at(-1)?.after;
-        if (parent) checkpoint = browseContinuation(parent.occurrence, false);
+        if (parent) checkpoint = positionCursor(parent.occurrence, false);
         continue;
       }
-      const probe = Math.min(READING_CHOOSER_COST.probe, READING_CHOOSER_COST.scanRows - examined);
+      const room = input.limit - items.length + 1;
+      const probe = this.order
+        ? Math.min(READING_CHOOSER_COST.probe, widen && items.length === 0
+          ? Math.max(room, READING_CHOOSER_COST.scanRows - skipped) : room)
+        : Math.min(READING_CHOOSER_COST.probe, READING_CHOOSER_COST.scanRows - examined);
+      if (probe < 1) break;
       const candidates = await this.range(owner, frame.parent, frame.after, q, false, probe);
       examined += Math.max(1, candidates.length);
       const targets = [...new Set(candidates.flatMap(row => row.item.target && NATIVE_ID.test(row.item.target) ? [row.item.target] : []))];
       const disclosed = await this.disclose(targets);
-      let descended = false;
+      let descended = false, deliveredHere = 0, passed = 0;
       for (const candidate of candidates) {
         const item = candidate.item; frame.after = item;
-        checkpoint = browseContinuation(item.occurrence, false);
-        if (item.role === 'part' && item.target && !disclosed.has(item.target)) continue;
+        checkpoint = positionCursor(item.occurrence, false);
+        if (item.role === 'part' && item.target && !disclosed.has(item.target)) {
+          withheld = true; passed++; continue;
+        }
         const redacted = item.target && NATIVE_ID.test(item.target) && !disclosed.has(item.target);
         if (item.role !== 'group' && candidate.matches && (!redacted || !q || String(item.ordinal) === q)) {
           items.push(redacted ? { ...item, target: null, labels: [] } : item);
-          if (items.length <= input.limit) lastDelivered = browseContinuation(item.occurrence, true);
-        }
+          deliveredHere++;
+          if (items.length <= input.limit) lastDelivered = positionCursor(item.occurrence, true);
+        } else if (item.role !== 'group') passed++;
         if (items.length > input.limit) break;
         const child = await this.child(item, frames);
         if (child) {
           frames.push(child); descended = true;
-          checkpoint = browseContinuation(item.occurrence, true);
+          checkpoint = positionCursor(item.occurrence, true);
           break;
         }
       }
+      skipped += passed;
+      widen = deliveredHere === 0 && !descended;
       if (!descended && candidates.length < probe && items.length <= input.limit) {
         frames.pop();
         const parent = frames.at(-1)?.after;
-        if (parent) checkpoint = browseContinuation(parent.occurrence, false);
+        if (parent) checkpoint = positionCursor(parent.occurrence, false);
       }
     }
     const lookahead = items.length > input.limit;
     const complete = !lookahead && frames.length === 0;
     items.splice(input.limit);
-    const delivered: ReadingOccurrence[] = items.map(({ ordinal: _ordinal, ...item }) => item);
+    // A sibling ordinal counts every earlier placement. Omit it once this
+    // request has stepped over an undisclosed part.
+    const delivered: ReadingOccurrence[] = withheld
+      ? items.map(({ ordinal: _ordinal, ...item }) => item) : items;
     const next = complete ? null : lookahead ? lastDelivered : checkpoint;
     if (!complete && !next) throw new WorkReadUnavailable('Reading continuation is unavailable');
     return { items: delivered, next, complete: complete && !this.labelsIndexing,

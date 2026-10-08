@@ -129,4 +129,22 @@ export class ReadingPositionStore {
   async abandon(receipt: string): Promise<void> {
     await this.pool.query(`DELETE FROM reading_position.pending_revelation WHERE receipt = $1`, [receipt]);
   }
+  /** Saved completions when the prepared resume index is absent. One occurrence
+   * page, never the chapter inventory. The index path does not call this. */
+  async completedPage(principal: VerifiedPrincipal, structures: readonly string[], after?: string) {
+    if (structures.length > REVELATION_COST.batch) throw new WorkReadInvalid('Progress structure batch exceeds its cost');
+    if (!structures.length) return { items: [] as string[], next: null as string | null };
+    const result = await this.pool.query<{ occurrence: string }>(`SELECT DISTINCT occurrence
+      FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2
+        AND structure = ANY($3::text[]) AND completed AND ($4::text IS NULL OR occurrence > $4)
+      ORDER BY occurrence LIMIT $5`, [principal.issuer, principal.subject, structures, after ?? null, REVELATION_COST.batch + 1]);
+    const items = result.rows.slice(0, REVELATION_COST.batch).map(row => row.occurrence);
+    return { items, next: result.rows.length > REVELATION_COST.batch ? items.at(-1)! : null };
+  }
+  async finishedWorks(agent: string, works: readonly string[]): Promise<Set<string>> {
+    if (works.length > REVELATION_COST.batch) throw new WorkReadInvalid('Finished Work batch exceeds 50 records');
+    const result = await this.pool.query<{ work: string }>(`SELECT work FROM reader.library_status
+      WHERE agent = $1 AND work = ANY($2::text[]) AND status = 'read'`, [agent, works]);
+    return new Set(result.rows.map(row => row.work));
+  }
 }

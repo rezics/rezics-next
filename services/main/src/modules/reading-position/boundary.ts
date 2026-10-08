@@ -239,7 +239,14 @@ export class ReadingBoundary {
   }
   private async privateSnapshot() {
     if (this.selection !== 'mine' || !await this.ownReader()) return null;
-    return this.session.deps.progress?.readerVersion(this.session.principal!) ?? 'unconfigured';
+    const { principal, options, deps } = this.session;
+    // The saved reader clock and the prepared index version are one fence:
+    // a continuation from either source is stale when that source moves.
+    const saved = deps.readingPositions
+      ? await deps.readingPositions.privateSnapshot(principal!, options.actingSubject!) : null;
+    const indexed = deps.progress ? await deps.progress.readerVersion(principal!) : null;
+    if (saved === null && indexed === null) return 'unconfigured';
+    return indexed === null ? saved! : `${saved ?? ''}\u0001${indexed}`;
   }
   async visible(records: readonly string[]): Promise<Set<string>> {
     const store = this.session.deps.readingPositions;
@@ -289,13 +296,16 @@ export class ReadingBoundary {
   }
   async chooser(work: string, limit: number, after?: string, q?: string) {
     const traversal = this.traversalFor(work);
-    const resumeOnly = this.selection === 'mine' && !q?.trim();
+    // Only the reader's own Mine is the resume record. Anonymous and explicit
+    // positions still list the opening page, which is what names Chapter 1.
+    const ownMine = this.selection === 'mine' && await this.ownReader();
+    const resumeOnly = ownMine && !q?.trim();
     let resumeAfter: ResumePageKey | undefined, browseAfter = after;
     if (resumeOnly) {
       const cursor = after ? readingContinuation(after, 'resume') : null;
       if (cursor && cursor.kind !== 'resume') throw new WorkReadInvalid('Reading continuation has another scope');
       resumeAfter = cursor?.after;
-    } else if (this.selection === 'mine' && after) {
+    } else if (ownMine && after) {
       const cursor = readingContinuation(after, 'search');
       if (cursor.kind !== 'search') throw new WorkReadInvalid('Reading continuation has another scope');
       resumeAfter = cursor.resume ?? undefined; browseAfter = cursor.browse ?? undefined;
@@ -308,8 +318,10 @@ export class ReadingBoundary {
         complete: false, search: undefined, scope: resumeOnly ? 'resume' as const : 'positions' as const,
         visibility: 'pending' as const };
     }
-    if (resumeOnly) {
-      const location = resolved === 'start' ? null : await traversal.location(resolved);
+    // A reader who has not started still needs the opening page. An empty
+    // resume record would leave the position control with no chapter name.
+    if (resumeOnly && resolved !== 'start') {
+      const location = await traversal.location(resolved);
       const items: ReadingOccurrence[] = [];
       if (location) {
         const { ordinal: _ordinal, ...item } = location.item;
@@ -324,7 +336,7 @@ export class ReadingBoundary {
     // Keep the resume window while advancing search, so each subsequent page
     // does not restart at the withheld end of the completion index.
     return { work, resolved, ...page,
-      next: page.next && this.selection === 'mine'
+      next: page.next && ownMine
         ? searchContinuation(page.next, resumeAfter ?? null) : page.next,
       scope: 'positions' as const };
   }
