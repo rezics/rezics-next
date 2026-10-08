@@ -47,6 +47,10 @@ export async function readReadingPositionPage(
     cursor?: string;
     limit?: number;
     language?: string;
+    /** Answer the chapters either side of this occurrence instead of a page. */
+    around?: string;
+    /** Answer the first chapter the reader may see from where this record is revealed. */
+    firstSeen?: string;
   },
 ): Promise<ReadingPositionPage> {
   const { work, ...query } = input;
@@ -54,7 +58,8 @@ export async function readReadingPositionPage(
     main.v1['reading-positions']({ work: work.slice(-36) }).get({
       query: {
         ...query,
-        limit: input.limit ?? 50,
+        // A lookup answers one bounded read and takes no page size.
+        ...(input.around || input.firstSeen ? {} : { limit: input.limit ?? 50 }),
       },
     });
   let answer = await read();

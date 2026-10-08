@@ -13,7 +13,6 @@ import {
   readChooser,
   readLabels,
   readPositionedRoute,
-  readReadingOrder,
 } from './read.ts';
 import { pickPositionLabel } from './position-picker.ts';
 
@@ -30,12 +29,6 @@ export interface PositionState {
   mode: 'default' | 'chosen' | 'all';
   work: string;
   chooser: Chooser;
-  /**
-   * Occurrences in disclosed reading order, for neighbours and for what a chapter adds.
-   * The chooser stays the position control's list. A resumed reader starts with that one chapter;
-   * `ensureReadingOrder` widens it once a page has already read its own facts.
-   */
-  readingOrder: readonly ChooserItem[];
   /** Names of the Works the positions are in (a volume); a chapter's own name is its label. */
   names: Names;
   /** The labels the compositions give their occurrences (`Chapter 3`), by occurrence IRI. */
@@ -104,9 +97,6 @@ export const loadPosition = cache(
       mode: choice.kind === 'default' ? 'default' : choice.kind === 'all' ? 'all' : 'chosen',
       work: chooser.data.work,
       chooser: chooser.data,
-      // The resume list is only this chapter. The order around it is read with the page that names neighbours,
-      // after that page has read its own relations and statements.
-      readingOrder: items,
       names,
       labels,
       at,
@@ -114,22 +104,6 @@ export const loadPosition = cache(
     };
   },
 );
-
-const widened = new WeakMap<PositionState, Promise<PositionState>>();
-
-/**
- * The disclosed order around a resumed chapter. The position chooser stays the one resume item.
- * A failed read leaves the order empty, and callers then keep the resume chapter itself.
- * One position state shares one read, including when several pages of the same request ask.
- */
-export function ensureReadingOrder(state: PositionState): Promise<PositionState> {
-  if (state.chooser.scope !== 'resume' || state.at === null) return Promise.resolve(state);
-  const existing = widened.get(state);
-  if (existing) return existing;
-  const pending = readReadingOrder(state.work, state.at).then((readingOrder) => ({ ...state, readingOrder }));
-  widened.set(state, pending);
-  return pending;
-}
 
 /** The Work a package's positions are in is the first Work its `positions.mount` lists. */
 export const positionOf = (pkg: Pick<ZonePackage, 'positions'> | null, zone: string, choice: PositionChoice) =>
@@ -144,33 +118,6 @@ function nameText(names: Names, reference: string): ZoneText | null {
 
 /** The label to read in `locale`: its own language, else the same base language, else English, else the first written. */
 export const pickLabel = pickPositionLabel;
-
-const chaptersOf = (items: readonly ChooserItem[]) => items.filter((item) => item.role === 'chapter');
-
-/**
- * Chapters the reader may see, in reading order. When a forward scan stops before the reader's chapter, the resume
- * chapter stands in for that place; earlier chapters remain on the scanned pages.
- */
-export function chaptersVisible(state: Pick<PositionState, 'chooser' | 'readingOrder' | 'at'>): ChooserItem[] {
-  const order = chaptersOf(state.readingOrder);
-  const resume = chaptersOf(state.chooser.items);
-  if (order.length && (!state.at || order.some((item) => item.occurrence === state.at))) return order;
-  return resume;
-}
-
-/** Where `id` (a UUID or an occurrence IRI) sits in the chapters the reader may see. */
-export function placedChapter(
-  state: Pick<PositionState, 'chooser' | 'readingOrder' | 'at'>,
-  id: string,
-): { ordered: ChooserItem[]; index: number } | null {
-  const match = (item: ChooserItem) => idOf(item.occurrence) === id || item.occurrence === id;
-  const ordered = chaptersVisible(state);
-  const index = ordered.findIndex(match);
-  if (index >= 0) return { ordered, index };
-  const wider = chaptersOf(state.readingOrder);
-  const widerIndex = wider.findIndex(match);
-  return widerIndex >= 0 ? { ordered: wider, index: widerIndex } : null;
-}
 
 /**
  * A chapter's name: the composition's label, else the label the positions read disclosed.

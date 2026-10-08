@@ -33,6 +33,9 @@ const current = iri(GRAPHS.current);
 export interface ReadingWork { work: string; structure: string | null; revision: string | null; generation: string | null }
 export interface ReadingFrame { work: string; parent: string; after?: ReadingOccurrence }
 export interface ReadingLocation { item: ReadingOccurrence; frames: ReadingFrame[] }
+/** A chapter lookup ends in one of three ways. `none` is the end of the reading
+ * order; `bound` is the scan window running out, which says nothing about what lies beyond. */
+export type ReadingStep = { status: 'found'; item: ReadingOccurrence } | { status: 'none' } | { status: 'bound' };
 interface Candidate { item: ReadingOccurrence; matches: boolean }
 type Disclose = (resources: string[]) => Promise<ReadonlySet<string>>;
 
@@ -48,6 +51,8 @@ function placementPattern(generation: string, parent?: string) {
     ?segment rv:parent ${parent ? iri(parent) : '?parent'} ; rv:segmentKey ?segmentKey .
     FILTER NOT EXISTS { ?placement rv:removedBy ?removed }`;
 }
+/** A chapter named without its sibling ordinal, which counts placements the reader may not see. */
+function bare({ ordinal: _ordinal, ...item }: ReadingOccurrence): ReadingOccurrence { return item; }
 function itemOf(row: ReadRow, meta?: ReadingWork): ReadingOccurrence {
   const value = (key: string) => row[key]?.value;
   const role = value('role')?.split('/').at(-1);
@@ -437,6 +442,74 @@ export class ReadingPositionTraversal {
     return { items: delivered, next, complete: complete && !this.labelsIndexing,
       visibility: delivered.length ? 'visible' as const : complete ? 'empty' as const : 'pending' as const,
       ...(q ? { search: { status: this.labelsIndexing ? 'indexing' as const : 'current' as const } } : {}) };
+  }
+
+  /** The chapter on either side of `occurrence` that the reader may see, in reading order.
+   * Asking about a chapter the reader cannot see is asking about one that does not exist. */
+  async neighbours(occurrence: string): Promise<{ previous: ReadingStep; next: ReadingStep }> {
+    const location = await this.navigation(occurrence);
+    if (!location || location.item.role !== 'chapter' || !await this.seen(location)) {
+      throw new WorkReadMissing('Reading position is unavailable');
+    }
+    const from = () => location.frames.map(frame => ({ ...frame }));
+    return { previous: await this.scan(from(), true), next: await this.scan(from(), false) };
+  }
+
+  /** The first chapter the reader may see at or after the place `occurrence` marks (a chapter, a group or a
+   * volume). The place itself may be hidden, or in a Work they cannot read; the scan then moves past it. */
+  async chapterFrom(occurrence: string): Promise<ReadingStep | null> {
+    const location = await this.navigation(occurrence);
+    if (!location) return null;
+    const frames = location.frames.map(frame => ({ ...frame }));
+    if (await this.seen(location)) {
+      if (location.item.role === 'chapter') return { status: 'found', item: bare(location.item) };
+      const child = await this.child(location.item, frames);
+      if (child) frames.push(child);
+    }
+    return this.scan(frames, false);
+  }
+
+  /** Whether the reader may see this place: every Work on its path is readable and so is what the placement targets. */
+  private async seen(location: ReadingLocation) {
+    try { await this.requireLocation(location); } catch (error) {
+      if (error instanceof WorkReadMissing) return false;
+      throw error;
+    }
+    const target = location.item.target;
+    return !(location.item.role === 'chapter' && target && NATIVE_ID.test(target) && !(await this.disclose([target])).has(target));
+  }
+
+  /** Walks the reading order from `frames`, as `page` does, to the first chapter the reader may see. Descending
+   * into a group or volume reads from its near end. One scan window bounds the walk: a request costs the same
+   * wherever the chapter sits, and a window that runs out says `bound`, never a guess. */
+  private async scan(frames: ReadingFrame[], reverse: boolean): Promise<ReadingStep> {
+    let spent = 0, step = 2;
+    while (frames.length) {
+      if (spent >= READING_CHOOSER_COST.scanRows) return { status: 'bound' };
+      this.session.checkDeadline();
+      const frame = frames.at(-1)!, owner = await this.metadataFor(frame.work);
+      try { await this.requireWork(frame.work); } catch (error) {
+        if (!(error instanceof WorkReadMissing)) throw error;
+        frames.pop(); spent++;
+        continue;
+      }
+      const probe = Math.min(step, READING_CHOOSER_COST.scanRows - spent);
+      const candidates = await this.range(owner, frame.parent, frame.after, '', reverse, probe);
+      spent += 1 + candidates.length;
+      const targets = [...new Set(candidates.flatMap(row => row.item.target && NATIVE_ID.test(row.item.target) ? [row.item.target] : []))];
+      const disclosed = await this.disclose(targets);
+      let descended = false;
+      for (const { item } of candidates) {
+        frame.after = item;
+        if (item.target && NATIVE_ID.test(item.target) && !disclosed.has(item.target)) continue;
+        if (item.role === 'chapter') return { status: 'found', item: bare(item) };
+        const child = await this.child(item, frames);
+        if (child) { frames.push(child); descended = true; break; }
+      }
+      step = descended ? 2 : step * 4;
+      if (!descended && candidates.length < probe) frames.pop();
+    }
+    return { status: 'none' };
   }
 
   /** Reverse seeks locate the end of a finished Work without reading its prefix. */

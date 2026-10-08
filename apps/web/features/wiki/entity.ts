@@ -11,11 +11,11 @@ import { zoneText } from '../realm/adapt.ts';
 import { creditedNameOf, relationRows } from '../work-levels/relation-rows.ts';
 import type { RelationEntry } from '../work-levels/types.ts';
 import { namesOf } from '../work-levels/read.ts';
-import { idOf } from '../work-page/route.ts';
+import { idOf, iriOf } from '../work-page/route.ts';
 import { memberHref, zoneLink, type ZoneSite } from './links.ts';
-import { readEvidence } from './read.ts';
+import { readEvidence, readNeighbours, type ChooserItem } from './read.ts';
 import { firstSeen, revealedAt } from './reveal.ts';
-import { disclosedName, ensureReadingOrder, occurrenceName, placedChapter, type PositionState } from './state.ts';
+import { disclosedName, occurrenceName, type PositionState } from './state.ts';
 
 // A wiki page's data for a package's `entity` slot: the page projection, the statements and relations Main returned
 // for the reader's position, and the evidence those cite. Everything shown was in an answer; a read that failed
@@ -209,51 +209,51 @@ export async function buildEntity({ id, locale, projection, site, fullPage, stat
   }
 
   const evidence = await evidenceFor(claims, main);
-  // The resume list is this chapter alone. Neighbours come from a separate disclosed order, read once the page's
-  // own facts are in hand, so the position chooser stays the one resume item.
-  const positioned = state ? await ensureReadingOrder(state) : null;
-  const asChapter = Boolean(positioned && mount && projection.target.base === 'occurrence');
+  // Neighbours and what a chapter adds are bounded Main reads, made once the page's own facts are in hand.
+  const asChapter = Boolean(state && mount && projection.target.base === 'occurrence');
   const [chapter, seen] = await Promise.all([
-    asChapter && positioned && mount ? chapterOf({ id, site, state: positioned, mount, locale, lists }) : null,
-    positioned && !asChapter ? firstSeen(id, positioned) : null]);
-  const firstSeenAt = seen && positioned ? await positionLink(site, positioned, seen, locale) : null;
+    asChapter && state && mount ? chapterOf({ id, site, state, mount, locale, lists }) : null,
+    state && !asChapter ? firstSeen(id, state) : null]);
+  const firstSeenAt = seen && state ? await positionLink(site, state, seen, locale) : null;
   return { id, kind: projection.registry.default ? null : entryLabel(projection.registry, locale), name: own, aliases, facts, relationships, evidence,
     firstSeen: firstSeenAt, more: more || claims.reduce((count, claim) => count + claim.ids.length, 0) > EVIDENCE_LIMIT,
     fullPage, chapter };
 }
 
 /** A position in the story as a link: its name and, when the Zone lists chapters, its page. */
-async function positionLink(site: ZoneSite, state: PositionState, occurrence: string, locale: string):
+async function positionLink(site: ZoneSite, state: PositionState, item: ChooserItem, locale: string):
   Promise<{ name: ZoneText; href: string | null } | null> {
-  const item = state.readingOrder.find(candidate => candidate.occurrence === occurrence)
-    ?? state.chooser.items.find(candidate => candidate.occurrence === occurrence);
-  const name = item ? disclosedName(state, item, locale) : occurrenceName(state, occurrence, locale);
-  return name ? { name, href: await zoneLink(site, occurrence, 'occurrence') } : null;
+  const name = disclosedName(state, item, locale);
+  return name ? { name, href: await zoneLink(site, item.occurrence, 'occurrence') } : null;
 }
+
+/** A chapter with no disclosed name is not a link, and it does not hide the next named chapter: look past it. */
+const NAMELESS_HOPS = 3;
 
 async function chapterOf({ id, site, state, mount, locale, lists }: {
   id: string; site: ZoneSite; state: PositionState; mount: string; locale: UiLocale;
   lists: readonly { segment: string; name: ZoneText }[];
 }): Promise<ZoneChapter | null> {
-  const place = placedChapter(state, id);
-  if (!place) return null;
-  const { ordered, index } = place;
-  const atIndex = state.at ? ordered.findIndex(item => item.occurrence === state.at) : -1;
-  // A scan that stops before the reader's chapter has only earlier chapters, so each of them is reached.
-  const pastListed = state.chooser.scope === 'resume' && state.at !== null && atIndex < 0;
-  const reachedIndex = state.mode === 'all' ? ordered.length - 1 : pastListed ? ordered.length - 1 : atIndex;
-  const reached = index <= reachedIndex;
-  // A chapter with no disclosed name is not a link, and it does not hide the next named chapter.
-  const neighbour = (from: number, step: number): ZoneNeighbour | null => {
-    for (let at = from; at >= 0 && at < ordered.length; at += step) {
-      const item = ordered[at]!;
+  const occurrence = iriOf(id);
+  const around = await readNeighbours(state.work, occurrence, state.main);
+  if (!around.ok && around.failure === 'missing') return null;
+  // A failed read still opens the chapter: it is reached when it is where the reader is, and has no links.
+  const reached = around.ok ? around.data.reached : state.mode === 'all' || state.at === occurrence;
+  const neighbour = async (side: 'previous' | 'next'): Promise<ZoneNeighbour | null> => {
+    let read = around;
+    for (let hop = 0; hop <= NAMELESS_HOPS && read.ok; hop++) {
+      const item = read.data[side];
+      if (!item) return null;
       const name = disclosedName(state, item, locale);
       if (name) return { name, href: memberHref(site, mount, item.occurrence) };
+      read = await readNeighbours(state.work, item.occurrence, state.main);
     }
     return null;
   };
+  const before = around.ok ? around.data.previous?.occurrence ?? null : null;
   const reveals = reached ? (await Promise.all(lists.filter(list => list.segment !== mount).map(async list => ({
-    list, ...await revealedAt(site, state, id, list.segment, locale) })))).flatMap(({ list, members, complete }) =>
+    list, ...await revealedAt(site, state, occurrence, before, list.segment, locale) })))).flatMap(({ list, members, complete }) =>
     members.length ? [{ segment: list.segment, name: list.name, members, complete }] : []) : [];
-  return { reached, reveals, previous: neighbour(index - 1, -1), next: neighbour(index + 1, 1) };
+  const [previous, next] = await Promise.all([neighbour('previous'), neighbour('next')]);
+  return { reached, reveals, previous, next };
 }

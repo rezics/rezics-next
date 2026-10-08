@@ -7,7 +7,7 @@ import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import type { Revelation } from './store.ts';
 import { READING_POSITION_COST, REVELATION_COST } from './contract.ts';
-import { compareReadingLocations, ReadingPositionTraversal } from './traversal.ts';
+import { compareReadingLocations, ReadingPositionTraversal, type ReadingStep } from './traversal.ts';
 import { continuityKey } from './continuity.ts';
 import { chooserPosition } from './chooser-position.ts';
 import { ReadingContinuityUnsupported, ReadingResumeContinuation } from './errors.ts';
@@ -300,6 +300,40 @@ export class ReadingBoundary {
       throw new WorkReadMoved('Reader position changed during the read');
     }
   }
+  /** The chapters either side of an occurrence, in reading order, crossing volume and group boundaries as the
+   * chooser does, and whether the selected position has reached it. Each side costs one scan window whatever the
+   * chapter's place in the Work. */
+  async neighbours(work: string, occurrence: string) {
+    const traversal = this.traversalFor(work);
+    await traversal.requireWork(work);
+    const found = await traversal.neighbours(occurrence);
+    // Whether the selected position has reached this chapter: the one comparison a page cannot make without the order.
+    const position = this.selection === 'all' ? null : await this.position(work);
+    const reached = this.selection === 'all' || position !== null && await this.prefixVisible(work, position, occurrence);
+    await this.fence();
+    return { ...found, reached };
+  }
+  /** The first chapter the reader may see from where `record` is revealed in this Work's continuity. A record this
+   * reader cannot see, or that is not revealed by position here, answers as a record that does not exist. */
+  async firstAppearance(work: string, record: string): Promise<ReadingStep> {
+    const traversal = this.traversalFor(work);
+    await traversal.requireWork(work);
+    await this.require(record);
+    // A record has at most one revelation per continuity.
+    const row = (this.records.get(record) ?? []).find(candidate => candidate.continuityWork === work);
+    if (!row) throw new WorkReadMissing('Resource is unavailable');
+    // Only a revelation that already shows the record here may place it: a later one is a spoiler.
+    if (this.selection !== 'all') {
+      const position = await this.position(work);
+      if (position === null || !await this.prefixVisible(work, position, row.occurrence)) {
+        throw new WorkReadMissing('Resource is unavailable');
+      }
+    }
+    const step = await traversal.chapterFrom(row.occurrence);
+    await this.fence();
+    return step ?? { status: 'none' };
+  }
+
   async chooser(work: string, limit: number, after?: string, q?: string) {
     const traversal = this.traversalFor(work);
     // Only the reader's own Mine is the resume record. Anonymous and explicit

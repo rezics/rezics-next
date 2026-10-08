@@ -90,30 +90,66 @@ export const readChooser = cache(
   },
 );
 
-/** Pages of the disclosed order read for one chapter's neighbours (each page is at most 50 positions). */
-export const READING_ORDER_PAGES = 4;
+/** The chapters either side of one chapter that the reader may see, and whether their position has reached it. */
+export interface ChapterNeighbours {
+  previous: ChooserItem | null;
+  next: ChooserItem | null;
+  reached: boolean;
+}
+
+type LookupPage = Awaited<ReturnType<typeof readReadingPositionPage>>;
+const itemAt = (page: LookupPage, step: { status: string; occurrence?: string } | undefined) =>
+  step?.status === 'found' ? (page.items.find((item) => item.occurrence === step.occurrence) ?? null) : null;
 
 /**
- * Chapters around one occurrence, in the order the positions read already discloses.
- * The reader's own progress, requested with no position, is only that chapter. Passing the occurrence asks for the
- * opening positions page, which omits a chapter the reader may not see. Stops once that chapter and one later
- * chapter are listed, the work ends, or the page bound is reached. A failed read returns what was listed so far.
+ * Main's bounded read of the chapters around one: the previous and next chapter the reader may see, in reading
+ * order across volumes. A side Main could not settle within its scan window, or that has no chapter, is null.
+ * A chapter the reader may not see is `missing`, as one that does not exist. `position` is what every other
+ * read of the page sends (omitted, Main chooses for the reader).
  */
-export const readReadingOrder = cache(async (work: string, occurrence: string): Promise<ChooserItem[]> => {
-  const items: ChooserItem[] = [];
-  let cursor: string | undefined;
-  for (let page = 0; page < READING_ORDER_PAGES; page++) {
-    const read = await readChooser(work, occurrence, cursor);
-    if (!read.ok || read.data.scope === 'resume') break;
-    items.push(...read.data.items);
-    const chapters = items.filter((item) => item.role === 'chapter');
-    const index = chapters.findIndex((item) => item.occurrence === occurrence);
-    const settled = index >= 0 && (index < chapters.length - 1 || !read.data.more);
-    if (settled || !read.data.nextCursor) break;
-    cursor = read.data.nextCursor;
-  }
-  return items;
-});
+export const readNeighbours = cache(
+  async (
+    work: string,
+    occurrence: string,
+    position: string | undefined,
+  ): Promise<Loaded<ChapterNeighbours>> => {
+    const { main, actingSubject } = await reader();
+    try {
+      const page = await readReadingPositionPage(main, { work, actingSubject, position, around: occurrence });
+      const neighbours = page.neighbours;
+      if (!neighbours) return { ok: false, failure: 'unavailable' };
+      return {
+        ok: true,
+        data: {
+          previous: itemAt(page, neighbours.previous),
+          next: itemAt(page, neighbours.next),
+          reached: neighbours.reached,
+        },
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        failure: error instanceof PositionReadError ? failureOf(error.status) : 'unavailable',
+      };
+    }
+  },
+);
+
+/**
+ * The first chapter the reader may see from where a record is revealed in the Work, or null when Main has no
+ * such chapter within its bound, the record is not placed by position, or the read failed.
+ */
+export const readFirstAppearance = cache(
+  async (work: string, record: string, position: string | undefined): Promise<ChooserItem | null> => {
+    const { main, actingSubject } = await reader();
+    try {
+      const page = await readReadingPositionPage(main, { work, actingSubject, position, firstSeen: record });
+      return itemAt(page, page.appearance);
+    } catch {
+      return null;
+    }
+  },
+);
 
 /** A claim's source passage and what Main permits of it at `position`; a withheld quotation arrives as null. */
 export const readEvidence = cache(

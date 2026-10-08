@@ -1,42 +1,27 @@
 import type { ZoneMember } from '@rezics/zone-sdk';
 import type { UiLocale } from '../../i18n/define.ts';
-import { readEntityProjection } from '../entity-page/read.ts';
+import { iriOf } from '../work-page/route.ts';
 import type { ZoneRouteRead } from '../realm/types.ts';
 import type { ZoneSite } from './links.ts';
 import { readMembers } from './members.ts';
-import { readPositionedRoute } from './read.ts';
-import { chaptersVisible, placedChapter, type PositionState } from './state.ts';
+import { readFirstAppearance, readPositionedRoute, type ChooserItem } from './read.ts';
+import type { PositionState } from './state.ts';
 
-// What a position adds. Main has no read for "the records revealed at this chapter", so these compare two answers
-// it did give, each already cut at its own position: the page of a record at the positions before and after, and a
-// mounted list at a chapter and at the one before. They are bounded and say when they stopped.
+// What a position adds. A record's first appearance is a bounded Main read. Main has no read for "the records
+// revealed at this chapter", so `revealedAt` compares two answers it did give, each already cut at its own
+// position: a mounted list at a chapter and at the one before. It is bounded and says when it stopped.
 
 /** Pages of a mounted list compared for one chapter (Main's pages are 24 members). */
 export const REVEAL_PAGES = 3;
 
-const readable = async (id: string, position: string) => {
-  const page = await readEntityProjection(id, position);
-  return page.ok ? true : page.failure === 'missing' ? false : null;
-};
-
 /**
- * The first chapter at which a record's page exists, found by halving the reading order between the start and the
- * position the reader is at (the record is known to be visible there). Null when a read failed or none was found.
+ * The first chapter at which a record is visible to the reader, from Main's bounded read of where the record is
+ * revealed. Null when the reader is not at a position, the record is not placed by position, Main found no
+ * chapter within its bound, or the read failed.
  */
-export async function firstSeen(id: string, state: PositionState): Promise<string | null> {
-  const chapters = chaptersVisible(state);
-  const ordered = chapters.length ? chapters : state.chooser.items;
-  const reached = state.at ? ordered.findIndex(item => item.occurrence === state.at) : state.mode === 'all' ? ordered.length - 1 : -1;
-  if (reached < 0) return null;
-  let low = 0;
-  let high = reached;
-  while (low < high) {
-    const middle = Math.floor((low + high) / 2);
-    const seen = await readable(id, ordered[middle]!.occurrence);
-    if (seen === null) return null;
-    if (seen) high = middle; else low = middle + 1;
-  }
-  return ordered[low]?.occurrence ?? null;
+export async function firstSeen(id: string, state: PositionState): Promise<ChooserItem | null> {
+  if (!state.at && state.mode !== 'all') return null;
+  return readFirstAppearance(state.work, iriOf(id), state.main);
 }
 
 type Index = Extract<ZoneRouteRead, { kind: 'index' }>;
@@ -55,18 +40,16 @@ async function itemsAt(site: ZoneSite, segment: string, position: string | undef
 }
 
 /**
- * The members of one mounted list that appear at `chapter` and not at the chapter before it. `complete` is false
- * when the comparison stopped at its page bound or a read failed, so the list may be shorter than the truth.
+ * The members of one mounted list that appear at `chapter` and not at `before`, the chapter the reader may see
+ * ahead of it (null for the first). `complete` is false when the comparison stopped at its page bound or a read
+ * failed, so the list may be shorter than the truth.
  */
-export async function revealedAt(site: ZoneSite, state: PositionState, chapter: string, segment: string,
-  locale: UiLocale): Promise<{ members: ZoneMember[]; complete: boolean }> {
-  const place = placedChapter(state, chapter);
-  if (!place) return { members: [], complete: false };
-  const { ordered, index } = place;
-  const here = { ...site, main: ordered[index]!.occurrence };
-  const [now, before] = await Promise.all([itemsAt(here, segment, here.main),
-    index ? itemsAt(here, segment, ordered[index - 1]!.occurrence) : { items: [], complete: true }]);
-  const earlier = new Set(before.items.map(item => item.id));
-  return { members: await readMembers(here, segment, now.items.filter(item => !earlier.has(item.id)), locale, state),
-    complete: now.complete && before.complete };
+export async function revealedAt(site: ZoneSite, state: PositionState, chapter: string, before: string | null,
+  segment: string, locale: UiLocale): Promise<{ members: ZoneMember[]; complete: boolean }> {
+  const here = { ...site, main: chapter };
+  const [now, earlier] = await Promise.all([itemsAt(here, segment, chapter),
+    before ? itemsAt(here, segment, before) : { items: [], complete: true }]);
+  const seen = new Set(earlier.items.map(item => item.id));
+  return { members: await readMembers(here, segment, now.items.filter(item => !seen.has(item.id)), locale, state),
+    complete: now.complete && earlier.complete };
 }
