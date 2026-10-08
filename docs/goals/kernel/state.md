@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-07 23:59 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-08 00:43 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
@@ -9,6 +9,48 @@ qualification and the physical locality/restore chains converge.
 
 This section supersedes the older per-slice status below; historical proof counts
 remain attached to their original inputs. Whole Goal remains active.
+
+- Filesystem repair LANDEDa2153ac04f1a, normal164 affected files/19 guards
+  pass. Actual current native225/16 suites/0failure/error/skip run-PPWSad;
+  shards75273/69782/806991/21298ms. Main advance rebase preserved gate.
+  Root retry33013 finished0, `.temp/kernel/native-filesystem-merge-0023.log`.
+  Prior19975 gate and15666 wake processes authoritatively disappeared without
+  terminal verdict;2359 original log retained as2359-interrupted and annotated
+  with exact successful retry output so G1397's wait can proceed.
+- Mandatory refresh5914 LIVE since00:37:01, stagedPID3458830, frozea2153ac04.
+  Desired native5692ff6a9bb2; FULL original351 package enabled on writable
+  disk-backed MODULE cache. `.temp/kernel/native-filesystem-activation-0037.log`.
+  New image availability/package acceptance/activation pending. Frozen cut includes
+  TrustG1401 ce3a87bb8/Access1775; its earlier00:30 refresh cancelled before writer
+  stop. Actual serving0140a/native25ce retained; no Main merge hold.
+- G1300 Sonnet27 exitedade8bb4ba: real RelationDefinition fixture hunk only;
+  original G847 now exposes Launch nested continuity regression, not passing.
+  Original G920595+3 runtime assertions passed QA235546-3fbe46 on composedbe1836.
+  Worker built -DskipTests variant and incorrectly taggednormal1ca9; Root preserved
+  diagnosticunqualified-skiptests-1ca9 tag and REMOVEDnormal1ca9. No package/image
+  qualification inferred. Program owns pinned-image provenance class fix.
+  Sonnet28 admission refused, no force; Cursor28 mechanically composes reviewed
+ 12 files only, currently303cb2474. No variant/native build or assertion repair.
+- LaunchG1414 owns bounded continuity-wide resume repair preserving originalG847
+  nested-volume data and visibility. Exact definition-only overlay loan staged
+  `.temp/kernel/g847-definition-only.patch`; preserve/hash/restore before commit,
+  no duplicated G847 editor. G1300 source normal landing remains separate.
+- G1397 Sonnet7 now composing onto accepted cacheMain. Exact ANY-hold guard8d893fddc
+  and integer distribution9e3f60d4d selected; current MODULE cache must survive.
+  Matching ALL355 package, separate-JVM21/60 and originalrelease3/480s still pending.
+  Startup4 tests are in-memory; no physical-server proof follows from them.
+- TrustG1408 exact additive post-replay reader loan grantedSHA256
+  bf4b41e9bc59b84e82b45e4a2f2a7925c8df4a99666f7882babc5f1d08e6f287.
+  G1330 claim released content-recovery-coverage.ts; no Kernel competing edits.
+  Original assertErasedRevision/signed catalog/bytes/borrowed custody remain.
+  Review flagged unbounded DISTINCT comment scan and successful null-comment
+  terminal scan; bounded indexed EXISTS/held deadline and many-comment proof
+  needed. Critical review/authentic signed restore before acceptance.
+- Manager codex-1 observed95%; reserve applies. Current admitted workers continue,
+  default Cursor, no new Sol/Luna or force/reset. All real mail received through
+  00:42 acknowledged; regression entries retain their separate acknowledgement.
+
+Earlier checkpoint details follow; latest state above supersedes pending status.
 
 - Latest build-policy refresh38317 finished exit201 before writer stop: all351
   original package tests ran, failures0/errors4/skips0, Maven37:24. Four unchanged
