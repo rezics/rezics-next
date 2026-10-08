@@ -627,6 +627,7 @@ export const operationExposures = {
   "postV1RecipesByIdImports": "public",
   "postV1RecipesByIdMeasures": "public",
   "postV1RecipesByIdScalings": "public",
+  "postV1RecipesByIdTimings": "public",
   "postV1RecipesNutrition": "public",
   "postV1RecommendationsGeneration-activations": "platform:platform-admin",
   "postV1RecommendationsGeneration-builds": "platform:platform-admin",
