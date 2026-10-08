@@ -198,7 +198,7 @@ export class StatementPublicationSeek {
     });
   }
   async append(value: StatementPublicationCheckpoint, references: readonly StatementPublicationReference[],
-    page: StatementPublicationPhysicalPage, verifyBasis: () => Promise<boolean>): Promise<StatementPublicationCheckpoint> {
+    page: StatementPublicationPhysicalPage, verifyBasis: (client: PoolClient) => Promise<boolean>): Promise<StatementPublicationCheckpoint> {
     validateCheckpoint(value);
     if (!page || value.phase !== 'building' || references.length > STATEMENT_PUBLICATION_SEEK_COST.buildEntries - 1
       || !Number.isInteger(page.rawExamined) || page.rawExamined < references.length || page.rawExamined > 128
@@ -232,7 +232,7 @@ export class StatementPublicationSeek {
           [value.basis.dataEpoch,ref.subject,ref.predicate,ref.meaningKey,ref.statementId,JSON.stringify(ref.frameRefs),ref.head,ref.source,ref.hasEvidence]);
         }
       }
-      if (!await verifyBasis()) unavailable('Publication build source basis moved');
+      if (!await verifyBasis(client)) unavailable('Publication build source basis moved');
       return this.advance(client,value,'building',page.after,page.exhausted);
     });
   }

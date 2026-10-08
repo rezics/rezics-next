@@ -100,7 +100,7 @@ export class StatementSeek {
   private readonly publication: StatementPublicationSeek;
   private publicationAfter = '';
 
-  async capturePublicationBasis(subject: string): Promise<StatementPublicationBasis | null> {
+  async capturePublicationBasis(subject: string, client?: PoolClient): Promise<StatementPublicationBasis | null> {
     const rows = (await this.env.fuseki.query(`PREFIX rv: <${RV}>
       SELECT ?membership ?globalFacts WHERE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(this.env.lineage.dataEpoch)} ;
@@ -116,7 +116,10 @@ export class StatementSeek {
       || rows[0]?.membership && rows[0].membership.type !== 'uri')
       throw new WorkReadUnavailable('Publication source basis is unavailable');
     if (rows[0]!.globalFacts!.value !== 'false') return null;
-    const fence = (await this.pool.query<{generation: string; open: boolean}>(
+    // The publication build already holds this pool inside append. A second
+    // checkout from the same pool stalls that transaction; the fence read is
+    // the same statement on the caller's client.
+    const fence = (await (client ?? this.pool).query<{generation: string; open: boolean}>(
       'SELECT generation::text,open FROM access.recovery_fence WHERE id=true')).rows[0];
     if (!fence?.open || !/^(0|[1-9][0-9]*)$/.test(fence.generation))
       throw new WorkReadUnavailable('Publication recovery basis is unavailable');
@@ -220,8 +223,8 @@ export class StatementSeek {
     if (checkpoint.phase === 'clearing') await this.publication.clearBatch(checkpoint);
     else {
       const page = await this.publicationSourcePage(basis,checkpoint.physicalAfter);
-      await this.publication.append(checkpoint,page.entries,page,async () => {
-        if (!this.samePublicationBasis(basis,await this.capturePublicationBasis(basis.subject))) return false;
+      await this.publication.append(checkpoint,page.entries,page,async client => {
+        if (!this.samePublicationBasis(basis,await this.capturePublicationBasis(basis.subject,client))) return false;
         if (page.exhausted) await this.verifyPublicationEof(basis,page.after);
         return true;
       });

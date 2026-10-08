@@ -1,5 +1,6 @@
 import { createHash, createHmac } from 'node:crypto';
-import type { Pool, PoolClient } from 'pg';
+import { Pool, type PoolClient } from 'pg';
+import { boundedPool } from '../../infrastructure/pg-pool.ts';
 import { CommandOutcomeUnknown, CommandRejected, type CommandEnvelope, type CommandResult,
   type FusekiClient } from '../../infrastructure/fuseki.ts';
 import { ObjectIntegrityError, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
@@ -71,40 +72,71 @@ export interface ReceiptCustodySession {
 }
 export interface ReceiptCustodyStore {
   receiptAt(dataEpoch: string, streamSequence: string): Promise<string | null>;
-  /** Serialize preparation, dispatch, reconciliation and retirement for one receipt across processes. */
-  withReceipt<T>(receipt: string, operation: (session: ReceiptCustodySession) => Promise<T>): Promise<T>;
+  /** Serialize preparation, dispatch, reconciliation and retirement for one receipt across processes.
+   * Pass the caller's client when that caller already holds one from this database. */
+  withReceipt<T>(receipt: string, operation: (session: ReceiptCustodySession) => Promise<T>,
+    client?: PoolClient): Promise<T>;
+}
+
+const receiptSessions = new WeakMap<Pool, Pool>();
+
+/** Receipt work holds its connection across a graph command. That command applies
+ * the template index through `controlTransaction` on the caller's pool, so a
+ * tracked pool's receipt session comes from a second pool object with the same
+ * bounds. A caller that already holds a client passes it and receipt work does
+ * not check out. A plain pg Pool is not tracked; receipt work keeps using it,
+ * so a single-connection session stays that pool's only client. */
+function receiptSessionPool(pool: Pool): Pool {
+  if (pool.connect === Pool.prototype.connect) return pool;
+  const existing = receiptSessions.get(pool);
+  if (existing) return existing;
+  const { options: _bounds, ...config } = pool.options;
+  const sessions = boundedPool(config);
+  receiptSessions.set(pool, sessions);
+  const end = pool.end.bind(pool);
+  let closed: Promise<void> | undefined;
+  pool.end = (callback?: () => void) => {
+    closed ??= sessions.end().then(() => undefined);
+    return closed.then(() => callback === undefined ? end() : end(callback));
+  };
+  return sessions;
 }
 
 /** Session locks survive each durable statement: preparation is committed BEFORE the graph request. */
 export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
-  constructor(private readonly pool: Pool) {}
+  private readonly sessions: Pool;
+  constructor(private readonly pool: Pool) {
+    this.sessions = receiptSessionPool(pool);
+  }
   async receiptAt(dataEpoch: string, streamSequence: string): Promise<string | null> {
     const rows = (await this.pool.query<{ receipt: string }>(`SELECT receipt FROM access.command_custody
       WHERE data_epoch = $1 AND stream_sequence = $2`, [dataEpoch, streamSequence])).rows;
     return rows[0]?.receipt ?? null;
   }
-  async withReceipt<T>(receipt: string, operation: (session: ReceiptCustodySession) => Promise<T>): Promise<T> {
-    const client = await this.pool.connect();
+  async withReceipt<T>(receipt: string, operation: (session: ReceiptCustodySession) => Promise<T>,
+    client?: PoolClient): Promise<T> {
+    const owned = client === undefined;
+    const held = client ?? await this.sessions.connect();
     let locked = false;
     let destroyed = false;
     try {
-      await client.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [`command-custody:${receipt}`]);
+      await held.query("SELECT pg_advisory_lock(hashtextextended($1, 0))", [`command-custody:${receipt}`]);
       locked = true;
       const durable = async (write: () => Promise<void>) => {
-        await client.query('BEGIN');
+        await held.query('BEGIN');
         try {
-          await client.query('SET LOCAL synchronous_commit = on');
+          await held.query('SET LOCAL synchronous_commit = on');
           await write();
-          await client.query('COMMIT');
+          await held.query('COMMIT');
         } catch (error) {
-          try { await client.query('ROLLBACK'); } catch { /* Preserve the original failure. */ }
+          try { await held.query('ROLLBACK'); } catch { /* Preserve the original failure. */ }
           throw error;
         }
       };
       return await operation({
-        client,
+        client: held,
         read: async () => {
-          const row = (await client.query<{ receipt: string; request_digest: string; payload_sha256: string;
+          const row = (await held.query<{ receipt: string; request_digest: string; payload_sha256: string;
             payload: Buffer; revision: string; terminal: CustodiedReceipt | null; outbox: Record<string, unknown> | null;
             reconciled: boolean; retired: boolean }>(`SELECT receipt, request_digest, payload_sha256, payload,
               revision, terminal, outbox, reconciled_at IS NOT NULL AS reconciled,
@@ -114,29 +146,33 @@ export class PostgresReceiptCustodyStore implements ReceiptCustodyStore {
             reconciled: row.reconciled, retired: row.retired } : null;
         },
         prepare: row => durable(async () => {
-          await client.query(`INSERT INTO access.command_custody
+          await held.query(`INSERT INTO access.command_custody
             (receipt, request_digest, payload_sha256, payload, revision) VALUES ($1,$2,$3,$4,$5)`,
           [receipt, row.requestDigest, row.payloadSha256, Buffer.from(row.payload), row.revision]);
         }),
         reconcile: (terminal, outbox) => durable(async () => {
-          const updated = await client.query(`UPDATE access.command_custody SET terminal = $2, outbox = $3,
+          const updated = await held.query(`UPDATE access.command_custody SET terminal = $2, outbox = $3,
             data_epoch = $4, stream_sequence = $5,
             reconciled_at = clock_timestamp() WHERE receipt = $1 AND terminal IS NULL`,
           [receipt, JSON.stringify(terminal), JSON.stringify(outbox), terminal.dataEpoch, terminal.streamSequence]);
           if (updated.rowCount !== 1) throw new Error('Custody reconciliation lost its prepared command');
         }),
         retire: async () => {
-          const updated = await client.query(`UPDATE access.command_custody SET retired_at = clock_timestamp()
+          const updated = await held.query(`UPDATE access.command_custody SET retired_at = clock_timestamp()
             WHERE receipt = $1 AND reconciled_at IS NOT NULL AND terminal IS NOT NULL AND outbox IS NOT NULL`, [receipt]);
           if (updated.rowCount !== 1) throw new Error('Receipt custody is not reconciled');
         },
       });
     } finally {
       if (locked) {
-        try { await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [`command-custody:${receipt}`]); }
-        catch { client.release(true); destroyed = true; }
+        try { await held.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [`command-custody:${receipt}`]); }
+        catch {
+          // A borrowed client belongs to its caller. Destroying it would drop
+          // that caller's transaction; only a session we opened can be discarded.
+          if (owned) { held.release(true); destroyed = true; }
+        }
       }
-      if (!destroyed) client.release();
+      if (owned && !destroyed) held.release();
     }
   }
 }
