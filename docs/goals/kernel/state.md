@@ -1,9 +1,35 @@
 # State
 
-Checkpoint: 2026-10-08 02:58 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-08 03:10 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
+
+## Current gate policy and live work
+
+Whole Goal active; latest status supersedes older pending gate references below.
+
+- Program G1410 ebd998e4f landed: owner-tier files now gate alongside units,
+  automatic per-file long deadlines, gen:check, own stream change selection and
+  conflict reasons. Mail4baa acknowledged. New gates use no960s override.
+- G1379 fresh normal gate535 files LIVE, user unit
+  rezics-kernel-structure-new-policy-0305, MainPID652273. Four actual stream paths,
+  no unrelated native rerun. Log G-1379-supervised-gate-0305-new-policy.log.
+- Root intentionally cancelled obsolete G1373 old-policy merge451558 and native
+  group610351 after exact process/start/cgroup verification; scoped container
+  cleanup completed. Wrapper201/inner143 is cancellation, never passing evidence.
+  Terminal maile33a acknowledged. Reason: outdated selection and missing owner
+  checks after Program policy landing, not an observation timeout.
+- G1373 replacement normal gate537 files LIVE, user unit
+  rezics-kernel-reader-new-policy-0307, MainPID679120; actual eight stream paths.
+  Log G-1373-supervised-gate-0307-new-policy.log. Both units self-mail terminal
+  results independently of finite manager turns; do not launch duplicates.
+- G1290 Grok27 done0f38355d9: all eight TS paths independently byte-equal4eac,
+  original immutable-object test actual6/22/0fail. Gen/types pass worker checks.
+  Matching native hooks remain G1282 Grok27 live; do not activate TS alone as a
+  working native title path. Source composition must retain original v1 semantics.
+- G1345 Sonnet18 original-I owner receiver remains live. Authentic owner closure,
+  private immutable delivery/recovery and Episode completeness remain unproven.
 
 ## Latest ready-work checkpoint
 
