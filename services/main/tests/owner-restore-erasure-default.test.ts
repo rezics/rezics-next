@@ -211,17 +211,17 @@ function expectOwnersHeld(run: ReturnType<typeof fixture>) {
   expect(run.relay.active).toBe(false);
 }
 
-test('authenticated default restore records unavailable erasure release as held before borrowing Access', async () => {
+test('authenticated default restore records a missing retained capture as a held conflict before borrowing Access', async () => {
   const run = fixture();
   const response = await run.send('held-default');
   expect(response.status).toBe(201);
   expect(response.headers.get('cache-control')).toBe('no-store');
   const view = await response.json() as { id: string };
   expect(view).toMatchObject({ profile: 'owner-reconciliation-v1', kind: 'restore', scope: 'product',
-    state: 'held', disposition: 'unavailable', replayed: false });
+    state: 'held', disposition: 'conflict', replayed: false });
   expect(run.relay.records.get('owner:reconcile:held-default')).toMatchObject({ id: view.id,
-    state: 'held', hold_reason: 'retained erasure restore release is unavailable' });
-  expect(run.relay.items).toEqual([{ reconciliation_id: view.id, owner: 'relay', disposition: 'unavailable' }]);
+    state: 'held', hold_reason: 'retained erasure reconciliation lacks the retained current capture' });
+  expect(run.relay.items).toEqual([{ reconciliation_id: view.id, owner: 'relay', disposition: 'conflict' }]);
   expect(run.relay.borrowCount).toBe(1);
   expect(run.relay.maximumBorrowed).toBe(1);
   expect(run.relay.releaseCount).toBe(1);
@@ -234,10 +234,10 @@ test('a captured relay pool alone cannot enable default restore without retained
   expect(response.status).toBe(201);
   const view = await response.json() as { id: string };
   expect(view).toMatchObject({ kind: 'restore', scope: 'product', state: 'held',
-    disposition: 'unavailable', replayed: false });
+    disposition: 'conflict', replayed: false });
   expect(run.relay.records.get('owner:reconcile:captured-without-erasures')).toMatchObject({
-    hold_reason: 'retained erasure restore release is unavailable' });
-  expect(run.relay.items).toEqual([{ reconciliation_id: view.id, owner: 'relay', disposition: 'unavailable' }]);
+    hold_reason: 'retained erasure reconciliation lacks the retained current capture' });
+  expect(run.relay.items).toEqual([{ reconciliation_id: view.id, owner: 'relay', disposition: 'conflict' }]);
   expectOwnersHeld(run);
 });
 
@@ -253,7 +253,7 @@ test('default held restore retries preserve the recorded result and reject chang
   expect(mismatch.status).toBe(409);
   expect(await mismatch.json()).toMatchObject({ code: 'idempotency_conflict' });
   expect(run.relay.records.size).toBe(1);
-  expect(run.relay.items).toEqual([{ reconciliation_id: original.id, owner: 'relay', disposition: 'unavailable' }]);
+  expect(run.relay.items).toEqual([{ reconciliation_id: original.id, owner: 'relay', disposition: 'conflict' }]);
   expect(run.relay.borrowCount).toBe(3);
   expect(run.relay.releaseCount).toBe(3);
   expectOwnersHeld(run);

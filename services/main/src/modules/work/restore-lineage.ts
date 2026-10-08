@@ -592,7 +592,9 @@ export async function releaseRestoredGraphHold(
   catch { throw new RestoreLineageConflict('recovery coverage envelope is invalid'); }
   assertRecoveryCoverage(coverage);
   if (!evidence.releaseErasures) {
-    throw new RestoreLineageConflict('retained erasure restore release is unavailable');
+    // Absence is authoritative: the retained capture is not here, so waiting
+    // cannot release the hold. The message stays an erasure conflict.
+    throw new RestoreLineageConflict('retained erasure reconciliation lacks the retained current capture');
   }
   if (!evidence.restoredRelayPool || evidence.restoredRelayPool === relayPool) {
     throw new RestoreLineageConflict('separate restored relay handoff is unavailable');
