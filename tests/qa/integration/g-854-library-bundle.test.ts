@@ -250,7 +250,7 @@ test('G-854: API review, own-person denial, private retention, interrupted apply
     }))).toEqual([accepted,accepted]);
     // Retained rows advance one page per worker tick, and each tick waits a second.
     const progress = await pollLibraryImportApply(() => applyStatus(large.id),{ deadlineMs: 300_000 });
-    expect(progress).toMatchObject({ pending: false,issues: 0 });
+    expect(progress).toMatchObject({ completed: 8,pending: false,issues: 0 });
     expect((await stack.contentPool.query(`SELECT count(*)::integer AS n FROM reader.consumption_session WHERE agent=$1`,[agent])).rows[0].n).toBe(sessions.length);
     expect(Date.now()-began).toBeLessThan(600_000);
 
