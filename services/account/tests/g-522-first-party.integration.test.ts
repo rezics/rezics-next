@@ -1,8 +1,20 @@
 import { expect, test } from 'bun:test';
 import { createHmac } from 'node:crypto';
+import type { Pool } from 'pg';
+import { cleanupRevokedSessionPage } from '../src/first-party-session.ts';
 import { accountFixture } from './account-fixture.ts';
 import { oauthFixture } from './oauth-fixture.ts';
 import { revokeSessions } from '../src/security-activity.ts';
+
+/** The logical fence denies the family at once. Physical removal of that
+ * session and its product tokens commits together, one bounded page at a time. */
+async function finishSessionCleanup(pool: Pool) {
+  for (let invocation = 0; invocation < 16; invocation++) {
+    const page = await cleanupRevokedSessionPage(pool);
+    if (!page.userId) return;
+  }
+  throw new Error('session cleanup did not finish');
+}
 
 test('G522 classification: registry membership, skipConsent and explicit consent are independent', async () => {
   const f = await accountFixture();
@@ -136,6 +148,8 @@ for (const route of ['devices', 'accounts'] as const) {
       if (route === 'devices') expect(await revoked.json()).toEqual({ revoked: 1 });
       if (raced.ok) expect((await refresh((await raced.json() as { refresh_token: string }).refresh_token)).ok).toBe(false);
       expect((await refresh(tokens.refresh_token)).ok).toBe(false);
+      // The row can outlive the fence; cleanup removes it in the same transaction as the session.
+      await finishSessionCleanup(f.pool);
       expect((await f.pool.query('SELECT 1 FROM "oauthRefreshToken" WHERE "userId" = $1 AND revoked IS NULL', [reader.id])).rowCount).toBe(0);
     } finally { await f.close(); }
   }, 60_000);
@@ -159,9 +173,6 @@ for (const action of ['sign-out', 'revoke-session', 'revoke-other-sessions', 're
       const response = await f.request(`/api/auth/${action}`, action === 'revoke-session' ? { token: session!.session.token } : {},
         action === 'sign-out' ? cookie : reader.cookie);
       expect(response.ok).toBe(true);
-      expect((await f.pool.query('SELECT 1 FROM "session" WHERE id = $1', [session!.session.id])).rowCount).toBe(0);
-      expect((await f.pool.query(`SELECT 1 FROM "oauthRefreshToken"
-        WHERE "userId" = $1 AND "clientId" = $2 AND "sessionId" IS NULL`, [reader.id, product.client_id])).rowCount).toBe(0);
       const refresh = (clientId: string, token: string) => oauth.token({ grant_type: 'refresh_token', client_id: clientId,
         refresh_token: token, resource: f.config.resource });
       expect((await refresh(product.client_id, productTokens.refresh_token)).ok).toBe(false);
@@ -169,6 +180,10 @@ for (const action of ['sign-out', 'revoke-session', 'revoke-other-sessions', 're
       const externalRefresh = await refresh(external.client_id, externalTokens.refresh_token);
       expect(externalRefresh.ok).toBe(true);
       expect(await oauth.introspect((await externalRefresh.json() as { access_token: string }).access_token)).toMatchObject({ active: true });
+      await finishSessionCleanup(f.pool);
+      expect((await f.pool.query('SELECT 1 FROM "session" WHERE id = $1', [session!.session.id])).rowCount).toBe(0);
+      expect((await f.pool.query(`SELECT 1 FROM "oauthRefreshToken"
+        WHERE "userId" = $1 AND "clientId" = $2 AND "sessionId" IS NULL`, [reader.id, product.client_id])).rowCount).toBe(0);
       const consent = await f.pool.query('SELECT 1 FROM "oauthConsent" WHERE "userId" = $1 AND "clientId" = $2',
         [reader.id, external.client_id]);
       expect(consent.rowCount).toBe(1);
@@ -214,18 +229,19 @@ test('G522 expiry: live first-party sessions stay listed and expiry cleanup cann
     expect(await revoked.json()).toEqual({ revoked: 1 });
     expect((await refresh(product.client_id, actionable.productTokens!.refresh_token)).ok).toBe(false);
     expect((await refresh(external.client_id, actionable.externalTokens.refresh_token)).ok).toBe(true);
-    // Better Auth's expired-session read deletes the Account session via its
-    // native adapter, so the same hook covers automatic cleanup and sign-out.
+    // An expired-session read fences that browser. Product refresh dies with the
+    // fence; consented offline access stays. Cleanup then removes the row.
     expect(await (await f.request('/api/auth/get-session', undefined, live.cookie)).json()).toBeNull();
-    expect((await f.pool.query('SELECT 1 FROM "session" WHERE id = $1', [live.id])).rowCount).toBe(0);
     expect((await refresh(product.client_id, live.productTokens!.refresh_token)).ok).toBe(false);
     expect((await refresh(external.client_id, live.externalTokens.refresh_token)).ok).toBe(true);
+    await finishSessionCleanup(f.pool);
+    expect((await f.pool.query('SELECT 1 FROM "session" WHERE id = $1', [live.id])).rowCount).toBe(0);
     const after = await (await f.request('/api/account/sessions?limit=100', undefined, reader.cookie)).json() as typeof list;
     expect(after.items.find(session => session.id === live.id)).toBeUndefined();
   } finally { await f.close(); }
 }, 60_000);
 
-test('G522 failed session deletion rolls back token revocation and a retry signs out', async () => {
+test('G522 failed session deletion rolls back token removal while the fence keeps refresh unusable', async () => {
   const f = await accountFixture();
   try {
     const oauth = await oauthFixture(f);
@@ -234,21 +250,28 @@ test('G522 failed session deletion rolls back token revocation and a retry signs
     const reader = await f.signup('rollback-session@example.test');
     const session = await f.auth.api.getSession({ headers: new Headers({ cookie: reader.cookie }) });
     const tokens = await oauth.issue(client.client_id, reader.cookie);
+    const refresh = (token: string) => oauth.token({ grant_type: 'refresh_token', client_id: client.client_id,
+      refresh_token: token, resource: f.config.resource });
+    const revoke = () => revokeSessions(f.pool, reader.id, session!.session.id, { sessionId: session!.session.id });
+    expect(await revoke()).toEqual({ revoked: 1 });
+    expect((await refresh(tokens.refresh_token)).ok).toBe(false);
     await f.pool.query(`CREATE FUNCTION g522_fail_session_delete() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN RAISE EXCEPTION 'injected_session_delete_failure'; END $$;
       CREATE TRIGGER g522_fail_session_delete BEFORE DELETE ON "session"
         FOR EACH ROW EXECUTE FUNCTION g522_fail_session_delete()`);
-    const revoke = () => revokeSessions(f.pool, reader.id, session!.session.id, { sessionId: session!.session.id });
-    await expect(revoke()).rejects.toThrow('injected_session_delete_failure');
-    expect((await f.pool.query('SELECT 1 FROM "session" WHERE id = $1', [session!.session.id])).rowCount).toBe(1);
-    const refresh = (token: string) => oauth.token({ grant_type: 'refresh_token', client_id: client.client_id,
-      refresh_token: token, resource: f.config.resource });
-    const refreshed = await refresh(tokens.refresh_token);
-    expect(refreshed.ok).toBe(true);
-    const rotated = await refreshed.json() as { refresh_token: string };
+    const inventory = () => f.pool.query<{ sessions: string; refresh: string }>(`SELECT
+      (SELECT count(*) FROM "session" WHERE id = $1) AS sessions,
+      (SELECT count(*) FROM "oauthRefreshToken" WHERE "userId" = $2 AND revoked IS NULL) AS refresh`,
+    [session!.session.id, reader.id]);
+    const before = (await inventory()).rows;
+    await expect(cleanupRevokedSessionPage(f.pool)).rejects.toThrow('injected_session_delete_failure');
+    expect((await inventory()).rows).toEqual(before);
+    expect((await refresh(tokens.refresh_token)).ok).toBe(false);
     await f.pool.query('DROP TRIGGER g522_fail_session_delete ON "session"');
-    expect(await revoke()).toEqual({ revoked: 1 });
-    expect((await refresh(rotated.refresh_token)).ok).toBe(false);
+    await finishSessionCleanup(f.pool);
+    expect((await f.pool.query('SELECT 1 FROM "session" WHERE id = $1', [session!.session.id])).rowCount).toBe(0);
+    expect((await f.pool.query('SELECT 1 FROM "oauthRefreshToken" WHERE "userId" = $1 AND revoked IS NULL', [reader.id])).rowCount).toBe(0);
+    expect((await refresh(tokens.refresh_token)).ok).toBe(false);
   } finally { await f.close(); }
 }, 60_000);
 
@@ -276,11 +299,14 @@ test('G522 native bulk sign-out reaches first-party tokens beyond the provider h
     const tokens = await oauth.issue(product.client_id, cookie);
     const revoked = await f.request('/api/auth/revoke-sessions', {}, reader.cookie);
     expect(revoked.ok).toBe(true);
-    expect((await f.pool.query('SELECT 1 FROM "session" WHERE "userId" = $1', [reader.id])).rowCount).toBe(0);
-    expect((await f.pool.query(`SELECT 1 FROM "oauthRefreshToken"
-      WHERE "userId" = $1 AND "clientId" = $2`, [reader.id, product.client_id])).rowCount).toBe(0);
+    // The provider hook snapshots 100 sessions. The fence still denies a token
+    // minted on a session outside that snapshot, before bounded cleanup.
     const refreshed = await oauth.token({ grant_type: 'refresh_token', client_id: product.client_id,
       refresh_token: tokens.refresh_token, resource: f.config.resource });
     expect(refreshed.ok).toBe(false);
+    await finishSessionCleanup(f.pool);
+    expect((await f.pool.query('SELECT 1 FROM "session" WHERE "userId" = $1', [reader.id])).rowCount).toBe(0);
+    expect((await f.pool.query(`SELECT 1 FROM "oauthRefreshToken"
+      WHERE "userId" = $1 AND "clientId" = $2`, [reader.id, product.client_id])).rowCount).toBe(0);
   } finally { await f.close(); }
 }, 60_000);

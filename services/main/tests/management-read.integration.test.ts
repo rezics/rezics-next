@@ -11,6 +11,14 @@ import { fusekiReadBudget } from '../src/infrastructure/fuseki.ts';
 
 const short = (id: string) => id.slice(-36);
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+/** Notifying content decisions store the statement a person can appeal. */
+function notifyingReasons(facts: string, scope: string, ruleDigest: string) {
+  return {
+    facts, scope, duration: 'Until an attributable decision supersedes this one.',
+    automation: false, appealRoute: '/v1/public-reports/{caseId}/correspondence',
+    contentLanguage: 'en', rule: { ref: 'urn:rezics:rule:test', revision: 'r1', digest: ruleDigest },
+  };
+}
 interface Page<T> { items: T[]; nextCursor: string | null; count: { value: number; total: null; kind: string } }
 
 test('Realm management: private report queue, decision audit, pagination, scope and stale fences', async () => {
@@ -110,11 +118,13 @@ test('Realm management: private report queue, decision audit, pagination, scope 
     await stack.accessPool.query(`INSERT INTO access.moderation_decision (id, kind, outcome,
       context, case_id, case_sequence, principal_id, acting_subject, authority_kind,
       authority_scope_id, authority_epoch, authority_proof_digest, idempotency_key,
-      request_digest, rule_ref, rule_revision, rule_digest, evidence_digest, disclosure, rationale)
+      request_digest, rule_ref, rule_revision, rule_digest, evidence_digest, disclosure, rationale,
+      statement_of_reasons)
       VALUES ($1, 'content_moderation', 'dismiss', $2, $3, 1, $4, $5, 'realm', $6, 0,
-        $7, 'decision-1', $8, 'urn:rezics:rule:test', 'r1', $9, $10, 'private', 'The edition is named')`,
+        $7, 'decision-1', $8, 'urn:rezics:rule:test', 'r1', $9, $10, 'private', 'The edition is named', $11)`,
     [decisionId, realm, cases[0]!.caseId, a.principalId, a.actor, scope,
-      digest('proof'), digest('decision'), digest('rule'), digest('evidence')]);
+      digest('proof'), digest('decision'), digest('rule'), digest('evidence'),
+      notifyingReasons('The recorded title names the edition.', 'This Work title', digest('rule'))]);
     await stack.accessPool.query(`UPDATE access.governance_case SET decision_head = $2,
       generation = 1 WHERE id = $1`, [cases[0]!.caseId, decisionId]);
     const log = await audit();
@@ -196,10 +206,14 @@ test('G-395 moderation context: submitter and reporter records, readable Works o
       await stack.accessPool.query(`INSERT INTO access.moderation_decision (id, kind, outcome, context, case_id,
         case_sequence, principal_id, acting_subject, authority_kind, authority_scope_id, authority_epoch,
         authority_proof_digest, idempotency_key, request_digest, rule_ref, rule_revision, rule_digest,
-        evidence_digest, disclosure) VALUES ($1, 'content_moderation', $2, $3, $4, 1, $5, $6, 'realm', $7, 0,
-        $8, $9, $10, 'urn:rezics:rule:test', 'r1', $11, $12, 'private')`,
+        evidence_digest, disclosure, statement_of_reasons) VALUES ($1, 'content_moderation', $2, $3, $4, 1, $5, $6, 'realm', $7, 0,
+        $8, $9, $10, 'urn:rezics:rule:test', 'r1', $11, $12, 'private', $13)`,
       [decision, outcome, realm, caseId, moderator.principalId, moderator.actor, scope, digest('proof'),
-        `context-decision-${n}`, digest(`decision-${n}`), digest('rule'), digest('evidence')]);
+        `context-decision-${n}`, digest(`decision-${n}`), digest('rule'), digest('evidence'),
+        notifyingReasons(outcome === 'restrict'
+          ? 'The title discloses the ending before the reader chooses it.'
+          : 'The report does not show a title that needs restriction.',
+        'This Work title', digest('rule'))]);
       await stack.accessPool.query('UPDATE access.governance_case SET decision_head = $2, generation = 1 WHERE id = $1',
         [caseId, decision]);
     }

@@ -384,13 +384,29 @@ test('G-297: Access and relay producers replay once per recipient, respect prefe
        request_digest,reason_code,evidence_count,evidence_digest)
       VALUES ($1,$2,$3,$4,0,$5,$6,'inaccurate',1,$7)`,
     [reportId, caseId, mutedId, member, `report-${reportId}`, 'd'.repeat(64), 'e'.repeat(64)]);
+    const statementOfReasons = {
+      facts: 'The recorded body is inaccurate.',
+      scope: 'This Work body',
+      duration: 'Until an attributable decision supersedes this one.',
+      automation: false,
+      appealRoute: '/v1/public-reports/{caseId}/correspondence',
+      contentLanguage: 'en',
+      rule: { ref: 'rule', revision: 'revision', digest: '2'.repeat(64) },
+    };
     await access.query(`INSERT INTO access.moderation_decision
       (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,
        authority_kind,authority_scope_id,authority_epoch,authority_proof_digest,
-       idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,evidence_digest,disclosure)
-      VALUES ($1,'content_moderation','restrict',$2,$3,1,$4,$5,'realm',$6,0,$7,$8,$9,$10,$11,$12,$13,'parties')`,
+       idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,evidence_digest,disclosure,
+       statement_of_reasons)
+      VALUES ($1,'content_moderation','restrict',$2,$3,1,$4,$5,'realm',$6,0,$7,$8,$9,$10,$11,$12,$13,'parties',$14)`,
     [moderationId, realm, caseId, actorId, actor, authorityScope, 'f'.repeat(64),
-      `moderation-${moderationId}`, '1'.repeat(64), 'rule', 'revision', '2'.repeat(64), '3'.repeat(64)]);
+      `moderation-${moderationId}`, '1'.repeat(64), 'rule', 'revision', '2'.repeat(64), '3'.repeat(64),
+      statementOfReasons]);
+    // A recorded statement notifies its parties, not a serial author walk.
+    await access.query(`INSERT INTO access.safety_party_notice
+      (id,decision_id,principal_id,case_id,credential,statement_of_reasons)
+      VALUES ($1,$2,$3,$4,$5,$6)`,
+    [randomUUID(), moderationId, recipientId, caseId, `party-${moderationId}`, statementOfReasons]);
     await access.query(`UPDATE access.governance_case SET generation = 1, decision_head = $2 WHERE id = $1`,
       [caseId, moderationId]);
     await drainAccess();

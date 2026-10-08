@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { createEmailVerificationToken } from 'better-auth/api';
 import { hashPassword } from 'better-auth/crypto';
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { cleanupRevokedSessionPage } from '../src/first-party-session.ts';
 import { accountFixture } from './account-fixture.ts';
 import { acceptGuardian } from './recovery-fixture.ts';
 import { sensitiveAuthPaths } from '../src/methods.ts';
@@ -10,6 +11,13 @@ import { sensitiveAuthPaths } from '../src/methods.ts';
 type Fixture = Awaited<ReturnType<typeof accountFixture>>;
 type Member = Awaited<ReturnType<Fixture['signup']>>;
 const mailLink = (text: string) => /https?:\/\/\S+/.exec(text)![0];
+async function finishSessionCleanup(pool: Pool) {
+  for (let invocation = 0; invocation < 16; invocation++) {
+    const page = await cleanupRevokedSessionPage(pool);
+    if (!page.userId) return;
+  }
+  throw new Error('session cleanup did not finish');
+}
 const currentEmail = async (f: Fixture, id: string) =>
   (await f.pool.query('SELECT email FROM "user" WHERE id = $1', [id])).rows[0].email as string;
 
@@ -240,6 +248,8 @@ test('SR-3: every sensitive provider alias and Account session route denies an o
       expect((await f.request(path, { token: peerSession }, member.cookie, { origin: '' })).status).toBe(403);
     }
     expect((await f.request(aliases[0]!, { token: peerSession }, member.cookie)).status).toBe(200);
+    expect(await f.auth.api.getSession({ headers: new Headers({ cookie: signed.headers.get('set-cookie')! }) })).toBeNull();
+    await finishSessionCleanup(f.pool);
     expect((await f.pool.query('SELECT 1 FROM "session" WHERE token = $1', [peerSession])).rowCount).toBe(0);
   } finally { await f.close(); }
 }, 90_000);

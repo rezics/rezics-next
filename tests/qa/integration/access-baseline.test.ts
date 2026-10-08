@@ -367,6 +367,9 @@ test('baseline: pinned control, principal and policy generations fence retries a
     const generation = await engageAccessRecoveryFence(h.accessPool);
     try { await expect(h.access.register({ ...request, idempotencyKey: randomUUID() })).rejects.toThrow('Access is held for recovery'); }
     finally { await releaseAccessRecoveryFence(h.accessPool, generation); }
+    // Disabling this principal must leave an effective controller on the Agent
+    // it still controls. Follow that controller before the account fence.
+    await h.replacementController(request.actingSubject);
     await h.access.strongDeactivateAccountSubject(principal.issuer, principal.subject);
     await expect(h.access.register({ ...request, idempotencyKey: randomUUID() })).rejects.toBeInstanceOf(AdmissionDenied);
   } finally { await h.close(); }

@@ -1,7 +1,17 @@
 import { expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
+import { cleanupRevokedSessionPage } from '../src/first-party-session.ts';
 import { accountFixture } from './account-fixture.ts';
 import { oauthFixture } from './oauth-fixture.ts';
+
+async function finishSessionCleanup(pool: Pool) {
+  for (let invocation = 0; invocation < 16; invocation++) {
+    const page = await cleanupRevokedSessionPage(pool);
+    if (!page.userId) return;
+  }
+  throw new Error('session cleanup did not finish');
+}
 
 const registration = { client_name: 'Logout metadata client', token_endpoint_auth_method: 'none',
   redirect_uris: ['https://notes.example.test/callback'], grant_types: ['authorization_code', 'refresh_token'],
@@ -104,6 +114,7 @@ test('legacy backchannel destinations never dispatch on single or bulk session d
         expect(retained.sessionId).toBeTruthy();
         expect(retained.sessionId).toBe(session!.session.id);
         expect((await f.request(`/api/auth${path}`, {}, cookie)).status).toBe(200);
+        await finishSessionCleanup(f.pool);
         expect((await f.pool.query('SELECT 1 FROM "session" WHERE id = $1', [retained.sessionId])).rowCount).toBe(0);
         if (path === '/revoke-sessions') {
           expect((await f.pool.query('SELECT 1 FROM "session" WHERE "userId" = $1', [member.id])).rowCount).toBe(0);

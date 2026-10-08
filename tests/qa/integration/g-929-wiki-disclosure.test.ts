@@ -109,10 +109,18 @@ async function removal(
     await client.query(
       `INSERT INTO access.moderation_decision
       (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,authority_scope_id,
-      authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,evidence_digest,disclosure)
+      authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,evidence_digest,disclosure,statement_of_reasons)
       VALUES ($1::uuid,'content_moderation','restrict','urn:rezics:context:global',$2,1,$3,$4,'platform','governance:platform',
-      0,$5,$1::text,$5,'urn:rezics:rule:g929','1',$5,$5,'private')`,
-      [decisionId, caseId, principalId, wiki.holder.actor, 'a'.repeat(64)],
+      0,$5,$1::text,$5,'urn:rezics:rule:g929','1',$5,$5,'private',$6::jsonb)`,
+      [decisionId, caseId, principalId, wiki.holder.actor, 'a'.repeat(64), {
+        facts: 'This exact revision stays out of current history and export until it is restored.',
+        scope: `The ${component} at this revision`,
+        duration: 'Until an attributable restoration.',
+        automation: false,
+        appealRoute: '/v1/public-reports/{caseId}/correspondence',
+        contentLanguage: 'en',
+        rule: { ref: 'urn:rezics:rule:g929', revision: '1', digest: 'a'.repeat(64) },
+      }],
     );
     await client.query(
       `INSERT INTO access.moderation_decision_target
@@ -145,9 +153,9 @@ async function removal(
       await restore.query(
         `INSERT INTO access.moderation_decision
         (id,kind,outcome,context,case_id,case_sequence,principal_id,acting_subject,authority_kind,authority_scope_id,
-        authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,evidence_digest,disclosure)
+        authority_epoch,authority_proof_digest,idempotency_key,request_digest,rule_ref,rule_revision,rule_digest,evidence_digest,disclosure,statement_of_reasons)
         SELECT $1::uuid,kind,'restore',context,case_id,case_sequence+1,principal_id,acting_subject,authority_kind,authority_scope_id,
-        authority_epoch,authority_proof_digest,$1::text,request_digest,rule_ref,rule_revision,rule_digest,evidence_digest,disclosure
+        authority_epoch,authority_proof_digest,$1::text,request_digest,rule_ref,rule_revision,rule_digest,evidence_digest,disclosure,statement_of_reasons
         FROM access.moderation_decision WHERE id=$2`,
         [restored, decisionId],
       );
