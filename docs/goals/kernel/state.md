@@ -34,6 +34,13 @@ Whole Goal active; this section supersedes live gate status below.
   cases pass. Grok28 resumed ONLY original issuer fresh lease +config and17 failed
   class cases; no native/assertion changes. Retain first failure evidence;117
   unique coverage would be104 firstpass plus17 rerun with4 duplicate passes.
+- Full image package prerequisite sent Program mail3325: native TitleCommand8
+  requires actual SQL-issued fixture/property; current Dockerfile supplies neither.
+  Existing focused wrapper compiles then issues original SQL fixture and mounts it.
+  Shared frozen build must supply same prerequisite to ALL Maven package tests;
+  original long fixture lease10000s, no skips/exclusions/untested tag. Image21e
+  remains unbuilt. Program also has exact two-line Claim isolated-test entry loan
+  request44b00; no harness/admission/timeouts requested.
 - G1290 Sonnet28 done test-only3a1594ef9, a92b935e765a hash. Actual Account
   verifier/register/claim/S3 custody/fixed issuer/real native/lostACK negatives
   prepared; NOT executed, matching image prerequisite remains. Native Source
