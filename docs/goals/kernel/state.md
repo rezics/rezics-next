@@ -1,6 +1,6 @@
 # State
 
-Checkpoint: 2026-10-08 03:30 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
+Checkpoint: 2026-10-08 03:35 UTC. Manager `goal-kernel-codex`, tmux `goal-kernel`.
 Live truth: `task goal -- status`; durable inbox `task goal -- mail inbox kernel`.
 Goal active. Completion cannot be projected reliably until Claim owner/native
 qualification and the physical locality/restore chains converge.
@@ -9,7 +9,7 @@ qualification and the physical locality/restore chains converge.
 
 Whole Goal active; this section supersedes live gate status below.
 
-- Program maile73b acknowledged: Core timeout is G1407 cleanup on empty scopes,
+- Program mail73b acknowledged: Core timeout is G1407 cleanup on empty scopes,
   G1418 fixes proportional cleanup without changing five-second test/assertions.
   Root intentionally stopped only G1379/G1373 fresh gate units; both now inactive,
   no passing/skipped verdict. Retry after Program mails G1418 landed.
@@ -28,9 +28,23 @@ Whole Goal active; this section supersedes live gate status below.
   through matching native acceptance and read-only lost-ACK lookup. Prepare test,
   hold physical proof until matching qualified union image; no handmade authority
   or untested tag/promotion. Grok27 TS source0f remains accepted unchanged.
-- G1282 Grok27 native composition and G1345 Sonnet18 owner receiver remain live.
-  G1345 provisional capture explicitly leaves creator/E-to-R/seek linkage
-  unresolved; this cannot qualify authentic owner closure or release.
+- G1282 Grok27 done8853b5367, native21e361b84736 unbuilt. Independently checked
+  first117 XML: Claim56 all pass; Title8 missing actual SQL fixture property,
+  WorkCommand9 has1failure/4errors missing fuseki-text.ttl. All other44 Title
+  cases pass. Grok28 resumed ONLY original issuer fresh lease +config and17 failed
+  class cases; no native/assertion changes. Retain first failure evidence;117
+  unique coverage would be104 firstpass plus17 rerun with4 duplicate passes.
+- G1290 Sonnet28 done test-only3a1594ef9, a92b935e765a hash. Actual Account
+  verifier/register/claim/S3 custody/fixed issuer/real native/lostACK negatives
+  prepared; NOT executed, matching image prerequisite remains. Native Source
+  qualification must precede calling this joined-path proof accepted.
+- Program mail1927 acknowledged: Program owns wider owner backlog/current-Main
+  failures and will route run4 triage. Kernel fixes only its four identified
+  surfaces; Source first-baseline attribution remains pending normal gates.
+- Statement fixture/SQL-format correction79206f040 on Main, original12/139 pass.
+  Structure group descriptor9e6aa7441 remains candidate, actual stable2/9 owner
+  pass. G1345 Sonnet18 receiver remains live; provisional capture explicitly leaves
+  creator/E-to-R/seek linkage unresolved, not authentic owner closure or release.
 
 ## Current gate policy and live work
 
