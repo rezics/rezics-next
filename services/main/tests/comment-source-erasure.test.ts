@@ -40,9 +40,10 @@ const repoRoot = resolve(import.meta.dir, '../../..');
 const canary = 'QUOTE-CANARY-ζ-source';
 const annotation = 'authored annotation stays';
 const sourceText = `Opening paragraph\n${canary}\nClosing paragraph`;
-/** Qualified integer runtime. New runs use this pin. A prior run of this file on
- * 5692ff6a9bb2 remains that run's evidence. */
-const qualifiedFuseki = 'rezics/fuseki:6.2.0-cmd0.5.39-835daa8774ac';
+/** Qualified integer runtime. New runs use this pin, the image built with the
+ * reviewed command profiles, including the widened native-agent credit roles.
+ * A prior run of this file on 835daa8774ac remains that run's evidence. */
+const qualifiedFuseki = 'rezics/fuseki:6.2.0-cmd0.5.39-5fc82f7d04cd';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
