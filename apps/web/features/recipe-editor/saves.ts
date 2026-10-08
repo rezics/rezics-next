@@ -1,6 +1,7 @@
+import { bodyText } from '../document-editor/body.ts';
 import { saveWorkDetails, detailsValues } from '../studio/details-api.ts';
 import type { DetailsValues } from '../studio/details-form.tsx';
-import { publishText, readLatest, saveText, selectMainText } from '../studio/text-api.ts';
+import { publishText, readLatest, readTextRevision, saveText, selectMainText } from '../studio/text-api.ts';
 import type { MainClient } from '../studio/types.ts';
 
 // The recipe's title, description and notes live beside the Composition, each on its own head, so
@@ -198,7 +199,11 @@ export function createNotesWriter({ main, actingSubject, work, mainVersion, lang
         if (published.outcome === 'stale') {
           const current = await main().v1.contributions({ contribution: idOf(notes.text) }).get({ query: { actingSubject } });
           if (!current.data) return fail('unavailable');
-          notes = { ...notes, head: current.data.draftHead, publicationHead: current.data.publicationHead };
+          // The head moved. Read that revision's body before treating this publication as already saved:
+          // the text held here can still match what this tab wants while the new draft says something else.
+          const read = await readTextRevision(actingSubject, notes.text, current.data.draftHead, main());
+          if (read === null) return fail('unavailable');
+          notes = { ...notes, head: current.data.draftHead, body: bodyText(read), publicationHead: current.data.publicationHead };
           adopt();
           continue;
         }

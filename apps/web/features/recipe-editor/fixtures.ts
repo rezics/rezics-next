@@ -56,7 +56,9 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
   const interference: { before?: (call: Call) => void;
     /** Holds every call until it settles, to put several edits in flight together. */ gate?: Promise<void>;
     /** Holds the calls of one name (`changes`, `timings`, `details`, `notes-create`, `publish`…); the call is recorded first. */
-    gates?: Record<string, Promise<void>> } = {};
+    gates?: Record<string, Promise<void>>;
+    /** A draft read answers nothing, so a recovery that must see the body cannot. */
+    unreadableDraft?: boolean } = {};
   const answer = (data: unknown) => ({ data, error: null });
   const refuse = (status: number, code: string) => ({ data: null, error: { status, value: { code } } });
   const record = async (name: string, body?: unknown, options?: { headers?: { 'idempotency-key'?: string } }) => {
@@ -124,7 +126,9 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
       } } }),
     contributions: Object.assign((_: { contribution: string }) => ({
       get: async () => answer({ draftHead: notes.head, publicationHead: notes.publicationHead }),
-      drafts: (_draft: { revision: string }) => ({ get: async () => answer({ body: notes.body, work, language: 'en', contribution: notes.text, revision: notes.head }) }) }), {
+      drafts: (_draft: { revision: string }) => ({ get: async () => interference.unreadableDraft
+        ? refuse(404, 'draft_unreadable')
+        : answer({ body: notes.body, work, language: 'en', contribution: notes.text, revision: notes.head }) }) }), {
       post: async (body: { body?: string }, options?: never) => {
         await record('notes-create', body, options);
         notes = { ...notes, text: id(300), head: next(), body: body.body ?? '' };
@@ -136,8 +140,12 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
       notes = { ...notes, head: next(), body: body.body ?? '' };
       return answer({ draftRevision: notes.head });
     } },
-    'contribution-publications': { post: async (body: unknown, options?: never) => {
+    'contribution-publications': { post: async (body: { expectedDraftHead: string; expectedPublicationHead?: string | null }, options?: never) => {
       await record('publish', body, options);
+      // A moved draft or publication head is the refusal the editor has to recover from.
+      if (body.expectedDraftHead !== notes.head || (body.expectedPublicationHead ?? null) !== (notes.publicationHead ?? null)) {
+        return refuse(409, 'stale_draft');
+      }
       notes = { ...notes, publicationHead: next() };
       return answer({ publicationDecision: notes.publicationHead, selectedDraft: notes.head });
     } },
@@ -147,5 +155,7 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
   return { main: () => main, calls, interference, world: () => ({ recipe, notes, metadata }),
     /** Another tab's write: the head moves under the editor. */
     elsewhere: (change: (state: RecipeState) => RecipeState) => { recipe = { ...change(recipe), head: next() }; },
+    /** Another tab's notes: a new draft head holding `body`. */
+    elsewhereNotes: (body: string) => { notes = { ...notes, body, head: next() }; },
     advance };
 }

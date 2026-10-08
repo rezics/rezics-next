@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { SyncedInput } from './controls.tsx';
 import type { Copy } from './messages.ts';
 import { measureOf, minutesOf, type RecipeState, type TimingName } from './model.ts';
-import { amountText, type Rational, typedAmount, wholeNumber } from './quantity.ts';
+import { amountText, type Rational, typedAmount } from './quantity.ts';
+import { timingLeave, timingShown } from './timing-field.ts';
 import type { RecipeStore } from './store.ts';
 import { directionOf } from '../studio/types.ts';
 
@@ -34,26 +35,28 @@ export function MeasuresSection({ store, state, language, t }: Common) {
     void store.submit({ kind: 'yield', yield: makes ? { value: makes, unitText } : null, servings: serves, servingsWord: t.servingsWord });
   };
   const commitTime = (name: TimingName, input: HTMLInputElement) => {
-    const text = input.value.trim();
-    const minutes = text ? wholeNumber(text) : null;
-    flag(name, text && !minutes ? t.minutesInvalid : null);
-    if (text && !minutes) return;
-    void store.submit({ kind: 'timings', times: { [name]: minutes ? minutes.numerator : null } });
+    const decision = timingLeave(measureOf(state, name), input.value);
+    if (decision.kind === 'invalid') { flag(name, t.minutesInvalid); return; }
+    flag(name, null);
+    if (decision.kind === 'unchanged') return;
+    void store.submit({ kind: 'timings', times: { [name]: decision.minutes } });
   };
 
   const lang = { lang: language, dir: directionOf(language) } as const;
   const timing = (name: TimingName, label: string) => {
-    const stored = minutesOf(measureOf(state, name));
     const measure = measureOf(state, name);
-    const shown = stored === null ? '' : stored === 'other' ? '' : String(stored);
+    const shown = timingShown(measure);
+    const other = minutesOf(measure) === 'other';
+    const problem = invalid[name];
+    const described = problem ? `${name}-problem` : other ? `${name}-other` : undefined;
     return <label key={name} className="grid min-w-0 gap-1 text-sm">{label}
-      <SyncedInput name={name} inputMode="numeric" value={shown} autoComplete="off"
-        placeholder={stored === 'other' && measure ? `${rationalText(measure.value)} ${measure.unitText ?? ''}`.trim() : t.minutesUnit}
-        aria-invalid={invalid[name] ? true : undefined} aria-describedby={invalid[name] ? `${name}-problem` : undefined}
+      <SyncedInput name={name} inputMode={/^\d*$/.test(shown) ? 'numeric' : 'text'} value={shown} autoComplete="off"
+        placeholder={other ? undefined : t.minutesUnit}
+        aria-invalid={problem ? true : undefined} aria-describedby={described}
         onBlur={event => commitTime(name, event.currentTarget)}
         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} />
-      {invalid[name] ? <span id={`${name}-problem`} className="text-destructive-foreground text-xs">{invalid[name]}</span>
-        : stored === 'other' && measure ? <span className="text-muted-foreground text-xs">{t.timeOther({ value: `${rationalText(measure.value)} ${measure.unitText ?? ''}`.trim() })}</span>
+      {problem ? <span id={`${name}-problem`} className="text-destructive-foreground text-xs">{problem}</span>
+        : other ? <span id={`${name}-other`} className="text-muted-foreground text-xs">{t.timeOther({ value: shown })}</span>
           : null}
     </label>;
   };

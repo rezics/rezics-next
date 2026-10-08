@@ -123,3 +123,57 @@ test('while publishing, a field save waits in the newest slot and publication ne
   expect(fake.world().notes.body).toBe('Edit two.');
   expect(writer.snapshot().notes.publicationHead).not.toBeNull();
 });
+
+test('publication after another tab saved different notes reads that draft and publishes this tab\'s text', async () => {
+  const initial = { text: id(300), head: id(1500), body: 'Our notes.', publicationHead: null };
+  const fake = fakeMain({ recipe: startRecipe, notes: initial });
+  const writer = createNotesWriter({ main: fake.main, actingSubject, work, mainVersion, language: 'en', initial });
+  let once = true;
+  fake.interference.before = call => {
+    if (call.name !== 'publish' || !once) return;
+    once = false;
+    fake.elsewhereNotes('Notes from the other tab.');
+  };
+  expect(await writer.publish('Our notes.')).toEqual({ kind: 'published' });
+  expect(fake.world().notes.body).toBe('Our notes.');
+  expect(fake.calls.map(call => call.name)).toEqual(['publish', 'notes-edit', 'publish', 'select']);
+  expect(fake.calls.filter(call => call.name === 'notes-edit').map(call => (call.body as { body: string }).body)).toEqual(['Our notes.']);
+  const published = fake.calls.filter(call => call.name === 'publish');
+  const head = fake.world().notes.head;
+  if (!head) throw new Error('notes head');
+  expect((published[1]!.body as { expectedDraftHead: string }).expectedDraftHead).toBe(head);
+  expect(writer.snapshot().failure).toBeNull();
+  expect(writer.snapshot().published).toBe(true);
+});
+
+test('a publication that cannot read the draft another tab saved is refused and does not publish it', async () => {
+  const initial = { text: id(300), head: id(1500), body: 'Our notes.', publicationHead: null };
+  const fake = fakeMain({ recipe: startRecipe, notes: initial });
+  const writer = createNotesWriter({ main: fake.main, actingSubject, work, mainVersion, language: 'en', initial });
+  fake.interference.before = call => {
+    if (call.name !== 'publish') return;
+    fake.elsewhereNotes('Notes from the other tab.');
+    fake.interference.unreadableDraft = true;
+  };
+  expect(await writer.publish('Our notes.')).toEqual({ kind: 'refused', refusal: 'unavailable' });
+  expect(writer.snapshot().failure).toBe('unavailable');
+  expect(fake.calls.map(call => call.name)).toEqual(['publish']);
+  expect(fake.world().notes.body).toBe('Notes from the other tab.');
+  expect(fake.world().notes.publicationHead).toBeNull();
+});
+
+test('publication of a moved draft that already holds this tab\'s text publishes it without rewriting', async () => {
+  const initial = { text: id(300), head: id(1500), body: 'Our notes.', publicationHead: null };
+  const fake = fakeMain({ recipe: startRecipe, notes: initial });
+  const writer = createNotesWriter({ main: fake.main, actingSubject, work, mainVersion, language: 'en', initial });
+  let once = true;
+  fake.interference.before = call => {
+    if (call.name !== 'publish' || !once) return;
+    once = false;
+    fake.elsewhereNotes('Our notes.');
+  };
+  expect(await writer.publish('Our notes.')).toEqual({ kind: 'published' });
+  expect(fake.calls.map(call => call.name)).toEqual(['publish', 'publish', 'select']);
+  expect(fake.world().notes.body).toBe('Our notes.');
+  expect(writer.snapshot().published).toBe(true);
+});

@@ -8,6 +8,7 @@ import { type KeyboardEvent, useRef, useState } from 'react';
 import { IconAction, SyncedTextarea } from './controls.tsx';
 import type { Copy } from './messages.ts';
 import { groups, ingredients, type IngredientNode, type RecipeState, steps, type StepNode } from './model.ts';
+import { selectionWhilePending, toggleIngredient } from './step-selection.ts';
 import type { RecipeStore } from './store.ts';
 import { directionOf } from '../studio/types.ts';
 
@@ -26,8 +27,7 @@ function UsesPicker({ state, value, onChange, t, idPrefix }: {
     { key: 'loose', heading: groups(state).length ? t.unsectioned : null, lines: all.filter(node => node.parent === state.structure) },
     ...groups(state).map(group => ({ key: group.occurrence, heading: group.label?.value ?? '', lines: all.filter(node => node.parent === group.occurrence) })),
   ].filter(block => block.lines.length);
-  const toggle = (occurrence: string, on: boolean) =>
-    onChange(on ? [...value, occurrence] : value.filter(id => id !== occurrence));
+  const toggle = (occurrence: string, on: boolean) => onChange(toggleIngredient(value, occurrence, on));
   return <div className="grid gap-3" role="group" aria-label={t.usesIngredients}>
     {blocks.map(block => <fieldset key={block.key} className="grid min-w-0 gap-1">
       {block.heading ? <legend className="font-medium text-muted-foreground text-xs">{t.usesInSection({ section: block.heading })}</legend> : null}
@@ -41,16 +41,28 @@ function UsesPicker({ state, value, onChange, t, idPrefix }: {
 function StepRow({ node, index, count, store, state, language, t, busy }: Common & { node: StepNode; index: number; count: number }) {
   const [linking, setLinking] = useState(false);
   const text = useRef<HTMLTextAreaElement>(null);
+  // Newest ingredient selection while this step's write has not settled. The checkboxes follow it,
+  // so a second check is added to it instead of replacing the references Main still has saved.
+  const pendingUses = useRef<readonly string[] | null>(null);
+  const [shownUses, setShownUses] = useState<readonly string[] | null>(null);
   const stored = node.qualifier.instructionText.value;
-  const uses = node.qualifier.usesIngredient;
+  const savedUses = node.qualifier.usesIngredient;
+  const uses = selectionWhilePending(savedUses, shownUses);
   const parent = state.nodes.find(item => item.occurrence === node.parent);
   const section = parent?.role === 'group' ? parent.label?.value : null;
-  const commit = (next: string[] = [...uses]) => {
+  const commit = (next?: readonly string[]) => {
+    const base = selectionWhilePending(savedUses, pendingUses.current);
+    const list = [...(next ?? base)];
     const value = text.current?.value.trim() ?? stored;
     if (!value) { if (text.current) text.current.value = stored; return; }
-    if (value !== stored || next.length !== uses.length || next.some((id, at) => id !== uses[at])) {
-      void store.submit({ kind: 'editStep', occurrence: node.occurrence, text: value, uses: next });
-    }
+    if (value === stored && list.length === base.length && list.every((item, at) => item === base[at])) return;
+    pendingUses.current = list;
+    setShownUses(list);
+    void store.submit({ kind: 'editStep', occurrence: node.occurrence, text: value, uses: list }).then(() => {
+      if (pendingUses.current !== list) return;
+      pendingUses.current = null;
+      setShownUses(null);
+    });
   };
   const number = index + 1;
   return <li data-step={node.occurrence} className="grid gap-2 rounded-2xl border border-border/60 bg-card p-3">
