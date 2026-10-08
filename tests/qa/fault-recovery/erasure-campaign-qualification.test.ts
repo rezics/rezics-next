@@ -31,6 +31,10 @@ import {
   type StatePins,
 } from '../../../scripts/operations/search-state.ts';
 import {
+  CAMPAIGN_DESTRUCTION_SCOPE,
+  selectCampaignCopies,
+} from '../../../scripts/qa/campaign-envelope.ts';
+import {
   qaStartupTestTimeout,
   runQaAdmissionChildAsync,
 } from '../../../scripts/qa/stack-startup.ts';
@@ -62,8 +66,12 @@ const literal = (value: string) => JSON.stringify(value);
 
 // The fixture owns no corpus builder: routine work restores retained whole-volume
 // copies and adds only <=64 exact graph footprints, as in erasure-graph-purge.
-// Medium managers prepare both sources with task fixture:restore before the
-// 360-second fault-file timer, then supply ERASURE_CAMPAIGN_SOURCES=a,b.
+// Populated qualification restores two sources from one fixture, then runs this
+// file twice. ERASURE_CAMPAIGN_COPY=0 with one ERASURE_CAMPAIGN_SOURCES id is
+// the rollback path; COPY=1 with the other id is irreversible retirement. Each
+// invocation keeps its own 360-second operation clock. Both runs must pass, and
+// both qualification.json files must be labelled as one of two. Without
+// ERASURE_CAMPAIGN_COPY, one invocation still takes two sources.
 test(
   'OPS10: retained populated fixture qualifies one physical erasure campaign and recovery',
   async () => {
@@ -73,6 +81,20 @@ test(
       throw new Error('Campaign profile must be small or medium');
     const profile: FixtureProfile = requested;
     const nonce = randomUUID().replaceAll('-', '').slice(0, 10);
+    const selection = selectCampaignCopies(
+      process.env.ERASURE_CAMPAIGN_SOURCES,
+      process.env.ERASURE_CAMPAIGN_COPY,
+    );
+    const suppliedSources = selection.kind === 'one' ? [selection.source] : selection.sources;
+    const ids = suppliedSources
+      ? [...suppliedSources]
+      : [`fixture-erasure-${nonce}-a`, `fixture-erasure-${nonce}-b`];
+    const supplied = suppliedSources !== undefined;
+    const runs = ids.map((id, position) => ({
+      index: (selection.kind === 'one' ? selection.index : position) as 0 | 1,
+      id,
+      stack: qaStack(id),
+    }));
     const evidenceDirectory = join(
       root,
       '.temp',
@@ -82,13 +104,13 @@ test(
     mkdirSync(evidenceDirectory, { recursive: true, mode: 0o700 });
     const evidence: Record<string, unknown> = {
       profile,
+      ...(selection.kind === 'one' ? { copy: selection.label } : {}),
       startedAt: new Date().toISOString(),
       routinePreparationActiveCeilingMs: PREPARATION_ACTIVE_BUDGET_MS,
       localPreparationActiveCeilingMs: PREPARATION_ACTIVE_BUDGET_MS,
       faultFileActiveBudgetMs: 360_000,
       measurement: '250ms sampled allocated/apparent bytes; observed peak is a lower bound',
-      destructionScope:
-        'only the explicitly retired graph/Lucene fileset; retained fixture, owner objects, backups and media are not destroyed',
+      destructionScope: CAMPAIGN_DESTRUCTION_SCOPE,
       phases: {},
       copies: [],
     };
@@ -117,26 +139,26 @@ test(
     if (!Number.isFinite(harnessStart) || harnessStart > Date.now())
       throw new Error('Invalid QA preparation start');
     const harnessSetupMs = Date.now() - harnessStart;
-    const supplied = process.env.ERASURE_CAMPAIGN_SOURCES?.split(',');
-    if (
-      supplied &&
-      (supplied.length !== 2 ||
-        new Set(supplied).size !== 2 ||
-        supplied.some((id) => !/^fixture-[a-z0-9-]{1,27}$/.test(id)))
-    )
-      throw new Error('Supply two distinct successful fixture:restore source IDs');
-    const ids = supplied ?? [`fixture-erasure-${nonce}-a`, `fixture-erasure-${nonce}-b`];
-    const stacks = ids.map(qaStack);
     const pools: Pool[] = [];
     const candidateNames: string[] = [];
-    const sourceOwners: { access: Pool; content: Pool }[] = [];
-    const custodyProofs: string[] = [];
+    const sourceOwners = new Map<number, { access: Pool; content: Pool }>();
+    const custodyProofs = new Map<number, string>();
+    const copyRecords = new Map<number, Record<string, unknown>>();
+    const copyRecord = (copyIndex: number): Record<string, unknown> => {
+      const record = copyRecords.get(copyIndex);
+      if (!record) throw new Error(`Missing campaign copy ${copyIndex} evidence`);
+      return record;
+    };
     let candidate: Awaited<ReturnType<typeof standaloneFuseki>> | undefined;
     let fixture: string | undefined;
     try {
       // This checks the exact repository image before fixture selection; no alias,
       // image substitution, fresh corpus build or compatibility bypass is permitted.
-      evidence.release = repositoryPins(root, stacks[0]!.dockerEnv, stacks[0]!.stateVolume);
+      evidence.release = repositoryPins(
+        root,
+        runs[0]!.stack.dockerEnv,
+        runs[0]!.stack.stateVolume,
+      );
       const retained = process.env.ERASURE_CAMPAIGN_FIXTURE ?? compatibleFixture(profile)?.id;
       const manifest = retained ? readManifest(retained) : undefined;
       if (
@@ -165,12 +187,12 @@ test(
         wallMs: number;
       }[] = [];
       let autoRestoreInvocationWallMs = 0;
-      for (const [index, stack] of stacks.entries()) {
+      for (const { index, id, stack } of runs) {
         const restoreEvidencePath = join(
           root,
           '.artifacts',
           'fixture-restore',
-          ids[index]!,
+          id,
           'run.json',
         );
         const retainedRestorePath = join(evidenceDirectory, `restore-${index}.json`);
@@ -180,7 +202,7 @@ test(
             const result = await runQaAdmissionChildAsync(
               root,
               'task',
-              ['fixture:restore', '--', '--fixture', manifest.id, '--run-id', ids[index]!],
+              ['fixture:restore', '--', '--fixture', manifest.id, '--run-id', id],
               PREPARATION_ACTIVE_BUDGET_MS,
             );
             const invocationWallMs = performance.now() - invocationStarted;
@@ -193,13 +215,13 @@ test(
                 writeFileSync(retainedRestorePath, failedEvidence, {
                   mode: 0o600,
                 });
-                restoreEvidenceSHA256[ids[index]!] = digest(failedEvidence);
+                restoreEvidenceSHA256[id] = digest(failedEvidence);
               }
               throw new Error(`fixture:restore failed; inspect restore-command-${index}.log`);
             }
             autoRestoreInvocationWallMs += invocationWallMs;
             autoRestoreInvocations.push({
-              target: ids[index]!,
+              target: id,
               activeMs: result.activeElapsedMs,
               admissionWaitMs: result.admissionWaitMs,
               wallMs: result.elapsedMs,
@@ -211,12 +233,12 @@ test(
         writeFileSync(retainedRestorePath, restoreBytes, {
           mode: 0o600,
         });
-        restoreEvidenceSHA256[ids[index]!] = digest(restoreBytes);
+        restoreEvidenceSHA256[id] = digest(restoreBytes);
         const restore = JSON.parse(restoreBytes) as FixtureRestoreEvidence;
         restoreTimings.push(
           validateRestorePreparation(restore, {
             fixture: manifest.id,
-            target: ids[index]!,
+            target: id,
             profile,
             works: PROFILES[profile].works,
             samples: manifest.samples.length,
@@ -243,11 +265,11 @@ test(
           }),
         };
         pools.push(owners.access, owners.content);
-        sourceOwners.push(owners);
+        sourceOwners.set(index, owners);
         await verifySourceCopy(index, phase, {
           start: () =>
             startSourceCopy(
-              ids[index]!,
+              id,
               {
                 restoredReady: !supplied,
                 up: () =>
@@ -274,14 +296,20 @@ test(
               inspected,
               repositoryPins(root, stack.dockerEnv, stack.stateVolume, [
                 `${fixtureProject(manifest.id)}_fuseki_data`,
-                stacks[1 - index]!.stateVolume,
+                // The other copy's volume is isolated only when this invocation opened it.
+                // Two invocations record both volumes for aggregateCampaignCopies.
+                ...runs
+                  .filter((other) => other.index !== index)
+                  .map((other) => other.stack.stateVolume),
               ]),
             );
-            (evidence.copies as unknown[]).push({
-              id: ids[index],
+            const record = {
+              id,
               stateVolume: stack.stateVolume,
               pins: inspected,
-            });
+            };
+            copyRecords.set(index, record);
+            (evidence.copies as unknown[]).push(record);
             return inspected;
           },
           count: async () => {
@@ -311,8 +339,8 @@ test(
         `urn:rezics:campaign:public-unit:${nonce}:${i}`,
         `urn:rezics:campaign:private-unit:${nonce}:${i}`,
       ]);
-      const campaignFiles: string[] = [];
-      for (const [index, stack] of stacks.entries()) {
+      const campaignFiles = new Map<number, string>();
+      for (const { index, stack } of runs) {
         const relay = new Pool({
           connectionString: stack.apps.ACCOUNT_RELAY_DATABASE_URL,
           max: 1,
@@ -342,7 +370,7 @@ test(
         }
         const rows = pairs.map((pair) => `${pair.iri}\t${pair.epoch}\n`).join('');
         const campaignFile = join(evidenceDirectory, `campaign-${index}.tsv`);
-        campaignFiles.push(campaignFile);
+        campaignFiles.set(index, campaignFile);
         writeFileSync(campaignFile, rows, { mode: 0o400 });
         const nq: string[] = [];
         const quad = (s: string, p: string, o: string, graph: string) =>
@@ -420,10 +448,10 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
           stack.fuseki,
           stack.apps,
           manifest,
-          sourceOwners[index]!.access,
+          sourceOwners.get(index)!.access,
         );
-        custodyProofs.push(JSON.stringify(proof));
-        (evidence.copies as Record<string, unknown>[])[index]!.sourceCustody = proof;
+        custodyProofs.set(index, JSON.stringify(proof));
+        copyRecord(index).sourceCustody = proof;
         stack.runner.stop();
       }
       const preparation = localPreparationTiming(
@@ -437,10 +465,10 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
       if (preparation.activeMs > PREPARATION_ACTIVE_BUDGET_MS)
         throw new Error('Campaign-local active preparation exceeded 600000ms');
 
-      for (const [index, stack] of stacks.entries()) {
+      for (const { index, stack } of runs) {
         const name = `rezics-campaign-${nonce}-${index}`;
         candidateNames.push(name);
-        const campaignFile = campaignFiles[index]!;
+        const campaignFile = campaignFiles.get(index)!;
         const pairs = readFileSync(campaignFile, 'utf8')
           .trimEnd()
           .split('\n')
@@ -494,13 +522,13 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
           campaignFileBytes(samplingCapture, 'sampling-errors.log'),
         );
         const summary = summarizeMeasurements(measurements, nativePhases);
-        (evidence.copies as Record<string, unknown>[])[index]!.measurements = summary;
+        copyRecord(index).measurements = summary;
         const readyCapture = run(campaignFileRead('ready', `${CANDIDATE}/erasure-purge.ready`));
         writeFileSync(join(evidenceDirectory, `ready-${index}-transport.log`), readyCapture);
         const ready = campaignFileBytes(readyCapture, 'ready');
         writeFileSync(join(evidenceDirectory, `ready-${index}.txt`), ready);
         expect(ready).toContain(`campaign-sha256=${digest(readFileSync(campaignFile, 'utf8'))}\n`);
-        (evidence.copies as Record<string, unknown>[])[index]!.ready = ready;
+        copyRecord(index).ready = ready;
         // The copied candidate is served only in an isolated loopback container for
         // exact read probes, then cleanly stopped before its readiness is verified.
         candidate = await standaloneFuseki(stack.dockerEnv, {
@@ -522,7 +550,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
           stack.apps.FUSEKI_MAINTENANCE_TOKEN,
           stack.apps.FUSEKI_COMMAND_TOKEN,
         );
-        const sourcePins = (evidence.copies as { pins: StatePins }[])[index]!.pins;
+        const sourcePins = copyRecord(index).pins as StatePins;
         expect(docker(['inspect', name, '--format', '{{.Image}}'], stack.dockerEnv).trim()).toBe(
           sourcePins.imageId,
         );
@@ -569,7 +597,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
               (await text(retainedPhrase)).results?.bindings.map((row) => row.unit?.value),
             ).toEqual([kept]);
           }
-          const owners = sourceOwners[index]!;
+          const owners = sourceOwners.get(index)!;
           // Use the source owner credentials and immutable bucket with only Fuseki
           // redirected to the candidate. The retained exact samples remain unchanged.
           const candidateApps = { ...stack.apps, FUSEKI_URL: candidate!.url };
@@ -589,8 +617,8 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
             expect(hit.results?.bindings.map((row) => row.unit?.value)).toEqual([sample.unit]);
           }
           const proof = await retainedCustody(client, candidateApps, manifest, owners.access);
-          expect(JSON.stringify(proof)).toBe(custodyProofs[index]!);
-          (evidence.copies as Record<string, unknown>[])[index]!.candidateCustody = proof;
+          expect(JSON.stringify(proof)).toBe(custodyProofs.get(index)!);
+          copyRecord(index).candidateCustody = proof;
         });
         await candidate.runner.stop();
         candidate.remove();
@@ -642,7 +670,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
             writeFileSync(join(evidenceDirectory, `retirement-${index}.txt`), receipt);
             expect(digest(receipt)).toBe(hash);
             expect(receipt).toContain('source-sha256=');
-            (evidence.copies as Record<string, unknown>[])[index]!.retirement = {
+            copyRecord(index).retirement = {
               hash,
               receipt,
               campaign: readFileSync(campaignFile, 'utf8'),
@@ -667,7 +695,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
       // rejected readiness probe still needs cleanup by its already-known name.
       for (const name of candidateNames)
         spawnSync('docker', ['rm', '-f', name], {
-          env: stacks[0]!.dockerEnv,
+          env: runs[0]!.stack.dockerEnv,
           encoding: 'utf8',
           timeout: 60_000,
         });
@@ -676,7 +704,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
       persist();
       // Supplied manager copies remain stopped. Automatic routine copies belong
       // to this run's existing QA cleanup; the retained fixture is never reset.
-      for (const stack of stacks) {
+      for (const { stack } of runs) {
         if (!readFileExists(join(stack.directory, 'compose.env'))) continue;
         if (!supplied) await rootCommand(['stack:reset', ...stack.args], 300_000);
         else await rootCommand(['stack:down', ...stack.args], 120_000);
@@ -1806,6 +1834,59 @@ test('OPS10: local campaign time keeps actual copy-start work and excludes only 
     PREPARATION_ACTIVE_BUDGET_MS,
   );
   expect(localPreparationTiming(400_000, 0, 12_000).activeMs).toBe(412_000);
+});
+
+test('OPS10: campaign copy selection refuses an index other than 0 or 1', () => {
+  for (const copy of ['2', '01', '-1', '', '0 ']) {
+    expect(() => selectCampaignCopies('fixture-campaign-a', copy)).toThrow(
+      'ERASURE_CAMPAIGN_COPY must be 0 or 1',
+    );
+  }
+});
+
+test('OPS10: campaign copy selection refuses two sources when a copy is set', () => {
+  expect(() => selectCampaignCopies('fixture-campaign-a,fixture-campaign-b', '0')).toThrow(
+    'One campaign copy needs exactly one fixture:restore source ID',
+  );
+  expect(() => selectCampaignCopies('fixture-campaign-a,fixture-campaign-b', '1')).toThrow(
+    'One campaign copy needs exactly one fixture:restore source ID',
+  );
+  expect(() => selectCampaignCopies(undefined, '1')).toThrow(
+    'One campaign copy needs exactly one fixture:restore source ID',
+  );
+});
+
+test('OPS10: campaign copy selection refuses one source when no copy is set', () => {
+  expect(() => selectCampaignCopies('fixture-campaign-a', undefined)).toThrow(
+    'Supply two distinct successful fixture:restore source IDs',
+  );
+  expect(selectCampaignCopies('fixture-campaign-a,fixture-campaign-b', undefined)).toEqual({
+    kind: 'pair',
+    sources: ['fixture-campaign-a', 'fixture-campaign-b'],
+  });
+  expect(selectCampaignCopies(undefined, undefined)).toEqual({ kind: 'pair', sources: undefined });
+});
+
+test('OPS10: one campaign copy labels qualification evidence as one of two', () => {
+  const rollback = selectCampaignCopies('fixture-campaign-a', '0');
+  const retirement = selectCampaignCopies('fixture-campaign-b', '1');
+  if (rollback.kind !== 'one' || retirement.kind !== 'one') throw new Error('expected one campaign copy');
+  const evidence = {
+    profile: 'medium' as const,
+    copy: rollback.label,
+    destructionScope: CAMPAIGN_DESTRUCTION_SCOPE,
+    copies: [] as unknown[],
+  };
+  expect(JSON.parse(JSON.stringify(evidence)).copy).toEqual({
+    index: 0,
+    of: 2,
+    path: 'rollback',
+    text: 'copy 0 of 2',
+  });
+  expect(retirement.label.text).toBe('copy 1 of 2');
+  expect(retirement.label.of).toBe(2);
+  expect(retirement.index).toBe(1);
+  expect(retirement.label.path).toBe('retirement');
 });
 
 async function retainedCustody(

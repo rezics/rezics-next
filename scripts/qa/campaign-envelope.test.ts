@@ -5,10 +5,10 @@ import { commandAsync, phaseDeadlineFailure } from './core.ts';
 import { cleanupQaStacks } from './stack-ownership.ts';
 import { projectName } from '../dev/config.ts';
 import {
-  CAMPAIGN_OPERATION_ACTIVE_MS, CAMPAIGN_PREPARATION_ACTIVE_MS,
-  campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard, campaignShardActiveMs,
-  childStackCleanupCommand, classifyCampaignEvidence, currentSuppliedRunIds, openCampaignEvidence,
-  preparationBoundaryActiveMs,
+  CAMPAIGN_DESTRUCTION_SCOPE, CAMPAIGN_OPERATION_ACTIVE_MS, CAMPAIGN_PREPARATION_ACTIVE_MS,
+  aggregateCampaignCopies, campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard,
+  campaignShardActiveMs, childStackCleanupCommand, classifyCampaignEvidence, currentSuppliedRunIds,
+  openCampaignEvidence, preparationBoundaryActiveMs, readCampaignCopyEvidence, selectCampaignCopies,
   type CampaignEvidenceRead, type CampaignEvidenceState, type CommandPhaseSample,
 } from './campaign-envelope.ts';
 
@@ -633,3 +633,116 @@ test('the runner refuses a foreign proof and keeps admission off the active cloc
   expect(malformed.ok).toBe(true);
   expect(malformedKind).toBe('refused');
 }, 15_000);
+
+test('campaign copy selection refuses an index other than 0 or 1', () => {
+  for (const copy of ['2', '01', '-1', '', '0 ']) {
+    expect(() => selectCampaignCopies('fixture-campaign-a', copy)).toThrow(
+      'ERASURE_CAMPAIGN_COPY must be 0 or 1');
+  }
+  expect(CAMPAIGN_PREPARATION_ACTIVE_MS).toBe(600_000);
+  expect(CAMPAIGN_OPERATION_ACTIVE_MS).toBe(360_000);
+});
+
+test('campaign copy selection refuses two sources when a copy is set', () => {
+  expect(() => selectCampaignCopies('fixture-campaign-a,fixture-campaign-b', '0')).toThrow(
+    'One campaign copy needs exactly one fixture:restore source ID');
+  expect(() => selectCampaignCopies('fixture-campaign-a,fixture-campaign-b', '1')).toThrow(
+    'One campaign copy needs exactly one fixture:restore source ID');
+  expect(() => selectCampaignCopies(undefined, '0')).toThrow(
+    'One campaign copy needs exactly one fixture:restore source ID');
+  const one = selectCampaignCopies('fixture-campaign-a', '0');
+  expect(one).toEqual({
+    kind: 'one', index: 0, source: 'fixture-campaign-a',
+    label: { index: 0, of: 2, path: 'rollback', text: 'copy 0 of 2' },
+  });
+});
+
+test('campaign copy selection refuses one source when no copy is set', () => {
+  expect(() => selectCampaignCopies('fixture-campaign-a', undefined)).toThrow(
+    'Supply two distinct successful fixture:restore source IDs');
+  expect(() => selectCampaignCopies('fixture-campaign-a,fixture-campaign-a', undefined)).toThrow(
+    'Supply two distinct successful fixture:restore source IDs');
+  expect(() => selectCampaignCopies('not-a-fixture,fixture-campaign-b', undefined)).toThrow(
+    'Supply two distinct successful fixture:restore source IDs');
+  expect(selectCampaignCopies('fixture-campaign-a,fixture-campaign-b', undefined)).toEqual({
+    kind: 'pair', sources: ['fixture-campaign-a', 'fixture-campaign-b'],
+  });
+  expect(selectCampaignCopies(undefined, undefined)).toEqual({ kind: 'pair', sources: undefined });
+});
+
+const copyManifestSha = 'ab'.repeat(32);
+
+function oneCopyEvidence(index: 0 | 1, source: string, volume: string): Record<string, unknown> {
+  const selected = selectCampaignCopies(source, String(index));
+  if (selected.kind !== 'one') throw new Error('expected one campaign copy');
+  const names = [
+    `source-${index}-start`, `source-${index}-pins`, `source-${index}-work-count`,
+    `source-${index}-samples`, `source-${index}-stop`, `copy-${index}-seed`, `copy-${index}-run`,
+    `copy-compact-index-${index}`, `verify-${index}`,
+    ...(index === 0 ? ['activation-before-rollback', 'rollback'] : ['activation', 'active-restart', 'retirement']),
+  ];
+  const copy: Record<string, unknown> = {
+    id: source, stateVolume: volume, pins: { stateVolume: volume },
+    measurements: { samples: 2 }, ready: `campaign-sha256=${copyManifestSha}\n`,
+  };
+  if (index === 1) copy.retirement = { hash: copyManifestSha };
+  return {
+    profile: 'medium', copy: selected.label, destructionScope: CAMPAIGN_DESTRUCTION_SCOPE,
+    fixture: { manifest: { id: 'fx-medium-7c8971526847' }, manifestSha256: copyManifestSha },
+    copies: [copy],
+    phases: Object.fromEntries(names.map(name => [name, 10])),
+    phaseDetails: Object.fromEntries(names.map(name => [name, { status: 'succeeded' }])),
+    completedAt: '2026-10-08T12:00:00.000Z',
+  };
+}
+
+test('one campaign copy labels qualification evidence as one of two', () => {
+  const evidence = oneCopyEvidence(0, 'fixture-campaign-a', 'rezics-qa-fixture-campaign-a_fuseki_data');
+  const written = JSON.parse(JSON.stringify(evidence)) as { copy: { text: string; of: number; index: number } };
+  expect(written.copy).toEqual({ index: 0, of: 2, path: 'rollback', text: 'copy 0 of 2' });
+  expect(JSON.stringify(written)).toContain('copy 0 of 2');
+  expect(readCampaignCopyEvidence(written).label.text).toBe('copy 0 of 2');
+  const retirement = oneCopyEvidence(1, 'fixture-campaign-b', 'rezics-qa-fixture-campaign-b_fuseki_data');
+  expect((retirement.copy as { text: string }).text).toBe('copy 1 of 2');
+  expect(readCampaignCopyEvidence(retirement).label.path).toBe('retirement');
+});
+
+test('two labelled copy files qualify only when they are distinct copies of one fixture', () => {
+  const rollback = oneCopyEvidence(0, 'fixture-campaign-a', 'rezics-qa-fixture-campaign-a_fuseki_data');
+  const retirement = oneCopyEvidence(1, 'fixture-campaign-b', 'rezics-qa-fixture-campaign-b_fuseki_data');
+  expect(aggregateCampaignCopies(retirement, rollback)).toEqual({
+    fixtureId: 'fx-medium-7c8971526847',
+    manifestSha256: copyManifestSha,
+    profile: 'medium',
+    sources: ['fixture-campaign-a', 'fixture-campaign-b'],
+    stateVolumes: ['rezics-qa-fixture-campaign-a_fuseki_data', 'rezics-qa-fixture-campaign-b_fuseki_data'],
+  });
+  const sharedSource = oneCopyEvidence(1, 'fixture-campaign-a', 'rezics-qa-fixture-campaign-b_fuseki_data');
+  expect(() => aggregateCampaignCopies(rollback, sharedSource)).toThrow('Campaign copies share a source');
+  const sharedVolume = oneCopyEvidence(1, 'fixture-campaign-b', 'rezics-qa-fixture-campaign-a_fuseki_data');
+  expect(() => aggregateCampaignCopies(rollback, sharedVolume)).toThrow('Campaign copies share a state volume');
+  const fixtureVolumeName = 'rezics-fixture-fx-medium-7c8971526847_fuseki_data';
+  expect(() => aggregateCampaignCopies(
+    oneCopyEvidence(0, 'fixture-campaign-a', fixtureVolumeName), retirement,
+  )).toThrow('retained fixture');
+  expect(() => aggregateCampaignCopies(rollback, oneCopyEvidence(
+    0, 'fixture-campaign-b', 'rezics-qa-fixture-campaign-b_fuseki_data',
+  ))).toThrow('needs copy 0 and copy 1');
+  const leaked = oneCopyEvidence(0, 'fixture-campaign-a', 'rezics-qa-fixture-campaign-a_fuseki_data');
+  (leaked.phases as Record<string, number>)['source-1-start'] = 1;
+  (leaked.phaseDetails as Record<string, { status: string }>)['source-1-start'] = { status: 'succeeded' };
+  expect(() => aggregateCampaignCopies(leaked, retirement)).toThrow('includes the other copy');
+  const unfinished = oneCopyEvidence(0, 'fixture-campaign-a', 'rezics-qa-fixture-campaign-a_fuseki_data');
+  delete (unfinished.phases as Record<string, number>).rollback;
+  delete (unfinished.phaseDetails as Record<string, unknown>).rollback;
+  expect(() => aggregateCampaignCopies(unfinished, retirement)).toThrow('missing rollback');
+  const failed = oneCopyEvidence(1, 'fixture-campaign-b', 'rezics-qa-fixture-campaign-b_fuseki_data');
+  failed.failure = 'timed out';
+  expect(() => aggregateCampaignCopies(rollback, failed)).toThrow('records a failure');
+  const otherFixture = oneCopyEvidence(1, 'fixture-campaign-b', 'rezics-qa-fixture-campaign-b_fuseki_data');
+  (otherFixture.fixture as { manifest: { id: string } }).manifest.id = 'fx-medium-000000000000';
+  expect(() => aggregateCampaignCopies(rollback, otherFixture)).toThrow('same fixture');
+  const unlabelled = { ...rollback };
+  delete unlabelled.copy;
+  expect(() => readCampaignCopyEvidence(unlabelled)).toThrow('no copy label');
+});

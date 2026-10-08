@@ -472,6 +472,34 @@ check evidence refusal, cutover interruption, rollback and exact retirement.
 These fixtures establish correctness for their cuts, not populated timing or
 peak allocation. The manager owns that separate qualification.
 
+Populated qualification restores two isolated sources from one retained fixture,
+then runs the campaign fault file once per source. Preparation stays on the
+600-second clock and the operation stays on the 360-second clock. Each
+invocation has its own operation clock. Copy 0 rolls the candidate back. Copy 1
+activates and irreversibly retires the recorded source. Give each invocation
+exactly one source id, and do not reuse a source.
+
+```sh
+task fixture:restore -- --fixture <fixture-id> --run-id fixture-campaign-a
+task fixture:restore -- --fixture <fixture-id> --run-id fixture-campaign-b
+ERASURE_CAMPAIGN_PROFILE=medium ERASURE_CAMPAIGN_FIXTURE=<fixture-id> \
+  ERASURE_CAMPAIGN_COPY=0 ERASURE_CAMPAIGN_SOURCES=fixture-campaign-a \
+  bun scripts/goal/goalctl.ts test --heavy \
+  tests/qa/fault-recovery/erasure-campaign-qualification.test.ts
+ERASURE_CAMPAIGN_PROFILE=medium ERASURE_CAMPAIGN_FIXTURE=<fixture-id> \
+  ERASURE_CAMPAIGN_COPY=1 ERASURE_CAMPAIGN_SOURCES=fixture-campaign-b \
+  bun scripts/goal/goalctl.ts test --heavy \
+  tests/qa/fault-recovery/erasure-campaign-qualification.test.ts
+```
+
+Both runs must pass. Each `qualification.json` is labelled `copy 0 of 2` or
+`copy 1 of 2`. The qualification is that pair: the same fixture, distinct state
+volumes that are not the retained fixture volume, rollback recorded on copy 0
+and retirement recorded on copy 1.
+[`aggregateCampaignCopies`](../../scripts/qa/campaign-envelope.ts) checks the
+two files. Omitting `ERASURE_CAMPAIGN_COPY` still runs both sources in one
+invocation.
+
 ## Offline Lucene rebuild
 
 Treat text as unavailable after uncertain index state, I/O failure, analyzer
