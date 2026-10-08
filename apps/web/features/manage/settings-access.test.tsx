@@ -31,6 +31,8 @@ test('each participation level round-trips through the Realm settings command an
           return { ok: true, data };
         },
         save: async command => { spaceWrites.push(command); return { ok: true, data: spaceAt(command.settings.visibility) }; },
+        settings: async () => { throw new Error('a Realm-only write does not re-read'); },
+        realm: async () => { throw new Error('a Realm-only write does not re-read'); },
       },
       actingSubject: accessActor, reason: 'Change who can take part', space: spaceAt('public'),
       spaceDraft: spaceAt('public').settings, realm, participation: level,
@@ -53,6 +55,8 @@ test('a stale participation write keeps the Realm command unconfirmed and does n
     api: {
       saveRealm: async () => ({ ok: false, failure: 'stale' }),
       save: async command => { spaceWrites.push(command); return { ok: true, data: accessInitial }; },
+      settings: async () => { throw new Error('a failed participation write does not re-read'); },
+      realm: async () => { throw new Error('a failed participation write does not re-read'); },
     },
     actingSubject: accessActor, reason: 'Members only', space: accessInitial,
     spaceDraft: { ...accessInitial.settings, listing: 'unlisted' },
@@ -69,7 +73,10 @@ test('discovery edits on a restricted Realm send the public projection and do no
   const result = await commitAccessEdits({
     api: {
       saveRealm: async () => { realmWrites += 1; return { ok: false, failure: 'unavailable' }; },
-      save: async command => { space = command; return { ok: true, data: { ...accessInitial, generation: '12', settings: command.settings } }; },
+      save: async command => { space = command; return { ok: true, data: { ...accessInitial, generation: '13', settings: command.settings } }; },
+      settings: async () => ({ ok: true, data: { ...accessInitial, generation: '13',
+        settings: { ...accessInitial.settings, listing: 'unlisted', visibility: 'public' } } }),
+      realm: async () => ({ ok: true, data: { ...realm, generation: '13', settings: { ...realm.settings, selfJoin: false } } }),
     },
     actingSubject: accessActor, reason: 'Unlist', space: spaceAt('public'),
     spaceDraft: { ...accessInitial.settings, listing: 'unlisted' },
@@ -94,6 +101,10 @@ test('a participation write and a discovery write share the receipt generation',
         seen.push({ kind: 'space', generation: command.expectedGeneration, visibility: command.settings.visibility });
         return { ok: true, data: { ...accessInitial, generation: command.expectedGeneration, settings: command.settings } };
       },
+      settings: async () => ({ ok: true, data: { ...accessInitial, generation: '15',
+        settings: { ...accessInitial.settings, listing: 'unlisted', visibility: 'private' } } }),
+      realm: async () => ({ ok: true, data: { ...basis, generation: '15',
+        settings: { ...basis.settings, visibility: 'private', selfJoin: false } } }),
     },
     actingSubject: accessActor, reason: 'Private and unlisted', space: accessInitial,
     spaceDraft: { ...accessInitial.settings, listing: 'unlisted' },
@@ -103,6 +114,55 @@ test('a participation write and a discovery write share the receipt generation',
     { kind: 'realm', generation: '12', visibility: 'private' },
     { kind: 'space', generation: '14', visibility: 'private' },
   ]);
+});
+
+test('unlisting refreshes the shared basis so the next participation save is current and keeps selfJoin', async () => {
+  let generation = 12n;
+  let storedRealm: RealmSettingsView = { ...basis, generation: '12',
+    settings: { ...basis.settings, visibility: 'public', selfJoin: true } };
+  let storedSpace: SpaceSettingsView = { ...accessInitial, generation: '12' };
+  const realmWrites: RealmSettingsCommand[] = [];
+  const api = {
+    settings: async () => ({ ok: true as const, data: storedSpace }),
+    realm: async () => ({ ok: true as const, data: storedRealm }),
+    save: async (command: SettingsCommand) => {
+      if (command.expectedGeneration !== storedSpace.generation) return { ok: false as const, failure: 'stale' as const };
+      generation += 1n;
+      const next = generation.toString();
+      const selfJoin = command.settings.admission === 'open';
+      storedSpace = { ...storedSpace, generation: next, settings: command.settings };
+      storedRealm = { ...storedRealm, generation: next, settings: { ...storedRealm.settings, selfJoin,
+        visibility: storedRealm.settings.visibility === 'restricted' && command.settings.visibility === 'public'
+          ? 'restricted' : command.settings.visibility } };
+      return { ok: true as const, data: storedSpace };
+    },
+    saveRealm: async (command: RealmSettingsCommand) => {
+      realmWrites.push(command);
+      if (command.expectedGeneration !== storedRealm.generation) return { ok: false as const, failure: 'stale' as const };
+      generation += 1n;
+      const next = generation.toString();
+      storedRealm = { ...storedRealm, generation: next, settings: command.settings };
+      storedSpace = { ...storedSpace, generation: next, settings: { ...storedSpace.settings,
+        visibility: projectedSpaceVisibility(command.settings.visibility) } };
+      const data: RealmSettingsReceipt = { generation: next, settings: command.settings,
+        receiptId: '00000000-0000-4000-8000-000000000099', replayed: false, ruleBasis: storedRealm.ruleBasis };
+      return { ok: true as const, data };
+    },
+  };
+  const unlisted = await commitAccessEdits({ api, actingSubject: accessActor, reason: 'Unlist', space: storedSpace,
+    spaceDraft: { ...storedSpace.settings, listing: 'unlisted' }, realm: storedRealm, participation: 'public',
+    keyFor: () => 'unlist' });
+  expect(unlisted.ok).toBe(true);
+  if (!unlisted.ok) return;
+  expect(unlisted.space.settings.listing).toBe('unlisted');
+  expect(unlisted.realm.generation).toBe(unlisted.space.generation);
+  expect(unlisted.realm.settings.selfJoin).toBe(false);
+  const madePrivate = await commitAccessEdits({ api, actingSubject: accessActor, reason: 'Members only',
+    space: unlisted.space, spaceDraft: unlisted.space.settings, realm: unlisted.realm, participation: 'private',
+    keyFor: () => 'private' });
+  expect(madePrivate).toMatchObject({ ok: true, realm: { settings: { visibility: 'private', selfJoin: false } } });
+  expect(realmWrites).toEqual([expect.objectContaining({ expectedGeneration: unlisted.realm.generation,
+    settings: expect.objectContaining({ visibility: 'private', selfJoin: false }) })]);
 });
 
 test('the create form supplies participation words and help in all eight locales', () => {

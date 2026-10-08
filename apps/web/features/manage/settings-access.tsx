@@ -46,7 +46,7 @@ function discoveryChanged(current: SpaceSettings, draft: SpaceSettings) {
 }
 
 export interface AccessCommitInput {
-  api: Pick<SpaceAccessApi, 'save' | 'saveRealm'>;
+  api: Pick<SpaceAccessApi, 'save' | 'saveRealm' | 'settings' | 'realm'>;
   actingSubject: string;
   reason: string;
   space: SpaceSettingsView;
@@ -70,6 +70,8 @@ function realmView(receipt: RealmSettingsReceipt): RealmSettingsView {
  * direct public/private write would collapse restricted.
  * Both commands share the Realm management generation, so a participation
  * write's receipt is the generation the discovery write must expect.
+ * A Space write bumps that generation and sets selfJoin from admission, so the
+ * basis afterwards is a fresh read. A Realm-only write keeps its own receipt.
  */
 export async function commitAccessEdits(input: AccessCommitInput): Promise<AccessCommit> {
   const participationChanged = input.realm.settings.visibility !== input.participation;
@@ -91,7 +93,10 @@ export async function commitAccessEdits(input: AccessCommitInput): Promise<Acces
         history: input.spaceDraft.history, admission: input.spaceDraft.admission } };
     const saved = await input.api.save(command, input.keyFor('space', JSON.stringify(command)));
     if (!saved.ok) return { ok: false, failure: saved.failure, realm: participationChanged ? realm : null };
-    space = saved.data;
+    const [freshSpace, freshRealm] = await Promise.all([input.api.settings(), input.api.realm()]);
+    if (!freshSpace.ok) return { ok: false, failure: freshSpace.failure, realm: participationChanged ? realm : null };
+    if (!freshRealm.ok) return { ok: false, failure: freshRealm.failure, realm: participationChanged ? realm : null };
+    return { ok: true, space: freshSpace.data, realm: freshRealm.data };
   } else if (participationChanged) {
     space = { ...space, generation: realm.generation, settings: { ...space.settings,
       visibility: projectedSpaceVisibility(input.participation) } };
