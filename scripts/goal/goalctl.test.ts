@@ -5,13 +5,14 @@ import { join } from 'node:path';
 import { processRunning } from '../../tests/qa/support/process-liveness.ts';
 import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
+import { nativeUnionTest, planAffected } from '../qa/affected.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { TmuxLauncher, processIdentity, tmuxServer, type LaunchDescriptor } from './coordinator.ts';
-import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, migrationsBelowMain, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
+import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, declaredTestTimeout, migrationsBelowMain, mergeOwnerFiles, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, inheritedSharedLifecycleOwnership, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, introducedUnitFailureFiles, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal,
-  qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runUnitGate, shardTimeoutFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, withRecovery, withSlot,
+  planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runUnitGate, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, unitFailureDetails, unitFileErrorDetails, withRecovery, withSlot,
   mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
@@ -316,6 +317,84 @@ describe('goalctl runtime policy', () => {
       expect(calls).toHaveLength(1);
       expect(result.runnerErrors).toHaveLength(1);
     });
+  });
+
+  test('a file declaring a 910000ms timeout runs alone for 970s and other files keep the default', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'goalctl-long-shard-'));
+    const long = join(directory, 'long.test.ts');
+    const ordinary = join(directory, 'ordinary.test.ts');
+    writeFileSync(long, `import { test } from 'bun:test';\ntest('slow', () => {}, 910_000);\n`);
+    writeFileSync(ordinary, `import { test } from 'bun:test';\ntest('fast', () => {});\n`);
+    expect(declaredTestTimeout(readFileSync(long, 'utf8'))).toEqual({ ms: 910_000, unparseable: false });
+    const real = readFileSync(join(import.meta.dir, '../../infra/jena/tests/semantic-source-readiness-union.test.ts'), 'utf8');
+    expect(declaredTestTimeout(real)).toEqual({ ms: 910_000, unparseable: false });
+    const planned = planUnitGateShards([
+      { file: long, timeout: declaredTestTimeout(readFileSync(long, 'utf8')) },
+      { file: ordinary, timeout: { unparseable: false } },
+    ], 4, 12 * 60 * 1000);
+    expect(planned.shards).toEqual([
+      { files: [long], budgetMs: 970_000 },
+      { files: [ordinary], budgetMs: 12 * 60 * 1000 },
+    ]);
+    const calls: { files: string[]; deadline: number }[] = [];
+    const previous = process.env.GOAL_UNIT_GATE_BUDGET_MS;
+    delete process.env.GOAL_UNIT_GATE_BUDGET_MS;
+    const lines: string[] = [];
+    const write = console.log;
+    console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
+    const before = Date.now();
+    try {
+      const result = await runUnitGate(directory, ['long.test.ts', 'ordinary.test.ts'], 4, async (_cwd, files, deadline) => {
+        calls.push({ files, deadline });
+        return { failing: [], timedOut: [], output: '', ms: 1, files, budgetExpired: false };
+      });
+      expect(result.failing).toEqual([]);
+      const longCall = calls.find(call => call.files.length === 1 && call.files[0] === 'long.test.ts');
+      const rest = calls.find(call => call.files.includes('ordinary.test.ts'));
+      expect(longCall?.files).toEqual(['long.test.ts']);
+      expect(rest?.files).toEqual(['ordinary.test.ts']);
+      expect(longCall!.deadline).toBeGreaterThanOrEqual(before + 970_000);
+      expect(longCall!.deadline).toBeLessThan(before + 970_000 + 2_000);
+      expect(rest!.deadline).toBeGreaterThanOrEqual(before + 12 * 60 * 1000);
+      expect(rest!.deadline).toBeLessThan(before + 12 * 60 * 1000 + 2_000);
+      expect(lines.some(line => line.includes('slowest budget 970000ms'))).toBe(true);
+    } finally {
+      console.log = write;
+      if (previous === undefined) delete process.env.GOAL_UNIT_GATE_BUDGET_MS;
+      else process.env.GOAL_UNIT_GATE_BUDGET_MS = previous;
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test('an unparseable declared timeout keeps the default budget and names the file', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'goalctl-unparsed-timeout-'));
+    const file = join(directory, 'bound.test.ts');
+    writeFileSync(file, `import { test } from 'bun:test';\nconst timeout = 910_000;\ntest('slow', () => {}, timeout);\n`);
+    expect(declaredTestTimeout(readFileSync(file, 'utf8')).unparseable).toBe(true);
+    const calls: { files: string[]; deadline: number }[] = [];
+    const previous = process.env.GOAL_UNIT_GATE_BUDGET_MS;
+    delete process.env.GOAL_UNIT_GATE_BUDGET_MS;
+    const lines: string[] = [];
+    const write = console.log;
+    console.log = (...args: unknown[]) => { lines.push(args.map(String).join(' ')); };
+    const before = Date.now();
+    try {
+      await runUnitGate(directory, ['bound.test.ts', 'missing.test.ts'], 1, async (_cwd, files, deadline) => {
+        calls.push({ files, deadline });
+        return { failing: [], timedOut: [], output: '', ms: 1, files, budgetExpired: false };
+      });
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.files).toContain('bound.test.ts');
+      expect(calls[0]!.deadline).toBeGreaterThanOrEqual(before + 12 * 60 * 1000);
+      expect(calls[0]!.deadline).toBeLessThan(before + 12 * 60 * 1000 + 2_000);
+      expect(lines.some(line => line.includes('bound.test.ts') && line.includes('could not be parsed'))).toBe(true);
+      expect(lines.some(line => line.includes('slowest budget 970000ms'))).toBe(false);
+    } finally {
+      console.log = write;
+      if (previous === undefined) delete process.env.GOAL_UNIT_GATE_BUDGET_MS;
+      else process.env.GOAL_UNIT_GATE_BUDGET_MS = previous;
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   test('extracts test names and assertion diffs from guard failures', () => {
@@ -1235,7 +1314,7 @@ process.exit(await child.exited);
       const events = () => readFileSync(join(r.dir, '.temp/goal-orchestration/merges.jsonl'), 'utf8')
         .trim().split('\n').map(line => JSON.parse(line));
       expect(events()).toEqual([{ before, after: tasks[first.id]!.mergedCommit, goal: 'alpha',
-        taskIds: [first.id, second.id], at: expect.any(String) }]);
+        taskIds: [first.id, second.id], files: ['worker-001.ts', 'worker-002.ts'], at: expect.any(String) }]);
       expect(r.run(['merge', second.id]).status).toBe(0);
       // A resumed sharer may finish without new commits; the no-op merge still records its delivered work.
       await r.stopFixture(second.id);
@@ -1252,6 +1331,8 @@ process.exit(await child.exited);
       writeFileSync(join(dir, 'present.test.ts'), '');
       // main added absent.test.ts after the branch's base; the branch cannot run it.
       expect(mergeUnitFiles(dir, 'Affected since abc: 2 changed paths\n  unit: present.test.ts\n  unit: absent.test.ts\n')).toEqual(['present.test.ts']);
+      writeFileSync(join(dir, 'owner.test.ts'), '');
+      expect(mergeOwnerFiles(dir, 'Affected since abc: 1 changed path\n  owner: owner.test.ts\n  owner: missing.test.ts\n')).toEqual(['owner.test.ts']);
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
@@ -1365,6 +1446,7 @@ process.exit(await child.exited);
             : 'its own migration number 990 occurs outside a proven migration context');
           expect(r.git('rev-parse', 'main')).toBe(before);
           expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+          expect(r.ledger().tasks[task.id]!.refusal).toContain('migration normalization refused; not merging:');
           expect(existsSync(join(task.worktree, directory, '990_first.sql'))).toBe(true);
           expect(spawnSync('git', ['-C', task.worktree, 'status', '--porcelain'], { encoding: 'utf8' }).stdout).toBe('');
         } else {
@@ -1414,6 +1496,7 @@ process.exit(await child.exited);
       const first = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan });
       expect(first.status).toBe(1);
       expect(first.stderr).toContain('introduced unit failures');
+      expect(r.ledger().tasks[task.id]!.refusal).toContain('introduced unit failures; not merging:');
       expect(r.ledger().tasks[task.id]!.migrationOrigins).toEqual({ [`${directory}/1005_retry.sql`]: original });
       writeFileSync(join(r.dir, directory, '1006_later.sql'), 'SELECT 3;\n');
       r.git('add', '.'); r.git('commit', '-qm', 'Another migration lands before retry');
@@ -1424,6 +1507,7 @@ process.exit(await child.exited);
       const second = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan });
       expect(second.stderr).toBe('');
       expect(second.status).toBe(0);
+      expect(r.ledger().tasks[task.id]!.refusal).toBeUndefined();
       expect(r.ledger().tasks[task.id]!.migrationOrigins).toEqual({ [`${directory}/1007_retry.sql`]: original });
       expect(existsSync(join(r.dir, directory, '1007_retry.sql'))).toBe(true);
       expect(readFileSync(join(r.dir, file), 'utf8')).toContain('1007_retry.sql');
@@ -1549,6 +1633,27 @@ ${edit}
     expect(streamUnitBaseline(events, ['stream'], 'head')).toBe('b');
     expect(streamUnitBaseline(events, ['peer'], 'head')).toBe('b');
     expect(streamUnitBaseline(events, ['new'], 'head')).toBe('head');
+  });
+
+  test('a stream selects its own commits plus earlier merge files, and the first merge only classifies inheritance', () => {
+    const own = ['services/main/src/stream-only.ts'];
+    expect(streamSelectionFiles(own, [{ before: 'main-a', after: 'merged', goal: 'alpha', taskIds: ['stream'],
+      files: ['services/main/src/earlier.ts'], at: 't0' }], ['stream']).sort())
+      .toEqual(['services/main/src/earlier.ts', 'services/main/src/stream-only.ts']);
+    expect(streamSelectionFiles(own, [{ before: 'main-a', after: 'merged', goal: 'alpha', taskIds: ['other'],
+      files: ['infra/jena/Dockerfile'], at: 't0' }], ['stream'])).toEqual(own);
+    const plan = (changed: string[]) => planAffected({
+      base: 'main', changed, graph: [], sources: new Map(),
+      exists: path => path === nativeUnionTest,
+      nativeUnionDockerfile: 'FROM eclipse-temurin:21\n',
+    });
+    expect(plan(own).nativeUnion).toBe('not selected');
+    expect(plan(own).tests.unit).not.toContain(nativeUnionTest);
+    expect(plan([...own, 'infra/jena/Dockerfile']).nativeUnion).toBe('selected');
+    expect(plan([...own, 'infra/jena/Dockerfile']).tests.unit).toContain(nativeUnionTest);
+    expect(streamUnitBaseline([{ before: 'first-main', after: 'merged', goal: 'alpha', taskIds: ['stream'], at: 't0' },
+      { before: 'later-main', after: 'merged-2', goal: 'alpha', taskIds: ['stream'], at: 't1' }], ['stream'], 'current'))
+      .toBe('first-main');
   });
 
   for (const outcome of ['introduced', 'inherited'] as const) {
@@ -1825,8 +1930,9 @@ ${edit}
       const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(fast, slow); r.save(ledger);
       writeFileSync(join(task.worktree, fast), `import { test, expect } from 'bun:test';\n`
         + `test('finishes', () => expect(true).toBe(true));\n`);
+      // The timeout is a binding, so the gate cannot extend the shard and still stops at its own budget.
       writeFileSync(join(task.worktree, slow), `import { setDefaultTimeout, test } from 'bun:test';\n`
-        + `setDefaultTimeout(120_000);\ntest('runs past the gate budget', async () => { await Bun.sleep(90_000); });\n`);
+        + `const gateTimeout = 120_000;\nsetDefaultTimeout(gateTimeout);\ntest('runs past the gate budget', async () => { await Bun.sleep(90_000); });\n`);
       r.commit(task);
       expect(spawnSync('git', ['-C', task.worktree, 'add', fast, slow]).status).toBe(0);
       expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add budget probes']).status).toBe(0);
@@ -1870,8 +1976,9 @@ ${edit}
       const ledger = r.ledger(); ledger.tasks[task.id]!.paths.push(slow, ...later); r.save(ledger);
       const seen = join(r.dir, '.temp/slow-once-seen');
       // Slow only on the first run, so the isolated retry of this file finishes.
+      // The timeout is a binding, so the gate cannot extend the shard and still stops at its own budget.
       writeFileSync(join(task.worktree, slow), `import { existsSync, writeFileSync } from 'node:fs';\n`
-        + `import { setDefaultTimeout, test } from 'bun:test';\nsetDefaultTimeout(120_000);\n`
+        + `import { setDefaultTimeout, test } from 'bun:test';\nconst gateTimeout = 120_000;\nsetDefaultTimeout(gateTimeout);\n`
         + `test('slow once', async () => { if (existsSync(${JSON.stringify(seen)})) return; writeFileSync(${JSON.stringify(seen)}, ''); await Bun.sleep(90_000); });\n`);
       for (const file of later) {
         writeFileSync(join(task.worktree, file), `import { expect, test } from 'bun:test';\ntest('passes', () => expect(true).toBe(true));\n`);
@@ -2143,6 +2250,146 @@ ${edit}
         && Date.now() < deadline) await Bun.sleep(20);
       r.workers.set('G-001', JSON.parse(readFileSync(join(r.dir, '.temp/ready/G-001'), 'utf8')) as { worker: number; child: number });
       expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(2);
+    } finally { r.cleanup(); }
+  });
+
+  test('a rebase conflict records the refusal, status shows it, and resume clears it', async () => {
+    const r = repo();
+    try {
+      const task = await r.start('G-001');
+      r.commit(task);
+      writeFileSync(join(r.dir, 'worker-001.ts'), `export const value = 'main';\n`);
+      r.git('add', 'worker-001.ts');
+      r.git('commit', '-qm', 'Main takes the same file');
+      await r.stopFixture(task.id);
+      const before = r.git('rev-parse', 'main');
+      const result = r.run(['merge', task.id]);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('does not rebase onto main');
+      const refusal = r.ledger().tasks[task.id]!.refusal;
+      expect(refusal).toContain('does not rebase onto main');
+      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+      expect(r.git('rev-parse', 'main')).toBe(before);
+      const status = r.run(['status']);
+      expect(status.status).toBe(0);
+      expect(status.stdout).toContain(refusal!);
+      const resumed = r.run(['resume', task.id, '-m', 'continue']);
+      expect(resumed.status).toBe(0);
+      const deadline = Date.now() + 5000;
+      while (r.workers.get(task.id)!.worker === (JSON.parse(readFileSync(join(r.dir, '.temp/ready', task.id), 'utf8')) as { worker: number }).worker
+        && Date.now() < deadline) await Bun.sleep(20);
+      r.workers.set(task.id, JSON.parse(readFileSync(join(r.dir, '.temp/ready', task.id), 'utf8')) as { worker: number; child: number });
+      expect(r.ledger().tasks[task.id]!.state).toBe('running');
+      expect(r.ledger().tasks[task.id]!.refusal).toBeUndefined();
+    } finally { r.cleanup(); }
+  });
+
+  test('stale generated artifacts block only when the rebased main still checks clean', async () => {
+    const r = repo();
+    try {
+      const generator = `import { existsSync } from 'node:fs';\n`
+        + `if (process.argv.includes('--check') && existsSync('stale-generated')) { console.error('generated output is stale'); process.exit(1); }\n`;
+      mkdirSync(join(r.dir, 'scripts'), { recursive: true });
+      writeFileSync(join(r.dir, 'scripts/generate.ts'), generator);
+      r.git('add', 'scripts/generate.ts');
+      r.git('commit', '-qm', 'Add generator');
+      const task = await r.start('G-001');
+      const ledger = r.ledger();
+      ledger.tasks[task.id]!.paths.push('stale-generated');
+      r.save(ledger);
+      writeFileSync(join(task.worktree, 'stale-generated'), 'stale\n');
+      expect(spawnSync('git', ['-C', task.worktree, 'add', 'stale-generated']).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Leave generated output stale']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const before = r.git('rev-parse', 'main');
+      const blocked = r.run(['merge', task.id]);
+      expect(blocked.status).toBe(1);
+      expect(blocked.stderr).toContain('run task gen');
+      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+      expect(r.ledger().tasks[task.id]!.refusal).toContain('run task gen');
+      expect(r.git('rev-parse', 'main')).toBe(before);
+    } finally { r.cleanup(); }
+  });
+
+  test('generated artifacts already stale on main do not block the merge', async () => {
+    const r = repo();
+    try {
+      const generator = `import { existsSync } from 'node:fs';\n`
+        + `if (process.argv.includes('--check') && existsSync('stale-generated')) { console.error('generated output is stale'); process.exit(1); }\n`;
+      mkdirSync(join(r.dir, 'scripts'), { recursive: true });
+      writeFileSync(join(r.dir, 'scripts/generate.ts'), generator);
+      writeFileSync(join(r.dir, 'stale-generated'), 'stale\n');
+      r.git('add', 'scripts/generate.ts', 'stale-generated');
+      r.git('commit', '-qm', 'Main already has stale output');
+      const task = await r.start('G-001');
+      r.commit(task);
+      await r.stopFixture(task.id);
+      const result = r.run(['merge', task.id]);
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain('stale on main');
+      expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+    } finally { r.cleanup(); }
+  });
+
+  test('an owner-tier plan file runs through task test and a branch-only failure blocks', async () => {
+    const r = repo();
+    try {
+      const file = 'scripts/qa/owner-probe.test.ts';
+      const task = await r.start('G-001');
+      const ledger = r.ledger();
+      ledger.tasks[task.id]!.paths.push(file);
+      r.save(ledger);
+      mkdirSync(join(task.worktree, 'scripts/qa'), { recursive: true });
+      writeFileSync(join(task.worktree, file), `import { expect, test } from 'bun:test';\n`
+        + `test('owner probe fails', () => expect(1).toBe(2));\n`);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', file]).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Add failing owner probe']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const plan = join(r.dir, '.temp/unit-plan');
+      writeFileSync(plan, `  owner: ${file}\n`);
+      const log = join(r.dir, '.temp/unit-log');
+      const before = r.git('rev-parse', 'main');
+      const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan, GOAL_TEST_LOG: log });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('introduced unit failures');
+      expect(result.stderr).toContain(file);
+      expect(r.git('rev-parse', 'main')).toBe(before);
+      expect(r.ledger().tasks[task.id]!.state).toBe('conflict');
+      const runs = readFileSync(log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as { args: string[] });
+      expect(runs.length).toBeGreaterThan(0);
+      expect(runs.every(run => run.args[0] === 'test' && run.args.includes(file))).toBe(true);
+    } finally { r.cleanup(); }
+  });
+
+  test('a later merge selects the stream\'s own files and classifies failures from the first merge', async () => {
+    const r = repo();
+    try {
+      const task = await r.start('G-001');
+      const ledger = r.ledger();
+      ledger.tasks[task.id]!.paths.push('stream-only.ts');
+      r.save(ledger);
+      r.commit(task);
+      await r.stopFixture(task.id);
+      const baseline = r.git('rev-parse', 'main');
+      expect(r.run(['merge', task.id, '--skip-unit-gate']).status).toBe(0);
+      mkdirSync(join(r.dir, 'infra/jena'), { recursive: true });
+      writeFileSync(join(r.dir, 'infra/jena/Dockerfile'), 'FROM scratch\n');
+      r.git('add', 'infra/jena/Dockerfile');
+      r.git('commit', '-qm', 'Main changes the native image');
+      writeFileSync(join(task.worktree, 'stream-only.ts'), `export const stream = true;\n`);
+      expect(spawnSync('git', ['-C', task.worktree, 'add', 'stream-only.ts']).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Stream-only change']).status).toBe(0);
+      const plan = join(r.dir, '.temp/unit-plan');
+      writeFileSync(plan, '');
+      const result = r.run(['merge', task.id], { GOAL_TEST_PLAN: plan });
+      expect(result.stderr).toBe('');
+      expect(result.status).toBe(0);
+      expect(result.stdout).toContain(`classification baseline ${baseline.slice(0, 12)}`);
+      expect(result.stdout).toContain(`against main ${baseline.slice(0, 12)}`);
+      expect(result.stdout).toContain('stream-only.ts');
+      expect(result.stdout).toContain('worker-001.ts');
+      expect(result.stdout).not.toContain('infra/jena/Dockerfile');
     } finally { r.cleanup(); }
   });
 });

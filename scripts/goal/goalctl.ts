@@ -6,7 +6,9 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtemp
   renameSync, readlinkSync, realpathSync, rmSync, statSync, lstatSync, writeFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
+import { pathToFileURL } from 'node:url';
+import { ownerGateFiles, testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
+import { backendGraph, formatPlan, needsGraph, planAffected } from '../qa/affected.ts';
 import { newReapScope, reapScopeChain, reapSettleMs, removeScopedContainers, sweepOrphanContainers } from '../qa/container-reaper.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { parseAffectedArgs, selectTestCommand } from '../qa/test.ts';
@@ -42,6 +44,8 @@ export interface Task extends Omit<Brief, 'worktree'> {
   historyGate?: boolean;
   /** Normalized migration paths retain the original claim when a failed unit gate is retried. */
   migrationOrigins?: Record<string, string>;
+  /** First line of the message that put the task in `conflict`. Absent in every other state. */
+  refusal?: string;
 }
 /** One running Goal. Its intent and areas live in `docs/goals/<slug>/GOAL.md`; the ledger keeps only runtime state. */
 export interface GoalRecord { manager: string; startedAt: string; closedAt?: string; archive?: string }
@@ -1265,7 +1269,7 @@ async function waitFor(id: string): Promise<void> {
     if (last.n === attempt.n) {
       last.endedAt ??= new Date().toISOString();
       if (result.session && !last.session) last.session = result.session;
-      if (current.state === 'running') current.state = 'exited';
+      if (current.state === 'running') { current.state = 'exited'; clearRefusal(current); }
     }
     return current;
   });
@@ -1363,6 +1367,7 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
     task.attempts.push(launch(task, nextEffort, session, prompt, continuing, manager, nextEngine));
     task.engine = nextEngine;
     task.state = 'running';
+    clearRefusal(task);
     console.log(`${task.id} attempt ${task.attempts.length}: ${modelOf(nextEngine)}/${nextEffort}`
       + ` ${continuing ? 'resumed' : 'fresh session'}, pid ${lastAttempt(task).pid}`);
   });
@@ -1442,7 +1447,7 @@ async function stopTask(id: string): Promise<void> {
       removeWorktreeStack(task.worktree);
     }
     lastAttempt(task).endedAt ??= new Date().toISOString();
-    if (task.state === 'running') task.state = 'stopped';
+    if (task.state === 'running') { task.state = 'stopped'; clearRefusal(task); }
   });
   console.log(`${id.toUpperCase()} stopped; its worktree and claims remain until close`);
 }
@@ -1818,11 +1823,266 @@ export function landedBoundary(repo: string, task: Pick<Task, 'base' | 'branch'>
   return before;
 }
 
-/** Add inventory guards to backend units from the public affected plan;
- * whole-unit widening uses its registered defaults. Both share the existing gate. */
-export function mergeUnitFiles(worktree: string, plan: string): string[] {
-  if (!/^Affected since /m.test(plan)) throw new Error('Affected unit plan was not produced');
-  const entries = [...plan.matchAll(/^  unit: (.+)$/gm)].map(match => match[1]!);
+/** Longest declared per-test timeout. `unparseable` means a timeout argument was not a numeric literal. */
+export interface DeclaredTestTimeout {
+  ms?: number;
+  unparseable: boolean;
+}
+
+const NUMERIC_LITERAL = /^(?:0|[1-9]\d*(?:_\d+)*)(?:\.\d+(?:_\d+)*)?(?:[eE][+-]?\d+)?$/;
+
+function numericLiteral(text: string): number | undefined {
+  const raw = text.trim();
+  if (!NUMERIC_LITERAL.test(raw)) return undefined;
+  const value = Number(raw.replaceAll('_', ''));
+  return Number.isSafeInteger(value) && value >= 0 ? value : undefined;
+}
+
+/** `/` after an operator or bracket starts a regex; after a value it is division. */
+function skipRegexLiteral(source: string, index: number): number {
+  let i = index + 1;
+  let inClass = false;
+  while (i < source.length) {
+    const char = source[i]!;
+    if (char === '\\') { i += 2; continue; }
+    if (char === '\n') return index + 1;
+    if (inClass) {
+      if (char === ']') inClass = false;
+      i++;
+      continue;
+    }
+    if (char === '[') { inClass = true; i++; continue; }
+    if (char === '/') {
+      i++;
+      while (i < source.length && /[a-z]/i.test(source[i]!)) i++;
+      return i;
+    }
+    i++;
+  }
+  return i;
+}
+
+function skipQuoted(source: string, index: number, canRegex: boolean): number {
+  const quote = source[index]!;
+  if (quote === '/' && canRegex) return skipRegexLiteral(source, index);
+  if (quote !== '"' && quote !== "'" && quote !== '`') return index + 1;
+  let i = index + 1;
+  while (i < source.length) {
+    const char = source[i]!;
+    if (char === '\\') { i += 2; continue; }
+    if (quote === '`' && char === '$' && source[i + 1] === '{') {
+      i = skipBracket(source, i + 1);
+      continue;
+    }
+    if (char === quote) return i + 1;
+    if (char === '\n' && quote !== '`') return i;
+    i++;
+  }
+  return i;
+}
+
+/** Index just past the bracket at `open`, which is `(`, `[` or `{`. Strings, comments and regexes stay opaque. */
+function skipBracket(source: string, open: number): number {
+  const closing: Record<string, string> = { '(': ')', '[': ']', '{': '}' };
+  const stack = [closing[source[open]!]!];
+  let i = open + 1;
+  let value = false;
+  while (i < source.length && stack.length) {
+    const char = source[i]!;
+    const next = source[i + 1];
+    if (char === '/' && next === '/') {
+      while (i < source.length && source[i] !== '\n') i++;
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      i += 2;
+      while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) i++;
+      i = Math.min(source.length, i + 2);
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`' || (char === '/' && !value)) {
+      const skipped = skipQuoted(source, i, char === '/' && !value);
+      value = skipped > i + 1 || char !== '/';
+      i = skipped;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      stack.push(closing[char]!);
+      value = false;
+      i++;
+      continue;
+    }
+    if (char === stack.at(-1)) {
+      stack.pop();
+      value = true;
+      i++;
+      continue;
+    }
+    if (/[A-Za-z0-9_$]/.test(char) || char === ')' || char === ']' || char === '}') value = true;
+    else if (!/\s/.test(char)) value = false;
+    i++;
+  }
+  return i;
+}
+
+function callArguments(source: string, open: number): { args: string[]; end: number } | undefined {
+  if (source[open] !== '(') return undefined;
+  const end = skipBracket(source, open);
+  if (source[end - 1] !== ')') return undefined;
+  const body = source.slice(open + 1, end - 1);
+  const args: string[] = [];
+  let start = 0;
+  let i = 0;
+  let value = false;
+  while (i < body.length) {
+    const char = body[i]!;
+    const next = body[i + 1];
+    if (char === '/' && next === '/') {
+      while (i < body.length && body[i] !== '\n') i++;
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      i += 2;
+      while (i < body.length && !(body[i] === '*' && body[i + 1] === '/')) i++;
+      i = Math.min(body.length, i + 2);
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`' || (char === '/' && !value)) {
+      const skipped = skipQuoted(body, i, char === '/' && !value);
+      value = true;
+      i = skipped;
+      continue;
+    }
+    if (char === '(' || char === '[' || char === '{') {
+      i = skipBracket(body, i);
+      value = true;
+      continue;
+    }
+    if (char === ',') {
+      args.push(body.slice(start, i));
+      start = i + 1;
+      value = false;
+      i++;
+      continue;
+    }
+    if (/[A-Za-z0-9_$]/.test(char)) value = true;
+    else if (!/\s/.test(char)) value = false;
+    i++;
+  }
+  args.push(body.slice(start));
+  return { args: args.filter(arg => arg.trim()), end };
+}
+
+function isCallback(argument: string): boolean {
+  const text = argument.trim();
+  return /^(?:async\b|function\b|\()/.test(text) || /=>/.test(text);
+}
+
+/** Numeric last argument of `test(...)` / `it(...)`, and `setDefaultTimeout(...)`. The longest one wins. */
+export function declaredTestTimeout(source: string): DeclaredTestTimeout {
+  let max: number | undefined;
+  let unparseable = false;
+  const note = (value: number | undefined) => {
+    if (value === undefined) { unparseable = true; return; }
+    max = max === undefined ? value : Math.max(max, value);
+  };
+  let i = 0;
+  let value = false;
+  while (i < source.length) {
+    const char = source[i]!;
+    const next = source[i + 1];
+    if (char === '/' && next === '/') {
+      while (i < source.length && source[i] !== '\n') i++;
+      continue;
+    }
+    if (char === '/' && next === '*') {
+      i += 2;
+      while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) i++;
+      i = Math.min(source.length, i + 2);
+      continue;
+    }
+    if (char === '"' || char === "'" || char === '`' || (char === '/' && !value)) {
+      i = skipQuoted(source, i, char === '/' && !value);
+      value = true;
+      continue;
+    }
+    if (!/[A-Za-z_$]/.test(char) || (i > 0 && /[A-Za-z0-9_$]/.test(source[i - 1]!))) {
+      // Parens stay visible so a timeout on a nested `test` call is still read.
+      if (/[A-Za-z0-9_$]/.test(char) || char === ')' || char === ']' || char === '}') value = true;
+      else if (!/\s/.test(char)) value = false;
+      i++;
+      continue;
+    }
+    const name = /^[A-Za-z_$][\w$]*/.exec(source.slice(i))![0]!;
+    let cursor = i + name.length;
+    const callee = name === 'test' || name === 'it' || name === 'setDefaultTimeout';
+    if (!callee || (i > 0 && source[i - 1] === '.')) {
+      value = true;
+      i = cursor;
+      continue;
+    }
+    const dotted = /^\s*(?:\.\s*[A-Za-z_$][\w$]*\s*)*/.exec(source.slice(cursor));
+    cursor += dotted?.[0].length ?? 0;
+    while (source[cursor] !== undefined && /\s/.test(source[cursor]!)) cursor++;
+    if (source[cursor] !== '(') {
+      value = true;
+      i = cursor;
+      continue;
+    }
+    let call = callArguments(source, cursor);
+    if (!call) { value = true; i = cursor + 1; continue; }
+    // `test.if(condition)(name, fn, timeout)` keeps the timeout on the following call.
+    while (name !== 'setDefaultTimeout') {
+      let after = call.end;
+      while (source[after] !== undefined && /\s/.test(source[after]!)) after++;
+      if (source[after] !== '(') break;
+      const nextCall = callArguments(source, after);
+      if (!nextCall) break;
+      call = nextCall;
+    }
+    if (name === 'setDefaultTimeout') note(call.args.length === 1 ? numericLiteral(call.args[0]!) : undefined);
+    else if (call.args.length >= 3) {
+      const last = call.args.at(-1)!;
+      const parsed = numericLiteral(last);
+      if (parsed !== undefined) note(parsed);
+      else if (!isCallback(last) && !last.trim().startsWith('{')) note(undefined);
+    }
+    value = true;
+    i = call.end;
+  }
+  return unparseable ? { unparseable: true } : { unparseable: false, ...(max !== undefined ? { ms: max } : {}) };
+}
+
+/** Added to a declared timeout when that file needs its own shard. One minute covers process startup under contention. */
+export const UNIT_GATE_TIMEOUT_MARGIN_MS = 60_000;
+
+export interface PlannedUnitShard { files: string[]; budgetMs: number }
+
+/** A file whose declared timeout plus the margin exceeds the default budget runs alone at that longer budget.
+ * Every other file keeps the default. Shards run together, so the ceiling is the slowest budget, not their sum. */
+export function planUnitGateShards(entries: readonly { file: string; timeout: DeclaredTestTimeout }[],
+  shardCount: number, defaultBudgetMs: number): { shards: PlannedUnitShard[]; unparseable: string[] } {
+  const unparseable: string[] = [];
+  const long: PlannedUnitShard[] = [];
+  const rest: string[] = [];
+  for (const entry of entries) {
+    if (entry.timeout.unparseable) {
+      unparseable.push(entry.file);
+      rest.push(entry.file);
+      continue;
+    }
+    const timeout = entry.timeout.ms;
+    if (timeout !== undefined && timeout + UNIT_GATE_TIMEOUT_MARGIN_MS > defaultBudgetMs) {
+      long.push({ files: [entry.file], budgetMs: timeout + UNIT_GATE_TIMEOUT_MARGIN_MS });
+    } else rest.push(entry.file);
+  }
+  return {
+    shards: [...long, ...balanceUnitShards(rest, shardCount).map(files => ({ files, budgetMs: defaultBudgetMs }))],
+    unparseable,
+  };
+}
+
+function existingTestFiles(worktree: string, entries: readonly string[], wholeTier: readonly string[]): string[] {
   const selected = new Set<string>();
   const collect = (file: string) => {
     const path = resolve(worktree, file);
@@ -1837,11 +2097,28 @@ export function mergeUnitFiles(worktree: string, plan: string): string[] {
   };
   for (const entry of entries) {
     if (entry.startsWith('whole tier (')) {
-      for (const file of [...testArgs('unit'), ...unitHarnessFiles]) collect(file);
+      for (const file of wholeTier) collect(file);
     } else collect(entry);
   }
-  for (const guard of repositoryGuards) collect(guard.file);
+  return [...selected];
+}
+
+/** Add inventory guards to backend units from the public affected plan;
+ * whole-unit widening uses its registered defaults. Both share the existing gate. */
+export function mergeUnitFiles(worktree: string, plan: string): string[] {
+  if (!/^Affected since /m.test(plan)) throw new Error('Affected unit plan was not produced');
+  const entries = [...plan.matchAll(/^  unit: (.+)$/gm)].map(match => match[1]!);
+  const selected = new Set(existingTestFiles(worktree, entries, [...testArgs('unit'), ...unitHarnessFiles]));
+  for (const file of existingTestFiles(worktree, repositoryGuards.map(guard => guard.file), [])) selected.add(file);
   return [...selected].sort();
+}
+
+/** Owner-tier files from the same plan. Whole-tier widening uses the worktree's owner registry. */
+export function mergeOwnerFiles(worktree: string, plan: string): string[] {
+  if (!/^Affected since /m.test(plan)) throw new Error('Affected unit plan was not produced');
+  const entries = [...plan.matchAll(/^  owner: (.+)$/gm)].map(match => match[1]!);
+  const whole = entries.some(entry => entry.startsWith('whole tier (')) ? ownerGateFiles(worktree) : [];
+  return existingTestFiles(worktree, entries, whole).sort();
 }
 
 /** Files a failing bun run names: in AGENT mode bun prints a `path:` header only for files with failures or errors. */
@@ -2150,7 +2427,9 @@ export function introducedUnitFailureFiles(branchFiles: readonly string[], branc
   }))].sort();
 }
 
-async function runUnitShard(cwd: string, files: readonly string[], deadline: number): Promise<UnitShardResult> {
+interface ShardInvocation { args: string[]; label: string; env: NodeJS.ProcessEnv }
+
+async function runUnitShard(cwd: string, files: readonly string[], deadline: number, invocation?: ShardInvocation): Promise<UnitShardResult> {
   const startedAt = Date.now();
   const unfinished = (output: string, timedOut: string[] = timedOutTestFiles(output, files, cwd)): UnitShardResult =>
     ({ done: false, failing: [], timedOut, failures: unitFailureDetails(output, files, cwd),
@@ -2161,11 +2440,14 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   // The gate's cwd is the tree under test, which may not contain this checkout's reaper.
   // Each shard has its own scope, so a timed-out shard cannot remove a sibling's containers.
   const scope = newReapScope();
-  const child = spawn('task', ['goal:unit-files', '--', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
+  const label = invocation?.label ?? 'goal:unit-files';
+  // The owner tier strips agent variables so bun lists every test. The gate still owns a reap scope
+  // so a shard stopped at its budget cannot leave containers behind.
+  const env: NodeJS.ProcessEnv = { ...(invocation?.env ?? { ...process.env, AGENT: '1', REZICS_REAP_PRELOAD: '1' }),
+    REZICS_REAP_SCOPE: scope, REZICS_REAP_SCOPES: reapScopeChain(process.env.REZICS_REAP_SCOPES, scope) };
+  const child = spawn('task', invocation?.args ?? ['goal:unit-files', '--', `--preload=${join(import.meta.dir, '../qa/container-reaper.ts')}`,
     ...files.map(file => `./${file}`)], {
-    cwd, env: { ...process.env, AGENT: '1', REZICS_REAP_PRELOAD: '1',
-      REZICS_REAP_SCOPE: scope, REZICS_REAP_SCOPES: reapScopeChain(process.env.REZICS_REAP_SCOPES, scope) },
-    stdio: ['ignore', 'pipe', 'pipe'], detached: true,
+    cwd, env, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
   });
   const stdout: string[] = [];
   const stderr: string[] = [];
@@ -2181,7 +2463,14 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
   child.stderr?.setEncoding('utf8');
   child.stdout?.on('data', take(stdout));
   child.stderr?.on('data', take(stderr));
-  const output = () => `${stdout.join('')}\n${stderr.join('')}`;
+  const output = () => {
+    const text = `${stdout.join('')}\n${stderr.join('')}`;
+    // The owner tier keeps bun's transcript in its artifact log. Failure comparison needs that transcript.
+    const artifacts = /QA artifacts: (\S+)/.exec(text);
+    if (!artifacts || /\.(?:test|spec)\.[cm]?[jt]sx?:$/m.test(text)) return text;
+    const log = join(artifacts[1]!, 'logs/owner.log');
+    return existsSync(log) ? `${text}\n${readFileSync(log, 'utf8')}` : text;
+  };
   const closed = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(resolve => {
     child.once('error', error => {
       launchError = `Unable to start unit runner: ${error.message}`;
@@ -2214,7 +2503,7 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
       ...failures.map(failure => failure.file)])];
     const fileErrors = unitFileErrorDetails(text, files, cwd, failing);
     const runnerErrors = outcome.code !== 0 && !namedFailing.length && !timedOut.length && !failures.length && !fileErrors.length
-      ? [{ files: [...files], diagnostic: text.trim() || `task goal:unit-files exited with status ${outcome.code}` }]
+      ? [{ files: [...files], diagnostic: text.trim() || `task ${label} exited with status ${outcome.code}` }]
       : [];
     // A failure bun did not attribute to a file counts against that shard.
     return { done: true, failing: outcome.code !== 0 && !failing.length ? [...files] : failing, timedOut, failures, fileErrors,
@@ -2228,6 +2517,38 @@ async function runUnitShard(cwd: string, files: readonly string[], deadline: num
     if (timer) clearTimeout(timer);
     try { removeScopedContainers(scope); } catch { /* the shard's status still stands */ }
   }
+}
+
+/** Owner files go through `task test`, the same command as the owner tier, so their environment matches. */
+function runOwnerShard(cwd: string, files: readonly string[], deadline: number): Promise<UnitShardResult> {
+  const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !['AGENT', 'CLAUDECODE', 'REPL_ID'].includes(key)));
+  return runUnitShard(cwd, files, deadline, { args: ['test', '--', ...files], label: 'test', env });
+}
+
+function gateShardRunner(owner: ReadonlySet<string>): UnitShardRunner {
+  return (cwd, group, deadline) => {
+    const owners = group.filter(file => owner.has(file));
+    const units = group.filter(file => !owner.has(file));
+    if (owners.length && units.length) return Promise.all([
+      runUnitShard(cwd, units, deadline), runOwnerShard(cwd, owners, deadline),
+    ]).then(mergeShardResults);
+    return owners.length ? runOwnerShard(cwd, owners, deadline) : runUnitShard(cwd, units, deadline);
+  };
+}
+
+function mergeShardResults(parts: readonly UnitShardResult[]): UnitShardResult {
+  return {
+    done: parts.every(part => part.done),
+    failing: [...new Set(parts.flatMap(part => part.failing))].sort(),
+    timedOut: [...new Set(parts.flatMap(part => part.timedOut))].sort(),
+    failures: parts.flatMap(part => part.failures),
+    fileErrors: parts.flatMap(part => part.fileErrors),
+    runnerErrors: parts.flatMap(part => part.runnerErrors),
+    files: [...new Set(parts.flatMap(part => part.files))].sort(),
+    output: parts.map(part => part.output).join('\n'),
+    ms: Math.max(...parts.map(part => part.ms)),
+    ...(parts.some(part => part.budgetExpired) ? { budgetExpired: true } : {}),
+  };
 }
 
 interface UnitGateResult {
@@ -2263,15 +2584,32 @@ export async function runUnitGate(cwd: string, files: readonly string[], shards?
   return unfinished.length ? { done: false, ...merged, unfinished } : { done: true, ...merged, unfinished: [] };
 }
 
+function fileDeclaredTimeout(cwd: string, file: string): DeclaredTestTimeout {
+  const path = join(cwd, file);
+  if (!existsSync(path)) return { unparseable: false };
+  try {
+    if (!statSync(path).isFile()) return { unparseable: false };
+    return declaredTestTimeout(readFileSync(path, 'utf8'));
+  } catch {
+    return { unparseable: true };
+  }
+}
+
 async function runUnitGatePass(cwd: string, files: readonly string[], shards: number | undefined,
   runShard: UnitShardRunner): Promise<{ result: UnitGateResult; shards: UnitShardResult[] }> {
   const empty: UnitGateResult = { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '' };
   if (!files.length) return { result: empty, shards: [] };
-  const groups = balanceUnitShards(files, shards ?? unitGateShards());
   const budget = unitGateBudgetMs();
-  console.log(`Unit gate: ${files.length} file(s) in ${groups.length} shard(s), budget ${budget}ms`);
-  const deadline = Date.now() + budget;
-  const results = await Promise.all(groups.map(group => runShard(cwd, group, deadline)));
+  const planned = planUnitGateShards(files.map(file => ({ file, timeout: fileDeclaredTimeout(cwd, file) })),
+    shards ?? unitGateShards(), budget);
+  for (const file of planned.unparseable) {
+    console.log(`Unit gate: ${file} declared a timeout that could not be parsed; using the default shard budget`);
+  }
+  // Concurrent shards share a start. The wall clock is the slowest budget, not the sum.
+  const slowest = Math.max(budget, ...planned.shards.map(shard => shard.budgetMs));
+  console.log(`Unit gate: ${files.length} file(s) in ${planned.shards.length} shard(s), slowest budget ${slowest}ms`);
+  const started = Date.now();
+  const results = await Promise.all(planned.shards.map(shard => runShard(cwd, shard.files, started + shard.budgetMs)));
   for (const result of results) {
     console.log(`Unit gate shard: ${result.files.length} file(s), ${result.done ? `${result.failing.length} failing` : 'unfinished'} in ${result.ms}ms`);
   }
@@ -2299,11 +2637,12 @@ interface TimeoutRetryResult {
   failures: UnitFailureDetail[]; fileErrors: UnitFileErrorDetail[]; runnerErrors: UnitRunnerError[];
 }
 
-async function retryTimedOutFiles(cwd: string, files: readonly string[], side: 'affected' | 'main'): Promise<TimeoutRetryResult> {
+async function retryTimedOutFiles(cwd: string, files: readonly string[], side: 'affected' | 'main',
+  runShard?: UnitShardRunner): Promise<TimeoutRetryResult> {
   const result: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [], runnerErrors: [] };
   for (const file of [...new Set(files)].sort()) {
     console.log(`Unit gate: ${file} timed out on ${side}; rerunning alone`);
-    const retry = await runUnitGate(cwd, [file], 1);
+    const retry = await runUnitGate(cwd, [file], 1, runShard);
     if (retry.runnerErrors.length) {
       result.inconclusive.push(file);
       result.runnerErrors.push(...retry.runnerErrors);
@@ -2336,6 +2675,120 @@ function runnerErrorRefusal(side: 'affected' | 'main', errors: readonly UnitRunn
 /** Streams retain responsibility for failures from earlier merges, including shared-branch merges. */
 export function streamUnitBaseline(events: readonly MergeEvent[], taskIds: readonly string[], current: string): string {
   return events.find(event => event.before !== event.after && event.taskIds.some(id => taskIds.includes(id)))?.before ?? current;
+}
+
+type RecordedMerge = MergeEvent & { files?: readonly string[] };
+
+/** The candidate's own changes plus files this stream changed in earlier recorded merges. */
+export function streamSelectionFiles(own: readonly string[], events: readonly RecordedMerge[], taskIds: readonly string[]): string[] {
+  const earlier = events.filter(event => event.before !== event.after && event.taskIds.some(id => taskIds.includes(id)))
+    .flatMap(event => event.files ?? []);
+  return [...new Set([...own, ...earlier])].sort();
+}
+
+function readMergeEvents(): RecordedMerge[] {
+  const eventPath = join(stateDir, 'merges.jsonl');
+  if (!existsSync(eventPath)) return [];
+  return readFileSync(eventPath, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as RecordedMerge);
+}
+
+function writeMergeEvent(event: MergeEvent, files: readonly string[]): void {
+  appendFileSync(join(stateDir, 'merges.jsonl'), `${JSON.stringify({ ...event, files: [...new Set(files)].sort() })}\n`);
+}
+
+/** A package.json whose only difference is `scripts` does not change installed dependencies. Matches the affected planner. */
+function scriptOnlyPackageManifests(root: string, base: string, changed: readonly string[]): Set<string> {
+  const result = new Set<string>();
+  if (!changed.includes('package.json') || !existsSync(join(root, 'package.json'))) return result;
+  const shown = git(root, ['show', `${base}:package.json`], true);
+  if (!shown) return result;
+  const withoutScripts = (text: string) => {
+    const { scripts: _scripts, ...rest } = JSON.parse(text) as Record<string, unknown>;
+    return JSON.stringify(rest);
+  };
+  try {
+    if (withoutScripts(shown) === withoutScripts(readFileSync(join(root, 'package.json'), 'utf8'))) result.add('package.json');
+  } catch { /* a package.json that does not parse is a real change */ }
+  return result;
+}
+
+const AFFECTED_CODE_FILE = /\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/;
+
+function affectedPlanForChanges(worktree: string, base: string, changed: readonly string[],
+  planner: { planAffected: typeof planAffected; needsGraph: typeof needsGraph; backendGraph: typeof backendGraph; formatPlan: typeof formatPlan }): string {
+  const manifests = scriptOnlyPackageManifests(worktree, base, changed);
+  const includeFrontend = changed.some(path => ['apps/web/', 'apps/accounts/', 'packages/ui/', 'apps/about/']
+    .some(prefix => path.startsWith(prefix)));
+  const graph = planner.needsGraph([...changed], manifests) ? planner.backendGraph(worktree, includeFrontend) : [];
+  const sources = new Map<string, string>();
+  for (const module of graph) {
+    const path = join(worktree, module.source);
+    if (AFFECTED_CODE_FILE.test(module.source) && existsSync(path)) sources.set(module.source, readFileSync(path, 'utf8'));
+  }
+  const dockerfile = join(worktree, 'infra/jena/Dockerfile');
+  return planner.formatPlan(planner.planAffected({
+    base, changed: [...changed], graph, sources,
+    exists: path => existsSync(resolve(worktree, path)),
+    scriptOnlyManifests: manifests,
+    nativeUnionDockerfile: existsSync(dockerfile) ? readFileSync(dockerfile, 'utf8') : '',
+  }));
+}
+
+async function affectedPlanText(worktree: string, base: string, changed: readonly string[]): Promise<string> {
+  if (process.env.GOAL_TEST_PLAN !== undefined) {
+    return `Affected since HEAD: fixture\n${readFileSync(process.env.GOAL_TEST_PLAN, 'utf8')}`;
+  }
+  const modulePath = join(worktree, 'scripts/qa/affected.ts');
+  if (!existsSync(modulePath)) {
+    const plan = spawnSync('task', ['test', '--', '--affected', base, '--list'],
+      { cwd: worktree, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+    if (plan.status !== 0) throw new Error(`Affected unit selection failed:\n${plan.stderr || plan.error?.message}`);
+    return plan.stdout;
+  }
+  try {
+    const planner = await import(pathToFileURL(modulePath).href) as {
+      planAffected: typeof planAffected; needsGraph: typeof needsGraph; backendGraph: typeof backendGraph; formatPlan: typeof formatPlan;
+    };
+    return affectedPlanForChanges(worktree, base, changed, planner);
+  } catch (error) {
+    console.log(`Pre-merge selection: affected planner import failed (${error instanceof Error ? error.message : error}); using this checkout's planner`);
+    return affectedPlanForChanges(worktree, base, changed, { planAffected, needsGraph, backendGraph, formatPlan });
+  }
+}
+
+function runGenerateCheck(cwd: string): { ok: boolean; output: string } {
+  const run = spawnSync('bun', ['scripts/generate.ts', '--check'], { cwd, encoding: 'utf8', timeout: 180_000 });
+  return { ok: run.status === 0, output: `${run.stdout ?? ''}\n${run.stderr ?? ''}` };
+}
+
+/** Stale generated artifacts block only when the main commit the branch was rebased onto still checks clean. */
+async function generatedArtifactRefusal(worktree: string, mainRoot: string, mainCommit: string): Promise<string | undefined> {
+  if (!existsSync(join(worktree, 'scripts/generate.ts'))) return undefined;
+  const branch = runGenerateCheck(worktree);
+  if (branch.ok) return undefined;
+  let directory: string | undefined;
+  try {
+    mkdirSync(join(mainRoot, '.temp'), { recursive: true });
+    directory = mkdtempSync(join(mainRoot, '.temp/gen-gate-'));
+    git(mainRoot, ['worktree', 'add', '--detach', directory, mainCommit]);
+    if (!existsSync(join(directory, 'scripts/generate.ts'))) {
+      console.log('Generated artifacts are stale on the branch and the baseline has no generator; reported, not blocking');
+      return undefined;
+    }
+    const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
+    if (install.status !== 0) throw new Error(`Generated artifact baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
+    const baseline = runGenerateCheck(directory);
+    if (!baseline.ok) {
+      console.log(`Generated artifacts are stale on main ${mainCommit.slice(0, 12)} as well; reported, not blocking\n${branch.output.trim().slice(-2_000)}`);
+      return undefined;
+    }
+  } finally {
+    if (directory) {
+      git(mainRoot, ['worktree', 'remove', '--force', directory], true);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
+  return `generated artifacts are stale; run task gen\n${branch.output.trim().slice(-4_000)}`;
 }
 
 /** Workspaces with a `<workspace>:typecheck` task, by the directories whose sources they check. Each task checks one
@@ -2497,30 +2950,34 @@ async function preMergeTypecheckGate(worktree: string, mainRoot: string, before:
   }
 }
 
-/** A branch failure is inherited only when main has the same failing test and assertion detail. */
-async function preMergeUnitGate(worktree: string, mainRoot: string, before: string, skip: boolean, gatedFiles: Set<string>): Promise<string | undefined> {
+/** A branch failure is inherited only when the classification baseline has the same failing test and assertion detail.
+ * Selection uses the candidate's own changes against current main, not that older baseline. */
+async function preMergeUnitGate(worktree: string, mainRoot: string, classificationBaseline: string, currentMain: string,
+  taskIds: readonly string[], skip: boolean, gatedFiles: Set<string>): Promise<string | undefined> {
   if (skip) {
     console.log('Unit gate skipped: --skip-unit-gate explicitly requested by the manager');
     return;
   }
-  // For a stream this includes its earlier landed changes, so failures from those changes are selected again.
-  // The first-merge boundary also prevents earlier guard failures from being classified as inherited.
-  const base = spawnSync('git', ['merge-base', 'HEAD', before], { cwd: worktree, encoding: 'utf8' }).stdout.trim() || before;
-  const plan = spawnSync('task', ['test', '--', '--affected', base, '--list'],
-    { cwd: worktree, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-  if (plan.status !== 0) throw new Error(`Affected unit selection failed:\n${plan.stderr || plan.error?.message}`);
-  const files = mergeUnitFiles(worktree, plan.stdout);
+  const own = git(worktree, ['diff', '--name-only', '--no-renames', `${currentMain}...HEAD`]).split('\n').filter(Boolean);
+  const changed = streamSelectionFiles(own, readMergeEvents(), taskIds);
+  console.log(`Pre-merge selection since ${currentMain.slice(0, 12)} (${changed.length} path(s)); classification baseline ${classificationBaseline.slice(0, 12)}\n  ${changed.join('\n  ')}`);
+  const plan = await affectedPlanText(worktree, currentMain, changed);
+  const unit = mergeUnitFiles(worktree, plan);
+  const owner = new Set(mergeOwnerFiles(worktree, plan).filter(file => !unit.includes(file)));
+  const files = [...unit, ...owner].sort();
   for (const file of files) gatedFiles.add(file);
-  console.log(`Pre-merge unit gate: ${files.length} affected/guard file(s) against main ${before.slice(0, 12)}`);
+  // The first-merge boundary classifies inherited failures. It is not the selection base.
+  console.log(`Pre-merge unit gate: ${files.length} affected/guard file(s) against main ${classificationBaseline.slice(0, 12)}`);
   if (!files.length) return;
+  const runShard = gateShardRunner(owner);
   // Run the branch first. A timeout is retried alone; any still-unresolved file keeps this merge inconclusive.
-  const branch = await runUnitGate(worktree, files);
+  const branch = await runUnitGate(worktree, files, undefined, runShard);
   let branchFailureFiles = branch.failing;
   let branchTimedOut = branch.timedOut;
   let branchTimeoutRetry: TimeoutRetryResult = { failing: [], passing: [], unfinished: [], inconclusive: [], failures: [], fileErrors: [], runnerErrors: [] };
   if (branch.runnerErrors.length) return runnerErrorRefusal('affected', branch.runnerErrors);
   if (!branch.done) {
-    branchTimeoutRetry = await retryTimedOutFiles(worktree, branch.timedOut, 'affected');
+    branchTimeoutRetry = await retryTimedOutFiles(worktree, branch.timedOut, 'affected', runShard);
     if (branchTimeoutRetry.runnerErrors.length) return runnerErrorRefusal('affected', branchTimeoutRetry.runnerErrors);
     branchFailureFiles = [...new Set([...branch.failing, ...branchTimeoutRetry.failing])].sort();
     const unresolved = [...new Set([
@@ -2541,12 +2998,12 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
   // A file can fail beside its shard-mates and pass when those failures run together. Confirm those together,
   // then retry every timeout alone so the side's decision comes from its isolated run.
   const together = branchFailureFiles.filter(file => !branchTimedOut.includes(file));
-  const confirmed = together.length ? await runUnitGate(worktree, together, 1)
+  const confirmed = together.length ? await runUnitGate(worktree, together, 1, runShard)
     : { done: true, failing: [], timedOut: [], failures: [], fileErrors: [], runnerErrors: [], unfinished: [], output: '' };
   if (confirmed.runnerErrors.length) return runnerErrorRefusal('affected', confirmed.runnerErrors);
   const alreadyRetried = new Set(branch.done ? [] : branch.timedOut);
   const retryNewTimeouts = (files: readonly string[]) => files.filter(file => !alreadyRetried.has(file));
-  const retry = await retryTimedOutFiles(worktree, retryNewTimeouts([...branchTimedOut, ...confirmed.timedOut]), 'affected');
+  const retry = await retryTimedOutFiles(worktree, retryNewTimeouts([...branchTimedOut, ...confirmed.timedOut]), 'affected', runShard);
   const confirmedFailures = [...new Set([
     ...(!branch.done ? branchTimeoutRetry.failing : []),
     ...confirmed.failing.filter(file => !confirmed.timedOut.includes(file)),
@@ -2577,7 +3034,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
   }
   if (!confirmedFailures.length) return;
   const introduced = confirmedFailures.filter(file =>
-    spawnSync('git', ['cat-file', '-e', `${before}:${file}`], { cwd: mainRoot }).status !== 0);
+    spawnSync('git', ['cat-file', '-e', `${classificationBaseline}:${file}`], { cwd: mainRoot }).status !== 0);
   const existing = confirmedFailures.filter(file => !introduced.includes(file));
   let directory: string | undefined;
   try {
@@ -2585,13 +3042,13 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
       // Keep the checkout shallow: owner unit gates bind PostgreSQL sockets below it.
       mkdirSync(join(mainRoot, '.temp'), { recursive: true });
       directory = mkdtempSync(join(mainRoot, '.temp/unit-gate-'));
-      git(mainRoot, ['worktree', 'add', '--detach', directory, before]);
+      git(mainRoot, ['worktree', 'add', '--detach', directory, classificationBaseline]);
       // Own workspace links keep the baseline on HEAD even when main has local source edits.
       const install = spawnSync('task', ['install'], { cwd: directory, encoding: 'utf8', timeout: 120_000 });
       if (install.status !== 0) throw new Error(`Unit baseline dependency install failed:\n${install.stdout}\n${install.stderr}`);
-      const main = await runUnitGate(directory, existing);
+      const main = await runUnitGate(directory, existing, undefined, runShard);
       if (main.runnerErrors.length) return runnerErrorRefusal('main', main.runnerErrors);
-      const mainRetry = await retryTimedOutFiles(directory, main.timedOut, 'main');
+      const mainRetry = await retryTimedOutFiles(directory, main.timedOut, 'main', runShard);
       if (mainRetry.runnerErrors.length) return runnerErrorRefusal('main', mainRetry.runnerErrors);
       const mainUnresolved = [...new Set([
         ...main.unfinished.filter(file => !main.timedOut.includes(file)),
@@ -2613,7 +3070,7 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, before: stri
           : main.fileErrors.filter(error => error.file === file && !main.timedOut.includes(error.file));
         if (introducedUnitFailureFiles([file], confirmedDetails.filter(failure => failure.file === file),
           mainDetails, confirmedFileErrors.filter(error => error.file === file), mainFileErrors).includes(file)) introduced.push(file);
-        else console.log(`Unit gate: ${file} also fails on main ${before.slice(0, 12)} with identical failure details; reported, not blocking`);
+        else console.log(`Unit gate: ${file} also fails on main ${classificationBaseline.slice(0, 12)} with identical failure details; reported, not blocking`);
       }
     }
   } finally {
@@ -2699,6 +3156,19 @@ export function fastForwardMain(sync: MainSync, current: PreparedMerge, gates: F
   }
 }
 
+function refusalLine(message: string): string {
+  return message.split('\n').map(line => line.trim()).find(Boolean) ?? message.trim();
+}
+
+function markConflict(task: Task, message: string): void {
+  task.state = 'conflict';
+  task.refusal = refusalLine(message);
+}
+
+function clearRefusal(task: Task): void {
+  delete task.refusal;
+}
+
 async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   reviewGuard?: (task: Task) => void, landPermittedFiles?: readonly string[]): Promise<void> {
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
@@ -2721,13 +3191,12 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
       if (running(sharer)) throw new Error(`${sharer.id} is still running`);
     }
     if (!['exited', 'conflict', 'stopped', 'merged'].includes(task.state)) throw new Error(`${task.id} is ${task.state}`);
-    const recordMerged = (commit: string, before?: string) => {
+    const recordMerged = (commit: string, before?: string, files: readonly string[] = []) => {
       if (before !== undefined) {
-        const event: MergeEvent = { before, after: commit, goal: task.goal ?? 'program',
-          taskIds: sharers.map(sharer => sharer.id).sort(), at: new Date().toISOString() };
-        appendFileSync(join(stateDir, 'merges.jsonl'), `${JSON.stringify(event)}\n`);
+        writeMergeEvent({ before, after: commit, goal: task.goal ?? 'program',
+          taskIds: sharers.map(sharer => sharer.id).sort(), at: new Date().toISOString() }, files);
       }
-      for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = commit; }
+      for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = commit; clearRefusal(sharer); }
     };
     if (git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main') throw new Error('Main checkout is not on main');
     const { committed, dirty, ahead } = changedFiles(task);
@@ -2735,8 +3204,11 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     if (flags.has('--landed')) {
       // The manager already landed this work on main by hand (a cherry-pick, often with a conflict resolved).
       const commit = git(root, ['rev-parse', 'HEAD']);
-      if (!sharers.every(sharer => sharer.mergedCommit === commit)) recordMerged(commit, landedBoundary(root, task, commit));
-      else recordMerged(commit);
+      if (!sharers.every(sharer => sharer.mergedCommit === commit)) {
+        const boundary = landedBoundary(root, task, commit);
+        const landedFiles = git(root, ['diff', '--name-only', '--no-renames', `${boundary}..${commit}`], true).split('\n').filter(Boolean);
+        recordMerged(commit, boundary, landedFiles);
+      } else recordMerged(commit);
       console.log(`${sharers.map(sharer => sharer.id).join(', ')} recorded as landed at ${commit.slice(0, 12)}`);
       return;
     }
@@ -2767,8 +3239,9 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     if (rebase.status !== 0) {
       const conflicted = git(task.worktree, ['diff', '--name-only', '--diff-filter=U'], true);
       git(task.worktree, ['rebase', '--abort'], true);
-      task.state = 'conflict';
-      throw new Error(`${task.id} does not rebase onto main; conflicts:\n  ${conflicted.split('\n').join('\n  ')}`);
+      const message = `${task.id} does not rebase onto main; conflicts:\n  ${conflicted.split('\n').filter(Boolean).join('\n  ')}`;
+      markConflict(task, message);
+      return message;
     }
     // Union merge concatenates both sides. Drop duplicate `.use()` lines and a mid-chain `;` on the task
     // branch, then parse. A composition root that still does not parse is `conflict` and is not merged.
@@ -2779,8 +3252,9 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     }
     const prepared = prepareCompositionMerge([...originals].map(([file, source]) => ({ file, source })));
     if (!prepared.fastForward) {
-      task.state = 'conflict';
-      return `${task.id} composition root does not parse; not merging:\n  ${prepared.error}`;
+      const message = `${task.id} composition root does not parse; not merging:\n  ${prepared.error}`;
+      markConflict(task, message);
+      return message;
     }
     for (const file of prepared.files) {
       const path = join(task.worktree, file.file);
@@ -2800,8 +3274,9 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     });
     if (failures.length) {
       for (const [file, source] of originals) writeFileSync(join(task.worktree, file), source);
-      task.state = 'conflict';
-      return `${task.id} composition root does not parse; not merging:\n  ${failures.join('\n  ')}`;
+      const message = `${task.id} composition root does not parse; not merging:\n  ${failures.join('\n  ')}`;
+      markConflict(task, message);
+      return message;
     }
     if (git(task.worktree, ['status', '--porcelain', '--', 'services/main/src'], true)) {
       git(task.worktree, ['commit', '-q', '-am', 'Normalize Main composition roots after rebase (goalctl)']);
@@ -2810,8 +3285,9 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
     try { normalization = normalizeMigrations(task.worktree, task.branch); }
     catch (error) { normalization = error instanceof Error ? error.message : String(error); }
     if (typeof normalization === 'string') {
-      task.state = 'conflict';
-      return `${task.id} migration normalization refused; not merging:\n  ${normalization}`;
+      const message = `${task.id} migration normalization refused; not merging:\n  ${normalization}`;
+      markConflict(task, message);
+      return message;
     }
     if (normalization.length) {
       for (const rename of normalization) {
@@ -2827,8 +3303,9 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
       .map(line => JSON.parse(line) as MergeEvent) : [];
     const baseline = streamUnitBaseline(events, sharers.map(sharer => sharer.id), before);
     if (spawnSync('git', ['merge-base', '--is-ancestor', baseline, before], { cwd: root }).status !== 0) {
-      task.state = 'conflict';
-      return `${task.id} first merge boundary ${baseline} is unavailable or outside main history; cannot classify inherited unit failures`;
+      const message = `${task.id} first merge boundary ${baseline} is unavailable or outside main history; cannot classify inherited unit failures`;
+      markConflict(task, message);
+      return message;
     }
     return { before, baseline, after, worktree: task.worktree, branch: task.branch,
       sharers: sharers.map(sharer => sharer.id).sort(), committed: changedFiles(task).committed };
@@ -2847,7 +3324,9 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
   const typecheck = (merge: PreparedMerge, only?: readonly string[]) =>
     preMergeTypecheckGate(merge.worktree, root, merge.baseline, merge.committed, skipTypes, only);
   const gate = (merge: PreparedMerge) => typecheck(merge)
-    .then(refusal => refusal ?? preMergeUnitGate(merge.worktree, root, merge.baseline, flags.has('--skip-unit-gate'), gatedFiles));
+    .then(refusal => refusal ?? generatedArtifactRefusal(merge.worktree, root, merge.before))
+    .then(refusal => refusal ?? preMergeUnitGate(merge.worktree, root, merge.baseline, merge.before, merge.sharers,
+      flags.has('--skip-unit-gate'), gatedFiles));
   let gateFailure = await gate(preparedMerge);
   for (;;) {
     const current: PreparedMerge = preparedMerge;
@@ -2857,8 +3336,9 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
       reviewGuard?.(task);
       const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree && HOLDING.includes(other.state));
       if (gateFailure) {
-        task.state = 'conflict';
-        return `${task.id} ${gateFailure}`;
+        const message = `${task.id} ${gateFailure}`;
+        markConflict(task, message);
+        return message;
       }
       if (task.worktree !== current.worktree || task.branch !== current.branch
         || git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main'
@@ -2868,13 +3348,14 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
         || sharers.map(sharer => sharer.id).sort().join(',') !== current.sharers.join(',')
         || sharers.some(sharer => sharer.goal !== task.goal || sharer.branch !== task.branch || running(sharer))
         || !['exited', 'conflict', 'stopped', 'merged'].includes(task.state)) {
-        task.state = 'conflict';
-        return `${task.id} main, task branch or sharers changed during the unit gate; retry merge to rebase, normalize and test again`;
+        const message = `${task.id} main, task branch or sharers changed during the unit gate; retry merge to rebase, normalize and test again`;
+        markConflict(task, message);
+        return message;
       }
       if (landPermittedFiles !== undefined) {
         const refusal = landScopeRefusal(ledger, task, sharers, changedFiles(task).committed, landPermittedFiles);
         if (refusal) {
-          task.state = 'conflict';
+          markConflict(task, refusal);
           return refusal;
         }
       }
@@ -2888,16 +3369,20 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
         fastForward: after => retryGitIndexLock(() => spawnSync('git', ['merge', '--ff-only', after], { cwd: root, encoding: 'utf8' })),
       }, current, { gatedFiles, regated, retyped, typechecked: skipTypes ? [] : typecheckWorkspaces(current.committed) });
       if (advance.kind === 'stopped') {
+        if (advance.conflict && advance.message) {
+          const message = `${task.id} ${advance.message}`;
+          markConflict(task, message);
+          return message;
+        }
         if (advance.conflict) task.state = 'conflict';
-        return advance.message && advance.conflict ? `${task.id} ${advance.message}` : advance.message;
+        return advance.message;
       }
       const prepared = advance.prepared;
       if (advance.kind === 'regate') return { rerun: prepared };
       if (advance.kind === 'retypecheck') return { rerun: prepared, workspaces: advance.workspaces };
-      const event: MergeEvent = { before: prepared.before, after: prepared.after, goal: task.goal ?? 'program',
-        taskIds: prepared.sharers, at: new Date().toISOString() };
-      appendFileSync(join(stateDir, 'merges.jsonl'), `${JSON.stringify(event)}\n`);
-      for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = prepared.after; }
+      writeMergeEvent({ before: prepared.before, after: prepared.after, goal: task.goal ?? 'program',
+        taskIds: prepared.sharers, at: new Date().toISOString() }, prepared.committed);
+      for (const sharer of sharers) { sharer.state = 'merged'; sharer.mergedCommit = prepared.after; clearRefusal(sharer); }
       console.log(`${sharers.map(sharer => sharer.id).join(', ')} merged at ${task.mergedCommit!.slice(0, 12)}; ${prepared.committed.length} file(s):`);
       console.log(`  ${prepared.committed.join('\n  ')}`);
       return undefined;
@@ -2976,6 +3461,7 @@ async function closeTask(id: string, outcome: 'verified' | 'cancelled'): Promise
     }
     if (task.state === 'merged' && !sharers.length) git(root, ['branch', '-d', task.branch], true);
     task.state = outcome;
+    clearRefusal(task);
     task.closedAt = new Date().toISOString();
     console.log(`${task.id} ${outcome}; claims released${outcome === 'cancelled' ? `, branch ${task.branch} kept` : ''}`);
   });
@@ -3093,6 +3579,7 @@ async function status(): Promise<void> {
     for (const task of Object.values(current.tasks)) {
       if (task.state === 'running' && !running(task)) {
         task.state = 'exited';
+        clearRefusal(task);
         lastAttempt(task).endedAt ??= new Date().toISOString();
       }
     }
@@ -3134,7 +3621,8 @@ async function status(): Promise<void> {
   for (const task of tasks.filter(t => !['verified', 'cancelled'].includes(t.state))) {
     const attempt = lastAttempt(task);
     console.log(`${task.id} ${task.state.padEnd(8)} ${task.goal ?? '-'} ${engineOf(attempt)}/${attempt.effort} #${attempt.n} `
-      + `${elapsed(attempt.startedAt)} [${task.cases.join(' ')}] ${task.title}`);
+      + `${elapsed(attempt.startedAt)} [${task.cases.join(' ')}] ${task.title}`
+      + (task.state === 'conflict' && task.refusal ? `\n  ${task.refusal}` : ''));
   }
   const closed = tasks.length - tasks.filter(t => !['verified', 'cancelled'].includes(t.state)).length;
   if (closed) console.log(`${closed} closed task(s) omitted`);
