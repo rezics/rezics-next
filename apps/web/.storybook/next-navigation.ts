@@ -32,3 +32,7 @@ export function notFound(): never {
 export function redirect(path: string): never {
   throw new Error(`redirect(${path}) is not available in stories`);
 }
+
+export function permanentRedirect(path: string): never {
+  throw new Error(`permanentRedirect(${path}) is not available in stories`);
+}

@@ -113,6 +113,20 @@ export interface ZoneReleaseMatches {
   more: boolean;
 }
 
+/**
+ * Catalogue facts the platform already read for one Work: a format concept, publication years and a
+ * declared episode or volume count. Null and empty mean the read answered and nothing was recorded.
+ * `unavailable` means a read did not answer, so a slot says so instead of treating the fact as absent.
+ */
+export interface ZoneCatalogueFacts {
+  format: ZoneText | null;
+  /** Calendar years of accepted first-publication dates, newest first. */
+  years: number[];
+  /** The declared count for this Zone's kind. Never a chapter count. */
+  count: number | null;
+  unavailable: boolean;
+}
+
 /** A published prompt or Skill, as its author disclosed it. */
 export interface ZoneHubItem {
   kind: 'prompt' | 'skill';
@@ -279,6 +293,8 @@ export interface ZoneCardOptions {
   layout?: ZoneCardLayout; rank?: number; slot?: number;
   /** Present on a release-filtered browse page: the releases that matched the reader's filter. */
   matches?: ZoneReleaseMatches;
+  /** Catalogue facts the platform read for this card, when the Zone asks for them. */
+  facts?: ZoneCatalogueFacts;
 }
 
 export interface WorkCardSlotProps extends ZoneSlotProps {
@@ -287,6 +303,8 @@ export interface WorkCardSlotProps extends ZoneSlotProps {
   rank?: number;
   /** The releases that matched the reader's release filter, when the card is a filtered result. */
   matches?: ZoneReleaseMatches;
+  /** Catalogue facts the platform read for this Work, when the Zone asks for them. */
+  facts?: ZoneCatalogueFacts;
   /**
    * The signed-in reader's next volume of this Work when it is a series, in the language they chose, as
    * Main reports it; draws nothing signed out or for any other Work. A package places it where it likes.
@@ -372,6 +390,31 @@ export interface BrowseHeaderSlotProps extends ZoneSlotProps {
   filter: ReactNode;
   /** Whether the results below are filtered by a release group. */
   filtered: boolean;
+  /**
+   * The publication-year control, when this Zone lists Works by first-publication year.
+   * The form submits to `action` and keeps `kept`. Empty when the Zone has no year view.
+   */
+  year?: {
+    action: string;
+    value: string;
+    kept: readonly { name: string; value: string }[];
+    /** The same filters with no year and no year directory. Null when neither is open. */
+    clearHref: string | null;
+    /** Newest-first publication years, with the same filters and no chosen year. */
+    directoryHref: string;
+    /** The page is that newest-first list, not one chosen year. */
+    directory: boolean;
+    /** The year read stopped at its bound, so a work outside the window is not listed. */
+    bounded: boolean;
+  } | null;
+}
+
+/** The compact fact panel a Work's page leads with. Credits stay empty until that read exists. */
+export interface CataloguePanelSlotProps extends ZoneSlotProps {
+  work: Pick<ZoneWork, 'id' | 'href' | 'title' | 'status'>;
+  facts: ZoneCatalogueFacts;
+  /** Studio, director and artist. Null until that read exists; the slot leaves the place and draws nothing. */
+  credits: null;
 }
 
 /** The sections of a Work's overview (the hub); a Zone may lead with some of them. */
@@ -522,6 +565,8 @@ export interface ZoneSlots {
   home?: ComponentType<HomeSlotProps>;
   /** Above the Zone's browse results: the release filter and the words around it. */
   browseHeader?: ComponentType<BrowseHeaderSlotProps>;
+  /** The fact panel a Work's page in this Zone leads with. */
+  cataloguePanel?: ComponentType<CataloguePanelSlotProps>;
   header?: ComponentType<HeaderSlotProps>;
   /** The search and filters the home leads with; the platform's is a search field and chip rows. */
   browseBar?: ComponentType<BrowseBarSlotProps>;
@@ -544,6 +589,12 @@ export interface ZonePackage {
   slots: ZoneSlots;
   /** Offers the release filter on the browse page, in the reader's language (`locale` is the interface locale). */
   releaseFilter?: (locale: string) => ZoneReleaseFilterSpec;
+  /**
+   * Asks the platform to pass catalogue facts into `workCard` and `cataloguePanel`, and to offer a
+   * publication-year view on browse. `count` names which declared literal the panel shows.
+   * `formatNames` are the format concepts' public names, so a genre is not presented as a format.
+   */
+  catalogue?: { count: 'episodes' | 'volumes'; formatNames: readonly string[] };
   /**
    * The hub sections a Work's page in this Zone leads with, in this order; the others follow in the hub's own
    * order. The platform draws every section the Work's page binds whatever this says, so it reorders and never

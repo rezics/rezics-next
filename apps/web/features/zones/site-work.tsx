@@ -1,9 +1,13 @@
 import { zoneMemberHref } from '../address/path.ts';
-import type { ZonePackage } from '@rezics/zone-sdk';
+import type { ZoneContext, ZonePackage, ZoneWork } from '@rezics/zone-sdk';
 import { notFound } from 'next/navigation';
 import type { UiLocale } from '../../i18n/define.ts';
 import { getMessages } from '../../i18n/server.ts';
+import { zoneText } from '../realm/adapt.ts';
+import LocalizedLink from '../shell/localized-link.tsx';
 import { loadWork } from '../work-page/read.ts';
+import { readCatalogueFacts } from './catalogue-facts.ts';
+import { SlotBoundary } from './slot-boundary.tsx';
 import {
   idOf,
   iriOf,
@@ -50,12 +54,17 @@ export function workBase(
  * The Work's own page and tabs inside the Zone's frame, with the Zone's Realm as their scope unless the URL
  * names another. Nothing here is a second copy of the Work page; `base` only moves its addresses.
  */
+const recordedStatus = (value: string | null | undefined): ZoneWork['status'] =>
+  value === 'ongoing' || value === 'completed' || value === 'hiatus' || value === 'upcoming'
+    || value === 'cancelled' ? value : null;
+
 export async function ZoneWorkPage({
   base,
   tab,
   search,
   locale,
   pkg,
+  zone,
 }: {
   base: ZoneWorkBase;
   tab: WorkTab;
@@ -63,6 +72,8 @@ export async function ZoneWorkPage({
   locale: UiLocale;
   /** The Zone's running package; its `hubOrder` chooses the hub sections the page leads with. */
   pkg?: ZonePackage | null;
+  /** The Zone the fact panel addresses. Omitted where the page has no catalogue package. */
+  zone?: ZoneContext | null;
 }) {
   const [work, messages] = await Promise.all([
     loadWork(base.ref, locale),
@@ -74,10 +85,21 @@ export async function ZoneWorkPage({
   const context =
     typeof search.context === 'string' && idOf(iriOf(search.context)) ? search.context : undefined;
   const lead = pkg?.hubOrder;
+  const Panel = pkg?.slots.cataloguePanel;
+  const catalogue = pkg?.catalogue;
+  const facts = tab === 'overview' && Panel && catalogue && zone
+    ? await readCatalogueFacts(work.id, locale, catalogue.count, catalogue.formatNames) : null;
   return (
     <WorkFrameView {...common} work={work.header} lead={lead}>
       {tab === 'overview' ? (
-        <WorkOverview {...common} work={work.header} scope={scope} context={context} lead={lead} />
+        <>
+          {facts && Panel && zone ? <SlotBoundary slot="cataloguePanel" fallback={null}>
+            <Panel zone={zone} work={{ id: work.id, href: base.path, title: zoneText(work.header.title),
+              status: recordedStatus(work.header.completionStatus) }} facts={facts} credits={null} fallback={null}
+              Link={LocalizedLink} />
+          </SlotBoundary> : null}
+          <WorkOverview {...common} work={work.header} scope={scope} context={context} lead={lead} />
+        </>
       ) : tab === 'contents' ? (
         <WorkContents {...common} work={work.header} query={parseContentsQuery(search)} />
       ) : tab === 'versions' ? (

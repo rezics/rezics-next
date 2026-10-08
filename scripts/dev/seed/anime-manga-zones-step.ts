@@ -1,0 +1,366 @@
+import { createHash } from 'node:crypto';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
+import { packageDigest } from '@rezics/zone-sdk';
+import { Pool } from 'pg';
+import { importBangumiWorkFacts, type BangumiFactSource, type BangumiFactsClient }
+  from '../../datasets/bangumi.ts';
+import { ZONE_PRESETS, type ZonePresentation } from '../../../services/main/src/modules/zone/presentation-format.ts';
+import type { SerialStatus } from '../../../services/main/src/modules/work/metadata-schema.ts';
+import { statementDecisionBody, classifiedStatementBody, discloseClassificationConcept,
+  shareClassificationContext } from './classified-statement.ts';
+import { collectionPage, createSpace } from './ln-vn-zones-step.ts';
+import { grantOfficialThemeSeed, grantOfficialZoneSeed, type LocalOperatorInput } from './operator.ts';
+import { seedKey } from './plan.ts';
+import { declaredCountProperties, workFormatConcepts, type WorkFormatKey } from './relation-lexicon-data.ts';
+import { seedWorkFormat } from './relation-lexicon.ts';
+import { refreshSeedTokens, stableId, type SeedState } from './state.ts';
+import { call, createOwnWork, grantVnSeedAuthority, publishCatalogueText, read, seedHttp,
+  type SeedPort } from './vn-catalogue-step.ts';
+
+const BOOK = 'https://schema.org/Book';
+const INTEGER = 'http://www.w3.org/2001/XMLSchema#integer';
+const root = resolve(import.meta.dir, '../../..');
+const short = (iri: string) => iri.slice(-36);
+const zoneIri = (id: string) => `https://rezics.com/id/${stableId(`catalogue-zone:${id}`)}`;
+const themeIri = (id: string) => `https://rezics.com/id/${stableId(`catalogue-theme:${id}`)}`;
+
+export type CatalogueZoneId = 'anime' | 'manga';
+export interface CatalogueSample {
+  key: string;
+  zone: CatalogueZoneId;
+  title: string;
+  language: 'ja' | 'en';
+  /** A calendar year the publication-year read can list. Null means no year is recorded. */
+  year: number | null;
+  subject: { kind: 'bangumi'; source: BangumiFactSource }
+    | { kind: 'one-shot'; subjectId: string; volumes: number | null; status: SerialStatus | null };
+}
+
+const bangumi = (id: number, type: number, platform: number, extra: Record<string, unknown> = {}): CatalogueSample['subject'] =>
+  ({ kind: 'bangumi', source: { id, type, platform, ...extra } });
+
+/** Enough mixed anime and manga that a format filter passes the first browse page. */
+export function animeMangaSamplePlan(): CatalogueSample[] {
+  const samples: CatalogueSample[] = [];
+  for (let index = 0; index < 22; index++) {
+    const tags = index === 1 ? ['未放送'] : index === 2 ? ['取消'] : index % 2 === 0 ? ['已完结'] : ['连载中'];
+    samples.push({
+      key: index === 0 ? 'long-tv' : `tv-${index}`, zone: 'anime',
+      title: index % 2 === 0 ? `長編シリーズ ${index}` : `Long running ${index}`,
+      language: index % 2 === 0 ? 'ja' : 'en', year: index === 3 ? null : 1980 + index,
+      subject: bangumi(910000 + index, 2, 1, { eps: index === 0 ? 1155 : 12, meta_tags: tags }),
+    });
+  }
+  const animeFormats = [
+    ['movie', 3, 12], ['movie-2', 3, 1], ['ova', 2, 6], ['ona', 5, 8], ['special', 4, 1],
+  ] as const;
+  for (const [key, platform, eps] of animeFormats) {
+    samples.push({ key, zone: 'anime', title: `Anime ${key}`, language: 'ja', year: 2001,
+      subject: bangumi(911000 + platform + samples.length, 2, platform, { eps, meta_tags: ['已完结'] }) });
+  }
+  samples.push({ key: 'anime-unclassified', zone: 'anime', title: 'Unclassified picture', language: 'en', year: null,
+    subject: bangumi(912000, 2, 99) });
+  for (let index = 0; index < 22; index++) {
+    const tags = index === 1 ? ['未发售'] : index === 2 ? ['腰斩'] : index % 2 === 0 ? ['已完结'] : ['连载中'];
+    samples.push({
+      key: index === 0 ? 'long-manga' : `manga-${index}`, zone: 'manga',
+      title: index % 2 === 0 ? `長編漫画 ${index}` : `Long comic ${index}`,
+      language: index % 2 === 0 ? 'ja' : 'en', year: index === 3 ? null : 1995 + index,
+      subject: bangumi(920000 + index, 1, 1001, { ...(index === 3 ? {} : { volumes: index === 0 ? 21 : 3 }),
+        meta_tags: tags }),
+    });
+  }
+  samples.push({ key: 'one-shot', zone: 'manga', title: '読切', language: 'ja', year: 2012,
+    subject: { kind: 'one-shot', subjectId: '930001', volumes: 1, status: 'completed' } });
+  samples.push({ key: 'one-shot-en', zone: 'manga', title: 'A single chapter', language: 'en', year: null,
+    subject: { kind: 'one-shot', subjectId: '930002', volumes: null, status: 'upcoming' } });
+  samples.push({ key: 'manga-unclassified', zone: 'manga', title: 'Unclassified book', language: 'en', year: null,
+    subject: bangumi(922000, 1, 999) });
+  return samples;
+}
+
+/** One-shot has no Bangumi field. The same statement and metadata writes still record it. */
+export async function importOneShotFacts(client: BangumiFactsClient, actingSubject: string,
+  work: { work: string; mainVersion: string }, sample: Extract<CatalogueSample['subject'], { kind: 'one-shot' }>):
+  Promise<{ concept: string; countPredicate: string | null }> {
+  const seeded = await seedWorkFormat(client, actingSubject);
+  const post = <T>(path: string, body: unknown, _token: string, key: string) => client.post<T>(path, body as object, key);
+  const context = await shareClassificationContext(post, '', actingSubject,
+    workFormatConcepts.map(item => seeded.concepts[item.key]), 'work-format:v1:context');
+  for (const item of workFormatConcepts) {
+    await discloseClassificationConcept(post, '', actingSubject, seeded.concepts[item.key].concept,
+      `work-format:v1:hint:${item.key}`);
+  }
+  const format: WorkFormatKey = 'one-shot';
+  const prefix = `work-format:v1:${work.work.slice(-36)}:${sample.subjectId}`;
+  const concept = seeded.concepts[format].concept;
+  const statement = await client.post<{ statement: string; meaningKey: string }>('/v1/statements',
+    classifiedStatementBody(actingSubject, work.mainVersion, concept, context), `${prefix}:format`);
+  await client.post('/v1/statement-decisions', statementDecisionBody(actingSubject, statement, { kind: 'global' },
+    'accepted', null), `${prefix}:format-decision`);
+  let countPredicate: string | null = null;
+  if (sample.volumes) {
+    const notation = declaredCountProperties.find(item => item.notation === 'volume-count')!.notation;
+    const definition = seeded.counts[notation];
+    countPredicate = definition.component;
+    const count = await client.post<{ statement: string; meaningKey: string }>('/v1/statements', {
+      profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work.work, predicate: definition.component,
+      relationDefinition: definition.revision,
+      value: { kind: 'literal', lexical: String(sample.volumes), datatype: INTEGER, language: null },
+      applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject,
+    }, `${prefix}:volume-count`);
+    await client.post('/v1/statement-decisions', statementDecisionBody(actingSubject, count, { kind: 'global' },
+      'accepted', null), `${prefix}:volume-count:decision`);
+  }
+  if (sample.status) {
+    await client.put(`/v1/works/${work.work.slice(-36)}/metadata`, {
+      profile: 'work-metadata-details-v1', expectedHead: null, actingSubject,
+      state: { kind: 'header', originalTitle: null, completionStatus: sample.status, localized: [] },
+    }, `${prefix}:status`);
+  }
+  return { concept, countPredicate };
+}
+
+export interface CatalogueWorkRecord {
+  key: string; zone: CatalogueZoneId; work: string; mainVersion: string;
+  contribution: string; decision: string; concept: string | null; year: number | null; title: string;
+}
+export interface CatalogueZoneRecord { id: CatalogueZoneId; space: string; realm: string; zone: string; theme: string }
+
+function factsClient(port: SeedPort): BangumiFactsClient {
+  return {
+    post: (path, body, key) => call(port, 'POST', path, body, key),
+    put: (path, body, key) => call(port, 'PUT', path, body, key),
+    authorizeDefinition: receipt => port.grant(`semantic:read:${receipt.component}`, 'semantic.read'),
+  };
+}
+
+async function importSample(client: BangumiFactsClient, actor: string, work: { work: string; mainVersion: string },
+  sample: CatalogueSample): Promise<string | null> {
+  if (sample.subject.kind === 'bangumi') {
+    const imported = await importBangumiWorkFacts(client, actor, work, sample.subject.source);
+    return imported.concept;
+  }
+  const imported = await importOneShotFacts(client, actor, work, sample.subject);
+  return imported.concept;
+}
+
+function presentation(name: string, collection: string): ZonePresentation {
+  return {
+    profile: 'zone-presentation-v2', preset: 'editorial', tokens: ZONE_PRESETS.editorial,
+    navigation: [{ label: 'Browse', href: '/browse' }], slides: [],
+    modules: [
+      { id: 'announcement', type: 'announcement', title: `${name} in the catalogue`,
+        source: { kind: 'query-block', block: 'new-adoptions' } },
+      { id: 'shelf', type: 'shelf', title: name, source: { kind: 'collection', collection },
+        options: { layout: 'covers', limit: 12 } },
+    ],
+  };
+}
+
+async function configure(port: SeedPort, id: CatalogueZoneId, zone: string, realm: string, collection: string,
+  name: string) {
+  const current = await read<{ revision: string; name: string; language: string; configuration: {
+    defaultRealm: string | null; official: Record<string, never> | null; presentation: unknown } }>(port,
+    `/v1/zones/${short(zone)}/configuration`);
+  const desired = { name, language: 'en', defaultRealm: realm, official: {},
+    presentation: presentation(name, collection) };
+  const actual = { name: current.name, language: current.language, defaultRealm: current.configuration.defaultRealm,
+    official: current.configuration.official, presentation: current.configuration.presentation };
+  if (!isDeepStrictEqual(actual, desired)) {
+    const writer: SeedPort = port.officialRequest ? { ...port, request: port.officialRequest } : port;
+    await call(writer, 'PUT', `/v1/zones/${short(zone)}/configuration`, {
+      expectedHead: current.revision, actingSubject: port.actingSubject, ...desired,
+    }, seedKey('catalogue-zone-config', `${id}:${current.revision.slice(-12)}`));
+  }
+}
+
+async function insertMembers(port: SeedPort, id: string, collection: string, wanted: string[]) {
+  let page = await collectionPage(port, collection);
+  const missing = wanted.filter(target => !page.targets.has(target));
+  let head = page.revision;
+  for (let offset = 0; offset < missing.length; offset += 16) {
+    const batch = missing.slice(offset, offset + 16);
+    const written = await call<{ revision: string }>(port, 'POST', `/v1/collections/${short(collection)}/changes`, {
+      expectedHead: head, actingSubject: port.actingSubject,
+      operations: batch.map(target => ({ op: 'insert', role: 'member', parent: page.structure,
+        position: 'last', target, selection: { mode: 'follow-context' } })),
+    }, seedKey('catalogue-members', `${id}:${head.slice(-12)}:${offset}`));
+    head = written.revision;
+  }
+}
+
+async function mount(port: SeedPort, id: string, zone: string, collection: string) {
+  const page = await read<{ revision: string; mounts: { target?: string; state?: string }[] }>(port,
+    `/v1/zones/${short(zone)}?limit=100`);
+  if (!page.mounts.some(item => item.target === collection && item.state !== 'removed')) {
+    await call(port, 'POST', `/v1/zones/${short(zone)}/mounts`, {
+      expectedHead: page.revision, target: collection, routeSegment: 'catalogue', disclosure: 'public',
+      position: 'last', actingSubject: port.actingSubject,
+    }, seedKey('catalogue-mount', id));
+  }
+}
+
+/** Source digest of one official package, the same bytes the web loader hashes. */
+export function cataloguePackageDigest(slug: CatalogueZoneId): Promise<string> {
+  const directory = join(root, 'apps/web/zones/official', slug);
+  const files: Record<string, string> = {};
+  const visit = (current: string) => {
+    for (const name of readdirSync(current)) {
+      const path = join(current, name);
+      if (statSync(path).isDirectory()) visit(path);
+      else files[relative(directory, path)] = readFileSync(path, 'utf8');
+    }
+  };
+  visit(directory);
+  return packageDigest(files);
+}
+
+const sha = (value: string) => createHash('sha256').update(value).digest('hex');
+
+/**
+ * Approve the package for exactly this source. Slots named here are the ones the first-party
+ * bundle admits (`workCard`, `footer`). The fact panel renders with the package; the bundle has
+ * no name for that slot.
+ */
+export async function approveCataloguePackage(port: SeedPort, input: {
+  zone: string; slug: CatalogueZoneId; owner: string; reviewer: string;
+  /** The independent reviewer's request. The owner never records their own review. */
+  review: SeedPort['request'];
+}): Promise<void> {
+  const theme = themeIri(input.slug);
+  const digest = await cataloguePackageDigest(input.slug);
+  const file = `assets/${input.slug}/main.js`;
+  const bundle = { profile: 'first-party-bundle-v1', hostZone: input.zone, packageDigest: digest, entry: file,
+    files: [{ path: file, digest: sha(`${input.slug}:${digest}`), gzipBytes: 1000 }],
+    slots: ['workCard', 'footer'], connectOrigins: [], imageOrigins: [], fontOrigins: [] };
+  const createKey = seedKey('catalogue-theme', input.slug);
+  await call(port, 'POST', '/v1/themes', { theme: short(theme), owner: input.owner, hostZone: input.zone,
+    actingSubject: input.owner, idempotencyKey: createKey }, createKey);
+  const revisionKey = seedKey('catalogue-theme-revision', `${input.slug}:${digest.slice(0, 12)}`);
+  const revision = await call<{ operation: string }>(port, 'POST', `/v1/themes/${short(theme)}/revisions`, {
+    expectedRevision: null, bundle, actingSubject: input.owner, idempotencyKey: revisionKey,
+  }, revisionKey);
+  const reviewKey = seedKey('catalogue-theme-review', `${input.slug}:${revision.operation.slice(-12)}`);
+  await call({ ...port, actingSubject: input.reviewer, request: input.review }, 'POST',
+    `/v1/themes/${short(theme)}/revisions/${short(revision.operation)}/reviews`, {
+      decision: 'approved', reviewEvidenceDigest: sha(`reviewed ${digest}`), actingSubject: input.reviewer,
+      idempotencyKey: reviewKey,
+    }, reviewKey);
+  const activationKey = seedKey('catalogue-theme-activation', `${input.slug}:${revision.operation.slice(-12)}`);
+  await call(port, 'POST', `/v1/themes/${short(theme)}/first-party-activations`, {
+    revision: revision.operation, expectedActivation: null,
+    approvalExpiresAt: new Date(Date.now() + 30 * 86_400_000).toISOString(), actingSubject: input.owner,
+    idempotencyKey: activationKey,
+  }, activationKey);
+  const current = await read<{ revision: string; name: string; language: string; configuration: {
+    defaultRealm: string | null; official: Record<string, never> | null; presentation: object } }>(port,
+    `/v1/zones/${short(input.zone)}/configuration`);
+  await call(port, 'PUT', `/v1/zones/${short(input.zone)}/configuration`, {
+    expectedHead: current.revision, actingSubject: input.owner, name: current.name, language: current.language,
+    defaultRealm: current.configuration.defaultRealm, official: current.configuration.official,
+    presentation: { ...current.configuration.presentation, official: { theme } },
+  }, seedKey('catalogue-theme-presentation', `${input.slug}:${current.revision.slice(-12)}`));
+}
+
+export async function applyAnimeMangaZones(port: SeedPort, samples = animeMangaSamplePlan()):
+  Promise<{ works: CatalogueWorkRecord[]; zones: CatalogueZoneRecord[] }> {
+  const actor = port.actingSubject;
+  await port.grant('work:create:root', 'work.create');
+  await port.grant('space:create:root', 'space.create');
+  await port.grant('classification:define:global', 'classification.proposition.define');
+  await port.grant('semantic:create:root', 'semantic.change');
+  await port.grant('context:create:root', 'context.create');
+  await port.grant(`statement:speak:${actor}`, 'statement.record');
+  await port.grant('classification:decide:global', 'statement.decide');
+  const client = factsClient(port);
+  const works: CatalogueWorkRecord[] = [];
+  for (const sample of samples) {
+    const created = await createOwnWork(port, { key: seedKey('catalogue-work', sample.key), title: sample.title,
+      language: sample.language, semanticType: BOOK });
+    await port.grant(`work:edit:${created.work}`, 'work.edit');
+    await port.grant(`work:read:${created.work}`, 'work.read');
+    await port.grant(`contribution:create:${created.work}`, 'contribution.create');
+    await port.grant(`publication:select:${created.mainVersion}`, 'publication.select');
+    const text = await publishCatalogueText(port, created, sample.key, sample.language, sample.title);
+    const concept = await importSample(client, actor, created, sample);
+    works.push({ key: sample.key, zone: sample.zone, work: created.work, mainVersion: created.mainVersion,
+      contribution: text.contribution, decision: text.decision, concept, year: sample.year, title: sample.title });
+  }
+  const zones: CatalogueZoneRecord[] = [];
+  for (const spec of [
+    { id: 'anime' as const, name: 'Anime' },
+    { id: 'manga' as const, name: 'Manga' },
+  ]) {
+    const zone = zoneIri(spec.id);
+    const space = await createSpace(port, { id: spec.id, name: spec.name, language: 'en', routeSegment: spec.id,
+      preset: 'editorial', mountSegment: 'catalogue', navigation: [{ label: 'Browse', href: '/browse' }],
+      browse: [], announcement: `${spec.name} in the catalogue`, sharedMember: '' }, zone);
+    const collection = `https://rezics.com/id/${stableId(`catalogue-collection:${spec.id}`)}`;
+    await port.grant(`zone:edit:${zone}`, 'zone.edit');
+    await port.grant(`semantic:read:${zone}`, 'semantic.read');
+    await call(port, 'POST', '/v1/zones', { zone, space: space.space, disclosure: 'public', name: spec.name,
+      language: 'en', actingSubject: actor }, seedKey('catalogue-zone', spec.id));
+    await port.grant(`collection:edit:${collection}`, 'collection.edit');
+    await port.grant(`semantic:read:${collection}`, 'semantic.read');
+    await call(port, 'POST', '/v1/collections', { collection, name: spec.name, language: 'en', disclosure: 'public',
+      actingSubject: actor }, seedKey('catalogue-collection', spec.id));
+    await port.grant(`zone:official:${zone}`, 'zone.official');
+    await configure(port, spec.id, zone, space.realm, collection, spec.name);
+    await port.grant(`publication:adopt:${space.realm}`, 'publication.adopt');
+    for (const work of works.filter(item => item.zone === spec.id)) {
+      await call(port, 'POST', '/v1/publication-selections', {
+        profile: 'realm-local-selection-v1', context: { kind: 'realm-local', id: space.realm },
+        work: work.work, mainVersion: work.mainVersion, contribution: work.contribution,
+        publicationDecision: work.decision, expectedSelectionHead: null, selectionBasis: 'realm-manager-review',
+        actingSubject: actor,
+      }, seedKey('catalogue-adoption', `${spec.id}:${work.key}`));
+    }
+    await insertMembers(port, spec.id, collection, works.filter(item => item.zone === spec.id).map(item => item.work));
+    await mount(port, spec.id, zone, collection);
+    zones.push({ id: spec.id, space: space.space, realm: space.realm, zone, theme: themeIri(spec.id) });
+  }
+  return { works, zones };
+}
+
+export async function seedAnimeMangaZones(state: SeedState): Promise<void> {
+  const session = state.sessions[0];
+  if (!session || !state.operatorInput || !state.operatorSession) {
+    throw new Error('Anime and manga Zones need the operator session');
+  }
+  const input: LocalOperatorInput = { ...state.operatorInput, ownerAccountSubject: session.accountId,
+    actingSubject: session.actingSubject };
+  const pool = new Pool({ connectionString: input.accessDatabaseUrl });
+  try {
+    const port: SeedPort = {
+      actingSubject: session.actingSubject,
+      request: (method, path, body, key) => seedHttp(state, () => session.token, method, path, body, key),
+      officialRequest: (method, path, body, key) => seedHttp(state, () => state.operatorSession!.token, method, path, body, key),
+      grant: async (scope, action) => {
+        if (action === 'zone.official') {
+          await grantOfficialZoneSeed(input, scope.slice('zone:official:'.length));
+          return;
+        }
+        await grantVnSeedAuthority(pool, input, scope, action);
+      },
+      refresh: () => refreshSeedTokens(state),
+    };
+    const created = await applyAnimeMangaZones(port);
+    const reviewer = state.sessions.find(item => item.id === 'daniel');
+    if (!reviewer) {
+      state.findings.add('Anime and manga package approval: independent reviewer is unavailable');
+      return;
+    }
+    for (const zone of created.zones) {
+      await state.optional(`Official ${zone.id} package`, async () => {
+        await grantOfficialThemeSeed(input, zone.theme, reviewer);
+        await approveCataloguePackage(port, { zone: zone.zone, slug: zone.id, owner: session.actingSubject,
+          reviewer: reviewer.actingSubject,
+          review: (method, path, body, key) => seedHttp(state, () => reviewer.token, method, path, body, key) });
+      });
+    }
+    console.log(`Anime and manga: ${created.works.length} works in ${created.zones.map(zone => zone.id).join(', ')}`);
+  } finally { await pool.end(); }
+}

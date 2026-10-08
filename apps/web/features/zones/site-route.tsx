@@ -41,6 +41,7 @@ import { DocumentPage, DocumentUnavailable, IndexPage, PageNotAvailable } from '
 import { ZoneEntityPage } from './site-entity.tsx';
 import type { SiteCrumb } from './site-navigation.tsx';
 import { workBase, workTabOf, ZoneWorkPage } from './site-work.tsx';
+import { CatalogueBrowse } from './catalogue-browse.tsx';
 import { addressKey, siteMemberTarget, spaceHref, zoneMemberHref } from '../address/path.ts';
 import { realmDiscovery } from '../address/space-read.ts';
 import { EntityPage } from '../entity-page/entity-page.tsx';
@@ -191,6 +192,19 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
   };
   if (routed.ok && routed.data.kind === 'home') return SiteHomeRoute(communityProps);
   if (!routed.ok && routed.failure === 'missing' && path.length === 1 && path[0] === 'browse') {
+    const catalogueView = await loadRealmView(space, locale, search, 'site');
+    if (catalogueView.kind === 'view' && catalogueView.pkg?.catalogue) {
+      const address = siteHref(locale, catalogueView.context.ref, path);
+      return (
+        <RealmFrame view={catalogueView} tab={null} locale={locale} search={search} address={address}
+          crumbs={[
+            { label: catalogueView.zone.name, href: spaceHref(catalogueView.context.ref, 'site') },
+            { label: zoneContentText(catalogueView.zoneMessages.browseTab, locale), href: null },
+          ]}>
+          <CatalogueBrowse view={catalogueView} search={search} />
+        </RealmFrame>
+      );
+    }
     return RealmBrowseRoute(communityProps);
   }
   const view = await loadRealmView(space, locale, search, 'site');
@@ -362,7 +376,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
         const base = workBase(ref, id, route.mount?.segment ?? null, view.context.realm);
         base.path = spaceHref(ref, 'site', route.tab ? path.slice(0, -1) : path);
         return frame(
-          <ZoneWorkPage base={base} tab={tab} search={search} locale={locale} pkg={view.pkg} />,
+          <ZoneWorkPage base={base} tab={tab} search={search} locale={locale} pkg={view.pkg} zone={view.zone} />,
           [home, ...(mount ? [mount] : []), { label: title, href: null }],
         );
       }

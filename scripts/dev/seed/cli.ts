@@ -16,6 +16,7 @@ import { seedContributions } from './contributions-step.ts';
 import { seedHomeFeed } from './feed-step.ts';
 import { seedFranchises } from './franchises-step.ts';
 import { seedScopedSubjects } from './scoped-subjects-step.ts';
+import { seedAnimeMangaZones } from './anime-manga-zones-step.ts';
 import { seedLnVnZones } from './ln-vn-zones-step.ts';
 import { seedBookConcepts } from './genres-step.ts';
 import { seedLibrary } from './library-step.ts';
@@ -147,7 +148,7 @@ function describe(error: unknown): string {
 // the classics readable and publish the Works they discuss and rate. Votes wait
 // a few steps for Home's projection; co-readers are built from all of it, last.
 export const steps: readonly SeedStep[] = [
-  seedAccounts, seedClassics, seedWorks, seedFranchises, seedScopedSubjects, seedVnCatalogue, seedLnVnZones, seedReleases, seedContributions, seedRealms, seedAdoptions,
+  seedAccounts, seedClassics, seedWorks, seedFranchises, seedScopedSubjects, seedVnCatalogue, seedLnVnZones, seedAnimeMangaZones, seedReleases, seedContributions, seedRealms, seedAdoptions,
   seedLibrary, seedChapters, seedModeration, seedHomeFeed,
   seedProfileCredits, seedProfileBios, seedProfileFollows, seedOfficialZones, seedRecipes, seedZoneSites, seedBookConcepts,
   seedOfficialThemes,
