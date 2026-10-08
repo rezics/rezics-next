@@ -150,7 +150,9 @@ export class AlsoEnjoyedStore {
    * Source revisions decide whether a replacement is needed; head age decides
    * when it is due. Privacy fences continue withholding unsafe reads meanwhile. */
   async refresh(work: MainWorkDependencies, request: Request) {
-    const position = await workRead(work, new Request(request.url), {}, session =>
+    // The pin is the position this read captured. A later sequence in the same
+    // epoch is a newer cut, not a reason to drop the build before it starts.
+    const position = await workRead(work, new Request(request.url), { movingGraph: true }, session =>
       Promise.resolve(session.position));
     const state = await inAccess(this.access, async client => {
       await requireRecoveryOpen(client);
@@ -265,7 +267,7 @@ export class AlsoEnjoyedStore {
     generation: Generation, rows: RatingRow[]) {
     const candidates = rows.filter(row => row.agent);
     if (!candidates.length) return new Set<string>();
-    return workRead(work, new Request(request.url), {}, async session => {
+    return workRead(work, new Request(request.url), { movingGraph: true }, async session => {
       // A later graph position only makes this batch newer than the basis.
       if (session.position.dataEpoch !== generation.graph_epoch) {
         throw new RecommendationRestart('Rating graph epoch changed during build');
@@ -291,7 +293,9 @@ export class AlsoEnjoyedStore {
     const epoch = await inAccess(this.access, client => claimLease(client, id, ALSO_ENJOYED_COST.leaseMs));
     const generation = await this.generation(id);
     if (generation.state !== 'building') throw new RecommendationRestart('Generation is closed');
-    await workRead(work, new Request(request.url, { method: 'POST' }), {}, async session => {
+    // The epoch still closes the build. A later sequence does not, or the
+    // checkpoint below would never commit while ratings are being written.
+    await workRead(work, new Request(request.url, { method: 'POST' }), { movingGraph: true }, async session => {
       if (session.position.dataEpoch !== generation.graph_epoch) {
         throw new RecommendationRestart('Co-reader graph epoch changed during build');
       }

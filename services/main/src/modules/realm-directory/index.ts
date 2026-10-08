@@ -114,10 +114,13 @@ export class RealmDirectoryIndex {
           after = ids?.at(-1) ?? batchCandidates.at(-1)?.id ?? after;
           if ((ids?.length ?? batchCandidates.length) < REALM_DIRECTORY_COST.sourceBatch) { complete = true; break; }
         }
+        // `target` is the cut this pass already read. A later sequence waits for
+        // the next pass; dropping the page would leave the directory unpublished.
+        // A restore hold or a missing epoch still refuses before the commit.
         const fence = await session.query(`SELECT ?sequence WHERE { GRAPH ${iri(GRAPHS.control)} {
           ${iri(DATASET)} rv:dataEpoch ${lit(session.position.dataEpoch)} ; rv:sequence ?sequence .
           FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } } } LIMIT 2`, 1);
-        if (fence[0]?.sequence?.value !== session.position.sequence) throw new WorkReadMoved('Directory source changed');
+        if (!fence[0]?.sequence?.value) throw new WorkReadUnavailable('Realm directory source is held');
       }
     }
     const client = await this.pool.connect();
@@ -178,7 +181,10 @@ export class RealmDirectoryIndex {
           WHERE generation = $1 AND realm = ANY($2::text[])`, [generation, changed]);
         for (const candidate of candidates) await this.upsert(client, candidate, generation);
       }
-      const publish = complete && target === session.position.sequence;
+      // A finished target is the position this pass read. Publishing only when
+      // that target still equals the pin would skip the commit whenever the
+      // next tick already sees a later write.
+      const publish = complete && BigInt(target) <= BigInt(session.position.sequence);
       if (complete && !publish) { base = target; target = session.position.sequence; after = ''; rebuilding = false; }
       // A rebuild may have inserted or removed rows without receipt deltas
       // relative to the old slot. Mirror it before admitting incremental work.

@@ -17,8 +17,10 @@ export class RealmDirectoryWorker {
   async tick(): Promise<boolean> {
     const index = this.deps.access.realmDirectory;
     if (!index) throw new WorkReadUnavailable('Realm directory index is unavailable');
+    // The checkpoint commit is inside refresh. A same-epoch advance after that
+    // commit must not turn the step into a thrown tick.
     return workRead(this.deps, new Request('http://main.internal/realm-directory-refresh', { method: 'POST' }),
-      {}, session => index.refresh(session));
+      { movingGraph: true }, session => index.refresh(session));
   }
 
   start(): void {

@@ -81,7 +81,9 @@ export class DiscoveryRefreshWorker {
   private async enroll(): Promise<void> {
     const after = await this.store.catalog();
     if (after === null) return;
-    const result = await workRead(this.deps, request(), {}, async (session) => {
+    // One keyset query. A later sequence is the next catalog pass; the cursor
+    // still advances. An epoch change still refuses the page.
+    const result = await workRead(this.deps, request(), { movingGraph: true }, async (session) => {
       if (!(await this.caughtUp(session))) return null;
       const rows = await session.query(
         `SELECT ?resource ?context ?scope ?realm WHERE { GRAPH ${iri(GRAPHS.current)} {
