@@ -61,6 +61,9 @@ export default {
   creating: '正在创建社区…',
   createFailed: '无法创建社区。请检查填写的内容并重试。',
   handleTaken: '这个短名已被使用，请换一个。',
+  // Machine-drafted; needs native review.
+  alreadyYours: '你已经有一个使用这个短名的社区。',
+  openYours: '打开这个社区',
   configureFailed: '社区已创建，但详情尚未保存。请重试或前往管理页面完成。',
   setupTitle: '完善你的社区',
   setupHelp: '完成几个步骤，让新成员更容易参与。不急着做的可以跳过。',

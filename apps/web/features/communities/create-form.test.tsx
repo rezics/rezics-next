@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
-import { createCommunityWithReadback, founderRealmAtHandle, initialCommunitySettings,
-  profilePublicationOpensRealm, type CommunityCreationIntent, type FounderRealmRead } from './create-form.tsx';
+import { realmHref } from '../realm/route.ts';
+import { communityText } from './messages.ts';
+import { createCommunityWithReadback, founderRealmAtHandle, initialCommunitySettings, ownedRealmNotice,
+  profilePublicationOpensRealm, stepAfterCreation, type CommunityCreationIntent, type FounderRealmRead } from './create-form.tsx';
 
 type CreationResponse = Awaited<ReturnType<NonNullable<Parameters<typeof createCommunityWithReadback>[2]>>>;
 const realm = 'https://rezics.com/id/00000000-0000-8000-8000-000000000412';
@@ -64,9 +66,11 @@ test('Repeated lost responses surface recovery failure after one readback attemp
 
 const actor = 'https://rezics.com/id/00000000-0000-8000-8000-000000000410';
 const owned = 'https://rezics.com/id/00000000-0000-8000-8000-000000000436';
-const pageOf = (realms: readonly string[], nextCursor: string | null) => ({ realms, nextCursor });
+const entry = (realmId: string, permissions: readonly string[] = ['realm.owner']) => ({ realm: realmId, permissions });
+const pageOf = (realms: readonly ReturnType<typeof entry>[], nextCursor: string | null) => ({ realms, nextCursor });
+const conflict = { data: null, error: { value: { code: 'alias_conflict' } } } as CreationResponse;
 
-test('The founder opens only a resolved Realm that their managed list names', async () => {
+test('The founder matches only a resolved Realm they own', async () => {
   const seen: Array<{ handle: string; actor: string; after: string | null }> = [];
   const read: FounderRealmRead = {
     resolve: async (handle, actingSubject) => {
@@ -75,8 +79,8 @@ test('The founder opens only a resolved Realm that their managed list names', as
     },
     managed: async (actingSubject, after) => {
       seen.push({ handle: '', actor: actingSubject, after });
-      if (after === null) return pageOf(['https://rezics.com/id/00000000-0000-8000-8000-000000000001'], owned);
-      return pageOf([owned], null);
+      if (after === null) return pageOf([entry('https://rezics.com/id/00000000-0000-8000-8000-000000000001')], owned);
+      return pageOf([entry(owned)], null);
     },
   };
   expect(await founderRealmAtHandle('readers', actor, read)).toBe(owned);
@@ -86,6 +90,56 @@ test('The founder opens only a resolved Realm that their managed list names', as
     { handle: '', actor, after: owned },
   ]);
   expect(await founderRealmAtHandle('missing', actor, read)).toBeNull();
+});
+
+test('A moderated-only Realm at the handle shows taken and makes no write', async () => {
+  for (const permissions of [['governance.moderate'], ['realm.members.manage', 'realm.settings.manage']]) {
+    const read: FounderRealmRead = {
+      resolve: async () => owned,
+      managed: async () => pageOf([entry(owned, permissions)], null),
+    };
+    expect(await founderRealmAtHandle('readers', actor, read)).toBeNull();
+    expect(await stepAfterCreation(conflict, 'readers', actor, read)).toEqual({ step: 'taken' });
+  }
+  const source = readFileSync(new URL('./create-form.tsx', import.meta.url), 'utf8');
+  const taken = source.slice(source.indexOf("step.step === 'taken'"), source.indexOf("step.step === 'keep'"));
+  expect(taken).toContain('setFailure(\'handle\')');
+  expect(taken).toContain('return');
+  expect(taken).not.toMatch(/uploadCommunityImage|\.profile\.put|localStorage/);
+  expect(communityText.handleTaken.en).toBe('This handle is already taken. Choose another.');
+});
+
+test('An owned Realm shows the notice and link and makes no write', async () => {
+  const read: FounderRealmRead = {
+    resolve: async () => owned,
+    managed: async () => pageOf([entry(owned, ['realm.owner', 'governance.moderate'])], null),
+  };
+  expect(await stepAfterCreation(conflict, 'readers', actor, read)).toEqual({ step: 'owned', realm: owned });
+  expect(ownedRealmNotice(owned, 'en')).toEqual({
+    notice: 'You already have a community at this handle.',
+    href: realmHref('en', owned.slice(-36)),
+  });
+  const source = readFileSync(new URL('./create-form.tsx', import.meta.url), 'utf8');
+  const ownedBranch = source.slice(source.indexOf("step.step === 'owned'"), source.indexOf("step.step === 'taken'"));
+  expect(ownedBranch).toContain('setOwnedRealm(step.realm)');
+  expect(ownedBranch).toContain('return');
+  expect(ownedBranch).not.toMatch(/uploadCommunityImage|\.profile\.put|localStorage/);
+  expect(source).toContain('words.openYours[locale]');
+});
+
+test('A same-page retry still replays the receipt', async () => {
+  const requests: Array<{ body: CommunityCreationIntent; key: string }> = [];
+  const result = await createCommunityWithReadback(input, 'creation-key', async (body, key) => {
+    requests.push({ body, key });
+    if (requests.length === 1) throw new Error('Response lost after commit');
+    return succeeded;
+  });
+  expect(requests).toEqual([{ body: input, key: 'creation-key' }, { body: input, key: 'creation-key' }]);
+  const read: FounderRealmRead = {
+    resolve: async () => { throw new Error('A receipt is not an address conflict'); },
+    managed: async () => { throw new Error('A receipt does not read the managed list'); },
+  };
+  expect(await stepAfterCreation(result, 'readers', actor, read)).toEqual({ step: 'write', realm });
 });
 
 test('A Realm the founder does not manage stays indistinguishable from a missing one', async () => {

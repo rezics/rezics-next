@@ -29,6 +29,9 @@ export default {
   submitCreate: '커뮤니티 만들기', creating: '커뮤니티 만드는 중…',
   createFailed: '커뮤니티를 만들지 못했습니다. 입력 내용을 확인하고 다시 시도하세요.',
   handleTaken: '이미 사용 중인 핸들입니다. 다른 핸들을 선택하세요.',
+  // Machine-drafted; needs native review.
+  alreadyYours: '이 핸들에는 이미 내 커뮤니티가 있습니다.',
+  openYours: '내 커뮤니티 열기',
   configureFailed: '커뮤니티를 만들었지만 세부 정보를 저장하지 못했습니다. 다시 시도하거나 나중에 관리에서 마무리하세요.',
   setupTitle: '커뮤니티 설정',
   setupHelp: '몇 가지 단계를 거치면 사람들이 편하게 참여할 수 있습니다. 나중에 할 일은 건너뛰어도 됩니다.',

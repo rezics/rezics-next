@@ -68,6 +68,8 @@ const en = {
   creating: 'Creating your community…',
   createFailed: 'Could not create this community. Check the details and try again.',
   handleTaken: 'This handle is already taken. Choose another.',
+  alreadyYours: 'You already have a community at this handle.',
+  openYours: 'Open your community',
   configureFailed: 'The community was created, but its details could not be saved. Try again or finish in Manage.',
   setupTitle: 'Set up your community',
   setupHelp: 'A few steps help people feel at home. Skip anything you want to do later.',

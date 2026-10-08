@@ -109,14 +109,17 @@ async function submitReaders(canvas: ReturnType<typeof within>) {
 }
 
 const ownedRealm = `https://rezics.com/id/${createdRealm}`;
+const mainWrites: string[] = [];
 
-/** A lost response leaves the handle taken by the founder's own Realm. The
- * address resolves and the managed list names it, so the form opens it. */
+/** A lost response leaves the handle on a Realm this founder owns. The form
+ * says so and links to it, and does not write over that Realm. */
 export const RecoveredOwnRealm: Story = {
   parameters: { route: { pathname: '/en/r/new', onPush: createdNavigation } },
   beforeEach() {
     createdNavigation.mockClear();
+    mainWrites.length = 0;
     return mockMain((url, method) => {
+      if (method !== 'GET') mainWrites.push(`${method} ${url.pathname}`);
       if (url.pathname === '/api/main/v1/spaces' && method === 'POST')
         return problem(409, 'alias_conflict');
       if (url.pathname === '/api/main/v1/addresses/resolve' && method === 'GET')
@@ -126,33 +129,40 @@ export const RecoveredOwnRealm: Story = {
         return Response.json({ items: [{ realm: ownedRealm, permissions: ['realm.owner'],
           openCount: { value: 0, kind: 'exact' }, escalatedCount: { value: 0, kind: 'exact' },
           latestActivity: null }], nextCursor: null, complete: true });
-      if (url.pathname === `/api/main/v1/realms/${createdRealm}/profile` && method === 'PUT')
-        return problem(404, 'realm_unavailable');
       return null;
     });
   },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await submitReaders(canvas);
-    await waitFor(() => expect(createdNavigation).toHaveBeenCalledWith(realmHref('en', createdRealm)));
+    await waitFor(() => expect(canvas.getByRole('alert').textContent ?? '').toContain('You already have a community at this handle'));
+    const link = canvas.getByRole('link', { name: 'Open your community' });
+    await expect(link.getAttribute('href')).toBe(realmHref('en', createdRealm));
+    await expect(createdNavigation).not.toHaveBeenCalled();
+    await expect(canvasElement.textContent ?? '').not.toContain('Open Manage');
+    await expect(mainWrites).toEqual(['POST /api/main/v1/spaces']);
   },
 };
 
-/** A handle that resolves to a Realm this founder does not manage is taken.
- * The other Realm's identity is not shown. */
+/** A handle that resolves to a Realm this founder only moderates is taken.
+ * The other Realm's identity is not shown, and nothing is written to it. */
 export const SomeoneElsesHandle: Story = {
   parameters: { route: { pathname: '/en/r/new', onPush: createdNavigation } },
   beforeEach() {
     createdNavigation.mockClear();
+    mainWrites.length = 0;
     const other = '00000000-0000-8000-8000-000000000999';
     return mockMain((url, method) => {
+      if (method !== 'GET') mainWrites.push(`${method} ${url.pathname}`);
       if (url.pathname === '/api/main/v1/spaces' && method === 'POST')
         return problem(409, 'alias_conflict');
       if (url.pathname === '/api/main/v1/addresses/resolve' && method === 'GET')
         return Response.json({ profile: 'address-resolution-v1', scope: 'space', key: 'readers-circle',
           status: 'resolved', capabilities: { realm: `https://rezics.com/id/${other}` } });
       if (url.pathname === '/api/main/v1/me/managed-realms' && method === 'GET')
-        return Response.json({ items: [], nextCursor: null, complete: true });
+        return Response.json({ items: [{ realm: `https://rezics.com/id/${other}`, permissions: ['governance.moderate'],
+          openCount: { value: 0, kind: 'exact' }, escalatedCount: { value: 0, kind: 'exact' },
+          latestActivity: null }], nextCursor: null, complete: true });
       return null;
     });
   },
@@ -162,5 +172,6 @@ export const SomeoneElsesHandle: Story = {
     await waitFor(() => expect(canvas.getByRole('alert').textContent ?? '').toContain('This handle is already taken'));
     await expect(createdNavigation).not.toHaveBeenCalled();
     await expect(canvasElement.textContent ?? '').not.toContain('00000000-0000-8000-8000-000000000999');
+    await expect(mainWrites).toEqual(['POST /api/main/v1/spaces']);
   },
 };

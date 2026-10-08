@@ -24,6 +24,9 @@ export default {
   bannerCrop: '使用寬幅圖片效果最好；手機上可能會裁掉圖片邊緣。',
   submitCreate: '建立社群', creating: '正在建立社群…',
   createFailed: '無法建立此社群。請檢查資料並再試一次。', handleTaken: '這個代稱已有人使用，請換一個。',
+  // Machine-drafted; needs native review.
+  alreadyYours: '你已經有一個使用這個代稱的社群。',
+  openYours: '開啟你的社群',
   configureFailed: '社群已建立，但無法儲存詳細資料。請再試一次，或稍後前往「管理」完成設定。',
   setupTitle: '設定你的社群',
   setupHelp: '完成幾個步驟，讓大家更容易融入。想稍後再做的項目都可以略過。',

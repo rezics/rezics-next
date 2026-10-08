@@ -61,6 +61,9 @@ export default {
   creating: 'Creando tu comunidad…',
   createFailed: 'No se pudo crear esta comunidad. Revisa los datos e inténtalo de nuevo.',
   handleTaken: 'Ese identificador ya está en uso. Elige otro.',
+  // Machine-drafted; needs native review.
+  alreadyYours: 'Ya tienes una comunidad con este identificador.',
+  openYours: 'Abrir tu comunidad',
   configureFailed: 'La comunidad se creó, pero no se pudieron guardar sus datos. Inténtalo de nuevo o termínalo en Administración.',
   setupTitle: 'Configura tu comunidad',
   setupHelp: 'Unos pocos pasos ayudan a que la gente se sienta en casa. Omite lo que quieras hacer más tarde.',

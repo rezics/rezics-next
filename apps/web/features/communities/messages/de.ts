@@ -61,6 +61,9 @@ export default {
   creating: 'Deine Community wird erstellt…',
   createFailed: 'Diese Community konnte nicht erstellt werden. Prüfe die Angaben und versuch es noch einmal.',
   handleTaken: 'Dieser Kurzname ist schon vergeben. Wähl einen anderen.',
+  // Machine-drafted; needs native review.
+  alreadyYours: 'Du hast bereits eine Community mit diesem Kurznamen.',
+  openYours: 'Deine Community öffnen',
   configureFailed: 'Die Community wurde erstellt, aber ihre Angaben konnten nicht gespeichert werden. Versuch es noch einmal oder schließ es in der Verwaltung ab.',
   setupTitle: 'Community einrichten',
   setupHelp: 'Ein paar Schritte helfen neuen Leuten beim Ankommen. Überspring, was du später machen willst.',

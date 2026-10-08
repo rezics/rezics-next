@@ -61,6 +61,9 @@ export default {
   creating: 'Création de votre communauté…',
   createFailed: 'Impossible de créer cette communauté. Vérifiez les informations et réessayez.',
   handleTaken: 'Cet identifiant est déjà pris. Choisissez-en un autre.',
+  // Machine-drafted; needs native review.
+  alreadyYours: 'Vous avez déjà une communauté avec cet identifiant.',
+  openYours: 'Ouvrir votre communauté',
   configureFailed: 'La communauté a été créée, mais ses informations n’ont pas pu être enregistrées. Réessayez ou terminez dans Gestion.',
   setupTitle: 'Configurer votre communauté',
   setupHelp: 'Quelques étapes aident les nouvelles personnes à s’y retrouver. Ignorez ce que vous ferez plus tard.',

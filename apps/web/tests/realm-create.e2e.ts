@@ -24,12 +24,14 @@ const copy = {
     description: 'Description',
     restricted: /Restricted/, ruleTitle: 'Rule title', ruleBody: 'What does this rule mean?',
     addRule: 'Add a rule', submit: 'Create community', failed: 'Could not create this community',
+    owned: 'You already have a community at this handle', openOwned: 'Open your community',
   },
   'zh-Hans': {
     title: '创建社区', name: '社区名称', handle: '社区短名', description: '社区简介',
     restricted: /受限/, ruleTitle: '规则标题',
     ruleBody: '这条规则是什么意思？', addRule: '添加规则', submit: '创建社区',
     failed: '无法创建社区',
+    owned: '你已经有一个使用这个短名的社区', openOwned: '打开这个社区',
   },
 } as const;
 
@@ -125,6 +127,16 @@ async function anonymousMisses(browser: Browser, testInfo: TestInfo, handle: str
   } finally { await context.close(); }
 }
 
+/** After a reload the same details meet the founder's Realm. The notice links to it; nothing is written over it. */
+async function openRecoveredRealm(page: Page, locale: keyof typeof copy, home: string) {
+  const words = copy[locale];
+  await expect(page.getByRole('alert')).toContainText(words.owned, { timeout: 60_000 });
+  if (page.viewportSize()?.width === 390)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
+  await activate(page.getByRole('link', { name: words.openOwned, exact: true }));
+  await page.waitForURL(url => url.pathname === home, { timeout: 60_000 });
+}
+
 async function shoot(page: Page, testInfo: TestInfo, name: string) {
   const path = testInfo.outputPath(name);
   await page.screenshot({ path, fullPage: true });
@@ -191,7 +203,7 @@ test('A lost restricted-Realm response reloads into the one Realm the founder cr
   await page.reload();
   await fillRealm(page, 'en', handle);
   await activate(page.getByRole('button', { name: copy.en.submit, exact: true }));
-  await page.waitForURL(url => url.pathname === home, { timeout: 60_000 });
+  await openRecoveredRealm(page, 'en', home);
   await expect(page.getByRole('heading', { level: 1, name: communityName })).toBeVisible();
   await shoot(page, testInfo, 'realm-create-en-1280-realm.png');
   await page.goto(realmHref('en', id, 'about'));
@@ -210,7 +222,7 @@ test('A lost restricted-Realm response reloads into the one Realm the founder cr
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
   await shoot(page, testInfo, 'realm-create-en-390-form.png');
   await activate(page.getByRole('button', { name: copy.en.submit, exact: true }));
-  await page.waitForURL(url => url.pathname === home, { timeout: 60_000 });
+  await openRecoveredRealm(page, 'en', home);
   await expect(page.getByRole('heading', { level: 1, name: communityName })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
   await shoot(page, testInfo, 'realm-create-en-390-realm.png');
@@ -219,7 +231,7 @@ test('A lost restricted-Realm response reloads into the one Realm the founder cr
   await fillRealm(page, 'zh-Hans', handle);
   await shoot(page, testInfo, 'realm-create-zh-Hans-1280-form.png');
   await activate(page.getByRole('button', { name: copy['zh-Hans'].submit, exact: true }));
-  await page.waitForURL(url => url.pathname === realmHref('zh-Hans', id), { timeout: 60_000 });
+  await openRecoveredRealm(page, 'zh-Hans', realmHref('zh-Hans', id));
   await expect(page.getByRole('heading', { level: 1, name: communityName })).toBeVisible();
   await shoot(page, testInfo, 'realm-create-zh-Hans-1280-realm.png');
 
@@ -228,7 +240,7 @@ test('A lost restricted-Realm response reloads into the one Realm the founder cr
   expect(await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth)).toBe(false);
   await shoot(page, testInfo, 'realm-create-zh-Hans-390-form.png');
   await activate(page.getByRole('button', { name: copy['zh-Hans'].submit, exact: true }));
-  await page.waitForURL(url => url.pathname === realmHref('zh-Hans', id), { timeout: 60_000 });
+  await openRecoveredRealm(page, 'zh-Hans', realmHref('zh-Hans', id));
   await expect(page.getByRole('heading', { level: 1, name: communityName })).toBeVisible();
   await page.goto(realmHref('zh-Hans', id, 'about'));
   const chineseRules = page.getByRole('region', { name: '社区规则' });

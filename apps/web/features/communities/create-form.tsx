@@ -54,13 +54,19 @@ export async function createCommunityWithReadback(input: CommunityCreationIntent
 /** One screen follows the same bound Manage uses for this list. */
 const MANAGED_REALM_PAGES = 5;
 
+/** One Realm from `GET /v1/me/managed-realms`, with the permissions this user holds there. */
+export interface ManagedRealmEntry {
+  realm: string;
+  permissions: readonly string[];
+}
+
 export interface FounderRealmRead {
   /** The Realm IRI at this handle when the caller can read it, or null when
    * the address is missing, unreadable or the read failed. */
   resolve(handle: string, actingSubject: string): Promise<string | null>;
-  /** One page of Realm IRIs the caller manages, or null when the list failed. */
+  /** One page of Realms the caller manages, or null when the list failed. */
   managed(actingSubject: string, after: string | null): Promise<{
-    realms: readonly string[]; nextCursor: string | null } | null>;
+    realms: readonly ManagedRealmEntry[]; nextCursor: string | null } | null>;
 }
 
 async function resolveReadableRealm(handle: string, actingSubject: string): Promise<string | null> {
@@ -78,13 +84,15 @@ async function readManagedRealmPage(actingSubject: string, after: string | null)
     const result = await browserMainApi().v1.me['managed-realms'].get({
       query: { actingSubject, ...after ? { after } : {} } });
     if (!result.data) return null;
-    return { realms: result.data.items.map(item => item.realm), nextCursor: result.data.nextCursor };
+    return { realms: result.data.items.map(item => ({ realm: item.realm, permissions: item.permissions })),
+      nextCursor: result.data.nextCursor };
   } catch { return null; }
 }
 
-/** The Realm at `handle` when this founder manages it. Someone else's Realm,
- * and a Realm this founder cannot read, are null: the same answer as a
- * missing address. Nothing sent earlier is kept; both answers come from the API. */
+/** The Realm at `handle` when this founder's permissions there include `realm.owner`.
+ * A Realm they only moderate or hold another permission on, someone else's Realm,
+ * and a Realm they cannot read are null: the same answer as a missing address.
+ * Nothing sent earlier is kept; both answers come from the API. */
 export async function founderRealmAtHandle(handle: string, actingSubject: string,
   read: FounderRealmRead = { resolve: resolveReadableRealm, managed: readManagedRealmPage }): Promise<string | null> {
   const realm = await read.resolve(handle, actingSubject);
@@ -93,11 +101,45 @@ export async function founderRealmAtHandle(handle: string, actingSubject: string
   for (let page = 0; page < MANAGED_REALM_PAGES; page++) {
     const listed = await read.managed(actingSubject, after);
     if (!listed) return null;
-    if (listed.realms.includes(realm)) return realm;
+    const listedRealm = listed.realms.find(item => item.realm === realm);
+    if (listedRealm) return listedRealm.permissions.includes('realm.owner') ? realm : null;
     if (!listed.nextCursor) return null;
     after = listed.nextCursor;
   }
   return null;
+}
+
+/** What the creation response asks the form to do. A receipt, including a
+ * same-page replay of the held key, is the only step that writes. An owned
+ * Realm is named so the form can link to it. Every other answer writes nothing. */
+export async function stepAfterCreation(
+  response: { data: CreationResponse['data']; error: CreationResponse['error'] },
+  handle: string, actingSubject: string,
+  read: FounderRealmRead = { resolve: resolveReadableRealm, managed: readManagedRealmPage },
+): Promise<{ step: 'write'; realm: string } | { step: 'owned'; realm: string } | { step: 'taken' } | { step: 'keep' }> {
+  const data = response.data;
+  if (data && 'realm' in data && data.realm) return { step: 'write', realm: data.realm };
+  const code = problemCode(response.error);
+  if (code === 'alias_conflict') {
+    const owned = await founderRealmAtHandle(handle, actingSubject, read);
+    return owned ? { step: 'owned', realm: owned } : { step: 'taken' };
+  }
+  if (code === 'invalid_alias') return { step: 'taken' };
+  return { step: 'keep' };
+}
+
+/** The notice and the address that opens a community this founder already owns. */
+export function ownedRealmNotice(realm: string, locale: UiLocale): { notice: string; href: string } {
+  return { notice: words.alreadyYours[locale], href: realmHref(locale, realm.slice(-36)) };
+}
+
+function OwnedCommunityNotice({ locale, realm }: { locale: UiLocale; realm: string }) {
+  const { notice, href } = ownedRealmNotice(realm, locale);
+  return <Alert variant="info" role="alert">
+    <AlertDescription>{notice}{' '}
+      <Link href={href} className="font-medium underline">{words.openYours[locale]}</Link>
+    </AlertDescription>
+  </Alert>;
 }
 
 /** A private Realm has no public profile to publish, and a profile that
@@ -133,6 +175,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
   const [iconSelection, setIconSelection] = useState<string | null>(null);
   const [bannerSelection, setBannerSelection] = useState<string | null>(null);
   const [createdRealm, setCreatedRealm] = useState<string | null>(null);
+  const [ownedRealm, setOwnedRealm] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<'create' | 'handle' | 'configure' | null>(null);
   const [translationError, setTranslationError] = useState(false);
@@ -149,6 +192,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
     setTranslationError(false);
     setBusy(true);
     setFailure(null);
+    setOwnedRealm(null);
     key.current ??= crypto.randomUUID();
     const operation = key.current;
     const main = browserMainApi();
@@ -161,24 +205,27 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
         creationIntent.current ??= { profile: 'space-realm-v2', language: nameLanguage,
           name: name.trim(), handle, topics: topics.map(topic => topic.id), capabilities: ['realm'], actingSubject,
           initialSettings: initialCommunitySettings(visibility, publishedRules) };
-        const { data, error } = await createCommunityWithReadback(creationIntent.current, `${operation}:create`);
-        if (!data || !('realm' in data) || !data.realm) {
-          const code = problemCode(error);
-          // The handle is already this founder's Realm. Open that Realm
-          // instead of minting another key and another community.
-          if (code === 'alias_conflict') realm = await founderRealmAtHandle(handle, actingSubject);
-          if (!realm) {
-            if (code === 'alias_conflict' || code === 'invalid_alias') {
-              // A refused alias the founder does not manage has no Realm to
-              // open. A corrected address is a new command; uncertain
-              // outcomes retain their original intent.
-              creationIntent.current = null;
-              key.current = null;
-              setFailure('handle');
-            } else setFailure('create');
-            return;
-          }
-        } else realm = data.realm;
+        const response = await createCommunityWithReadback(creationIntent.current, `${operation}:create`);
+        const step = await stepAfterCreation(response, handle, actingSubject);
+        // A Realm this founder owns is only linked. The form cannot tell a lost
+        // submission from an older Realm, so it never writes over either one.
+        if (step.step === 'owned') {
+          setOwnedRealm(step.realm);
+          return;
+        }
+        if (step.step === 'taken') {
+          // A refused alias has no Realm to open. A corrected address is a new
+          // command; uncertain outcomes retain their original intent.
+          creationIntent.current = null;
+          key.current = null;
+          setFailure('handle');
+          return;
+        }
+        if (step.step === 'keep') {
+          setFailure('create');
+          return;
+        }
+        realm = step.realm;
         setCreatedRealm(realm);
       }
       const id = realm.slice(-36);
@@ -315,6 +362,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
         {createdRealm ? <> <Link href={`/manage/r/${createdRealm.slice(-36)}`}
           className="font-medium underline">{words.manage[locale]}</Link></> : null}</AlertDescription>
     </Alert> : null}
+    {ownedRealm ? <OwnedCommunityNotice locale={locale} realm={ownedRealm} /> : null}
     <Button type="submit" isLoading={busy} className="justify-self-start">
       {busy ? words.creating[locale] : words.submitCreate[locale]}</Button>
     {createdRealm ? <Link href={`/manage/r/${createdRealm.slice(-36)}`}

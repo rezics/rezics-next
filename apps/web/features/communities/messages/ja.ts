@@ -30,6 +30,9 @@ export default {
   submitCreate: 'コミュニティを作成', creating: 'コミュニティを作成中…',
   createFailed: 'コミュニティを作成できませんでした。入力内容を確認して、もう一度お試しください。',
   handleTaken: 'このハンドルはすでに使われています。別のものを選んでください。',
+  // Machine-drafted; needs native review.
+  alreadyYours: 'このハンドルには、すでにあなたのコミュニティがあります。',
+  openYours: 'コミュニティを開く',
   configureFailed: 'コミュニティは作成されましたが、詳細を保存できませんでした。もう一度お試しいただくか、あとで「管理」から設定してください。',
   setupTitle: 'コミュニティを設定',
   setupHelp: 'いくつかの手順を済ませると、みんなが参加しやすくなります。あとで行うことはスキップできます。',
