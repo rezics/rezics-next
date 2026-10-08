@@ -2375,6 +2375,8 @@ export interface UnitFileEvidence {
   cases: UnitFailureCase[];
   /** Set when a timeout's transcript or owner progress names the test that was running. */
   runningTest?: string;
+  /** Set when the file failed without a `(fail)` name, for example an import error between tests. */
+  fileError?: string;
 }
 export interface UnitRunEvidence {
   side: 'affected' | 'main';
@@ -2478,7 +2480,26 @@ function errorBeforeFailure(pending: readonly string[]): string[] {
   return collected;
 }
 
-/** `(fail)` names plus the error bun printed before that line, or after it when the timeout follows the name. */
+function trailingTimeout(lines: readonly string[], from: number): { lines: string[]; consumed: number } {
+  const collected: string[] = [];
+  let consumed = from;
+  for (let cursor = from + 1; cursor < lines.length && collected.length < UNIT_GATE_FAILURE_ERROR_LINES; cursor++) {
+    const next = lines[cursor]!;
+    if (UNIT_RESULT_LINE.test(next) || bunRunSummaryLine(next) || UNIT_FILE_HEADER.test(next)) break;
+    if (!next.trim()) {
+      if (collected.length) break;
+      continue;
+    }
+    // Only the timeout annotation belongs to the `(fail)` it follows. The next test's error stays pending.
+    if (!(UNIT_TIMEOUT_LINE.test(next) || /^Timeout:/i.test(next))) break;
+    collected.push(next.trimEnd());
+    consumed = cursor;
+  }
+  return { lines: collected, consumed };
+}
+
+/** `(fail)` names plus the error bun printed before that line, or the timeout detail bun prints after the name.
+ * That trailing timeout is consumed here so the next case cannot record it as its own error. */
 function failureCases(section: string): UnitFailureCase[] {
   const lines = section.split('\n');
   const cases: UnitFailureCase[] = [];
@@ -2492,15 +2513,11 @@ function failureCases(section: string): UnitFailureCase[] {
       continue;
     }
     const before = errorBeforeFailure(pending);
-    const after: string[] = [];
-    for (let cursor = index + 1; cursor < lines.length && after.length < UNIT_GATE_FAILURE_ERROR_LINES; cursor++) {
-      const next = lines[cursor]!;
-      if (UNIT_RESULT_LINE.test(next) || bunRunSummaryLine(next) || UNIT_FILE_HEADER.test(next)) break;
-      if (next.trim()) after.push(next.trimEnd());
-    }
-    const error = (before.length ? before : after).slice(0, UNIT_GATE_FAILURE_ERROR_LINES).join('\n').trim();
+    const after = trailingTimeout(lines, index);
+    const error = (before.length ? before : after.lines).slice(0, UNIT_GATE_FAILURE_ERROR_LINES).join('\n').trim();
     cases.push({ test: fail[1]!.trim(), error });
     pending = [];
+    if (after.lines.length) index = after.consumed;
   }
   return cases;
 }
@@ -2537,6 +2554,38 @@ function capCaseErrors(cases: readonly UnitFailureCase[]): UnitFailureCase[] {
   });
 }
 
+function capStoredError(error: string): string {
+  const lined = error.split('\n').slice(0, UNIT_GATE_FAILURE_ERROR_LINES).join('\n');
+  return capCaseErrors([{ test: '', error: lined }])[0]!.error;
+}
+
+/** An import failure is `# Unhandled error between tests` and has no `(fail)` name.
+ * A failing file with neither keeps the other diagnostic lines in its section. */
+function fileLevelError(section: string, failing: boolean): string {
+  const lines = section.split('\n');
+  const blocks: string[][] = [];
+  let current: string[] | undefined;
+  for (const line of lines) {
+    if (/^# Unhandled error/i.test(line)) {
+      current = [line.trimEnd()];
+      blocks.push(current);
+      continue;
+    }
+    if (!current) continue;
+    if (bunRunSummaryLine(line) || UNIT_RESULT_LINE.test(line) || UNIT_FILE_HEADER.test(line)) {
+      current = undefined;
+      continue;
+    }
+    current.push(line.trimEnd());
+    if (/^-{3,}$/.test(line.trim()) && current.filter(item => /^-{3,}$/.test(item.trim())).length >= 2) current = undefined;
+  }
+  const unhandled = blocks.map(block => block.join('\n').trim()).filter(Boolean).join('\n');
+  if (unhandled) return unhandled;
+  if (!failing) return '';
+  return lines.filter(line => line.trim() && !bunRunSummaryLine(line) && !UNIT_RESULT_LINE.test(line)
+    && !UNIT_FILE_HEADER.test(line)).join('\n').trim();
+}
+
 export function unitFileEvidence(output: string, scope: readonly string[], failing: readonly string[],
   timedOut: readonly string[], root?: string): UnitFileEvidence[] {
   // Classification omits a failure inside a shard the budget stopped. The transcript still names it.
@@ -2544,14 +2593,24 @@ export function unitFileEvidence(output: string, scope: readonly string[], faili
   return scope.flatMap(file => {
     const section = fileSection(output, file, root);
     const cases = capCaseErrors(failureCases(section));
-    if (!classified.has(file) && cases.length === 0) return [];
-    const evidence: UnitFileEvidence = { file, output: capFileOutput(section), cases };
+    const diagnostic = cases.length === 0 ? fileLevelError(section, failing.includes(file)) : '';
+    const fileError = diagnostic ? capStoredError(diagnostic) : undefined;
+    if (!classified.has(file) && cases.length === 0 && !fileError) return [];
+    const evidence: UnitFileEvidence = { file, output: capFileOutput(section), cases, ...(fileError ? { fileError } : {}) };
     if (timedOut.includes(file)) {
       const running = runningTestName(section);
       if (running) evidence.runningTest = running;
     }
     return [evidence];
   });
+}
+
+function formatErrorLines(error: string, indent: string): string[] {
+  const lines: string[] = [];
+  for (const errorLine of error.split('\n').slice(0, UNIT_GATE_FAILURE_ERROR_LINES)) {
+    if (errorLine.trim()) lines.push(`${indent}${errorLine}`);
+  }
+  return lines;
 }
 
 function formatFileEvidence(file: UnitFileEvidence): string {
@@ -2561,10 +2620,9 @@ function formatFileEvidence(file: UnitFileEvidence): string {
   }
   for (const item of file.cases) {
     lines.push(`    (fail) ${item.test}`);
-    for (const errorLine of item.error.split('\n').slice(0, UNIT_GATE_FAILURE_ERROR_LINES)) {
-      if (errorLine.trim()) lines.push(`      ${errorLine}`);
-    }
+    lines.push(...formatErrorLines(item.error, '      '));
   }
+  if (file.fileError && !file.cases.length) lines.push(...formatErrorLines(file.fileError, '    '));
   return lines.join('\n');
 }
 
@@ -2588,13 +2646,16 @@ function notePasses(evidence: UnitRunEvidence[], side: 'affected' | 'main', pass
   for (const pass of passes) noteUnitRun(evidence, side, kindOf(pass), pass.output, pass.files, pass.failing, pass.timedOut, root);
 }
 
-/** A later run replaces an earlier one when it names cases. A timeout that names only the running test does not drop cases already kept. */
+/** A later run replaces an earlier one when it names cases. A timeout that names only the running test does not drop cases already kept.
+ * A file-level error stays when the later run does not replace it with its own. */
 function preferFileEvidence(previous: UnitFileEvidence | undefined, next: UnitFileEvidence): UnitFileEvidence {
   if (!previous) return next;
   const runningTest = next.runningTest ?? previous.runningTest;
   if (next.cases.length) return { ...next, runningTest };
   if (previous.cases.length) return { ...previous, runningTest };
-  if (next.runningTest || next.output) return { ...next, runningTest };
+  if (next.fileError || next.runningTest || next.output) {
+    return { ...next, runningTest, ...(next.fileError || previous.fileError ? { fileError: next.fileError ?? previous.fileError } : {}) };
+  }
   return { ...previous, runningTest };
 }
 
@@ -2625,7 +2686,7 @@ export function unitGateRefusal(message: string, files: readonly string[], runs:
     const inherited = evidenceForSide(runs, 'main', files);
     const shown = files.filter(file => {
       const found = inherited.get(file);
-      return found && (found.cases.length > 0 || found.runningTest);
+      return found && (found.cases.length > 0 || found.runningTest || found.fileError);
     });
     if (shown.length) lines.push('inherited on main:', ...shown.map(file => formatFileEvidence(inherited.get(file)!)));
   }
@@ -3357,6 +3418,10 @@ export async function runUnitSide(cwd: string, files: readonly string[], side: '
     timedOut = branch.timedOut;
   }
   if (!failureFiles.length) return none({ initialDone: branch.done });
+  // Case evidence does not replace the raw transcript the merge log kept before that channel existed.
+  if (side === 'affected') {
+    console.log(`Unit gate: ${failureFiles.length} file(s) fail on the branch:\n${branch.output.slice(-20_000)}`);
+  }
   // A file can fail beside its shard-mates and pass when those failures run together. Confirm those together,
   // then retry every timeout alone so the side's decision comes from its isolated run.
   const together = failureFiles.filter(file => !timedOut.includes(file));
@@ -3429,7 +3494,6 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, classificati
       console.log(`Pre-merge unit gate: every affected unit file and repository guard ${side.initialDone ? 'passes' : 'passes after isolated retry'}`);
       return;
     }
-    if (side.failing.length) console.log(`Unit gate: ${side.failing.length} file(s) fail on the branch`);
     if (side.orderDependent.length) {
       console.log(`Unit gate: ${side.orderDependent.length} file(s) failed only across shards; order-dependent, reported, not blocking\n  ${side.orderDependent.join('\n  ')}`);
     }

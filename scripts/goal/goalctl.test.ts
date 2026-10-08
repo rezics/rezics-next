@@ -611,6 +611,83 @@ describe('goalctl runtime policy', () => {
       expect(kept!.cases[0]?.error).toContain('error: expect(received).toBe(expected)');
       expect(kept!.cases[0]?.error).not.toContain('detail 79');
     });
+
+    test('consecutive timeouts keep each case\'s own trailing error', () => {
+      const file = 'gate-two-timeouts.test.ts';
+      const output = [
+        `${file}:`,
+        '(fail) first timeout [20.10ms]',
+        '  ^ this test timed out after 20ms.',
+        '(fail) second timeout [50.10ms]',
+        '  ^ this test timed out after 50ms.',
+      ].join('\n');
+      const [kept] = unitFileEvidence(output, [file], [file], [file]);
+      expect(kept!.cases.map(item => item.test)).toEqual(['first timeout', 'second timeout']);
+      expect(kept!.cases[0]!.error).toContain('timed out after 20ms');
+      expect(kept!.cases[0]!.error).not.toContain('50ms');
+      expect(kept!.cases[1]!.error).toContain('timed out after 50ms');
+      expect(kept!.cases[1]!.error).not.toContain('20ms');
+      const followed = [
+        `${file}:`,
+        'error: expect(received).toBe(expected)',
+        'Expected: 1',
+        '(fail) assertion holds its own error [1ms]',
+        '(fail) timeout after an assertion [50.10ms]',
+        '  ^ this test timed out after 50ms.',
+      ].join('\n');
+      const [mixed] = unitFileEvidence(followed, [file], [file], []);
+      expect(mixed!.cases.map(item => item.test)).toEqual(['assertion holds its own error', 'timeout after an assertion']);
+      expect(mixed!.cases[0]!.error).toContain('Expected: 1');
+      expect(mixed!.cases[0]!.error).not.toContain('50ms');
+      expect(mixed!.cases[1]!.error).toContain('timed out after 50ms');
+    });
+
+    test('a file-level import error is kept and the branch output tail is logged', async () => {
+      const file = 'gate-import-error.test.ts';
+      const head = 'IMPORT-HEAD-NOT-IN-TAIL';
+      const marker = 'branch-output-tail-marker';
+      const blob = 'E'.repeat(30 * 1024);
+      const output = [
+        head,
+        `${file}:`,
+        '# Unhandled error between tests',
+        '-------------------------------',
+        `error: Cannot find module './missing-probe-import.ts' ${blob}`,
+        '-------------------------------',
+        marker,
+      ].join('\n');
+      await withEvidence([file], async () => shard([file], {
+        failing: [file], output,
+        fileErrors: [{ file, detail: "error: Cannot find module './missing-probe-import.ts'" }],
+      }), ({ evidence, lines }) => {
+        const kept = evidence.find(run => run.kind === 'first')?.files.find(item => item.file === file);
+        expect(kept?.cases).toEqual([]);
+        expect(kept?.fileError).toContain('# Unhandled error between tests');
+        expect(kept?.fileError).toContain("Cannot find module './missing-probe-import.ts'");
+        expect(kept?.fileError).toContain('[truncated to 20KB]');
+        expect(Buffer.byteLength(kept!.fileError!)).toBeLessThanOrEqual(20 * 1024);
+        expect(kept!.fileError).not.toContain(blob);
+        expect(kept!.fileError).not.toContain(marker);
+        const printed = lines.join('\n');
+        expect(printed).toContain('# Unhandled error between tests');
+        expect(printed).toContain("Cannot find module './missing-probe-import.ts'");
+        const tailLog = lines.find(line => line.includes('fail on the branch'));
+        const tail = tailLog!.slice(tailLog!.indexOf('\n') + 1);
+        expect(tail.length).toBeLessThanOrEqual(20_000);
+        expect(tail).toContain(marker);
+        expect(tail).not.toContain(head);
+        const refusal = unitGateRefusal('introduced unit failures; not merging:', [file], evidence);
+        expect(refusal).toContain(`introduced unit failures; not merging:\n  ${file}`);
+        expect(refusal).toContain('# Unhandled error between tests');
+        expect(refusal).toContain("Cannot find module './missing-probe-import.ts'");
+        expect(refusal).not.toContain(blob);
+        const path = writeUnitEvidence(evidence);
+        const stored = JSON.parse(readFileSync(path!, 'utf8')) as { invocations: { runs: UnitRunEvidence[] }[] };
+        const storedError = stored.invocations[0]!.runs.flatMap(run => run.files).find(item => item.file === file)?.fileError;
+        expect(storedError).toContain("Cannot find module './missing-probe-import.ts'");
+        expect(Buffer.byteLength(storedError!)).toBeLessThanOrEqual(20 * 1024);
+      });
+    });
   });
 
   test('a file declaring a 910000ms timeout runs alone for 970s and other files keep the default', async () => {
