@@ -60,6 +60,15 @@ export async function eraseLibraryImportsForPrincipals(content: Pool, access: Po
           if (!ids.length) break;
           await deleteLibraryUploads(client,agent,ids);
         }
+        // A source row names its file and its (agent, digest) source. Deleting
+        // the file cascades the row and removes that source; a digest another
+        // of this agent's files still names stays. Upload deletion returns
+        // when this agent has no files, so a source no remaining row names is
+        // never visited there. It is still this agent's private record.
+        // Sources are not shared across agents.
+        await client.query(`DELETE FROM reader.library_import_source s WHERE s.agent=$1
+          AND NOT EXISTS (SELECT 1 FROM reader.library_import_source_row r
+            WHERE r.agent=s.agent AND r.source_digest=s.digest)`,[agent]);
         for (const table of ['library_import_session_effect','library_import_upload_command','library_import_review_command',
           'library_import_step','library_import_row_outcome','library_import_batch','library_import_placement','library_import_daily_budget']) {
           await client.query(`DELETE FROM reader.${table} WHERE agent=$1`,[agent]);
