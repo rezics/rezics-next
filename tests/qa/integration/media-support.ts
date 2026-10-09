@@ -130,6 +130,10 @@ export async function startMediaStack(label: string, options: { contentProjectio
   const statementSeek = composition.dependencies.statementSeek!;
   const templateSeek = composition.templateSeek;
   await templateSeek.backfill(env.lineage.dataEpoch);
+  // Production starts StatementSeekWorker at boot, while the inventory is empty,
+  // which is the only moment projectOnce records complete coverage. Later page
+  // reads fail closed until a test projects the batches its own writes added.
+  await statementSeek.projectOnce();
 
   // Existing media journeys use an explicitly deterministic benign screen.
   // Screening acceptance disables this fixture convenience to observe every state.

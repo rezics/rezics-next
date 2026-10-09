@@ -68,8 +68,16 @@ const semantic = async (name: string, type: string) => (await json<{ component: 
 const project = async (frames: string[]) => (await json<{ projection: { id: string } }>(await owner.send('POST', '/v1/projections',
   { subject, frames, actingSubject: owner.actor }), 201)).projection.id;
 const frameQuery = (frames: string[]) => frames.map(frame => `&frame=${encodeURIComponent(frame)}`).join('');
-const readStatements = async (frames: string[] = [], extra = '') => json<StatementPage>(await owner.read(
-  `/v1/resources/${short(subject)}/statements?limit=20${frameQuery(frames)}${extra}`));
+/** Page reads require seek coverage at the current graph sequence. The harness
+ * does not run the process worker, so a read projects the batches just written. */
+async function catchStatementSeek() {
+  for (let turn = 0; turn < 64 && await stack.statementSeek.projectOnce(); turn++) { /* bounded outbox batches */ }
+}
+const readStatements = async (frames: string[] = [], extra = '') => {
+  await catchStatementSeek();
+  return json<StatementPage>(await owner.read(
+    `/v1/resources/${short(subject)}/statements?limit=20${frameQuery(frames)}${extra}`));
+};
 const ids = (page: StatementPage) => page.groups.flatMap(group => group.items)
   .flatMap(item => item.kind === 'statement' ? [item.statement] : []);
 async function statement(applicability: string[], on = subject, key = randomUUID(), value?: object) {
@@ -344,10 +352,12 @@ test('projection pages retain the subject header, frame summaries and own judgme
     await client.query('COMMIT');
   } finally { client.release(); }
   const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access, media: stack.media,
-    mediaAccess: stack.mediaAccess, readingPositions: store, account: { verify: async () => owner.principal } });
+    mediaAccess: stack.mediaAccess, readingPositions: store, statementSeek: stack.statementSeek,
+    account: { verify: async () => owner.principal } });
   const page = async (position: string) => json<Static<typeof entityPage>>(await app.handle(new Request(
     `http://main.local/v1/resources/${short(scopedProjection)}/page?actingSubject=${encodeURIComponent(owner.actor)}&position=${encodeURIComponent(position)}`,
     { headers: { authorization: `Bearer ${owner.token}` } })));
+  await catchStatementSeek();
   const early = await page(chapter), all = await page('all');
   expect(Value.Check(entityPage, early)).toBe(true);
   expect(early.projection).toMatchObject({ subject: { reference: scopedSubject } });
@@ -514,6 +524,7 @@ test('memberships a reader cannot see never fail a frame read, whatever their nu
   await owner.grant(`semantic:read:${visible.occurrence}`, 'semantic.read');
   const record = await statement([canon]); await accept(record);
   const outsider = await stack.member('crowded-reader');
+  await catchStatementSeek();
   const read = await outsider.read(`/v1/resources/${short(subject)}/statements?limit=20&frame=${encodeURIComponent(crowded.work)}`);
   expect(read.status).toBe(200);
   expect(ids(await json<StatementPage>(read))).toContain(record.statement);
