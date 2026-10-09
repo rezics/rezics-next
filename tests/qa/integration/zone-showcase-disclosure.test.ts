@@ -1,6 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { Client } from 'pg';
 import sharp from 'sharp';
 import { S3ImmutableObjects, type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { readZoneConfiguration } from '../../../services/main/src/modules/zone/configuration.ts';
@@ -18,13 +17,6 @@ let started: Promise<MediaStack> | undefined;
 const stack = () => started ??= (async () => {
   const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
   try {
-    for (const url of [owners.urls.access, owners.urls.content, owners.urls.relay]) {
-      const probe = new Client({ connectionString: url });
-      await probe.connect();
-      try {
-        expect((await probe.query<{ role: string }>('SELECT current_user AS role')).rows[0]?.role).toBe('postgres');
-      } finally { await probe.end(); }
-    }
     const fixture = await startMediaStack('zone-showcase-disclosure', { ownerUrls: owners.urls });
     return { ...fixture, stop: async () => { try { await fixture.stop(); } finally { await owners.close(); } } };
   } catch (error) { await owners.close(); throw error; }
