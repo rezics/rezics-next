@@ -3,6 +3,7 @@ import { LOAD_FIXTURE_ID } from '../qa/core.ts';
 import { PHASE_D_FIXTURE } from '../../tests/qa/load/fixture-phase-d.ts';
 import { parseDockerVolumeLines, PINNED_FIXTURE_IDS } from './stack.ts';
 import {
+  accountedPruneInventory,
   decideFixturePrune,
   formatPruneReport,
   pruneTargets,
@@ -18,6 +19,7 @@ function generation(id: string, fields: Partial<ListedGeneration> = {}): ListedG
     seed: 'rezics-background-v1',
     project: `rezics-fixture-${id}`,
     compatible: false,
+    manifest: true,
     directory: true,
     volumes: [],
     buildInProgress: false,
@@ -205,6 +207,48 @@ test('one generation can be current, pinned, retained and in use together', () =
   });
   expect(decision.keep).toEqual([{ id, reasons: ['current', 'pinned', 'retained', 'in-use'] }]);
   expect(decision.removeGenerations).toEqual([]);
+});
+
+test('an overridden fixture root removes only generations whose manifest is in that root', () => {
+  const localSuperseded = 'fx-small-222222222222';
+  const foreign = 'fx-small-18451cd1a83d';
+  const interrupted = 'fx-small-037e81264d77';
+  const listed: PruneInventory = {
+    generations: [
+      generation(localSuperseded, {
+        profile: 'small',
+        completedAt: '2026-09-01T00:00:00.000Z',
+      }),
+      generation(foreign, { profile: 'small', directory: false, manifest: false }),
+      generation(interrupted, { profile: 'small', manifest: false }),
+    ],
+    volumes: [volume(localSuperseded), volume(foreign), volume(interrupted),
+      { name: 'rezics-obs-verify-20260527_clickstack-data', project: 'rezics-obs-verify-20260527' }],
+    currentIds: [],
+    pins: [],
+    mountedVolumes: [],
+    liveQaProjects: [],
+  };
+  const shared = decideFixturePrune(accountedPruneInventory(listed, false));
+  expect(shared.removeGenerations.map((item) => item.id)).toEqual([
+    interrupted,
+    foreign,
+    localSuperseded,
+  ]);
+  const decision = decideFixturePrune(accountedPruneInventory(listed, true));
+  expect(decision.removeGenerations.map((item) => item.id)).toEqual([localSuperseded]);
+  expect(decision.keep).toEqual([]);
+  expect(decision.abandoned.map((item) => item.project)).toEqual(['rezics-obs-verify-20260527']);
+  const report = formatPruneReport({
+    mode: 'dry-run',
+    currentIds: [],
+    pins: [],
+    decision,
+    failures: [],
+  });
+  expect(report).toContain(`remove ${localSuperseded} superseded directory`);
+  expect(report).not.toContain(foreign);
+  expect(report).not.toContain(interrupted);
 });
 
 test('declared pins are the ids load and phase D restore, and a test literal is not a pin', () => {

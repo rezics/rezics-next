@@ -18,6 +18,8 @@ export interface ListedGeneration {
   completedAt?: string;
   /** `restoreCompatibility` accepts the manifest. An interrupted build is not compatible. */
   compatible: boolean;
+  /** This root has the generation's manifest. A volume alone is not one. */
+  manifest: boolean;
   directory: boolean;
   volumes: readonly string[];
   /** A live process holds the generation's build lock. */
@@ -86,6 +88,8 @@ export interface PruneScope {
  * `compatibleFixture` selects, which erasure-campaign-qualification restores.
  * `in-use` means a running container mounts the generation, or its build lock
  * is held. Anything else of that generation is superseded.
+ * An overridden fixture root passes `accountedPruneInventory` first, so a
+ * volume whose manifest lives in another root is neither kept nor removed.
  */
 export function decideFixturePrune(inventory: PruneInventory): PruneDecision {
   const current = new Set(inventory.currentIds);
@@ -146,6 +150,29 @@ export function decideFixturePrune(inventory: PruneInventory): PruneDecision {
       left.reason.localeCompare(right.reason) || left.project.localeCompare(right.project),
   );
   return { keep, removeGenerations, keepProjects, abandoned, unlabelled };
+}
+
+const FIXTURE_VOLUME_PROJECT = /^rezics-fixture-(fx-(?:small|medium)-[0-9a-f]{12})$/;
+
+/**
+ * The shared root may remove a generation known only by its volumes.
+ * An overridden root removes a generation only when that root has its directory
+ * and manifest. Other fixture volumes stay out of the listing.
+ */
+export function accountedPruneInventory(
+  inventory: PruneInventory,
+  localRoot: boolean,
+): PruneInventory {
+  if (!localRoot) return inventory;
+  const generations = inventory.generations.filter(
+    (generation) => generation.directory && generation.manifest,
+  );
+  const accounted = new Set(generations.map((generation) => generation.project));
+  const volumes = inventory.volumes.filter((volume) => {
+    if (!volume.project || !FIXTURE_VOLUME_PROJECT.test(volume.project)) return true;
+    return accounted.has(volume.project);
+  });
+  return { ...inventory, generations, volumes };
 }
 
 /** Newest compatible manifest of each profile and seed. Tied completion times all stay. */
@@ -252,6 +279,7 @@ async function collectInventory(): Promise<PruneInventory> {
     mountedVolumeNames,
     runningComposeProjects,
     PINNED_FIXTURE_IDS,
+    fixtureRootIsOverridden,
     root,
   } = await import('./stack.ts');
   const { readManifest } = await import('./build.ts');
@@ -293,6 +321,7 @@ async function collectInventory(): Promise<PruneInventory> {
       project: fixtureProject(id),
       ...(manifest ? { completedAt: manifest.build.completedAt } : {}),
       compatible: manifest ? restoreCompatibility(manifest, inputs).compatible : false,
+      manifest: manifest !== undefined,
       directory: existsSync(directory),
       volumes: [],
       buildInProgress: buildLockHeld(`${directory}.lock`),
@@ -313,14 +342,17 @@ async function collectInventory(): Promise<PruneInventory> {
     ({ profile, seed }) =>
       manifestIdentity(manifestCore(root, fixtureCorpus(profile, seed), fixtureOwners, engines)).id,
   );
-  return {
-    generations,
-    volumes,
-    currentIds,
-    pins: [...PINNED_FIXTURE_IDS],
-    mountedVolumes,
-    liveQaProjects,
-  };
+  return accountedPruneInventory(
+    {
+      generations,
+      volumes,
+      currentIds,
+      pins: [...PINNED_FIXTURE_IDS],
+      mountedVolumes,
+      liveQaProjects,
+    },
+    fixtureRootIsOverridden(),
+  );
 }
 
 function removalError(error: unknown): string {

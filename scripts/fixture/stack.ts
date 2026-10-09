@@ -14,13 +14,22 @@ export const VOLUME_KINDS = ['postgres_data', 'fuseki_data', 'rustfs_data'] as c
 /** Generations a restore names by id. Prune keeps this list and does not infer pins from source text. */
 export const PINNED_FIXTURE_IDS = ['fx-medium-c9f6e4fdcb52'] as const;
 
-/** A worker with a checkout-local write boundary can override the shared backup directory. */
-export const fixtureRoot = (() => {
-  if (process.env.REZICS_FIXTURE_ROOT) return resolve(process.env.REZICS_FIXTURE_ROOT);
+function sharedFixtureRoot(): string {
   const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'],
     { cwd: root, encoding: 'utf8' });
   return join(common.status === 0 ? dirname(common.stdout.trim()) : root, '.temp', 'fixture');
-})();
+}
+
+const sharedRoot = sharedFixtureRoot();
+
+/** A worker with a checkout-local write boundary can override the shared backup directory. */
+export const fixtureRoot = process.env.REZICS_FIXTURE_ROOT
+  ? resolve(process.env.REZICS_FIXTURE_ROOT) : sharedRoot;
+
+/** True when this process's backup directory is not the shared git-common fixture root. */
+export function fixtureRootIsOverridden(): boolean {
+  return resolve(fixtureRoot) !== resolve(sharedRoot);
+}
 
 export function fixtureDirectory(id: string): string { return join(fixtureRoot, id); }
 /** Outside the `rezics-dev`/`rezics-qa-*` namespaces, so no stack command can start a backup. */
