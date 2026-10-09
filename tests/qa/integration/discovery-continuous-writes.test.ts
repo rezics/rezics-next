@@ -52,6 +52,9 @@ test('discovery activates under a steady stream of unrelated votes and shelf cha
 
     // Every graph read of the build is followed by one vote on a Statement no
     // Work is about and one shelf change: a deterministic stream, not a timer.
+    // The stream's own writes read the graph too (the shelf status write reads
+    // its metadata); those reads must not start another write, or the stream
+    // would recurse until every content connection is held by a nested write.
     const voter = { issuer: `https://qa-discovery-continuous.test`, subject: randomUUID() };
     await f.accessPool.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
       [randomUUID(), voter.issuer, voter.subject]);
@@ -59,15 +62,18 @@ test('discovery activates under a steady stream of unrelated votes and shelf cha
     const vote = (target: string) => judgments.write(voter, { statement: target, context: { kind: 'global' },
       dimension: 'fit', value: 1, expectedRevision: '0', idempotencyKey: randomUUID(),
       requestDigest: randomUUID().replaceAll('-', '').repeat(2) });
-    let streaming = true, writes = 0;
+    let streaming = true, writes = 0, inStream = false;
     const query = f.fuseki.query.bind(f.fuseki);
     f.fuseki.query = async (sparql, bytes) => {
       const result = await query(sparql, bytes);
-      if (streaming) {
+      if (streaming && !inStream) {
         writes++;
-        await vote(native());
-        await shelves.write({ agent: native(), work: native(), status: 'read', expectedVersion: 0,
-          idempotencyKey: randomUUID() });
+        inStream = true;
+        try {
+          await vote(native());
+          await shelves.write({ agent: native(), work: native(), status: 'read', expectedVersion: 0,
+            idempotencyKey: randomUUID() });
+        } finally { inStream = false; }
       }
       return result;
     };
