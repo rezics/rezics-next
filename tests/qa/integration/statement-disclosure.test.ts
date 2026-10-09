@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { startMediaStack, type MediaStack } from './media-support.ts';
+import { createStatementProperty, type StatementProperty } from './statement-property.ts';
 import { GRAPHS, iri, lit } from '../../../services/main/src/modules/work/activate.ts';
 import { framePattern } from '../../../services/main/src/modules/projection/frame-read.ts';
 import { READ_PREFIX } from '../../../services/main/src/modules/work/read-session.ts';
@@ -10,6 +11,7 @@ const id = () => `https://rezics.com/id/${randomUUID()}`;
 const short = (ref: string) => ref.slice(-36);
 type Member = Awaited<ReturnType<MediaStack['member']>>;
 let stack: MediaStack, owner: Member, writer: Member, work: string, subject: string;
+let fact: StatementProperty;
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const text = await response.text();
@@ -28,8 +30,8 @@ async function semantic(name: string, type: string, publicWork?: string) {
   return saved.component;
 }
 const write = (member: Member, on: string, applicability: string[], key = randomUUID()) => member.send('POST', '/v1/statements', {
-  profile: 'statement-v1', speaker: { kind: 'personal' }, subject: on, predicate: 'https://example.org/fact',
-  relationDefinition: 'https://example.org/meaning', value: { kind: 'literal', lexical: key,
+  profile: 'statement-v1', speaker: { kind: 'personal' }, subject: on, predicate: fact.predicate,
+  relationDefinition: fact.relationDefinition, value: { kind: 'literal', lexical: key,
     datatype: 'http://www.w3.org/2001/XMLSchema#string', language: null },
   applicability, interpretation: { kind: 'selected' }, evidence: [], actingSubject: member.actor,
 }, key);
@@ -39,6 +41,8 @@ beforeAll(async () => {
   owner = await stack.member('coordinate-owner'); writer = await stack.member('coordinate-writer');
   work = (await stack.publicWork(owner.actor)).work;
   await owner.grant('semantic:create:root', 'semantic.change');
+  fact = await createStatementProperty(owner.send.bind(owner), owner.actor);
+  for (const member of [owner, writer]) await member.grant(`semantic:read:${fact.predicate}`, 'semantic.read');
   await owner.grant('projection:create:root', 'projection.create');
   await owner.grant(`work:read:${work}`, 'work.read');
   for (const member of [owner, writer]) await member.grant(`statement:speak:${member.actor}`, 'statement.record');

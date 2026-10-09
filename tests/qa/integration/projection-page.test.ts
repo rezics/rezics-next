@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Static } from 'typebox';
 import { Value } from 'typebox/value';
 import { startMediaStack, type MediaStack } from './media-support.ts';
+import { createStatementProperty, type StatementProperty } from './statement-property.ts';
 import { seedCanonicity, seedVariantKindConcepts, seedRelationLexicon, type SeedLexiconClient } from '../../../scripts/dev/seed/relation-lexicon.ts';
 import { CANONICITY_PROPERTY, relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { entityPage, subjectStatementPage, resourceRelationPage } from '../../../services/main/src/modules/entity-page/contract.ts';
@@ -28,6 +29,7 @@ let subject: string, canon: string, legends: string, chapter: string, later: str
 let volumeOne: string, volumeTwo: string, inVolume: string, inOtherVolume: string, edition: { release: string; realization: string };
 let foreign: { work: string; chapter: string; release: string };
 let relation: { component: string; revision: string };
+let fact: StatementProperty;
 let vocabulary: Awaited<ReturnType<typeof seedCanonicity>>;
 
 const seedClient: SeedLexiconClient = {
@@ -73,8 +75,8 @@ const ids = (page: StatementPage) => page.groups.flatMap(group => group.items)
 async function statement(applicability: string[], on = subject, key = randomUUID(), value?: object) {
   return json<{ statement: string; revision: string; meaningKey: string }>(await owner.send('POST', '/v1/statements',
     { profile: 'statement-v1', speaker: { kind: 'personal' }, subject: on,
-      predicate: value ? CANONICITY_PROPERTY : 'https://example.org/fact',
-      relationDefinition: value ? vocabulary.definition.revision : 'https://example.org/meaning',
+      predicate: value ? CANONICITY_PROPERTY : fact.predicate,
+      relationDefinition: value ? vocabulary.definition.revision : fact.relationDefinition,
       value: value ?? { kind: 'literal', lexical: key, datatype: 'http://www.w3.org/2001/XMLSchema#string', language: null },
       applicability, interpretation: { kind: 'selected' }, evidence: [], actingSubject: owner.actor }, key), 201);
 }
@@ -153,6 +155,8 @@ beforeAll(async () => {
     [`statement:speak:${owner.actor}`,'statement.record'], ['classification:decide:global','statement.decide'],
     ['relation:create:root','relation.change'],
   ]) await owner.grant(scope!, action!);
+  fact = await createStatementProperty(owner.send.bind(owner), owner.actor);
+  await owner.grant(`semantic:read:${fact.predicate}`, 'semantic.read');
   subject = await semantic('One character', `${RV}Character`);
   canon = await semantic('Canon continuity', `${RV}NarrativeContinuity`);
   legends = await semantic('Legends continuity', `${RV}NarrativeContinuity`);
@@ -203,12 +207,12 @@ test('projection Statement normalization preserves the request on replay and ref
   expect(read).toMatchObject({ subject, applicability: [canon, chapter].sort() });
   expect(ids(await readStatements())).toContain(saved.statement);
   const response = await owner.send('POST', '/v1/statements', { profile: 'statement-v1', speaker: { kind: 'personal' },
-    subject: projection, predicate: 'https://example.org/fact', relationDefinition: 'https://example.org/meaning',
+    subject: projection, predicate: fact.predicate, relationDefinition: fact.relationDefinition,
     value: { kind: 'literal', lexical: key, datatype: 'http://www.w3.org/2001/XMLSchema#string', language: null },
     applicability: [canon], interpretation: { kind: 'selected' }, evidence: [], actingSubject: owner.actor }, key);
   expect((await json<{ statement: string }>(response)).statement).toBe(saved.statement);
   const overflow = await owner.send('POST', '/v1/statements', { profile: 'statement-v1', speaker: { kind: 'personal' },
-    subject: projection, predicate: 'https://example.org/fact', relationDefinition: 'https://example.org/meaning',
+    subject: projection, predicate: fact.predicate, relationDefinition: fact.relationDefinition,
     value: { kind: 'no-value' }, applicability: Array.from({ length: 8 }, () => `https://rezics.com/id/${randomUUID()}`),
     interpretation: { kind: 'selected' }, evidence: [], actingSubject: owner.actor });
   expect(await json(overflow, 422)).toMatchObject({ code: 'statement_applicability_too_large' });
@@ -239,8 +243,8 @@ test('projection participants are refused with an applicability instruction', as
   expect((await outsider.read(`/v1/resources/${short(subject)}/statements?frame=${encodeURIComponent(secret)}`)).status).toBe(404);
   await outsider.grant(`statement:speak:${outsider.actor}`, 'statement.record');
   const hiddenStatement = await outsider.send('POST', '/v1/statements', { profile: 'statement-v1',
-    speaker: { kind: 'personal' }, subject: hidden, predicate: 'https://example.org/fact',
-    relationDefinition: 'https://example.org/meaning', value: { kind: 'no-value' }, applicability: [],
+    speaker: { kind: 'personal' }, subject: hidden, predicate: fact.predicate,
+    relationDefinition: fact.relationDefinition, value: { kind: 'no-value' }, applicability: [],
     interpretation: { kind: 'selected' }, evidence: [], actingSubject: outsider.actor });
   expect(await json(hiddenStatement, 409)).toMatchObject({ code: 'target_unavailable' });
   const normalized = await statement([], hidden);
@@ -468,8 +472,8 @@ test('a position is covered by the Structure group above it and by its Work; a r
 
 test('a Statement names only existing coordinates, and a caller cannot move a projection Statement out of its frame', async () => {
   const write = (on: string, applicability: string[], key = randomUUID()) => owner.send('POST', '/v1/statements',
-    { profile: 'statement-v1', speaker: { kind: 'personal' }, subject: on, predicate: 'https://example.org/fact',
-      relationDefinition: 'https://example.org/meaning', value: { kind: 'literal', lexical: key,
+    { profile: 'statement-v1', speaker: { kind: 'personal' }, subject: on, predicate: fact.predicate,
+      relationDefinition: fact.relationDefinition, value: { kind: 'literal', lexical: key,
         datatype: 'http://www.w3.org/2001/XMLSchema#string', language: null },
       applicability, interpretation: { kind: 'selected' }, evidence: [], actingSubject: owner.actor }, key);
   const refused = async (on: string, applicability: string[], code: string) =>

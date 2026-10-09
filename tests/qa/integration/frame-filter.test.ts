@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { Static } from 'typebox';
 import { startMediaStack, type MediaStack } from './media-support.ts';
+import { createStatementProperty, type StatementProperty } from './statement-property.ts';
 import { subjectStatementPage } from '../../../services/main/src/modules/entity-page/contract.ts';
 import { ensureGlobalClassificationContext } from '../../../services/main/src/modules/classification/global.ts';
 import { STATEMENT_SEEK_COST, type StatementSeekOrder } from '../../../services/main/src/modules/statement/seek.ts';
@@ -15,6 +16,7 @@ const short = (ref: string) => ref.slice(-36);
 type Page = Static<typeof subjectStatementPage>;
 type Member = Awaited<ReturnType<MediaStack['member']>>;
 let stack: MediaStack, owner: Member, work: string, subject: string, canon: string, legends: string;
+let fact: StatementProperty;
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const text = await response.text();
@@ -39,11 +41,11 @@ async function settled(path: string, body: object, key: string) {
   }
   throw new Error(`${path} did not settle`);
 }
-async function accepted(applicability: string[], index: number) {
+async function accepted(applicability: string[]) {
   const key = randomUUID();
   const saved = await settled('/v1/statements', { profile: 'statement-v1',
-    speaker: { kind: 'personal' }, subject, predicate: `https://example.org/fact-${index % 7}`,
-    relationDefinition: 'https://example.org/meaning', value: { kind: 'literal', lexical: key,
+    speaker: { kind: 'personal' }, subject, predicate: fact.predicate,
+    relationDefinition: fact.relationDefinition, value: { kind: 'literal', lexical: key,
       datatype: 'http://www.w3.org/2001/XMLSchema#string', language: null },
     applicability, interpretation: { kind: 'selected' }, evidence: [], actingSubject: owner.actor }, key);
   await settled('/v1/statement-decisions', { profile: 'statement-decision-v1',
@@ -59,6 +61,8 @@ beforeAll(async () => {
   work = (await stack.publicWork(owner.actor)).work;
   for (const [scope, action] of [['semantic:create:root', 'semantic.change'], [`statement:speak:${owner.actor}`, 'statement.record'],
     ['classification:decide:global', 'statement.decide'], [`work:read:${work}`, 'work.read']] as const) await owner.grant(scope, action);
+  fact = await createStatementProperty(owner.send.bind(owner), owner.actor);
+  await owner.grant(`semantic:read:${fact.predicate}`, 'semantic.read');
   subject = await semantic('A subject with many Statements', `${RV}Character`,true);
   canon = await semantic('Canon', `${RV}NarrativeContinuity`);
   legends = await semantic('Legends', `${RV}NarrativeContinuity`);
@@ -72,7 +76,7 @@ test('a framed page of a subject with many Statements is ordered by specificity 
   for (let start = 0; start < STATEMENTS; start += 4) {
     const batch = await Promise.all(Array.from({ length: Math.min(4, STATEMENTS - start) }, async (_, offset) => {
       const index = start + offset, scope = scopes[index % scopes.length]!;
-      return [await accepted(scope, index), index % scopes.length] as const;
+      return [await accepted(scope), index % scopes.length] as const;
     }));
     for (const [statement, kind] of batch) if (kind < 4) covered.set(statement, [0, 17, 17, 34][kind]!);
   }
