@@ -272,7 +272,11 @@ These steps describe one workable approach, not a fixed procedure.
 
 A brief names the outcome and the owner mechanism that carries it: consume,
 configure, extend, or new with the reason no owner fits. It does not prescribe
-a second representation of a decision that owner already makes. When `dispatch`
+a second representation of a decision that owner already makes. A brief that
+merges copies states the expected net decrease in production lines, and the
+handoff shows it (`git diff --numstat`). A merge that grows the code usually
+kept every caller's variation as an option instead of choosing one; it is
+justified only by a correctness gain the brief names. When `dispatch`
 or `reclaim` refuses a path an exited task already changed outside its claim,
 land the earlier task first or drop the path.
 

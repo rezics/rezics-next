@@ -241,7 +241,7 @@ describe('Goal landing', () => {
     const directory = mkdtempSync(join(tmpdir(), 'goal-review-'));
     try {
       await expect(reviewBranch({ directory, worktree: join(directory, 'absent'),
-        brief: 'brief', handoff: 'RESULT: done', base: 'base', head: 'head' })).rejects.toThrow();
+        brief: 'brief', handoff: 'RESULT: done', base: 'base', head: 'head' }, 'codex')).rejects.toThrow();
       expect(existsSync(join(directory, 'stderr.log'))).toBe(true);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });

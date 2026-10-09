@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 export interface LandReview {
   worktree: string; base: string; head: string; brief: string; handoff: string; directory: string;
@@ -43,10 +43,14 @@ const SONNET_REVIEW_MODEL = 'claude-sonnet-5-5';
 // Bounds the diff embedded for a reviewer that cannot run git itself.
 const EMBEDDED_DIFF_LIMIT = 400_000;
 
-/** Program switches every Goal's reviewer by writing this file; `GOAL_REVIEW_ENGINE` overrides it for one run. */
-export const REVIEW_ENGINE_FILE = join(import.meta.dir, '../../.temp/goal-orchestration/review-engine');
+/** Program switches every Goal's reviewer by writing this file in the orchestration state of the repository
+ * being landed, the same root goalctl's ledger uses; `GOAL_REVIEW_ENGINE` overrides it for one run. */
+export function reviewEngineFile(cwd = process.cwd()): string {
+  const common = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd, encoding: 'utf8' });
+  return join(dirname(common.stdout.trim()), '.temp', 'goal-orchestration', 'review-engine');
+}
 
-export function reviewEngine(env: NodeJS.ProcessEnv = process.env, file = REVIEW_ENGINE_FILE): ReviewEngine {
+export function reviewEngine(env: NodeJS.ProcessEnv = process.env, file = reviewEngineFile()): ReviewEngine {
   const engine = env.GOAL_REVIEW_ENGINE?.trim() || (existsSync(file) ? readFileSync(file, 'utf8').trim() : '') || 'codex';
   if (!(REVIEW_ENGINES as readonly string[]).includes(engine)) {
     throw new Error(`GOAL_REVIEW_ENGINE must be one of ${REVIEW_ENGINES.join(', ')}`);
@@ -84,7 +88,7 @@ function runReviewer(program: string, args: string[], request: LandReview, promp
 export function reviewPrompt(request: LandReview): string {
   return `Review this exited Goal worker's committed branch against its assigned brief.
 Report blocking defects only: wrong behaviour, scope beyond the brief, weakened tests, or security defects.
-Which owner carries this change? Report a blocker when any new table, predicate, action or policy duplicates a mapped mechanism.
+Which owner carries this change? Report a blocker when any new table, predicate, action or policy duplicates a mapped mechanism. When the brief merges copies, report a blocker if non-test lines grow without a correctness gain the brief names.
 Do not report style preferences or speculative improvements. Return {"findings":[]} if there are no blockers.
 This is a read-only review: do not edit files or run commands that mutate repository or external state.
 Inspect git diff ${request.base}..${request.head} and relevant source/tests in this worktree.
