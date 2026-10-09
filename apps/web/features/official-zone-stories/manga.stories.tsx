@@ -71,7 +71,7 @@ async function recorded(canvasElement: HTMLElement, copy: {
   const gap = canvasElement.querySelectorAll('[data-catalogue-panel]')[1]?.textContent ?? '';
   for (const line of copy.panelNames) await expect(gap).toContain(line);
   await expect(canvas.getByRole('link', { name: copy.sibling })).toBeVisible();
-  await expect(canvas.getAllByText(copy.archive).length).toBeGreaterThan(0);
+  await expect(canvas.getAllByText(copy.archive)).toHaveLength(1);
   await expect(canvas.queryByText(/\d+ episodes/)).toBeNull();
   await fits();
 }

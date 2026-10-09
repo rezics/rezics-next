@@ -2,8 +2,9 @@ import type { ZoneLinkProps } from '@rezics/zone-sdk';
 import { expect, test } from 'bun:test';
 import { createElement, type ComponentType } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { AnimeCard, AnimeCataloguePanel } from '../../zones/official/anime/slots.tsx';
-import { MangaCard, MangaCataloguePanel } from '../../zones/official/manga/slots.tsx';
+import { AnimeBrowseHeader, AnimeCard, AnimeCataloguePanel, AnimeFooter } from '../../zones/official/anime/slots.tsx';
+import { MangaBrowseHeader, MangaCard, MangaCataloguePanel, MangaFooter } from '../../zones/official/manga/slots.tsx';
+import { installHostZoneAddresses } from '../zones/addresses.ts';
 import { catalogueFacts, catalogueWork, catalogueZone } from './catalogue-zone.tsx';
 
 const Link = ((props: ZoneLinkProps) => createElement('a', props)) as ComponentType<ZoneLinkProps>;
@@ -81,6 +82,29 @@ test('a manga work page still names each fact that was not recorded', () => {
   expect(html).toContain('Year not recorded');
   expect(html).toContain('Volume count not recorded');
   expect(html).toContain('Status not recorded');
+});
+
+test('the source credit is the footer, once, as the visual-novel Zone places its own', () => {
+  installHostZoneAddresses();
+  const year = { action: '/browse', value: '1980', kept: [], clearHref: null, directoryHref: '/browse?years=1',
+    directory: false, bounded: false };
+  const animeHead = draw(createElement(AnimeBrowseHeader, {
+    zone: catalogueZone('anime', 'en'), Link, fallback: null, filter: null, filtered: false, year,
+  }));
+  const animeFoot = draw(createElement(AnimeFooter, {
+    zone: catalogueZone('anime', 'en'), Link, fallback: null,
+  }));
+  expect(animeHead).not.toContain('Bangumi Archive');
+  expect(animeFoot).toContain('Bangumi Archive wiki export');
+
+  const mangaHead = draw(createElement(MangaBrowseHeader, {
+    zone: catalogueZone('manga', 'en'), Link, fallback: null, filter: null, filtered: false, year,
+  }));
+  const mangaFoot = draw(createElement(MangaFooter, {
+    zone: catalogueZone('manga', 'en'), Link, fallback: null,
+  }));
+  expect(mangaHead).not.toContain('Bangumi Archive');
+  expect(mangaFoot).toContain('Bangumi Archive wiki export');
 });
 
 test('a reviewed property name labels the count, and the counted phrase stays the package\'s', () => {

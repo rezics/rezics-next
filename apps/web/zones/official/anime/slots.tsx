@@ -83,11 +83,12 @@ export function AnimeCataloguePanel({ zone, work, facts }: CataloguePanelSlotPro
   </section>;
 }
 
-/** Above the results: a publication year, and where the facts come from. */
+/** Above the results: a publication year. The source credit stays in the footer, once. */
 export function AnimeBrowseHeader({ zone, year, Link }: BrowseHeaderSlotProps) {
+  if (!year) return null;
   const t = strings(zone.locale);
   return <div className="anime-browse-head">
-    {year ? <form action={year.action} method="get" className="anime-year" data-catalogue-year="">
+    <form action={year.action} method="get" className="anime-year" data-catalogue-year="">
       {year.kept.map(item => <input key={`${item.name}=${item.value}`} type="hidden" name={item.name} value={item.value} />)}
       <label className="anime-year-field">{t.yearLabel}
         <input name="year" defaultValue={year.value} inputMode="numeric" autoComplete="off"
@@ -97,8 +98,7 @@ export function AnimeBrowseHeader({ zone, year, Link }: BrowseHeaderSlotProps) {
       {year.clearHref ? <Link href={year.clearHref}>{t.yearClear}</Link> : null}
       {year.directory ? null : <Link href={year.directoryHref}>{t.yearDirectory}</Link>}
       {year.bounded ? <p className="anime-year-note">{t.yearBounded}</p> : null}
-    </form> : null}
-    <p className="anime-source">{t.attribution}</p>
+    </form>
   </div>;
 }
 
