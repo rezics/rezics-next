@@ -145,6 +145,115 @@ describe('pinned main-wide regression', () => {
     } finally { r.cleanup(); }
   });
 
+  test('a batch timeout names the hanging file and reruns only the files that never started', async () => {
+    const recorded = join(import.meta.dir, '../../tests/qa/fixtures/regression-hang');
+    const logs = {
+      model: {
+        log: 'model-1.txt',
+        hang: 'services/main/tests/read-snapshot-native.test.ts',
+        after: [] as string[],
+        files: [
+          'infra/jena/tests/command.integration.test.ts',
+          'model/compiler/generate.test.ts',
+          'model/tests/daily-rating.test.ts',
+          'model/tests/event-time.test.ts',
+          'model/tests/experience-rating.test.ts',
+          'model/tests/native-equivalence.test.ts',
+          'model/tests/reasoning-profile.test.ts',
+          'model/tests/source-reification.test.ts',
+          'model/tests/validation-shape-terms.test.ts',
+          'packages/model/tests/generated.test.ts',
+          'services/main/tests/read-snapshot-native.test.ts',
+        ],
+      },
+      unit: {
+        log: 'unit-17.txt',
+        hang: 'infra/jena/tests/semantic-source-readiness-union.test.ts',
+        after: [
+          'infra/jena/tests/tdb2-integrity.test.ts',
+          'infra/jena/tests/work-name-scope-basis.test.ts',
+        ],
+        files: [
+          'infra/jena/tests/erasure-campaign-shell.test.ts',
+          'infra/jena/tests/fuseki-owner.test.ts',
+          'infra/jena/tests/native-external-fixture.test.ts',
+          'infra/jena/tests/native-integer-preservation.test.ts',
+          'infra/jena/tests/semantic-source-readiness-union.test.ts',
+          'infra/jena/tests/tdb2-integrity.test.ts',
+          'infra/jena/tests/work-name-scope-basis.test.ts',
+          'model/compiler/shacl.test.ts',
+          'model/tests/agent-realm-turtle.test.ts',
+          'model/tests/claim-analysis.test.ts',
+          'model/tests/comment-source-erasure.test.ts',
+          'model/tests/context-classification-turtle.test.ts',
+          'model/tests/contribution-selection-turtle.test.ts',
+          'model/tests/facet-definitions.test.ts',
+          'model/tests/g-512-language-profiles.test.ts',
+        ],
+      },
+    } as const;
+    for (const tier of ['model', 'unit'] as const) {
+      const spec = logs[tier];
+      const r = repo();
+      try {
+        const previous = r.files.filter(file => file.tier === tier).map(file => file.file);
+        r.files.splice(0, r.files.length, ...r.files.filter(file => file.tier !== tier),
+          ...spec.files.map(file => ({ file, tier, outcome: 'pending' as const })));
+        for (const file of spec.files) r.write(file, file === 'infra/jena/tests/command.integration.test.ts' ? 'fail\n' : 'pass\n');
+        r.commit(Object.fromEntries(previous.map(file => [file, null])));
+        const result = await r.run({ runId: `${tier}-hang`, only: [tier], runner: async (...args) => {
+          const produced = await r.runner(...args);
+          if (args[1].id !== `${tier}-1` || !args[2].endsWith('/attempt-1')) return produced;
+          const path = join(args[2], 'logs', `${tier}.log`);
+          mkdirSync(dirname(path), { recursive: true });
+          writeFileSync(path, readFileSync(join(recorded, spec.log), 'utf8'));
+          return { ...produced, code: 1, classification: 'deadline',
+            outcomes: Object.fromEntries(args[1].files.map(file => [file, 'missing' as const])),
+            evidence: 'bun timed out after 180000 ms of active work', artifactPaths: [args[2]] };
+        } });
+        const rest = r.calls.filter(call => call.batch.tier === tier && call.batch.id.endsWith('-rest'));
+        expect(rest.map(call => call.batch.files)).toEqual(spec.after.length ? [[...spec.after]] : []);
+        expect(rest.every(call => !call.batch.files.includes(spec.hang))).toBe(true);
+        const log = join(r.calls.find(call => call.batch.tier === tier && call.directory.endsWith('/attempt-1'))!.directory, 'logs', `${tier}.log`);
+        const hung = result.files.find(file => file.file === spec.hang)!;
+        expect(hung.outcome).toBe('failed');
+        expect(hung.reason).toBe(`Hung until the tier deadline; ${log}`);
+        expect(result.files.find(file => file.file === (tier === 'unit' ? 'model/compiler/shacl.test.ts' : 'model/compiler/generate.test.ts'))!.outcome).toBe('passed');
+        const summary = readFileSync(join(r.options.stateDir, 'regress', `${tier}-hang`, 'summary.md'), 'utf8');
+        expect(summary).toContain(spec.hang);
+        expect(summary).toContain(log);
+        const diagnosis = result.diagnoses.find(item => item.file === spec.hang);
+        expect(diagnosis).toMatchObject({ classification: 'deadline', reason: `Hung until the tier deadline; ${log}` });
+        expect(diagnosis!.artifactPaths).toContain(log);
+        expect(result.diagnoses.some(item => item.file === `batch:${tier}-1`)).toBe(false);
+        for (const file of spec.after) expect(result.files.find(item => item.file === file)!.outcome).toBe('passed');
+      } finally { r.cleanup(); }
+    }
+  });
+
+  test('a batch that times out before any file header stays a deadline for the batch', async () => {
+    const r = repo();
+    try {
+      const later = 'tests/qa/unit/later.test.ts';
+      r.files.push({ file: later, tier: 'unit', outcome: 'pending' });
+      r.write(later, 'pass\n');
+      r.commit();
+      const result = await r.run({ runId: 'admission-deadline', only: ['unit'], runner: async (...args) => {
+        const produced = await r.runner(...args);
+        if (args[1].tier !== 'unit') return produced;
+        const path = join(args[2], 'logs', 'unit.log');
+        mkdirSync(dirname(path), { recursive: true });
+        writeFileSync(path, 'Memory admission deadline reached; no work started\n');
+        return { ...produced, code: 1, classification: 'deadline', outcomes: {},
+          evidence: 'Memory admission deadline reached; no work started', artifactPaths: [args[2]] };
+      } });
+      expect(r.calls.filter(call => call.batch.tier === 'unit')).toHaveLength(1);
+      expect(result.diagnoses).toEqual([expect.objectContaining({ file: 'batch:unit-1', classification: 'deadline', status: 'unavailable' })]);
+      expect(result.files.filter(file => file.tier === 'unit').every(file => file.outcome === 'missing')).toBe(true);
+      expect(result.files.some(file => file.reason?.includes('Hung until the tier deadline'))).toBe(false);
+    } finally { r.cleanup(); }
+  });
+
   test('a deadline with partial evidence retains per-file assertion failures alongside one run event', async () => {
     const r = repo();
     try {

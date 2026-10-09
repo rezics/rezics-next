@@ -6,7 +6,7 @@ import * as filesystem from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
+import { hungTestFile, parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
 import { newRunId, type Tier } from '../qa/core.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { defaultStopGraceMs, terminateProcessGroup } from '../qa/process/terminate.ts';
@@ -22,6 +22,8 @@ export interface Execution {
   queueMs: number; testMs: number; totalMs: number; evidence?: string; classification?: Classification;
   failingTests?: string[];
   cause?: string;
+  /** The file still running when this batch stopped on a timeout, and the tier log that shows it. */
+  hang?: { file: string; log: string };
 }
 export interface Batch {
   id: string; tier: RegressionTier; files: string[]; state: 'pending' | 'running' | 'done'; attempts: Execution[];
@@ -245,6 +247,46 @@ function batchRunFailure(batch: Batch, result: Execution): boolean {
   return Boolean(result.code) && (result.classification === 'infrastructure'
     || ((result.classification === 'deadline' || result.classification === 'resource')
       && (batch.files.some(file => !result.outcomes[file] || result.outcomes[file] === 'missing') || !assertionFiles(batch, result).length)));
+}
+
+const hangReason = (log: string) => `Hung until the tier deadline; ${log}`;
+
+function continuationId(batches: readonly Batch[], parent: string): string {
+  const used = new Set(batches.map(batch => batch.id));
+  let id = `${parent}-rest`;
+  let n = 2;
+  while (used.has(id)) id = `${parent}-rest-${n++}`;
+  return id;
+}
+
+function tierDeadlineLog(batch: Batch, result: Execution): { text: string; path: string } | undefined {
+  if (result.classification !== 'deadline') return undefined;
+  const name = `${batch.tier.replaceAll('/', '-')}.log`;
+  for (const root of result.artifactPaths) {
+    for (const path of [join(root, 'logs', name), join(root, name)]) {
+      if (existsSync(path)) return { text: readFileSync(path, 'utf8'), path };
+    }
+  }
+  return undefined;
+}
+
+/** Keep results the tier log already printed, fail the file that was still running,
+ * and return the files that never started so they can run without it. */
+function attributeDeadlineHang(batch: Batch, result: Execution): string[] {
+  const log = tierDeadlineLog(batch, result);
+  if (!log) return [];
+  const hung = hungTestFile(log.text, batch.files);
+  if (!hung.file) return [];
+  for (const [file, outcome] of Object.entries(hung.completed)) {
+    if (outcome === 'failed' || result.outcomes[file] !== 'failed') result.outcomes[file] = outcome;
+  }
+  result.outcomes[hung.file] = 'failed';
+  result.hang = { file: hung.file, log: log.path };
+  const later = new Set(hung.after);
+  for (const file of hung.after) delete result.outcomes[file];
+  const moved = batch.files.filter(file => later.has(file));
+  batch.files = batch.files.filter(file => !later.has(file));
+  return moved;
 }
 
 async function command(checkout: string, args: string[], logPath: string, timeoutMs = 7 * 3_600_000,
@@ -568,12 +610,21 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       if (git(tree, ['rev-parse', 'HEAD']) !== commit || git(tree, ['status', '--porcelain'])) throw new Error(`Source changed during regression: ${tree}`);
       return result;
     };
+    let lane: Batch[] | undefined;
+    const continueAfterHang = (parent: Batch, files: string[]) => {
+      if (!files.length) return;
+      const continuation: Batch = { id: continuationId(manifest.batches, parent.id), tier: parent.tier, files,
+        state: 'pending', attempts: [] };
+      manifest.batches.splice(manifest.batches.indexOf(parent) + 1, 0, continuation);
+      lane?.push(continuation);
+    };
     const runInitialBatch = async (batch: Batch, tree?: string): Promise<void> => {
       if (batch.state === 'done') return;
       batch.state = 'running'; save();
       // A dead engine gets one fresh queue entry, then leaves a resumable pending batch rather than a busy loop.
       for (let attempt = 0; attempt < 2; attempt++) {
         const result = await execute(pinned, batch, `${batch.id}/attempt-${batch.attempts.length + 1}`, tree);
+        const moved = attributeDeadlineHang(batch, result);
         // Logs already live at artifactPaths; keep checkpoints bounded instead of copying every stack log into them.
         batch.attempts.push({ ...result, evidence: undefined });
         const voided = result.classification === 'infrastructure';
@@ -582,17 +633,23 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
           && batch.files.includes(diagnosis.file) && ['passed', 'failed'].includes(result.outcomes[diagnosis.file] ?? 'missing')));
         for (const file of manifest.files.filter(file => file.tier === batch.tier && batch.files.includes(file.file))) {
           file.outcome = voided ? 'void' : result.outcomes[file.file] ?? 'missing';
+          if (!voided && result.hang?.file === file.file) file.reason = hangReason(result.hang.log);
         }
-        batch.state = voided ? 'pending' : 'done'; save();
+        batch.state = voided ? 'pending' : 'done';
+        if (!voided && moved.length) continueAfterHang(batch, moved);
+        save();
         if (!voided) break;
       }
     };
+    const serialTier = (tier: RegressionTier) => tier === 'unit' || tier === 'model' || tier === 'jena:check';
     // Unit batches fit the harness's three-minute budget and run serially; stack and owner batches use measured memory admission.
-    for (const batch of manifest.batches.filter(batch => batch.tier === 'unit' || batch.tier === 'model' || batch.tier === 'jena:check')) {
-      await runInitialBatch(batch);
+    // A hang splices its remainder in front of the following batches, so the index walks that new batch too.
+    for (let index = 0; index < manifest.batches.length; index++) {
+      const batch = manifest.batches[index]!;
+      if (serialTier(batch.tier)) await runInitialBatch(batch);
     }
-    const pending = manifest.batches.filter(batch => batch.state !== 'done' && !browserTier(batch.tier)
-      && batch.tier !== 'unit' && batch.tier !== 'model' && batch.tier !== 'jena:check');
+    const pending = manifest.batches.filter(batch => batch.state !== 'done' && !browserTier(batch.tier) && !serialTier(batch.tier));
+    lane = pending;
     let next = 0;
     let failure: unknown;
     const workers = Array.from({ length: Math.min(slotLimit, pending.length) }, async (_, index) => {
@@ -609,7 +666,11 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     // Keep the manifest lock until all admitted children settle, even when another lane fails.
     await Promise.all(workers);
     if (failure) throw failure;
-    for (const batch of manifest.batches.filter(batch => browserTier(batch.tier))) await runInitialBatch(batch);
+    lane = undefined;
+    for (let index = 0; index < manifest.batches.length; index++) {
+      const batch = manifest.batches[index]!;
+      if (browserTier(batch.tier)) await runInitialBatch(batch);
+    }
     const eventPath = join(stateDir, 'merges.jsonl');
     const events = existsSync(eventPath) ? readFileSync(eventPath, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as MergeEvent) : [];
     const route = options.route ?? (async entry => appendInbox(stateDir, entry));
@@ -642,8 +703,16 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     };
     for (const batch of manifest.batches.filter(batch => batch.attempts.length > 0)) {
       const initial = batch.attempts.at(-1)!;
-      let failing = batch.files.filter(file => initial.outcomes[file] !== 'passed');
-      if (batchRunFailure(batch, initial)) {
+      const hang = initial.hang;
+      // A timeout that names the file still running is that file's failure. Startup and
+      // admission, which print no file header, stay a deadline for the whole batch.
+      if (hang && !manifest.diagnoses.some(item => item.file === hang.file)) {
+        await routeFileFailure(hang.file, initial, { file: hang.file, status: 'unavailable', classification: 'deadline',
+          after: pinned, probes: [], artifactPaths: [...new Set([...initial.artifactPaths, hang.log])],
+          reason: hangReason(hang.log) });
+      }
+      let failing = batch.files.filter(file => initial.outcomes[file] !== 'passed' && file !== hang?.file);
+      if (batchRunFailure(batch, initial) && !hang) {
         await routeBatchFailure(batch, initial);
       }
       if (manifest.diagnoses.some(item => item.file === `batch:${batch.id}`)) {
@@ -659,15 +728,16 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
         await retainUnavailableAssertions(batch, evidence, [], 'Batch execution unavailable');
         continue;
       }
-      if (!failing.length && initial.code) {
+      if (!failing.length && initial.code && !hang) {
         await routeBatchFailure(batch, initial, 'Batch runner failed despite passing file evidence');
       }
       let repeatBatch: Execution | undefined;
+      const runnable = hang ? { ...batch, files: batch.files.filter(file => file !== hang.file) } : batch;
       for (const file of failing) {
         if (manifest.diagnoses.some(item => item.file === file)) continue;
         const diagnosis: Diagnosis = { file, status: 'inconclusive', classification: initial.classification ?? 'deterministic',
           after: pinned, probes: [], artifactPaths: [...initial.artifactPaths] };
-        repeatBatch ??= await execute(pinned, batch, `${batch.id}/confirm`);
+        repeatBatch ??= await execute(pinned, runnable, `${batch.id}/confirm`);
         const repeat = repeatBatch;
         diagnosis.artifactPaths.push(...repeat.artifactPaths);
         if (batchRunFailure(batch, repeat)) {
@@ -735,7 +805,8 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       `Result: ${manifest.status}; complete execution: ${complete}; shards: ${manifest.shards}`,
       `Preflight: ${manifest.preflight.ok ? 'passed' : manifest.preflight.reason}`, '',
       ...manifest.batches.map(batch => `${batch.id}: ${batch.state}; ${batch.files.length} files; `
-        + batch.attempts.map(result => `queue ${result.queueMs}ms, test ${result.testMs}ms, total ${result.totalMs}ms (${result.classification ?? 'passed'})`).join('; ')), '',
+        + batch.attempts.map(result => `queue ${result.queueMs}ms, test ${result.testMs}ms, total ${result.totalMs}ms (${result.classification ?? 'passed'})`
+          + (result.hang ? `; hung ${result.hang.file}; ${result.hang.log}` : '')).join('; ')), '',
       ...manifest.diagnoses.map(item => `${item.file}: ${item.status}, ${item.classification}; ${item.before ?? '?'}..${item.after}; `
         + `${item.goal ?? 'program'} ${item.taskIds?.join(', ') ?? ''}; ${item.reason ?? ''}`), '',
     ].join('\n'));

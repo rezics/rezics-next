@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { acceptanceStatuses, caseInventory, e2eArgs, failedSelection, parseJUnit, testArgs, titleIds, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
+import { acceptanceStatuses, caseInventory, e2eArgs, failedSelection, hungTestFile, parseJUnit, testArgs, titleIds, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
 import { parseArgs, writeSummary, type Tier } from '../../../scripts/qa/core.ts';
 import { inventoryFingerprint, selectBackendCases } from '../../../scripts/qa/backend-scope.ts';
 import { integrationGateFiles } from '../../../scripts/qa/integration-gate-files.ts';
@@ -303,4 +303,53 @@ test('QA08: a complete run requires explicit case coverage before promotion', ()
       partial: false, errors: [], cases, tests, tiers: tiers.slice(1) });
     expect(JSON.parse(readFileSync(join(dir, 'acceptance.json'), 'utf8')).certifiesFull).toBe(false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a timed-out tier log names the file that was still running', () => {
+  const recorded = resolve(import.meta.dir, '../fixtures/regression-hang');
+  const modelFiles = [
+    'infra/jena/tests/command.integration.test.ts',
+    'model/compiler/generate.test.ts',
+    'model/tests/daily-rating.test.ts',
+    'model/tests/event-time.test.ts',
+    'model/tests/experience-rating.test.ts',
+    'model/tests/native-equivalence.test.ts',
+    'model/tests/reasoning-profile.test.ts',
+    'model/tests/source-reification.test.ts',
+    'model/tests/validation-shape-terms.test.ts',
+    'packages/model/tests/generated.test.ts',
+    'services/main/tests/read-snapshot-native.test.ts',
+  ];
+  const model = hungTestFile(readFileSync(join(recorded, 'model-1.txt'), 'utf8'), modelFiles);
+  expect(model.file).toBe('services/main/tests/read-snapshot-native.test.ts');
+  expect(model.after).toEqual([]);
+  expect(model.completed['infra/jena/tests/command.integration.test.ts']).toBe('failed');
+  expect(model.completed['model/compiler/generate.test.ts']).toBe('passed');
+  const unitFiles = [
+    'infra/jena/tests/erasure-campaign-shell.test.ts',
+    'infra/jena/tests/fuseki-owner.test.ts',
+    'infra/jena/tests/native-external-fixture.test.ts',
+    'infra/jena/tests/native-integer-preservation.test.ts',
+    'infra/jena/tests/semantic-source-readiness-union.test.ts',
+    'infra/jena/tests/tdb2-integrity.test.ts',
+    'infra/jena/tests/work-name-scope-basis.test.ts',
+    'model/compiler/shacl.test.ts',
+    'model/tests/agent-realm-turtle.test.ts',
+    'model/tests/claim-analysis.test.ts',
+    'model/tests/comment-source-erasure.test.ts',
+    'model/tests/context-classification-turtle.test.ts',
+    'model/tests/contribution-selection-turtle.test.ts',
+    'model/tests/facet-definitions.test.ts',
+    'model/tests/g-512-language-profiles.test.ts',
+  ];
+  const unit = hungTestFile(readFileSync(join(recorded, 'unit-17.txt'), 'utf8'), unitFiles);
+  expect(unit.file).toBe('infra/jena/tests/semantic-source-readiness-union.test.ts');
+  expect(unit.after).toEqual([
+    'infra/jena/tests/tdb2-integrity.test.ts',
+    'infra/jena/tests/work-name-scope-basis.test.ts',
+  ]);
+  expect(unit.completed['model/compiler/shacl.test.ts']).toBe('passed');
+  expect(hungTestFile('Memory admission deadline reached; no work started\n', unitFiles).file).toBeUndefined();
+  expect(hungTestFile('bun timed out after 180000 ms of active work\n', unitFiles).file).toBeUndefined();
+  expect(hungTestFile('bun timed out after 180000 ms of active work\n', unitFiles).after).toEqual([]);
 });

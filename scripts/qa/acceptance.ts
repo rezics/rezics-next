@@ -331,3 +331,62 @@ export function testArgs(
   // stores the leaf name separately in each testcase.
   return [...files, '-t', `^.*(?:${tests.map(test => escape(test.name)).join('|')})$`];
 }
+
+const tierLogHeader = /^(\S+\.(?:test|spec)\.[cm]?[jt]sx?):$/;
+const tierLogResult = /^\((pass|fail|skip|todo)\) /;
+const tierLogTimeout = /^(?:bun timed out\b|QA tier budget exceeded\b|Command deadline exceeded\b)/;
+
+export interface HungBatch {
+  /** Last file header with no result after it. Absent when the log never started a file. */
+  file?: string;
+  completed: Record<string, 'passed' | 'failed'>;
+  /** Batch files the timeout did not finish, excluding the hanging file. */
+  after: string[];
+}
+
+/** The file still running when a tier log ends on a timeout: the last file
+ * header with no result after it. Files that already printed a result keep it.
+ * A log that stops before any file header names no file. */
+export function hungTestFile(log: string, files: readonly string[]): HungBatch {
+  const known = new Set(files);
+  const completed = new Map<string, 'passed' | 'failed'>();
+  let current: string | undefined;
+  let hasResult = false;
+  let last: { file: string; open: boolean } | undefined;
+  const close = () => {
+    if (!current) return;
+    last = { file: current, open: !hasResult };
+    current = undefined;
+    hasResult = false;
+  };
+  for (const raw of log.split('\n')) {
+    const line = raw.replace(/\u001b\[[0-9;]*m/g, '');
+    if (tierLogTimeout.test(line)) break;
+    const header = tierLogHeader.exec(line);
+    if (header) {
+      close();
+      const file = header[1]!.replace(/^\.\//, '');
+      if (known.has(file)) {
+        current = file;
+        hasResult = false;
+      }
+      continue;
+    }
+    const file = current;
+    if (!file) continue;
+    const result = tierLogResult.exec(line);
+    if (!result) continue;
+    hasResult = true;
+    if (result[1] === 'fail') completed.set(file, 'failed');
+    else if (completed.get(file) !== 'failed') completed.set(file, 'passed');
+  }
+  close();
+  const file = last?.open ? last.file : undefined;
+  if (file) completed.delete(file);
+  const finished = new Set(completed.keys());
+  return {
+    ...(file ? { file } : {}),
+    completed: Object.fromEntries(completed),
+    after: file ? files.filter(item => item !== file && !finished.has(item)) : [],
+  };
+}
