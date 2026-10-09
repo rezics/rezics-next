@@ -356,12 +356,15 @@ final class ModelMutationPolicy {
     }
 
     /** The graph erasure command adds rv:ErasedRevision and leaves every prior type. */
-    private static boolean erasureTombstone(DatasetGraph data, String receipt, String name, Subject before) {
-        if (!before.graph().equals(REVISIONS)
-            || !receipt.matches("urn:rezics:receipt:erasure-graph:[0-9a-f]{64}")) return false;
+    static boolean erasureMarker(DatasetGraph data, String receipt, String name) {
+        if (!receipt.matches("urn:rezics:receipt:erasure-graph:[0-9a-f]{64}")) return false;
         Node node = NodeFactory.createURI(name);
-        Node erased = NodeFactory.createURI(RV + "ErasedRevision");
-        if (!data.contains(REVISIONS, node, RDF.type.asNode(), erased)) return false;
+        return data.contains(REVISIONS, node, RDF.type.asNode(), NodeFactory.createURI(RV + "ErasedRevision"));
+    }
+
+    private static boolean erasureTombstone(DatasetGraph data, String receipt, String name, Subject before) {
+        if (!before.graph().equals(REVISIONS) || !erasureMarker(data, receipt, name)) return false;
+        Node node = NodeFactory.createURI(name);
         for (Node type : before.types()) {
             if (!data.contains(REVISIONS, node, RDF.type.asNode(), type)) return false;
         }

@@ -1464,6 +1464,10 @@ final class CommandService extends ActionService {
                 return invalid("bound profile focus omitted: " + subject);
         }
         for (String subject : plan.revisions()) {
+            // The erasure marker keeps the revision's product shape and adds
+            // rv:ErasedRevision. That product shape rejects the extra type; the
+            // erasure profile is the validation for this command.
+            if (ModelMutationPolicy.erasureMarker(dataset, receipt, subject)) continue;
             Map<String, Object> canonical = CanonicalPolicy.validate(profiles, dataset, subject, true);
             if (canonical != null) return canonical;
             if (hasType(dataset, CommandPolicy.REVISIONS, subject, "ContentPublicationDecision")) {
