@@ -175,21 +175,28 @@ test("the mechanism map's import surface is its entry-point files and named adap
       'services/main/src/modules/rights/store.ts',
     ],
     'governance-restriction': [
+      'services/main/src/modules/governance/rules.ts',
       'services/main/src/modules/governance/schema.ts',
       'services/main/src/modules/governance/store.ts',
     ],
     'language-parsing': [
+      'services/main/src/modules/display-language/public-request.ts',
+      'services/main/src/modules/display-language/schema.ts',
       'services/main/src/modules/display-language/select.ts',
       'services/main/src/modules/display-language/tag.ts',
     ],
     'access-authority': [
       'services/main/src/modules/access/admission.ts',
       'services/main/src/modules/access/authority-read.ts',
+      'services/main/src/modules/access/baseline.ts',
       'services/main/src/modules/access/exposure.ts',
       'services/main/src/modules/access/fixture-authority.ts',
       'services/main/src/modules/access/grants.ts',
+      'services/main/src/modules/access/memberships.ts',
+      'services/main/src/modules/access/platform-administrator.ts',
       'services/main/src/modules/access/representations.ts',
       'services/main/src/modules/access/scope-gates.ts',
+      'services/main/src/modules/access/semantic-disclosure.ts',
       'services/main/src/modules/access/topology-control.ts',
     ],
   });
