@@ -69,7 +69,8 @@ export function EpisodeProgress({ work, api, t, className }: { work: string; api
     // The next episode marked moves the run on at once; Main is read again either way, and settles it.
     const after = read!.mains.items[episode.number];
     if (completed && episode.occurrence === read!.next?.occurrence && (after || read!.mains.next === null)) {
-      setStanding({ ok: true, data: { ...read!, through: episode, next: after ?? null } });
+      const extendsRun = episode.number === (read!.through?.number ?? 0) + 1;
+      setStanding({ ok: true, data: { ...read!, through: extendsRun ? episode : read!.through, next: after ?? null } });
     }
     setReload(count => count + 1);
   }

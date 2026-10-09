@@ -176,8 +176,7 @@ test('episode 1001 of a real series is watched on another device, and episode 10
   const handset = await device(browser, info, phone, seeded.episodes.work);
   const phoneEpisodes = handset.locator('[data-episode-progress]');
   await loaded(handset, '[data-episode-progress]', 180_000);
-  // One watched episode does not move the run that starts at episode 1. Episode 1001 is opened
-  // by its number, and that mark is the only progress write.
+  // Nothing is watched yet. Episode 1001 is opened by its number, and marking it is the only progress write.
   await expect(phoneEpisodes.getByText('Continue from episode 1')).toBeVisible();
   await expect(phoneEpisodes.getByText('No episode watched yet')).toBeVisible();
   await phoneEpisodes.getByLabel('Go to episode number').fill('1001');
@@ -194,7 +193,7 @@ test('episode 1001 of a real series is watched on another device, and episode 10
   const wide = await device(browser, info, desktop, seeded.episodes.work);
   const desktopEpisodes = wide.locator('[data-episode-progress]');
   await loaded(wide, '[data-episode-progress]', 180_000);
-  await expect(desktopEpisodes.getByText('Continue from episode 1')).toBeVisible();
+  await expect(desktopEpisodes.getByText('Continue from episode 1002')).toBeVisible();
   await desktopEpisodes.getByLabel('Go to episode number').fill('1001');
   await desktopEpisodes.getByRole('button', { name: 'Go' }).click();
   await expect(desktopEpisodes.locator('[data-selected="main"]')).toContainText('Episode 1001', { timeout: 180_000 });

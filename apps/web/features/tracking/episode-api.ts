@@ -38,6 +38,11 @@ export interface EpisodeApi {
   structure(work: string): Promise<Loaded<{ structure: string; placesWorks: boolean } | null>>;
   /** A page of the Structure's root, or of one group with `parent`; `after` continues it. */
   page(structure: string, query?: { parent?: string; after?: string }): Promise<Loaded<StructurePage>>;
+  /**
+   * The furthest occurrence this reader has completed, from the progress order index.
+   * Null when they have not started. A read that does not answer is a failure.
+   */
+  resume(work: string): Promise<Loaded<string | null>>;
   progress(episode: EpisodeRef): Promise<Loaded<EpisodeProgress>>;
   /**
    * Sets one occurrence's completion. Without `conflict`, a write another device got to first is
@@ -93,6 +98,15 @@ export function mainEpisodeApi(actingSubject: string, main: () => MainClient = b
           .map(item => ({ occurrence: item.occurrence, label: label(item) })),
         groups: page.data.occurrences.filter(item => item.role === 'group')
           .map(item => ({ occurrence: item.occurrence, label: item.labels[0]?.value ?? null })) } };
+    },
+    async resume(work) {
+      const read = await restarted(() => settle(() => main().v1['reading-positions']({ work: uuidOf(work) }).get({
+        query: { actingSubject, position: 'mine', limit: 1 } })));
+      if (!read.ok) return read;
+      const page = read.data as { scope?: string; resolved?: string; items?: { occurrence?: string }[] };
+      const named = page.scope === 'resume' || page.resolved?.startsWith('https://') === true;
+      if (!named) return { ok: true, data: null };
+      return { ok: true, data: page.items?.[0]?.occurrence ?? page.resolved ?? null };
     },
     progress: read,
     async mark(episode, change, options) {

@@ -96,6 +96,16 @@ describe('where the reader stands in a series', () => {
     expect(read.mains.pages).toBe(MAX_PAGES);
   });
 
+  test('marking episode 1001 of 1002 continues from episode 1002', async () => {
+    const memory = store(1002, 0, 20);
+    finish(memory, 1001);
+    const read = await standing(memory);
+    expect(read.through).toBeNull();
+    expect(read.next?.number).toBe(1002);
+    expect(memory.calls.filter(call => call.startsWith('progress'))).toHaveLength(1);
+    expect(memory.calls.filter(call => call.startsWith('page:root')).length).toBeLessThanOrEqual(MAX_PAGES);
+  });
+
   test('a series with no episodes has no standing', async () => {
     expect(await standingOf(memoryEpisodeApi(store(0)), saoOne)).toEqual({ ok: true, data: null });
   });
@@ -112,8 +122,8 @@ describe('Main behind the episode api', () => {
   const group = 'https://rezics.com/id/00000000-0000-7000-8000-000000000e01';
   const at = (id: string) => `https://rezics.com/id/00000000-0000-7000-8000-${id.padStart(12, '0')}`;
 
-  function main(handlers: { get?: () => unknown; put?: (body: unknown) => unknown; parts?: () => unknown; page?: () => unknown }) {
-    const asked: { parts: unknown[]; pages: unknown[]; puts: { body: unknown; key: string | undefined }[] } = { parts: [], pages: [], puts: [] };
+  function main(handlers: { get?: () => unknown; put?: (body: unknown) => unknown; parts?: () => unknown; page?: () => unknown; resume?: () => unknown }) {
+    const asked: { parts: unknown[]; pages: unknown[]; puts: { body: unknown; key: string | undefined }[]; resumes: unknown[] } = { parts: [], pages: [], puts: [], resumes: [] };
     const progress = {
       get: async () => handlers.get?.() ?? { data: { completed: false, position: null, version: 0 }, error: null },
       put: async (body: unknown, options: { headers: Record<string, string> }) => {
@@ -134,6 +144,10 @@ describe('Main behind the episode api', () => {
           },
           occurrences: () => ({ progress }),
         }),
+        'reading-positions': () => ({ get: async (request: { query: unknown }) => {
+          asked.resumes.push(request.query);
+          return handlers.resume?.() ?? { data: { scope: 'positions', resolved: 'start', items: [] }, error: null };
+        } }),
       },
     } as unknown as MainClient;
     return { api: mainEpisodeApi('https://rezics.com/id/agent', () => client), asked };
@@ -150,6 +164,14 @@ describe('Main behind the episode api', () => {
   test('a Work with no series Structure has nothing to track, and a failed read is a failure', async () => {
     expect(await main({ parts: () => ({ data: null, error: { status: 404, value: {} } }) }).api.structure(saoOne)).toEqual({ ok: true, data: null });
     expect(await main({ parts: () => ({ data: null, error: { status: 503, value: {} } }) }).api.structure(saoOne)).toMatchObject({ ok: false });
+  });
+
+  test('Mine names the furthest completed occurrence, and a start has none', async () => {
+    const resumed = main({ resume: () => ({ data: { scope: 'resume', resolved: at('e1001'),
+      items: [{ occurrence: at('e1001') }] }, error: null }) });
+    expect(await resumed.api.resume(saoOne)).toEqual({ ok: true, data: at('e1001') });
+    expect(resumed.asked.resumes).toEqual([{ actingSubject: 'https://rezics.com/id/agent', position: 'mine', limit: 1 }]);
+    expect(await main({}).api.resume(saoOne)).toEqual({ ok: true, data: null });
   });
 
   test('a page tells episodes from groups, names them, and continues from Main\'s cursor', async () => {

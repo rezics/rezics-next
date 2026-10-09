@@ -41,6 +41,14 @@ export function memoryEpisodeApi(store: MemoryEpisodes): EpisodeApi {
       return { ok: true, data: { parts: taken, groups: parent || from ? [] : store.groups.map(({ occurrence, label }) => ({ occurrence, label })),
         next: more ? String(from + store.page) : null } };
     },
+    async resume() {
+      store.calls.push('resume');
+      let furthest: string | null = null;
+      for (const part of store.mains) {
+        if (store.progress.get(part.occurrence)?.completed) furthest = part.occurrence;
+      }
+      return { ok: true, data: furthest };
+    },
     async progress(episode) {
       store.calls.push(`progress:${episode.occurrence.slice(-3)}`);
       return { ok: true, data: row(episode) };
