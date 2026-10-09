@@ -39,8 +39,6 @@ export interface PruneInventory {
   pins: readonly string[];
   /** Volume names mounted by a running container. */
   mountedVolumes: readonly string[];
-  /** `rezics-qa-*` projects that have a running container. */
-  liveQaProjects: readonly string[];
 }
 
 export interface KeptGeneration {
@@ -57,7 +55,7 @@ export interface RemovedGeneration {
 
 export interface VolumeProject {
   project: string;
-  reason: 'dev' | 'live-qa' | 'in-use';
+  reason: 'dev' | 'in-use';
   volumes: string[];
 }
 
@@ -95,7 +93,6 @@ export function decideFixturePrune(inventory: PruneInventory): PruneDecision {
   const current = new Set(inventory.currentIds);
   const pins = new Set(inventory.pins);
   const mounted = new Set(inventory.mountedVolumes);
-  const liveQa = new Set(inventory.liveQaProjects);
   const retained = retainedGenerationIds(inventory.generations);
   const volumesByProject = new Map<string, string[]>();
   for (const volume of inventory.volumes) {
@@ -130,9 +127,10 @@ export function decideFixturePrune(inventory: PruneInventory): PruneDecision {
   const abandonedGroups = new Map<string, string[]>();
   for (const [project, names] of volumesByProject) {
     if (generationProjects.has(project)) continue;
+    // QA stacks belong to the reaper and stack:reset, including while they are stopped.
+    if (project.startsWith('rezics-qa-')) continue;
     const volumes = [...new Set(names)].sort();
     if (project === DEV_COMPOSE_PROJECT) keepProjects.push({ project, reason: 'dev', volumes });
-    else if (liveQa.has(project)) keepProjects.push({ project, reason: 'live-qa', volumes });
     else if (volumes.some((name) => mounted.has(name)))
       keepProjects.push({ project, reason: 'in-use', volumes });
     else abandonedGroups.set(project, volumes);
@@ -277,7 +275,6 @@ async function collectInventory(): Promise<PruneInventory> {
     dockerEnvironment,
     listDockerVolumes,
     mountedVolumeNames,
-    runningComposeProjects,
     PINNED_FIXTURE_IDS,
     fixtureRootIsOverridden,
     root,
@@ -290,9 +287,6 @@ async function collectInventory(): Promise<PruneInventory> {
   const docker = dockerEnvironment();
   const volumes = listDockerVolumes(docker);
   const mountedVolumes = mountedVolumeNames(docker);
-  const liveQaProjects = runningComposeProjects(docker).filter((project) =>
-    project.startsWith('rezics-qa-'),
-  );
   const ids = new Set<string>();
   let entries: { name: string; isDirectory: () => boolean }[] = [];
   try {
@@ -349,7 +343,6 @@ async function collectInventory(): Promise<PruneInventory> {
       currentIds,
       pins: [...PINNED_FIXTURE_IDS],
       mountedVolumes,
-      liveQaProjects,
     },
     fixtureRootIsOverridden(),
   );

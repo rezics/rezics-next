@@ -181,12 +181,6 @@ export function listDockerVolumes(docker: NodeJS.ProcessEnv): ListedDockerVolume
     '{{.Name}}\t{{.Label "com.docker.compose.project"}}'], docker, 60_000));
 }
 
-/** Compose projects of containers that are running now. */
-export function runningComposeProjects(docker: NodeJS.ProcessEnv): string[] {
-  const output = run('docker', ['ps', '--format', '{{.Label "com.docker.compose.project"}}'], docker, 30_000);
-  return [...new Set(output.split('\n').map(line => line.trim()).filter(Boolean))].sort();
-}
-
 /** Named volumes mounted into a running container. */
 export function mountedVolumeNames(docker: NodeJS.ProcessEnv): string[] {
   const ids = run('docker', ['ps', '-q'], docker, 30_000).split('\n').map(line => line.trim()).filter(Boolean);

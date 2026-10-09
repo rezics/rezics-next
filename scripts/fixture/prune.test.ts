@@ -99,7 +99,6 @@ function inventory(): PruneInventory {
     currentIds: [current, 'fx-small-999999999999'],
     pins: [pinned],
     mountedVolumes: [mountedVolume, mountedForeign],
-    liveQaProjects: ['rezics-qa-20261009t221849-3b5894-1'],
   };
 }
 
@@ -138,11 +137,6 @@ test('fixture prune removes superseded generations and abandoned projects, and l
   expect(decision.keepProjects).toEqual([
     { project: 'rezics-dev', reason: 'dev', volumes: ['rezics-dev_postgres_data'] },
     { project: 'book-relocation', reason: 'in-use', volumes: [mountedForeign] },
-    {
-      project: 'rezics-qa-20261009t221849-3b5894-1',
-      reason: 'live-qa',
-      volumes: ['rezics-qa-20261009t221849-3b5894-1_postgres_data'],
-    },
   ]);
   expect(decision.unlabelled).toEqual([
     '86a580698b875574a16091b58508e29e8f6fff6de0b72e819d9294094da04efa',
@@ -169,10 +163,37 @@ test('fixture prune removes superseded generations and abandoned projects, and l
   expect(report).toContain(`remove ${supersededBackground} superseded directory`);
   expect(report).toContain('abandoned rezics-obs-verify-20260527');
   expect(report).toContain('keep-project rezics-dev dev');
-  expect(report).toContain('keep-project rezics-qa-20261009t221849-3b5894-1 live-qa');
+  expect(report).not.toContain('rezics-qa-20261009t221849-3b5894-1');
   expect(report).toContain(
     'unlabelled rezics-catalogue-g1038-20261003t230200-7615bd-1-1000_fuseki_data',
   );
+});
+
+test('a stopped QA project is neither kept nor abandoned', () => {
+  const project = 'rezics-qa-20261009t222612-8db5e4-f2-eg';
+  const volumes = ['postgres_data', 'fuseki_data', 'rustfs_data'].map((kind) => ({
+    name: `${project}_${kind}`,
+    project,
+  }));
+  const decision = decideFixturePrune({
+    generations: [],
+    volumes,
+    currentIds: [],
+    pins: [],
+    mountedVolumes: [],
+  });
+  expect(decision.keep).toEqual([]);
+  expect(decision.keepProjects).toEqual([]);
+  expect(decision.abandoned).toEqual([]);
+  expect(decision.removeGenerations).toEqual([]);
+  const report = formatPruneReport({
+    mode: 'dry-run',
+    currentIds: [],
+    pins: [],
+    decision,
+    failures: [],
+  });
+  expect(report).not.toContain(project);
 });
 
 test('a same-size build prune leaves other sizes, the generation just built, and abandoned projects', () => {
@@ -203,7 +224,6 @@ test('one generation can be current, pinned, retained and in use together', () =
     currentIds: [id],
     pins: [id],
     mountedVolumes: [volume(id).name],
-    liveQaProjects: [],
   });
   expect(decision.keep).toEqual([{ id, reasons: ['current', 'pinned', 'retained', 'in-use'] }]);
   expect(decision.removeGenerations).toEqual([]);
@@ -227,7 +247,6 @@ test('an overridden fixture root removes only generations whose manifest is in t
     currentIds: [],
     pins: [],
     mountedVolumes: [],
-    liveQaProjects: [],
   };
   const shared = decideFixturePrune(accountedPruneInventory(listed, false));
   expect(shared.removeGenerations.map((item) => item.id)).toEqual([
@@ -261,7 +280,6 @@ test('declared pins are the ids load and phase D restore, and a test literal is 
     currentIds: [],
     pins: [...PINNED_FIXTURE_IDS],
     mountedVolumes: [],
-    liveQaProjects: [],
   });
   expect(decision.keep).toEqual([{ id: PINNED_FIXTURE_IDS[0], reasons: ['pinned'] }]);
   expect(decision.removeGenerations.map((item) => item.id)).toEqual([recorded]);
