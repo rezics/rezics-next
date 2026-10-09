@@ -1,10 +1,10 @@
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 
-// The composition root starts servers and workers on import, so its wiring is
-// checked as source. Integration tests build their own dependencies and cannot
-// see a worker the root composes without an owner it needs.
-const root = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+// composeMain builds the worker graph. It is checked as source so the test does
+// not start that graph. Integration tests build their own dependencies and cannot
+// see a worker the composition includes without an owner it needs.
+const root = readFileSync(new URL('../src/composition.ts', import.meta.url), 'utf8');
 
 /** The dependency object literal passed as a constructor's first argument. */
 function dependencies(constructor: string): string {

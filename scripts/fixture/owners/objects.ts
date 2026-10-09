@@ -5,7 +5,7 @@ import { type FixtureWork, RecordDigest, corpusWorks, mainComponentState, sha256
   workComponentState } from '../corpus.ts';
 import type { FixtureOwner, LoadTarget } from './types.ts';
 
-/** Main's Work revision namespace in the semantic bucket (services/main/src/index.ts). */
+/** Main's Work revision namespace in the semantic bucket (services/main/src/composition.ts). */
 export const WORK_OBJECT_PREFIX = 'semantic/work/';
 /** RustFS 1.0.0 saturated near 1,450 PUT/s here at 64, 192 or no checksum alike. */
 const UPLOAD_CONCURRENCY = 64;

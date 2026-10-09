@@ -41,8 +41,14 @@ test('configured catalogue disclosure distinguishes public Works from hidden Wor
 });
 
 test('the production composition configures the baseline graph on the registry it serves', () => {
-  const root = readFileSync(new URL('../src/index.ts', import.meta.url), 'utf8');
+  const root = readFileSync(new URL('../src/composition.ts', import.meta.url), 'utf8');
+  const constructed = root.indexOf('const access = new AccessAdmissionRegistry(');
+  const configured = root.indexOf('access.configureBaseline(fuseki);');
+  const served = root.indexOf('createMainApp(fuseki,');
+  expect(constructed).toBeGreaterThanOrEqual(0);
   expect(root).toMatch(/const access = new AccessAdmissionRegistry\(/);
   expect(root).toMatch(/\baccess\.configureBaseline\(fuseki\);/);
-  expect(root.indexOf('access.configureBaseline(fuseki);')).toBeLessThan(root.indexOf('createMainApp(fuseki,'));
+  expect(configured).toBeGreaterThan(constructed);
+  expect(configured).toBeLessThan(served);
+  expect(root.slice(configured, served)).toContain('\n    access,');
 });
