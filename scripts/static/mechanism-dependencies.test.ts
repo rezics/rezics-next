@@ -178,13 +178,19 @@ test("the mechanism map's import surface is its entry-point files and named adap
       'services/main/src/modules/governance/schema.ts',
       'services/main/src/modules/governance/store.ts',
     ],
-    'language-parsing': ['services/main/src/modules/display-language/tag.ts'],
+    'language-parsing': [
+      'services/main/src/modules/display-language/select.ts',
+      'services/main/src/modules/display-language/tag.ts',
+    ],
     'access-authority': [
+      'services/main/src/modules/access/admission.ts',
       'services/main/src/modules/access/authority-read.ts',
+      'services/main/src/modules/access/exposure.ts',
       'services/main/src/modules/access/fixture-authority.ts',
       'services/main/src/modules/access/grants.ts',
       'services/main/src/modules/access/representations.ts',
       'services/main/src/modules/access/scope-gates.ts',
+      'services/main/src/modules/access/topology-control.ts',
     ],
   });
   const rules = assessMechanismDependencies(mechanisms, root).rules;

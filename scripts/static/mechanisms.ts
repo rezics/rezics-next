@@ -42,7 +42,7 @@ export const mechanisms = [
   {
     id: 'language-parsing',
     owner: 'services/main/src/modules/display-language',
-    entryPoints: ['tag.ts#parseLanguage', 'tag.ts#canonicalLanguage'],
+    entryPoints: ['tag.ts#parseLanguage', 'tag.ts#canonicalLanguage', 'select.ts#selectDisplayName'],
     ownedState: ['LanguageTag'],
     protectedEffects: ['parse language tag'],
     allowedAdapters: ['parseLanguage'],
@@ -59,6 +59,9 @@ export const mechanisms = [
       'grants.ts#AccessGrants',
       'representations.ts#AccessRepresentations',
       'scope-gates.ts#ensureBaselineScopeGate',
+      'admission.ts#AccessAdmissionRegistry',
+      'exposure.ts#AccessExposure',
+      'topology-control.ts#controlTransaction',
     ],
     ownedState: ['access.scope_gate', 'access.representation', 'access.permission_grant', 'access.policy'],
     protectedEffects: ['write scope gate', 'write representation', 'write permission grant', 'write access policy'],
