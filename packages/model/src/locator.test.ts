@@ -1,17 +1,16 @@
 import { expect, test } from 'bun:test';
 import * as fc from 'fast-check';
-import { checkDocument, documentVersion, parseDocument, type DocumentBlock, type DocumentSnapshot } from './document.ts';
 import { checkLocator, ContentCommentTargetSchema, locatorFromComment, locatorVersion,
-  parseLocator, resolveBlock, type Locator } from './locator.ts';
+  parseLocator, resolveBlock, type Locator, type ResolvableBlock, type ResolvableSnapshot } from './locator.ts';
 import { Value } from 'typebox/value';
 
 const digest = 'a'.repeat(64);
 const source = { type: 'hosted' as const, revision: 'revision-1', digest };
 const external = (mediaType: string) => ({ type: 'external' as const, representationSha256: digest, mediaType });
-const paragraph = (id: string, text = 'Identical paragraph'): DocumentBlock => ({
+const paragraph = (id: string, text = 'Identical paragraph'): ResolvableBlock => ({
   id, type: 'paragraph', content: [{ type: 'text', text, styles: {} }],
 });
-const snapshot = (blocks: DocumentBlock[]): DocumentSnapshot => ({ version: documentVersion, blocks });
+const snapshot = (blocks: ResolvableBlock[]): ResolvableSnapshot => ({ blocks });
 const blockLocator = (blockId: string): Locator => ({ version: locatorVersion, source,
   selector: { type: 'BlockSelector', blockId } });
 const seed = Number(process.env.REZICS_QA_SEED ?? '20260930');
@@ -144,10 +143,10 @@ test('G-510: splitting and merging return review candidates even when a survivin
 
 test('G-510: copies and origins from other pinned bytes cannot become the selected identity', () => {
   const pinned = snapshot([paragraph('target')]);
-  const copy: DocumentBlock = { ...paragraph('copied'), lineage: { kind: 'copy', origins: [{ id: 'target', digest }] } };
+  const copy: ResolvableBlock = { ...paragraph('copied'), lineage: { kind: 'copy', origins: [{ id: 'target', digest }] } };
   expect(resolveBlock(blockLocator('target'), pinned, snapshot([copy, ...pinned.blocks]))).toEqual({ status: 'unchanged', id: 'target' });
   expect(resolveBlock(blockLocator('target'), pinned, snapshot([copy]))).toEqual({ status: 'deleted', candidates: [] });
-  const otherEdition: DocumentBlock = { ...paragraph('split'), lineage: {
+  const otherEdition: ResolvableBlock = { ...paragraph('split'), lineage: {
     kind: 'split', origins: [{ id: 'target', digest: 'b'.repeat(64) }],
   } };
   expect(resolveBlock(blockLocator('target'), pinned, snapshot([otherEdition]))).toEqual({ status: 'deleted', candidates: [] });
@@ -164,7 +163,7 @@ test('G-510: child identity survives unrelated child insertion and reports paren
 
 test('G-510: table-cell selection uses a stable ID through inserted rows, edits and cell reorder', () => {
   const cell = (id: string, text = 'cell') => ({ id, type: 'tableCell', content: [{ type: 'text', text, styles: {} }] });
-  const table = (cells: ReturnType<typeof cell>[][]): DocumentBlock => ({ id: 'table', type: 'table',
+  const table = (cells: ReturnType<typeof cell>[][]): ResolvableBlock => ({ id: 'table', type: 'table',
     content: { type: 'tableContent', rows: cells.map(row => ({ cells: row })) } });
   const pinned = snapshot([table([[cell('left'), cell('target')]])]);
   const locator: Locator = { version: locatorVersion, source,
@@ -181,8 +180,8 @@ test('G-510: table-cell selection uses a stable ID through inserted rows, edits 
 });
 
 test('G-510: property order is immaterial to identity, while unknown payload edits are changes', () => {
-  const pinned = snapshot([{ id: 'future', type: 'future', props: { a: 1, b: 2 }, content: { raw: '字😀' } }]);
-  const reordered = snapshot([{ type: 'future', id: 'future', content: { raw: '字😀' }, props: { b: 2, a: 1 } }]);
+  const pinned = snapshot([{ id: 'future', type: 'future', props: { a: 1, b: 2 }, content: { raw: '字😀' } } as ResolvableBlock]);
+  const reordered = snapshot([{ type: 'future', id: 'future', content: { raw: '字😀' }, props: { b: 2, a: 1 } } as ResolvableBlock]);
   expect(resolveBlock(blockLocator('future'), pinned, reordered)).toEqual({ status: 'unchanged', id: 'future' });
   expect(resolveBlock(blockLocator('future'), pinned, snapshot([{ ...pinned.blocks[0]!, content: { raw: 'edited' } }]))).toEqual({ status: 'changed', candidates: ['future'] });
 });
@@ -210,7 +209,7 @@ test('G-510 property: random edit scripts preserve untouched IDs and every unkno
   const action = fc.record({ kind: fc.constantFrom('insert', 'move', 'edit', 'delete', 'split'),
     position: fc.nat(1000), destination: fc.nat(1000), text: fc.string() });
   fc.assert(fc.property(fc.jsonValue(), fc.array(action, { maxLength: 50 }), (unknown, actions) => {
-    const opaque: DocumentBlock = { id: 'opaque', type: 'future-widget', content: unknown, extension: { bytes: '  字😀\n  ' } };
+    const opaque = { id: 'opaque', type: 'future-widget', content: unknown, extension: { bytes: '  字😀\n  ' } } as ResolvableBlock;
     const pinned = snapshot([paragraph('target'), opaque, paragraph('initial')]);
     const unknownBytes = JSON.stringify(opaque);
     let blocks = [...pinned.blocks];
@@ -231,8 +230,7 @@ test('G-510 property: random edit scripts preserve untouched IDs and every unkno
           { ...paragraph(id, action.text), lineage: { kind: 'split', origins: [{ id: selected.id, digest }] } });
       }
       const later = snapshot(blocks);
-      expect(checkDocument(later)).toBe(true);
-      expect(JSON.stringify(parseDocument(later).blocks.find(block => block.id === 'opaque'))).toBe(unknownBytes);
+      expect(JSON.stringify(later.blocks.find(block => block.id === 'opaque'))).toBe(unknownBytes);
       for (const preserved of ['target', 'opaque']) {
         const result = resolveBlock(blockLocator(preserved), pinned, later);
         expect(['unchanged', 'moved']).toContain(result.status);
