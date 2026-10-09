@@ -10,6 +10,7 @@ import {
 import { assertWorkCost, profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import type { ResourceListQuery } from '../../../services/main/src/modules/query/resource-contract.ts';
 import { queryProfileProcess } from '../../../services/main/tests/g-1053-profile-process.ts';
+import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
 interface Page {
   items: { id: string; types: string[]; name: { value: string }; work?: unknown }[];
@@ -206,7 +207,9 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
     await author.grant(MANAGE_SCOPE, MANAGE_ACTION);
     await author.grant('classification:define:global', 'classification.proposition.define');
     await author.grant('classification:decide:global', 'classification.decision.set');
-    for (let index = definitions.length; index < 8; index++)
+    await author.grant('classification:decide:global', 'statement.decide');
+    const knownDefinitions = definitions.length;
+    for (let index = knownDefinitions; index < 8; index++)
       definitions.push(
         await command(
           '/v1/classification-vocabulary',
@@ -222,7 +225,25 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
           201,
         ),
       );
+    // A Concept name stays hidden until its spoiler hint is known. Discovery
+    // only indexes a classification whose Concept summary is available.
+    for (const term of definitions.slice(knownDefinitions))
+      await command(
+        `/v1/concepts/${term.concept.slice(-36)}/spoiler-hints`,
+        {
+          profile: 'concept-spoiler-hint-v1',
+          context: { kind: 'global' },
+          hint: 'not-spoiler',
+          expectedGeneration: '0',
+          actingSubject: author.actor,
+        },
+        201,
+      );
     await author.grant('work:create:catalogue-import', 'work.create');
+    // Catalogue import stays closed until this principal holds that platform use.
+    await grantRecordedPlatformUse(stack.accessPool, author.principalId, [
+      'catalogue-import', 'platform-admin',
+    ], author.actor);
     // Scale backgrounds use the same public bulk recipe as the diagnostic
     // cohort. No serial one-Work publication or nested stack/restore is needed.
     if (Bun.env.G1053_CATALOGUE_SCALE) {
@@ -288,29 +309,42 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
                 ? definitions.slice(0, 1)
                 : []
             ).map((row) => ({
-              sense: row.sense,
-              expectedSenseHead: row.definitionRevision,
+              concept: row.concept,
+              definition: row.definitionRevision,
               expectedDecisionHead: null,
-              outcome: 'accepted',
+              outcome: 'accepted' as const,
+              sense: row.sense,
             })),
           },
         };
       });
-      // Definition pins come from the owning vocabulary response/read, including
-      // the legacy fixture response whose local type omitted that field.
+      // Catalogue import pins the Concept and its definition revision.
+      // A retained vocabulary response can omit that revision; the sense head is the same pin.
       for (const item of items)
         for (const row of item.input.classifications)
-          if (!row.expectedSenseHead) {
+          if (!row.definition) {
             const head = await stack.fuseki
               .query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?head WHERE {
           GRAPH <urn:rezics:graph:current> { <${row.sense}> rv:head ?head } } LIMIT 2`);
-            row.expectedSenseHead = head.results!.bindings[0]!.head!.value;
+            row.definition = head.results!.bindings[0]!.head!.value;
           }
+      const importedItems = items.map((item) => ({
+        key: item.key,
+        input: {
+          ...item.input,
+          classifications: item.input.classifications.map((row) => ({
+            concept: row.concept,
+            definition: row.definition,
+            expectedDecisionHead: row.expectedDecisionHead,
+            outcome: row.outcome,
+          })),
+        },
+      }));
       const imported = await command<{
         items: { status: string; receipt: { work: string; mainVersion: string } }[];
       }>('/v1/work-imports/bulk', {
         actingSubject: author.actor,
-        items,
+        items: importedItems,
       });
       expect(imported.items.every((row) => row.status === 'succeeded')).toBe(true);
       works.push(...imported.items.map((row) => row.receipt));

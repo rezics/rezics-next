@@ -27,6 +27,9 @@ export const CATALOGUE_IMPORT_SCOPE = 'work:create:catalogue-import';
 export const CATALOGUE_IMPORT_COST = { items: 128, credits: 8, classifications: 8,
   requestBytes: 1024 * 1024, itemBytes: 16 * 1024, commandBytes: 16_000_000,
   stagedQuads: 16_384, deadlineMs: 30_000 } as const;
+/** One native transaction records at most 64 Work-name owners. A catalogue item
+ * creates one Work, so an API batch is committed in groups of this size. */
+const NAME_OWNER_COMMAND = 64;
 const closed = { additionalProperties: false } as const;
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$' });
 const text = (maxLength: number) => t.String({ minLength: 1, maxLength, pattern: '^[^\\u0000-\\u001f\\u007f]+$' });
@@ -308,8 +311,10 @@ export async function importCatalogueWorks(deps: MainWorkDependencies, request: 
   }
   if (prepared.length) await files?.flush();
   prepared.sort((left, right) => left.index - right.index);
-  if (prepared.length) {
-    try { await deps.environment.fuseki.catalogueBatch(prepared.map(row => row.envelope)); }
+  for (let start = 0; start < prepared.length; start += NAME_OWNER_COMMAND) {
+    try {
+      await deps.environment.fuseki.catalogueBatch(prepared.slice(start, start + NAME_OWNER_COMMAND).map(row => row.envelope));
+    }
     catch { /* The shared commit can succeed before its response is lost. Read each receipt. */ }
   }
   for (const row of prepared) {

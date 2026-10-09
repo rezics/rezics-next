@@ -22,8 +22,11 @@ export class ProfilesAccess {
     this.listing = new AgentListingStore(pool);
   }
 
-  /** `read` callbacks write nothing; see controlRead for their asynchronous commit. */
-  private async transaction<T>(operation: (client: PoolClient) => Promise<T>, read = false): Promise<T> {
+  /** `read` callbacks write nothing; see controlRead for their asynchronous commit.
+   * `fenceInOperation` means the callback's own statement share-locks the recovery
+   * fence and refuses a closed fence, so this wrapper does not issue a second probe. */
+  private async transaction<T>(operation: (client: PoolClient) => Promise<T>, read = false,
+    fenceInOperation = false): Promise<T> {
     const signal = fusekiReadBudget.getStore()?.signal ?? AbortSignal.timeout(10_000);
     signal.throwIfAborted();
     const client = await new Promise<PoolClient>((resolve, reject) => {
@@ -44,8 +47,10 @@ export class ProfilesAccess {
       await client.query(read ? 'BEGIN; SET LOCAL synchronous_commit = off' : 'BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
-      const fence = await client.query<{ open: boolean }>('SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-      if (!fence.rows[0]?.open) throw new WorkReadUnavailable('Access recovery hold');
+      if (!fenceInOperation) {
+        const fence = await client.query<{ open: boolean }>('SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
+        if (!fence.rows[0]?.open) throw new WorkReadUnavailable('Access recovery hold');
+      }
       const result = await operation(client);
       await client.query('COMMIT');
       signal.throwIfAborted();
@@ -63,15 +68,26 @@ export class ProfilesAccess {
     return (await this.agentFences([agent])).get(agent) ?? null;
   }
 
-  /** One indexed probe for a page of Agents; an inactive Agent is absent. */
+  /** One indexed probe for a page of Agents; an inactive Agent is absent.
+   * The same statement share-locks the recovery fence. A second fence probe
+   * would bill every Agent card read twice. */
   async agentFences(agents: readonly string[]): Promise<Map<string, string>> {
     if (!agents.length) return new Map();
     return this.transaction(async client => {
-      const rows = await client.query<{ id: string; generation: string; recovery: string }>(`SELECT s.id,
-        s.generation, f.generation AS recovery FROM access.authority_subject s CROSS JOIN access.recovery_fence f
-        WHERE s.id = ANY($1::text[]) AND s.kind = 'agent' AND s.active AND f.id = true`, [agents]);
-      return new Map(rows.rows.map(row => [row.id, `${row.recovery}:${row.generation}`]));
-    }, true);
+      const rows = await client.query<{ id: string | null; generation: string | null; recovery: string | null; open: boolean | null }>(`
+        SELECT s.id, s.generation, f.generation AS recovery, f.open
+        FROM access.recovery_fence f
+        CROSS JOIN unnest($1::text[]) AS wanted(id)
+        LEFT JOIN access.authority_subject s
+          ON s.id = wanted.id AND s.kind = 'agent' AND s.active
+        WHERE f.id = true
+        FOR SHARE OF f`, [agents]);
+      if (!rows.rows.length || rows.rows.some((row) => row.open !== true || !row.recovery)) {
+        throw new WorkReadUnavailable('Access recovery hold');
+      }
+      return new Map(rows.rows.flatMap((row) => row.id && row.generation
+        ? [[row.id, `${row.recovery}:${row.generation}`] as const] : []));
+    }, true, true);
   }
 
   async libraryFence(principal: VerifiedPrincipal, agent: string,
