@@ -449,11 +449,13 @@ describe('Official Zone packages', () => {
   test('every installed official vertical ships its own package', () => {
     expect([...officialSlugs].sort()).toEqual([
       'ai-workshop',
+      'anime',
       'books',
       'fiction',
       'franchise-wiki',
       'games',
       'light-novels',
+      'manga',
       'mods',
       'software',
       'visual-novels',
