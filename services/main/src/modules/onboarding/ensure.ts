@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { AccountAssertionUnavailable } from '../account/verify-assertion.ts';
-import { ActingContextStale } from '../access/contexts.ts';
+import { ActingContextStale } from '../access/composition.ts';
 
 export interface PersonOnboardingResult {
   profile: 'person-onboarding-v1';

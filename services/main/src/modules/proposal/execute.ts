@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { OrgRosterPolicyInput,
-  AccessManagedOrganizations } from '../access/managed-organizations.ts';
+  AccessManagedOrganizations } from '../access/composition.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { AccessProposalExecutions, type ProposalExecutionBasis } from './access.ts';
 import { ProposalDenied, ProposalPending, ProposalStale, readProposalGraphBasis,

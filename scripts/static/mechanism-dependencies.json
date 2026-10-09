@@ -160,16 +160,8 @@
     "imported": "services/main/src/modules/governance/notices-mail.ts"
   },
   {
-    "importer": "services/main/src/modules/onboarding/ensure.ts",
-    "imported": "services/main/src/modules/access/contexts.ts"
-  },
-  {
     "importer": "services/main/src/modules/proposal/access.ts",
     "imported": "services/main/src/modules/access/authority-witness.ts"
-  },
-  {
-    "importer": "services/main/src/modules/proposal/execute.ts",
-    "imported": "services/main/src/modules/access/managed-organizations.ts"
   },
   {
     "importer": "services/main/src/modules/protection/reconcile-restored.ts",
