@@ -1,8 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { devPorts } from '../dev/config.ts';
+import { allocatePortSet } from '../lib/ports.ts';
 import { createCommandOutputRedactor, redactCommandOutput } from './command-output.ts';
 import { loadDockerEnvironment } from '../load/docker-env.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
@@ -87,29 +87,10 @@ export function composeArgs(project: string, envFile: string, command: string[])
   return ['compose', '--env-file', envFile, '-f', composeFile, '--project-name', project, ...command];
 }
 
-async function availablePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('Could not allocate port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 /** Fresh loopback ports for every Compose port variable; endpoints are run-local. */
 export async function freshPorts(): Promise<Record<string, string>> {
-  const selected = new Set<number>();
-  const ports: Record<string, string> = {};
-  for (const name of Object.keys(devPorts())) {
-    let port: number;
-    do { port = await availablePort(); } while (selected.has(port));
-    selected.add(port);
-    ports[name] = String(port);
-  }
-  return ports;
+  const allocated = await allocatePortSet(Object.keys(devPorts()));
+  return Object.fromEntries(Object.entries(allocated).map(([name, port]) => [name, String(port)]));
 }
 
 function pinnedImage(service: string, pattern: RegExp): string {

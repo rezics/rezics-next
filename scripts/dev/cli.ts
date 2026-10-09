@@ -3,7 +3,6 @@ import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 
 import { randomUUID } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
-import { createServer } from 'node:net';
 import { Client, Pool } from 'pg';
 import { ensureStatementSeekCurrent } from '../../services/main/src/modules/statement/upgrade.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
@@ -18,6 +17,7 @@ import { fusekiImageFromCompose } from '../load/image.ts';
 import { devResetPlan, devResetTarget } from './reset.ts';
 import { ensureBackend, activeBackend, storageBackend, readPendingRefresh } from './refresh.ts';
 import { expectedRefreshEnvironment, prepareRefreshStorage, refreshSharedStack } from './refresh-stack.ts';
+import { allocatePortSet } from '../lib/ports.ts';
 import { devStackStopArgs, rememberDevStack, stopDevSession } from './stack-session.ts';
 import { forgetQaStack, rememberQaStack, qaStartupServices, QA_STACK_TIER } from '../qa/stack-ownership.ts';
 import { assertOwnerMigrationsComplete, migrateFixtureOwners, migrateOwnerData } from '../fixture/migrate.ts';
@@ -213,33 +213,14 @@ async function stackBackup(options: StackOptions): Promise<void> {
   }
 }
 
-async function availablePort(): Promise<number> {
-  return new Promise((res, rej) => {
-    const server = createServer();
-    server.once('error', rej);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return rej(new Error('Could not allocate port'));
-      server.close(() => res(address.port));
-    });
-  });
-}
-
 async function stackConfig(options: StackOptions): Promise<{ composeEnv: Record<string, string>; apps: Record<string, string>; dir: string }> {
   const dir = stackDirectory(root, options);
   const portNames = Object.keys(devPorts());
-  const ports: Record<string, number> = options.profile === 'dev' ? devPorts() : {};
   const saved = existsSync(join(dir, 'compose.env')) ? readEnv(join(dir, 'compose.env')) : undefined;
   // A worktree backend also serves the Accounts app on a port of its own.
   const needed = options.profile === 'qa' ? [...saved ? [] : portNames,
     ...hostsAccountsApp(options) && !saved?.ACCOUNTS_PORT ? ['ACCOUNTS_PORT'] : []] : [];
-  const selected = new Set<number>();
-  for (const name of needed) {
-    let port: number;
-    do { port = await availablePort(); } while (selected.has(port));
-    selected.add(port);
-    ports[name] = port;
-  }
+  const ports = options.profile === 'dev' ? devPorts() : await allocatePortSet(needed);
   const composeEnv = ensureSecrets(root, options, ports);
   // apps.env is derived from compose.env; regenerate it when an older layout
   // lacks variables that newer services require.

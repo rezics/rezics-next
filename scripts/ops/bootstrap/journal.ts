@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { replayCommand } from '../../lib/command-journal.ts';
 import type { BootstrapApi } from './api.ts';
 
 export const digest = (value: unknown) =>
@@ -27,32 +28,14 @@ export class BootstrapJournal {
     readonly state: Journal,
     private readonly save: (state: Journal) => Promise<void>,
   ) {}
-  async command<T>(
-    api: BootstrapApi,
-    key: string,
-    method: 'POST' | 'PUT',
-    path: string,
-    body: unknown,
-    intent: unknown = body,
-  ): Promise<T> {
-    const intentDigest = digest(intent);
-    let entry = this.state.entries[key];
-    if (
-      entry &&
-      (entry.method !== method || entry.path !== path || entry.intent !== intentDigest)
-    ) {
-      throw new Error(`Bootstrap command ${key} changed its intent`);
-    }
-    if (entry?.response !== undefined) return entry.response as T;
-    if (!entry) {
-      entry = { method, path, body: structuredClone(body), intent: intentDigest };
-      this.state.entries[key] = entry;
-      await this.save(this.state);
-    }
-    const response = await api.write<T>(method, path, entry.body, key);
-    entry.response = response;
-    await this.save(this.state);
-    return response;
+  async command<T>(api: BootstrapApi, key: string, method: 'POST' | 'PUT', path: string,
+    body: unknown, intent: unknown = body): Promise<T> {
+    return replayCommand<JournalEntry, T>({
+      read: () => this.state.entries[key],
+      write: async entry => { this.state.entries[key] = entry; await this.save(this.state); },
+    }, { method, path, body, intent: digest(intent), outcome: 'response',
+      changed: `Bootstrap command ${key} changed its intent` },
+    entry => api.write<T>(entry.method, entry.path, entry.body, key));
   }
 }
 

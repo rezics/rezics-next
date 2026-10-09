@@ -6,6 +6,7 @@ import {
   type DatasetApi,
   type DatasetSession,
 } from './auth.ts';
+import { replayCommand } from '../lib/command-journal.ts';
 import { atomicJson, canonical, sha256 } from './store.ts';
 import { checkedComponentState } from '../../services/main/src/modules/semantic/change.ts';
 import { acquireDatasetImportLock } from './lock.ts';
@@ -502,34 +503,17 @@ export async function importDataset(
         save();
       }
     };
-    const command = async (
-      label: string,
-      method: 'GET' | 'POST' | 'PUT',
-      path: string,
-      body?: unknown,
-      itemKeys?: string[],
-    ): Promise<Record<string, unknown>> => {
+    const command = (label: string, method: 'GET' | 'POST' | 'PUT', path: string,
+      body?: unknown, itemKeys?: string[]): Promise<Record<string, unknown>> => {
       const key = `dataset:${sha256(`${context}:${label}`)}`;
-      let entry = journal.entries[label];
-      if (entry && (entry.method !== method || entry.path !== path))
-        throw new Error(`Dataset request changed: ${label}`);
-      // The first persisted request binds all allocated child IDs and catalogue
-      // search receipts before dispatch. Never regenerate them after a lost response.
-      if (!entry) {
-        entry = { method, path, body: body ?? null, ...(itemKeys ? { itemKeys } : {}) };
-        journal.entries[label] = entry;
-        saveEntry(label, entry);
-      }
-      if (entry.result) return entry.result;
-      entry.result = await request(
-        api,
-        method,
-        path,
-        entry.body ?? undefined,
-        method === 'GET' ? undefined : key,
-      );
-      saveEntry(label, entry);
-      return entry.result;
+      // The first persisted request binds child IDs and search receipts before dispatch.
+      return replayCommand<JournalEntry, Record<string, unknown>>({
+        read: () => journal.entries[label],
+        write: entry => { journal.entries[label] = entry; saveEntry(label, entry); },
+      }, { method, path, body: body ?? null, outcome: 'result', changed: `Dataset request changed: ${label}`,
+        ...(itemKeys ? { fields: { itemKeys } } : {}) },
+      entry => request(api, entry.method, entry.path, entry.body ?? undefined,
+        entry.method === 'GET' ? undefined : key));
     };
     const retained = async (label: string, record: DatasetRecord, value: unknown) => {
       const parts = intakeChunks(value),

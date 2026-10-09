@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseOptions, projectName, type StackOptions } from '../dev/config.ts';
+import { recordedStackArgs } from '../dev/stack-session.ts';
 
 export const QA_STACK_REGISTRY = 'REZICS_QA_STACK_REGISTRY';
 export const QA_STACK_TIER = 'REZICS_QA_STACK_TIER';
@@ -18,9 +19,8 @@ export function rememberQaStack(options: StackOptions, directory = process.env[Q
   if (options.profile !== 'qa') throw new Error('A QA child may only start QA stacks');
   const project = projectName(options);
   mkdirSync(directory, { recursive: true });
-  writeFileSync(join(directory, `${project}.json`), JSON.stringify(['--profile', 'qa',
-    '--run-id', options.runId!, ...(options.persistent ? ['--persistent'] : []),
-    ...(options.rawUpdate ? ['--raw-update'] : [])]), { mode: 0o600 });
+  writeFileSync(join(directory, `${project}.json`), JSON.stringify(recordedStackArgs(options)),
+    { mode: 0o600 });
 }
 
 export function forgetQaStack(options: StackOptions, directory = process.env[QA_STACK_REGISTRY]): void {

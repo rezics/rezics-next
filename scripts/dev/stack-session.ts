@@ -2,6 +2,11 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { dirname, join } from 'node:path';
 import { parseOptions, projectName, type StackOptions } from './config.ts';
 
+export function recordedStackArgs(options: StackOptions): string[] {
+  return ['--profile', 'qa', '--run-id', options.runId!,
+    ...(options.persistent ? ['--persistent'] : []), ...(options.rawUpdate ? ['--raw-update'] : [])];
+}
+
 const sessionFile = (root: string) => join(root, '.temp', 'dev-stacks.json');
 
 /** Remember each isolated backend this checkout started, including custom run IDs.
@@ -22,8 +27,8 @@ function save(root: string, stacks: StackOptions[]): void {
   const path = sessionFile(root);
   if (!stacks.length) { rmSync(path, { force: true }); return; }
   mkdirSync(dirname(path), { recursive: true });
-  const args = stacks.map(options => ['--profile', 'qa', '--run-id', options.runId!,
-    ...(options.persistent ? ['--persistent'] : []), ...(options.rawUpdate ? ['--raw-update'] : []),
+  // The Accounts app flag is dev-only; QA records use recordedStackArgs alone.
+  const args = stacks.map(options => [...recordedStackArgs(options),
     ...(options.accountsApp ? ['--accounts-app'] : [])]);
   writeFileSync(`${path}.tmp`, JSON.stringify(args), { mode: 0o600 });
   renameSync(`${path}.tmp`, path);
