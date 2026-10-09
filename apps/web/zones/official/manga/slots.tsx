@@ -31,6 +31,13 @@ function yearsText(years: readonly number[], locale: string, missing: string): s
   return new Intl.ListFormat(locale, { style: 'short', type: 'conjunction' }).format(years.map(String));
 }
 
+/** The property's reviewed name when the page language has one; otherwise the package's word. */
+function countFactLabel(facts: ZoneCatalogueFacts, fallback: string): ReactNode {
+  const name = facts.countName;
+  if (!name) return fallback;
+  return <bdi lang={name.lang || undefined} dir={name.dir}>{name.value}</bdi>;
+}
+
 /** Format, year, declared volume count and status. Unavailable replaces the line; it does not guess. */
 export function MangaFacts({ locale, work, facts, labelled }: {
   locale: string; work: Pick<ZoneWork, 'status'>; facts: ZoneCatalogueFacts | undefined; labelled: boolean;
@@ -38,13 +45,13 @@ export function MangaFacts({ locale, work, facts, labelled }: {
   const t = strings(locale);
   if (!facts || facts.unavailable) return <p data-catalogue-unavailable="">{t.unavailable}</p>;
   const count = facts.count === null ? t.countMissing : t.volumes(new Intl.NumberFormat(locale).format(facts.count));
-  const rows: { key: string; label: string; value: ReactNode; recorded: boolean }[] = [
+  const rows: { key: string; label: ReactNode; value: ReactNode; recorded: boolean }[] = [
     { key: 'format', label: t.formatLabel, recorded: facts.format !== null, value: facts.format
       ? <bdi lang={facts.format.lang || undefined} dir={facts.format.dir}>{facts.format.value}</bdi>
       : t.formatMissing },
     { key: 'year', label: t.yearFactLabel, recorded: facts.years.length > 0,
       value: yearsText(facts.years, locale, t.yearMissing) },
-    { key: 'count', label: t.countLabel, recorded: facts.count !== null, value: count },
+    { key: 'count', label: countFactLabel(facts, t.countLabel), recorded: facts.count !== null, value: count },
     { key: 'status', label: t.statusLabel, recorded: work.status !== null, value: statusWord(work.status, t) },
   ];
   // The work page names every gap. A card shows only what was recorded.

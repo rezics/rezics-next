@@ -82,3 +82,23 @@ test('a manga work page still names each fact that was not recorded', () => {
   expect(html).toContain('Volume count not recorded');
   expect(html).toContain('Status not recorded');
 });
+
+test('a reviewed property name labels the count, and the counted phrase stays the package\'s', () => {
+  const anime = draw(createElement(AnimeCataloguePanel, {
+    zone: catalogueZone('anime', 'en'), Link, fallback: null, credits: null,
+    work: catalogueWork('long', 'Long', 'en', 'completed'),
+    facts: catalogueFacts('TV', [1980], 1155, false, { value: 'Instalments', lang: 'en', dir: 'ltr' }),
+  }));
+  expect(anime).toContain('lang="en" dir="ltr">Instalments');
+  expect(anime).toContain('1,155 episodes');
+  expect(anime).not.toContain('>Episodes<');
+
+  const manga = draw(createElement(MangaCataloguePanel, {
+    zone: catalogueZone('manga', 'en'), Link, fallback: null, credits: null,
+    work: catalogueWork('long', 'Long', 'en', 'completed'),
+    facts: catalogueFacts('Manga', [1995], 21, false, { value: 'Bande', lang: 'de', dir: 'ltr' }),
+  }));
+  expect(manga).toContain('lang="de" dir="ltr">Bande');
+  expect(manga).toContain('21 volumes');
+  expect(manga).not.toContain('>Volumes<');
+});

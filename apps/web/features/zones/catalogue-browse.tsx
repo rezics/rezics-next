@@ -128,6 +128,7 @@ export async function CatalogueBrowse({ view, search }: {
   const header = Header ? <Header zone={view.zone} filter={null} filtered={false} fallback={null} Link={Link}
     year={yearControl} /> : null;
 
+  const publicationYears = new Map<string, number[]>();
   if (listing) {
     const roster = await members(view, { ...state, cursor: null });
     if (roster.failure) {
@@ -143,7 +144,10 @@ export async function CatalogueBrowse({ view, search }: {
       }
       for (const row of listed.data.items) {
         const work = roster.works.get(row.id);
-        if (work && !found.some(item => item.id === work.id)) found.push(work);
+        if (!work) continue;
+        const prior = publicationYears.get(work.id) ?? [];
+        if (!prior.includes(row.year)) publicationYears.set(work.id, [...prior, row.year].sort((left, right) => right - left));
+        if (!found.some(item => item.id === work.id)) found.push(work);
       }
       if (!listed.data.nextCursor) { cursor = undefined; break; }
       cursor = listed.data.nextCursor;
@@ -164,6 +168,11 @@ export async function CatalogueBrowse({ view, search }: {
     model.results = bounded ? t.resultsAtLeast({ count: String(found.length) }) : t.results(found.length);
   }
 
-  const card = cardRenderer(view.zone, view.pkg, locale, view.zoneMessages, view.reader.avatarQuery);
+  const baseCard = cardRenderer(view.zone, view.pkg, locale, view.zoneMessages, view.reader.avatarQuery);
+  const card = (work: ZoneWork, options?: Parameters<typeof baseCard>[1]) => baseCard(work, {
+    ...options,
+    // Every Work on a single-year page was listed for that year. The map holds any other years too.
+    publicationYears: publicationYears.get(work.id) ?? (year !== null ? [year] : undefined),
+  });
   return <>{header}<ZoneBrowse model={model} messages={view.zoneMessages} card={card} /></>;
 }

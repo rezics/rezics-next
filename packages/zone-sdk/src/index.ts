@@ -124,6 +124,11 @@ export interface ZoneCatalogueFacts {
   years: number[];
   /** The declared count for this Zone's kind. Never a chapter count. */
   count: number | null;
+  /**
+   * Reviewed name of that count in the page language. Null when the property has no
+   * reviewed presentation in that language; the package then uses its own word.
+   */
+  countName: ZoneText | null;
   unavailable: boolean;
 }
 
@@ -295,6 +300,11 @@ export interface ZoneCardOptions {
   matches?: ZoneReleaseMatches;
   /** Catalogue facts the platform read for this card, when the Zone asks for them. */
   facts?: ZoneCatalogueFacts;
+  /**
+   * Years the publication-year template already returned for this Work.
+   * A card uses them when the statement page did not include that date.
+   */
+  publicationYears?: readonly number[];
 }
 
 export interface WorkCardSlotProps extends ZoneSlotProps {

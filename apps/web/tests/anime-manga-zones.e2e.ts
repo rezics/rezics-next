@@ -1,8 +1,12 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, type Page, test } from '@playwright/test';
+import { expect as baseExpect, type Page, test } from '@playwright/test';
 import { spaceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
+
+// The year view and the Work page render catalogue reads on the server. A quiet stack
+// answers inside a few seconds; a busy one needs the same budget as the click.
+const expect = baseExpect.configure({ timeout: 30_000 });
 
 // A reader filters each Zone by format and publication year, opens the long series, and reads the fact panel.
 // anime-manga-zones.prepare.ts writes the Zones into this stack before Playwright starts.
@@ -49,11 +53,11 @@ const copy = {
 test.use({ reducedMotion: 'reduce', actionTimeout: 30_000 });
 
 async function chooseFormat(page: Page, filters: string, name: RegExp) {
-  // The same word is the screen-reader heading and the phone disclosure. Only the summary opens the drawer.
-  // Facets stream in after the shell, so wait until the disclosure or a visible chip is on screen.
-  const summary = page.locator('summary', { hasText: filters });
+  // The phone drawer and the desktop chip are both in the tree. Only a shown control counts:
+  // an `or` of a hidden summary and a visible chip is two matches, and the expectation fails closed.
+  const summary = page.locator('summary', { hasText: filters }).filter({ visible: true });
   const link = page.getByRole('link', { name }).filter({ visible: true });
-  await expect(summary.or(link.first())).toBeVisible();
+  await expect(summary.or(link).first()).toBeVisible();
   if (await summary.isVisible()) await summary.click();
   await link.first().click();
 }
@@ -84,6 +88,7 @@ for (const locale of locales) {
       const anime = page.getByRole('link', { name: data.anime.title }).first();
       await expect(anime).toBeVisible();
       await expect(page.getByText(words.episodes).first()).toBeVisible();
+      await anime.scrollIntoViewIfNeeded();
       await shot('anime-year');
       await anime.click();
       const animePanel = page.locator('[data-catalogue-panel]');
@@ -93,6 +98,7 @@ for (const locale of locales) {
       await expect(animePanel).toContainText(words.episodes);
       await expect(animePanel).toContainText(words.completed);
       await expect(animePanel).not.toContainText(/chapter/i);
+      await animePanel.scrollIntoViewIfNeeded();
       await shot('anime-panel');
 
       await page.goto(localizedPath(spaceHref(data.manga.handle, 'site', ['browse']), locale));
@@ -101,6 +107,7 @@ for (const locale of locales) {
       const manga = page.getByRole('link', { name: data.manga.title }).first();
       await expect(manga).toBeVisible();
       await expect(page.getByText(words.volumes).first()).toBeVisible();
+      await manga.scrollIntoViewIfNeeded();
       await shot('manga-year');
       await manga.click();
       const mangaPanel = page.locator('[data-catalogue-panel]');
@@ -110,6 +117,7 @@ for (const locale of locales) {
       await expect(mangaPanel).toContainText(words.volumes);
       await expect(mangaPanel).toContainText(words.completed);
       await expect(mangaPanel.getByText(/\d+ episodes/)).toHaveCount(0);
+      await mangaPanel.scrollIntoViewIfNeeded();
       await shot('manga-panel');
     });
   }

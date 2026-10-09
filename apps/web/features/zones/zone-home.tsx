@@ -52,8 +52,10 @@ async function CatalogueSlotCard({ zone, work, options, locale, count, formatNam
   Slot: ComponentType<WorkCardSlotProps>; fallback: ReactNode;
 }) {
   // Loaded only when a card still needs the read. Stories pass facts and never pull the server reader.
-  const facts = options.facts ?? await (await import('./catalogue-facts.ts'))
-    .readCatalogueFacts(work.id, locale, count, formatNames);
+  // The year listing already holds the template's year. Use it when the statement page omitted the date.
+  const { catalogueYears, readCatalogueFacts } = await import('./catalogue-facts.ts');
+  const read = options.facts ?? await readCatalogueFacts(work.id, locale, count, formatNames);
+  const facts = read.unavailable ? read : { ...read, years: catalogueYears(read.years, options.publicationYears) };
   return <Slot zone={zone} work={work} layout={options.layout ?? 'cover'} rank={options.rank} matches={options.matches}
     facts={facts} nextVolume={<NextVolume work={work.id} locale={locale} />} fallback={fallback} Link={LocalizedLink} />;
 }

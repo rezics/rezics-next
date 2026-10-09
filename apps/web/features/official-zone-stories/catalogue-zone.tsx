@@ -44,8 +44,8 @@ export function catalogueWork(name: string, title: string, lang: string, status:
 }
 
 export function catalogueFacts(format: string | null, years: number[], count: number | null,
-  unavailable = false): ZoneCatalogueFacts {
-  return { format: format === null ? null : text(format, 'en'), years, count, unavailable };
+  unavailable = false, countName: ZoneText | null = null): ZoneCatalogueFacts {
+  return { format: format === null ? null : text(format, 'en'), years, count, countName, unavailable };
 }
 
 /** The Zone frame. Children receive the Zone and a card renderer that already has its facts. */

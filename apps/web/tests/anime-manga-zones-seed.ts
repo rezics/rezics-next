@@ -25,6 +25,7 @@ import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-br
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { platformAdministratorSession } from '../../../tests/qa/fixtures/platform-grant.ts';
 import { startMediaStack } from '../../../tests/qa/integration/media-support.ts';
+import { catalogueCountProperty } from '../features/zones/catalogue-count.ts';
 import { openActorPlatformGroup } from './g-838-catalogue.ts';
 
 const QUERY = 'https://rezics.com/query/work-publication-years';
@@ -297,10 +298,12 @@ async function waitForCatalogueRead(origin: string, work: string, lexical: strin
     const definitionText = await definition.text();
     detail = `statements ${statements.status} ${statementText.slice(0, 180)}; classifications ${classes.status}; ${notation} ${definition.status} ${definitionText.slice(0, 120)}`;
     if (statements.status === 200 && statementText.includes(`"${lexical}"`) && classes.status === 200) {
-      // The lexicon key route only returns relation definitions, and anonymous disclosure only
-      // publishes those. Declared counts are properties, so this GET stays 404. Waiting cannot fix it.
-      if (definition.status === 200) return;
-      throw new Error(`Catalogue count ${notation} is not publicly readable: ${detail}`);
+      // A count is a public property. The key returns kind and the subject → value rendering.
+      // A missing or closed property stays 404; waiting does not make it public.
+      const body = definition.status === 200 ? parsed(definitionText) : null;
+      const property = catalogueCountProperty(body && typeof body === 'object' ? body : null, 'en');
+      if (property) return;
+      throw new Error(`Catalogue count ${notation} is not a public property: ${detail}`);
     }
     await new Promise(done => setTimeout(done, 1000));
   }

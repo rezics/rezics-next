@@ -4,10 +4,13 @@ import { readEntityProjection, readStatements, sectionOf } from '../entity-page/
 import type { StatementItem, StatementPage } from '../entity-page/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { reader, readClassifications, settle } from '../work-page/read.ts';
+import { idOf } from '../work-page/route.ts';
 import type { Loaded } from '../work-page/types.ts';
+import { catalogueCountProperty, type CatalogueCountProperty } from './catalogue-count.ts';
 
 // Facts a catalogue card and the leading panel state. Every value is a Statement or a classification
-// the Work page already reads, or a year the publication-year template returned. Nothing is inferred
+// the Work page already reads, or a year the publication-year template returned. A count's predicate
+// is the public property of that name; its reviewed presentation names it. Nothing is inferred
 // from a title, a season or a chapter count.
 
 const DATE_PUBLISHED = 'https://schema.org/datePublished';
@@ -16,7 +19,7 @@ const INTEGER = `${XSD}integer`;
 const DATE = /^(\d{4,})-(\d{2})-(\d{2})(Z|[+-]\d{2}:\d{2})?$/;
 const DATE_TIME = /^(\d{4,})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
 
-const empty = (): ZoneCatalogueFacts => ({ format: null, years: [], count: null, unavailable: false });
+const empty = (): ZoneCatalogueFacts => ({ format: null, years: [], count: null, countName: null, unavailable: false });
 
 function daysInMonth(year: number, month: number): number {
   const date = new Date(0);
@@ -60,11 +63,23 @@ export function cataloguePublicationYear(datatype: string, lexical: string): num
   return year;
 }
 
+/** The form a literal was recorded in. A date the API client parsed is written back as that form. */
+function recordedLexical(lexical: unknown, datatype: string): string | null {
+  if (typeof lexical === 'string') return lexical;
+  if (!(lexical instanceof Date) || Number.isNaN(lexical.getTime())) return null;
+  const iso = lexical.toISOString();
+  const kind = datatype.startsWith(XSD) ? datatype.slice(XSD.length) : datatype;
+  if (kind === 'gYear') return iso.slice(0, 4);
+  if (kind === 'date' || kind === 'gYearMonth') return iso.slice(0, kind === 'gYearMonth' ? 7 : 10);
+  return iso.replace(/\.\d+(?=Z$)/, '');
+}
+
 function literalOf(item: StatementItem): { lexical: string; datatype: string } | null {
   if (!('kind' in item) || item.kind !== 'statement') return null;
   const value = item.value;
-  if (!value || value.kind !== 'literal' || typeof value.lexical !== 'string' || typeof value.datatype !== 'string') return null;
-  return { lexical: value.lexical, datatype: value.datatype };
+  if (!value || value.kind !== 'literal' || typeof value.datatype !== 'string') return null;
+  const lexical = recordedLexical(value.lexical, value.datatype);
+  return lexical === null ? null : { lexical, datatype: value.datatype };
 }
 
 async function statementPages(id: string): Promise<Loaded<StatementPage[]>> {
@@ -112,13 +127,15 @@ function yearsFrom(pages: readonly StatementPage[]): number[] {
   return [...years].sort((left, right) => right - left);
 }
 
-async function countPredicate(notation: 'episode-count' | 'volume-count'): Promise<Loaded<string | null>> {
+async function countPredicate(notation: 'episode-count' | 'volume-count',
+  locale: UiLocale): Promise<Loaded<CatalogueCountProperty | null>> {
   const { main, actingSubject } = await reader();
   const read = await settle(() => main.v1.lexicon.definitions({ key: notation }).get({
-    query: { ...(actingSubject ? { actingSubject } : {}) },
+    query: { languages: locale, ...(actingSubject ? { actingSubject } : {}) },
   }));
   if (!read.ok) return read.failure === 'missing' ? { ok: true, data: null } : read;
-  return { ok: true, data: read.data.definition };
+  // Kind and the subject → value rendering decide that this key is a count. The predicate is that property.
+  return { ok: true, data: catalogueCountProperty(read.data, locale) };
 }
 
 /**
@@ -127,11 +144,13 @@ async function countPredicate(notation: 'episode-count' | 'volume-count'): Promi
  */
 export async function readCatalogueFacts(id: string, locale: UiLocale, count: 'episodes' | 'volumes',
   formatNames: readonly string[]): Promise<ZoneCatalogueFacts> {
+  // A browse card names the Work by its IRI. Statement and classification paths take the UUID.
+  const resource = idOf(id) ?? id;
   const names = new Set(formatNames);
   const [classifications, pages, predicate] = await Promise.all([
-    readClassifications(id, locale, { kind: 'global' }),
-    statementPages(id),
-    countPredicate(count === 'episodes' ? 'episode-count' : 'volume-count'),
+    readClassifications(resource, locale, { kind: 'global' }),
+    statementPages(resource),
+    countPredicate(count === 'episodes' ? 'episode-count' : 'volume-count', locale),
   ]);
   if (!classifications.ok || !pages.ok || !predicate.ok) return { ...empty(), unavailable: true };
   const matched = classifications.data.items.find(item => names.has(item.name.value));
@@ -141,7 +160,8 @@ export async function readCatalogueFacts(id: string, locale: UiLocale, count: 'e
   return {
     format,
     years: yearsFrom(pages.data),
-    count: predicate.data ? countFrom(pages.data, predicate.data) : null,
+    count: predicate.data ? countFrom(pages.data, predicate.data.predicate) : null,
+    countName: predicate.data?.name ?? null,
     unavailable: false,
   };
 }
@@ -163,13 +183,46 @@ export async function readPublicationYears(parameters: { fromYear?: number; toYe
     return { error: result.error, data };
   }, cursor);
   if (!answer.ok) return answer;
-  const items = answer.data.items.flatMap(item => {
+  const rows = Array.isArray(answer.data.items) ? answer.data.items : [];
+  const items = rows.flatMap(item => {
     if (!item || typeof item !== 'object') return [];
     const row = item as { id?: unknown; year?: unknown; statement?: unknown };
     return typeof row.id === 'string' && typeof row.year === 'number' && typeof row.statement === 'string'
       ? [{ id: row.id, year: row.year, statement: row.statement }] : [];
   });
   return { ok: true, data: { items, nextCursor: answer.data.nextCursor } };
+}
+
+/**
+ * Statement years win. Otherwise the years are the ones the publication-year
+ * template already returned for this Work. An empty list is unrecorded.
+ */
+export function catalogueYears(stated: readonly number[], listed?: readonly number[]): number[] {
+  if (stated.length || !listed?.length) return [...stated];
+  return [...new Set(listed.filter(year => Number.isInteger(year) && year >= 1 && year <= 9999))]
+    .sort((left, right) => right - left);
+}
+
+/** Pages of the publication-year template, stopped when this Work appears. A failed page leaves what was found. */
+export async function publicationYearsOf(id: string): Promise<number[]> {
+  try {
+    const want = idOf(id) ?? id;
+    const years = new Set<number>();
+    let cursor: string | undefined;
+    for (let page = 0; page < 8; page++) {
+      const listed = await readPublicationYears({}, cursor);
+      if (!listed.ok) break;
+      for (const row of listed.data.items) {
+        if ((idOf(row.id) ?? row.id) === want) years.add(row.year);
+      }
+      if (years.size || !listed.data.nextCursor) break;
+      cursor = listed.data.nextCursor;
+    }
+    return catalogueYears([], [...years]);
+  } catch (error) {
+    console.error('Publication year read failed', error);
+    return [];
+  }
 }
 
 /** A year the address names, or null when it names none. A value outside 1..9999 is dropped, not guessed. */
