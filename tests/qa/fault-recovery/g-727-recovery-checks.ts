@@ -36,7 +36,7 @@ import {
 import { heldErasureMaintenanceClient } from '../../../services/main/src/modules/erasure/graph.ts';
 import type { RetainedAuthorityCoverage } from '../../../services/main/src/modules/erasure/authority.ts';
 import type { RestoredContext, RestoreChecks } from '../../../scripts/ops/restore.ts';
-import { freePort } from './search-ops-support.ts';
+import { startPostgresCluster } from '../support/postgres-cluster.ts';
 
 export type RecoveryProbeSource = Pick<RestoredContext, 'apps' | 'pools' | 'fuseki'>;
 
@@ -97,32 +97,10 @@ export async function retainCurrentRelay(
   } finally {
     stopped.compose(['stop', 'postgres']);
   }
-  const data = join(directory, 'retained-relay-pg');
-  const port = await freePort();
-  const stop = () =>
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '30', '-w', 'stop'], {
-      timeout: 40_000,
-    });
-  execFileSync('initdb', ['-D', data, '-U', 'postgres', '--auth=trust'], { timeout: 60_000 });
-  execFileSync(
-    'pg_ctl',
-    [
-      '-D',
-      data,
-      '-l',
-      join(directory, 'retained-relay-pg.log'),
-      '-o',
-      `-h 127.0.0.1 -p ${port} -c unix_socket_directories=`,
-      '-t',
-      '60',
-      '-w',
-      'start',
-    ],
-    { timeout: 65_000 },
-  );
-  const url = (database: string) => `postgresql://postgres@127.0.0.1:${port}/${database}`;
+  const cluster = await startPostgresCluster({ role: 'postgres' });
+  const url = (database: string) => `postgresql://postgres@127.0.0.1:${cluster.port}/${database}`;
   try {
-    execFileSync('createdb', ['-h', '127.0.0.1', '-p', String(port), '-U', 'postgres', 'relay'], {
+    execFileSync('createdb', ['-h', '127.0.0.1', '-p', String(cluster.port), '-U', 'postgres', 'relay'], {
       timeout: 30_000,
     });
     execFileSync(
@@ -131,7 +109,7 @@ export async function retainCurrentRelay(
       { timeout: 60_000 },
     );
   } catch (error) {
-    stop();
+    cluster.remove();
     throw error;
   }
   const pool = new Pool({ connectionString: url('relay'), max: 4 });
@@ -140,7 +118,7 @@ export async function retainCurrentRelay(
     relayPool: pool,
     close: async () => {
       await pool.end();
-      stop();
+      cluster.remove();
       rmSync(directory, { recursive: true, force: true });
     },
   };

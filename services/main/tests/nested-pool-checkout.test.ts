@@ -4,9 +4,10 @@ import type { DeletionRecoverySet } from '../../account/src/deletion-recovery-se
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster, startPreparedPostgresCluster, type PostgresCluster }
+  from '../../../tests/qa/support/postgres-cluster.ts';
 import {
   boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode,
 } from '../src/infrastructure/pg-pool.ts';
@@ -21,13 +22,12 @@ import { capturePgRecoveryFrontier, type PgRecoveryFrontier } from '../src/modul
 import type { RecoveryCoverage } from '../src/modules/work/restore-lineage.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const tag = `np${process.pid}`;
-const socketDir = `/tmp/${tag}-sock`;
-const archive = `/tmp/${tag}-arch`;
+const archive = join(root, '.temp', `nested-pool-archive-${process.pid}`);
 const state = join(root, '.temp', `nested-pool-${process.pid}`);
-const primaryData = join(state, 'primary');
 const backupData = join(state, 'backup');
 const restoredData = join(state, 'restored');
+let primaryCluster: PostgresCluster | undefined;
+let restoredCluster: PostgresCluster | undefined;
 const hmacKey = '11'.repeat(32);
 const epoch = '11111111-1111-4111-8111-111111111111';
 const routingEpoch = '22222222-2222-4222-8222-222222222222';
@@ -94,28 +94,6 @@ let content: Pool;
 let sealedCoverage = '';
 let sealedDeletion = '';
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
-function startPostgres(data: string, port: number, label: string): void {
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, `${label}.log`),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socketDir}`, '-w', 'start'], { cwd: state });
-}
-
-function stopPostgres(data: string): void {
-  try { execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state, stdio: 'ignore' }); }
-  catch { /* already stopped */ }
-}
-
 function database(port: number, name: string, max = 4): Pool {
   const pool = new Pool({ host: '127.0.0.1', port, user, database: name, max });
   pools.push(pool);
@@ -137,14 +115,11 @@ async function waitFor(check: () => Promise<boolean>, label: string): Promise<vo
 }
 
 beforeAll(async () => {
-  mkdirSync(socketDir, { recursive: true, mode: 0o700 });
   mkdirSync(archive, { recursive: true, mode: 0o700 });
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', primaryData, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  appendFileSync(join(primaryData, 'postgresql.conf'),
-    `\nwal_level = replica\narchive_mode = on\narchive_command = 'test ! -e ${archive}/%f && cp %p ${archive}/%f'\n`);
-  const primaryPort = await freePort();
-  startPostgres(primaryData, primaryPort, 'primary');
+  primaryCluster = await startPostgresCluster({ serverSettings:
+    `wal_level = replica\narchive_mode = on\narchive_command = 'test ! -e ${archive}/%f && cp %p ${archive}/%f'\n` });
+  const primaryPort = primaryCluster.port;
   const admin = database(primaryPort, 'postgres');
   await admin.query('CREATE DATABASE account');
   await admin.query('CREATE DATABASE access');
@@ -224,13 +199,13 @@ beforeAll(async () => {
   execFileSync('pg_basebackup', ['-D', backupData, '-Fp', '-Xs', '--checkpoint=fast',
     '-h', '127.0.0.1', '-p', String(primaryPort), '-U', user], { cwd: state });
   await Promise.all(pools.splice(0).map(pool => pool.end()));
-  stopPostgres(primaryData);
+  primaryCluster.stop('fast');
   cpSync(backupData, restoredData, { recursive: true });
   appendFileSync(join(restoredData, 'postgresql.auto.conf'),
     `\narchive_mode = off\nrestore_command = 'cp ${archive}/%f %p'\nrecovery_target = 'immediate'\nrecovery_target_action = 'promote'\n`);
   writeFileSync(join(restoredData, 'recovery.signal'), '');
-  restoredPort = await freePort();
-  startPostgres(restoredData, restoredPort, 'restored');
+  restoredCluster = await startPreparedPostgresCluster(restoredData);
+  restoredPort = restoredCluster.port;
   const restored = database(restoredPort, 'postgres');
   await waitFor(async () => (await restored.query<{ recovering: boolean }>(
     'SELECT pg_is_in_recovery() AS recovering')).rows[0]?.recovering === false,
@@ -287,10 +262,9 @@ async function withNestedCheckoutThrow<T>(work: () => Promise<T>): Promise<T> {
 
 afterAll(async () => {
   await Promise.all(pools.map(pool => pool.end()));
-  stopPostgres(restoredData);
-  stopPostgres(primaryData);
+  restoredCluster?.remove();
+  primaryCluster?.remove();
   rmSync(state, { recursive: true, force: true });
-  rmSync(socketDir, { recursive: true, force: true });
   rmSync(archive, { recursive: true, force: true });
 }, 60_000);
 

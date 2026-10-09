@@ -2,9 +2,9 @@ import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { migrateContent } from '../src/migrate.ts';
 import { evidenceDigestKeys, evidenceSourceTextKeys } from '../../main/src/modules/verification/schema.ts';
 import { VerificationInvalid, VerificationStore } from '../../main/src/modules/verification/store.ts';
@@ -21,34 +21,19 @@ const otherCanary = 'OTHER-PASSAGE-η-kept';
 const authoredNote = 'authored note stays';
 const digest = 'ab'.repeat(32);
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 async function cluster() {
   const state = join(root, '.temp', `evidence-source-erasure-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  const user = process.env.USER ?? execFileSync('whoami', { encoding: 'utf8' }).trim();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user, database: 'postgres', max: 8 });
-  return { pool, port, user, state, async stop() {
-    await pool.end();
-    try { execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state }); }
-    finally { rmSync(state, { recursive: true, force: true }); }
+  const postgres = await startPostgresCluster();
+  const port = postgres.port;
+  const user = postgres.user;
+  const pool = new Pool({ ...postgres.connection, max: 8 });
+  return { pool, port, user, connection: postgres.connection, state, async stop() {
+    try { await pool.end(); }
+    finally {
+      try { postgres.remove(); }
+      finally { rmSync(state, { recursive: true, force: true }); }
+    }
   } };
 }
 
@@ -310,8 +295,7 @@ test('content-bound source text clears once under the revision journal and canno
     await pool.query(`CREATE DATABASE ${restoredName}`);
     execFileSync('psql', ['-h', '127.0.0.1', '-p', String(source.port), '-U', source.user,
       '-d', restoredName, '-v', 'ON_ERROR_STOP=1', '-f', before], { cwd: source.state, stdio: 'pipe' });
-    const restored = new Pool({ host: '127.0.0.1', port: source.port, user: source.user,
-      database: restoredName, max: 2 });
+    const restored = new Pool({ ...source.connection, database: restoredName, max: 2 });
     try {
       const replay = randomUUID();
       const client = await restored.connect();

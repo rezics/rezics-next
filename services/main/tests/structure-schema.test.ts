@@ -1,9 +1,8 @@
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { join, resolve } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -177,27 +176,13 @@ test('BOOK03: an exact composition seal retains its selected Content revision', 
   expect(hidden).not.toHaveProperty('unavailableCount');
 });
 
-let state = '';
-let data = '';
-let port = 0;
+let cluster: PostgresCluster | undefined;
 let server: Pool | undefined;
 const pools: Pool[] = [];
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const probe = createServer();
-    probe.once('error', reject);
-    probe.listen(0, '127.0.0.1', () => {
-      const address = probe.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      probe.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 async function database(name: string): Promise<Pool> {
   await server!.query(`CREATE DATABASE ${name}`);
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: name, max: 4 });
+  const pool = new Pool({ ...cluster!.connection, database: name, max: 4 });
   pools.push(pool);
   return pool;
 }
@@ -211,16 +196,8 @@ async function rejects(action: Promise<unknown>, pattern: RegExp): Promise<void>
 }
 
 beforeAll(async () => {
-  state = join(root, '.temp', `structure-schema-${randomUUID()}`);
-  data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  server = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 2 });
+  cluster = await startPostgresCluster();
+  server = new Pool({ ...cluster.connection, max: 2 });
   // Replaying Content through 869 is only the saved-state baseline. On a cold or
   // loaded host that replay exceeds the five-second case budget before any assertion.
   const libraryUpgrade = await database('library_revision_upgrade');
@@ -234,8 +211,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await Promise.all([...pools, ...(server ? [server] : [])].map(pool => pool.end()));
-  if (data) execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
-  if (state) rmSync(state, { recursive: true, force: true });
+  cluster?.remove();
 });
 
 test('COMP03 owner schema: Content migrations install 030 empty and upgrade from the current head', async () => {
@@ -313,7 +289,7 @@ test('BOOK02/COMP06: progress keys each occurrence and replays a private command
 test.each(['startup', 'artifact'])('Progress index migration commits library changes before its online build and recovers a cancelled invalid index (%s)', async runner => {
   const pool = await database(`progress_online_upgrade_${runner}`);
   const run = () => runner === 'startup' ? migrateContent(pool) : migrateContentFromArtifact(
-    `postgresql://${encodeURIComponent(process.env.USER!)}@127.0.0.1:${port}/${pool.options.database}`, root);
+    `postgresql://${encodeURIComponent(cluster!.user)}@127.0.0.1:${cluster!.port}/${pool.options.database}`, root);
   await pool.query(`CREATE SCHEMA content; CREATE TABLE content.schema_migration
     (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
   for (const name of schemaFiles(root, 'content').filter(name => migrationVersion(name) < 870)) {

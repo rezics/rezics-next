@@ -1,8 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
@@ -20,30 +19,9 @@ const repThree = '00000000-0000-4000-8000-000000000003';
 const grantOne = '10000000-0000-4000-8000-000000000001';
 const grantTwo = '10000000-0000-4000-8000-000000000002';
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 test('IAM33 partial: represented Work proof binds mandate, grant, actor and generations', async () => {
-  const state = join(root, '.temp', `represented-proof-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socketDirectory = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER,
-    database: 'postgres', max: 4 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 4 });
   try {
     const client = await pool.connect();
     try {
@@ -222,7 +200,6 @@ test('IAM33 partial: represented Work proof binds mandate, grant, actor and gene
       grouped.requestDigest)).state).toBe('claimed');
   } finally {
     await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    rmSync(state, { recursive: true, force: true });
+    cluster.remove();
   }
 }, 120_000);

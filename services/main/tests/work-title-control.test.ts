@@ -1,12 +1,11 @@
 import { expect, test } from 'bun:test';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { AccountAssertionDenied, AccountAssertionVerifier } from '../src/modules/account/verify-assertion.ts';
 import { AccessAdmissionRegistry, AdmissionDenied, type RegisteredAdmission } from '../src/modules/access/admission.ts';
@@ -43,22 +42,9 @@ test('LIVE03 unknown or mismatched stored title control modes fail closed', asyn
 test('private human title custody signs actual claimed SQL actor on a max-one receipt session', async () => {
   const root = resolve(import.meta.dir, '../../..');
   const stateDirectory = join(root, '.temp', `title-custody-${randomUUID()}`);
-  const dataDirectory = join(stateDirectory, 'pgdata');
   mkdirSync(stateDirectory, { recursive: true, mode: 0o700 });
-  const port = await new Promise<number>((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('No SQL fixture port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-  execFileSync('initdb', ['-D', dataDirectory, '-A', 'trust', '--no-instructions'], { cwd: stateDirectory, stdio: 'pipe' });
-  execFileSync('pg_ctl', ['-D', dataDirectory, '-l', join(stateDirectory, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k /tmp`, '-w', 'start'], { cwd: stateDirectory, stdio: 'pipe' });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 1,
-    connectionTimeoutMillis: 1000 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 1, connectionTimeoutMillis: 1000 });
   const issuer = 'https://account.rezics.test', audience = 'rezics-main', accountSubject = randomUUID();
   const { privateKey, publicKey } = await generateKeyPair('RS256');
   const jwk = { ...await exportJWK(publicKey), kid: 'title-fixture-key', alg: 'RS256', use: 'sig' };
@@ -342,6 +328,6 @@ test('private human title custody signs actual claimed SQL actor on a max-one re
   } finally {
     await accountServer.stop(true);
     await pool.end();
-    execFileSync('pg_ctl', ['-D', dataDirectory, '-m', 'immediate', '-w', 'stop'], { cwd: stateDirectory, stdio: 'pipe' });
+    cluster.remove();
   }
 }, 60_000);

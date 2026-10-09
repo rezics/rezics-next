@@ -6,6 +6,7 @@ import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { migrateAccount, migrationRecords } from '../../../scripts/ops/migrate.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { openRecoveryPayload, RecoveryEnvelopeConflict, sealRecoveryPayload }
@@ -68,16 +69,10 @@ class OpenGraph extends FusekiClient {
 
 test('component: stubbed access and an always-true graph keep the annotation shape without the quote', async () => {
   const state = join(root, '.temp', `comment-source-http-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 4 });
-  const access = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 2 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 4 });
+  const access = new Pool({ ...cluster.connection, max: 2 });
   try {
     await migrateContent(pool);
     await pool.query(`CREATE SCHEMA access;
@@ -165,22 +160,16 @@ test('component: stubbed access and an always-true graph keep the annotation sha
   } finally {
     await access.end();
     await pool.end();
-    try { execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state }); }
+    try { cluster.remove(); }
     finally { rmSync(state, { recursive: true, force: true }); }
   }
 });
 
 test('real account, access, native graph and a restored content catalog keep the annotation and drop the quote', async () => {
   const state = join(root, '.temp', `comment-source-real-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 4 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 4 });
   let restored: Pool | undefined;
   let fusekiContainer = '';
   let accountServer: ReturnType<typeof Bun.serve> | undefined;
@@ -235,13 +224,12 @@ test('real account, access, native graph and a restored content catalog keep the
     // comparison of the content catalog, not authenticated signed recovery.
     const captured = await captureContentRecoveryCoverage(pool, []);
     const archive = join(state, 'content.dump');
-    execFileSync('pg_dump', ['-Fc', '-f', archive, '-h', '127.0.0.1', '-p', String(port),
-      '-U', process.env.USER!, 'postgres'], { cwd: state });
+    execFileSync('pg_dump', ['-Fc', '-f', archive, '-h', '127.0.0.1', '-p', String(cluster.port),
+      '-U', cluster.user, 'postgres'], { cwd: state });
     await pool.query('CREATE DATABASE comment_source_restore');
-    execFileSync('pg_restore', ['--no-owner', '--no-acl', '-h', '127.0.0.1', '-p', String(port),
-      '-U', process.env.USER!, '-d', 'comment_source_restore', archive], { cwd: state });
-    restored = new Pool({ host: '127.0.0.1', port, user: process.env.USER,
-      database: 'comment_source_restore', max: 4 });
+    execFileSync('pg_restore', ['--no-owner', '--no-acl', '-h', '127.0.0.1', '-p', String(cluster.port),
+      '-U', cluster.user, '-d', 'comment_source_restore', archive], { cwd: state });
+    restored = new Pool({ ...cluster.connection, database: 'comment_source_restore', max: 4 });
     await assertContentRecoveryCoverage(restored, fuseki, captured);
     const stillQuoted = (await restored.query<{ exact: string; body: string }>(
       'SELECT exact, body FROM content.comment WHERE id = $1', [commentId])).rows[0]!;
@@ -439,7 +427,7 @@ test('real account, access, native graph and a restored content catalog keep the
     if (fusekiContainer) execFileSync('docker', ['rm', '-f', fusekiContainer], { stdio: 'ignore' });
     await restored?.end();
     await pool.end();
-    try { execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state }); }
+    try { cluster.remove(); }
     finally { rmSync(state, { recursive: true, force: true }); }
   }
 }, 180_000);
@@ -454,22 +442,16 @@ async function applyMigrations(pool: Pool, owner: 'access' | 'relay') {
 // physical backup, restore an independent copy, or carry a held restore lineage.
 test('sealed envelope on the same captured owners stays closed until journal replay clears the quote', async () => {
   const state = join(root, '.temp', `comment-source-envelope-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
   mkdirSync(join(state, 'objects'), { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const admin = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 1 });
-  const owners = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'quote_access', max: 4 });
+  const cluster = await startPostgresCluster();
+  const admin = new Pool({ ...cluster.connection, max: 1 });
+  const owners = new Pool({ ...cluster.connection, database: 'quote_access', max: 4 });
   // Access state coverage digests every table in the Access database. Content
   // replay must use its own database or the sealed Access cut moves with the quote.
-  const contentDb = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'quote_content', max: 4 });
-  const account = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'quote_account', max: 2 });
-  const relay = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'quote_relay', max: 4 });
+  const contentDb = new Pool({ ...cluster.connection, database: 'quote_content', max: 4 });
+  const account = new Pool({ ...cluster.connection, database: 'quote_account', max: 2 });
+  const relay = new Pool({ ...cluster.connection, database: 'quote_relay', max: 4 });
   let fusekiContainer = '';
   let accountServer: ReturnType<typeof Bun.serve> | undefined;
   const hmacKey = 'dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd';
@@ -481,8 +463,8 @@ test('sealed envelope on the same captured owners stays closed until journal rep
     await admin.query('CREATE DATABASE quote_relay');
     await applyMigrations(owners, 'access');
     await migrateContent(contentDb);
-    const accountUrl = new URL(`postgresql://127.0.0.1:${port}/quote_account`);
-    accountUrl.username = process.env.USER!;
+    const accountUrl = new URL(`postgresql://127.0.0.1:${cluster.port}/quote_account`);
+    accountUrl.username = cluster.user;
     await migrateAccount({
       ACCOUNT_DATABASE_URL: accountUrl.href,
       ACCOUNT_BASE_URL: 'http://127.0.0.1:3002',
@@ -718,7 +700,7 @@ test('sealed envelope on the same captured owners stays closed until journal rep
     await accountServer?.stop(true);
     if (fusekiContainer) execFileSync('docker', ['rm', '-f', fusekiContainer], { stdio: 'ignore' });
     await Promise.allSettled([owners.end(), contentDb.end(), account.end(), relay.end(), admin.end()]);
-    try { execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state }); }
+    try { cluster.remove(); }
     finally { rmSync(state, { recursive: true, force: true }); }
   }
 }, 300_000);

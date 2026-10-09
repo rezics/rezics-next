@@ -2,12 +2,14 @@ import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
 import { expect, test } from 'bun:test';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { copyRecoveryTree } from '../support/recovery-copy.ts';
+import { startPostgresCluster, startPreparedPostgresCluster, type PostgresCluster }
+  from '../support/postgres-cluster.ts';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
 import { accountAuthOptions, createAccountAuth } from '../../../services/account/src/auth.ts';
@@ -74,11 +76,9 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
   const runId = `owner-cut-${randomUUID().replaceAll('-', '').slice(0, 12)}`;
   const stackArgs = ['--profile', 'qa', '--run-id', runId];
   const state = join(root, '.temp', `erasure-restore-${randomUUID()}`);
-  const socketDirectory = join(root, '.temp', 's');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
   const pools: Pool[] = [];
-  const replayData: string[] = [];
+  const replayClusters: PostgresCluster[] = [];
   let app: ReturnType<typeof createAccountApp> | undefined;
   let started = false;
   try {
@@ -247,15 +247,12 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     };
     const restore = async (backup: string, name: string) => {
       const data = join(state, name);
-      replayData.push(data);
       copyRecoveryTree(backup, data);
       appendFileSync(join(data, 'postgresql.auto.conf'), "\narchive_mode = off\nrestore_command = 'false'\n");
       writeFileSync(join(data, 'recovery.signal'), '');
-      const replayPort = await freePort();
-      execFileSync('pg_ctl', ['-D', data, '-l', join(state, `${name}.log`),
-        '-o', `-h 127.0.0.1 -p ${replayPort} -k ${socketDirectory}`, '-t', '60', '-w', 'start'],
-      { cwd: state, timeout: 65_000 });
-      const restored = (database: string) => new Pool({ host: '127.0.0.1', port: replayPort, database,
+      const restoredCluster = await startPreparedPostgresCluster(data, { role: 'postgres' });
+      replayClusters.push(restoredCluster);
+      const restored = (database: string) => new Pool({ host: '127.0.0.1', port: restoredCluster.port, database,
         user: 'postgres', password: compose.POSTGRES_PASSWORD! });
       const owners = { account: restored('account'), access: restored('access'), content: restored('content') };
       pools.push(owners.account, owners.access, owners.content);
@@ -266,7 +263,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
         if (recovering) await Bun.sleep(100);
       }
       expect(recovering).toBe(false);
-      return { ...owners, port: replayPort };
+      return { ...owners, port: restoredCluster.port };
     };
     const credentials = async (pool: Pool, subject: string) => (await pool.query<{ users: string;
       passwords: string; sessions: string }>(`SELECT (SELECT count(*) FROM "user" WHERE id = $1)::text AS users,
@@ -503,7 +500,6 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     // physical fileset or WAL is copied into it. The retained relay journal is
     // one of the four owner archives and must survive beside the owner rows.
     const offHost = join(state, 'off-host-custody');
-    const offHostData = join(offHost, 'postgresql');
     mkdirSync(offHost, { recursive: true, mode: 0o700 });
     const offHostExpiry = new Date(Date.now() + 14 * 24 * 60 * 60_000);
     for (const owner of ['account', 'access', 'content', 'relay'] as const) {
@@ -538,13 +534,9 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
       expect(createHash('sha256').update(readFileSync(file)).digest('hex'))
         .toBe(custody.archives[name]);
     }
-    execFileSync('initdb', ['-D', offHostData, '-U', 'postgres', '--auth=trust', '--no-instructions'],
-      { cwd: state, timeout: 30_000, stdio: 'ignore' });
-    replayData.push(offHostData);
-    const offHostPort = await freePort();
-    execFileSync('pg_ctl', ['-D', offHostData, '-l', join(offHost, 'postgresql.log'),
-      '-o', `-h 127.0.0.1 -p ${offHostPort} -k ${socketDirectory}`, '-t', '60', '-w', 'start'],
-    { cwd: state, timeout: 65_000 });
+    const offHostCluster = await startPostgresCluster({ role: 'postgres' });
+    replayClusters.push(offHostCluster);
+    const offHostPort = offHostCluster.port;
     const offHostAdmin = new Pool({ host: '127.0.0.1', port: offHostPort,
       database: 'postgres', user: 'postgres' });
     pools.push(offHostAdmin);
@@ -590,12 +582,7 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
     await app?.stop();
     await Promise.allSettled(pools.map(pool => pool.end()));
     try {
-      for (const data of replayData) {
-        if (spawnSync('pg_ctl', ['-D', data, 'status'], { cwd: state, timeout: 5_000 }).status === 0) {
-          execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '10', '-w', 'stop'],
-            { cwd: state, timeout: 15_000 });
-        }
-      }
+      for (const cluster of replayClusters) cluster.remove();
     } finally {
       try { if (started) await rootCommand(['stack:reset', ...stackArgs], 120_000); }
       finally { rmSync(state, { recursive: true, force: true }); }

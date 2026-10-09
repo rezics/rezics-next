@@ -1,9 +1,8 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import {
@@ -19,8 +18,6 @@ import { DisclosureStore } from '../src/modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const state = join(root, '.temp', `nested-access-request-paths-${randomUUID()}`);
-const data = join(state, 'pgdata');
 const previousMode = nestedPoolCheckoutMode();
 const holder = () => `https://rezics.com/id/${randomUUID()}`;
 const principal: VerifiedPrincipal = {
@@ -28,31 +25,15 @@ const principal: VerifiedPrincipal = {
   subject: 'nested-access-reader',
   emailVerified: true,
 };
-let port: number;
+let cluster: PostgresCluster | undefined;
 let admin: Pool;
 let pool: Pool;
-let started = false;
 
 beforeAll(async () => {
   setNestedPoolCheckoutMode('throw');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], {
-    cwd: state, stdio: 'pipe',
-  });
-  port = await new Promise<number>((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'), '-o',
-    `-h 127.0.0.1 -p ${port} -k /tmp`, '-w', 'start'], { cwd: state, stdio: 'pipe' });
-  started = true;
-  const config = { host: '127.0.0.1', port, user: process.env.USER, max: 1 };
-  admin = boundedPool({ ...config, database: 'postgres' });
+  cluster = await startPostgresCluster();
+  const config = { ...cluster.connection, max: 1 };
+  admin = boundedPool(config);
   await admin.query('CREATE DATABASE nested_access_paths');
   pool = boundedPool({ ...config, database: 'nested_access_paths', connectionTimeoutMillis: 5_000 });
   for (const file of schemaFiles(root, 'access')) {
@@ -63,8 +44,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await pool?.end();
   await admin?.end();
-  if (started) execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state, stdio: 'pipe' });
-  rmSync(state, { recursive: true, force: true });
+  cluster?.remove();
   setNestedPoolCheckoutMode(previousMode);
 }, 60_000);
 

@@ -1,10 +1,9 @@
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../support/postgres-cluster.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
@@ -32,18 +31,6 @@ import { activateMetadataWork, DATASET, GRAPHS, metadataWorkRequestDigest, RV }
 
 const root = resolve(import.meta.dir, '../../..');
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact public search', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.FUSEKI_URL
     || !Bun.env.MAIN_DATA_EPOCH || !Bun.env.MAIN_ROUTING_EPOCH
@@ -51,15 +38,9 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
     throw new Error('Run this test through the isolated QA integration tier');
   }
   const state = join(root, '.temp', `content-native-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 8 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 8 });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   try {
     await migrateContent(pool);
@@ -482,7 +463,7 @@ test('WORK09/WORK10/SEARCH03/SEARCH19: Content CAS, private drafts and exact pub
   } finally {
     await accessPool.end();
     await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
+    cluster.remove();
     rmSync(state, { recursive: true, force: true });
   }
 }, 60_000);

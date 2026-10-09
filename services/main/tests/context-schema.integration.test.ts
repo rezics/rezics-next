@@ -1,9 +1,8 @@
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { contextSelectionCandidates, contextSelectionScopeKey,
   type ContextSelectionScope } from '../src/modules/context/schema.ts';
@@ -15,18 +14,6 @@ const migrations = join(root, 'services/main/migrations/access');
 const OWN = '100_context_selection.sql';
 const native = () => `https://rezics.com/id/${Bun.randomUUIDv7()}`;
 const digest = 'c'.repeat(64);
-
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
 
 async function apply(pool: Pool, files: readonly string[]): Promise<void> {
   const client = await pool.connect();
@@ -93,16 +80,8 @@ async function advance(client: PoolClient, selection: string, expected: string, 
 }
 
 test('CTX03: schema foundation Access private Context selections install empty, upgrade head and guard CAS', async () => {
-  const state = join(root, '.temp', `context-schema-${Bun.randomUUIDv7()}`);
-  const data = join(state, 'pgdata');
-  const socketDirectory = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
-  const admin = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 1 });
+  const cluster = await startPostgresCluster();
+  const admin = new Pool({ ...cluster.connection, max: 1 });
   const pools: Pool[] = [];
   try {
     const files = schemaFiles(root, 'access');
@@ -111,7 +90,7 @@ test('CTX03: schema foundation Access private Context selections install empty, 
     const later = files.filter(file => migrationVersion(file) > migrationVersion(OWN));
     for (const name of ['context_empty', 'context_upgrade']) await admin.query(`CREATE DATABASE ${name}`);
     const database = (name: string) => {
-      const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: name, max: 4 });
+      const pool = new Pool({ ...cluster.connection, database: name, max: 4 });
       pools.push(pool);
       return pool;
     };
@@ -264,7 +243,6 @@ test('CTX03: schema foundation Access private Context selections install empty, 
   } finally {
     for (const pool of pools) await pool.end();
     await admin.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    rmSync(state, { recursive: true, force: true });
+    cluster.remove();
   }
 }, 120_000);

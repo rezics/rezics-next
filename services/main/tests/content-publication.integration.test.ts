@@ -1,10 +1,9 @@
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { ContentConflict, ContentCore, type PublicationPreparation,
   type VariantIdentity } from '../../content/src/core.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
@@ -20,18 +19,6 @@ import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
 const root = resolve(import.meta.dir, '../../..');
 const literal = (value: string) => ({ type: 'literal', value });
 const uri = (value: string) => ({ type: 'uri', value });
-
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
 
 /** Simulates only the trusted graph receipt reader, never Jena validation/execution. */
 class ReceiptReader extends FusekiClient {
@@ -73,15 +60,9 @@ function admission(input: PublishPinnedContentInput): RegisteredAdmission {
 
 test('WORK10: partial Content pin and exact graph receipt reconciliation', async () => {
   const state = join(root, '.temp', `content-publication-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 8 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 8 });
   try {
     await migrateContent(pool);
     const content = new ContentCore(pool);
@@ -196,7 +177,7 @@ test('WORK10: partial Content pin and exact graph receipt reconciliation', async
     expect(await preparationStatus(unavailable.input.preparationId)).toBeUndefined();
   } finally {
     await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
+    cluster.remove();
     rmSync(state, { recursive: true, force: true });
   }
 }, 30_000);

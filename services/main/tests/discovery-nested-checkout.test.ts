@@ -1,10 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, spyOn, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import {
   boundedPool,
@@ -28,8 +27,6 @@ import {
 } from '../src/modules/recommendation/derived-generation.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const state = join(root, '.temp', `discovery-nested-checkout-${randomUUID()}`);
-const data = join(state, 'pgdata');
 const position = { dataEpoch: randomUUID(), sequence: '1' };
 const basis = { scope: 'global' as const, realm: null, context: null, owner: null };
 const scopeKey = discoveryScopeKey(basis);
@@ -52,7 +49,7 @@ const replacement: ProjectedWork = {
 };
 const receipt = () => ({ idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
 const previousMode = nestedPoolCheckoutMode();
-let port: number;
+let cluster: PostgresCluster | undefined;
 let admin: Pool;
 let access: Pool;
 let refresh: DiscoveryRefreshStore;
@@ -62,42 +59,13 @@ let deltaId: string;
 let lease: string;
 let database: string;
 let copies = 0;
-let started = false;
 
 beforeAll(async () => {
   setNestedPoolCheckoutMode('throw');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], {
-    cwd: state,
-    stdio: 'pipe',
-  });
-  port = await new Promise<number>((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string')
-        return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-  execFileSync(
-    'pg_ctl',
-    [
-      '-D',
-      data,
-      '-l',
-      join(state, 'postgres.log'),
-      '-o',
-      `-h 127.0.0.1 -p ${port} -k /tmp`,
-      '-w',
-      'start',
-    ],
-    { cwd: state, stdio: 'pipe' },
-  );
-  started = true;
-  const config = { host: '127.0.0.1', port, user: process.env.USER, max: 1 };
-  admin = new Pool({ ...config, database: 'postgres' });
+  const running = await startPostgresCluster();
+  cluster = running;
+  const config = { ...running.connection, max: 1 };
+  admin = new Pool(config);
   await admin.query('CREATE DATABASE discovery_baseline');
   const baseline = boundedPool({ ...config, database: 'discovery_baseline' });
   try {
@@ -156,9 +124,7 @@ beforeEach(async () => {
   database = `discovery_copy_${++copies}`;
   await admin.query(`CREATE DATABASE ${database} TEMPLATE discovery_baseline`);
   access = boundedPool({
-    host: '127.0.0.1',
-    port,
-    user: process.env.USER,
+    ...cluster!.connection,
     database,
     max: 1,
     connectionTimeoutMillis: 500,
@@ -174,9 +140,7 @@ afterEach(async () => {
 
 afterAll(async () => {
   await admin?.end();
-  if (started)
-    execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state, stdio: 'pipe' });
-  rmSync(state, { recursive: true, force: true });
+  cluster?.remove();
   setNestedPoolCheckoutMode(previousMode);
 }, 60_000);
 
@@ -425,7 +389,7 @@ test('obsolete discovery inspection reuses its transaction while stale refresh a
 });
 
 test('Bun startup and instrumented workers release detector ownership across async contexts', async () => {
-  const connection = `postgres://${process.env.USER}@127.0.0.1:${port}/${database}`;
+  const connection = `postgres://${cluster!.user}@127.0.0.1:${cluster!.port}/${database}`;
   const results = [];
   for (const mode of ['plain', 'telemetry']) {
     const child = Bun.spawn(

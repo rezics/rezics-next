@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { ManagementReadStore } from '../src/modules/management-reads/read-store.ts';
@@ -17,15 +16,16 @@ type CaseKind = 'content_report' | 'rights_complaint';
 /** Migrate one native PostgreSQL template; each test gets an isolated copy. */
 export async function realmTriageQueueDatabase() {
   const root = resolve(import.meta.dir, '../../..');
-  const directory = join(root, '.temp', `realm-triage-queue-${randomUUID()}`),
-    data = join(directory, 'pgdata');
   const copies = new Set<() => Promise<void>>();
   let admin: Pool | undefined,
-    started = false,
     count = 0;
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const command = (name: string, args: string[]) =>
-    execFileSync(name, args, { cwd: directory, stdio: 'pipe', timeout: 30_000 });
+  const cluster = await startPostgresCluster();
+  const config = {
+    host: cluster.host,
+    port: cluster.port,
+    user: cluster.user,
+    connectionTimeoutMillis: 30_000,
+  };
   async function stop() {
     const errors: unknown[] = [];
     for (const close of [...copies]) {
@@ -41,52 +41,14 @@ export async function realmTriageQueueDatabase() {
       errors.push(error);
     }
     admin = undefined;
-    if (started) {
-      try {
-        command('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '30', '-w', 'stop']);
-        started = false;
-      } catch (error) {
-        errors.push(error);
-      }
+    try {
+      cluster.remove();
+    } catch (error) {
+      errors.push(error);
     }
-    // Preserve a running server's data and log if shutdown failed.
-    if (!started) rmSync(directory, { recursive: true, force: true });
     if (errors.length) throw new AggregateError(errors, 'Realm triage PostgreSQL cleanup failed');
   }
   try {
-    command('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync']);
-    const port = await new Promise<number>((resolvePort, reject) => {
-      const server = createServer();
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
-        const address = server.address();
-        if (!address || typeof address === 'string') {
-          server.close();
-          reject(new Error('No native PostgreSQL test port'));
-          return;
-        }
-        server.close((error) => (error ? reject(error) : resolvePort(address.port)));
-      });
-    });
-    started = true;
-    command('pg_ctl', [
-      '-D',
-      data,
-      '-l',
-      join(directory, 'postgres.log'),
-      '-o',
-      `-h 127.0.0.1 -p ${port} -k /tmp`,
-      '-t',
-      '30',
-      '-w',
-      'start',
-    ]);
-    const config = {
-      host: '127.0.0.1',
-      port,
-      user: process.env.USER,
-      connectionTimeoutMillis: 30_000,
-    };
     admin = new Pool({ ...config, database: 'postgres', max: 1 });
     await admin.query('CREATE DATABASE realm_triage_template');
     const files = schemaFiles(root, 'access');

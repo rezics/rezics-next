@@ -1,45 +1,24 @@
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { notificationProducerEventsSql } from '../src/modules/notification-producers/access-log.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const state = join(root, '.temp', `settings-digest-${Bun.randomUUIDv7()}`);
 const accessDir = join(root, 'services/main/migrations/access');
+let cluster: PostgresCluster | undefined;
 let pool: Pool | null = null;
-
-const port = () => new Promise<number>((done, fail) => {
-  const server = createServer();
-  server.once('error', fail);
-  server.listen(0, '127.0.0.1', () => {
-    const address = server.address();
-    if (!address || typeof address === 'string') return fail(new Error('No PostgreSQL port'));
-    server.close(() => done(address.port));
-  });
-});
 
 afterAll(async () => {
   await pool?.end();
-  try { execFileSync('pg_ctl', ['-D', join(state, 'pgdata'), '-m', 'immediate', 'stop']); }
-  catch { /* PostgreSQL may not have started. */ }
-  rmSync(state, { recursive: true, force: true });
+  cluster?.remove();
 });
 
 test('settings Access migrations preserve notification kinds, digest ledgers and consumed producer cursors', async () => {
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const pgPort = await port();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${pgPort} -k ${socket}`, '-w', 'start'], { cwd: state });
-  pool = new Pool({ host: '127.0.0.1', port: pgPort, user: process.env.USER,
-    database: 'postgres', max: 2 });
+  cluster = await startPostgresCluster();
+  pool = new Pool({ ...cluster.connection, max: 2 });
   const legacyEvents = [Bun.randomUUIDv7(), Bun.randomUUIDv7(), Bun.randomUUIDv7()];
   for (const file of schemaFiles(root, 'access')) {
     if (file === '1130_notification_producer_insert_log.sql') {

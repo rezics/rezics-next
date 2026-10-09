@@ -1,11 +1,9 @@
 // sql-relations-allow: public.unrelated_recovery_state -- The test creates this stray table to prove coverage still rejects unknown Account tables.
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { migrateAccount, migrationRecords } from '../../../scripts/ops/migrate.ts';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import {
   AccountRecoveryCoverageConflict,
   accountRecoveryCoverage,
@@ -14,34 +12,13 @@ import {
 
 const root = resolve(import.meta.dir, '../../..');
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 test('Account release migration ledger is covered without accepting unrelated tables', async () => {
-  const state = join(root, '.temp', `account-recovery-coverage-${Bun.randomUUIDv7()}`);
-  const data = join(state, 'pgdata');
-  const sockets = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(sockets, { recursive: true, mode: 0o700 });
-  const port = await freePort();
+  const cluster = await startPostgresCluster();
+  const port = cluster.port;
   const url = new URL(`postgresql://127.0.0.1:${port}/postgres`);
-  url.username = process.env.USER!;
-  const pool = new Pool({ connectionString: url.href });
-  let started = false;
+  url.username = cluster.user;
+  const pool = new Pool({ ...cluster.connection });
   try {
-    execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-    execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-      '-o', `-h 127.0.0.1 -p ${port} -k ${sockets}`, '-w', 'start'], { cwd: state });
-    started = true;
     const configuration = {
       ACCOUNT_DATABASE_URL: url.href,
       ACCOUNT_BASE_URL: 'http://127.0.0.1:3002',
@@ -94,8 +71,7 @@ test('Account release migration ledger is covered without accepting unrelated ta
     await pool.query('ALTER TABLE public.verification RENAME TO missing_verification');
     await expect(accountRecoveryCoverage(pool)).rejects.toThrow('missing ["verification"]');
   } finally {
-    await pool.end();
-    if (started) execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    rmSync(state, { recursive: true, force: true });
+    try { await pool.end(); }
+    finally { cluster.remove(); }
   }
 }, 30_000);

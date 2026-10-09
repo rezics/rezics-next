@@ -1,40 +1,18 @@
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { ContentConflict, ContentCore, ContentUnavailable, contentDraftIntentDigest,
   type VariantIdentity } from '../src/core.ts';
 import { migrateContent } from '../src/migrate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', async () => {
-  const state = join(root, '.temp', `content-core-${crypto.randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  // Skip the disposable fixture's initial disk sync; server fsync stays enabled.
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 8 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 8 });
   try {
     expect((await pool.query<{ fsync: string }>('SHOW fsync')).rows[0]?.fsync).toBe('on');
     await migrateContent(pool);
@@ -47,8 +25,7 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
     // A retained v3 Content owner upgrades through the same runner; it must
     // preserve the SQL-owned triggers and install only the missing migration.
     await pool.query('CREATE DATABASE content_v3');
-    const older = new Pool({ host: '127.0.0.1', port,
-      user: process.env.USER, database: 'content_v3' });
+    const older = new Pool({ ...cluster.connection, database: 'content_v3' });
     try {
       await older.query(`CREATE SCHEMA content;
         CREATE TABLE content.schema_migration (version integer PRIMARY KEY,
@@ -264,8 +241,7 @@ test('WORK09/WORK10: Content core CAS, exact bytes, receipts, pins and outbox', 
     expect(inventoryLast.nextCursor).toBeNull();
     await expect(core.listVariantHeads(inventoryResource, '', 21)).rejects.toBeInstanceOf(ContentConflict);
   } finally {
-    await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
-    rmSync(state, { recursive: true, force: true });
+    try { await pool.end(); }
+    finally { cluster.remove(); }
   }
 });

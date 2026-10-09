@@ -1,46 +1,20 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
-import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { migrateContent } from '../src/migrate.ts';
 
 // Lock and planner behaviour of migration 1709's own statements. The assertions read the
 // installed function text, so a rewrite of the update statements is what they follow.
-const root = resolve(import.meta.dir, '../../..');
 const digest = 'ab'.repeat(32);
 const canary = 'RACE-CANARY-evidence';
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 async function cluster() {
-  const state = join(root, '.temp', `evidence-source-lock-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  const user = process.env.USER ?? execFileSync('whoami', { encoding: 'utf8' }).trim();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user, database: 'postgres', max: 8 });
+  const postgres = await startPostgresCluster();
+  const pool = new Pool({ ...postgres.connection, max: 8 });
   return { pool, async stop() {
-    await pool.end();
-    try { execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state }); }
-    finally { rmSync(state, { recursive: true, force: true }); }
+    try { await pool.end(); }
+    finally { postgres.remove(); }
   } };
 }
 

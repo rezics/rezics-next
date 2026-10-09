@@ -1,9 +1,8 @@
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
 import { ContentCore, migrateContent, type VariantIdentity } from '../../content/src/index.ts';
@@ -13,47 +12,26 @@ import { PROTECTION_RULE } from '../src/modules/protection/schema.ts';
 const root = resolve(import.meta.dir, '../../..');
 const migrations = join(root, 'services/content/migrations');
 const PROTECTION_VERSION = 130;
-const state = join(root, '.temp', `protection-schema-${randomUUID()}`);
-const data = join(state, 'pgdata');
-const socket = join(root, '.temp', 'pg-sock');
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex');
-let port = 0;
+let cluster: PostgresCluster | undefined;
 let admin: Pool;
 const pools: Pool[] = [];
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 async function database(name: string): Promise<Pool> {
   await admin.query(`CREATE DATABASE ${name}`);
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: name, max: 6 });
+  const pool = new Pool({ ...cluster!.connection, database: name, max: 6 });
   pools.push(pool);
   return pool;
 }
 
 beforeAll(async () => {
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  admin = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 2 });
+  cluster = await startPostgresCluster();
+  admin = new Pool({ ...cluster.connection, max: 2 });
 }, 60_000);
 
 afterAll(async () => {
   await Promise.all([...pools, admin].map(pool => pool?.end()));
-  try { execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state }); }
-  finally { rmSync(state, { recursive: true, force: true }); }
+  cluster?.remove();
 });
 
 const files = () => schemaFiles(root, 'content');

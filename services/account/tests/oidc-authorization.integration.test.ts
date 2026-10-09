@@ -1,20 +1,17 @@
 import { expect, test } from 'bun:test';
 import { signupPolicyFixture } from './account-fixture.ts';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { join, resolve } from 'node:path';
 import { getMigrations } from 'better-auth/db/migration';
 import { Elysia } from 'elysia';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { accountAuthOptions, createAccountAuth } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
 import { installConsentRefreshFence } from '../src/consent-fence.ts';
 import { AccountAssertionDenied, AccountAssertionVerifier }
   from '../../main/src/modules/account/verify-assertion.ts';
 
-const root = resolve(import.meta.dir, '../../..');
 const resource = 'https://main.rezics.test';
 
 async function freePort(): Promise<number> {
@@ -32,17 +29,8 @@ async function freePort(): Promise<number> {
 type Tokens = { access_token: string; refresh_token: string };
 
 test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pending codes and Account authority unchanged', async () => {
-  const state = join(root, '.temp', `oidc-authorization-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const pgPort = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${pgPort} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port: pgPort,
-    user: process.env.USER, database: 'postgres' });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection });
   const accountPort = await freePort();
   const base = `http://127.0.0.1:${accountPort}`;
   const issuer = `${base}/api/auth`;
@@ -472,10 +460,10 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
       expect((await response.json() as { access_token: string }).access_token).toBeTruthy();
     }
   } finally {
-    await Promise.all(clients.map(client => client.stop()));
-    await account?.stop();
-    await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    rmSync(state, { recursive: true, force: true });
+    try {
+      await Promise.all(clients.map(client => client.stop()));
+      await account?.stop();
+      await pool.end();
+    } finally { cluster.remove(); }
   }
 }, 120_000);

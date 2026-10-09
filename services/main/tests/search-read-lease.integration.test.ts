@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied, AdmissionExpired,
   AdmissionUnavailable, engageAccessRecoveryFence, releaseAccessRecoveryFence,
 } from '../src/modules/access/admission.ts';
@@ -15,29 +15,9 @@ const root = resolve(import.meta.dir, '../../..');
 const issuer = 'https://account.search.test';
 const subject = 'reader';
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 test('SEARCH12 foundation: durable private read admission, fences and two Main registries', async () => {
-  const state = join(root, '.temp', `search-read-lease-${Bun.randomUUIDv7()}`);
-  const data = join(state, 'pgdata');
-  const socketDirectory = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
-  const config = { host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 4 };
+  const cluster = await startPostgresCluster();
+  const config = { ...cluster.connection, max: 4 };
   const pool = new Pool(config);
   const secondPool = new Pool(config);
   try {
@@ -286,7 +266,7 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
       && row.scope === `contribution:read:${recoveryTarget}` && row.sendStartedAt !== null)).toBe(true);
     const inventory = JSON.parse(execFileSync(...scriptCommand(['access:pending-search']), {
       cwd: root, env: { ...process.env,
-        ACCESS_DATABASE_URL: `postgresql://${encodeURIComponent(config.user ?? '')}@127.0.0.1:${port}/postgres` },
+        ACCESS_DATABASE_URL: `postgresql://${encodeURIComponent(cluster.user)}@127.0.0.1:${cluster.port}/postgres` },
     }).toString()) as { rows: Array<{ id: string; sendStartedAt: string | null }> };
     expect(inventory.rows.some(row => row.id === recoveryDelivery.id
       && row.sendStartedAt !== null)).toBe(true);
@@ -324,7 +304,6 @@ test('SEARCH12 foundation: durable private read admission, fences and two Main r
   } finally {
     await secondPool.end();
     await pool.end();
-    try { execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state }); }
-    finally { rmSync(state, { recursive: true, force: true }); }
+    cluster.remove();
   }
 }, 120_000);

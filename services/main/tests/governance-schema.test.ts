@@ -1,9 +1,8 @@
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { getTableConfig, type PgTable } from 'drizzle-orm/pg-core';
 import { Pool, type PoolClient } from 'pg';
 import { migrateContent } from '../../content/src/migrate.ts';
@@ -27,8 +26,7 @@ const decisionReasons = (outcome: string, scope: string, rule: DecisionInput['ru
     appealRoute: '/v1/public-reports/{caseId}/correspondence', contentLanguage: 'en', rule,
   });
 
-const state = join(root, '.temp', `governance-schema-${id()}`);
-let port = 0;
+let cluster: PostgresCluster | undefined;
 const pools: Pool[] = [];
 let accessEmpty: Pool;
 let accessUpgrade: Pool;
@@ -37,27 +35,8 @@ let contentUpgrade: Pool;
 let upgradedProof: OrganizationModeration;
 let upgradedRecord: string;
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 beforeAll(async () => {
-  const data = join(state, 'pgdata');
-  const socketDirectory = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
+  cluster = await startPostgresCluster();
   const admin = database('postgres');
   for (const name of ['access_empty', 'access_upgrade', 'content_empty', 'content_upgrade']) {
     await admin.query(`CREATE DATABASE ${name}`);
@@ -93,13 +72,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await Promise.all(pools.map(pool => pool.end()));
-  try {
-    execFileSync('pg_ctl', ['-D', join(state, 'pgdata'), '-m', 'fast', '-w', 'stop'], { cwd: state });
-  } finally { rmSync(state, { recursive: true, force: true }); }
+  cluster?.remove();
 }, 60_000);
 
 function database(name: string): Pool {
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: name, max: 2 });
+  const pool = new Pool({ ...cluster!.connection, database: name, max: 2 });
   pools.push(pool);
   return pool;
 }

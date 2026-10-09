@@ -1,34 +1,13 @@
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
-import { resolve, join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { horizonLagSql, readHorizonLag } from '../src/modules/horizon/lag.ts';
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 test('held writer ages rise while all three horizon consumers retain pending rows', async () => {
-  const state = resolve(import.meta.dir, '../../../.temp', `horizon-lag-${Bun.randomUUIDv7()}`);
-  const data = join(state, 'data');
-  const socket = resolve(import.meta.dir, '../../../.temp/pg-sock');
-  mkdirSync(state, { recursive: true });
-  mkdirSync(socket, { recursive: true });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 4 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 4 });
   try {
     // Minimal owner tables exercise the actual read query without unrelated schema or graph preparation.
     await pool.query(`CREATE SCHEMA access;
@@ -134,7 +113,6 @@ test('held writer ages rise while all three horizon consumers retain pending row
     } finally { await writer.query('ROLLBACK'); writer.release(); }
   } finally {
     await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
-    rmSync(state, { recursive: true, force: true });
+    cluster.remove();
   }
 }, 30_000);

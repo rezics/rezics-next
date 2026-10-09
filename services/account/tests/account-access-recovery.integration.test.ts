@@ -9,6 +9,8 @@ import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
+import { startPostgresCluster, startPreparedPostgresCluster, type PostgresCluster }
+  from '../../../tests/qa/support/postgres-cluster.ts';
 import { accountAuthOptions, createAccountAuth } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
 import { installConsentRefreshFence } from '../src/consent-fence.ts';
@@ -116,11 +118,9 @@ async function seedCurrentAccountCoverage(pool: Pool): Promise<void> {
 test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL frontier', async () => {
   const state = join(root, '.temp', `account-access-recovery-${Bun.randomUUIDv7()}`);
   const manifestKey = 'ab'.repeat(32);
-  const socketDirectory = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
-  type Owner = { name: string; data: string; backup: string; archive: string;
-    port: number; pool: Pool; started: boolean };
+  type Owner = { name: string; cluster: PostgresCluster; backup: string; archive: string;
+    port: number; pool: Pool };
   const owners: Owner[] = [];
   const recovered: Owner[] = [];
   let graphProcess: ChildProcess | undefined;
@@ -153,24 +153,16 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     if (process.exitCode === null) await new Promise<void>(resolveExit => process.once('exit', () => resolveExit()));
   };
   const start = async (name: string, data: string): Promise<Owner> => {
-    const port = await freePort();
-    execFileSync('pg_ctl', ['-D', data, '-l', join(state, `${name}.log`),
-      '-o', `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
-    return { name, data, backup: '', archive: '', port,
-      pool: new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres' }),
-      started: true };
+    const cluster = await startPreparedPostgresCluster(data);
+    return { name, cluster, backup: '', archive: '', port: cluster.port, pool: new Pool(cluster.connection) };
   };
   const init = async (name: string): Promise<Owner> => {
-    const data = join(state, `${name}-primary`);
     const backup = join(state, `${name}-backup`);
     const archive = join(state, `${name}-archive`);
     mkdirSync(archive, { mode: 0o700 });
-    execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-    appendFileSync(join(data, 'postgresql.conf'), `\nwal_level = replica\narchive_mode = on\n` +
-      `archive_command = 'test ! -e ${archive}/%f && cp %p ${archive}/%f'\n`);
-    const owner = await start(name, data);
-    owner.backup = backup;
-    owner.archive = archive;
+    const cluster = await startPostgresCluster({ serverSettings:
+      `wal_level = replica\narchive_mode = on\narchive_command = 'test ! -e ${archive}/%f && cp %p ${archive}/%f'\n` });
+    const owner = { name, cluster, backup, archive, port: cluster.port, pool: new Pool(cluster.connection) };
     owners.push(owner);
     return owner;
   };
@@ -186,8 +178,7 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
     }
     expect(existsSync(join(owner.archive, requiredWal))).toBe(true);
     await owner.pool.end();
-    execFileSync('pg_ctl', ['-D', owner.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    owner.started = false;
+    owner.cluster.stop('fast');
   };
   const restore = async (owner: Owner, complete: boolean, requiredWal: string): Promise<Owner> => {
     const label = `${owner.name}-${complete ? 'full' : 'older'}`;
@@ -530,9 +521,11 @@ test('OPS03/IAM10 partial: two-owner deletion cut rejects either missing WAL fro
   } finally {
     await app?.stop();
     await stopFuseki();
-    for (const owner of [...recovered, ...owners]) {
-      try { await owner.pool.end(); } catch { /* pool may already be closed */ }
-      if (owner.started) execFileSync('pg_ctl', ['-D', owner.data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    }
+    try {
+      for (const owner of [...recovered, ...owners]) {
+        try { await owner.pool.end(); } catch { /* pool may already be closed */ }
+        owner.cluster.remove();
+      }
+    } finally { rmSync(state, { recursive: true, force: true }); }
   }
 }, 120_000);

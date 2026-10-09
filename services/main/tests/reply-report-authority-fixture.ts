@@ -1,8 +1,7 @@
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { Elysia } from 'elysia';
 import { Pool, type PoolClient } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
@@ -55,15 +54,16 @@ export interface ReportingReply {
 /** One native owner template, copied without Docker or a live graph service. */
 export async function replyReportAuthorityDatabase() {
   const root = resolve(import.meta.dir, '../../..');
-  const directory = join(root, '.temp', `reply-report-authority-${randomUUID()}`),
-    data = join(directory, 'pgdata');
-  mkdirSync(directory, { recursive: true, mode: 0o700 });
-  const command = (name: string, args: string[]) =>
-    execFileSync(name, args, { cwd: directory, stdio: 'pipe', timeout: 30_000 });
   let admin: Pool | undefined,
-    started = false,
     count = 0;
   const copies = new Set<() => Promise<void>>();
+  const cluster = await startPostgresCluster();
+  const config = {
+    host: cluster.host,
+    port: cluster.port,
+    user: cluster.user,
+    connectionTimeoutMillis: 30_000,
+  };
   async function stop() {
     const errors: unknown[] = [];
     for (const close of [...copies])
@@ -78,51 +78,15 @@ export async function replyReportAuthorityDatabase() {
       errors.push(error);
     }
     admin = undefined;
-    if (started)
-      try {
-        command('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '30', '-w', 'stop']);
-        started = false;
-      } catch (error) {
-        errors.push(error);
-      }
-    if (!started) rmSync(directory, { recursive: true, force: true });
+    try {
+      cluster.remove();
+    } catch (error) {
+      errors.push(error);
+    }
     if (errors.length)
       throw new AggregateError(errors, 'Reply reporting PostgreSQL cleanup failed');
   }
   try {
-    command('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync']);
-    const port = await new Promise<number>((resolvePort, reject) => {
-      const server = createServer();
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
-        const address = server.address();
-        if (!address || typeof address === 'string') {
-          server.close();
-          reject(new Error('No reply reporting PostgreSQL port'));
-          return;
-        }
-        server.close((error) => (error ? reject(error) : resolvePort(address.port)));
-      });
-    });
-    started = true;
-    command('pg_ctl', [
-      '-D',
-      data,
-      '-l',
-      join(directory, 'postgres.log'),
-      '-o',
-      `-h 127.0.0.1 -p ${port} -k /tmp`,
-      '-t',
-      '30',
-      '-w',
-      'start',
-    ]);
-    const config = {
-      host: '127.0.0.1',
-      port,
-      user: process.env.USER,
-      connectionTimeoutMillis: 30_000,
-    };
     admin = new Pool({ ...config, database: 'postgres', max: 1 });
     await admin.query('CREATE DATABASE reply_report_template');
     const template = new Pool({ ...config, database: 'reply_report_template', max: 1 });

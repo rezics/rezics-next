@@ -1,11 +1,10 @@
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster, type PostgresCluster } from '../support/postgres-cluster.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { contentErasureTables, DESTRUCTION_STATUSES, DISPOSITION_DESTRUCTION,
   DISPOSITION_SUPPRESSION, ERASURE_AUTHORITIES, ERASURE_KINDS, ERASURE_STAGES,
@@ -27,26 +26,13 @@ const ownRelay = /^01\d_/;
 const ownContent = /^12\d_/;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
-let state = '';
-let port = 0;
+let cluster: PostgresCluster | undefined;
 let admin: Pool | undefined;
 const pools: Pool[] = [];
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 async function database(name: string): Promise<Pool> {
   await admin!.query(`CREATE DATABASE ${name}`);
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: name, max: 4 });
+  const pool = new Pool({ ...cluster!.connection, database: name, max: 4 });
   pools.push(pool);
   return pool;
 }
@@ -99,27 +85,14 @@ async function usesIndex(pool: Pool, sql: string, params: unknown[], index: stri
 }
 
 beforeAll(async () => {
-  state = join(root, '.temp', `erasure-schema-${randomUUID()}`);
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  // Skip the disposable fixture's initial disk sync; server fsync stays enabled.
-  execFileSync('initdb', ['-D', join(state, 'pgdata'), '-A', 'trust', '--no-instructions',
-    '--no-sync'], { cwd: state, stdio: 'ignore' });
-  port = await freePort();
-  execFileSync('pg_ctl', ['-D', join(state, 'pgdata'), '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state, stdio: 'ignore' });
-  admin = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 2 });
+  cluster = await startPostgresCluster();
+  admin = new Pool({ ...cluster.connection, max: 2 });
 }, 60_000);
 
 afterAll(async () => {
   await Promise.all(pools.map(pool => pool.end()));
   await admin?.end();
-  if (state) {
-    try {
-      execFileSync('pg_ctl', ['-D', join(state, 'pgdata'), '-m', 'fast', '-w', 'stop'], { stdio: 'ignore' });
-    } finally { rmSync(state, { recursive: true, force: true }); }
-  }
+  cluster?.remove();
 }, 60_000);
 
 test('erasure journal schema installs empty, upgrades current head and allocates commit-ordered epochs', async () => {

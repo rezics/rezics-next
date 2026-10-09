@@ -1,10 +1,9 @@
 import { test, expect } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import {
   AccessAdmissionRegistry, AdmissionConflict, AdmissionDenied, AdmissionExpired,
@@ -14,29 +13,9 @@ import {
 
 const root = resolve(import.meta.dir, '../../..');
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () => {
-  const state = join(root, '.temp', `access-integration-${Bun.randomUUIDv7()}`);
-  const data = join(state, 'pgdata');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  const socketDirectory = join(root, '.temp', 'pg-sock');
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 4 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 4 });
   try {
     const client = await pool.connect();
     try {
@@ -203,6 +182,6 @@ test('IAM07 partial: PostgreSQL admission, claim and scope closures', async () =
     await expect(registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
   } finally {
     await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    cluster.remove();
   }
 }, 120_000);

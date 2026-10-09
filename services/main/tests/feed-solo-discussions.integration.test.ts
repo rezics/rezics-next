@@ -1,10 +1,9 @@
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { digest } from '../src/modules/recommendation/derived-generation.ts';
 import { FeedStore } from '../src/modules/feed/store.ts';
 
@@ -15,31 +14,12 @@ import { FeedStore } from '../src/modules/feed/store.ts';
 const root = resolve(import.meta.dir, '../../..');
 const accessDir = join(root, 'services/main/migrations/access');
 const SOLO = '820_feed_solo_discussions.sql';
-const state = join(root, '.temp', `feed-solo-${Bun.randomUUIDv7()}`);
+let cluster: PostgresCluster | undefined;
 let pool: Pool;
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 beforeAll(async () => {
-  const data = join(state, 'pgdata');
-  const socketDirectory = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
-  pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 2 });
+  cluster = await startPostgresCluster();
+  pool = new Pool({ ...cluster.connection, max: 2 });
   for (const file of schemaFiles(root, 'access').filter(file => migrationVersion(file) < migrationVersion(SOLO))) {
     await pool.query(readFileSync(join(accessDir, file), 'utf8'));
   }
@@ -47,8 +27,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool?.end();
-  try { execFileSync('pg_ctl', ['-D', join(state, 'pgdata'), '-m', 'immediate', 'stop']); } catch { /* not started */ }
-  rmSync(state, { recursive: true, force: true });
+  cluster?.remove();
 });
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;

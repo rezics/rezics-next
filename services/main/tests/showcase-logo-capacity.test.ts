@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
@@ -14,7 +13,6 @@ import { MediaStore } from '../src/modules/media/store.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const state = join(root, '.temp', `showcase-capacity-${randomUUID()}`);
-const data = join(state, 'pgdata');
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 const actor = native();
 const principal = randomUUID();
@@ -22,9 +20,8 @@ const admission = () => ({ admissionId: randomUUID(), principalId: principal,
   actingSubject: actor, authorityEpoch: '1', requestDigest: 'a'.repeat(64) });
 const inspect = async () => ({ width: 640, height: 480, hasAlpha: true });
 const eight = ['en', 'ja', 'zh-Hant', 'zh-Hans', 'ko', 'fr', 'de', 'es'];
+let cluster: PostgresCluster | undefined;
 let admin: Pool | undefined;
-let port: number;
-let running = false;
 let asset: string;
 let legacy: { active: string; removed: string; empty: string; trailer: string; avatar: string };
 
@@ -33,31 +30,12 @@ const logo = (target: string, language: string, tone: 'light' | 'dark' = 'light'
   expectedSelection: null, role: 'logo', language, tone, anchor: 'center-top',
   asset, crop: null, focalArea: null });
 
-async function freePort(): Promise<number> {
-  return new Promise((done, fail) => {
-    const server = createServer();
-    server.once('error', fail);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return fail(new Error('No PostgreSQL port'));
-      server.close(() => done(address.port));
-    });
-  });
-}
-
-const poolFor = (database: string) => new Pool({ host: '127.0.0.1', port,
-  user: process.env.USER, database, max: 8 });
+const poolFor = (database: string) => new Pool({ ...cluster!.connection, database, max: 8 });
 
 /** Build the migrated owner and exact source once; each test restores an isolated copy. */
 beforeAll(async () => {
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  running = true;
+  cluster = await startPostgresCluster();
   admin = poolFor('postgres');
   await admin.query('CREATE DATABASE showcase_capacity_template');
   const pool = poolFor('showcase_capacity_template');
@@ -95,7 +73,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await admin?.end();
-  if (running) execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
+  cluster?.remove();
   rmSync(state, { recursive: true, force: true });
 });
 

@@ -1,10 +1,9 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import {
   AccessAdmissionRegistry,
@@ -20,56 +19,19 @@ import {
 } from '../src/modules/access/zone-content-authority.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const state = join(root, '.temp', `zone-content-owner-${randomUUID()}`);
-const data = join(state, 'pgdata');
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const receipt = () => ({ idempotencyKey: randomUUID(), requestDigest: digest(randomUUID()) });
 const resource = () => `https://rezics.com/id/${randomUUID()}`;
+let cluster: PostgresCluster | undefined;
 let pool: Pool;
-let started = false;
 let admin: Awaited<ReturnType<typeof controller>>;
 let grants: AccessGrants;
 let access: AccessAdmissionRegistry;
 
 beforeAll(async () => {
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], {
-    cwd: state,
-    stdio: 'pipe',
-  });
-  const port = await new Promise<number>((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string')
-        return reject(new Error('No PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-  execFileSync(
-    'pg_ctl',
-    [
-      '-D',
-      data,
-      '-l',
-      join(state, 'postgres.log'),
-      '-o',
-      `-h 127.0.0.1 -p ${port} -k /tmp`,
-      '-w',
-      'start',
-    ],
-    { cwd: state, stdio: 'pipe' },
-  );
-  started = true;
-  pool = new Pool({
-    host: '127.0.0.1',
-    port,
-    user: process.env.USER,
-    database: 'postgres',
-    max: 4,
-    connectionTimeoutMillis: 1000,
-  });
+  const running = await startPostgresCluster();
+  cluster = running;
+  pool = new Pool({ ...running.connection, max: 4, connectionTimeoutMillis: 1000 });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -95,11 +57,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool?.end();
-  if (started)
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], {
-      cwd: state,
-      stdio: 'pipe',
-    });
+  cluster?.remove();
 });
 
 /** A current controller is sufficient for administrator authority. Deliberately

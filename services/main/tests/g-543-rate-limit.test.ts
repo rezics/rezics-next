@@ -1,11 +1,10 @@
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Elysia } from 'elysia';
 import { Pool } from 'pg';
-import { freePort } from '../../account/tests/account-fixture.ts';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { rateLimitBudgets, rateLimitFamily, principalClasses } from '../src/modules/rate-limit/budgets.ts';
 import { rateLimitHook } from '../src/modules/rate-limit/hook.ts';
 import { anonymousIdentity, PostgresRateLimitStore, RATE_LIMIT_COST_V1, type RateLimitOptions } from '../src/modules/rate-limit/store.ts';
@@ -250,14 +249,8 @@ test('G-543: global hook reaches each Main plugin group and fails closed on depe
 
 test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets, safety isolation and replay', async () => {
   const root = resolve(import.meta.dir, '../../..');
-  const state = join(root, '.temp', `g-543-${Bun.randomUUIDv7()}`);
-  const data = join(state, 'pg');
-  mkdirSync(state, { recursive: true });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { stdio: 'ignore' });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k /tmp`, '-w', 'start'], { stdio: 'ignore' });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 8 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 8 });
   try {
     const migrations = join(root, 'services/main/migrations/access');
     for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort(compareMigrationPaths)) {
@@ -459,7 +452,6 @@ test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets
     expect(outage.headers.get('retry-after')).toBe('5');
   } finally {
     await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { stdio: 'ignore' });
-    rmSync(state, { recursive: true, force: true });
+    cluster.remove();
   }
 }, 120_000);

@@ -1,10 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
-import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { ReaderLibraryStatusStore } from '../src/modules/library/status.ts';
@@ -14,41 +11,20 @@ import { InvalidStructureProgress, StructureProgressStore } from '../src/modules
 import type { SessionSelection } from '../src/modules/session/contract.ts';
 import { ConsumptionSessionStore, sessionCompletionSource } from '../src/modules/session/store.ts';
 
-const root = resolve(import.meta.dir, '../../..');
 const id = () => `https://rezics.com/id/${randomUUID()}`;
 const principal = (): VerifiedPrincipal => ({ issuer: 'https://progress-from-sessions.test', subject: randomUUID() });
 const order = (index: number) => `a\u0002${index.toString(36).padStart(4, '0')}`;
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
-let state: string, data: string, pool: Pool;
+let cluster: PostgresCluster | undefined;
+let pool: Pool;
 beforeAll(async () => {
-  state = join(root, '.temp', `progress-from-sessions-${randomUUID()}`);
-  data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 16 });
+  cluster = await startPostgresCluster();
+  pool = new Pool({ ...cluster.connection, max: 16 });
   await migrateContent(pool);
 }, 120_000);
 afterAll(async () => {
-  await pool.end();
-  try { execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state }); }
-  finally { rmSync(state, { recursive: true, force: true }); }
+  await pool?.end();
+  cluster?.remove();
 });
 
 /** One series of `chapters` placements under a stub of the graph. */

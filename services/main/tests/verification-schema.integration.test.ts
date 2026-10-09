@@ -1,9 +1,8 @@
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
 import { migrateContent } from '../../content/src/migrate.ts';
@@ -17,18 +16,6 @@ const FIRST_VERIFICATION = 90;
 const id = () => crypto.randomUUID();
 const native = () => `https://rezics.com/id/${crypto.randomUUID()}`;
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
-
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
 
 async function tx<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
@@ -142,16 +129,9 @@ async function assertCatalog(pool: Pool) {
 }
 
 test('FACT01-FACT04 owner schema: Content verification migrations install empty and upgrade from head', async () => {
-  const state = join(root, '.temp', `verification-schema-${crypto.randomUUID()}`);
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', join(state, 'pgdata'), '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', join(state, 'pgdata'), '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const admin = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 2 });
-  const connect = (database: string) => new Pool({ host: '127.0.0.1', port, user: process.env.USER, database, max: 6 });
+  const cluster = await startPostgresCluster();
+  const admin = new Pool({ ...cluster.connection, max: 2 });
+  const connect = (database: string) => new Pool({ ...cluster.connection, database, max: 6 });
   const local = schemaFiles(root, 'content')
     .map(name => ({ name, version: migrationVersion(name) }));
   const ours = local.filter(item => item.version >= FIRST_VERIFICATION && item.version < 100);
@@ -205,7 +185,7 @@ test('FACT01-FACT04 owner schema: Content verification migrations install empty 
     }
   } finally {
     await admin.end();
-    execFileSync('pg_ctl', ['-D', join(state, 'pgdata'), '-m', 'fast', '-w', 'stop'], { cwd: state });
+    cluster.remove();
   }
 }, 120_000);
 

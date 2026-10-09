@@ -1,11 +1,10 @@
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../support/postgres-cluster.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
@@ -22,18 +21,6 @@ const root = resolve(import.meta.dir, '../../..');
 const consumer = 'main-content-backpressure-v1';
 const agent = `https://rezics.com/id/${randomUUID()}`;
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 interface Snapshot {
   profile: string;
   complete: boolean;
@@ -47,15 +34,9 @@ test('OPS06: worker and broker saturation refuse new intents and lose no admitte
     throw new Error('Run this test through the isolated QA integration tier');
   }
   const state = join(root, '.temp', `backpressure-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 6 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 6 });
   try {
     // Content and relay are separate owners; one disposable server hosts both schemas.
     await migrateContent(pool);
@@ -184,7 +165,7 @@ test('OPS06: worker and broker saturation refuse new intents and lose no admitte
     const relayConsumer = `backpressure-${randomUUID()}`;
     await initializeRelayCheckpoint(pool, relayConsumer, lineage.dataEpoch);
     // Main observes the relay checkpoint only through a read-only session.
-    const relayReader = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres',
+    const relayReader = new Pool({ ...cluster.connection,
       max: 2, options: '-c default_transaction_read_only=on' });
     try {
       await expect(relayReader.query('UPDATE relay.checkpoint SET sequence = 0 WHERE consumer = $1',
@@ -249,7 +230,7 @@ test('OPS06: worker and broker saturation refuse new intents and lose no admitte
     }
   } finally {
     await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    cluster.remove();
     rmSync(state, { recursive: true, force: true });
   }
 }, 240_000);

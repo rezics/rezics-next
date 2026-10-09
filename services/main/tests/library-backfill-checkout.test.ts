@@ -1,51 +1,18 @@
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
-import { join, resolve } from 'node:path';
 import type { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import {
   boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode,
 } from '../src/infrastructure/pg-pool.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { prepareLibraryShelves } from '../src/modules/library/backfill.ts';
 
-const root = resolve(import.meta.dir, '../../..');
-
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
-function stopCluster(data: string, state: string, socket: string): void {
-  try {
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state, stdio: 'ignore' });
-  } catch { /* the cluster never became ready */ }
-  rmSync(state, { recursive: true, force: true });
-  rmSync(socket, { recursive: true, force: true });
-}
-
 /** A checkout from the context that started the backfill is not nested while the
  * backfill holds its connection. A second checkout inside that scan still is. */
 test('the library backfill keeps its checkout off the context that started it', async () => {
-  const state = join(root, '.temp', `library-backfill-checkout-${process.pid}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', `lb-sock-${process.pid}`);
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
+  const cluster = await startPostgresCluster();
   const content = boundedPool({
-    host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 3,
+    ...cluster.connection, max: 3,
     connectionTimeoutMillis: 5_000,
   });
   const previous = nestedPoolCheckoutMode();
@@ -114,6 +81,6 @@ test('the library backfill keeps its checkout off the context that started it', 
     if (finished) await finished.catch(() => undefined);
     setNestedPoolCheckoutMode(previous);
     await content.end();
-    stopCluster(data, state, socket);
+    cluster.remove();
   }
 }, 60_000);

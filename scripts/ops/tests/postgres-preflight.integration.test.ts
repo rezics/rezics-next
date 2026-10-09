@@ -1,65 +1,23 @@
 import { expect, test } from 'bun:test';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
-import { appendFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Client, Pool } from 'pg';
 import { checkPostgresOwners, postgresPreflightConfig } from '../postgres-preflight.ts';
 import { migrateOwners, repositoryRoot } from '../migrate.ts';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 
 test('administrator provisioning is idempotent, requires restart and restores inherited owner diagnostics without data grants', async () => {
-  const state = join(repositoryRoot, '.temp', `postgres-preflight-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  let started = false;
+  const cluster = await startPostgresCluster({
+    role: 'postgres',
+    serverSettings: 'max_prepared_transactions = 4',
+  });
   let admin: Pool | undefined;
   try {
-    execFileSync('initdb', ['-D', data, '-U', 'postgres', '-A', 'trust', '--no-instructions'], {
-      stdio: 'pipe',
-      timeout: 30_000,
-    });
-    appendFileSync(join(data, 'postgresql.conf'), '\nmax_prepared_transactions = 4\n');
-    const port = await new Promise<number>((resolve, reject) => {
-      const server = createServer();
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
-        const address = server.address();
-        if (!address || typeof address === 'string') return reject(new Error('No test port'));
-        server.close(() => resolve(address.port));
-      });
-    });
-    const start = () => {
-      execFileSync(
-        'pg_ctl',
-        [
-          '-D',
-          data,
-          '-l',
-          join(state, 'postgres.log'),
-          '-o',
-          `-h 127.0.0.1 -p ${port} -k /tmp`,
-          '-t',
-          '20',
-          '-w',
-          'start',
-        ],
-        { stdio: 'pipe', timeout: 30_000 },
-      );
-      started = true;
-    };
-    const stop = () => {
-      execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-t', '20', '-w', 'stop'], {
-        stdio: 'pipe',
-        timeout: 30_000,
-      });
-      started = false;
-    };
-    start();
-    const url = (owner: string) => `postgres://${owner}@127.0.0.1:${port}/postgres`;
+    const url = (owner: string) => `postgres://${owner}@127.0.0.1:${cluster.port}/postgres`;
     const connectAdmin = () =>
       new Pool({
-        connectionString: url('postgres'),
+        ...cluster.connection,
         max: 1,
         connectionTimeoutMillis: 5_000,
         statement_timeout: 5_000,
@@ -82,7 +40,7 @@ test('administrator provisioning is idempotent, requires restart and restores in
           '-h',
           '127.0.0.1',
           '-p',
-          String(port),
+          String(cluster.port),
           '-U',
           'postgres',
           '-d',
@@ -105,8 +63,8 @@ test('administrator provisioning is idempotent, requires restart and restores in
     ).toBeNull();
     await admin.end();
     admin = undefined;
-    stop();
-    start();
+    cluster.stop('fast');
+    cluster.start();
     admin = connectAdmin();
     await expect(checkPostgresOwners(env)).resolves.toBeUndefined();
     const privileges = (
@@ -173,7 +131,7 @@ test('administrator provisioning is idempotent, requires restart and restores in
     } finally {
       await bounded.end();
     }
-    const envFile = join(state, 'production.env');
+    const envFile = join(cluster.directory, 'production.env');
     writeFileSync(
       envFile,
       Object.entries(env)
@@ -213,11 +171,6 @@ test('administrator provisioning is idempotent, requires restart and restores in
     await expect(checkPostgresOwners(env)).resolves.toBeUndefined();
   } finally {
     await admin?.end();
-    if (started)
-      spawnSync('pg_ctl', ['-D', data, '-m', 'immediate', '-t', '10', '-w', 'stop'], {
-        stdio: 'pipe',
-        timeout: 15_000,
-      });
-    rmSync(state, { recursive: true, force: true });
+    cluster.remove();
   }
 }, 90_000);

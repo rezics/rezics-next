@@ -1,18 +1,14 @@
 import { test, expect } from 'bun:test';
 import { signupPolicyFixture } from './account-fixture.ts';
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { join, resolve } from 'node:path';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { accountAuthOptions, createAccountAuth } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
 import { installConsentRefreshFence } from '../src/consent-fence.ts';
 import { AccountAssertionDenied, AccountAssertionVerifier } from '../../main/src/modules/account/verify-assertion.ts';
-
-const root = resolve(import.meta.dir, '../../..');
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -27,16 +23,8 @@ async function freePort(): Promise<number> {
 }
 
 test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over HTTP', async () => {
-  const state = join(root, '.temp', `account-integration-${Bun.randomUUIDv7()}`);
-  const data = join(state, 'pgdata');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  const socketDirectory = join(root, '.temp', 'pg-sock');
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const postgresPort = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${postgresPort} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port: postgresPort, user: process.env.USER, database: 'postgres' });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection });
   const accountPort = await freePort();
   const baseURL = `http://127.0.0.1:${accountPort}`;
   const operatorUserIds = new Set<string>();
@@ -263,8 +251,9 @@ test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over
       .toBe(1);
     expect(fencedSubjects).toEqual([memberId]);
   } finally {
-    await app?.stop();
-    await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    try {
+      await app?.stop();
+      await pool.end();
+    } finally { cluster.remove(); }
   }
 }, 120_000);

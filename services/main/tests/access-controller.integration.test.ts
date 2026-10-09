@@ -1,11 +1,10 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { AsyncResource } from 'node:async_hooks';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { boundedPool } from '../src/infrastructure/pg-pool.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
@@ -24,52 +23,16 @@ import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts'
 import { principalControllerSubjects } from '../src/modules/access/controller-continuity.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const state = join(root, '.temp', `access-controller-${randomUUID()}`);
-const data = join(state, 'pgdata');
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const native = () => `https://rezics.com/id/${randomUUID()}`;
+let cluster: PostgresCluster | undefined;
 let pool: Pool;
 let single: Pool;
-let started = false;
 
 beforeAll(async () => {
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], {
-    cwd: state,
-    stdio: 'pipe',
-  });
-  const port = await new Promise<number>((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string')
-        return reject(new Error('missing PostgreSQL port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-  execFileSync(
-    'pg_ctl',
-    [
-      '-D',
-      data,
-      '-l',
-      join(state, 'postgres.log'),
-      '-o',
-      `-h 127.0.0.1 -p ${port} -k /tmp`,
-      '-w',
-      'start',
-    ],
-    { cwd: state, stdio: 'pipe' },
-  );
-  started = true;
-  const config = {
-    host: '127.0.0.1',
-    port,
-    user: process.env.USER,
-    database: 'postgres',
-    connectionTimeoutMillis: 1000,
-  };
+  const running = await startPostgresCluster();
+  cluster = running;
+  const config = { ...running.connection, connectionTimeoutMillis: 1000 };
   pool = new Pool({ ...config, max: 4 });
   single = boundedPool({ ...config, max: 1 });
   const client = await pool.connect();
@@ -90,11 +53,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await single?.end();
   await pool?.end();
-  if (started)
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], {
-      cwd: state,
-      stdio: 'pipe',
-    });
+  cluster?.remove();
 });
 
 async function principal() {

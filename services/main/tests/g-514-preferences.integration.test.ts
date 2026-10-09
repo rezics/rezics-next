@@ -1,10 +1,9 @@
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { Elysia } from 'elysia';
 import { Pool } from 'pg';
 import { preferencesRoutes } from '../src/routes/preferences.ts';
@@ -17,7 +16,7 @@ import { canonicalLanguage } from '../src/modules/display-language/select.ts';
 const root = resolve(import.meta.dir, '../../..');
 const accessDir = join(root, 'services/main/migrations/access');
 const migration = '875_reading_languages.sql';
-const state = join(root, '.temp', `g-514-${randomUUID()}`);
+let cluster: PostgresCluster | undefined;
 let pool: Pool;
 const principal = { issuer: 'https://account.rezics.test', subject: 'g-514', emailVerified: true };
 const owner = randomUUID(), agent = `https://rezics.com/id/${randomUUID()}`, representation = randomUUID();
@@ -26,18 +25,6 @@ const feedOnlyOwner = randomUUID(), feedOnlyAgent = `https://rezics.com/id/${ran
 const feedOnlyPrincipal = { ...principal, subject: 'g-514-feed-only' };
 let home: HomePersonalStore, person: PersonPreferencesStore, app: Pick<Elysia, 'handle'>;
 const languages = ['ar', 'zh-TW', 'yue-Hant', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'he', 'sr-Latn', 'pa-Arab'];
-
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
 
 async function provisionPerson(principalId: string, personAgent: string, control: string, createdAt: string) {
   await pool.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')", [personAgent]);
@@ -50,14 +37,8 @@ async function provisionPerson(principalId: string, personAgent: string, control
 }
 
 beforeAll(async () => {
-  const data = join(state, 'pgdata'), socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 6 });
+  cluster = await startPostgresCluster();
+  pool = new Pool({ ...cluster.connection, max: 6 });
   for (const file of schemaFiles(root, 'access').filter(file => migrationVersion(file) < migrationVersion(migration))) {
     await pool.query(readFileSync(join(accessDir, file), 'utf8'));
   }
@@ -87,8 +68,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool?.end();
-  try { execFileSync('pg_ctl', ['-D', join(state, 'pgdata'), '-m', 'immediate', 'stop']); } catch { /* not started */ }
-  rmSync(state, { recursive: true, force: true });
+  cluster?.remove();
 });
 
 async function call(path: string, body?: object, key?: string) {

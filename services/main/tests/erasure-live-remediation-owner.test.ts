@@ -1,8 +1,7 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { appendContentEvent } from '../../content/src/event-sequencer.ts';
@@ -23,22 +22,9 @@ const quote = 'OLD-QUOTE-ζ-source';
 const authored = 'authored annotation stays';
 const manifestDigest = 'cd'.repeat(32);
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 let state = '';
-let cluster: { host: string; port: number; user: string };
+let cluster: PostgresCluster | undefined;
 let admin: Pool;
-let stopCluster: () => Promise<void>;
 let nativeSuppressed = new Set<string>();
 const lineage = { dataEpoch: randomUUID(), routingEpoch: randomUUID() };
 
@@ -61,7 +47,7 @@ interface Env { pool: Pool; service: ErasureService; queries: string[]; upgrade(
 /** `legacy` installs Content without migrations 1708 and 1709, as a database that predates source clearing. */
 async function database(name: string, legacy: boolean): Promise<Env> {
   await admin.query(`CREATE DATABASE ${name}`);
-  const pool = new Pool({ ...cluster, database: name, max: 6 });
+  const pool = new Pool({ ...cluster!.connection, database: name, max: 6 });
   const queries: string[] = [];
   let content = join(root, 'services/content/migrations');
   if (legacy) {
@@ -97,29 +83,20 @@ let old: Env;
 
 beforeAll(async () => {
   state = join(root, '.temp', `erasure-live-remediation-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  const user = process.env.USER ?? execFileSync('whoami', { encoding: 'utf8' }).trim();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  cluster = { host: '127.0.0.1', port, user };
-  admin = new Pool({ ...cluster, database: 'postgres', max: 2 });
-  stopCluster = async () => {
-    await env?.pool.end();
-    await old?.pool.end();
-    await admin.end();
-    try { execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state }); }
-    finally { rmSync(state, { recursive: true, force: true }); }
-  };
+  cluster = await startPostgresCluster();
+  admin = new Pool({ ...cluster.connection, max: 2 });
   env = await database('remediation_main', false);
   old = await database('remediation_legacy', true);
 }, 120_000);
 
-afterAll(async () => { await stopCluster?.(); });
+afterAll(async () => {
+  await env?.pool.end();
+  await old?.pool.end();
+  await admin?.end();
+  try { cluster?.remove(); }
+  finally { if (state) rmSync(state, { recursive: true, force: true }); }
+});
 
 interface Fixture {
   erasureId: string; epoch: string; admission: string; resource: string; revisions: string[];
@@ -251,7 +228,7 @@ const finishInventory = (target: Env) => completePendingContentErasures(target.s
 /** Owner relay, erasure journal, Content and Access are four separate pools, each with one connection. */
 function ownerOperations() {
   const pools = ['owner', 'journal', 'content', 'access'].map(() =>
-    new Pool({ ...cluster, database: 'remediation_main', max: 1 }));
+    new Pool({ ...cluster!.connection, database: 'remediation_main', max: 1 }));
   const [owner, journal, content, access] = pools as [Pool, Pool, Pool, Pool];
   const service = new ErasureService(journal, content, access);
   return { ops: new OwnerOperations(owner, graph, undefined, undefined, undefined, service),

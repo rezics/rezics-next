@@ -2,9 +2,9 @@ import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../support/postgres-cluster.ts';
 import { ContentComments, contentCommentIntentDigest } from '../../../services/content/src/comments.ts';
 import { appendContentEvent, ContentCore, contentEventPosition, ContentPositionPending,
   type ContentEvent } from '../../../services/content/src/core.ts';
@@ -21,33 +21,15 @@ const principal = { issuer: 'https://content-write-concurrency.test', subject: r
 const environment = { fuseki: new FusekiClient('http://127.0.0.1:9'),
   lineage: { dataEpoch: 'unused-for-owner-events', routingEpoch: '1' }, objectDirectory: '.temp' };
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 /** A disposable loopback cluster. A fresh one starts at a low transaction counter. */
 async function cluster(name: string) {
   const state = join(root, '.temp', `content-write-concurrency-${name}-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 8 });
-  return { state, port, pool, async stop() {
+  const started = await startPostgresCluster();
+  const pool = new Pool({ ...started.connection, max: 8 });
+  return { state, port: started.port, pool, async stop() {
     await pool.end();
-    try { execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state }); }
+    try { started.remove(); }
     finally { rmSync(state, { recursive: true, force: true }); }
   } };
 }

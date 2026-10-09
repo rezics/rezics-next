@@ -1,11 +1,10 @@
 // sql-relations-allow: access.platform_administrator -- The setup inserts the pre-grant singleton before migration 1290 so the upgrade preserves that holder, then proves migration 1291 removed the table.
 import { afterAll, beforeAll, expect, spyOn, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { Elysia } from 'elysia';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { AccessExposure } from '../src/modules/access/exposure.ts';
@@ -45,10 +44,8 @@ import {
 } from '../src/modules/access/platform-permissions.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const state = join(root, '.temp', `platform-access-${randomUUID()}`);
-const data = join(state, 'pgdata');
+let cluster: PostgresCluster | undefined;
 let pool: Pool;
-let started = false;
 let admin: Awaited<ReturnType<typeof person>>;
 let reader: Awaited<ReturnType<typeof person>>;
 let grants: AccessGrants;
@@ -65,44 +62,9 @@ const rateStore = (owner: Pool = pool) =>
   });
 
 beforeAll(async () => {
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], {
-    cwd: state,
-    stdio: 'pipe',
-  });
-  const port = await new Promise<number>((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string')
-        return reject(new Error('No PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-  execFileSync(
-    'pg_ctl',
-    [
-      '-D',
-      data,
-      '-l',
-      join(state, 'postgres.log'),
-      '-o',
-      `-h 127.0.0.1 -p ${port} -k /tmp`,
-      '-w',
-      'start',
-    ],
-    { cwd: state, stdio: 'pipe' },
-  );
-  started = true;
-  pool = new Pool({
-    host: '127.0.0.1',
-    port,
-    user: process.env.USER,
-    database: 'postgres',
-    max: 4,
-    connectionTimeoutMillis: 1000,
-  });
+  const running = await startPostgresCluster();
+  cluster = running;
+  pool = new Pool({ ...running.connection, max: 4, connectionTimeoutMillis: 1000 });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -142,11 +104,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await pool?.end();
-  if (started)
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], {
-      cwd: state,
-      stdio: 'pipe',
-    });
+  cluster?.remove();
 });
 
 async function person(owner: Pool | PoolClient = pool) {

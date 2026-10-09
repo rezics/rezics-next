@@ -1,9 +1,8 @@
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { ContentCore, ContentUnavailable, type ProjectionPublication, type VariantIdentity } from '../../content/src/core.ts';
@@ -62,24 +61,10 @@ class ProjectionGraph extends FusekiClient {
 }
 
 async function postgres(run: (pool: Pool) => Promise<void>) {
-  const state = join(root, '.temp', `projection-isolation-${crypto.randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(socket, { recursive: true });
-  mkdirSync(state, { recursive: true });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync']);
-  const port = await new Promise<number>((resolvePort, reject) => {
-    const server = createServer(); server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'), '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start']);
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 4 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 4 });
   try { await migrateContent(pool); await run(pool); }
-  finally { await pool.end(); execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop']); rmSync(state, { recursive: true, force: true }); }
+  finally { await pool.end(); cluster.remove(); }
 }
 
 test('Content retains failed A while B projects, survives restart, supersedes in order and replays a graph commit', async () => {

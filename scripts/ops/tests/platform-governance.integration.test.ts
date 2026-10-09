@@ -1,10 +1,9 @@
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { Elysia } from 'elysia';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
@@ -33,9 +32,8 @@ const receipt = () => ({ idempotencyKey: randomUUID(), requestDigest: digest(ran
 
 test('first governance designation is atomic, ordinary grants add backups and opening requires a permanent holder while Main stays ready', async () => {
   const state = join(repositoryRoot, '.temp', `platform-governance-${randomUUID()}`);
-  const data = join(state, 'pgdata');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  let started = false;
+  let cluster: PostgresCluster | undefined;
   let pool: Pool | undefined;
   let readiness: string[] = [];
   const envNames = [
@@ -46,38 +44,11 @@ test('first governance designation is atomic, ordinary grants add backups and op
   ] as const;
   const previous = Object.fromEntries(envNames.map((name) => [name, process.env[name]]));
   try {
-    execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], {
-      cwd: state,
-      stdio: 'pipe',
-    });
-    const port = await new Promise<number>((resolve, reject) => {
-      const server = createServer();
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
-        const address = server.address();
-        if (!address || typeof address === 'string')
-          return reject(new Error('No PostgreSQL test port'));
-        server.close(() => resolve(address.port));
-      });
-    });
-    execFileSync(
-      'pg_ctl',
-      [
-        '-D',
-        data,
-        '-l',
-        join(state, 'postgres.log'),
-        '-o',
-        `-h 127.0.0.1 -p ${port} -k /tmp`,
-        '-w',
-        'start',
-      ],
-      { cwd: state, stdio: 'pipe' },
-    );
-    started = true;
+    const running = await startPostgresCluster();
+    cluster = running;
     const url = (database: string) =>
-      `postgres://127.0.0.1:${port}/${database}?user=${encodeURIComponent(process.env.USER!)}`;
-    pool = new Pool({ connectionString: url('postgres'), max: 4, statement_timeout: 5000 });
+      `postgres://127.0.0.1:${running.port}/${database}?user=${encodeURIComponent(running.user)}`;
+    pool = new Pool({ ...running.connection, max: 4, statement_timeout: 5000 });
     for (const database of ['content', 'relay']) await pool.query(`CREATE DATABASE ${database}`);
     await migrateTracked(url('postgres'), repositoryRoot, migrationDirectories.access);
     await migrateTracked(url('relay'), repositoryRoot, migrationDirectories.relay);
@@ -435,53 +406,18 @@ test('first governance designation is atomic, ordinary grants add backups and op
     }
     await endMainSchemaReady(readiness);
     await pool?.end();
-    if (started)
-      execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], {
-        cwd: state,
-        stdio: 'pipe',
-      });
+    cluster?.remove();
     rmSync(state, { recursive: true, force: true });
   }
 }, 120_000);
 
 test('revoking the designated holder ends the seeded assignment ceiling', async () => {
-  const state = join(repositoryRoot, '.temp', `platform-governance-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  let started = false;
+  let cluster: PostgresCluster | undefined;
   let pool: Pool | undefined;
   try {
-    execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], {
-      cwd: state,
-      stdio: 'pipe',
-    });
-    const port = await new Promise<number>((resolve, reject) => {
-      const server = createServer();
-      server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
-        const address = server.address();
-        if (!address || typeof address === 'string')
-          return reject(new Error('No PostgreSQL test port'));
-        server.close(() => resolve(address.port));
-      });
-    });
-    execFileSync(
-      'pg_ctl',
-      [
-        '-D',
-        data,
-        '-l',
-        join(state, 'postgres.log'),
-        '-o',
-        `-h 127.0.0.1 -p ${port} -k /tmp`,
-        '-w',
-        'start',
-      ],
-      { cwd: state, stdio: 'pipe' },
-    );
-    started = true;
-    const url = `postgres://127.0.0.1:${port}/postgres?user=${encodeURIComponent(process.env.USER!)}`;
-    pool = new Pool({ connectionString: url, max: 4 });
+    const running = await startPostgresCluster();
+    cluster = running;
+    pool = new Pool({ ...running.connection, max: 4 });
     const owner = pool;
     for (const file of schemaFiles(repositoryRoot, 'access')) {
       if (file === '1441_platform_grant_seed_ceiling.sql') continue;
@@ -656,11 +592,6 @@ test('revoking the designated holder ends the seeded assignment ceiling', async 
     expect(continued.status).toBe(200);
   } finally {
     await pool?.end();
-    if (started)
-      execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], {
-        cwd: state,
-        stdio: 'pipe',
-      });
-    rmSync(state, { recursive: true, force: true });
+    cluster?.remove();
   }
 }, 120_000);

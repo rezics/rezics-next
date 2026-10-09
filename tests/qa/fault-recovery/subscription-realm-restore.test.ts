@@ -1,10 +1,8 @@
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../support/postgres-cluster.ts';
 import { ContentCore, contentDraftIntentDigest } from '../../../services/content/src/core.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import type { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -20,31 +18,11 @@ import type { RegisteredAdmission } from '../../../services/main/src/modules/acc
 
 const root = resolve(import.meta.dir, '../../..');
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
 
 test('SUB08: a pre-revocation Content restore cannot pass the retained review cut', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through isolated QA fault recovery');
-  const state = join(root, '.temp', `realm-restore-${randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const poolFor = (database: string) => new Pool({ host: '127.0.0.1', port,
-    user: process.env.USER, database, max: 4 });
+  const cluster = await startPostgresCluster();
+  const poolFor = (database: string) => new Pool({ ...cluster.connection, database, max: 4 });
   let live = poolFor('postgres');
   let restored: Pool | undefined;
   try {
@@ -119,8 +97,7 @@ test('SUB08: a pre-revocation Content restore cannot pass the retained review cu
   } finally {
     await live.end();
     if (restored) await restored.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
-    rmSync(state, { recursive: true, force: true });
+    cluster.remove();
   }
 }, 180_000);
 

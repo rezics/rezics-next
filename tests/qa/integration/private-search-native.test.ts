@@ -1,13 +1,12 @@
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Elysia } from 'elysia';
 import { Pool } from 'pg';
+import { startPostgresCluster, type PostgresCluster } from '../support/postgres-cluster.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessAdmissionRegistry, AdmissionDenied, AdmissionExpired, AdmissionUnavailable,
   engageAccessRecoveryFence, releaseAccessRecoveryFence, type RegisteredAdmission,
@@ -77,30 +76,17 @@ async function rootCommand(args: string[], timeout: number): Promise<void> {
   }
 }
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no Access test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 const runId = `${Bun.env.REZICS_QA_RUN_ID}-pn`;
 const stackOptions = { profile: 'qa' as const, runId, persistent: true };
 const stackArgs = ['--profile', 'qa', '--run-id', runId, '--persistent'];
 const state = join(root, '.temp', `private-native-${randomUUID()}`);
-const data = join(state, 'pgdata');
 const actor = ID + randomUUID();
 const principal: VerifiedPrincipal = { issuer: 'https://qa-private-search.test', subject: randomUUID() };
 const other: VerifiedPrincipal = { issuer: principal.issuer, subject: randomUUID() };
 const principalId = randomUUID();
 const otherId = randomUUID();
 let stackStarted = false;
-let postgresStarted = false;
+let cluster: PostgresCluster | undefined;
 let accessConfig!: { host: string; port: number; user: string | undefined; database: string; max: number };
 let pool!: Pool;
 let secondPool!: Pool;
@@ -114,16 +100,10 @@ let app!: ReturnType<typeof createMainApp>;
 
 beforeAll(async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated QA integration tier');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  postgresStarted = true;
+  cluster = await startPostgresCluster();
   // Two pools stand in for two Main replicas sharing the Access owner.
-  accessConfig = { host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 4 };
+  accessConfig = { ...cluster.connection, max: 4 };
   pool = new Pool(accessConfig);
   secondPool = new Pool(accessConfig);
   access = new AccessAdmissionRegistry(pool);
@@ -159,7 +139,7 @@ afterAll(async () => {
   await secondPool?.end();
   await pool?.end();
   try {
-    if (postgresStarted) execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    cluster?.remove();
   } finally {
     rmSync(state, { recursive: true, force: true });
     if (stackStarted) await rootCommand(['stack:reset', ...stackArgs], 120_000);

@@ -3,7 +3,8 @@ import { discloseClassificationConcept, recordClassifiedStatement, shareClassifi
   type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { test, expect } from 'bun:test';
-import { execFileSync, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { createHash } from 'node:crypto';
 import { closeSync, copyFileSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -81,10 +82,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     FUSEKI_BASE: base, MAIN: 'main', JVM_ARGS: '-Xms128m -Xmx1g' }, stdio: ['ignore', fusekiLog, fusekiLog] });
   closeSync(fusekiLog);
   const fuseki = new FusekiClient(`http://127.0.0.1:${fusekiPort}/rezics`);
-  const pgData = join(state, 'pgdata');
-  const socketDirectory = join(root, '.temp', 'pg-sock');
-  mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
-  let postgresStarted = false;
+  let cluster: PostgresCluster | undefined;
   let pool: Pool | undefined;
   let accountApp: ReturnType<typeof createAccountApp> | undefined;
   let mainApp: ReturnType<typeof createMainApp> | undefined;
@@ -94,12 +92,8 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       if (i === 119) throw new Error('Fuseki did not start');
       await Bun.sleep(250);
     }
-    execFileSync('initdb', ['-D', pgData, '-A', 'trust', '--no-instructions'], { cwd: state });
-    const pgPort = await freePort();
-    execFileSync('pg_ctl', ['-D', pgData, '-l', join(state, 'postgres.log'),
-      '-o', `-h 127.0.0.1 -p ${pgPort} -k ${socketDirectory}`, '-w', 'start'], { cwd: state });
-    postgresStarted = true;
-    pool = new Pool({ host: '127.0.0.1', port: pgPort, user: process.env.USER, database: 'postgres' });
+    cluster = await startPostgresCluster();
+    pool = new Pool({ ...cluster.connection });
     const accountPort = await freePort();
     const accountBase = `http://127.0.0.1:${accountPort}`;
     const resource = 'https://main.rezics.test';
@@ -1807,7 +1801,7 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
     await mainApp?.stop();
     await accountApp?.stop();
     await pool?.end();
-    if (postgresStarted) execFileSync('pg_ctl', ['-D', pgData, '-m', 'fast', '-w', 'stop'], { cwd: state });
+    cluster?.remove();
     fusekiProcess.kill('SIGTERM');
     if (fusekiProcess.exitCode === null) {
       await new Promise<void>(resolveExit => fusekiProcess.once('exit', () => resolveExit()));

@@ -1,9 +1,7 @@
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { join, resolve } from 'node:path';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool, type PoolConfig } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { accountAuthOptions, createAccountAuth, type AccountConfig } from '../src/auth.ts';
 import { createAccountApp } from '../src/app.ts';
 import { installConsentRefreshFence } from '../src/consent-fence.ts';
@@ -25,14 +23,8 @@ export async function freePort(): Promise<number> {
 
 export async function accountFixture(overrides: Partial<AccountConfig> = {}, hostname = '127.0.0.1',
   poolOptions: Pick<PoolConfig, 'max' | 'connectionTimeoutMillis'> = {}) {
-  const state = join(resolve(import.meta.dir, '../../..'), '.temp', `account-g205-${Bun.randomUUIDv7()}`);
-  const data = join(state, 'pg');
-  mkdirSync(state, { recursive: true });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { stdio: 'ignore' });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k /tmp`, '-w', 'start'], { stdio: 'ignore' });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', ...poolOptions });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, ...poolOptions });
   const accountPort = await freePort();
   const baseURL = `http://${hostname}:${accountPort}`;
   const secret = 'account-g205-integration-secret-at-least-32';
@@ -44,10 +36,10 @@ export async function accountFixture(overrides: Partial<AccountConfig> = {}, hos
     operatorUserIds: operators, email, ...overrides };
   let app: ReturnType<typeof createAccountApp> | undefined;
   const close = async () => {
-    await app?.stop();
-    await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { stdio: 'ignore' });
-    rmSync(state, { recursive: true, force: true });
+    try {
+      await app?.stop();
+      await pool.end();
+    } finally { cluster.remove(); }
   };
   try {
     await (await getMigrations(accountAuthOptions(config))).runMigrations();

@@ -1,10 +1,9 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { ContentCore, ContentProjectionCursor, ContentUnavailable,
   migrateContent, type VariantIdentity } from '../../content/src/index.ts';
 import { FusekiClient, type CommandEnvelope, type CommandPosition,
@@ -31,33 +30,15 @@ import { assertPinnedState, inspectFusekiState, offlineTextIndex, rebuildPublicC
 
 const root = resolve(import.meta.dir, '../../..');
 
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 test('SEARCH15/WORK10: partial Content outbox checkpoint and fail-closed MatchUnit relay', async () => {
   const fusekiUrl = process.env.FUSEKI_URL;
   if (!fusekiUrl) throw new Error('FUSEKI_URL must point to an isolated pinned Fuseki stack');
   const fuseki = new FusekiClient(fusekiUrl);
   expect((await fuseki.query('ASK {}')).boolean).toBe(true);
   const state = join(root, '.temp', `content-projection-${crypto.randomUUID()}`);
-  const data = join(state, 'pgdata');
-  const socket = join(root, '.temp', 'pg-sock');
   mkdirSync(state, { recursive: true, mode: 0o700 });
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres', max: 6 });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection, max: 6 });
   try {
     await migrateContent(pool);
     await migrateContent(pool);
@@ -123,7 +104,7 @@ test('SEARCH15/WORK10: partial Content outbox checkpoint and fail-closed MatchUn
     await expect(cursor.read(consumer)).rejects.toThrow('owner epoch changed');
   } finally {
     await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
+    cluster.remove();
     rmSync(state, { recursive: true, force: true });
   }
 }, 30_000);

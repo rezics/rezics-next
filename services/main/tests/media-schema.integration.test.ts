@@ -1,9 +1,8 @@
 import { migrationVersion, schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
-import { createServer } from 'node:net';
+import { readFileSync } from 'node:fs';
+import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { join, resolve } from 'node:path';
 import { eq, inArray } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -23,27 +22,12 @@ import { fromPlainText } from '@rezics/document';
 const root = resolve(import.meta.dir, '../../..');
 const migrationDirectory = join(root, 'services/content/migrations');
 const MEDIA_VERSION = 70;
-const state = join(root, '.temp', `media-schema-${randomUUID()}`);
-const data = join(state, 'pgdata');
-let port = 0;
+let cluster: PostgresCluster | undefined;
 let admin: Pool;
 
 const sha = (value: string) => createHash('sha256').update(value).digest('hex');
 const iri = (id: string) => `https://rezics.com/id/${id}`;
 const DEFAULT_CONTEXT = 'urn:rezics:media:context:default';
-
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string')
-        return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
 
 function migrationFiles(): Array<{ version: number; name: string }> {
   return schemaFiles(root, 'content')
@@ -52,7 +36,7 @@ function migrationFiles(): Array<{ version: number; name: string }> {
 
 async function database(name: string): Promise<Pool> {
   await admin.query(`CREATE DATABASE ${name}`);
-  return new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: name, max: 8 });
+  return new Pool({ ...cluster!.connection, database: name, max: 8 });
 }
 
 async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -171,37 +155,13 @@ async function activateOriginal(
 }
 
 beforeAll(async () => {
-  mkdirSync(state, { recursive: true, mode: 0o700 });
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(socket, { recursive: true, mode: 0o700 });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions', '--no-sync'], {
-    cwd: state,
-  });
-  port = await freePort();
-  execFileSync(
-    'pg_ctl',
-    [
-      '-D',
-      data,
-      '-l',
-      join(state, 'postgres.log'),
-      '-o',
-      `-h 127.0.0.1 -p ${port} -k ${socket}`,
-      '-w',
-      'start',
-    ],
-    { cwd: state },
-  );
-  admin = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres' });
+  cluster = await startPostgresCluster();
+  admin = new Pool({ ...cluster.connection });
 });
 
 afterAll(async () => {
   await admin?.end();
-  try {
-    execFileSync('pg_ctl', ['-D', data, '-m', 'immediate', '-w', 'stop'], { cwd: state });
-  } finally {
-    rmSync(state, { recursive: true, force: true });
-  }
+  cluster?.remove();
 });
 
 test('image presentation separates classifier evidence, manual labels, age assessment and protected occurrence concealment', async () => {

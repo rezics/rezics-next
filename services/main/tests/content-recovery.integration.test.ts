@@ -1,9 +1,6 @@
 import { expect, test } from 'bun:test';
-import { execFileSync } from 'node:child_process';
-import { createServer } from 'node:net';
-import { mkdirSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { ContentCore } from '../../content/src/core.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
@@ -11,32 +8,9 @@ import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
   ContentRecoveryConflict, graphContentReferences } from '../src/modules/work/content-recovery-coverage.ts';
 import { RV } from '../src/modules/work/activate.ts';
 
-const root = resolve(import.meta.dir, '../../..');
-
-async function freePort(): Promise<number> {
-  return new Promise((resolvePort, reject) => {
-    const server = createServer();
-    server.once('error', reject);
-    server.listen(0, '127.0.0.1', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') return reject(new Error('no PostgreSQL test port'));
-      server.close(() => resolvePort(address.port));
-    });
-  });
-}
-
 test('OPS03: Content recovery binds exact graph revision, preparation, receipt, outbox and bytes', async () => {
-  const state = join(root, '.temp', `content-recovery-${crypto.randomUUID()}`);
-  const data = join(state, 'pgdata');
-  // PostgreSQL's Unix socket pathname has a 107-byte limit on this host.
-  const socket = join(root, '.temp', 'pg-sock');
-  mkdirSync(state, { recursive: true });
-  mkdirSync(socket, { recursive: true });
-  execFileSync('initdb', ['-D', data, '-A', 'trust', '--no-instructions'], { cwd: state });
-  const port = await freePort();
-  execFileSync('pg_ctl', ['-D', data, '-l', join(state, 'postgres.log'),
-    '-o', `-h 127.0.0.1 -p ${port} -k ${socket}`, '-w', 'start'], { cwd: state });
-  const pool = new Pool({ host: '127.0.0.1', port, user: process.env.USER, database: 'postgres' });
+  const cluster = await startPostgresCluster();
+  const pool = new Pool({ ...cluster.connection });
   try {
     await migrateContent(pool);
     const content = new ContentCore(pool);
@@ -123,7 +97,6 @@ test('OPS03: Content recovery binds exact graph revision, preparation, receipt, 
       .rejects.toBeInstanceOf(ContentRecoveryConflict);
   } finally {
     await pool.end();
-    execFileSync('pg_ctl', ['-D', data, '-m', 'fast', '-w', 'stop'], { cwd: state });
-    rmSync(state, { recursive: true, force: true });
+    cluster.remove();
   }
 }, 30_000);
