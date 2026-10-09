@@ -140,6 +140,15 @@ async function measure(dimension: string, scale: string, operation: string, path
   validate: (body: any) => void) {
   if (process.env.G1026_OPERATIONS && !process.env.G1026_OPERATIONS.split(',').includes(operation)) return;
   if (operation === 'threads-best' || operation === 'threads-top') await home.project();
+  // Zone bytes are written to the local object directory. The first read of a
+  // digest 404s the object store, verifies the file, and caches it. That fetch
+  // is outside the sample; both recorded temperatures are then warm.
+  if (operation === 'zone-home' || operation === 'zone-presentation' || operation === 'zone-banners') {
+    const warmed = await app.handle(new Request(`http://main.local${path}`));
+    const warmedBody = await warmed.json();
+    assert.equal(warmed.status, 200, `${path}: ${JSON.stringify(warmedBody)}`);
+    validate(warmedBody);
+  }
   for (const viewer of ['anonymous', 'member']) for (const temperature of ['first', 'warm']) {
     await flushTelemetryTraces();
     sink.clear();
