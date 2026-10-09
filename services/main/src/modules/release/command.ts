@@ -2,10 +2,11 @@ import { CommandRejected, fusekiReadBudget } from '../../infrastructure/fuseki.t
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
-import { AdmissionDenied, AdmissionExpired, type RegisteredAdmission } from '../access/admission.ts';
+import { AdmissionDenied, type RegisteredAdmission } from '../access/admission.ts';
 import { WEB_PUBLICATION_PROFILE } from '../web-publication/schema.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent, prepareWorkComponent,
   IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
+import { readWorkEditReceipt, sealWorkEdit, settleWorkEdit, type WorkEditReceipt } from '../work/command-envelope.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { workEditReceiptIri } from '../work/edit.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
@@ -14,72 +15,16 @@ import { languageListLiteral } from './languages.ts';
 import { assertReleaseCorrection, checkedRelease, checkedReleaseV2, resolvedReleaseV2, parseStoredRelease, releaseDigest, releaseLanguageLiteral, RELEASE_V3_PROFILE, identifierLiteral, RELEASE_V2_PROFILE,
   RELEASE_COST, RELEASE_V2_COST, RELEASE_PROFILE, InvalidRelease, ReleaseUnavailable, StaleRelease, type AnyReleaseRecord } from './schema.ts';
 
-export function releaseReceiptIri(admissionId: string): string {
-  return workEditReceiptIri(admissionId);
-}
+const releaseEnvelope = { target: 'release' as const, revision: 'releaseRevision',
+  deadlineMs: RELEASE_COST.deadlineMs, unavailable: ReleaseUnavailable, invalid: InvalidRelease,
+  stale: StaleRelease, incomplete: 'Release receipt is incomplete',
+  cancelled: 'Release command was cancelled; refresh its basis',
+  mismatch: 'Release receipt targets another release', sealInvalid: true };
 
-export interface ReleaseCommandReceipt {
-  outcome: 'succeeded' | 'cancelled'; receipt: string; admissionId: string; requestDigest: string;
-  authorityEpoch: string; scope: string; dataEpoch: string; sequence: string;
-  work?: string; release?: string; revision?: string;
-}
-
-export async function readReleaseReceipt(env: Pick<WorkActivationEnvironment, 'fuseki'>,
-  admissionId: string): Promise<ReleaseCommandReceipt | null> {
-  const receipt = releaseReceiptIri(admissionId);
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?outcome ?digest ?authority ?scope ?epoch ?sequence ?work ?release ?revision WHERE {
-      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:admissionId ${lit(admissionId)} ;
-        rv:outcome ?outcome ; rv:requestDigest ?digest ; rv:authorityEpoch ?authority ;
-        rv:admittedScope ?scope ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
-        OPTIONAL { ${iri(receipt)} rv:work ?work ; rv:release ?release ; rv:releaseRevision ?revision }
-      } } LIMIT 2`, 8192)).results?.bindings ?? [];
-  if (!rows.length) return null;
-  const row = rows[0]!;
-  const outcome = row.outcome?.value === `${RV}Succeeded` ? 'succeeded'
-    : row.outcome?.value === `${RV}Cancelled` ? 'cancelled' : null;
-  if (rows.length !== 1 || !outcome || !row.digest || !row.authority || !row.scope || !row.epoch || !row.sequence
-    || outcome === 'succeeded' && (!row.work || !row.release || !row.revision)) {
-    throw new ReleaseUnavailable('Release receipt is incomplete');
-  }
-  return { outcome, receipt, admissionId, requestDigest: row.digest.value, authorityEpoch: row.authority.value,
-    scope: row.scope.value, dataEpoch: row.epoch.value, sequence: row.sequence.value,
-    ...(outcome === 'succeeded' ? { work: row.work!.value, release: row.release!.value,
-      revision: row.revision!.value } : {}) };
-}
-
-async function sealRelease(env: WorkActivationEnvironment, admission: RegisteredAdmission): Promise<void> {
-  const existing = await readReleaseReceipt(env, admission.id);
-  if (existing) return;
-  const receipt = releaseReceiptIri(admission.id);
-  const batch = `urn:rezics:outbox:${hash(receipt)}`;
-  const event = `urn:rezics:event:${hash(receipt)}`;
-  const update = `PREFIX rv: <${RV}>
-    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
-    INSERT {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
-        rv:requestDigest ${lit(admission.requestDigest)} ; rv:admissionId ${lit(admission.id)} ;
-        rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(admission.scope)} ;
-        rv:outcome rv:Cancelled ; rv:datasetId ${iri(DATASET)} ;
-        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
-      GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-        ${iri(event)} a rv:AdmissionCancelledEvent ; rv:ordinal 0 ; rv:action "work.edit" ;
-          rv:receipt ${iri(receipt)} ; rv:admissionId ${lit(admission.id)} . }
-    }
-    WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-      BIND(?n + 1 AS ?next)
-    }`;
-  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest, update,
-    validations: [], deadlineMs: RELEASE_COST.deadlineMs }); }
-  catch { /* A lost response still resolves through the receipt below. */ }
-  if (!await readReleaseReceipt(env, admission.id)) throw new PendingAdmittedWork(admission.id, 'work-edit');
-}
+export const releaseReceiptIri = workEditReceiptIri;
+export type ReleaseCommandReceipt = WorkEditReceipt<'release'>;
+export const readReleaseReceipt = (env: Pick<WorkActivationEnvironment, 'fuseki'>, admissionId: string) =>
+  readWorkEditReceipt(env, admissionId, releaseEnvelope);
 
 async function loadRelease(env: WorkActivationEnvironment, work: string, release: string, basis?: string):
   Promise<{ revision: string; graphProfile: string; record: AnyReleaseRecord } | null> {
@@ -154,13 +99,13 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
   if (await readReleaseReceipt(env, admission.id)) return false;
   const current = await loadRelease(env, record.work, release);
   if ((current?.revision ?? null) !== record.expectedHead) {
-    await sealRelease(env, admission);
+    await sealWorkEdit(env, admission, releaseEnvelope);
     return false;
   }
   if (current) {
     try { assertReleaseCorrection(current.record, record); }
     catch (error) {
-      if (error instanceof InvalidRelease) { await sealRelease(env, admission); throw error; }
+      if (error instanceof InvalidRelease) { await sealWorkEdit(env, admission, releaseEnvelope); throw error; }
       throw error;
     }
   }
@@ -247,7 +192,7 @@ export async function commitRelease(env: WorkActivationEnvironment, admission: R
     deadlineMs: RELEASE_COST.deadlineMs }, admission);
   if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
   if (!await readReleaseReceipt(env, admission.id)) {
-    await sealRelease(env, admission);
+    await sealWorkEdit(env, admission, releaseEnvelope);
     return false;
   }
   return true;
@@ -287,45 +232,7 @@ export async function setRelease(deps: MainWorkDependencies, request: Request,
       if (!basis) throw new StaleRelease('Release basis is unavailable');
       assertReleaseCorrection(basis.record, resolved);
     }
-    const registered = await deps.access.register({ principal, actingSubject: record.actingSubject,
-      action: 'work.edit', scope: `work:edit:${record.work}`, idempotencyKey,
-      requestDigest: digest });
-    try {
-      let admission = registered;
-      if (registered.state !== 'sealed' && registered.dispatchEligible) {
-        try { admission = await deps.access.claim(registered.id, digest, principal); }
-        catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
-      }
-      let committed = false, failure: unknown;
-      try {
-        if (admission.state === 'sealed') { /* A retry resolves the exact receipt below. */ }
-        else if (!admission.dispatchEligible || admission.state === 'registered') await sealRelease(env, admission);
-        else committed = await commitRelease(env, admission, resolved);
-      } catch (error) {
-        failure = error;
-        if (error instanceof InvalidRelease) await sealRelease(env, admission);
-      }
-      const terminal = await readReleaseReceipt(env, admission.id);
-      if (!terminal) {
-        if (failure instanceof InvalidRelease || failure instanceof ReleaseUnavailable || failure instanceof IdempotencyConflict
-          || failure instanceof CommandRejected || failure instanceof StaleRelease) throw failure;
-        throw new PendingAdmittedWork(admission.id, 'work-edit');
-      }
-      await deps.access.recordGraphOutcome(admission.id, terminal);
-      if (failure instanceof InvalidRelease) throw failure;
-      await assertNotInvalidProfileReceipt(env.fuseki, terminal.receipt);
-      if (failure instanceof CommandRejected) throw failure;
-      if (terminal.outcome === 'cancelled') throw new StaleRelease('Release command was cancelled; refresh its basis');
-      if (terminal.work !== record.work || terminal.release !== record.id) {
-        throw new IdempotencyConflict('Release receipt targets another release');
-      }
-      return { work: terminal.work, release: terminal.release, revision: terminal.revision!,
-        receipt: terminal.receipt, sourcePosition: { dataEpoch: terminal.dataEpoch, sequence: terminal.sequence },
-        replayed: !committed };
-    } catch (error) {
-      if (error instanceof ReleaseUnavailable || error instanceof IdempotencyConflict
-        || error instanceof CommandRejected || error instanceof StaleRelease || error instanceof InvalidRelease) throw error;
-      throw new PendingAdmittedWork(registered.id, 'work-edit');
-    }
+    return settleWorkEdit(env, deps.access, principal, releaseEnvelope, record.actingSubject,
+      record.work, idempotencyKey, digest, record.id, admission => commitRelease(env, admission, resolved));
   });
 }

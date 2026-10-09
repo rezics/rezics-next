@@ -2,82 +2,27 @@ import { CommandRejected, fusekiReadBudget } from '../../infrastructure/fuseki.t
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
-import { AdmissionDenied, AdmissionExpired, type RegisteredAdmission } from '../access/admission.ts';
+import { AdmissionDenied, type RegisteredAdmission } from '../access/admission.ts';
 import { term } from '../context/command.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent, prepareWorkComponent,
   IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
+import { readWorkEditReceipt, sealWorkEdit, settleWorkEdit, type WorkEditReceipt } from '../work/command-envelope.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { workEditReceiptIri } from '../work/edit.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { assertRealizationCorrection, checkedRealization, parseStoredRealization, realizationDigest, 
   REALIZATION_COST, REALIZATION_PROFILE, InvalidRealization, RealizationUnavailable, StaleRealization, type RealizationRecord } from './schema.ts';
 
-export function realizationReceiptIri(admissionId: string): string {
-  return workEditReceiptIri(admissionId);
-}
+const realizationEnvelope = { target: 'realization' as const, revision: 'realizationRevision',
+  deadlineMs: REALIZATION_COST.deadlineMs, unavailable: RealizationUnavailable, invalid: InvalidRealization,
+  stale: StaleRealization, incomplete: 'Realization receipt is incomplete',
+  cancelled: 'Realization command was cancelled; refresh its basis',
+  mismatch: 'Realization receipt targets another realization', sealInvalid: false };
 
-export interface RealizationCommandReceipt {
-  outcome: 'succeeded' | 'cancelled'; receipt: string; admissionId: string; requestDigest: string;
-  authorityEpoch: string; scope: string; dataEpoch: string; sequence: string;
-  work?: string; realization?: string; revision?: string;
-}
-
-export async function readRealizationReceipt(env: Pick<WorkActivationEnvironment, 'fuseki'>,
-  admissionId: string): Promise<RealizationCommandReceipt | null> {
-  const receipt = realizationReceiptIri(admissionId);
-  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?outcome ?digest ?authority ?scope ?epoch ?sequence ?work ?realization ?revision WHERE {
-      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:admissionId ${lit(admissionId)} ;
-        rv:outcome ?outcome ; rv:requestDigest ?digest ; rv:authorityEpoch ?authority ;
-        rv:admittedScope ?scope ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
-        OPTIONAL { ${iri(receipt)} rv:work ?work ; rv:realization ?realization ; rv:realizationRevision ?revision }
-      } } LIMIT 2`, 8192)).results?.bindings ?? [];
-  if (!rows.length) return null;
-  const row = rows[0]!;
-  const outcome = row.outcome?.value === `${RV}Succeeded` ? 'succeeded'
-    : row.outcome?.value === `${RV}Cancelled` ? 'cancelled' : null;
-  if (rows.length !== 1 || !outcome || !row.digest || !row.authority || !row.scope || !row.epoch || !row.sequence
-    || outcome === 'succeeded' && (!row.work || !row.realization || !row.revision)) {
-    throw new RealizationUnavailable('Realization receipt is incomplete');
-  }
-  return { outcome, receipt, admissionId, requestDigest: row.digest.value, authorityEpoch: row.authority.value,
-    scope: row.scope.value, dataEpoch: row.epoch.value, sequence: row.sequence.value,
-    ...(outcome === 'succeeded' ? { work: row.work!.value, realization: row.realization!.value,
-      revision: row.revision!.value } : {}) };
-}
-
-async function sealRealization(env: WorkActivationEnvironment, admission: RegisteredAdmission): Promise<void> {
-  const existing = await readRealizationReceipt(env, admission.id);
-  if (existing) return;
-  const receipt = realizationReceiptIri(admission.id);
-  const batch = `urn:rezics:outbox:${hash(receipt)}`;
-  const event = `urn:rezics:event:${hash(receipt)}`;
-  const update = `PREFIX rv: <${RV}>
-    DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }
-    INSERT {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
-        rv:requestDigest ${lit(admission.requestDigest)} ; rv:admissionId ${lit(admission.id)} ;
-        rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(admission.scope)} ;
-        rv:outcome rv:Cancelled ; rv:datasetId ${iri(DATASET)} ;
-        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
-      GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
-        ${iri(event)} a rv:AdmissionCancelledEvent ; rv:ordinal 0 ; rv:action "work.edit" ;
-          rv:receipt ${iri(receipt)} ; rv:admissionId ${lit(admission.id)} . }
-    }
-    WHERE {
-      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
-        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
-      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
-      BIND(?n + 1 AS ?next)
-    }`;
-  try { await env.fuseki.commandWithReceipt({ receipt, digest: admission.requestDigest, update,
-    validations: [], deadlineMs: REALIZATION_COST.deadlineMs }); }
-  catch { /* A lost response still resolves through the receipt below. */ }
-  if (!await readRealizationReceipt(env, admission.id)) throw new PendingAdmittedWork(admission.id, 'work-edit');
-}
+export const realizationReceiptIri = workEditReceiptIri;
+export type RealizationCommandReceipt = WorkEditReceipt<'realization'>;
+export const readRealizationReceipt = (env: Pick<WorkActivationEnvironment, 'fuseki'>, admissionId: string) =>
+  readWorkEditReceipt(env, admissionId, realizationEnvelope);
 
 async function loadRealization(env: WorkActivationEnvironment, work: string, realization: string, basis?: string):
   Promise<{ revision: string; record: RealizationRecord } | null> {
@@ -124,13 +69,13 @@ export async function commitRealization(env: WorkActivationEnvironment, admissio
   if (await readRealizationReceipt(env, admission.id)) return false;
   const current = await loadRealization(env, record.work, realization);
   if ((current?.revision ?? null) !== record.expectedHead) {
-    await sealRealization(env, admission);
+    await sealWorkEdit(env, admission, realizationEnvelope);
     return false;
   }
   if (current) {
     try { assertRealizationCorrection(current.record, record); }
     catch (error) {
-      if (error instanceof InvalidRealization) { await sealRealization(env, admission); throw error; }
+      if (error instanceof InvalidRealization) { await sealWorkEdit(env, admission, realizationEnvelope); throw error; }
       throw error;
     }
   }
@@ -206,7 +151,7 @@ export async function commitRealization(env: WorkActivationEnvironment, admissio
     deadlineMs: REALIZATION_COST.deadlineMs }, admission);
   if (result.status === 'invalid' || result.status === 'unknown-profile') throw new CommandRejected(result);
   if (!await readRealizationReceipt(env, admission.id)) {
-    await sealRealization(env, admission);
+    await sealWorkEdit(env, admission, realizationEnvelope);
     return false;
   }
   return true;
@@ -233,42 +178,7 @@ export async function setRealization(deps: MainWorkDependencies, request: Reques
       if (!basis) throw new StaleRealization('Realization basis is unavailable');
       assertRealizationCorrection(basis.record, record);
     }
-    const registered = await deps.access.register({ principal, actingSubject: record.actingSubject,
-      action: 'work.edit', scope: `work:edit:${record.work}`, idempotencyKey,
-      requestDigest: digest });
-    try {
-      let admission = registered;
-      if (registered.state !== 'sealed' && registered.dispatchEligible) {
-        try { admission = await deps.access.claim(registered.id, digest, principal); }
-        catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
-      }
-      let committed = false, failure: unknown;
-      try {
-        if (admission.state === 'sealed') { /* A retry resolves the exact receipt below. */ }
-        else if (!admission.dispatchEligible || admission.state === 'registered') await sealRealization(env, admission);
-        else committed = await commitRealization(env, admission, record);
-      } catch (error) { failure = error; }
-      const terminal = await readRealizationReceipt(env, admission.id);
-      if (!terminal) {
-        if (failure instanceof InvalidRealization || failure instanceof RealizationUnavailable || failure instanceof IdempotencyConflict
-          || failure instanceof CommandRejected || failure instanceof StaleRealization) throw failure;
-        throw new PendingAdmittedWork(admission.id, 'work-edit');
-      }
-      await deps.access.recordGraphOutcome(admission.id, terminal);
-      if (failure instanceof InvalidRealization) throw failure;
-      await assertNotInvalidProfileReceipt(env.fuseki, terminal.receipt);
-      if (failure instanceof CommandRejected) throw failure;
-      if (terminal.outcome === 'cancelled') throw new StaleRealization('Realization command was cancelled; refresh its basis');
-      if (terminal.work !== record.work || terminal.realization !== record.id) {
-        throw new IdempotencyConflict('Realization receipt targets another realization');
-      }
-      return { work: terminal.work, realization: terminal.realization, revision: terminal.revision!,
-        receipt: terminal.receipt, sourcePosition: { dataEpoch: terminal.dataEpoch, sequence: terminal.sequence },
-        replayed: !committed };
-    } catch (error) {
-      if (error instanceof RealizationUnavailable || error instanceof IdempotencyConflict
-        || error instanceof CommandRejected || error instanceof StaleRealization || error instanceof InvalidRealization) throw error;
-      throw new PendingAdmittedWork(registered.id, 'work-edit');
-    }
+    return settleWorkEdit(env, deps.access, principal, realizationEnvelope, record.actingSubject,
+      record.work, idempotencyKey, digest, record.id, admission => commitRealization(env, admission, record));
   });
 }
