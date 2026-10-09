@@ -18,6 +18,8 @@ import { publicPhrasePageResult } from '../../../services/main/src/api-contract.
 import { queryWorkStandingRatings } from '../../../services/main/src/modules/rating/global-aggregate.ts';
 import { RatingAggregateUnavailable } from '../../../services/main/src/modules/rating/aggregate.ts';
 import { metadataComponent } from '../../../services/main/src/modules/work/metadata-schema.ts';
+import { AgentVanityHandles } from '../../../services/main/src/modules/agent/vanity.ts';
+import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { RATING_PROJECTION_HEALTH_COST } from '../../../services/main/src/modules/rating/projection-health.ts';
@@ -68,8 +70,13 @@ test('G1012: search, Discover Works and sections survive lagging optional owners
         continuation: start + limit < works.length ? String(start + limit) : null };
     } } as unknown as RankingGenerations;
     const serial = new SerialStatisticsProjection(f.accessPool, relay, f.contentPool, f.env);
+    // Production composition supplies the name-policy and handle owners. Without
+    // the name policy every agent name is withheld and a present author credit
+    // is reported as an unavailable preview.
     const deps = { environment: f.env, access: f.access, media: f.media, discovery: projection, recommendations,
       profiles: new ProfilesAccess(f.accessPool),
+      personPreferences: new PersonPreferencesStore(f.accessPool),
+      agentHandles: new AgentVanityHandles(f.accessPool),
       account: { verify: async () => member.principal }, serialStats: serial };
     const build = (contexts: Array<string | null>) => workRead(deps, new Request('http://main.local/source'), {}, async session => {
       for (const selectedContext of contexts) {

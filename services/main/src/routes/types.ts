@@ -38,12 +38,14 @@ function typeError(error: unknown): Response {
   return problem(503, 'types_unavailable', 'Type registry is unavailable');
 }
 
-/** Main's request hook refreshes the shared public snapshot before this read. */
-export function typeRoutes() {
+/** The first read in this request loads the catalog; a failure keeps the snapshot. */
+export function typeRoutes(work?: Pick<MainWorkDependencies, 'types'>) {
   return new Elysia().get(
     '/v1/types',
     { response: { 200: typeList, 500: problemResult(500), 503: problemResult(503) } },
-    ({ request }) => {
+    async ({ request }) => {
+      try { await work?.types?.ensureRequest(); }
+      catch { /* a public list keeps the last installed snapshot */ }
       const headers = { 'cache-control': 'public, max-age=300', etag: typeListTag };
       return fresh(request)
         ? new Response(null, { status: 304, headers })

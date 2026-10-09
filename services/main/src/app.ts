@@ -317,7 +317,7 @@ function extraRoutes8(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(workStatsRoutes(work))
     .use(facetRoutes())
     .use(typeAdministrationRoutes(work))
-    .use(typeRoutes())
+    .use(typeRoutes(work))
     .use(ratingPopulationRoutes(work))
     .use(projectionRoutes(work));
 }
@@ -335,6 +335,11 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
       if (new URL(request.url).pathname.startsWith('/health/')) return;
       const types = work?.types;
       if (!types) return;
+      // The catalog loads on the first type read, not for every request.
+      if (typeof types.openRequest === 'function') {
+        types.openRequest();
+        return;
+      }
       const load = typeof types.beginRequest === 'function' ? types.beginRequest() : types.refresh();
       return Promise.resolve(load).then(() => undefined, () => {
         if (request.method !== 'GET' && request.method !== 'HEAD')

@@ -9,7 +9,7 @@ import {
   ControlDenied,
   ControlInvalid,
   ControlStale,
-  controlRead,
+  ControlUnavailable,
   controlTransaction,
   lockGate,
   mandateFor,
@@ -74,7 +74,7 @@ export class AdmittedTypeStore {
   private expiresAt = 0;
   private refreshing?: Promise<void>;
   private refreshFailure?: unknown;
-  /** Catalog load shared by the requests currently inside `beginRequest`. */
+  /** Catalog load shared by the requests currently inside `openRequest`. */
   private openRequests = 0;
   private openLoad?: Promise<void>;
   constructor(
@@ -91,18 +91,24 @@ export class AdmittedTypeStore {
     return result.rows.map(fromRow);
   }
 
-  /** One catalog read for this HTTP request. A previous request's snapshot is not
-   * reused: admission can change between requests, and page size must not decide
-   * whether this request pays the read. Pair with `endRequest` after the response. */
-  beginRequest(): Promise<void> {
+  /** Brackets one HTTP request. Does not query: a request that never reads types
+   * pays no catalog transaction. Pair with `endRequest` after the response. */
+  openRequest(): void {
     this.openRequests++;
-    if (this.openLoad) return this.openLoad;
-    if (this.refreshFailure && this.now() < this.expiresAt) {
-      this.openLoad = Promise.reject(this.refreshFailure);
-      return this.openLoad;
-    }
-    this.openLoad = this.readCatalog();
-    return this.openLoad;
+  }
+
+  /** First catalog read in the open request. Concurrent readers share it. A
+   * previous request's snapshot is not reused: admission can change between
+   * requests, and page size must not decide whether this request pays the read. */
+  ensureRequest(): Promise<void> {
+    return this.refresh(false);
+  }
+
+  /** Opens a request and reads the catalog. Callers that only need the bracket
+   * use `openRequest` and let the first type read call `ensureRequest`. */
+  beginRequest(): Promise<void> {
+    this.openRequest();
+    return this.ensureRequest();
   }
 
   /** Drops this request's claim on the catalog load. The next request reads again. */
@@ -112,10 +118,17 @@ export class AdmittedTypeStore {
     if (this.openRequests === 0) this.openLoad = undefined;
   }
 
-  /** Direct callers reuse a successful snapshot until the TTL. A request that
-   * already loaded the catalog does not read it again. */
+  /** Direct callers reuse a successful snapshot until the TTL. Inside a request,
+   * the first read loads and later reads share it, including after the TTL. */
   async refresh(force = false): Promise<void> {
-    if (!force && this.openRequests > 0 && this.openLoad) return this.openLoad;
+    if (!force && this.openRequests > 0) {
+      if (!this.openLoad) {
+        this.openLoad = this.refreshFailure && this.now() < this.expiresAt
+          ? Promise.reject(this.refreshFailure)
+          : this.readCatalog();
+      }
+      return this.openLoad;
+    }
     if (this.refreshing) {
       await this.refreshing;
       if (force) return this.refresh(true);
@@ -133,7 +146,9 @@ export class AdmittedTypeStore {
       await this.refreshing;
       return;
     }
-    this.refreshing = controlRead(this.pool, (client) => this.rows(client)).then((rows) => {
+    // The fence lock and the catalog rows are one statement, so this read does not
+    // open a second transaction of BEGIN, timeouts, a fence SELECT and COMMIT.
+    this.refreshing = this.catalogRows().then((rows) => {
       installRegisteredTypes(rows);
       this.expiresAt = this.now() + TYPES_READ_COST.ttlMs;
       this.refreshFailure = undefined;
@@ -147,6 +162,29 @@ export class AdmittedTypeStore {
       await this.refreshing;
     } finally {
       this.refreshing = undefined;
+    }
+  }
+
+  private async catalogRows(): Promise<RegisteredType[]> {
+    const client = await this.pool.connect();
+    try {
+      const result = await client.query<TypeRow & { fence_open: boolean }>(
+        `WITH fence AS MATERIALIZED (
+          SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE)
+        SELECT fence.open AS fence_open, admitted.type_iri, admitted.base, admitted.labels,
+          admitted.presentation, admitted.cover, admitted.creation, admitted.interest,
+          admitted.primary_action, admitted.priority, admitted.revision, admitted.lifecycle
+        FROM fence
+        LEFT JOIN LATERAL (
+          SELECT ${columns} FROM access.admitted_type
+          ORDER BY type_iri LIMIT $1
+        ) admitted ON fence.open`,
+        [TYPES_READ_COST.maxTypes + 1],
+      );
+      if (result.rows[0]?.fence_open !== true) throw new ControlUnavailable('Access recovery is held');
+      return result.rows.filter((row) => row.type_iri != null).map(fromRow);
+    } finally {
+      client.release();
     }
   }
 
