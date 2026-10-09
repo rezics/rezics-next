@@ -143,6 +143,19 @@ test(`Studio ${basis} chapter Content resolves to its public Book on the Main ph
   } finally {
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
       GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ${iri(PUBLIC_SEARCH_ANCHOR)} a rv:SearchGraphAnchor . } }`);
+    // The raw anchor write drops this shared graph's membership proof. Later cases
+    // still create chapters, so preparation puts the proof back.
+    const deadline = Date.now() + 60_000;
+    let restored = false;
+    for (let turn = 0; turn < 8 && !restored; turn++) {
+      const prepared = await stack.fuseki.membershipPrepare({
+        dataEpoch: stack.env.lineage.dataEpoch, routingEpoch: stack.env.lineage.routingEpoch,
+        requestId: randomUUID(), deadline,
+      });
+      if (prepared.status !== 'committed') throw new Error(`membership proof was not restored: ${prepared.status}`);
+      restored = prepared.complete;
+    }
+    if (!restored) throw new Error('membership proof was not restored');
     await stack.stop();
   }
 }, 240_000);
