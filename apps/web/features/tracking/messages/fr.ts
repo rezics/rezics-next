@@ -113,7 +113,7 @@ export default {
   markChapterRead: 'Marquer comme lu', markChapterUnread: 'Marquer comme non lu',
   noSuchChapter: 'Ce chapitre n’existe pas.',
   playHeading: 'Votre partie', notPlayed: 'Pas encore joué', gamePlayed: 'Joué', gameCompleted: 'Terminé',
-  markPlayed: 'Marquer comme joué', markCompleted: 'Marquer comme terminé',
+  markPlayed: 'Marquer comme joué', markCompleted: 'Marquer comme terminé', markNotCompleted: 'Marquer comme non terminé',
   routesTitle: 'Routes',
   routesNote: 'Une route est une façon de traverser le jeu. Terminer le jeu suit ses parties requises.',
 } satisfies TrackingMessages;

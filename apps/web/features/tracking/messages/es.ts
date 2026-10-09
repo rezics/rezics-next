@@ -113,7 +113,7 @@ export default {
   markChapterRead: 'Marcar como leído', markChapterUnread: 'Marcar como no leído',
   noSuchChapter: 'Ese capítulo no existe.',
   playHeading: 'Tu partida', notPlayed: 'Aún sin jugar', gamePlayed: 'Jugado', gameCompleted: 'Completado',
-  markPlayed: 'Marcar como jugado', markCompleted: 'Marcar como completado',
+  markPlayed: 'Marcar como jugado', markCompleted: 'Marcar como completado', markNotCompleted: 'Marcar como no completado',
   routesTitle: 'Rutas',
   routesNote: 'Una ruta es una forma de recorrer el juego. Completarlo sigue sus partes obligatorias.',
 } satisfies TrackingMessages;

@@ -13,6 +13,13 @@ export function mediumOf(presentation: string | null, structure: { volumes: bool
   return 'episodes';
 }
 
+/** A chapter the positions read already named. Its label is the one Main returned. */
+export interface Place {
+  structure: string;
+  occurrence: string;
+  label: string;
+}
+
 export interface ChapterRef {
   structure: string;
   occurrence: string;
@@ -57,12 +64,17 @@ export interface RouteRef {
   required: boolean;
 }
 
-/** Played once any part has been started; completed once every part that gates the game is. */
-export function gameStatus(routes: readonly { required: boolean; completed: boolean; started: boolean }[]):
-  'none' | 'played' | 'completed' {
+/**
+ * Played once any part the read already shows has been started; completed once every part that
+ * gates the game is completed. A page that does not cover the parts leaves the game unknown:
+ * a part the read did not return is not "not played".
+ */
+export function gameStatus(routes: readonly { required: boolean; completed: boolean | null; started?: boolean }[],
+  exhaustive = true): 'none' | 'played' | 'completed' | 'unknown' {
   if (!routes.length) return 'none';
   const gate = routes.some(route => route.required) ? routes.filter(route => route.required) : routes;
-  if (gate.every(route => route.completed)) return 'completed';
-  if (routes.some(route => route.completed || route.started)) return 'played';
+  if (exhaustive && gate.every(route => route.completed === true)) return 'completed';
+  if (routes.some(route => route.completed === true || route.started)) return 'played';
+  if (!exhaustive || routes.some(route => route.completed === null)) return 'unknown';
   return 'none';
 }

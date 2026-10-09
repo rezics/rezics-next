@@ -110,7 +110,7 @@ export default {
   markChapterRead: '標為已讀', markChapterUnread: '標為未讀',
   noSuchChapter: '沒有這一話。',
   playHeading: '你的遊玩', notPlayed: '還沒有玩過', gamePlayed: '玩過', gameCompleted: '已通關',
-  markPlayed: '標為玩過', markCompleted: '標為已通關',
+  markPlayed: '標為玩過', markCompleted: '標為已通關', markNotCompleted: '標為未通關',
   routesTitle: '路線',
   routesNote: '路線是通關的一種方式。完成遊戲以它的必要部分為準。',
 } satisfies TrackingMessages;

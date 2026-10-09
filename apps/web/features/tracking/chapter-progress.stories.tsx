@@ -3,31 +3,41 @@ import { expect, userEvent, within } from 'storybook/test';
 import { PageContainer } from '../shell/page.tsx';
 import { ChapterProgress } from './chapter-progress.tsx';
 import type { EpisodeProgress } from './episode-api.ts';
-import type { MediaApi } from './media-api.ts';
-import type { ChapterRef } from './media.ts';
+import type { ChapterStanding, MediaApi, PositionPage } from './media-api.ts';
+import type { Place } from './media.ts';
 import { copyOf } from './messages.ts';
 
 const occurrence = (volume: number, number: number) => `https://example.test/occ/${volume}-${number}`;
-const chapter = (volume: number, number: number): ChapterRef => ({
-  structure: 'https://example.test/book', occurrence: occurrence(volume, number), number, label: null,
-  volume: { number: volume, label: String(volume) },
+const place = (volume: number, number: number): Place => ({
+  structure: 'https://example.test/book', occurrence: occurrence(volume, number),
+  label: `Volume ${volume}, chapter ${number}`,
 });
-const books = [
-  { number: 1, label: '1', work: 'https://example.test/vol/1', chapters: [1, 2, 3, 4].map(number => chapter(1, number)) },
-  { number: 2, label: '2', work: 'https://example.test/vol/2', chapters: [1, 2, 3, 4].map(number => chapter(2, number)) },
-];
+const places = [1, 2].flatMap(volume => [1, 2, 3, 4].map(number => place(volume, number)));
 
-/** Chapters of two volumes, with one optional stale write so the conflict panel can be opened. */
-function memoryChapters(read: string[] = [], stale = false): MediaApi {
+/** Two volumes, one page at a time. One write can come back stale so the conflict panel opens. */
+function memoryChapters(read: string[] = [], stale = false, failRead = false): MediaApi {
   const rows = new Map<string, EpisodeProgress>(read.map(id => [id, { completed: true, position: 'read', version: 1 }]));
   let once = stale;
+  const standing = (): ChapterStanding => {
+    const index = places.reduce((found, item, at) => rows.get(item.occurrence)?.completed ? at : found, -1);
+    if (index < 0) return { last: null, next: places[0] ?? null, caughtUp: false, opened: null };
+    const next = places[index + 1] ?? null;
+    return { last: places[index] ?? null, next, caughtUp: next === null, opened: null };
+  };
+  const page = (cursor?: string): PositionPage => cursor
+    ? { items: places.slice(4), next: null }
+    : { items: places.slice(0, 4), next: 'more' };
   return {
     types: async () => ({ ok: true, data: ['https://schema.org/BookSeries'] }),
-    volumes: async () => ({ ok: true, data: books.map(({ chapters: _chapters, ...volume }) => volume) }),
-    chapters: async work => ({ ok: true, data: books.find(volume => volume.work === work)?.chapters ?? [] }),
-    routes: async () => ({ ok: true, data: [] }),
-    resume: async () => ({ ok: true, data: [...rows].reverse().find(([, row]) => row.completed)?.[0] ?? null }),
-    progress: async part => ({ ok: true, data: rows.get(part.occurrence) ?? { completed: false, position: null, version: 0 } }),
+    volumes: async () => ({ ok: true, data: [] }),
+    chapters: async () => ({ ok: true, data: null }),
+    routes: async () => ({ ok: true, data: { items: [], next: null } }),
+    standing: async () => ({ ok: true, data: standing() }),
+    positions: async (_work, cursor) => ({ ok: true, data: page(cursor) }),
+    completions: async () => ({ ok: true, data: { occurrences: [], next: null, complete: true } }),
+    progress: async part => failRead
+      ? { ok: false, failure: 'unavailable' }
+      : { ok: true, data: rows.get(part.occurrence) ?? { completed: false, position: null, version: 0 } },
     mark: async (part, change) => {
       const current = rows.get(part.occurrence) ?? { completed: false, position: null, version: 0 };
       if (once) {
@@ -51,24 +61,24 @@ const meta = {
   title: 'Tracking/Chapter progress',
   component: Sheet,
   parameters: { docs: { description: { component:
-    'A manga with volumes: the last chapter read, the next one, and a jump to a chapter inside a volume. Another device writing the same chapter keeps both versions on screen.' } } },
+    'A manga with volumes: the last chapter read, the next one, and the chapters one page at a time. Another device writing the same chapter keeps both versions on screen.' } } },
   args: { api: memoryChapters() },
   globals: { viewport: { value: 'phone' } },
 } satisfies Meta<{ api: MediaApi }>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Volume 2 chapter 3 is marked from the jump, and the next chapter is the one after it. */
+/** Volume 2 chapter 3 is on the next page. Marking it continues at the chapter after it. */
 export const MarkVolumeChapter: Story = {
   args: { api: memoryChapters() },
   async play({ canvasElement }) {
     const view = within(canvasElement);
     await view.findByText('No chapter read yet');
-    await userEvent.type(view.getByLabelText('Volume'), '2');
-    await userEvent.type(view.getByLabelText('Chapter'), '3');
-    await userEvent.click(view.getByRole('button', { name: 'Go' }));
-    await view.findByText('Volume 2, chapter 3');
-    await userEvent.click(view.getByRole('button', { name: /^Mark read$/ }));
+    await expect(view.getByText('Continue from Volume 1, chapter 1')).toBeVisible();
+    await expect(view.queryByRole('button', { name: 'Volume 2, chapter 3' })).toBeNull();
+    await userEvent.click(view.getByRole('button', { name: 'Show more' }));
+    await userEvent.click(view.getByRole('button', { name: 'Volume 2, chapter 3' }));
+    await userEvent.click(await view.findByRole('button', { name: /^Mark read$/ }));
     await view.findByText('Last read: Volume 2, chapter 3');
     await expect(view.getByText('Continue from Volume 2, chapter 4')).toBeVisible();
   },
@@ -91,13 +101,24 @@ export const Conflict: Story = {
   async play({ canvasElement }) {
     const view = within(canvasElement);
     await view.findByText('Last read: Volume 2, chapter 3');
-    await userEvent.type(view.getByLabelText('Volume'), '2');
-    await userEvent.type(view.getByLabelText('Chapter'), '3');
-    await userEvent.click(view.getByRole('button', { name: 'Go' }));
+    await userEvent.click(view.getByRole('button', { name: 'Show more' }));
+    await userEvent.click(view.getByRole('button', { name: 'Volume 2, chapter 3' }));
     await userEvent.click(await view.findByRole('button', { name: 'Mark not read' }));
     await view.findByText('Changed on another device');
     await expect(view.getByText('Your change')).toBeVisible();
     await userEvent.click(view.getByRole('button', { name: 'Keep my change' }));
     await view.findByText('No chapter read yet');
+  },
+};
+
+/** A chapter whose progress could not be read stays failed, and is not shown as unread. */
+export const ReadFailed: Story = {
+  args: { api: memoryChapters([], false, true) },
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByText('No chapter read yet');
+    await userEvent.click(view.getByRole('button', { name: 'Volume 1, chapter 1' }));
+    await view.findByText('Couldn’t save. Try again.');
+    await expect(view.queryByText('Not read')).toBeNull();
   },
 };

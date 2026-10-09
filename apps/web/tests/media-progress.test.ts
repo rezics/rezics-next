@@ -41,5 +41,6 @@ describe('medium progress', () => {
     expect(gameStatus([story, route])).toBe('completed');
     expect(gameStatus([{ ...story, completed: false }, { ...route, completed: true, started: true }])).toBe('played');
     expect(gameStatus([])).toBe('none');
+    expect(gameStatus([{ required: true, completed: null }], false)).toBe('unknown');
   });
 });

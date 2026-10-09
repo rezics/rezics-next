@@ -110,7 +110,7 @@ export default {
   markChapterRead: '読了にする', markChapterUnread: '未読に戻す',
   noSuchChapter: 'その章はありません。',
   playHeading: 'プレイ', notPlayed: 'まだプレイしていない', gamePlayed: 'プレイ済み', gameCompleted: 'クリア',
-  markPlayed: 'プレイ済みにする', markCompleted: 'クリアにする',
+  markPlayed: 'プレイ済みにする', markCompleted: 'クリアにする', markNotCompleted: 'クリアを取り消す',
   routesTitle: 'ルート',
   routesNote: 'ルートはゲームの進み方の一つです。クリアは必須の部分に従います。',
 } satisfies TrackingMessages;

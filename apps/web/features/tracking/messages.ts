@@ -131,6 +131,7 @@ const en = {
   gameCompleted: 'Completed',
   markPlayed: 'Mark played',
   markCompleted: 'Mark completed',
+  markNotCompleted: 'Mark not completed',
   routesTitle: 'Routes',
   routesNote: 'A route is one way through the game. Completing the game follows its required parts.',
 };
