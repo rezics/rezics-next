@@ -276,7 +276,10 @@ a second representation of a decision that owner already makes. A brief that
 merges copies states the expected net decrease in production lines, and the
 handoff shows it (`git diff --numstat`). A merge that grows the code usually
 kept every caller's variation as an option instead of choosing one; it is
-justified only by a correctness gain the brief names. When `dispatch`
+justified only by a correctness gain the brief names. A brief for code that
+deletes state (volumes, stacks, backups, directories) names who owns what it
+deletes and limits it to that: never what a caller supplied, another checkout
+recorded, or another owner manages between steps. When `dispatch`
 or `reclaim` refuses a path an exited task already changed outside its claim,
 land the earlier task first or drop the path.
 
