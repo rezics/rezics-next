@@ -1,4 +1,4 @@
-import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
+import { AsyncResource } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import { logWorkerFault, telemetryLog } from '@rezics/observability/log';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
@@ -12,21 +12,9 @@ export const SHELF_METADATA_COST = { graphCalls: 3, graphRows: 49, sqlReads: 4,
 export const LIBRARY_BACKFILL_COST = { batch: 24, parentRows: 3, graphCallsPerRow: 4, deadlineMs: 600_000 } as const;
 const titleKey = (value: string) => value.normalize('NFKC').toLowerCase();
 
-const shelfMetadataRead = new AsyncLocalStorage<true>();
-
 /** Canonical, language-independent ordering key. Cards still use live disclosure
- * and display-language reads; these private sort hints never grant authority.
- * One graph neighbourhood per status write: the caller still holds its content
- * client, so a further metadata read returns an empty snapshot instead of
- * another graph round trip. An observer that writes shelf status on each graph
- * read would otherwise check out every content connection and never return. */
+ * and display-language reads; these private sort hints never grant authority. */
 export async function readShelfMetadata(content: Pool | PoolClient, access: Pool, graph: FusekiClient,
-  agent: string, work: string, includeSessionHistory = false): Promise<ShelfMetadata> {
-  if (shelfMetadataRead.getStore()) return { titleKey: null, ownRating: null, lastReadAt: null };
-  return shelfMetadataRead.run(true, () => loadShelfMetadata(content, access, graph, agent, work, includeSessionHistory));
-}
-
-async function loadShelfMetadata(content: Pool | PoolClient, access: Pool, graph: FusekiClient,
   agent: string, work: string, includeSessionHistory = false): Promise<ShelfMetadata> {
   const rows = (await graph.query(`${READ_PREFIX} SELECT ?main ?label ?structure WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:mainVersion ?main .
