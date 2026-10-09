@@ -8,6 +8,7 @@ import { recordStatement, recordStatementRequest } from '../../../services/main/
 import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
 import { startMediaStack } from './media-support.ts';
+import { createStatementProperty } from './statement-property.ts';
 
 type Composition = { structure: string; revision: string; occurrences: string[] };
 type Page = { items: { id: string }[]; nextCursor: string | null };
@@ -66,9 +67,11 @@ test('participation revealed at chapter 3 is absent at chapter 2 in projection a
       await editor.send('POST', '/v1/projections', { subject, frames: [frame], actingSubject: editor.actor }), 201)).projection.id;
     const participation = await project(person, event);
     const withheldSubject = await project(latePerson, event), withheldFrame = await project(person, lateFrame);
+    const property = await createStatementProperty(editor.send.bind(editor), editor.actor);
+    await editor.grant(`semantic:read:${property.predicate}`, 'semantic.read');
     const statement = async (subject: string, object = event) => {
       const input = { speaker: { kind: 'personal' as const }, subject,
-        predicate: 'https://example.org/participates', relationDefinition: 'https://example.org/participation-v1',
+        predicate: property.predicate, relationDefinition: property.relationDefinition,
         value: { kind: 'resource' as const, iri: object }, applicability: [],
         interpretation: { kind: 'selected' as const }, evidence: [], actingSubject: editor.actor };
       const intent = recordStatementRequest(input);
