@@ -1,3 +1,4 @@
+import { logWorkerFault } from '@rezics/observability/log';
 import { InvalidRatingCalendar } from '../modules/rating/calendar.ts';
 import { PlatformClosed } from '../modules/access/exposure.ts';
 import { platformExposureProblem } from '../modules/access/exposure-routes.ts';
@@ -139,8 +140,12 @@ export function problem(status: number, code: string, title: string, headers?: H
 }
 
 export function commandError(error: unknown): Response {
-  return typedRefusal(error)
-    ?? problem(503, 'dependency_unavailable', 'Work operation could not be completed', { 'retry-after': '1' });
+  const typed = typedRefusal(error);
+  if (typed) return typed;
+  // An unrecognized error is answered as unavailable; the log carries its class
+  // (and a nested checkout's holders) so the 503 can be routed to an owner.
+  logWorkerFault('main.route.dependency_unavailable', error);
+  return problem(503, 'dependency_unavailable', 'Work operation could not be completed', { 'retry-after': '1' });
 }
 
 /** Status and problem for a typed refusal. Unrecognized errors return undefined;
