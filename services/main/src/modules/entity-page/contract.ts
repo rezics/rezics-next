@@ -2,7 +2,7 @@ import { t } from 'elysia';
 import { resourceSummary } from '../media/summary-contract.ts';
 import { resolvedTarget } from '../target/contract.ts';
 import { typeDefinition } from '../types/contract.ts';
-import { readId, readPosition, workHeader } from '../work/read-contract.ts';
+import { readId, readPosition, wikiDisplayObligations, workHeader } from '../work/read-contract.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
 import { wikiClaimEvidence } from '../wiki/evidence-contract.ts';
 import { frameMatch } from '../projection/frame-read.ts';
@@ -142,6 +142,7 @@ export const subjectStatementPage = t.Object(
     profile: t.Literal('subject-statements-v1'),
     resource: readId,
     acceptanceContext: t.String(),
+    factObligations: wikiDisplayObligations,
     groups: t.Array(
       t.Object(
         { predicate: t.String(), items: t.Array(t.Union([statement, componentProperty])) },

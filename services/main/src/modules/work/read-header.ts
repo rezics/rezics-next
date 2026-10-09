@@ -1,3 +1,4 @@
+import { RightsInvalid, RightsUnavailable, workDescriptionMaterial, type WikiDisplayObligations } from '../rights/store.ts';
 import { chooseMainLanguage, readMainLanguageHeads } from './selection-heads.ts';
 import type { Static } from 'typebox';
 import { iri, GRAPHS, WORK_SEMANTIC_TYPES } from './activate.ts';
@@ -90,8 +91,22 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
   const metadata = basis.metadata;
   const selected = selectedMetadata(metadata, session.options.language);
   await fenceWorkBasis(session, basis);
+  const store = session.deps.rights?.store;
+  let descriptionObligations: WikiDisplayObligations = { status: 'unassessed' };
+  if (store) {
+    try {
+      descriptionObligations = (await store.currentWikiDisplayObligations([workDescriptionMaterial(work)]))[0]
+        ?? descriptionObligations;
+    } catch (error) {
+      if (error instanceof RightsUnavailable || error instanceof RightsInvalid) {
+        throw new WorkReadUnavailable('Rights obligations are unavailable');
+      }
+      throw error;
+    }
+  }
   const path = `/v1/works/${work.slice(-36)}`;
   return { profile: 'work-read-v1' as const, ...basis.card, disclosure: basis.disclosure,
+    descriptionObligations,
     ...(basis.fieldProvenance ? { fieldProvenance: basis.fieldProvenance } : {}),
     title: selected.title ?? basis.card.title, description: selected.description,
     tagline: selected.tagline, completionStatus: metadata.completionStatus,

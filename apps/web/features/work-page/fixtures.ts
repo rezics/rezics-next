@@ -39,6 +39,7 @@ export const work: WorkHeader = {
   description: { value: 'A surveyor maps a delta that redraws itself with every tide.\nWhat she records, the river '
     + 'undoes, until the map and the city begin to argue about which of them is true.', language: 'en',
   direction: 'ltr', basis: 'requested' },
+  descriptionObligations: { status: 'unassessed' },
   tagline: name('A novel of rivers, maps and the stories a city tells about itself.'),
   completionStatus: 'completed', chapterCount: 24, wordCount: 86_400, lastUpdatedAt: '2026-09-20T08:00:00.000Z',
   mainVersionRevision: iri('d3f5b7a9-1c2e-4d4f-8a6b-9c1e3f5a7b9d'), mainVersionLabel: null, selectedLanguage: 'en',

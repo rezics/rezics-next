@@ -89,12 +89,55 @@ function exportRightsIdentity(member: VerifiedExportMember): ExportRightsIdentit
   return value as ExportRightsIdentity;
 }
 
-const unassessedBasis = (useScope: Parameters<LicenseScopeHook>[1], memberOrdinal: number) => ({
-  basisKind: 'unprotected_fact' as const, basisRef: null, licenseExpression: null, notice: null,
-  obligations: [] as Array<'attribution' | 'share_alike' | 'non_commercial' | 'no_derivatives'
-    | 'notice_retention' | 'access_restriction'>,
-  useScope, result: 'undetermined' as const, memberOrdinals: [memberOrdinal],
-});
+/** Public wiki display. A head for another use, including export, is a different key. */
+export const WIKI_DISPLAY_USE = { family: 'data_rights', useKind: 'wiki_display',
+  useScope: 'rezics:wiki' } as const;
+
+export interface WikiDisplayObligation {
+  kind: typeof obligationKinds[number]; instrument: string; appliesTo: 'display' | 'all'; notice: string | null;
+}
+/** No current head, and a disclosure-hidden head, are the same public shape. */
+export type WikiDisplayObligations = { status: 'unassessed' }
+  | { status: 'assessed'; use: 'wiki_display'; instrument: string | null; obligations: WikiDisplayObligation[] };
+
+const displayAppliesTo = new Set(['display', 'all']);
+
+/** The description text of a Work. Importers assess this key; the source is not part of the key. */
+export function workDescriptionMaterial(work: string): MaterialScope {
+  if (!agentPattern.test(work)) throw new RightsInvalid('invalid work description material');
+  return { scopeKind: 'work', provider: null, namespace: null, sourceRecordId: null,
+    contentVariantId: null, mediaAsset: null, workId: work, wikiEvidenceId: null, component: 'synopsis' };
+}
+
+/** The fact set displayed for a subject resource. */
+export function resourceFactMaterial(resource: string): MaterialScope {
+  if (!agentPattern.test(resource)) throw new RightsInvalid('invalid fact-set material');
+  return { scopeKind: 'work', provider: null, namespace: null, sourceRecordId: null,
+    contentVariantId: null, mediaAsset: null, workId: resource, wikiEvidenceId: null, component: 'record' };
+}
+
+export function projectWikiDisplay(row: { assessmentId: string | null; licenseInstrument: string | null;
+  obligations: Array<{ kind: string; instrument: string; appliesTo: string; notice: string | null }> } | undefined,
+  hidden: boolean): WikiDisplayObligations {
+  if (hidden || !row?.assessmentId) return { status: 'unassessed' };
+  return { status: 'assessed', use: 'wiki_display', instrument: row.licenseInstrument,
+    obligations: row.obligations.flatMap(item => displayAppliesTo.has(item.appliesTo)
+      && (obligationKinds as readonly string[]).includes(item.kind)
+      ? [{ kind: item.kind as typeof obligationKinds[number], instrument: item.instrument,
+        appliesTo: item.appliesTo as 'display' | 'all', notice: item.notice }] : []) };
+}
+
+/** A missing export head is not an unprotected fact. The result stays undetermined. */
+export function unassessedExportBasis(useScope: Parameters<LicenseScopeHook>[1], memberOrdinal: number): ExportBasis {
+  return { basisKind: 'unassessed', basisRef: null, licenseExpression: null, notice: null, obligations: [],
+    useScope, result: 'undetermined', memberOrdinals: [memberOrdinal] };
+}
+
+/** Kinds the export profile can carry. `other` stays unsupported and leaves the member undetermined. */
+export const exportSupportedObligationKinds = {
+  attribution: 'attribution', share_alike: 'share_alike', non_commercial: 'non_commercial',
+  no_derivatives: 'no_derivatives', notice_retention: 'notice_retention', change_indication: 'change_indication',
+} as const;
 
 async function rollback(client: PoolClient): Promise<void> {
   try { await client.query('ROLLBACK'); } catch { /* preserve the original failure */ }
@@ -369,6 +412,86 @@ export class RightsStore {
   }
 
   /**
+   * Current wiki-display obligations for a page of materials. One Content
+   * statement for the whole batch, then one Access statement for disclosure
+   * fences on heads that exist. No graph call. A hidden head returns the
+   * unassessed shape and does not carry the instrument or notice.
+   */
+  async currentWikiDisplayObligations(materials: readonly MaterialScope[]): Promise<WikiDisplayObligations[]> {
+    if (materials.length > 32 || materials.some(material => !validMaterial(material))) {
+      throw new RightsInvalid('wiki display obligation batch is invalid');
+    }
+    if (!materials.length) return [];
+    const ordinals = materials.map((_, index) => index + 1);
+    let rows: Array<{ ordinal: number; assessment_id: string | null; license_instrument: string | null;
+      obligations: Array<{ kind: string; instrument: string; applies_to: string; notice: string | null }> | null }>;
+    try {
+      rows = (await this.content.query<{ ordinal: number; assessment_id: string | null;
+        license_instrument: string | null;
+        obligations: Array<{ kind: string; instrument: string; applies_to: string; notice: string | null }> | null
+      }>(`WITH requested AS ( -- wiki-display obligations
+          SELECT * FROM unnest($1::int[], $2::text[], $3::text[], $4::text[], $5::uuid[],
+            $6::text[], $7::text[], $8::text[], $9::text[], $10::text[]) AS r(ordinal, scope_kind, provider,
+              namespace, source_record_id, content_variant_id, media_asset, work_id, wiki_evidence_id, component)
+        )
+        SELECT r.ordinal, a.id AS assessment_id, a.license_instrument,
+          COALESCE(o.items, '[]'::jsonb) AS obligations
+        FROM requested r
+        LEFT JOIN LATERAL (SELECT m.id FROM rights.material m
+          WHERE m.scope_kind = r.scope_kind AND m.provider IS NOT DISTINCT FROM r.provider
+            AND m.namespace IS NOT DISTINCT FROM r.namespace
+            AND m.source_record_id IS NOT DISTINCT FROM r.source_record_id
+            AND m.content_variant_id IS NOT DISTINCT FROM r.content_variant_id
+            AND m.media_asset IS NOT DISTINCT FROM r.media_asset
+            AND m.work_id IS NOT DISTINCT FROM r.work_id
+            AND m.wiki_evidence_id IS NOT DISTINCT FROM r.wiki_evidence_id
+            AND m.component = r.component
+          LIMIT 1) m ON true
+        LEFT JOIN rights.use_assessment_head h ON h.material_id = m.id AND h.family = 'data_rights'
+          AND h.use_kind = 'wiki_display' AND h.use_scope = $11
+        LEFT JOIN rights.use_assessment a ON a.id = h.assessment_id
+        LEFT JOIN LATERAL (SELECT jsonb_agg(jsonb_build_object('kind', b.kind, 'instrument', b.instrument,
+          'applies_to', b.applies_to, 'notice', b.notice) ORDER BY b.ordinal) AS items
+          FROM rights.obligation b WHERE b.assessment_id = a.id
+            AND b.applies_to IN ('display', 'all')) o ON true`, [
+        ordinals, materials.map(item => item.scopeKind), materials.map(item => item.provider),
+        materials.map(item => item.namespace), materials.map(item => item.sourceRecordId),
+        materials.map(item => item.contentVariantId), materials.map(item => item.mediaAsset),
+        materials.map(item => item.workId ?? null), materials.map(item => item.wikiEvidenceId ?? null),
+        materials.map(item => item.component), WIKI_DISPLAY_USE.useScope,
+      ])).rows;
+    } catch { throw new RightsUnavailable('wiki display obligations are unavailable'); }
+    const byOrdinal = new Map(rows.map(row => [Number(row.ordinal), row]));
+    const disclosed = materials.flatMap((material, index) => byOrdinal.get(index + 1)?.assessment_id && material.workId
+      ? [{ ordinal: index + 1, resource: material.workId, component: material.component }] : []);
+    let hidden = new Set<number>();
+    if (disclosed.length) {
+      try {
+        const fences = await this.access.query<{ ordinal: number }>(`WITH requested AS ( -- wiki-display disclosure
+            SELECT * FROM unnest($1::int[], $2::text[], $3::text[]) AS r(ordinal, resource, component)
+          )
+          SELECT r.ordinal FROM requested r
+          WHERE EXISTS (SELECT 1 FROM access.governance_enforcement e
+            WHERE e.state = 'restricted' AND e.effect = 'disclosure'
+              AND (e.resource = r.resource OR e.resource = right(r.resource, 36))
+              AND (e.component = r.component OR e.component IN ('record', 'publication')))`, [
+          disclosed.map(item => item.ordinal), disclosed.map(item => item.resource),
+          disclosed.map(item => item.component),
+        ]);
+        hidden = new Set(fences.rows.map(row => Number(row.ordinal)));
+      } catch { throw new RightsUnavailable('wiki display obligations are unavailable'); }
+    }
+    return materials.map((_, index) => {
+      const row = byOrdinal.get(index + 1);
+      const obligations = Array.isArray(row?.obligations) ? row.obligations
+        : typeof row?.obligations === 'string' ? JSON.parse(row.obligations) as typeof row.obligations : [];
+      return projectWikiDisplay(row ? { assessmentId: row.assessment_id, licenseInstrument: row.license_instrument,
+        obligations: (obligations ?? []).map(item => ({ kind: item.kind, instrument: item.instrument,
+          appliesTo: item.applies_to, notice: item.notice })) } : undefined, hidden.has(index + 1));
+    });
+  }
+
+  /**
    * Export hook for one exact use. Owner readers attach an exact material key
    * and target; this owner resolves the key to its immutable material row.
    */
@@ -387,8 +510,8 @@ export class RightsStore {
         extent: Record<string, unknown> | null; obligations: Array<{ kind: string; instrument: string;
           applies_to: string; notice: string | null }> }>(`WITH requested AS (
           SELECT * FROM unnest($1::int[], $2::text[], $3::text[], $4::text[], $5::uuid[],
-            $6::text[], $7::text[], $8::text[], $11::text[]) AS r(ordinal, scope_kind, provider,
-              namespace, source_record_id, content_variant_id, media_asset, component, wiki_evidence_id)
+            $6::text[], $7::text[], $8::text[], $11::text[], $12::text[]) AS r(ordinal, scope_kind, provider,
+              namespace, source_record_id, content_variant_id, media_asset, component, wiki_evidence_id, work_id)
         )
         SELECT r.ordinal, m.id, m.expression_kind, a.id AS assessment_id, a.basis, a.outcome,
           a.license_instrument, a.exception_kind, a.rationale, a.extent,
@@ -400,6 +523,7 @@ export class RightsStore {
             AND m.content_variant_id IS NOT DISTINCT FROM r.content_variant_id
             AND m.media_asset IS NOT DISTINCT FROM r.media_asset AND m.component = r.component
             AND m.wiki_evidence_id IS NOT DISTINCT FROM r.wiki_evidence_id
+            AND m.work_id IS NOT DISTINCT FROM r.work_id
           LIMIT 1) m ON true
         LEFT JOIN rights.use_assessment_head h ON h.material_id = m.id AND h.family = 'data_rights'
           AND h.use_kind = $9 AND h.use_scope = $10
@@ -413,6 +537,7 @@ export class RightsStore {
         valid.map(item => item.identity.material.sourceRecordId), valid.map(item => item.identity.material.contentVariantId),
         valid.map(item => item.identity.material.mediaAsset), valid.map(item => item.identity.material.component),
         useKind, scope, valid.map(item => item.identity.material.wikiEvidenceId ?? null),
+        valid.map(item => item.identity.material.workId ?? null),
       ]) : Promise.resolve({ rows: [] }),
       enforceable.length ? this.access.query<{ ordinal: number; decision_id: string | null }>(`WITH requested AS (
           SELECT * FROM unnest($1::int[], $2::text[], $3::text[], $4::text[], $5::text[]) AS r(
@@ -434,7 +559,7 @@ export class RightsStore {
       .map(row => [row.ordinal, row.decision_id!]));
     const bases: ExportBasis[] = members.map((_member, index) => {
       const ordinal = index + 1;
-      if (malformed.includes(index)) return { ...unassessedBasis(useScope, ordinal),
+      if (malformed.includes(index)) return { ...unassessedExportBasis(useScope, ordinal),
         result: 'prohibited' as const, obligations: ['access_restriction' as const],
         notice: 'The selected member has an invalid rights identity.' };
       const identity = identities[index];
@@ -443,19 +568,16 @@ export class RightsStore {
       if (decision) {
         return { ...(row?.assessment_id ? {
           basisKind: 'use_assessment' as const, basisRef: row.assessment_id,
-        } : unassessedBasis(useScope, ordinal)),
+        } : unassessedExportBasis(useScope, ordinal)),
         licenseExpression: null, notice: `Export restricted by decision ${decision}.`,
         obligations: ['access_restriction' as const], useScope, result: 'prohibited' as const,
         memberOrdinals: [ordinal] };
       }
       if (!identity || !row || !row.assessment_id || !row.basis || !row.outcome) {
-        return { ...unassessedBasis(useScope, ordinal) };
+        return { ...unassessedExportBasis(useScope, ordinal) };
       }
-      const supportedObligations: Record<string, 'attribution' | 'share_alike' | 'non_commercial'
-        | 'no_derivatives' | 'notice_retention'> = {
-        attribution: 'attribution', share_alike: 'share_alike', non_commercial: 'non_commercial',
-        no_derivatives: 'no_derivatives', notice_retention: 'notice_retention',
-      };
+      const supportedObligations: Record<string, typeof exportSupportedObligationKinds[keyof typeof exportSupportedObligationKinds]>
+        = exportSupportedObligationKinds;
       const obligations = row.obligations.map(item => supportedObligations[item.kind]);
       const notices = row.obligations.map(item => item.notice).filter((item): item is string => item !== null);
       const rationale = row.basis === 'statutory_exception'
@@ -473,7 +595,7 @@ export class RightsStore {
         licenseExpression: row.basis === 'license' ? row.license_instrument : null,
         notice: rationale ?? (notices.length ? JSON.stringify(notices) : null),
         obligations: unsupportedCondition ? [] : obligations as Array<'attribution' | 'share_alike'
-          | 'non_commercial' | 'no_derivatives' | 'notice_retention'>,
+          | 'non_commercial' | 'no_derivatives' | 'notice_retention' | 'change_indication'>,
         useScope, result, memberOrdinals: [ordinal] };
     });
     return bases;

@@ -1,5 +1,6 @@
 import { t } from 'elysia';
 import { displayLanguageBasis } from '../display-language/schema.ts';
+import { obligationKinds } from '../rights/schema.ts';
 import type { PersonPreferencesStore } from '../preferences/store.ts';
 import { authorNameProvenance } from '../source/author-name.ts';
 import type { Viewer } from '../suitability/policy.ts';
@@ -30,6 +31,28 @@ export async function discloseParticipantName<T extends { value: string }>(
   const visible = await visibleNames(preferences, [participant], viewer, 'read');
   return visible.has(participant) ? name : { reference: participant, status: 'unavailable' };
 }
+/** A tuple, so the response type keeps each kind. The record must match `obligationKinds`. */
+const obligationKindLiteral = {
+  attribution: t.Literal('attribution'), share_alike: t.Literal('share_alike'),
+  notice_retention: t.Literal('notice_retention'), change_indication: t.Literal('change_indication'),
+  non_commercial: t.Literal('non_commercial'), no_derivatives: t.Literal('no_derivatives'),
+  other: t.Literal('other'),
+} satisfies Record<typeof obligationKinds[number], ReturnType<typeof t.Literal>>;
+const obligationKind = t.Union([
+  obligationKindLiteral.attribution, obligationKindLiteral.share_alike,
+  obligationKindLiteral.notice_retention, obligationKindLiteral.change_indication,
+  obligationKindLiteral.non_commercial, obligationKindLiteral.no_derivatives,
+  obligationKindLiteral.other,
+]);
+/** Current wiki-display obligations of one text or fact set. `unassessed` is also the hidden shape. */
+export const wikiDisplayObligations = t.Union([
+  t.Object({ status: t.Literal('unassessed') }, { additionalProperties: false }),
+  t.Object({ status: t.Literal('assessed'), use: t.Literal('wiki_display'),
+    instrument: t.Nullable(t.String()),
+    obligations: t.Array(t.Object({ kind: obligationKind, instrument: t.String(),
+      appliesTo: t.Union([t.Literal('display'), t.Literal('all')]), notice: t.Nullable(t.String()) },
+    { additionalProperties: false }), { maxItems: 16 }) }, { additionalProperties: false }),
+]);
 export const readAvatar = t.Union([
   t.Object({ kind: t.Literal('fallback'), policy: t.String(), key: t.String(), resourceType: t.String() }),
   t.Object({ kind: t.Literal('image'), selection: t.String(), url: t.String(), mediaType: t.String(),
@@ -59,6 +82,7 @@ export const workHeader = t.Object({ profile: t.Literal('work-read-v1'), ...work
   originalTitle: t.Nullable(t.Object({ ...recordedText.properties,
     direction: t.Union([t.Literal('ltr'), t.Literal('rtl')]) })),
   metadataRevision: t.Nullable(readId), description: t.Nullable(readName),
+  descriptionObligations: wikiDisplayObligations,
   mainVersionRevision: readId, mainVersionLabel: t.Nullable(readName),
   selectedLanguage: t.Nullable(t.String()),
   /** Present when the Work is a chapter: its Book, and where the chapter is read in the Book's contents. */

@@ -464108,6 +464108,97 @@
                                       "null"
                                     ]
                                   },
+                                  "descriptionObligations": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "status": {
+                                            "const": "unassessed",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "instrument": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "obligations": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "appliesTo": {
+                                                  "enum": [
+                                                    "display",
+                                                    "all"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "instrument": {
+                                                  "type": "string"
+                                                },
+                                                "kind": {
+                                                  "enum": [
+                                                    "attribution",
+                                                    "share_alike",
+                                                    "notice_retention",
+                                                    "change_indication",
+                                                    "non_commercial",
+                                                    "no_derivatives",
+                                                    "other"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "notice": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "instrument",
+                                                "appliesTo",
+                                                "notice"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 16,
+                                            "type": "array"
+                                          },
+                                          "status": {
+                                            "const": "assessed",
+                                            "type": "string"
+                                          },
+                                          "use": {
+                                            "const": "wiki_display",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "use",
+                                          "instrument",
+                                          "obligations"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
                                   "disclosure": {
                                     "enum": [
                                       "public",
@@ -464435,6 +464526,7 @@
                                   "originalTitle",
                                   "metadataRevision",
                                   "description",
+                                  "descriptionObligations",
                                   "mainVersionRevision",
                                   "mainVersionLabel",
                                   "selectedLanguage",
@@ -467659,6 +467751,97 @@
                               ],
                               "type": "object"
                             },
+                            "factObligations": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "status": {
+                                      "const": "unassessed",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "instrument": {
+                                      "~elyTyp": 7,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "obligations": {
+                                      "items": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "appliesTo": {
+                                            "enum": [
+                                              "display",
+                                              "all"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "instrument": {
+                                            "type": "string"
+                                          },
+                                          "kind": {
+                                            "enum": [
+                                              "attribution",
+                                              "share_alike",
+                                              "notice_retention",
+                                              "change_indication",
+                                              "non_commercial",
+                                              "no_derivatives",
+                                              "other"
+                                            ],
+                                            "type": "string"
+                                          },
+                                          "notice": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          }
+                                        },
+                                        "required": [
+                                          "kind",
+                                          "instrument",
+                                          "appliesTo",
+                                          "notice"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "maxItems": 16,
+                                      "type": "array"
+                                    },
+                                    "status": {
+                                      "const": "assessed",
+                                      "type": "string"
+                                    },
+                                    "use": {
+                                      "const": "wiki_display",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "status",
+                                    "use",
+                                    "instrument",
+                                    "obligations"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
                             "groups": {
                               "items": {
                                 "additionalProperties": false,
@@ -468158,6 +468341,7 @@
                             "profile",
                             "resource",
                             "acceptanceContext",
+                            "factObligations",
                             "groups",
                             "nextCursor",
                             "sourcePosition",
@@ -471372,6 +471556,97 @@
                             "null"
                           ]
                         },
+                        "descriptionObligations": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "status": {
+                                  "const": "unassessed",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "instrument": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "obligations": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "appliesTo": {
+                                        "enum": [
+                                          "display",
+                                          "all"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "instrument": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "attribution",
+                                          "share_alike",
+                                          "notice_retention",
+                                          "change_indication",
+                                          "non_commercial",
+                                          "no_derivatives",
+                                          "other"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "notice": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "instrument",
+                                      "appliesTo",
+                                      "notice"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "const": "assessed",
+                                  "type": "string"
+                                },
+                                "use": {
+                                  "const": "wiki_display",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "use",
+                                "instrument",
+                                "obligations"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
                         "disclosure": {
                           "enum": [
                             "public",
@@ -471699,6 +471974,7 @@
                         "originalTitle",
                         "metadataRevision",
                         "description",
+                        "descriptionObligations",
                         "mainVersionRevision",
                         "mainVersionLabel",
                         "selectedLanguage",
@@ -478639,6 +478915,97 @@
                       ],
                       "type": "object"
                     },
+                    "factObligations": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "unassessed",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "instrument": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "obligations": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "appliesTo": {
+                                    "enum": [
+                                      "display",
+                                      "all"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "instrument": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "attribution",
+                                      "share_alike",
+                                      "notice_retention",
+                                      "change_indication",
+                                      "non_commercial",
+                                      "no_derivatives",
+                                      "other"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "notice": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "instrument",
+                                  "appliesTo",
+                                  "notice"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 16,
+                              "type": "array"
+                            },
+                            "status": {
+                              "const": "assessed",
+                              "type": "string"
+                            },
+                            "use": {
+                              "const": "wiki_display",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "use",
+                            "instrument",
+                            "obligations"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
                     "groups": {
                       "items": {
                         "additionalProperties": false,
@@ -479138,6 +479505,7 @@
                     "profile",
                     "resource",
                     "acceptanceContext",
+                    "factObligations",
                     "groups",
                     "nextCursor",
                     "sourcePosition",
@@ -573588,6 +573956,97 @@
                         "null"
                       ]
                     },
+                    "descriptionObligations": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "unassessed",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "instrument": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "obligations": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "appliesTo": {
+                                    "enum": [
+                                      "display",
+                                      "all"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "instrument": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "attribution",
+                                      "share_alike",
+                                      "notice_retention",
+                                      "change_indication",
+                                      "non_commercial",
+                                      "no_derivatives",
+                                      "other"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "notice": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "instrument",
+                                  "appliesTo",
+                                  "notice"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 16,
+                              "type": "array"
+                            },
+                            "status": {
+                              "const": "assessed",
+                              "type": "string"
+                            },
+                            "use": {
+                              "const": "wiki_display",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "use",
+                            "instrument",
+                            "obligations"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
                     "disclosure": {
                       "enum": [
                         "public",
@@ -573915,6 +574374,7 @@
                     "originalTitle",
                     "metadataRevision",
                     "description",
+                    "descriptionObligations",
                     "mainVersionRevision",
                     "mainVersionLabel",
                     "selectedLanguage",

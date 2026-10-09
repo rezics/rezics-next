@@ -11,6 +11,13 @@ and immutable history through authorized, revision-checked commands. Management
 reads expose all open states. Ending an offering cannot rewrite its declaration
 or allow recognition to reopen it. The [rights owner schema](../../services/main/src/modules/rights/schema.ts)
 records material- and use-specific bases and obligations apart from Access.
+A Work description and a resource's statement page each include the current
+`data_rights` assessment for `wiki_display` (`rezics:wiki`) of that text or fact
+set: the licence instrument, and each display obligation's kind, instrument,
+applies-to and notice. A missing head is `unassessed`. A disclosure fence on
+that material returns the same shape and omits the instrument and notice.
+Export uses its own head, including `change_indication`; a missing export head
+is `unassessed` with an undetermined result, not an unprotected fact.
 
 The [source reuse boundary](source-lifecycle.md#basis-for-acquisition-and-reuse)
 and [dated legal/provider evidence](../research/source-data-rights.md) explain

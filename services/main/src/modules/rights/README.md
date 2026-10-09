@@ -28,6 +28,7 @@ reuse. Service terms and data rights remain separate families.
 | `assess` | One Access grant lookup, one indexed material lookup, one head lock and at most 16 obligation inserts. |
 | `evaluate` | One Access grant lookup, one indexed material/head lookup and at most 16 obligation rows. |
 | `exportScope` | One Content query over at most 256 exact material/head keys and their at most 16 obligations each, plus one Access query over at most 256 exact export targets. |
+| `currentWikiDisplayObligations` | One Content query over at most 32 exact material keys and their display obligations, then one Access query for disclosure fences on keys that have a current `wiki_display` head. No graph call. The result is part of the Work header or statement page and uses that response's cache headers. |
 | `rawRetentionPermitted` | One provider/material lookup and one current service-terms head lookup; absent terms do not create a copyright conclusion, while an explicit `not_supported` result blocks raw retention. |
 | `createAdmittedOffering` / `changeAdmittedOffering` | One Access admission and claim; one graph state read, one guarded graph command, one terminal receipt read. |
 | `readOffering` | One bounded graph query returning at most two rows for one offering identity. |
@@ -57,6 +58,11 @@ Export readers attach `rightsIdentity` to each exact member's owner-verified
 data. It carries the exact rights material key and governance owner, resource,
 component and revision; Content resolves the key to its immutable material row.
 Export scope evaluation uses
-`rezics:export:<full|excerpt|quotation|evaluation>` and carries only obligations
-admitted by the export profile. Missing assessments stay undetermined; they do
-not inherit another use's basis.
+`rezics:export:<full|excerpt|quotation|evaluation>` and carries obligations
+admitted by the export profile, including `change_indication`. A missing head
+is `unassessed` with result `undetermined`. It does not inherit another use's
+basis and it is not an unprotected fact.
+A public Work description reads the `synopsis` material of that Work, and
+`GET /v1/resources/{id}/statements` reads the `record` material of that
+subject. Both use `data_rights` / `wiki_display` / `rezics:wiki` and attach
+only obligations whose applies-to is `display` or `all`.

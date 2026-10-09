@@ -20,7 +20,7 @@ import {
   type ReadRow,
   type WorkReadSession,
 } from '../work/read-session.ts';
-import { resolveStatementAcceptancesAt, statementValueFromManifest } from './read.ts';
+import { readFactObligations, resolveStatementAcceptancesAt, statementValueFromManifest } from './read.ts';
 import type { StatementSeekOrder } from './seek.ts';
 import { STATEMENT_LIMITS, type StatementValue } from './schema.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
@@ -605,6 +605,7 @@ export async function readSubjectStatements(
     profile: 'subject-statements-v1',
     resource,
     acceptanceContext: context,
+    factObligations: await readFactObligations(session, resource),
     groups: [...groups].map(([predicate, grouped]) => ({ predicate, items: grouped })),
     nextCursor,
     sourcePosition: session.position,

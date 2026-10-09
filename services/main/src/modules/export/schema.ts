@@ -79,9 +79,9 @@ export interface ExportResidualRow {
 }
 
 export const EXPORT_BASIS_KINDS = ['license_offering', 'use_assessment', 'public_domain',
-  'unprotected_fact', 'statutory_exception', 'native_contribution'] as const;
+  'unprotected_fact', 'statutory_exception', 'native_contribution', 'unassessed'] as const;
 export const EXPORT_OBLIGATIONS = ['attribution', 'share_alike', 'non_commercial',
-  'no_derivatives', 'notice_retention', 'access_restriction'] as const;
+  'no_derivatives', 'notice_retention', 'change_indication', 'access_restriction'] as const;
 
 /** `export.rights_basis`: a basis evaluated for this manifest's use scope only. */
 export interface ExportRightsBasisRow {

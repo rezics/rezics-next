@@ -3,7 +3,9 @@ import { CLASSIFICATION_INHERIT_POLICY, CLASSIFICATION_ISOLATE_POLICY,
 } from '../classification/context.ts';
 import { ContextCommandUnavailable } from '../context/command.ts';
 import { readComponent } from '../semantic/command.ts';
+import { RightsInvalid, RightsUnavailable, resourceFactMaterial, type WikiDisplayObligations } from '../rights/store.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
+import { WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { MAX_SEARCH_RESPONSE_BYTES, SearchSnapshotMoved } from '../work/search-readiness.ts';
 import type { Acceptance } from './graph.ts';
@@ -28,6 +30,21 @@ export class StatementNotFound extends Error {}
 export class StatementBatchBudgetExceeded extends Error {}
 export class StatementBatchUnavailable extends Error {}
 export const MAX_PUBLIC_STATEMENT_BATCH = 512;
+
+/** One lookup for the subject's fact set. A missing rights owner reads unassessed. */
+export async function readFactObligations(session: WorkReadSession, resource: string): Promise<WikiDisplayObligations> {
+  const store = session.deps.rights?.store;
+  if (!store) return { status: 'unassessed' };
+  try {
+    return (await store.currentWikiDisplayObligations([resourceFactMaterial(resource)]))[0]
+      ?? { status: 'unassessed' };
+  } catch (error) {
+    if (error instanceof RightsUnavailable || error instanceof RightsInvalid) {
+      throw new WorkReadUnavailable('Rights obligations are unavailable');
+    }
+    throw error;
+  }
+}
 
 /**
  * The meaning basis is readable only when its Context is Public or the caller holds the

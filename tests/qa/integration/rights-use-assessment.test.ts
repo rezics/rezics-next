@@ -54,7 +54,7 @@ test('LIVE13/LIVE14/LIVE15/LIVE16/LIVE17: scoped rights, retention limits and co
       const factDraft = await new ContentCore(content).saveDraft({ operationId: `rights-${randomUUID()}`,
         variant: { id: variant, resourceId: resource, language: { kind: 'tag', tag: 'en', originalTag: 'en' },
           direction: 'ltr' }, expectedHead: null, model: 'content-shape-v1', sourceRevision: null,
-        provenance: { fixture: 'rights' }, serializedJson: JSON.stringify({ facts: ['one'] }) });
+        provenance: { fixture: 'rights' }, serializedJson: JSON.stringify({ body: 'one' }) });
       const facts = { scopeKind: 'content_variant', provider: null, namespace: null, sourceRecordId: null,
         contentVariantId: variant, mediaAsset: null, component: 'facts' };
       const expression = { ...facts, component: 'synopsis' };

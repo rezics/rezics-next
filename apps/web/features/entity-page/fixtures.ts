@@ -69,6 +69,7 @@ const statement = (n: number, predicate: string, value: Extract<StatementItem, {
 export const statements = (next: string | null = null): StatementPage => ({
   profile: 'subject-statements-v1', resource: iri('0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d'),
   acceptanceContext: 'urn:rezics:classification-context:global',
+  factObligations: { status: 'unassessed' },
   groups: [
     { predicate: 'https://schema.org/name', items: [
       statement(1, 'https://schema.org/name', { kind: 'literal', lexical: 'Kirito', datatype: 'rdf:langString', language: 'en' }),
