@@ -62,6 +62,15 @@ absence/uniqueness slots, model generation and receipt absence. External Access
 admission remains a separate fenced owner decision. Reports may expose private
 paths and values, so inspect them under the owning disclosure policy.
 
+A composition change validates the nodes it edits. Structure, generation,
+order-segment and item-list neighbours constrain those nodes by class, so a
+scalar edit (head, placement count, member count, segment key, one list edge)
+does not read or revalidate their inbound closure. `placementCount` and
+`memberCount` are checked on the edited node. Parent role, depth, cycles and
+order-key uniqueness belong to the composition command. A shape violation
+already on an unedited neighbour is not this change's responsibility. A
+type-set change still takes the reverse-dependent closure.
+
 Ordinary Fuseki Update and the optional `/shacl` report endpoint do not enforce
 this path. Product ingress exposes validated commands and query; offline imports
 must stage and qualify a new generation. See the

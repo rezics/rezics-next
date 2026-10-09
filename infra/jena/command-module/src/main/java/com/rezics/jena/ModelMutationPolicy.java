@@ -108,10 +108,20 @@ final class ModelMutationPolicy {
             // Old address revisions are immutable historical records, imported
             // to Access before this maintenance-only projection decommission.
             if (nameProjectionRetired(data, receipt, entry.getKey(), entry.getValue())) continue;
-            // Structure head, generation-count and Agent profile edits preserve the
-            // resource type. Inbound links constrain that type, not the scalar fields;
-            // validating each one would turn a bounded edit into a whole-graph scan.
-            if (stableStructureType(data, entry.getKey(), entry.getValue())
+            // Affected focus. The edited node is validated above. Inbound neighbours
+            // join the focus only when this edit can change a constraint they read.
+            // Structure, generation, order-segment and item-list shapes are local:
+            // cardinalities, datatypes, patterns and sh:class. Neighbours name these
+            // nodes only by class (placement rv:orderSegment, generation rv:structure,
+            // list and occurrence links). A scalar edit — head, placementCount,
+            // memberCount, segment key, one list edge — leaves that class unchanged,
+            // so the inbound closure is not a focus and is not read. placementCount
+            // and memberCount are the incremental totals; they are checked on the
+            // edited node, not by rescanning. Parent role, depth, cycles and
+            // order-key uniqueness are the composition command's checks, not these
+            // shapes. A type-set change still scans. A shape violation already sitting
+            // on an unedited neighbour is not this change's responsibility.
+            if (stableCompositionClass(data, entry.getKey(), entry.getValue())
                 || stableAgentIdentity(data, entry.getKey(), entry.getValue())
                 || stableZoneIdentity(data, entry.getKey(), entry.getValue())) continue;
             boolean agentTombstone = agentCompensation(data, receipt, entry.getKey(), entry.getValue());
@@ -341,10 +351,13 @@ final class ModelMutationPolicy {
         return !before.types().equals(values(data, before.graph(), NodeFactory.createURI(name), RDF.type.asNode()));
     }
 
-    private static boolean stableStructureType(DatasetGraph data, String name, Subject before) {
+    /** Class-stable composition nodes. Inbound sh:class constraints read the type
+     * set and nothing else these shapes store. */
+    private static boolean stableCompositionClass(DatasetGraph data, String name, Subject before) {
         if (before.selection() == null || typeChanged(data, name, before)) return false;
         String type = before.selection().type();
-        return type.equals(RV + "Structure") || type.equals(RV + "StructureGeneration");
+        return type.equals(RV + "Structure") || type.equals(RV + "StructureGeneration")
+            || type.equals(RV + "OrderSegment") || type.equals("https://schema.org/ItemList");
     }
 
     /** A profile edit keeps rv:Agent. Compensation replaces that type and still scans. */
