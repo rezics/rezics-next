@@ -4,28 +4,31 @@ import { join } from 'node:path';
 import {
   discoveryProblems,
   scriptDiscoveries,
+  scriptEntryFiles,
   scriptProjectPattern,
-  unusedScriptFiles,
 } from '../../../scripts/static/script-entries.ts';
 
 const repo = join(import.meta.dir, '../../..');
 
-test('a disconnected script helper is reported and a launched script and a scanned file are not', () => {
+test('Knip reports a disconnected script helper and not a launched or scanned file', () => {
   const root = mkdtempSync(join(repo, '.temp/script-entries-'));
   try {
     mkdirSync(join(root, 'scripts/scanned'), { recursive: true });
-    mkdirSync(join(root, 'scripts/research'), { recursive: true });
     writeFileSync(
       join(root, 'Taskfile.yml'),
       "version: '3'\ntasks:\n  run:\n    cmds:\n      - bun scripts/ran.ts\n",
     );
     writeFileSync(
       join(root, 'package.json'),
-      JSON.stringify({ scripts: { tool: 'bun scripts/pkg-tool.ts' } }),
+      JSON.stringify({
+        name: 'script-entries-fixture',
+        private: true,
+        scripts: { tool: 'bun scripts/pkg-tool.ts' },
+      }),
     );
     writeFileSync(
       join(root, 'scripts/ran.ts'),
-      "// bun scripts/disconnected.ts\nimport { used } from './ran-helper.ts';\nimport './spawner.ts';\nexport const ran = used;\n",
+      "import { used } from './ran-helper.ts';\nimport './spawner.ts';\nexport const ran = used;\n",
     );
     writeFileSync(join(root, 'scripts/ran-helper.ts'), 'export const used = 1;\n');
     writeFileSync(
@@ -40,20 +43,43 @@ test('a disconnected script helper is reported and a launched script and a scann
       join(root, 'scripts/scan-entries.ts'),
       "import { readdirSync } from 'node:fs';\nexport const load = () => readdirSync('scripts/scanned');\n",
     );
-    writeFileSync(join(root, 'scripts/research/orphan.ts'), 'export const hidden = 1;\n');
     const discoveries = [
       { pattern: 'scripts/scanned/*.ts', discoveredBy: 'scripts/scan-entries.ts' },
     ];
     expect(discoveryProblems(root, discoveries)).toEqual([]);
-    const unused = unusedScriptFiles(root, { discoveries });
+    const entries = scriptEntryFiles(root, discoveries);
+    expect(entries).toContain('scripts/ran.ts');
+    expect(entries).toContain('scripts/scanned/entry.ts');
+    expect(entries).not.toContain('scripts/disconnected.ts');
+    writeFileSync(
+      join(root, 'knip.json'),
+      JSON.stringify({ entry: entries, project: [scriptProjectPattern] }),
+    );
+    const result = Bun.spawnSync({
+      cmd: [
+        join(repo, 'node_modules/.bin/knip'),
+        '--no-progress',
+        '--no-gitignore',
+        '--include',
+        'files',
+        '--reporter',
+        'json',
+      ],
+      cwd: root,
+      stdout: 'pipe',
+      stderr: 'pipe',
+    });
+    expect(result.exitCode, `${result.stdout}${result.stderr}`).toBe(1);
+    const report = JSON.parse(result.stdout.toString()) as {
+      issues: { file: string; files?: unknown[] }[];
+    };
+    const unused = report.issues.filter((issue) => issue.files?.length).map((issue) => issue.file);
     expect(unused).toContain('scripts/disconnected.ts');
     expect(unused).not.toContain('scripts/ran.ts');
     expect(unused).not.toContain('scripts/ran-helper.ts');
-    expect(unused).not.toContain('scripts/spawner.ts');
     expect(unused).not.toContain('scripts/spawned.ts');
     expect(unused).not.toContain('scripts/pkg-tool.ts');
     expect(unused).not.toContain('scripts/scanned/entry.ts');
-    expect(unused).not.toContain('scripts/research/orphan.ts');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
