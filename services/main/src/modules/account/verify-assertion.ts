@@ -31,10 +31,9 @@ export class AccountAssertionInsufficientScope extends AccountAssertionDenied {}
 export class AccountAssertionUnavailable extends Error {}
 
 interface RequestAdmission { scopes: readonly string[]; principal: VerifiedAccountAssertion }
-/** The Request object is the admission's lifetime. A later check on that same
- * object reads the grant this request already verified. The next request is a
- * new object, so it verifies again and observes revocation. Nothing here is
- * keyed by the bearer. */
+/** Rate-limit admission for this Request, taken by its first read session.
+ * A retry session finds nothing here and verifies again, so a revocation
+ * between attempts is seen. Nothing is keyed by the bearer. */
 const requestAdmissions = new WeakMap<Request, RequestAdmission>();
 
 function grantCovers(admission: RequestAdmission, requiredScopes: readonly string[]): boolean {
@@ -45,8 +44,8 @@ function grantCovers(admission: RequestAdmission, requiredScopes: readonly strin
   return requiredScopes.every(scope => admitted.includes(scope));
 }
 
-/** Verify this request's bearer once. Another scope on the same Request uses
- * the grant from that admission instead of asking Account again. */
+/** Hand the rate-limit admission to the first read session of this Request.
+ * That session consumes it. A later attempt on the same Request verifies again. */
 export async function verifyRequestAccount(
   account: Pick<AccountAssertionVerifier, 'verify'>,
   request: Request,
@@ -54,13 +53,20 @@ export async function verifyRequestAccount(
 ): Promise<VerifiedAccountAssertion> {
   const existing = requestAdmissions.get(request);
   if (existing) {
-    if (grantCovers(existing, requiredScopes)) return existing.principal;
+    if (grantCovers(existing, requiredScopes)) {
+      if (requiredScopes.length > 0) requestAdmissions.delete(request);
+      return existing.principal;
+    }
     if (existing.principal.accountScopes) {
       throw new AccountAssertionInsufficientScope('Account assertion lacks a required scope');
     }
   }
   const principal = await account.verify(request, requiredScopes);
-  if (!requestAdmissions.has(request)) requestAdmissions.set(request, { scopes: requiredScopes, principal });
+  // Only the rate-limit check, which asks for no operation scope, is stored.
+  // A read session's own verification must not satisfy the next attempt.
+  if (requiredScopes.length === 0 && !requestAdmissions.has(request)) {
+    requestAdmissions.set(request, { scopes: requiredScopes, principal });
+  }
   return principal;
 }
 

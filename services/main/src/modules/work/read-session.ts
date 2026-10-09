@@ -361,8 +361,8 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
           session.restorePriors = located.priors;
           if (request.headers.has('authorization')) {
             if (!options.actingSubject) throw new WorkReadInvalid('actingSubject is required for authenticated reads');
-            // The request's bearer admission is shared with the rate-limit check.
-            // Each attempt still rechecks that the principal remains active.
+            // The rate-limit admission covers this attempt only. A retry verifies
+            // again, and each attempt rechecks that the principal remains active.
             session.principal = await verifyRequestAccount(deps.account, request, ['work:read']);
             if (!await deps.access.activePrincipalId(session.principal)) throw new AccountAssertionDenied('Principal is inactive');
             if (deps.personPreferences) {

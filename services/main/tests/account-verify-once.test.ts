@@ -106,6 +106,23 @@ test('the next request verifies again, so a revoked bearer is refused', async ()
   expect(verifications).toBe(2);
 });
 
+test('the rate-limit grant covers one attempt; a retry verifies again', async () => {
+  let verifications = 0;
+  const account = { verify: async () => { verifications++; return granted(['work:read']); } };
+  const request = new Request('http://main.local/v1/works', { headers: { authorization: 'Bearer reader' } });
+  await verifyRequestAccount(account, request, []);
+  await verifyRequestAccount(account, request, ['work:read']);
+  expect(verifications).toBe(1);
+  await verifyRequestAccount(account, request, ['work:read']);
+  expect(verifications).toBe(2);
+
+  const direct = new Request('http://main.local/v1/works?retry=1', { headers: { authorization: 'Bearer reader' } });
+  await verifyRequestAccount(account, direct, ['work:read']);
+  expect(verifications).toBe(3);
+  await verifyRequestAccount(account, direct, ['work:read']);
+  expect(verifications).toBe(4);
+});
+
 test('a grant that omits work:read is refused from the admission already made', async () => {
   let verifications = 0;
   const app = appFor(async () => { verifications++; return granted([]); });
