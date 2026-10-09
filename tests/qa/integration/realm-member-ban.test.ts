@@ -16,7 +16,7 @@ function keysOf(value: unknown, keys: string[] = []): string[] {
   return keys;
 }
 
-test('a banned member reads their own ban and appeal, and every other caller gets the same absence', async () => {
+test('a banned member reads their own ban and appeal, and every other authenticated caller gets the same absence', async () => {
   const stack = await startMediaStack('realm-member-ban');
   const owner = await stack.member('owner');
   const banned = await stack.member('banned');
@@ -103,12 +103,18 @@ test('a banned member reads their own ban and appeal, and every other caller get
       return String(result.body.receiptId);
     };
     const own = () => call('GET', memberBan(realmId, banned.actor), undefined, banned.token);
-    const probes = () => Promise.all([
-      call('GET', memberBan(realmId, banned.actor)),
+    const strangers = () => Promise.all([
       call('GET', memberBan(realmId, banned.actor), undefined, other.token),
       call('GET', memberBan(realmId, banned.actor), undefined, owner.token),
       call('GET', memberBan(randomUUID(), banned.actor), undefined, banned.token),
     ]);
+    // The stack opens realm-appeals, so a missing bearer reaches the handler.
+    const anonymousBan = async () => {
+      const response = await call('GET', memberBan(realmId, banned.actor));
+      expect(response.status).toBe(401);
+      expect(response.body.code).toBe('account_assertion_denied');
+      return response;
+    };
     const decidedAt = async (caseId: string) => {
       const row = (await pool.query<{ decided_at: Date }>(
         `SELECT d.decided_at FROM access.moderation_decision d
@@ -137,8 +143,9 @@ test('a banned member reads their own ban and appeal, and every other caller get
     expect(baseline.status).toBe(404);
     expect(baseline.body).toEqual({ type: 'https://rezics.com/problems/appeal_unavailable', title: 'Appeal is unavailable',
       status: 404, code: 'appeal_unavailable' });
-    const before = await probes();
+    const before = await strangers();
     for (const probe of before) expect(signature(probe)).toBe(signature(baseline));
+    await anonymousBan();
     const older = await ban('Older reason', null);
     const permanent = await own();
     expect(permanent.status).toBe(200);
@@ -146,13 +153,16 @@ test('a banned member reads their own ban and appeal, and every other caller get
       bannedUntil: null, permanent: true, appeal: { state: 'none' } });
     expect(typeof permanent.body.happenedAt).toBe('string');
     hidden(permanent.body);
-    const whileBanned = await probes();
+    const whileBanned = await strangers();
     // Controller guard: another member and the moderator still get absence, not the ban.
+    expect(whileBanned[0]!.status).toBe(404);
     expect(whileBanned[1]!.status).toBe(404);
-    expect(whileBanned[2]!.status).toBe(404);
-    expect(whileBanned[1]!.text.includes('Older reason')).toBe(false);
-    expect(whileBanned[1]!.text.includes(older)).toBe(false);
+    expect(whileBanned[0]!.text.includes('Older reason')).toBe(false);
+    expect(whileBanned[0]!.text.includes(older)).toBe(false);
     for (const probe of whileBanned) expect(signature(probe)).toBe(signature(baseline));
+    const unsignedWhileBanned = await anonymousBan();
+    expect(unsignedWhileBanned.text.includes('Older reason')).toBe(false);
+    expect(unsignedWhileBanned.text.includes(older)).toBe(false);
     const current = await ban('Current reason', 86_400);
     const timed = await own();
     expect(timed.status).toBe(200);
@@ -203,7 +213,8 @@ test('a banned member reads their own ban and appeal, and every other caller get
       WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2`, [realm, banned.actor]);
     const expired = await own();
     expect(signature(expired)).toBe(signature(baseline));
-    const afterExpiry = await probes();
+    const afterExpiry = await strangers();
     for (const probe of afterExpiry) expect(signature(probe)).toBe(signature(baseline));
+    await anonymousBan();
   } finally { await stack.stop(); }
 }, 180_000);

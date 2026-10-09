@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
-import type { PoolClient } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
@@ -11,6 +11,23 @@ import { auditItem, moderationItem } from '../../../services/main/src/modules/ma
 import { ManagementReadStore } from '../../../services/main/src/modules/management-reads/read-store.ts';
 import { realmMemberProof } from '../../../services/main/src/modules/realm-reply/member-policy.ts';
 import { startMediaStack } from './media-support.ts';
+
+function watchPermissionReads(pool: Pool) {
+  let reads = 0;
+  const connect = pool.connect.bind(pool) as (...args: unknown[]) => Promise<PoolClient>;
+  pool.connect = ((...args: unknown[]) => connect(...args).then(client => {
+    const query = client.query.bind(client) as (...qargs: unknown[]) => unknown;
+    client.query = ((...qargs: unknown[]) => {
+      const first = qargs[0];
+      const text = typeof first === 'string' ? first
+        : first && typeof first === 'object' && 'text' in first ? String((first as { text: unknown }).text) : '';
+      if (text.includes('read_platform_permissions')) reads += 1;
+      return query(...qargs);
+    }) as PoolClient['query'];
+    return client;
+  })) as Pool['connect'];
+  return { reads: () => reads, reset() { reads = 0; } };
+}
 
 function keysOf(value: unknown, keys: string[] = []): string[] {
   if (Array.isArray(value)) value.forEach(item => keysOf(item, keys));
@@ -137,9 +154,15 @@ test('a banned member appeals once, a reversal lifts the ban, and the read hides
       expect(raw.includes('acting_subject')).toBe(false);
       expect(raw.includes('actingSubject')).toBe(false);
     };
+    // The stack opens realm-appeals, so a missing bearer reaches this handler.
+    // The handler requires an idempotency key before it checks the account.
     const anonymous = await call('POST', `${appeal}/${randomUUID()}/appeal`, { statement: 'I appeal.' });
-    expect(anonymous.status).toBe(403);
-    expect(anonymous.body.code).toBe('platform_closed');
+    expect(anonymous.status).toBe(400);
+    expect(anonymous.body.code).toBe('invalid_idempotency_key');
+    const anonymousKeyed = await call('POST', `${appeal}/${randomUUID()}/appeal`, { statement: 'I appeal.' },
+      undefined, randomUUID());
+    expect(anonymousKeyed.status).toBe(401);
+    expect(anonymousKeyed.body.code).toBe('account_assertion_denied');
     const unsigned = await call('GET', `${appeal}/${randomUUID()}/appeal`, undefined, 'not-a-token');
     expect(unsigned.status).toBe(401);
     const bannedBody = { actingSubject: owner.actor, member: banned.actor,
@@ -611,5 +634,79 @@ test('reversing a sanction appeal unbans once, refuses a moderator who cannot un
       undefined, member.token);
     expect(timedRead.body.appeal).toMatchObject({ outcome: 'reversed', liftReceiptId: null });
     expect((timedRead.body.appeal as { liftedAt: string }).liftedAt).toEqual(expect.any(String));
+  } finally { await stack.stop(); }
+}, 180_000);
+
+test('a closed realm-appeals gate answers before any grant lookup and hides ban and appeal reads', async () => {
+  const stack = await startMediaStack('realm-appeal-closed');
+  const owner = await stack.member('owner');
+  const stranger = await stack.member('stranger');
+  const watched = watchPermissionReads(stack.accessPool);
+  try {
+    const store = new GovernanceStore(stack.accessPool,
+      { capture: async () => { throw new Error('sanction appeals do not capture evidence'); } },
+      { current: async () => { throw new Error('sanction appeals do not read target heads'); } },
+      { current: async () => { throw new Error('sanction appeals do not read rules'); } });
+    const people = [owner, stranger];
+    const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      realmAdmin: new AccessRealmManagement(stack.accessPool),
+      platformAccess: new AccessExposure(stack.accessPool, { REZICS_PLATFORM_OPEN_GROUPS: '' }),
+      managementReads: new ManagementReadStore(stack.accessPool, stack.env),
+      governance: { store }, account: { verify: async request => {
+        const token = request.headers.get('authorization')?.replace(/^Bearer /, '');
+        const person = people.find(candidate => candidate.token === token);
+        if (!person) throw new AccountAssertionDenied('Bearer required');
+        return person.principal;
+      } } });
+    const realmId = randomUUID();
+    const receiptId = randomUUID();
+    const appeal = `/v1/realms/${realmId}/member-receipts/${receiptId}/appeal`;
+    const ban = `/v1/realms/${realmId}/member-ban?${new URLSearchParams({ actingSubject: stranger.actor })}`;
+    const call = async (method: string, path: string, body?: object, token?: string, key?: string) => {
+      const response = await app.handle(new Request(`http://main.test${path}`, { method,
+        headers: { ...(token ? { authorization: `Bearer ${token}` } : {}),
+          ...(body ? { 'content-type': 'application/json' } : {}),
+          ...(key ? { 'idempotency-key': key } : {}) },
+        body: body ? JSON.stringify(body) : undefined }));
+      const text = await response.text();
+      return { status: response.status, text, body: text ? JSON.parse(text) as Record<string, unknown> : {} };
+    };
+    const absent = { type: 'https://rezics.com/problems/appeal_unavailable', title: 'Appeal is unavailable',
+      status: 404, code: 'appeal_unavailable' };
+    watched.reset();
+    const anonymous = await call('POST', appeal, { statement: 'I appeal.' });
+    expect(anonymous.status).toBe(401);
+    expect(anonymous.body.code).toBe('unauthorized');
+    expect(watched.reads()).toBe(0);
+    const anonymousKeyed = await call('POST', appeal, { statement: 'I appeal.' }, undefined, randomUUID());
+    expect(anonymousKeyed.status).toBe(401);
+    expect(anonymousKeyed.body.code).toBe('unauthorized');
+    expect(watched.reads()).toBe(0);
+    const invalid = await call('POST', appeal, { statement: 'I appeal.' }, 'not-a-token', randomUUID());
+    expect(invalid.status).toBe(401);
+    expect(invalid.body.code).toBe('invalid_account_assertion');
+    expect(watched.reads()).toBe(0);
+    const closed = await call('POST', appeal, { statement: 'I appeal.' }, stranger.token, randomUUID());
+    expect(closed.status).toBe(403);
+    expect(closed.body.code).toBe('platform_closed');
+    expect(watched.reads()).toBeGreaterThan(0);
+    watched.reset();
+    const hiddenAnonymous = [await call('GET', appeal), await call('GET', ban)];
+    expect(watched.reads()).toBe(0);
+    const hiddenGranted = [
+      await call('GET', appeal, undefined, stranger.token),
+      await call('GET', ban, undefined, owner.token),
+    ];
+    expect(watched.reads()).toBeGreaterThan(0);
+    for (const read of [...hiddenAnonymous, ...hiddenGranted]) {
+      expect(read.status).toBe(404);
+      expect(read.body).toEqual(absent);
+      expect(read.text).toBe(hiddenAnonymous[0]!.text);
+    }
+    const beforeInvalidRead = watched.reads();
+    const invalidRead = await call('GET', appeal, undefined, 'not-a-token');
+    expect(invalidRead.status).toBe(401);
+    expect(invalidRead.body.code).toBe('invalid_account_assertion');
+    expect(watched.reads()).toBe(beforeInvalidRead);
   } finally { await stack.stop(); }
 }, 180_000);

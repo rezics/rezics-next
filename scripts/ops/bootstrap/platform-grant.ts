@@ -109,18 +109,20 @@ export async function readPlatformGrants(
     } catch (error) {
       grantFailure(error, 'read');
     }
+    // platform-grants-v1 names the page rows `items`. A body that only has
+    // `grants` is not this page, so it is not scanned as one.
+    const parsed = body as { profile?: unknown; authorityEpoch?: unknown; items?: unknown; nextCursor?: unknown };
     if (
       !body ||
       typeof body !== 'object' ||
-      (body as { profile?: unknown }).profile !== 'platform-grants-v1' ||
-      !Array.isArray((body as { grants?: unknown }).grants) ||
-      typeof (body as { authorityEpoch?: unknown }).authorityEpoch !== 'string'
+      parsed.profile !== 'platform-grants-v1' ||
+      !Array.isArray(parsed.items) ||
+      typeof parsed.authorityEpoch !== 'string'
     ) {
       throw new Error('Bootstrap did not receive a platform grant page');
     }
-    const parsed = body as { authorityEpoch: string; grants: unknown[]; nextCursor?: unknown };
     authorityEpoch = parsed.authorityEpoch;
-    for (const row of parsed.grants) {
+    for (const row of parsed.items) {
       const grant = readGrant(row);
       if (grant) grants.push(grant);
     }

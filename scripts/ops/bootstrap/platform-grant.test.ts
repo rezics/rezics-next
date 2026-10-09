@@ -52,8 +52,15 @@ function catalogue(active = true, validUntil: string | null = null): GrantRow {
   };
 }
 
-function page(grants: GrantRow[], nextCursor: string | null = null) {
-  return { profile: 'platform-grants-v1', authorityEpoch: '3', grants, nextCursor };
+/** The public grant page. Its rows are `items`, the same name as platform-grants-v1. */
+function page(rows: GrantRow[], nextCursor: string | null = null) {
+  return {
+    profile: 'platform-grants-v1',
+    authorityEpoch: '3',
+    items: rows,
+    nextCursor,
+    complete: nextCursor === null,
+  };
 }
 
 async function harness(initial: GrantRow[], paged = false) {
@@ -226,6 +233,29 @@ test('an expired catalogue-import grant is issued again', async () => {
     ensureCatalogueImportGrant({ api: h.api, journal: h.journal, namespace: h.plan.namespace, operator: operator() }),
   ).resolves.toBeUndefined();
   expect(h.writes.filter((write) => write.path === '/v1/access/grant-changes')).toHaveLength(1);
+});
+
+test('a platform grant page whose rows are named grants is refused', async () => {
+  const h = await harness([designation()]);
+  h.api.read = async <T>(path: string): Promise<T> => {
+    const url = new URL(path, 'https://main.example');
+    if (url.pathname !== '/v1/access/grants') throw new Error(`unexpected read ${url.pathname}`);
+    return {
+      profile: 'platform-grants-v1',
+      authorityEpoch: '3',
+      grants: [designation()],
+      nextCursor: null,
+      complete: true,
+    } as T;
+  };
+  await expect(
+    ensureCatalogueImportGrant({
+      api: h.api,
+      journal: h.journal,
+      namespace: h.plan.namespace,
+      operator: operator(),
+    }),
+  ).rejects.toThrow('Bootstrap did not receive a platform grant page');
 });
 
 test('the designation grant is read from a later page', async () => {

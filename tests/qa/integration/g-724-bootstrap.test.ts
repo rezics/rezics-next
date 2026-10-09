@@ -93,7 +93,16 @@ test('G-724: first administrator is granted once, replay/other configuration is 
       'openid access:grant agent:create space:create zone:edit collection:edit semantic:read work:create work:edit work:read source:intake owner:operate classification:define rating:configure';
     const verifierClient = await account.workloadApp('Bootstrap token verifier', ['work:read']);
     const client = await account.nativeApp('Launch operator', scopes);
+    // source:intake is a closed-group scope. Third-party consent drops it, so
+    // intake would answer account_assertion_denied. The launch operator is first-party.
+    await account.pool.query(
+      `INSERT INTO rezics_oauth_first_party_client (client_id) VALUES ($1) ON CONFLICT DO NOTHING`,
+      [client.client_id],
+    );
     const token = (await account.issue(client.client_id, account.operator, scopes)).access_token;
+    expect(String((await account.introspect(verifierClient, token)).scope ?? '').split(' ')).toContain(
+      'source:intake',
+    );
     const verifier = new AccountAssertionVerifier(account.verifierConfig(verifierClient));
     const fuseki = new FusekiClient(
       qa.fusekiUrl,
