@@ -8,7 +8,7 @@ import {
   type ZoneWork,
 } from '@rezics/zone-sdk';
 import type { ReactNode } from 'react';
-import { CatalogueYearForm } from '../catalogue-year.tsx';
+import { CatalogueYearForm } from './catalogue-year.tsx';
 import { strings } from './strings.ts';
 
 // Slots of the official Anime Zone. They render only the facts the platform passes.
