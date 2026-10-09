@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { redactCommandOutput } from './command-output.ts';
+import { DEFAULT_SEED } from './corpus.ts';
 
 /** Compose project of the shared dev stack. Other `rezics-dev-*` projects are not this stack. */
 export const DEV_COMPOSE_PROJECT = 'rezics-dev';
@@ -44,6 +45,8 @@ export interface PruneInventory {
 export interface KeptGeneration {
   id: string;
   reasons: FixtureKeepReason[];
+  /** Manifest seed prune does not compute. Absent for the default seed. */
+  uncomputedSeed?: string;
 }
 
 export interface RemovedGeneration {
@@ -80,12 +83,14 @@ export interface PruneScope {
 
 /**
  * Keep a generation when a current consumer can still restore it.
- * `current` is the id `fixture:build` computes for that profile and seed.
+ * `current` is the id `fixture:build` computes for the default seed.
  * `pinned` is an id in `PINNED_FIXTURE_IDS`. `retained` is the newest manifest
- * `restoreCompatibility` accepts for that profile and seed: the backup
+ * `restoreCompatibility` accepts for that profile and the default seed: the backup
  * `compatibleFixture` selects, which erasure-campaign-qualification restores.
  * `in-use` means a running container mounts the generation, or its build lock
- * is held. Anything else of that generation is superseded.
+ * is held. A manifest with any other seed is kept: prune does not compute it.
+ * A volume with no manifest is superseded. Anything else of a default-seed
+ * generation is superseded.
  * An overridden fixture root passes `accountedPruneInventory` first, so a
  * volume whose manifest lives in another root is neither kept nor removed.
  */
@@ -114,7 +119,12 @@ export function decideFixturePrune(inventory: PruneInventory): PruneDecision {
     if (retained.has(generation.id)) reasons.push('retained');
     if (generation.buildInProgress || volumes.some((name) => mounted.has(name)))
       reasons.push('in-use');
-    if (reasons.length) keep.push({ id: generation.id, reasons });
+    const uncomputedSeed =
+      generation.manifest && generation.seed !== '' && generation.seed !== DEFAULT_SEED
+        ? generation.seed
+        : undefined;
+    if (reasons.length || uncomputedSeed)
+      keep.push({ id: generation.id, reasons, ...(uncomputedSeed ? { uncomputedSeed } : {}) });
     else
       removeGenerations.push({
         id: generation.id,
@@ -227,7 +237,11 @@ export function formatPruneReport(
   for (const id of [...outcome.currentIds].sort()) lines.push(`current-id ${id}`);
   for (const id of outcome.pins) lines.push(`pin ${id}`);
   for (const generation of outcome.decision.keep) {
-    lines.push(`keep ${generation.id} ${generation.reasons.join(',')}`);
+    const reasons = generation.reasons.join(',');
+    const seed = generation.uncomputedSeed
+      ? `kept: seed ${generation.uncomputedSeed} is not computed by prune`
+      : '';
+    lines.push(`keep ${generation.id} ${[reasons, seed].filter(Boolean).join(' ')}`);
   }
   for (const generation of outcome.decision.removeGenerations) {
     lines.push(`remove ${generation.id} superseded${generation.directory ? ' directory' : ''}`);
@@ -329,9 +343,6 @@ async function collectInventory(): Promise<PruneInventory> {
     pairs.set(`${profile}\0${seed}`, { profile, seed });
   };
   for (const profile of Object.keys(PROFILES)) addPair(profile, DEFAULT_SEED);
-  for (const generation of generations) {
-    if (generation.seed) addPair(generation.profile, generation.seed);
-  }
   const currentIds = [...pairs.values()].map(
     ({ profile, seed }) =>
       manifestIdentity(manifestCore(root, fixtureCorpus(profile, seed), fixtureOwners, engines)).id,

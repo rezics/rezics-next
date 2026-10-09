@@ -105,9 +105,10 @@ function inventory(): PruneInventory {
 test('fixture prune keeps current, pinned, retained and in-use generations', () => {
   const decision = decideFixturePrune(inventory());
   expect(decision.keep).toEqual([
-    { id: retainedRanked, reasons: ['retained'] },
-    { id: tiedLeft, reasons: ['retained'] },
-    { id: tiedRight, reasons: ['retained'] },
+    { id: staleRanked, reasons: [], uncomputedSeed: 'g556-ranked-v1' },
+    { id: retainedRanked, reasons: ['retained'], uncomputedSeed: 'g556-ranked-v1' },
+    { id: tiedLeft, reasons: ['retained'], uncomputedSeed: 'tie-seed' },
+    { id: tiedRight, reasons: ['retained'], uncomputedSeed: 'tie-seed' },
     { id: current, reasons: ['current'] },
     { id: pinned, reasons: ['pinned'] },
     { id: retainedBackground, reasons: ['retained'] },
@@ -120,7 +121,6 @@ test('fixture prune keeps current, pinned, retained and in-use generations', () 
 test('fixture prune removes superseded generations and abandoned projects, and lists unlabelled volumes', () => {
   const decision = decideFixturePrune(inventory());
   expect(decision.removeGenerations.map((item) => item.id)).toEqual([
-    staleRanked,
     supersededBackground,
     supersededSmall,
   ]);
@@ -207,7 +207,7 @@ test('a same-size build prune leaves other sizes, the generation just built, and
       profile: 'medium',
       protectIds: [supersededBackground],
     }).generations.map((item) => item.id),
-  ).toEqual([staleRanked]);
+  ).toEqual([]);
 });
 
 test('one generation can be current, pinned, retained and in use together', () => {
@@ -227,6 +227,37 @@ test('one generation can be current, pinned, retained and in use together', () =
   });
   expect(decision.keep).toEqual([{ id, reasons: ['current', 'pinned', 'retained', 'in-use'] }]);
   expect(decision.removeGenerations).toEqual([]);
+});
+
+test('a non-default seed is kept and a volume with no manifest is removed', () => {
+  const ranked = 'fx-medium-052fa07dfd0e';
+  const volumeOnly = 'fx-medium-605f041f8150';
+  const decision = decideFixturePrune({
+    generations: [
+      generation(ranked, { seed: 'g556-ranked-v1', compatible: false }),
+      generation(volumeOnly, { directory: false, manifest: false, seed: '' }),
+    ],
+    volumes: [volume(ranked), volume(volumeOnly)],
+    currentIds: [],
+    pins: [],
+    mountedVolumes: [],
+  });
+  expect(decision.keep).toEqual([
+    { id: ranked, reasons: [], uncomputedSeed: 'g556-ranked-v1' },
+  ]);
+  expect(decision.removeGenerations.map((item) => item.id)).toEqual([volumeOnly]);
+  const report = formatPruneReport({
+    mode: 'dry-run',
+    currentIds: [],
+    pins: [],
+    decision,
+    failures: [],
+  });
+  expect(report).toContain(
+    `keep ${ranked} kept: seed g556-ranked-v1 is not computed by prune`,
+  );
+  expect(report).toContain(`remove ${volumeOnly} superseded`);
+  expect(report).not.toContain(`remove ${ranked}`);
 });
 
 test('an overridden fixture root removes only generations whose manifest is in that root', () => {
