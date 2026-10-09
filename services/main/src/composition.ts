@@ -83,7 +83,7 @@ import { ContentProtectionStore } from './modules/protection/content-store.ts';
 import { EditorialReviewStore } from './modules/editorial-review/store.ts';
 import { PrivateSearchSettlement } from './modules/contribution/private-search-settlement.ts';
 import { ContentSearchReadAccess } from './modules/search-disclosure/content-read-lease.ts';
-import { ReleaseRatingInventoryStore } from './modules/access/rating-aggregate-inventory.ts';
+import { ReleaseRatingInventoryStore } from './modules/rating/aggregate-inventory.ts';
 import { TargetRatingInventoryStore } from './modules/rating/target-inventory.ts';
 import { AccessActingContexts } from './modules/access/contexts.ts';
 import { AccessSessionAgents } from './modules/access/session-agent.ts';

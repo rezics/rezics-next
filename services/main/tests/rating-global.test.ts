@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
-import type { RatingAggregateInventory } from '../src/modules/access/rating-aggregate-inventory.ts';
+import type { RatingAggregateInventory } from '../src/modules/rating/aggregate-inventory.ts';
 import { InvalidRatingAggregateQuery, RatingAggregateBudgetExceeded, RatingAggregateUnavailable }
   from '../src/modules/rating/aggregate.ts';
 import { InvalidRatingContextInput, RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY,

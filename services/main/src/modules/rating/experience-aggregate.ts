@@ -1,7 +1,7 @@
 import { fusekiReadBudget, FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge,
   type SparqlResult } from '../../infrastructure/fuseki.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
-import { MAX_RATING_AGGREGATE_SLOTS } from '../access/rating-aggregate-inventory.ts';
+import { MAX_RATING_AGGREGATE_SLOTS } from './aggregate-inventory.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readComponentState, RevisionReadBudgetExceeded } from '../work/history.ts';
 import { InvalidRatingAggregateQuery, RatingAggregateBudgetExceeded, RatingAggregateUnavailable,

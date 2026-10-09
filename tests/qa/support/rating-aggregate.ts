@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
 import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { RATING_INVENTORY_SQL, readRatingAggregateInventory } from '../../../services/main/src/modules/access/rating-aggregate-inventory.ts';
+import { RATING_INVENTORY_SQL, readRatingAggregateInventory } from '../../../services/main/src/modules/rating/aggregate-inventory.ts';
 import { EXPERIENCE_CONTEXT_ID, EXPERIENCE_OBSERVATION_ID } from '../../../services/main/src/modules/rating/experience.ts';
 import { EXPERIENCE_AGGREGATE_PROFILES, type ExperienceAggregateProfile } from '../../../services/main/src/modules/rating/experience-reduction.ts';
 import { EXPERIENCE_CONTEXT_DEFAULT_PROFILE } from '../../../services/main/src/modules/rating/experience-aggregate.ts';

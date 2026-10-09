@@ -1,7 +1,7 @@
 import { readComponentState, type RevisionReadBudget } from '../work/history.ts';
 import { DATASET, GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { MAX_RATING_AGGREGATE_SLOTS, type RatingAggregateInventory, type RatingInventoryHead, type TargetRatingComponents,
-  type TargetRatingSnapshot } from '../access/rating-aggregate-inventory.ts';
+  type TargetRatingSnapshot } from './aggregate-inventory.ts';
 import { RatingAggregateUnavailable } from './aggregate.ts';
 import { componentsAgree, meanDisclosure, type MeanDisplay, type RatingComponents } from './components.ts';
 import { sameRatingInstant } from './observation.ts';

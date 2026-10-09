@@ -1,7 +1,7 @@
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readComponentState, RevisionReadBudgetExceeded } from '../work/history.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import type { ReleaseRatingInventoryStore } from '../access/rating-aggregate-inventory.ts';
+import type { ReleaseRatingInventoryStore } from './aggregate-inventory.ts';
 import { InvalidRatingAggregateQuery, RatingAggregateBudgetExceeded,
   RatingAggregateUnavailable } from './aggregate.ts';
 import { RELEASE_CONTEXT_PROFILE, RELEASE_OBSERVATION_PROFILE, releaseRatingDigest,

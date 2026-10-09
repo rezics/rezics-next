@@ -119,7 +119,7 @@ import { InvalidClassificationResolution, ClassificationResolutionUnavailable,
   ClassificationTargetUnavailable } from '../modules/classification/resolve.ts';
 import { InvalidRatingPolicyInput, RatingPolicyUnavailable, StaleRatingPolicy }
   from '../modules/rating/policy.ts';
-import { RatingInventoryConflict } from '../modules/access/rating-aggregate-inventory.ts';
+import { RatingInventoryConflict } from '../modules/rating/aggregate-inventory.ts';
 import { InvalidRatingContextInput, RatingRealmUnavailable } from '../modules/rating/context.ts';
 import { InvalidRatingObservationInput, RatingObservationUnavailable, StaleRatingObservation }
   from '../modules/rating/observation.ts';

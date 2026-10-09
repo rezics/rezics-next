@@ -6,7 +6,7 @@ import {
   listTargetsNeedingReconstruction,
   readTargetRatingReconstructionBatch,
   recordTargetRatingValues,
-} from '../access/rating-aggregate-inventory.ts';
+} from './aggregate-inventory.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { RatingAggregateUnavailable } from './aggregate.ts';
 import { readTargetRatingContext } from './target.ts';

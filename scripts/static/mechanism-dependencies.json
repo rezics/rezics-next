@@ -73,10 +73,6 @@
   },
   {
     "importer": "services/main/src/composition.ts",
-    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
-  },
-  {
-    "importer": "services/main/src/composition.ts",
     "imported": "services/main/src/modules/access/realm-management-joining.ts"
   },
   {
@@ -216,32 +212,8 @@
     "imported": "services/main/src/modules/access/exposure-declarations.ts"
   },
   {
-    "importer": "services/main/src/modules/rating/experience-aggregate.ts",
-    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
-  },
-  {
-    "importer": "services/main/src/modules/rating/global-aggregate.ts",
-    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
-  },
-  {
-    "importer": "services/main/src/modules/rating/legacy-reconstruction.ts",
-    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
-  },
-  {
     "importer": "services/main/src/modules/rating/question-presentation-schema.ts",
     "imported": "services/main/src/modules/access/rating-question-presentation.ts"
-  },
-  {
-    "importer": "services/main/src/modules/rating/release-aggregate.ts",
-    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
-  },
-  {
-    "importer": "services/main/src/modules/rating/target-aggregate.ts",
-    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
-  },
-  {
-    "importer": "services/main/src/modules/rating/target-inventory.ts",
-    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
   },
   {
     "importer": "services/main/src/modules/realm-admin/join-requests.ts",
@@ -477,10 +449,6 @@
   },
   {
     "importer": "services/main/src/routes/dependencies.ts",
-    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
-  },
-  {
-    "importer": "services/main/src/routes/dependencies.ts",
     "imported": "services/main/src/modules/access/realm-management-joining.ts"
   },
   {
@@ -550,10 +518,6 @@
   {
     "importer": "services/main/src/routes/problems.ts",
     "imported": "services/main/src/modules/access/private-recipients.ts"
-  },
-  {
-    "importer": "services/main/src/routes/problems.ts",
-    "imported": "services/main/src/modules/access/rating-aggregate-inventory.ts"
   },
   {
     "importer": "services/main/src/routes/problems.ts",

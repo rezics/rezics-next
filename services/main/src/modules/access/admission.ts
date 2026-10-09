@@ -12,7 +12,7 @@ import { createHash } from 'node:crypto';
 import { receiptFamilyFor } from './receipt-families.ts';
 import { Pool, type PoolClient } from 'pg';
 import { recordRatingAggregateHead, readRatingAggregateInventory,
-  checkRatingAggregateFence, readRatingContextPolicyWitness } from './rating-aggregate-inventory.ts';
+  checkRatingAggregateFence, readRatingContextPolicyWitness } from '../rating/aggregate-inventory.ts';
 import { directWorkCreateProof, selectedDirectWorkProof } from './direct-principal.ts';
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof, saveInvitedWorkProof,

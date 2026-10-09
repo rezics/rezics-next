@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { readTargetRatingSnapshot, checkRatingAggregateFence }
-  from '../access/rating-aggregate-inventory.ts';
+  from './aggregate-inventory.ts';
 
 /** Access owner boundary of target aggregates: sealed components, and for one
  * small target its private heads, from a single snapshot. */

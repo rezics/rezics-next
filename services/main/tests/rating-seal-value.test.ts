@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { PoolClient } from 'pg';
-import { RatingInventoryConflict, recordRatingAggregateHead } from '../src/modules/access/rating-aggregate-inventory.ts';
+import { RatingInventoryConflict, recordRatingAggregateHead } from '../src/modules/rating/aggregate-inventory.ts';
 import { targetRatingSlotIri } from '../src/modules/rating/target.ts';
 import { targetRatingDigest } from '../src/modules/rating/target-digest.ts';
 
