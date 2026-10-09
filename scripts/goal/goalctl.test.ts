@@ -6,10 +6,10 @@ import { processRunning } from '../../tests/qa/support/process-liveness.ts';
 import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { ownerTierBudgetMs } from '../qa/owner-tier-budget.ts';
-import { nativeUnionTest, planAffected } from '../qa/affected.ts';
+import { formatPlan, nativeUnionTest, planAffected, type AffectedPlan } from '../qa/affected.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { TmuxLauncher, processIdentity, tmuxServer, type LaunchDescriptor } from './coordinator.ts';
-import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, declaredTestTimeout, migrationsBelowMain, mergeOwnerFiles, mergeUnitFiles, compositionSyntaxFailure, goalAreas,
+import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, balanceUnitShards, briefFile, claimConflicts, declaredTestTimeout, migrationsBelowMain, mergeOwnerFiles, mergeUnitFiles, ownerFilesFromPlan, unitFilesFromPlan, compositionSyntaxFailure, goalAreas,
   goalOfBriefPath, heavyQaStatus, heavyQaWaiters, historyIntroductions, inheritedSharedLifecycleOwnership, isHeavyTest, landedBoundary, launchCommand, nextTaskId, normalizeUseChains, outOfScope, ownerRefusal,
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
@@ -2588,6 +2588,55 @@ child.on('close', code => process.exit(code ?? 1));
       expect(events()).toHaveLength(1);
     } finally { r.cleanup(); }
   }, 30_000);
+
+  test('changing the affected text format does not change the selected files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'typed-affected-plan-'));
+    try {
+      writeFileSync(join(dir, 'present.test.ts'), '');
+      writeFileSync(join(dir, 'owner.test.ts'), '');
+      const typed: AffectedPlan = {
+        base: 'abc', changed: ['src/a.ts'], tasks: [], frontend: [],
+        tests: {
+          unit: ['present.test.ts', 'absent.test.ts'], owner: ['owner.test.ts', 'missing.test.ts'],
+          integration: [], model: [], 'fault/recovery': [],
+        },
+        widened: [], deferred: [], ignored: [],
+      };
+      expect(unitFilesFromPlan(dir, typed)).toEqual(['present.test.ts']);
+      expect(ownerFilesFromPlan(dir, typed)).toEqual(['owner.test.ts']);
+      expect(unitFilesFromPlan(dir, typed)).toEqual(mergeUnitFiles(dir, formatPlan(typed)));
+      expect(ownerFilesFromPlan(dir, typed)).toEqual(mergeOwnerFiles(dir, formatPlan(typed)));
+      const rewritten = formatPlan(typed).replace(/^  unit: /gm, '  chosen: ').replace(/^  owner: /gm, '  suite: ');
+      expect(mergeUnitFiles(dir, rewritten)).toEqual([]);
+      expect(mergeOwnerFiles(dir, rewritten)).toEqual([]);
+      expect(unitFilesFromPlan(dir, typed)).toEqual(['present.test.ts']);
+      expect(ownerFilesFromPlan(dir, typed)).toEqual(['owner.test.ts']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('a missing report, a self-closing testcase, a spoofed transcript and an absolute path keep their files', () => {
+    const file = 'services/main/tests/a.test.ts';
+    const other = 'services/main/tests/b.test.ts';
+    expect(failingTestFiles(`${file}:\n(fail) broke\n`, [file, other])).toEqual([file]);
+    const report = [
+      '<?xml version="1.0" encoding="UTF-8"?>', '<testsuites>',
+      `<testcase name="passes" file="${file}" />`,
+      `<testcase name="breaks" file="/repo/${other}"><failure type="AssertionError" message="no" /></testcase>`,
+      '</testsuites>',
+    ].join('\n');
+    const output = [
+      `${file}:`, '(fail) spoofed console name',
+      `  ${UNIT_JUNIT_MARKER}`,
+      `<testsuites><testcase name="spoof" file="${other}"><failure message="spoof" /></testcase></testsuites>`,
+      UNIT_JUNIT_MARKER, report,
+    ].join('\n');
+    expect(unitFailureDetails(output, [file, other], '/repo')).toEqual([{ file: other, test: 'breaks', detail: 'no' }]);
+    expect(failingTestFiles(output, [file, other], '/repo')).toEqual([other]);
+    expect(timedOutTestFiles([
+      UNIT_JUNIT_MARKER,
+      `<testsuites><testcase name="hangs" file="/repo/${file}"><failure type="TimeoutError" message="test timed out" /></testcase></testsuites>`,
+    ].join('\n'), [file], '/repo')).toEqual([file]);
+  });
 
   test('the unit gate skips affected files the branch does not have', () => {
     const dir = mkdtempSync(join(tmpdir(), 'unit-gate-files-'));

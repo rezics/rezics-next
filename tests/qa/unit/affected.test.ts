@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { testArgs } from '../../../scripts/qa/acceptance.ts';
 import { classify, erasureCampaignNativeTest, formatPlan, inputSelectedNativeTests, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, type GraphModule } from '../../../scripts/qa/affected.ts';
-import { mergeUnitFiles } from '../../../scripts/goal/goalctl.ts';
+import { mergeUnitFiles, unitFilesFromPlan } from '../../../scripts/goal/goalctl.ts';
 import { affectedCommands, parseAffectedArgs, runAffected } from '../../../scripts/qa/test.ts';
 
 const edge = (resolved: string, module = resolved) => ({ module, resolved, couldNotResolve: false, coreModule: false });
@@ -377,6 +377,10 @@ test('a widened unit tier omits input-selected native files unless their COPY ru
       writeFileSync(join(directory, file), '');
     }
     const selected = mergeUnitFiles(directory, lockPlan);
+    expect(unitFilesFromPlan(directory, lock)).toEqual(selected);
+    const rewritten = lockPlan.replace(/^  unit: /gm, '  chosen: ');
+    expect(mergeUnitFiles(directory, rewritten)).not.toEqual(selected);
+    expect(unitFilesFromPlan(directory, lock)).toEqual(selected);
     expect(selected).not.toContain(nativeUnionTest);
     expect(selected).not.toContain(erasureCampaignNativeTest);
     expect(selected).toContain('tests/qa/unit/nested/behavior.test.ts');
@@ -393,6 +397,7 @@ test('a widened unit tier omits input-selected native files unless their COPY ru
       writeFileSync(join(imageDirectory, file), '');
     }
     expect(mergeUnitFiles(imageDirectory, formatPlan(image))).toEqual([...inputSelectedNativeTests].sort());
+    expect(unitFilesFromPlan(imageDirectory, image)).toEqual([...inputSelectedNativeTests].sort());
   } finally {
     rmSync(imageDirectory, { recursive: true, force: true });
   }

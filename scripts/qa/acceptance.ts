@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { isAbsolute, join, relative } from 'node:path';
 import type { Tier } from './core.ts';
 import { declaredCases } from './cases/index.ts';
 import type { Case } from './cases/types.ts';
@@ -14,6 +14,10 @@ export interface TestResult {
   skipped: boolean;
   durationMs?: number;
   seed?: number;
+  /** Decoded failure or error message. Present when that attribute is non-empty. */
+  detail?: string;
+  /** The failure is a runner timeout, so a hanging file can be retried alone. */
+  timeout?: boolean;
 }
 
 export const UNEXECUTED_FILE_TEST = 'QA file did not complete';
@@ -29,9 +33,9 @@ export function caseInventory(_root?: string): Case[] {
   return declaredCases.map(({ id, page }) => ({ id, page }));
 }
 
-function decode(value: string): string {
+export function decodeXml(value: string): string {
   return value.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (_, entity: string) => {
-    if (entity.startsWith('#x')) return String.fromCodePoint(parseInt(entity.slice(2), 16));
+    if (/^#x/i.test(entity)) return String.fromCodePoint(parseInt(entity.slice(2), 16));
     if (entity.startsWith('#')) return String.fromCodePoint(parseInt(entity.slice(1), 10));
     return ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" } as Record<string, string>)[entity] ?? `&${entity};`;
   });
@@ -39,21 +43,48 @@ function decode(value: string): string {
 
 function attribute(attrs: string, key: string): string | undefined {
   const value = attrs.match(new RegExp(`(?:^|\\s)${key}="([^"]*)"`))?.[1];
-  return value === undefined ? undefined : decode(value);
+  return value === undefined ? undefined : decodeXml(value);
 }
 
-export function parseJUnit(xml: string, tier: Tier): TestResult[] {
+export interface JUnitDecodeOptions {
+  /** Absolute `file` attributes are reported relative to this directory. */
+  root?: string;
+}
+
+function reportedFile(file: string, root: string | undefined): string {
+  if (root === undefined) return file;
+  const stripped = file.replace(/^\.\//, '');
+  return isAbsolute(stripped) ? relative(root, stripped) : stripped;
+}
+
+/** The first failure or error element. A self-closing testcase has no body, so it cannot own a later case. */
+function caseFailure(body: string): { failed: boolean; detail?: string; timeout?: boolean } {
+  const tag = /<(?:failure|error)\b([^>]*?)(?:\/>|>)/.exec(body);
+  if (!tag) return { failed: false };
+  const type = attribute(tag[1] ?? '', 'type');
+  const message = attribute(tag[1] ?? '', 'message');
+  const timeout = type === 'TimeoutError' || (message !== undefined && /^test timed out\b/i.test(message));
+  return { failed: true, ...(message ? { detail: message } : {}), ...(timeout ? { timeout: true } : {}) };
+}
+
+export function parseJUnit(xml: string, tier: Tier, options?: JUnitDecodeOptions): TestResult[] {
   const result: TestResult[] = [];
   for (const match of xml.matchAll(/<testcase\b([^>]*?)(?:\s*\/>|>([\s\S]*?)<\/testcase>)/g)) {
     const name = attribute(match[1], 'name');
-    const file = attribute(match[1], 'file') ?? (tier === 'e2e'
+    const rawFile = attribute(match[1], 'file') ?? (tier === 'e2e'
       ? playwrightFile(attribute(match[1], 'classname')) : undefined);
-    if (!name || !file) continue;
+    if (!name || !rawFile) continue;
     const body = match[2] ?? '';
     const seconds = Number(attribute(match[1], 'time'));
-    result.push({ name, file, tier, failed: /<(?:failure|error)\b/.test(body),
+    const failure = caseFailure(body);
+    result.push({
+      name, file: reportedFile(rawFile, options?.root), tier,
+      failed: failure.failed,
       skipped: /<skipped\b/.test(body),
-      ...(Number.isFinite(seconds) && seconds >= 0 ? { durationMs: Math.round(seconds * 1000) } : {}) });
+      ...(Number.isFinite(seconds) && seconds >= 0 ? { durationMs: Math.round(seconds * 1000) } : {}),
+      ...(failure.detail ? { detail: failure.detail } : {}),
+      ...(failure.timeout ? { timeout: true } : {}),
+    });
   }
   return result;
 }

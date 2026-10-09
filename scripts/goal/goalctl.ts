@@ -7,8 +7,8 @@ import { appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtemp
 import { homedir, tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { ownerGateFiles, testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
-import { backendGraph, formatPlan, needsGraph, planAffected } from '../qa/affected.ts';
+import { decodeXml, ownerGateFiles, parseJUnit, testArgs, unitHarnessFiles, type TestResult } from '../qa/acceptance.ts';
+import { affectedPlanForChanges, affectedUnitTierEntries, type AffectedPlan } from '../qa/affected.ts';
 import { newReapScope, reapScopeChain, reapSettleMs, removeScopedContainers, sweepOrphanContainers } from '../qa/container-reaper.ts';
 import { processAlive } from '../qa/process/identity.ts';
 import { directoryLeaseHeld, readDirectoryLease, transferDirectoryLease, tryAcquireDirectoryLease,
@@ -2412,8 +2412,7 @@ function existingTestFiles(worktree: string, entries: readonly string[], wholeTi
   return [...selected];
 }
 
-/** Add inventory guards to backend units from the public affected plan;
- * whole-unit widening uses its registered defaults. Both share the existing gate. */
+/** Unit files named by an affected-plan transcript. Fixtures and a checkout without the typed planner still use this; the merge gate reads the plan object. */
 export function mergeUnitFiles(worktree: string, plan: string): string[] {
   if (!/^Affected since /m.test(plan)) throw new Error('Affected unit plan was not produced');
   const entries = [...plan.matchAll(/^  unit: (.+)$/gm)].map(match => match[1]!);
@@ -2422,12 +2421,28 @@ export function mergeUnitFiles(worktree: string, plan: string): string[] {
   return [...selected].sort();
 }
 
-/** Owner-tier files from the same plan. Whole-tier widening uses the worktree's owner registry. */
+/** Owner-tier files from the same transcript. Whole-tier widening uses the worktree's owner registry. */
 export function mergeOwnerFiles(worktree: string, plan: string): string[] {
   if (!/^Affected since /m.test(plan)) throw new Error('Affected unit plan was not produced');
   const entries = [...plan.matchAll(/^  owner: (.+)$/gm)].map(match => match[1]!);
   const whole = entries.some(entry => entry.startsWith('whole tier (')) ? ownerGateFiles(worktree) : [];
   return existingTestFiles(worktree, entries, whole).sort();
+}
+
+/** Unit files from the typed plan. Widening lists the registered unit entries and omits input-selected native files unless the plan names them. */
+export function unitFilesFromPlan(worktree: string, plan: AffectedPlan): string[] {
+  const widened = plan.widened.some(item => item.tier === 'unit');
+  const entries = [...(widened ? affectedUnitTierEntries() : []), ...plan.tests.unit];
+  const selected = new Set(existingTestFiles(worktree, entries, []));
+  for (const file of existingTestFiles(worktree, repositoryGuards.map(guard => guard.file), [])) selected.add(file);
+  return [...selected].sort();
+}
+
+/** Owner files from the typed plan. Whole-tier widening uses the worktree's owner registry. */
+export function ownerFilesFromPlan(worktree: string, plan: AffectedPlan): string[] {
+  const widened = plan.widened.some(item => item.tier === 'owner');
+  const entries = [...(widened ? ['whole tier (owner)'] : []), ...plan.tests.owner];
+  return existingTestFiles(worktree, entries, widened ? ownerGateFiles(worktree) : []).sort();
 }
 
 /** Separates the console transcript from the JUnit report appended for attribution. */
@@ -2508,77 +2523,45 @@ function consoleAfterReport(output: string): string {
   return dropRunSummary(stripJunitBlocks(block.after));
 }
 
-function decodeXml(text: string): string {
-  return text
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, digits: string) => String.fromCodePoint(Number(digits)))
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&');
-}
-
-function junitAttribute(attrs: string, name: string): string | undefined {
-  return new RegExp(`\\b${name}="([^"]*)"`).exec(attrs)?.[1];
-}
-
-function junitFileAttr(fileAttr: string, root?: string): string {
-  let file = decodeXml(fileAttr).replace(/^\.\//, '');
-  if (root && isAbsolute(file)) file = relative(root, file);
-  return file;
+/** Testcases in the gate's appended report. Undefined when that report is absent.
+ * A leading `./` is the same file the console header names without it. */
+function reportCases(output: string, root?: string): TestResult[] | undefined {
+  const xml = junitXml(output);
+  if (xml === undefined) return undefined;
+  return parseJUnit(xml, 'unit', root === undefined ? undefined : { root }).map(test => ({
+    ...test,
+    file: test.file.replace(/^\.\//, ''),
+  }));
 }
 
 /** Files the appended JUnit report names, including ones whose cases passed.
  * A file that is absent was not in that report, so its console cases still count. */
 function junitReportedFiles(output: string, candidates: readonly string[], root?: string): Set<string> {
-  const xml = junitXml(output);
-  if (xml === undefined) return new Set();
+  const cases = reportCases(output, root);
+  if (!cases) return new Set();
   const known = new Set(candidates);
   const files = new Set<string>();
-  for (const match of xml.matchAll(/<testcase\b([^>]*?)(?:\/>|>)/g)) {
-    const fileAttr = junitAttribute(match[1]!, 'file');
-    if (!fileAttr) continue;
-    const file = junitFileAttr(fileAttr, root);
-    if (known.has(file)) files.add(file);
-  }
+  for (const test of cases) if (known.has(test.file)) files.add(test.file);
   return files;
 }
 
 interface JunitFailure extends UnitFailureDetail { timeout: boolean }
 
-function junitTimeoutFailure(attrs: string): boolean {
-  if (junitAttribute(attrs, 'type') === 'TimeoutError') return true;
-  const message = junitAttribute(attrs, 'message');
-  return message !== undefined && /^test timed out\b/i.test(decodeXml(message));
-}
-
 /** Named failures from the gate's JUnit report. Undefined when that report is absent.
  * A present report with no failures is an empty list, so the console summary cannot supply names. */
 function junitFailures(output: string, candidates: readonly string[], root?: string): JunitFailure[] | undefined {
-  const xml = junitXml(output);
-  if (xml === undefined) return undefined;
+  const cases = reportCases(output, root);
+  if (!cases) return undefined;
   const known = new Set(candidates);
   const found: JunitFailure[] = [];
   const seen = new Set<string>();
-  // A passing testcase is `<testcase ... />`. `[^>]*` would treat that slash as attributes and
-  // swallow the next failing testcase, so the passing file would own the later failure.
-  for (const match of xml.matchAll(/<testcase\b([^>]*[^>/])>([\s\S]*?)<\/testcase>/g)) {
-    const body = match[2]!;
-    const failure = /<(?:failure|error)\b([^>]*)>/.exec(body);
-    if (!failure) continue;
-    const name = junitAttribute(match[1]!, 'name');
-    const fileAttr = junitAttribute(match[1]!, 'file');
-    if (!name || !fileAttr) continue;
-    const file = junitFileAttr(fileAttr, root);
-    if (!known.has(file)) continue;
-    const test = decodeXml(name);
-    const key = `${file}\0${test}`;
+  for (const test of cases) {
+    if (!test.failed || !known.has(test.file)) continue;
+    const key = `${test.file}\0${test.name}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    const message = junitAttribute(failure[1]!, 'message');
-    const detail = message ? normalizeUnitFileError(decodeXml(message), root) : undefined;
-    found.push({ file, test, timeout: junitTimeoutFailure(failure[1]!), ...(detail ? { detail } : {}) });
+    const detail = test.detail ? normalizeUnitFileError(test.detail, root) : undefined;
+    found.push({ file: test.file, test: test.name, timeout: test.timeout === true, ...(detail ? { detail } : {}) });
   }
   return found;
 }
@@ -3838,64 +3821,38 @@ function writeMergeEvent(event: MergeEvent, files: readonly string[]): void {
   appendFileSync(join(stateDir, 'merges.jsonl'), `${JSON.stringify({ ...event, files: [...new Set(files)].sort() })}\n`);
 }
 
-/** A package.json whose only difference is `scripts` does not change installed dependencies. Matches the affected planner. */
-function scriptOnlyPackageManifests(root: string, base: string, changed: readonly string[]): Set<string> {
-  const result = new Set<string>();
-  if (!changed.includes('package.json') || !existsSync(join(root, 'package.json'))) return result;
-  const shown = git(root, ['show', `${base}:package.json`], true);
-  if (!shown) return result;
-  const withoutScripts = (text: string) => {
-    const { scripts: _scripts, ...rest } = JSON.parse(text) as Record<string, unknown>;
-    return JSON.stringify(rest);
-  };
-  try {
-    if (withoutScripts(shown) === withoutScripts(readFileSync(join(root, 'package.json'), 'utf8'))) result.add('package.json');
-  } catch { /* a package.json that does not parse is a real change */ }
-  return result;
-}
+type AffectedSelection = { plan: AffectedPlan } | { text: string };
 
-const AFFECTED_CODE_FILE = /\.(?:ts|tsx|mts|cts|js|mjs|cjs)$/;
-
-function affectedPlanForChanges(worktree: string, base: string, changed: readonly string[],
-  planner: { planAffected: typeof planAffected; needsGraph: typeof needsGraph; backendGraph: typeof backendGraph; formatPlan: typeof formatPlan }): string {
-  const manifests = scriptOnlyPackageManifests(worktree, base, changed);
-  const includeFrontend = changed.some(path => ['apps/web/', 'apps/accounts/', 'packages/ui/', 'apps/about/']
-    .some(prefix => path.startsWith(prefix)));
-  const graph = planner.needsGraph([...changed], manifests) ? planner.backendGraph(worktree, includeFrontend) : [];
-  const sources = new Map<string, string>();
-  for (const module of graph) {
-    const path = join(worktree, module.source);
-    if (AFFECTED_CODE_FILE.test(module.source) && existsSync(path)) sources.set(module.source, readFileSync(path, 'utf8'));
-  }
-  const dockerfile = join(worktree, 'infra/jena/Dockerfile');
-  return planner.formatPlan(planner.planAffected({
-    base, changed: [...changed], graph, sources,
-    exists: path => existsSync(resolve(worktree, path)),
-    scriptOnlyManifests: manifests,
-    nativeUnionDockerfile: existsSync(dockerfile) ? readFileSync(dockerfile, 'utf8') : '',
-  }));
-}
-
-async function affectedPlanText(worktree: string, base: string, changed: readonly string[]): Promise<string> {
+/** The worktree's planner when it can be imported, otherwise this checkout's. A missing module or a fixture plan stays text. */
+async function affectedSelection(worktree: string, base: string, changed: readonly string[]): Promise<AffectedSelection> {
   if (process.env.GOAL_TEST_PLAN !== undefined) {
-    return `Affected since HEAD: fixture\n${readFileSync(process.env.GOAL_TEST_PLAN, 'utf8')}`;
+    return { text: `Affected since HEAD: fixture\n${readFileSync(process.env.GOAL_TEST_PLAN, 'utf8')}` };
   }
   const modulePath = join(worktree, 'scripts/qa/affected.ts');
   if (!existsSync(modulePath)) {
     const plan = spawnSync('task', ['test', '--', '--affected', base, '--list'],
       { cwd: worktree, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
     if (plan.status !== 0) throw new Error(`Affected unit selection failed:\n${plan.stderr || plan.error?.message}`);
-    return plan.stdout;
+    return { text: plan.stdout };
   }
   try {
     const planner = await import(pathToFileURL(modulePath).href) as {
-      planAffected: typeof planAffected; needsGraph: typeof needsGraph; backendGraph: typeof backendGraph; formatPlan: typeof formatPlan;
+      affectedPlanForChanges?: typeof affectedPlanForChanges;
     };
-    return affectedPlanForChanges(worktree, base, changed, planner);
+    if (typeof planner.affectedPlanForChanges !== 'function') throw new Error('affected planner does not export a typed plan');
+    return { plan: planner.affectedPlanForChanges(worktree, base, changed) };
   } catch (error) {
     console.log(`Pre-merge selection: affected planner import failed (${error instanceof Error ? error.message : error}); using this checkout's planner`);
-    return affectedPlanForChanges(worktree, base, changed, { planAffected, needsGraph, backendGraph, formatPlan });
+    return { plan: affectedPlanForChanges(worktree, base, changed) };
   }
+}
+
+function selectedUnitFiles(worktree: string, selection: AffectedSelection): string[] {
+  return 'plan' in selection ? unitFilesFromPlan(worktree, selection.plan) : mergeUnitFiles(worktree, selection.text);
+}
+
+function selectedOwnerFiles(worktree: string, selection: AffectedSelection): string[] {
+  return 'plan' in selection ? ownerFilesFromPlan(worktree, selection.plan) : mergeOwnerFiles(worktree, selection.text);
 }
 
 function generatorOutput(run: ReturnType<typeof spawnSync>): string {
@@ -4422,9 +4379,9 @@ async function preMergeUnitGate(worktree: string, mainRoot: string, currentMain:
   const own = git(worktree, ['diff', '--name-only', '--no-renames', `${currentMain}...HEAD`]).split('\n').filter(Boolean);
   const changed = streamSelectionFiles(own, readMergeEvents(), taskIds, mainRoot);
   console.log(`Pre-merge selection since ${currentMain.slice(0, 12)} (${changed.length} path(s))\n  ${changed.join('\n  ')}`);
-  const plan = await affectedPlanText(worktree, currentMain, changed);
-  const unit = mergeUnitFiles(worktree, plan);
-  const owner = new Set(mergeOwnerFiles(worktree, plan).filter(file => !unit.includes(file)));
+  const selection = await affectedSelection(worktree, currentMain, changed);
+  const unit = selectedUnitFiles(worktree, selection);
+  const owner = new Set(selectedOwnerFiles(worktree, selection).filter(file => !unit.includes(file)));
   const files = [...unit, ...owner].sort();
   for (const file of files) gatedFiles.add(file);
   console.log(`Pre-merge unit gate: ${files.length} affected/guard file(s) against main ${currentMain.slice(0, 12)}`);

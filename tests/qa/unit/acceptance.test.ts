@@ -149,6 +149,24 @@ test('QA07: JUnit parser distinguishes failures and skipped tests', () => {
   expect(results[0]?.durationMs).toBe(125);
 });
 
+test('JUnit decoding keeps failure details, a timeout, a self-closing neighbor and an absolute path', () => {
+  const xml = `<testsuites>
+    <testcase name="passes" file="a.test.ts" />
+    <testcase name="breaks &amp; stays" file="./b.test.ts"><failure type="AssertionError" message="no &amp; no" /></testcase>
+    <testcase name="hangs" file="/repo/c.test.ts"><failure type="TimeoutError" message="test timed out after 5s" /></testcase>
+    <testcase name="message timeout" file="d.test.ts"><failure message="Test timed out after 1s" /></testcase>
+    </testsuites>`;
+  const results = parseJUnit(xml, 'unit', { root: '/repo' });
+  expect(results.map(item => [item.file, item.name, item.failed, item.detail, item.timeout ?? false])).toEqual([
+    ['a.test.ts', 'passes', false, undefined, false],
+    ['b.test.ts', 'breaks & stays', true, 'no & no', false],
+    ['c.test.ts', 'hangs', true, 'test timed out after 5s', true],
+    ['d.test.ts', 'message timeout', true, 'Test timed out after 1s', true],
+  ]);
+  expect(parseJUnit('<testcase name="abs" file="/repo/c.test.ts"><failure message="x" /></testcase>', 'unit')[0]?.file)
+    .toBe('/repo/c.test.ts');
+});
+
 test('QA07: Playwright JUnit preserves named test outcomes without inventing acceptance IDs', () => {
   const results = parseJUnit(`<testsuites><testsuite name="public-search.e2e.ts">
     <testcase name="public search reaches Main" classname="public-search.e2e.ts" time="0.25" />

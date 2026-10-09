@@ -517,7 +517,7 @@ function resolveWorkspaceImports(root: string, modules: GraphModule[]): GraphMod
   }));
 }
 
-function scriptOnlyManifests(root: string, base: string, changed: string[]): Set<string> {
+function scriptOnlyManifests(root: string, base: string, changed: readonly string[]): Set<string> {
   const result = new Set<string>();
   if (!changed.includes('package.json') || !existsSync(join(root, 'package.json'))) return result;
   const shown = spawnSync('git', ['show', `${base}:package.json`], { cwd: root, encoding: 'utf8' });
@@ -526,11 +526,15 @@ function scriptOnlyManifests(root: string, base: string, changed: string[]): Set
     const { scripts: _scripts, ...rest } = JSON.parse(text) as Record<string, unknown>;
     return JSON.stringify(rest);
   };
-  if (
-    withoutScripts(shown.stdout) ===
-    withoutScripts(readFileSync(join(root, 'package.json'), 'utf8'))
-  ) {
-    result.add('package.json');
+  try {
+    if (
+      withoutScripts(shown.stdout) ===
+      withoutScripts(readFileSync(join(root, 'package.json'), 'utf8'))
+    ) {
+      result.add('package.json');
+    }
+  } catch {
+    // A package.json that does not parse is a dependency change, not a script-only edit.
   }
   return result;
 }
@@ -548,10 +552,13 @@ export function needsGraph(
   );
 }
 
-export function affectedPlan(root: string, ref?: string): AffectedPlan {
-  const { base, changed } = changedPaths(root, ref);
-  const manifests = scriptOnlyManifests(root, base, changed);
-  const graph = needsGraph(changed, manifests) ? backendGraph(root, changed.some(path => frontendWorkspace(path) !== undefined)) : [];
+/** Plan one explicit base and changed-file list. Loads script-only manifests, the import graph and Dockerfile inputs. */
+export function affectedPlanForChanges(root: string, base: string, changed: readonly string[]): AffectedPlan {
+  const files = [...changed];
+  const manifests = scriptOnlyManifests(root, base, files);
+  const graph = needsGraph(files, manifests)
+    ? backendGraph(root, files.some(path => frontendWorkspace(path) !== undefined))
+    : [];
   const sources = new Map<string, string>();
   for (const module of graph) {
     const path = join(root, module.source);
@@ -561,7 +568,7 @@ export function affectedPlan(root: string, ref?: string): AffectedPlan {
   const dockerfile = join(root, nativeUnionDockerfile);
   return planAffected({
     base,
-    changed,
+    changed: files,
     graph,
     sources,
     exists: (path) => existsSync(resolve(root, path)),
@@ -570,6 +577,12 @@ export function affectedPlan(root: string, ref?: string): AffectedPlan {
   });
 }
 
+export function affectedPlan(root: string, ref?: string): AffectedPlan {
+  const { base, changed } = changedPaths(root, ref);
+  return affectedPlanForChanges(root, base, changed);
+}
+
+/** People read this. File selection uses the plan object; rewriting these lines does not change the files. */
 export function formatPlan(plan: AffectedPlan): string {
   const lines = [`Affected since ${plan.base.slice(0, 12)}: ${plan.changed.length} changed paths`];
   for (const { task, because } of plan.tasks) lines.push(`  task ${task} (${because})`);
