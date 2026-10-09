@@ -1,7 +1,7 @@
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { processRunning } from '../../tests/qa/support/process-liveness.ts';
 import { describe, expect, test } from 'bun:test';
 import { testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
@@ -2107,6 +2107,11 @@ describe('goalctl Goals', () => {
     expect(isHeavyTest(['--tier', 'integration'])).toBe(true);
     expect(isHeavyTest(['--result-file', 'slot.json', '--tier', 'integration'])).toBe(true);
     expect(isHeavyTest(['--tier', 'integration', '--file', 'tests/qa/integration/a.test.ts'])).toBe(false);
+    expect(isHeavyTest(['--tier', 'unit', '--file', 'tests/qa/unit/acceptance.test.ts',
+      '--tier', 'owner', '--file', 'scripts/goal/regress.test.ts'])).toBe(false);
+    expect(isHeavyTest(['--tier', 'integration', '--file', 'tests/qa/integration/a.test.ts',
+      '--tier', 'e2e', '--file', 'apps/web/tests/a.e2e.ts'])).toBe(true);
+    expect(isHeavyTest(['--tier', 'unit', '--tier', 'owner', '--file', 'scripts/goal/regress.test.ts'])).toBe(true);
     expect(isHeavyTest(['--result-file', 'slot.json', '--tier', 'owner', '--file', 'scripts/goal/regress.test.ts'])).toBe(false);
     for (const tier of ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'load']) {
       expect(isHeavyTest(['--tier', tier, '--file', 'tests/example.test.ts'])).toBe(false);
@@ -4970,6 +4975,7 @@ describe('heavy QA lock', () => {
     ['scripts/qa/test.ts', 'tests/qa/integration/access-download-api.test.ts'],
     ['scripts/qa/test.ts', 'scripts/goal/goalctl.test.ts'],
     ['scripts/qa/test.ts', '--tier', 'unit', '--file', 'tests/qa/unit/qa-harness.test.ts'],
+    ['scripts/qa/test.ts', 'services/main/tests/command.test.ts', 'scripts/dev/seed/api.test.ts'],
   ]) {
     test(`light harness dispatch defers its ordinary slot: ${args.join(' ')}`, async () => {
       const root = mkdtempSync(join(process.cwd(), '.temp', 'deferred-harness-slot-'));

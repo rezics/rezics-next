@@ -1,19 +1,51 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from './acceptance.ts';
+import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath, unitHarnessFiles, unitOwnerFiles } from './acceptance.ts';
 import { affectedPlan, affectedTiers, affectedUnitTierFiles, formatPlan, type AffectedPlan } from './affected.ts';
 import { forgetChildScope, noteChildScope, reapChildEnvironment, reapSettleMs, removeScopedContainers } from './container-reaper.ts';
-import { goalSlotDirectory, parseArgs, trackCommandProcess, untrackCommandProcess } from './core.ts';
+import { formatTierRunLine, goalSlotDirectory, implementedTiers, parseArgs, trackCommandProcess, untrackCommandProcess, type Tier } from './core.ts';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const testFile = /\.(?:test|spec|e2e|stories)\.[cm]?[jt]sx?$/;
+const tierOrder = implementedTiers.filter(tier => tier !== 'static');
 
-export function selectTestCommand(args: string[]): [string, string[]] {
+export interface TestGroup {
+  /** Registered QA tier. Absent for a Bun file that belongs to none. */
+  tier?: Tier;
+  files: string[];
+  command: [string, string[]];
+}
+
+function registeredTier(file: string, unitGates: readonly string[]): Tier | undefined {
+  if (isQaIntegrationPath(file)) return 'integration';
+  if (isQaModelPath(file)) return 'model';
+  if (isQaFaultPath(file)) return 'fault/recovery';
+  if (isQaLoadPath(file)) return 'load';
+  if (isQaE2ePath(file)) return 'e2e';
+  if (isQaOwnerPath(file)) return 'owner';
+  if (!file.includes('..') && (file === 'tests/qa/unit' || file.startsWith('tests/qa/unit/')
+    || (unitHarnessFiles as readonly string[]).includes(file) || unitGates.includes(file))) return 'unit';
+  return undefined;
+}
+
+function hostedCommand(tier: Tier, files: string[], id?: string): [string, string[]] {
+  return ['bun', ['scripts/qa/cli.ts', '--tier', tier, ...files.flatMap(file => ['--file', file]),
+    ...(id ? ['--id', id] : [])]];
+}
+
+/** One QA invocation when every file belongs to a tier the runner can host. */
+function combinedQaCommand(groups: TestGroup[]): [string, string[]] | undefined {
+  if (groups.length < 2 || groups.some(group => !group.tier)) return undefined;
+  return ['bun', ['scripts/qa/cli.ts', ...groups.flatMap(group => ['--tier', group.tier!,
+    ...group.files.flatMap(file => ['--file', file])])]];
+}
+
+export function selectTestGroups(args: string[]): TestGroup[] {
   // Explicit tier runs still pass through goalctl's QA slot.
   if (args[0] === '--tier') {
     parseArgs(args);
-    return ['bun', ['scripts/qa/cli.ts', ...args]];
+    return [{ files: [], command: ['bun', ['scripts/qa/cli.ts', ...args]] }];
   }
   const paths = args.filter(arg => testFile.test(arg));
   if (!paths.length) throw new Error('Provide explicit test file paths or --affected; full-suite execution belongs to task qa.');
@@ -32,32 +64,56 @@ export function selectTestCommand(args: string[]): [string, string[]] {
       || (workspace === 'apps/web' && file.startsWith('packages/ui/')))) {
       throw new Error('Run each workspace’s stories separately from other tests');
     }
-    return ['task', [workspace === 'apps/web' ? 'storybook:test' : 'accounts:storybook:test', '--',
-      ...args.map(arg => testFile.test(arg) ? relative(resolve(root, workspace), resolve(root, arg)) : arg)]];
+    return [{ files, command: ['task', [workspace === 'apps/web' ? 'storybook:test' : 'accounts:storybook:test', '--',
+      ...args.map(arg => testFile.test(arg) ? relative(resolve(root, workspace), resolve(root, arg)) : arg)]] }];
   }
-  const integration = files.filter(isQaIntegrationPath);
-  const model = files.filter(isQaModelPath);
-  const fault = files.filter(isQaFaultPath);
-  const load = files.filter(isQaLoadPath);
-  const e2e = files.filter(isQaE2ePath);
-  const owner = files.filter(file => isQaOwnerPath(file) && !integration.includes(file) && !model.includes(file)
-    && !fault.includes(file) && !load.includes(file) && !e2e.includes(file));
-  if (!integration.length && !model.length && !fault.length && !load.length && !e2e.length && !owner.length) return ['bun', ['test', ...args]];
-  if (integration.length + model.length + fault.length + load.length + e2e.length + owner.length !== files.length
-    || [integration, model, fault, load, e2e, owner].filter(group => group.length).length !== 1) {
-    throw new Error('Run registered QA integration, model, fault/recovery, load, e2e and other test files in separate commands');
+  const tierOf = registeredTier;
+  const unitGates = unitOwnerFiles();
+  const tier = (file: string) => tierOf(file, unitGates);
+  // Unit files and other Bun files keep the direct Bun command until a hosted tier joins them.
+  const hosted = new Set<Tier>(['owner', 'integration', 'model', 'fault/recovery', 'e2e', 'load']);
+  if (!files.some(file => {
+    const name = tier(file);
+    return name !== undefined && hosted.has(name);
+  })) {
+    const allUnit = files.every(file => tier(file) === 'unit');
+    return [{ ...(allUnit ? { tier: 'unit' as const } : {}), files, command: ['bun', ['test', ...args]] }];
+  }
+  const loose = files.filter(file => !tier(file));
+  const groups: TestGroup[] = [];
+  if (loose.length) groups.push({ files: loose, command: ['bun', ['test', ...loose]] });
+  for (const name of tierOrder) {
+    const tierFiles = files.filter(file => tier(file) === name);
+    if (!tierFiles.length) continue;
+    groups.push({ tier: name, files: tierFiles,
+      command: name === 'unit' ? ['bun', ['test', ...tierFiles]] : hostedCommand(name, tierFiles) });
   }
   const other = args.filter(arg => !testFile.test(arg));
-  let id: string | undefined;
   if (other.length) {
-    if (other.length !== 2 || other[0] !== '-t'
+    if (groups.length !== 1 || other.length !== 2 || other[0] !== '-t'
       || !/^[A-Z][A-Z0-9]*\d{2,}$/.test(other[1]!)) {
       throw new Error('QA stack selection accepts only -t <acceptance ID>');
     }
-    id = other[1];
+    const group = groups[0]!;
+    if (group.tier) group.command = hostedCommand(group.tier, group.files, other[1]);
   }
-  return ['bun', ['scripts/qa/cli.ts', '--tier', owner.length ? 'owner' : model.length ? 'model' : fault.length ? 'fault/recovery' : load.length ? 'load' : e2e.length ? 'e2e' : 'integration',
-    ...files.flatMap(file => ['--file', file]), ...(id ? ['--id', id] : [])]];
+  return groups;
+}
+
+function commandsFor(groups: TestGroup[]): [string, string[]][] {
+  const combined = combinedQaCommand(groups);
+  return combined ? [combined] : groups.map(group => group.command);
+}
+
+/** The commands `goalctl test` runs. Several registered tiers become one QA invocation. */
+export function testCommands(args: string[]): [string, string[]][] {
+  return commandsFor(selectTestGroups(args));
+}
+
+export function selectTestCommand(args: string[]): [string, string[]] {
+  const commands = testCommands(args);
+  if (commands.length !== 1) throw new Error('A Bun file outside a registered tier runs as its own command');
+  return commands[0]!;
 }
 
 export function parseAffectedArgs(args: string[]): { ref?: string; list: boolean } | undefined {
@@ -163,9 +219,29 @@ export interface TestDispatchOptions {
   env?: NodeJS.ProcessEnv;
 }
 
+async function runTierGroups(groups: TestGroup[], options: TestDispatchOptions): Promise<number> {
+  const runner = options.runner ?? run;
+  const artifactRoot = join(root, '.artifacts', 'qa');
+  const lines: string[] = [];
+  let failed = false;
+  for (const group of groups) {
+    const before = new Set(existsSync(artifactRoot) ? readdirSync(artifactRoot) : []);
+    const code = await runner(group.command);
+    failed ||= code !== 0;
+    const created = (existsSync(artifactRoot) ? readdirSync(artifactRoot) : []).filter(name => !before.has(name));
+    lines.push(formatTierRunLine(group.tier ?? 'bun', created.length === 1 ? created[0]! : 'no run id',
+      code === 0 ? 'passed' : 'failed'));
+  }
+  console.log(lines.join('\n'));
+  return failed ? 1 : 0;
+}
+
 /** Explicit stories bypass the stack harness, but their browser workers still need host memory. */
 export async function dispatchTest(args: string[], options: TestDispatchOptions = {}): Promise<number> {
-  const command = selectTestCommand(args);
+  const groups = selectTestGroups(args);
+  const commands = commandsFor(groups);
+  if (commands.length !== 1) return runTierGroups(groups, options);
+  const command = commands[0]!;
   const env = options.env ?? process.env;
   if (command[0] === 'task' && ['storybook:test', 'accounts:storybook:test'].includes(command[1][0]!)
     && await isLocalQaRun(root, env)) {

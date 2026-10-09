@@ -15,7 +15,7 @@ import { directoryLeaseHeld, readDirectoryLease, transferDirectoryLease, tryAcqu
   updateDirectoryLeaseNote, type AcquiredDirectoryLease, type DirectoryLeaseRecord } from '../qa/process/lease.ts';
 import { terminateProcessGroup } from '../qa/process/terminate.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
-import { parseAffectedArgs, selectTestCommand } from '../qa/test.ts';
+import { parseAffectedArgs, testCommands } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
 import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
@@ -444,12 +444,22 @@ export function ownerRefusal(task: Pick<Task, 'id' | 'goal'>, caller = process.e
 export function isHeavyTest(args: readonly string[]): boolean {
   if (args.includes('--heavy')) return true;
   if (args.includes('--list')) return false;
-  const tierIndex = args.indexOf('--tier');
-  if (tierIndex >= 0) {
-    // Only known nonbrowser tiers may share slots when their file selection is bounded.
-    const lightTier = ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'load'].includes(args[tierIndex + 1] ?? '');
-    if (!args.includes('--file') || !lightTier) return true;
+  const light = new Set(['unit', 'owner', 'model', 'integration', 'fault/recovery', 'load']);
+  const tiers: string[] = [];
+  const filesForTier: boolean[] = [];
+  let current = -1;
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === '--tier') {
+      current = tiers.length;
+      tiers.push(args[index + 1] ?? '');
+      filesForTier.push(false);
+      index++;
+    } else if (args[index] === '--file' && current >= 0) filesForTier[current] = true;
   }
+  // Every named tier must be a bounded non-browser tier. One tier still accepts `--file` anywhere.
+  if (tiers.length === 1) {
+    if (!args.includes('--file') || !light.has(tiers[0]!)) return true;
+  } else if (tiers.length > 1 && tiers.some((tier, index) => !light.has(tier) || !filesForTier[index])) return true;
   return args.some(arg => arg === '--affected' || arg.startsWith('--affected='));
 }
 
@@ -5481,7 +5491,9 @@ function harnessOwnsSlot(command: readonly string[]): boolean {
   if (script !== resolve(import.meta.dir, '../qa/test.ts')) return false;
   const args = command.slice(2);
   if (parseAffectedArgs(args)) return false;
-  const [program, selected] = selectTestCommand(args);
+  const commands = testCommands(args);
+  if (commands.length !== 1) return false;
+  const [program, selected] = commands[0]!;
   return program === 'bun' && selected[0] === 'scripts/qa/cli.ts';
 }
 

@@ -33,8 +33,80 @@ export const backendTiers: Tier[] = implementedTiers.filter(tier => tier !== 'e2
 export const uncoveredTiers: Tier[] = [];
 export function tierArtifactName(tier: Tier): string { return tier.replaceAll('/', '-'); }
 
+/** One line of the mixed-tier summary: the tier, its QA run id, and its result. */
+export function formatTierRunLine(tier: string, runId: string, status: string): string {
+  return `${tier}: ${runId} ${status}`;
+}
+
+export interface QaTierSelection { tier: Tier; files?: string[]; id?: string }
+
+const fileTiers = new Set<Tier>(['unit', 'owner', 'integration', 'model', 'fault/recovery', 'e2e', 'load']);
+
+function tierFlagCount(args: string[]): number {
+  let count = 0;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--tier' && implementedTiers.includes(args[i + 1] as Tier)) {
+      count++;
+      i++;
+    }
+  }
+  return count;
+}
+
+/** Several `--tier` sections keep each tier's files. One section stays the single-tier shape. */
+function parseTierGroups(args: string[]): { tier?: Tier; onlyFailed?: string; keep: boolean; record: boolean;
+  files?: string[]; id?: string; backend?: boolean; storybook?: boolean; groups?: QaTierSelection[] } {
+  let keep = false;
+  let record = false;
+  let backend = false;
+  let onlyFailed: string | undefined;
+  const groups: QaTierSelection[] = [];
+  let current: QaTierSelection | undefined;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === '--tier' && implementedTiers.includes(args[i + 1] as Tier)) {
+      const tier = args[++i] as Tier;
+      current = groups.find(group => group.tier === tier);
+      if (!current) {
+        current = { tier };
+        groups.push(current);
+      }
+      continue;
+    }
+    if (arg === '--file' && /\.(?:test|e2e)\.tsx?$/.test(args[i + 1] ?? '')) {
+      if (!current || !fileTiers.has(current.tier)) {
+        throw new Error('--file and --id require a unit, owner, integration, model, fault/recovery, e2e or load tier');
+      }
+      (current.files ??= []).push(args[++i]!);
+      continue;
+    }
+    if (arg === '--id' && /^[A-Z][A-Z0-9]*\d{2,}$/.test(args[i + 1] ?? '')) {
+      if (!current || !fileTiers.has(current.tier)) {
+        throw new Error('--file and --id require a unit, owner, integration, model, fault/recovery, e2e or load tier');
+      }
+      if (current.id) throw new Error('--id was already set for this tier');
+      current.id = args[++i];
+      continue;
+    }
+    if (arg === '--only-failed' && /^[a-z0-9][a-z0-9-]{0,30}$/.test(args[i + 1] ?? '')) {
+      onlyFailed = args[++i];
+      continue;
+    }
+    if (arg === '--keep') { keep = true; continue; }
+    if (arg === '--record') { record = true; continue; }
+    if (arg === '--backend') { backend = true; continue; }
+    if (arg === '--storybook') throw new Error('--storybook requires the e2e tier');
+    throw new Error(`Unsupported QA option: ${arg}`);
+  }
+  groups.sort((a, b) => implementedTiers.indexOf(a.tier) - implementedTiers.indexOf(b.tier));
+  if (record || onlyFailed) throw new Error(record ? '--record requires a full run' : '--tier and --only-failed cannot be combined');
+  if (backend && groups.some(group => group.tier === 'e2e')) throw new Error('The backend scope has no e2e tier');
+  return { tier: undefined, onlyFailed: undefined, keep, record, groups, ...(backend ? { backend } : {}) };
+}
+
 export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; keep: boolean; record: boolean;
-  files?: string[]; id?: string; backend?: boolean; storybook?: boolean } {
+  files?: string[]; id?: string; backend?: boolean; storybook?: boolean; groups?: QaTierSelection[] } {
+  if (tierFlagCount(args) > 1) return parseTierGroups(args);
   let tier: Tier | undefined;
   let onlyFailed: string | undefined;
   let keep = false;

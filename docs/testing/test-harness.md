@@ -18,7 +18,7 @@ and the complete retained backend scope.
 
 | Task | Use |
 | --- | --- |
-| `task test -- <files> [-t <ID>]` | Run explicit unit files or registered stack files; keep tiers in separate commands. |
+| `task test -- <files> [-t <ID>]` | Run explicit test files. Files from several registered tiers stay in tier order; each tier keeps its own admission, budget and stack. |
 | `task test -- --affected [<base>] [--list]` | Run or preview tests selected from the changed tree. |
 | `task qa -- --tier <name>` | Diagnose one tier in its QA environment. |
 | `task qa -- --only-failed <run-id>` | Recheck prior failures; this is partial evidence. |

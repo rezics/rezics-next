@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { expect, test } from 'bun:test';
-import { dispatchTest, selectTestCommand } from '../../../scripts/qa/test.ts';
+import { dispatchTest, selectTestCommand, selectTestGroups } from '../../../scripts/qa/test.ts';
 import { testArgs } from '../../../scripts/qa/acceptance.ts';
 import { parseArgs } from '../../../scripts/qa/core.ts';
 import { GiB, waitForMemory } from '../../../scripts/qa/memory-admission.ts';
@@ -129,9 +129,9 @@ test('QA10: registered integration paths and acceptance IDs select shared QA set
 });
 
 test('QA11: selected runs reject unsafe paths and full-record combinations', () => {
-  expect(() => selectTestCommand(['tests/qa/integration/shared-stack.test.ts',
-    'model/compiler/generate.test.ts'])).toThrow('separate commands');
   expect(() => selectTestCommand(['../outside.test.ts'])).toThrow('outside this checkout or missing');
+  expect(() => selectTestCommand(['tests/qa/integration/shared-stack.test.ts',
+    'tests/qa/fault-recovery/lost-response.test.ts', '-t', 'SYS02'])).toThrow('-t <acceptance ID>');
   expect(() => parseArgs(['--record', '--tier', 'integration', '--id', 'OPS01']))
     .toThrow('--record requires a full run');
   for (const file of ['activate', 'full-work', 'recovery']) {
@@ -179,6 +179,58 @@ test('Bun script owner files select their bounded tier without a service stack',
   expect(parseArgs(['--tier', 'owner']).tier).toBe('owner');
 });
 
+
+test('explicit files from two tiers select those tiers in order and keep each file on its tier', () => {
+  const unitFile = 'services/main/tests/command.test.ts';
+  const ownerFile = 'scripts/dev/seed/api.test.ts';
+  const ownerAndUnit = selectTestGroups([ownerFile, unitFile]);
+  expect(ownerAndUnit.map(group => group.tier)).toEqual(['unit', 'owner']);
+  expect(ownerAndUnit.map(group => group.files)).toEqual([[unitFile], [ownerFile]]);
+  const ownerCommand = selectTestCommand([ownerFile, unitFile]);
+  expect(ownerCommand[0]).toBe('bun');
+  const ownerGroups = parseArgs(ownerCommand[1].slice(1)).groups;
+  expect(ownerGroups).toEqual([
+    { tier: 'unit', files: [unitFile] },
+    { tier: 'owner', files: [ownerFile] },
+  ]);
+  expect(testArgs('unit', undefined, { files: ownerGroups![0]!.files })).toEqual([unitFile]);
+  expect(() => testArgs('unit', undefined, { files: [ownerFile] })).toThrow('not registered');
+  expect(testArgs('owner', undefined, { files: ownerGroups![1]!.files })).toEqual([ownerFile]);
+
+  const integrationFile = 'tests/qa/integration/shared-stack.test.ts';
+  const faultFile = 'tests/qa/fault-recovery/lost-response.test.ts';
+  const integrationAndFault = selectTestGroups([faultFile, integrationFile]);
+  expect(integrationAndFault.map(group => group.tier)).toEqual(['integration', 'fault/recovery']);
+  expect(integrationAndFault.map(group => group.files)).toEqual([[integrationFile], [faultFile]]);
+  const stackCommand = selectTestCommand([faultFile, integrationFile]);
+  const stackGroups = parseArgs(stackCommand[1].slice(1)).groups;
+  expect(stackGroups?.map(group => group.tier)).toEqual(['integration', 'fault/recovery']);
+  expect(testArgs('integration', undefined, { files: stackGroups![0]!.files })).toEqual([integrationFile]);
+  expect(() => testArgs('integration', undefined, { files: [faultFile] })).toThrow('not registered');
+  expect(testArgs('fault/recovery', undefined, { files: stackGroups![1]!.files })).toEqual([faultFile]);
+  expect(() => testArgs('fault/recovery', undefined, { files: [integrationFile] })).toThrow('not registered');
+});
+
+test('a Bun file outside a tier keeps its own command and any group failure fails the run', async () => {
+  const logs: string[] = [];
+  const original = console.log;
+  console.log = (message?: unknown) => { logs.push(String(message)); };
+  const launches: [string, string[]][] = [];
+  try {
+    const code = await dispatchTest([
+      'apps/about/tests/build.test.ts',
+      'scripts/dev/seed/api.test.ts',
+    ], { runner: async command => { launches.push(command); return launches.length === 1 ? 0 : 3; } });
+    expect(code).toBe(1);
+  } finally { console.log = original; }
+  expect(launches.map(command => command[1][0])).toEqual(['test', 'scripts/qa/cli.ts']);
+  expect(launches[1]![1]).toContain('--tier');
+  expect(launches[1]![1]).toContain('owner');
+  expect(launches[0]![1]).toContain('apps/about/tests/build.test.ts');
+  expect(launches[0]![1]).not.toContain('scripts/dev/seed/api.test.ts');
+  expect(logs.join('\n')).toContain('bun: no run id passed');
+  expect(logs.join('\n')).toContain('owner: no run id failed');
+});
 
 test('owner file selection accepts Bun TSX tests', () => {
   expect(parseArgs(['--tier', 'owner', '--file', 'packages/document/tests/checker.test.tsx']).files)

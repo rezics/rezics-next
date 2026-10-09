@@ -14,6 +14,7 @@ import {
   estimatedDurations,
   expandTestPaths,
   faultRecoveryBaselineDurations,
+  formatTierRunLine,
   goalSlotDirectory,
   implementedTiers,
   isolationCandidates,
@@ -99,8 +100,17 @@ const backendSelection = options.backend ? selectBackendCases(inventory) : undef
 const cases = backendSelection?.cases ?? inventory;
 const caseCoverage = declaredCaseCoverage(cases, options.backend ? 'backend' : 'all');
 const selection = options.onlyFailed ? failedSelection(join(root, '.artifacts', 'qa'), options.onlyFailed) : undefined;
-const selected = selection?.tiers ?? (options.tier ? [options.tier] : options.backend ? backendTiers : implementedTiers);
-const chosen = options.files || options.id ? options : undefined;
+// Explicit tiers keep the files named for them. An owner file stays out of the unit
+// command, and each stack tier starts only its own projects.
+const tierGroups = options.groups ?? (options.tier ? [{ tier: options.tier,
+  ...(options.files ? { files: options.files } : {}), ...(options.id ? { id: options.id } : {}) }] : undefined);
+const selected = selection?.tiers ?? (tierGroups ? tierGroups.map(group => group.tier)
+  : options.backend ? backendTiers : implementedTiers);
+function chosenFor(tier: Tier): { files?: string[]; id?: string } | undefined {
+  const group = tierGroups?.find(item => item.tier === tier);
+  if (!group || (!group.files?.length && !group.id)) return undefined;
+  return { files: group.files, id: group.id };
+}
 const runDeadline = qaMemoryDeadline(process.env, Date.now() + 6 * 3_600_000);
 process.env.REZICS_QA_MEMORY_DEADLINE = String(runDeadline);
 process.env.REZICS_STACK_PROFILE = 'qa';
@@ -266,7 +276,7 @@ async function startRunStack(args: string[], budget: number, env: NodeJS.Process
     (environment, onLine) => runQaStartupChildAsync(root, args, budget, environment, onLine), reserve);
 }
 
-const release = options.tier || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
+const release = options.tier || options.groups || options.onlyFailed ? () => {} : acquireFullLock(root, runId);
 
 function campaignEvidenceRead(projectRunId: string, sample: CommandPhaseSample): CampaignEvidenceRead {
   const evidencePath = join(directory, 'erasure-campaign-qualification.json');
@@ -695,7 +705,7 @@ function testWall(runs: ShardRun[]): number {
 // order-dependent, and the fresh result replaces the shared-project result.
 async function runStackTier(tier: StackTier): Promise<void> {
   const artifact = tierArtifactName(tier);
-  const { paths, flags } = splitTestArgs(testArgs(tier, selection, chosen));
+  const { paths, flags } = splitTestArgs(testArgs(tier, selection, chosenFor(tier)));
   // Only the explicitly selected exclusive drill times both 600-second commands.
   // Routine tier selections retain their existing wall and command deadlines.
   const exclusiveRecovery = tier === 'fault/recovery' && paths.length === 1
@@ -886,8 +896,8 @@ try {
         'bun',
         [
           'test',
-          ...testArgs(tier, selection, chosen),
-          ...(tier === 'unit' && !selection && !chosen ? unitHarnessFiles : []),
+          ...testArgs(tier, selection, chosenFor(tier)),
+          ...(tier === 'unit' && !selection && !chosenFor(tier) ? unitHarnessFiles : []),
           '--reporter=junit',
           `--reporter-outfile=${join(directory, `${tier}.xml`)}`,
         ],
@@ -906,7 +916,7 @@ try {
       }
       const stackDir = join(root, '.temp', 'stack', `rezics-qa-${projectRunId}`);
       const compose = readEnv(join(stackDir, 'compose.env'));
-      const result = await commandAsync(root, 'bun', ['test', ...testArgs('model', selection, chosen), '--reporter=junit',
+      const result = await commandAsync(root, 'bun', ['test', ...testArgs('model', selection, chosenFor('model')), '--reporter=junit',
         `--reporter-outfile=${join(directory, 'model.xml')}`], 180_000,
       { ...process.env, FUSEKI_URL: `http://127.0.0.1:${compose.FUSEKI_PORT}/rezics/`,
         FUSEKI_MAINTENANCE_TOKEN: compose.FUSEKI_MAINTENANCE_TOKEN,
@@ -959,7 +969,7 @@ try {
           writeFileSync(join(directory, 'e2e.xml'), xmlForCommand(tier, false, webAuth.elapsedMs, webAuth.output));
           continue;
         }
-        const args = e2eArgs(selection, chosen);
+        const args = e2eArgs(selection, chosenFor('e2e'));
         const plan = e2eBrowserPlan(args, options.storybook === true);
         const counts = browserFileCounts(root, args);
         const budgets = browserBudgets(counts.playwright, counts.storybook, browserProjectCount(), {
@@ -1004,8 +1014,8 @@ try {
         LOAD_PREPARATION_BUDGET_MS - (Date.now() - preparationStarted
           - admissionIntervalMs(admissionIntervals, preparationStarted, Date.now())));
       const selectedFiles = expandTestPaths(root,
-        splitTestArgs(testArgs(tier, selection, chosen)).paths);
-      const fixturePlan = loadFixturePlan(runId, selectedFiles, chosen?.id);
+        splitTestArgs(testArgs(tier, selection, chosenFor(tier))).paths);
+      const fixturePlan = loadFixturePlan(runId, selectedFiles, chosenFor(tier)?.id);
       startedProjects.push(projectRunId);
       const up = await startRunStack(['stack:up', '--profile', 'qa', '--run-id', projectRunId], 180_000);
       if (!up.ok) { errors.push(`${tier} stack startup failed`); writeFileSync(join(logs, `${artifact}-stack.log`), up.output); tiers.push({ name: tier, status: 'failed' }); writeFileSync(join(directory, `${artifact}.xml`), xmlForCommand(tier, false, up.elapsedMs, up.output)); continue; }
@@ -1042,7 +1052,7 @@ try {
       }
       // docs/testing/test-harness.md#tiers-and-budgets: 5 min since the phase D probes.
       const budget = 300_000;
-      const result = await commandAsync(root, 'bun', ['test', ...testArgs(tier, selection, chosen), '--reporter=junit',
+      const result = await commandAsync(root, 'bun', ['test', ...testArgs(tier, selection, chosenFor(tier)), '--reporter=junit',
         `--reporter-outfile=${join(directory, `${artifact}.xml`)}`], budget,
       { ...process.env, ...staged.apps, REZICS_QA_RUN_ID: projectRunId,
         REZICS_S3_GATE_PROJECT: projectRunId,
@@ -1104,7 +1114,7 @@ try {
       }
     }
     writeSummary(directory, { runId, sourceBefore, sourceAfter, tiers, isolation,
-      partial: Boolean(options.tier || selection || options.files || options.id), errors, cases, tests,
+      partial: Boolean(options.tier || options.groups || selection || options.files || options.id), errors, cases, tests,
       diagnosticOf: selection?.sourceRunId, retiredTests: selection?.retiredTests, caseCoverage,
       scope: options.backend ? 'backend' : 'all', excludedCases: backendSelection?.excluded,
       inventoryFingerprint: backendSelection?.inventoryFingerprint });
@@ -1122,7 +1132,11 @@ try {
     runSlots?.release();
     release();
   }
-  console.log(readFileSync(join(directory, 'summary.md'), 'utf8'));
-  console.log(`QA artifacts: ${directory}`);
+    console.log(readFileSync(join(directory, 'summary.md'), 'utf8'));
+    console.log(`QA artifacts: ${directory}`);
+    if ((options.groups?.length ?? 0) > 1) {
+      console.log(selected.map(name => formatTierRunLine(name, runId,
+        tiers.find(tier => tier.name === name)?.status ?? 'failed')).join('\n'));
+    }
   if (errors.length) process.exitCode = 1;
 }

@@ -251,6 +251,25 @@ test('QA02: load is an implemented isolated tier', () => {
   expect(tierArtifactName('load')).toBe('load');
 });
 
+test('several explicit tiers keep their own files in tier order', () => {
+  expect(parseArgs([
+    '--tier', 'fault/recovery', '--file', 'tests/qa/fault-recovery/lost-response.test.ts',
+    '--tier', 'integration', '--file', 'tests/qa/integration/shared-stack.test.ts',
+  ]).groups).toEqual([
+    { tier: 'integration', files: ['tests/qa/integration/shared-stack.test.ts'] },
+    { tier: 'fault/recovery', files: ['tests/qa/fault-recovery/lost-response.test.ts'] },
+  ]);
+  expect(parseArgs(['--tier', 'unit', '--file', 'services/main/tests/command.test.ts',
+    '--tier', 'owner', '--file', 'scripts/dev/seed/api.test.ts']).groups).toEqual([
+    { tier: 'unit', files: ['services/main/tests/command.test.ts'] },
+    { tier: 'owner', files: ['scripts/dev/seed/api.test.ts'] },
+  ]);
+  expect(() => parseArgs(['--tier', 'owner', '--file', 'scripts/dev/seed/api.test.ts',
+    '--tier', 'e2e', '--storybook'])).toThrow('--storybook requires the e2e tier');
+  expect(() => parseArgs(['--record', '--tier', 'unit', '--file', 'tests/qa/unit/acceptance.test.ts',
+    '--tier', 'owner', '--file', 'scripts/dev/seed/api.test.ts'])).toThrow('--record requires a full run');
+});
+
 test('QA02: e2e is an implemented tier without declaring acceptance coverage', () => {
   expect(implementedTiers).toContain('e2e');
   expect(parseArgs(['--tier', 'e2e'])).toEqual({ tier: 'e2e', onlyFailed: undefined,

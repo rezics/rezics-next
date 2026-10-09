@@ -58,7 +58,7 @@ partial and recovery outcomes the behaviour has. Prove your own work, nothing
 wider:
 
 ```sh
-task goal -- test <your test files>        # one QA slot; never --heavy for your own files
+task goal -- test <your test files>        # one QA slot, including files from several tiers; never --heavy for your own files
 task <workspace>:typecheck                 # waits for host memory on a local Goal run
 node_modules/.bin/oxlint --type-aware <changed directories>
 task ast-grep -- scan <changed files>
