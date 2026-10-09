@@ -1,8 +1,10 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { context, trace } from '@opentelemetry/api';
 import { Pool, type PoolClient, type PoolConfig } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
+import { currentWorkerTick } from '../worker-tick.ts';
 
 /**
  * Session defaults for every request-serving PostgreSQL pool. Request paths
@@ -48,12 +50,23 @@ const REPOSITORY_ROOT = resolve(import.meta.dir, '../../../..');
 const CHECKOUT_SITE = /^([A-Za-z0-9_./:-]+):(\d{1,7})(?: ([A-Za-z_$][A-Za-z0-9_$.#]*))?$/;
 const CHECKOUT_FRAME = /^\s*at (?:async )?(.+)$/;
 const POOL_IDENTITY = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+const CHECKOUT_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+/** Same shape as a worker tick name: a short label, never a payload. */
+const CHECKOUT_TICK = /^[A-Za-z][\w.:-]{0,80}$/;
+/** OpenTelemetry trace id. The all-zero id is the inactive span, not a request. */
+const CHECKOUT_REQUEST = /^[0-9a-f]{32}$/;
 
 export interface NestedPoolCheckoutDetail {
   outers?: readonly string[];
   inner?: string;
   pool?: string;
   repeats?: number;
+  /** When the nested checkout was observed, UTC. */
+  at?: string;
+  /** Worker tick that held or requested the connection, when one is running. */
+  tick?: string;
+  /** Active request trace id, when a request span is in scope. */
+  request?: string;
 }
 
 /** The caller already holds a client from this pool and asked for another. */
@@ -62,6 +75,9 @@ export class NestedPoolCheckoutError extends Error {
   readonly inner: string;
   readonly pool?: string;
   readonly repeats?: number;
+  readonly at?: string;
+  readonly tick?: string;
+  readonly request?: string;
 
   constructor(detail: NestedPoolCheckoutDetail = {}) {
     super('Nested PostgreSQL pool checkout');
@@ -72,6 +88,10 @@ export class NestedPoolCheckoutError extends Error {
     if (typeof detail.repeats === 'number' && Number.isFinite(detail.repeats) && detail.repeats > 0) {
       this.repeats = Math.trunc(detail.repeats);
     }
+    if (detail.at !== undefined && CHECKOUT_AT.test(detail.at)) this.at = detail.at;
+    if (detail.tick !== undefined && CHECKOUT_TICK.test(detail.tick)) this.tick = detail.tick;
+    if (detail.request !== undefined && CHECKOUT_REQUEST.test(detail.request)
+      && detail.request !== '0'.repeat(32)) this.request = detail.request;
   }
 }
 
@@ -190,11 +210,23 @@ function databaseName(connectionString: string): string | undefined {
   }
 }
 
+/** The request's trace id when a span is active. Absent outside a request. */
+function activeRequestTrace(): string | undefined {
+  const traceId = trace.getSpan(context.active())?.spanContext().traceId;
+  if (!traceId || !CHECKOUT_REQUEST.test(traceId) || traceId === '0'.repeat(32)) return undefined;
+  return traceId;
+}
+
 function nestedCheckoutError(pool: Pool, holds: readonly CheckoutHold[]): NestedPoolCheckoutError {
+  const tick = currentWorkerTick();
+  const request = activeRequestTrace();
   return new NestedPoolCheckoutError({
     outers: holds.slice(0, CHECKOUT_OUTER_LIMIT).map(hold => formatCheckoutOrigin(hold.origin)),
     inner: formatCheckoutOrigin(captureCheckoutOrigin()),
     pool: poolIdentity(pool),
+    at: new Date().toISOString(),
+    ...(tick ? { tick } : {}),
+    ...(request ? { request } : {}),
   });
 }
 
@@ -215,6 +247,7 @@ function logReportedCheckout(error: NestedPoolCheckoutError): void {
   logWorkerFault('main.database.nested-checkout', repeats > 0
     ? new NestedPoolCheckoutError({
       outers: error.outers, inner: error.inner, pool: error.pool, repeats,
+      at: error.at, tick: error.tick, request: error.request,
     })
     : error);
 }

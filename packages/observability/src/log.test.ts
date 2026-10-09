@@ -154,6 +154,43 @@ test('a nested checkout fault keeps bounded caller locations and drops query tex
   expect(dropped).not.toContain('SELECT');
 });
 
+test('a nested checkout fault names its worker tick and drops a tick that is data', async () => {
+  class NestedPoolCheckoutError extends Error {
+    constructor(fields: { inner?: string; tick?: string }) {
+      super('Nested PostgreSQL pool checkout');
+      this.name = 'NestedPoolCheckoutError';
+      Object.assign(this, fields);
+    }
+  }
+  const [named, dropped] = await capture(() => {
+    logWorkerFault('main.database.nested-checkout', new NestedPoolCheckoutError({
+      inner: 'services/main/src/infrastructure/pg-pool.ts:88 controlTransaction',
+      tick: 'main.template.recovery',
+    }));
+    logWorkerFault('main.database.nested-checkout', new NestedPoolCheckoutError({
+      inner: 'services/main/src/infrastructure/pg-pool.ts:88 controlTransaction',
+      tick: "SELECT 'reader@example.com'",
+    }));
+  });
+  expect(JSON.parse(named!)).toEqual({
+    level: 'error',
+    event: 'worker_fault',
+    'rezics.worker.name': 'main.database.nested-checkout',
+    'error.class': 'NestedPoolCheckoutError',
+    'rezics.checkout.inner': 'services/main/src/infrastructure/pg-pool.ts:88 controlTransaction',
+    'rezics.checkout.tick': 'main.template.recovery',
+  });
+  expect(JSON.parse(dropped!)).toEqual({
+    level: 'error',
+    event: 'worker_fault',
+    'rezics.worker.name': 'main.database.nested-checkout',
+    'error.class': 'NestedPoolCheckoutError',
+    'rezics.checkout.inner': 'services/main/src/infrastructure/pg-pool.ts:88 controlTransaction',
+  });
+  expect(dropped).not.toContain('SELECT');
+  expect(dropped).not.toContain('reader@example.com');
+});
+
 test('an unbounded class, code, or count is omitted', async () => {
   const [line] = await capture(() => telemetryLog('worker_fault', 'error', {
     'error.class': 'reader@example.com',

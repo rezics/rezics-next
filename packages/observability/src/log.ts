@@ -33,6 +33,7 @@ const allowed = new Set([
   'rezics.checkout.inner',
   'rezics.checkout.pool',
   'rezics.checkout.repeats',
+  'rezics.checkout.tick',
 ]);
 const counts = new Set([
   'rezics.backfill.examined',
@@ -45,6 +46,8 @@ const workerName = /^[a-z][a-z0-9._-]{0,63}$/;
 /** Repository-relative caller `path:line` and an optional function name. */
 const checkoutOrigin = /^[A-Za-z0-9_./:-]+:\d{1,7}(?: [A-Za-z_$][A-Za-z0-9_$.#]*)?$/;
 const checkoutPool = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
+/** A worker tick name. Same bound as the tick runner: a short label, never a payload. */
+const checkoutTick = /^[A-Za-z][\w.:-]{0,80}$/;
 const emailAddress = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i;
 const personOrAgentIri =
   /https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|urn:rezics:agent:/i;
@@ -83,6 +86,12 @@ function publicAttributes(attributes: Attributes): Attributes {
     }
     if (key === 'rezics.checkout.repeats') {
       if (typeof value === 'number' && Number.isFinite(value) && value > 0) result[key] = Math.trunc(value);
+      continue;
+    }
+    if (key === 'rezics.checkout.tick') {
+      if (typeof value === 'string' && checkoutTick.test(value) && !logLineCarriesPersonalData(value)) {
+        result[key] = value;
+      }
       continue;
     }
     if (counts.has(key)) {
@@ -147,7 +156,9 @@ export function logWorkerFault(worker: string, error: unknown): void {
 
 function checkoutAttributes(error: unknown): Attributes {
   if (!(error instanceof Error) || error.name !== 'NestedPoolCheckoutError') return {};
-  const fields = error as Error & { outers?: unknown; inner?: unknown; pool?: unknown; repeats?: unknown };
+  const fields = error as Error & {
+    outers?: unknown; inner?: unknown; pool?: unknown; repeats?: unknown; tick?: unknown;
+  };
   const attributes: Attributes = {};
   if (Array.isArray(fields.outers)) {
     const outers = fields.outers.filter((item): item is string => typeof item === 'string');
@@ -156,6 +167,7 @@ function checkoutAttributes(error: unknown): Attributes {
   if (typeof fields.inner === 'string' && fields.inner !== '') attributes['rezics.checkout.inner'] = fields.inner;
   if (typeof fields.pool === 'string') attributes['rezics.checkout.pool'] = fields.pool;
   if (typeof fields.repeats === 'number') attributes['rezics.checkout.repeats'] = fields.repeats;
+  if (typeof fields.tick === 'string') attributes['rezics.checkout.tick'] = fields.tick;
   return attributes;
 }
 

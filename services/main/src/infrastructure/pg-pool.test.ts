@@ -1,7 +1,10 @@
 import { expect, spyOn, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { context, ROOT_CONTEXT, trace } from '@opentelemetry/api';
+import { AsyncLocalStorageContextManager } from '@opentelemetry/context-async-hooks';
 import { Pool, type PoolClient, type PoolConfig } from 'pg';
+import { currentWorkerTick, runWorkerTick } from '../worker-tick.ts';
 import {
   boundedPool, CONNECTION_BOUNDS, CONNECTION_CHECKOUT_WAIT_MS, connectionBoundOptions,
   NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedCheckoutReportClock,
@@ -188,6 +191,12 @@ test('nested checkout fields stay inside their bounds and reject query text', ()
   ]);
   expect(error.inner).toBe('unknown');
   expect(error.pool).toBeUndefined();
+  const unlabeled = new NestedPoolCheckoutError({
+    at: 'yesterday', tick: querySecret, request: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001',
+  });
+  expect(unlabeled.at).toBeUndefined();
+  expect(unlabeled.tick).toBeUndefined();
+  expect(unlabeled.request).toBeUndefined();
   expectBounded(error);
   const rendered = JSON.stringify(error);
   expect(rendered).not.toContain('nested_checkout_secret_value');
@@ -385,6 +394,78 @@ test('the oldest three holders are named when more than three checkouts nest', a
       }
     }
   } finally {
+    setNestedPoolCheckoutMode(previous);
+    setNestedCheckoutReportClock();
+  }
+});
+
+test('a nested checkout names the worker tick and the request trace that held the pool', async () => {
+  const previous = nestedPoolCheckoutMode();
+  setNestedCheckoutReportClock();
+  setNestedPoolCheckoutMode('throw');
+  const manager = new AsyncLocalStorageContextManager();
+  expect(context.setGlobalContextManager(manager)).toBe(true);
+  const traceId = 'ab'.repeat(16);
+  try {
+    await withMockedPool({ connectionString: 'postgres://u@127.0.0.1:1/access' }, async (pool) => {
+      const outside = await runWorkerTick('main.template.recovery', async () => {
+        expect(currentWorkerTick()).toBe('main.template.recovery');
+        const held = await pool.connect();
+        try {
+          return await pool.connect().then(() => undefined, (error: unknown) => error);
+        } finally { held.release(); }
+      });
+      expect(outside).toBeInstanceOf(NestedPoolCheckoutError);
+      const duringTick = outside as NestedPoolCheckoutError;
+      expect(duringTick.tick).toBe('main.template.recovery');
+      expect(duringTick.at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      expect(duringTick.request).toBeUndefined();
+
+      const idle = await pool.connect();
+      idle.release();
+      const held = await pool.connect();
+      try {
+        const bare = await pool.connect().then(() => undefined, (error: unknown) => error);
+        expect(bare).toBeInstanceOf(NestedPoolCheckoutError);
+        expect((bare as NestedPoolCheckoutError).tick).toBeUndefined();
+        expect((bare as NestedPoolCheckoutError).request).toBeUndefined();
+        expect((bare as NestedPoolCheckoutError).at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      } finally { held.release(); }
+
+      await context.with(trace.setSpanContext(ROOT_CONTEXT, {
+        traceId, spanId: 'cd'.repeat(8), traceFlags: 1,
+      }), async () => {
+        const outer = await pool.connect();
+        try {
+          const requested = await pool.connect().then(() => undefined, (error: unknown) => error);
+          expect(requested).toBeInstanceOf(NestedPoolCheckoutError);
+          expect((requested as NestedPoolCheckoutError).request).toBe(traceId);
+          expect((requested as NestedPoolCheckoutError).tick).toBeUndefined();
+        } finally { outer.release(); }
+      });
+
+      setNestedPoolCheckoutMode('log');
+      const logged = await captureErrors(async () => {
+        await runWorkerTick('main.template.recovery', async () => {
+          const held = await pool.connect();
+          try { await pool.connect(); } finally { held.release(); }
+        });
+        await context.with(trace.setSpanContext(ROOT_CONTEXT, {
+          traceId, spanId: 'cd'.repeat(8), traceFlags: 1,
+        }), async () => {
+          const held = await pool.connect();
+          try { await pool.connect(); } finally { held.release(); }
+        });
+      });
+      const faults = logged.map(line => JSON.parse(line) as {
+        trace_id?: string; 'rezics.checkout.tick'?: string;
+      });
+      expect(faults).toContainEqual(expect.objectContaining({ 'rezics.checkout.tick': 'main.template.recovery' }));
+      expect(faults).toContainEqual(expect.objectContaining({ trace_id: traceId }));
+      expect(faults.every(fault => !('request' in fault) && !('at' in fault) && !('time' in fault))).toBe(true);
+    });
+  } finally {
+    context.disable();
     setNestedPoolCheckoutMode(previous);
     setNestedCheckoutReportClock();
   }
