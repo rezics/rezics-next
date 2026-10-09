@@ -19,5 +19,7 @@ export function browserMainApi(
     // A public reader without an eligible Agent must not send an authenticated
     // request with no actingSubject (Main rejects that ambiguous authority).
     fetch: { credentials: anonymous ? 'omit' : 'same-origin' },
+    // Date-shaped JSON stays text. A literal's lexical form is the string Main recorded.
+    parseDate: false,
   });
 }

@@ -84,6 +84,8 @@ export function mainApiWithToken(accessToken: string | undefined) {
       return result;
     },
     fetch: { cache: 'no-store' },
+    // Date-shaped JSON stays text. A literal's lexical form is the string Main recorded.
+    parseDate: false,
     fetcher: ((input, init) =>
       serverRead(input, init, {
         idempotentRead: mainBodyRead(
