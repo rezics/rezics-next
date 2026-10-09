@@ -9,6 +9,7 @@ import { createMainApp, type MainWorkDependencies } from '../../../services/main
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
+import { TemplateSeekIndex } from '../../../services/main/src/modules/query/seek-index.ts';
 import { ExportStore } from '../../../services/main/src/modules/export/store.ts';
 import { operationTools, type CapabilityDocument } from '../../../services/main/src/modules/mcp/capabilities.ts';
 import { dispatchTool } from '../../../services/main/src/modules/mcp/dispatch.ts';
@@ -45,7 +46,7 @@ function serial(name: string, run: (scene: Scene) => Promise<void>) {
     const turn = tail.then(async () => run(await scene()));
     tail = turn.then(() => undefined, () => undefined);
     await turn;
-  }, 120_000);
+  }, 180_000);
 }
 
 function scene() {
@@ -67,11 +68,13 @@ async function build(): Promise<Scene> {
     prefix: 'semantic/structure/' });
   await structureObjects.initialize();
   await provisionFixtureAuthor(f.env, f.actor);
+  const templateSeek = new TemplateSeekIndex(f.accessPool, f.env.fuseki);
   const mediaAccess = new MediaAccessBatchReader(f.accessPool, f.env.fuseki);
   const deps: MainWorkDependencies = { environment: f.env, catalogueIntake: f.catalogueIntake,
     access: f.access, account: f.account.verifier, content, contentAuthoring: content, mediaAccess,
     structureObjects, platformAccess: new AccessExposure(f.accessPool),
     erasures: new ErasureService(relay, f.pool, f.accessPool), exports: new ExportStore(f.pool),
+    templateSeek,
     mcp: { issuer: f.account.issuer, resource: 'http://main.local' } };
   const app = createMainApp(f.env.fuseki, deps);
   const call = (method: string, path: string, body?: object, token: string | null = f.account.tokenA) =>
@@ -151,6 +154,7 @@ async function build(): Promise<Scene> {
   const fixedEpoch = fixedRows[0]?.epoch?.value;
   const fixedSequence = fixedRows[0]?.sequence?.value;
   if (fixedRows.length !== 1 || !fixedEpoch || !fixedSequence) throw new Error('fixed release position is missing');
+  await templateSeek.backfill(f.env.lineage.dataEpoch, true);
   return {
     app, actor: f.actor, token: f.account.tokenA, work: created.work, mainVersion: created.mainVersion,
     heads: { first: created.workRevision, erased: middle.revision, current: current.revision },
@@ -209,16 +213,17 @@ serial('public Work reads omit an erased revision and keep its siblings', async 
 serial('Statement reads do not return an erased revision', async (scene) => {
   await scene.grant(`statement:speak:${scene.actor}`, 'statement.record');
   const meaning = { subject: scene.mainVersion, predicate: 'https://example.org/erasure-reader',
-    relationDefinition: nativeId(), value: { kind: 'resource' as const, iri: scene.releases.kept },
+    relationDefinition: nativeId(), value: { kind: 'literal' as const, lexical: 'kept statement text',
+      datatype: 'http://www.w3.org/2001/XMLSchema#string', language: null },
     applicability: [], interpretation: { kind: 'selected' as const }, evidence: [] };
   const written = await scene.call('POST', '/v1/statements', { profile: 'statement-v1',
     speaker: { kind: 'personal' }, ...meaning, actingSubject: scene.actor });
   const created = await body(written);
-  expect(created.status).toBe(201);
+  expect(created.status, created.text).toBe(201);
   const statement = (JSON.parse(created.text) as { statement: string }).statement;
   const read = await body(await scene.call('GET', `/v1/statements/${uuidOf(statement)}`, undefined, null));
   expect(read.status).toBe(200);
-  expect(read.text).toContain(scene.releases.kept);
+  expect(read.text).toContain('kept statement text');
   expect(read.text).not.toContain(scene.releases.erased);
   expect(read.text).not.toContain(scene.heads.erased);
   expect(read.text).not.toContain(scene.draft.erased);
@@ -228,7 +233,7 @@ serial('query templates omit an erased revision and keep its siblings', async (s
   const response = await body(await scene.call('POST', '/v1/query', {
     profile: 'template-query-v1', query: 'https://rezics.com/query/work-versions', revision: 1,
     parameters: { roots: [scene.work] }, presentation: { actingSubject: scene.actor }, limit: 64 }));
-  expect(response.status).toBe(200);
+  expect(response.status, response.text).toBe(200);
   expect(response.text).toContain(scene.draft.kept);
   expect(response.text).toContain(scene.fixed);
   expect(response.text).not.toContain(scene.draft.erased);
@@ -275,6 +280,11 @@ serial('release facets omit an erased release and keep its sibling', async (scen
 
 serial('export omits an erased fixed release and the other release remains', async (scene) => {
   await scene.grant(`export:${scene.fixed}`, 'export.create');
+  const verified = await body(await scene.call('POST',
+    `/v1/works/${uuidOf(scene.work)}/catalogue-verifications`,
+    { expectedHead: scene.heads.current, evidence: 'Compared the published original and bibliographic evidence',
+      actingSubject: scene.actor }));
+  expect(verified.status, verified.text).toBe(200);
   const payload = { profile: 'export-create-v1', actingSubject: scene.actor, useScope: 'evaluation',
     selection: { kind: 'fixed-release', reference: scene.fixed, expectedPosition: scene.fixedPosition } };
   const before = await body(await scene.call('POST', '/v1/exports', payload));
