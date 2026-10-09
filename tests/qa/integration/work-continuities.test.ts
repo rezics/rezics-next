@@ -158,6 +158,10 @@ test('more hidden memberships than the scan budget return a bounded frame subset
     ${Array.from({ length: count }, () => `${iri(id())} a rv:RelationOccurrence ; rv:occurrenceHead ${iri(head)} .`).join('\n')}
   } }`);
   await join(crowded, publicRef);
+  // A framed statement read refuses a seek index behind the graph. The membership
+  // scan under test starts only after that index has caught this Work's writes.
+  while (await stack.statementSeek.projectOnce()) { /* bounded outbox batches */ }
+  if (!(await stack.statementSeek.coverage())?.complete) await stack.statementSeek.rebuild();
   const query = stack.fuseki.query.bind(stack.fuseki);
   let scans = 0;
   stack.fuseki.query = async (sparql, maximum) => {
@@ -165,8 +169,7 @@ test('more hidden memberships than the scan budget return a bounded frame subset
     return query(sparql, maximum);
   };
   try {
-    const framed = await outsider.read(`/v1/resources/${short(subject)}/statements?frame=${encodeURIComponent(crowded)}`);
-    expect(framed.status).toBe(200); await framed.text();
+    await json(await outsider.read(`/v1/resources/${short(subject)}/statements?frame=${encodeURIComponent(crowded)}`));
     expect(scans).toBe(FRAME_READ_COST.membershipScans);
     scans = 0;
     const page = await json<Page>(await outsider.read(path(crowded)));
