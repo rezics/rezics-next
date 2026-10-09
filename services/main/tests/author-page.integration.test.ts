@@ -11,7 +11,7 @@ import { AuthorReaders } from '../src/modules/author-page/readers.ts';
 import { SourceAuthorNameStore } from '../src/modules/source/author-name.ts';
 import { SourceIntakeStore } from '../src/modules/source/intake.ts';
 import { GRAPHS, RV, iri } from '../src/modules/work/activate.ts';
-import { authorCreditTriples } from '../src/modules/work/author-credit.ts';
+import { adoptAuthorCredit } from '../src/modules/work/author-credit.ts';
 import { mainSelectionDigest, selectMainDefault } from '../src/modules/work/select-main.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -65,11 +65,15 @@ test('G-382 Open Library author pages list public credited Works with projected 
       expect(response.headers.get('cache-control')).toContain('no-store');
       return JSON.parse(text) as T;
     };
-    const credit = async (work: string, author: string, ordinal: number) => {
-      const triples = authorCreditTriples({ work, credit: id(), revision: id(), expectedHead: id(), sourceKey: author,
-        sourceRoleKey: null, nativeOrdinal: ordinal, actingSubject: writer.actor }, stack.env.lineage.dataEpoch, '1');
-      await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> INSERT DATA {
-        GRAPH ${iri(GRAPHS.current)} { ${triples.current} } GRAPH ${iri(GRAPHS.revisions)} { ${triples.revision} } }`);
+    const credit = async (work: string, authorKey: string, ordinal: number) => {
+      await writer.grant(`work:edit:${work}`, 'work.edit');
+      const head = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ?head } }`)).results!.bindings[0]!.head!.value;
+      await adoptAuthorCredit(stack.env, { verify: async () => writer.principal }, stack.access,
+        new Request('http://main.local/credits', { headers: { authorization: `Bearer ${writer.token}` } }), {
+          work, credit: id(), revision: id(), expectedHead: head, sourceKey: authorKey,
+          sourceRoleKey: null, nativeOrdinal: ordinal, actingSubject: writer.actor,
+        }, id(), randomUUID());
     };
 
     // No public Work credits an author yet, whatever Open Library knows; an ID that is not one is invalid.
