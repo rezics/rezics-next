@@ -1,11 +1,10 @@
-import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { readVerified, sha256, writeVerified } from '../lib/paced-fetch.ts';
 
 export const repository = resolve(import.meta.dir, '../..');
-export const sha256 = (bytes: string | Uint8Array) =>
-  createHash('sha256').update(bytes).digest('hex');
+export { sha256 };
 export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value && typeof value === 'object')
@@ -42,16 +41,9 @@ export function blobPath(root: string, digest: string): string {
 }
 
 export function verifiedBlob(root: string, digest: string): Buffer {
-  const bytes = readFileSync(blobPath(root, digest));
-  if (sha256(bytes) !== digest) throw new Error(`Dataset blob is corrupt: ${digest}`);
-  return bytes;
+  return readVerified(blobPath(root, digest), digest);
 }
 
 export function putBlob(root: string, bytes: Uint8Array): string {
-  const digest = sha256(bytes),
-    path = blobPath(root, digest);
-  mkdirSync(dirname(path), { recursive: true });
-  if (existsSync(path)) verifiedBlob(root, digest);
-  else writeFileSync(path, bytes, { flag: 'wx' });
-  return digest;
+  return writeVerified(blobPath(root, sha256(bytes)), bytes);
 }

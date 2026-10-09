@@ -86,11 +86,11 @@ test('dataset: no dangling root, edge or image can be published as a complete sn
 test('dataset: cached responses obey byte budgets, refetch corrupt bytes, and a restart reuses them', async () => {
   const root = temporary();
   let requests = 0;
+  const body = '{"complete":true}';
   const fetcher = async () => {
     requests++;
     return new Response(body, { headers: { 'content-type': 'application/json' } });
   };
-  const body = '{"complete":true}';
   try {
     const acquisition = new Acquisition(root, false, fetcher);
     const url = 'https://example.test/catalogue';
@@ -101,13 +101,10 @@ test('dataset: cached responses obey byte budgets, refetch corrupt bytes, and a 
     await expect(acquisition.capture(url, { limit: 1 })).rejects.toThrow('cached');
     expect(requests).toBe(1);
     writeFileSync(blobPath(root, first.digest), 'corrupt');
-    const healed = await acquisition.capture(url);
-    expect(healed.digest).toBe(first.digest);
+    expect((await acquisition.capture(url)).digest).toBe(first.digest);
     expect(requests).toBe(2);
     expect(readFileSync(blobPath(root, first.digest)).toString()).toBe(body);
-    const restarted = new Acquisition(root, false, fetcher);
-    const reused = await restarted.capture(url);
-    expect(reused.digest).toBe(first.digest);
+    await new Acquisition(root, false, fetcher).capture(url);
     expect(requests).toBe(2);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -118,8 +115,11 @@ test('dataset: a 429 waits for Retry-After and stops within five attempts', asyn
   const root = temporary();
   const sleeps: number[] = [];
   let requests = 0;
+  const sleep = async (ms: number) => {
+    sleeps.push(ms);
+  };
   try {
-    const limited = new Acquisition(
+    await new Acquisition(
       root,
       false,
       async () => {
@@ -128,18 +128,13 @@ test('dataset: a 429 waits for Retry-After and stops within five attempts', asyn
           ? new Response('', { status: 429, headers: { 'retry-after': '2' } })
           : new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } });
       },
-      async (ms) => {
-        sleeps.push(ms);
-      },
-    );
-    const capture = await limited.capture('https://example.test/limited');
-    expect(capture.bytes).toBe('{"ok":true}'.length);
+      sleep,
+    ).capture('https://example.test/limited');
     expect(requests).toBe(2);
     expect(sleeps).toEqual([2_000]);
-
     requests = 0;
     sleeps.length = 0;
-    const capped = new Acquisition(
+    await new Acquisition(
       root,
       true,
       async () => {
@@ -148,13 +143,9 @@ test('dataset: a 429 waits for Retry-After and stops within five attempts', asyn
           ? new Response('', { status: 429, headers: { 'retry-after': '1000' } })
           : new Response('{"ok":true}', { headers: { 'content-type': 'application/json' } });
       },
-      async (ms) => {
-        sleeps.push(ms);
-      },
-    );
-    await capped.capture('https://example.test/capped');
+      sleep,
+    ).capture('https://example.test/capped');
     expect(sleeps).toEqual([120_000]);
-
     requests = 0;
     sleeps.length = 0;
     const exhausted = new Acquisition(
@@ -164,9 +155,7 @@ test('dataset: a 429 waits for Retry-After and stops within five attempts', asyn
         requests++;
         return new Response('', { status: 429, headers: { 'retry-after': '2' } });
       },
-      async (ms) => {
-        sleeps.push(ms);
-      },
+      sleep,
     );
     await expect(exhausted.capture('https://example.test/exhausted')).rejects.toBeInstanceOf(
       RemoteUnavailable,

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Acquisition, MissingRemote, RemoteUnavailable } from './network.ts';
-import { atomicJson, canonical, sha256, verifiedBlob } from './store.ts';
+import { atomicJson, blobPath, canonical, sha256, verifiedBlob } from './store.ts';
 import type { DatasetSnapshot, DatasetSource, StoredImage } from './types.ts';
 
 export type ImageMode = 'none' | 'covers' | 'all';
@@ -81,7 +81,7 @@ export async function freezeSnapshot(
   for (const image of selected) {
     try {
       const capture = await acquisition.capture(image.url, { limit: 16 * 1024 * 1024 });
-      if (!isImage(verifiedBlob(acquisition.root, capture.digest)))
+      if (!isImage(readFileSync(blobPath(acquisition.root, capture.digest))))
         throw new Error(`Invalid image response: ${image.url}`);
       saved.push({ ...image, missing: false, capture });
     } catch (error) {

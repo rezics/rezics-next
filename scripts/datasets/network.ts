@@ -3,16 +3,8 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync } from '
 import { dirname, join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import {
-  commitVerified,
-  CorruptBytes,
-  PaceClock,
-  pacedFetch,
-  PacedRetriesExhausted,
-  readVerified,
-  retryAfterSecondsOrHttpDate,
-} from '../lib/paced-fetch.ts';
-import { atomicJson, blobPath, canonical, sha256 } from './store.ts';
+import * as paced from '../lib/paced-fetch.ts';
+import { atomicJson, blobPath, canonical, sha256, verifiedBlob } from './store.ts';
 
 export interface Capture {
   url: string;
@@ -37,19 +29,12 @@ export class RemoteUnavailable extends Error {
   }
 }
 
-function intervalMs(host: string): number {
-  if (host === 'musicbrainz.org') return 1_100;
-  if (host === 'api.vndb.org') return 1_600;
-  if (host === 'api.bgm.tv') return 1_000;
-  return 100;
-}
-
 /** One process owns acquisition. Cached responses make interruption/restart resumable.
  * Requests and retries share each provider's limiter. A snapshot freezes captured bytes;
  * an API crawl records its acquisition interval, never claims a point-in-time dump. */
 export class Acquisition {
   readonly captures = new Map<string, Capture>();
-  private readonly clock: PaceClock;
+  private readonly clock: paced.Pace;
   constructor(
     readonly root: string,
     readonly refresh = false,
@@ -57,7 +42,7 @@ export class Acquisition {
     sleep: (ms: number) => Promise<void> = (ms) => Bun.sleep(ms),
     now: () => number = Date.now,
   ) {
-    this.clock = new PaceClock(sleep, now);
+    this.clock = paced.pace(sleep, now);
   }
 
   async capture(
@@ -70,7 +55,7 @@ export class Acquisition {
     if (!this.refresh && existsSync(path)) {
       const prior = JSON.parse(readFileSync(path, 'utf8')) as Capture;
       try {
-        const bytes = readVerified(blobPath(this.root, prior.digest), prior.digest);
+        const bytes = verifiedBlob(this.root, prior.digest);
         if (
           prior.url !== url ||
           bytes.length !== prior.bytes ||
@@ -81,32 +66,23 @@ export class Acquisition {
         this.captures.set(key, prior);
         return prior;
       } catch (error) {
-        // Corrupt bytes are not the captured object, so acquire them again.
-        if (!(error instanceof CorruptBytes)) throw error;
+        if (!(error instanceof paced.CorruptBytes)) throw error;
       }
     }
     const host = new URL(url).hostname;
-    const interval = intervalMs(host);
+    const interval =
+      { 'musicbrainz.org': 1100, 'api.vndb.org': 1600, 'api.bgm.tv': 1000 }[host] ?? 100;
+    let response: Response;
     try {
-      return await pacedFetch(
+      response = await paced.pacedFetch(
         this.clock,
+        url,
+        host,
         {
-          spacing: 'start',
           intervalMs: interval,
           maxAttempts: 5,
           retryAfterCapMs: 120_000,
-          retryStatus: (status) => status === 429 || status >= 500,
-          fallbackWaitMs: (attempt) => 1_000 * 2 ** attempt,
-          retryAfterMs: retryAfterSecondsOrHttpDate,
-          onTransport: (cause, _attempt, remaining) =>
-            remaining ? undefined : new Error(`Acquisition failed: ${url}`, { cause }),
-          retryRead: (cause, _attempt, remaining) =>
-            remaining &&
-            !(cause instanceof Error && /exceeded|digest mismatch/.test(cause.message)),
-        },
-        {
-          url,
-          paceKey: host,
+          serverErrorFrom: 500,
           timeoutMs: (options.limit ?? 0) >= 512 * 1024 * 1024 ? 600_000 : 30_000,
           init: {
             method: options.body === undefined ? 'GET' : 'POST',
@@ -119,21 +95,11 @@ export class Acquisition {
           },
         },
         this.fetcher,
-        (response) => this.storeResponse(response, url, options, key, path),
       );
     } catch (error) {
-      if (error instanceof PacedRetriesExhausted) throw new RemoteUnavailable(url, error.status);
-      throw error;
+      if (error instanceof paced.RetriesExhausted) throw new RemoteUnavailable(url, error.status);
+      throw new Error(`Acquisition failed: ${url}`, { cause: error });
     }
-  }
-
-  private async storeResponse(
-    response: Response,
-    url: string,
-    options: { limit?: number; expectedDigest?: string },
-    key: string,
-    metaPath: string,
-  ): Promise<Capture> {
     if (response.status === 404) {
       await response.body?.cancel();
       throw new MissingRemote(url);
@@ -165,7 +131,7 @@ export class Acquisition {
       const digest = hash.digest('hex');
       if (options.expectedDigest && digest !== options.expectedDigest)
         throw new Error(`Upstream digest mismatch: ${url}`);
-      commitVerified(blobPath(this.root, digest), temporary, digest);
+      paced.commitVerified(blobPath(this.root, digest), temporary, digest);
       const capture: Capture = {
         url,
         digest,
@@ -176,7 +142,7 @@ export class Acquisition {
         etag: response.headers.get('etag'),
         lastModified: response.headers.get('last-modified'),
       };
-      atomicJson(metaPath, capture);
+      atomicJson(path, capture);
       this.captures.set(key, capture);
       if (bytes > 100 * 1024 * 1024 || this.captures.size % 25 === 0)
         console.log(`Captured ${this.captures.size} responses; last ${bytes} bytes: ${url}`);
@@ -188,8 +154,6 @@ export class Acquisition {
 
   async json(url: string, body?: unknown): Promise<unknown> {
     const capture = await this.capture(url, { body });
-    return JSON.parse(
-      readVerified(blobPath(this.root, capture.digest), capture.digest).toString('utf8'),
-    );
+    return JSON.parse(readFileSync(blobPath(this.root, capture.digest)).toString('utf8'));
   }
 }

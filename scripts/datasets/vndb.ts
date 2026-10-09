@@ -1,5 +1,6 @@
+import { readFileSync } from 'node:fs';
 import type { Acquisition } from './network.ts';
-import { verifiedBlob } from './store.ts';
+import { blobPath } from './store.ts';
 import type { DatasetEdge, DatasetImage, DatasetRecord, DatasetSource } from './types.ts';
 
 export const VNDB_DUMP_URL = 'https://dl.vndb.org/dump/vndb-db-2026-10-02.tar.zst';
@@ -89,7 +90,8 @@ export function fateTitle(value: string | null): boolean {
 
 export async function fetchVndb(acquisition: Acquisition): Promise<DatasetSource> {
   const capture = await acquisition.capture(VNDB_DUMP_URL, { limit: 512 * 1024 * 1024 });
-  const dump = new VndbDump(Bun.zstdDecompressSync(verifiedBlob(acquisition.root, capture.digest)));
+  const archived = readFileSync(blobPath(acquisition.root, capture.digest));
+  const dump = new VndbDump(Bun.zstdDecompressSync(archived));
   return selectFate(dump, {
     url: capture.url,
     digest: capture.digest,
