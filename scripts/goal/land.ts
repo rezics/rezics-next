@@ -80,14 +80,11 @@ function runReviewer(program: string, args: string[], request: LandReview, promp
   }).finally(() => { closeSync(stdout); closeSync(stderr); });
 }
 
-/** Keep the review independent of worker instructions and fail closed on malformed output. */
-export async function reviewBranch(request: LandReview, engine: ReviewEngine = reviewEngine()): Promise<string[]> {
-  const schema = join(request.directory, 'schema.json');
-  const output = join(request.directory, 'review.json');
-  writeFileSync(schema, JSON.stringify({ type: 'object', additionalProperties: false,
-    properties: { findings: { type: 'array', items: { type: 'string' } } }, required: ['findings'] }));
-  const prompt = `Review this exited Goal worker's committed branch against its assigned brief.
+/** Questions the landing review asks in addition to brief compliance. */
+export function reviewPrompt(request: LandReview): string {
+  return `Review this exited Goal worker's committed branch against its assigned brief.
 Report blocking defects only: wrong behaviour, scope beyond the brief, weakened tests, or security defects.
+Which owner carries this change? Report a blocker when any new table, predicate, action or policy duplicates a mapped mechanism.
 Do not report style preferences or speculative improvements. Return {"findings":[]} if there are no blockers.
 This is a read-only review: do not edit files or run commands that mutate repository or external state.
 Inspect git diff ${request.base}..${request.head} and relevant source/tests in this worktree.
@@ -103,6 +100,15 @@ ${request.brief}
 <handoff>
 ${request.handoff}
 </handoff>`;
+}
+
+/** Keep the review independent of worker instructions and fail closed on malformed output. */
+export async function reviewBranch(request: LandReview, engine: ReviewEngine = reviewEngine()): Promise<string[]> {
+  const schema = join(request.directory, 'schema.json');
+  const output = join(request.directory, 'review.json');
+  writeFileSync(schema, JSON.stringify({ type: 'object', additionalProperties: false,
+    properties: { findings: { type: 'array', items: { type: 'string' } } }, required: ['findings'] }));
+  const prompt = reviewPrompt(request);
   let result: unknown;
   if (engine === 'sonnet') {
     // Claude Code reviews with read-only tools and no shell, so the diff travels in the prompt.

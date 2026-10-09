@@ -16,6 +16,7 @@ import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeE
 import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { land, type LandScope } from './land.ts';
+import { mechanisms } from '../static/mechanisms.ts';
 import { GoalMailStore } from './mail.ts';
 import { GoalCoordinator, claudeConfigHome, claudeNativeSession, claudeWakeArgs, nativeSession, processIdentity, tmuxServer,
   WAKE_LAST_MESSAGE, WAKE_PROMPT, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
@@ -196,6 +197,37 @@ export function validateBrief(brief: Brief): string[] {
   for (const id of brief.depends) if (!/^G-\d{3,}$/.test(id)) errors.push(`bad dependency: ${id}`);
   if (brief.worktree !== undefined && !/^[a-z][a-z0-9-]{1,40}$/.test(brief.worktree)) {
     errors.push(`worktree must be a lower-case name: ${brief.worktree}`);
+  }
+  return errors;
+}
+
+/** A brief selects each mapped concept it touches, or `none`. `new` needs the reason no owner fits. */
+export function mechanismSectionErrors(markdown: string, ids: readonly string[] = mechanisms.map(item => item.id)): string[] {
+  const heading = /^## Mechanisms[ \t]*$/m.exec(markdown);
+  if (!heading) return ['brief needs a ## Mechanisms section'];
+  const rest = markdown.slice(heading.index + heading[0].length);
+  const next = /\n## (?!#)/.exec(rest);
+  const body = next ? rest.slice(0, next.index) : rest;
+  const lines = body.split(/\r?\n/).map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+  if (!lines.length) return ['brief needs a ## Mechanisms section'];
+  if (lines.length === 1 && lines[0] === 'none') return [];
+  if (lines.includes('none')) return ['mechanism section is none or a list, not both'];
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  const known = new Set(ids);
+  for (const line of lines) {
+    const match = /^(?:-\s+)?([a-z0-9-]+):\s*(consume|configure|extend|new)(?:\s+(?:—|–|-)\s+(\S.*))?\s*$/.exec(line);
+    if (!match) {
+      errors.push(`bad mechanism line: ${line}`);
+      continue;
+    }
+    const id = match[1]!;
+    const relation = match[2]!;
+    const reason = match[3];
+    if (!known.has(id)) errors.push(`unknown mechanism: ${id}`);
+    if (seen.has(id)) errors.push(`duplicate mechanism: ${id}`);
+    seen.add(id);
+    if (relation === 'new' && !reason?.trim()) errors.push(`mechanism ${id}: new needs the reason no owner fits`);
   }
   return errors;
 }
@@ -1241,8 +1273,9 @@ function elapsed(fromIso: string): string {
 
 async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
   const absolute = resolve(briefPath);
-  const brief = parseBrief(readFileSync(absolute, 'utf8'));
-  const errors = validateBrief(brief);
+  const text = readFileSync(absolute, 'utf8');
+  const brief = parseBrief(text);
+  const errors = [...validateBrief(brief), ...mechanismSectionErrors(text)];
   if (errors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${errors.join('\n  ')}`);
   await withLedger(ledger => {
     if (ledger.tasks[brief.id]) throw new Error(`${brief.id} already exists (${ledger.tasks[brief.id]!.state}); use resume`);
@@ -4788,8 +4821,9 @@ async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
 // areas the same way; every other conflict still refuses. The new brief is copied into the worktree.
 async function reclaimTask(id: string, briefPath: string, flags: Set<string>): Promise<void> {
   const absolute = resolve(briefPath);
-  const brief = parseBrief(readFileSync(absolute, 'utf8'));
-  const errors = validateBrief(brief);
+  const text = readFileSync(absolute, 'utf8');
+  const brief = parseBrief(text);
+  const errors = [...validateBrief(brief), ...mechanismSectionErrors(text)];
   if (errors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${errors.join('\n  ')}`);
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
@@ -4942,7 +4976,8 @@ async function newBrief(args: string[]): Promise<void> {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, ['---', `id: ${id}`, `title: ${title}`, `engine: ${DEFAULT_ENGINE}`, 'effort: high', 'cases: []',
       'paths: []                             # name new files by capability, never g-NNN', 'migrations: []', 'shared: []',
-      'depends: []', '---', '', '## Outcome', '', '## Checks', ''].join('\n'));
+      'depends: []', '---', '', '## Outcome', '', '## Mechanisms', '', 'none',
+      '# <id>: consume | configure | extend | new — <why no owner fits>', '', '## Checks', ''].join('\n'));
     ledger.reserved = { ...ledger.reserved, [id]: goal };
     console.log(`${id} reserved for Goal ${goal}: ${relative(root, path)}`);
   });

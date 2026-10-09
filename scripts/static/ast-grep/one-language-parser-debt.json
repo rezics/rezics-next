@@ -1,0 +1,496 @@
+{
+  "matches": [
+    {
+      "file": "apps/web/app/[locale]/studio/[agent]/works/[work]/write/page.tsx",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/i"
+    },
+    {
+      "file": "apps/web/features/communities/name-fields.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "apps/web/features/communities/name-fields.ts",
+      "text": "Intl.getCanonicalLocales(value)"
+    },
+    {
+      "file": "apps/web/features/onboarding/languages.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "apps/web/features/onboarding/languages.ts",
+      "text": "Intl.getCanonicalLocales(trimmed)"
+    },
+    {
+      "file": "apps/web/features/search/state.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "apps/web/features/studio/actions.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/i"
+    },
+    {
+      "file": "apps/web/features/studio/details-api.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/i"
+    },
+    {
+      "file": "apps/web/features/studio/types.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{1,8}){0,4}$/i"
+    },
+    {
+      "file": "apps/web/features/studio/types.ts",
+      "text": "Intl.getCanonicalLocales(tag)"
+    },
+    {
+      "file": "apps/web/features/work-page/route.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "services/content/src/core.ts",
+      "text": "Intl.getCanonicalLocales(value)"
+    },
+    {
+      "file": "services/main/src/api-contract.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/api-contract.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/api-contract.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/api-contract.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/modules/agent/profile.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u"
+    },
+    {
+      "file": "services/main/src/modules/classification/vocabulary.ts",
+      "text": "/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/i"
+    },
+    {
+      "file": "services/main/src/modules/collection/dynamic.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/context/preferences.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/context/summary-read.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/contribution/draft.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/export/planner.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/graph-query/schema.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/u"
+    },
+    {
+      "file": "services/main/src/modules/library-import/batch.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/library/status.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/media/summary.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/profiles/read.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u"
+    },
+    {
+      "file": "services/main/src/modules/profiles/read.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/u"
+    },
+    {
+      "file": "services/main/src/modules/realm-profile/schema.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/modules/realm-profile/schema.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/modules/realm-reply/thread-contract.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/modules/realm-reply/thread-contract.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/modules/recipe/importer.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/review/store.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/saved-filter/contract.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/modules/saved-filter/contract.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/modules/search-disclosure/public-fields.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/semantic/concept-search.ts",
+      "text": "/^[a-z]{2,3}(?:-[a-z0-9]{1,8})*$/i"
+    },
+    {
+      "file": "services/main/src/modules/semantic/concept-search.ts",
+      "text": "Intl.getCanonicalLocales(language)"
+    },
+    {
+      "file": "services/main/src/modules/semantic/value.ts",
+      "text": "/^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/semantic/value.ts",
+      "text": "Intl.getCanonicalLocales(language)"
+    },
+    {
+      "file": "services/main/src/modules/source/native-work-adoption.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/statement/schema.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/structure/change.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/structure/format.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/modules/structure/format.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/modules/vote/graph.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/activate.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/history.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/history.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/history.ts",
+      "text": "/^[a-z]{2,3}(?:-[a-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/metadata-schema.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/modules/work/metadata-schema.ts",
+      "text": "Intl.getCanonicalLocales(value)"
+    },
+    {
+      "file": "services/main/src/modules/work/metadata-schema.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/modules/work/native-variants.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/read-contract.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/modules/work/read-contract.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/modules/work/reconcile-restored.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/reconcile-restored.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/search-joined.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/search-multifield.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/search-public.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/search-public.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/select-main.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/select-main.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/select-realm.ts",
+      "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/selection-heads.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/modules/work/translation-links.ts",
+      "text": "/^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$/"
+    },
+    {
+      "file": "services/main/src/routes/agents.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/agents.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/agents.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/agents.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/catalog.ts",
+      "text": "'^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/catalog.ts",
+      "text": "^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/contexts.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/contexts.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/contexts.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/contexts.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/contributions.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/contributions.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/graph-queries.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/graph-queries.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/pro-sites.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/pro-sites.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/publication.ts",
+      "text": "'^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/publication.ts",
+      "text": "'^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/publication.ts",
+      "text": "'^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/publication.ts",
+      "text": "'^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/publication.ts",
+      "text": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/publication.ts",
+      "text": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/publication.ts",
+      "text": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/publication.ts",
+      "text": "^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/resources.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/resources.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/reviews.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/reviews.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/search.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/sources.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/sources.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/studio.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/studio.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$"
+    },
+    {
+      "file": "services/main/src/routes/works.ts",
+      "text": "'^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$'"
+    },
+    {
+      "file": "services/main/src/routes/works.ts",
+      "text": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$"
+    }
+  ]
+}

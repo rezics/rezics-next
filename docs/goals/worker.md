@@ -14,6 +14,9 @@ the brief is wrong for the code or the need, take the better course within your
 claim and explain it, or hand off `blocked` with the exact reason. If your CLI can
 delegate independent parts to sub-agents, do so.
 
+When a brief prescribes a second mechanism for a decision an owner already
+makes, stop and report that instead of building it.
+
 ## Scope
 
 - Change the files your claimed `paths` match. A needed file outside them: if

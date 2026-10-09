@@ -270,6 +270,10 @@ Observations so far, to be revised with evidence:
 
 These steps describe one workable approach, not a fixed procedure.
 
+A brief names the outcome and the owner mechanism that carries it: consume,
+configure, extend, or new with the reason no owner fits. It does not prescribe
+a second representation of a decision that owner already makes.
+
 1. **Start.** Run `goalctl goal start <goal> --manager <session>` and
    `goalctl status`, and check `git log`/`git status` for maintainer edits.
    Read the Goal's `GOAL.md` and `state.md`, this charter and the

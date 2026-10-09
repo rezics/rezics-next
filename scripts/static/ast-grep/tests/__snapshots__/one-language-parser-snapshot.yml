@@ -6,12 +6,30 @@ snapshots:
       style: primary
       start: 20
       end: 56
+  const languageTag = /^[a-z]{2,5}(?:-[A-Za-z0-9]{3,8})*$/;:
+    labels:
+    - source: /^[a-z]{2,5}(?:-[A-Za-z0-9]{3,8})*$/
+      style: primary
+      start: 20
+      end: 56
+  'const languageTag = t.String({ pattern: ''^[A-Za-z]{2,12}(-[A-Za-z0-9]{3,8})*$'' });':
+    labels:
+    - source: '''^[A-Za-z]{2,12}(-[A-Za-z0-9]{3,8})*$'''
+      style: primary
+      start: 40
+      end: 78
   'const languageTag = t.String({ pattern: ''^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$'' });':
     labels:
     - source: '''^[A-Za-z]{2,8}(-[A-Za-z0-9]{1,8})*$'''
       style: primary
       start: 40
       end: 77
+  const tag = Intl.getCanonicalLocales(input)[0];:
+    labels:
+    - source: Intl.getCanonicalLocales(input)
+      style: primary
+      start: 12
+      end: 43
   const tag = Intl.getCanonicalLocales(value)[0];:
     labels:
     - source: Intl.getCanonicalLocales(value)

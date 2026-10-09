@@ -14,10 +14,11 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   parseBrief, parseCodexUsage, pathsOverlap, prepareCompositionMerge, preserveWorktreeArtifacts, rangesOverlap, removeFromTree, retryGitIndexLock, SONNET_MODEL,
   addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
   planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate, runUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_GATE_FILE_CAP, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
-  mailCommand, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
+  mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, usageReport, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
+import { reviewPrompt } from './land.ts';
 import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
 
 const brief = `---
@@ -51,6 +52,20 @@ describe('goalctl briefs', () => {
       .replace('040-044', '044-040'));
     expect(validateBrief(parsed)).toHaveLength(3);
     expect(validateBrief({ ...parseBrief(brief), paths: ['.temp/x'] })).toHaveLength(1);
+  });
+
+  test('selects mapped mechanisms, or none when the task touches none', () => {
+    const body = (mechanisms: string) => `---\nid: G-040\ntitle: t\neffort: high\n---\n## Outcome\n\n## Mechanisms\n\n${mechanisms}\n\n## Checks\n`;
+    expect(mechanismSectionErrors(body('none'))).toEqual([]);
+    expect(mechanismSectionErrors(body('- rights-evaluation: consume\n- language-parsing: configure'))).toEqual([]);
+    expect(mechanismSectionErrors(body('- rights-evaluation: new — no owner evaluates this private instrument'))).toEqual([]);
+    expect(mechanismSectionErrors('---\nid: G-040\ntitle: t\neffort: high\n---\n## Outcome\n')).toContain('brief needs a ## Mechanisms section');
+    expect(mechanismSectionErrors(body('- not-a-mechanism: consume'))).toContain('unknown mechanism: not-a-mechanism');
+    expect(mechanismSectionErrors(body('- rights-evaluation: new'))).toContain('mechanism rights-evaluation: new needs the reason no owner fits');
+    expect(mechanismSectionErrors(body('none\n- rights-evaluation: consume'))).toContain('mechanism section is none or a list, not both');
+    const prompt = reviewPrompt({ worktree: '/w', base: 'a', head: 'b', brief: 'brief', handoff: 'RESULT: done', directory: '/d' });
+    expect(prompt).toContain('Which owner carries this change?');
+    expect(prompt).toContain('duplicates a mapped mechanism');
   });
 });
 
@@ -2143,7 +2158,8 @@ describe('goalctl reclaim', () => {
   function writeBrief(dir: string, paths: string): string {
     const path = join(dir, 'brief.md');
     writeFileSync(path, ['---', 'id: G-010', 'title: Alpha work', 'effort: high', 'engine: grok', 'cases: []',
-      `paths: [${paths}]`, 'migrations: []', 'shared: []', 'depends: []', '---', '', 'Outcome.', ''].join('\n'));
+      `paths: [${paths}]`, 'migrations: []', 'shared: []', 'depends: []', '---', '', '## Outcome', '', 'Outcome.', '',
+      '## Mechanisms', '', 'none', ''].join('\n'));
     return path;
   }
 
@@ -2348,7 +2364,7 @@ child.on('close', code => process.exit(code ?? 1));
       const path = join(dir, '.temp', `${id}.md`);
       writeFileSync(path, ['---', `id: ${id}`, 'title: Sleeping test worker', 'effort: high',
         `engine: ${options.engine ?? 'grok'}`, `paths: [worker-${id.slice(2)}.ts]`, `depends: [${options.depends ?? ''}]`,
-        ...options.worktree ? [`worktree: ${options.worktree}`] : [], '---', ''].join('\n'));
+        ...options.worktree ? [`worktree: ${options.worktree}`] : [], '---', '', '## Mechanisms', '', 'none', ''].join('\n'));
       return path;
     };
     const workers = new Map<string, { worker: number; child: number }>();
@@ -3531,6 +3547,32 @@ process.exit(0);
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('Unknown dependency G-999');
       expect(result.stderr).toContain('docs/goals/program/state.md');
+    } finally { r.cleanup(); }
+  });
+
+  test('dispatch dry-run refuses a brief without Mechanisms or with an unknown id', () => {
+    const r = repo();
+    try {
+      const missing = join(r.dir, '.temp/no-mechanisms.md');
+      writeFileSync(missing, ['---', 'id: G-070', 'title: No mechanisms', 'effort: high', 'engine: grok',
+        'paths: [worker-070.ts]', '---', '', '## Outcome', '', 'Do the thing.', ''].join('\n'));
+      const refused = r.run(['dispatch', missing, '--dry-run']);
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toContain('## Mechanisms');
+      expect(r.ledger().tasks['G-070']).toBeUndefined();
+      const unknown = join(r.dir, '.temp/unknown-mechanism.md');
+      writeFileSync(unknown, ['---', 'id: G-071', 'title: Unknown mechanism', 'effort: high', 'engine: grok',
+        'paths: [worker-071.ts]', '---', '', '## Mechanisms', '', '- not-a-mechanism: consume', ''].join('\n'));
+      const named = r.run(['dispatch', unknown, '--dry-run']);
+      expect(named.status).toBe(1);
+      expect(named.stderr).toContain('unknown mechanism: not-a-mechanism');
+      const created = r.run(['new', '--goal', 'alpha', 'Example outcome']);
+      expect(created.status, created.stderr).toBe(0);
+      const written = created.stdout.match(/docs\/goals\/alpha\/tasks\/G-\d+\.md/);
+      expect(written).not.toBeNull();
+      const text = readFileSync(join(r.dir, written![0]!), 'utf8');
+      expect(text).toContain('## Mechanisms');
+      expect(text).toContain('\nnone\n');
     } finally { r.cleanup(); }
   });
 

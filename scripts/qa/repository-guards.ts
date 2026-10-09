@@ -93,4 +93,17 @@ export const repositoryGuards = [
     reason:
       'Route modules mounted by createMainApp must not declare a local error hook the app hook would hide.',
   },
+  {
+    file: 'scripts/static/mechanisms.test.ts',
+    reason: 'The mechanism map has one owner per concept and resolvable entry points.',
+  },
+  {
+    file: 'scripts/static/mechanism-writers.test.ts',
+    reason:
+      'Only the Rights and Governance owners write assessment, obligation and enforcement-fence state.',
+  },
+  {
+    file: 'scripts/static/one-language-parser-debt.test.ts',
+    reason: 'Language-tag parsing outside the display-language module stays at the frozen violations.',
+  },
 ] as const;
