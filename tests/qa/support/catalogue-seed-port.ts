@@ -54,18 +54,23 @@ export async function catalogueSeedPort(
       const saved =
         key && method === 'POST' && path === '/v1/works' ? prepared.get(key) : undefined;
       if (!saved) return port.request(method, path, body, key);
+      // Catalogue authoring leaves the prepared Work without an editor credit.
       const expected = {
         profile: 'metadata-only-v1',
         title: saved.item.title,
         language: saved.item.language,
         semanticTypes: saved.item.semanticTypes,
         actingSubject: port.actingSubject,
-        authoring: 'own-work',
+        authoring: 'catalogue',
+        grain: 'new-creative-scope',
       };
       const actual = body as Record<string, unknown>;
+      const receipt = actual?.candidateReceipt;
       if (
         !actual ||
-        Object.keys(actual).length !== Object.keys(expected).length ||
+        typeof receipt !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(receipt) ||
+        Object.keys(actual).length !== Object.keys(expected).length + 1 ||
         Object.entries(expected).some(
           ([field, value]) => JSON.stringify(actual[field]) !== JSON.stringify(value),
         )

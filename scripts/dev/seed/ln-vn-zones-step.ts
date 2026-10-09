@@ -10,7 +10,7 @@ import { grantOfficialZoneSeed, type LocalOperatorInput } from './operator.ts';
 import { seedKey, works } from './plan.ts';
 import { adoptZoneSpace } from './realms-step.ts';
 import { refreshSeedTokens, stableId, type SeedState } from './state.ts';
-import { call, createOwnWork, ensureHeader, grantVnSeedAuthority, publishCatalogueText, read, seedHttp,
+import { call, createCatalogueWork, ensureHeader, grantVnSeedAuthority, publishCatalogueText, read, seedHttp,
   type HttpResult, type SeedPort } from './vn-catalogue-step.ts';
 
 const BOOK = 'https://schema.org/Book';
@@ -102,10 +102,13 @@ export async function applyLnVnZones(input: ApplyInput): Promise<LnVnZonesManife
   }
   await port.grant('work:create:root', 'work.create');
   await port.grant('space:create:root', 'space.create');
+  // Shelf samples and the replayed franchise are catalogue Works. The grant
+  // exempts the pending slot limit; it does not credit the acting account.
+  await port.grant('catalogue:verify:root', 'catalogue.verify');
   const catalogueWorks = await replayCatalogue(port);
   const published = [];
   for (const sample of SAMPLES) {
-    const created = await createOwnWork(port, { key: seedKey('vndb-sample', sample.id), title: sample.title,
+    const created = await createCatalogueWork(port, { key: seedKey('vndb-sample', sample.id), title: sample.title,
       language: sample.language, semanticType: BOOK });
     await port.grant(`work:edit:${created.work}`, 'work.edit');
     await port.grant(`work:read:${created.work}`, 'work.read');

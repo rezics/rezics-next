@@ -108,7 +108,9 @@ test('G1045: VN fixture consumes only the declared public bulk creation receipts
     language: declared.language,
     semanticTypes: declared.semanticTypes,
     actingSubject: actor,
-    authoring: 'own-work',
+    authoring: 'catalogue',
+    grain: 'new-creative-scope',
+    candidateReceipt: '00000000-0000-4000-8000-000000000001',
   };
   expect((await prepared.request('POST', '/v1/works', body, declared.key)).body).toMatchObject({
     work: actor,

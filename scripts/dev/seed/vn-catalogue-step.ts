@@ -3,11 +3,13 @@ import { Pool, type PoolClient } from 'pg';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { loadVndbSlice, metadataTag, recordedTag, seededReleasePlan, ODBL, DBCL,
   type PlannedRelease, type VndbSlice } from '../../../tests/fixtures/vndb/load.ts';
+import { catalogueWorkBody } from '../../../tests/fixtures/catalogue/intake.ts';
 import { SeedApiError } from './api.ts';
 import { acceptClassifiedStatement, discloseClassificationConcept, expectedScopeDecisionHead, shareClassificationContext,
   type ClassificationResolution, type SharedClassificationContext } from './classified-statement.ts';
 import { grantImportedContributionSeedAuthority, type LocalOperatorInput } from './operator.ts';
 import { seedKey } from './plan.ts';
+import { assertSeedRequest } from './request-schema.ts';
 import { refreshSeedTokens, stableId, type SeedState, type WorkReceipt } from './state.ts';
 
 export interface HttpResult { status: number; body: unknown }
@@ -119,6 +121,9 @@ export async function applyVnCatalogue(port: SeedPort): Promise<VnCatalogueManif
   const plan = seededReleasePlan(slice);
   const actor = port.actingSubject;
   await port.grant('work:create:root', 'work.create');
+  // More than three catalogue Works are loaded. The grant exempts the pending
+  // slot limit; it does not record the acting account as an author.
+  await port.grant('catalogue:verify:root', 'catalogue.verify');
   await port.grant('classification:define:global', 'classification.proposition.define');
   await port.grant('classification:decide:global', 'statement.decide');
   await port.grant('context:create:root', 'context.create');
@@ -169,7 +174,7 @@ async function seedVisualNovel(port: SeedPort, slice: VndbSlice, vn: VndbSlice['
   concept: { concept: string; sense: string }, interpretation: SharedClassificationContext): Promise<VnWorkRecord> {
   if (vn.olang !== 'en' && vn.olang !== 'ja') throw new Error(`VNDB ${vn.id} language ${vn.olang} is not en or ja`);
   const title = workTitle(slice, vn);
-  const created = await createOwnWork(port, { key: seedKey('vndb-work', vn.id), title: title.value,
+  const created = await createCatalogueWork(port, { key: seedKey('vndb-work', vn.id), title: title.value,
     language: vn.olang, semanticType: VIDEO_GAME });
   await port.grant(`work:edit:${created.work}`, 'work.edit');
   await port.grant(`work:read:${created.work}`, 'work.read');
@@ -431,12 +436,15 @@ async function recordRights(port: SeedPort, work: string) {
   };
 }
 
-export async function createOwnWork(port: SeedPort, input: { key: string; title: string; language: string;
+/** Catalogue intake creates the Work and keeps the acting account off its author credits.
+ * A creator is credited afterwards only when the source names that creator. */
+export async function createCatalogueWork(port: SeedPort, input: { key: string; title: string; language: string;
   semanticType: string }): Promise<WorkReceipt> {
-  return call<WorkReceipt>(port, 'POST', '/v1/works', {
-    profile: 'metadata-only-v1', title: input.title, language: input.language,
-    semanticTypes: [input.semanticType], actingSubject: port.actingSubject, authoring: 'own-work',
-  }, input.key);
+  const searched = await catalogueWorkBody(port, { title: input.title, language: input.language,
+    semanticTypes: [input.semanticType] }, input.key);
+  const body = { ...searched, authoring: 'catalogue' as const };
+  assertSeedRequest('POST', '/v1/works', body);
+  return call<WorkReceipt>(port, 'POST', '/v1/works', body, input.key);
 }
 
 export async function ensureHeader(port: SeedPort, work: string, key: string, desired: {
