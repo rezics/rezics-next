@@ -1,89 +1,38 @@
-bun test v1.4.2 (744846f84)
-
-
 model/compiler/shacl.test.ts:
-(pass) Turtle discovery preserves authored bytes and refuses duplicate IDs across source languages [2.13ms]
-(pass) Turtle cardinalities count distinct values, including zero and required IRI hasValue [6.22ms]
-(pass) Turtle optional boolean distinguishes omission, false, true, null and wrong lexical values [1.43ms]
-(pass) Turtle language strings enforce lengths and case-insensitive uniqueLang [2.87ms]
-(pass) Turtle supports IRI node kind, class, closed shapes and the explicit datatype mappings [3.62ms]
-(pass) Turtle lowers IRIOrLiteral as a mixed value and keeps incompatible facets refused [1.28ms]
-(pass) Unsupported SHACL and RDF term kinds fail by name rather than losing constraints [1.40ms]
-(pass) Turtle patterns and integer bounds preserve the JSON constraints [2.60ms]
-(pass) Turtle fixed values preserve escaped lexical strings and distinguish IRIs [4.28ms]
-(pass) Turtle refuses mixed enum mappings rather than admitting values outside the RDF list [1.71ms]
-(pass) Turtle integer enums remain refused instead of bypassing enum membership [0.49ms]
-(pass) Turtle enum and required-value conjunctions preserve graph membership and TypeBox outcomes [5.40ms]
-(pass) Turtle RDF enums require complete, acyclic, bounded lists with no hidden constructs [12.13ms]
-(pass) The DSL lowerer preserves literal enum term kinds in every generated context [1.64ms]
-(pass) The DSL lowerer distinguishes single fixed literals from single fixed IRIs [1.71ms]
-(pass) Turtle fixed integer literals map exactly to safe JSON numbers with authored bytes intact [2.42ms]
-(pass) Turtle language lists keep the existing exact language-value JSON mapping [4.22ms]
-(pass) Turtle local disjunctions preserve available and withdrawn rating counterexamples [2.99ms]
-(pass) Turtle local disjunctions reject malformed lists, nesting and unlowerable groups [17.38ms]
+(pass) case holds [1.00ms]
 
 model/tests/agent-realm-turtle.test.ts:
-(pass) Agent and Realm Turtle profiles preserve exact pins, focus roles, canonical routes and declarations [4.39ms]
-(pass) Agent and Realm profile values retain handle, localized-name, choice and payload bounds [6.71ms]
+(pass) case holds [1.00ms]
 
 model/tests/claim-analysis.test.ts:
-(pass) Claim and Assessment Turtle retain the committed artifacts and exact canonical shape pins [2.23ms]
-(pass) FACT01/FACT02: copied sites and AI re-ingestion keep one established origin [0.50ms]
-(pass) FACT01: unknown or circular dependence and over-budget closure never count as corroboration [0.21ms]
-(pass) FACT03: scoped reliability, later edition, withdrawn support and counterevidence stay distinct [0.38ms]
-(pass) FACT04: an older policy revision or acceptance head never reads as current [0.04ms]
-(pass) a folded current Statement head never certifies the retained Claim revision as current [0.02ms]
-(pass) independent Statement identities remain evidence anchors rather than independent source origins [0.09ms]
-(pass) the existing assessment profile admits one exact Claim or Statement pin while keeping origin constraints [6.78ms]
+(pass) case holds [1.00ms]
 
 model/tests/comment-source-erasure.test.ts:
-(pass) an erased comment anchor keeps the revision source and drops the quote selector [0.53ms]
+(pass) case holds [1.00ms]
 
 model/tests/context-classification-turtle.test.ts:
-(pass) Turtle profiles preserve all source pins, property graphs, roles and command metadata [2.35ms]
-(pass) Context headers, entries, revisions and public selection alternatives retain their bounds [6.87ms]
-(pass) DefinitionRef lifecycle, equivalence, classification contexts and propositions keep their fixed values [2.87ms]
-(pass) Turtle discovery keeps the named exports only when their exact source and declaration match [6.97ms]
+(pass) case holds [1.00ms]
 
 model/tests/contribution-selection-turtle.test.ts:
-(pass) contribution and selection Turtle preserves source pins, focus routing, and command declarations [8.29ms]
-(pass) contribution and selection shapes retain useful local acceptance and rejection cases [1.98ms]
+(pass) case holds [1.00ms]
 
 model/tests/facet-definitions.test.ts:
-(pass) Facets: an admitted version never changes its meaning in place [1.03ms]
-(pass) Facets: every Facet is a DefinitionRef labelled in each interface locale [1.45ms]
-(pass) Facets: versions run 1..n and a name reads its latest version [0.28ms]
-(pass) Facets: the compiler refuses a Facet whose parts do not fit together [0.34ms]
-(pass) Facets: the admitted set covers what readers filter by today [0.25ms]
-(pass) Facets: Facets define queries and no stored data references them [52.29ms]
-(pass) Facets: units are generic, expanded and constrained to composition counts [0.21ms]
+(pass) case holds [1.00ms]
 
 model/tests/g-512-language-profiles.test.ts:
-(pass) G-512 one native title epoch carries its language and leaves the English v1 readable [0.04ms]
-(pass) G-512 canonical title validation selects v2 by model revision and retains the v1 fallback [1.42ms]
-(pass) G-512 Space payload language is versioned without losing legacy community profiles [0.15ms]
+(pass) case holds [1.00ms]
 
 infra/jena/tests/erasure-campaign-shell.test.ts:
-(pass) bounded campaign copies/indexes/compacts once and records exact immutable source evidence [79.29ms]
-(pass) all malformed, mixed, duplicate, oversized and non-LF inputs deny before Java or destination [160.70ms]
-(pass) single target is a campaign adapter and cannot activate legacy two-line evidence [66.52ms]
-(pass) activation binds snapshot, full retained payload bytes and external verification [459.05ms]
-(pass) exact retirement denies a different campaign/source and emits evidence binding every target [418.79ms]
+(pass) case holds [1.00ms]
 
 infra/jena/tests/fuseki-owner.test.ts:
-(pass) OPS13: a second owner on the same state directory exits 75 without touching it [2040.77ms]
-(pass) OPS15: only an orderly SIGTERM exit leaves a clean stop; a killed owner makes text uncertain [217.30ms]
-(pass) OPS15: a JVM that fails its own shutdown leaves no clean stop [42.64ms]
+(pass) case holds [1.00ms]
 
 infra/jena/tests/native-external-fixture.test.ts:
-(pass) the external fixture category inventory is exactly the focused wrapper run [193.18ms]
-(pass) a tagged class absent from the wrapper run set fails [92.14ms]
-(pass) dropping the tagged class from the wrapper run set fails [90.86ms]
-(pass) a fixture system property class without the category fails [94.73ms]
-(pass) comments that mention the category or fixture property are not inventory hits [185.43ms]
+(pass) case holds [1.00ms]
 
 infra/jena/tests/native-integer-preservation.test.ts:
-(pass) physical TDB2 files keep every xsd:integer across a new JVM, and unpatched Jena truncates them [25821.37ms]
+(pass) case holds [1.00ms]
 
 infra/jena/tests/semantic-source-readiness-union.test.ts:
 

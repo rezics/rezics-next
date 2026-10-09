@@ -1,97 +1,32 @@
-bun test v1.4.2 (744846f84)
-P0.3 native matrix 0.5.39: 81/81 outcomes matched, 0 violation paths absent from bounded reports; /home/edge/.cache/rezics-r/686ad1445ceb/6208a5fe1ba980bd/.artifacts/qa/20261009t052420-359f73/model-equivalence.json
-
-
 model/compiler/generate.test.ts:
-(pass) consumer inspection cannot replace the loaded authored constraint basis [2.77ms]
-(pass) MODEL14: compiler closes owner shapes and keeps the shared Resource shape open [0.06ms]
-(pass) P0.3: reviewed profiles publish matching shape bytes and digests [59.55ms]
-(pass) P0.3: generation check detects emitted artifact drift in a clean checkout [369.30ms]
-(pass) P0.3: authored constraints emit current profiles with recorded candidate coverage [40.30ms]
-(pass) P0.8: Content publication emits distinct current and revision focus roles [41.72ms]
-(pass) VIEW01: Work address profile constrains the normalized route and revision anchor [39.88ms]
-(pass) VIEW02: Work address lifecycle profile preserves the original route target [41.72ms]
-(pass) VIEW02: disposition shapes distinguish merged redirects from retired tombstones [41.93ms]
-(pass) WORK02: reviewed translation profile requires exact official provenance [38.89ms]
-(pass) WORK04: derivation profile binds explicit kind and exact source and target revisions [35.53ms]
-(pass) WORK05: fixed text release profile binds every selected dependency and byte digest [41.34ms]
-(pass) P0.8: Content search profiles emit projection, unit and eligibility roles [39.76ms]
-(pass) P0.3: invalid or changed authored constraints cannot silently reuse the profile digest [1.28ms]
-(pass) exact Turtle custody refuses plain objects and clones but accepts reload and re-export [2.64ms]
-(pass) G-071: the generated registry keeps the historical canonical routes and binding demands [41.80ms]
-(pass) G-071: the manifest pins the command-module version defined once in pom.xml [34.52ms]
-(pass) G-071: a profile declared in its definition joins the registry after the established types [1.52ms]
-(pass) G-071: ambiguous, duplicate or stale registry declarations fail generation [0.41ms]
-(pass) registry and command compilation refuse the retired override without reading its value [0.87ms]
-(pass) generation removes retired arbitrary output and check mode rejects its reintroduction [598.70ms]
-(pass) an in-place profile relaxation regenerates its bytes and digest and detects hand-edited output [591.22ms]
-(pass) a compiler lowering change regenerates derived artifacts and preserves exact Turtle [539.29ms]
-(pass) an authored profile can be removed without a digest lock [529.11ms]
-(pass) an in-place Facet refinement regenerates its registry [481.17ms]
-(pass) a new exact Turtle author joins generation without a separate digest file [428.82ms]
-(pass) a TS-only Profile export refuses generation without captured Turtle [202.18ms]
-(pass) an authored Facet can be removed from the current registry [430.75ms]
+(pass) case holds [1.00ms]
 
 model/tests/daily-rating.test.ts:
-(pass) RATE03/MODEL17: daily shapes and native bindings reject missing or mismatched calendar fields [838.04ms]
+(pass) case holds [1.00ms]
 
 model/tests/event-time.test.ts:
-(pass) RATE07/RATE08: Event time points reuse exact temporal values and keep event identity separate [0.30ms]
-(pass) RATE09: event revision records one available instant or a two-ended interval [0.07ms]
+(pass) case holds [1.00ms]
 
 model/tests/experience-rating.test.ts:
-(pass) RATE02/MODEL17: experience shapes bind occasion predecessor and immutable evaluation times [936.86ms]
-(pass) RATE05/MODEL17: native policy successor keeps the question head and rejects malformed revisions [145.63ms]
+(pass) case holds [1.00ms]
 
 model/tests/native-equivalence.test.ts:
-(pass) P0.3: TypeScript candidate fixtures preserve all recorded profile digests and outcomes [0.59ms]
-(pass) MODEL17: participation names: one occurrence shape validates named and unnamed writes and rejects invalid names [116.90ms]
-(pass) MODEL02: Work scalar native fixture preserves recorded outcomes and digest [0.38ms]
-(pass) MODEL02: reviewed Work scalar shape candidates match native command validation [151.33ms]
-(pass) MODEL17/MODEL27: generated profiles match recorded candidates through native command validation [2199.42ms]
+(pass) case holds [1.00ms]
 
 model/tests/reasoning-profile.test.ts:
-(pass) MODEL19: finite reasoning rejects identity-producing OWL axioms and keeps native IDs distinct [1.23ms]
-(pass) MODEL20: NoEntailment rejects union and partial closure outputs without fallback, counts or authority [2.01ms]
-(pass) MODEL20: unavailable selection does not become absence, fallback or authorization [0.07ms]
-(pass) MODEL20: reasoning inputs stop at the declared scope and fact bounds [2.18ms]
+(pass) case holds [1.00ms]
 
 model/tests/source-reification.test.ts:
-(pass) MODEL09: reified source claims use stable IDs, exact provenance and no native acceptance predicates [0.65ms]
-(pass) MODEL09: missing source description produces only the observed title Statement [0.05ms]
+(pass) case holds [1.00ms]
 
 model/tests/validation-shape-terms.test.ts:
-(pass) MODEL17: compiler rejects unsupported executable and unreviewed shape terms [1.09ms]
-(pass) MODEL13: authored profiles cannot confuse resource, vocabulary or Schema.org namespaces [0.98ms]
-(pass) Turtle identity, namespace and shape boundaries remain required without rendering [1.10ms]
+(pass) case holds [1.00ms]
 
 infra/jena/tests/command.integration.test.ts:
-487 |       rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(lineage.dataEpoch)} ; rv:sequence 0 .
-488 |   } } WHERE { FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} ?p ?o } }
-489 |     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } } }`;
-490 |   const command = await fuseki.commandWithReceipt({ receipt, digest, update,
-491 |     validations: [], deadlineMs: 10_000 });
-492 |   if (command.status !== 'committed') throw new CommandRejected(command);
-                                                  ^
-error: Fuseki command invalid
- result: {
-  status: "invalid",
-  report: "bootstrap requires an empty dataset and insert-only update",
-},
-
-      at initializeFreshGraph (/home/edge/.cache/rezics-r/686ad1445ceb/6208a5fe1ba980bd/services/main/src/modules/work/activate.ts:492:45)
-      at async <anonymous> (/home/edge/.cache/rezics-r/686ad1445ceb/6208a5fe1ba980bd/infra/jena/tests/command.integration.test.ts:152:9)
-(fail) (unnamed) [19.94ms]
+(fail) case rejects [1.00ms]
 
 packages/model/tests/generated.test.ts:
-(pass) P0.3: authored vocabulary and contexts resolve the shape predicates [3.59ms]
-(pass) P0.3: manifest authenticates every generated artifact without changing reviewed shape digests [4.84ms]
-(pass) the model package exposes schemas without the removed generated arbitrary artifact [0.48ms]
-(pass) RATE03: generated daily types require both the base class and daily specialization [1.96ms]
-(pass) P0.3: metadata Work candidates require one MainVersion and fixed native type without coercion [0.82ms]
-(pass) standing rating revisions require Available integer 1-10 and Withdrawn value omission [3.89ms]
-(pass) standing rating Context keeps the fixed 1-10 integer scale [0.99ms]
-(pass) text contribution candidates preserve language tags and required single-value envelopes [1.01ms]
+(pass) case holds [1.00ms]
 
 services/main/tests/read-snapshot-native.test.ts:
 
