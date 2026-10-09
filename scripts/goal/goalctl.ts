@@ -4848,8 +4848,11 @@ async function reclaimTask(id: string, briefPath: string, flags: Set<string>): P
     if (brief.id !== task.id) throw new Error(`${briefPath} is for ${brief.id}, not ${task.id}`);
     if (running(task)) throw new Error(`${task.id} is still running`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
+    // A path this task already holds was claimed before any later change to it, so only added paths can
+    // collide with another task's unlanded change.
+    const added = { ...brief, paths: brief.paths.filter(path => !task.paths.includes(path)) };
     const conflicts = [...claimConflicts(brief, Object.values(ledger.tasks)),
-      ...unlandedChangeConflicts(brief, Object.values(ledger.tasks))];
+      ...unlandedChangeConflicts(added, Object.values(ledger.tasks))];
     if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, task.goal, areasOf(activeGoals(ledger))));
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     Object.assign(task, { title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,

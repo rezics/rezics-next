@@ -1197,12 +1197,11 @@ describe('goalctl runtime policy', () => {
   });
 
   test('the unit gate refuses a checkout too deep for a PostgreSQL socket', () => {
-    const taskTree = dirname(dirname(import.meta.dir));
-    const main = dirname(dirname(dirname(taskTree)));
-    const normal = join(main, '.temp/worktrees/g-1000');
-    expect(gateTreeRefusal(normal, main)).toBeUndefined();
+    // Fixed paths, so the result does not depend on where this checkout lives.
+    const main = '/tmp/rezics-socket-check';
+    const taskTree = join(main, '.temp/worktrees/g-1000');
     expect(gateTreeRefusal(taskTree, main)).toBeUndefined();
-    const nested = join(taskTree, '.temp/gate-scratch');
+    const nested = join(taskTree, '.temp/gate-scratch', 'x'.repeat(40));
     const refusal = gateTreeRefusal(nested, main);
     expect(refusal).toBe(postgresSocketRefusal(physicalPath(nested)));
     expect(refusal).toContain(physicalPath(nested));
@@ -2312,6 +2311,14 @@ describe('goalctl reclaim', () => {
       const reverted = run(['reclaim', 'G-001', writeBrief('G-001', ['claimed.ts'])]);
       expect(reverted.status).toBe(0);
       expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: changed by G-001 (unlanded)');
+      ledger.tasks['G-002'].paths = ['other.ts', 'caller.ts'];
+      save();
+      const kept = run(['reclaim', 'G-002', writeBrief('G-002', ['other.ts', 'caller.ts', 'extra.ts'])]);
+      expect(kept.stderr).toBe('');
+      expect(kept.status).toBe(0);
+      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-002'].paths).toEqual(['other.ts', 'caller.ts', 'extra.ts']);
+      ledger.tasks['G-002'].paths = ['other.ts'];
+      save();
       for (const state of ['running', 'conflict', 'stopped']) {
         ledger.tasks['G-001'].state = state;
         save();
