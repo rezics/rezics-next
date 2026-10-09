@@ -154,9 +154,16 @@ describe('G-965 Concept and saved-view owner journey', () => {
     expect(await service.resolve(input())).toEqual({ status: 'undisclosed' });
     await follow(`urn:rezics:saved-view:${saved.id}`, savedFollow.revision, { level: 'all' });
     // Content still exists, but a private Realm no longer discloses this post.
-    await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(seeded.realm.space)} rv:disclosure rv:Public } } INSERT { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(seeded.realm.space)} rv:disclosure rv:Private } } WHERE {}`);
+    const spaceId = seeded.realm.space.slice(-36);
+    const current = await home.json<{ generation: string; settings: {
+      visibility: 'public' | 'private'; listing: 'listed' | 'unlisted';
+      history: 'everything' | 'from-admission'; admission: 'open' | 'request' | 'invitation' } }>(
+      await home.call('GET', `/v1/spaces/${spaceId}/settings?actingSubject=${encodeURIComponent(seeded.author)}`,
+        undefined, home.author.token));
+    await home.json(await home.call('PUT', `/v1/spaces/${spaceId}/settings`, {
+      actingSubject: seeded.author, expectedGeneration: current.generation, reason: 'Private Realm',
+      settings: { ...current.settings, visibility: 'private' },
+    }, home.author.token), 201);
     expect(await service.resolve(input())).toEqual({ status: 'undisclosed' });
   });
 });

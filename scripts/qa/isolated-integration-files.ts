@@ -244,7 +244,6 @@ export const rawSparqlIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/g-929-wiki-disclosure.test.ts',
   'tests/qa/integration/g-930-merge-authority.test.ts',
   'tests/qa/integration/g-935-rating-language.test.ts',
-  'tests/qa/integration/g-965-saved-views.test.ts',
   'tests/qa/integration/g-991-owner-migrations.test.ts',
   'tests/qa/integration/hub-api.test.ts',
   'tests/qa/integration/library-copies-loans.test.ts',
