@@ -49,6 +49,25 @@ export const mechanisms = [
       'scripts/static/ast-grep/tests/one-language-parser-test.yml',
     ],
   },
+  {
+    id: 'access-authority',
+    owner: 'services/main/src/modules/access',
+    entryPoints: [
+      'fixture-authority.ts#grantFixtureAuthority',
+      'grants.ts#AccessGrants',
+      'representations.ts#AccessRepresentations',
+      'scope-gates.ts#ensureBaselineScopeGate',
+    ],
+    ownedState: ['access.scope_gate', 'access.representation', 'access.permission_grant', 'access.policy'],
+    protectedEffects: ['write scope gate', 'write representation', 'write permission grant', 'write access policy'],
+    allowedAdapters: ['authority-read'],
+    conformanceTests: [
+      'tests/qa/unit/dataset-bootstrap.test.ts',
+      'scripts/static/mechanism-writers.test.ts',
+      'tests/qa/integration/access-baseline-seed.test.ts',
+      'tests/qa/integration/web-auth-bootstrap.test.ts',
+    ],
+  },
 ] as const satisfies readonly Mechanism[];
 
 export type MechanismId = (typeof mechanisms)[number]['id'];

@@ -7,7 +7,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 test('the mechanism map has one owner per concept and resolvable entry points', () => {
   expect(mechanismMapErrors(mechanisms, root)).toEqual([]);
   expect(mechanisms.map(entry => entry.id)).toEqual([
-    'rights-evaluation', 'governance-restriction', 'language-parsing',
+    'rights-evaluation', 'governance-restriction', 'language-parsing', 'access-authority',
   ]);
 });
 

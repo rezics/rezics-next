@@ -272,6 +272,49 @@ test.each(['member', 'administrator'] as const)(
               receipt.mainVersion,
             );
           }
+        if (state.operatorInput && attempt === 0) {
+          const authorityRows = async () =>
+            (
+              await h.accessPool.query<{ id: string; same: boolean; bounded: boolean }>(
+                `SELECT id, issuer_subject = recipient_subject AS same,
+                  active AND valid_until > now()
+                    AND valid_until <= now() + interval '8 hours 1 minute' AS bounded
+                FROM access.permission_grant
+                WHERE action IN ('work.read', 'work.edit', 'contribution.create', 'publication.select')
+                ORDER BY id`,
+              )
+            ).rows;
+          const before = await authorityRows();
+          expect(before.length).toBeGreaterThan(0);
+          expect(before.every((row) => row.same && row.bounded)).toBe(true);
+          const sample = nativeWorks[0]!;
+          const sampleOwner =
+            state.sessions.find((session) => session.id === sample.author) ?? state.sessions[0]!;
+          const sampleReceipt = state.created.get(sample.id)!;
+          const again = {
+            ...state.operatorInput,
+            ownerAccountSubject: sampleOwner.accountId,
+            actingSubject: sampleOwner.actingSubject,
+          };
+          await grantImportedWorkSeedAuthority(again, sampleReceipt.work, sampleReceipt.mainVersion);
+          expect(await authorityRows()).toEqual(before);
+          const closedScope = `work:read:${sampleReceipt.work}`;
+          await h.accessPool.query(
+            'UPDATE access.scope_gate SET open = false, dispatch_open = false WHERE id = $1',
+            [closedScope],
+          );
+          try {
+            await expect(
+              grantImportedWorkSeedAuthority(again, sampleReceipt.work, sampleReceipt.mainVersion),
+            ).rejects.toThrow('Seed grant gate is closed');
+            expect(await authorityRows()).toEqual(before);
+          } finally {
+            await h.accessPool.query(
+              'UPDATE access.scope_gate SET open = true, dispatch_open = true WHERE id = $1',
+              [closedScope],
+            );
+          }
+        }
         await seedContributions(state, nativeWorks);
         if (journey === 'member') {
           await seedRealms(state);

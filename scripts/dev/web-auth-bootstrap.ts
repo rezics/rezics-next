@@ -11,6 +11,7 @@ import { operatorRole, rolePermits } from '../../services/account/src/operators.
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { createAgentGraph } from '../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../services/main/src/modules/agent/provision.ts';
+import { grantFixtureAuthority, rethrowFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
 import { repairJoiningFixtureConsent } from '../../services/main/src/modules/access/join-fixture-consent.ts';
 import { MAIN_SITE_SCOPE, MAIN_SITE_SCOPES } from '../../apps/web/features/auth/scopes.ts';
 import { appEnvironment, readEnv, replacePrivate, savePrivate, stackDirectory } from './config.ts';
@@ -156,7 +157,7 @@ async function signInOperator(app: ReturnType<typeof createAccountApp>, base: st
   return { ...operator, cookie };
 }
 
-async function grantWorkCreation(pool: Pool, issuer: string, memberId: string,
+export async function grantWorkCreation(pool: Pool, issuer: string, memberId: string,
   actor: string, provision: { id: string; digest: string; dataEpoch: string; sequence: string }): Promise<string> {
   const principalId = randomUUID();
   const client = await pool.connect();
@@ -169,21 +170,23 @@ async function grantWorkCreation(pool: Pool, issuer: string, memberId: string,
     if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
     await client.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1, $2, $3)`, [principalId, issuer, memberId]);
-    await client.query("INSERT INTO access.scope_gate (id) VALUES ('work:create:root') ON CONFLICT (id) DO NOTHING");
-    const gate = await client.query<{ open: boolean }>(
-      "SELECT open FROM access.scope_gate WHERE id = 'work:create:root' FOR SHARE");
-    if (gate.rows[0]?.open !== true) throw new Error('Work creation gate is closed');
     await client.query("INSERT INTO access.authority_subject (id, kind) VALUES ($1, 'agent')", [actor]);
-    await client.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
-      VALUES ($1, $2, $3, 'work.create', now() + interval '8 hours')`,
-    [randomUUID(), principalId, actor]);
-    await client.query(`INSERT INTO access.permission_grant
-      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-      VALUES ($1, $2, $2, 'work:create:root', 'work.create', now() + interval '8 hours')`,
-    [randomUUID(), actor]);
-    const control = randomUUID();
-    await client.query(`INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until)
-      VALUES ($1,$2,$3,'agent.control','infinity')`, [control, principalId, actor]);
+    let control: string;
+    try {
+      const authority = await grantFixtureAuthority(client, {
+        scope: 'work:create:root', requireDispatch: false,
+        representations: [
+          { principalId, actor, action: 'work.create', lifetime: '8 hours' },
+          { principalId, actor, action: 'agent.control', lifetime: 'infinity' },
+        ],
+        grant: { actor, action: 'work.create', lifetime: '8 hours' },
+      });
+      const mandate = authority.representationIds[1];
+      if (!mandate) throw new Error('Work creation did not record agent control');
+      control = mandate;
+    } catch (error) {
+      rethrowFixtureAuthority(error, { gate: 'Work creation gate is closed' });
+    }
     await client.query(`INSERT INTO access.agent_provision (id, principal_id, idempotency_key,
       request_digest, agent_id, agent_kind, display_name, principal_epoch, state,
       graph_data_epoch, graph_sequence, representation_id)

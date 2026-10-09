@@ -15,7 +15,14 @@ afterEach(() => {
   for (const file of files.splice(0)) rmSync(file, { force: true });
 });
 function ownerFixture(
-  options: { closed?: boolean; policy?: boolean; prior?: boolean; controlled?: boolean } = {},
+  options: {
+    closed?: boolean;
+    policy?: boolean;
+    prior?: boolean;
+    controlled?: boolean;
+    gateClosed?: boolean;
+    dispatchClosed?: boolean;
+  } = {},
 ) {
   const calls: { sql: string; values: unknown[] }[] = [];
   const client = {
@@ -25,10 +32,14 @@ function ownerFixture(
       if (sql.includes('FROM access.recovery_fence')) return result([{ open: !options.closed }]);
       if (sql.includes('FROM access.principal'))
         return result([{ id: 'principal-dataset', active: true }]);
-      if (sql.includes('FROM access.representation'))
-        return result(options.controlled === false ? [] : [{ id: 'existing-controller' }]);
+      if (sql.includes('FROM access.representation')) {
+        const action = values[2];
+        if (action === 'agent.control')
+          return result(options.controlled === false ? [] : [{ id: 'existing-controller' }]);
+        return result(options.prior ? [{ id: `representation-${String(action)}` }] : []);
+      }
       if (sql.includes('FROM access.scope_gate'))
-        return result([{ open: true, dispatch_open: true }]);
+        return result([{ open: !options.gateClosed, dispatch_open: !options.dispatchClosed }]);
       if (sql.includes('FROM access.policy'))
         return result(options.policy ? [{ id: 'existing-policy' }] : []);
       if (sql.includes('FROM access.permission_grant'))
@@ -38,6 +49,10 @@ function ownerFixture(
   } as unknown as Pick<PoolClient, 'query'>;
   return { client, calls };
 }
+const grantInsert =
+  "INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until) VALUES ($1,$2,$2,$3,$4,clock_timestamp() + interval '7 days')";
+const representationInsert =
+  "INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,clock_timestamp() + interval '7 days')";
 const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000123';
 
 describe('dedicated local dataset administrator bootstrap', () => {
@@ -113,8 +128,17 @@ describe('dedicated local dataset administrator bootstrap', () => {
     const grants = fixture.calls.filter((call) =>
       call.sql.startsWith('INSERT INTO access.permission_grant'),
     );
-    expect(grants).toHaveLength(DATASET_ADMIN_GRANTS.length);
-    for (const grant of grants) expect(grant.values[1]).toBe(actor);
+    expect(grants.map((call) => ({ sql: call.sql, actor: call.values[1], scope: call.values[2], action: call.values[3] }))).toEqual(
+      DATASET_ADMIN_GRANTS.map(({ action, scope }) => ({ sql: grantInsert, actor, scope, action })),
+    );
+    const representations = fixture.calls.filter((call) =>
+      call.sql.startsWith('INSERT INTO access.representation'),
+    );
+    expect(representations.map((call) => ({
+      sql: call.sql, principal: call.values[1], actor: call.values[2], action: call.values[3],
+    }))).toEqual(DATASET_ADMIN_GRANTS.map(({ action }) => ({
+      sql: representationInsert, principal: 'principal-dataset', actor, action,
+    })));
     expect(
       fixture.calls.some((call) => /^\s*(DELETE|UPDATE|TRUNCATE|DROP|ALTER)/.test(call.sql)),
     ).toBe(false);
@@ -127,16 +151,22 @@ describe('dedicated local dataset administrator bootstrap', () => {
 
   test('reuses active fixture grants and refuses recovery holds, unrelated policies, or missing control', async () => {
     const reused = ownerFixture({ prior: true });
-    await grantDatasetAdminAuthority(
+    const result = await grantDatasetAdminAuthority(
       reused.client,
       'http://127.0.0.1:3004/api/auth',
       'dataset-account',
       actor,
     );
+    expect(result.granted.map((grant) => grant.id)).toEqual(
+      DATASET_ADMIN_GRANTS.map(() => 'existing-fixture-grant'),
+    );
     expect(
       reused.calls.some((call) => call.sql.startsWith('INSERT INTO access.permission_grant')),
     ).toBe(false);
-    for (const posture of [{ closed: true }, { policy: true }, { controlled: false }]) {
+    expect(
+      reused.calls.some((call) => call.sql.startsWith('INSERT INTO access.representation')),
+    ).toBe(false);
+    for (const posture of [{ closed: true }, { policy: true }, { controlled: false }, { gateClosed: true }, { dispatchClosed: true }]) {
       const fixture = ownerFixture(posture);
       await expect(
         grantDatasetAdminAuthority(
@@ -148,7 +178,8 @@ describe('dedicated local dataset administrator bootstrap', () => {
       ).rejects.toThrow();
       expect(fixture.calls.at(-1)?.sql).toBe('ROLLBACK');
       expect(
-        fixture.calls.some((call) => call.sql.startsWith('INSERT INTO access.permission_grant')),
+        fixture.calls.some((call) => call.sql.startsWith('INSERT INTO access.permission_grant')
+          || call.sql.startsWith('INSERT INTO access.representation')),
       ).toBe(false);
     }
   });

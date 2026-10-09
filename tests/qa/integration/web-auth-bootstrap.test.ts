@@ -56,6 +56,21 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
     try {
       expect(await baselineMemberProof(db, privateConfig.principalId, result.actingSubject))
         .toMatchObject({ provision_id: expect.any(String), representation_id: expect.any(String) });
+      const grants = await db.query<{ action: string; scope_id: string; same: boolean; eight: boolean }>(
+        `SELECT action, scope_id, issuer_subject = recipient_subject AS same,
+          valid_until > now() AND valid_until <= now() + interval '8 hours 1 minute' AS eight
+        FROM access.permission_grant
+        WHERE recipient_subject = $1 AND action = 'work.create'`, [result.actingSubject]);
+      expect(grants.rows).toEqual([{ action: 'work.create', scope_id: 'work:create:root', same: true, eight: true }]);
+      const mandates = await db.query<{ action: string; forever: boolean; eight: boolean }>(
+        `SELECT action, valid_until = 'infinity'::timestamptz AS forever,
+          valid_until > now() AND valid_until <= now() + interval '8 hours 1 minute' AS eight
+        FROM access.representation WHERE principal_id = $1 AND subject_id = $2
+        ORDER BY action`, [privateConfig.principalId, result.actingSubject]);
+      expect(mandates.rows).toEqual([
+        { action: 'agent.control', forever: true, eight: false },
+        { action: 'work.create', forever: false, eight: true },
+      ]);
     } finally { db.release(); }
     const firstParty = await accountPool.query(`SELECT 1 FROM rezics_oauth_first_party_client
       WHERE client_id = $1`, [publicConfig.clientId]);

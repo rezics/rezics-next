@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { setClientDisabled } from '../../../services/account/src/admin-actions.ts';
+import { ensureFixtureScopeGate, grantFixtureAuthority, rethrowFixtureAuthority,
+  type FixtureRepresentation } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { PLATFORM_ACTION, PLATFORM_SCOPE } from '../../../services/main/src/modules/suitability/store.ts';
 import { SeedApi, type Credentials, type SeedEndpoints } from './api.ts';
 import { proveOperatorAuthority } from './zones.ts';
@@ -97,21 +99,17 @@ async function grantImportedSeedScopes(input: LocalOperatorInput,
     await client.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')
       ON CONFLICT (id) DO NOTHING`, [input.actingSubject]);
     for (const { action, scope } of grants) {
-      await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
-      const gate = await client.query<{ open: boolean; dispatch_open: boolean }>(
-        'SELECT open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
-      if (gate.rows[0]?.open !== true || gate.rows[0]?.dispatch_open !== true) {
-        throw new Error(`Seed grant gate is closed: ${scope}`);
+      try {
+        await grantFixtureAuthority(client, {
+          scope, requireDispatch: true,
+          representations: [operator, owner].map(principalId => ({
+            principalId, actor: input.actingSubject, action, lifetime: '8 hours' as const,
+          })),
+          grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
+        });
+      } catch (error) {
+        rethrowFixtureAuthority(error, { gate: `Seed grant gate is closed: ${scope}` });
       }
-      await ensureRepresentation(client, operator, input.actingSubject, action);
-      await ensureRepresentation(client, owner, input.actingSubject, action);
-      const found = await client.query(`SELECT id FROM access.permission_grant
-        WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
-          AND valid_until > now() FOR SHARE`, [input.actingSubject, scope, action]);
-      if (!found.rowCount) await client.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`,
-      [randomUUID(), input.actingSubject, scope, action]);
     }
     await client.query('COMMIT');
   } catch (error) {
@@ -162,16 +160,8 @@ async function principal(client: PoolClient, issuer: string, accountSubject: str
   return id;
 }
 
-async function ensureRepresentation(client: PoolClient, principalId: string,
-  actor: string, action: string) {
-  const existing = await client.query(`SELECT id FROM access.representation
-    WHERE principal_id = $1 AND subject_id = $2 AND action = $3 AND active
-      AND valid_until > now() FOR SHARE`, [principalId, actor, action]);
-  if (existing.rowCount) return;
-  await client.query(`INSERT INTO access.representation
-    (id, principal_id, subject_id, action, valid_until)
-    VALUES ($1,$2,$3,$4,now() + interval '8 hours')`,
-  [randomUUID(), principalId, actor, action]);
+function seedRepresentation(principalId: string, actor: string, action: string): FixtureRepresentation {
+  return { principalId, actor, action, lifetime: '8 hours' };
 }
 
 /** Fixture-only grants. Realms and Zones themselves are still created through Main APIs. */
@@ -198,19 +188,18 @@ export async function grantOfficialZoneSeed(input: LocalOperatorInput, zone: str
       ['zone.edit', `zone:edit:${zone}`], ['zone.official', `zone:official:${zone}`],
       ['semantic.read', `semantic:read:${zone}`],
     ] as const) {
-      await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
-      const gate = await client.query<{ open: boolean }>(
-        'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
-      if (gate.rows[0]?.open !== true) throw new Error(`Seed grant gate is closed: ${scope}`);
-      if (action !== 'semantic.read') await ensureRepresentation(client, operator, input.actingSubject, action);
-      if (action !== 'zone.official') await ensureRepresentation(client, owner, input.actingSubject, action);
-      const grant = await client.query(`SELECT id FROM access.permission_grant
-        WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
-          AND valid_until > now() FOR SHARE`, [input.actingSubject, scope, action]);
-      if (!grant.rowCount) await client.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`,
-      [randomUUID(), input.actingSubject, scope, action]);
+      const representations = [
+        ...(action !== 'semantic.read' ? [seedRepresentation(operator, input.actingSubject, action)] : []),
+        ...(action !== 'zone.official' ? [seedRepresentation(owner, input.actingSubject, action)] : []),
+      ];
+      try {
+        await grantFixtureAuthority(client, {
+          scope, requireDispatch: false, representations,
+          grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
+        });
+      } catch (error) {
+        rethrowFixtureAuthority(error, { gate: `Seed grant gate is closed: ${scope}` });
+      }
     }
     await client.query('COMMIT');
   } catch (error) {
@@ -250,18 +239,15 @@ export async function grantOfficialThemeSeed(input: LocalOperatorInput, theme: s
       ['theme.activate', `theme:activate:${theme.slice(-36)}`, input.actingSubject, operator],
       ['theme.review', `theme:review:${theme.slice(-36)}`, reviewer.actingSubject, reviewerPrincipal],
     ]) {
-      await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
-      const gate = await client.query<{ open: boolean }>(
-        'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
-      if (gate.rows[0]?.open !== true) throw new Error(`Official theme gate is closed: ${scope}`);
-      await ensureRepresentation(client, principalId, actor, action);
-      const grant = await client.query(`SELECT id FROM access.permission_grant
-        WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
-          AND valid_until > now() FOR SHARE`, [actor, scope, action]);
-      if (!grant.rowCount) await client.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`,
-      [randomUUID(), actor, scope, action]);
+      try {
+        await grantFixtureAuthority(client, {
+          scope, requireDispatch: false,
+          representations: [seedRepresentation(principalId, actor, action)],
+          grant: { actor, action, lifetime: '8 hours' },
+        });
+      } catch (error) {
+        rethrowFixtureAuthority(error, { gate: `Official theme gate is closed: ${scope}` });
+      }
     }
     await client.query('COMMIT');
   } catch (error) {
@@ -289,18 +275,15 @@ export async function grantCuratedCollectionSeed(input: LocalOperatorInput, coll
     const scope = `collection:edit:${collection}`;
     await client.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')
       ON CONFLICT (id) DO NOTHING`, [input.actingSubject]);
-    await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
-    const gate = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
-    if (gate.rows[0]?.open !== true) throw new Error('Collection edit gate is closed');
-    await ensureRepresentation(client, owner, input.actingSubject, 'collection.edit');
-    const grant = await client.query(`SELECT id FROM access.permission_grant
-      WHERE recipient_subject = $1 AND scope_id = $2 AND action = 'collection.edit' AND active
-        AND valid_until > now() FOR SHARE`, [input.actingSubject, scope]);
-    if (!grant.rowCount) await client.query(`INSERT INTO access.permission_grant
-      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-      VALUES ($1,$2,$2,$3,'collection.edit',now() + interval '8 hours')`,
-    [randomUUID(), input.actingSubject, scope]);
+    try {
+      await grantFixtureAuthority(client, {
+        scope, requireDispatch: false,
+        representations: [seedRepresentation(owner, input.actingSubject, 'collection.edit')],
+        grant: { actor: input.actingSubject, action: 'collection.edit', lifetime: '8 hours' },
+      });
+    } catch (error) {
+      rethrowFixtureAuthority(error, { gate: 'Collection edit gate is closed' });
+    }
     await client.query('COMMIT');
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve first error */ }
@@ -356,18 +339,15 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
     if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
     const owner = await principal(client, `${input.endpoints.account}/api/auth`, input.ownerAccountSubject);
     for (const { action, scope } of grants) {
-      await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
-      const gate = await client.query<{ open: boolean }>(
-        'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
-      if (gate.rows[0]?.open !== true) throw new Error(`Home seed grant gate is closed: ${scope}`);
-      await ensureRepresentation(client, owner, input.actingSubject, action);
-      const found = await client.query(`SELECT id FROM access.permission_grant
-        WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
-          AND valid_until > now() FOR SHARE`, [input.actingSubject, scope, action]);
-      if (!found.rowCount) await client.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`,
-      [randomUUID(), input.actingSubject, scope, action]);
+      try {
+        await grantFixtureAuthority(client, {
+          scope, requireDispatch: false,
+          representations: [seedRepresentation(owner, input.actingSubject, action)],
+          grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
+        });
+      } catch (error) {
+        rethrowFixtureAuthority(error, { gate: `Home seed grant gate is closed: ${scope}` });
+      }
     }
     await client.query('COMMIT');
   } catch (error) {
@@ -382,7 +362,6 @@ export async function openRealmReportScope(input: LocalOperatorInput, realm: str
   if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(realm)) throw new Error('Seed Realm id must be native');
   const pool = new Pool({ connectionString: input.accessDatabaseUrl });
   try {
-    await pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING',
-      [`governance:realm:${realm}`]);
+    await ensureFixtureScopeGate(pool, `governance:realm:${realm}`);
   } finally { await pool.end(); }
 }

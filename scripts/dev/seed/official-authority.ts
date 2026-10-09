@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { grantFixtureAuthority, rethrowFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { SeedApi } from './api.ts';
 import type { LocalOperatorInput } from './operator.ts';
@@ -118,22 +119,15 @@ export async function grantRealmProfileSeed(input: LocalOperatorInput, grants: r
       ON CONFLICT (id) DO NOTHING`, [input.actingSubject]);
     for (const grant of grants) {
       const scope = scopeOf(grant);
-      await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
-      const gate = await client.query<{ open: boolean }>('SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE',
-        [scope]);
-      if (gate.rows[0]?.open !== true) throw new Error(`Realm profile seed gate is closed: ${scope}`);
-      const represented = await client.query(`SELECT 1 FROM access.representation WHERE principal_id = $1
-        AND subject_id = $2 AND action = $3 AND active AND valid_until > now() FOR SHARE`,
-      [principal, input.actingSubject, grant.action]);
-      if (!represented.rowCount) await client.query(`INSERT INTO access.representation
-        (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,now() + interval '8 hours')`,
-      [randomUUID(), principal, input.actingSubject, grant.action]);
-      const granted = await client.query(`SELECT 1 FROM access.permission_grant WHERE recipient_subject = $1
-        AND scope_id = $2 AND action = $3 AND active AND valid_until > now() FOR SHARE`,
-      [input.actingSubject, scope, grant.action]);
-      if (!granted.rowCount) await client.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`, [randomUUID(), input.actingSubject, scope, grant.action]);
+      try {
+        await grantFixtureAuthority(client, {
+          scope, requireDispatch: false,
+          representations: [{ principalId: principal, actor: input.actingSubject, action: grant.action, lifetime: '8 hours' }],
+          grant: { actor: input.actingSubject, action: grant.action, lifetime: '8 hours' },
+        });
+      } catch (error) {
+        rethrowFixtureAuthority(error, { gate: `Realm profile seed gate is closed: ${scope}` });
+      }
     }
     await client.query('COMMIT');
   } catch (error) {

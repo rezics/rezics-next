@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
+import { grantFixtureAuthority, rethrowFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { loadVndbSlice, metadataTag, recordedTag, seededReleasePlan, ODBL, DBCL,
   type PlannedRelease, type VndbSlice } from '../../../tests/fixtures/vndb/load.ts';
 import { SeedApiError } from './api.ts';
@@ -55,18 +56,15 @@ export async function grantVnSeedAuthority(pool: Pool, input: LocalOperatorInput
     const owner = await principal(client, `${input.endpoints.account}/api/auth`, input.ownerAccountSubject);
     await client.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')
       ON CONFLICT (id) DO NOTHING`, [input.actingSubject]);
-    await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
-    const gate = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
-    if (gate.rows[0]?.open !== true) throw new Error(`Visual novel seed grant gate is closed: ${scope}`);
-    await ensureRepresentation(client, owner, input.actingSubject, action);
-    const grant = await client.query(`SELECT id FROM access.permission_grant
-      WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
-        AND valid_until > now() FOR SHARE`, [input.actingSubject, scope, action]);
-    if (!grant.rowCount) await client.query(`INSERT INTO access.permission_grant
-      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-      VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')`,
-    [randomUUID(), input.actingSubject, scope, action]);
+    try {
+      await grantFixtureAuthority(client, {
+        scope, requireDispatch: false,
+        representations: [{ principalId: owner, actor: input.actingSubject, action, lifetime: '8 hours' }],
+        grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
+      });
+    } catch (error) {
+      rethrowFixtureAuthority(error, { gate: `Visual novel seed grant gate is closed: ${scope}` });
+    }
     await client.query('COMMIT');
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve the first error */ }
@@ -82,16 +80,6 @@ async function principal(client: PoolClient, issuer: string, accountSubject: str
   await client.query('INSERT INTO access.principal (id, account_issuer, account_subject) VALUES ($1,$2,$3)',
     [id, issuer, accountSubject]);
   return id;
-}
-
-async function ensureRepresentation(client: PoolClient, principalId: string, actor: string, action: string) {
-  const existing = await client.query(`SELECT id FROM access.representation
-    WHERE principal_id = $1 AND subject_id = $2 AND action = $3 AND active
-      AND valid_until > now() FOR SHARE`, [principalId, actor, action]);
-  if (existing.rowCount) return;
-  await client.query(`INSERT INTO access.representation
-    (id, principal_id, subject_id, action, valid_until)
-    VALUES ($1,$2,$3,$4,now() + interval '8 hours')`, [randomUUID(), principalId, actor, action]);
 }
 
 export async function seedVnCatalogue(state: SeedState): Promise<void> {

@@ -5,7 +5,7 @@ import type { Pool } from 'pg';
 import { MAIN_SITE_SCOPE } from '../../apps/web/features/auth/scopes.ts';
 import { createAccountApp } from '../../services/account/src/app.ts';
 import type { createAccountAuth } from '../../services/account/src/auth.ts';
-import { parseWebAuthOptions, reconcileWebClient, replaceWebClientInstallation, retiredOperator,
+import { grantWorkCreation, parseWebAuthOptions, reconcileWebClient, replaceWebClientInstallation, retiredOperator,
   type WebClientAccount, type WebClientInstallationChanges, type WebClientRegistrationState,
   WebClientNotUpdatable, webClientCurrent, webClientReconcileMessage, webClientRegistration }
   from './web-auth-bootstrap.ts';
@@ -275,4 +275,46 @@ test('IAM01: a web client the operator cannot update is re-registered, and other
     installationScopes: siteScopes.filter(scope => scope !== 'follow:read') }))).rejects.toThrow('install failed');
   expect(halfUpdated.registrations).toEqual([]);
   expect(halfUpdated.updates).toHaveLength(1);
+});
+
+const workCreateGrant = "INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until) VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')";
+const workCreateRepresentation = "INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,now() + interval '8 hours')";
+const controlRepresentation = "INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,'infinity')";
+
+function workCreationClient(options: { recovery?: boolean; open?: boolean } = {}) {
+  const calls: { sql: string; values: unknown[] }[] = [];
+  const client = {
+    async query(sql: string, values: unknown[] = []) {
+      calls.push({ sql, values });
+      const rows = (found: Record<string, unknown>[] = []) => ({ rows: found, rowCount: found.length });
+      if (sql.includes('FROM access.recovery_fence')) return rows([{ open: options.recovery !== false }]);
+      if (sql.includes('FROM access.scope_gate')) return rows([{ open: options.open !== false, dispatch_open: true }]);
+      if (sql.includes('FROM access.representation') || sql.includes('FROM access.permission_grant')) return rows();
+      return rows();
+    },
+    release() {},
+  };
+  return { calls, pool: { connect: async () => client } as unknown as Pool };
+}
+
+test('IAM01: web auth bootstrap grants eight-hour work creation and an unbounded control mandate', async () => {
+  const actor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000010';
+  const created = workCreationClient();
+  const provision = { id: '00000000-0000-4000-8000-000000000011', digest: 'a'.repeat(64),
+    dataEpoch: 'epoch', sequence: '1' };
+  await grantWorkCreation(created.pool, 'http://127.0.0.1:9/api/auth', 'member', actor, provision);
+  const grants = created.calls.filter(call => call.sql.startsWith('INSERT INTO access.permission_grant'));
+  const representations = created.calls.filter(call => call.sql.startsWith('INSERT INTO access.representation'));
+  expect(grants.map(call => ({ sql: call.sql, actor: call.values[1], scope: call.values[2], action: call.values[3] })))
+    .toEqual([{ sql: workCreateGrant, actor, scope: 'work:create:root', action: 'work.create' }]);
+  expect(representations.map(call => ({ sql: call.sql, actor: call.values[2], action: call.values[3] }))).toEqual([
+    { sql: workCreateRepresentation, actor, action: 'work.create' },
+    { sql: controlRepresentation, actor, action: 'agent.control' },
+  ]);
+  const closed = workCreationClient({ open: false });
+  await expect(grantWorkCreation(closed.pool, 'http://127.0.0.1:9/api/auth', 'member', actor, provision))
+    .rejects.toThrow('Work creation gate is closed');
+  expect(closed.calls.some(call => call.sql.startsWith('INSERT INTO access.permission_grant')
+    || call.sql.startsWith('INSERT INTO access.representation'))).toBe(false);
+  expect(closed.calls.at(-1)?.sql).toBe('ROLLBACK');
 });

@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test';
+import type { Pool } from 'pg';
 import { SeedApiError, type SeedApi } from './api.ts';
-import { convergeRelease, releaseFacts } from './franchises-step.ts';
+import { convergeRelease, grantSeedAuthority, releaseFacts } from './franchises-step.ts';
+import type { LocalOperatorInput } from './operator.ts';
 
 const uuid = '00000000-0000-4000-a000-000000000001';
 const native = (suffix: string) => `https://rezics.com/id/00000000-0000-4000-a000-${suffix.padStart(12, '0')}`;
@@ -74,6 +76,93 @@ test('a release with no public read is left to the create that follows', async (
   const run = fixture(404);
   expect(await run.run()).toBeNull();
   expect(run.puts).toEqual([]);
+});
+
+const seedActor = 'https://rezics.com/id/00000000-0000-4000-8000-000000000009';
+const seedInput = {
+  endpoints: { account: 'http://127.0.0.1:9' },
+  accessDatabaseUrl: 'postgres://127.0.0.1:5432/access',
+  ownerAccountSubject: 'owner-account',
+  actingSubject: seedActor,
+} as LocalOperatorInput;
+const eightHourGrant = "INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until) VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')";
+const eightHourRepresentation = "INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,now() + interval '8 hours')";
+
+function seedAuthorityClient(options: { recovery?: boolean; open?: boolean; dispatch?: boolean } = {}) {
+  const calls: { sql: string; values: unknown[] }[] = [];
+  const grants = new Map<string, string>();
+  const representations = new Map<string, string>();
+  let principalId: string | undefined;
+  const client = {
+    async query(sql: string, values: unknown[] = []) {
+      calls.push({ sql, values });
+      const rows = (found: Record<string, unknown>[] = []) => ({ rows: found, rowCount: found.length });
+      if (sql.includes('FROM access.recovery_fence')) return rows([{ open: options.recovery !== false }]);
+      if (sql.includes('FROM access.principal')) return rows(principalId ? [{ id: principalId }] : []);
+      if (sql.startsWith('INSERT INTO access.principal')) {
+        principalId = String(values[0]);
+        return rows();
+      }
+      if (sql.includes('FROM access.scope_gate')) {
+        return rows([{ open: options.open !== false, dispatch_open: options.dispatch !== false }]);
+      }
+      if (sql.includes('FROM access.representation')) {
+        const id = representations.get(`${values[0]}:${values[2]}`);
+        return rows(id ? [{ id }] : []);
+      }
+      if (sql.startsWith('INSERT INTO access.representation')) {
+        representations.set(`${values[1]}:${values[3]}`, String(values[0]));
+        return rows();
+      }
+      if (sql.includes('FROM access.permission_grant')) {
+        const id = grants.get(`${values[0]}:${values[1]}:${values[2]}`);
+        return rows(id ? [{ id }] : []);
+      }
+      if (sql.startsWith('INSERT INTO access.permission_grant')) {
+        grants.set(`${values[1]}:${values[2]}:${values[3]}`, String(values[0]));
+        return rows();
+      }
+      return rows();
+    },
+    release() {},
+  };
+  return { calls, pool: { connect: async () => client } as unknown as Pool };
+}
+
+test('franchise seed writes an eight-hour self-grant and a retry keeps that row', async () => {
+  const first = seedAuthorityClient();
+  await grantSeedAuthority(first.pool, seedInput, 'semantic:create:root', 'semantic.change');
+  const grant = first.calls.find(call => call.sql.startsWith('INSERT INTO access.permission_grant'));
+  const representation = first.calls.find(call => call.sql.startsWith('INSERT INTO access.representation'));
+  expect(grant?.sql).toBe(eightHourGrant);
+  expect(grant?.values[1]).toBe(seedActor);
+  expect(grant?.values[2]).toBe('semantic:create:root');
+  expect(grant?.values[3]).toBe('semantic.change');
+  expect(representation?.sql).toBe(eightHourRepresentation);
+  expect(representation?.values[2]).toBe(seedActor);
+  expect(representation?.values[3]).toBe('semantic.change');
+  const before = first.calls.filter(call => call.sql.startsWith('INSERT INTO access.permission_grant')
+    || call.sql.startsWith('INSERT INTO access.representation')).length;
+  await grantSeedAuthority(first.pool, seedInput, 'semantic:create:root', 'semantic.change');
+  const after = first.calls.filter(call => call.sql.startsWith('INSERT INTO access.permission_grant')
+    || call.sql.startsWith('INSERT INTO access.representation')).length;
+  expect(after).toBe(before);
+});
+
+test('a closed franchise gate refuses before a grant, including when only dispatch is open', async () => {
+  const closed = seedAuthorityClient({ open: false, dispatch: true });
+  await expect(grantSeedAuthority(closed.pool, seedInput, 'semantic:create:root', 'semantic.change'))
+    .rejects.toThrow('Franchise seed grant gate is closed');
+  expect(closed.calls.some(call => call.sql.startsWith('INSERT INTO access.permission_grant')
+    || call.sql.startsWith('INSERT INTO access.representation'))).toBe(false);
+  expect(closed.calls.at(-1)?.sql).toBe('ROLLBACK');
+  const held = seedAuthorityClient({ recovery: false });
+  await expect(grantSeedAuthority(held.pool, seedInput, 'semantic:create:root', 'semantic.change'))
+    .rejects.toThrow('Access recovery fence is closed');
+  expect(held.calls.some(call => call.sql.startsWith('INSERT INTO access.'))).toBe(false);
+  const dispatchHeld = seedAuthorityClient({ open: true, dispatch: false });
+  await grantSeedAuthority(dispatchHeld.pool, seedInput, 'semantic:create:root', 'semantic.change');
+  expect(dispatchHeld.calls.some(call => call.sql.startsWith('INSERT INTO access.permission_grant'))).toBe(true);
 });
 
 test('release facts ignore read-only fields and the order of identifiers and coverage', () => {

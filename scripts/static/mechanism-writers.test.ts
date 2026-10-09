@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mechanismWriterViolations } from './mechanism-writers.ts';
+import { accessAuthorityDebt, accessAuthorityWriters, mechanismWriterViolations } from './mechanism-writers.ts';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const fixture = (name: string, path: string) => ({
@@ -16,6 +16,32 @@ test('only Rights and Governance write assessment, obligation and enforcement st
     violations.push(...mechanismWriterViolations([{ path, source: readFileSync(resolve(root, path), 'utf8') }]));
   }
   expect(violations.sort()).toEqual([]);
+});
+
+test('Access authority writes stay in Access, the frozen debt, or neither scripts nor other modules', async () => {
+  const serviceWriters: string[] = [];
+  for await (const path of new Bun.Glob('services/**/src/**/*.ts').scan({ cwd: root })) {
+    serviceWriters.push(...accessAuthorityWriters([{ path, source: readFileSync(resolve(root, path), 'utf8') }]));
+  }
+  expect(serviceWriters.sort()).toEqual([...accessAuthorityDebt].sort());
+  const scriptViolations: string[] = [];
+  for await (const path of new Bun.Glob('scripts/**/*.ts').scan({ cwd: root })) {
+    // Guard fixtures are the negative cases. The load corpus still grants by its own SQL.
+    if (path.startsWith('scripts/static/fixtures/') || path.startsWith('scripts/load/')) continue;
+    scriptViolations.push(...mechanismWriterViolations([{ path, source: readFileSync(resolve(root, path), 'utf8') }]));
+  }
+  expect(scriptViolations.sort()).toEqual([]);
+  expect(mechanismWriterViolations(accessAuthorityDebt.map(path => ({
+    path, source: readFileSync(resolve(root, path), 'utf8'),
+  })))).toEqual([]);
+});
+
+test('a fixture script that inserts a permission grant fails; an Access module write passes', () => {
+  const grant = fixture('permission-grant.ts', 'scripts/dev/seed/unauthorized-grant.ts');
+  const owner = fixture('permission-grant.ts', 'services/main/src/modules/access/fixture-authority.ts');
+  expect(mechanismWriterViolations([grant]).join('\n')).toContain('writes access authority state');
+  expect(mechanismWriterViolations([owner])).toEqual([]);
+  expect(accessAuthorityWriters([grant])).toEqual(['scripts/dev/seed/unauthorized-grant.ts']);
 });
 
 test('an adaptation policy and a separate cover fence fail; a mapping, a projection and an owner change pass', () => {

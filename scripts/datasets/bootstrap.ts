@@ -3,6 +3,10 @@ import { chmodSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
 import { writeAudit } from '../../services/account/src/operators.ts';
+import {
+  grantFixtureAuthority,
+  rethrowFixtureAuthority,
+} from '../../services/main/src/modules/access/fixture-authority.ts';
 import { AccessPlatformAdministrators } from '../../services/main/src/modules/access/platform-administrator.ts';
 import { SeedApi, type SeedEndpoints } from '../dev/seed/api.ts';
 import { atomicJson, repository, sha256 } from './store.ts';
@@ -228,52 +232,21 @@ export async function grantDatasetAdminAuthority(
       throw new Error('Dataset administrator must already control its publicly provisioned Agent');
     const granted: { action: string; scope: string; id: string }[] = [];
     for (const { action, scope } of DATASET_ADMIN_GRANTS) {
-      await client.query(
-        'INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING',
-        [scope],
-      );
-      const gate = (
-        await client.query<{ open: boolean; dispatch_open: boolean }>(
-          'SELECT open, dispatch_open FROM access.scope_gate WHERE id = $1 FOR SHARE',
-          [scope],
-        )
-      ).rows[0];
-      if (!gate?.open || !gate.dispatch_open)
-        throw new Error(`Dataset administrator setup refuses closed scope ${scope}`);
-      if (
-        (
-          await client.query(
-            'SELECT id FROM access.policy WHERE scope_id = $1 AND ended_at IS NULL LIMIT 1',
-            [scope],
-          )
-        ).rowCount
-      ) {
-        throw new Error(
-          `Dataset administrator setup preserves the existing root policy for ${scope}; use its supported assignment flow`,
-        );
+      try {
+        const authority = await grantFixtureAuthority(client, {
+          scope,
+          requireDispatch: true,
+          refuseExistingPolicy: true,
+          representations: [{ principalId: principal.id, actor, action, lifetime: '7 days' }],
+          grant: { actor, action, lifetime: '7 days', requireSelfIssuer: true },
+        });
+        granted.push({ id: authority.grantId, action, scope });
+      } catch (error) {
+        rethrowFixtureAuthority(error, {
+          gate: `Dataset administrator setup refuses closed scope ${scope}`,
+          policy: `Dataset administrator setup preserves the existing root policy for ${scope}; use its supported assignment flow`,
+        });
       }
-      const representation = await client.query(
-        'SELECT id FROM access.representation WHERE principal_id = $1 AND subject_id = $2 AND action = $3 AND active AND valid_until > clock_timestamp() FOR SHARE',
-        [principal.id, actor, action],
-      );
-      if (!representation.rowCount)
-        await client.query(
-          "INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,clock_timestamp() + interval '7 days')",
-          [randomUUID(), principal.id, actor, action],
-        );
-      const prior = (
-        await client.query<{ id: string }>(
-          'SELECT id FROM access.permission_grant WHERE issuer_subject = $1 AND recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active AND valid_until > clock_timestamp() FOR SHARE',
-          [actor, scope, action],
-        )
-      ).rows[0];
-      const id = prior?.id ?? randomUUID();
-      if (!prior)
-        await client.query(
-          "INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until) VALUES ($1,$2,$2,$3,$4,clock_timestamp() + interval '7 days')",
-          [id, actor, scope, action],
-        );
-      granted.push({ id, action, scope });
     }
     await client.query('COMMIT');
     return { principal: principal.id, granted };

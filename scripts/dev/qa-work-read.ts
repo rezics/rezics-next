@@ -1,7 +1,7 @@
-import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
+import { grantFixtureAuthority, rethrowFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -58,18 +58,16 @@ export async function grantQaWorkRead(input: QaWorkReadInput): Promise<void> {
     [fixture.principalId, fixture.actingSubject]);
     if (actor.rowCount !== 1) throw new Error('QA actor is not registered for Work creation');
     const scope = `work:read:${input.work}`;
-    await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
-    const gate = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.scope_gate WHERE id = $1 FOR SHARE', [scope]);
-    if (gate.rows[0]?.open !== true) throw new Error('Work read gate is closed');
-    await client.query(`INSERT INTO access.representation
-      (id, principal_id, subject_id, action, valid_until)
-      VALUES ($1, $2, $3, 'work.read', now() + interval '8 hours')`,
-    [randomUUID(), fixture.principalId, fixture.actingSubject]);
-    await client.query(`INSERT INTO access.permission_grant
-      (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-      VALUES ($1, $2, $2, $3, 'work.read', now() + interval '8 hours')`,
-    [randomUUID(), fixture.actingSubject, scope]);
+    try {
+      await grantFixtureAuthority(client, {
+        scope, requireDispatch: false,
+        representations: [{ principalId: fixture.principalId, actor: fixture.actingSubject,
+          action: 'work.read', lifetime: '8 hours' }],
+        grant: { actor: fixture.actingSubject, action: 'work.read', lifetime: '8 hours' },
+      });
+    } catch (error) {
+      rethrowFixtureAuthority(error, { gate: 'Work read gate is closed' });
+    }
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');
