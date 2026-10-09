@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
-import { grantFixtureAuthority, rethrowFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { loadVndbSlice, metadataTag, recordedTag, seededReleasePlan, ODBL, DBCL,
   type PlannedRelease, type VndbSlice } from '../../../tests/fixtures/vndb/load.ts';
 import { SeedApiError } from './api.ts';
@@ -50,21 +50,14 @@ export async function grantVnSeedAuthority(pool: Pool, input: LocalOperatorInput
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const fence = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-    if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
     const owner = await principal(client, `${input.endpoints.account}/api/auth`, input.ownerAccountSubject);
     await client.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')
       ON CONFLICT (id) DO NOTHING`, [input.actingSubject]);
-    try {
-      await grantFixtureAuthority(client, {
-        scope, requireDispatch: false,
-        representations: [{ principalId: owner, actor: input.actingSubject, action, lifetime: '8 hours' }],
-        grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
-      });
-    } catch (error) {
-      rethrowFixtureAuthority(error, { gate: `Visual novel seed grant gate is closed: ${scope}` });
-    }
+    await grantFixtureAuthority(client, {
+      scope, requireDispatch: false,
+      representations: [{ principalId: owner, actor: input.actingSubject, action, lifetime: '8 hours' }],
+      grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
+    });
     await client.query('COMMIT');
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve the first error */ }

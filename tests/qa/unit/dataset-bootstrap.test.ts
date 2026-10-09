@@ -9,6 +9,7 @@ import {
   datasetStackMarker,
   completeDatasetAdminAudit,
 } from '../../../scripts/datasets/bootstrap.ts';
+import { FixtureAuthorityDenied } from '../../../services/main/src/modules/access/fixture-authority.ts';
 
 const files: string[] = [];
 afterEach(() => {
@@ -166,16 +167,25 @@ describe('dedicated local dataset administrator bootstrap', () => {
     expect(
       reused.calls.some((call) => call.sql.startsWith('INSERT INTO access.representation')),
     ).toBe(false);
+    const denied: Record<string, { kind: FixtureAuthorityDenied['kind']; message: string }> = {
+      closed: { kind: 'recovery', message: 'Access recovery fence is closed' },
+      policy: { kind: 'policy', message: 'fixture scope has a policy: work:create:root' },
+      gateClosed: { kind: 'gate', message: 'fixture scope is closed: work:create:root' },
+      dispatchClosed: { kind: 'gate', message: 'fixture scope is closed: work:create:root' },
+    };
     for (const posture of [{ closed: true }, { policy: true }, { controlled: false }, { gateClosed: true }, { dispatchClosed: true }]) {
       const fixture = ownerFixture(posture);
-      await expect(
+      const key = Object.keys(posture)[0]!;
+      const expectation = expect(
         grantDatasetAdminAuthority(
           fixture.client,
           'http://127.0.0.1:3004/api/auth',
           'dataset-account',
           actor,
         ),
-      ).rejects.toThrow();
+      );
+      if (denied[key]) await expectation.rejects.toMatchObject({ name: 'FixtureAuthorityDenied', ...denied[key] });
+      else await expectation.rejects.toThrow('must already control its publicly provisioned Agent');
       expect(fixture.calls.at(-1)?.sql).toBe('ROLLBACK');
       expect(
         fixture.calls.some((call) => call.sql.startsWith('INSERT INTO access.permission_grant')

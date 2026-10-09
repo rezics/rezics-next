@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { setClientDisabled } from '../../../services/account/src/admin-actions.ts';
-import { ensureFixtureScopeGate, grantFixtureAuthority, rethrowFixtureAuthority,
+import { ensureFixtureScopeGate, grantFixtureAuthority,
   type FixtureRepresentation } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { PLATFORM_ACTION, PLATFORM_SCOPE } from '../../../services/main/src/modules/suitability/store.ts';
 import { SeedApi, type Credentials, type SeedEndpoints } from './api.ts';
@@ -91,25 +91,18 @@ async function grantImportedSeedScopes(input: LocalOperatorInput,
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const fence = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-    if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
     const operator = await principal(client, `${input.endpoints.account}/api/auth`, input.accountSubject);
     const owner = await principal(client, `${input.endpoints.account}/api/auth`, input.ownerAccountSubject);
     await client.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')
       ON CONFLICT (id) DO NOTHING`, [input.actingSubject]);
     for (const { action, scope } of grants) {
-      try {
-        await grantFixtureAuthority(client, {
-          scope, requireDispatch: true,
-          representations: [operator, owner].map(principalId => ({
-            principalId, actor: input.actingSubject, action, lifetime: '8 hours' as const,
-          })),
-          grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
-        });
-      } catch (error) {
-        rethrowFixtureAuthority(error, { gate: `Seed grant gate is closed: ${scope}` });
-      }
+      await grantFixtureAuthority(client, {
+        scope, requireDispatch: true,
+        representations: [operator, owner].map(principalId => ({
+          principalId, actor: input.actingSubject, action, lifetime: '8 hours' as const,
+        })),
+        grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
+      });
     }
     await client.query('COMMIT');
   } catch (error) {
@@ -176,9 +169,6 @@ export async function grantOfficialZoneSeed(input: LocalOperatorInput, zone: str
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const fence = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-    if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
     const issuer = `${input.endpoints.account}/api/auth`;
     const owner = await principal(client, issuer, input.ownerAccountSubject);
     const operator = await principal(client, issuer, input.accountSubject);
@@ -192,14 +182,10 @@ export async function grantOfficialZoneSeed(input: LocalOperatorInput, zone: str
         ...(action !== 'semantic.read' ? [seedRepresentation(operator, input.actingSubject, action)] : []),
         ...(action !== 'zone.official' ? [seedRepresentation(owner, input.actingSubject, action)] : []),
       ];
-      try {
-        await grantFixtureAuthority(client, {
-          scope, requireDispatch: false, representations,
-          grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
-        });
-      } catch (error) {
-        rethrowFixtureAuthority(error, { gate: `Seed grant gate is closed: ${scope}` });
-      }
+      await grantFixtureAuthority(client, {
+        scope, requireDispatch: false, representations,
+        grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
+      });
     }
     await client.query('COMMIT');
   } catch (error) {
@@ -223,9 +209,6 @@ export async function grantOfficialThemeSeed(input: LocalOperatorInput, theme: s
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const fence = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-    if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
     const issuer = `${input.endpoints.account}/api/auth`;
     const operator = await principal(client, issuer, input.accountSubject);
     const reviewerPrincipal = await principal(client, issuer, reviewer.accountId);
@@ -239,15 +222,11 @@ export async function grantOfficialThemeSeed(input: LocalOperatorInput, theme: s
       ['theme.activate', `theme:activate:${theme.slice(-36)}`, input.actingSubject, operator],
       ['theme.review', `theme:review:${theme.slice(-36)}`, reviewer.actingSubject, reviewerPrincipal],
     ]) {
-      try {
-        await grantFixtureAuthority(client, {
-          scope, requireDispatch: false,
-          representations: [seedRepresentation(principalId, actor, action)],
-          grant: { actor, action, lifetime: '8 hours' },
-        });
-      } catch (error) {
-        rethrowFixtureAuthority(error, { gate: `Official theme gate is closed: ${scope}` });
-      }
+      await grantFixtureAuthority(client, {
+        scope, requireDispatch: false,
+        representations: [seedRepresentation(principalId, actor, action)],
+        grant: { actor, action, lifetime: '8 hours' },
+      });
     }
     await client.query('COMMIT');
   } catch (error) {
@@ -268,22 +247,15 @@ export async function grantCuratedCollectionSeed(input: LocalOperatorInput, coll
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const fence = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-    if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
     const owner = await principal(client, `${input.endpoints.account}/api/auth`, input.ownerAccountSubject);
     const scope = `collection:edit:${collection}`;
     await client.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')
       ON CONFLICT (id) DO NOTHING`, [input.actingSubject]);
-    try {
-      await grantFixtureAuthority(client, {
-        scope, requireDispatch: false,
-        representations: [seedRepresentation(owner, input.actingSubject, 'collection.edit')],
-        grant: { actor: input.actingSubject, action: 'collection.edit', lifetime: '8 hours' },
-      });
-    } catch (error) {
-      rethrowFixtureAuthority(error, { gate: 'Collection edit gate is closed' });
-    }
+    await grantFixtureAuthority(client, {
+      scope, requireDispatch: false,
+      representations: [seedRepresentation(owner, input.actingSubject, 'collection.edit')],
+      grant: { actor: input.actingSubject, action: 'collection.edit', lifetime: '8 hours' },
+    });
     await client.query('COMMIT');
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve first error */ }
@@ -334,20 +306,13 @@ export async function grantHomeSeedAuthority(input: LocalOperatorInput,
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const fence = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-    if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
     const owner = await principal(client, `${input.endpoints.account}/api/auth`, input.ownerAccountSubject);
     for (const { action, scope } of grants) {
-      try {
-        await grantFixtureAuthority(client, {
-          scope, requireDispatch: false,
-          representations: [seedRepresentation(owner, input.actingSubject, action)],
-          grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
-        });
-      } catch (error) {
-        rethrowFixtureAuthority(error, { gate: `Home seed grant gate is closed: ${scope}` });
-      }
+      await grantFixtureAuthority(client, {
+        scope, requireDispatch: false,
+        representations: [seedRepresentation(owner, input.actingSubject, action)],
+        grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
+      });
     }
     await client.query('COMMIT');
   } catch (error) {

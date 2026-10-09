@@ -85,8 +85,8 @@ const seedInput = {
   ownerAccountSubject: 'owner-account',
   actingSubject: seedActor,
 } as LocalOperatorInput;
-const eightHourGrant = "INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until) VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')";
-const eightHourRepresentation = "INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,now() + interval '8 hours')";
+const eightHourGrant = "INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until) VALUES ($1,$2,$2,$3,$4,clock_timestamp() + interval '8 hours')";
+const eightHourRepresentation = "INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,clock_timestamp() + interval '8 hours')";
 
 function seedAuthorityClient(options: { recovery?: boolean; open?: boolean; dispatch?: boolean } = {}) {
   const calls: { sql: string; values: unknown[] }[] = [];
@@ -152,14 +152,19 @@ test('franchise seed writes an eight-hour self-grant and a retry keeps that row'
 test('a closed franchise gate refuses before a grant, including when only dispatch is open', async () => {
   const closed = seedAuthorityClient({ open: false, dispatch: true });
   await expect(grantSeedAuthority(closed.pool, seedInput, 'semantic:create:root', 'semantic.change'))
-    .rejects.toThrow('Franchise seed grant gate is closed');
+    .rejects.toMatchObject({ name: 'FixtureAuthorityDenied', kind: 'gate',
+      message: 'fixture scope is closed: semantic:create:root' });
   expect(closed.calls.some(call => call.sql.startsWith('INSERT INTO access.permission_grant')
     || call.sql.startsWith('INSERT INTO access.representation'))).toBe(false);
   expect(closed.calls.at(-1)?.sql).toBe('ROLLBACK');
   const held = seedAuthorityClient({ recovery: false });
   await expect(grantSeedAuthority(held.pool, seedInput, 'semantic:create:root', 'semantic.change'))
-    .rejects.toThrow('Access recovery fence is closed');
-  expect(held.calls.some(call => call.sql.startsWith('INSERT INTO access.'))).toBe(false);
+    .rejects.toMatchObject({ name: 'FixtureAuthorityDenied', kind: 'recovery',
+      message: 'Access recovery fence is closed' });
+  expect(held.calls.some(call => call.sql.startsWith('INSERT INTO access.permission_grant')
+    || call.sql.startsWith('INSERT INTO access.representation')
+    || call.sql.includes('INSERT INTO access.scope_gate'))).toBe(false);
+  expect(held.calls.at(-1)?.sql).toBe('ROLLBACK');
   const dispatchHeld = seedAuthorityClient({ open: true, dispatch: false });
   await grantSeedAuthority(dispatchHeld.pool, seedInput, 'semantic:create:root', 'semantic.change');
   expect(dispatchHeld.calls.some(call => call.sql.startsWith('INSERT INTO access.permission_grant'))).toBe(true);

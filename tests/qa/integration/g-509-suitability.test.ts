@@ -388,9 +388,10 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
         [PLATFORM_SCOPE, column === 'open'],
       );
       try {
-        await expect(grantPlatformModerationSeed(seedInput)).rejects.toThrow(
-          'Seed grant gate is closed',
-        );
+        await expect(grantPlatformModerationSeed(seedInput)).rejects.toMatchObject({
+          name: 'FixtureAuthorityDenied', kind: 'gate',
+          message: `fixture scope is closed: ${PLATFORM_SCOPE}`,
+        });
         expect(
           (
             await f.accessPool.query(`SELECT ${column} FROM access.scope_gate WHERE id = $1`, [
@@ -486,9 +487,10 @@ test('G-509: real API assessment chains, authority, retries, concurrency and evi
     try {
       expect((await read([release.release])).status).toBe(503);
       expect((await write(release.release, [], recovered.assessment.revision)).status).toBe(503);
-      await expect(grantPlatformModerationSeed(seedInput)).rejects.toThrow(
-        'Access recovery fence is closed',
-      );
+      await expect(grantPlatformModerationSeed(seedInput)).rejects.toMatchObject({
+        name: 'FixtureAuthorityDenied', kind: 'recovery',
+        message: 'Access recovery fence is closed',
+      });
     } finally {
       await f.accessPool.query('UPDATE access.recovery_fence SET open = true WHERE id = true');
     }

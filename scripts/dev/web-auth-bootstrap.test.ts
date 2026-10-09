@@ -277,8 +277,8 @@ test('IAM01: a web client the operator cannot update is re-registered, and other
   expect(halfUpdated.updates).toHaveLength(1);
 });
 
-const workCreateGrant = "INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until) VALUES ($1,$2,$2,$3,$4,now() + interval '8 hours')";
-const workCreateRepresentation = "INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,now() + interval '8 hours')";
+const workCreateGrant = "INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until) VALUES ($1,$2,$2,$3,$4,clock_timestamp() + interval '8 hours')";
+const workCreateRepresentation = "INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,clock_timestamp() + interval '8 hours')";
 const controlRepresentation = "INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,'infinity')";
 
 function workCreationClient(options: { recovery?: boolean; open?: boolean } = {}) {
@@ -313,7 +313,8 @@ test('IAM01: web auth bootstrap grants eight-hour work creation and an unbounded
   ]);
   const closed = workCreationClient({ open: false });
   await expect(grantWorkCreation(closed.pool, 'http://127.0.0.1:9/api/auth', 'member', actor, provision))
-    .rejects.toThrow('Work creation gate is closed');
+    .rejects.toMatchObject({ name: 'FixtureAuthorityDenied', kind: 'gate',
+      message: 'fixture scope is closed: work:create:root' });
   expect(closed.calls.some(call => call.sql.startsWith('INSERT INTO access.permission_grant')
     || call.sql.startsWith('INSERT INTO access.representation'))).toBe(false);
   expect(closed.calls.at(-1)?.sql).toBe('ROLLBACK');

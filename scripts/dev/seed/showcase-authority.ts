@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
-import { grantFixtureAuthority, rethrowFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import type { LocalOperatorInput } from './operator.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -38,22 +38,15 @@ export async function grantShowcaseSeedAuthority(input: LocalOperatorInput, gran
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const fence = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-    if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
     const owner = await principal(client, `${input.endpoints.account}/api/auth`, input.ownerAccountSubject);
     await client.query(`INSERT INTO access.authority_subject (id, kind) VALUES ($1,'agent')
       ON CONFLICT (id) DO NOTHING`, [input.actingSubject]);
     for (const { action, scope } of grants) {
-      try {
-        await grantFixtureAuthority(client, {
-          scope, requireDispatch: true,
-          representations: [{ principalId: owner, actor: input.actingSubject, action, lifetime: '8 hours' }],
-          grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
-        });
-      } catch (error) {
-        rethrowFixtureAuthority(error, { gate: `Showcase seed grant gate is closed: ${scope}` });
-      }
+      await grantFixtureAuthority(client, {
+        scope, requireDispatch: true,
+        representations: [{ principalId: owner, actor: input.actingSubject, action, lifetime: '8 hours' }],
+        grant: { actor: input.actingSubject, action, lifetime: '8 hours' },
+      });
     }
     await client.query('COMMIT');
   } catch (error) {

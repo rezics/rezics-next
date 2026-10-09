@@ -26,8 +26,8 @@ test('Access authority writes stay in Access, the frozen debt, or neither script
   expect(serviceWriters.sort()).toEqual([...accessAuthorityDebt].sort());
   const scriptViolations: string[] = [];
   for await (const path of new Bun.Glob('scripts/**/*.ts').scan({ cwd: root })) {
-    // Guard fixtures are the negative cases. The load corpus still grants by its own SQL.
-    if (path.startsWith('scripts/static/fixtures/') || path.startsWith('scripts/load/')) continue;
+    // Guard fixtures are the negative cases.
+    if (path.startsWith('scripts/static/fixtures/')) continue;
     scriptViolations.push(...mechanismWriterViolations([{ path, source: readFileSync(resolve(root, path), 'utf8') }]));
   }
   expect(scriptViolations.sort()).toEqual([]);

@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { grantFixtureAuthority, rethrowFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
+import { grantFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 
 const root = resolve(import.meta.dir, '../..');
@@ -49,25 +49,17 @@ export async function grantQaWorkRead(input: QaWorkReadInput): Promise<void> {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    const fence = await client.query<{ open: boolean }>(
-      'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
-    if (fence.rows[0]?.open !== true) throw new Error('Access recovery fence is closed');
     const actor = await client.query(`SELECT id FROM access.representation
       WHERE principal_id = $1 AND subject_id = $2 AND action = 'work.create'
-        AND active = true AND valid_until > now() FOR SHARE`,
+        AND active = true AND valid_until > clock_timestamp() FOR SHARE`,
     [fixture.principalId, fixture.actingSubject]);
     if (actor.rowCount !== 1) throw new Error('QA actor is not registered for Work creation');
-    const scope = `work:read:${input.work}`;
-    try {
-      await grantFixtureAuthority(client, {
-        scope, requireDispatch: false,
-        representations: [{ principalId: fixture.principalId, actor: fixture.actingSubject,
-          action: 'work.read', lifetime: '8 hours' }],
-        grant: { actor: fixture.actingSubject, action: 'work.read', lifetime: '8 hours' },
-      });
-    } catch (error) {
-      rethrowFixtureAuthority(error, { gate: 'Work read gate is closed' });
-    }
+    await grantFixtureAuthority(client, {
+      scope: `work:read:${input.work}`, requireDispatch: false,
+      representations: [{ principalId: fixture.principalId, actor: fixture.actingSubject,
+        action: 'work.read', lifetime: '8 hours' }],
+      grant: { actor: fixture.actingSubject, action: 'work.read', lifetime: '8 hours' },
+    });
     await client.query('COMMIT');
   } catch (error) {
     await client.query('ROLLBACK');

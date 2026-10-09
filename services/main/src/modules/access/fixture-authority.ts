@@ -1,17 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 
-type Sql = Pick<PoolClient, 'query'>;
+type Sql = Pick<Pool | PoolClient, 'query'>;
 
-/** How long a fixture mandate or grant stays active. The clock matches the
- * statement the fixture used before this operation owned the write. */
+/** Fixture mandate and grant duration, always read with clock_timestamp().
+ * Seed sessions use 8 hours. Dataset administration uses 7 days because an
+ * import outlasts a seed session. Web-auth agent control uses infinity
+ * because that mandate must outlast the local process. A caller with no
+ * separate duration uses the seed window. */
 export type FixtureLifetime = '8 hours' | '7 days' | 'infinity';
-
-const lifetimeSql = {
-  '8 hours': { until: "now() + interval '8 hours'", current: 'now()' },
-  '7 days': { until: "clock_timestamp() + interval '7 days'", current: 'clock_timestamp()' },
-  infinity: { until: "'infinity'", current: 'now()' },
-} as const;
 
 const scopePattern = /^[^\s\0]{1,256}$/;
 const actionPattern = /^[^\s\0]{1,128}$/;
@@ -28,17 +25,6 @@ export class FixtureAuthorityDenied extends Error {
     this.kind = kind;
     this.scope = scope;
   }
-}
-
-/** Replace a denied fixture write with the caller's precondition message. */
-export function rethrowFixtureAuthority(error: unknown, messages: {
-  gate?: string; policy?: string; recovery?: string;
-}): never {
-  if (error instanceof FixtureAuthorityDenied) {
-    const message = messages[error.kind];
-    if (message) throw new Error(message);
-  }
-  throw error;
 }
 
 export interface FixtureRepresentation {
@@ -71,20 +57,24 @@ export interface FixtureAuthorityResult {
   representationIds: string[];
 }
 
+function until(lifetime: FixtureLifetime): string {
+  return lifetime === 'infinity' ? "'infinity'" : `clock_timestamp() + interval '${lifetime}'`;
+}
+
+function requireToken(value: string, pattern: RegExp, scope: string): void {
+  if (!pattern.test(value)) throw new FixtureAuthorityDenied('gate', scope);
+}
+
 async function recoveryOpen(client: Sql): Promise<void> {
   const fence = await client.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
   if (fence.rows[0]?.open !== true) throw new FixtureAuthorityDenied('recovery');
 }
 
-function requireScope(scope: string): void {
-  if (!scopePattern.test(scope)) throw new FixtureAuthorityDenied('gate', scope);
-}
-
 /** Insert a missing scope gate and stop when it is closed. No representation
  * or permission grant is written after a refusal. */
 async function openFixtureScope(client: Sql, scope: string, requireDispatch: boolean): Promise<void> {
-  requireScope(scope);
+  requireToken(scope, scopePattern, scope);
   await client.query(
     'INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
   const gate = await client.query<{ open: boolean; dispatch_open: boolean }>(
@@ -94,36 +84,32 @@ async function openFixtureScope(client: Sql, scope: string, requireDispatch: boo
 }
 
 async function ensureRepresentation(client: Sql, representation: FixtureRepresentation): Promise<string> {
-  if (!actionPattern.test(representation.action)) {
-    throw new FixtureAuthorityDenied('gate', representation.action);
-  }
-  const clock = lifetimeSql[representation.lifetime];
+  requireToken(representation.action, actionPattern, representation.action);
   const existing = await client.query<{ id: string }>(
     `SELECT id FROM access.representation
       WHERE principal_id = $1 AND subject_id = $2 AND action = $3 AND active
-        AND valid_until > ${clock.current} FOR SHARE`,
+        AND valid_until > clock_timestamp() FOR SHARE`,
     [representation.principalId, representation.actor, representation.action]);
   if (existing.rows[0]) return existing.rows[0].id;
   const id = randomUUID();
   await client.query(
-    `INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,${clock.until})`,
+    `INSERT INTO access.representation (id, principal_id, subject_id, action, valid_until) VALUES ($1,$2,$3,$4,${until(representation.lifetime)})`,
     [id, representation.principalId, representation.actor, representation.action]);
   return id;
 }
 
 async function ensureGrant(client: Sql, scope: string, grant: FixtureGrant): Promise<string> {
-  if (!actionPattern.test(grant.action)) throw new FixtureAuthorityDenied('gate', scope);
-  const clock = lifetimeSql[grant.lifetime];
+  requireToken(grant.action, actionPattern, scope);
   const selfIssuer = grant.requireSelfIssuer ? 'AND issuer_subject = recipient_subject' : '';
   const existing = await client.query<{ id: string }>(
     `SELECT id FROM access.permission_grant
       WHERE recipient_subject = $1 AND scope_id = $2 AND action = $3 AND active
-        AND valid_until > ${clock.current} ${selfIssuer} FOR SHARE`,
+        AND valid_until > clock_timestamp() ${selfIssuer} FOR SHARE`,
     [grant.actor, scope, grant.action]);
   if (existing.rows[0]) return existing.rows[0].id;
   const id = randomUUID();
   await client.query(
-    `INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until) VALUES ($1,$2,$2,$3,$4,${clock.until})`,
+    `INSERT INTO access.permission_grant (id, issuer_subject, recipient_subject, scope_id, action, valid_until) VALUES ($1,$2,$2,$3,$4,${until(grant.lifetime)})`,
     [id, grant.actor, scope, grant.action]);
   return id;
 }
@@ -148,10 +134,22 @@ export async function grantFixtureAuthority(client: Sql, input: FixtureAuthority
   return { grantId: await ensureGrant(client, input.scope, input.grant), representationIds };
 }
 
+/** End this actor's live fixture mandates and self-grants. A load baseline
+ * expires the seed window so a later read meets closed authority. */
+export async function expireFixtureAuthority(client: Sql, actor: string): Promise<void> {
+  requireToken(actor, scopePattern, actor);
+  await recoveryOpen(client);
+  await client.query(
+    `UPDATE access.representation SET valid_until = clock_timestamp() - interval '1 second'
+      WHERE subject_id = $1 AND valid_until > clock_timestamp()`, [actor]);
+  await client.query(
+    `UPDATE access.permission_grant SET valid_until = clock_timestamp() - interval '1 second'
+      WHERE issuer_subject = $1 AND valid_until > clock_timestamp()`, [actor]);
+}
+
 /** Record a scope gate without granting. An existing closed gate stays closed. */
-export async function ensureFixtureScopeGate(client: Pick<Pool | PoolClient, 'query'>, scope: string):
-  Promise<void> {
-  requireScope(scope);
+export async function ensureFixtureScopeGate(client: Sql, scope: string): Promise<void> {
+  requireToken(scope, scopePattern, scope);
   await client.query(
     'INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
 }

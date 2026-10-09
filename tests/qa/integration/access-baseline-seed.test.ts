@@ -306,7 +306,10 @@ test.each(['member', 'administrator'] as const)(
           try {
             await expect(
               grantImportedWorkSeedAuthority(again, sampleReceipt.work, sampleReceipt.mainVersion),
-            ).rejects.toThrow('Seed grant gate is closed');
+            ).rejects.toMatchObject({
+              name: 'FixtureAuthorityDenied', kind: 'gate',
+              message: `fixture scope is closed: ${closedScope}`,
+            });
             expect(await authorityRows()).toEqual(before);
           } finally {
             await h.accessPool.query(

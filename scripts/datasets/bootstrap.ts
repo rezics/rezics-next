@@ -3,10 +3,7 @@ import { chmodSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool, type PoolClient } from 'pg';
 import { writeAudit } from '../../services/account/src/operators.ts';
-import {
-  grantFixtureAuthority,
-  rethrowFixtureAuthority,
-} from '../../services/main/src/modules/access/fixture-authority.ts';
+import { grantFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
 import { AccessPlatformAdministrators } from '../../services/main/src/modules/access/platform-administrator.ts';
 import { SeedApi, type SeedEndpoints } from '../dev/seed/api.ts';
 import { atomicJson, repository, sha256 } from './store.ts';
@@ -207,13 +204,6 @@ export async function grantDatasetAdminAuthority(
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
       `dataset-admin:${issuer}:${accountSubject}`,
     ]);
-    const fence = (
-      await client.query<{ open: boolean }>(
-        'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE',
-      )
-    ).rows[0];
-    if (!fence?.open)
-      throw new Error('Dataset administrator setup refuses a closed Access recovery fence');
     const principal = (
       await client.query<{ id: string; active: boolean }>(
         'SELECT id, active FROM access.principal WHERE account_issuer = $1 AND account_subject = $2 FOR SHARE',
@@ -232,21 +222,14 @@ export async function grantDatasetAdminAuthority(
       throw new Error('Dataset administrator must already control its publicly provisioned Agent');
     const granted: { action: string; scope: string; id: string }[] = [];
     for (const { action, scope } of DATASET_ADMIN_GRANTS) {
-      try {
-        const authority = await grantFixtureAuthority(client, {
-          scope,
-          requireDispatch: true,
-          refuseExistingPolicy: true,
-          representations: [{ principalId: principal.id, actor, action, lifetime: '7 days' }],
-          grant: { actor, action, lifetime: '7 days', requireSelfIssuer: true },
-        });
-        granted.push({ id: authority.grantId, action, scope });
-      } catch (error) {
-        rethrowFixtureAuthority(error, {
-          gate: `Dataset administrator setup refuses closed scope ${scope}`,
-          policy: `Dataset administrator setup preserves the existing root policy for ${scope}; use its supported assignment flow`,
-        });
-      }
+      const authority = await grantFixtureAuthority(client, {
+        scope,
+        requireDispatch: true,
+        refuseExistingPolicy: true,
+        representations: [{ principalId: principal.id, actor, action, lifetime: '7 days' }],
+        grant: { actor, action, lifetime: '7 days', requireSelfIssuer: true },
+      });
+      granted.push({ id: authority.grantId, action, scope });
     }
     await client.query('COMMIT');
     return { principal: principal.id, granted };

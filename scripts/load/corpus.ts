@@ -15,6 +15,7 @@ import { selectRealmLocal, realmSelectionDigest } from '../../services/main/src/
 import { rejectRealmLocal, realmRejectionDigest } from '../../services/main/src/modules/work/reject-realm.ts';
 import { createRatingContext, ratingContextDigest } from '../../services/main/src/modules/rating/context.ts';
 import { seedContent, type LoadCase } from '../../tests/qa/load/corpus.ts';
+import { grantFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
 import { onceForKey, runBoundedIndices } from './schedule.ts';
 
 export function uniqueToken(index: number): string {
@@ -73,7 +74,6 @@ export class LoadAuthority {
   readonly access: AccessAdmissionRegistry;
   private readonly principalId = randomUUID();
   private readonly granted = new Map<string, Promise<void>>();
-  private readonly represented = new Map<string, Promise<void>>();
 
   constructor(private readonly pool: Pool) { this.access = new AccessAdmissionRegistry(pool); }
 
@@ -84,19 +84,12 @@ export class LoadAuthority {
   }
 
   private async grant(scope: string, action: string): Promise<void> {
-    await onceForKey(this.represented, action, async () => {
-      await this.pool.query(`INSERT INTO access.representation
-        (id, principal_id, subject_id, action, valid_until)
-        VALUES ($1, $2, $3, $4, now() + interval '6 hours')`,
-      [randomUUID(), this.principalId, this.actor, action]);
-    });
-    const key = `${scope}\0${action}`;
-    await onceForKey(this.granted, key, async () => {
-      await this.pool.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [scope]);
-      await this.pool.query(`INSERT INTO access.permission_grant
-        (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
-        VALUES ($1, $2, $2, $3, $4, now() + interval '6 hours')`,
-      [randomUUID(), this.actor, scope, action]);
+    await onceForKey(this.granted, `${scope}\0${action}`, async () => {
+      await grantFixtureAuthority(this.pool, {
+        scope, requireDispatch: false,
+        representations: [{ principalId: this.principalId, actor: this.actor, action, lifetime: '8 hours' }],
+        grant: { actor: this.actor, action, lifetime: '8 hours' },
+      });
     });
   }
 

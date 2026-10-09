@@ -28,6 +28,7 @@ import { selectMainDefault, mainSelectionDigest, PUBLIC_SEARCH_GRAPH }
   from '../../services/main/src/modules/work/select-main.ts';
 import { setStandingRating, standingRatingDigest }
   from '../../services/main/src/modules/rating/observation.ts';
+import { expireFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
 import { seedPracticalCorpus, type PracticalCorpus, type LoadAuthority, replacementContribution,
   writerCohorts, writerIndex }
   from './corpus.ts';
@@ -811,10 +812,7 @@ try {
     if (!admissions.rows[0] || admissions.rows[0].sealed !== admissions.rows[0].total
       || Number(admissions.rows[0].sealed) < count * 4)
       throw new Error('baseline Access admissions did not all seal');
-    await accessPool.query(`UPDATE access.representation SET valid_until = now() - interval '1 second'
-      WHERE subject_id = $1 AND valid_until > now()`, [authority.actor]);
-    await accessPool.query(`UPDATE access.permission_grant SET valid_until = now() - interval '1 second'
-      WHERE issuer_subject = $1 AND valid_until > now()`, [authority.actor]);
+    await expireFixtureAuthority(accessPool, authority.actor);
     const remaining = await accessPool.query<{ reps: string; grants: string }>(`SELECT
       (SELECT count(*)::text FROM access.representation WHERE subject_id = $1 AND valid_until > now()) AS reps,
       (SELECT count(*)::text FROM access.permission_grant WHERE issuer_subject = $1 AND valid_until > now()) AS grants`,
