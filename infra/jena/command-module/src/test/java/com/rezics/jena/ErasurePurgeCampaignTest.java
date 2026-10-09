@@ -12,6 +12,7 @@ import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.Dataset;
 import org.apache.jena.query.ReadWrite;
 import org.apache.jena.query.text.*;
+import org.apache.jena.sparql.core.DatasetGraph;
 import org.apache.jena.sparql.core.DatasetGraphFactory;
 import org.apache.jena.sparql.core.Quad;
 import org.apache.jena.tdb2.TDB2Factory;
@@ -166,5 +167,118 @@ public class ErasurePurgeCampaignTest {
             assertThrows(IllegalArgumentException.class, () -> ErasurePurge.main(new String[]{sourcePath.toString(), denied.toString(), target(1), "1"}));
             assertFalse(Files.exists(denied));
         }
+    }
+
+    @Test public void middleRevisionPurgeLeavesTheOtherRevisionsAndCurrentPointers() throws Exception {
+        Work work = work();
+        Dataset output = TDB2Factory.connectDataset(work.destination.toString());
+        output.begin(ReadWrite.READ);
+        try {
+            assertEquals(work.expected, quads(output));
+            assertFalse(output.asDatasetGraph().contains(REVISIONS, iri(work.middle), rv("label"), NodeFactory.createLiteralString("two")));
+            assertTrue(output.asDatasetGraph().contains(REVISIONS, iri(work.first), rv("label"), NodeFactory.createLiteralString("one")));
+            assertTrue(output.asDatasetGraph().contains(REVISIONS, iri(work.last), rv("predecessor"), iri(work.middle)));
+            assertTrue(output.asDatasetGraph().contains(iri(CommandPolicy.CURRENT), iri(work.work), rv("formerHead"), iri(work.middle)));
+            assertTrue(output.asDatasetGraph().contains(iri(CommandPolicy.CURRENT), iri(work.work), rv("head"), iri(work.last)));
+            EntityDefinition definition = new EntityDefinition("uri", "label", "graph");
+            definition.set("publicBody", rv("searchBody")); definition.set("privateBody", rv("privateSearchBody"));
+            definition.setLangField("lang"); definition.setUidField("uid");
+            TextIndexConfig config = new TextIndexConfig(definition); config.setValueStored(true);
+            TextIndexLucene index = new TextIndexLucene(new ByteBuffersDirectory(), config);
+            var filtered = new FilteredGraphTextIndex(index);
+            var indexed = new DatasetGraphText(DatasetGraphFactory.createTxnMem(), filtered, new TextDocProducerTriples(filtered));
+            try {
+                indexed.begin(ReadWrite.WRITE); quads(output).forEach(indexed::add); indexed.commit(); indexed.end();
+                assertTrue(filtered.query(rv("searchBody"), "middle", PUBLIC.getURI(), null, 100).isEmpty());
+                assertEquals(1, filtered.query(rv("searchBody"), "kept", PUBLIC.getURI(), null, 100).size());
+                assertEquals(1, filtered.query(rv("privateSearchBody"), "latest", PRIVATE.getURI(), null, 100).size());
+            } finally { indexed.close(); index.close(); }
+        } finally { output.end(); output.close(); }
+        Dataset source = TDB2Factory.connectDataset(work.source.toString());
+        source.begin(ReadWrite.READ);
+        try { assertEquals(work.before, quads(source)); }
+        finally { source.end(); source.close(); }
+    }
+
+    @Test public void restoreDoesNotBringBackAPurgedRevisionPayload() throws Exception {
+        Work work = work();
+        Dataset restored = TDB2Factory.connectDataset(work.destination.toString());
+        restored.begin(ReadWrite.READ);
+        try {
+            assertEquals(work.expected, quads(restored));
+            assertFalse(restored.asDatasetGraph().contains(REVISIONS, iri(work.middle), rv("label"),
+                NodeFactory.createLiteralString("two")));
+        } finally { restored.end(); restored.close(); }
+        String receipt = "urn:rezics:receipt:erasure-restore:" + "ab".repeat(32);
+        IllegalArgumentException rejected = assertThrows(IllegalArgumentException.class,
+            () -> CommandPolicy.parse(restoreUpdate(work.middle, receipt, true), receipt));
+        assertTrue(rejected.getMessage(), rejected.getMessage().contains("tombstone"));
+        assertNotNull(CommandPolicy.parse(restoreUpdate(work.middle, receipt, false), receipt));
+    }
+
+    private static String restoreUpdate(String revision, String receipt, boolean payload) {
+        String extra = payload ? "<" + revision + "> <http://www.w3.org/2000/01/rdf-schema#label> \"two\" . " : "";
+        return "DELETE { } INSERT { GRAPH <" + CommandPolicy.REVISIONS + "> { <" + revision
+            + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://rezics.com/vocab/ErasedRevision> . <"
+            + revision + "> <https://rezics.com/vocab/erasureEpoch> \"4\"^^<http://www.w3.org/2001/XMLSchema#integer> . "
+            + extra + "} GRAPH <" + CommandPolicy.RECEIPTS + "> { <" + receipt
+            + "> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://rezics.com/vocab/OperationReceipt> . } } WHERE { GRAPH <"
+            + CommandPolicy.CONTROL + "> { <urn:rezics:dataset:product> <https://rezics.com/vocab/dataEpoch> \"1\" . } }";
+    }
+
+    private record Work(Path source, Path destination, String work, String first, String middle, String last,
+                        Set<Quad> before, Set<Quad> expected) {}
+
+    private static Work work() throws Exception {
+        String work = "https://rezics.com/id/00000000-0000-4000-8000-0000000000b1";
+        String first = "https://rezics.com/id/00000000-0000-4000-8000-0000000000a1";
+        String middle = "https://rezics.com/id/00000000-0000-4000-8000-0000000000a2";
+        String last = "https://rezics.com/id/00000000-0000-4000-8000-0000000000a3";
+        Path base = directory(), sourcePath = base.resolve("source"), destPath = base.resolve("destination");
+        Dataset source = TDB2Factory.connectDataset(sourcePath.toString());
+        source.begin(ReadWrite.WRITE);
+        DatasetGraph graph = source.asDatasetGraph();
+        Node current = iri(CommandPolicy.CURRENT);
+        Node epoch = NodeFactory.createLiteralDT("4", org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger);
+        graph.add(current, iri(work), RDF.type.asNode(), iri("https://schema.org/CreativeWork"));
+        graph.add(current, iri(work), rv("head"), iri(last));
+        graph.add(current, iri(work), rv("formerHead"), iri(middle));
+        revision(graph, first, work, "one");
+        revision(graph, middle, work, "two");
+        graph.add(REVISIONS, iri(middle), RDF.type.asNode(), rv("ErasedRevision"));
+        graph.add(REVISIONS, iri(middle), EPOCH, epoch);
+        revision(graph, last, work, "three");
+        graph.add(REVISIONS, iri(last), rv("predecessor"), iri(middle));
+        graph.add(REVISIONS, iri("urn:rezics:other"), rv("note"), NodeFactory.createLiteralString("untouched"));
+        Node gone = iri("urn:rezics:search:gone");
+        text(graph, PUBLIC, iri("urn:rezics:search:kept"), first, "kept-secret", "searchBody");
+        text(graph, PUBLIC, gone, middle, "middle-secret", "searchBody");
+        text(graph, PRIVATE, iri("urn:rezics:search:last"), last, "latest-secret", "privateSearchBody");
+        source.commit(); source.end();
+        source.begin(ReadWrite.READ);
+        Set<Quad> before = quads(source);
+        source.end(); source.close();
+        ErasurePurge.main(new String[]{sourcePath.toString(), destPath.toString(), middle, "4"});
+        Set<Quad> expected = new HashSet<>();
+        for (Quad quad : before) {
+            boolean ownRevision = REVISIONS.equals(quad.getGraph()) && iri(middle).equals(quad.getSubject());
+            boolean ownText = PUBLIC.equals(quad.getGraph()) && gone.equals(quad.getSubject());
+            if (!ownRevision && !ownText) expected.add(quad);
+        }
+        expected.add(new Quad(REVISIONS, iri(middle), RDF.type.asNode(), rv("ErasedRevision")));
+        expected.add(new Quad(REVISIONS, iri(middle), EPOCH, epoch));
+        return new Work(sourcePath, destPath, work, first, middle, last, before, expected);
+    }
+
+    private static void revision(DatasetGraph graph, String revision, String work, String label) {
+        graph.add(REVISIONS, iri(revision), RDF.type.asNode(), rv("RevisionAnchor"));
+        graph.add(REVISIONS, iri(revision), rv("component"), iri(work));
+        graph.add(REVISIONS, iri(revision), rv("label"), NodeFactory.createLiteralString(label));
+    }
+
+    private static void text(DatasetGraph graph, Node index, Node unit, String revision, String body, String predicate) {
+        graph.add(index, unit, RDF.type.asNode(), rv("MatchUnit"));
+        graph.add(index, unit, rv("revision"), iri(revision));
+        graph.add(index, unit, rv(predicate), NodeFactory.createLiteralString(body));
     }
 }

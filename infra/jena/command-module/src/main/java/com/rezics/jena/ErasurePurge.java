@@ -103,6 +103,22 @@ public final class ErasurePurge {
         }
     }
 
+    /** Match units in the public or private text index that name one purged revision. */
+    private static Set<Node> textIndexDocuments(DatasetGraph source, Set<Node> revisions) {
+        Set<Node> documents = new HashSet<>();
+        if (revisions.isEmpty()) return documents;
+        for (Node graph : new Node[]{PUBLIC_SEARCH, PRIVATE_SEARCH}) {
+            for (Node predicate : new Node[]{RV_REVISION, RV_CONTENT_REVISION}) {
+                var found = source.find(graph, Node.ANY, predicate, Node.ANY);
+                while (found.hasNext()) {
+                    Quad quad = found.next();
+                    if (revisions.contains(quad.getObject())) documents.add(quad.getSubject());
+                }
+            }
+        }
+        return documents;
+    }
+
     private static void addDependents(DatasetGraph source, Set<Node> removed) {
         // Only typed Content projection nodes are evicted as whole subjects.
         // Other incoming references lose the exact edge, preserving unrelated facts.
@@ -148,15 +164,28 @@ public final class ErasurePurge {
                     destination.begin(ReadWrite.WRITE);
                     try {
                         DatasetGraph output = destination.asDatasetGraph();
-                        Set<Node> removed = new HashSet<>();
-                        removed.addAll(campaign.targets().keySet());
+                        Set<Node> contentTargets = new HashSet<>();
+                        Set<Node> revisionTargets = new HashSet<>();
+                        for (Node target : campaign.targets().keySet()) {
+                            if (target.getURI().startsWith("https://rezics.com/id/")) revisionTargets.add(target);
+                            else contentTargets.add(target);
+                        }
+                        // A Content URN still drops its projection and every edge that names it.
+                        // A revision IRI drops only its own revision-graph quads and its text documents.
+                        Set<Node> removed = new HashSet<>(contentTargets);
                         addDependents(input, removed);
+                        Set<Node> textDocuments = textIndexDocuments(input, revisionTargets);
                         long retained = 0;
                         long excluded = 0;
                         var quads = input.find();
                         while (quads.hasNext()) {
                             Quad quad = quads.next();
-                            if (removed.contains(quad.getSubject()) || removed.contains(quad.getObject())) excluded++;
+                            boolean dropContent = removed.contains(quad.getSubject()) || removed.contains(quad.getObject());
+                            boolean dropRevision = revisionTargets.contains(quad.getSubject())
+                                && CommandPolicy.REVISIONS.equals(quad.getGraph().getURI());
+                            boolean dropText = textDocuments.contains(quad.getSubject())
+                                && (PUBLIC_SEARCH.equals(quad.getGraph()) || PRIVATE_SEARCH.equals(quad.getGraph()));
+                            if (dropContent || dropRevision || dropText) excluded++;
                             else { output.add(quad); retained++; }
                         }
                         org.apache.jena.tdb2.sys.CopyDSG.copyPrefixes(input, output);
