@@ -93,9 +93,7 @@ test('a manga chapter marked on a phone resumes on the desktop, including from a
   await expect(phoneChapters.getByText('No chapter read yet')).toBeVisible();
   await expect(phoneChapters.getByText('Continue from Volume 1, chapter 1')).toBeVisible();
 
-  await phoneChapters.getByLabel('Volume').fill('2');
-  await phoneChapters.getByLabel('Chapter').fill('3');
-  await phoneChapters.getByRole('button', { name: 'Go' }).click();
+  await phoneChapters.getByRole('button', { name: 'Volume 2, chapter 3', exact: true }).click();
   await expect(phoneChapters.locator('[data-selected]')).toContainText('Volume 2, chapter 3');
   await phoneChapters.getByRole('button', { name: 'Mark read', exact: true }).click();
   await expect(phoneChapters.getByText('Last read: Volume 2, chapter 3')).toBeVisible();
@@ -133,12 +131,8 @@ test('a manga chapter marked on a phone resumes on the desktop, including from a
     await gate;
     await route.fallback();
   });
-  await phoneChapters.getByLabel('Volume').fill('2');
-  await phoneChapters.getByLabel('Chapter').fill('4');
-  await phoneChapters.getByRole('button', { name: 'Go' }).click();
-  await desktopChapters.getByLabel('Volume').fill('2');
-  await desktopChapters.getByLabel('Chapter').fill('4');
-  await desktopChapters.getByRole('button', { name: 'Go' }).click();
+  await phoneChapters.getByRole('button', { name: 'Volume 2, chapter 4', exact: true }).click();
+  await desktopChapters.getByRole('button', { name: 'Volume 2, chapter 4', exact: true }).click();
   await expect(phoneChapters.locator('[data-selected]')).toContainText('Volume 2, chapter 4');
   const marking = phoneChapters.getByRole('button', { name: 'Mark read', exact: true }).click();
   await putStarted;
@@ -173,23 +167,41 @@ test('a game marked completed on one device is completed on the other', async ({
   await expect(desktopPlay.locator('[data-where]')).toHaveText('Completed');
   await expect(desktopPlay.getByRole('button', { name: seeded.game.route })).toBeVisible();
   await shot(wide, info, 'game-desktop', desktopPlay);
+  await desktopPlay.getByRole('button', { name: 'Mark not completed' }).click();
+  await expect(desktopPlay.locator('[data-where]')).toHaveText('Not played yet');
 });
 
-test('episode 1001 of a real series resumes at the next episode on another device', async ({ browser }, info) => {
+test('episode 1001 of a real series is watched on another device, and episode 1002 is the next one', async ({ browser }, info) => {
   test.setTimeout(300_000);
   const handset = await device(browser, info, phone, seeded.episodes.work);
   const phoneEpisodes = handset.locator('[data-episode-progress]');
   await loaded(handset, '[data-episode-progress]', 180_000);
-  await expect(phoneEpisodes.getByText('Continue from episode 1001')).toBeVisible();
+  // One watched episode does not move the run that starts at episode 1. Episode 1001 is opened
+  // by its number, and that mark is the only progress write.
+  await expect(phoneEpisodes.getByText('Continue from episode 1')).toBeVisible();
+  await expect(phoneEpisodes.getByText('No episode watched yet')).toBeVisible();
+  await phoneEpisodes.getByLabel('Go to episode number').fill('1001');
+  await phoneEpisodes.getByRole('button', { name: 'Go' }).click();
+  await expect(phoneEpisodes.locator('[data-selected="main"]')).toContainText('Episode 1001', { timeout: 180_000 });
+  await expect(phoneEpisodes.locator('[data-selected="main"]')).toContainText('Not watched');
   const saved = handset.waitForResponse(response => response.request().method() === 'PUT'
     && response.url().includes('/progress') && response.ok());
-  await phoneEpisodes.getByRole('button', { name: 'Mark episode 1001 watched' }).click();
+  await phoneEpisodes.getByRole('button', { name: 'Mark watched', exact: true }).click();
   await saved;
-  const wide = await device(browser, info, desktop, seeded.episodes.work);
-  await expect(phoneEpisodes.getByText('Continue from episode 1002')).toBeVisible({ timeout: 180_000 });
+  await expect(phoneEpisodes.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
   await shot(handset, info, 'episode-1001-phone', phoneEpisodes);
+
+  const wide = await device(browser, info, desktop, seeded.episodes.work);
   const desktopEpisodes = wide.locator('[data-episode-progress]');
   await loaded(wide, '[data-episode-progress]', 180_000);
-  await expect(desktopEpisodes.getByText('Continue from episode 1002')).toBeVisible();
+  await expect(desktopEpisodes.getByText('Continue from episode 1')).toBeVisible();
+  await desktopEpisodes.getByLabel('Go to episode number').fill('1001');
+  await desktopEpisodes.getByRole('button', { name: 'Go' }).click();
+  await expect(desktopEpisodes.locator('[data-selected="main"]')).toContainText('Episode 1001', { timeout: 180_000 });
+  await expect(desktopEpisodes.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
+  await desktopEpisodes.getByLabel('Go to episode number').fill('1002');
+  await desktopEpisodes.getByRole('button', { name: 'Go' }).click();
+  await expect(desktopEpisodes.locator('[data-selected="main"]')).toContainText('Episode 1002', { timeout: 180_000 });
+  await expect(desktopEpisodes.locator('[data-selected="main"]')).toContainText('Not watched');
   await shot(wide, info, 'episode-1001-desktop', desktopEpisodes);
 });
