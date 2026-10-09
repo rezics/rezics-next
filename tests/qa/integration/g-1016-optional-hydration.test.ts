@@ -32,14 +32,25 @@ test('G1016: typeahead and also enjoyed degrade optional owners per item, preser
     const phrase = `g1016${randomUUID().replaceAll('-', '')}`;
     const works = [await f.publicWork(authors[0]!.actor, ['en'], `${phrase} affected`),
       await f.publicWork(authors[1]!.actor, ['en'], `${phrase} healthy`)];
-    await f.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {
-      ${[source, ...works].map(work => `${iri(work.work)} a <https://schema.org/Book> .`).join('\n')}
-    } }`);
+    const workHead = async (work: string) => {
+      const head = (await f.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ?head } }`)).results?.bindings[0]?.head?.value;
+      if (!head) throw new Error('Work head is unavailable');
+      return head;
+    };
+    const recordBook = async (actor: typeof authors[0], work: string) => {
+      await actor!.grant(`work:edit:${work}`, 'work.edit');
+      await json(await actor!.send('PUT', `/v1/works/${work.slice(-36)}/type`, {
+        profile: 'work-type-v2', expectedHead: await workHead(work),
+        types: ['https://schema.org/Book'], actingSubject: actor!.actor,
+      }, randomUUID()));
+    };
+    await recordBook(authors[0], source.work);
     const metadata = { kind: 'header' as const, originalTitle: null, localized: [{ language: 'en',
       title: null, description: null, mainVersionLabel: null, tagline: 'Healthy recommendation facts' }] };
     for (const [index, work] of works.entries()) {
       const author = authors[index]!;
-      await author.grant(`work:edit:${work.work}`, 'work.edit');
+      await recordBook(author, work.work);
       await json(await author.send('PUT', `/v1/works/${work.work.slice(-36)}/metadata`, {
         profile: 'work-metadata-details-v1', expectedHead: null, actingSubject: author.actor, state: metadata,
       }, randomUUID()));
@@ -63,9 +74,11 @@ test('G1016: typeahead and also enjoyed degrade optional owners per item, preser
     const store = new AlsoEnjoyedStore(f.accessPool, f.contentPool);
     const handles = new AgentVanityHandles(f.accessPool);
     const serial = new SerialStatisticsProjection(f.accessPool, relay, f.contentPool, f.env);
-    const app = createMainApp(f.fuseki, { environment: f.env, access: f.access, media: f.media,
+    const deps = { environment: f.env, access: f.access, media: f.media,
       profiles: new ProfilesAccess(f.accessPool), agentHandles: handles, serialStats: serial,
-      alsoEnjoyed: store, account: { verify: async () => writer.principal } });
+      personPreferences: f.composition.dependencies.personPreferences,
+      templateSeek: f.templateSeek, alsoEnjoyed: store, account: { verify: async () => writer.principal } };
+    const app = createMainApp(f.fuseki, deps);
     const suggest = () => app.handle(new Request(`http://main.local/v1/search/typeahead?prefix=${phrase}`));
     const recommend = (limit = 20, cursor?: string) => app.handle(new Request(
       `http://main.local/v1/works/${source.work.slice(-36)}/also-enjoyed?limit=${limit}`
@@ -129,7 +142,11 @@ test('G1016: typeahead and also enjoyed degrade optional owners per item, preser
     expect(damaged.items.find((item: { id: string }) => item.id === works[1]!.work).tagline.value).toBe('Healthy recommendation facts');
     f.fuseki.query = nativeQuery;
     const avatars = f.media.store.avatarRows.bind(f.media.store);
-    f.media.store.avatarRows = async () => { throw new MediaUnavailable('Cover projection unavailable'); };
+    const coverTargets = new Set(works.map(work => work.work));
+    f.media.store.avatarRows = async (targets, context) => {
+      if (targets.some(target => coverTargets.has(target))) throw new MediaUnavailable('Cover projection unavailable');
+      return avatars(targets, context);
+    };
     for (const item of (await json(await recommend())).items) expect(item.cover.kind).toBe('fallback');
     for (const item of (await json(await suggest())).items) expect(item.cover.kind).toBe('fallback');
     f.media.store.avatarRows = avatars;
@@ -182,11 +199,30 @@ test('G1016: typeahead and also enjoyed degrade optional owners per item, preser
     await json(await recommend(), 503);
     // Live erasure still removes the title-based suggestion despite optional
     // author failures. This fence does not depend on a projection catching up.
-    const erased = `urn:rezics:g1016-erased:${randomUUID()}`;
-    await f.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(erased)} rv:resource ${iri(works[0]!.work)} ; rv:contentPublicationHead ${iri(erased)} . }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(erased)} rv:contentRevision ${iri(erased)} ; a rv:ErasedRevision . }
-    }`);
+    const affected = works[0]!.work;
+    const variantId = `urn:rezics:variant:${randomUUID()}`;
+    await writer.grant(`work:read:${affected}`, 'work.read');
+    await writer.grant(`content:draft:${affected}`, 'content.draft');
+    await writer.grant(`content:publish:${affected}`, 'content.publish');
+    const saved = await json(await writer.send('POST', '/v1/content-drafts', {
+      profile: 'content-text-v1', resourceId: affected, variantId,
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', expectedHead: null,
+      body: `Erased body ${randomUUID()}`, actingSubject: writer.actor,
+    }, randomUUID()), 201);
+    const exact = (await f.content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
+    if (exact?.status !== 'available') throw new Error('Content draft was not saved');
+    await json(await writer.send('POST', '/v1/content-publications', {
+      profile: 'content-publication-v1', preparationId: `g1016-${randomUUID()}`, revisionId: saved.revisionId,
+      expectedDigest: exact.reference.byteDigest, expectedContentEpoch: saved.sourcePosition.dataEpoch,
+      resourceId: affected, variantId, expectedPublicationHead: null, actingSubject: writer.actor,
+    }, randomUUID()), 201);
+    await writer.grant(`erasure:${affected}`, 'erasure.request');
+    const erasure = await json(await writer.send('POST', '/v1/erasures', {
+      profile: 'content-revision-erasure-v1', actingSubject: writer.actor,
+      resourceId: affected, revisionIds: [saved.revisionId],
+    }, randomUUID()));
+    expect(erasure).toMatchObject({ suppression: 'suppressed' });
+    expect(erasure.erasureEpoch).toMatch(/^[1-9][0-9]*$/);
     handles.current = async agent => {
       if (agent === authors[0]!.actor) throw new WorkReadUnavailable('Still behind');
       return handle(agent);

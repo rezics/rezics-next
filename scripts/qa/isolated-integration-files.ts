@@ -220,7 +220,6 @@ export const rawSparqlIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/follows-authors.test.ts',
   'tests/qa/integration/g-1001-work-cards.test.ts',
   'tests/qa/integration/g-1016-discovery-refresh.test.ts',
-  'tests/qa/integration/g-1016-optional-hydration.test.ts',
   'tests/qa/integration/g-1019-unnamed-agent.test.ts',
   'tests/qa/integration/g-1033-discovery-refresh.test.ts',
   'tests/qa/integration/g-1042-ranking-followups.test.ts',
