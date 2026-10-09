@@ -341,14 +341,6 @@
   },
   {
     "importer": "services/main/src/routes/access-authority.ts",
-    "imported": "services/main/src/modules/access/group-intent.ts"
-  },
-  {
-    "importer": "services/main/src/routes/access-authority.ts",
-    "imported": "services/main/src/modules/access/groups.ts"
-  },
-  {
-    "importer": "services/main/src/routes/access-authority.ts",
     "imported": "services/main/src/modules/access/managed-org-authority.ts"
   },
   {
@@ -362,14 +354,6 @@
   {
     "importer": "services/main/src/routes/access-authority.ts",
     "imported": "services/main/src/modules/access/platform-grants.ts"
-  },
-  {
-    "importer": "services/main/src/routes/access-memberships.ts",
-    "imported": "services/main/src/modules/access/group-intent.ts"
-  },
-  {
-    "importer": "services/main/src/routes/access-policy.ts",
-    "imported": "services/main/src/modules/access/group-intent.ts"
   },
   {
     "importer": "services/main/src/routes/access-policy.ts",
@@ -386,14 +370,6 @@
   {
     "importer": "services/main/src/routes/access-read.ts",
     "imported": "services/main/src/modules/access/policy-errors.ts"
-  },
-  {
-    "importer": "services/main/src/routes/access-roles.ts",
-    "imported": "services/main/src/modules/access/group-intent.ts"
-  },
-  {
-    "importer": "services/main/src/routes/access-topology.ts",
-    "imported": "services/main/src/modules/access/group-intent.ts"
   },
   {
     "importer": "services/main/src/routes/access-topology.ts",

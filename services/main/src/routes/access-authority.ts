@@ -1,8 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { PlatformGrantDenied, PlatformGrantStale, PlatformGrantConflict, PlatformGrantUnavailable }
   from '../modules/access/platform-grants.ts';
-import { GROUP_SCOPE } from '../modules/access/groups.ts';
-import { groupChangeIntentDigest } from '../modules/access/group-intent.ts';
+import { groupChangeIntentDigest } from '../modules/access/scope-gates.ts';
 import { OrgRealmUnavailable } from '../modules/access/org-realm-authority.ts';
 import { ManagedOrgUnavailable } from '../modules/access/managed-org-authority.ts';
 import { managedOrgUuid, managedOrgQuery, managedOrgStateResult, managedOrgChangeBody,
@@ -239,7 +238,7 @@ export function accessAuthorityRoutes(work: MainWorkDependencies) {
         if (!work.groups) return problem(503, 'group_unavailable', 'Group management is unavailable');
         const state = await work.groups.readState(principal, query.issuerSubject);
         return Response.json({ profile: 'work-create-group-scope-v1',
-          scope: GROUP_SCOPE, ...state },
+          scope: 'work:create:root', ...state },
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     })

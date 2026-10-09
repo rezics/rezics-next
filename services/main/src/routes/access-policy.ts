@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
-import { groupChangeIntentDigest } from '../modules/access/group-intent.ts';
+import { groupChangeIntentDigest } from '../modules/access/scope-gates.ts';
 import {
   PolicyConflict, PolicyControllerContinuity, PolicyDenied, PolicyInvalid, PolicyNotFound,
   PolicyReferenceNotAdmitted, PolicyStale, PolicyUnavailable, ProofHandleMismatch, ProofHandleStale,

@@ -2,7 +2,7 @@ import { Elysia, t, type AnySchema, type UnwrapSchema } from 'elysia';
 import { AccountAssertionDenied } from '../modules/account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import type { AuthorityControl } from '../modules/access/grants.ts';
-import { groupChangeIntentDigest } from '../modules/access/group-intent.ts';
+import { groupChangeIntentDigest } from '../modules/access/scope-gates.ts';
 import { InvitationExpired } from '../modules/access/invitation.ts';
 import { PolicyUnavailable } from '../modules/access/policy-errors.ts';
 import { AGENT_ACCESS_COST } from '../modules/access/invitation-schema.ts';

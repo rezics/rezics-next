@@ -1,4 +1,19 @@
+import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
+
+function stableCommand(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableCommand).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableCommand(item)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** Bind a validated command body to one owner-local idempotency key. */
+export function groupChangeIntentDigest(command: Record<string, unknown>): string {
+  return createHash('sha256').update(stableCommand(command)).digest('hex');
+}
 
 /** Serialize an absent receipt as well as an existing one. The key must cover
  * the receipt's unique identity, not its scope: one retry key can cross scopes.

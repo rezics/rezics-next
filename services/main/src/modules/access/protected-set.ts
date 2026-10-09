@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
-import { groupChangeIntentDigest } from './group-intent.ts';
+import { groupChangeIntentDigest } from './scope-gates.ts';
 import { GROUP_INVENTORY_SCOPE } from './groups.ts';
 import { applyAgentController, applyAgentRecovery } from './agent-control.ts';
 import { type ProtectedChangeKind, MAX_PROTECTED_APPROVALS } from './protected-set-schema.ts';

@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { groupChangeIntentDigest } from '../modules/access/group-intent.ts';
+import { groupChangeIntentDigest } from '../modules/access/scope-gates.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';

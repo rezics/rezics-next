@@ -1,7 +1,6 @@
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
-import { groupChangeIntentDigest } from './group-intent.ts';
-import { lockAccessKey } from './scope-gates.ts';
+import { groupChangeIntentDigest, lockAccessKey } from './scope-gates.ts';
 import { currentMembershipDependency, validMembershipDependency,
   type MembershipDependency } from './memberships.ts';
 import { type OperationalBoundsProfile, readAccessBounds } from '../../operations/bounds.ts';

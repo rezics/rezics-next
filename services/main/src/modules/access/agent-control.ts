@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import { CONTROL_ACTION, MAX_CONTROLLERS, type RecoveryReason } from './agent-control-schema.ts';
-import { groupChangeIntentDigest } from './group-intent.ts';
+import { groupChangeIntentDigest } from './scope-gates.ts';
 import { drainRevokedAuthority } from './policy-transaction.ts';
 import {
   ControlConflict,
