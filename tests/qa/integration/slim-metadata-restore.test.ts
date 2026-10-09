@@ -133,11 +133,16 @@ async function originalGraphCopy(stack: QaStack, volume: string) {
     secrets: fusekiSecrets(stack.composeEnv) });
 }
 
+const semanticSourceBasis = 'urn:rezics:projection:semantic-source-basis';
+
+/** Owner quads. The semantic-source checkpoint belongs to this process:
+ * startup and deferred admission rewrite it after a held cut opens. */
 async function facts(fuseki: FusekiClient, subjects?: readonly string[]) {
   return (await fuseki.query(`SELECT ?graph ?subject ?predicate ?object WHERE {
     ${subjects ? `VALUES ?subject { ${subjects.map(iri).join(' ')} }` : ''}
     { GRAPH ?graph { ?subject ?predicate ?object } }
     UNION { ?subject ?predicate ?object . BIND(<${defaultGraph}> AS ?graph) }
+    FILTER(?subject != <${semanticSourceBasis}>)
   } ORDER BY ?graph ?subject ?predicate ?object`)).results!.bindings;
 }
 
@@ -160,7 +165,7 @@ test('held product slim metadata restore preserves retired owner custody, exact 
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through selected QA integration');
   const stack = qaStack(`metadata-restore-${randomUUID().slice(0, 12)}`);
   let accessPool: Pool | undefined, relayPool: Pool | undefined, historicalPool: Pool | undefined;
-  let accountPool: Pool | undefined, contentPool: Pool | undefined;
+  let accountPool: Pool | undefined, contentPool: Pool | undefined, capturedRelayPool: Pool | undefined;
   let postgres: Awaited<ReturnType<typeof promotedPostgres>> | undefined;
   let originalGraph: StandaloneFuseki | undefined;
   const originalVolume = `rezics-metadata-original-${randomUUID().slice(0, 12)}`;
@@ -385,6 +390,10 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     historicalPool = new Pool({ connectionString: postgres.connection(apps.ACCESS_DATABASE_URL!), max: 1, connectionTimeoutMillis: 30_000 });
     accountPool = new Pool({ connectionString: postgres.connection(apps.ACCOUNT_DATABASE_URL!) });
     contentPool = new Pool({ connectionString: postgres.connection(apps.CONTENT_DATABASE_URL!) });
+    // Release reads this handoff before the borrowed-transaction check. It is the
+    // relay database inside the promoted Access and Content capture.
+    capturedRelayPool = new Pool({ connectionString: postgres.connection(apps.MAIN_RELAY_DATABASE_URL!),
+      max: 1, connectionTimeoutMillis: 30_000 });
     custodyStore = new PostgresReceiptCustodyStore(accessPool);
     custody = new ReceiptCustody(custodyStore, objects, fuseki,
       apps.FUSEKI_TITLE_ADMISSION_KEY!, proofRetirementSender(apps.FUSEKI_URL!, apps.FUSEKI_COMMAND_TOKEN!));
@@ -465,7 +474,7 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     expect(await facts(fuseki)).toEqual(held);
     const prematureErasures = mock(async () => { throw new Error('An incomplete signed restore cannot enter erasure release'); });
     await expect(releaseRestoredGraphHold(fuseki,accessPool,relayPool,env.lineage,{
-      sealedCoverage,hmacKey:recoveryKey,accountPool,contentPool,
+      sealedCoverage,hmacKey:recoveryKey,accountPool,contentPool,restoredRelayPool:capturedRelayPool,
       objectStore:{directory:env.objectDirectory,workObjects:objects},releaseErasures:prematureErasures,
     })).rejects.toThrow();
     expect(prematureErasures).not.toHaveBeenCalled();
@@ -704,7 +713,8 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     const callbackCalls: { pid: string; txid: string; generation: string }[] = [];
     let activeReleaseClients: { accessClient: PoolClient; relayClient: PoolClient } | undefined;
     const evidence: AuthenticatedRecoveryCoverage = {
-      ...authority, accountPool, contentPool, objectStore: restoredOwners.objects,
+      ...authority, accountPool, contentPool, restoredRelayPool: capturedRelayPool,
+      objectStore: restoredOwners.objects,
       releaseErasures: async (clients, releaseGraph) => {
         expect(clients.accessClient).toBe(activeReleaseClients?.accessClient);
         expect(clients.relayClient).toBe(activeReleaseClients?.relayClient);
@@ -964,6 +974,7 @@ test('held product slim metadata restore preserves retired owner custody, exact 
     await historicalPool?.end();
     await accountPool?.end();
     await contentPool?.end();
+    await capturedRelayPool?.end();
     postgres?.stop();
     originalGraph?.remove();
     try { execFileSync('docker', ['volume', 'rm', originalVolume], { cwd: root, env: stack.dockerEnv, timeout: 20_000, stdio:'pipe' }); }
