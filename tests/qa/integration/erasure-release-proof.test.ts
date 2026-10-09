@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { randomUUID } from 'node:crypto';
 import { Client, Pool, type PoolClient } from 'pg';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -33,13 +34,13 @@ const liveVolume = `rezics-release-proof-${suffix}-live`, cutVolume = `rezics-re
 const restoredVolume = `rezics-release-proof-${suffix}-restored`, heldVolume = `rezics-release-proof-${suffix}-held`;
 const releasedVolume = `rezics-release-proof-${suffix}-released`, legacyVolume = `rezics-release-proof-${suffix}-legacy`;
 
-function docker(args: string[]) {
-  const result = spawnSync('docker', args, { env: qa.dockerEnv, encoding: 'utf8', timeout: 60_000 });
+function docker(env: NodeJS.ProcessEnv, args: string[], owned = preserveReapEnvironment(env)) {
+  const result = spawnSync('docker', args, { env: preserveReapEnvironment(owned), encoding: 'utf8', timeout: 60_000 });
   if (result.status !== 0) throw new Error(`isolated release proof fixture operation failed: ${result.stderr.slice(-1500)}`);
 }
 
 function copyGraph(from: string, to: string) {
-  docker(['run', '--rm', '--network', 'none', '--user', '0:0', '--volume', `${from}:/from:ro`,
+  docker(preserveReapEnvironment(qa.dockerEnv), ['run', '--rm', '--network', 'none', '--user', '0:0', '--volume', `${from}:/from:ro`,
     '--volume', `${to}:/to`, '--entrypoint', 'sh', pinnedImage(), '-ec',
     'rm -rf /to/rezics; cp -a /from/rezics /to/rezics']);
 }
@@ -136,7 +137,7 @@ beforeAll(async () => {
   accessObserver = new Client({ connectionString: databases.urls.access });
   await relayObserver.connect(); await accessObserver.connect();
   for (const volume of [liveVolume, cutVolume, restoredVolume, heldVolume, releasedVolume, legacyVolume]) {
-    docker(['volume', 'create', volume]); volumes.push(volume);
+    docker(preserveReapEnvironment(qa.dockerEnv), ['volume', 'create', volume]); volumes.push(volume);
   }
   const graph = async (volume: string) => {
     const value = await standaloneFuseki(qa.dockerEnv, { name: volume, volume, image: pinnedImage(),
@@ -235,7 +236,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await Promise.allSettled([access?.end(), relay?.end(), relayObserver?.end(), accessObserver?.end()]);
   for (const graph of containers) graph.remove();
-  if (qa) for (const volume of volumes) docker(['volume', 'rm', '-f', volume]);
+  if (qa) for (const volume of volumes) docker(preserveReapEnvironment(qa.dockerEnv), ['volume', 'rm', '-f', volume]);
   await databases?.close();
 }, 120_000);
 

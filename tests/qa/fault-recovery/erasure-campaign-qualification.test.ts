@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
@@ -63,6 +64,23 @@ const PREPARATION_ACTIVE_BUDGET_MS = 600_000;
 const SOURCE_START_ACTIVE_BUDGET_MS = 180_000;
 const digest = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
 const literal = (value: string) => JSON.stringify(value);
+
+/** stack:down leaves the copy's volumes. Remove those, not the retained fixture backup. */
+function dropProjectVolumes(project: string): void {
+  const env = preserveReapEnvironment(process.env);
+  const listed = spawnSync('docker', ['volume', 'ls', '-q', '--filter',
+    `label=com.docker.compose.project=${project}`], { env, encoding: 'utf8', timeout: 30_000 });
+  const labeled = (listed.stdout ?? '').split('\n').map(name => name.trim())
+    .filter(name => /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name));
+  const names = [...new Set([...labeled, ...['postgres_data', 'fuseki_data', 'rustfs_data']
+    .map(kind => `${project}_${kind}`)])];
+  for (const name of names) {
+    const removed = spawnSync('docker', ['volume', 'rm', '-f', name], { env, encoding: 'utf8', timeout: 180_000 });
+    if (removed.status !== 0 && !(removed.stderr ?? '').includes('No such volume')) {
+      throw new Error(`Could not remove volume ${name}: ${(removed.stderr || removed.stdout || '').slice(-400)}`);
+    }
+  }
+}
 
 // The fixture owns no corpus builder: routine work restores retained whole-volume
 // copies and adds only <=64 exact graph footprints, as in erasure-graph-purge.
@@ -151,6 +169,7 @@ test(
     };
     let candidate: Awaited<ReturnType<typeof standaloneFuseki>> | undefined;
     let fixture: string | undefined;
+    let bodyError: unknown;
     try {
       // This checks the exact repository image before fixture selection; no alias,
       // image substitution, fresh corpus build or compatibility bypass is permitted.
@@ -551,7 +570,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
           stack.apps.FUSEKI_COMMAND_TOKEN,
         );
         const sourcePins = copyRecord(index).pins as StatePins;
-        expect(docker(['inspect', name, '--format', '{{.Image}}'], stack.dockerEnv).trim()).toBe(
+        expect(docker(['inspect', name, '--format', '{{.Image}}'], preserveReapEnvironment(stack.dockerEnv)).trim()).toBe(
           sourcePins.imageId,
         );
         const candidatePins = candidate.runner
@@ -686,6 +705,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
       );
       evidence.completedAt = new Date().toISOString();
     } catch (error) {
+      bodyError = error;
       evidence.failure = error instanceof Error ? error.message : String(error);
       evidence.failureDetails = campaignFailure(error);
       throw error;
@@ -695,20 +715,27 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbloader
       // rejected readiness probe still needs cleanup by its already-known name.
       for (const name of candidateNames)
         spawnSync('docker', ['rm', '-f', name], {
-          env: runs[0]!.stack.dockerEnv,
+          env: preserveReapEnvironment(runs[0]!.stack.dockerEnv),
           encoding: 'utf8',
           timeout: 60_000,
         });
       await Promise.allSettled(pools.map((pool) => pool.end()));
       evidence.fixtureBackupRetained = fixture ?? null;
       persist();
-      // Supplied manager copies remain stopped. Automatic routine copies belong
-      // to this run's existing QA cleanup; the retained fixture is never reset.
+      // Supplied copies stop and drop their project volumes. The retained fixture
+      // backup is never reset. Automatic copies reset, then drop anything left.
+      const leaks: string[] = [];
+      const note = (error: unknown) => { leaks.push(error instanceof Error ? error.message : String(error)); };
       for (const { stack } of runs) {
         if (!readFileExists(join(stack.directory, 'compose.env'))) continue;
-        if (!supplied) await rootCommand(['stack:reset', ...stack.args], 300_000);
-        else await rootCommand(['stack:down', ...stack.args], 120_000);
+        try {
+          if (!supplied) await rootCommand(['stack:reset', ...stack.args], 300_000);
+          else await rootCommand(['stack:down', ...stack.args], 120_000);
+        } catch (error) { note(error); }
+        try { dropProjectVolumes(stack.project); } catch (error) { note(error); }
       }
+      if (leaks.length) console.error(leaks.join('\n'));
+      if (!bodyError && leaks.length) throw new Error(leaks.join('\n'));
     }
   },
   qaStartupTestTimeout(360_000),

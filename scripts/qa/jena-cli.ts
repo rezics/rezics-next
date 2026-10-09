@@ -3,6 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { copyFileSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { loadDockerEnvironment } from '../load/docker-env.ts';
+import { preserveReapEnvironment } from './container-reaper.ts';
 import { captureFusekiPlan } from '../load/fuseki-plan.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
 
@@ -262,7 +263,7 @@ function useContainer<T>(
   const image = fusekiImageFromCompose(compose);
   if (options.imagePresent && !options.imagePresent(image.image)) throw missingImage(image.image);
   const started = Date.now();
-  const env = options.dockerEnv ?? loadDockerEnvironment();
+  const env = preserveReapEnvironment(options.dockerEnv ?? loadDockerEnvironment());
   const run = allocateJenaRun(options.directory);
   mkdirSync(run.directory, { recursive: true });
   const tokenFile = join(run.directory, 'container.token');
@@ -274,13 +275,13 @@ function useContainer<T>(
     if (left <= 0) throw new Error('Jena CLI deadline exceeded');
     return left;
   };
-  const execute = (command: string[]): JenaCommandResult => {
+  const execute = (command: string[], commandEnv: NodeJS.ProcessEnv = env): JenaCommandResult => {
     if (command.some((part) => part === 'pull' || part === 'build'))
       throw new Error('Jena CLI does not build or pull an image');
     const bounds = { timeoutMs: remain(), maxOutputBytes: limits.maxOutputBytes };
     const result = options.run
       ? options.run(command, bounds)
-      : realRun(command, env, bounds, 'execution');
+      : realRun(command, commandEnv, bounds, 'execution');
     const bytes = Buffer.byteLength(result.stdout) + Buffer.byteLength(result.stderr);
     if (bytes > limits.maxOutputBytes) throw new Error('Jena CLI output exceeded 1 MiB');
     if (result.status === null || result.signal) throw new Error('Jena CLI deadline exceeded');
@@ -307,7 +308,7 @@ function useContainer<T>(
   let failure: unknown;
   try {
     if (!options.imagePresent) {
-      const inspected = execute(['docker', 'image', 'inspect', image.image, '--format', '{{.Id}}']);
+      const inspected = execute(['docker', 'image', 'inspect', image.image, '--format', '{{.Id}}'], env);
       if (inspected.status !== 0 || !inspected.stdout.trim().startsWith('sha256:'))
         throw missingImage(image.image);
     }
@@ -339,7 +340,7 @@ function useContainer<T>(
     ownedId = id;
     writeFileSync(tokenFile, `${id}\n`);
     const jar = `/opt/apache-jena-fuseki-${image.jenaVersion}/fuseki-server.jar`;
-    const exec = (args: string[]) => execute(['docker', 'exec', id, ...args]);
+    const exec = (args: string[]) => execute(['docker', 'exec', id, ...args], env);
     const java = (args: string[]) => exec(['java', `-Xmx${heap}`, '-cp', jar, ...args]);
     const save = (name: string, result: JenaCommandResult) => {
       writeFileSync(join(run.directory, `${name}.stdout`), result.stdout);

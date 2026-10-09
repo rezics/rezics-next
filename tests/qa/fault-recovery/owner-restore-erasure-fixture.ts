@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { Elysia } from 'elysia';
 import { decodeJwt } from 'jose';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -166,20 +167,20 @@ export async function ownerRestoreErasureFixture() {
     copies: string[] = [],
     pgCopies: string[] = [];
   const containers: Awaited<ReturnType<typeof standaloneFuseki>>[] = [];
-  const docker = (args: string[], timeout = 60_000) => {
-    const result = spawnSync('docker', args, { env: qa.dockerEnv, encoding: 'utf8', timeout });
+  const docker = (env: NodeJS.ProcessEnv, args: string[], timeout = 60_000) => {
+    const result = spawnSync('docker', args, { env: preserveReapEnvironment(env), encoding: 'utf8', timeout });
     if (result.status !== 0 || result.error)
       throw new Error(`isolated recovery Docker step failed: ${result.stderr.slice(-1500)}`);
     return result.stdout.trim();
   };
   const volume = (label: string) => {
     const name = `rezics-owner-erasure-${suffix}-${label}`;
-    docker(['volume', 'create', name]);
+    docker(preserveReapEnvironment(qa.dockerEnv), ['volume', 'create', name]);
     volumes.push(name);
     return name;
   };
   const copyGraph = (from: string, to: string) =>
-    docker([
+    docker(preserveReapEnvironment(qa.dockerEnv), [
       'run',
       '--rm',
       '--network',
@@ -223,7 +224,7 @@ export async function ownerRestoreErasureFixture() {
     for (const name of copies.reverse())
       await admin(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
     await databases.close();
-    for (const name of volumes) docker(['volume', 'rm', '-f', name], 30_000);
+    for (const name of volumes) docker(preserveReapEnvironment(qa.dockerEnv), ['volume', 'rm', '-f', name], 30_000);
     rmSync(directory, { recursive: true, force: true });
   };
   try {
@@ -652,7 +653,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       const container = qa.compose(['ps', '-q', 'postgres']).output.trim();
       if (!/^[0-9a-f]{12,64}$/.test(container))
         throw new Error('QA PostgreSQL container is unavailable');
-      docker(['cp', `${container}:${remote}`, pgBackup]);
+      docker(preserveReapEnvironment(qa.dockerEnv), ['cp', `${container}:${remote}`, pgBackup]);
       execFileSync('pg_verifybackup', ['--no-parse-wal', pgBackup], { timeout: 15_000 });
     } finally {
       const removed = qa.compose(

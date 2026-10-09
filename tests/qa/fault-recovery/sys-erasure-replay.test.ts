@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { cpSync, existsSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -73,7 +74,7 @@ test('SYS07: older Account, Access, Content, graph and object copies replay with
   try {
     for (const name of [liveVolume, graphVolume]) {
       const volume = spawnSync('docker', ['volume', 'create', name], {
-        env: qa.dockerEnv, encoding: 'utf8', timeout: 30_000 });
+        env: preserveReapEnvironment(qa.dockerEnv), encoding: 'utf8', timeout: 30_000 });
       if (volume.status !== 0) throw new Error(`cannot create isolated graph copy: ${volume.stderr}`);
     }
     live = await standaloneFuseki(qa.dockerEnv, {
@@ -159,7 +160,7 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
       '--volume', `${liveVolume}:/from:ro`, '--volume', `${graphVolume}:/to`,
       '--entrypoint', 'sh', pinnedImage(), '-ec',
       'rm -rf /to/rezics && cp -a /from/rezics /to/rezics'],
-    { env: qa.dockerEnv, encoding: 'utf8', timeout: 30_000 });
+    { env: preserveReapEnvironment(qa.dockerEnv), encoding: 'utf8', timeout: 30_000 });
     if (copied.status !== 0) throw new Error(`older graph copy failed: ${copied.stderr}`);
     await live.runner.start();
     candidate = await standaloneFuseki(qa.dockerEnv, {
@@ -167,7 +168,7 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
       secrets: fusekiSecrets(qa.composeEnv),
     }).catch(error => {
       const logs = spawnSync('docker', ['logs', candidateName], {
-        env: qa.dockerEnv, encoding: 'utf8', timeout: 10_000 });
+        env: preserveReapEnvironment(qa.dockerEnv), encoding: 'utf8', timeout: 10_000 });
       throw new Error(`${String(error)}: ${(logs.stderr ?? '').slice(-2000)}`);
     });
     const oldGraph = new FusekiClient(candidate.url,
@@ -261,10 +262,10 @@ java -Xmx2g -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \
   } finally {
     candidate?.remove();
     live?.remove();
-    spawnSync('docker', ['rm', '-f', candidateName], { env: qa.dockerEnv, timeout: 30_000 });
-    spawnSync('docker', ['rm', '-f', liveName], { env: qa.dockerEnv, timeout: 30_000 });
-    spawnSync('docker', ['volume', 'rm', '-f', graphVolume], { env: qa.dockerEnv, timeout: 30_000 });
-    spawnSync('docker', ['volume', 'rm', '-f', liveVolume], { env: qa.dockerEnv, timeout: 30_000 });
+    spawnSync('docker', ['rm', '-f', candidateName], { env: preserveReapEnvironment(qa.dockerEnv), timeout: 30_000 });
+    spawnSync('docker', ['rm', '-f', liveName], { env: preserveReapEnvironment(qa.dockerEnv), timeout: 30_000 });
+    spawnSync('docker', ['volume', 'rm', '-f', graphVolume], { env: preserveReapEnvironment(qa.dockerEnv), timeout: 30_000 });
+    spawnSync('docker', ['volume', 'rm', '-f', liveVolume], { env: preserveReapEnvironment(qa.dockerEnv), timeout: 30_000 });
     await closeAccount().catch(() => undefined);
     await Promise.allSettled([...pools].map(pool => pool.end()));
     await databases.close();

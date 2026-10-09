@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { preserveReapEnvironment } from '../../scripts/qa/container-reaper.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -82,7 +83,7 @@ function imageScript(image: string, network: string, variables: string[], script
      const child = Bun.spawn([process.execPath, ${JSON.stringify(script)}, '/tmp/production.env'], { stdout: 'inherit', stderr: 'inherit' });
      process.exit(await child.exited);`,
     ],
-    { encoding: 'utf8', timeout: 60_000 },
+    { encoding: 'utf8', timeout: 60_000, env: preserveReapEnvironment(process.env) },
   );
 }
 
@@ -151,7 +152,7 @@ test('pinned runtime images reproduce identities and satisfy production startup 
   expect(first.sourceCommit).toBe(sourceCommit);
   expect(second).toEqual(first);
   const pins = JSON.parse(
-    docker([
+    docker(preserveReapEnvironment(process.env), [
       'run',
       '--rm',
       '--entrypoint',
@@ -163,7 +164,7 @@ test('pinned runtime images reproduce identities and satisfy production startup 
   ) as ReleaseManifest;
   expect(first.images.fuseki!.reference).toBe(pins.images.fuseki);
   const expectedScopes = JSON.parse(
-    docker([
+    docker(preserveReapEnvironment(process.env), [
       'run',
       '--rm',
       '--entrypoint',
@@ -188,11 +189,11 @@ test('pinned runtime images reproduce identities and satisfy production startup 
         '-e',
         "const r = await Bun.build({ entrypoints: ['infra/release/entrypoint.ts', 'services/main/src/index.ts', 'services/account/src/index.ts', 'services/main/src/relay.ts', 'services/main/src/relay-init.ts', 'scripts/ops/migrate.ts', 'scripts/ops/postgres-preflight.ts', 'services/main/src/telemetry.ts', 'services/main/src/relay-telemetry.ts', 'services/account/src/telemetry.ts', 'services/main/src/modules/media-screen/classifier-process.ts'], target: 'bun' }); if (!r.success) { console.error(r.logs); process.exit(1); }",
       ],
-      { encoding: 'utf8', timeout: 60_000 },
+      { encoding: 'utf8', timeout: 60_000, env: preserveReapEnvironment(process.env) },
     );
     if (result.status !== 0) throw new Error(`${role} runtime imports: ${result.stderr}`);
   }
-  const native = docker([
+  const native = docker(preserveReapEnvironment(process.env), [
     'run',
     '--rm',
     '--entrypoint',
@@ -211,8 +212,8 @@ test('pinned runtime images reproduce identities and satisfy production startup 
   await accountSmoke(first.images, pins, expectedScopes);
 }, 1_200_000);
 
-function docker(args: string[]) {
-  const result = spawnSync('docker', args, { encoding: 'utf8', timeout: 120_000 });
+function docker(env: NodeJS.ProcessEnv, args: string[], owned = preserveReapEnvironment(env)) {
+  const result = spawnSync('docker', args, { encoding: 'utf8', timeout: 120_000, env: preserveReapEnvironment(owned) });
   if (result.error || result.status !== 0)
     throw new Error(`Docker ${args[0]} failed: ${result.stderr || result.error?.message}`);
   if (args[0] === 'logs') return result.stdout + result.stderr;
@@ -235,8 +236,8 @@ async function accountSmoke(
   const env = smokeEnvironment(name, secret);
   const variables = Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]);
   try {
-    docker(['network', 'create', network]);
-    docker([
+    docker(preserveReapEnvironment(process.env), ['network', 'create', network]);
+    docker(preserveReapEnvironment(process.env), [
       'run',
       '--detach',
       '--name',
@@ -254,14 +255,14 @@ async function accountSmoke(
       const result = spawnSync(
         'docker',
         ['exec', name, 'pg_isready', '-h', '127.0.0.1', '-U', 'postgres'],
-        { encoding: 'utf8', timeout: 5_000 },
+        { encoding: 'utf8', timeout: 5_000, env: preserveReapEnvironment(process.env) },
       );
       if (result.status === 0) break;
       if (Date.now() > deadline) throw new Error('Smoke PostgreSQL readiness timed out');
       await Bun.sleep(250);
     }
     for (const database of ['access', 'relay', 'content', 'account']) {
-      docker([
+      docker(preserveReapEnvironment(process.env), [
         'exec',
         name,
         'psql',
@@ -272,7 +273,7 @@ async function accountSmoke(
         '-c',
         `CREATE ROLE ${database} LOGIN NOSUPERUSER PASSWORD '${secret}'`,
       ]);
-      docker([
+      docker(preserveReapEnvironment(process.env), [
         'exec',
         name,
         'psql',
@@ -284,7 +285,7 @@ async function accountSmoke(
         `CREATE DATABASE ${database} OWNER ${database}`,
       ]);
     }
-    docker([
+    docker(preserveReapEnvironment(process.env), [
       'exec',
       name,
       'psql',
@@ -307,7 +308,7 @@ async function accountSmoke(
       join(repositoryRoot, '.temp/image-smoke/postgres-preflight.stdout'),
       ownerProbe.stdout,
     );
-    docker([
+    docker(preserveReapEnvironment(process.env), [
       'exec',
       name,
       'psql',
@@ -330,7 +331,7 @@ async function accountSmoke(
       join(repositoryRoot, '.temp/image-smoke/postgres-preflight-denied.stderr'),
       missingDiagnostics.stderr,
     );
-    docker([
+    docker(preserveReapEnvironment(process.env), [
       'exec',
       name,
       'psql',
@@ -347,7 +348,7 @@ async function accountSmoke(
     ).toBe(0);
     const migrate = () =>
       JSON.parse(
-        docker(['run', '--rm', '--network', network, ...variables, images.migrate!.digest])
+        docker(preserveReapEnvironment(process.env), ['run', '--rm', '--network', network, ...variables, images.migrate!.digest])
           .split('\n')
           .at(-1)!,
       ) as { applied: string[] };
@@ -360,7 +361,7 @@ async function accountSmoke(
     expect(migrate().applied).toEqual([]);
     // Existing isolated subjects are not operator appointments or launch qualification.
     for (const subject of [env.SAFETY_PRIMARY_ACCOUNT!, env.SAFETY_BACKUP_ACCOUNT!]) {
-      docker([
+      docker(preserveReapEnvironment(process.env), [
         'exec',
         name,
         'psql',
@@ -374,7 +375,7 @@ async function accountSmoke(
         `INSERT INTO public."user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
          VALUES ('${subject}', 'Isolated smoke subject', '${subject}@smoke.rezics.com', true, now(), now())`,
       ]);
-      docker([
+      docker(preserveReapEnvironment(process.env), [
         'exec',
         name,
         'psql',
@@ -390,7 +391,7 @@ async function accountSmoke(
       ]);
     }
     // An older resource ceiling must gain every installed scope on Account startup.
-    docker([
+    docker(preserveReapEnvironment(process.env), [
       'exec',
       name,
       'psql',
@@ -407,7 +408,7 @@ async function accountSmoke(
     ]);
     // Relay initialization is a successful finite job; a repeated run is safe.
     for (let i = 0; i < 2; i++)
-      docker([
+      docker(preserveReapEnvironment(process.env), [
         'run',
         '--rm',
         '--network',
@@ -420,7 +421,7 @@ async function accountSmoke(
         images['relay-init']!.digest,
       ]);
     const checkpoint = JSON.parse(
-      docker([
+      docker(preserveReapEnvironment(process.env), [
         'exec',
         name,
         'psql',
@@ -441,7 +442,7 @@ async function accountSmoke(
       join(repositoryRoot, '.temp/image-smoke/relay-init.json'),
       JSON.stringify(checkpoint) + '\n',
     );
-    docker([
+    docker(preserveReapEnvironment(process.env), [
       'run',
       '--detach',
       '--name',
@@ -453,7 +454,7 @@ async function accountSmoke(
       '127.0.0.1::3002',
       images.account!.digest,
     ]);
-    const port = docker(['port', account, '3002/tcp']).split(':').at(-1)!;
+    const port = docker(preserveReapEnvironment(process.env), ['port', account, '3002/tcp']).split(':').at(-1)!;
     const origin = `http://127.0.0.1:${port}`;
     const healthDeadline = Date.now() + 60_000;
     while (true) {
@@ -464,11 +465,11 @@ async function accountSmoke(
         /* still starting */
       }
       if (Date.now() > healthDeadline)
-        throw new Error(`Account startup failed: ${docker(['logs', account]).slice(-1000)}`);
+        throw new Error(`Account startup failed: ${docker(preserveReapEnvironment(process.env), ['logs', account]).slice(-1000)}`);
       await Bun.sleep(250);
     }
     const installedScopes = JSON.parse(
-      docker([
+      docker(preserveReapEnvironment(process.env), [
         'exec',
         name,
         'psql',
@@ -493,7 +494,7 @@ async function accountSmoke(
     ).toEqual({
       status: 'ready',
     });
-    const missingMigration = docker([
+    const missingMigration = docker(preserveReapEnvironment(process.env), [
       'exec',
       name,
       'psql',
@@ -510,7 +511,7 @@ async function accountSmoke(
     expect(
       (await fetch(`${origin}/health/live`, { signal: AbortSignal.timeout(2_000) })).status,
     ).toBe(200);
-    docker([
+    docker(preserveReapEnvironment(process.env), [
       'exec',
       name,
       'psql',
@@ -536,7 +537,7 @@ async function accountSmoke(
       objects,
       postgres: name,
     })) {
-      const logs = spawnSync('docker', ['logs', container], { encoding: 'utf8', timeout: 10_000 });
+      const logs = spawnSync('docker', ['logs', container], { encoding: 'utf8', timeout: 10_000, env: preserveReapEnvironment(process.env) });
       writeFileSync(
         join(repositoryRoot, `.temp/image-smoke/${role}.log`),
         `${logs.stdout ?? ''}${logs.stderr ?? ''}`,
@@ -549,9 +550,10 @@ async function accountSmoke(
       {
         encoding: 'utf8',
         timeout: 30_000,
+        env: preserveReapEnvironment(process.env),
       },
     );
-    spawnSync('docker', ['network', 'rm', network], { encoding: 'utf8', timeout: 30_000 });
+    spawnSync('docker', ['network', 'rm', network], { encoding: 'utf8', timeout: 30_000, env: preserveReapEnvironment(process.env) });
   }
 }
 
@@ -576,7 +578,7 @@ async function mainSmoke(
     'FUSEKI_COMMAND_TOKEN',
     'FUSEKI_TITLE_ADMISSION_KEY',
   ].flatMap((key) => ['-e', `${key}=${key === 'FUSEKI_TITLE_ADMISSION_KEY' ? titleKey : secret}`]);
-  docker([
+  docker(preserveReapEnvironment(process.env), [
     'run',
     '--detach',
     '--name',
@@ -592,7 +594,7 @@ async function mainSmoke(
     '127.0.0.1::3030',
     images.fuseki!.digest,
   ]);
-  docker([
+  docker(preserveReapEnvironment(process.env), [
     'run',
     '--detach',
     '--name',
@@ -609,9 +611,9 @@ async function mainSmoke(
     '127.0.0.1::9000',
     pins.images.rustfs,
   ]);
-  const graphPort = docker(['port', graph, '3030/tcp']).split(':').at(-1)!;
+  const graphPort = docker(preserveReapEnvironment(process.env), ['port', graph, '3030/tcp']).split(':').at(-1)!;
   const fuseki = new FusekiClient(`http://127.0.0.1:${graphPort}/rezics/`, secret, secret);
-  const storagePort = docker(['port', objects, '9000/tcp']).split(':').at(-1)!;
+  const storagePort = docker(preserveReapEnvironment(process.env), ['port', objects, '9000/tcp']).split(':').at(-1)!;
   const deadline = Date.now() + 60_000;
   let storageError = '';
   while (true) {
@@ -630,7 +632,7 @@ async function mainSmoke(
     }
     if (Date.now() > deadline)
       throw new Error(
-        `Main smoke storage did not start: ${storageError}\nGraph: ${docker(['logs', graph]).slice(-2000)}\nObjects: ${docker(['logs', objects]).slice(-2000)}`,
+        `Main smoke storage did not start: ${storageError}\nGraph: ${docker(preserveReapEnvironment(process.env), ['logs', graph]).slice(-2000)}\nObjects: ${docker(preserveReapEnvironment(process.env), ['logs', objects]).slice(-2000)}`,
       );
     await Bun.sleep(250);
   }
@@ -642,7 +644,7 @@ async function mainSmoke(
   const accepted = envCheck();
   expect(accepted.status).toBe(0);
   writeFileSync(join(repositoryRoot, '.temp/image-smoke/production-env.stdout'), accepted.stdout);
-  docker([
+  docker(preserveReapEnvironment(process.env), [
     'run',
     '--detach',
     '--name',
@@ -652,7 +654,7 @@ async function mainSmoke(
     ...variables,
     images.relay!.digest,
   ]);
-  docker([
+  docker(preserveReapEnvironment(process.env), [
     'run',
     '--detach',
     '--name',
@@ -664,7 +666,7 @@ async function mainSmoke(
     '127.0.0.1::3001',
     images.main!.digest,
   ]);
-  const mainPort = docker(['port', main, '3001/tcp']).split(':').at(-1)!;
+  const mainPort = docker(preserveReapEnvironment(process.env), ['port', main, '3001/tcp']).split(':').at(-1)!;
   const origin = `http://127.0.0.1:${mainPort}`;
   const readyDeadline = Date.now() + 60_000;
   while (true) {
@@ -674,7 +676,7 @@ async function mainSmoke(
       /* still starting */
     }
     if (Date.now() > readyDeadline)
-      throw new Error(`Main startup failed: ${docker(['logs', main]).slice(-2000)}`);
+      throw new Error(`Main startup failed: ${docker(preserveReapEnvironment(process.env), ['logs', main]).slice(-2000)}`);
     await Bun.sleep(250);
   }
   expect(
@@ -704,9 +706,9 @@ async function mainSmoke(
   );
   expect(searchReady.dataEpoch).toBe('1');
   expect(searchReady.indexGeneration).toMatch(/^urn:rezics:text-index-generation:/);
-  expect(docker(['inspect', relay, '--format', '{{.State.Running}}'])).toBe('true');
-  expect(docker(['logs', relay])).toContain('main_relay_started');
-  docker([
+  expect(docker(preserveReapEnvironment(process.env), ['inspect', relay, '--format', '{{.State.Running}}'])).toBe('true');
+  expect(docker(preserveReapEnvironment(process.env), ['logs', relay])).toContain('main_relay_started');
+  docker(preserveReapEnvironment(process.env), [
     'exec',
     name,
     'psql',
@@ -731,7 +733,7 @@ async function mainSmoke(
     const result = spawnSync(
       'docker',
       ['run', '--rm', '--network', network, ...variables, images[role]!.digest],
-      { encoding: 'utf8', timeout: 30_000 },
+      { encoding: 'utf8', timeout: 30_000, env: preserveReapEnvironment(process.env) },
     );
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('Production forbids payment provider rows');
@@ -741,7 +743,7 @@ async function mainSmoke(
     join(repositoryRoot, '.temp/image-smoke/provider-row-refused.json'),
     JSON.stringify(refusal) + '\n',
   );
-  docker([
+  docker(preserveReapEnvironment(process.env), [
     'exec',
     name,
     'psql',

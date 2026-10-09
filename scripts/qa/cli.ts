@@ -58,7 +58,8 @@ import {
 import { selectBackendCases } from './backend-scope.ts';
 import { declaredCaseCoverage, missingCaseDeclarations, renderQualification,
   type QualificationRecord } from './coverage.ts';
-import { readEnv } from '../dev/config.ts';
+import { parseOptions, projectName, readEnv } from '../dev/config.ts';
+import { preserveReapEnvironment } from './container-reaper.ts';
 import { stageQaBootstrap } from './bootstrap.ts';
 import { browserBudgets, browserFileCounts, browserProjectCount, e2eBrowserPlan } from './browser-budget.ts';
 import { qaMemoryDeadline, qaMemoryNeed, type StartupSlotGate } from './memory-admission.ts';
@@ -297,14 +298,30 @@ function campaignEvidenceRead(projectRunId: string, sample: CommandPhaseSample):
   };
 }
 
+async function removeProjectVolumes(project: string): Promise<void> {
+  const env = preserveReapEnvironment(process.env);
+  const listed = await commandAsync(root, 'docker', ['volume', 'ls', '-q', '--filter',
+    `label=com.docker.compose.project=${project}`], 30_000, env);
+  if (!listed.ok) throw new Error(listed.output);
+  const labeled = listed.output.split('\n').map(name => name.trim())
+    .filter(name => /^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(name));
+  const names = [...new Set([...labeled, ...['postgres_data', 'fuseki_data', 'rustfs_data']
+    .map(kind => `${project}_${kind}`)])];
+  for (const name of names) {
+    const removed = await commandAsync(root, 'docker', ['volume', 'rm', '-f', name], 180_000, env);
+    if (!removed.ok && !removed.output.includes('No such volume')) throw new Error(removed.output);
+  }
+}
+
 async function resetChildStacks(registry: string): Promise<string[]> {
-  // Only ids validated from the current source list keep their volumes. Timeout and
-  // the final cleanup both come through here. A caller-owned copy is stopped, not reset.
+  // Timeout and the final cleanup both come through here. A caller-owned copy is
+  // stopped rather than reset, then its project volumes are removed.
   const supplied = currentSuppliedRunIds(process.env.ERASURE_CAMPAIGN_SOURCES);
   const failures = await cleanupQaStacks(registry, async args => {
     const command = childStackCleanupCommand(args, supplied);
     const down = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', command, ...args], 120_000);
     if (!down.ok) throw new Error(down.output);
+    if (command === 'stack:down') await removeProjectVolumes(projectName(parseOptions(args)));
   });
   if (!failures.length) childStackRegistries.delete(registry);
   return failures;
@@ -455,7 +472,7 @@ async function runShardWork(
     if (resourceClass) {
       const inspected = await commandAsync(root, 'docker', ['inspect', '--format',
         '{"memory":{{.HostConfig.Memory}},"tmpfs":{{json .HostConfig.Tmpfs}},"mounts":{{json .Mounts}}}',
-        `rezics-qa-${projectRunId}-fuseki-1`], 10_000);
+        `rezics-qa-${projectRunId}-fuseki-1`], 10_000, preserveReapEnvironment(process.env));
       let failure = inspected.ok ? '' : 'Could not inspect QA Fuseki allocation';
       if (inspected.ok) {
         // Command-only files start a persistent stack in test mode too.

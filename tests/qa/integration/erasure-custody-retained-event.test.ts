@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { randomUUID } from 'node:crypto';
 import { Pool, type PoolClient } from 'pg';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -82,8 +83,8 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar \\
 afterAll(async () => {
   await Promise.allSettled([relay?.end(), writer?.end()]);
   if (qa) {
-    spawnSync('docker', ['rm', '-f', volume], { env: qa.dockerEnv, timeout: 60_000 });
-    spawnSync('docker', ['volume', 'rm', '-f', volume], { env: qa.dockerEnv, timeout: 60_000 });
+    spawnSync('docker', ['rm', '-f', volume], { env: preserveReapEnvironment(qa.dockerEnv), timeout: 60_000 });
+    spawnSync('docker', ['volume', 'rm', '-f', volume], { env: preserveReapEnvironment(qa.dockerEnv), timeout: 60_000 });
   }
   await databases?.close();
 }, 120_000);

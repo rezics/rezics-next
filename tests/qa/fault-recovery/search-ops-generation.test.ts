@@ -1,6 +1,7 @@
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
@@ -138,7 +139,7 @@ test('OPS15/OPS16: a crash retains the TDB2 receipt, fences text, and a pinned r
     stack.compose(['stop', 'fuseki']);
     stack.compose(['rm', '-sf', 'fuseki']);
     const { spawnSync } = await import('node:child_process');
-    spawnSync('docker', ['volume', 'rm', '-f', restoredVolume], { env: stack.dockerEnv, timeout: 60_000 });
+    spawnSync('docker', ['volume', 'rm', '-f', restoredVolume], { env: preserveReapEnvironment(stack.dockerEnv), timeout: 60_000 });
     if (pool) await pool.end();
     if (started) await rootCommand(['stack:reset', ...stack.args], 120_000);
   }

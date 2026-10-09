@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { resolve } from 'node:path';
 import { createCommandOutputRedactor } from '../../../scripts/fixture/command-output.ts';
 import { run, stream } from '../../../scripts/fixture/stack.ts';
@@ -20,7 +21,7 @@ function captured(result: ReturnType<typeof spawnSync>) {
 
 test('an unstarted compose command keeps the real status, error and signal', () => {
   const payload = 'p'.repeat(131_073);
-  const result = captured(spawnSync('docker', ['compose', 'run', payload], { encoding: 'utf8' }));
+  const result = captured(spawnSync('docker', ['compose', 'run', payload], { encoding: 'utf8', env: preserveReapEnvironment(process.env) }));
   expect(result.status ?? null).toBeNull();
   expect(result.signal).toBeNull();
   expect(result.error?.code).toBe('E2BIG');

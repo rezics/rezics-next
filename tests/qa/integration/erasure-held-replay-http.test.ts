@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { createHmac, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -78,7 +79,7 @@ test('OPS10: real held native HTTP replay authenticates exact bytes, preserves t
   const image = Bun.env.REZICS_HELD_ERASURE_IMAGE ?? pinnedImage();
   const imageId = docker(
     ['image', 'inspect', '--format', '{{.Id}}', image],
-    stack.dockerEnv,
+    preserveReapEnvironment(stack.dockerEnv),
   ).trim();
   const evidence = join(Bun.env.REZICS_QA_ARTIFACT_DIR!, 'held-erasure-http');
   mkdirSync(evidence, { recursive: true });
@@ -628,10 +629,10 @@ SELECT ?unit WHERE { GRAPH <${graphName}> { (?unit ?score) text:query (rv:${fiel
     source?.remove();
     // Names also clean up a container whose readiness failed before assignment.
     spawnSync('docker', ['rm', '-f', `${name}-copy`, name], {
-      env: stack.dockerEnv,
+      env: preserveReapEnvironment(stack.dockerEnv),
       timeout: 60_000,
     });
-    spawnSync('docker', ['volume', 'rm', '-f', volume], { env: stack.dockerEnv, timeout: 60_000 });
+    spawnSync('docker', ['volume', 'rm', '-f', volume], { env: preserveReapEnvironment(stack.dockerEnv), timeout: 60_000 });
     await access.end();
     await relay.end();
     await databases.close();

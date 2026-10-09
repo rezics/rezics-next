@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildHeldGraphErasureCommand, graphErasureReceipt } from '../src/modules/erasure/graph.ts';
@@ -135,7 +136,7 @@ public class ErasureHeldCallerContractTest {
         '-Dtest=ErasureHeldCallerContractTest',
         'test',
       ],
-      { cwd: root, encoding: 'utf8', timeout: 150_000 },
+      { cwd: root, encoding: 'utf8', timeout: 150_000, env: preserveReapEnvironment(process.env) },
     );
     mkdirSync(join(root, '.temp/goal'), { recursive: true });
     writeFileSync(
@@ -146,7 +147,7 @@ public class ErasureHeldCallerContractTest {
       throw new Error(`Native caller interoperability failed: ${result.stdout}\n${result.stderr}`);
     expect(result.stdout).toContain('Tests run: 1, Failures: 0, Errors: 0');
   } finally {
-    spawnSync('docker', ['rm', '-f', name], { encoding: 'utf8', timeout: 30_000 });
+    spawnSync('docker', ['rm', '-f', name], { encoding: 'utf8', timeout: 30_000, env: preserveReapEnvironment(process.env) });
     rmSync(build, { recursive: true, force: true });
   }
 }, 185_000);

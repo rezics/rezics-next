@@ -1,6 +1,7 @@
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { qaMemoryDeadline } from './memory-admission.ts';
 import { commandAsync } from './core.ts';
+import { preserveReapEnvironment } from './container-reaper.ts';
 
 const PREPARE_BUDGET_MS = 60_000;
 
@@ -23,7 +24,7 @@ export async function admitIntegrationWorkScope(input: {
     const page = await fuseki.prepareWorkScopeDirectory();
     if (page.status === 'unavailable') {
       const logs = await commandAsync(
-        input.root, 'docker', ['logs', '--tail', '40', container], 15_000, input.environment,
+        input.root, 'docker', ['logs', '--tail', '40', container], 15_000, preserveReapEnvironment(input.environment),
       );
       throw new Error(`Work name scope writer was not admitted (${page.reason})\n${logs.output}`);
     }

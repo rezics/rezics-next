@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { Pool } from 'pg';
 import { objectStore as recoveryObjectStore } from '../../../scripts/ops/backup.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
@@ -722,7 +723,7 @@ test('Structure custody: restored GroupRole and qualifier mappings and exact S3 
   } finally {
     restoreFrontierOracle?.();
     native?.remove();
-    spawnSync('docker', ['volume', 'rm', volume], { env: qa.dockerEnv, timeout: 60_000 });
+    spawnSync('docker', ['volume', 'rm', volume], { env: preserveReapEnvironment(qa.dockerEnv), timeout: 60_000 });
     await Promise.all([...pools].map((value) => value.end()));
     await databases.close();
     rmSync(directory, { recursive: true, force: true });

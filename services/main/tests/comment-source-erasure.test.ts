@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -210,7 +211,7 @@ test('real account, access, native graph and a restored content catalog keep the
       qualifiedFuseki,
       '/opt/apache-jena-fuseki-6.2.0/fuseki-server', '--port=3030', '--no-cors', '--timeout=10000',
       '--config=/fuseki/fuseki-text-qa.ttl'],
-    { encoding: 'utf8' }).trim();
+    { encoding: 'utf8', env: preserveReapEnvironment(process.env) }).trim();
     const fuseki = new FusekiClient(`http://127.0.0.1:${fusekiPort}/rezics/`);
     let ready = false;
     for (let attempt = 0; attempt < 40 && !ready; attempt++) {
@@ -424,7 +425,7 @@ test('real account, access, native graph and a restored content catalog keep the
     expect(JSON.stringify(shownBody)).not.toContain(canary);
   } finally {
     await accountServer?.stop(true);
-    if (fusekiContainer) execFileSync('docker', ['rm', '-f', fusekiContainer], { stdio: 'ignore' });
+    if (fusekiContainer) execFileSync('docker', ['rm', '-f', fusekiContainer], { stdio: 'ignore', env: preserveReapEnvironment(process.env) });
     await restored?.end();
     await pool.end();
     try { cluster.remove(); }
@@ -487,7 +488,7 @@ test('sealed envelope on the same captured owners stays closed until journal rep
       qualifiedFuseki,
       '/opt/apache-jena-fuseki-6.2.0/fuseki-server', '--port=3030', '--no-cors', '--timeout=10000',
       '--config=/fuseki/fuseki-text-qa.ttl'],
-    { encoding: 'utf8' }).trim();
+    { encoding: 'utf8', env: preserveReapEnvironment(process.env) }).trim();
     const fuseki = new FusekiClient(`http://127.0.0.1:${fusekiPort}/rezics`, maintenance, commandToken);
     let fusekiUp = false;
     for (let attempt = 0; attempt < 40 && !fusekiUp; attempt++) {
@@ -698,7 +699,7 @@ test('sealed envelope on the same captured owners stays closed until journal rep
       .rejects.toBeInstanceOf(ContentRecoveryConflict);
   } finally {
     await accountServer?.stop(true);
-    if (fusekiContainer) execFileSync('docker', ['rm', '-f', fusekiContainer], { stdio: 'ignore' });
+    if (fusekiContainer) execFileSync('docker', ['rm', '-f', fusekiContainer], { stdio: 'ignore', env: preserveReapEnvironment(process.env) });
     await Promise.allSettled([owners.end(), contentDb.end(), account.end(), relay.end(), admin.end()]);
     try { cluster.remove(); }
     finally { rmSync(state, { recursive: true, force: true }); }

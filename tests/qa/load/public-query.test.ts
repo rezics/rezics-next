@@ -4,6 +4,7 @@ import { closeSync, existsSync, mkdirSync, openSync, readFileSync, unlinkSync, w
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { hostLoopbackAccess, loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import { seedLoadCorpus, type LoadCase, type LoadCorpus } from './corpus.ts';
@@ -58,7 +59,7 @@ function checkSnapshot(snapshot: Record<string, any>, item: LoadCase, corpus: Lo
 }
 
 async function k6Run(args: string[], env: NodeJS.ProcessEnv) {
-  const child = spawn('docker', args, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn('docker', args, { cwd: root, env: preserveReapEnvironment(env), stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   child.stdout.on('data', chunk => { output += chunk.toString(); });
   child.stderr.on('data', chunk => { output += chunk.toString(); });
