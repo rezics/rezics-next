@@ -45,6 +45,9 @@ test('all malformed, mixed, duplicate, oversized and non-LF inputs deny before J
     rows.replace('\t12', '\t10000000000000000000'),
     rows.replace('content:revision:', 'content:projection:'),
     rows.replace('00000000-', 'FFFFFFFF-'),
+    'https://rezics.com/id/not-a-uuid\t1\n',
+    'https://rezics.com/ID/00000000-0000-0000-0000-000000000001\t1\n',
+    'http://rezics.com/id/00000000-0000-0000-0000-000000000001\t1\n',
     rows + `${revision(1)}\t12\n`,
     rows + `${revision(1)}\t13\n`,
     rows + '\n',
@@ -57,6 +60,21 @@ test('all malformed, mixed, duplicate, oversized and non-LF inputs deny before J
     expect(f.exists(f.candidateBase)).toBe(false);
     expect(f.exists(join(f.base, 'java-calls'))).toBe(false);
   }
+});
+
+test('a revision IRI is a campaign subject beside a Content revision URN', () => {
+  const f = fixture();
+  const iri = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
+  writeFileSync(f.campaign, `${iri}\t7\n${revision(1)}\t12\n`);
+  expect(f.build().status).toBe(0);
+  expect(readFileSync(join(f.candidate, 'erasure-campaign.tsv'), 'utf8')).toBe(
+    `${iri}\t7\n${revision(1)}\t12\n`,
+  );
+  const alone = join(f.base, 'databases/iri-candidate');
+  expect(f.run('purge-tdb2', [alone, iri, '7']).status).toBe(0);
+  expect(readFileSync(join(alone, 'databases/rezics/erasure-campaign.tsv'), 'utf8')).toBe(
+    `${iri}\t7\n`,
+  );
 });
 
 test('single target is a campaign adapter and cannot activate legacy two-line evidence', () => {

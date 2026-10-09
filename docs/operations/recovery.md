@@ -398,18 +398,19 @@ paired recovery set and current authority/erasure frontier. Run these scripts
 inside the release's pinned Fuseki image with its saved volume; do not open a
 second JVM on a live owner or manufacture `clean-stop`.
 
-Prepare one protected `campaign.tsv` from committed exact Content revision and
-erasure-epoch pairs. Each row is a lower-case UUID Content revision URN, one tab,
-a positive decimal epoch of at most 19 digits, and LF. Supply 1–64 rows, without
-headers, comments, blank rows, CRLF or repeated revisions. Input order and every
-byte are part of the SHA-256 identity. Keep this file immutable throughout the
-campaign. An existing graph tombstone must carry the supplied exact epoch; a
-missing graph target or conflicting epoch rejects the whole copy.
-
-The campaign file accepts only Content revision URNs. Live `POST /v1/erasures`
-also tombstones text-contribution drafts, semantic component revisions, release
-revisions, Work heads and composition structure revisions. Those subjects are
-not campaign rows; this sanitizer does not copy or exclude them.
+Prepare one protected `campaign.tsv` from committed exact revision and
+erasure-epoch pairs. Each row is one subject, one tab, a positive decimal epoch
+of at most 19 digits, and LF. A subject is a lower-case Content revision URN
+(`urn:rezics:content:revision:{uuid}`) or a revision IRI
+(`https://rezics.com/id/{uuid}`): the same subjects live erasure tombstones,
+including a text-contribution draft, a semantic component, a release, a Work
+head and a composition structure. Supply 1–64 rows, without headers, comments,
+blank rows, CRLF or repeated subjects. Input order and every byte are part of
+the SHA-256 identity. Keep this file immutable throughout the campaign. An
+existing graph tombstone must carry the supplied exact epoch; a missing graph
+target or conflicting epoch rejects the whole copy. A subject left in a retained
+backup returns when that backup is restored, so the copy excludes every campaign
+subject.
 
 ```sh
 sh /path/to/purge-tdb2.sh /fuseki/databases/erasure-candidate --campaign /protected/campaign.tsv

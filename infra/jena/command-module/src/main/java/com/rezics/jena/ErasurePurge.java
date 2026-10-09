@@ -50,7 +50,7 @@ public final class ErasurePurge {
         Map<Node, String> targets = new LinkedHashMap<>();
         for (String row : text.substring(0, text.length() - 1).split("\n", -1)) {
             String[] pair = row.split("\t", -1);
-            if (pair.length != 2 || !pair[0].matches("urn:rezics:content:revision:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
+            if (pair.length != 2 || !pair[0].matches(ErasurePolicy.REVISION_TARGET)
                 || !pair[1].matches("[1-9][0-9]{0,18}") || targets.size() == 64
                 || targets.putIfAbsent(uri(pair[0]), pair[1]) != null)
                 throw new IllegalArgumentException("invalid, duplicate or oversized campaign pair");

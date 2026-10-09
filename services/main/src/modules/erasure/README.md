@@ -44,7 +44,8 @@ once; it does not turn an older backup into current authority by itself.
 For a journaled Content revision that already has graph data, the isolated
 `infra/jena/purge-tdb2.sh EMPTY_DEST_BASE EXACT_REVISION_IRI ERASURE_EPOCH`
 builds a new TDB2 copy from retained quads, runs the pinned compactor, and
-rebuilds an empty Lucene index. It accepts only an exact Content revision URN.
+rebuilds an empty Lucene index. A subject is an exact Content revision URN or a
+revision IRI (`https://rezics.com/id/{uuid}`).
 The candidate retains an `ErasedRevision` tombstone; the native command gate
 rejects later inserts naming that IRI. Verify the stopped candidate's exact
 graph and direct text reads, retained revision and lineage, and copy inventory;

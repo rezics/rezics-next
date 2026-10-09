@@ -43,7 +43,7 @@ final class ErasureRestorePolicy {
     static final String PREFIX = "urn:rezics:receipt:erasure-restore:";
     static final String DOMAIN = "rezics-erasure-restore-v1";
     private static final String UUID = "[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}";
-    private static final String TARGET = "urn:rezics:content:revision:" + UUID;
+    private static final String TARGET = ErasurePolicy.REVISION_TARGET;
     private static final int MAX_TARGETS = 64, MAX_UNITS = 64, MAX_QUADS = 16_384;
     private static final Node CONTROL = uri(CommandPolicy.CONTROL), REVISIONS = uri(CommandPolicy.REVISIONS),
         RECEIPTS = uri(CommandPolicy.RECEIPTS), PUBLIC = uri(CommandPolicy.PUBLIC_SEARCH), PRIVATE = uri(CommandPolicy.PRIVATE_SEARCH),

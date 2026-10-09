@@ -19,12 +19,19 @@ else
 fi
 validate_campaign() {
   # awk accepts a missing final LF; compare exact bytes with its reconstruction.
+  # Subjects match ErasurePolicy.REVISION_TARGET: a Content revision URN or a revision IRI.
   normalized=$(printf '%s' "$campaign" | LC_ALL=C awk -F '\t' '
-    NF != 2 || $1 !~ /^urn:rezics:content:revision:[0-9a-f-]+$/ || length($1) != 64 ||
-      $2 !~ /^[1-9][0-9]*$/ || length($2) > 19 || seen[$1]++ { exit 1 }
-    { id=substr($1,29); if (id !~ /^[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+-[0-9a-f]+$/ ||
-        substr(id,9,1)!="-" || substr(id,14,1)!="-" || substr(id,19,1)!="-" || substr(id,24,1)!="-") exit 1;
-      print $1 "\t" $2 }
+    function uuid_at(value, start,    id) {
+      id = substr(value, start)
+      return length(id) == 36 && id ~ /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+    }
+    NF != 2 || $2 !~ /^[1-9][0-9]*$/ || length($2) > 19 || seen[$1]++ { exit 1 }
+    {
+      ok = ($1 ~ /^urn:rezics:content:revision:/ && length($1) == 64 && uuid_at($1, 29)) ||
+        ($1 ~ /^https:\/\/rezics\.com\/id\// && length($1) == 58 && uuid_at($1, 23))
+      if (!ok) exit 1
+      print $1 "\t" $2
+    }
     END { if (NR < 1 || NR > 64) exit 1 }') || usage
   reconstructed=$(printf '%s\n.' "$normalized")
   [ "$campaign" = "${reconstructed%.}" ] || usage

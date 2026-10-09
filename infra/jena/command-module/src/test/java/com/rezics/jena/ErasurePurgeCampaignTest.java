@@ -39,6 +39,10 @@ public class ErasurePurgeCampaignTest {
         String exact = row(2) + row(1);
         var parsed = ErasurePurge.campaign(exact.getBytes(StandardCharsets.US_ASCII));
         assertEquals(2, parsed.targets().size());
+        String iri = "https://rezics.com/id/00000000-0000-4000-8000-000000000002\t7\n";
+        assertEquals(1, ErasurePurge.campaign(iri.getBytes(StandardCharsets.US_ASCII)).targets().size());
+        assertThrows(IllegalArgumentException.class, () -> ErasurePurge.campaign(
+            "https://rezics.com/id/not-a-uuid\t7\n".getBytes(StandardCharsets.US_ASCII)));
         assertNotEquals(parsed.sha256(), ErasurePurge.campaign((row(1) + row(2)).getBytes(StandardCharsets.US_ASCII)).sha256());
         for (String input : new String[]{"", row(1) + row(1), row(1) + target(1) + "\t2\n",
             row(1) + "\n" + row(2), row(1).stripTrailing(), row(1).replace("\n", "\r\n"),

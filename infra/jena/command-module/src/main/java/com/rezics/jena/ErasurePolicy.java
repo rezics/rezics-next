@@ -20,6 +20,10 @@ final class ErasurePolicy {
     private static final Node CONTENT_REVISION = NodeFactory.createURI("https://rezics.com/vocab/contentRevision");
     private static final Node ERASURE_EPOCH = NodeFactory.createURI("https://rezics.com/vocab/erasureEpoch");
 
+    /** Content revision URNs and the revision IRIs reads already honour. `String.matches` is full-string. */
+    static final String REVISION_TARGET =
+        "(?:urn:rezics:content:revision:|https://rezics\\.com/id/)[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}";
+
     static String preflight(DatasetGraph data, CommandPolicy.Plan plan, String receipt) {
         if (ErasureRestorePolicy.applies(receipt)) return "held erasure requires its authenticated restore path";
         Update update = plan.request().getOperations().getFirst();
@@ -32,8 +36,7 @@ final class ErasurePolicy {
                 || !plan.graphs().equals(Set.of(CommandPolicy.CONTROL, CommandPolicy.REVISIONS,
                     CommandPolicy.RECEIPTS, CommandPolicy.OUTBOX, CommandPolicy.PUBLIC_SEARCH,
                     CommandPolicy.PRIVATE_SEARCH))
-                || plan.revisions().stream().anyMatch(subject -> !subject.matches(
-                    "urn:rezics:content:revision:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")))
+                || plan.revisions().stream().anyMatch(subject -> !subject.matches(REVISION_TARGET)))
                 return "erasure graph footprint differs";
             for (Quad quad : inserts) {
                 String graph = quad.getGraph().getURI();
