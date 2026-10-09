@@ -29,8 +29,9 @@ interface BrowsePage {
   tags: string;
 }
 
-// The publication-year template is read by the browser journey. Folding a date takes the
-// claim-fold fence, and this stack's assembler does not serve the raw update that would release it.
+// The publication-year read is proven by the browser journey only for now. On a fresh dataset the
+// claim fold leaves the dataset's restore hold set (its release phase is refused), which hides every
+// public read; the year proof and the yearless Work's absence return here once the fold releases it.
 test('Anime and manga Zones: format and status filters page, and an unclassified Work stays out of a format it was not given', async () => {
   const stack = await startMediaStack('anime-manga-zones');
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL! });
