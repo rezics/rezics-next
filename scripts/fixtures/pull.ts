@@ -1,6 +1,15 @@
-import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import {
+  CorruptBytes,
+  PaceClock,
+  pacedFetch,
+  PacedRetriesExhausted,
+  readVerified,
+  retryAfterSeconds,
+  sha256,
+  writeVerified,
+} from '../lib/paced-fetch.ts';
 import { sources, type FixtureSource } from '../../tests/fixtures/sources/wikidata.ts';
 import { openLibrary } from '../../tests/fixtures/sources/open-library.ts';
 import { gutenberg } from '../../tests/fixtures/sources/gutenberg.ts';
@@ -17,7 +26,10 @@ export interface FixtureEntry {
   reuseBasis: string;
   seed: string;
 }
-export interface FixtureLock { version: 1; entries: FixtureEntry[] }
+export interface FixtureLock {
+  version: 1;
+  entries: FixtureEntry[];
+}
 export interface PullOptions {
   source?: string;
   mode?: 'replay' | 'live';
@@ -37,25 +49,35 @@ export interface PullResult {
 }
 
 const lockRelative = 'tests/fixtures/fixtures.lock.json';
-const hash = (data: string) => createHash('sha256').update(data, 'utf8').digest('hex');
 const canonical = (value: unknown) => JSON.stringify(value) + '\n';
-const defaultSleep = (ms: number) => new Promise<void>(resolveSleep => setTimeout(resolveSleep, ms));
-const seedPath = (source: string, digest: string) => source === 'gutenberg'
-  ? `tests/fixtures/gutenberg/${digest}.json` : `tests/fixtures/seeds/${source}/${digest}.json`;
+const defaultSleep = (ms: number) =>
+  new Promise<void>((resolveSleep) => setTimeout(resolveSleep, ms));
+const seedPath = (source: string, digest: string) =>
+  source === 'gutenberg'
+    ? `tests/fixtures/gutenberg/${digest}.json`
+    : `tests/fixtures/seeds/${source}/${digest}.json`;
 
 function readLock(root: string): FixtureLock {
   const path = join(root, lockRelative);
   if (!existsSync(path)) return { version: 1, entries: [] };
   const lock = JSON.parse(readFileSync(path, 'utf8')) as FixtureLock;
-  if (lock.version !== 1 || !Array.isArray(lock.entries)) throw new Error('Unsupported fixture lock');
+  if (lock.version !== 1 || !Array.isArray(lock.entries))
+    throw new Error('Unsupported fixture lock');
   const seen = new Set<string>();
   for (const entry of lock.entries) {
     const key = `${entry.source}/${entry.id}`;
-    if (seen.has(key) || !/^[a-z][a-z0-9-]*$/.test(entry.source)
-      || !/^[A-Za-z0-9-]+$/.test(entry.id) || !/^[a-f0-9]{64}$/.test(entry.sha256)
-      || !Number.isSafeInteger(entry.size) || entry.size < 0
-      || entry.seed !== seedPath(entry.source, entry.sha256)
-      || !entry.requestUrl.startsWith('https://') || !entry.reuseBasis || !entry.fetchedAt) {
+    if (
+      seen.has(key) ||
+      !/^[a-z][a-z0-9-]*$/.test(entry.source) ||
+      !/^[A-Za-z0-9-]+$/.test(entry.id) ||
+      !/^[a-f0-9]{64}$/.test(entry.sha256) ||
+      !Number.isSafeInteger(entry.size) ||
+      entry.size < 0 ||
+      entry.seed !== seedPath(entry.source, entry.sha256) ||
+      !entry.requestUrl.startsWith('https://') ||
+      !entry.reuseBasis ||
+      !entry.fetchedAt
+    ) {
       throw new Error(`Invalid fixture lock entry ${key}`);
     }
     seen.add(key);
@@ -63,11 +85,21 @@ function readLock(root: string): FixtureLock {
   return lock;
 }
 
+function integrityError(path: string, source: string): Error {
+  return new Error(
+    `Fixture integrity mismatch at ${path}; run task fixtures:pull -- --source ${source} --update-lock`,
+  );
+}
+
 function checkedBytes(path: string, entry: FixtureEntry): string {
-  const bytes = readFileSync(path);
-  if (bytes.length !== entry.size || hash(bytes.toString('utf8')) !== entry.sha256) {
-    throw new Error(`Fixture integrity mismatch at ${path}; run task fixtures:pull -- --source ${entry.source} --update-lock`);
+  let bytes: Buffer;
+  try {
+    bytes = readVerified(path, entry.sha256);
+  } catch (error) {
+    if (error instanceof CorruptBytes) throw integrityError(path, entry.source);
+    throw error;
   }
+  if (bytes.length !== entry.size) throw integrityError(path, entry.source);
   return bytes.toString('utf8');
 }
 
@@ -76,109 +108,184 @@ function cachePath(root: string, source: string, digest: string): string {
 }
 
 function putImmutable(path: string, bytes: string, digest: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  if (existsSync(path)) {
-    if (hash(readFileSync(path, 'utf8')) !== digest) throw new Error(`Fixture cache collision at ${path}`);
-    return;
+  try {
+    writeVerified(path, Buffer.from(bytes), digest);
+  } catch (error) {
+    if (error instanceof CorruptBytes) throw new Error(`Fixture cache collision at ${path}`);
+    throw error;
   }
-  writeFileSync(path, bytes, { flag: 'wx' });
 }
 
 /** Verified replay is available without network in a clean checkout via committed minimal seeds. */
 export function readLockedFixture(root: string, source: string, id: string): unknown {
-  const entry = readLock(root).entries.find(item => item.source === source && item.id === id);
-  if (!entry) throw new Error(`No locked fixture ${source}/${id}; run task fixtures:pull -- --source ${source} --update-lock`);
+  const entry = readLock(root).entries.find((item) => item.source === source && item.id === id);
+  if (!entry)
+    throw new Error(
+      `No locked fixture ${source}/${id}; run task fixtures:pull -- --source ${source} --update-lock`,
+    );
   const cache = cachePath(root, source, entry.sha256);
   if (!existsSync(cache)) {
     const seed = join(root, entry.seed);
-    if (!existsSync(seed)) throw new Error(`Fixture ${source}/${id} unavailable offline; run task fixtures:pull -- --source ${source} with network access`);
+    if (!existsSync(seed))
+      throw new Error(
+        `Fixture ${source}/${id} unavailable offline; run task fixtures:pull -- --source ${source} with network access`,
+      );
     putImmutable(cache, checkedBytes(seed, entry), entry.sha256);
   }
   return JSON.parse(checkedBytes(cache, entry));
 }
 
-async function fetchNormalized(adapter: Source, request: { id: string; url: string },
-  fetcher: typeof fetch, sleep: (ms: number) => Promise<void>): Promise<string> {
-  const userAgent = `REZICSFixtureHarness/1.0 (+https://github.com/rezics/rezics-next)`;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    let response: Response;
-    try {
-      response = await fetcher(request.url, { headers: { 'User-Agent': userAgent,
-        Accept: adapter.responseFormat === 'text' ? 'text/plain' : 'application/json' },
-        signal: AbortSignal.timeout(15_000) });
-    } catch (error) { throw new Error(`Fixture fetch failed for ${adapter.name}/${request.id}: ${String(error)}`); }
-    if (response.status === 429 || response.status === 503) {
-      const retry = Number(response.headers.get('retry-after'));
-      if (attempt === 2) throw new Error(`Fixture fetch ${adapter.name}/${request.id}: HTTP ${response.status}`);
-      await sleep(Math.min(30_000, Math.max(adapter.minimumIntervalMs, Number.isFinite(retry) ? retry * 1000 : 1000)));
-      continue;
+async function fetchNormalized(
+  adapter: Source,
+  request: { id: string; url: string },
+  fetcher: typeof fetch,
+  clock: PaceClock,
+): Promise<string> {
+  const userAgent = 'REZICSFixtureHarness/1.0 (+https://github.com/rezics/rezics-next)';
+  try {
+    return await pacedFetch(
+      clock,
+      {
+        spacing: 'end',
+        intervalMs: adapter.minimumIntervalMs,
+        maxAttempts: 3,
+        retryAfterCapMs: 30_000,
+        retryStatus: (status) => status === 429 || status === 503,
+        fallbackWaitMs: () => 1_000,
+        retryAfterMs: (header) => retryAfterSeconds(header),
+        onTransport: (cause) =>
+          new Error(`Fixture fetch failed for ${adapter.name}/${request.id}: ${String(cause)}`),
+      },
+      {
+        url: request.url,
+        paceKey: adapter.name,
+        timeoutMs: 15_000,
+        init: {
+          headers: {
+            'User-Agent': userAgent,
+            Accept: adapter.responseFormat === 'text' ? 'text/plain' : 'application/json',
+          },
+        },
+      },
+      fetcher,
+      async (response) => {
+        if (!response.ok)
+          throw new Error(`Fixture fetch ${adapter.name}/${request.id}: HTTP ${response.status}`);
+        const bytes = await response.arrayBuffer();
+        if (bytes.byteLength > 2_000_000)
+          throw new Error(`Fixture response too large for ${adapter.name}/${request.id}`);
+        const decoded = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
+        let raw: unknown = decoded;
+        if (adapter.responseFormat !== 'text') {
+          try {
+            raw = JSON.parse(decoded);
+          } catch {
+            throw new Error(`Fixture response was not JSON for ${adapter.name}/${request.id}`);
+          }
+        }
+        return canonical(adapter.normalize(raw, request.id));
+      },
+    );
+  } catch (error) {
+    if (error instanceof PacedRetriesExhausted) {
+      throw new Error(`Fixture fetch ${adapter.name}/${request.id}: HTTP ${error.status}`);
     }
-    if (!response.ok) throw new Error(`Fixture fetch ${adapter.name}/${request.id}: HTTP ${response.status}`);
-    const bytes = await response.arrayBuffer();
-    if (bytes.byteLength > 2_000_000) throw new Error(`Fixture response too large for ${adapter.name}/${request.id}`);
-    const decoded = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
-    let raw: unknown = decoded;
-    if (adapter.responseFormat !== 'text') {
-      try { raw = JSON.parse(decoded); }
-      catch { throw new Error(`Fixture response was not JSON for ${adapter.name}/${request.id}`); }
-    }
-    return canonical(adapter.normalize(raw, request.id));
+    throw error;
   }
-  throw new Error('Unreachable fixture retry state');
 }
 
 export async function pullFixtures(root: string, options: PullOptions = {}): Promise<PullResult[]> {
   const adapters = options.adapters ?? [...sources, openLibrary, gutenberg];
-  const selected = options.source ? adapters.filter(item => item.name === options.source) : adapters;
+  const selected = options.source
+    ? adapters.filter((item) => item.name === options.source)
+    : adapters;
   if (!selected.length) throw new Error(`Unsupported fixture source: ${options.source}`);
   const mode = options.mode ?? 'replay';
-  if (options.updateLock && mode !== 'live') throw new Error('--update-lock requires REZICS_FIXTURES=live');
+  if (options.updateLock && mode !== 'live')
+    throw new Error('--update-lock requires REZICS_FIXTURES=live');
   const lock = readLock(root);
   const next = [...lock.entries];
   const results: PullResult[] = [];
-  const sleep = options.sleep ?? defaultSleep;
+  const clock = new PaceClock(options.sleep ?? defaultSleep);
   for (const adapter of selected) {
-    let lastRequest = 0;
     for (const request of adapter.requests) {
-      const index = next.findIndex(item => item.source === adapter.name && item.id === request.id);
+      const index = next.findIndex(
+        (item) => item.source === adapter.name && item.id === request.id,
+      );
       const prior = next[index];
       if (prior && (prior.requestUrl !== request.url || prior.reuseBasis !== adapter.reuseBasis)) {
-        if (!options.updateLock) throw new Error(`Fixture acquisition metadata changed for ${adapter.name}/${request.id}; review and update lock`);
+        if (!options.updateLock)
+          throw new Error(
+            `Fixture acquisition metadata changed for ${adapter.name}/${request.id}; review and update lock`,
+          );
       }
       const cache = prior && cachePath(root, adapter.name, prior.sha256);
       if (mode === 'replay' && prior && cache && existsSync(cache)) {
         checkedBytes(cache, prior);
-        results.push({ id: request.id, source: adapter.name, status: 'cached', sha256: prior.sha256 });
+        results.push({
+          id: request.id,
+          source: adapter.name,
+          status: 'cached',
+          sha256: prior.sha256,
+        });
         continue;
       }
       if (mode === 'replay' && prior && existsSync(join(root, prior.seed))) {
         readLockedFixture(root, adapter.name, request.id);
-        results.push({ id: request.id, source: adapter.name, status: 'hydrated', sha256: prior.sha256 });
+        results.push({
+          id: request.id,
+          source: adapter.name,
+          status: 'hydrated',
+          sha256: prior.sha256,
+        });
         continue;
       }
-      if (options.offline) throw new Error(`Fixture ${adapter.name}/${request.id} unavailable offline; run task fixtures:pull -- --source ${adapter.name} with network access`);
-      if (mode === 'replay' && !prior) throw new Error(`No locked fixture ${adapter.name}/${request.id}; run REZICS_FIXTURES=live task fixtures:pull -- --source ${adapter.name} --update-lock`);
-      const gap = adapter.minimumIntervalMs - (Date.now() - lastRequest);
-      if (gap > 0) await sleep(gap);
-      const payload = await fetchNormalized(adapter, request, options.fetcher ?? fetch, sleep);
-      lastRequest = Date.now();
-      const sha256 = hash(payload);
-      putImmutable(cachePath(root, adapter.name, sha256), payload, sha256);
-      const drift = prior?.sha256 !== sha256;
+      if (options.offline)
+        throw new Error(
+          `Fixture ${adapter.name}/${request.id} unavailable offline; run task fixtures:pull -- --source ${adapter.name} with network access`,
+        );
+      if (mode === 'replay' && !prior)
+        throw new Error(
+          `No locked fixture ${adapter.name}/${request.id}; run REZICS_FIXTURES=live task fixtures:pull -- --source ${adapter.name} --update-lock`,
+        );
+      const payload = await fetchNormalized(adapter, request, options.fetcher ?? fetch, clock);
+      const digest = sha256(payload);
+      putImmutable(cachePath(root, adapter.name, digest), payload, digest);
+      const drift = prior?.sha256 !== digest;
       if (mode === 'replay' && prior && drift) {
-        throw new Error(`Fixture ${adapter.name}/${request.id} drifted while restoring replay cache; run REZICS_FIXTURES=live task fixtures:pull -- --source ${adapter.name} to inspect, then --update-lock`);
+        throw new Error(
+          `Fixture ${adapter.name}/${request.id} drifted while restoring replay cache; run REZICS_FIXTURES=live task fixtures:pull -- --source ${adapter.name} to inspect, then --update-lock`,
+        );
       }
       if (options.updateLock) {
-        const seed = seedPath(adapter.name, sha256);
-        putImmutable(join(root, seed), payload, sha256);
-        const entry: FixtureEntry = { id: request.id, source: adapter.name, requestUrl: request.url,
-          fetchedAt: (options.now ?? (() => new Date()))().toISOString(), sha256,
-          size: Buffer.byteLength(payload), reuseBasis: adapter.reuseBasis, seed };
-        if (index < 0) next.push(entry); else next[index] = entry;
+        const seed = seedPath(adapter.name, digest);
+        putImmutable(join(root, seed), payload, digest);
+        const entry: FixtureEntry = {
+          id: request.id,
+          source: adapter.name,
+          requestUrl: request.url,
+          fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
+          sha256: digest,
+          size: Buffer.byteLength(payload),
+          reuseBasis: adapter.reuseBasis,
+          seed,
+        };
+        if (index < 0) next.push(entry);
+        else next[index] = entry;
       }
-      results.push({ id: request.id, source: adapter.name,
-        status: options.updateLock ? 'updated' : drift ? 'drift' : mode === 'live' ? 'unchanged' : 'fetched',
-        sha256, ...(prior && drift ? { previousSha256: prior.sha256 } : {}) });
+      results.push({
+        id: request.id,
+        source: adapter.name,
+        status: options.updateLock
+          ? 'updated'
+          : drift
+            ? 'drift'
+            : mode === 'live'
+              ? 'unchanged'
+              : 'fetched',
+        sha256: digest,
+        ...(prior && drift ? { previousSha256: prior.sha256 } : {}),
+      });
     }
   }
   if (options.updateLock) {
@@ -196,7 +303,8 @@ export function parseArgs(args: string[]): { source?: string; updateLock: boolea
   let source: string | undefined;
   let updateLock = false;
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--source' && /^[a-z][a-z0-9-]*$/.test(args[i + 1] ?? '') && !source) source = args[++i];
+    if (args[i] === '--source' && /^[a-z][a-z0-9-]*$/.test(args[i + 1] ?? '') && !source)
+      source = args[++i];
     else if (args[i] === '--update-lock' && !updateLock) updateLock = true;
     else throw new Error(`Unsupported fixture option: ${args[i]}`);
   }
@@ -207,11 +315,17 @@ if (import.meta.main) {
   try {
     const args = parseArgs(process.argv.slice(2));
     const mode = Bun.env.REZICS_FIXTURES ?? 'replay';
-    if (mode !== 'replay' && mode !== 'live') throw new Error(`Unsupported REZICS_FIXTURES mode: ${mode}`);
+    if (mode !== 'replay' && mode !== 'live')
+      throw new Error(`Unsupported REZICS_FIXTURES mode: ${mode}`);
     const result = await pullFixtures(resolve(import.meta.dir, '../..'), {
-      ...args, mode, offline: Bun.env.REZICS_FIXTURES_OFFLINE === '1',
+      ...args,
+      mode,
+      offline: Bun.env.REZICS_FIXTURES_OFFLINE === '1',
     });
-    for (const item of result) console.log(`${item.source}/${item.id}: ${item.status} ${item.sha256}${item.previousSha256 ? ` (was ${item.previousSha256})` : ''}`);
+    for (const item of result)
+      console.log(
+        `${item.source}/${item.id}: ${item.status} ${item.sha256}${item.previousSha256 ? ` (was ${item.previousSha256})` : ''}`,
+      );
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
