@@ -438,7 +438,7 @@ test('G-955: all QA stacks inherit heap/direct-memory settings below their conta
   expect(existsSync(join(root, '.temp'))).toBe(true);
 });
 
-test('G-955: repair state left by one file is absent when the next file starts', async () => {
+test('repair state left by one file is absent when the next file starts', async () => {
   const maintenance = 'ab'.repeat(32);
   const command = 'cd'.repeat(32);
   const repair = WORK_SCOPE_REPAIR_GRAPH;
@@ -509,7 +509,7 @@ test('G-955: repair state left by one file is absent when the next file starts',
   }
 });
 
-test('G-955: a broken integration reset names the stack and keeps the file that already passed', () => {
+test('a broken integration reset names the stack and keeps the file that already passed', () => {
   const passed = 'tests/qa/integration/g-896-content-sequence.test.ts';
   const pending = 'tests/qa/integration/g-894-progress-summary.test.ts';
   const stack = 'rezics-qa-20261008t183626-c1e5d6-1';
