@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { Pool } from 'pg';
+import { initializeRelayCheckpoint } from '../../../services/main/src/modules/outbox/relay.ts';
 import { workProfileProbe } from '../support/work-profile-probe.ts';
 import { assertWorkCost } from '../support/work-profile.ts';
 import { captureFusekiQueryPlan } from '../../../scripts/load/fuseki-plan.ts';
@@ -78,8 +80,10 @@ test('G1024: captured query produces a real pinned ARQ plan and candidate count 
 test('G1024: three corpus Work scales use real public commands and preserve exact selected content within the preparation budget', async () => {
   const started = performance.now();
   const stack = await startMediaStack('g-1024-public-corpus', { agents: true, library: true });
+  const relay = new Pool({ connectionString: process.env.ACCOUNT_RELAY_DATABASE_URL });
   try {
     const member = await stack.member('author');
+    await initializeRelayCheckpoint(relay, process.env.MAIN_RELAY_CONSUMER!, stack.env.lineage.dataEpoch);
     const api = workProfileCorpusApi('http://main.local', member.token, {
       fetch: ((input, init) => stack.main.handle(new Request(input, init))) as typeof fetch,
     });
@@ -148,6 +152,7 @@ test('G1024: three corpus Work scales use real public commands and preserve exac
       JSON.stringify(evidence, null, 2) + '\n',
     );
   } finally {
+    await relay.end();
     await stack.stop();
   }
 }, 420_000);
