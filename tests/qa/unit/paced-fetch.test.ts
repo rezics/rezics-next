@@ -86,7 +86,7 @@ test('a 429 waits for Retry-After or its cap and stops at the attempt bound', as
         : new Response('ok');
     },
   );
-  expect(await text.text()).toBe('ok');
+  expect(text.bytes.toString()).toBe('ok');
   expect(capped.sleeps).toEqual([30_000]);
   const dated = clock();
   requests = 0;
@@ -126,4 +126,29 @@ test('requests on one key are spaced from the start of the previous turn', async
     fetchOk,
   );
   expect(paced.sleeps).toEqual([1_100]);
+});
+
+test('a body stream that fails once is read again and the next attempt completes', async () => {
+  const paced = clock();
+  let requests = 0;
+  const fetched = await pacedFetch(
+    paced.pace,
+    'https://example.test/body',
+    'example.test',
+    limit,
+    async () => {
+      requests++;
+      if (requests > 1) return new Response('ok');
+      return new Response(
+        new ReadableStream({
+          pull(controller) {
+            controller.enqueue(new Uint8Array([1]));
+            controller.error(new Error('reset'));
+          },
+        }),
+      );
+    },
+  );
+  expect(requests).toBe(2);
+  expect(fetched.bytes.toString()).toBe('ok');
 });

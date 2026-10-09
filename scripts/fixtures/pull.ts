@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { CorruptBytes, pace, pacedFetch, readVerified, RetriesExhausted, sha256 as fileSha256, writeVerified, type Pace } from '../lib/paced-fetch.ts';
+import { CorruptBytes, pace, pacedFetch, readVerified, RetriesExhausted, sha256 as fileSha256, writeVerified, type Fetched, type Pace } from '../lib/paced-fetch.ts';
 import { sources, type FixtureSource } from '../../tests/fixtures/sources/wikidata.ts';
 import { openLibrary } from '../../tests/fixtures/sources/open-library.ts';
 import { gutenberg } from '../../tests/fixtures/sources/gutenberg.ts';
@@ -97,9 +97,9 @@ export function readLockedFixture(root: string, source: string, id: string): unk
 async function fetchNormalized(adapter: Source, request: { id: string; url: string },
   fetcher: typeof fetch, clock: Pace): Promise<string> {
   const userAgent = `REZICSFixtureHarness/1.0 (+https://github.com/rezics/rezics-next)`;
-  let response: Response;
+  let fetched: Fetched;
   try {
-    response = await pacedFetch(clock, request.url, adapter.name, {
+    fetched = await pacedFetch(clock, request.url, adapter.name, {
       intervalMs: adapter.minimumIntervalMs, maxAttempts: 3, timeoutMs: 15_000,
       retryAfterCapMs: 30_000, serverErrorFrom: 503,
       init: { headers: { 'User-Agent': userAgent,
@@ -110,8 +110,8 @@ async function fetchNormalized(adapter: Source, request: { id: string; url: stri
       throw new Error(`Fixture fetch ${adapter.name}/${request.id}: HTTP ${error.status}`);
     throw new Error(`Fixture fetch failed for ${adapter.name}/${request.id}: ${String(error)}`);
   }
-  if (!response.ok) throw new Error(`Fixture fetch ${adapter.name}/${request.id}: HTTP ${response.status}`);
-  const bytes = await response.arrayBuffer();
+  if (fetched.status < 200 || fetched.status >= 300) throw new Error(`Fixture fetch ${adapter.name}/${request.id}: HTTP ${fetched.status}`);
+  const bytes = fetched.bytes;
   if (bytes.byteLength > 2_000_000) throw new Error(`Fixture response too large for ${adapter.name}/${request.id}`);
   const decoded = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
   let raw: unknown = decoded;
