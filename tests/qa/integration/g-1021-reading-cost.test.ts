@@ -72,6 +72,7 @@ test('G1021: chooser pages, numbered and CJK seeks, and saved positions at 100, 
       return work;
     };
     const samples: object[] = [];
+    let flatNumberCost: { graphCalls: number; graphRows: number; objectReads: number; objectBytes: number } | undefined;
     for (const count of [100, 1000, 10000]) {
       const buildStarted = performance.now();
       const rootWork = await makeWork(`G1021 ${count} chapters`);
@@ -131,8 +132,25 @@ test('G1021: chooser pages, numbered and CJK seeks, and saved positions at 100, 
         total += page.items.length; cursor = page.nextCursor;
       }
       expect(total).toBe(count + 3);
-      const number = await measured('number', { q: String(lastCount), limit: '100' });
-      expect(number.items.some(item => item.occurrence === last && item.ordinal === lastCount)).toBe(true);
+      // The indexed Structure read, when built, turns this case back into a seek.
+      // The refusal assertion forces that update.
+      const numberStart = performance.now(), numberCalls = stack.fuseki.queries, numberRows = graphRows,
+        numberGraphBytes = graphBytes, numberReads = objectReads, numberObjectBytes = objectBytes,
+        numberWork = graphWork.length;
+      const number = await json<{ code: string }>(await app.handle(new Request(
+        `http://main.local/v1/reading-positions/${short(rootWork.work)}?${new URLSearchParams({ q: String(lastCount), limit: '100' })}`)), 503);
+      const numberCost = { graphCalls: stack.fuseki.queries - numberCalls, graphRows: graphRows - numberRows,
+        graphBytes: graphBytes - numberGraphBytes, objectReads: objectReads - numberReads,
+        objectBytes: objectBytes - numberObjectBytes };
+      samples.push({ count, operation: 'number', ms: performance.now() - numberStart, ...numberCost,
+        queries: graphWork.slice(numberWork) });
+      expect(number).toMatchObject({ code: 'reading_seek_unavailable' });
+      // Graph bytes follow the width of the episode number. Calls, rows and object
+      // reads stay flat: the refusal does not walk the chapter inventory.
+      const flat = { graphCalls: numberCost.graphCalls, graphRows: numberCost.graphRows,
+        objectReads: numberCost.objectReads, objectBytes: numberCost.objectBytes };
+      if (flatNumberCost === undefined) flatNumberCost = flat;
+      else expect(flat).toEqual(flatNumberCost);
       const cjk = await measured('cjk', { q: '重逢', limit: '1' });
       expect(cjk.items.map(item => item.occurrence)).toEqual([last]); expect(cjk.complete).toBe(true);
       const saved = await measured('saved-position', { q: '重逢', position: last, limit: '1' });

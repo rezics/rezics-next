@@ -1,11 +1,6 @@
-import { join } from 'node:path';
-import { Client } from 'pg';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
-import { initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
-import { readEnv, replacePrivate } from '../dev/config.ts';
 import { qaMemoryDeadline } from './memory-admission.ts';
 import { commandAsync } from './core.ts';
-import { integrationOwnerResetStatements, resetIntegrationState } from './integration-reset.ts';
 
 const ADMISSION_WAIT_MS = 120_000;
 const PREPARE_BUDGET_MS = 60_000;
@@ -85,93 +80,6 @@ export async function admitIntegrationWorkScope(input: {
     throw new Error(`Work name scope preparation is unqualified (${page.status} ${page.phase})`);
   }
   throw new Error('Work name scope preparation exceeds 60 seconds');
-}
-
-/** The product assembler has no raw update endpoint, and the image refuses
- * CLEAR ALL, so the SPARQL reset cannot empty this stack. Wipe the Fuseki
- * volume and write a fresh graph. The following admission restart then
- * qualifies the writer. A maintenance dataset reset that already succeeded
- * must not call this: wiping would drop the graph it just wrote. */
-export async function resetDisposableExclusiveStack(input: {
-  root: string;
-  projectRunId: string;
-  environment: NodeJS.ProcessEnv;
-}): Promise<void> {
-  const stackDir = join(input.root, '.temp', 'stack', `rezics-qa-${input.projectRunId}`);
-  const appsPath = join(stackDir, 'apps.env');
-  const composePath = join(stackDir, 'compose.env');
-  const saved = readEnv(composePath);
-  const next = await resetIntegrationState(readEnv(appsPath), saved, {
-    owners: resetIntegrationOwners,
-    graph: async (apps, lineage) => {
-      const started = Date.now();
-      await emptyDurableFuseki(input);
-      const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN, apps.FUSEKI_COMMAND_TOKEN);
-      await waitForExclusiveFuseki(fuseki);
-      await initializeFreshGraph(fuseki, lineage);
-      console.log(`work-scope-disposable-reset recreateMs=${Date.now() - started}`);
-    },
-  });
-  replacePrivate(appsPath, next);
-  replacePrivate(composePath, {
-    ...readEnv(composePath),
-    MAIN_DATA_EPOCH: next.MAIN_DATA_EPOCH!,
-    MAIN_ROUTING_EPOCH: next.MAIN_ROUTING_EPOCH!,
-  });
-}
-
-async function emptyDurableFuseki(input: {
-  root: string;
-  projectRunId: string;
-  environment: NodeJS.ProcessEnv;
-}): Promise<void> {
-  const container = `rezics-qa-${input.projectRunId}-fuseki-1`;
-  const stopped = await commandAsync(
-    input.root, 'docker', ['stop', '-t', '60', container], ADMISSION_WAIT_MS, input.environment,
-  );
-  if (!stopped.ok) throw new Error(`Disposable Fuseki stop failed: ${stopped.output}`);
-  const image = await commandAsync(
-    input.root, 'docker', ['inspect', container, '--format', '{{.Config.Image}}'], 15_000, input.environment,
-  );
-  if (!image.ok) throw new Error(`Disposable Fuseki image lookup failed: ${image.output}`);
-  const wiped = await commandAsync(input.root, 'docker', [
-    'run', '--rm', '--user', '0:0', '--volumes-from', container, '--entrypoint', 'sh', image.output.trim(),
-    '-c', 'rm -rf /fuseki/databases/* /fuseki/databases/.[!.]*',
-  ], 60_000, input.environment);
-  if (!wiped.ok) throw new Error(`Disposable Fuseki wipe failed: ${wiped.output}`);
-  const started = await commandAsync(
-    input.root, 'docker', ['start', container], ADMISSION_WAIT_MS, input.environment,
-  );
-  if (!started.ok) throw new Error(`Disposable Fuseki start failed: ${started.output}`);
-}
-
-async function resetIntegrationOwners(compose: Record<string, string>): Promise<void> {
-  const db = new Client({
-    connectionString: `postgres://postgres:${encodeURIComponent(compose.POSTGRES_PASSWORD!)}@127.0.0.1:${compose.POSTGRES_PORT}/postgres`,
-  });
-  await db.connect();
-  try {
-    for (const sql of integrationOwnerResetStatements) await db.query(sql);
-  } finally {
-    await db.end();
-  }
-}
-
-async function waitForExclusiveFuseki(fuseki: FusekiClient): Promise<void> {
-  const deadline = Date.now() + ADMISSION_WAIT_MS;
-  while (Date.now() < deadline) {
-    try {
-      const health = await fuseki.commandHealth();
-      if (health.publicSearchDeltaAvailable === false) {
-        throw new Error('Fuseki is not delta-exclusive, so startup cannot admit the Work-name writer');
-      }
-      return;
-    } catch (error) {
-      if (error instanceof Error && error.message.startsWith('Fuseki is not delta-exclusive')) throw error;
-      await Bun.sleep(500);
-    }
-  }
-  throw new Error('Fuseki did not become ready after the disposable recreate');
 }
 
 /** Bun's case clock cannot pause; the enclosing runner bounds active file work. */
