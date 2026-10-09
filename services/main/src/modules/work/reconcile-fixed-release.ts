@@ -7,7 +7,7 @@ import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment }
 import { fixedReleaseDigest, fixedReleaseReceiptIri, readFixedRelease,
   readFixedReleaseTerminal, type FixedReleaseInput } from './fixed-release.ts';
 import { readWorkComponentState } from './history.ts';
-import { reconciledCursor, RetainedEffectConflict } from './reconcile-restored.ts';
+import { heldMainRecovery, recoveryCursor, reconciledCursor, RetainedEffectConflict } from './reconcile-restored.ts';
 
 const PROFILE = 'https://rezics.com/definition/fixed-native-text-release-v1';
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -136,10 +136,12 @@ export async function reconcileRetainedFixedRelease(
       throw new RetainedEffectConflict('Access admission does not prove retained fixed release');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const update = `PREFIX rv: <${RV}>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(release)} a rv:FixedRelease ; rv:work ${iri(input.work)} ;
             rv:mainVersion ${iri(input.mainVersion)} ;
@@ -169,9 +171,7 @@ export async function reconcileRetainedFixedRelease(
             rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ; rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+          ${recovery.bind}
         }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(input.work)} rv:mainVersion ${iri(input.mainVersion)} .

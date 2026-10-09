@@ -89,6 +89,40 @@ import { readTranslationLinkTerminal, readTranslationLinks, translationLinkDiges
 
 export class RetainedEffectConflict extends Error {}
 
+/** Cutover records a scoped Main counter beside the diagnostic cursor.
+ * A held command has to advance both, or the invariant rejects the cursor. */
+export async function heldMainRecovery(env: WorkActivationEnvironment, marker: string, priorEpoch: string): Promise<boolean> {
+  const controls = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?saved ?savedMain WHERE {
+    GRAPH ${iri(GRAPHS.control)} {
+      ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
+        rv:restoreHold true ; rv:restoreCutover ${iri(marker)} .
+      ${iri(marker)} rv:priorDataEpoch ${lit(priorEpoch)} ; rv:priorSequence ?saved .
+      OPTIONAL { ${iri(marker)} rv:priorMainSequence ?savedMain }
+    } } LIMIT 2`)).results?.bindings ?? [];
+  const control = controls[0];
+  if (controls.length !== 1 || !control?.saved || !/^(0|[1-9][0-9]*)$/.test(control.saved.value)
+    || control.savedMain && !/^(0|[1-9][0-9]*)$/.test(control.savedMain.value)) {
+    throw new RetainedEffectConflict('held recovery cut is unavailable');
+  }
+  return Boolean(control.savedMain);
+}
+
+export function recoveryCursor(marker: string, sequence: string, paired: boolean, diagnostic = sequence) {
+  return {
+    delete: `${iri(marker)} rv:reconciledPriorSequence ?last .${paired ? ` ${iri(marker)} rv:reconciledPriorMainSequence ?lastMain .` : ''}`,
+    insert: `${iri(marker)} rv:reconciledPriorSequence ${diagnostic} .${paired ? ` ${iri(marker)} rv:reconciledPriorMainSequence ${sequence} .` : ''}`,
+    bind: `OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
+          BIND(COALESCE(?last, ?saved) AS ?previous)
+          ${paired
+            ? `${iri(marker)} rv:priorMainSequence ?savedMain .
+          OPTIONAL { ${iri(marker)} rv:reconciledPriorMainSequence ?lastMain }
+          BIND(COALESCE(?lastMain, ?savedMain) AS ?previousMain)
+          FILTER(?previous < ${diagnostic} && ?previousMain + 1 = ${sequence})`
+            : `FILTER(?previous + 1 = ${diagnostic})`}`,
+  };
+}
+
 interface AccessEffectRow {
   acting_subject?: string;
   action: string;
@@ -479,11 +513,13 @@ export async function reconcileRetainedWorkCreate(
       throw new RetainedEffectConflict('current Access admission does not prove retained create');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     let update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(receipt.work)} a schema:CreativeWork${payload.semanticTypes.map(type => `, <${type}>`).join('')} ;
             rv:mainVersion ${iri(receipt.mainVersion)} ;
@@ -528,9 +564,7 @@ export async function reconcileRetainedWorkCreate(
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
             rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+          ${recovery.bind}
         }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.work)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.mainVersion)} ?p ?o } }
@@ -613,9 +647,9 @@ export async function reconcileRetainedWorkCreate(
       if (!oldWhere.includes('rv:restoreHold true')) throw new RetainedEffectConflict('Catalogue recovery fence is absent');
       const prefix = catalogue.update.slice(0,whereAt)
         .replace('DELETE { GRAPH '+iri(GRAPHS.control)+' { '+iri(DATASET)+' rv:sequence ?n } }',
-          'DELETE { GRAPH '+iri(GRAPHS.control)+' { '+iri(marker)+' rv:reconciledPriorSequence ?last } }')
+          'DELETE { GRAPH '+iri(GRAPHS.control)+' { '+recovery.delete+' } }')
         .replace('GRAPH '+iri(GRAPHS.control)+' { '+iri(DATASET)+' rv:sequence ?next }',
-          'GRAPH '+iri(GRAPHS.control)+' { '+iri(marker)+' rv:reconciledPriorSequence '+sequence+' }');
+          'GRAPH '+iri(GRAPHS.control)+' { '+recovery.insert+' }');
       update = prefix+'} WHERE { '+oldWhere+' BIND('+sequence+' AS ?next) '+catalogue.update.slice(guardsAt);
     }
     const existing = await readWorkTerminalReceipt(env.fuseki, receipt.admissionId);
@@ -952,10 +986,12 @@ export async function reconcileRetainedRatingContext(
       throw new RetainedEffectConflict('current Access admission does not prove retained rating context');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const update = `PREFIX rv: <${RV}>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(realm)} rv:ratingContext ${iri(context)} .
           ${iri(context)} a rv:RatingContext ${experience ? ', rv:ExperienceRatingContext' : daily ? ', rv:DailyRatingContext' : ''} ;
@@ -1001,9 +1037,7 @@ export async function reconcileRetainedRatingContext(
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
             rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+          ${recovery.bind}
         }
         GRAPH ${iri(GRAPHS.current)} {
           ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
@@ -1336,6 +1370,8 @@ export async function reconcileRetainedStandingRating(
       throw new RetainedEffectConflict('current Access admission does not prove retained rating');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const priorGuard = predecessor
       ? `GRAPH ${iri(GRAPHS.current)} {
            ${iri(observation)} a rv:RatingObservation ;
@@ -1353,12 +1389,12 @@ export async function reconcileRetainedStandingRating(
     const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
       DELETE {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} }
         ${predecessor ? `GRAPH ${iri(GRAPHS.current)} {
           ${iri(observation)} rv:observationHead ${iri(predecessor)} }` : ''}
       }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(observation)} a rv:RatingObservation ${experience ? ', rv:ExperienceRatingObservation' : daily ? ', rv:DailyRatingObservation' : ''} ;
             ${identity ? `rv:ratingOccasion ${iri(identity.occasionKey)} ;` : ''}
@@ -1420,9 +1456,7 @@ export async function reconcileRetainedStandingRating(
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
             rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+          ${recovery.bind}
         }
         GRAPH ${iri(GRAPHS.current)} {
           ?space a rv:Space ; rv:realmCapability ${iri(receipt.realm)} ;
@@ -1521,16 +1555,14 @@ interface RetainedRelease {
   eventId: string; batchId: string; receipt: RetainedReceipt; state: Record<string, unknown>;
 }
 
-const restoreGuard = (env: WorkActivationEnvironment, coverage: RelayCoverage, sequence: string,
-  marker: string) => `GRAPH ${iri(GRAPHS.control)} {
+const restoreGuard = (env: WorkActivationEnvironment, coverage: RelayCoverage,
+  marker: string, bind: string) => `GRAPH ${iri(GRAPHS.control)} {
           ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
             rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
             rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+          ${bind}
         }`;
 
 /** Replay one release-grain Context from its sealed admission and exact immutable bytes. */
@@ -1570,17 +1602,19 @@ async function reconcileRetainedReleaseRatingContext(env: WorkActivationEnvironm
       throw new RetainedEffectConflict('current Access admission does not prove retained release rating context');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const update = `PREFIX rv: <${RV}>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         ${releaseContextTriples({ realm, context, revision, operation, question,
           manifest: receipt.ratingContextManifest!, receipt: receipt.id, digest: receipt.requestDigest,
           admission: { id: receipt.admissionId, authorityEpoch: receipt.authorityEpoch, scope: receipt.scope },
           batch: batchId, event: eventId, dataEpoch: coverage.dataEpoch, sequence })}
       }
       WHERE {
-        ${restoreGuard(env, coverage, sequence, marker)}
+        ${restoreGuard(env, coverage, marker, recovery.bind)}
         GRAPH ${iri(GRAPHS.current)} {
           ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
           ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active . }
@@ -1684,17 +1718,19 @@ async function reconcileRetainedReleaseRating(env: WorkActivationEnvironment, ac
       throw new RetainedEffectConflict('current Access admission does not prove retained release rating');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const binding = { realm: receipt.realm!, context, work, mainVersion, release, slot, observation,
       revision, availability, value, predecessor };
     const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
       DELETE {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} }
         ${predecessor ? `GRAPH ${iri(GRAPHS.current)} {
           ${iri(observation)} rv:observationHead ${iri(predecessor)} }` : ''}
       }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         ${releaseObservationTriples({ ...binding, operation: receipt.operation!,
           contextRevision: receipt.contextRevision!, manifest: receipt.observationManifest!,
           receipt: receipt.id, digest: receipt.requestDigest,
@@ -1702,7 +1738,7 @@ async function reconcileRetainedReleaseRating(env: WorkActivationEnvironment, ac
           batch: batchId, event: eventId, dataEpoch: coverage.dataEpoch, sequence, times })}
       }
       WHERE {
-        ${restoreGuard(env, coverage, sequence, marker)}
+        ${restoreGuard(env, coverage, marker, recovery.bind)}
         ${releaseTargetPattern({ realm: iri(receipt.realm!), context: iri(context), work: iri(work),
           main: iri(mainVersion), release: iri(release), contextRevision: iri(receipt.contextRevision!) })}
         ${releaseHeadGuard({ observation, slot, context, release, predecessor }, times)}
@@ -2671,10 +2707,12 @@ export async function reconcileRetainedRealmSpaceCreate(
       throw new RetainedEffectConflict('current Access admission does not prove retained Space');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(space)} a rv:Space ; rv:owner ${iri(owner)} ;
             ${profile !== SPACE_REALM_PROFILE_V1 ? `rv:definitionProfile ${iri(profile)} ;` : ''}
@@ -2723,9 +2761,7 @@ export async function reconcileRetainedRealmSpaceCreate(
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
             rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+          ${recovery.bind}
         }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(space)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} ?p ?o } }
@@ -2859,10 +2895,12 @@ export async function reconcileRetainedContributionDraftCreate(
       throw new RetainedEffectConflict('current Access admission does not prove retained draft');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(contribution)} a rv:TextContribution ; rv:work ${iri(work)} ;
             rv:author ${iri(author)} ; rv:language ${lit(language)} ;
@@ -2905,9 +2943,7 @@ export async function reconcileRetainedContributionDraftCreate(
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
             rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+          ${recovery.bind}
         }
         GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a schema:CreativeWork . }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(contribution)} ?p ?o } }
@@ -3234,15 +3270,17 @@ export async function reconcileRetainedContributionPublication(
       throw new RetainedEffectConflict('current Access admission does not prove retained publication');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const predecessorTriple = predecessor ? `rv:predecessor ${iri(predecessor)} ;` : '';
     const receiptPredecessor = predecessor ? `rv:expectedHead ${iri(predecessor)} ;` : '';
     const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       DELETE {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} }
         GRAPH ${iri(GRAPHS.current)} { ${iri(contribution)} rv:publicationHead ?prior }
       }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.current)} { ${iri(contribution)} rv:publicationHead ${iri(decision)} }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(decision)} a rv:PublicationDecision, rv:RevisionAnchor ;
@@ -3283,9 +3321,7 @@ export async function reconcileRetainedContributionPublication(
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
             rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+          ${recovery.bind}
         }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(contribution)} a rv:TextContribution ; rv:work ${iri(work)} ;
@@ -3472,17 +3508,19 @@ export async function reconcileRetainedMainSelection(
       throw new RetainedEffectConflict('current Access admission does not prove retained selection');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const predecessorTriple = predecessor ? `rv:predecessor ${iri(predecessor)} ;` : '';
     const receiptPredecessor = predecessor ? `rv:expectedHead ${iri(predecessor)} ;` : '';
     const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       DELETE {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} }
         GRAPH ${iri(GRAPHS.current)} { ${iri(main)} rv:selectionHead ?prior ;
           rv:head ${iri(mainPredecessor)} }
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?oldUnit ?oldPredicate ?oldValue }
       }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.current)} { ${iri(main)} rv:selectionHead ${iri(selection)} ;
           rv:head ${iri(mainRevision)} }
         GRAPH ${iri(GRAPHS.revisions)} {
@@ -3540,9 +3578,7 @@ export async function reconcileRetainedMainSelection(
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
             rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+          ${recovery.bind}
         }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(work)} a schema:CreativeWork ; rv:mainVersion ${iri(main)} ;
@@ -4353,6 +4389,8 @@ export async function reconcileRetainedAdmissionCancellation(
       throw new RetainedEffectConflict('current Access admission does not prove retained cancellation');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const reasonTriple = terminalRejected ? 'rv:reason rv:StaleHead ;' : '';
     const eventType = workRejected ? 'WorkEditRejectedEvent'
       : contributionRejected ? 'ContributionDraftEditRejectedEvent'
@@ -4380,9 +4418,9 @@ export async function reconcileRetainedAdmissionCancellation(
       || ratingPolicyStale || ratingPolicyCancelled
       ? ` ; rv:admissionId ${lit(receipt.admissionId)}` : '';
     const update = `PREFIX rv: <${RV}>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(receipt.id)} a rv:OperationReceipt ; rv:requestDigest ${lit(receipt.requestDigest)} ;
             rv:admissionId ${lit(receipt.admissionId)} ; rv:authorityEpoch ${lit(receipt.authorityEpoch)} ;
@@ -4404,9 +4442,7 @@ export async function reconcileRetainedAdmissionCancellation(
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
             rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+          ${recovery.bind}
         }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {

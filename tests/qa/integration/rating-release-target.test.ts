@@ -34,10 +34,14 @@ import { ratingAccount } from '../support/rating-account.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 async function stack(action: 'stack:up' | 'stack:reset', runId: string): Promise<void> {
+  // The shard pins the product assembler, which has no SPARQL update endpoint.
+  // This disposable graph clears its hold with one raw update, so it keeps the fixture assembler.
+  const env = { ...process.env };
+  delete env.REZICS_FUSEKI_ASSEMBLER;
   const result = action === 'stack:up'
-    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId], 180_000)
+    ? await runQaStartupChildAsync(root, [action, '--profile', 'qa', '--run-id', runId], 180_000, env)
     : spawnSync('bun', ['scripts/dev/cli.ts', action, '--profile', 'qa', '--run-id', runId],
-      { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000 });
+      { cwd: root, encoding: 'utf8', timeout: 180_000, maxBuffer: 2_000_000, env });
   if (result.status !== 0 || result.error) throw new Error(`${action}: ${(
     result.stderr || result.stdout || result.error?.message || '').slice(-2000)}`);
 }
