@@ -16,8 +16,12 @@ async function json<T>(response: Response, status = 200): Promise<T> {
   return JSON.parse(value) as T;
 }
 
+const BOOK = 'https://schema.org/Book';
+const GUIDE = 'https://schema.org/DigitalDocument';
+const MOD = 'https://rezics.com/vocab/ModPackage';
+
 test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility revocation', async () => {
-  const stack = await startMediaStack('also-enjoyed');
+  const stack = await startMediaStack('also-enjoyed', { profileCredits: true });
   try {
     const manager = await stack.member('manager');
     await manager.grant(MANAGE_SCOPE, MANAGE_ACTION);
@@ -30,31 +34,37 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     const sameAuthor = await stack.publicWork(manager.actor, ['en'], 'A second book by the author');
     const chapter = await stack.publicWork(manager.actor, ['en'], 'A chapter Work');
     const hidden = await stack.privateWork(manager.actor, 'A private Work');
-    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
-      GRAPH ${iri(GRAPHS.current)} {
-        ${[source, candidate, another, sameAuthor, chapter, hidden]
-          .map(item => `${iri(item.work)} a <https://schema.org/Book> .`).join('\n')}
-        ${iri(unrelated.work)} a <https://schema.org/DigitalDocument> .
-        ${iri(modSource.work)} a <https://rezics.com/vocab/ModPackage> .
-        ${iri(modCandidate.work)} a <https://rezics.com/vocab/ModPackage> .
-      }
-    }`);
-    const author = (work: string, id: string) => `
-      GRAPH ${iri(GRAPHS.current)} { ${iri(id)} a rv:AuthorCredit ; rv:work ${iri(work)} ;
-        rv:creditRevision ${iri(id)} ; <https://schema.org/roleName> "author" ;
-        rv:externalProvider "open-library" ; rv:externalNamespace "author" ;
-        rv:externalKey "OLsame" ; <https://schema.org/position> 0 ;
-        rv:editControl rv:HumanConfirmed . }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(id)} a rv:AuthorCreditRevision ; rv:component ${iri(id)} ;
-        rv:work ${iri(work)} ; rv:externalKey "OLsame" ; <https://schema.org/position> 0 . }`;
-    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
-      ${author(source.work, `https://rezics.com/id/${randomUUID()}`)}
-      ${author(sameAuthor.work, `https://rezics.com/id/${randomUUID()}`)}
-    }`);
+    const workHead = async (work: string) => {
+      const head = (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:head ?head } }`)).results?.bindings[0]?.head?.value;
+      if (!head) throw new Error('Work head is unavailable');
+      return head;
+    };
+    const recordType = async (work: string, types: string[]) => {
+      await manager.grant(`work:edit:${work}`, 'work.edit');
+      await json(await manager.send('PUT', `/v1/works/${work.slice(-36)}/type`, {
+        profile: 'work-type-v2', expectedHead: await workHead(work), types, actingSubject: manager.actor,
+      }), 200);
+    };
+    for (const item of [source, candidate, another, sameAuthor, chapter, hidden]) await recordType(item.work, [BOOK]);
+    await recordType(unrelated.work, [GUIDE]);
+    await recordType(modSource.work, [MOD]);
+    await recordType(modCandidate.work, [MOD]);
+    // The shelf excludes a shared author identity. A native credit and an Open Library
+    // key are the same exclusion once both works name that author.
+    const creditAuthor = async (work: string) => {
+      await json(await manager.send('POST', `/v1/works/${work.slice(-36)}/agent-credits`, {
+        profile: 'native-agent-credit-v1', credit: `https://rezics.com/id/${randomUUID()}`,
+        agent: manager.actor, role: 'author', expectedWorkHead: await workHead(work),
+        actingSubject: manager.actor,
+      }), 201);
+    };
+    await creditAuthor(source.work);
+    await creditAuthor(sameAuthor.work);
     const store = new AlsoEnjoyedStore(stack.accessPool, stack.contentPool);
     const principals = new Map<string, typeof manager.principal>([[manager.token, manager.principal]]);
     const deps = { environment: stack.env, access: stack.access, media: stack.media,
-      alsoEnjoyed: store, account: { verify: async (request: Request) => {
+      templateSeek: stack.templateSeek, alsoEnjoyed: store, account: { verify: async (request: Request) => {
         const principal = principals.get(request.headers.get('authorization')?.replace('Bearer ', '') ?? '');
         if (!principal) throw new Error('unknown bearer');
         return principal;
@@ -93,37 +103,17 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
       const started = performance.now();
       const moving = await json<CardPage>(await read(20));
       expect(performance.now() - started).toBeLessThan(WORK_READ_COST.deadlineMs);
-      expect(churn).toBe(2);
+      // The recommendation read and its adoption-template read each sample the
+      // graph position at the start and again at the end.
+      expect(churn).toBe(4);
       expect(moving.stale).toBe(true);
       expect(moving.items.map(item => item.id)).toContain(candidate.work);
       expect(moving.items.map(item => item.id)).not.toContain(hidden.work);
       expect(moving.items.map(item => item.id)).toContain(chapter.work);
       expect(moving.items.map(item => item.id)).not.toContain(sameAuthor.work);
     } finally { stack.fuseki.query = originalQuery; }
-    const erasedVariant = `urn:rezics:also-enjoyed-variant:${randomUUID()}`;
-    const erasedPublication = `urn:rezics:also-enjoyed-publication:${randomUUID()}`;
-    const erasedRevision = `urn:rezics:also-enjoyed-revision:${randomUUID()}`;
-    const erasure = `GRAPH ${iri(GRAPHS.current)} { ${iri(erasedVariant)} rv:resource ${iri(candidate.work)} ;
-      rv:contentPublicationHead ${iri(erasedPublication)} . }
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(erasedPublication)} rv:contentRevision ${iri(erasedRevision)} .
-        ${iri(erasedRevision)} a rv:ErasedRevision . }`;
-    let erased = false;
-    stack.fuseki.query = async (sparql, bytes) => {
-      const result = await originalQuery(sparql, bytes);
-      if (!stack.fuseki.isBackgroundContext && !erased && sparql.includes('SELECT ?work ?head ?main ?type WHERE')) {
-        erased = true;
-        await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { ${erasure} }`);
-      }
-      return result;
-    };
-    try {
-      const revoked = await json<CardPage>(await read());
-      expect(erased).toBe(true);
-      expect(revoked.items.map(item => item.id)).not.toContain(candidate.work);
-    } finally {
-      stack.fuseki.query = originalQuery;
-      if (erased) await stack.fuseki.update(`PREFIX rv: <${RV}> DELETE DATA { ${erasure} }`);
-    }
+    // The candidate stays visible until a later read erases its published Content.
+    // That read is after the co-reader assertions, which still need the Work.
     const readers = await Promise.all(['reader-1', 'reader-2', 'reader-3', 'reader-4', 'private-reader']
       .map(name => stack.member(name)));
     for (const [index, reader] of readers.entries()) {
@@ -217,5 +207,44 @@ test('Also enjoyed: public shelf overlap, fallback, exclusions and visibility re
     expect(stale.stale).toBe(true);
     expect(stale.items.find(item => item.id === candidate.work)?.basis).toBe('similar');
     expect((await store.candidates(source.work)).sourceReaders).toBe(0);
+    const variantId = `urn:rezics:variant:${randomUUID()}`;
+    await manager.grant(`work:read:${candidate.work}`, 'work.read');
+    await manager.grant(`content:draft:${candidate.work}`, 'content.draft');
+    await manager.grant(`content:publish:${candidate.work}`, 'content.publish');
+    const saved = await json<{ revisionId: string; sourcePosition: { dataEpoch: string } }>(
+      await manager.send('POST', '/v1/content-drafts', {
+        profile: 'content-text-v1', resourceId: candidate.work, variantId,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', expectedHead: null,
+        body: `Published body ${randomUUID()}`, actingSubject: manager.actor,
+      }), 201);
+    const exact = (await stack.content.readExactBatch([saved.revisionId], async ids => new Set(ids)))[0];
+    if (exact?.status !== 'available') throw new Error('Content draft was not saved');
+    await json(await manager.send('POST', '/v1/content-publications', {
+      profile: 'content-publication-v1', preparationId: `also-${randomUUID()}`, revisionId: saved.revisionId,
+      expectedDigest: exact.reference.byteDigest, expectedContentEpoch: saved.sourcePosition.dataEpoch,
+      resourceId: candidate.work, variantId, expectedPublicationHead: null, actingSubject: manager.actor,
+    }), 201);
+    await manager.grant(`erasure:${candidate.work}`, 'erasure.request');
+    let erasing = false;
+    let erasure: { erasureEpoch: string; suppression: string } | undefined;
+    stack.fuseki.query = async (sparql, bytes) => {
+      const result = await originalQuery(sparql, bytes);
+      if (!stack.fuseki.isBackgroundContext && !erasure && !erasing
+        && sparql.includes('SELECT ?work ?head ?main ?type WHERE')) {
+        erasing = true;
+        erasure = await fusekiReadBudget.exit(async () => json(await manager.send('POST', '/v1/erasures', {
+          profile: 'content-revision-erasure-v1', actingSubject: manager.actor,
+          resourceId: candidate.work, revisionIds: [saved.revisionId],
+        }), 200));
+      }
+      return result;
+    };
+    try {
+      const revoked = await json<CardPage>(await read());
+      expect(erasure?.suppression).toBe('suppressed');
+      expect(erasure?.erasureEpoch).toMatch(/^[1-9][0-9]*$/);
+      expect(revoked.stale).toBe(true);
+      expect(revoked.items.map(item => item.id)).not.toContain(candidate.work);
+    } finally { stack.fuseki.query = originalQuery; }
   } finally { await stack.stop(); }
 }, 240_000);

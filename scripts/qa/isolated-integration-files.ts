@@ -193,7 +193,6 @@ export const rawSparqlIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/access-baseline.test.ts',
   'tests/qa/integration/access-managed-organization-api.test.ts',
   'tests/qa/integration/agent-profile.test.ts',
-  'tests/qa/integration/also-enjoyed.test.ts',
   'tests/qa/integration/catalog-descriptions.test.ts',
   'tests/qa/integration/classification-bootstrap.test.ts',
   'tests/qa/integration/concept-page.test.ts',
