@@ -19,6 +19,20 @@ reproduction or native editing cannot expand retention rights. Complaint decisio
 must fence refresh at their scope while preserving independently supported facts.
 See [content governance](content-governance.md#rights-complaints) and [erasure](../operations/erasure.md).
 
+## Platform imports and user contributions
+
+Decision 55, maintainer, 2026-10-09. The platform answers for what it imports
+itself. An operator import publishes facts only, such as titles, dates, numbers,
+staff and relations, and never the source's user-written text such as summaries.
+Every imported fact carries a visible mark naming its source, with a link. The
+first case is the Bangumi Archive wiki export behind the launch anime and manga
+catalogue; on 2026-10-09 its repository stated no data licence.
+
+What a user enters is that user's contribution and responsibility, even when
+they bring it in with the platform's tools. The tools only prompt them to record
+where it came from, and the platform keeps the source they give. A marked source
+also lets a complaint fence exactly the scope it names, as above.
+
 ## Why observation, support and control differ
 
 An observation records exact captured bytes, coverage and time. Mapping classifies

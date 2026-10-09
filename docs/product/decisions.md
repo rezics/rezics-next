@@ -92,6 +92,12 @@ Maintainer, 2026-10-05.
 
 54. <a id="decision-54"></a>[Showcase carousel](../contracts/presentation.md#showcase-carousel) and [showcase art](../contracts/media.md#showcase-art): the window sets the stage, slides are layers, art belongs to the Work, banners never slide.
 
+## Sources
+
+Maintainer, 2026-10-09.
+
+55. <a id="decision-55"></a>[Platform imports and user contributions](../contracts/source-lifecycle.md#platform-imports-and-user-contributions): platform imports publish marked facts only; users answer for what they enter, and the tools only prompt for its source.
+
 Settled research, also adopted on 2026-09-29:
 
 - R30: [URLs and SEO](urls-and-seo.md).
