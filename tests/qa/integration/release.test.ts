@@ -31,6 +31,12 @@ test('releases keep kind and status, closed records, web snapshots and edition l
     };
     await authorCredit(work);
     const root = `/v1/works/${work.work.slice(-36)}`;
+    // An edition command validates the Work shape, which requires a descriptive metadata head.
+    await json(await editor.send('PUT', `${root}/metadata`, {
+      profile: 'work-metadata-details-v1', expectedHead: null, actingSubject: editor.actor,
+      state: { kind: 'header', originalTitle: { value: '紅樓夢', language: 'zh' },
+        localized: [{ language: 'zh', title: '紅樓夢', description: null, mainVersionLabel: null }] },
+    }));
     const editionId = id();
     const v1 = await json<{ revision: string }>(await editor.send('PUT', `${root}/metadata`, {
       profile: 'work-metadata-details-v1', expectedHead: null, actingSubject: editor.actor,
