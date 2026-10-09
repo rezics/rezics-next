@@ -34,7 +34,7 @@ services:
       retries: 30
 
   fuseki:
-    image: rezics/fuseki:6.2.0-cmd0.5.39-224103a0c487
+    image: rezics/fuseki:6.2.0-cmd0.5.39-0bee21b02aeb
     # A failed TDB2 commit halts the JVM on purpose (CommitHalt); the journal replays on restart.
     restart: unless-stopped
     oom_score_adj: ${REZICS_FUSEKI_OOM_SCORE_ADJ:-0}

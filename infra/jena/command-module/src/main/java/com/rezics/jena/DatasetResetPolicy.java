@@ -31,6 +31,11 @@ final class DatasetResetPolicy {
             if (TemplateIndexService.workScopeNativeStorage(data))
                 TemplateIndexService.withdrawWorkScopeWriter(data);
         });
+        // The generation this audit requires was just deleted, so qualifying
+        // here returns false. A process that proved exclusivity at startup
+        // admits again when the fresh graph's audit succeeds.
+        SearchDeltaJournal.dropQualification(data);
+        SearchDeltaJournal.deferExclusiveAdmission(data);
     }
 
     private DatasetResetPolicy() {}

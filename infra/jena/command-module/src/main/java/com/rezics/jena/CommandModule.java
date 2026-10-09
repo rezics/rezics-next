@@ -11,6 +11,7 @@ import org.apache.jena.fuseki.server.Operation;
 import org.apache.jena.assembler.Assembler;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ResourceFactory;
+import org.apache.jena.sparql.core.DatasetGraph;
 
 public final class CommandModule implements FusekiAutoModule {
     /** The pom.xml project version, filtered into module.properties at build time. */
@@ -78,24 +79,35 @@ public final class CommandModule implements FusekiAutoModule {
         // Qualification precedes HTTP traffic, including after an offline rebuild.
         // Empty/uninitialized datasets stay closed until a qualified startup.
         if (CommandService.deltaExclusive(point.getDataService())) {
-            SearchDeltaJournal.qualifyAtStartup(point.getDataService().getDataset());
-            data.begin(org.apache.jena.query.ReadWrite.WRITE);
-            try {
-                var control = CommandInvariant.readControl(data);
-                // Any restoreHold value is an uncertain cut, like a held one: no qualification
-                // is minted. Source admission and effects stay closed while inspection can start.
-                if (control != null && !control.held() && !hasRestoreHold(data)) {
-                    long deadline = System.nanoTime() + 10_000_000_000L;
-                    SemanticSourceBasis.qualifyAtStartup(data, deadline);
-                    SemanticSourceBasis.check(deadline);
-                    CommitHalt.commit(data);
-                } else data.abort();
-            } finally { data.end(); }
+            SearchDeltaJournal.proveExclusiveStartup(data);
+            // An empty store has no text generation yet, so this audit returns
+            // false. The maintenance reset deletes that generation too. The
+            // command that stores the fresh graph completes the same admission.
+            if (SearchDeltaJournal.qualifyAtStartup(data)) SearchDeltaJournal.clearDeferredAdmission(data);
+            else SearchDeltaJournal.deferExclusiveAdmission(data);
+            qualifySemanticSources(data);
         } else {
+            SearchDeltaJournal.revokeExclusiveStartup(data);
             data.begin(org.apache.jena.query.ReadWrite.WRITE);
             try { SemanticSourceBasis.invalidate(data); CommitHalt.commit(data); }
             finally { data.end(); }
         }
+    }
+
+    /** Same source qualification startup runs once a control record exists. */
+    static void qualifySemanticSources(DatasetGraph data) {
+        data.begin(org.apache.jena.query.ReadWrite.WRITE);
+        try {
+            var control = CommandInvariant.readControl(data);
+            // Any restoreHold value is an uncertain cut, like a held one: no qualification
+            // is minted. Source admission and effects stay closed while inspection can start.
+            if (control != null && !control.held() && !hasRestoreHold(data)) {
+                long deadline = System.nanoTime() + 10_000_000_000L;
+                SemanticSourceBasis.qualifyAtStartup(data, deadline);
+                SemanticSourceBasis.check(deadline);
+                CommitHalt.commit(data);
+            } else data.abort();
+        } finally { data.end(); }
     }
 
     /** One indexed (control, product, restoreHold, ANY) probe; the value's type or truth is not interpreted. */

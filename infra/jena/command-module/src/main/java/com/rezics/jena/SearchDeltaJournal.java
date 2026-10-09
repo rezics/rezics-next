@@ -57,6 +57,14 @@ final class SearchDeltaJournal {
     private record Qualification(String epoch, String generation, long ordinal,
                                  long luceneGeneration, long population, String sequence) {}
     private static final Map<DatasetGraph, Qualification> qualified = new WeakHashMap<>();
+    /** Set only when this process's startup saw a delta-exclusive service.
+     * Later admission reads the proof; it does not inspect the operation list again. */
+    private static final Map<org.apache.jena.tdb2.store.DatasetGraphTDB, Boolean> exclusiveStartup = new WeakHashMap<>();
+    /** Armed when exclusive startup cannot admit, or a maintenance reset withdraws
+     * the writer. The next successful generation audit consumes it. */
+    private static final Map<org.apache.jena.tdb2.store.DatasetGraphTDB, Boolean> deferredAdmission = new WeakHashMap<>();
+    private static final ThreadLocal<Boolean> startupAudit = ThreadLocal.withInitial(() -> false);
+    private static long deferredAdmissionNanos;
     private static final Map<DatasetGraph, Recovery> recovering = new WeakHashMap<>();
     private static final java.util.concurrent.ScheduledExecutorService recoveryExecutor =
         java.util.concurrent.Executors.newSingleThreadScheduledExecutor(work -> {
@@ -119,6 +127,11 @@ final class SearchDeltaJournal {
      * its empty baseline before traffic; qualification still audits every RDF
      * and Lucene body. No caller-provided unit inventory is accepted. */
     static boolean qualifyAtStartup(DatasetGraph data) {
+        startupAudit.set(true);
+        try { return qualifyAtStartupBody(data); }
+        finally { startupAudit.remove(); }
+    }
+    private static boolean qualifyAtStartupBody(DatasetGraph data) {
         boolean nativeScope = TemplateIndexService.workScopeNativeStorage(data);
         // Failed/repeated startup cannot retain an earlier same-store admission.
         if (nativeScope) TemplateIndexService.withdrawWorkScopeWriter(data);
@@ -135,6 +148,75 @@ final class SearchDeltaJournal {
         boolean qualified = qualify(data);
         if (nativeScope && qualified) TemplateIndexService.admitWorkScopeWriter(data);
         return qualified;
+    }
+
+    /** Record the exclusivity decision startup already made for this store. */
+    static void proveExclusiveStartup(DatasetGraph data) {
+        var store = physicalStore(data);
+        if (store == null) return;
+        synchronized (exclusiveStartup) { exclusiveStartup.put(store, true); }
+    }
+    /** A non-exclusive reconfiguration must not keep a proof from an earlier exclusive start. */
+    static void revokeExclusiveStartup(DatasetGraph data) {
+        var store = physicalStore(data);
+        if (store == null) return;
+        synchronized (exclusiveStartup) { exclusiveStartup.remove(store); }
+        clearDeferredAdmission(store);
+    }
+    static boolean exclusiveStartupProved(DatasetGraph data) {
+        var store = physicalStore(data);
+        if (store == null) return false;
+        synchronized (exclusiveStartup) { return Boolean.TRUE.equals(exclusiveStartup.get(store)); }
+    }
+    /** Arm the same admission for after the fresh graph is stored. No-op unless
+     * this process proved exclusivity at startup. */
+    static void deferExclusiveAdmission(DatasetGraph data) {
+        if (!exclusiveStartupProved(data) || !TemplateIndexService.workScopeNativeStorage(data)) return;
+        var store = physicalStore(data);
+        if (store == null) return;
+        synchronized (deferredAdmission) { deferredAdmission.put(store, true); }
+    }
+    static void clearDeferredAdmission(DatasetGraph data) {
+        var store = physicalStore(data);
+        if (store != null) clearDeferredAdmission(store);
+    }
+    private static void clearDeferredAdmission(org.apache.jena.tdb2.store.DatasetGraphTDB store) {
+        synchronized (deferredAdmission) { deferredAdmission.remove(store); }
+    }
+    /** Drop the in-memory journal baseline. A maintenance reset has deleted the
+     * generation it named; recovery must not requalify the empty store. */
+    static void dropQualification(DatasetGraph data) {
+        synchronized (qualified) { qualified.remove(data); }
+        stopRecovery(data);
+    }
+    static long deferredAdmissionNanos() { return deferredAdmissionNanos; }
+    private static org.apache.jena.tdb2.store.DatasetGraphTDB physicalStore(DatasetGraph data) {
+        DatasetGraph base = data;
+        while (base instanceof org.apache.jena.sparql.core.DatasetGraphWrapper wrapper
+            && org.apache.jena.tdb2.sys.TDBInternal.getDatasetGraphTDB(base) == null)
+            base = wrapper.getWrapped();
+        return org.apache.jena.tdb2.sys.TDBInternal.getDatasetGraphTDB(base);
+    }
+    /** Startup's audit returns false while the generation is absent, which is
+     * the state a maintenance reset commits. The fresh graph is stored by the
+     * next command. This repeats that same admission then, and only when the
+     * process proved exclusivity at startup. */
+    private static void admitDeferred(DatasetGraph data) {
+        if (startupAudit.get()) return;
+        var store = physicalStore(data);
+        if (store == null || data.isInTransaction() || !exclusiveStartupProved(data)) return;
+        boolean deferred;
+        synchronized (deferredAdmission) { deferred = Boolean.TRUE.equals(deferredAdmission.get(store)); }
+        if (!deferred || !TemplateIndexService.workScopeNativeStorage(data)) return;
+        long started = System.nanoTime();
+        try {
+            CommandModule.qualifySemanticSources(data);
+            TemplateIndexService.admitWorkScopeWriter(data);
+            clearDeferredAdmission(store);
+        } catch (RuntimeException failure) {
+            TemplateIndexService.withdrawWorkScopeWriter(data);
+            throw failure;
+        } finally { deferredAdmissionNanos = System.nanoTime() - started; }
     }
 
     static boolean canTrackCommit(DatasetGraph data) {
@@ -169,6 +251,7 @@ final class SearchDeltaJournal {
         Qualification baseline = auditGeneration(data, index);
         if (baseline == null) { invalidate(data); return false; }
         synchronized (qualified) { qualified.put(data, baseline); }
+        admitDeferred(data);
         return true;
     }
 

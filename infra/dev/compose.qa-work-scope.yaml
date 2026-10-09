@@ -1,8 +1,0 @@
-# Work-name admission restarts Fuseki after the text generation is stored.
-# A tmpfs database is discarded by that restart, so this overlay keeps the
-# Fuseki store on the project volume. Postgres and the object store stay tmpfs.
-services:
-  fuseki:
-    tmpfs: !reset []
-    volumes: !override
-      - fuseki_data:/fuseki/databases

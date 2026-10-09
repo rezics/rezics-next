@@ -2,64 +2,21 @@ import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { qaMemoryDeadline } from './memory-admission.ts';
 import { commandAsync } from './core.ts';
 
-const ADMISSION_WAIT_MS = 120_000;
 const PREPARE_BUDGET_MS = 60_000;
 
-/** Restart Fuseki after the text generation is stored, then page the Work-name
- * directory to complete. Admission is qualifyAtStartup on a delta-exclusive
- * service: it runs only when the process starts and a text generation already
- * exists. A dataset reset deletes that generation and withdraws the writer
- * before the fresh graph is written, so the same restart has to follow every
- * fresh graph, not only the first bootstrap. The database is a project volume:
- * stopping the container would discard a tmpfs store. */
+/** Page the Work-name directory to complete. The exclusive writer is admitted
+ * in process when the fresh graph is stored, so Fuseki stays up. Main's startup
+ * preparation runs before that graph exists and leaves the directory unfinished;
+ * this wait still finishes it after bootstrap and after every maintenance reset. */
 export async function admitIntegrationWorkScope(input: {
   root: string;
   projectRunId: string;
   fusekiUrl: string;
   maintenanceToken: string | undefined;
   environment: NodeJS.ProcessEnv;
-}): Promise<{ restartMs: number; prepareMs: number }> {
+}): Promise<{ prepareMs: number }> {
   const container = `rezics-qa-${input.projectRunId}-fuseki-1`;
   const fuseki = new FusekiClient(input.fusekiUrl, input.maintenanceToken);
-  const previous = await fuseki.commandHealth().catch(() => undefined);
-  const restartStarted = Date.now();
-  // docker restart's default 10s stop is short enough to SIGKILL Fuseki. The
-  // entrypoint then marks the text index uncertain and startup qualification
-  // refuses the writer. An orderly stop leaves clean-stop, and the next
-  // process is the one allowed to admit.
-  const stopped = await commandAsync(
-    input.root, 'docker', ['stop', '-t', '60', container], ADMISSION_WAIT_MS, input.environment,
-  );
-  if (!stopped.ok) throw new Error(`Fuseki stop failed: ${stopped.output}`);
-  const started = await commandAsync(
-    input.root, 'docker', ['start', container], ADMISSION_WAIT_MS, input.environment,
-  );
-  if (!started.ok) throw new Error(`Fuseki start failed: ${started.output}`);
-  const waitDeadline = Date.now() + ADMISSION_WAIT_MS;
-  let ready = false;
-  while (Date.now() < waitDeadline) {
-    try {
-      const health = await fuseki.commandHealth();
-      if (previous && health.instanceId === previous.instanceId) {
-        await Bun.sleep(500);
-        continue;
-      }
-      if (health.publicSearchDeltaAvailable === false) {
-        throw new Error('Fuseki is not delta-exclusive, so startup cannot admit the Work-name writer');
-      }
-      if ('textIndexUncertain' in health && health.textIndexUncertain === true) {
-        throw new Error('Fuseki text index is uncertain, so startup cannot admit the Work-name writer');
-      }
-      ready = true;
-      break;
-    } catch (error) {
-      if (error instanceof Error && (error.message.startsWith('Fuseki is not delta-exclusive')
-        || error.message.startsWith('Fuseki text index is uncertain'))) throw error;
-      await Bun.sleep(500);
-    }
-  }
-  if (!ready) throw new Error('Fuseki did not become ready after the Work-name writer restart');
-  const restartMs = Date.now() - restartStarted;
   const prepareStarted = Date.now();
   const prepareDeadline = prepareStarted + PREPARE_BUDGET_MS;
   while (Date.now() < prepareDeadline) {
@@ -73,8 +30,8 @@ export async function admitIntegrationWorkScope(input: {
     if (page.status === 'deadline') continue;
     if (page.phase === 'complete' && page.more === false) {
       const prepareMs = Date.now() - prepareStarted;
-      console.log(`work-scope-admission restartMs=${restartMs} prepareMs=${prepareMs}`);
-      return { restartMs, prepareMs };
+      console.log(`work-scope-admission prepareMs=${prepareMs}`);
+      return { prepareMs };
     }
     if (page.phase === 'owners' && page.more === true) continue;
     throw new Error(`Work name scope preparation is unqualified (${page.status} ${page.phase})`);

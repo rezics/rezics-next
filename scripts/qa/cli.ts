@@ -91,7 +91,6 @@ const errors: string[] = [];
 const startedProjects: string[] = [];
 const startedFixtureProjects: string[] = [];
 const rawUpdateProjects = new Set<string>();
-const durableFusekiProjects = new Set<string>();
 const childStackRegistries = new Set<string>();
 const faultFixtureEnvironment: NodeJS.ProcessEnv = {};
 const inventory = caseInventory(root);
@@ -396,12 +395,6 @@ async function runShardWork(
   if (rawUpdate) rawUpdateProjects.add(projectRunId);
   const admitsWorkScope = tier === 'integration' && integrationStackAdmitsWorkScope(files, rawUpdate);
   if (admitsWorkScope) environment.REZICS_FUSEKI_ASSEMBLER = exclusiveWorkScopeAssembler;
-  // Admission restarts Fuseki. The ordinary QA tmpfs would discard the text
-  // generation, so this stack keeps that database on the project volume.
-  if (admitsWorkScope && !persistent) {
-    environment.REZICS_FUSEKI_DURABLE_DATABASES = '1';
-    durableFusekiProjects.add(projectRunId);
-  }
   const stackArgs = ['--profile', 'qa', '--run-id', projectRunId,
     ...(persistent ? ['--persistent'] : []), ...(rawUpdate ? ['--raw-update'] : [])];
   const started = persistent ? startedFixtureProjects : startedProjects;
@@ -454,11 +447,10 @@ async function runShardWork(
         `rezics-qa-${projectRunId}-fuseki-1`], 10_000);
       let failure = inspected.ok ? '' : 'Could not inspect QA Fuseki allocation';
       if (inspected.ok) {
-        // Command-only files start a persistent stack in test mode too. Work-scope
-        // admission also keeps the Fuseki database on a volume so a restart can
-        // see the text generation. Check the storage stack:up was asked for.
+        // Command-only files start a persistent stack in test mode too.
+        // Check the storage stack:up was asked for.
         try { assertQaResourceAllocation(resourceClass, JSON.parse(inspected.output),
-          persistent || environment.REZICS_FUSEKI_DURABLE_DATABASES === '1' ? 'scale' : 'test'); }
+          persistent ? 'scale' : 'test'); }
         catch (error) { failure = redactCommandOutput(error instanceof Error ? error.message : 'Invalid QA Fuseki allocation'); }
       }
       if (failure) {
@@ -490,8 +482,8 @@ async function runShardWork(
       return finish({ ok: false, timedOut: bootstrap.timedOut, noMatch: false,
         xml: xmlForCommand(tier, false, bootstrap.elapsedMs, bootstrap.output) });
     }
-    // The first Fuseki process started before bootstrap stored the text generation.
-    // Restart it so qualifyAtStartup can admit the writer, then finish the directory.
+    // Bootstrap stores the text generation after Fuseki has started. The writer
+    // is admitted in that process; this pages the directory Main left unfinished.
     if (admitsWorkScope) {
       try {
         await admitIntegrationWorkScope({
@@ -584,8 +576,8 @@ async function runShardWork(
         break;
       }
       apps = readEnv(join(stackDir, 'apps.env'));
-      // The reset emptied the dataset and withdrew the writer. The fresh graph is
-      // stored again; restart admits the writer and preparation completes the scope.
+      // The reset emptied the dataset. The fresh graph admits the writer again;
+      // preparation completes the scope Main does not rerun.
       if (admitsWorkScope) {
         try {
           await admitIntegrationWorkScope({
@@ -1093,9 +1085,7 @@ try {
     errors.push(...(await resetChildStacks(registry)).map(error => `QA child stack cleanup failed: ${error}`));
   }
   if (!options.keep) for (const projectRunId of startedProjects) {
-    const down = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000,
-      durableFusekiProjects.has(projectRunId)
-        ? { ...process.env, REZICS_FUSEKI_DURABLE_DATABASES: '1' } : process.env);
+    const down = command(root, 'bun', ['scripts/dev/cli.ts', 'stack:reset', '--profile', 'qa', '--run-id', projectRunId], 120_000);
     if (!down.ok) { errors.push(`QA stack cleanup failed: ${projectRunId}`); writeFileSync(join(logs, `${projectRunId}-cleanup.log`), down.output); }
   }
   // Restored fixture copies hold large persistent volumes; removing one took over

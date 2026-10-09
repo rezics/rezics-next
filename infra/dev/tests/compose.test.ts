@@ -4,14 +4,12 @@ import { fileURLToPath } from 'node:url';
 
 const compose = fileURLToPath(new URL('../compose.yaml', import.meta.url));
 const qaCompose = fileURLToPath(new URL('../compose.qa.yaml', import.meta.url));
-const workScopeCompose = fileURLToPath(new URL('../compose.qa-work-scope.yaml', import.meta.url));
 const assembler = fileURLToPath(new URL('../../jena/fuseki-text.ttl', import.meta.url));
 
-function resolvedStack(qa = false, workScope = false) {
+function resolvedStack(qa = false) {
   const files = [
     '-f', compose,
     ...(qa ? ['-f', qaCompose] : []),
-    ...(workScope ? ['-f', workScopeCompose] : []),
   ];
   const result = Bun.spawnSync(['docker', 'compose', ...files, 'config', '--format', 'json'], {
     env: {
@@ -72,14 +70,5 @@ describe('P0.1 local stack contract', () => {
     }
     expect(services.postgres.volumes.some((volume: { target: string }) =>
       volume.target === '/docker-entrypoint-initdb.d/00-owners.sh')).toBe(true);
-  });
-
-  test('work-scope admission keeps the Fuseki database across a process restart', () => {
-    const services = resolvedStack(true, true).services;
-    expect(services.fuseki.tmpfs ?? []).toEqual([]);
-    expect(services.fuseki.volumes.some((volume: { target: string }) =>
-      volume.target === '/fuseki/databases')).toBe(true);
-    expect(services.postgres.tmpfs.some((mount: string) => mount.startsWith('/var/lib/postgresql:'))).toBe(true);
-    expect(services.rustfs.tmpfs.some((mount: string) => mount.startsWith('/data:'))).toBe(true);
   });
 });
