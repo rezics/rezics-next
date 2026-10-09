@@ -9,6 +9,8 @@ const RESOURCE = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4
 /**
  * Graph revision kinds whose reads already hide `rv:ErasedRevision`.
  * `semantic_revision` is the existing journal kind for a semantic component.
+ * Each of these is erasable in production because its subject is a revision IRI
+ * the purge campaign removes. A class that identity resolution does not name stays closed.
  */
 export const GRAPH_ERASURE_KINDS = ['text_contribution_draft', 'semantic_revision', 'release_revision',
   'work_head', 'composition_revision'] as const;

@@ -5,7 +5,7 @@ import type { Pool } from 'pg';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { ContentErasureInvalid } from '../src/modules/erasure/content.ts';
 import { canonicalErasureTargets } from '../src/modules/erasure/graph.ts';
-import { ERASURE_REVISION_RESOURCES, resolveErasureRevisions,
+import { ERASURE_REVISION_RESOURCES, GRAPH_ERASURE_KINDS, graphRevisionIds, resolveErasureRevisions,
   type ResolvedErasureRevision } from '../src/modules/erasure/revision-kind.ts';
 
 const uuid = (ordinal: number) => `00000000-0000-4000-8000-${String(ordinal).padStart(12, '0')}`;
@@ -204,4 +204,26 @@ test('every revision class is erasable or explicitly closed', () => {
   expect(source).toContain('rv:RevisionAnchor');
   expect(source).toContain('work_head');
   expect(source).toContain('text_contribution_draft');
+});
+
+test('every erasable kind has a purge subject and a closed class stays closed', () => {
+  const scripts = ['purge-tdb2.sh', 'purge-activate.sh'].map(file =>
+    readFileSync(resolve(import.meta.dir, '../../../infra/jena', file), 'utf8'));
+  for (const script of scripts) {
+    expect(script).toContain('urn:rezics:content:revision:');
+    expect(script).toContain('https:\\/\\/rezics\\.com\\/id\\/');
+  }
+  const id = '00000000-0000-4000-8000-000000000001';
+  for (const kind of GRAPH_ERASURE_KINDS) {
+    const [subject] = graphRevisionIds([{ kind, ref: id }]);
+    expect(subject).toBe(`https://rezics.com/id/${id}`);
+    expect(subject).toHaveLength(58);
+  }
+  expect(canonicalErasureTargets([id])).toEqual([`urn:rezics:content:revision:${id}`]);
+  expect(`urn:rezics:content:revision:${id}`).toHaveLength(64);
+  const source = readFileSync(resolve(import.meta.dir, '../src/modules/erasure/revision-kind.ts'), 'utf8');
+  for (const name of Object.keys(CLOSED_REVISION_CLASSES)) {
+    expect(source).not.toContain(`BIND("${name}"`);
+    expect(GRAPH_ERASURE_KINDS as readonly string[]).not.toContain(name);
+  }
 });
