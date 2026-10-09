@@ -137,6 +137,8 @@ export function decideFixturePrune(inventory: PruneInventory): PruneDecision {
   const abandonedGroups = new Map<string, string[]>();
   for (const [project, names] of volumesByProject) {
     if (generationProjects.has(project)) continue;
+    // Other compose projects on the host are not this repository's to remove.
+    if (!project.startsWith('rezics-')) continue;
     // QA stacks belong to the reaper and stack:reset, including while they are stopped.
     if (project.startsWith('rezics-qa-')) continue;
     const volumes = [...new Set(names)].sort();

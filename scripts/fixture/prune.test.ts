@@ -90,6 +90,7 @@ function inventory(): PruneInventory {
     },
     { name: 'rezics-obs-verify-20260527_clickstack-data', project: 'rezics-obs-verify-20260527' },
     { name: mountedForeign, project: 'book-relocation' },
+    { name: 'grseed-site_postgres-data', project: 'grseed-site' },
     { name: '86a580698b875574a16091b58508e29e8f6fff6de0b72e819d9294094da04efa' },
     { name: 'rezics-catalogue-g1038-20261003t230200-7615bd-1-1000_fuseki_data' },
   ];
@@ -136,7 +137,6 @@ test('fixture prune removes superseded generations and abandoned projects, and l
   ]);
   expect(decision.keepProjects).toEqual([
     { project: 'rezics-dev', reason: 'dev', volumes: ['rezics-dev_postgres_data'] },
-    { project: 'book-relocation', reason: 'in-use', volumes: [mountedForeign] },
   ]);
   expect(decision.unlabelled).toEqual([
     '86a580698b875574a16091b58508e29e8f6fff6de0b72e819d9294094da04efa',
@@ -164,6 +164,9 @@ test('fixture prune removes superseded generations and abandoned projects, and l
   expect(report).toContain('abandoned rezics-obs-verify-20260527');
   expect(report).toContain('keep-project rezics-dev dev');
   expect(report).not.toContain('rezics-qa-20261009t221849-3b5894-1');
+  // Another repository's projects are neither kept nor removed, mounted or not.
+  expect(report).not.toContain('grseed-site');
+  expect(report).not.toContain('book-relocation');
   expect(report).toContain(
     'unlabelled rezics-catalogue-g1038-20261003t230200-7615bd-1-1000_fuseki_data',
   );
