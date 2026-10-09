@@ -1,6 +1,7 @@
 import { lookup } from 'node:dns/promises';
 import { request as httpsRequest } from 'node:https';
-import { BlockList, isIP, type LookupFunction } from 'node:net';
+import { isIP, type LookupFunction } from 'node:net';
+import { isPublicAddress } from '../../infrastructure/outbound-address.ts';
 import { WEB_SNAPSHOT_COST, WebSnapshotUnavailable } from './schema.ts';
 
 export const SNAPSHOT_USER_AGENT = 'REZICS-source-capture/1 (web snapshot)';
@@ -18,52 +19,6 @@ export interface SnapshotAddress {
   family: number;
 }
 export type SnapshotResolver = (host: string) => Promise<SnapshotAddress[]>;
-
-const nonPublic = new BlockList();
-// https://www.iana.org/assignments/iana-ipv4-special-registry (2025-10-09)
-// Refuse special-purpose blocks even where they contain public exceptions.
-for (const [address, prefix] of [
-  ['0.0.0.0', 8],
-  ['10.0.0.0', 8],
-  ['100.64.0.0', 10],
-  ['127.0.0.0', 8],
-  ['169.254.0.0', 16],
-  ['172.16.0.0', 12],
-  ['192.0.0.0', 24],
-  ['192.0.2.0', 24],
-  ['192.88.99.0', 24],
-  ['192.168.0.0', 16],
-  ['198.18.0.0', 15],
-  ['198.51.100.0', 24],
-  ['203.0.113.0', 24],
-  ['224.0.0.0', 4],
-  ['240.0.0.0', 4],
-] as const)
-  nonPublic.addSubnet(address, prefix, 'ipv4');
-
-const globalV6 = new BlockList();
-globalV6.addSubnet('2000::', 3, 'ipv6');
-// Conservative public-unicast policy: exclude protocol/transition assignments
-// and documentation, including expanded spellings and embedded IPv4 addresses.
-// https://www.iana.org/assignments/iana-ipv6-special-registry (2025-10-09)
-for (const [address, prefix] of [
-  ['2001::', 23],
-  ['2001:db8::', 32],
-  ['2002::', 16],
-  ['3fff::', 20],
-] as const)
-  nonPublic.addSubnet(address, prefix, 'ipv6');
-
-function isPublicAddress(value: string): boolean {
-  const family = isIP(value);
-  if (family === 4) return !nonPublic.check(value, 'ipv4');
-  return (
-    family === 6 &&
-    !value.includes('%') &&
-    globalV6.check(value, 'ipv6') &&
-    !nonPublic.check(value, 'ipv6')
-  );
-}
 
 /** Like the bounded MCP transport, check all DNS answers and pin one socket
  * lookup. Preserve the hostname for Host and TLS verification; never reuse a

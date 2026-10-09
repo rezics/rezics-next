@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { enforceChildDeadline } from '../../infrastructure/child-deadline.ts';
 import { SCREEN_LIMITS, screenVerdict, type Scores } from './policy.ts';
 
 export interface ImageClassifier { classify(bytes: Uint8Array, mediaType: string, signal?: AbortSignal): Promise<Scores> }
@@ -35,20 +36,12 @@ export async function classifyInProcess(bytes: Uint8Array, mediaType: string, ti
       } catch { invalid = true; child.kill('SIGKILL'); }
     },
   });
-  let expired = false;
-  const kill = () => { child.kill('SIGKILL'); };
-  const timer = setTimeout(() => { expired = true; kill(); }, timeoutMs);
-  signal?.addEventListener('abort', kill, { once: true });
-  // Abort may arrive between the initial check and listener registration.
-  if (signal?.aborted) kill();
+  const deadline = enforceChildDeadline(child, timeoutMs, signal);
   try {
     const exit = await child.exited;
-    if (expired || signal?.aborted || exit !== 0 || invalid || !scores) throw new Error('local classifier unavailable');
+    if (deadline.expired || signal?.aborted || exit !== 0 || invalid || !scores) throw new Error('local classifier unavailable');
     return scores;
   } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener('abort', kill);
-    if (child.exitCode === null) kill();
-    await child.exited;
+    await deadline.release();
   }
 }

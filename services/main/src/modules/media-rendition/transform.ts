@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { enforceChildDeadline } from '../../infrastructure/child-deadline.ts';
 import {
   checkSize,
   parseProfile,
@@ -172,16 +173,7 @@ async function runTransform(
       },
     },
   );
-  let expired = false;
-  const kill = () => {
-    child.kill('SIGKILL');
-  };
-  const timer = setTimeout(() => {
-    expired = true;
-    kill();
-  }, timeoutMs);
-  signal?.addEventListener('abort', kill, { once: true });
-  if (signal?.aborted) kill();
+  const deadline = enforceChildDeadline(child, timeoutMs, signal);
   const output = (async () => {
     const chunks: Uint8Array[] = [];
     let length = 0;
@@ -189,7 +181,7 @@ async function runTransform(
       for await (const chunk of child.stdout) {
         if (length + chunk.byteLength > RENDITION_LIMITS.bytes * (plans?.length ?? 0)) {
           invalid = true;
-          kill();
+          child.kill('SIGKILL');
           break;
         }
         length += chunk.byteLength;
@@ -197,14 +189,14 @@ async function runTransform(
       }
     } catch {
       invalid = true;
-      kill();
+      child.kill('SIGKILL');
     }
     return Buffer.concat(chunks, length);
   })();
   try {
     const [exit, data] = await Promise.all([child.exited, output]);
     if (
-      expired ||
+      deadline.expired ||
       signal?.aborted ||
       exit !== 0 ||
       invalid ||
@@ -228,10 +220,7 @@ async function runTransform(
       };
     });
   } finally {
-    clearTimeout(timer);
-    signal?.removeEventListener('abort', kill);
-    if (child.exitCode === null) kill();
-    await child.exited;
+    await deadline.release();
     await output;
   }
 }
