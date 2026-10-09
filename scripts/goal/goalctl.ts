@@ -135,6 +135,9 @@ const programOf = (engine: Engine): string =>
 const engineEnv = (engine: Engine): Record<string, string> =>
   engine === 'codex-1' ? { CODEX_HOME: CODEX_1_HOME } : isCodex(engine) ? { CODEX_HOME } : {};
 const HOLDING: State[] = ['running', 'exited', 'conflict', 'merged', 'stopped'];
+// Landed (`merged`) and closed tasks no longer have to land. Every other holding state
+// still does, including files it committed outside its claim.
+const UNLANDED: State[] = ['running', 'exited', 'conflict', 'stopped'];
 
 /** The leading `---` block of a brief or Goal file as flat `key: value` fields. `#` at the start of a line or after a
  * space begins a comment. A key with no value may be followed by `- item` lines, read as the list `[item, ...]`. */
@@ -822,6 +825,80 @@ function scopeViolations(committed: string[], task: Task, sharers: Task[], regen
   return outOfClaimFiles(committed.filter(file => sharedTree || !union.has(file)), sharers, regenerated);
 }
 
+/** `git check-attr -z` records `path NUL attr NUL value NUL` for each path. */
+function unionMerged(files: readonly string[]): Set<string> {
+  const union = new Set<string>();
+  for (let start = 0; start < files.length; start += 200) {
+    const output = git(root, ['check-attr', '-z', 'merge', '--', ...files.slice(start, start + 200)], true);
+    const parts = output ? output.split('\0') : [];
+    for (let index = 0; index + 2 < parts.length; index += 3) {
+      if (parts[index + 1] === 'merge' && parts[index + 2] === 'union') union.add(parts[index]!);
+    }
+  }
+  return union;
+}
+
+/** Commits on `main..branch` whose every change to a path is a regeneration commit. */
+function regeneratedOnBranch(branch: string): string[] {
+  const log = git(root, ['log', '--name-only', '--pretty=format:%H%x09%s', `main..${branch}`], true);
+  return log ? filesOnlyRegenerated(log) : [];
+}
+
+/** Files this branch committed outside the claim that land would still refuse if another task claimed them.
+ * A solo task may edit union-merge files and regeneration output; a shared branch may not. */
+function unlandedOutOfClaim(task: Task, sharers: readonly Task[]): string[] {
+  const committed = git(root, ['diff', '--name-only', `main...${task.branch}`], true).split('\n').filter(Boolean);
+  if (!committed.length) return [];
+  const sharedTree = sharers.some(sharer => sharer.worktreeName) || sharers.length > 1;
+  const union = sharedTree ? new Set<string>() : unionMerged(committed);
+  const watched = committed.filter(file => !union.has(file));
+  return outOfClaimFiles(watched, [...sharers], regeneratedOnBranch(task.branch));
+}
+
+/** Out-of-claim commits of a task that has not landed or closed, matched the way a path claim is. */
+function unlandedChangeConflicts(brief: Brief, tasks: readonly Task[]): string[] {
+  if (!brief.paths.some(path => !isGeneratedOutput(path))) return [];
+  const conflicts: string[] = [];
+  const seen = new Set<string>();
+  for (const task of tasks) {
+    if (!UNLANDED.includes(task.state) || !task.branch) continue;
+    const key = `${task.worktree}\0${task.branch}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const sharers = tasks.filter(other => other.worktree === task.worktree && other.branch === task.branch
+      && HOLDING.includes(other.state));
+    // A sharer may adopt the file into its own claim. Another task may not take it.
+    if (sharers.some(sharer => sharer.id === brief.id)) continue;
+    const files = unlandedOutOfClaim(task, sharers);
+    if (!files.length) continue;
+    const names = sharers.filter(sharer => UNLANDED.includes(sharer.state)).map(sharer => sharer.id).sort().join(', ');
+    for (const path of brief.paths) {
+      if (isGeneratedOutput(path)) continue;
+      const held = files.some(file => new Bun.Glob(path).match(file) || pathsOverlap(path, file));
+      if (held) conflicts.push(`path ${path} changed by ${names} (unlanded)`);
+    }
+  }
+  return conflicts;
+}
+
+/** Unlanded tasks that committed this exact path outside their claim. */
+function unlandedChangers(tasks: readonly Task[], path: string): Task[] {
+  if (!path || isGeneratedOutput(path)) return [];
+  const found: Task[] = [];
+  const seen = new Set<string>();
+  for (const task of tasks) {
+    if (!UNLANDED.includes(task.state) || !task.branch) continue;
+    const key = `${task.worktree}\0${task.branch}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const sharers = tasks.filter(other => other.worktree === task.worktree && other.branch === task.branch
+      && HOLDING.includes(other.state));
+    if (!unlandedOutOfClaim(task, sharers).includes(path)) continue;
+    found.push(...sharers.filter(sharer => UNLANDED.includes(sharer.state)));
+  }
+  return found.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
+}
+
 function claimingTasks(ledger: Ledger, files: readonly string[], excludedIds: ReadonlySet<string>): { file: string; id: string }[] {
   return files.flatMap(file => Object.values(ledger.tasks)
     .filter(task => !excludedIds.has(task.id) && HOLDING.includes(task.state)
@@ -1279,7 +1356,8 @@ async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
     const reservedBy = ledger.reserved?.[brief.id];
     if (reservedBy && reservedBy !== goal) throw new Error(`${brief.id} is reserved for Goal ${reservedBy}; take an ID with \`new\``);
     const tasks = Object.values(ledger.tasks);
-    const conflicts = claimConflicts(brief, tasks);
+    // Commits outside the claim are held until that task lands or closes, or land would refuse it.
+    const conflicts = [...claimConflicts(brief, tasks), ...unlandedChangeConflicts(brief, tasks)];
     if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, goal, areasOf(activeGoals(ledger))));
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     for (const id of brief.depends) {
@@ -3832,11 +3910,9 @@ function resetGeneratedWorktree(worktree: string): void {
 /** Subject of the commit that records generator output. Scope checks recognise it by this text. */
 export const REGENERATION_COMMIT_SUBJECT = 'Regenerate generated outputs (goalctl)';
 
-/** Paths whose every change on the branch since `main` is from a regeneration commit.
+/** Paths whose every change in this `git log --name-only` output is from a regeneration commit.
  * A path the task's own commit also changed stays in the claim check. */
-export function regenerationOnlyFiles(repo: string): string[] {
-  if (!existsSync(repo)) return [];
-  const log = git(repo, ['log', '--name-only', '--pretty=format:%H%x09%s', 'main..HEAD']);
+function filesOnlyRegenerated(log: string): string[] {
   const regen = new Set<string>();
   const own = new Set<string>();
   let bucket: Set<string> | undefined;
@@ -3850,6 +3926,13 @@ export function regenerationOnlyFiles(repo: string): string[] {
     bucket?.add(line);
   }
   return [...regen].filter(file => !own.has(file)).sort();
+}
+
+/** Paths whose every change on the branch since `main` is from a regeneration commit.
+ * A path the task's own commit also changed stays in the claim check. */
+export function regenerationOnlyFiles(repo: string): string[] {
+  if (!existsSync(repo)) return [];
+  return filesOnlyRegenerated(git(repo, ['log', '--name-only', '--pretty=format:%H%x09%s', 'main..HEAD']));
 }
 
 /** Regenerates outputs, commits whatever the generator changed, then verifies with `--check`.
@@ -4808,7 +4891,8 @@ async function reclaimTask(id: string, briefPath: string, flags: Set<string>): P
     if (brief.id !== task.id) throw new Error(`${briefPath} is for ${brief.id}, not ${task.id}`);
     if (running(task)) throw new Error(`${task.id} is still running`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
-    const conflicts = claimConflicts(brief, Object.values(ledger.tasks));
+    const conflicts = [...claimConflicts(brief, Object.values(ledger.tasks)),
+      ...unlandedChangeConflicts(brief, Object.values(ledger.tasks))];
     if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, task.goal, areasOf(activeGoals(ledger))));
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
     Object.assign(task, { title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
@@ -5696,7 +5780,7 @@ async function main(argv: string[]): Promise<number> {
     case 'close': await closeTasks(positional.slice(0, -1), positional.at(-1) ?? ''); return 0;
     case 'reclaim': await reclaimTask(positional[0] ?? '', positional[1] ?? '', flags); return 0;
     case 'owner': {
-      // Read-only: which open task claims a repository path (workers check before editing outside their claim).
+      // Read-only: which open task claims a path, or committed it outside its claim and has not landed.
       const path = positional[0] ?? '';
       const ledger = readLedger();
       const areas = Object.entries(areasOf(activeGoals(ledger)))
@@ -5706,12 +5790,17 @@ async function main(argv: string[]): Promise<number> {
         console.log(`${path}: unclaimed${areaNote}`);
         return 0;
       }
-      const holders = Object.values(ledger.tasks).filter(task => HOLDING.includes(task.state)
+      const tasks = Object.values(ledger.tasks);
+      const holders = tasks.filter(task => HOLDING.includes(task.state)
         && task.paths.some(pattern => !isGeneratedOutput(pattern)
           && (new Bun.Glob(pattern).match(path) || pathsOverlap(pattern, path))));
-      console.log((holders.length ? `${path}: claimed by ${holders.map(task => `${task.id} (${task.state})`).join(', ')}`
-        : `${path}: unclaimed`) + areaNote);
-      return holders.length ? 1 : 0;
+      const changed = unlandedChangers(tasks, path);
+      const claimText = holders.length
+        ? `claimed by ${holders.map(task => `${task.id} (${task.state})`).join(', ')}` : '';
+      const changeText = changed.length ? `changed by ${changed.map(task => task.id).join(', ')} (unlanded)` : '';
+      const body = [claimText, changeText].filter(Boolean).join('; ') || 'unclaimed';
+      console.log(`${path}: ${body}${areaNote}`);
+      return claimText || changeText ? 1 : 0;
     }
     case 'status': await status(); return 0;
     case 'mail': {

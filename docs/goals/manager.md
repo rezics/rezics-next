@@ -272,7 +272,9 @@ These steps describe one workable approach, not a fixed procedure.
 
 A brief names the outcome and the owner mechanism that carries it: consume,
 configure, extend, or new with the reason no owner fits. It does not prescribe
-a second representation of a decision that owner already makes.
+a second representation of a decision that owner already makes. When `dispatch`
+or `reclaim` refuses a path an exited task already changed outside its claim,
+land the earlier task first or drop the path.
 
 1. **Start.** Run `goalctl goal start <goal> --manager <session>` and
    `goalctl status`, and check `git log`/`git status` for maintainer edits.

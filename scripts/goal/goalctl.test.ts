@@ -2226,6 +2226,118 @@ describe('goalctl reclaim', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
+  test('dispatch and reclaim refuse a file an exited task committed outside its claim until that task is verified', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'goalctl-unlanded-'));
+    const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha', GOAL_MEMORY_FLOOR_GIB: '0', GOAL_MAX_WORKERS: '25' };
+    for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE']) delete env[key];
+    const git = (...args: string[]) => {
+      const result = spawnSync('git', args, { cwd: dir, encoding: 'utf8', env });
+      if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+      return result.stdout.trim();
+    };
+    const run = (args: string[]) => spawnSync('bun', [join(import.meta.dir, 'goalctl.ts'), ...args],
+      { cwd: dir, encoding: 'utf8', env });
+    const writeBrief = (id: string, paths: string[]) => {
+      const path = join(dir, `${id}.md`);
+      writeFileSync(path, ['---', `id: ${id}`, 'title: Claim a path', 'effort: high', 'engine: grok', 'cases: []',
+        `paths: [${paths.join(', ')}]`, 'migrations: []', 'shared: []', 'depends: []', '---', '',
+        '## Mechanisms', '', 'none', ''].join('\n'));
+      return path;
+    };
+    try {
+      git('init', '-q', '-b', 'main');
+      git('config', 'user.email', 'goal@example.invalid');
+      git('config', 'user.name', 'goalctl test');
+      writeFileSync(join(dir, 'README'), 'start\n');
+      writeFileSync(join(dir, '.gitattributes'), 'union-file.ts merge=union\n');
+      git('add', '.');
+      git('commit', '-qm', 'start');
+      const worktree = join(dir, '.temp/worktrees/g-001');
+      git('worktree', 'add', '-q', '-b', 'goal/g-001', worktree, 'main');
+      mkdirSync(join(worktree, '.temp/goal'), { recursive: true });
+      writeFileSync(join(worktree, 'claimed.ts'), 'export {};\n');
+      writeFileSync(join(worktree, 'caller.ts'), 'export {};\n');
+      mkdirSync(join(worktree, 'generated'), { recursive: true });
+      writeFileSync(join(worktree, 'generated/note.json'), '{}\n');
+      writeFileSync(join(worktree, 'union-file.ts'), 'export {};\n');
+      expect(spawnSync('git', ['-C', worktree, 'add', 'claimed.ts', 'caller.ts', 'generated/note.json', 'union-file.ts'],
+        { encoding: 'utf8', env }).status).toBe(0);
+      expect(spawnSync('git', ['-C', worktree, 'commit', '-qm', 'Change a caller outside the claim'],
+        { encoding: 'utf8', env }).status).toBe(0);
+      writeFileSync(join(worktree, 'dirty.ts'), 'export {};\n');
+      const held = (id: string, paths: string[], branch: string, tree: string) => ({
+        id, title: id, effort: 'high', engine: 'grok', cases: [], paths, migrations: [], shared: [],
+        depends: [], brief: join(dir, `${id}.md`), worktree: tree, branch, base: '0', state: 'exited' as string,
+        attempts: [], goal: 'alpha',
+      });
+      const ledger = {
+        goals: { alpha: { manager: 'alpha-manager', startedAt: '2026-10-09T00:00:00.000Z' } },
+        tasks: {
+          'G-001': held('G-001', ['claimed.ts'], 'goal/g-001', worktree),
+          'G-002': held('G-002', ['other.ts'], 'goal/g-002', join(dir, 'absent-worktree')),
+        },
+      };
+      mkdirSync(join(dir, '.temp/goal-orchestration'), { recursive: true });
+      const ledgerPath = join(dir, '.temp/goal-orchestration/ledger.json');
+      const save = () => writeFileSync(ledgerPath, `${JSON.stringify(ledger, null, 2)}\n`);
+      save();
+      const caller = writeBrief('G-003', ['caller.ts']);
+      const refused = run(['dispatch', caller, '--dry-run']);
+      expect(refused.status).toBe(1);
+      expect(refused.stderr).toContain('Claim conflict for G-003:\n  path caller.ts changed by G-001 (unlanded)');
+      expect(refused.stderr).not.toContain('overlaps');
+      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-003']).toBeUndefined();
+      const glob = run(['dispatch', writeBrief('G-004', ['caller.*']), '--dry-run']);
+      expect(glob.status).toBe(1);
+      expect(glob.stderr).toContain('path caller.* changed by G-001 (unlanded)');
+      const reclaim = run(['reclaim', 'G-002', writeBrief('G-002', ['caller.ts'])]);
+      expect(reclaim.status).toBe(1);
+      expect(reclaim.stderr).toContain('path caller.ts changed by G-001 (unlanded)');
+      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-002'].paths).toEqual(['other.ts']);
+      const owner = run(['owner', 'caller.ts']);
+      expect(owner.status).toBe(1);
+      expect(owner.stdout).toContain('caller.ts: changed by G-001 (unlanded)');
+      expect(run(['owner', 'claimed.ts']).stdout).toContain('claimed.ts: claimed by G-001 (exited)');
+      for (const path of ['generated/note.json', 'union-file.ts', 'dirty.ts', 'fresh.ts']) {
+        const result = run(['dispatch', writeBrief('G-005', [path]), '--dry-run']);
+        expect(result.stderr).toBe('');
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain('G-005: claims ok');
+        expect(run(['owner', path]).stdout).toContain(`${path}: unclaimed`);
+      }
+      const adopted = run(['reclaim', 'G-001', writeBrief('G-001', ['claimed.ts', 'caller.ts'])]);
+      expect(adopted.stderr).toBe('');
+      expect(adopted.status).toBe(0);
+      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: claimed by G-001 (exited)');
+      const reverted = run(['reclaim', 'G-001', writeBrief('G-001', ['claimed.ts'])]);
+      expect(reverted.status).toBe(0);
+      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: changed by G-001 (unlanded)');
+      for (const state of ['running', 'conflict', 'stopped']) {
+        ledger.tasks['G-001'].state = state;
+        save();
+        expect(run(['dispatch', caller, '--dry-run']).stderr).toContain('changed by G-001 (unlanded)');
+      }
+      ledger.tasks['G-001'].state = 'merged';
+      save();
+      expect(run(['dispatch', caller, '--dry-run']).status).toBe(0);
+      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: unclaimed');
+      expect(run(['owner', 'claimed.ts']).stdout).toContain('claimed.ts: claimed by G-001 (merged)');
+      ledger.tasks['G-001'].state = 'exited';
+      save();
+      expect(run(['dispatch', caller, '--dry-run']).stderr).toContain('changed by G-001 (unlanded)');
+      ledger.tasks['G-001'].state = 'verified';
+      save();
+      const allowed = run(['dispatch', caller, '--dry-run']);
+      expect(allowed.stderr).toBe('');
+      expect(allowed.status).toBe(0);
+      expect(allowed.stdout).toContain('G-003: claims ok');
+      expect(run(['owner', 'caller.ts']).stdout).toContain('caller.ts: unclaimed');
+      const released = run(['reclaim', 'G-002', writeBrief('G-002', ['caller.ts'])]);
+      expect(released.status).toBe(0);
+      expect(JSON.parse(readFileSync(ledgerPath, 'utf8')).tasks['G-002'].paths).toEqual(['caller.ts']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   test('lists --allow-area beside reclaim in the usage text', () => {
     const result = spawnSync('bun', [join(import.meta.dir, 'goalctl.ts')], {
       cwd: join(import.meta.dir, '../..'), encoding: 'utf8',
