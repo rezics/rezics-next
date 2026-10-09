@@ -20,6 +20,11 @@ test('a local docker helper whose spawn passes a builder owns its callers', () =
   expect(found).toEqual([]);
 });
 
+test('a local docker helper that does not spawn is still a docker call', () => {
+  const found = scanDockerSpawnFiles(root, ['scripts/static/fixtures/docker-ownership/argv-helper.ts']);
+  expect(found.map(item => item.call)).toEqual(["docker(['javac', 'Oracle.java'])"]);
+});
+
 test('a fixture that spawns docker compose with a bare environment is caught', () => {
   const found = scanDockerSpawnFiles(root, ['scripts/static/fixtures/docker-ownership/bare-compose.ts']);
   expect(found.map(item => item.call)).toEqual([

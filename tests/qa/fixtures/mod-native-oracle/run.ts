@@ -1,5 +1,6 @@
 /** Reproduce PKG07/08 observations with publisher-checksummed loader JARs. Run from repo root. */
 import { createHash } from 'node:crypto';
+import { preserveReapEnvironment } from '../../../../scripts/qa/container-reaper.ts';
 import { mkdir, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { solveModCaptures, type ModCapture }
@@ -16,9 +17,9 @@ const lock = await Bun.file(join(fixture, 'lock.json')).json() as {
 const sha = async (path: string): Promise<string> => createHash('sha256')
   .update(new Uint8Array(await Bun.file(path).arrayBuffer())).digest('hex');
 const run = async (args: string[], cwd = root): Promise<string> => {
-  const process = Bun.spawn(args, { cwd, stdout: 'pipe', stderr: 'pipe' });
+  const child = Bun.spawn(args, { cwd, env: preserveReapEnvironment(process.env), stdout: 'pipe', stderr: 'pipe' });
   const [stdout, stderr, code] = await Promise.all([
-    new Response(process.stdout).text(), new Response(process.stderr).text(), process.exited,
+    new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
   ]);
   if (code !== 0) throw new Error(`${args.join(' ')} failed (${code})\n${stdout}\n${stderr}`);
   return `${stdout}\n${stderr}`;

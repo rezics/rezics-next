@@ -195,7 +195,7 @@ function isDockerSpawn(name: string, tokens: Token[], open: number): boolean {
 }
 
 function bindings(tokens: Token[]): {
-  fns: Set<string>; vars: Set<string>; helpers: Set<string>; owners: Set<string>; spawning: Set<string>;
+  fns: Set<string>; vars: Set<string>; owners: Set<string>; covers: Set<string>;
 } {
   const fns = new Set<string>(reapEnvironmentBuilders);
   const vars = new Set<string>();
@@ -251,27 +251,34 @@ function bindings(tokens: Token[]): {
       }
     }
   }
-  // A local helper owns calls of its name when its own docker spawn passes a builder.
-  const helpers = new Set<string>();
+  // A local `docker` helper owns its callers only when its own spawn passes a builder.
+  // A helper that only builds an argv does not. A spawn that passes a builder covers
+  // the `docker()` calls in its argument list.
   const owners = new Set<string>();
-  const spawning = new Set<string>();
+  const covers = new Set<string>();
   for (const item of functions) {
-    if (item.name === 'docker') helpers.add(item.name);
-    let spawn = false;
-    let owned = false;
+    let dockerSpawn = false;
+    let dockerPreserved = false;
+    let spawnPreserved = false;
+    let mentioned = false;
     for (let i = item.from; i <= item.to; i++) {
       const call = calleeAt(tokens, i);
-      if (call && call.open <= item.to && fns.has(call.name)) owned = true;
-      if (tokens[i]?.kind === 'id' && vars.has(tokens[i]!.text)) owned = true;
-      if (!call || call.open > item.to || !isDockerSpawn(call.name, tokens, call.open)) continue;
-      spawn = true;
+      if (call && call.open <= item.to && fns.has(call.name)) mentioned = true;
+      if (tokens[i]?.kind === 'id' && vars.has(tokens[i]!.text)) mentioned = true;
+      if (!call || call.open > item.to) continue;
       const close = matching(tokens, call.open, '(', ')');
-      if (close <= item.to && callPreserves(tokens, call.open, close, fns, vars)) owned = true;
+      const preserved = close <= item.to && callPreserves(tokens, call.open, close, fns, vars);
+      if (spawnCallees.has(call.name) && preserved) spawnPreserved = true;
+      if (!isDockerSpawn(call.name, tokens, call.open)) continue;
+      dockerSpawn = true;
+      if (preserved) dockerPreserved = true;
     }
-    if (spawn) spawning.add(item.name);
-    if (owned) owners.add(item.name);
+    if (item.name === 'docker') {
+      if (dockerSpawn && dockerPreserved) owners.add(item.name);
+    } else if (mentioned || (dockerSpawn && dockerPreserved)) owners.add(item.name);
+    if (spawnPreserved) covers.add(item.name);
   }
-  return { fns, vars, helpers, owners, spawning };
+  return { fns, vars, owners, covers };
 }
 
 function statementEnd(tokens: Token[], from: number): number {
@@ -306,11 +313,14 @@ export function scanDockerSpawnFiles(root: string, files: readonly string[]): Do
     const text = readFileSync(join(root, file), 'utf8');
     const tokens = tokenize(text);
     const bound = bindings(tokens);
+    const coveredUntil: number[] = [];
     for (let i = 0; i < tokens.length; i++) {
+      while (coveredUntil.length > 0 && i > coveredUntil[coveredUntil.length - 1]!) coveredUntil.pop();
       const call = calleeAt(tokens, i);
       if (tokens[i - 1]?.text === 'function') continue;
+      if (call && bound.covers.has(call.name)) coveredUntil.push(matching(tokens, call.open, '(', ')'));
       if (call && bound.owners.has(call.name)) continue;
-      if (call?.name === 'docker' && bound.helpers.has(call.name) && !bound.spawning.has(call.name)) continue;
+      if (coveredUntil.length > 0 && call?.name === 'docker') continue;
       if (!call || !isDockerSpawn(call.name, tokens, call.open)) continue;
       const close = matching(tokens, call.open, '(', ')');
       if (callPreserves(tokens, call.open, close, bound.fns, bound.vars)) continue;
