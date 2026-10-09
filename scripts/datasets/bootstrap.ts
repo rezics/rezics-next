@@ -5,6 +5,7 @@ import { Pool, type PoolClient } from 'pg';
 import { writeAudit } from '../../services/account/src/operators.ts';
 import { grantFixtureAuthority } from '../../services/main/src/modules/access/fixture-authority.ts';
 import { AccessPlatformAdministrators } from '../../services/main/src/modules/access/platform-administrator.ts';
+import { readEnv } from '../dev/config.ts';
 import { SeedApi, type SeedEndpoints } from '../dev/seed/api.ts';
 import { atomicJson, repository, sha256 } from './store.ts';
 
@@ -48,18 +49,6 @@ export function checkedLocalDatabase(value: string): string {
     );
   }
   return value;
-}
-function environment(stack: string): Record<string, string> {
-  return Object.fromEntries(
-    readFileSync(join(stack, 'dev.env'), 'utf8')
-      .split('\n')
-      .flatMap((line) => {
-        const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-        if (!match) return [];
-        const value = match[2]!.replace(/^(['"])(.*)\1$/, '$2');
-        return [[match[1]!, value]];
-      }),
-  );
 }
 export function datasetStackMarker(epoch: string | undefined, operator: string): string {
   if (!epoch || !/^[0-9a-f-]{36}$/.test(epoch) || !operator || /[\s\u0000-\u001f]/.test(operator))
@@ -113,7 +102,7 @@ export async function ensureDatasetAdminAccount(
     if (!['127.0.0.1', 'localhost', '[::1]'].includes(new URL(value).hostname))
       throw new Error('Dataset administrator setup is local-only');
   }
-  const env = environment(stack);
+  const env = readEnv(join(stack, 'dev.env'));
   const owner = (
     JSON.parse(readFileSync(join(stack, 'web-auth/private.json'), 'utf8')) as {
       operator?: { id: string; email: string; password: string };
@@ -255,7 +244,7 @@ export async function ensureDatasetAdminAccess(
   accountSubject: string,
   actor: string,
 ): Promise<void> {
-  const env = environment(stack);
+  const env = readEnv(join(stack, 'dev.env'));
   const access = new Pool({ connectionString: checkedLocalDatabase(env.ACCESS_DATABASE_URL!) });
   const account = new Pool({ connectionString: checkedLocalDatabase(env.ACCOUNT_DATABASE_URL!) });
   const issuer = env.ACCOUNT_ISSUER ?? `${env.ACCOUNT_ORIGIN ?? env.ACCOUNT_BASE_URL}/api/auth`;
@@ -318,7 +307,7 @@ export async function bootstrapDatasetAdmin(
 ) {
   const { localDatasetSession } = await import('./auth.ts');
   const session = await localDatasetSession(stack, 'admin');
-  const env = environment(stack);
+  const env = readEnv(join(stack, 'dev.env'));
   return {
     mainOrigin: session.mainOrigin,
     actingSubject: session.actingSubject,
@@ -354,7 +343,7 @@ export async function inspectDatasetBulkOwnerStatus(
   actor: string,
   key: string,
 ): Promise<DatasetBulkOwnerStatus> {
-  const env = environment(stack),
+  const env = readEnv(join(stack, 'dev.env')),
     issuer = env.ACCOUNT_ISSUER ?? `${env.ACCOUNT_ORIGIN ?? env.ACCOUNT_BASE_URL}/api/auth`;
   const access = new Pool({
     connectionString: checkedLocalDatabase(env.ACCESS_DATABASE_URL!),

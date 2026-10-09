@@ -2,7 +2,6 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
-import { parseEnv } from 'node:util';
 import { Client, Pool } from 'pg';
 import { ensureStatementSeekCurrent } from '../../services/main/src/modules/statement/upgrade.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
@@ -397,14 +396,13 @@ async function prepareDev(options: StackOptions,
   const currentApps = readEnv(join(stackDirectory(root, options), 'apps.env'));
   const issued = readEnv(runtimePath);
   const publicConfig = JSON.parse(readFileSync(publicPath, 'utf8')) as { clientId: string };
-  const overrides = existsSync(overridesFile) ? parseEnv(readFileSync(overridesFile, 'utf8')) : {};
+  const overrides = existsSync(overridesFile) ? readEnv(overridesFile) : {};
   return { ...currentApps,
     ACCOUNT_OPERATOR_USER_IDS: issued.ACCOUNT_OPERATOR_USER_IDS ?? '',
     ACCOUNT_MAIN_CLIENT_ID: issued.ACCOUNT_MAIN_CLIENT_ID ?? apps.ACCOUNT_MAIN_CLIENT_ID!,
     ACCOUNT_MAIN_CLIENT_SECRET: issued.ACCOUNT_MAIN_CLIENT_SECRET ?? apps.ACCOUNT_MAIN_CLIENT_SECRET!,
     WEB_OAUTH_CLIENT_ID: publicConfig.clientId,
-    ...Object.fromEntries(Object.entries(overrides).filter((entry): entry is [string, string] =>
-      typeof entry[1] === 'string')) };
+    ...overrides };
 }
 
 /** Prepare the stack for an external process orchestrator and write the

@@ -129,13 +129,30 @@ export function serializeEnv(values: Record<string, string | number>): string {
   }).join('\n') + '\n';
 }
 
+/** Blank lines and `#` comments are ignored. Every other line is `NAME=value`
+ * or `export NAME=value`. A value whose first and last characters are the same
+ * `"` or `'` loses that one pair; the interior stays verbatim, backslashes
+ * included. Anything else is an error naming this file and line. */
 export function readEnv(path: string): Record<string, string> {
-  return Object.fromEntries(readFileSync(path, 'utf8').split(/\r?\n/).filter(Boolean)
-    .map(line => {
-      const at = line.indexOf('=');
-      if (at < 1) throw new Error(`Invalid environment file: ${path}`);
-      return [line.slice(0, at), line.slice(at + 1)];
-    }));
+  const values: Record<string, string> = {};
+  const lines = readFileSync(path, 'utf8').split(/\r?\n/);
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index] ?? '';
+    if (/^\s*(?:#.*)?$/.test(line)) continue;
+    const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+    if (!match) throw new Error(`Invalid environment line ${path}:${index + 1}`);
+    values[match[1]!] = unquoteEnv(match[2]!, `${path}:${index + 1}`);
+  }
+  return values;
+}
+
+function unquoteEnv(value: string, where: string): string {
+  const quote = value[0];
+  if (quote !== '"' && quote !== "'") return value;
+  if (value.length < 2 || value[value.length - 1] !== quote) {
+    throw new Error(`Invalid environment line ${where}`);
+  }
+  return value.slice(1, -1);
 }
 
 /** Compose gives process variables precedence over --env-file. Bind every saved

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { CONTINUITY, ID } from '../../services/main/src/modules/work/activate.ts';
 import { realmSelectionSlotIri } from '../../services/main/src/modules/work/select-realm.ts';
+export { canonicalJson as stable } from '../lib/canonical-json.ts';
 
 /** Changing what any owner stores for the same entity requires a new fixture format. */
 export const FIXTURE_FORMAT = 'rezics-fixture-v2';
@@ -176,16 +177,6 @@ export function mainComponentState(work: FixtureWork): Record<string, unknown> {
 /** First, middle and last Works: bounded restore smoke and test targets. */
 export function sampleIndices(corpus: Corpus): number[] {
   return [...new Set([0, Math.floor(corpus.works / 2), corpus.works - 1])];
-}
-
-/** Canonical JSON with sorted keys, for digests independent of insertion order. */
-export function stable(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
-      .map(([key, item]) => `${JSON.stringify(key)}:${stable(item)}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
 }
 
 /** Streaming owner summary: record count per kind plus one ordered digest. */

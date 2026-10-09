@@ -1,20 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { canonicalJson } from '../lib/canonical-json.ts';
 import { readVerified, sha256, writeVerified } from '../lib/paced-fetch.ts';
 
 export const repository = resolve(import.meta.dir, '../..');
 export { sha256 };
-export function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object')
-    return `{${Object.entries(value)
-      .filter(([, item]) => item !== undefined)
-      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-      .map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`)
-      .join(',')}}`;
-  return JSON.stringify(value);
-}
+export { canonicalJson as canonical };
 
 /** Worktrees share the main checkout's sibling store, rather than their own ../. */
 export function datasetRoot(override = process.env.REZICS_DATASET_ROOT): string {
@@ -31,7 +23,7 @@ export function atomicJson(path: string, value: unknown): void {
   // Same-filesystem staging also supports an external store on a separate disk.
   const temporary = join(dirname(path), '.temp', `${process.pid}-${crypto.randomUUID()}.json`);
   mkdirSync(dirname(temporary), { recursive: true });
-  writeFileSync(temporary, `${canonical(value)}\n`, { mode: 0o600 });
+  writeFileSync(temporary, `${canonicalJson(value)}\n`, { mode: 0o600 });
   renameSync(temporary, path);
 }
 

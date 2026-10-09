@@ -6,7 +6,6 @@ import { closeSync, existsSync, fchmodSync, openSync, readFileSync, readlinkSync
   rmSync, writeFileSync ,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { parseEnv } from 'node:util';
 import { Client, Pool } from 'pg';
 import { acquireSharedLifecycle, inheritedSharedLifecycleOwnership, markSharedLifecycleCommandStarted, sharedLifecycleEnvironment, transferSharedLifecycleOwnership } from '../goal/goalctl.ts';
 import { migrationDirectories, migrationRecords, type SchemaOwner } from '../ops/migrate.ts';
@@ -184,7 +183,7 @@ export function expectedRefreshEnvironment(root: string): Record<string, string>
   const issued = readEnv(join(dir, 'web-auth/runtime.env'));
   const publicConfig = JSON.parse(readFileSync(join(dir, 'web-auth/public.json'), 'utf8')) as { clientId: string };
   const overrideFile = join(root, '.env.dev');
-  const overrides = existsSync(overrideFile) ? parseEnv(readFileSync(overrideFile, 'utf8')) : {};
+  const overrides = existsSync(overrideFile) ? readEnv(overrideFile) : {};
   return { ...appEnvironment(saved, dir),
     ACCOUNT_OPERATOR_USER_IDS: issued.ACCOUNT_OPERATOR_USER_IDS ?? '',
     ACCOUNT_MAIN_CLIENT_ID: issued.ACCOUNT_MAIN_CLIENT_ID ?? saved.ACCOUNT_MAIN_CLIENT_ID!,

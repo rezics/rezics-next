@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readEnv } from '../dev/config.ts';
 import { SeedApi, type SeedEndpoints } from '../dev/seed/api.ts';
 import { people } from '../dev/seed/plan.ts';
 import {
@@ -41,19 +42,6 @@ export class DatasetApiError extends Error {
       `${method} ${path}: HTTP ${status} ${typeof detail.code === 'string' ? detail.code : ''}`,
     );
   }
-}
-function envFile(path: string): Record<string, string> {
-  return Object.fromEntries(
-    readFileSync(path, 'utf8')
-      .split('\n')
-      .flatMap((line) => {
-        const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/);
-        if (!match) return [];
-        let value = match[2]!;
-        if (/^(['"]).*\1$/.test(value)) value = value.slice(1, -1);
-        return [[match[1]!, value]];
-      }),
-  );
 }
 function local(origin: string): string {
   const url = new URL(origin);
@@ -155,7 +143,7 @@ export async function localDatasetSession(
     throw new Error(
       'Dataset identity must be admin, operator or the existing mei development fixture',
     );
-  const env = envFile(join(stack, 'dev.env'));
+  const env = readEnv(join(stack, 'dev.env'));
   const publicConfig = JSON.parse(readFileSync(join(stack, 'web-auth/public.json'), 'utf8')) as {
     clientId: string;
     redirectUris: string[];
