@@ -88,7 +88,8 @@ for (const locale of locales) {
       const anime = page.getByRole('link', { name: data.anime.title }).first();
       await expect(anime).toBeVisible();
       await expect(page.getByText(words.episodes).first()).toBeVisible();
-      await anime.scrollIntoViewIfNeeded();
+      await page.locator('[data-catalogue-card]').first().scrollIntoViewIfNeeded();
+      await page.locator('[data-catalogue-facts]').first().scrollIntoViewIfNeeded();
       await shot('anime-year');
       await anime.click();
       const animePanel = page.locator('[data-catalogue-panel]');
@@ -107,7 +108,8 @@ for (const locale of locales) {
       const manga = page.getByRole('link', { name: data.manga.title }).first();
       await expect(manga).toBeVisible();
       await expect(page.getByText(words.volumes).first()).toBeVisible();
-      await manga.scrollIntoViewIfNeeded();
+      await page.locator('[data-catalogue-card]').first().scrollIntoViewIfNeeded();
+      await page.locator('[data-catalogue-facts]').first().scrollIntoViewIfNeeded();
       await shot('manga-year');
       await manga.click();
       const mangaPanel = page.locator('[data-catalogue-panel]');
