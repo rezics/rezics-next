@@ -157,6 +157,7 @@ export async function queryPublicRealmClassifiedRatedPhrase(env: WorkActivationE
             rv:work ?work ; rv:mainVersion ?main ; rv:context ?unitContext ;
             rv:contribution ?contribution ; rv:revision ?revision ;
             rv:selection ?selection ; rv:language ?language .
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
         }
         GRAPH ${iri(GRAPHS.current)} {
           ?work a schema:CreativeWork ; rv:mainVersion ?main .

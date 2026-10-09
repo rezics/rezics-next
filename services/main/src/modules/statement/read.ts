@@ -263,6 +263,7 @@ export async function readStatement(env: WorkActivationEnvironment, statement: s
       OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:StatementRevision, rv:RevisionAnchor ;
         rv:component ${iri(statement)} ; rv:operation ?operation ; rv:recordedBy ?recordedBy .
         OPTIONAL { ?head rv:manifest ?manifest }
+        FILTER NOT EXISTS { ?head a rv:ErasedRevision }
         BIND(?head AS ?headRevision) } }
       OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} rv:semanticContextRevision ?pin }
         OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?pin a rv:ContextSemanticRevision ; rv:component ?context }

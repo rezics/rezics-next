@@ -472,7 +472,8 @@ export async function readFixedRelease(env: WorkActivationEnvironment, release: 
         rv:publicationDecision ?decision ; rv:selectedDraft ?draft ; rv:language ?language ;
         rv:bodyDigest ?digest ; rv:manifest ?manifest ; rv:sealedBy ?actor ;
         rv:modelRevision ?model ; rv:shapeRevision ?shape ; rv:datasetId ?dataset ;
-        rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
+        rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+      FILTER NOT EXISTS { ${iri(release)} a rv:ErasedRevision } }
   } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (rows.length === 0) throw new RevisionNotFound('fixed release is unavailable');

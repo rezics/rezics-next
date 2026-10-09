@@ -90,6 +90,7 @@ export async function queryPublicMainPhrase(env: WorkActivationEnvironment,
             rv:selection ?selection ; rv:language ?language .
           OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
             rv:searchChapterTitle ?chapterTitle . }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
         }
         GRAPH ${iri(GRAPHS.current)} {
           ?main rv:selectionHead ?selection .
@@ -269,6 +270,7 @@ export async function queryPublicRealmPhrase(env: WorkActivationEnvironment,
             rv:selection ?selection ; rv:language ?language .
           OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
             rv:searchChapterTitle ?chapterTitle . }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
         }
         GRAPH ${iri(GRAPHS.current)} {
           ?work a schema:CreativeWork ; rv:mainVersion ?main .

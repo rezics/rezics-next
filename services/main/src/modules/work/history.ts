@@ -307,6 +307,7 @@ export async function readExactMainRevision(
           rv:shapeRevision ?shape ; rv:datasetId ?dataset ; rv:dataEpoch ?epoch ;
           rv:sequence ?sequence .
         OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor }
+        FILTER NOT EXISTS { ${iri(revision)} a rv:ErasedRevision }
       }
     }`);
   const rows = result.results?.bindings ?? [];
@@ -362,6 +363,7 @@ export async function readExactWorkRevision(
           rv:manifest ?manifest ; rv:modelRevision ?model ; rv:shapeRevision ?shape ;
           rv:datasetId ?dataset ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor }
+        FILTER NOT EXISTS { ${iri(revision)} a rv:ErasedRevision }
       }
       OPTIONAL { GRAPH <${GRAPHS.current}> { ?work rv:mergedInto ?mergedInto } }
     }`);

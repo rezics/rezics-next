@@ -70,6 +70,7 @@ export async function queryPublicMainTitleBody(env: WorkActivationEnvironment,
             rv:searchBody ?publicBody .
           OPTIONAL { ?unit rv:searchResultWork ?resultWork ; rv:searchResultMain ?resultMain ;
             rv:searchChapterTitle ?chapterTitle . }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
         }
         ${indexedNameMatch('?work', input.titleTerm.normalize('NFC').trim().replace(/\s+/gu, ' '))}
         BIND(1000000 AS ?titleScore)

@@ -173,7 +173,8 @@ async function releasePage(
         VALUES (?release ?revision) { ${admitted.map((row) => `(${iri(row.release!.value)} ${iri(row.revision!.value)})`).join(' ')} }
         GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ReleaseRevision ; rv:component ?release ;
           rv:modelRevision ?profile ; rv:releaseState ?state .
-          VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} ${iri(RELEASE_V3_PROFILE)} } }
+          VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} ${iri(RELEASE_V3_PROFILE)} }
+          FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
       } LIMIT ${admitted.length + 1}`,
             admitted.length + 1,
           )
@@ -296,6 +297,7 @@ export async function readWorkReleases(
         `SELECT DISTINCT ?release ?revision WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?release a rv:Release ; rv:work|rv:coverageWork ${iri(work)} ; rv:releaseHead ?revision .
     }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
     ${
       listed
         ? `FILTER(EXISTS { GRAPH ${iri(GRAPHS.current)} {
@@ -381,7 +383,8 @@ export async function readWorkRelease(session: WorkReadSession, work: string, re
     `SELECT DISTINCT ?revision ?state WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(release)} a rv:Release ; rv:work|rv:coverageWork ${iri(work)} ; rv:releaseHead ?revision }
     GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ReleaseRevision ; rv:component ${iri(release)} ;
-      rv:modelRevision ?profile ; rv:releaseState ?state . VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} ${iri(RELEASE_V3_PROFILE)} } }
+      rv:modelRevision ?profile ; rv:releaseState ?state . VALUES ?profile { ${iri(RELEASE_PROFILE)} ${iri(RELEASE_V2_PROFILE)} ${iri(RELEASE_V3_PROFILE)} }
+      FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
   } LIMIT 2`,
     2,
   );

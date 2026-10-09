@@ -213,6 +213,7 @@ export async function queryPublicContentPhrase(env: WorkActivationEnvironment,
             rv:resource ?resource ; rv:variant ?variant ; rv:revision ?revision ;
             rv:publicationDecision ?decision ; rv:eligibility ?eligibility ;
             rv:projection ?unitProjection ; rv:language ?language .
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:ErasedRevision } }
         }
         GRAPH ${iri(GRAPHS.current)} { ?variant a rv:ContentVariant ;
           rv:resource ?resource ; rv:contentPublicationHead ?decision ;

@@ -17,7 +17,9 @@ VALUES (?id ?_sort) {}
       } UNION { GRAPH <urn:rezics:graph:revisions> {
           ?id a rv:FixedRelease ; rv:work ?_work_iri ; rv:mainVersion ?_main_iri ;
             rv:selectedDraft ?revision ; rv:contribution ?contribution ; rv:publicationDecision ?decision ; rv:language ?language .
-          ?decision rv:disclosure rv:Public . FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
+          ?decision rv:disclosure rv:Public .
+          FILTER NOT EXISTS { ?id a rv:ErasedRevision }
+          FILTER NOT EXISTS { ?revision a rv:ErasedRevision } }
         GRAPH <urn:rezics:graph:current> { ?contribution rv:publicationHead ?decision }
         BIND("release" AS ?kind) BIND(false AS ?selected) }
 FILTER(?_contentLanguage = "" || LCASE(STR(?language)) = ?_contentLanguage)

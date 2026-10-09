@@ -133,6 +133,7 @@ export async function readExactContributionDraft(
             rv:manifest ?manifest ; rv:modelRevision ?model ; rv:shapeRevision ?shape ;
             rv:datasetId ?dataset ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
           OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor }
+          FILTER NOT EXISTS { ${iri(revision)} a rv:ErasedRevision }
         }
       } LIMIT 2`, signal);
     assertContributionReadOpen(signal);

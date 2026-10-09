@@ -133,6 +133,7 @@ export async function queryPublicGroupedRatedCore(env: WorkActivationEnvironment
             rv:work ?work ; rv:mainVersion ?main ; rv:context ?unitContext ;
             rv:contribution ?contribution ; rv:revision ?bodyRevision ;
             rv:selection ?selection ; rv:language ?language .
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?bodyRevision a rv:ErasedRevision } }
         }
         GRAPH ${iri(GRAPHS.current)} {
           ?work a schema:CreativeWork ; rv:mainVersion ?main .

@@ -124,7 +124,8 @@ export function releaseGroupPattern(condition: FilterCondition, release: string,
   const head = `GRAPH ${iri(GRAPHS.current)} { ?work (${path}|^rv:work) ${release} .
     VALUES ?releaseType${key} { ${related.types.map(term).join(' ')} }
     ${release} a ?releaseType${key} ; rv:releaseHead ?releaseHead${key} . }
-    GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} a rv:ReleaseRevision ; rv:component ${release} }`;
+    GRAPH ${iri(GRAPHS.revisions)} { ?releaseHead${key} a rv:ReleaseRevision ; rv:component ${release} .
+      FILTER NOT EXISTS { ?releaseHead${key} a rv:ErasedRevision } }`;
   // A single UNION lets Jena reorder the legacy branches across every coverage
   // entry. On a v3 catalogue that plan exceeds the release read deadline.
   // Separate subqueries keep each definition's join on its own branch.
