@@ -58,7 +58,8 @@ describe('goalctl briefs', () => {
     const body = (mechanisms: string) => `---\nid: G-040\ntitle: t\neffort: high\n---\n## Outcome\n\n## Mechanisms\n\n${mechanisms}\n\n## Checks\n`;
     expect(mechanismSectionErrors(body('none'))).toEqual([]);
     expect(mechanismSectionErrors(body('- rights-evaluation: consume\n- language-parsing: configure'))).toEqual([]);
-    expect(mechanismSectionErrors(body('- rights-evaluation: new — no owner evaluates this private instrument'))).toEqual([]);
+    expect(mechanismSectionErrors(body('- private-instrument: new — no owner evaluates this private instrument'))).toEqual([]);
+    expect(mechanismSectionErrors(body('- rights-evaluation: new — another evaluator'))).toContain('mechanism rights-evaluation is mapped: consume, configure or extend it');
     expect(mechanismSectionErrors('---\nid: G-040\ntitle: t\neffort: high\n---\n## Outcome\n')).toContain('brief needs a ## Mechanisms section');
     expect(mechanismSectionErrors(body('- not-a-mechanism: consume'))).toContain('unknown mechanism: not-a-mechanism');
     expect(mechanismSectionErrors(body('- rights-evaluation: new'))).toContain('mechanism rights-evaluation: new needs the reason no owner fits');

@@ -201,7 +201,7 @@ export function validateBrief(brief: Brief): string[] {
   return errors;
 }
 
-/** A brief selects each mapped concept it touches, or `none`. `new` needs the reason no owner fits. */
+/** A brief selects each mapped concept it touches, or `none`. `new` names an unmapped one and needs the reason no owner fits. */
 export function mechanismSectionErrors(markdown: string, ids: readonly string[] = mechanisms.map(item => item.id)): string[] {
   const heading = /^## Mechanisms[ \t]*$/m.exec(markdown);
   if (!heading) return ['brief needs a ## Mechanisms section'];
@@ -224,7 +224,9 @@ export function mechanismSectionErrors(markdown: string, ids: readonly string[] 
     const id = match[1]!;
     const relation = match[2]!;
     const reason = match[3];
-    if (!known.has(id)) errors.push(`unknown mechanism: ${id}`);
+    // A new mechanism is not in the map yet; the task that builds it registers it.
+    if (relation === 'new' && known.has(id)) errors.push(`mechanism ${id} is mapped: consume, configure or extend it`);
+    if (relation !== 'new' && !known.has(id)) errors.push(`unknown mechanism: ${id}`);
     if (seen.has(id)) errors.push(`duplicate mechanism: ${id}`);
     seen.add(id);
     if (relation === 'new' && !reason?.trim()) errors.push(`mechanism ${id}: new needs the reason no owner fits`);
