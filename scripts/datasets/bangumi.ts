@@ -206,6 +206,75 @@ export async function scanBangumiArchive(
   return seen;
 }
 
+/** Free-text fields the copyright page leaves with their authors. Numeric scores and
+ * collection counts are not in this list; a text field under one of these names is. */
+export const BANGUMI_USER_POST_FIELDS = [
+  'blog', 'blogs', 'comment', 'comments', 'review', 'reviews', 'tsukkomi',
+  'rating_text', 'score_comment', 'collection_comment', 'collection_text',
+  'user_comment', 'short_comment', 'comment_box',
+] as const;
+
+/** Covers and other images. Publishers own the art, so an uploader's licence does not cover it. */
+export const BANGUMI_IMAGE_FIELDS = ['images', 'image', 'cover', 'avatar'] as const;
+
+const bangumiOmittedFields = new Set<string>([...BANGUMI_USER_POST_FIELDS, ...BANGUMI_IMAGE_FIELDS]);
+
+export function bangumiSkipReason(field: string): string | null {
+  if ((BANGUMI_USER_POST_FIELDS as readonly string[]).includes(field))
+    return 'Bangumi leaves users\' blogs, posts (吐槽), reviews, comments and collection text with their authors';
+  if ((BANGUMI_IMAGE_FIELDS as readonly string[]).includes(field))
+    return 'Publishers own the art; the uploader\'s licence does not cover covers or images';
+  return null;
+}
+
+/** Drop user-post and image fields at every object level. Infobox wiki text stays;
+ * it is subject information (titles, staff, dates), not a cover field. */
+export function bangumiMappedData<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => bangumiMappedData(item)) as T;
+  if (!value || typeof value !== 'object') return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (bangumiOmittedFields.has(key)) continue;
+    out[key] = bangumiMappedData(child);
+  }
+  return out as T;
+}
+
+export function bangumiFieldDisposition(value: unknown, prefix = ''): {
+  kept: string[];
+  skipped: { field: string; reason: string }[];
+} {
+  const kept: string[] = [];
+  const skipped: { field: string; reason: string }[] = [];
+  const walk = (node: unknown, path: string) => {
+    if (Array.isArray(node)) {
+      node.forEach((item, index) => walk(item, `${path}[${index}]`));
+      return;
+    }
+    if (!node || typeof node !== 'object') return;
+    for (const [key, child] of Object.entries(node as Record<string, unknown>)) {
+      const field = path ? `${path}.${key}` : key;
+      const reason = bangumiSkipReason(key);
+      if (reason) skipped.push({ field, reason });
+      else {
+        kept.push(field);
+        walk(child, field);
+      }
+    }
+  };
+  walk(value, prefix);
+  return { kept, skipped };
+}
+
+export function bangumiSourceUrl(kind: 'subject' | 'character', id: string | number): string {
+  return `https://bgm.tv/${kind}/${id}`;
+}
+
+/** Page URL stored on a statement as rv:evidence. Licence and credit are not Bangumi fields. */
+export function bangumiStatementEvidence(kind: 'subject' | 'character', id: string | number): string[] {
+  return [bangumiSourceUrl(kind, id)];
+}
+
 function record(
   kind: 'subject' | 'person' | 'character' | 'episode',
   row: Row,
@@ -225,7 +294,7 @@ function record(
     title,
     language: 'ja',
     sourceUrl: `https://bgm.tv/${kind === 'episode' ? 'ep' : kind}/${externalId}`,
-    data: row,
+    data: bangumiMappedData(row),
     native: reference
       ? 'source-only'
       : kind === 'subject'
@@ -239,9 +308,10 @@ function record(
 }
 
 /** The archive intentionally contains a tag subset. Acquire every elected
- * subject's current public API response to retain all API-exposed tags and
- * image variants while preserving the exact original archive fields. This
- * accepts an already captured source so resumptions need not rescan the dump. */
+ * subject's current public API response to retain API-exposed tags while
+ * preserving the archive fields. Covers, other images and user posts are
+ * omitted here, not hidden later. This accepts an already captured source so
+ * resumptions need not rescan the dump. */
 export async function enrichBangumiSubjects(
   acquisition: Acquisition,
   source: DatasetSource,
@@ -254,7 +324,6 @@ export async function enrichBangumiSubjects(
   const edgeIndex = new Map(
     edges.map((edge, index) => [canonical([edge.from, edge.to, edge.kind]), index]),
   );
-  const images = source.images.map((image) => ({ ...image }));
   const membership = source.scope.familySubjectIds;
   if (
     !Array.isArray(membership) ||
@@ -313,7 +382,7 @@ export async function enrichBangumiSubjects(
       fetchedAt: captured?.fetchedAt ?? null,
     };
     observations.push(observation);
-    subject.data.api_subject = row;
+    subject.data.api_subject = bangumiMappedData(row);
     subject.data.api_subject_acquisition = observation;
     successful++;
     if (canonicalId !== externalId) {
@@ -394,40 +463,6 @@ export async function enrichBangumiSubjects(
         } else edges[index] = edge;
       }
     }
-    const apiImages = row.images;
-    if (apiImages && typeof apiImages === 'object' && !Array.isArray(apiImages)) {
-      const entries = Object.entries(apiImages as Row).filter(
-        (entry): entry is [string, string] => typeof entry[1] === 'string' && !!entry[1],
-      );
-      for (const [, imageUrl] of entries)
-        if (!imageUrl.startsWith('https://'))
-          throw new Error(`Bangumi API returned a non-HTTPS image: ${imageUrl}`);
-      const primary =
-        entries.find(([variant]) => variant === 'large') ??
-        entries.find(([variant]) => variant === 'common') ??
-        entries[0];
-      if (primary) {
-        const coverIndex = images.findIndex(
-          (image) => image.record === subjectKey && image.role === 'cover',
-        );
-        const cover = { record: subjectKey, role: 'cover', url: primary[1] };
-        if (coverIndex < 0) images.push(cover);
-        else images[coverIndex] = cover;
-        for (const [variant, imageUrl] of entries) {
-          if (imageUrl === primary[1]) continue;
-          const image = { record: subjectKey, role: `image-variant:${variant}`, url: imageUrl };
-          if (
-            !images.some(
-              (prior) =>
-                prior.record === image.record &&
-                prior.role === image.role &&
-                prior.url === image.url,
-            )
-          )
-            images.push(image);
-        }
-      }
-    }
   }
   const sorted = timestamps.sort();
   const sourceLimitations = Array.isArray(source.scope.sourceLimitations)
@@ -440,14 +475,14 @@ export async function enrichBangumiSubjects(
     ...source,
     records,
     edges,
-    images,
+    images: [],
     scope: {
       ...source.scope,
       surfaces: [
         ...new Set([
           ...(Array.isArray(source.scope.surfaces) ? (source.scope.surfaces as string[]) : []),
-          'complete public v0 subject JSON for every elected family subject',
-          'all API-exposed tags, counts and image variants',
+          'public v0 subject JSON for every elected family subject, without images or user posts',
+          'all API-exposed tags and counts',
         ]),
       ],
       subjectApiCoverage: {
@@ -459,7 +494,7 @@ export async function enrichBangumiSubjects(
         redirects: apiRedirects,
         boundaryRecords: apiBoundary,
         fields:
-          'Every public v0 subject response is retained exactly in data.api_subject; every API-exposed community tag, its full counts, managed tags and image variants are represented.',
+          'Every public v0 subject response is retained in data.api_subject except image and user-post fields; every API-exposed community tag, its full counts and managed tags are represented. Covers and other images are omitted.',
         tagCoverage:
           'Union of archive tags and every tag exposed by the official subject API. API exposure is not a claim to unexposed private or deleted tag assignments.',
       },
@@ -719,15 +754,6 @@ export async function fetchBangumi(acquisition: Acquisition): Promise<DatasetSou
     }
   }
   records.push(...tags.values());
-  const images = records
-    .filter(
-      (item) => ['subject', 'person', 'character'].includes(item.kind) && !item.data.unavailable,
-    )
-    .map((item) => ({
-      record: item.key,
-      role: item.kind === 'subject' ? 'cover' : 'portrait',
-      url: `https://api.bgm.tv/v0/${item.kind === 'person' ? 'persons' : item.kind === 'character' ? 'characters' : 'subjects'}/${item.externalId}/image?type=large`,
-    }));
   // Preserve the official interpretation dictionaries alongside the elected data.
   const constants: Record<string, string> = {};
   for (const name of [
@@ -751,7 +777,7 @@ export async function fetchBangumi(acquisition: Acquisition): Promise<DatasetSou
       .map((value) => key('subject', value)),
     records,
     edges,
-    images,
+    images: [],
     scope: {
       archive: latest,
       archiveDigest: archive.digest,
@@ -767,7 +793,6 @@ export async function fetchBangumi(acquisition: Acquisition): Promise<DatasetSou
         'incident subject relations with full reference rows',
         'one-hop incident person/character relations',
         'all exported tags and managed tags',
-        'large image endpoints',
       ],
       frontier: {
         subjects: [...selected.references].map((value) => key('subject', value)),
@@ -785,10 +810,11 @@ export async function fetchBangumi(acquisition: Acquisition): Promise<DatasetSou
       supplements,
       redirects,
       consistency:
-        'Base wiki and relationship rows share one official archive snapshot; dangling endpoint supplements, redirects and image bytes are captured later through current official API endpoints.',
+        'Base wiki and relationship rows share one official archive snapshot; dangling endpoint supplements and redirects are captured later through current official API endpoints. Image bytes are not captured.',
       sourceLimitations: [
         'Archive exports only a subset of community tags, as documented upstream.',
-        'Comments, reviews, user collections and deleted/private content are outside the elected public wiki dataset.',
+        'Comments, reviews, user posts and collection text are not imported; the copyright page leaves them with their authors.',
+        'Covers and other images are not imported; publishers own the art.',
       ],
     },
   });
@@ -957,7 +983,8 @@ export function bangumiWorkFacts(record: BangumiFactSource): BangumiWorkFacts {
 /**
  * Write one subject's facts through the public API: one classified format on the
  * Main version, one integer count on the Work, and completion when a tag maps.
- * Keys stay fixed so a replay writes the same scheme the bootstrap seed created.
+ * Each statement's evidence is the subject page. Keys stay fixed so a replay
+ * writes the same scheme the bootstrap seed created.
  */
 export async function importBangumiWorkFacts(client: BangumiFactsClient, actingSubject: string,
   work: { work: string; mainVersion: string }, record: BangumiFactSource): Promise<{
@@ -979,11 +1006,13 @@ export async function importBangumiWorkFacts(client: BangumiFactsClient, actingS
       `work-format:v1:hint:${item.key}`);
   }
   const prefix = `work-format:v1:${work.work.slice(-36)}:${facts.subjectId}`;
+  const evidence = bangumiStatementEvidence('subject', facts.subjectId);
   let concept: string | null = null;
   if (format) {
     concept = seeded.concepts[format].concept;
     const statement = await client.post<{ statement: string; meaningKey: string }>('/v1/statements',
-      helpers.classifiedStatementBody(actingSubject, work.mainVersion, concept, context), `${prefix}:format`);
+      { ...helpers.classifiedStatementBody(actingSubject, work.mainVersion, concept, context), evidence },
+      `${prefix}:format`);
     await client.post('/v1/statement-decisions', helpers.statementDecisionBody(
       actingSubject, statement, { kind: 'global' }, 'accepted', null), `${prefix}:format-decision`);
   }
@@ -995,7 +1024,7 @@ export async function importBangumiWorkFacts(client: BangumiFactsClient, actingS
       profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work.work,
       predicate: definition.component, relationDefinition: definition.revision,
       value: { kind: 'literal', lexical: facts.count.lexical, datatype: integerDatatype, language: null },
-      applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject,
+      applicability: [], interpretation: { kind: 'selected' }, evidence, actingSubject,
     }, `${prefix}:${facts.count.notation}`);
     await client.post('/v1/statement-decisions', helpers.statementDecisionBody(
       actingSubject, statement, { kind: 'global' }, 'accepted', null),

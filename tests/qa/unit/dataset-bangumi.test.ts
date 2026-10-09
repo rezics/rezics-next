@@ -3,12 +3,19 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { zipSync, strToU8 } from 'fflate';
 import {
+  BANGUMI_IMAGE_FIELDS,
+  BANGUMI_USER_POST_FIELDS,
   bangumiFamily,
+  bangumiFieldDisposition,
+  bangumiMappedData,
+  bangumiSourceUrl,
+  bangumiStatementEvidence,
   enrichBangumiSubjects,
   fetchBangumi,
   scanBangumiArchive,
   selectBangumiSubjects,
 } from '../../../scripts/datasets/bangumi.ts';
+import captured from '../../../services/main/tests/bangumi-captured-subjects.json';
 import { MissingRemote, type Acquisition } from '../../../scripts/datasets/network.ts';
 import { canonical, putBlob, repository, sha256 } from '../../../scripts/datasets/store.ts';
 import type { DatasetSource } from '../../../scripts/datasets/types.ts';
@@ -237,13 +244,13 @@ test('Bangumi acquisition keeps episodes of all types, repeat staff jobs, voice 
     expect(dataset.records.find((row) => row.key === 'bangumi:person:11')?.native).toBe(
       'source-only',
     );
-    expect(dataset.images.find((image) => image.record === 'bangumi:character:20')?.url).toBe(
-      'https://api.bgm.tv/v0/characters/20/image?type=large',
+    expect(dataset.images).toEqual([]);
+    expect(dataset.records.find((row) => row.key === 'bangumi:character:20')?.sourceUrl).toBe(
+      'https://bgm.tv/character/20',
     );
     expect(dataset.records.find((row) => row.key === 'bangumi:subject:99')?.data.unavailable).toBe(
       true,
     );
-    expect(dataset.images.some((image) => image.record === 'bangumi:subject:99')).toBe(false);
     expect(dataset.scope.unavailableEntities).toEqual([
       {
         key: 'bangumi:subject:99',
@@ -268,7 +275,7 @@ test('Bangumi acquisition keeps episodes of all types, repeat staff jobs, voice 
   }
 });
 
-test('Bangumi enrichment preserves complete archive/API fields and unions all exposed tag counts, image variants and observed merged/restricted subjects', async () => {
+test('Bangumi enrichment keeps licensed archive and API fields, unions tag counts, and omits images and user posts', async () => {
   const oldTagKey = `bangumi:tag:${sha256('Old')}`;
   const source: DatasetSource = {
     provider: 'bangumi',
@@ -334,6 +341,7 @@ test('Bangumi enrichment preserves complete archive/API fields and unions all ex
       large: 'https://lain.bgm.tv/cover-large.png',
       medium: 'https://lain.bgm.tv/cover-medium.png',
     },
+    comment: 'user post',
     infobox: [{ key: 'Long field', value: '完整信息'.repeat(10_000) }],
     rating: { total: 100, count: { '10': 60 } },
     arbitrary_future_field: { retained: true },
@@ -369,7 +377,8 @@ test('Bangumi enrichment preserves complete archive/API fields and unions all ex
   const subject = enriched.records.find((row) => row.key === 'bangumi:subject:1')!;
   expect(subject.data.infobox).toBe('{{original wiki}}');
   expect(subject.data.summary).toBe('Original full summary');
-  expect(subject.data.api_subject).toEqual(api);
+  const { images: _images, comment: _comment, ...licensed } = api;
+  expect(subject.data.api_subject).toEqual(licensed);
   expect(enriched.records.find((row) => row.kind === 'tag' && row.title === 'New')?.native).toBe(
     'concept',
   );
@@ -386,14 +395,7 @@ test('Bangumi enrichment preserves complete archive/API fields and unions all ex
     enriched.edges.find((edge) => edge.from === subject.key && edge.kind === 'meta-tag')?.data
       .api_tag,
   ).toEqual({ name: 'Public taxonomy' });
-  expect(
-    enriched.images.find((image) => image.record === subject.key && image.role === 'cover')?.url,
-  ).toBe(api.images.large);
-  expect(
-    enriched.images.find(
-      (image) => image.record === subject.key && image.role === 'image-variant:medium',
-    )?.url,
-  ).toBe(api.images.medium);
+  expect(enriched.images).toEqual([]);
   expect(enriched.scope.subjectApiCoverage).toMatchObject({
     requested: 3,
     successful: 2,
@@ -414,4 +416,45 @@ test('Bangumi enrichment preserves complete archive/API fields and unions all ex
   expect(replay.records).toEqual(enriched.records);
   expect(replay.edges).toEqual(enriched.edges);
   expect(replay.images).toEqual(enriched.images);
+});
+
+const omitted = new Set<string>([...BANGUMI_USER_POST_FIELDS, ...BANGUMI_IMAGE_FIELDS]);
+
+function keyNames(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap(keyNames);
+  if (!value || typeof value !== 'object') return [];
+  return Object.entries(value).flatMap(([key, child]) => [key, ...keyNames(child)]);
+}
+
+test('Bangumi mapping drops user posts and images from a captured subject and cites the page', () => {
+  const capturedRow = (captured as Record<string, Record<string, unknown>>)['975']!;
+  const row = {
+    ...capturedRow,
+    summary: '草帽一伙的航海故事。',
+    comment: 'a user post',
+    blog: { text: 'a user blog' },
+    images: { large: 'https://lain.bgm.tv/pic/cover/l/nope.jpg' },
+    api_subject: {
+      id: 975,
+      summary: '草帽一伙的航海故事。',
+      comment: 'nested user post',
+      images: { medium: 'https://lain.bgm.tv/nested.jpg' },
+    },
+  };
+  const mapped = bangumiMappedData(row);
+  expect(keyNames(mapped).filter((name) => omitted.has(name))).toEqual([]);
+  expect(mapped.summary).toBe('草帽一伙的航海故事。');
+  expect(mapped.name).toBe(capturedRow.name);
+  const skipped = bangumiFieldDisposition(row).skipped;
+  expect(skipped.map((item) => item.field).sort()).toEqual([
+    'api_subject.comment',
+    'api_subject.images',
+    'blog',
+    'comment',
+    'images',
+  ]);
+  for (const item of skipped) expect(item.reason.length).toBeGreaterThan(0);
+  expect(bangumiStatementEvidence('subject', 975)).toEqual(['https://bgm.tv/subject/975']);
+  expect(bangumiStatementEvidence('character', 20)).toEqual(['https://bgm.tv/character/20']);
+  expect(bangumiSourceUrl('character', 20)).toBe('https://bgm.tv/character/20');
 });
