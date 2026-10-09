@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from 'pg';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { workEditReceiptIri } from '../work/edit.ts';
-import { reconciledCursor, RetainedEffectConflict } from '../work/reconcile-restored.ts';
+import { heldMainRecovery, recoveryCursor, reconciledCursor, RetainedEffectConflict } from '../work/reconcile-restored.ts';
 import { relayRetainedEventAt, type RelayCoverage } from '../outbox/relay.ts';
 import type { OwnerCloudEvent } from '../outbox/event-handlers.ts';
 import { OpenLibraryConversionStore } from './open-library-conversion.ts';
@@ -63,19 +63,14 @@ async function retainedChild(access: PoolClient, relay: Pool, coverage: RelayCov
   return { retained, receipt, admitted };
 }
 
-function cursorWhere(env: WorkActivationEnvironment, coverage: RelayCoverage, sequence: string) {
+function cursorWhere(env: WorkActivationEnvironment, coverage: RelayCoverage, sequence: string, paired: boolean) {
   const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
-  return { marker, where: `GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)}
+  const recovery = recoveryCursor(marker, sequence, paired);
+  return { marker, recovery, where: `GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)}
       rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:routingEpoch ${lit(env.lineage.routingEpoch)} ;
       rv:sequence 0 ; rv:restoreHold true ; rv:restoreCutover ${iri(marker)} .
       ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ; rv:priorSequence ?saved .
-      OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-      BIND(COALESCE(?last, ?saved) AS ?previous) FILTER(?previous + 1 = ${sequence}) }` };
-}
-
-function cursorChange(marker: string, sequence: string) {
-  return { remove: `GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }`,
-    add: `GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }` };
+      ${recovery.bind} }` };
 }
 
 function envelope(receipt: ChildReceipt, coverage: RelayCoverage, sequence: string,
@@ -108,8 +103,8 @@ export async function reconcileRetainedNativeChild(env: WorkActivationEnvironmen
     if (fence?.open !== false) throw new RetainedEffectConflict('Access recovery fence is not held');
     const { retained, receipt, admitted } = await retainedChild(access, relayPool,
       coverage, sequence, retirement);
-    const { marker, where } = cursorWhere(env, coverage, sequence);
-    const cursor = cursorChange(marker, sequence);
+    const paired = await heldMainRecovery(env, `urn:rezics:restore:${env.lineage.dataEpoch}`, coverage.dataEpoch);
+    const { marker, recovery, where } = cursorWhere(env, coverage, sequence, paired);
     let prior: unknown;
     let update: string;
     if (!retirement) {
@@ -156,7 +151,8 @@ export async function reconcileRetainedNativeChild(env: WorkActivationEnvironmen
         rv:sourceKey ${lit(value.sourceKey)} ; schema:position ${value.nativeOrdinal} ;
         rv:editControl rv:HumanConfirmed ; rv:rightsStatus rv:Undetermined`;
       update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-        DELETE { ${cursor.remove} } INSERT { ${cursor.add}
+        DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
+        INSERT { GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} } }
           GRAPH ${iri(GRAPHS.current)} { ${iri(value.child)} a rv:NativeChild ;
             rv:childRevision ${iri(value.revision)} ; ${common} . }
           GRAPH ${iri(GRAPHS.revisions)} { ${iri(value.revision)} a rv:NativeChildRevision, rv:RevisionAnchor ;
@@ -194,7 +190,8 @@ export async function reconcileRetainedNativeChild(env: WorkActivationEnvironmen
       if (digest !== receipt.requestDigest) throw new RetainedEffectConflict('retirement intent differs');
       prior = await readNativeChildRetirement(env, receipt.nativeChild);
       update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-        DELETE { ${cursor.remove} } INSERT { ${cursor.add}
+        DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
+        INSERT { GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} } }
           GRAPH ${iri(GRAPHS.current)} { ${iri(receipt.nativeChild)} rv:retiredBy ${iri(receipt.id)} . }
           ${envelope(receipt, coverage, sequence, retained.eventId, true)} }
         WHERE { ${where}

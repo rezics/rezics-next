@@ -162,6 +162,7 @@ function recovery(options: { corrects?: string; heldPrior?: string } = {}) {
         ? [{ prior: field(options.heldPrior) }] : [] } };
       if (sparql.includes('SELECT ?cursor')) return { results: { bindings: committed
         ? [{ cursor: field('1') }] : [] } };
+      if (sparql.includes('SELECT ?saved ?savedMain WHERE')) return { results: { bindings: [{ saved: field('0') }] } };
       if (sparql.includes('SELECT\n    ?derivation ?targetWork')) {
         const row = (derivation: string, sequence: string) => ({ derivation: field(derivation),
           targetWork: field(source.input.targetWork), sourceWork: field(source.input.sourceWork),

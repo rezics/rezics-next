@@ -162,6 +162,7 @@ function mockRecovery(status: 'official' | 'third-party', sourceRevision: string
           sequence: value('1') }] : [] } };
       if (sparql.includes('SELECT ?cursor')) return { results: { bindings: committed
         ? [{ cursor: value('1') }] : [] } };
+      if (sparql.includes('SELECT ?saved ?savedMain WHERE')) return { results: { bindings: [{ saved: value('0') }] } };
       if (sparql.includes('SELECT\n    ?link ?targetWork')) return { results: { bindings: committed
         ? [{ link: value(ids[8]!), targetWork: value(source.input.targetWork),
           sourceWork: value(source.input.sourceWork), sourceMain: value(source.input.sourceMainVersion),

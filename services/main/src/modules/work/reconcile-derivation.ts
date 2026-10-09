@@ -6,7 +6,7 @@ import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment }
 import { continuityGuard, declared, derivationTriples, derivationValidations,
   readWorkDerivationTerminal, readWorkDerivations, sourcePattern, validateWorkDerivation,
   workDerivationDigest, workDerivationReceiptIri, type WorkDerivationInput } from './derivations.ts';
-import { reconciledCursor, RetainedEffectConflict }
+import { heldMainRecovery, recoveryCursor, reconciledCursor, RetainedEffectConflict }
   from './reconcile-restored.ts';
 
 const kinds = { adaptation: 'Adaptation', 'new-recording': 'NewRecording',
@@ -147,11 +147,13 @@ export async function reconcileRetainedWorkDerivation(
       throw new RetainedEffectConflict('Access admission does not prove retained Work derivation');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const source = sourcePattern(input);
     const update = `PREFIX rv: <${RV}>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${derivationTriples(derivation, input, coverage.dataEpoch, sequence)}
         }
@@ -175,9 +177,7 @@ export async function reconcileRetainedWorkDerivation(
             rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ; rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+${recovery.bind}
         }
         GRAPH ${iri(GRAPHS.current)} {
           ${iri(input.targetWork)} rv:mainVersion ${iri(input.targetMainVersion)} .

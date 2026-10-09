@@ -3,7 +3,7 @@ import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } f
 import { authorCreditValidations, readAuthorCredit, readAuthorCreditReceipt } from '../work/author-credit.ts';
 import { authorCreditRetirementDigest, readAuthorCreditRetirement } from '../work/author-credit-retirement.ts';
 import { workEditReceiptIri } from '../work/edit.ts';
-import { reconciledCursor, RetainedEffectConflict } from '../work/reconcile-restored.ts';
+import { heldMainRecovery, recoveryCursor, reconciledCursor, RetainedEffectConflict } from '../work/reconcile-restored.ts';
 import { relayRetainedEventAt, type MainCloudEvent, type RelayCoverage } from '../outbox/relay.ts';
 
 /** Reapply one human retirement at its retained position, after its credit has recovered. */
@@ -73,10 +73,12 @@ export async function reconcileRetainedAuthorCreditRetirement(env: WorkActivatio
     const prior = await readAuthorCreditRetirement(env, credit);
     if (!prior) {
       const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+      const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+      const recovery = recoveryCursor(marker, sequence, paired);
       const batch = `urn:rezics:outbox:${hash(receipt.id)}`;
       const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-        DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
-        INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
+        INSERT { GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
           GRAPH ${iri(GRAPHS.current)} { ${iri(credit)} rv:retiredBy ${iri(receipt.id)} . }
           GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} a rv:OperationReceipt ;
             rv:outcome rv:Succeeded ; rv:action "work.edit" ;
@@ -93,8 +95,7 @@ export async function reconcileRetainedAuthorCreditRetirement(env: WorkActivatio
         WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ; rv:restoreHold true ;
           rv:restoreCutover ${iri(marker)} . ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
-          rv:priorSequence ?saved . OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous) FILTER(?previous + 1 = ${sequence}) }
+          rv:priorSequence ?saved . ${recovery.bind} }
           GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a schema:CreativeWork ; rv:head ${iri(head)} .
             ${iri(credit)} a rv:AuthorCredit ; rv:work ${iri(work)} ; rv:creditRevision ${iri(revision)} . }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} rv:protectionHead ?p } }

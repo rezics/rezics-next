@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
 import { DATASET, GRAPHS, RV, hash, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
-import { reconciledCursor, RetainedEffectConflict } from '../work/reconcile-restored.ts';
+import { heldMainRecovery, recoveryCursor, reconciledCursor, RetainedEffectConflict } from '../work/reconcile-restored.ts';
 import { authorCreditDigest, authorCreditEnvelope, authorCreditTriples, authorCreditValidations,
   readAuthorCreditReceipt, readAuthorCredit } from '../work/author-credit.ts';
 import { workEditReceiptIri } from '../work/edit.ts';
@@ -83,21 +83,22 @@ export async function reconcileRetainedAuthorCredit(env: WorkActivationEnvironme
     }
     const existing = await readAuthorCreditReceipt(env, receipt.admissionId);
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     if (!existing) {
       const triples = authorCreditTriples(value, coverage.dataEpoch, sequence);
       const admission = { id: receipt.admissionId, scope: receipt.scope,
         authorityEpoch: receipt.authorityEpoch, requestDigest: digest };
       const update = `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-        DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
-        INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
+        INSERT { GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
           GRAPH ${iri(GRAPHS.current)} { ${triples.current} }
           GRAPH ${iri(GRAPHS.revisions)} { ${triples.revision} }
           ${authorCreditEnvelope(value, receipt.sourceIntent!, admission, coverage.dataEpoch, sequence)} }
         WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
           rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ; rv:restoreHold true ; rv:restoreCutover ${iri(marker)} .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ; rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous) FILTER(?previous + 1 = ${sequence}) }
+          ${recovery.bind} }
           GRAPH ${iri(GRAPHS.current)} { ${iri(value.work)} rv:head ${iri(value.expectedHead)} . }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(value.credit)} ?p ?o } }

@@ -109,6 +109,8 @@ class RestoreFuseki extends FusekiClient {
       return { boolean: !!this.conversion };
     }
     if (sparql.includes('ASK') && sparql.includes('a rv:ClassificationApplication')) return { boolean: false };
+    // This held cut records only the diagnostic prior sequence.
+    if (sparql.includes('SELECT ?saved ?savedMain WHERE')) return rows([{ saved: '0' }]);
     throw new Error(`Unexpected restore query: ${sparql}`);
   }
 }

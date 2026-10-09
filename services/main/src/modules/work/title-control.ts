@@ -19,6 +19,7 @@ import { validEditorialControlBasis, type EditorialControlBasis } from '../prote
 import { catalogueNameProjection } from '../search/names.ts';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { canonicalLanguage } from '../display-language/select.ts';
+import { heldMainRecovery, recoveryCursor } from './reconcile-restored.ts';
 import { profileRegistry } from '../../../../../packages/model/src/generated/profiles.ts';
 
 export const TITLE_PROFILE_V1 = 'https://rezics.com/definition/work-title-control-v1';
@@ -751,17 +752,18 @@ export async function titleControlCommand(env: WorkActivationEnvironment, admiss
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } } BIND(?n + 1 AS ?next) }`;
   if (retained) {
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+    const paired = await heldMainRecovery(env, marker, retained.dataEpoch);
+    const recovery = recoveryCursor(marker, retained.sequence, paired);
     const ordinary = `GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;\n      rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }`;
     if (!update.includes(ordinary)) throw new Error('title recovery template differs');
     update = update.replace(`GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }`,
-      `GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last }`)
+      `GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} }`)
       .replace(`GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }`,
-        `GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${retained.sequence} }`)
+        `GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }`)
       .replace(ordinary, `GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ; rv:restoreHold true ; rv:restoreCutover ${iri(marker)} .
         ${iri(marker)} rv:priorDataEpoch ${lit(retained.dataEpoch)} ; rv:priorSequence ?saved .
-        OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-        BIND(COALESCE(?last, ?saved) AS ?previous) FILTER(?previous + 1 = ${retained.sequence}) }`)
+        ${recovery.bind} }`)
       .replace(`FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }`, '')
       .replaceAll(`rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next`, `rv:dataEpoch ${lit(retained.dataEpoch)} ; rv:sequence ${retained.sequence}`)
       .replaceAll(`rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;\n        rv:sequence ?next`, `rv:dataEpoch ${lit(retained.dataEpoch)} ; rv:sequence ${retained.sequence}`)

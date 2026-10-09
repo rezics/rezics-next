@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
-import { reconciledCursor, RetainedEffectConflict } from '../work/reconcile-restored.ts';
+import { heldMainRecovery, recoveryCursor, reconciledCursor, RetainedEffectConflict } from '../work/reconcile-restored.ts';
 import { relayRetainedEventAt, RelayCheckpointConflict, type RelayCoverage,
   type SourceBoundaryCloudEvent } from '../outbox/relay.ts';
 import { OpenLibraryConversionStore } from './open-library-conversion.ts';
@@ -82,6 +82,8 @@ export async function reconcileRetainedSourceProjection(
   const existing = await graph.readReified(principalId, conversionId);
   const fullyReified = existing?.receipt === expected.receipt;
   const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
+  const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+  const recovery = recoveryCursor(marker, sequence, paired);
   if (!fullyReified) {
     const validations = await profileValidations(env.fuseki, PROFILE, [
       { shape: `${SHAPE}/record-shape`, focus: [observation.record], graphs: [SOURCE] },
@@ -92,9 +94,9 @@ export async function reconcileRetainedSourceProjection(
     const update = `PREFIX rv: <${RV}>
       PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
       PREFIX prov: <http://www.w3.org/ns/prov#>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ?last } }
+      DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
       INSERT {
-        GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} }
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(SOURCE)} { ${sourceTriples(conversion, observation)} }
         GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} a rv:OperationReceipt ;
           rv:requestDigest ${lit(receipt.requestDigest)} ; rv:outcome rv:Succeeded ;
@@ -118,9 +120,7 @@ export async function reconcileRetainedSourceProjection(
             rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ;
             rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous)
-          FILTER(?previous + 1 = ${sequence})
+${recovery.bind}
         }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(SOURCE)} { ${iri(conversion.conversion)} ?p ?o } }

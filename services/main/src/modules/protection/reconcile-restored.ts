@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit, workMetadataValidations } from '../work/activate.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { reconciledCursor, RetainedEffectConflict } from '../work/reconcile-restored.ts';
+import { heldMainRecovery, recoveryCursor, reconciledCursor, RetainedEffectConflict } from '../work/reconcile-restored.ts';
 import { relayRetainedEventAt, type RelayCoverage } from '../outbox/relay.ts';
 import { protectionReceiptIri, workReceiptFamilies,
   type WorkProtectionAdmissionAction } from './receipt-family.ts';
@@ -167,6 +167,8 @@ export async function reconcileRetainedWorkProtection(env: WorkActivationEnviron
       throw new RetainedEffectConflict('Access does not prove retained Work protection effect');
     }
     const marker = markerFor(env.lineage.dataEpoch);
+    const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
+    const recovery = recoveryCursor(marker, sequence, paired);
     const prior = await readWorkProtectionReceipt(env, effect.admissionId, effect.action);
     if (!prior) {
       const base = `GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ;
@@ -230,9 +232,9 @@ export async function reconcileRetainedWorkProtection(env: WorkActivationEnviron
         }
       }
       const update = `PREFIX rv: <${RV}> DELETE { GRAPH ${iri(GRAPHS.control)} {
-        ${iri(marker)} rv:reconciledPriorSequence ?last . }
+        ${recovery.delete} }
         GRAPH ${iri(GRAPHS.current)} { ${deleteCurrent} } }
-        INSERT { GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorSequence ${sequence} . }
+        INSERT { GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
           GRAPH ${iri(GRAPHS.current)} { ${insertCurrent} }
           GRAPH ${iri(GRAPHS.revisions)} { ${subjectTriples(triples, GRAPHS.revisions)} }
           GRAPH ${iri(GRAPHS.receipts)} { ${subjectTriples(triples, GRAPHS.receipts)} }
@@ -241,8 +243,7 @@ export async function reconcileRetainedWorkProtection(env: WorkActivationEnviron
           rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence 0 ;
           rv:restoreCutover ${iri(marker)} ; rv:restoreHold true .
           ${iri(marker)} rv:priorDataEpoch ${lit(coverage.dataEpoch)} ; rv:priorSequence ?saved .
-          OPTIONAL { ${iri(marker)} rv:reconciledPriorSequence ?last }
-          BIND(COALESCE(?last, ?saved) AS ?previous) FILTER(?previous + 1 = ${sequence}) }
+          ${recovery.bind} }
           ${base} ${extraGuard}
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(effect.id)} ?p ?o } }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(envelope.data.batchId)} ?p ?o } }
