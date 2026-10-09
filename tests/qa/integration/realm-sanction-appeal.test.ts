@@ -72,8 +72,6 @@ test('a banned member appeals once, a reversal lifts the ban, and the read hides
     await pool.query(`INSERT INTO access.authority_subject (id,kind) VALUES ($1,'institution') ON CONFLICT DO NOTHING`, [realm]);
     await pool.query(`INSERT INTO access.membership_policy (kind,owner_subject,revision,terms_revision)
       VALUES ('realm',$1,1,'terms-v1') ON CONFLICT DO NOTHING`, [realm]);
-    const revision = await pool.query<{ generation: string }>(
-      `SELECT generation::text FROM access.realm_admin_revision WHERE realm = $1`, [realm]);
     const store = new GovernanceStore(pool,
       { capture: async () => { throw new Error('sanction appeals do not capture evidence'); } },
       { current: async () => { throw new Error('sanction appeals do not read target heads'); } },
@@ -109,8 +107,14 @@ test('a banned member appeals once, a reversal lifts the ban, and the read hides
         report_activity: row?.report_activity ?? null,
       };
     };
-    const realmGeneration = async () => (await pool.query<{ generation: string }>(
-      `SELECT generation::text FROM access.realm_admin_revision WHERE realm = $1`, [realm])).rows[0]?.generation ?? '0';
+    // The management generation is a client-visible page field. Reading it from
+    // the owner table would make the next command depend on a private SELECT.
+    const realmGeneration = async () => {
+      const page = await call('GET', `${root}/members?${new URLSearchParams({ actingSubject: owner.actor })}`,
+        undefined, owner.token);
+      expect(page.status, JSON.stringify(page.body)).toBe(200);
+      return String(page.body.generation);
+    };
     const escalateAppeal = async (itemId: string) => call('POST', `${root}/escalations`, {
       actingSubject: owner.actor, expectedGeneration: await realmGeneration(),
       reason: 'This appeal is not a report', expectedItemGeneration: '0',
@@ -166,7 +170,7 @@ test('a banned member appeals once, a reversal lifts the ban, and the read hides
     const unsigned = await call('GET', `${appeal}/${randomUUID()}/appeal`, undefined, 'not-a-token');
     expect(unsigned.status).toBe(401);
     const bannedBody = { actingSubject: owner.actor, member: banned.actor,
-      expectedGeneration: revision.rows[0]?.generation ?? '0', expectedMembershipGeneration: '0',
+      expectedGeneration: await realmGeneration(), expectedMembershipGeneration: '0',
       reason: 'Repeated rule violations', action: 'ban', consent: null, durationSeconds: null };
     const ban = await call('POST', `${root}/members`, bannedBody, owner.token, randomUUID());
     expect({ status: ban.status, body: ban.body }).toMatchObject({ status: 201 });
@@ -288,10 +292,8 @@ test('a banned member appeals once, a reversal lifts the ban, and the read hides
     expect(await queueActivity()).toEqual(reportsBefore);
     await otherModerator.grant(`agent:control:${otherModerator.actor}`, 'agent.control');
     const sanction = async (member: typeof other) => {
-      const generation = await pool.query<{ generation: string }>(
-        `SELECT generation::text FROM access.realm_admin_revision WHERE realm = $1`, [realm]);
       const result = await call('POST', `${root}/members`, { actingSubject: owner.actor, member: member.actor,
-        expectedGeneration: generation.rows[0]?.generation ?? '0', expectedMembershipGeneration: '0',
+        expectedGeneration: await realmGeneration(), expectedMembershipGeneration: '0',
         reason: 'Concurrent sanction', action: 'ban', consent: null, durationSeconds: null,
       }, owner.token, randomUUID());
       expect({ status: result.status, body: result.body }).toMatchObject({ status: 201 });
@@ -463,8 +465,14 @@ test('reversing a sanction appeal unbans once, refuses a moderator who cannot un
       const text = await response.text();
       return { status: response.status, body: text ? JSON.parse(text) as Record<string, unknown> : {} };
     };
-    const realmGeneration = async () => (await pool.query<{ generation: string }>(
-      `SELECT generation::text FROM access.realm_admin_revision WHERE realm = $1`, [realm])).rows[0]?.generation ?? '0';
+    // The management generation is a client-visible page field. Reading it from
+    // the owner table would make the next command depend on a private SELECT.
+    const realmGeneration = async () => {
+      const page = await call('GET', `${root}/members?${new URLSearchParams({ actingSubject: owner.actor })}`,
+        undefined, owner.token);
+      expect(page.status, JSON.stringify(page.body)).toBe(200);
+      return String(page.body.generation);
+    };
     const reports = async () => (await pool.query<{ open_reports: string }>(
       `SELECT open_reports::text FROM access.realm_management_activity WHERE realm = $1`, [realm])).rows[0]?.open_reports ?? '0';
     const unbans = async () => (await pool.query<{ n: number }>(

@@ -92,8 +92,14 @@ test('a banned member reads their own ban and appeal, and every other authentica
       expect(raw.includes('acting_subject')).toBe(false);
       expect(raw.includes('actingSubject')).toBe(false);
     };
-    const realmGeneration = async () => (await pool.query<{ generation: string }>(
-      `SELECT generation::text FROM access.realm_admin_revision WHERE realm = $1`, [realm])).rows[0]?.generation ?? '0';
+    // The management generation is a client-visible page field. Reading it from
+    // the owner table would make the next command depend on a private SELECT.
+    const realmGeneration = async () => {
+      const page = await call('GET', `${root}/members?${new URLSearchParams({ actingSubject: owner.actor })}`,
+        undefined, owner.token);
+      expect(page.status, JSON.stringify(page.body)).toBe(200);
+      return String(page.body.generation);
+    };
     const ban = async (reason: string, durationSeconds: number | null) => {
       const result = await call('POST', `${root}/members`, {
         actingSubject: owner.actor, member: banned.actor, expectedGeneration: await realmGeneration(),
