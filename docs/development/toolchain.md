@@ -506,6 +506,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task dataset:format` | Format the local dataset tools and their unit tests. |
 | `task fixture:build` | Build a deterministic background corpus into owner storage. |
 | `task fixture:restore` | Restore a fixture backup into a new persistent QA stack. |
+| `task fixture:prune` | List fixture generations and abandoned volumes a current restore cannot use. Pass --apply to remove them. |
 | `task fixtures:pull` | Replay verified factual fixtures from the cache or committed seed. |
 | `task load` | Run the mixed host load profile. |
 | `task load:prepare` | Build a reusable command-created load baseline. |
