@@ -149,8 +149,11 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
   selector: { occurrences: readonly string[] } | { segment: string },
   profile: StructureProfile = 'book-composition'): Promise<PlacementState[]> {
   if ('occurrences' in selector && !selector.occurrences.length) return [];
+  // Occurrence identity determines the placement IRI, so the read seeks that
+  // subject. An unbound placement joined on the generation walks every member.
   const scope = 'occurrences' in selector
-    ? `VALUES ?occurrence { ${selector.occurrences.map(iri).join(' ')} }`
+    ? `VALUES (?occurrence ?placement) { ${selector.occurrences.map(occurrence =>
+      `(${iri(occurrence)} ${iri(placementIri(generation, occurrence))})`).join(' ')} }`
     : `?placement rv:orderSegment ${iri(selector.segment)} .`;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?placement ?occurrence ?type ?segment ?parent ?segmentKey ?orderKey ?role ?label

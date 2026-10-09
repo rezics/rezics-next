@@ -86,15 +86,19 @@ test('a 16-occurrence composition change validates the same focus at 100 and 100
     const change = async (operations: object[]) => {
       composition = await json<Composition>(await call('POST', `${path}/changes`, {
         profile: 'book-composition', expectedHead: composition.revision, actingSubject: member.actor, operations }));
+      return composition;
     };
     const sample = async (count: number) => {
       const before = compositionWork.length;
+      const beforeQueries = stack.fuseki.queries;
       const anchor = anchors[count % anchors.length]!;
-      await change(Array.from({ length: 16 }, () => insert({ after: anchor })));
+      const changed = await change(Array.from({ length: 16 }, () => insert({ after: anchor })));
       const work = compositionWork.at(-1);
       if (!work || compositionWork.length === before) throw new Error('composition command did not report native work');
-      console.log('composition-change-cost', JSON.stringify({ chapters: count, ...work }));
-      return work;
+      const measured = { ...work, graphQueries: stack.fuseki.queries - beforeQueries,
+        pagesRead: changed.cost.pagesRead, pagesWritten: changed.cost.pagesWritten };
+      console.log('composition-change-cost', JSON.stringify({ chapters: count, ...measured }));
+      return measured;
     };
     let count = 100;
     const at100 = await sample(count);
@@ -110,6 +114,14 @@ test('a 16-occurrence composition change validates the same focus at 100 and 100
     expect(at100.focuses).toBeLessThan(250);
     expect(at1000.focuses).toBeLessThan(250);
     expect(Math.abs(at1000.focuses - at100.focuses)).toBeLessThan(120);
+    // Client seeks stay inside a fixed budget at both scales. Page reads follow
+    // tree depth, which stays inside the same ceiling from 100 to 1000 chapters.
+    expect(at100.graphQueries).toBeLessThanOrEqual(10);
+    expect(at1000.graphQueries).toBeLessThanOrEqual(10);
+    expect(at100.pagesRead).toBeLessThanOrEqual(20);
+    expect(at1000.pagesRead).toBeLessThanOrEqual(20);
+    expect(at100.pagesWritten).toBeLessThanOrEqual(10);
+    expect(at1000.pagesWritten).toBeLessThanOrEqual(10);
     expect(at100.validationMs).toBeGreaterThan(0);
     expect(at1000.updateMs).toBeGreaterThan(0);
   } finally {

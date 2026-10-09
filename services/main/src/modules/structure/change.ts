@@ -2,7 +2,7 @@ import { CommandRejected, type CommandValidation } from '../../infrastructure/fu
 import { Value } from 'typebox/value';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
-import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, RV, hash, iri, lit,
@@ -507,8 +507,8 @@ function checkAdmission(admission: Admission, digest: string, profile: Structure
 }
 
 async function existing(env: WorkActivationEnvironment, admission: Admission): Promise<CompositionTerminal | null> {
-  await assertNotInvalidProfileReceipt(env.fuseki,
-    compositionReceiptIri(admission.id, admission.action));
+  // The receipt read classifies InvalidProfile itself; a second ask would only
+  // repeat that seek before the command.
   const terminal = await readCompositionReceipt(env, admission.id, admission.action);
   if (terminal) return terminalResult(terminal, admission);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('composition admission expired');
@@ -772,6 +772,47 @@ export async function createComposition(env: WorkActivationEnvironment,
   return { terminal: await settled(env, intent.admission), committed };
 }
 
+/** One process keeps the head it just committed so the next change of that
+ * composition can seek from the manifest instead of re-reading it. The command
+ * still compares the head in the graph. */
+const carriedCompositions = new Map<string, { header: CompositionHeader; manifest: StructureManifest }>();
+const CARRIED_COMPOSITIONS = 8;
+
+export function carriedComposition(structure: string, expectedHead: string):
+  { header: CompositionHeader; manifest: StructureManifest } | undefined {
+  const hit = carriedCompositions.get(structure);
+  return hit?.header.head === expectedHead ? hit : undefined;
+}
+
+function rememberComposition(header: CompositionHeader, manifest: StructureManifest): void {
+  if (carriedCompositions.size >= CARRIED_COMPOSITIONS && !carriedCompositions.has(header.structure)) {
+    const oldest = carriedCompositions.keys().next().value;
+    if (oldest) carriedCompositions.delete(oldest);
+  }
+  carriedCompositions.delete(header.structure);
+  carriedCompositions.set(header.structure, { header, manifest });
+}
+
+function forgetComposition(structure: string, expectedHead: string): void {
+  const hit = carriedCompositions.get(structure);
+  if (hit?.header.head === expectedHead) carriedCompositions.delete(structure);
+}
+
+function placementFromRecord(record: OccurrenceRecord, generation: string): PlacementState {
+  const active = record.state === 'active';
+  return { occurrence: record.occurrence, placement: placementIri(generation, record.occurrence),
+    active, parent: record.parent, role: record.role, introducedBy: record.introducedBy,
+    labels: record.labels, ...(record.labels[0] ? { label: record.labels[0] } : {}),
+    ...(active ? { segmentKey: record.segmentKey, orderKey: record.orderKey }
+      : { removedBy: record.removedBy }),
+    ...(record.target ? { target: record.target } : {}),
+    ...(record.selection?.mode === 'follow-context' ? { selection: { mode: 'follow-context' as const } }
+      : record.selection?.mode === 'fixed-revision'
+        ? { selection: { mode: 'fixed-revision' as const, revision: record.selection.revision } } : {}),
+    ...(record.qualifier ? { qualifier: record.qualifier } : {}),
+    ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}) };
+}
+
 /** In-memory working state over lazily loaded placements and order segments. */
 class Working {
   readonly placements = new Map<string, PlacementState>();
@@ -782,6 +823,8 @@ class Working {
   private readonly members = new Map<string, string[]>();
   private readonly indexedSegments = new Map<string, string>();
   private readonly soughtSegments = new Map<string, SegmentState | null>();
+  /** Order keys read from the order tree, so placing a sibling does not load every member. */
+  private readonly orderKeys = new Map<string, string>();
   private allocated = 0;
   activeDelta = 0;
   rebalanced = 0;
@@ -814,14 +857,38 @@ class Working {
     }
   }
 
+  orderKey(occurrence: string): string | undefined {
+    return this.placements.get(occurrence)?.orderKey ?? this.orderKeys.get(occurrence);
+  }
+
+  noteOrderKey(occurrence: string, key: string): void { this.orderKeys.set(occurrence, key); }
+
+  /** The retained record is the head's copy. A graph placement with no record is corruption;
+   * absence from both is a missing occurrence. */
   async get(occurrence: string): Promise<PlacementState | undefined> {
-    if (!this.placements.has(occurrence)) {
-      for (const state of await readPlacements(this.env, this.header.generation,
-        { occurrences: [occurrence] }, this.header.profile)) {
-        await this.hydrate(state);
-      }
+    if (this.placements.has(occurrence)) return this.placements.get(occurrence);
+    const record = (await recordTree(structureObjects(this.env)).lookup(this.manifest.records,
+      [occurrence], this.cost)).get(occurrence);
+    if (!record) {
+      const graph = await readPlacements(this.env, this.header.generation,
+        { occurrences: [occurrence] }, this.header.profile);
+      if (graph.length) throw new StructureObjectCorrupt('composition graph differs from its retained head');
+      return undefined;
     }
-    return this.placements.get(occurrence);
+    const state = placementFromRecord(record, this.header.generation);
+    if (record.orderKey) this.orderKeys.set(occurrence, record.orderKey);
+    if (record.state === 'active') {
+      const known = [...this.segments.values()].find(segment =>
+        segment.parent === record.parent && segment.key === record.segmentKey);
+      const segment = known ?? await readSegment(this.env, this.header.generation, { occurrence });
+      if (segment.parent !== record.parent || segment.key !== record.segmentKey) {
+        throw new StructureObjectCorrupt('composition segment differs from its retained order');
+      }
+      state.segment = segment.segment;
+      this.rememberSegment(segment);
+    }
+    await this.hydrate(state);
+    return state;
   }
 
   add(state: PlacementState): void {
@@ -909,15 +976,21 @@ class Working {
     return false;
   }
 
+  /** One segment's order is a key range in the order tree, not a scan of the generation. */
   async membersOf(id: string): Promise<string[]> {
     let list = this.members.get(id);
     if (!list) {
-      const loaded = await readPlacements(this.env, this.header.generation, { segment: id }, this.header.profile);
-      for (const state of loaded) await this.hydrate(state);
-      list = loaded.map(state => this.placements.get(state.occurrence)!)
-        .filter(state => state.active && state.segment === id)
-        .sort((a, b) => a.orderKey! < b.orderKey! ? -1 : 1).map(state => state.occurrence);
-      if (list.length !== this.segment(id).count) throw new CompositionCorrupt('order segment count differs');
+      const segment = this.segment(id);
+      const entries = await orderTree(structureObjects(this.env)).range(this.manifest.order,
+        `${segment.parent}\u0001${segment.key}\u0001`, `${segment.parent}\u0001${segment.key}\u0002`,
+        STRUCTURE_LIMITS.segmentMembers + 1, this.cost);
+      if (entries.length > STRUCTURE_LIMITS.segmentMembers
+        || entries.some(entry => entry.parent !== segment.parent || entry.segmentKey !== segment.key)) {
+        throw new CompositionCorrupt('order segment count differs');
+      }
+      for (const entry of entries) this.orderKeys.set(entry.occurrence, entry.orderKey);
+      list = entries.map(entry => entry.occurrence);
+      if (list.length !== segment.count) throw new CompositionCorrupt('order segment count differs');
       this.members.set(id, list);
     }
     return list;
@@ -981,7 +1054,9 @@ async function locate(w: Working, parent: string, position: Position): Promise<{
       throw new CompositionConflict('position sibling is not an active child of the parent');
     }
     const segment = await w.loadSegment(sibling.segment!);
-    return { segment, index: (await w.membersOf(segment.segment)).indexOf(sibling.occurrence) + 1 };
+    const index = (await w.membersOf(segment.segment)).indexOf(sibling.occurrence);
+    if (index < 0) throw new CompositionConflict('position sibling is not an active child of the parent');
+    return { segment, index: index + 1 };
   }
   const found = await w.seekSegment(parent, null, position === 'last');
   const segment = found ?? w.newSegment(parent, segmentKeyBetween(null, null));
@@ -995,10 +1070,10 @@ async function place(w: Working, state: PlacementState, parent: string, position
     at = await locate(w, parent, position);
   }
   const members = await w.membersOf(at.segment.segment);
-  const key = async (index: number) => index >= 0 && index < members.length
-    ? (await w.get(members[index]!))!.orderKey! : null;
+  const key = (index: number) => index >= 0 && index < members.length
+    ? w.orderKey(members[index]!) ?? null : null;
   let candidate: string | null;
-  try { candidate = keyBetween(await key(at.index - 1), await key(at.index)); }
+  try { candidate = keyBetween(key(at.index - 1), key(at.index)); }
   catch (error) { if (!(error instanceof OrderKeyInvalid)) throw error; candidate = null; }
   members.splice(at.index, 0, state.occurrence);
   at.segment.count++;
@@ -1008,9 +1083,16 @@ async function place(w: Working, state: PlacementState, parent: string, position
   if (candidate === null || !withinBudget(candidate)) {
     // Bounded local rebalance: only this segment's keys are rewritten.
     const keys = evenKeys(members.length);
-    for (const [index, occurrence] of members.entries()) (await w.get(occurrence))!.orderKey = keys[index]!;
+    for (const [index, occurrence] of members.entries()) {
+      const member = (await w.get(occurrence))!;
+      member.orderKey = keys[index]!;
+      w.noteOrderKey(occurrence, keys[index]!);
+    }
     w.rebalanced += members.length;
-  } else state.orderKey = candidate;
+  } else {
+    state.orderKey = candidate;
+    w.noteOrderKey(state.occurrence, candidate);
+  }
 }
 
 async function unplace(w: Working, state: PlacementState): Promise<void> {
@@ -1271,6 +1353,8 @@ export interface ChangeCompositionIntent {
   expectedHead: string;
   operations: readonly CompositionOperation[];
   newWork?: NewChapterPost;
+  /** Header (and manifest, when the previous commit of this head is still the one we hold). */
+  carried?: { header: CompositionHeader; manifest?: StructureManifest };
 }
 
 export interface CompositionChangeResult {
@@ -1283,7 +1367,10 @@ export interface CompositionChangeResult {
 /** Apply one bounded change batch against the exact expected head and seal a new revision. */
 export async function changeComposition(env: WorkActivationEnvironment,
   intent: ChangeCompositionIntent): Promise<CompositionChangeResult> {
-  const header = await readCompositionHeader(env, intent.structure);
+  const supplied = intent.carried?.header.structure === intent.structure ? intent.carried : undefined;
+  const header = supplied?.header
+    ?? carriedComposition(intent.structure, intent.expectedHead)?.header
+    ?? await readCompositionHeader(env, intent.structure);
   if (!header) throw new CompositionUnavailable('composition is unavailable');
   const registration = structureProfileFor(header.profile);
   const operations = checkedOperations(intent.operations, registration);
@@ -1336,7 +1423,14 @@ export async function changeComposition(env: WorkActivationEnvironment,
   }
   const objects = structureObjects(env);
   const cost: CompositionCost = { ...newCost(), placementsWritten: 0, segmentsWritten: 0, rebalanced: 0 };
-  const manifest = await readManifest(objects, header, cost, env);
+  const carriedManifest = header.head === intent.expectedHead
+    ? (supplied?.header === header ? supplied.manifest : undefined)
+      ?? carriedComposition(intent.structure, intent.expectedHead)?.manifest
+    : undefined;
+  const manifest = carriedManifest && carriedManifest.structure === header.structure
+    && carriedManifest.generation === header.generation && carriedManifest.structureOf === header.component
+    && carriedManifest.profile === header.profile
+    ? carriedManifest : await readManifest(objects, header, cost, env);
   if (header.profile === 'book-composition' && !manifest.topGroups) {
     throw new StructureObjectUnavailable('composition group root requires bounded preparation');
   }
@@ -1419,8 +1513,12 @@ export async function changeComposition(env: WorkActivationEnvironment,
     cost.segmentsWritten++;
   }
   // The graph projection must still match the retained head before it is extended.
+  // Changed nodes are sought by placement IRI; unchanged neighbours stay in the order tree.
   const retained = await recordTree(objects).lookup(manifest.records,
     changedExisting.map(state => state.occurrence), cost);
+  const graphRecords = new Map((changedExisting.length ? await readPlacements(env, header.generation,
+    { occurrences: changedExisting.map(state => state.occurrence) }, header.profile) : [])
+    .map(state => [state.occurrence, placementRecord(state)]));
   for (const old of changedExisting) {
     const canonical = (record: OccurrenceRecord | undefined) => record && JSON.stringify({ ...record,
       ...(record.qualifier ? { qualifier: record.qualifier.type === 'ingredient-line'
@@ -1432,7 +1530,9 @@ export async function changeComposition(env: WorkActivationEnvironment,
         .sort((a, b) => a.language < b.language ? -1 : a.language > b.language ? 1 : 0),
     }, (_key, value: unknown) => value && typeof value === 'object' && !Array.isArray(value)
       ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : value);
-    if (canonical(retained.get(old.occurrence)) !== canonical(placementRecord(old))) {
+    const authored = retained.get(old.occurrence);
+    if (canonical(authored) !== canonical(placementRecord(old))
+      || canonical(graphRecords.get(old.occurrence)) !== canonical(authored)) {
       throw new StructureObjectCorrupt('composition graph differs from its retained head');
     }
     // RDF references are sets; the authored immutable record remains the source
@@ -1451,8 +1551,9 @@ export async function changeComposition(env: WorkActivationEnvironment,
     order: await orderTree(objects).apply(manifest.order, order, cost), placementCount: count };
   const qualifierKeys = await updateQualifierKeyIndex(objects, manifest, nextSource,
     [...records].map(([occurrence, after]) => ({ before: retained.get(occurrence), after: after ?? undefined })), cost);
-  const next = await writeManifest(objects, qualifierKeys ? { ...nextSource,
-    format: STRUCTURE_INDEXED_MANIFEST_FORMAT, qualifierKeys } : nextSource, cost);
+  const published: StructureManifest = qualifierKeys ? { ...nextSource,
+    format: STRUCTURE_INDEXED_MANIFEST_FORMAT, qualifierKeys } : nextSource;
+  const next = await writeManifest(objects, published, cost);
   const operation = derivedId(`${intent.admission.id}\0composition\0operation`);
   const receipt = compositionReceiptIri(intent.admission.id, intent.admission.action);
   const chapter = intent.newWork;
@@ -1550,14 +1651,19 @@ export async function changeComposition(env: WorkActivationEnvironment,
     ...qualifierChecks,
   ]);
   if (!committed && !await readCompositionReceipt(env, intent.admission.id, intent.admission.action)) {
+    forgetComposition(intent.structure, intent.expectedHead);
     if (targetInvariant?.rejection) await sealRejection(env, intent.admission, 'composition.change',
       'TopologyConflict', `${headGuard} ${targetInvariant.rejection}`);
     await sealRejection(env, intent.admission, 'composition.change', 'StaleHead',
       `GRAPH ${iri(GRAPHS.current)} { ${iri(intent.structure)} rv:structureHead ?head }
       FILTER(?head != ${iri(intent.expectedHead)})`);
   }
-  return { terminal: await settled(env, intent.admission), committed, occurrences,
-    ...(committed ? { cost } : {}) };
+  const terminal = await settled(env, intent.admission);
+  if (terminal.outcome === 'succeeded' && terminal.revision === revision) {
+    rememberComposition({ ...header, head: revision, placementCount: count,
+      manifest: manifestIri(next) }, published);
+  }
+  return { terminal, committed, occurrences, ...(committed ? { cost } : {}) };
 }
 
 /** Replace the bounded Recipe measure set at one head without rewriting occurrence trees. */

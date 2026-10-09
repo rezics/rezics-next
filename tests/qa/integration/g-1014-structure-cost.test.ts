@@ -67,10 +67,26 @@ test('G1014: one occurrence write at 100, 1000 and 10000 chapters touches only i
     expect(targetChecks).toBe(2);
     const insert = (position: 'last' | { after: string }) => ({ op: 'insert', parent: composition.structure,
       position, role: 'chapter', target: chapter.work });
+    // A 202 is an unknown outcome for this key. The same body and key settle it;
+    // a new key would abandon the admission the way a lost response must not.
     const change = async (operations: object[]) => {
-      composition = await json<Composition>(await call('POST', `${path}/changes`, {
-        profile: 'book-composition', expectedHead: composition.revision, actingSubject: member.actor, operations }));
-      return composition;
+      const idempotencyKey = randomUUID();
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const response = await app.handle(new Request(`http://main.local${path}/changes`, {
+          method: 'POST', headers: { authorization: `Bearer ${member.token}`, 'idempotency-key': idempotencyKey,
+            'content-type': 'application/json' },
+          body: JSON.stringify({ profile: 'book-composition', expectedHead: composition.revision,
+            actingSubject: member.actor, operations }) }));
+        if (response.status === 202) {
+          const pending = await response.json() as { retry?: { afterMs?: number } };
+          const after = typeof pending.retry?.afterMs === 'number' ? pending.retry.afterMs : 1_000;
+          await new Promise(resolve => setTimeout(resolve, Math.min(Math.max(after, 250), 2_000)));
+          continue;
+        }
+        composition = await json<Composition>(response);
+        return composition;
+      }
+      throw new Error('composition change stayed reconciling');
     };
     // Spread importer edits across known source anchors. This also exercises
     // middle splits; each HTTP command uses the public 16-operation batch.
@@ -78,7 +94,9 @@ test('G1014: one occurrence write at 100, 1000 and 10000 chapters touches only i
     const measurements: object[] = [];
     const originalQuery = stack.fuseki.query.bind(stack.fuseki);
     let segmentRows = 0;
+    let capture: string[] | undefined;
     stack.fuseki.query = async (sparql, maxBytes) => {
+      capture?.push(sparql.replace(/\s+/g, ' ').slice(0, 180));
       const result = await originalQuery(sparql, maxBytes);
       segmentRows += (result.results?.bindings ?? []).filter(row => row.segment && row.count).length;
       return result;
@@ -95,9 +113,15 @@ test('G1014: one occurrence write at 100, 1000 and 10000 chapters touches only i
       const samples = [];
       for (let sample = 0; sample < 3; sample++) {
         const beforeQueries = stack.fuseki.queries, beforeRows = segmentRows, started = performance.now();
+        const queries: string[] = [];
+        capture = queries;
         const added = await change([insert('last')]);
-        samples.push({ milliseconds: performance.now() - started, graphQueries: stack.fuseki.queries - beforeQueries,
-          segmentRows: segmentRows - beforeRows, cost: added.cost });
+        capture = undefined;
+        const sample = { milliseconds: performance.now() - started, graphQueries: stack.fuseki.queries - beforeQueries,
+          segmentRows: segmentRows - beforeRows, queries, cost: added.cost };
+        samples.push(sample);
+        console.log('G1014: sample', JSON.stringify({ size, ...sample }));
+        expect(sample.graphQueries).toBeLessThanOrEqual(10);
         expect(added.cost.placementsWritten).toBeLessThanOrEqual(33);
         expect(added.cost.segmentsWritten).toBeLessThanOrEqual(2);
         expect(added.cost.rebalanced).toBeLessThanOrEqual(32);

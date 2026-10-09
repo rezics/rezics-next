@@ -6,7 +6,7 @@ import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/act
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { sealMetadataWorkEditAdmission } from '../work/edit.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { changeComposition, chapterCreateDigest, compositionChangeDigest, compositionCreateDigest,
+import { carriedComposition, changeComposition, chapterCreateDigest, compositionChangeDigest, compositionCreateDigest,
   changeStructureMeasures, structureMeasureDigest,
   compositionSealDigest, createComposition, readCompositionReceipt, sealComposition,
   compositionRestoreDigest, compositionStageDigest, restoreComposition, structureCreateDigest,
@@ -50,7 +50,7 @@ async function admitted(env: WorkActivationEnvironment, account: Account, access
   request: Request, input: { owner: string; profile: StructureProfileRegistration;
     actingSubject: string; idempotencyKey: string; digest: string },
   run: (admission: RegisteredAdmission) => Promise<{ committed: boolean; occurrences?: string[];
-    cost?: CompositionCost }>, returnCancelled = false): Promise<AdmittedComposition> {
+    cost?: CompositionCost; terminal?: CompositionTerminal }>, returnCancelled = false): Promise<AdmittedComposition> {
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, [input.profile.editPermission]);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
@@ -78,7 +78,9 @@ async function admitted(env: WorkActivationEnvironment, account: Account, access
         runError = error;
       }
     }
-    const terminal = await readCompositionReceipt(env, registered.id, input.profile.editAction);
+    // A run that already read this admission's receipt is that proof. Reading it
+    // again would only repeat the seek.
+    const terminal = ran?.terminal ?? await readCompositionReceipt(env, registered.id, input.profile.editAction);
     if (!terminal && runError && known(runError)) throw runError;
     if (!terminal) throw new PendingAdmittedWork(registered.id, 'work-edit');
     await access.recordGraphOutcome(registered.id, terminal);
@@ -117,8 +119,14 @@ export function createAdmittedComposition(env: WorkActivationEnvironment, accoun
 export async function changeAdmittedComposition(env: WorkActivationEnvironment, account: Account,
   access: Access, request: Request, input: { structure: string; expectedHead: string;
     operations: readonly CompositionOperation[]; actingSubject: string; idempotencyKey: string;
-    newWork?: NewChapterPost }, targetReader?: StructureTargetReader) {
-  const { header, profile } = await structureOwner(env, input.structure);
+    profile?: StructureProfile; newWork?: NewChapterPost }, targetReader?: StructureTargetReader) {
+  const carried = carriedComposition(input.structure, input.expectedHead);
+  const header = carried?.header ?? await readCompositionHeader(env, input.structure);
+  if (!header) throw new CompositionUnavailable('composition is unavailable');
+  if (input.profile && input.profile !== header.profile) {
+    throw new InvalidCompositionChange('composition profile differs');
+  }
+  const profile = structureProfileFor(header.profile);
   const digest = input.newWork
     ? chapterCreateDigest(input.structure, input.expectedHead, input.operations, input.newWork)
     : compositionChangeDigest(input.structure, input.expectedHead, input.operations, profile.id);
@@ -139,7 +147,7 @@ export async function changeAdmittedComposition(env: WorkActivationEnvironment, 
     idempotencyKey: input.idempotencyKey, digest },
   admission => changeComposition(env, { admission, structure: input.structure,
     expectedHead: input.expectedHead, operations: input.operations,
-    newWork: input.newWork }));
+    newWork: input.newWork, carried: carried ?? { header } }));
 }
 
 export async function changeAdmittedStructureMeasures(env: WorkActivationEnvironment,

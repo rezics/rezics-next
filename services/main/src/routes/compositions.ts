@@ -503,12 +503,11 @@ export function compositionRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       try {
-        const header = await readCompositionHeader(work.environment, `https://rezics.com/id/${params.id}`);
-        if (header && header.profile !== body.profile) throw new InvalidCompositionChange('composition profile differs');
         const result = await changeAdmittedComposition(work.environment, work.account, work.access,
           request, { structure: `https://rezics.com/id/${params.id}`, expectedHead: body.expectedHead,
-            operations: body.operations.map(commandOperation), actingSubject: body.actingSubject,
-            idempotencyKey }, resourceTargetReader(work, request, body.actingSubject));
+            profile: body.profile, operations: body.operations.map(commandOperation),
+            actingSubject: body.actingSubject, idempotencyKey },
+          resourceTargetReader(work, request, body.actingSubject));
         return Response.json({ structure: result.structure, revision: result.revision,
           expectedHead: result.expectedHead, receipt: result.receipt, replayed: result.replayed,
           occurrences: result.occurrences ?? body.operations.flatMap((operation, index) =>
