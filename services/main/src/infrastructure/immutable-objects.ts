@@ -298,6 +298,10 @@ export class S3ImmutableObjects implements ImmutableObjects {
     }
     const cached = verifiedObjectCache.lookup(digest);
     if (cached) {
+      // The store read uses this same signal. An aborted deadline must fail
+      // that read, not receive cached bytes.
+      const deadline = signal ?? this.readSignal?.();
+      if (deadline?.aborted) return new Uint8Array(await this.readStore(digest, maxBytes, deadline));
       verifiedObjectCache.hits++;
       if (maxBytes !== undefined && cached.byteLength > maxBytes)
         throw new ObjectReadBudgetExceeded('immutable object exceeds its read budget');

@@ -215,6 +215,32 @@ test('a cached object still refuses a tighter read budget without a store call',
   expect(counts.gets).toBe(before);
 });
 
+test('a cache hit fails when the read deadline is already aborted', async () => {
+  const bytes = Buffer.from('deadline');
+  const expected = digestOf(bytes);
+  const counts = { gets: 0 };
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
+    if (request.method !== 'GET') return new Response(null, { status: 405 });
+    counts.gets++;
+    return new Response(Buffer.from(bytes));
+  } });
+  servers.push(server);
+  const live = new AbortController();
+  let deadline = live.signal;
+  const store = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
+    bucket: 'rezics-semantic', accessKeyId: 'local-test-key', secretAccessKey: 'local-test-secret',
+    prefix: 'semantic/work/', readSignal: () => deadline });
+  expect(Buffer.from(await store.get(expected))).toEqual(bytes);
+  deadline = AbortSignal.abort(new DOMException('recovery deadline', 'TimeoutError'));
+  const error = await store.get(expected).then(() => undefined, (caught: unknown) => caught);
+  expect(error).toBeInstanceOf(ObjectUnavailable);
+  expect((error as Error).message).toBe('committed immutable object is unavailable');
+  deadline = new AbortController().signal;
+  const afterDeadline = counts.gets;
+  expect(Buffer.from(await store.get(expected))).toEqual(bytes);
+  expect(counts.gets).toBe(afterDeadline);
+});
+
 test('an aborted caller does not receive bytes', async () => {
   const { store, counts } = fakeS3();
   const digest = await store.put(Buffer.from('abort'));
