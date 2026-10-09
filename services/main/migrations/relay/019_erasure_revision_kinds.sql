@@ -1,5 +1,8 @@
 -- The live erasure operation tombstones every revision kind reads already
 -- honour. Keep every existing owner pair and add the graph revision kinds.
+-- This stays in the erasure-journal series so it runs after 010 creates
+-- relay.erasure_target, including the upgrade that applies that series onto
+-- the earlier relay head.
 DO $$
 DECLARE
   constraint_name text;
