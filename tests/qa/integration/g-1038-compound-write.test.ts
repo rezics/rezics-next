@@ -264,6 +264,40 @@ test('G1038: compound and bulk catalogue writes preserve denial, CAS, partial va
     expect(raceRows[0]!.receipt!.work).toBe(raceRows[1]!.receipt!.work);
     const collision = { ...base, work };
     expect((await single(collision)).status).toBe(409);
+    // A second name-owner group that never commits leaves the first group's
+    // Works in place. The pending key is the retry, not a rollback.
+    const nativeGroups = stack.fuseki.catalogueBatch.bind(stack.fuseki);
+    let nameOwnerGroup = 0;
+    stack.fuseki.catalogueBatch = async (envelopes) => {
+      nameOwnerGroup += 1;
+      if (nameOwnerGroup === 2) throw new Error('second name-owner group refused');
+      return nativeGroups(envelopes);
+    };
+    const splitItems = Array.from({ length: 65 }, (_, index) => ({
+      key: randomUUID(),
+      input: { ...base, title: `Name owner group ${index}`, credits: [], aliases: [] },
+    }));
+    const split = await home.json<{
+      items: CatalogueImportOutcome[];
+      complete: boolean;
+      partial: boolean;
+    }>(await bulk(splitItems));
+    expect(nameOwnerGroup).toBe(2);
+    expect(split.complete).toBe(false);
+    expect(split.partial).toBe(true);
+    expect(split.items.slice(0, 64).every((row) => row.status === 'succeeded')).toBe(true);
+    expect(split.items[64]).toMatchObject({ status: 'pending' });
+    expect(split.items[64]!.receipt).toBeUndefined();
+    const committed = split.items[0]!.receipt!.work!;
+    expect((await home.call('GET', `/v1/works/${committed.slice(-36)}?language=en`)).status).toBe(200);
+    stack.fuseki.catalogueBatch = nativeGroups;
+    const retried = await home.json<{
+      items: CatalogueImportOutcome[];
+      complete: boolean;
+      partial: boolean;
+    }>(await bulk([splitItems[64]!]));
+    expect(retried).toMatchObject({ complete: true, partial: false });
+    expect(retried.items[0]!.status).toBe('succeeded');
     // Relay proves every logical position even though the physical commit was shared.
     expect((await home.projectRelay()).length).toBeGreaterThan(0);
   } finally {

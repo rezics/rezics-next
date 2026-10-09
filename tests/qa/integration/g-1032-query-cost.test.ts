@@ -10,7 +10,6 @@ import {
 import { assertWorkCost, profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import type { ResourceListQuery } from '../../../services/main/src/modules/query/resource-contract.ts';
 import { queryProfileProcess } from '../../../services/main/tests/g-1053-profile-process.ts';
-import { grantRecordedPlatformUse } from '../fixtures/platform-grant.ts';
 
 interface Page {
   items: { id: string; types: string[]; name: { value: string }; work?: unknown }[];
@@ -240,10 +239,6 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
         201,
       );
     await author.grant('work:create:catalogue-import', 'work.create');
-    // Catalogue import stays closed until this principal holds that platform use.
-    await grantRecordedPlatformUse(stack.accessPool, author.principalId, [
-      'catalogue-import', 'platform-admin',
-    ], author.actor);
     // Scale backgrounds use the same public bulk recipe as the diagnostic
     // cohort. No serial one-Work publication or nested stack/restore is needed.
     if (Bun.env.G1053_CATALOGUE_SCALE) {

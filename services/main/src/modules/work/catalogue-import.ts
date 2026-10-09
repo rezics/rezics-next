@@ -251,7 +251,10 @@ async function terminalStatus(env: WorkActivationEnvironment, terminal: WorkTerm
 
 /** O(items × (credits + classifications)) bounded admission, object staging and
  * node-local validation; no corpus enumeration, receipt/history replay or bulk
- * loader. The native writer commits once; per-item logical sequences preserve
+ * loader. The request accepts at most {@link CATALOGUE_IMPORT_COST.items} items.
+ * Each native command commits at most 64 of them, in order. A later group's
+ * failure leaves earlier groups committed; an item with no receipt stays
+ * pending, and the same key retries. Per-item logical sequences preserve
  * existing relay/recovery ordering. Unknown native index page work is unmeasured. */
 export async function importCatalogueWorks(deps: MainWorkDependencies, request: Request,
   actingSubject: string, items: readonly { key: string; input: CatalogueImportInput }[]): Promise<CatalogueImportOutcome[]> {
@@ -315,7 +318,8 @@ export async function importCatalogueWorks(deps: MainWorkDependencies, request: 
     try {
       await deps.environment.fuseki.catalogueBatch(prepared.slice(start, start + NAME_OWNER_COMMAND).map(row => row.envelope));
     }
-    catch { /* The shared commit can succeed before its response is lost. Read each receipt. */ }
+    catch { /* This group's commit can succeed before its response is lost.
+      Earlier groups stay committed. Read each receipt; a group that never committed stays pending. */ }
   }
   for (const row of prepared) {
     const terminal = await readWorkTerminalReceipt(deps.environment.fuseki, row.admission.id);
