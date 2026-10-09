@@ -3,6 +3,7 @@ import { discloseClassificationConcept, recordClassifiedStatement, shareClassifi
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { AccessExposure } from '../../../services/main/src/modules/access/exposure.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -133,31 +134,15 @@ test('IAM01/IAM10/IAM21/MODEL01/MODEL08/WORK01/WORK05/WORK09/BOOK04/CTX01/CTX02/
       [platformGrant, actor, permission, principalId,
         `urn:rezics:access-receipt:${createHash('sha256').update(platformGrant).digest('hex')}`]);
     }
-    const signIn = await fetch(`${base}/api/auth/sign-in/email`, {
+    const signedIn = await fetch(`${base}/api/auth/sign-in/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: base },
       body: JSON.stringify({ email: member.email, password: member.password }),
     });
-    expect(signIn.status).toBe(200);
-    const verifier = randomBytes(32).toString('base64url');
-    const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code',
-      client_id: webClient.client_id, redirect_uri: redirectUri, scope,
-      state: randomUUID(), resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256',
-    })) authorize.searchParams.set(key, value);
-    const authorized = await fetch(authorize, {
-      headers: { cookie: signIn.headers.get('set-cookie')! }, redirect: 'manual' });
-    expect(authorized.status).toBe(302);
-    const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-    const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code',
-        client_id: webClient.client_id, code, redirect_uri: redirectUri,
-        code_verifier: verifier, resource: Bun.env.ACCOUNT_MAIN_RESOURCE }),
-    });
-    expect(exchange.status).toBe(200);
-    const token = (await exchange.json() as { access_token: string }).access_token;
+    expect(signedIn.status).toBe(200);
+    const token = (await signIn({
+      account: base, clientId: webClient.client_id, redirectUri, scope,
+      resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
+    }, signedIn.headers.get('set-cookie')!)).accessToken;
     await migrateContent(contentPool);
     const content = new ContentCore(contentPool);
     const comments = new ContentComments(contentPool);

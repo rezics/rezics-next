@@ -1,9 +1,10 @@
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -166,26 +167,10 @@ test('IAM11/OPS03: deletion frontiers preserve unrelated public Work and Content
         redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
         grant_types: ['authorization_code'], scope: 'openid work:create work:edit',
         skip_consent: true, require_pkce: true } });
-    const verifier = randomBytes(32).toString('base64url');
-    const authorize = new URL(`${baseURL}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code',
-      client_id: browserClient.client_id, redirect_uri: redirectUri,
-      scope: 'openid work:create work:edit', state: randomUUID(),
-      resource: apps.ACCOUNT_MAIN_RESOURCE!,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-    const authorized = await fetch(authorize, {
-      headers: { cookie: unaffected.cookie }, redirect: 'manual' });
-    expect(authorized.status).toBe(302);
-    const code = new URL(authorized.headers.get('location')!).searchParams.get('code');
-    if (!code) throw new Error('OAuth authorization code is absent');
-    const exchange = await fetch(`${baseURL}/api/auth/oauth2/token`, { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code',
-        client_id: browserClient.client_id, code, redirect_uri: redirectUri,
-        code_verifier: verifier, resource: apps.ACCOUNT_MAIN_RESOURCE! }) });
-    expect(exchange.status).toBe(200);
-    const bearer = `Bearer ${(await exchange.json() as { access_token: string }).access_token}`;
+    const bearer = `Bearer ${(await signIn({
+      account: baseURL, clientId: browserClient.client_id, redirectUri,
+      scope: 'openid work:create work:edit', resource: apps.ACCOUNT_MAIN_RESOURCE!,
+    }, unaffected.cookie)).accessToken}`;
     const verifierAccount = new AccountAssertionVerifier({ issuer, audience: apps.ACCOUNT_MAIN_RESOURCE!,
       jwksUrl: `${baseURL}/api/auth/jwks`,
       introspectUrl: `${baseURL}/api/auth/oauth2/introspect`,

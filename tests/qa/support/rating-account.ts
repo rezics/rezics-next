@@ -1,5 +1,6 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { expect } from 'bun:test';
 import { getMigrations } from 'better-auth/db/migration';
@@ -78,27 +79,14 @@ export async function ratingAccount(apps: Record<string, string>,
       grant_types: ['authorization_code'], scope: scopes,
       skip_consent: true, require_pkce: true } });
     async function tokenFor(user: { email: string; password: string }, scope = scopes) {
-      const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
+      const signedIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
         headers: { 'content-type': 'application/json', origin: base },
         body: JSON.stringify({ email: user.email, password: user.password }) });
-      expect(signIn.status).toBe(200);
-      const verifier = randomBytes(32).toString('base64url');
-      const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
-      for (const [key, value] of Object.entries({ response_type: 'code',
-        client_id: oauthClient.client_id, redirect_uri: redirectUri, scope,
-        state: randomUUID(), resource: apps.ACCOUNT_MAIN_RESOURCE!,
-        code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256',
-      })) authorize.searchParams.set(key, value);
-      const authorized = await fetch(authorize, {
-        headers: { cookie: signIn.headers.get('set-cookie')! }, redirect: 'manual' });
-      expect(authorized.status).toBe(302);
-      const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-      const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: oauthClient.client_id,
-          code, redirect_uri: redirectUri, code_verifier: verifier, resource: apps.ACCOUNT_MAIN_RESOURCE! }) });
-      expect(exchange.status).toBe(200);
-      return (await exchange.json() as { access_token: string }).access_token;
+      expect(signedIn.status).toBe(200);
+      return (await signIn({
+        account: base, clientId: oauthClient.client_id, redirectUri, scope,
+        resource: apps.ACCOUNT_MAIN_RESOURCE!,
+      }, signedIn.headers.get('set-cookie')!)).accessToken;
     }
 
     const a = await signUp('a'), b = await signUp('b');

@@ -1,7 +1,7 @@
 import { test, expect } from 'bun:test';
 import { signupPolicyFixture } from './account-fixture.ts';
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { appendFileSync, copyFileSync, cpSync, existsSync, mkdirSync,
   readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -132,27 +132,9 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
         token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
         client_credentials_scopes: ['work:create'] },
     });
-    const pkceVerifier = 'a'.repeat(64);
-    const authorize = new URL(`${baseURL}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code',
-      client_id: publicClient.client_id, redirect_uri: callback,
-      scope: 'openid work:create', state: 'pitr-state',
-      code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
-      code_challenge_method: 'S256', resource: 'https://main.rezics.test' })) {
-      authorize.searchParams.set(key, value);
-    }
-    const authorized = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
-    expect(authorized.status).toBe(302);
-    const code = new URL(authorized.headers.get('location')!).searchParams.get('code');
-    if (!code) throw new Error('Account did not issue an authorization code');
-    const exchanged = await fetch(`${baseURL}/api/auth/oauth2/token`, {
-      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code',
-        client_id: publicClient.client_id, code, redirect_uri: callback,
-        code_verifier: pkceVerifier, resource: 'https://main.rezics.test' }),
-    });
-    expect(exchanged.status).toBe(200);
-    const token = (await exchanged.json() as { access_token: string }).access_token;
+    const oauth = (scope: string) => ({ account: baseURL, clientId: publicClient.client_id,
+      redirectUri: callback, scope, resource: 'https://main.rezics.test' });
+    const token = (await signIn(oauth('openid work:create'), cookie)).accessToken;
     const discovery = await fetch(`${baseURL}/api/auth/.well-known/openid-configuration`);
     const metadata = await discovery.json() as { issuer: string; jwks_uri: string };
     const verifier = new AccountAssertionVerifier({ issuer: metadata.issuer,
@@ -171,22 +153,8 @@ test('OPS03/IAM10 partial: archived Account WAL retains sign-out and deletion', 
     expect(memberSignUp.status).toBe(200);
     const memberCookie = memberSignUp.headers.get('set-cookie')!;
     memberId = (await memberSignUp.json() as { user: { id: string } }).user.id;
-    authorize.searchParams.set('scope', 'openid work:create offline_access');
-    authorize.searchParams.set('state', 'member-pitr-state');
-    const memberAuthorization = await fetch(authorize, {
-      headers: { cookie: memberCookie }, redirect: 'manual',
-    });
-    expect(memberAuthorization.status).toBe(302);
-    const memberCode = new URL(memberAuthorization.headers.get('location')!).searchParams.get('code');
-    if (!memberCode) throw new Error('Account did not issue a member authorization code');
-    const memberExchange = await fetch(`${baseURL}/api/auth/oauth2/token`, {
-      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code',
-        client_id: publicClient.client_id, code: memberCode, redirect_uri: callback,
-        code_verifier: pkceVerifier, resource: 'https://main.rezics.test' }),
-    });
-    expect(memberExchange.status).toBe(200);
-    const memberTokens = await memberExchange.json() as { access_token: string; refresh_token?: string };
+    const memberSession = await signIn(oauth('openid work:create offline_access'), memberCookie);
+    const memberTokens = { access_token: memberSession.accessToken, refresh_token: memberSession.refreshToken };
     expect(memberTokens.refresh_token).toBeTruthy();
     const memberRequest = new Request('https://main.rezics.test/works', {
       method: 'POST', headers: { authorization: `Bearer ${memberTokens.access_token}` },

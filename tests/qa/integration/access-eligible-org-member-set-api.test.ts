@@ -1,5 +1,6 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -82,24 +83,10 @@ test('IAM25: B grants the exact eligible A-member set; P exercises it as P', asy
         headers: { 'content-type': 'application/json', origin: base },
         body: JSON.stringify({ email: user.email, password: user.password }) });
       expect(signedIn.status).toBe(200);
-      const verifier = randomBytes(32).toString('base64url');
-      const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
-      for (const [key, value] of Object.entries({ response_type: 'code',
-        client_id: oauth.client_id, redirect_uri: callback, scope, state: randomUUID(),
-        resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
-        code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-        code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-      const authorized = await fetch(authorize, { redirect: 'manual',
-        headers: { cookie: signedIn.headers.get('set-cookie')! } });
-      expect(authorized.status).toBe(302);
-      const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-      const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: oauth.client_id,
-          code, redirect_uri: callback, code_verifier: verifier,
-          resource: Bun.env.ACCOUNT_MAIN_RESOURCE }) });
-      expect(exchange.status).toBe(200);
-      return (await exchange.json() as { access_token: string }).access_token;
+      return (await signIn({
+        account: base, clientId: oauth.client_id, redirectUri: callback, scope,
+        resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
+      }, signedIn.headers.get('set-cookie')!)).accessToken;
     }
     const p = await signUp('p');
     const outsider = await signUp('outsider');

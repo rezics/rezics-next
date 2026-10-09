@@ -1,6 +1,7 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { expect, test } from 'bun:test';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { agentProvisionHarness } from './agent-provision-support.ts';
 import { startMediaStack } from './media-support.ts';
@@ -48,29 +49,18 @@ test('G-520: private Account names never provision or appear in public Person, h
     expect(signedUp.user.name).toBe(marker);
     // Membership eligibility is a separate Account assertion, not a public name.
     await h.accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [signedUp.user.id]);
-    const signIn = await fetch(`${h.base}/api/auth/sign-in/email`, { method: 'POST',
+    const signedIn = await fetch(`${h.base}/api/auth/sign-in/email`, { method: 'POST',
       headers: { 'content-type': 'application/json', origin: h.base },
       body: JSON.stringify({ email, password }) });
-    expect(signIn.status).toBe(200);
-    const pkce = randomBytes(32).toString('base64url');
-    const authorize = new URL(`${h.base}/api/auth/oauth2/authorize`);
+    expect(signedIn.status).toBe(200);
     const scope = 'openid agent:create work:create work:edit space:create';
-    for (const [key, value] of Object.entries({ response_type: 'code', client_id: h.client.client_id,
-      redirect_uri: h.redirectUri, scope, state: randomUUID(), resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
-      code_challenge: createHash('sha256').update(pkce).digest('base64url'), code_challenge_method: 'S256' })) {
-      authorize.searchParams.set(key, value);
-    }
-    const authorized = await fetch(authorize, { headers: { cookie: signIn.headers.get('set-cookie')! },
-      redirect: 'manual' });
-    expect(authorized.status).toBe(302);
-    const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-    const tokens = await json<{ access_token: string }>(await fetch(`${h.base}/api/auth/oauth2/token`, {
-      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: h.client.client_id, code,
-        redirect_uri: h.redirectUri, code_verifier: pkce, resource: Bun.env.ACCOUNT_MAIN_RESOURCE! }) }));
+    const accessToken = (await signIn({
+      account: h.base, clientId: h.client.client_id, redirectUri: h.redirectUri, scope,
+      resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
+    }, signedIn.headers.get('set-cookie')!)).accessToken;
     const introspected = await json<Record<string, unknown>>(await fetch(`${h.base}/api/auth/oauth2/introspect`, {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ token: tokens.access_token, client_id: h.verifierClient.client_id,
+      body: new URLSearchParams({ token: accessToken, client_id: h.verifierClient.client_id,
         client_secret: h.verifierClient.client_secret! }) }));
     expect(introspected.active).toBe(true);
     expect(JSON.stringify(introspected)).not.toContain(marker);
@@ -100,11 +90,11 @@ test('G-520: private Account names never provision or appear in public Person, h
     const sessionKey = randomUUID();
     const call = (method: string, path: string, body?: unknown, authenticated = true,
       session = sessionKey) => app.handle(new Request(`http://main.test${path}`, { method,
-      headers: { ...(authenticated ? { authorization: `Bearer ${tokens.access_token}` } : {}),
+      headers: { ...(authenticated ? { authorization: `Bearer ${accessToken}` } : {}),
         'x-session-key': session, 'idempotency-key': randomUUID(), 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) }));
     const principal = await h.verifier.verify(new Request('http://main.test', {
-      headers: { authorization: `Bearer ${tokens.access_token}` } }), ['agent:create', 'work:create']);
+      headers: { authorization: `Bearer ${accessToken}` } }), ['agent:create', 'work:create']);
     expect(principal.emailVerified).toBe(true);
     expect(principal).not.toHaveProperty('accountDisplayName');
     const graphPosition = () => h!.fuseki.query(`SELECT ?n WHERE {

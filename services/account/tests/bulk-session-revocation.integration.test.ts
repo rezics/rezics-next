@@ -1,5 +1,6 @@
 import { expect, spyOn, test } from 'bun:test';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
+import { prepareAuthorization } from '../../../scripts/lib/oauth-client.ts';
 import { Client } from 'pg';
 import { cleanupRevokedSessionPage } from '../src/first-party-session.ts';
 import { installConsentRefreshFence } from '../src/consent-fence.ts';
@@ -159,11 +160,10 @@ for (const mode of ['all', 'others', 'single'] as const) {
       const accountGeneration = (await f.pool.query('SELECT generation FROM rezics_account_security WHERE user_id = $1',
         [member.id])).rows;
       const code = await oauth.code(product.client_id, selectedCookie);
-      const consentQuery = new URLSearchParams({ response_type: 'code', client_id: r.external.client_id,
-        redirect_uri: 'https://notes.example.test/callback', scope: 'openid work:read offline_access',
-        state: randomUUID(), prompt: 'consent', resource: f.config.resource,
-        code_challenge: hash('consent-verifier'), code_challenge_method: 'S256' });
-      const authorization = await f.request(`/api/auth/oauth2/authorize?${consentQuery}`, undefined, selectedCookie);
+      const prepared = prepareAuthorization({ account: f.baseURL, clientId: r.external.client_id,
+        redirectUri: 'https://notes.example.test/callback', scope: 'openid work:read offline_access',
+        resource: f.config.resource }, { prompt: 'consent' });
+      const authorization = await f.request(`${prepared.url.pathname}${prepared.url.search}`, undefined, selectedCookie);
       expect(authorization.status).toBe(302);
       const signedConsent = new URL(authorization.headers.get('location')!, f.baseURL).searchParams.toString();
       expect((await f.request(`/api/account/consent?${new URLSearchParams({ oauth_query: signedConsent })}`,

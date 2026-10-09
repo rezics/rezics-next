@@ -1,4 +1,5 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { readFileSync } from 'node:fs';
 
 const groupId = /^[a-z][a-z0-9-]{0,63}$/;
@@ -179,51 +180,27 @@ export async function platformAdministratorSession(env: NodeJS.ProcessEnv = proc
   if (!agentIri.test(saved.actingSubject) || !principalIdPattern.test(saved.principalId)) {
     throw new Error('Web auth private.json has no platform administrator principal');
   }
-  const signIn = await fetch(`${accountBase}/api/auth/sign-in/email`, {
+  const signedIn = await fetch(`${accountBase}/api/auth/sign-in/email`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin: accountBase },
     body: JSON.stringify({ email: saved.member.email, password: saved.member.password }),
   });
-  const cookie = signIn.headers.get('set-cookie');
-  if (signIn.status !== 200 || !cookie) {
-    const detail = await signIn.text();
-    throw new Error(`Platform administrator sign-in failed with HTTP ${signIn.status}: ${detail.slice(0, 300)}`);
+  const cookie = signedIn.headers.get('set-cookie');
+  if (signedIn.status !== 200 || !cookie) {
+    const detail = await signedIn.text();
+    throw new Error(`Platform administrator sign-in failed with HTTP ${signedIn.status}: ${detail.slice(0, 300)}`);
   }
-  await signIn.body?.cancel();
-  const verifier = randomBytes(32).toString('base64url');
-  const state = randomUUID();
-  const authorize = new URL(published.authorizationEndpoint);
-  for (const [key, value] of Object.entries({
-    response_type: 'code', client_id: published.clientId, redirect_uri: redirectUri, scope, state,
-    resource, code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-    code_challenge_method: 'S256',
-  })) authorize.searchParams.set(key, value);
-  const authorized = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
-  const location = authorized.headers.get('location');
-  if (authorized.status !== 302 || !location) {
-    const detail = await authorized.text();
-    throw new Error(`Platform administrator authorization failed with HTTP ${authorized.status}: ${detail.slice(0, 300)}`);
+  await signedIn.body?.cancel();
+  let token: string;
+  try {
+    token = (await signIn({
+      account: accountBase, clientId: published.clientId, redirectUri, scope, resource,
+      authorizeEndpoint: published.authorizationEndpoint, tokenEndpoint: published.tokenEndpoint,
+    }, cookie)).accessToken;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    throw new Error(`Platform administrator token exchange failed: ${detail.slice(0, 300)}`);
   }
-  await authorized.body?.cancel();
-  const redirected = new URL(location);
-  const code = redirected.searchParams.get('code');
-  if (redirected.origin + redirected.pathname !== redirectUri || !code) {
-    throw new Error('Platform administrator authorization returned no code');
-  }
-  const exchange = await fetch(published.tokenEndpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code', client_id: published.clientId, code,
-      redirect_uri: redirectUri, code_verifier: verifier, resource,
-    }),
-  });
-  if (exchange.status !== 200) {
-    const detail = await exchange.text();
-    throw new Error(`Platform administrator token exchange failed with HTTP ${exchange.status}: ${detail.slice(0, 300)}`);
-  }
-  const token = (await exchange.json() as { access_token?: string }).access_token;
-  if (!token) throw new Error('Platform administrator token exchange returned no access token');
   return { mainOrigin, token, actingSubject: saved.actingSubject, principalId: saved.principalId };
 }
 

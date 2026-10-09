@@ -1,5 +1,6 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { authorize, postToken } from '../../../scripts/lib/oauth-client.ts';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -128,6 +129,8 @@ export async function startAgentControlHarness(label: string) {
       require_pkce: true,
     },
   });
+  const oauth = (scope: string) => ({ account: base, clientId: client.client_id, redirectUri, scope,
+    resource: Bun.env.ACCOUNT_MAIN_RESOURCE! });
   const codeFor = async (user: { email: string; password: string }, scope: string) => {
     const signIn = await fetch(`${base}/api/auth/sign-in/email`, {
       method: 'POST',
@@ -135,39 +138,14 @@ export async function startAgentControlHarness(label: string) {
       body: JSON.stringify({ email: user.email, password: user.password }),
     });
     expect(signIn.status).toBe(200);
-    const verifier = randomBytes(32).toString('base64url');
-    const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({
-      response_type: 'code',
-      client_id: client.client_id,
-      redirect_uri: redirectUri,
-      scope,
-      state: randomUUID(),
-      resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256',
-    }))
-      authorize.searchParams.set(key, value);
-    const authorized = await fetch(authorize, {
-      headers: { cookie: signIn.headers.get('set-cookie')! },
-      redirect: 'manual',
-    });
-    expect(authorized.status).toBe(302);
-    const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-    return { code, verifier };
+    const pending = await authorize(oauth(scope), signIn.headers.get('set-cookie')!);
+    if (!pending.ok) throw new Error(`authorize failed: ${pending.response.status}`);
+    return { code: pending.code, verifier: pending.verifier };
   };
   const exchangeCode = (code: string, verifier: string) =>
-    fetch(`${base}/api/auth/oauth2/token`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        client_id: client.client_id,
-        code,
-        redirect_uri: redirectUri,
-        code_verifier: verifier,
-        resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
-      }),
+    postToken(oauth(scopes), {
+      grant_type: 'authorization_code', client_id: client.client_id, code,
+      redirect_uri: redirectUri, code_verifier: verifier, resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
     });
   const tokenFor = async (user: { email: string; password: string }, scope: string) => {
     const { code, verifier } = await codeFor(user, scope);
@@ -278,15 +256,9 @@ export async function startAgentControlHarness(label: string) {
     },
     exchangeCode,
     refreshToken(refreshToken: string): Promise<Response> {
-      return fetch(`${base}/api/auth/oauth2/token`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          grant_type: 'refresh_token',
-          client_id: client.client_id,
-          refresh_token: refreshToken,
-          resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
-        }),
+      return postToken(oauth(scopes), {
+        grant_type: 'refresh_token', client_id: client.client_id, refresh_token: refreshToken,
+        resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
       });
     },
     accountRequest(path: string, body: object, cookie?: string): Promise<Response> {

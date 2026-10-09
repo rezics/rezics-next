@@ -1,5 +1,6 @@
 import { test, expect } from 'bun:test';
 import { signupPolicyFixture } from './account-fixture.ts';
+import { postToken, prepareAuthorization, signIn } from '../../../scripts/lib/oauth-client.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { getMigrations } from 'better-auth/db/migration';
@@ -91,65 +92,27 @@ test('IAM09: withdrawn consent fences old refresh and Main access across clients
       expect(response.status).toBe(200);
       return response.json() as Promise<Record<string, unknown>>;
     };
+    const oauth = (clientId: string, scope: string) => ({ account: baseURL, clientId,
+      redirectUri: callback, scope, resource });
     const issueWithConsent = async (clientId: string, account = member,
       scope = 'openid work:create offline_access') => {
-      const pkceVerifier = randomBytes(32).toString('base64url');
-      const authorize = new URL(`${baseURL}/api/auth/oauth2/authorize`);
-      for (const [key, value] of Object.entries({ response_type: 'code',
-        client_id: clientId, redirect_uri: callback,
-        scope, prompt: 'consent', state: randomUUID(), resource,
-        code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
-        code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-      const prompt = await fetch(authorize, {
-        headers: { cookie: account.cookie }, redirect: 'manual' });
-      expect(prompt.status).toBe(302);
-      const consentURL = new URL(prompt.headers.get('location')!, baseURL);
-      expect(consentURL.pathname).toBe('/consent');
-      const accepted = await fetch(`${baseURL}/api/auth/oauth2/consent`, {
-        method: 'POST', redirect: 'manual',
-        headers: { 'content-type': 'application/json', cookie: account.cookie, origin: baseURL },
-        body: JSON.stringify({ accept: true, oauth_query: consentURL.searchParams.toString() }),
-      });
-      expect(accepted.status).toBe(200);
-      const destination = await accepted.json() as { redirect: boolean; url: string };
-      expect(destination.redirect).toBe(true);
-      const code = new URL(destination.url).searchParams.get('code');
-      expect(code).toBeTruthy();
-      const exchange = await fetch(`${baseURL}/api/auth/oauth2/token`, {
-        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'authorization_code',
-          client_id: clientId, code: code!, redirect_uri: callback,
-          code_verifier: pkceVerifier, resource }),
-      });
-      expect(exchange.status).toBe(200);
-      const tokens = await exchange.json() as { access_token: string; refresh_token: string };
-      expect(tokens.refresh_token).toBeTruthy();
-      return tokens;
+      const session = await signIn(oauth(clientId, scope), account.cookie, { prompt: 'consent' });
+      expect(session.refreshToken).toBeTruthy();
+      return { access_token: session.accessToken, refresh_token: session.refreshToken! };
     };
     const issueCodeWithoutPrompt = async (clientId: string) => {
-      const pkceVerifier = randomBytes(32).toString('base64url');
-      const authorize = new URL(`${baseURL}/api/auth/oauth2/authorize`);
-      for (const [key, value] of Object.entries({ response_type: 'code',
-        client_id: clientId, redirect_uri: callback,
-        scope: 'openid work:create offline_access', state: randomUUID(), resource,
-        code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
-        code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-      const response = await fetch(authorize, {
-        headers: { cookie: member.cookie }, redirect: 'manual' });
+      const prepared = prepareAuthorization(oauth(clientId, 'openid work:create offline_access'));
+      const response = await fetch(prepared.url, { headers: { cookie: member.cookie }, redirect: 'manual' });
       expect(response.status).toBe(302);
       const redirect = new URL(response.headers.get('location')!, baseURL);
       expect(redirect.pathname).toBe('/auth/callback');
       const code = redirect.searchParams.get('code');
       expect(code).toBeTruthy();
-      return { code: code!, pkceVerifier };
+      return { code: code!, pkceVerifier: prepared.verifier };
     };
     const exchangeCode = (clientId: string, pending: { code: string; pkceVerifier: string }) =>
-      fetch(`${baseURL}/api/auth/oauth2/token`, {
-        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: clientId,
-          code: pending.code, redirect_uri: callback,
-          code_verifier: pending.pkceVerifier, resource }),
-      });
+      postToken(oauth(clientId, ''), { grant_type: 'authorization_code', client_id: clientId,
+        code: pending.code, redirect_uri: callback, code_verifier: pending.pkceVerifier, resource });
     const consentFor = async (clientId: string, account = member,
       expectedScopes = ['work:create', 'offline_access']) => {
       const response = await fetch(`${baseURL}/api/auth/oauth2/get-consents`, {
@@ -174,11 +137,8 @@ test('IAM09: withdrawn consent fences old refresh and Main access across clients
       body: JSON.stringify({ id }),
     });
     const refresh = (clientId: string, token: string, scope?: string) =>
-      fetch(`${baseURL}/api/auth/oauth2/token`, {
-        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'refresh_token', client_id: clientId,
-          refresh_token: token, resource, ...(scope ? { scope } : {}) }),
-      });
+      postToken(oauth(clientId, scope ?? ''), { grant_type: 'refresh_token', client_id: clientId,
+        refresh_token: token, resource, ...(scope ? { scope } : {}) });
     const original = await issueWithConsent(consentingClient.client_id);
     const peer = await issueWithConsent(peerClient.client_id);
     const other = await issueWithConsent(consentingClient.client_id, otherMember);

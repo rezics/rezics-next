@@ -1,6 +1,7 @@
 import { isForegroundOperation } from './support/operation-cost.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { authorize as oauthAuthorize, postToken } from '../../../scripts/lib/oauth-client.ts';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { expect } from 'bun:test';
 import { getMigrations } from 'better-auth/db/migration';
@@ -92,33 +93,19 @@ export async function startAccount(input: { pool: PoolConfig; secret: string; re
   const workloadApp = (name: string, scopes: string[]) => registerClient({
     client_name: name, scope: scopes.join(' '), token_endpoint_auth_method: 'client_secret_post',
     grant_types: ['client_credentials'], client_credentials_scopes: scopes });
+  const oauthClient = (clientId: string, scope: string) => ({ account: base, service: local, clientId,
+    redirectUri: CALLBACK, scope, resource: input.resource });
   /** Authorization code with PKCE; explicit consent when the App is not trusted. */
   const authorize = async (clientId: string, member: Member, scope: string,
     consent = true): Promise<{ code: string; verifier: string } | Response> => {
-    const verifier = randomBytes(32).toString('base64url');
-    const url = new URL(`${local}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code', client_id: clientId,
-      redirect_uri: CALLBACK, scope, state: randomUUID(), resource: input.resource,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256', ...(consent ? { prompt: 'consent' } : {}) })) {
-      url.searchParams.set(key, value);
-    }
-    const prompt = await fetch(url, { headers: { cookie: member.cookie }, redirect: 'manual' });
-    if (prompt.status !== 302) return prompt;
-    const target = new URL(prompt.headers.get('location')!, base);
-    if (target.pathname === '/consent') {
-      const accepted = await post('/api/auth/oauth2/consent',
-        { accept: true, oauth_query: target.searchParams.toString() }, member.cookie);
-      expect(accepted.status).toBe(200);
-      const destination = await accepted.json() as { url: string };
-      return { code: new URL(destination.url).searchParams.get('code')!, verifier };
-    }
-    return { code: target.searchParams.get('code')!, verifier };
+    const pending = await oauthAuthorize(oauthClient(clientId, scope), member.cookie,
+      consent ? { prompt: 'consent' } : {});
+    if (!pending.ok) return pending.response;
+    return { code: pending.code, verifier: pending.verifier };
   };
   const exchange = (clientId: string, pending: { code: string; verifier: string }) =>
-    form('/api/auth/oauth2/token', { grant_type: 'authorization_code', client_id: clientId,
-      code: pending.code, redirect_uri: CALLBACK, code_verifier: pending.verifier,
-      resource: input.resource });
+    postToken(oauthClient(clientId, ''), { grant_type: 'authorization_code', client_id: clientId,
+      code: pending.code, redirect_uri: CALLBACK, code_verifier: pending.verifier, resource: input.resource });
   const issue = async (clientId: string, member: Member, scope: string, consent = true) => {
     const pending = await authorize(clientId, member, scope, consent);
     if (pending instanceof Response) throw new Error(`authorize failed: ${pending.status}`);
@@ -128,7 +115,7 @@ export async function startAccount(input: { pool: PoolConfig; secret: string; re
     return JSON.parse(text) as Tokens;
   };
   const refresh = (clientId: string, token: string, scope?: string) =>
-    form('/api/auth/oauth2/token', { grant_type: 'refresh_token', client_id: clientId,
+    postToken(oauthClient(clientId, scope ?? ''), { grant_type: 'refresh_token', client_id: clientId,
       refresh_token: token, resource: input.resource, ...(scope ? { scope } : {}) });
   const clientCredentials = (client: { client_id: string; client_secret?: string },
     scope: string) => form('/api/auth/oauth2/token', { grant_type: 'client_credentials',

@@ -1,4 +1,5 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { expect, test } from 'bun:test';
@@ -94,25 +95,10 @@ test('IAM01/IAM03/IAM04: Account and Access check explicit Agents without poolin
         headers: { 'content-type': 'application/json', origin: base },
         body: JSON.stringify({ email: member.email, password: member.password }) });
       expect(signedIn.status).toBe(200);
-      const verifier = randomBytes(32).toString('base64url');
-      const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
-      for (const [key, value] of Object.entries({ response_type: 'code',
-        client_id: clientId, redirect_uri: callback,
-        scope: 'openid agent:create work:create', state: randomUUID(), resource,
-        code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-        code_challenge_method: 'S256',
-      })) authorize.searchParams.set(key, value);
-      const approved = await fetch(authorize, {
-        headers: { cookie: signedIn.headers.get('set-cookie')! }, redirect: 'manual' });
-      expect(approved.status).toBe(302);
-      const code = new URL(approved.headers.get('location')!).searchParams.get('code')!;
-      const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'authorization_code',
-        client_id: clientId, code, redirect_uri: callback,
-          code_verifier: verifier, resource }) });
-      expect(exchange.status).toBe(200);
-      return (await exchange.json() as { access_token: string }).access_token;
+      return (await signIn({
+        account: base, clientId, redirectUri: callback,
+        scope: 'openid agent:create work:create', resource,
+      }, signedIn.headers.get('set-cookie')!)).accessToken;
     };
     const [firstToken, secondToken] = await Promise.all([tokenFor(first), tokenFor(second)]);
     const otherProductToken = await tokenFor(first, otherProductClient.client_id, otherRedirectUri);

@@ -1,4 +1,5 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
+import { randomUUID } from 'node:crypto';
 import { expect } from 'bun:test';
 import { Pool } from 'pg';
 import { agentProvisionHarness } from '../../../tests/qa/integration/agent-provision-support.ts';
@@ -37,25 +38,14 @@ export async function memberFixture() {
   const app = createMainApp(h.fuseki, { environment: h.env, account: h.verifier,
     access, contentAuthoring: content, content, realmReplies: replies, maintainers });
   await h.accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [h.user.id]);
-  const signIn = await fetch(`${h.base}/api/auth/sign-in/email`, { method: 'POST',
+  const signedIn = await fetch(`${h.base}/api/auth/sign-in/email`, { method: 'POST',
     headers: { 'content-type': 'application/json', origin: h.base },
     body: JSON.stringify({ email: h.user.email, password: h.user.password }) });
-  expect(signIn.status).toBe(200);
-  const verifier = randomBytes(32).toString('base64url');
-  const authorize = new URL(`${h.base}/api/auth/oauth2/authorize`);
-  for (const [key, value] of Object.entries({ response_type: 'code', client_id: h.client.client_id,
-    redirect_uri: h.redirectUri, scope: `openid ${scopes.join(' ')}`, state: randomUUID(),
-    resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-    code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-  const authorized = await fetch(authorize, { headers: { cookie: signIn.headers.get('set-cookie')! }, redirect: 'manual' });
-  expect(authorized.status).toBe(302);
-  const exchange = await fetch(`${h.base}/api/auth/oauth2/token`, { method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'authorization_code', client_id: h.client.client_id,
-      code: new URL(authorized.headers.get('location')!).searchParams.get('code')!,
-      redirect_uri: h.redirectUri, code_verifier: verifier, resource: Bun.env.ACCOUNT_MAIN_RESOURCE! }) });
-  expect(exchange.status).toBe(200);
-  const token = (await exchange.json() as { access_token: string }).access_token;
+  expect(signedIn.status).toBe(200);
+  const token = (await signIn({
+    account: h.base, clientId: h.client.client_id, redirectUri: h.redirectUri,
+    scope: `openid ${scopes.join(' ')}`, resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
+  }, signedIn.headers.get('set-cookie')!)).accessToken;
   async function agent(name: string, kind: 'person' | 'organization' = 'person') {
     const response = await h.call(h.main(), token, randomUUID(), {
       profile: 'agent-provision-v1', kind, displayName: name });

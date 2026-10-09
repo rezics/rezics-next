@@ -4,8 +4,9 @@ import { composeProcessEnvironment, projectName, readEnv, stackDirectory } from 
 import { loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { test, expect } from 'bun:test';
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, cpSync, existsSync,
   mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -337,31 +338,15 @@ pg_verifybackup --no-parse-wal ${remote}`], 100_000);
         token_endpoint_auth_method: 'none', grant_types: ['authorization_code'],
         scope: oauthScope, skip_consent: true, require_pkce: true } });
     const member = await signUp('member');
-    const signIn = await fetch(`${accountBase}/api/auth/sign-in/email`, {
+    const signedIn = await fetch(`${accountBase}/api/auth/sign-in/email`, {
       method: 'POST', headers: { 'content-type': 'application/json', origin: accountBase },
       body: JSON.stringify({ email: member.email, password: member.password }),
     });
-    expect(signIn.status).toBe(200);
-    const pkceVerifier = randomBytes(32).toString('base64url');
-    const authorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code',
-      client_id: browserClient.client_id, redirect_uri: redirectUri, scope: oauthScope,
-      state: Bun.randomUUIDv7(), resource: accountConfig(accountPool).resource,
-      code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
-      code_challenge_method: 'S256',
-    })) authorize.searchParams.set(key, value);
-    const authorized = await fetch(authorize, {
-      headers: { cookie: signIn.headers.get('set-cookie')! }, redirect: 'manual' });
-    expect(authorized.status).toBe(302);
-    const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-    const exchange = await fetch(`${accountBase}/api/auth/oauth2/token`, { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code',
-        client_id: browserClient.client_id, code, redirect_uri: redirectUri,
-        code_verifier: pkceVerifier, resource: accountConfig(accountPool).resource }),
-    });
-    expect(exchange.status).toBe(200);
-    const accessToken = (await exchange.json() as { access_token: string }).access_token;
+    expect(signedIn.status).toBe(200);
+    const accessToken = (await signIn({
+      account: accountBase, clientId: browserClient.client_id, redirectUri,
+      scope: oauthScope, resource: accountConfig(accountPool).resource,
+    }, signedIn.headers.get('set-cookie')!)).accessToken;
     let bearer = `Bearer ${accessToken}`;
     const metadataResponse = await fetch(`${accountBase}/api/auth/.well-known/openid-configuration`);
     expect(metadataResponse.status).toBe(200);
@@ -877,24 +862,11 @@ recovery_target_action = 'promote'
     try {
       const renewalApp = createAccountApp(createAccountAuth(accountConfig(renewalOwner.pool)),
         renewalOwner.pool);
-      const renewedPkce = randomBytes(32).toString('base64url');
-      const renewedAuthorize = new URL(authorize);
-      renewedAuthorize.searchParams.set('state', Bun.randomUUIDv7());
-      renewedAuthorize.searchParams.set('code_challenge',
-        createHash('sha256').update(renewedPkce).digest('base64url'));
-      const renewedAuthorization = await renewalApp.handle(new Request(renewedAuthorize, {
-        headers: { cookie: signIn.headers.get('set-cookie')! },
-      }));
-      expect(renewedAuthorization.status).toBe(302);
-      const renewedCode = new URL(renewedAuthorization.headers.get('location')!).searchParams.get('code')!;
-      const renewedExchange = await renewalApp.handle(new Request(`${accountBase}/api/auth/oauth2/token`, {
-        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'authorization_code',
-          client_id: browserClient.client_id, code: renewedCode, redirect_uri: redirectUri,
-          code_verifier: renewedPkce, resource: accountConfig(renewalOwner.pool).resource }),
-      }));
-      expect(renewedExchange.status).toBe(200);
-      const renewedToken = (await renewedExchange.json() as { access_token: string }).access_token;
+      const renewedToken = (await signIn({
+        account: accountBase, clientId: browserClient.client_id, redirectUri,
+        scope: oauthScope, resource: accountConfig(renewalOwner.pool).resource,
+        fetch: async (input, init) => renewalApp.handle(new Request(input, init)),
+      }, signedIn.headers.get('set-cookie')!)).accessToken;
       bearer = `Bearer ${renewedToken}`;
       request.headers.set('authorization', bearer);
       expectedAccountAssertion.accountExpiresAt = decodeJwt(renewedToken).exp;

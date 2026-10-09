@@ -1,6 +1,7 @@
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -160,30 +161,14 @@ test('OPS03/PKG14/SYS12: signed owner cut restores Content and exact Go checksum
         grant_types: ['authorization_code'], scope: 'openid work:create work:edit owner:operate',
         skip_consent: true, require_pkce: true } });
     const member = await signUp('member');
-    const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
+    const signedIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
       headers: { 'content-type': 'application/json', origin: base },
       body: JSON.stringify({ email: member.email, password: member.password }) });
-    expect(signIn.status).toBe(200);
-    const verifier = randomBytes(32).toString('base64url');
-    const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code',
-      client_id: browserClient.client_id, redirect_uri: redirectUri,
-      scope: 'openid work:create work:edit owner:operate', state: randomUUID(),
-      resource: apps.ACCOUNT_MAIN_RESOURCE!,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-    const authorized = await fetch(authorize, {
-      headers: { cookie: signIn.headers.get('set-cookie')! }, redirect: 'manual' });
-    expect(authorized.status).toBe(302);
-    const code = new URL(authorized.headers.get('location')!).searchParams.get('code');
-    if (!code) throw new Error('OAuth authorization code is absent');
-    const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code',
-        client_id: browserClient.client_id, code, redirect_uri: redirectUri,
-        code_verifier: verifier, resource: apps.ACCOUNT_MAIN_RESOURCE! }) });
-    expect(exchange.status).toBe(200);
-    const bearer = `Bearer ${(await exchange.json() as { access_token: string }).access_token}`;
+    expect(signedIn.status).toBe(200);
+    const bearer = `Bearer ${(await signIn({
+      account: base, clientId: browserClient.client_id, redirectUri,
+      scope: 'openid work:create work:edit owner:operate', resource: apps.ACCOUNT_MAIN_RESOURCE!,
+    }, signedIn.headers.get('set-cookie')!)).accessToken}`;
     const account = new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
       audience: apps.ACCOUNT_MAIN_RESOURCE!, jwksUrl: `${base}/api/auth/jwks`,
       introspectUrl: `${base}/api/auth/oauth2/introspect`,

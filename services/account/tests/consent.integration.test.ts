@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { prepareAuthorization } from '../../../scripts/lib/oauth-client.ts';
 import { accountFixture } from './account-fixture.ts';
 import { providerScopes } from '../src/oauth-scopes.ts';
 import { scopeDescriptions } from '../src/scope-descriptions.ts';
@@ -15,12 +15,10 @@ test('G205 consent: authenticated signed preview, localization, denial, tamperin
         token_endpoint_auth_method: 'none', grant_types: ['authorization_code'],
         scope: 'openid work:read offline_access', require_pkce: true } });
     const pending = async () => {
-      const verifier = randomBytes(32).toString('base64url');
-      const query = new URLSearchParams({ response_type: 'code', client_id: client.client_id,
-        redirect_uri: 'https://notes.example.test/callback', scope: 'openid work:read offline_access',
-        state: randomUUID(), prompt: 'consent', resource: f.config.resource,
-        code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' });
-      const response = await f.request(`/api/auth/oauth2/authorize?${query}`, undefined, owner.cookie);
+      const prepared = prepareAuthorization({ account: f.baseURL, clientId: client.client_id,
+        redirectUri: 'https://notes.example.test/callback', scope: 'openid work:read offline_access',
+        resource: f.config.resource }, { prompt: 'consent' });
+      const response = await f.request(`${prepared.url.pathname}${prepared.url.search}`, undefined, owner.cookie);
       expect(response.status).toBe(302);
       return new URL(response.headers.get('location')!, f.baseURL).searchParams.toString();
     };

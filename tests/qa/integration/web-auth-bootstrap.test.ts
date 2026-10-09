@@ -1,4 +1,5 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
+import { postToken, prepareAuthorization } from '../../../scripts/lib/oauth-client.ts';
 import { readFileSync, rmSync, statSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { expect, test } from 'bun:test';
@@ -99,39 +100,25 @@ test('IAM01/WORK01: authenticated metadata-only Work has an empty Main Version',
     expect(signIn.status).toBe(200);
     const cookie = signIn.headers.get('set-cookie');
     expect(cookie).toBeTruthy();
-    const verifier = randomBytes(32).toString('base64url');
     const redirectUri = publicConfig.redirectUris[0]!;
-    const authorize = new URL(publicConfig.authorizationEndpoint);
-    for (const [key, value] of Object.entries({ response_type: 'code',
-      client_id: publicConfig.clientId, redirect_uri: redirectUri,
-      scope: publicConfig.scope, state: randomUUID(), resource: publicConfig.resource,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256',
-    })) authorize.searchParams.set(key, value);
-    const authorization = await fetch(authorize, { headers: { cookie: cookie! },
-      redirect: 'manual' });
+    const oauth = (redirect: string) => ({ account: base, clientId: publicConfig.clientId, redirectUri: redirect,
+      scope: publicConfig.scope, resource: publicConfig.resource,
+      authorizeEndpoint: publicConfig.authorizationEndpoint, tokenEndpoint: publicConfig.tokenEndpoint });
+    const first = prepareAuthorization(oauth(redirectUri));
+    const authorization = await fetch(first.url, { headers: { cookie: cookie! }, redirect: 'manual' });
     expect(authorization.status).toBe(302);
     const location = new URL(authorization.headers.get('location')!);
     expect(location.origin + location.pathname).toBe(redirectUri);
-    expect(location.searchParams.get('state')).toBe(authorize.searchParams.get('state'));
-    const wranglerAuthorize = new URL(authorize);
-    wranglerAuthorize.searchParams.set('redirect_uri', publicConfig.redirectUris[1]!);
-    wranglerAuthorize.searchParams.set('state', randomUUID());
-    const wranglerAuthorization = await fetch(wranglerAuthorize, {
-      headers: { cookie: cookie! }, redirect: 'manual' });
+    expect(location.searchParams.get('state')).toBe(first.url.searchParams.get('state'));
+    const second = prepareAuthorization(oauth(publicConfig.redirectUris[1]!));
+    const wranglerAuthorization = await fetch(second.url, { headers: { cookie: cookie! }, redirect: 'manual' });
     expect(wranglerAuthorization.status).toBe(302);
     const wranglerLocation = new URL(wranglerAuthorization.headers.get('location')!);
-    expect(wranglerLocation.origin + wranglerLocation.pathname)
-      .toBe(publicConfig.redirectUris[1]!);
-    expect(wranglerLocation.searchParams.get('state'))
-      .toBe(wranglerAuthorize.searchParams.get('state'));
-    const exchange = await fetch(publicConfig.tokenEndpoint, { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code',
-        client_id: publicConfig.clientId, code: location.searchParams.get('code')!,
-        redirect_uri: redirectUri, code_verifier: verifier,
-        resource: publicConfig.resource }),
-    });
+    expect(wranglerLocation.origin + wranglerLocation.pathname).toBe(publicConfig.redirectUris[1]!);
+    expect(wranglerLocation.searchParams.get('state')).toBe(second.url.searchParams.get('state'));
+    const exchange = await postToken(oauth(redirectUri), { grant_type: 'authorization_code',
+      client_id: publicConfig.clientId, code: location.searchParams.get('code')!,
+      redirect_uri: redirectUri, code_verifier: first.verifier, resource: publicConfig.resource });
     expect(exchange.status).toBe(200);
     const token = (await exchange.json() as { access_token: string }).access_token;
     const userInfo = await fetch(`${base}/api/auth/oauth2/userinfo`, {

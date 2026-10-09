@@ -1,11 +1,11 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { discloseClassificationConcept, recordClassifiedStatement, shareClassificationContext, statementDecisionBody,
   type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { test, expect } from 'bun:test';
 import { spawn } from 'node:child_process';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
-import { createHash } from 'node:crypto';
 import { closeSync, copyFileSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -138,21 +138,11 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
       body: { client_name: 'Full Work RP', redirect_uris: [callback], token_endpoint_auth_method: 'none',
         grant_types: ['authorization_code'], scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define context:write statement:write statement:decide rating:configure rating:submit rating:read', skip_consent: true, require_pkce: true },
     });
-    const pkceVerifier = 'b'.repeat(64);
-    const authorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code', client_id: publicClient.client_id,
-      redirect_uri: callback, scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define context:write statement:write statement:decide rating:configure rating:submit rating:read', state: 'full-work-state',
-      code_challenge: createHash('sha256').update(pkceVerifier).digest('base64url'),
-      code_challenge_method: 'S256', resource })) authorize.searchParams.set(key, value);
-    const authorization = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
-    expect(authorization.status).toBe(302);
-    const code = new URL(authorization.headers.get('location')!).searchParams.get('code')!;
-    const exchange = await fetch(`${accountBase}/api/auth/oauth2/token`, { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: publicClient.client_id,
-        code, redirect_uri: callback, code_verifier: pkceVerifier, resource }) });
-    expect(exchange.status).toBe(200);
-    const token = (await exchange.json() as { access_token: string }).access_token;
+    const token = (await signIn({
+      account: accountBase, clientId: publicClient.client_id, redirectUri: callback,
+      scope: 'openid work:create work:edit work:read space:create realm:adopt realm:reject realm:classify classification:define context:write statement:write statement:decide rating:configure rating:submit rating:read',
+      resource,
+    }, cookie)).accessToken;
     const accessMigrations = join(root, 'services/main/migrations/access');
     for (const file of schemaFiles(root, 'access')) {
       await pool.query(readFileSync(join(accessMigrations, file), 'utf8'));
@@ -1312,25 +1302,10 @@ test('IAM01/IAM07/IAM10/SYS02/G3 partial: real Account to Access to Main HTTP to
         password: 'correct horse battery staple' }) });
     expect(secondRaterSignUp.status).toBe(200);
     const secondRater = await secondRaterSignUp.json() as { user: { id: string } };
-    const secondVerifier = 'c'.repeat(64);
-    const secondAuthorize = new URL(`${accountBase}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code',
-      client_id: publicClient.client_id, redirect_uri: callback,
-      scope: 'openid rating:submit rating:read', state: 'second-rater-state',
-      code_challenge: createHash('sha256').update(secondVerifier).digest('base64url'),
-      code_challenge_method: 'S256', resource })) secondAuthorize.searchParams.set(key, value);
-    const secondAuthorization = await fetch(secondAuthorize, {
-      headers: { cookie: secondRaterSignUp.headers.get('set-cookie')! }, redirect: 'manual' });
-    expect(secondAuthorization.status).toBe(302);
-    const secondCode = new URL(secondAuthorization.headers.get('location')!)
-      .searchParams.get('code')!;
-    const secondExchange = await fetch(`${accountBase}/api/auth/oauth2/token`, {
-      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code',
-        client_id: publicClient.client_id, code: secondCode, redirect_uri: callback,
-        code_verifier: secondVerifier, resource }) });
-    expect(secondExchange.status).toBe(200);
-    const secondToken = (await secondExchange.json() as { access_token: string }).access_token;
+    const secondToken = (await signIn({
+      account: accountBase, clientId: publicClient.client_id, redirectUri: callback,
+      scope: 'openid rating:submit rating:read', resource,
+    }, secondRaterSignUp.headers.get('set-cookie')!)).accessToken;
     const secondPrincipalId = Bun.randomUUIDv7();
     await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
       VALUES ($1, $2, $3)`, [secondPrincipalId, metadata.issuer, secondRater.user.id]);

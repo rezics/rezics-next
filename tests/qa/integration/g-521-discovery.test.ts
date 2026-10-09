@@ -1,5 +1,6 @@
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { replacementController } from './g-523-controller-fixture.ts';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
@@ -74,22 +75,10 @@ test('G-521/IAM01: identity discovery and session/main choices are independent o
         { avatarDelivery: async () => { throw new Error('No avatar in this fixture'); } }) });
     // A third-party identity token alone must not enumerate or choose Agents.
     // The acting-identity token has agent:create but no publishing scope.
-    const verifier = randomBytes(32).toString('base64url');
-    const authorize = new URL(`${h.base}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code', client_id: h.client.client_id,
-      redirect_uri: h.redirectUri, scope: 'openid', state: randomUUID(),
+    const openidOnlyToken = (await signIn({
+      account: h.base, clientId: h.client.client_id, redirectUri: h.redirectUri, scope: 'openid',
       resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' })) {
-      authorize.searchParams.set(key, value);
-    }
-    const authorized = await fetch(authorize, { headers: { cookie: h.user.cookie }, redirect: 'manual' });
-    expect(authorized.status).toBe(302);
-    const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-    const exchange = await fetch(`${h.base}/api/auth/oauth2/token`, { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: h.client.client_id,
-        code, redirect_uri: h.redirectUri, code_verifier: verifier, resource: Bun.env.ACCOUNT_MAIN_RESOURCE! }) });
-    const openidOnlyToken = (await json<{ access_token: string }>(exchange)).access_token;
+    }, h.user.cookie)).accessToken;
     const identityToken = h.token;
     const sessionKey = randomUUID();
     const call = (method: string, path: string, body?: object, token = identityToken,

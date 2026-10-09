@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { prepareAuthorization } from '../../../scripts/lib/oauth-client.ts';
 import { readFileSync } from 'node:fs';
 import { Elysia } from 'elysia';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
@@ -128,12 +128,9 @@ test('G-580: native loopback registration completes signed consent and PKCE at i
     const registered = await registration.json() as { client_id: string; redirect_uris: string[]; application_type: string };
     expect(registered.redirect_uris).toEqual([redirect]);
     expect(registered.application_type).toBe('native');
-    const verifier = randomBytes(32).toString('base64url'), state = randomUUID();
-    const authorize = new URLSearchParams({ client_id: registered.client_id, response_type: 'code',
-      redirect_uri: redirect, scope: 'openid work:read offline_access', state,
-      resource: account.config.resource, code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256' });
-    const authorized = await account.request(`/api/auth/oauth2/authorize?${authorize}`, undefined, person.cookie);
+    const prepared = prepareAuthorization({ account: account.baseURL, clientId: registered.client_id,
+      redirectUri: redirect, scope: 'openid work:read offline_access', resource: account.config.resource });
+    const authorized = await account.request(`${prepared.url.pathname}${prepared.url.search}`, undefined, person.cookie);
     const pending = new URL(authorized.headers.get('location')!, account.baseURL);
     expect(pending.pathname).toBe('/consent');
     const signed = pending.searchParams.toString();
@@ -148,9 +145,9 @@ test('G-580: native loopback registration completes signed consent and PKCE at i
     expect(consent.status).toBe(200);
     const destination = (await consent.json() as { url: string }).url;
     expect((await fetch(destination)).status).toBe(200);
-    expect(returned!.searchParams.get('state')).toBe(state);
+    expect(returned!.searchParams.get('state')).toBe(prepared.url.searchParams.get('state'));
     const exchange = { client_id: registered.client_id, grant_type: 'authorization_code',
-      code: returned!.searchParams.get('code')!, code_verifier: verifier, redirect_uri: redirect, resource: account.config.resource };
+      code: returned!.searchParams.get('code')!, code_verifier: prepared.verifier, redirect_uri: redirect, resource: account.config.resource };
     const wrongPort = await oauth.token({ ...exchange, redirect_uri: `http://127.0.0.1:${await freePort()}/callback` });
     expect(wrongPort.status).toBe(400);
     const token = await oauth.token(exchange);

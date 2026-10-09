@@ -1,5 +1,6 @@
 import { signupPolicyFixture } from '../signup-policy-fixture.ts';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { OAuthClientError, signIn } from '../../lib/oauth-client.ts';
 import { assertSeedRequest } from './request-schema.ts';
 import { recoverSeedPut, seedPutConflict } from './put-recovery.ts';
 import { nameClosedRefusal, openSeedPlatformGroup, seedCallExposure, type SeedPlatformGrant } from './platform-use.ts';
@@ -179,43 +180,22 @@ export class SeedApi {
 
   async token(cookie: string): Promise<string> {
     const { account, clientId, redirectUri, resource, scope } = this.endpoints;
-    const verifier = randomBytes(32).toString('base64url');
-    const authorize = new URL(`${account}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code', client_id: clientId,
-      redirect_uri: redirectUri, scope, state: randomUUID(), resource,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-      code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-    const requestAuthorization = async () => {
-      for (let attempt = 0; ; attempt++) {
-        const response = await this.accountFetch(authorize, { headers: { cookie }, redirect: 'manual' });
-        if (response.status < 500 || attempt >= 3) return response;
+    const service = this.endpoints.accountService ?? account;
+    const local = [account, service].every(origin => ['127.0.0.1', 'localhost'].includes(new URL(origin).hostname));
+    try {
+      return (await signIn({ account, service, clientId, redirectUri, scope, resource,
+        fetch: (input, init) => this.accountFetch(input, init) }, cookie, { attempts: 4, recover: async response => {
+        if (!local || response.status !== 403) return false;
+        const refused = await response.clone().json().catch(() => null) as { error?: string; code?: string } | null;
+        if (refused?.error !== 'policy_acceptance_required' && refused?.code !== 'policy_acceptance_required') return false;
         await response.body?.cancel();
-        await new Promise(resolve => setTimeout(resolve, 250 * (attempt + 1)));
-      }
-    };
-    let authorized = await requestAuthorization();
-    if (authorized.status === 403 && [account, this.endpoints.accountService ?? account].every(origin =>
-      ['127.0.0.1', 'localhost'].includes(new URL(origin).hostname))) {
-      const refused = await authorized.clone().json().catch(() => null) as { error?: string; code?: string } | null;
-      if (refused?.error === 'policy_acceptance_required' || refused?.code === 'policy_acceptance_required') {
-        await authorized.body?.cancel();
         await this.acceptLocalSeedPolicies(cookie);
-        authorized = await requestAuthorization();
-      }
+        return true;
+      } })).accessToken;
+    } catch (error) {
+      if (error instanceof OAuthClientError && error.operation === 'authorize') throw new SeedApiError('OAuth authorize', error.status, error.detail);
+      throw error;
     }
-    const location = authorized.headers.get('location');
-    if (authorized.status !== 302 || !location) {
-      throw new SeedApiError('OAuth authorize', authorized.status, (await authorized.text()).slice(0, 500));
-    }
-    const code = new URL(location, account).searchParams.get('code');
-    if (!code) throw new Error(`OAuth authorize: no code in ${new URL(location, account).pathname}`);
-    const exchanged = await this.accountFetch(`${account}/api/auth/oauth2/token`, { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: clientId,
-        code, redirect_uri: redirectUri, code_verifier: verifier, resource }) });
-    const result = await payload<{ access_token?: string }>(exchanged, 'OAuth token');
-    if (!result.access_token) throw new Error('OAuth token: missing access_token');
-    return result.access_token;
   }
 
   /** Open platform:use for this bearer before a closed Main call. A seed with no

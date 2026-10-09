@@ -1,6 +1,7 @@
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { expect, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
@@ -140,23 +141,10 @@ test('OPS11/OPS12/IAM11/SEARCH20: restored backups keep erased payloads and cred
         redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
         grant_types: ['authorization_code'], scope: 'openid access:manage',
         skip_consent: true, require_pkce: true } });
-    const codeVerifier = randomBytes(32).toString('base64url');
-    const authorize = new URL(`${baseURL}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code',
-      client_id: browserClient.client_id, redirect_uri: redirectUri, scope: 'openid access:manage',
-      state: randomUUID(), resource: apps.ACCOUNT_MAIN_RESOURCE!,
-      code_challenge: createHash('sha256').update(codeVerifier).digest('base64url'),
-      code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-    const authorized = await fetch(authorize, { headers: { cookie: operator.cookie }, redirect: 'manual' });
-    expect(authorized.status).toBe(302);
-    const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-    const exchange = await fetch(`${baseURL}/api/auth/oauth2/token`, { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: browserClient.client_id,
-        code, redirect_uri: redirectUri, code_verifier: codeVerifier,
-        resource: apps.ACCOUNT_MAIN_RESOURCE! }) });
-    expect(exchange.status).toBe(200);
-    const token = (await exchange.json() as { access_token: string }).access_token;
+    const token = (await signIn({
+      account: baseURL, clientId: browserClient.client_id, redirectUri,
+      scope: 'openid access:manage', resource: apps.ACCOUNT_MAIN_RESOURCE!,
+    }, operator.cookie)).accessToken;
     const verifier = new AccountAssertionVerifier({ issuer, audience: apps.ACCOUNT_MAIN_RESOURCE!,
       jwksUrl: `${baseURL}/api/auth/jwks`, introspectUrl: `${baseURL}/api/auth/oauth2/introspect`,
       clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! });

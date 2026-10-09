@@ -1,7 +1,7 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readEnv } from '../dev/config.ts';
+import { signIn } from '../lib/oauth-client.ts';
 import { SeedApi, type SeedEndpoints } from '../dev/seed/api.ts';
 import { people } from '../dev/seed/plan.ts';
 import {
@@ -76,62 +76,8 @@ async function datasetToken(endpoints: SeedEndpoints, cookie: string): Promise<s
       throw new Error(`Dataset operator policy acceptance: HTTP ${accepted.status}`);
     await accepted.body?.cancel();
   }
-  const verifier = randomBytes(32).toString('base64url');
-  const authorize = new URL(`${service}/api/auth/oauth2/authorize`);
-  for (const [key, value] of Object.entries({
-    response_type: 'code',
-    client_id: clientId,
-    redirect_uri: redirectUri,
-    scope,
-    resource,
-    state: randomUUID(),
-    code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-    code_challenge_method: 'S256',
-  }))
-    authorize.searchParams.set(key, value);
-  const authorized = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
-  if (authorized.status !== 302 || !authorized.headers.get('location')) {
-    throw new Error(`Public dataset OAuth authorization: HTTP ${authorized.status}`);
-  }
-  let location = new URL(authorized.headers.get('location')!, account);
-  const query =
-    location.searchParams.get('oauth_query') ??
-    (location.searchParams.has('sig') ? location.search.slice(1) : null);
-  if (query) {
-    const consent = await fetch(`${service}/api/account/consent`, {
-      method: 'POST',
-      redirect: 'manual',
-      headers: { cookie, origin: account, 'content-type': 'application/json' },
-      body: JSON.stringify({ oauth_query: query, accept: true, scope }),
-    });
-    if (consent.headers.get('location'))
-      location = new URL(consent.headers.get('location')!, account);
-    else {
-      if (!consent.ok) throw new Error(`Public dataset OAuth consent: HTTP ${consent.status}`);
-      const decision = (await consent.json()) as { url?: string; redirect_uri?: string };
-      if (!(decision.url ?? decision.redirect_uri))
-        throw new Error('Dataset OAuth consent returned no callback');
-      location = new URL((decision.url ?? decision.redirect_uri)!, account);
-    }
-  }
-  const code = location.searchParams.get('code');
-  if (!code) throw new Error('Public dataset OAuth authorization returned no code');
-  const exchanged = await fetch(`${service}/api/auth/oauth2/token`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      code,
-      code_verifier: verifier,
-      resource,
-    }),
-  });
-  if (!exchanged.ok) throw new Error(`Public dataset OAuth exchange: HTTP ${exchanged.status}`);
-  const result = (await exchanged.json()) as { access_token?: string };
-  if (!result.access_token) throw new Error('Dataset OAuth token response has no access token');
-  return result.access_token;
+  const client = { account, service, clientId, redirectUri, scope, resource };
+  return (await signIn(client, cookie)).accessToken;
 }
 
 /** Uses public sign-in, audited OAuth registration and PKCE only; no owner-store access. */

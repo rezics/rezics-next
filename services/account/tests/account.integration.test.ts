@@ -1,6 +1,7 @@
 import { test, expect } from 'bun:test';
 import { signupPolicyFixture } from './account-fixture.ts';
 import { createHash } from 'node:crypto';
+import { postToken, prepareAuthorization } from '../../../scripts/lib/oauth-client.ts';
 import { createServer } from 'node:net';
 import { getMigrations } from 'better-auth/db/migration';
 import { Pool } from 'pg';
@@ -138,15 +139,10 @@ test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over
     expect(memberSignUp.status).toBe(200);
     const memberCookie = memberSignUp.headers.get('set-cookie')!;
     const memberId = (await memberSignUp.json() as { user: { id: string } }).user.id;
-    const pkceVerifier = 'a'.repeat(64);
-    const challenge = createHash('sha256').update(pkceVerifier).digest('base64url');
-    const authorize = new URL(`${baseURL}/api/auth/oauth2/authorize`);
-    for (const [key, value] of Object.entries({ response_type: 'code', client_id: publicClient.client_id,
-      redirect_uri: callback, scope: 'openid work:create offline_access', state: 'opaque-state-1',
-      code_challenge: challenge, code_challenge_method: 'S256', resource: 'https://main.rezics.test' })) {
-      authorize.searchParams.set(key, value);
-    }
-    const invalidRedirect = new URL(authorize);
+    const prepared = prepareAuthorization({ account: baseURL, clientId: publicClient.client_id,
+      redirectUri: callback, scope: 'openid work:create offline_access', resource: 'https://main.rezics.test' },
+    { state: 'opaque-state-1' });
+    const invalidRedirect = new URL(prepared.url);
     invalidRedirect.searchParams.set('redirect_uri', 'https://unregistered.example.test/callback');
     const rejectedRedirect = await fetch(invalidRedirect, {
       headers: { cookie: memberCookie }, redirect: 'manual' });
@@ -155,19 +151,17 @@ test('IAM01/IAM02/IAM10 partial: Account schema, session and OIDC discovery over
     expect(errorLocation.origin + errorLocation.pathname).toBe(`${baseURL}/api/auth/error`);
     expect(errorLocation.searchParams.get('error')).toBe('invalid_redirect');
     expect(errorLocation.searchParams.has('code')).toBe(false);
-    const authorization = await fetch(authorize, { headers: { cookie: memberCookie }, redirect: 'manual' });
+    const authorization = await fetch(prepared.url, { headers: { cookie: memberCookie }, redirect: 'manual' });
     expect(authorization.status).toBe(302);
     const destination = new URL(authorization.headers.get('location')!);
     expect(destination.origin + destination.pathname).toBe(callback);
     expect(destination.searchParams.get('state')).toBe('opaque-state-1');
     const code = destination.searchParams.get('code');
     expect(code).toBeTruthy();
-    const exchanged = await fetch(`${baseURL}/api/auth/oauth2/token`, {
-      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code', client_id: publicClient.client_id,
-        code: code!, redirect_uri: callback, code_verifier: pkceVerifier,
-        resource: 'https://main.rezics.test' }),
-    });
+    const exchanged = await postToken({ account: baseURL, clientId: publicClient.client_id,
+      redirectUri: callback, scope: 'openid work:create offline_access', resource: 'https://main.rezics.test' },
+    { grant_type: 'authorization_code', client_id: publicClient.client_id, code: code!,
+      redirect_uri: callback, code_verifier: prepared.verifier, resource: 'https://main.rezics.test' });
     expect(exchanged.status).toBe(200);
     const userTokens = await exchanged.json() as { access_token: string;
       id_token: string; refresh_token?: string };

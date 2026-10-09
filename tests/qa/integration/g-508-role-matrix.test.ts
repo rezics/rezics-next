@@ -1,5 +1,6 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
@@ -75,21 +76,10 @@ test('G508: role matrix gates kinds, retyping, every import entry point and publ
     }
     async function tokenFor(user: { email: string; password: string }) {
       const session = await h.auth.api.signInEmail({ body: user, asResponse: true });
-      const verifier = randomBytes(32).toString('base64url');
-      const url = new URL(`${h.base}/api/auth/oauth2/authorize`);
-      for (const [key, value] of Object.entries({ response_type: 'code', client_id: h.client.client_id,
-        redirect_uri: h.redirectUri, scope: `openid ${scopes.join(' ')}`, state: randomUUID(),
-        resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, code_challenge_method: 'S256',
-        code_challenge: createHash('sha256').update(verifier).digest('base64url') })) url.searchParams.set(key, value);
-      const authorized = await fetch(url, { redirect: 'manual', headers: { cookie: session.headers.get('set-cookie')! } });
-      expect(authorized.status).toBe(302);
-      const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-      const exchange = await fetch(`${h.base}/api/auth/oauth2/token`, { method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: h.client.client_id,
-          code, redirect_uri: h.redirectUri, code_verifier: verifier, resource: Bun.env.ACCOUNT_MAIN_RESOURCE! }) });
-      expect(exchange.status).toBe(200);
-      return (await exchange.json() as { access_token: string }).access_token;
+      return (await signIn({
+        account: h.base, clientId: h.client.client_id, redirectUri: h.redirectUri,
+        scope: `openid ${scopes.join(' ')}`, resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
+      }, session.headers.get('set-cookie')!)).accessToken;
     }
     async function person(name: string, user = h.user) {
       await h.accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [user.id]);

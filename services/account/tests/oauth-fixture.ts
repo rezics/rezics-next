@@ -1,4 +1,4 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { authorize, postToken } from '../../../scripts/lib/oauth-client.ts';
 import type { accountFixture } from './account-fixture.ts';
 
 export async function oauthFixture(f: Awaited<ReturnType<typeof accountFixture>>) {
@@ -12,24 +12,15 @@ export async function oauthFixture(f: Awaited<ReturnType<typeof accountFixture>>
     body: { client_name: trusted ? 'Trusted app' : 'Notes', token_endpoint_auth_method: 'none',
       redirect_uris: ['https://notes.example.test/callback'], grant_types: ['authorization_code', 'refresh_token'],
       scope: 'openid work:read offline_access', require_pkce: true, skip_consent: trusted } });
-  const token = (values: Record<string, string>) => fetch(`${f.baseURL}/api/auth/oauth2/token`, {
-    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(values) });
+  const redirectUri = 'https://notes.example.test/callback';
+  const oauth = (clientId: string) => ({ account: f.baseURL, clientId, redirectUri,
+    scope: 'openid work:read offline_access', resource: f.config.resource });
+  const token = (values: Record<string, string>) => postToken(oauth(values.client_id ?? ''), values);
   const code = async (clientId: string, cookie: string) => {
-    const verifier = randomBytes(32).toString('base64url');
-    const query = new URLSearchParams({ response_type: 'code', client_id: clientId,
-      redirect_uri: 'https://notes.example.test/callback', scope: 'openid work:read offline_access',
-      state: randomUUID(), resource: f.config.resource,
-      code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' });
-    const authorized = await f.request(`/api/auth/oauth2/authorize?${query}`, undefined, cookie);
-    let destination = new URL(authorized.headers.get('location')!, f.baseURL);
-    if (destination.pathname === '/consent') {
-      const consent = await f.request('/api/account/consent', { oauth_query: destination.searchParams.toString(), accept: true }, cookie);
-      if (!consent.ok) throw new Error(`Consent: ${consent.status} ${await consent.text()}`);
-      destination = new URL((await consent.json() as { url: string }).url);
-    }
-    if (!destination.searchParams.get('code')) throw new Error(`Authorize: ${destination}`);
-    return { client_id: clientId, code: destination.searchParams.get('code')!,
-      code_verifier: verifier, redirect_uri: 'https://notes.example.test/callback', resource: f.config.resource };
+    const pending = await authorize(oauth(clientId), cookie);
+    if (!pending.ok) throw new Error(`Authorize: ${pending.response.status} ${await pending.response.text()}`);
+    return { client_id: clientId, code: pending.code, code_verifier: pending.verifier,
+      redirect_uri: redirectUri, resource: f.config.resource };
   };
   const issue = async (clientId: string, cookie: string) => {
     const response = await token({ ...await code(clientId, cookie), grant_type: 'authorization_code' });

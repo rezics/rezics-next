@@ -1,5 +1,6 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { mkdirSync, rmSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -71,29 +72,14 @@ test('IAM13/IAM14: institutional Agent grant survives operator and representativ
       grant_types: ['authorization_code'], scope: 'openid access:grant work:create',
       skip_consent: true, require_pkce: true } });
     async function tokenFor(user: { email: string; password: string }, scope: string) {
-      const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
+      const signedIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST',
         headers: { 'content-type': 'application/json', origin: base },
         body: JSON.stringify({ email: user.email, password: user.password }) });
-      expect(signIn.status).toBe(200);
-      const verifier = randomBytes(32).toString('base64url');
-      const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
-      for (const [key, value] of Object.entries({ response_type: 'code',
-        client_id: client.client_id, redirect_uri: redirectUri, scope,
-        state: randomUUID(), resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
-        code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-        code_challenge_method: 'S256',
-      })) authorize.searchParams.set(key, value);
-      const authorized = await fetch(authorize, {
-        headers: { cookie: signIn.headers.get('set-cookie')! }, redirect: 'manual' });
-      expect(authorized.status).toBe(302);
-      const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-      const exchange = await fetch(`${base}/api/auth/oauth2/token`, { method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: client.client_id,
-          code, redirect_uri: redirectUri, code_verifier: verifier,
-          resource: Bun.env.ACCOUNT_MAIN_RESOURCE }) });
-      expect(exchange.status).toBe(200);
-      return (await exchange.json() as { access_token: string }).access_token;
+      expect(signedIn.status).toBe(200);
+      return (await signIn({
+        account: base, clientId: client.client_id, redirectUri, scope,
+        resource: Bun.env.ACCOUNT_MAIN_RESOURCE!,
+      }, signedIn.headers.get('set-cookie')!)).accessToken;
     }
     const manager1 = await signUp('manager-one');
     const manager2 = await signUp('manager-two');

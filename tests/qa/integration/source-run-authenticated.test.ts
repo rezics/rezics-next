@@ -1,5 +1,6 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { signIn } from '../../../scripts/lib/oauth-client.ts';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { expect, test } from 'bun:test';
 import { Pool } from 'pg';
@@ -86,24 +87,11 @@ test('PKG20: real Account scopes and Access admission fence Go source runs', asy
     });
     expect(signedIn.status).toBe(200);
     const cookie = signedIn.headers.get('set-cookie')!;
-    const tokenFor = async (scope: string) => {
-      const verifier = randomBytes(32).toString('base64url');
-      const authorize = new URL(`${base}/api/auth/oauth2/authorize`);
-      for (const [key, value] of Object.entries({ response_type: 'code', client_id: client.client_id,
-        redirect_uri: redirectUri, scope, state: randomUUID(), resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
-        code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-        code_challenge_method: 'S256' })) authorize.searchParams.set(key, value);
-      const authorized = await fetch(authorize, { headers: { cookie }, redirect: 'manual' });
-      expect(authorized.status).toBe(302);
-      const code = new URL(authorized.headers.get('location')!).searchParams.get('code')!;
-      const exchanged = await fetch(`${base}/api/auth/oauth2/token`, {
-        method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ grant_type: 'authorization_code', client_id: client.client_id,
-          code, redirect_uri: redirectUri, code_verifier: verifier, resource: Bun.env.ACCOUNT_MAIN_RESOURCE }),
-      });
-      expect(exchanged.status).toBe(200);
-      return (await exchanged.json() as { access_token: string }).access_token;
-    };
+    const tokenFor = async (scope: string) =>
+      (await signIn({
+        account: base, clientId: client.client_id, redirectUri, scope,
+        resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
+      }, cookie)).accessToken;
     const acquireToken = await tokenFor('openid source:acquire');
     const readToken = await tokenFor('openid source:read');
     await migrateContent(contentPool);

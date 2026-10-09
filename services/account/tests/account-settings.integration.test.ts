@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { createHash, createPrivateKey, randomBytes, sign } from 'node:crypto';
+import { createHash, createPrivateKey, sign } from 'node:crypto';
+import { prepareAuthorization } from '../../../scripts/lib/oauth-client.ts';
 import { createOTP } from '@better-auth/utils/otp';
 import { symmetricDecrypt } from 'better-auth/crypto';
 import { chromium, type Page } from '@playwright/test';
@@ -128,11 +129,9 @@ test('G261 settings: /sign-in can name the App from the signed authorization req
   try {
     const oauth = await oauthFixture(f);
     const client = await oauth.createClient();
-    const query = new URLSearchParams({ response_type: 'code', client_id: client.client_id,
-      redirect_uri: 'https://notes.example.test/callback', scope: 'openid work:read', state: 'prelogin',
-      code_challenge: createHash('sha256').update(randomBytes(32)).digest('base64url'),
-      code_challenge_method: 'S256' });
-    const authorized = await f.request(`/api/auth/oauth2/authorize?${query}`);
+    const prepared = prepareAuthorization({ account: f.baseURL, clientId: client.client_id,
+      redirectUri: 'https://notes.example.test/callback', scope: 'openid work:read' }, { state: 'prelogin' });
+    const authorized = await f.request(`${prepared.url.pathname}${prepared.url.search}`);
     const signIn = new URL(authorized.headers.get('location')!, f.baseURL);
     expect(signIn.pathname).toBe('/sign-in');
     const named = await f.request('/api/auth/oauth2/public-client-prelogin',

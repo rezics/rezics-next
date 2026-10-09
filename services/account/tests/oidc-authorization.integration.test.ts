@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { signupPolicyFixture } from './account-fixture.ts';
+import { postToken, prepareAuthorization } from '../../../scripts/lib/oauth-client.ts';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createServer } from 'node:net';
 import { getMigrations } from 'better-auth/db/migration';
@@ -83,16 +84,11 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
         .get('/start', ({ request }) => {
           const id = randomUUID();
           const state = randomBytes(24).toString('base64url');
-          const verifier = randomBytes(32).toString('base64url');
-          pending.set(id, { state, verifier });
-          const url = new URL(`${base}/api/auth/oauth2/authorize`);
-          for (const [key, value] of Object.entries({ response_type: 'code',
-            client_id: registration.client_id, redirect_uri: callback,
-            scope: 'openid work:create agent:create offline_access', state, resource,
-            code_challenge: createHash('sha256').update(verifier).digest('base64url'),
-            code_challenge_method: 'S256' })) url.searchParams.set(key, value);
-          if (new URL(request.url).searchParams.has('consent')) url.searchParams.set('prompt', 'consent');
-          return new Response(null, { status: 302, headers: { location: url.toString(),
+          const prepared = prepareAuthorization({ account: base, clientId: registration.client_id,
+            redirectUri: callback, scope: 'openid work:create agent:create offline_access', resource },
+          { state, ...(new URL(request.url).searchParams.has('consent') ? { prompt: 'consent' } : {}) });
+          pending.set(id, { state, verifier: prepared.verifier });
+          return new Response(null, { status: 302, headers: { location: prepared.url.toString(),
             'set-cookie': `${cookieName}=${id}; HttpOnly; SameSite=Lax; Path=/` } });
         })
         .get(`/${name}/callback`, async ({ request }) => {
@@ -109,12 +105,10 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
             return Response.json({ error: 'invalid_callback' }, { status: 400 });
           }
           pending.delete(id!);
-          const exchange = await fetch(`${base}/api/auth/oauth2/token`, {
-            method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-            body: new URLSearchParams({ grant_type: 'authorization_code',
-              client_id: registration.client_id, code: codeValues[0], redirect_uri: callback,
-              code_verifier: transaction.verifier, resource }),
-          });
+          const exchange = await postToken({ account: base, clientId: registration.client_id,
+            redirectUri: callback, scope: 'openid work:create agent:create offline_access', resource },
+          { grant_type: 'authorization_code', client_id: registration.client_id, code: codeValues[0],
+            redirect_uri: callback, code_verifier: transaction.verifier, resource });
           if (exchange.status !== 200) return Response.json({ error: 'token_denied' }, { status: 502 });
           issued.set(id!, await exchange.json() as Tokens);
           return new Response(null, { status: 204 });
@@ -290,10 +284,9 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
       expect(code).toBeTruthy();
       return { ...transaction, location, code };
     };
-    const token = (params: Record<string, string>) => fetch(`${base}/api/auth/oauth2/token`, {
-      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'authorization_code', resource, ...params }),
-    });
+    const token = (params: Record<string, string>) => postToken({ account: base,
+      clientId: params.client_id ?? '', redirectUri: params.redirect_uri ?? '', scope: '', resource },
+    { grant_type: 'authorization_code', resource, ...params });
     type Pending = Awaited<ReturnType<typeof authorizeCode>>;
     const redeem = (pending: Pending, params: Record<string, string> = {}) => token({
       client_id: pending.rp.clientId, redirect_uri: pending.rp.callback, code: pending.code,
@@ -302,11 +295,9 @@ test('IAM02: invalid OIDC requests and swapped two-client exchanges leave pendin
       expect(response.status).toBe(status);
       expect((await response.json() as { error: string }).error).toBe(error);
     };
-    const refresh = (rp: RelyingParty, value: string) => fetch(`${base}/api/auth/oauth2/token`, {
-      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ grant_type: 'refresh_token', client_id: rp.clientId,
-        refresh_token: value, resource }),
-    });
+    const refresh = (rp: RelyingParty, value: string) => postToken({ account: base, clientId: rp.clientId,
+      redirectUri: rp.callback, scope: '', resource }, { grant_type: 'refresh_token', client_id: rp.clientId,
+      refresh_token: value, resource });
     const redeemed: [RelyingParty, Tokens][] = [[alpha, alphaFirst.tokens], [beta, betaFirst.tokens]];
 
     for (const [owner, other] of [[alpha, beta], [beta, alpha]] as const) {
