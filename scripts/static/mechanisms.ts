@@ -72,6 +72,7 @@ export const mechanisms = [
       'platform-administrator.ts#AccessPlatformAdministrators',
       'memberships.ts#AccessMemberships',
       'semantic-disclosure.ts#readReferenceDisclosure',
+      'composition.ts#composeAccess',
     ],
     ownedState: ['access.scope_gate', 'access.representation', 'access.permission_grant', 'access.policy'],
     protectedEffects: ['write scope gate', 'write representation', 'write permission grant', 'write access policy'],

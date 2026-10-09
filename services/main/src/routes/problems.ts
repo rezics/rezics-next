@@ -11,8 +11,12 @@ import { CommandRejected, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded 
   from '../infrastructure/fuseki.ts';
 import { AdmissionConflict, AdmissionControllerContinuity, AdmissionDenied, AdmissionUnavailable }
   from '../modules/access/admission.ts';
-import { GroupConflict, GroupDenied, GroupStale, GroupUnavailable }
-  from '../modules/access/groups.ts';
+import {
+  ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable,
+  GroupConflict, GroupDenied, GroupStale, GroupUnavailable,
+  PrivateRecipientConflict, PrivateRecipientDenied, PrivateRecipientStale, PrivateRecipientUnavailable,
+  RoleConflict, RoleDenied, RoleStale, RoleUnavailable,
+} from '../modules/access/composition.ts';
 import { GrantConflict, GrantDenied, GrantStale, GrantUnavailable }
   from '../modules/access/grants.ts';
 import { MembershipConflict, MembershipDenied, MembershipStale, MembershipUnavailable }
@@ -21,11 +25,8 @@ import { OrgRealmConflict, OrgRealmDenied, OrgRealmStale, OrgRealmUnavailable }
   from '../modules/access/org-realm-authority.ts';
 import { ManagedOrgConflict, ManagedOrgDenied, ManagedOrgStale, ManagedOrgUnavailable }
   from '../modules/access/managed-org-authority.ts';
-import { PrivateRecipientConflict, PrivateRecipientDenied, PrivateRecipientStale,
-  PrivateRecipientUnavailable } from '../modules/access/private-recipients.ts';
 import { RepresentationConflict, RepresentationDenied, RepresentationStale,
   RepresentationUnavailable } from '../modules/access/representations.ts';
-import { RoleConflict, RoleDenied, RoleStale, RoleUnavailable } from '../modules/access/roles.ts';
 import { SourceIntakeConflict, SourceIntakeInvalid, SourceIntakeUnavailable,
   SourceProviderRateLimited } from '../modules/source/intake.ts';
 import { OpenLibraryAcquisitionInvalid, OpenLibraryAcquisitionMissing,
@@ -53,8 +54,6 @@ import { AuthorCreditInvalid, AuthorCreditConflict, AuthorCreditUnavailable }
   from '../modules/work/author-credit.ts';
 import { AddressClaimConflict, AddressClaimUnavailable, InvalidAddressClaim }
   from '../modules/address/claim.ts';
-import { ActingContextDenied, ActingContextInvalid, ActingContextStale, ActingContextUnavailable }
-  from '../modules/access/contexts.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable }
   from '../modules/account/verify-assertion.ts';
 import { PendingAdmittedWork } from '../modules/work/create-admitted.ts';

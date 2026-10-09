@@ -85,21 +85,17 @@ import { PrivateSearchSettlement } from './modules/contribution/private-search-s
 import { ContentSearchReadAccess } from './modules/search-disclosure/content-read-lease.ts';
 import { ReleaseRatingInventoryStore } from './modules/rating/aggregate-inventory.ts';
 import { TargetRatingInventoryStore } from './modules/rating/target-inventory.ts';
-import { AccessActingContexts } from './modules/access/contexts.ts';
+import { composeAccess } from './modules/access/composition.ts';
 import { AccessSessionAgents } from './modules/access/session-agent.ts';
-import { AccessGroups } from './modules/access/groups.ts';
 import { AccessGrants } from './modules/access/grants.ts';
 import { AccessMemberships } from './modules/access/memberships.ts';
 import { AccessPrivateMemberships } from './modules/access/private-memberships.ts';
-import { AccessPrivateRecipients } from './modules/access/private-recipients.ts';
 import { AccessMembershipConsents } from './modules/access/membership-consents.ts';
 import { AccessOrgRealmParticipation } from './modules/access/org-realm-participation.ts';
 import { AccessOrganizationModeration } from './modules/access/organization-moderation.ts';
-import { AccessManagedOrganizations } from './modules/access/managed-organizations.ts';
 import { AccessRepresentations } from './modules/access/representations.ts';
 import { AccessRepresentedMembershipAuthority } from './modules/access/represented-membership-authority.ts';
 import { AccessEligibleOrgMemberSet } from './modules/access/eligible-org-member-set.ts';
-import { AccessRoles } from './modules/access/roles.ts';
 import { AccessPolicyOwner } from './modules/access/policy-owner.ts';
 import { MediaAccessBatchReader } from './modules/media/access-batch.ts';
 import { ExportStore } from './modules/export/store.ts';
@@ -427,7 +423,7 @@ export async function composeMain(input: ComposeMainInput) {
   const sourceFieldWithdrawals = new SourceFieldWithdrawalStore(contentPool, environment);
   const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrectionPublisher(
     new VerificationStore(contentPool), new NotificationStore(pool)));
-  const actingContextDiscovery = new AccessActingContexts(pool, environment);
+  const accessOwners = composeAccess(pool, environment);
   const openLibraryFetch = config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT
     ? openLibraryFixtureFetch(config.MAIN_OPEN_LIBRARY_FIXTURE_ROOT) : fetch;
   await configureNamePreferences(environment, pool);
@@ -531,23 +527,23 @@ export async function composeMain(input: ComposeMainInput) {
     exportVerification: new VerificationStore(contentPool),
     exportVerificationPrivate: new VerificationStore(contentPool),
     exportRights: rightsStore.exportScope,
-    actingContexts: new AccessActingContexts(pool),
-    actingContextDiscovery,
-    sessionAgents: new AccessSessionAgents(pool, actingContextDiscovery),
-    groups: new AccessGroups(pool),
+    actingContexts: accessOwners.actingContexts,
+    actingContextDiscovery: accessOwners.actingContextDiscovery,
+    sessionAgents: new AccessSessionAgents(pool, accessOwners.actingContextDiscovery),
+    groups: accessOwners.groups,
     grants: new AccessGrants(pool),
     platformAccess: new AccessExposure(pool),
     memberships: new AccessMemberships(pool),
     membershipConsents: new AccessMembershipConsents(pool),
     orgRealmParticipation: new AccessOrgRealmParticipation(pool),
     organizationModeration: new AccessOrganizationModeration(pool),
-    managedOrganizations: new AccessManagedOrganizations(pool),
+    managedOrganizations: accessOwners.managedOrganizations,
     privateMemberships: new AccessPrivateMemberships(pool),
-    privateRecipients: new AccessPrivateRecipients(pool),
+    privateRecipients: accessOwners.privateRecipients,
     representations: new AccessRepresentations(pool),
     representedMembershipAuthority: new AccessRepresentedMembershipAuthority(pool),
     eligibleOrgMemberSet: new AccessEligibleOrgMemberSet(pool),
-    roles: new AccessRoles(pool),
+    roles: accessOwners.roles,
     accessPolicy: new AccessPolicyOwner(pool),
     sourceIntake,
     sourceAuthorNames: new SourceAuthorNameStore(contentPool, sourceIntake, openLibraryFetch),

@@ -25,23 +25,11 @@
   },
   {
     "importer": "services/main/src/composition.ts",
-    "imported": "services/main/src/modules/access/contexts.ts"
-  },
-  {
-    "importer": "services/main/src/composition.ts",
     "imported": "services/main/src/modules/access/download-leases.ts"
   },
   {
     "importer": "services/main/src/composition.ts",
     "imported": "services/main/src/modules/access/eligible-org-member-set.ts"
-  },
-  {
-    "importer": "services/main/src/composition.ts",
-    "imported": "services/main/src/modules/access/groups.ts"
-  },
-  {
-    "importer": "services/main/src/composition.ts",
-    "imported": "services/main/src/modules/access/managed-organizations.ts"
   },
   {
     "importer": "services/main/src/composition.ts",
@@ -62,10 +50,6 @@
   {
     "importer": "services/main/src/composition.ts",
     "imported": "services/main/src/modules/access/private-memberships.ts"
-  },
-  {
-    "importer": "services/main/src/composition.ts",
-    "imported": "services/main/src/modules/access/private-recipients.ts"
   },
   {
     "importer": "services/main/src/composition.ts",
@@ -90,10 +74,6 @@
   {
     "importer": "services/main/src/composition.ts",
     "imported": "services/main/src/modules/access/represented-membership-authority.ts"
-  },
-  {
-    "importer": "services/main/src/composition.ts",
-    "imported": "services/main/src/modules/access/roles.ts"
   },
   {
     "importer": "services/main/src/composition.ts",
@@ -385,19 +365,7 @@
   },
   {
     "importer": "services/main/src/routes/dependencies.ts",
-    "imported": "services/main/src/modules/access/contexts.ts"
-  },
-  {
-    "importer": "services/main/src/routes/dependencies.ts",
     "imported": "services/main/src/modules/access/eligible-org-member-set.ts"
-  },
-  {
-    "importer": "services/main/src/routes/dependencies.ts",
-    "imported": "services/main/src/modules/access/groups.ts"
-  },
-  {
-    "importer": "services/main/src/routes/dependencies.ts",
-    "imported": "services/main/src/modules/access/managed-organizations.ts"
   },
   {
     "importer": "services/main/src/routes/dependencies.ts",
@@ -414,10 +382,6 @@
   {
     "importer": "services/main/src/routes/dependencies.ts",
     "imported": "services/main/src/modules/access/private-memberships.ts"
-  },
-  {
-    "importer": "services/main/src/routes/dependencies.ts",
-    "imported": "services/main/src/modules/access/private-recipients.ts"
   },
   {
     "importer": "services/main/src/routes/dependencies.ts",
@@ -438,10 +402,6 @@
   {
     "importer": "services/main/src/routes/dependencies.ts",
     "imported": "services/main/src/modules/access/represented-membership-authority.ts"
-  },
-  {
-    "importer": "services/main/src/routes/dependencies.ts",
-    "imported": "services/main/src/modules/access/roles.ts"
   },
   {
     "importer": "services/main/src/routes/dependencies.ts",
@@ -473,15 +433,7 @@
   },
   {
     "importer": "services/main/src/routes/problems.ts",
-    "imported": "services/main/src/modules/access/contexts.ts"
-  },
-  {
-    "importer": "services/main/src/routes/problems.ts",
     "imported": "services/main/src/modules/access/exposure-routes.ts"
-  },
-  {
-    "importer": "services/main/src/routes/problems.ts",
-    "imported": "services/main/src/modules/access/groups.ts"
   },
   {
     "importer": "services/main/src/routes/problems.ts",
@@ -490,14 +442,6 @@
   {
     "importer": "services/main/src/routes/problems.ts",
     "imported": "services/main/src/modules/access/org-realm-authority.ts"
-  },
-  {
-    "importer": "services/main/src/routes/problems.ts",
-    "imported": "services/main/src/modules/access/private-recipients.ts"
-  },
-  {
-    "importer": "services/main/src/routes/problems.ts",
-    "imported": "services/main/src/modules/access/roles.ts"
   },
   {
     "importer": "services/main/src/routes/proposals.ts",

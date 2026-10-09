@@ -12,19 +12,18 @@ import type { AgentVanityHandles } from '../modules/agent/vanity.ts';
 import type { ReleaseRatingInventoryStore } from '../modules/rating/aggregate-inventory.ts';
 import type { TargetRatingInventoryStore } from '../modules/rating/target-inventory.ts';
 import type { AccessOrganizationModeration } from '../modules/access/organization-moderation.ts';
-import type { AccessGroups } from '../modules/access/groups.ts';
+import type {
+  AccessActingContexts, AccessGroups, AccessManagedOrganizations, AccessPrivateRecipients, AccessRoles,
+} from '../modules/access/composition.ts';
 import type { AccessGrants } from '../modules/access/grants.ts';
 import type { AccessMemberships } from '../modules/access/memberships.ts';
 import type { AccessMembershipConsents } from '../modules/access/membership-consents.ts';
 import type { AccessOrgRealmParticipation } from '../modules/access/org-realm-participation.ts';
-import type { AccessManagedOrganizations } from '../modules/access/managed-organizations.ts';
 import type { AccessPrivateMemberships } from '../modules/access/private-memberships.ts';
-import type { AccessPrivateRecipients } from '../modules/access/private-recipients.ts';
 import type { AccessRepresentations } from '../modules/access/representations.ts';
 import type { AccessRepresentedMembershipAuthority }
   from '../modules/access/represented-membership-authority.ts';
 import type { AccessEligibleOrgMemberSet } from '../modules/access/eligible-org-member-set.ts';
-import type { AccessRoles } from '../modules/access/roles.ts';
 import type { SourceIntakeStore } from '../modules/source/intake.ts';
 import type { SourceAuthorNameStore } from '../modules/source/author-name.ts';
 import type { RecipeSourceConversionStore } from '../modules/recipe/source-conversion.ts';
@@ -53,7 +52,6 @@ import type { SourceFieldApplicationStore } from '../modules/source/field-applic
 import type { SourceNativeChildStore } from '../modules/source/child-native-support.ts';
 import type { ProviderIdentityStore } from '../modules/source/provider-identity.ts';
 import type { SourceScoreStore } from '../modules/source/score.ts';
-import type { AccessActingContexts } from '../modules/access/contexts.ts';
 import type { AccessSessionAgents } from '../modules/access/session-agent.ts';
 import type { AccountAssertionVerifier } from '../modules/account/verify-assertion.ts';
 import type { RelayHandoffPositions } from '../modules/outbox/relay-position.ts';
