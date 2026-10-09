@@ -1,7 +1,7 @@
 import { unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import type { ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
+import { evictVerifiedImmutableObject, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 
 const REVISION_GRAPH = 'urn:rezics:graph:revisions';
 const RV = 'https://rezics.com/vocab/';
@@ -65,6 +65,7 @@ export async function discardUnpublishedWorkObjects(input: {
         if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
       }
     }
+    evictVerifiedImmutableObject(digest);
   }
   return true;
 }

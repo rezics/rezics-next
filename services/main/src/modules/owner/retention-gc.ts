@@ -3,6 +3,7 @@ import { lstat, readdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Pool, PoolClient } from 'pg';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { evictVerifiedImmutableObject } from '../../infrastructure/immutable-objects.ts';
 import { DATASET } from '../work/activate.ts';
 import { captureObjectRecoveryCoverage, type ObjectRecoveryStore } from './object-coverage.ts';
 import { graphPlacementControl } from './placement.ts';
@@ -112,6 +113,7 @@ export async function reconcileRetentionGc(relay: Pool, fuseki: FusekiClient,
         [row.id, nextOrdinal++, digest]);
       }
       await unlink(path);
+      evictVerifiedImmutableObject(digest);
     }
     const after = await captureObjectRecoveryCoverage(fuseki, store);
     if (JSON.stringify(after) !== JSON.stringify(coverage)

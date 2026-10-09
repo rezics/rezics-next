@@ -1,7 +1,8 @@
 import { lstat, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import { ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
+import { evictVerifiedImmutableObject, ObjectUnavailable, withoutVerifiedImmutableObjectCache }
+  from '../../infrastructure/immutable-objects.ts';
 import { captureObjectRecoveryCoverage, ObjectRecoveryConflict, type ObjectRecoveryStore } from '../owner/object-coverage.ts';
 
 const OBJECT = /^sha256:([0-9a-f]{64})$/;
@@ -27,7 +28,8 @@ async function localPresent(store: ObjectRecoveryStore, key: string): Promise<bo
 
 async function remotePresent(store: ObjectRecoveryStore, key: string): Promise<boolean> {
   if (!store.workObjects) return false;
-  try { await store.workObjects.get(key); return true; }
+  // A cached body is not proof the store still has the object.
+  try { await withoutVerifiedImmutableObjectCache(() => store.workObjects!.get(key)); return true; }
   catch (error) {
     if (error instanceof ObjectUnavailable) return false;
     throw error;
@@ -68,6 +70,7 @@ export async function replayObjectErasure(store: ObjectRecoveryStore, ref: strin
       await store.workObjects.discard(key);
     }
     if (await localPresent(store, key)) await unlink(join(store.directory, key));
+    evictVerifiedImmutableObject(key);
   } catch { return 'conflict'; }
   return await objectErasureAbsent(store, ref) ? 'replayed' : 'conflict';
 }
