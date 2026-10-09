@@ -560,6 +560,19 @@ test('CLP05: historical wiki rendering and export survive renames, merges and ri
     await L.f.fuseki.update(
       `INSERT DATA { GRAPH <${GRAPHS.current}> { <${jane}> <${RV}mergedInto> <${elizabeth.component}> } }`,
     );
+    // The raw merge drops this shared graph's membership proof. The triple is not a list change,
+    // so preparation puts the proof back before later commands read a populated list.
+    const deadline = Date.now() + 60_000;
+    let restored = false;
+    for (let turn = 0; turn < 8 && !restored; turn++) {
+      const prepared = await L.f.fuseki.membershipPrepare({
+        dataEpoch: L.f.env.lineage.dataEpoch, routingEpoch: L.f.env.lineage.routingEpoch,
+        requestId: randomUUID(), deadline,
+      });
+      if (prepared.status !== 'committed') throw new Error(`membership proof was not restored: ${prepared.status}`);
+      restored = prepared.complete;
+    }
+    if (!restored) throw new Error('membership proof was not restored');
     const { resolutions: _merged, ...mergedContent } = await history(L, world, holder, pinnedQuery);
     const { resolutions: _original, ...pinnedContent } = pinned;
     expect(mergedContent).toEqual(pinnedContent);
