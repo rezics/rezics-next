@@ -5,7 +5,7 @@ import { Value } from 'typebox/value';
 import { startMediaStack, type MediaStack } from './media-support.ts';
 import { createStatementProperty, type StatementProperty } from './statement-property.ts';
 import { seedCanonicity, seedVariantKindConcepts, seedRelationLexicon, type SeedLexiconClient } from '../../../scripts/dev/seed/relation-lexicon.ts';
-import { CANONICITY_PROPERTY, relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
+import { relationLexiconSeed } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { entityPage, subjectStatementPage, resourceRelationPage } from '../../../services/main/src/modules/entity-page/contract.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { ReadingPositionStore } from '../../../services/main/src/modules/reading-position/store.ts';
@@ -83,7 +83,7 @@ const ids = (page: StatementPage) => page.groups.flatMap(group => group.items)
 async function statement(applicability: string[], on = subject, key = randomUUID(), value?: object) {
   return json<{ statement: string; revision: string; meaningKey: string }>(await owner.send('POST', '/v1/statements',
     { profile: 'statement-v1', speaker: { kind: 'personal' }, subject: on,
-      predicate: value ? CANONICITY_PROPERTY : fact.predicate,
+      predicate: value ? vocabulary.definition.component : fact.predicate,
       relationDefinition: value ? vocabulary.definition.revision : fact.relationDefinition,
       value: value ?? { kind: 'literal', lexical: key, datatype: 'http://www.w3.org/2001/XMLSchema#string', language: null },
       applicability, interpretation: { kind: 'selected' }, evidence: [], actingSubject: owner.actor }, key), 201);
@@ -389,7 +389,7 @@ test('canonicity is a seeded Concept judgment on the subject, scoped to continui
   await accept(record);
   const page = await readStatements([canon]);
   expect(page.groups.flatMap(group => group.items).find(item => item.kind === 'statement' && item.statement === record.statement))
-    .toMatchObject({ speaker: owner.actor, predicate: CANONICITY_PROPERTY, value: { kind: 'resource', iri: vocabulary.concepts.canon },
+    .toMatchObject({ speaker: owner.actor, predicate: vocabulary.definition.component, value: { kind: 'resource', iri: vocabulary.concepts.canon },
       qualifiers: { applicability: [canon] } });
   expect(ids(await readStatements([legends]))).not.toContain(record.statement);
   for (const concept of Object.values(vocabulary.concepts)) expect((await owner.read(`/v1/resources/${short(concept)}`)).status).toBe(200);
