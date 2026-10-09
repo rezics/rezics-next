@@ -1,13 +1,14 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync,
-  realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+  realpathSync, renameSync, writeFileSync } from 'node:fs';
 import * as filesystem from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
 import { newRunId, type Tier } from '../qa/core.ts';
+import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { defaultStopGraceMs, terminateProcessGroup } from '../qa/process/terminate.ts';
 import { physicalPath, POSTGRES_SOCKET_LIMIT, postgresSocketByteLength } from './postgres-socket.ts';
 
@@ -426,15 +427,8 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
   if (!validId(runId)) throw new Error('Invalid regression run ID');
   const directory = diskDirectory(join(stateDir, 'regress', runId), 'report directory');
   const lock = join(directory, 'lock');
-  if (existsSync(lock)) {
-    const pid = existsSync(join(lock, 'pid')) ? Number(readFileSync(join(lock, 'pid'), 'utf8')) : 0;
-    let alive = !pid && Date.now() - statSync(lock).mtimeMs < 10_000;
-    try { if (pid > 0) { process.kill(pid, 0); alive = true; } } catch { /* interrupted owner */ }
-    if (alive) throw new Error(`Regression ${runId} is already running`);
-    rmSync(lock, { recursive: true, force: true });
-  }
-  mkdirSync(lock);
-  writeFileSync(join(lock, 'pid'), String(process.pid));
+  const acquired = tryAcquireDirectoryLease(lock);
+  if (acquired === 'held') throw new Error(`Regression ${runId} is already running`);
   let interrupted = false;
   const stop = () => { interrupted = true; };
   process.on('SIGINT', stop);
@@ -749,7 +743,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
   } finally {
     process.off('SIGINT', stop);
     process.off('SIGTERM', stop);
-    rmSync(lock, { recursive: true, force: true });
+    acquired.release();
   }
 }
 

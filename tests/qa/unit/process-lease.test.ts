@@ -67,7 +67,7 @@ test('a reused pid does not release the process that now owns that pid', () => {
     expect(acquired).not.toBe('held');
     if (acquired === 'held') return;
     releaseDirectoryLease(directory, 'previous-owner');
-    expect(readFileSync(join(directory, 'lease'), 'utf8')).toBe(acquired.token);
+    expect(JSON.parse(readFileSync(join(directory, 'identity.json'), 'utf8')).token).toBe(acquired.token);
     expect(processIdentity(process.pid)?.start).toBe(self.start);
     acquired.release();
     expect(directoryLeaseState(directory)).toBe('free');
@@ -111,7 +111,7 @@ time.sleep(30)
     expect(acquired).not.toBe('held');
     if (acquired === 'held') return;
     releaseDirectoryLease(directory, 'zombie-owner');
-    expect(readFileSync(join(directory, 'lease'), 'utf8')).toBe(acquired.token);
+    expect(JSON.parse(readFileSync(join(directory, 'identity.json'), 'utf8')).token).toBe(acquired.token);
     acquired.release();
   } finally {
     parent.kill('SIGKILL');
@@ -134,7 +134,7 @@ test('an owner that dies during initialization cannot release a later acquisitio
     if (acquired === 'held') return;
     releaseDirectoryLease(directory, 'never-published');
     expect(existsSync(directory)).toBe(true);
-    expect(readFileSync(join(directory, 'lease'), 'utf8')).toBe(acquired.token);
+    expect(JSON.parse(readFileSync(join(directory, 'identity.json'), 'utf8')).token).toBe(acquired.token);
     acquired.release();
     expect(existsSync(directory)).toBe(false);
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -207,7 +207,7 @@ test('an old cleanup after a new acquisition leaves the new owner in place', () 
     if (second === 'held') return;
     first.release();
     expect(existsSync(directory)).toBe(true);
-    expect(readFileSync(join(directory, 'lease'), 'utf8')).toBe(second.token);
+    expect(JSON.parse(readFileSync(join(directory, 'identity.json'), 'utf8')).token).toBe(second.token);
     second.release();
     expect(existsSync(directory)).toBe(false);
   } finally { rmSync(root, { recursive: true, force: true }); }

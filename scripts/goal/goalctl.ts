@@ -10,8 +10,9 @@ import { pathToFileURL } from 'node:url';
 import { ownerGateFiles, testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { backendGraph, formatPlan, needsGraph, planAffected } from '../qa/affected.ts';
 import { newReapScope, reapScopeChain, reapSettleMs, removeScopedContainers, sweepOrphanContainers } from '../qa/container-reaper.ts';
-import { processAlive, processIdentity as readProcessIdentity } from '../qa/process/identity.ts';
-import { adoptLeaseOwner, directoryLeaseHeld, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from '../qa/process/lease.ts';
+import { processAlive } from '../qa/process/identity.ts';
+import { directoryLeaseHeld, readDirectoryLease, transferDirectoryLease, tryAcquireDirectoryLease,
+  updateDirectoryLeaseNote, type AcquiredDirectoryLease, type DirectoryLeaseRecord } from '../qa/process/lease.ts';
 import { terminateProcessGroup } from '../qa/process/terminate.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { parseAffectedArgs, selectTestCommand } from '../qa/test.ts';
@@ -5099,15 +5100,12 @@ function commandTickets(queueDir: string, alive: (pid: number) => boolean): { pa
 
 /** Who holds the heavy QA lock, or undefined when it is free (a dead holder's lock is free). */
 function commandHolder(lockDir = heavyLock, alive: (pid: number) => boolean = pidAlive): string | undefined {
-  try {
-    const info = JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')) as
-      { pid: number; goal?: string; command: string; startedAt: string; commandStartedAt?: string | null;
-        start?: string; boot?: string };
-    const commandState = typeof info.commandStartedAt === 'string' ? `command started ${info.commandStartedAt}`
-      : info.commandStartedAt === null ? 'command not started' : 'command start unknown';
-    const live = info.start && info.boot ? processAlive({ pid: info.pid, start: info.start, boot: info.boot }) : alive(info.pid);
-    return live ? `Goal ${info.goal ?? '?'} since ${info.startedAt} (pid ${info.pid}): ${info.command} (${commandState})` : undefined;
-  } catch { return undefined; }
+  const info = readDirectoryLease(lockDir);
+  if (!info?.command || info.invalid) return undefined;
+  const commandState = typeof info.commandStartedAt === 'string' ? `command started ${info.commandStartedAt}`
+    : info.commandStartedAt === null ? 'command not started' : 'command start unknown';
+  const live = info.start && info.boot ? processAlive({ pid: info.pid, start: info.start, boot: info.boot }) : alive(info.pid);
+  return live ? `Goal ${info.goal ?? '?'} since ${info.startedAt} (pid ${info.pid}): ${info.command} (${commandState})` : undefined;
 }
 
 /** Holder text as before, plus how many live tickets are waiting. Reading the queue drops tickets of dead pids. */
@@ -5263,8 +5261,8 @@ async function acquireQueuedCommand(command: readonly string[], options: HeavyWa
           // A refresh that has already taken the lock must not absorb changes arriving after its snapshot.
           let started = false;
           try {
-            const holder = JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')) as CommandTicket;
-            started = holder.command === commandText && holder.pid === prior.ticket.pid && alive(holder.pid);
+            const holder = readDirectoryLease(lockDir);
+            started = holder?.command === commandText && holder.pid === prior.ticket.pid && alive(holder.pid);
           } catch { /* a queued refresh has no holder record */ }
           if (!started) return undefined;
         }
@@ -5273,23 +5271,19 @@ async function acquireQueuedCommand(command: readonly string[], options: HeavyWa
         || commandTickets(commandQueueDir(lifecycleLockDir), alive).length > 0);
       if (ahead === 0 && !lifecyclePending && !dirLockHeld(lockDir, alive)) {
         try {
-          // A negative timeout fails at once when the directory is held, so this loop's poll is the only wait.
-          // The stale-owner reap inside acquireDir still runs before that failure.
-          await acquireDir(lockDir, -1, kind);
-          const leaseId = randomUUID();
-          const owner = readProcessIdentity(pid);
-          writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
-            pid, goal, command: commandText, startedAt: new Date().toISOString(), commandStartedAt: null, leaseId,
-            ...(owner ? { start: owner.start, boot: owner.boot } : {}),
-          }));
-          atomicJson(join(lockDir, 'pid'), pid);
-          if (owner) adoptLeaseOwner(lockDir, pid);
+          // Fail at once when the directory is held, so this loop's poll is the only wait.
+          // Stale-owner reclaim still runs before that failure.
+          const acquired = tryAcquireDirectoryLease(lockDir, {
+            pid, alive: candidate => alive(candidate),
+            note: { goal, command: commandText, startedAt: new Date().toISOString(), commandStartedAt: null },
+          });
+          if (acquired === 'held') throw new Error(`The ${kind} lock is held`);
           if (commandText !== 'task dev:refresh') {
             const turns = commandGoalTurns(queueDir).filter(turn => turn !== (goal ?? '?'));
             turns.push(goal ?? '?');
             writeFileSync(join(queueDir, 'turns'), JSON.stringify(turns));
           }
-          return () => releaseCommandLease(lockDir, leaseId, pid);
+          return () => acquired.release();
         } catch { /* the lock was taken between the check and the create */ }
       }
       if (now() > deadline) throw new Error(`The ${kind} lock stayed held for six hours`);
@@ -5360,41 +5354,27 @@ async function runQaCommand(command: readonly string[], env: NodeJS.ProcessEnv, 
 }
 
 export function markHeavyCommandStarted(lockDirectory: string): void {
-  const path = join(lockDirectory, 'info.json');
-  try {
-    const info = JSON.parse(readFileSync(path, 'utf8')) as { pid: number; [key: string]: unknown };
-    if (info.pid === process.pid) atomicJson(path, { ...info, commandStartedAt: new Date().toISOString() });
-  } catch { /* status may read the lock while it is being acquired */ }
+  updateDirectoryLeaseNote(lockDirectory, process.pid, { commandStartedAt: new Date().toISOString() });
 }
 
 export function markSharedLifecycleCommandStarted(lockDirectory = sharedLifecycleLock): void {
   markHeavyCommandStarted(lockDirectory);
 }
 
-interface CommandLease { pid: number; leaseId: string; start?: string; boot?: string; delegatedFromPid?: number; [key: string]: unknown }
-
-function commandOwnerAlive(info: CommandLease): boolean {
+function commandOwnerAlive(info: DirectoryLeaseRecord): boolean {
   return info.start && info.boot ? processAlive({ pid: info.pid, start: info.start, boot: info.boot }) : pidAlive(info.pid);
 }
 
-function commandLease(lockDirectory: string): CommandLease | undefined {
-  try {
-    const info = JSON.parse(readFileSync(join(lockDirectory, 'info.json'), 'utf8')) as CommandLease;
-    return Number.isSafeInteger(info.pid) && info.pid > 0 && typeof info.leaseId === 'string'
-      && info.pid === Number(readFileSync(join(lockDirectory, 'pid'), 'utf8')) ? info : undefined;
-  } catch { return undefined; }
-}
-
-function releaseCommandLease(lockDirectory: string, leaseId: string, pid: number): void {
-  const info = commandLease(lockDirectory);
-  if (info?.leaseId === leaseId && info.pid === pid) rmSync(lockDirectory, { recursive: true, force: true });
+function commandLease(lockDirectory: string): DirectoryLeaseRecord | undefined {
+  const info = readDirectoryLease(lockDirectory);
+  return info?.token && !info.invalid ? info : undefined;
 }
 
 export function sharedLifecycleEnvironment(lockDirectory = sharedLifecycleLock): NodeJS.ProcessEnv {
   const info = commandLease(lockDirectory);
-  if (!info || !commandOwnerAlive(info)) throw new Error('Shared lifecycle lease is absent or stale');
+  if (!info?.token || !commandOwnerAlive(info)) throw new Error('Shared lifecycle lease is absent or stale');
   return { GOAL_SHARED_LIFECYCLE_LOCK: resolve(lockDirectory), GOAL_SHARED_LIFECYCLE_PID: String(info.pid),
-    GOAL_SHARED_LIFECYCLE_LEASE: info.leaseId };
+    GOAL_SHARED_LIFECYCLE_LEASE: info.token };
 }
 
 /** Nested maintenance uses the caller's validated lease, so a repair may invoke refresh without queuing behind itself. */
@@ -5402,42 +5382,22 @@ export function inheritedSharedLifecycleOwnership(lockDirectory = sharedLifecycl
   { lockDirectory: string; pid: number; leaseId: string } | undefined {
   if (!env.GOAL_SHARED_LIFECYCLE_LOCK) return undefined;
   const info = commandLease(lockDirectory);
-  if (resolve(env.GOAL_SHARED_LIFECYCLE_LOCK) !== resolve(lockDirectory) || !info || !commandOwnerAlive(info)
+  if (resolve(env.GOAL_SHARED_LIFECYCLE_LOCK) !== resolve(lockDirectory) || !info?.token || !commandOwnerAlive(info)
     || ![String(info.pid), String(info.delegatedFromPid)].includes(env.GOAL_SHARED_LIFECYCLE_PID ?? '')
-    || info.leaseId !== env.GOAL_SHARED_LIFECYCLE_LEASE) {
+    || info.token !== env.GOAL_SHARED_LIFECYCLE_LEASE) {
     throw new Error('Inherited shared lifecycle lease is absent, stale or belongs to another lock');
   }
-  return { lockDirectory, pid: info.pid, leaseId: info.leaseId };
+  return { lockDirectory, pid: info.pid, leaseId: info.token };
 }
 
 /** The staged child owns the lease while running. Restore a live caller for the rest of its repair command;
- * if that caller was killed, the child releases it. Every cleanup checks both the lease and the owner. */
+ * if that caller was killed, the child releases it. */
 export function transferSharedLifecycleOwnership(lockDirectory: string, pid: number,
   expectedOwnerPid = process.ppid): () => void {
   const info = commandLease(lockDirectory);
-  if (!Number.isSafeInteger(pid) || pid < 1 || !info || info.pid !== expectedOwnerPid) {
+  if (!Number.isSafeInteger(pid) || pid < 1 || !info?.token)
     throw new Error('Shared lifecycle ownership changed before transfer');
-  }
-  const adopted = adoptLeaseOwner(lockDirectory, pid);
-  const adoptedIdentity = adopted ? readProcessIdentity(pid) : undefined;
-  atomicJson(join(lockDirectory, 'info.json'), { ...info, pid, delegatedFromPid: expectedOwnerPid,
-    transferredAt: new Date().toISOString(),
-    ...(adoptedIdentity ? { start: adoptedIdentity.start, boot: adoptedIdentity.boot } : {}) });
-  atomicJson(join(lockDirectory, 'pid'), pid);
-  return () => {
-    const current = commandLease(lockDirectory);
-    if (current?.leaseId !== info.leaseId || current.pid !== pid) return;
-    const parentAlive = info.start && info.boot
-      ? processAlive({ pid: expectedOwnerPid, start: info.start, boot: info.boot })
-      : pidAlive(expectedOwnerPid);
-    if (expectedOwnerPid !== pid && parentAlive) {
-      const restored = readProcessIdentity(expectedOwnerPid);
-      atomicJson(join(lockDirectory, 'info.json'), { ...current, pid: expectedOwnerPid, delegatedFromPid: info.delegatedFromPid,
-        ...(restored ? { start: restored.start, boot: restored.boot } : {}) });
-      atomicJson(join(lockDirectory, 'pid'), expectedOwnerPid);
-      if (restored) adoptLeaseOwner(lockDirectory, expectedOwnerPid);
-    } else releaseCommandLease(lockDirectory, info.leaseId, pid);
-  };
+  return transferDirectoryLease(lockDirectory, info.token, pid, expectedOwnerPid, { alive: candidate => pidAlive(candidate) });
 }
 
 /** Repairs mutate the shared stack, not a QA stack: no QA lease, stack reap or QA admission environment. */

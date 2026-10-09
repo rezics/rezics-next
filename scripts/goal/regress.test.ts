@@ -536,8 +536,9 @@ describe('pinned main-wide regression', () => {
           if (polls === 1) {
             rmSync(join(queue, 'gate.json'));
             mkdirSync(lock);
-            writeFileSync(join(lock, 'info.json'), JSON.stringify({ pid: process.pid, goal: 'owner',
-              command: 'merge gate', startedAt: new Date().toISOString() }));
+            writeFileSync(join(lock, 'identity.json'), JSON.stringify({ pid: process.pid, token: 'heavy-token',
+              goal: 'owner', command: 'merge gate', startedAt: new Date().toISOString() }));
+            writeFileSync(join(lock, 'pid'), String(process.pid));
             r.commit({ [r.unit]: 'fail\n' });
           } else rmSync(lock, { recursive: true });
         } });

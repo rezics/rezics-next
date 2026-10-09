@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { directoryLeaseState, readDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { repository } from './store.ts';
@@ -27,14 +27,7 @@ export function acquireDatasetImportLock(context: string): () => void {
     const owner = readDirectoryLease(directory);
     throw new Error(`Dataset import context already has an active writer (PID ${owner?.pid})`);
   }
-  const lease = tryAcquireDirectoryLease(directory, {
-    publish: (dir, record) => {
-      writeFileSync(join(dir, 'owner.json'), JSON.stringify({
-        pid: record.pid, start: record.start, boot: record.boot, token: record.token,
-        context, acquiredAt: new Date().toISOString(),
-      }), { mode: 0o600 });
-    },
-  });
+  const lease = tryAcquireDirectoryLease(directory);
   if (lease === 'held') {
     const again = directoryLeaseState(directory);
     const owner = readDirectoryLease(directory);

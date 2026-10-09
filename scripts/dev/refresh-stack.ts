@@ -33,7 +33,7 @@ import { AppHostResourceLost, appHostRestartInstruction, type RefreshInputs, ass
   refreshResources, type RefreshResource } from './refresh.ts';
 import { runHostAdmission } from '../qa/host-admission.ts';
 import { processAlive } from '../qa/process/identity.ts';
-import { directoryLeaseHeld } from '../qa/process/lease.ts';
+import { directoryLeaseHeld, readDirectoryLease } from '../qa/process/lease.ts';
 import { terminateProcessGroup } from '../qa/process/terminate.ts';
 import { inspectOfficialZoneApprovals } from './seed/official-zones-step.ts';
 import { officialSourceDigest } from './seed/official-theme-step.ts';
@@ -636,7 +636,7 @@ export async function refreshStagedStack(root: string, revision: string, lock: s
   const dir = stackDirectory(root, { profile: 'dev' });
   const candidate = join(dir, 'backend-revisions', revision);
   if (!/^[a-f0-9]{40,64}$/.test(revision) || realpathSync(process.cwd()) !== realpathSync(candidate)
-    || readFileSync(join(lock, 'pid'), 'utf8').trim() !== String(parentPid)
+    || readDirectoryLease(lock)?.pid !== parentPid
     || !refreshProcessAlive(parentPid)
     || command(candidate, 'git', ['rev-parse', 'HEAD']) !== revision
     || readFileSync(join(candidate, '.temp/backend-ready'), 'utf8') !== revision)

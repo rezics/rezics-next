@@ -1,9 +1,10 @@
 import { spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
+import { adoptLeaseOwner, readDirectoryLease, releaseDirectoryLease, tryAcquireDirectoryLease } from './process/lease.ts';
 import { discoverJourneyPreparations, selectJourneyPreparations } from './e2e-preparation.ts';
 
 const claimRoot = join(tmpdir(), 'rezics-e2e-web-ports');
@@ -56,25 +57,6 @@ function claimDirectory(port: number): string {
   return join(claimRoot, String(port));
 }
 
-function pidAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true; }
-  catch (error) { return (error as NodeJS.ErrnoException).code === 'EPERM'; }
-}
-
-function claimPid(port: number): number | undefined {
-  const path = join(claimDirectory(port), 'pid');
-  if (!existsSync(path)) return undefined;
-  const pid = Number(readFileSync(path, 'utf8'));
-  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
-}
-
-function writeClaimPid(port: number, pid: number): void {
-  const path = join(claimDirectory(port), 'pid');
-  const next = `${path}.next`;
-  writeFileSync(next, String(pid), { mode: 0o600 });
-  renameSync(next, path);
-}
-
 function holderCommand(pid: number): boolean {
   try { return readFileSync(`/proc/${pid}/cmdline`).includes('REZICS_WEB_PORT_FILE'); }
   catch { return false; }
@@ -87,18 +69,8 @@ function stopHolder(pid: number): void {
 }
 
 function tryClaim(port: number, pid: number): boolean {
-  const dir = claimDirectory(port);
-  try { mkdirSync(dir, { mode: 0o700 }); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-    const owner = claimPid(port);
-    if (owner !== undefined && pidAlive(owner)) return false;
-    rmSync(dir, { recursive: true, force: true });
-    try { mkdirSync(dir, { mode: 0o700 }); }
-    catch { return false; }
-  }
-  writeClaimPid(port, pid);
-  return claimPid(port) === pid;
+  const lease = tryAcquireDirectoryLease(claimDirectory(port), { pid, mode: 0o700 });
+  return lease !== 'held' && lease.record.pid === pid;
 }
 
 const holderSource = [
@@ -180,10 +152,8 @@ export async function allocateWebPort(): Promise<WebPortReservation> {
         released = true;
         started.child.stdin?.end();
         stopHolder(started.pid);
-        const owner = claimPid(started.port);
-        if (owner === undefined || owner === started.pid || !pidAlive(owner)) {
-          rmSync(claimDirectory(started.port), { recursive: true, force: true });
-        }
+        const record = readDirectoryLease(claimDirectory(started.port));
+        if (record?.token) releaseDirectoryLease(claimDirectory(started.port), record.token, started.pid);
         rmSync(started.directory, { recursive: true, force: true });
       },
     };
@@ -193,8 +163,10 @@ export async function allocateWebPort(): Promise<WebPortReservation> {
 
 /** The e2e process owns the claim while the holder keeps the socket through the web build. */
 export function adoptWebPort(port: number, holderPid: number): void {
-  if (claimPid(port) !== holderPid) throw new Error(`Web port ${port} is not reserved by holder ${holderPid}`);
-  writeClaimPid(port, process.pid);
+  const directory = claimDirectory(port);
+  const record = readDirectoryLease(directory);
+  if (record?.pid !== holderPid || !record.token || !adoptLeaseOwner(directory, process.pid))
+    throw new Error(`Web port ${port} is not reserved by holder ${holderPid}`);
 }
 
 function bindAndClose(port: number): Promise<void> {
@@ -222,7 +194,9 @@ export async function releaseHeldWebPort(holderPid: number, port: number): Promi
 }
 
 function releaseOwnedClaim(port: number): void {
-  if (claimPid(port) === process.pid) rmSync(claimDirectory(port), { recursive: true, force: true });
+  const directory = claimDirectory(port);
+  const record = readDirectoryLease(directory);
+  if (record?.pid === process.pid && record.token) releaseDirectoryLease(directory, record.token, process.pid);
 }
 
 function requiredWebOrigin(): { origin: string; port: number; holderPid: number } {

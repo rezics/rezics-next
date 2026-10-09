@@ -201,13 +201,7 @@ export function expectedFusekiModuleVersion(compose: string): string {
 export function acquireFullLock(root: string, runId: string): () => void {
   const path = join(root, '.temp', 'qa-full.lock');
   mkdirSync(join(root, '.temp'), { recursive: true });
-  const lease = tryAcquireDirectoryLease(path, {
-    publish: (directory, record) => {
-      writeFileSync(join(directory, 'owner.json'), JSON.stringify({
-        pid: record.pid, runId, start: record.start, boot: record.boot, token: record.token,
-      }));
-    },
-  });
+  const lease = tryAcquireDirectoryLease(path, { note: { runId } });
   if (lease === 'held') throw new Error(`Another full QA run holds ${path}`);
   return () => lease.release();
 }

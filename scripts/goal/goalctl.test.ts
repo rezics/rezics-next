@@ -4464,7 +4464,7 @@ describe('heavy QA lock', () => {
         }
         run.gate.wake();
         const release = await run.done;
-        served.push(JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')).command);
+        served.push(JSON.parse(readFileSync(join(lockDir, 'identity.json'), 'utf8')).command);
         release();
       }
       expect(served).toEqual(['task dev:refresh', 'b-next', 'c-next', 'a-next', 'b-last', 'a-last']);
@@ -4486,7 +4486,7 @@ describe('heavy QA lock', () => {
         sleep: () => Promise.reject(new Error('duplicate refresh waited')) });
       expect(second).toBeUndefined();
       expect(ticketRows(join(root, 'shared-lifecycle-queue'))).toHaveLength(1);
-      expect(JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')).command).toBe('holder');
+      expect(JSON.parse(readFileSync(join(lockDir, 'identity.json'), 'utf8')).command).toBe('holder');
       releaseHolder();
       gate.wake();
       (await first)!();
@@ -4542,7 +4542,7 @@ describe('heavy QA lock', () => {
         firstDone.then(() => 'acquired' as const),
       ])).toBe('slept');
       expect(readFileSync(join(lockDir, 'marker'), 'utf8')).toBe('held');
-      expect(existsSync(join(lockDir, 'info.json'))).toBe(false);
+      expect(existsSync(join(lockDir, 'identity.json'))).toBe(false);
       clock = firstAt + 5;
       rmSync(lockDir, { recursive: true, force: true });
       secondDone = acquireHeavy(['second'], {
@@ -4562,7 +4562,7 @@ describe('heavy QA lock', () => {
       const releaseFirst = await firstDone;
       expect(served).toEqual(['first']);
       expect(ticketRows(queueDir)).toEqual([[later, 'goal-b', 'second', firstAt + 5]]);
-      expect(JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8'))).toMatchObject({
+      expect(JSON.parse(readFileSync(join(lockDir, 'identity.json'), 'utf8'))).toMatchObject({
         pid: earlier, goal: 'goal-a', command: 'first',
       });
       releaseFirst();
@@ -4572,7 +4572,7 @@ describe('heavy QA lock', () => {
       const releaseSecond = await secondDone;
       expect(served).toEqual(['first', 'second']);
       expect(ticketRows(queueDir)).toEqual([]);
-      expect(JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')).pid).toBe(later);
+      expect(JSON.parse(readFileSync(join(lockDir, 'identity.json'), 'utf8')).pid).toBe(later);
       releaseSecond();
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
@@ -4596,7 +4596,7 @@ describe('heavy QA lock', () => {
         sleep: () => Promise.reject(new Error('waiter slept behind a dead ticket')),
       });
       expect(ticketRows(queueDir)).toEqual([]);
-      expect(JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8'))).toMatchObject({
+      expect(JSON.parse(readFileSync(join(lockDir, 'identity.json'), 'utf8'))).toMatchObject({
         pid: process.pid, goal: 'scoped-subjects', command: 'next',
       });
       expect(readFileSync(join(lockDir, 'pid'), 'utf8')).toBe(String(process.pid));
@@ -4637,7 +4637,7 @@ describe('heavy QA lock', () => {
       expect(readdirSync(queueDir).filter(name => name.endsWith('.json'))).toEqual([]);
       expect(readFileSync(join(lockDir, 'marker'), 'utf8')).toBe('held');
       expect(readFileSync(join(lockDir, 'pid'), 'utf8')).toBe(String(process.pid));
-      expect(existsSync(join(lockDir, 'info.json'))).toBe(false);
+      expect(existsSync(join(lockDir, 'identity.json'))).toBe(false);
     } finally { rmSync(root, { recursive: true, force: true }); }
   });
 
@@ -4649,8 +4649,9 @@ describe('heavy QA lock', () => {
     try {
       expect(heavyQaStatus(join(root, 'missing'))).toBe('free; 0 waiting');
       mkdirSync(lockDir);
-      writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
-        pid: process.pid, goal: 'scoped-subjects', command: 'bun test affected', startedAt: '2026-10-04T00:00:00.000Z', commandStartedAt: null,
+      writeFileSync(join(lockDir, 'identity.json'), JSON.stringify({
+        pid: process.pid, token: 'status-token', goal: 'scoped-subjects', command: 'bun test affected',
+        startedAt: '2026-10-04T00:00:00.000Z', commandStartedAt: null,
       }));
       mkdirSync(queueDir);
       writeFileSync(join(queueDir, 'a.json'), JSON.stringify({ pid: process.pid, command: 'a', arrivedAt: 2 }));
@@ -4663,8 +4664,9 @@ describe('heavy QA lock', () => {
       markHeavyCommandStarted(lockDir);
       expect(heavyQaStatus(lockDir)).toContain('command started');
       expect(existsSync(join(queueDir, 'dead.json'))).toBe(false);
-      writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
-        pid: dead, goal: 'scoped-subjects', command: 'bun test affected', startedAt: '2026-10-04T00:00:00.000Z',
+      writeFileSync(join(lockDir, 'identity.json'), JSON.stringify({
+        pid: dead, token: 'status-token', goal: 'scoped-subjects', command: 'bun test affected',
+        startedAt: '2026-10-04T00:00:00.000Z',
       }));
       expect(heavyQaStatus(lockDir)).toBe('free; 2 waiting');
     } finally { rmSync(root, { recursive: true, force: true }); }
