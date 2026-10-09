@@ -30,6 +30,40 @@ export class AccountAssertionDenied extends Error {}
 export class AccountAssertionInsufficientScope extends AccountAssertionDenied {}
 export class AccountAssertionUnavailable extends Error {}
 
+interface RequestAdmission { scopes: readonly string[]; principal: VerifiedAccountAssertion }
+/** The Request object is the admission's lifetime. A later check on that same
+ * object reads the grant this request already verified. The next request is a
+ * new object, so it verifies again and observes revocation. Nothing here is
+ * keyed by the bearer. */
+const requestAdmissions = new WeakMap<Request, RequestAdmission>();
+
+function grantCovers(admission: RequestAdmission, requiredScopes: readonly string[]): boolean {
+  // A published grant is the introspection result. A verifier that omits it
+  // enforced only the scopes of the call that produced the admission.
+  const grant = admission.principal.accountScopes;
+  const admitted = grant ?? admission.scopes;
+  return requiredScopes.every(scope => admitted.includes(scope));
+}
+
+/** Verify this request's bearer once. Another scope on the same Request uses
+ * the grant from that admission instead of asking Account again. */
+export async function verifyRequestAccount(
+  account: Pick<AccountAssertionVerifier, 'verify'>,
+  request: Request,
+  requiredScopes: readonly string[],
+): Promise<VerifiedAccountAssertion> {
+  const existing = requestAdmissions.get(request);
+  if (existing) {
+    if (grantCovers(existing, requiredScopes)) return existing.principal;
+    if (existing.principal.accountScopes) {
+      throw new AccountAssertionInsufficientScope('Account assertion lacks a required scope');
+    }
+  }
+  const principal = await account.verify(request, requiredScopes);
+  if (!requestAdmissions.has(request)) requestAdmissions.set(request, { scopes: requiredScopes, principal });
+  return principal;
+}
+
 const DEFAULT_TIMEOUT_MS = 3_000;
 // The Account resource profile signs access tokens for 300 seconds. Keep this
 // verifier's bounds aligned with Account's signing-key policy.

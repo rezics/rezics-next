@@ -6,7 +6,7 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 // `deps.media` is declared by module augmentation in the media routes; import it
 // so programs that reach this file without the route module still see it.
 import type {} from '../../routes/media.ts';
-import { AccountAssertionDenied } from '../account/verify-assertion.ts';
+import { AccountAssertionDenied, verifyRequestAccount } from '../account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { readResourceSummaries, type ResourceSummary } from '../media/summary.ts';
 import { readerLanguages } from '../display-language/select.ts';
@@ -321,7 +321,7 @@ export async function publicWorkRead<T>(deps: MainWorkDependencies, request: Req
   options: Omit<ReadOptions, 'actingSubject' | 'publicViewer'>,
   operation: (session: WorkReadSession) => Promise<T>, url: string | URL = request.url): Promise<T> {
   const principal = request.headers.has('authorization')
-    ? await deps.account.verify(request, ['work:read']) : null;
+    ? await verifyRequestAccount(deps.account, request, ['work:read']) : null;
   return workRead(deps, publicLanguageRequest(request, url),
     { ...options, publicViewer: disclosureViewer(principal) }, operation);
 }
@@ -361,7 +361,9 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
           session.restorePriors = located.priors;
           if (request.headers.has('authorization')) {
             if (!options.actingSubject) throw new WorkReadInvalid('actingSubject is required for authenticated reads');
-            session.principal = await deps.account.verify(request, ['work:read']);
+            // The request's bearer admission is shared with the rate-limit check.
+            // Each attempt still rechecks that the principal remains active.
+            session.principal = await verifyRequestAccount(deps.account, request, ['work:read']);
             if (!await deps.access.activePrincipalId(session.principal)) throw new AccountAssertionDenied('Principal is inactive');
             if (deps.personPreferences) {
               session.readingLanguages = await deps.personPreferences.languagesForReader(session.principal);

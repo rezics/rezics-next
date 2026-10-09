@@ -1,6 +1,6 @@
 import { Elysia, ParseError, ValidationError } from 'elysia';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
-import { AccountAssertionDenied } from '../account/verify-assertion.ts';
+import { AccountAssertionDenied, verifyRequestAccount } from '../account/verify-assertion.ts';
 import {
   rateLimitFamily,
   type Budgets,
@@ -44,7 +44,7 @@ export function rateLimitHook(
       if (!anonymous && !independent) {
         const attribution = await cache.resolve(
           request.headers.get('authorization')!,
-          () => account.verify(request, []),
+          () => verifyRequestAccount(account, request, []),
           (principal) => limit.store.classify(principal),
         );
         identity = attribution.identity;

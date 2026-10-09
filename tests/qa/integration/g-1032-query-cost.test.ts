@@ -99,7 +99,17 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       ...account,
       verify: async (...args: Parameters<typeof account.verify>) => {
         accountChecks++;
-        return account.verify(...args);
+        const principal = await account.verify(...args);
+        // Account introspection publishes the consented grant. This fixture
+        // accepts every operation scope; without that grant the request would
+        // ask again for each scope.
+        return principal.accountScopes ? principal : {
+          ...principal,
+          accountScopes: [
+            'classification:decide', 'classification:define', 'judgment:write', 'statement:decide',
+            'work:create', 'work:edit', 'work:read',
+          ],
+        };
       },
     },
   };
