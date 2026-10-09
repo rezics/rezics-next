@@ -91,11 +91,11 @@ final class ModelMutationPolicy {
                 }
                 continue;
             }
-            Map<String, Object> invalid = checkSubject(profiles, data, receipt, entry.getKey(), entry.getValue(), membershipLists);
+            Map<String, Object> invalid = checkSubject(profiles, data, plan, receipt, entry.getKey(), entry.getValue(), membershipLists);
             if (invalid != null) return invalid;
         }
         for (var entry : before.revisions().entrySet()) {
-            Map<String, Object> invalid = checkSubject(profiles, data, receipt, entry.getKey(), entry.getValue(), membershipLists);
+            Map<String, Object> invalid = checkSubject(profiles, data, plan, receipt, entry.getKey(), entry.getValue(), membershipLists);
             if (invalid != null) return invalid;
         }
         Set<String> dependentCurrent = new HashSet<>();
@@ -134,7 +134,7 @@ final class ModelMutationPolicy {
             // An erasure marker keeps the revision's earlier type. Historical
             // parents still name that revision; reads hide it, so they are not
             // restaged or revalidated in this command.
-            if (erasureTombstone(data, receipt, entry.getKey(), entry.getValue())) continue;
+            if (erasureTombstone(data, plan, receipt, entry.getKey(), entry.getValue())) continue;
             String overflow = dependents(profiles, data, entry.getKey(), plan,
                 dependentCurrent, dependentRevisions, inboundQuads,
                 typeChanged(data, entry.getKey(), entry.getValue()), false);
@@ -154,12 +154,12 @@ final class ModelMutationPolicy {
     }
 
     private static Map<String, Object> checkSubject(ProfileRegistry profiles, DatasetGraph data,
-                                                    String receipt, String name, Subject before, Set<Node> membershipLists) {
+                                                    CommandPolicy.Plan plan, String receipt, String name, Subject before, Set<Node> membershipLists) {
         CanonicalPolicy.Selection selected = before.selection();
         if (selected == null) return null;
         // The erasure marker keeps this revision's product type. Its product
         // shape rejects the added rv:ErasedRevision; the erasure profile checks it.
-        if (erasureTombstone(data, receipt, name, before)) return null;
+        if (erasureTombstone(data, plan, receipt, name, before)) return null;
         Node node = NodeFactory.createURI(name);
         if (!data.contains(before.graph(), node, RDF.type.asNode(), NodeFactory.createURI(selected.type()))) {
             if (nameProjectionRetired(data, receipt, name, before))
@@ -358,15 +358,16 @@ final class ModelMutationPolicy {
         return !before.types().equals(values(data, before.graph(), NodeFactory.createURI(name), RDF.type.asNode()));
     }
 
-    /** The graph erasure command adds rv:ErasedRevision and leaves every prior type. */
-    static boolean erasureMarker(DatasetGraph data, String receipt, String name) {
-        if (!receipt.matches("urn:rezics:receipt:erasure-graph:[0-9a-f]{64}")) return false;
+    /** The graph erasure command adds rv:ErasedRevision and leaves every prior type.
+     * The receipt string is not enough: ErasurePolicy must have admitted the update. */
+    static boolean erasureMarker(DatasetGraph data, CommandPolicy.Plan plan, String receipt, String name) {
+        if (ErasurePolicy.admitsMarker(plan, receipt) != null) return false;
         Node node = NodeFactory.createURI(name);
         return data.contains(REVISIONS, node, RDF.type.asNode(), NodeFactory.createURI(RV + "ErasedRevision"));
     }
 
-    private static boolean erasureTombstone(DatasetGraph data, String receipt, String name, Subject before) {
-        if (!before.graph().equals(REVISIONS) || !erasureMarker(data, receipt, name)) return false;
+    private static boolean erasureTombstone(DatasetGraph data, CommandPolicy.Plan plan, String receipt, String name, Subject before) {
+        if (!before.graph().equals(REVISIONS) || !erasureMarker(data, plan, receipt, name)) return false;
         Node node = NodeFactory.createURI(name);
         for (Node type : before.types()) {
             if (!data.contains(REVISIONS, node, RDF.type.asNode(), type)) return false;

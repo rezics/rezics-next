@@ -24,37 +24,69 @@ final class ErasurePolicy {
     static final String REVISION_TARGET =
         "(?:urn:rezics:content:revision:|https://rezics\\.com/id/)[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}";
 
+    /**
+     * Every command with an erasure-graph receipt is admitted here, before it is applied.
+     * The receipt text is not authority: each revision subject may gain only {@code ErasedRevision}
+     * and {@code erasureEpoch}. A deleted quad, a changed quad, or a quad on any other subject is refused.
+     * @return null when the command is that marker, otherwise the refusal
+     */
+    static String admitsMarker(CommandPolicy.Plan plan, String receipt) {
+        if (receipt == null || !receipt.startsWith("urn:rezics:receipt:erasure-graph:"))
+            return "not an erasure marker";
+        if (plan == null || plan.request() == null) return "erasure command is not a marker";
+        return markerFootprint(plan, receipt);
+    }
+
     static String preflight(DatasetGraph data, CommandPolicy.Plan plan, String receipt) {
         if (ErasureRestorePolicy.applies(receipt)) return "held erasure requires its authenticated restore path";
+        if (receipt.startsWith("urn:rezics:receipt:erasure-graph:")) {
+            String marker = admitsMarker(plan, receipt);
+            if (marker != null) return marker;
+        }
         Update update = plan.request().getOperations().getFirst();
         List<Quad> inserts = update instanceof UpdateModify modify ? modify.getInsertQuads()
             : update instanceof UpdateDataInsert insert ? insert.getQuads() : new ArrayList<>();
-        if (receipt.startsWith("urn:rezics:receipt:erasure-graph:")) {
-            if (!receipt.matches("urn:rezics:receipt:erasure-graph:[0-9a-f]{64}")
-                || !plan.current().isEmpty() || !plan.source().isEmpty()
-                || plan.revisions().isEmpty()
-                || !plan.graphs().equals(Set.of(CommandPolicy.CONTROL, CommandPolicy.REVISIONS,
-                    CommandPolicy.RECEIPTS, CommandPolicy.OUTBOX, CommandPolicy.PUBLIC_SEARCH,
-                    CommandPolicy.PRIVATE_SEARCH))
-                || plan.revisions().stream().anyMatch(subject -> !subject.matches(REVISION_TARGET)))
-                return "erasure graph footprint differs";
-            for (Quad quad : inserts) {
-                String graph = quad.getGraph().getURI();
-                if (graph.equals(CommandPolicy.PUBLIC_SEARCH) || graph.equals(CommandPolicy.PRIVATE_SEARCH))
-                    return "erasure cannot insert indexed content";
-                if (graph.equals(CommandPolicy.REVISIONS)
-                    && !(quad.getPredicate().equals(RDF.type.asNode()) && quad.getObject().equals(ERASED)
-                        || quad.getPredicate().equals(ERASURE_EPOCH) && quad.getObject().isLiteral()))
-                    return "erasure may insert only an exact tombstone";
-            }
-            if (update instanceof UpdateModify modify) for (Quad quad : modify.getDeleteQuads()) {
-                if (Set.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS, CommandPolicy.SOURCE)
-                    .contains(quad.getGraph().getURI())) return "erasure cannot remove owner history";
-            }
-        }
         for (Quad quad : inserts) {
             if (erased(data, quad.getSubject()) || erased(data, quad.getObject()))
                 return "erased exact revision cannot be reactivated";
+        }
+        return null;
+    }
+
+    private static String markerFootprint(CommandPolicy.Plan plan, String receipt) {
+        Update update = plan.request().getOperations().getFirst();
+        List<Quad> inserts = update instanceof UpdateModify modify ? modify.getInsertQuads()
+            : update instanceof UpdateDataInsert insert ? insert.getQuads() : new ArrayList<>();
+        if (!receipt.matches("urn:rezics:receipt:erasure-graph:[0-9a-f]{64}")
+            || !plan.current().isEmpty() || !plan.source().isEmpty()
+            || plan.revisions().isEmpty()
+            || !plan.graphs().equals(Set.of(CommandPolicy.CONTROL, CommandPolicy.REVISIONS,
+                CommandPolicy.RECEIPTS, CommandPolicy.OUTBOX, CommandPolicy.PUBLIC_SEARCH,
+                CommandPolicy.PRIVATE_SEARCH))
+            || plan.revisions().stream().anyMatch(subject -> !subject.matches(REVISION_TARGET)))
+            return "erasure graph footprint differs";
+        for (Quad quad : inserts) {
+            String graph = quad.getGraph().getURI();
+            if (graph.equals(CommandPolicy.PUBLIC_SEARCH) || graph.equals(CommandPolicy.PRIVATE_SEARCH))
+                return "erasure cannot insert indexed content";
+            if (graph.equals(CommandPolicy.REVISIONS)
+                && !(quad.getPredicate().equals(RDF.type.asNode()) && quad.getObject().equals(ERASED)
+                    || quad.getPredicate().equals(ERASURE_EPOCH) && quad.getObject().isLiteral()))
+                return "erasure may insert only an exact tombstone";
+        }
+        for (String subject : plan.revisions()) {
+            boolean type = false, epoch = false;
+            for (Quad quad : inserts) {
+                if (!quad.getGraph().getURI().equals(CommandPolicy.REVISIONS) || !quad.getSubject().isURI()
+                    || !quad.getSubject().getURI().equals(subject)) continue;
+                if (quad.getPredicate().equals(RDF.type.asNode()) && quad.getObject().equals(ERASED)) type = true;
+                if (quad.getPredicate().equals(ERASURE_EPOCH) && quad.getObject().isLiteral()) epoch = true;
+            }
+            if (!type || !epoch) return "erasure may insert only an exact tombstone";
+        }
+        if (update instanceof UpdateModify modify) for (Quad quad : modify.getDeleteQuads()) {
+            if (Set.of(CommandPolicy.CURRENT, CommandPolicy.REVISIONS, CommandPolicy.SOURCE)
+                .contains(quad.getGraph().getURI())) return "erasure cannot remove owner history";
         }
         return null;
     }

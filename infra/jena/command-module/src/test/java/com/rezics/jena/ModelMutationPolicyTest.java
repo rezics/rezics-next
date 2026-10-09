@@ -91,11 +91,32 @@ public class ModelMutationPolicyTest {
             data.add(revisions, node, RDF.type.asNode(), uri(RV + "RevisionAnchor"));
             data.add(revisions, parent, RDF.type.asNode(), uri(RV + "RevisionAnchor"));
             data.add(revisions, parent, uri(RV + "selectedDraft"), node);
-            CommandPolicy.Plan plan = new CommandPolicy.Plan(null, Set.of(CommandPolicy.REVISIONS),
-                Set.of(), Set.of(revision), Set.of(), false, false, true);
+            String receipt = "urn:rezics:receipt:erasure-graph:" + "ab".repeat(32);
+            CommandPolicy.Plan plan = CommandPolicy.parse("""
+                PREFIX rv: <https://rezics.com/vocab/>
+                PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                DELETE {
+                  GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?prior }
+                  GRAPH <urn:rezics:search:public> { ?unit ?p ?o }
+                  GRAPH <urn:rezics:search:private> { ?private ?pp ?po }
+                }
+                INSERT {
+                  GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?next }
+                  GRAPH <urn:rezics:graph:revisions> {
+                    <%s> a rv:ErasedRevision ; rv:erasureEpoch "7"^^xsd:integer .
+                  }
+                  GRAPH <urn:rezics:graph:receipts> { <%s> a rv:OperationReceipt }
+                  GRAPH <urn:rezics:graph:outbox> { <urn:rezics:outbox:erasure> a rv:OutboxBatch }
+                }
+                WHERE {
+                  GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?prior }
+                  BIND(?prior + 1 AS ?next)
+                  GRAPH <urn:rezics:search:public> { ?unit rv:revision <%s> ; ?p ?o }
+                  GRAPH <urn:rezics:search:private> { ?private rv:revision <%s> ; ?pp ?po }
+                }
+                """.formatted(revision, receipt, revision, revision), receipt);
             ModelMutationPolicy.Snapshot before = ModelMutationPolicy.capture(PROFILES, data, plan);
             data.add(revisions, node, RDF.type.asNode(), uri(RV + "ErasedRevision"));
-            String receipt = "urn:rezics:receipt:erasure-graph:" + "ab".repeat(32);
             assertNull(ModelMutationPolicy.check(PROFILES, data, plan, receipt, before));
             assertEquals("uncanonical reverse revision dependency requires staged lifecycle: " + parent.getURI(),
                 report(ModelMutationPolicy.check(PROFILES, data, plan, "urn:receipt:probe", before)));
