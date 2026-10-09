@@ -11,6 +11,8 @@ import { animeMangaSamplePlan, importOneShotFacts, type CatalogueSample, type Ca
 import { startMediaStack } from './media-support.ts';
 
 const PAGE = 20;
+const DATE = 'http://www.w3.org/2001/XMLSchema#date';
+const YEAR_QUERY = 'https://rezics.com/query/work-publication-years';
 
 interface Recorded {
   key: string;
@@ -29,10 +31,8 @@ interface BrowsePage {
   tags: string;
 }
 
-// The publication-year read is proven by the browser journey only for now. On a fresh dataset the
-// claim fold leaves the dataset's restore hold set (its release phase is refused), which hides every
-// public read; the year proof and the yearless Work's absence return here once the fold releases it.
-test('Anime and manga Zones: format and status filters page, and an unclassified Work stays out of a format it was not given', async () => {
+// A dated Work appears on the publication-year page; a Work with no date does not.
+test('Anime and manga Zones: format and status filters page, an unclassified Work stays out of a format it was not given, and publication years page newest first', async () => {
   const stack = await startMediaStack('anime-manga-zones');
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL! });
   try {
@@ -64,6 +64,7 @@ test('Anime and manga Zones: format and status filters page, and an unclassified
       if (space.outcome !== 'succeeded' || !space.realm) throw new Error(`${id} Realm was not created`);
       realms[id] = space.realm;
     }
+    const publication = await publicationDateProperty(client, author.actor);
     const recorded: Recorded[] = [];
     for (const sample of animeMangaSamplePlan()) {
       const created = await stack.catalogueWork(author.actor, sample.title);
@@ -77,6 +78,8 @@ test('Anime and manga Zones: format and status filters page, and an unclassified
         throw new Error(`Main selection failed for ${sample.key}`);
       }
       const imported = await importSample(client, author.actor, created, sample);
+      if (sample.year !== null) await recordPublicationYear(client, author.actor, created.work, sample.year,
+        publication, sample.key);
       const adoption = { ...selection, mainVersion: created.mainVersion,
         context: { kind: 'realm-local' as const, id: realms[sample.zone] },
         selectionBasis: 'realm-manager-review' as const };
@@ -100,6 +103,8 @@ test('Anime and manga Zones: format and status filters page, and an unclassified
     expect(lexical(await statements(row('long-manga').work), row('long-manga').countPredicate)).toEqual(['21']);
     expect(lexical(await statements(row('anime-unclassified').work), row('long-tv').countPredicate)).toEqual([]);
     expect(lexical(await statements(row('one-shot').work), row('one-shot').countPredicate)).toEqual(['1']);
+    expect(lexical(await statements(row('long-tv').work), publication.component)).toEqual(['1980-01-01']);
+    expect(lexical(await statements(row('tv-3').work), publication.component)).toEqual([]);
 
     const projection = new ZoneBrowseProjection(stack.accessPool, relay, stack.env);
     await projection.backfill();
@@ -164,11 +169,69 @@ test('Anime and manga Zones: format and status filters page, and an unclassified
     expect((await collect(realms.manga, { status: 'upcoming' })).seen).toEqual(expect.arrayContaining([
       row('manga-1').work, row('one-shot-en').work,
     ]));
+
+    const dated = recorded.filter(item => item.year !== null);
+    const years = async (parameters: { fromYear?: number; toYear?: number } = {}) => {
+      const seen: { id: string; year: number }[] = [];
+      let cursor: string | undefined;
+      let first: { items: { id: string; year: number }[]; nextCursor: string | null } | null = null;
+      for (let page = 0; page < 8; page++) {
+        const response = await stack.main.handle(new Request('http://main.local/v1/query', { method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ profile: 'template-query-v1', query: YEAR_QUERY, revision: 1, parameters,
+            limit: PAGE, ...(cursor ? { cursor } : {}) }) }));
+        const body = await response.json() as { result?: { items: { id: string; year: number; statement: string }[];
+          nextCursor: string | null } };
+        if (response.status !== 200) throw new Error(`Year read ${response.status}: ${JSON.stringify(body).slice(0, 500)}`);
+        const result = body.result!;
+        if (!first) first = result;
+        seen.push(...result.items.map(item => ({ id: item.id, year: item.year })));
+        cursor = result.nextCursor ?? undefined;
+        if (!cursor) break;
+      }
+      return { seen, first: first! };
+    };
+    const listed = await years();
+    expect(listed.first.items).toHaveLength(PAGE);
+    expect(listed.first.nextCursor).not.toBeNull();
+    expect(listed.seen.map(item => item.year)).toEqual([...listed.seen.map(item => item.year)].sort((left, right) => right - left));
+    expect(listed.seen.map(item => item.id).sort()).toEqual(dated.map(item => item.work).sort());
+    for (const key of ['tv-3', 'anime-unclassified', 'manga-3', 'one-shot-en', 'manga-unclassified'] as const) {
+      expect(listed.seen.map(item => item.id)).not.toContain(row(key).work);
+    }
+    const bounded = await years({ fromYear: 2010, toYear: 2016 });
+    expect(bounded.seen.map(item => item.id).sort()).toEqual(dated.filter(item => item.year! >= 2010 && item.year! <= 2016)
+      .map(item => item.work).sort());
+    expect(bounded.seen.map(item => item.year).every(year => year >= 2010 && year <= 2016)).toBe(true);
   } finally {
     await relay.end();
     await stack.stop();
   }
 }, 600_000);
+
+async function publicationDateProperty(client: BangumiFactsClient, actor: string):
+  Promise<{ component: string; revision: string }> {
+  const definition = await client.post<{ component: string; revision: string }>('/v1/semantic/changes', {
+    profile: 'semantic-change-v1', actingSubject: actor, expectedHead: null,
+    state: { component: 'definition', kind: 'property', notation: 'statement-first-publication-date-v1', roles: [] },
+  }, 'catalogue-year:v1:property');
+  await client.authorizeDefinition(definition);
+  return definition;
+}
+
+async function recordPublicationYear(client: BangumiFactsClient, actor: string, work: string, year: number,
+  definition: { component: string; revision: string }, key: string): Promise<void> {
+  const statement = await client.post<{ statement: string; meaningKey: string }>('/v1/statements', {
+    profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work, predicate: definition.component,
+    relationDefinition: definition.revision,
+    value: { kind: 'literal', lexical: `${year}-01-01`, datatype: DATE, language: null },
+    applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject: actor,
+  }, `catalogue-year:v1:${key}`);
+  await client.post('/v1/statement-decisions', {
+    profile: 'statement-decision-v1', target: { kind: 'statement', statement: statement.statement },
+    acceptance: { kind: 'global' }, expectedDecisionHead: null, outcome: 'accepted', actingSubject: actor,
+  }, `catalogue-year:v1:${key}:decision`);
+}
 
 async function importSample(client: BangumiFactsClient, actor: string,
   work: { work: string; mainVersion: string }, sample: CatalogueSample):
