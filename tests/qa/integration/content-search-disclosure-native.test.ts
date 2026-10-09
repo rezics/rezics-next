@@ -10,6 +10,7 @@ import { InvalidPublicDisclosure, PUBLIC_DISCLOSURE_COST, PublicDisclosureUnavai
 import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { contextFixture, nativeId } from './context-fixture.ts';
 import { png, startMediaStack } from './media-support.ts';
+import { createStatementProperty } from './statement-property.ts';
 
 const short = (id: string) => id.split('/').at(-1)!;
 
@@ -57,10 +58,14 @@ test('SEARCH03/SEARCH11: public owner values exclude private Context selections 
     await f.grant(`statement:speak:${f.actorA}`, 'statement.record');
     await f.globalAcceptance();
     await f.grant('classification:decide:global', 'statement.decide');
+    await f.grant('semantic:create:root', 'semantic.change');
+    const property = await createStatementProperty(f.call, f.actorA);
+    await f.grant(`semantic:read:${property.predicate}`, 'semantic.read');
     const makeStatement = async (value: string, selected = publicContext) => {
       const written = await f.json<{ statement: string }>(await f.call('POST', '/v1/statements', {
         profile: 'statement-v1', speaker: { kind: 'personal' }, subject: space,
-        predicate: relation, relationDefinition: nativeId(), value: { kind: 'resource', iri: value },
+        predicate: property.predicate, relationDefinition: property.relationDefinition,
+        value: { kind: 'resource', iri: value },
         applicability: [], interpretation: { kind: 'explicit',
           context: selected.context, semanticRevision: selected.semanticRevision }, evidence: [],
         actingSubject: f.actorA }), 201);
@@ -167,7 +172,6 @@ test('SEARCH03/SEARCH11: hidden names and private avatars do not enter public se
     await owner.grant(`media:avatar:${shown.work}`, 'media.avatar');
     await owner.grant(`media:avatar:${hidden.work}`, 'media.avatar');
     await owner.grant(`work:read:${hidden.work}`, 'work.read');
-    const image = await owner.upload(png(128, 128), 'public');
     const choose = async (target: string, asset: string) => {
       const response = await owner.send('PUT', `/v1/resources/${short(target)}/avatar`, {
         profile: 'resource-avatar-selection-v1', expectedSelection: null,
@@ -175,8 +179,12 @@ test('SEARCH03/SEARCH11: hidden names and private avatars do not enter public se
       expect(response.status).toBe(201);
       return (await response.json() as { selection: string }).selection;
     };
-    const shownAvatar = await choose(shown.work, image.asset);
-    const hiddenAvatar = await choose(hidden.work, image.asset);
+    // One asset attached to a private Work is withheld everywhere. The public
+    // Work needs its own image so search can still disclose that selection.
+    const shownImage = await owner.upload(png(128, 128), 'public');
+    const hiddenImage = await owner.upload(png(64, 64), 'public');
+    const shownAvatar = await choose(shown.work, shownImage.asset);
+    const hiddenAvatar = await choose(hidden.work, hiddenImage.asset);
     const restrictedTitles = async () => new Set<string>();
     const input = { contexts: [], statements: [], resources: [shown.work],
       mediaContext: DEFAULT_MEDIA_CONTEXT, language: 'en' };
