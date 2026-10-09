@@ -43,6 +43,7 @@ export async function scopedSubjectsFixture() {
     structureObjects, catalogueIntake: new CatalogueIntakeStore(stack.accessPool, stack.env),
     agentProvisioning: new AgentProvisioning(stack.accessPool, stack.env),
     projections: new ProjectionStore(stack.accessPool), targetRatingInventory: new TargetRatingInventoryStore(stack.accessPool),
+    statementSeek: stack.statementSeek,
   });
   // A keyed definition sealed under the work prefix is invisible to later files
   // that read the shared object directory. Keep those bytes in that directory.

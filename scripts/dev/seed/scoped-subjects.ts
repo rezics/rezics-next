@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { SeedApiError } from './api.ts';
 import { catalogueWorkBody } from '../../../tests/fixtures/catalogue/intake.ts';
-import { relationLexiconSeed, CANONICITY_PROPERTY, type LexiconSeedDefinition } from './relation-lexicon-data.ts';
+import { relationLexiconSeed, type LexiconSeedDefinition } from './relation-lexicon-data.ts';
 import { seedRelationLexicon, seedVariantKindConcepts, seedCanonicity } from './relation-lexicon.ts';
 import { seedScopedSubjectQuestions, scopedSubjectLocales, type ScopedSubjectApi, type GlobalQuestions } from './scoped-subjects-questions.ts';
 import { GLOBAL_TARGET_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/target-context-authority.ts';
@@ -250,6 +250,7 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
     return api.post<T>(path, body, requestKey);
   } }, actor, namespace);
   for (const concept of Object.values(vocabulary.concepts)) await authorize(`semantic:read:${concept}`, 'semantic.read');
+  result.definitions.canonicity = vocabulary.definition.component;
   const relation = async (id: string, definition: string, bindings: { role: string; ref: string; creditedName?: string }[],
     applicability: string[] = []) => {
     const saved = await api.post<Occurrence>('/v1/relations/changes', {
@@ -333,8 +334,9 @@ export async function loadScopedSubjects(port: ScopedSubjectPort): Promise<Scope
   const authority = await api.post<{ agent: string }>('/v1/agents', { profile: 'agent-provision-v1', kind: 'organization',
     displayName: 'Continuity authority (demo curator)' }, key('authority'));
   result.authority = authority.agent;
+  await authorize(`semantic:read:${vocabulary.definition.component}`, 'semantic.read', authority.agent);
   for (const continuity of ['canon', 'legends']) await statement(`canonicity-${continuity}`, result.works[continuity]!.work,
-    CANONICITY_PROPERTY, { kind: 'resource', iri: vocabulary.concepts[continuity as 'canon' | 'legends'] },
+    vocabulary.definition.component, { kind: 'resource', iri: vocabulary.concepts[continuity as 'canon' | 'legends'] },
     [subject(continuity)], ['https://www.starwars.com/news/the-legendary-star-wars-expanded-universe-turns-a-new-page'],
     authority.agent, vocabulary.definition.revision);
   const game = result.works['blue-archive']!;

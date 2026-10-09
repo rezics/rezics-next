@@ -5,7 +5,6 @@ import { Value } from 'typebox/value';
 import { loadScopedSubjects, type ScopedSubjectManifest } from '../../../scripts/dev/seed/scoped-subjects.ts';
 import { scopedSubjectLocales, scopedSubjectQuestions } from '../../../scripts/dev/seed/scoped-subjects-questions.ts';
 import { entityPage, subjectStatementPage, resourceRelationPage } from '../../../services/main/src/modules/entity-page/contract.ts';
-import { CANONICITY_PROPERTY } from '../../../scripts/dev/seed/relation-lexicon-data.ts';
 import { scopedSubjectsFixture } from './scoped-subjects-support.ts';
 
 const short = (ref: string) => ref.slice(-36);
@@ -26,15 +25,24 @@ const projection = (id: string) => data.projections[id]!;
 const api = () => h.api(null);
 const curator = () => h.api(h.owner);
 const acting = () => `actingSubject=${encodeURIComponent(h.owner.actor)}`;
-const statements = (on: string, frames: string[] = []) => curator().get<Statements>(
-  `/v1/resources/${short(on)}/statements?${acting()}&limit=20&position=all${frames.map(frame => `&frame=${encodeURIComponent(frame)}`).join('')}`);
+const catchStatementIndex = async () => {
+  while (await h.stack.statementSeek.projectOnce()) { /* bounded outbox batches */ }
+};
+const statements = async (on: string, frames: string[] = []) => {
+  await catchStatementIndex();
+  return curator().get<Statements>(
+    `/v1/resources/${short(on)}/statements?${acting()}&limit=20&position=all${frames.map(frame => `&frame=${encodeURIComponent(frame)}`).join('')}`);
+};
 const statementIds = (page: Statements) => page.groups.flatMap(group => group.items)
   .flatMap(item => item.kind === 'statement' ? [item.statement] : []);
 const relations = (on: string, frames: string[] = []) => curator().get<Relations>(
   `/v1/resources/${short(on)}/relations?${acting()}&languages=en${frames.map(frame => `&frame=${encodeURIComponent(frame)}`).join('')}`);
 const relationRecord = <T>(ref: string) => curator().get<T>(`/v1/relations/${short(ref)}?${acting()}`);
-const page = (ref: string) => curator().get<Static<typeof entityPage>>(
-  `/v1/resources/${short(ref)}/page?${acting()}&position=all`);
+const page = async (ref: string) => {
+  await catchStatementIndex();
+  return curator().get<Static<typeof entityPage>>(
+    `/v1/resources/${short(ref)}/page?${acting()}&position=all`);
+};
 const aggregate = (context: string, target: string) => api().post<Aggregate>('/v1/rating-aggregates', {
   profile: 'realm-target-latest-mean-v1', context, target,
 }, randomUUID());
@@ -51,6 +59,9 @@ beforeAll(async () => {
   data = await loadScopedSubjects({ api: h.api(h.owner), actor: h.owner.actor, namespace: `scoped-${randomUUID().slice(0, 8)}`,
     authorize: h.authorize, findDefinition: h.findDefinition,
     raters: readers.map(reader => ({ actor: reader.actor, api: h.api(reader) })) });
+  // Statement and page reads refuse an index behind this seed's graph.
+  while (await h.stack.statementSeek.projectOnce()) { /* bounded outbox batches */ }
+  if (!(await h.stack.statementSeek.coverage())?.complete) await h.stack.statementSeek.rebuild();
   // Later files open these keys from the shared object directory. A miss or an
   // unreadable revision here is the same failure they would see.
   for (const key of ['variant-of', 'holds-title', 'represents', 'in-continuity', 'appearance']) {
@@ -234,7 +245,7 @@ test('Anakin keeps one identity across Canon and Legends; Work membership select
     }
     const canonicity = await api().get(`/v1/statements/${short(data.statements[`canonicity-${selected}`]!)}`);
     expect(canonicity).toMatchObject({ speaker: data.authority, subject: data.works[selected!]!.work,
-      predicate: CANONICITY_PROPERTY, applicability: [subject(selected!)] });
+      predicate: data.definitions.canonicity, applicability: [subject(selected!)] });
   }
   const read = await page(projection('anakin-canon'));
   expect(statementIds(read.projection!.statements)).toContain(data.statements['canon-family']!);
