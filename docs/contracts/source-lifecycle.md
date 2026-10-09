@@ -25,7 +25,8 @@ Decision 55, maintainer, 2026-10-09. The platform answers for what it imports
 itself. An operator import publishes what the source licenses, and facts only
 where the licence is unknown. It never imports posts the source's users wrote
 for themselves, such as reviews, blogs or comments. Every imported fact or text
-shows a mark naming its source and licence, with a link.
+shows a mark naming its source and licence, with a link. Covers are the
+exception below.
 
 The first case is Bangumi. Its [copyright page](https://bgm.tv/about/copyright),
 checked on 2026-10-09, puts subject information under CC BY-SA 3.0, and
@@ -36,8 +37,16 @@ crediting Bangumi with the licence and a link to the subject page. An edited or
 translated summary is an adaptation and stays under CC BY-SA, so the licence
 travels with the text through reads and exports.
 
-Covers are left out even though the page lists them under the same licence. The
-art belongs to its publishers, and users who uploaded it could not license it.
+Covers are imported as well, because they identify the Work and every wiki of
+Works shows them. The page lists them under the same licence, but the art
+belongs to its rights holder, usually the publisher or studio, and the users
+who uploaded it could not license it. So a cover's mark says its copyright
+belongs to its rights holder, naming the holder where the record does, and
+credits Bangumi as the source with a link; it does not claim CC BY-SA. A cover
+fills the cover role only and never becomes showcase or banner art. A rights
+holder's complaint takes a cover down through the
+[rights complaint](content-governance.md#rights-complaints) path, fenced to that
+cover so a refresh does not bring it back, while the Work's facts stay.
 
 What a user enters is that user's contribution and responsibility, even when
 they bring it in with the platform's tools. The tools only prompt them to record
