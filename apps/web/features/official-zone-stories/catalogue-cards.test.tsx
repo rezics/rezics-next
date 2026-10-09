@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { AnimeBrowseHeader, AnimeCard, AnimeCataloguePanel, AnimeFooter } from '../../zones/official/anime/slots.tsx';
 import { MangaBrowseHeader, MangaCard, MangaCataloguePanel, MangaFooter } from '../../zones/official/manga/slots.tsx';
 import { installHostZoneAddresses } from '../zones/addresses.ts';
+import { cataloguePlatformWork, ZoneWorkRow } from '../zones/card.tsx';
+import { zoneMessagesFor } from '../zones/fixtures.ts';
 import { catalogueFacts, catalogueWork, catalogueZone } from './catalogue-zone.tsx';
 
 const Link = ((props: ZoneLinkProps) => createElement('a', props)) as ComponentType<ZoneLinkProps>;
@@ -105,6 +107,26 @@ test('the source credit is the footer, once, as the visual-novel Zone places its
   }));
   expect(mangaHead).not.toContain('Bangumi Archive');
   expect(mangaFoot).toContain('Bangumi Archive wiki export');
+});
+
+test('a catalogue card does not name the account that created the Work', () => {
+  const work = catalogueWork('long', 'Long series', 'ja', 'completed');
+  work.author = { value: 'catalogue-editor', lang: 'en', dir: 'ltr' };
+  work.authorHref = '/@catalogue-editor';
+  const row = createElement(ZoneWorkRow, {
+    work: cataloguePlatformWork(work), locale: 'en', messages: zoneMessagesFor('en'), whyHere: false,
+  });
+  const card = draw(createElement(AnimeCard, {
+    zone: catalogueZone('anime', 'en'), Link, layout: 'row', nextVolume: null, fallback: row,
+    work, facts: catalogueFacts('TV', [1980], 1155),
+  }));
+  const panel = draw(createElement(AnimeCataloguePanel, {
+    zone: catalogueZone('anime', 'en'), Link, fallback: null, credits: null,
+    work, facts: catalogueFacts('TV', [1980], 1155),
+  }));
+  expect(card).not.toContain('catalogue-editor');
+  expect(card).toContain('1,155 episodes');
+  expect(panel).not.toContain('catalogue-editor');
 });
 
 test('a reviewed property name labels the count, and the counted phrase stays the package\'s', () => {

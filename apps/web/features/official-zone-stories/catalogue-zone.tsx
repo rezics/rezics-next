@@ -36,10 +36,12 @@ export function catalogueZone(slug: 'anime' | 'manga', locale: UiLocale): ZoneCo
   };
 }
 
-export function catalogueWork(name: string, title: string, lang: string, status: ZoneWork['status']): ZoneWork {
+export function catalogueWork(name: string, title: string, lang: string, status: ZoneWork['status'],
+  author: string | null = null): ZoneWork {
   return {
     id: iri(name), href: `/works/${name}`, title: text(title, lang), cover: null, kind: 'book',
-    author: null, tagline: null, status, chapters: null, words: null, updatedAt: null, decision: null,
+    author: author ? text(author, 'en') : null, authorHref: author ? `/@${author}` : null,
+    tagline: null, status, chapters: null, words: null, updatedAt: null, decision: null,
   };
 }
 

@@ -13,7 +13,7 @@ import { captureCatalogueStory, CatalogueZoneFrame, catalogueFacts, catalogueLin
 // A card shows only recorded facts. The work page names a missing year or volume count.
 // Chapter counts are never shown as volumes.
 
-const longSeries = catalogueWork('m1', '長編漫画', 'ja', 'completed');
+const longSeries = catalogueWork('m1', '長編漫画', 'ja', 'completed', 'catalogue-editor');
 const yearless = catalogueWork('m2', 'A single chapter', 'en', 'upcoming');
 const cancelled = catalogueWork('m3', 'Stopped', 'en', 'cancelled');
 
@@ -72,6 +72,7 @@ async function recorded(canvasElement: HTMLElement, copy: {
   for (const line of copy.panelNames) await expect(gap).toContain(line);
   await expect(canvas.getByRole('link', { name: copy.sibling })).toBeVisible();
   await expect(canvas.getAllByText(copy.archive)).toHaveLength(1);
+  await expect(canvas.queryByText('catalogue-editor')).toBeNull();
   await expect(canvas.queryByText(/\d+ episodes/)).toBeNull();
   await fits();
 }

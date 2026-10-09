@@ -8,7 +8,7 @@ import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { installHostZoneAddresses } from './addresses.ts';
 import { ZoneBrowseBar } from './browse.tsx';
-import { WhyHere, ZoneWorkCard, ZoneWorkRow } from './card.tsx';
+import { cataloguePlatformWork, WhyHere, ZoneWorkCard, ZoneWorkRow } from './card.tsx';
 import type { ZoneMessages } from './messages.ts';
 import { AnnouncementModule, type CardRenderer, ChipModule, DecisionModule, DiscussionModule, EditorialModule,
   HeroModule, type ModuleProps, PeopleModule, QuoteModule, RankingModule, RisingModule, ShelfModule } from './modules.tsx';
@@ -77,8 +77,9 @@ export function cardRenderer(zone: ZoneContext, pkg: ZonePackage | null, locale:
       messages={messages} avatarQuery={avatarQuery} whyHere={whyHere} />;
   return (work, options = {}) => {
     if (!Slot) return platform(work, options, true);
-    const fallback = platform(work, options, false);
     const catalogue = pkg?.catalogue;
+    // The platform row would name the creating account. A catalogue card does not.
+    const fallback = platform(catalogue ? cataloguePlatformWork(work) : work, options, false);
     const card = catalogue && options.facts === undefined
       ? <CatalogueSlotCard zone={zone} work={work} options={options} locale={locale} count={catalogue.count}
         formatNames={catalogue.formatNames} Slot={Slot} fallback={fallback} />

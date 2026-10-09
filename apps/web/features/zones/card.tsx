@@ -31,6 +31,15 @@ const name = (text: ZoneText) => ({ value: text.value, language: text.lang, dire
  * paths, as on every other surface; the reader's `avatarQuery` goes on by the
  * tile, so any query on the Zone's image URL is dropped here.
  */
+/**
+ * The platform row under a catalogue card. A byline names a credited creator.
+ * The account that created or imported the Work is not one, so it is left off
+ * until a credit role is what the card shows.
+ */
+export function cataloguePlatformWork(work: ZoneWork): ZoneWork {
+  return { ...work, author: null, authorHref: null };
+}
+
 export function catalogueWork(work: ZoneWork): CatalogueWork {
   const path = work.cover?.url.split('?')[0];
   const media = path?.startsWith(`${BFF_PREFIX}/v1/media/`) ? path.slice(BFF_PREFIX.length) : null;

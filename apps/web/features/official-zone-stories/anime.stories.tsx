@@ -12,7 +12,7 @@ import { captureCatalogueStory, CatalogueZoneFrame, catalogueFacts, catalogueLin
 // The Anime Zone's browse, fact panel and footer. Facts are the ones a read would pass.
 // A card shows only recorded facts. The work page names each fact that is missing.
 
-const longSeries = catalogueWork('a1', '長編シリーズ', 'ja', 'completed');
+const longSeries = catalogueWork('a1', '長編シリーズ', 'ja', 'completed', 'catalogue-editor');
 const yearless = catalogueWork('a2', 'Unclassified picture', 'en', null);
 const upcoming = catalogueWork('a3', 'Soon', 'en', 'upcoming');
 
@@ -71,6 +71,7 @@ async function recorded(canvasElement: HTMLElement, copy: {
   for (const line of copy.panelNames) await expect(gap).toContain(line);
   await expect(canvas.getByRole('link', { name: copy.sibling })).toBeVisible();
   await expect(canvas.getAllByText(copy.archive)).toHaveLength(1);
+  await expect(canvas.queryByText('catalogue-editor')).toBeNull();
   await expect(canvas.queryByText(/chapter/i)).toBeNull();
   await fits();
 }
