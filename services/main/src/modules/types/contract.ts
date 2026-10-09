@@ -69,7 +69,9 @@ export const typeDefinition = t.Object(
   closed,
 );
 
-/** One bounded owner read per TTL per process; warm reads reuse the serialized body. */
+/** One owner catalog read per HTTP request. Direct `refresh` reuses a successful
+ * snapshot until `ttlMs`; a failed read waits out that interval before taking
+ * another connection. The served list body is the installed snapshot. */
 export const TYPES_READ_COST = {
   graphReads: 0,
   ownerReads: 1,

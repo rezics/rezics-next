@@ -331,13 +331,19 @@ export function createMainApp(fuseki: FusekiClient, work?: SearchRouteDependenci
   // Registered first so it also handles every plugin route mounted below.
   const app = new Elysia()
     .use(httpTelemetry())
-    .request(async ({ request }) => {
+    .request(({ request }) => {
       if (new URL(request.url).pathname.startsWith('/health/')) return;
-      try { await work?.types?.refresh(); }
-      catch {
+      const types = work?.types;
+      if (!types) return;
+      const load = typeof types.beginRequest === 'function' ? types.beginRequest() : types.refresh();
+      return Promise.resolve(load).then(() => undefined, () => {
         if (request.method !== 'GET' && request.method !== 'HEAD')
           return problem(503, 'types_unavailable', 'Type registry is unavailable');
-      }
+      });
+    })
+    .afterResponse(({ request }) => {
+      if (new URL(request.url).pathname.startsWith('/health/')) return;
+      work?.types?.endRequest?.();
     })
     .error(({ error, request }) => {
       const wikiProblem = wikiSchemaError(error, request);

@@ -74,6 +74,9 @@ export class AdmittedTypeStore {
   private expiresAt = 0;
   private refreshing?: Promise<void>;
   private refreshFailure?: unknown;
+  /** Catalog load shared by the requests currently inside `beginRequest`. */
+  private openRequests = 0;
+  private openLoad?: Promise<void>;
   constructor(
     private readonly pool: Pool,
     private readonly now = Date.now,
@@ -88,8 +91,31 @@ export class AdmittedTypeStore {
     return result.rows.map(fromRow);
   }
 
-  /** A request after the TTL refreshes before using the registry, never in the background. */
+  /** One catalog read for this HTTP request. A previous request's snapshot is not
+   * reused: admission can change between requests, and page size must not decide
+   * whether this request pays the read. Pair with `endRequest` after the response. */
+  beginRequest(): Promise<void> {
+    this.openRequests++;
+    if (this.openLoad) return this.openLoad;
+    if (this.refreshFailure && this.now() < this.expiresAt) {
+      this.openLoad = Promise.reject(this.refreshFailure);
+      return this.openLoad;
+    }
+    this.openLoad = this.readCatalog();
+    return this.openLoad;
+  }
+
+  /** Drops this request's claim on the catalog load. The next request reads again. */
+  endRequest(): void {
+    if (this.openRequests === 0) return;
+    this.openRequests--;
+    if (this.openRequests === 0) this.openLoad = undefined;
+  }
+
+  /** Direct callers reuse a successful snapshot until the TTL. A request that
+   * already loaded the catalog does not read it again. */
   async refresh(force = false): Promise<void> {
+    if (!force && this.openRequests > 0 && this.openLoad) return this.openLoad;
     if (this.refreshing) {
       await this.refreshing;
       if (force) return this.refresh(true);
@@ -97,6 +123,14 @@ export class AdmittedTypeStore {
     }
     if (!force && this.now() < this.expiresAt) {
       if (this.refreshFailure) throw this.refreshFailure;
+      return;
+    }
+    await this.readCatalog();
+  }
+
+  private async readCatalog(): Promise<void> {
+    if (this.refreshing) {
+      await this.refreshing;
       return;
     }
     this.refreshing = controlRead(this.pool, (client) => this.rows(client)).then((rows) => {
