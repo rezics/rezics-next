@@ -148,3 +148,9 @@ contracts board shows C0, C2–C6 landed with acceptance, and record §10's
 population-scale list is empty, and the `product-audit` skill finds no open P0
 or P1 class in this Goal's areas. Capacity at 300 and 500 million business
 entities is a later Goal (program, Completion).
+
+## Records
+
+[Provider and composition configuration test](reports/thesis-test-provider-and-composition.md)
+walks an unseen catalogue provider and an unseen composition kind and lists
+where each still requires code.
