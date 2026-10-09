@@ -75,6 +75,15 @@ each Goal's areas are closed to the others; retries resume the same session; fil
 outside the claim block a merge unless the manager passes `--allow-scope` after
 review; workers propose out-of-scope work instead of doing it.
 
+Claims keep two tasks off the same files, but not off the same decision: two
+tasks can build one concept twice in different files. So every brief has a
+`## Mechanisms` section, and `dispatch` and `reclaim` refuse one without it. The
+section has one line for each mechanism in `scripts/static/mechanisms.ts` that
+the task touches, `<id>: consume | configure | extend | new — <why no owner
+fits>`, or the single line `none`. A brief names the outcome and the owner
+mechanism, not a representation. The repository guards that land and merge
+always run refuse writes to an owned state from outside its owner.
+
 ## Several Goals
 
 Maintainer, 2026-10-04: several Goals run at once, one manager each. A Goal is
