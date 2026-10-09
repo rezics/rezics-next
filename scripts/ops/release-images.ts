@@ -46,7 +46,7 @@ const runtimeWorkspaceRoots = [
   'packages/document',
   'packages/zone-sdk',
 ];
-const runtimeArtifacts = [
+export const runtimeArtifacts = [
   'scripts/ops/migrate.ts',
   'scripts/ops/postgres-preflight.ts',
   'scripts/ops/production-env.ts',
@@ -58,6 +58,8 @@ const runtimeArtifacts = [
   'apps/accounts/features/config/env.ts',
   // Account consent and Main MCP discovery inspect the installed public contract.
   'generated/openapi/main/public.json',
+  // Main's query template reader imports the generated template catalog.
+  'generated/query/templates.ts',
 ];
 
 interface GitFile {

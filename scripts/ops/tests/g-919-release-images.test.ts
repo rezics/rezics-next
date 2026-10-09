@@ -5,12 +5,13 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { prepareImageContext } from '../release-images.ts';
+import { dirname, join, relative, resolve, sep } from 'node:path';
+import { prepareImageContext, runtimeArtifacts } from '../release-images.ts';
 import { productionExample } from './g-722-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -95,6 +96,7 @@ function fixture() {
     'apps/web/features/config/env.ts',
     'apps/accounts/features/config/env.ts',
     'generated/openapi/main/public.json',
+    'generated/query/templates.ts',
     'generated/model/manifest.json',
     'yarn.lock',
     '.yarnrc.yml',
@@ -179,6 +181,7 @@ test('G-919 production context follows transitive, optional, peer and cyclic wor
   expect(existsSync(join(options.context, 'packages/dev/package.json'))).toBe(true);
   expect(existsSync(join(options.context, 'apps/frontend/package.json'))).toBe(true);
   expect(existsSync(join(options.context, 'generated/openapi/main/public.json'))).toBe(true);
+  expect(existsSync(join(options.context, 'generated/query/templates.ts'))).toBe(true);
   expect(existsSync(join(options.context, 'scripts/lib/migration-order.ts'))).toBe(true);
   expect(existsSync(join(options.context, 'scripts/lib/concurrent-index.ts'))).toBe(true);
   expect(existsSync(join(options.context, 'scripts/ops/postgres-preflight.ts'))).toBe(true);
@@ -383,3 +386,18 @@ test('production image context loads owner scopes, preflight and native dependen
   });
   expect((await auth).success).toBe(true);
 }, 150_000);
+
+test('G-919 every top-level generated file a service imports is in the release payload', () => {
+  const missing: string[] = [];
+  for (const entry of readdirSync(join(root, 'services'), { recursive: true, withFileTypes: true })) {
+    const dir = entry.parentPath;
+    if (!entry.isFile() || !entry.name.endsWith('.ts') || !dir.includes(`${sep}src`) || dir.includes(`${sep}tests`)) continue;
+    const file = join(dir, entry.name);
+    for (const match of readFileSync(file, 'utf8').matchAll(/from '((?:\.\.\/)+generated\/[^']+)'/g)) {
+      const target = relative(root, resolve(dirname(file), match[1]!));
+      // generated/model is copied whole; every other top-level file must be listed.
+      if (!target.startsWith('generated/model/') && !runtimeArtifacts.includes(target)) missing.push(`${relative(root, file)} -> ${target}`);
+    }
+  }
+  expect(missing).toEqual([]);
+});
