@@ -126,6 +126,10 @@ class CapturingFuseki extends FusekiClient {
       const row = [...this.receipts].find(([receipt]) => query.includes(`<${receipt}>`))?.[1];
       return { results: { bindings: row ? [query.includes('?id ?epoch ?scope ?dataEpoch') ? { ...row, epoch: row.authorityEpoch! } : row] : [] } };
     }
+    // Replay asks whether the held cut also saved a Main sequence. This scenario has only the diagnostic prior.
+    if (query.includes('SELECT ?saved ?savedMain WHERE')) {
+      return { results: { bindings: [{ saved: lit('0') }] } };
+    }
     throw new Error(`Unexpected query: ${query.slice(0, 160)}`);
   }
   override async commandWithReceipt(command: CommandEnvelope) {
