@@ -5,9 +5,8 @@ import { AccessActingContexts } from '../../../services/main/src/modules/access/
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import { SourceAuthorNameStore } from '../../../services/main/src/modules/source/author-name.ts';
-import { authorCreditTriples } from '../../../services/main/src/modules/work/author-credit.ts';
+import { adoptAuthorCredit } from '../../../services/main/src/modules/work/author-credit.ts';
 import { mainSelectionDigest, selectMainDefault } from '../../../services/main/src/modules/work/select-main.ts';
-import { GRAPHS, RV, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { DiscoveryProjection } from '../../../services/main/src/modules/discovery/store.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { MANAGE_ACTION, MANAGE_SCOPE } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
@@ -35,7 +34,8 @@ test('title, localized title, tagline and retained author facts match current pu
     const discovery = new DiscoveryProjection(stack.accessPool);
     await actor.grant('work:create:root', 'work.create');
     const deps = { actingContexts: new AccessActingContexts(stack.accessPool), environment: stack.env, access: stack.access, sourceIntake: intake,
-      sourceAuthorNames: names, discovery, judgments: new AccessJudgments(stack.accessPool),
+      sourceAuthorNames: names, sourceAdoptions: stack.composition.dependencies.sourceAdoptions,
+      templateSeek: stack.templateSeek, discovery, judgments: new AccessJudgments(stack.accessPool),
       account: { verify: async (request: Request, scopes: readonly string[]) => {
         if (request.headers.get('authorization') === 'Bearer owner'
           || (request.headers.get('authorization') === 'Bearer reader' && scopes[0] === 'source:read')) return actor.principal;
@@ -84,11 +84,16 @@ test('title, localized title, tagline and retained author facts match current pu
 
     const credit = `https://rezics.com/id/${randomUUID()}`;
     const head = await json(await call(`/v1/works/${title.work.slice(-36)}`));
-    const triples = authorCreditTriples({ work: title.work, credit, revision: `https://rezics.com/id/${randomUUID()}`,
+    // The credits read uses this app's template directory. A raw insert never
+    // updates that directory, so the credit is adopted and the directory rebuilt.
+    await adoptAuthorCredit(stack.env, deps.account, stack.access, new Request('http://main.local/credits', {
+      headers: { authorization: 'Bearer owner' },
+    }), {
+      work: title.work, credit, revision: `https://rezics.com/id/${randomUUID()}`,
       expectedHead: head.revision, sourceKey: '/authors/OL1A', sourceRoleKey: null, nativeOrdinal: 0,
-      actingSubject: actor.actor }, stack.env.lineage.dataEpoch, '1');
-    await stack.fuseki.update(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/> INSERT DATA {
-      GRAPH ${iri(GRAPHS.current)} { ${triples.current} } GRAPH ${iri(GRAPHS.revisions)} { ${triples.revision} } }`);
+      actingSubject: actor.actor,
+    }, `https://rezics.com/id/${randomUUID()}`, randomUUID());
+    await stack.templateSeek.backfill(stack.env.lineage.dataEpoch, true);
     const path = '/v1/sources/open-library/authors/OL1A/name';
     const refresh = { action: 'refresh', expectedRevision: null };
     expect((await call(path, refresh, 'reader')).status).toBe(401);
