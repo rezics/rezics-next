@@ -4,7 +4,8 @@ import { afterEach, expect, spyOn, test } from 'bun:test';
 import { CommandForbidden, CommandOutcomeUnknown, FusekiClient,
   type TitleCandidateCommandEnvelope, type TitleCandidateResult } from '../src/infrastructure/fuseki.ts';
 import { createHash } from 'node:crypto';
-import { ObjectReadBudgetExceeded, S3ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
+import { clearVerifiedImmutableObjectCache, evictVerifiedImmutableObject, ObjectReadBudgetExceeded,
+  S3ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 
 test('selected immutable evidence uses a bounded S3 range with one overflow witness', async () => {
   const bytes = Buffer.from('bound');
@@ -23,6 +24,8 @@ test('selected immutable evidence uses a bounded S3 range with one overflow witn
     const objects = new S3ImmutableObjects({ endpoint: `http://127.0.0.1:${server.port}`,
       bucket: 'title-test', prefix: 'work/', accessKeyId: 'local-key', secretAccessKey: 'local-secret' });
     expect(await objects.get(digest, bytes.length)).toEqual(new Uint8Array(bytes));
+    // The exact read is cached. Drop it so the tighter budget still witnesses the store range.
+    evictVerifiedImmutableObject(digest);
     await expect(objects.get(digest, bytes.length - 1)).rejects.toBeInstanceOf(ObjectReadBudgetExceeded);
     expect(ranges).toEqual(['bytes=0-5', 'bytes=0-4']);
     expect(served).toEqual([5, 5]);
@@ -45,7 +48,10 @@ test('immutable evidence refuses a corrupt ranged reply and cancels a chunked ov
 });
 
 const restores: (() => void)[] = [];
-afterEach(() => { for (const restore of restores.splice(0).reverse()) restore(); });
+afterEach(() => {
+  clearVerifiedImmutableObjectCache();
+  for (const restore of restores.splice(0).reverse()) restore();
+});
 const admitted = 'a'.repeat(64), maintenance = 'b'.repeat(64);
 const client = (token = admitted) => new FusekiClient('http://fuseki.invalid/rezics/', maintenance, token);
 const envelope = (mode: 'accept' | 'lookup' = 'accept'): TitleCandidateCommandEnvelope => ({

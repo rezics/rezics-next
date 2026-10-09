@@ -1,7 +1,8 @@
 import { canonicalLanguage } from '../display-language/select.ts';
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
+import { ObjectIntegrityError, ObjectUnavailable, rememberVerifiedImmutableObject,
+  type ImmutableObjects } from '../../infrastructure/immutable-objects.ts';
 import { DATASET, GRAPHS, PROFILE, hash, iri, normalizeWorkSemanticTypes,
   type WorkActivationEnvironment } from './activate.ts';
 import { checkedWorkScalarValue, InvalidWorkScalarValue,
@@ -62,7 +63,8 @@ export interface WorkPayload {
   scalarValue?: WorkScalarValue;
 }
 
-function objectBytes(directory: string, digest: string, budget?: RevisionReadBudget): Buffer {
+function objectBytes(directory: string, digest: string, budget?: RevisionReadBudget,
+  remember?: (digest: string, bytes: Uint8Array) => void): Buffer {
   if (!/^[0-9a-f]{64}$/.test(digest)) throw new RevisionCorrupt('invalid immutable object reference');
   let bytes: Buffer;
   try {
@@ -79,16 +81,17 @@ function objectBytes(directory: string, digest: string, budget?: RevisionReadBud
     throw new RevisionUnavailable('committed revision bytes are unavailable');
   }
   if (hash(bytes) !== digest) throw new RevisionCorrupt('immutable object digest differs');
+  remember?.(digest, bytes);
   return bytes;
 }
 
 export function readComponentState(
   objectDirectory: string, manifestIri: string, component: string, profile = PROFILE,
-  budget?: RevisionReadBudget,
+  budget?: RevisionReadBudget, remember?: (digest: string, bytes: Uint8Array) => void,
 ): Record<string, unknown> {
   if (!/^urn:rezics:sha256:[0-9a-f]{64}$/.test(manifestIri)) throw new RevisionCorrupt('invalid manifest reference');
   let manifest: Record<string, unknown>;
-  try { manifest = JSON.parse(objectBytes(objectDirectory, manifestIri.slice(-64), budget).toString('utf8')); }
+  try { manifest = JSON.parse(objectBytes(objectDirectory, manifestIri.slice(-64), budget, remember).toString('utf8')); }
   catch (error) { if (error instanceof RevisionUnavailable || error instanceof RevisionCorrupt || error instanceof RevisionReadBudgetExceeded) throw error;
     throw new RevisionCorrupt('manifest is not JSON'); }
   if (manifest.format !== 'rezics-manifest-v1' || manifest.component !== component
@@ -97,7 +100,7 @@ export function readComponentState(
     || typeof manifest.payload !== 'string' || !/^sha256:[0-9a-f]{64}$/.test(manifest.payload)) {
     throw new RevisionCorrupt('manifest does not match revision');
   }
-  const payload = objectBytes(objectDirectory, manifest.payload.slice(7), budget);
+  const payload = objectBytes(objectDirectory, manifest.payload.slice(7), budget, remember);
   if (manifest.payloadBytes !== payload.length) throw new RevisionCorrupt('payload byte count differs');
   let stored: Record<string, unknown>;
   try { stored = JSON.parse(payload.toString('utf8')); }
@@ -146,7 +149,14 @@ async function readComponentStateFromObjects(
   return state;
 }
 
-/** New Work revisions use S3; exact verified filesystem bytes remain a migration read. */
+/**
+ * New Work revisions use S3. The store stays authoritative: a body that fails
+ * its digest check is `RevisionCorrupt` and is not replaced by the local file.
+ * Only `RevisionUnavailable` (the store 404s or cannot be read) falls back to
+ * `objectDirectory/<digest>`. That file is hashed before use, then both the
+ * manifest and the payload are remembered so the next `get` of either digest
+ * does not fetch.
+ */
 export async function readWorkComponentState(
   env: WorkActivationEnvironment, manifestIri: string, component: string, profile = PROFILE,
 ): Promise<Record<string, unknown>> {
@@ -155,6 +165,8 @@ export async function readWorkComponentState(
     catch (error) {
       if (!(error instanceof RevisionUnavailable)) throw error;
     }
+    return readComponentState(env.objectDirectory, manifestIri, component, profile, undefined,
+      rememberVerifiedImmutableObject);
   }
   return readComponentState(env.objectDirectory, manifestIri, component, profile);
 }

@@ -2,7 +2,8 @@ import { afterEach, expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { S3ImmutableObjects, ObjectIntegrityError, ObjectReadBudgetExceeded } from '../src/infrastructure/immutable-objects.ts';
+import { clearVerifiedImmutableObjectCache, evictVerifiedImmutableObject, ObjectIntegrityError,
+  ObjectReadBudgetExceeded, S3ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { prepareComponent, prepareWorkComponent, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { readWorkComponentState, RevisionCorrupt } from '../src/modules/work/history.ts';
@@ -10,6 +11,7 @@ import { readWorkComponentState, RevisionCorrupt } from '../src/modules/work/his
 const servers: ReturnType<typeof Bun.serve>[] = [];
 const directories: string[] = [];
 afterEach(async () => {
+  clearVerifiedImmutableObjectCache();
   await Promise.all(servers.splice(0).map(server => server.stop(true)));
   for (const directory of directories.splice(0)) rmSync(directory, { recursive: true, force: true });
 });
@@ -93,6 +95,9 @@ test('P0.5 concurrent same-key writers converge and corrupt read-back fails clos
   expect(data.size).toBe(1);
   expect(Buffer.from(await store.get(expected))).toEqual(bytes);
   data.set(`semantic/work/sha256/${expected}`, Buffer.from('tampered'));
+  // A verified hit is not re-read. The store is authoritative again once that digest is dropped.
+  expect(Buffer.from(await store.get(expected))).toEqual(bytes);
+  evictVerifiedImmutableObject(expected);
   await expect(store.get(expected)).rejects.toBeInstanceOf(ObjectIntegrityError);
   await expect(store.put(bytes)).rejects.toBeInstanceOf(ObjectIntegrityError);
   const env: WorkActivationEnvironment = { workObjects: store, objectDirectory: '/nonexistent',

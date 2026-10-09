@@ -1,7 +1,171 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { AwsClient } from 'aws4fetch';
 
 const DIGEST = /^[0-9a-f]{64}$/;
+
+/**
+ * Verified immutable bytes, keyed by digest, for this process only. Main and
+ * the relay each have their own copy. A digest names one body, including
+ * across retention prefixes, so a hit is not re-hashed and is not a freshness
+ * or tombstone check.
+ *
+ * Bounds: at most 512 entries and 32 MiB. An object over 1 MiB is not stored.
+ * Least-recently-used entries leave first. A hit does not extend the 60 s TTL,
+ * so a destroyed object cannot be served for the life of a busy process when
+ * an erasure path missed its eviction.
+ *
+ * Nothing enters after a failed digest check, a short read, a budget refusal,
+ * or an aborted body. `discard` and the in-process object destruction paths
+ * evict the digest. Readers that resolve a live graph revision never ask for
+ * a tombstoned digest; readers that fetch by digest alone are limited by this
+ * TTL (and by eviction when destruction runs in-process).
+ */
+export const VERIFIED_OBJECT_CACHE_DEFAULTS = {
+  maxEntries: 512,
+  maxTotalBytes: 32 * 1024 * 1024,
+  maxObjectBytes: 1024 * 1024,
+  ttlMs: 60_000,
+} as const;
+
+interface VerifiedObjectCacheLimits {
+  maxEntries: number;
+  maxTotalBytes: number;
+  maxObjectBytes: number;
+  ttlMs: number;
+}
+
+interface VerifiedCacheEntry {
+  bytes: Uint8Array;
+  expiresAt: number;
+}
+
+interface VerifiedObjectCacheMetrics {
+  hits: number;
+  misses: number;
+}
+
+class VerifiedObjectCache {
+  private readonly entries = new Map<string, VerifiedCacheEntry>();
+  private totalBytes = 0;
+  hits = 0;
+  misses = 0;
+  limits: VerifiedObjectCacheLimits = { ...VERIFIED_OBJECT_CACHE_DEFAULTS };
+  now: () => number = () => Date.now();
+
+  lookup(digest: string): Uint8Array | undefined {
+    const entry = this.entries.get(digest);
+    if (!entry) return undefined;
+    if (entry.expiresAt <= this.now()) {
+      this.remove(digest);
+      return undefined;
+    }
+    this.entries.delete(digest);
+    this.entries.set(digest, entry);
+    return new Uint8Array(entry.bytes);
+  }
+
+  remember(digest: string, bytes: Uint8Array): void {
+    if (!DIGEST.test(digest) || sha256(bytes) !== digest) return;
+    if (bytes.byteLength > this.limits.maxObjectBytes || bytes.byteLength > this.limits.maxTotalBytes
+      || this.limits.maxEntries < 1) return;
+    if (this.entries.has(digest)) this.remove(digest);
+    while (this.entries.size >= this.limits.maxEntries
+      || this.totalBytes + bytes.byteLength > this.limits.maxTotalBytes) {
+      const oldest = this.entries.keys().next().value;
+      if (oldest === undefined) return;
+      this.remove(oldest);
+    }
+    const copy = new Uint8Array(bytes);
+    this.entries.set(digest, { bytes: copy, expiresAt: this.now() + this.limits.ttlMs });
+    this.totalBytes += copy.byteLength;
+  }
+
+  evict(digest: string): void {
+    this.remove(digest);
+  }
+
+  clear(): void {
+    this.entries.clear();
+    this.totalBytes = 0;
+    this.hits = 0;
+    this.misses = 0;
+    this.limits = { ...VERIFIED_OBJECT_CACHE_DEFAULTS };
+    this.now = () => Date.now();
+  }
+
+  private remove(digest: string): void {
+    const entry = this.entries.get(digest);
+    if (!entry) return;
+    this.totalBytes -= entry.bytes.byteLength;
+    this.entries.delete(digest);
+  }
+}
+
+const verifiedObjectCache = new VerifiedObjectCache();
+const skipVerifiedObjectCache = new AsyncLocalStorage<true>();
+
+/** Counters for tests. Not an endpoint. */
+export function verifiedImmutableObjectCacheMetrics(): VerifiedObjectCacheMetrics {
+  return { hits: verifiedObjectCache.hits, misses: verifiedObjectCache.misses };
+}
+
+/** Drop every entry, counter, limit override and clock. */
+export function clearVerifiedImmutableObjectCache(): void {
+  verifiedObjectCache.clear();
+}
+
+/** Shrink bounds or pin the clock. Production uses {@link VERIFIED_OBJECT_CACHE_DEFAULTS}. */
+export function configureVerifiedImmutableObjectCache(options: {
+  maxEntries?: number;
+  maxTotalBytes?: number;
+  maxObjectBytes?: number;
+  ttlMs?: number;
+  now?: () => number;
+}): void {
+  verifiedObjectCache.limits = {
+    maxEntries: options.maxEntries ?? verifiedObjectCache.limits.maxEntries,
+    maxTotalBytes: options.maxTotalBytes ?? verifiedObjectCache.limits.maxTotalBytes,
+    maxObjectBytes: options.maxObjectBytes ?? verifiedObjectCache.limits.maxObjectBytes,
+    ttlMs: options.ttlMs ?? verifiedObjectCache.limits.ttlMs,
+  };
+  if (options.now) verifiedObjectCache.now = options.now;
+}
+
+/** Forget one digest in this process. Destruction paths call this after the bytes are gone. */
+export function evictVerifiedImmutableObject(digest: string): void {
+  verifiedObjectCache.evict(digest);
+}
+
+/**
+ * Store bytes already checked against `digest`. A mismatch or an over-limit
+ * body is ignored, so a caller cannot poison the cache.
+ */
+export function rememberVerifiedImmutableObject(digest: string, bytes: Uint8Array): void {
+  verifiedObjectCache.remember(digest, bytes);
+}
+
+/** Read the store itself. Presence checks and publish read-back must not treat a cache hit as proof. */
+export function withoutVerifiedImmutableObjectCache<T>(read: () => Promise<T>): Promise<T> {
+  return skipVerifiedObjectCache.run(true, read);
+}
+
+function whenNotAborted(signal: AbortSignal | undefined, work: Promise<Uint8Array>): Promise<Uint8Array> {
+  if (!signal) return work;
+  if (signal.aborted) return Promise.reject(new ObjectUnavailable('committed immutable object is unavailable'));
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(new ObjectUnavailable('committed immutable object is unavailable'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    work.then(bytes => {
+      signal.removeEventListener('abort', onAbort);
+      if (signal.aborted) reject(new ObjectUnavailable('committed immutable object is unavailable'));
+      else resolve(new Uint8Array(bytes));
+    }, error => {
+      signal.removeEventListener('abort', onAbort);
+      reject(error);
+    });
+  });
+}
 
 export class ObjectUnavailable extends Error {}
 export class ObjectIntegrityError extends Error {}
@@ -46,6 +210,8 @@ export class S3ImmutableObjects implements ImmutableObjects {
   private readonly bucketUrl: string;
   private readonly prefix: string;
   private readonly readSignal: (() => AbortSignal) | undefined;
+  /** One store fetch shared by concurrent first reads of a digest on this client. */
+  private readonly inflight = new Map<string, Promise<Uint8Array>>();
 
   constructor(options: S3ObjectOptions) {
     const endpoint = new URL(options.endpoint);
@@ -107,10 +273,12 @@ export class S3ImmutableObjects implements ImmutableObjects {
       throw new ObjectUnavailable(`immutable object create failed (${response.status})`);
     }
     // A competing creator may have won. In either case, do not publish a manifest
-    // until the exact bytes can be read through the selected backend.
+    // until the exact bytes can be read through the selected backend. That
+    // read-back skips the cache: a hit is not proof this namespace stored them.
     for (let attempt = 0; attempt < 8; attempt++) {
       try {
-        await this.get(digest);
+        const visible = await this.readStore(digest);
+        rememberVerifiedImmutableObject(digest, visible);
         return digest;
       } catch (error) {
         if (!(error instanceof ObjectUnavailable) || attempt === 7) throw error;
@@ -123,6 +291,49 @@ export class S3ImmutableObjects implements ImmutableObjects {
   async get(digest: string, maxBytes?: number, signal?: AbortSignal): Promise<Uint8Array> {
     if (maxBytes !== undefined && (!Number.isSafeInteger(maxBytes) || maxBytes < 1))
       throw new ObjectReadBudgetExceeded('invalid immutable object read budget');
+    this.key(digest);
+    if (signal?.aborted) throw new ObjectUnavailable('committed immutable object is unavailable');
+    if (skipVerifiedObjectCache.getStore()) {
+      return new Uint8Array(await this.readStore(digest, maxBytes, signal));
+    }
+    const cached = verifiedObjectCache.lookup(digest);
+    if (cached) {
+      verifiedObjectCache.hits++;
+      if (maxBytes !== undefined && cached.byteLength > maxBytes)
+        throw new ObjectReadBudgetExceeded('immutable object exceeds its read budget');
+      return cached;
+    }
+    verifiedObjectCache.misses++;
+    const bytes = maxBytes === undefined
+      ? await this.joinRead(digest, signal)
+      : await this.readStore(digest, maxBytes, signal);
+    if (maxBytes !== undefined) rememberVerifiedImmutableObject(digest, bytes);
+    if (signal?.aborted) throw new ObjectUnavailable('committed immutable object is unavailable');
+    if (maxBytes !== undefined && bytes.byteLength > maxBytes)
+      throw new ObjectReadBudgetExceeded('immutable object exceeds its read budget');
+    return new Uint8Array(bytes);
+  }
+
+  /** Concurrent unbounded reads of one digest share the store fetch. A caller's abort does not cancel it. */
+  private joinRead(digest: string, signal?: AbortSignal): Promise<Uint8Array> {
+    const existing = this.inflight.get(digest);
+    const shared = existing ?? this.startRead(digest);
+    return whenNotAborted(signal, shared);
+  }
+
+  private startRead(digest: string): Promise<Uint8Array> {
+    const shared = this.readStore(digest, undefined, this.readSignal?.()).then(bytes => {
+      rememberVerifiedImmutableObject(digest, bytes);
+      return bytes;
+    });
+    const tracked = shared.finally(() => {
+      if (this.inflight.get(digest) === tracked) this.inflight.delete(digest);
+    });
+    this.inflight.set(digest, tracked);
+    return tracked;
+  }
+
+  private async readStore(digest: string, maxBytes?: number, signal?: AbortSignal): Promise<Uint8Array> {
     const key = this.key(digest);
     let response: Response;
     try { response = await this.signer.fetch(`${this.bucketUrl}/${key}`,
@@ -176,5 +387,6 @@ export class S3ImmutableObjects implements ImmutableObjects {
     if (!response.ok && response.status !== 404) {
       throw new ObjectUnavailable(`immutable object discard failed (${response.status})`);
     }
+    evictVerifiedImmutableObject(digest);
   }
 }
