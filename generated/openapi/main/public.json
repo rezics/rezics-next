@@ -535940,68 +535940,119 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "generation": {
-                      "pattern": "^(0|[1-9][0-9]{0,17})$",
-                      "type": "string"
-                    },
-                    "realm": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "settings": {
-                      "additionalProperties": false,
+                  "anyOf": [
+                    {
                       "properties": {
-                        "admission": {
-                          "enum": [
-                            "open",
-                            "request",
-                            "invitation"
-                          ],
+                        "generation": {
+                          "pattern": "^(0|[1-9][0-9]{0,17})$",
                           "type": "string"
                         },
-                        "history": {
-                          "enum": [
-                            "everything",
-                            "from-admission"
-                          ],
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
-                        "listing": {
-                          "enum": [
-                            "listed",
-                            "unlisted"
+                        "settings": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "admission": {
+                              "enum": [
+                                "open",
+                                "request",
+                                "invitation"
+                              ],
+                              "type": "string"
+                            },
+                            "history": {
+                              "enum": [
+                                "everything",
+                                "from-admission"
+                              ],
+                              "type": "string"
+                            },
+                            "listing": {
+                              "enum": [
+                                "listed",
+                                "unlisted"
+                              ],
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "public",
+                                "private"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "visibility",
+                            "listing",
+                            "history",
+                            "admission"
                           ],
-                          "type": "string"
+                          "type": "object"
                         },
-                        "visibility": {
-                          "enum": [
-                            "public",
-                            "private"
-                          ],
+                        "space": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         }
                       },
                       "required": [
-                        "visibility",
-                        "listing",
-                        "history",
-                        "admission"
+                        "space",
+                        "realm",
+                        "generation",
+                        "settings"
                       ],
                       "type": "object"
                     },
-                    "space": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
+                    {
+                      "properties": {
+                        "generation": {
+                          "pattern": "^(0|[1-9][0-9]{0,17})$",
+                          "type": "string"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "listing": {
+                              "enum": [
+                                "listed",
+                                "unlisted"
+                              ],
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "public",
+                                "private"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "visibility",
+                            "listing"
+                          ],
+                          "type": "object"
+                        },
+                        "space": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "zone": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "space",
+                        "zone",
+                        "generation",
+                        "settings"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "space",
-                    "realm",
-                    "generation",
-                    "settings"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -536355,206 +536406,365 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "expectedGeneration": {
-                    "pattern": "^(0|[1-9][0-9]{0,17})$",
-                    "type": "string"
-                  },
-                  "reason": {
-                    "maxLength": 2000,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "settings": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
-                      "admission": {
-                        "enum": [
-                          "open",
-                          "request",
-                          "invitation"
-                        ],
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
-                      "history": {
-                        "enum": [
-                          "everything",
-                          "from-admission"
-                        ],
+                      "expectedGeneration": {
+                        "pattern": "^(0|[1-9][0-9]{0,17})$",
                         "type": "string"
                       },
-                      "listing": {
-                        "enum": [
-                          "listed",
-                          "unlisted"
-                        ],
+                      "reason": {
+                        "maxLength": 2000,
+                        "minLength": 1,
                         "type": "string"
                       },
-                      "visibility": {
-                        "enum": [
-                          "public",
-                          "private"
+                      "settings": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "admission": {
+                            "enum": [
+                              "open",
+                              "request",
+                              "invitation"
+                            ],
+                            "type": "string"
+                          },
+                          "history": {
+                            "enum": [
+                              "everything",
+                              "from-admission"
+                            ],
+                            "type": "string"
+                          },
+                          "listing": {
+                            "enum": [
+                              "listed",
+                              "unlisted"
+                            ],
+                            "type": "string"
+                          },
+                          "visibility": {
+                            "enum": [
+                              "public",
+                              "private"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "visibility",
+                          "listing",
+                          "history",
+                          "admission"
                         ],
-                        "type": "string"
+                        "type": "object"
                       }
                     },
                     "required": [
-                      "visibility",
-                      "listing",
-                      "history",
-                      "admission"
+                      "actingSubject",
+                      "expectedGeneration",
+                      "reason",
+                      "settings"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedGeneration": {
+                        "pattern": "^(0|[1-9][0-9]{0,17})$",
+                        "type": "string"
+                      },
+                      "reason": {
+                        "maxLength": 2000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "settings": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "listing": {
+                            "enum": [
+                              "listed",
+                              "unlisted"
+                            ],
+                            "type": "string"
+                          },
+                          "visibility": {
+                            "enum": [
+                              "public",
+                              "private"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "visibility",
+                          "listing"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "actingSubject",
+                      "expectedGeneration",
+                      "reason",
+                      "settings"
                     ],
                     "type": "object"
                   }
-                },
-                "required": [
-                  "actingSubject",
-                  "expectedGeneration",
-                  "reason",
-                  "settings"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "expectedGeneration": {
-                    "pattern": "^(0|[1-9][0-9]{0,17})$",
-                    "type": "string"
-                  },
-                  "reason": {
-                    "maxLength": 2000,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "settings": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
-                      "admission": {
-                        "enum": [
-                          "open",
-                          "request",
-                          "invitation"
-                        ],
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
-                      "history": {
-                        "enum": [
-                          "everything",
-                          "from-admission"
-                        ],
+                      "expectedGeneration": {
+                        "pattern": "^(0|[1-9][0-9]{0,17})$",
                         "type": "string"
                       },
-                      "listing": {
-                        "enum": [
-                          "listed",
-                          "unlisted"
-                        ],
+                      "reason": {
+                        "maxLength": 2000,
+                        "minLength": 1,
                         "type": "string"
                       },
-                      "visibility": {
-                        "enum": [
-                          "public",
-                          "private"
+                      "settings": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "admission": {
+                            "enum": [
+                              "open",
+                              "request",
+                              "invitation"
+                            ],
+                            "type": "string"
+                          },
+                          "history": {
+                            "enum": [
+                              "everything",
+                              "from-admission"
+                            ],
+                            "type": "string"
+                          },
+                          "listing": {
+                            "enum": [
+                              "listed",
+                              "unlisted"
+                            ],
+                            "type": "string"
+                          },
+                          "visibility": {
+                            "enum": [
+                              "public",
+                              "private"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "visibility",
+                          "listing",
+                          "history",
+                          "admission"
                         ],
-                        "type": "string"
+                        "type": "object"
                       }
                     },
                     "required": [
-                      "visibility",
-                      "listing",
-                      "history",
-                      "admission"
+                      "actingSubject",
+                      "expectedGeneration",
+                      "reason",
+                      "settings"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedGeneration": {
+                        "pattern": "^(0|[1-9][0-9]{0,17})$",
+                        "type": "string"
+                      },
+                      "reason": {
+                        "maxLength": 2000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "settings": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "listing": {
+                            "enum": [
+                              "listed",
+                              "unlisted"
+                            ],
+                            "type": "string"
+                          },
+                          "visibility": {
+                            "enum": [
+                              "public",
+                              "private"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "visibility",
+                          "listing"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "actingSubject",
+                      "expectedGeneration",
+                      "reason",
+                      "settings"
                     ],
                     "type": "object"
                   }
-                },
-                "required": [
-                  "actingSubject",
-                  "expectedGeneration",
-                  "reason",
-                  "settings"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "expectedGeneration": {
-                    "pattern": "^(0|[1-9][0-9]{0,17})$",
-                    "type": "string"
-                  },
-                  "reason": {
-                    "maxLength": 2000,
-                    "minLength": 1,
-                    "type": "string"
-                  },
-                  "settings": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
-                      "admission": {
-                        "enum": [
-                          "open",
-                          "request",
-                          "invitation"
-                        ],
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
-                      "history": {
-                        "enum": [
-                          "everything",
-                          "from-admission"
-                        ],
+                      "expectedGeneration": {
+                        "pattern": "^(0|[1-9][0-9]{0,17})$",
                         "type": "string"
                       },
-                      "listing": {
-                        "enum": [
-                          "listed",
-                          "unlisted"
-                        ],
+                      "reason": {
+                        "maxLength": 2000,
+                        "minLength": 1,
                         "type": "string"
                       },
-                      "visibility": {
-                        "enum": [
-                          "public",
-                          "private"
+                      "settings": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "admission": {
+                            "enum": [
+                              "open",
+                              "request",
+                              "invitation"
+                            ],
+                            "type": "string"
+                          },
+                          "history": {
+                            "enum": [
+                              "everything",
+                              "from-admission"
+                            ],
+                            "type": "string"
+                          },
+                          "listing": {
+                            "enum": [
+                              "listed",
+                              "unlisted"
+                            ],
+                            "type": "string"
+                          },
+                          "visibility": {
+                            "enum": [
+                              "public",
+                              "private"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "visibility",
+                          "listing",
+                          "history",
+                          "admission"
                         ],
-                        "type": "string"
+                        "type": "object"
                       }
                     },
                     "required": [
-                      "visibility",
-                      "listing",
-                      "history",
-                      "admission"
+                      "actingSubject",
+                      "expectedGeneration",
+                      "reason",
+                      "settings"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "expectedGeneration": {
+                        "pattern": "^(0|[1-9][0-9]{0,17})$",
+                        "type": "string"
+                      },
+                      "reason": {
+                        "maxLength": 2000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "settings": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "listing": {
+                            "enum": [
+                              "listed",
+                              "unlisted"
+                            ],
+                            "type": "string"
+                          },
+                          "visibility": {
+                            "enum": [
+                              "public",
+                              "private"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "visibility",
+                          "listing"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "actingSubject",
+                      "expectedGeneration",
+                      "reason",
+                      "settings"
                     ],
                     "type": "object"
                   }
-                },
-                "required": [
-                  "actingSubject",
-                  "expectedGeneration",
-                  "reason",
-                  "settings"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -536565,77 +536775,137 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "generation": {
-                      "pattern": "^(0|[1-9][0-9]{0,17})$",
-                      "type": "string"
-                    },
-                    "realm": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "receiptId": {
-                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "settings": {
-                      "additionalProperties": false,
+                  "anyOf": [
+                    {
                       "properties": {
-                        "admission": {
-                          "enum": [
-                            "open",
-                            "request",
-                            "invitation"
-                          ],
+                        "generation": {
+                          "pattern": "^(0|[1-9][0-9]{0,17})$",
                           "type": "string"
                         },
-                        "history": {
-                          "enum": [
-                            "everything",
-                            "from-admission"
-                          ],
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
-                        "listing": {
-                          "enum": [
-                            "listed",
-                            "unlisted"
-                          ],
+                        "receiptId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                           "type": "string"
                         },
-                        "visibility": {
-                          "enum": [
-                            "public",
-                            "private"
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "admission": {
+                              "enum": [
+                                "open",
+                                "request",
+                                "invitation"
+                              ],
+                              "type": "string"
+                            },
+                            "history": {
+                              "enum": [
+                                "everything",
+                                "from-admission"
+                              ],
+                              "type": "string"
+                            },
+                            "listing": {
+                              "enum": [
+                                "listed",
+                                "unlisted"
+                              ],
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "public",
+                                "private"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "visibility",
+                            "listing",
+                            "history",
+                            "admission"
                           ],
+                          "type": "object"
+                        },
+                        "space": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         }
                       },
                       "required": [
-                        "visibility",
-                        "listing",
-                        "history",
-                        "admission"
+                        "space",
+                        "realm",
+                        "generation",
+                        "settings",
+                        "receiptId",
+                        "replayed"
                       ],
                       "type": "object"
                     },
-                    "space": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
+                    {
+                      "properties": {
+                        "generation": {
+                          "pattern": "^(0|[1-9][0-9]{0,17})$",
+                          "type": "string"
+                        },
+                        "receiptId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "listing": {
+                              "enum": [
+                                "listed",
+                                "unlisted"
+                              ],
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "public",
+                                "private"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "visibility",
+                            "listing"
+                          ],
+                          "type": "object"
+                        },
+                        "space": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "zone": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "space",
+                        "zone",
+                        "generation",
+                        "settings",
+                        "receiptId",
+                        "replayed"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "space",
-                    "realm",
-                    "generation",
-                    "settings",
-                    "receiptId",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -536645,77 +536915,137 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "generation": {
-                      "pattern": "^(0|[1-9][0-9]{0,17})$",
-                      "type": "string"
-                    },
-                    "realm": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "receiptId": {
-                      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "settings": {
-                      "additionalProperties": false,
+                  "anyOf": [
+                    {
                       "properties": {
-                        "admission": {
-                          "enum": [
-                            "open",
-                            "request",
-                            "invitation"
-                          ],
+                        "generation": {
+                          "pattern": "^(0|[1-9][0-9]{0,17})$",
                           "type": "string"
                         },
-                        "history": {
-                          "enum": [
-                            "everything",
-                            "from-admission"
-                          ],
+                        "realm": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
-                        "listing": {
-                          "enum": [
-                            "listed",
-                            "unlisted"
-                          ],
+                        "receiptId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                           "type": "string"
                         },
-                        "visibility": {
-                          "enum": [
-                            "public",
-                            "private"
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "admission": {
+                              "enum": [
+                                "open",
+                                "request",
+                                "invitation"
+                              ],
+                              "type": "string"
+                            },
+                            "history": {
+                              "enum": [
+                                "everything",
+                                "from-admission"
+                              ],
+                              "type": "string"
+                            },
+                            "listing": {
+                              "enum": [
+                                "listed",
+                                "unlisted"
+                              ],
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "public",
+                                "private"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "visibility",
+                            "listing",
+                            "history",
+                            "admission"
                           ],
+                          "type": "object"
+                        },
+                        "space": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         }
                       },
                       "required": [
-                        "visibility",
-                        "listing",
-                        "history",
-                        "admission"
+                        "space",
+                        "realm",
+                        "generation",
+                        "settings",
+                        "receiptId",
+                        "replayed"
                       ],
                       "type": "object"
                     },
-                    "space": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
+                    {
+                      "properties": {
+                        "generation": {
+                          "pattern": "^(0|[1-9][0-9]{0,17})$",
+                          "type": "string"
+                        },
+                        "receiptId": {
+                          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "settings": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "listing": {
+                              "enum": [
+                                "listed",
+                                "unlisted"
+                              ],
+                              "type": "string"
+                            },
+                            "visibility": {
+                              "enum": [
+                                "public",
+                                "private"
+                              ],
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "visibility",
+                            "listing"
+                          ],
+                          "type": "object"
+                        },
+                        "space": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "zone": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "space",
+                        "zone",
+                        "generation",
+                        "settings",
+                        "receiptId",
+                        "replayed"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "space",
-                    "realm",
-                    "generation",
-                    "settings",
-                    "receiptId",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },

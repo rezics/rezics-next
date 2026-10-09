@@ -11,6 +11,7 @@ import { readId, readUuid } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { AppealNotEscalable } from '../modules/access/realm-management.ts';
 import { commandError, problem } from './problems.ts';
+import { AccountAssertionInsufficientScope } from '../modules/account/verify-assertion.ts';
 import { joinRequestBasis, joinRequestCommand, joinRequestReceipt, joinRequestPage, joinRequestWithdraw,
   joinRequestDecision, joinRequestDecisionReceipt, RealmJoinRequestMissing, joinRequestQuery,
   ownJoinRequestQuery, ownJoinRequestPage } from '../modules/realm-admin/join-requests.ts';
@@ -35,6 +36,15 @@ const params = t.Object({ realm: readUuid });
 const query = t.Object({ actingSubject: readId }, { additionalProperties: false });
 const headers = { 'cache-control': 'private, no-store' };
 const problems = { ...writeProblems, 404: problemResult(404), 422: problemResult(422) };
+/** Realm managers present governance:decide. A Zone editor presents zone:edit,
+ * the same account scope Zone edits already require. */
+async function settingsPrincipal(work: MainWorkDependencies, request: Request) {
+  try { return await work.account.verify(request, ['governance:decide']); }
+  catch (error) {
+    if (!(error instanceof AccountAssertionInsufficientScope)) throw error;
+    return await work.account.verify(request, ['zone:edit']);
+  }
+}
 const key = (request: Request): string => {
   const value = request.headers.get('idempotency-key');
   if (!value || !/^[A-Za-z0-9:_./-]{1,128}$/.test(value)) throw new RealmAdminInvalid('Idempotency-Key is required');
@@ -122,7 +132,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       response: { 200: spaceSettingsView, ...authorizedReadProblems, ...problems },
     }, async ({ request, params: path, query: options }) => {
       try {
-        const principal = await work.account.verify(request, ['governance:decide']);
+        const principal = await settingsPrincipal(work, request);
         return Response.json(await owner().spaceSettings(principal, `https://rezics.com/id/${path.space}`,
           options.actingSubject, work.environment), { headers });
       } catch (error) { return errorResponse(error); }
@@ -131,7 +141,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
       response: { 200: spaceSettingsReceipt, 201: spaceSettingsReceipt, ...problems },
     }, async ({ request, params: path, body }) => {
       try {
-        const principal = await work.account.verify(request, ['governance:decide']);
+        const principal = await settingsPrincipal(work, request);
         const result = await owner().changeSpaceSettings(principal, `https://rezics.com/id/${path.space}`,
           body, key(request), work.environment);
         return Response.json(result, { headers, status: result.replayed ? 200 : 201 });

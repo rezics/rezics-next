@@ -22,13 +22,20 @@ export const policyHead = (id: string) => `urn:rezics:receipt:${hash(`${id}\0rea
 export const realmPolicyDeliveryHead = (op: Pick<RealmPolicyDelivery, 'receipt_id' | 'policy_head'>) =>
   op.policy_head ?? `urn:rezics:realm-policy:${op.receipt_id}`;
 
+/** Space disclosure and listing are the facts readers, search and sitemaps consult.
+ * Realm policy delivery and Zone Space settings publish these same triples. */
+export function spaceDisclosureFacts(space: string, visibility: 'public' | 'private' | 'restricted',
+  listing: ResourceListing = 'listed'): string {
+  return `${iri(space)} rv:disclosure rv:${visibility === 'private' ? 'Private' : 'Public'} ;
+    rv:listing ${lit(listing)} .`;
+}
+
 /** Creation and later delivery publish the same policy fields on the Realm.
  * The head is the publishing command's receipt IRI, not a separate resource. */
 export function realmPolicyCurrentFacts(realm: string, space: string, revision: string,
   policy: Pick<RealmPolicy, 'visibility' | 'reviewMode'>
     & Partial<Pick<RealmPolicy, 'listing' | 'history' | 'admission'>>): string {
-  return `${iri(space)} rv:disclosure rv:${policy.visibility === 'private' ? 'Private' : 'Public'} ;
-    rv:listing ${lit(policy.listing ?? 'listed')} .
+  return `${spaceDisclosureFacts(space, policy.visibility, policy.listing)}
     ${iri(realm)} rv:visibility ${lit(policy.visibility)} ; rv:reviewMode ${lit(policy.reviewMode)} ;
       rv:historyVisibility ${lit(policy.history ?? 'everything')} ; rv:admissionMode ${lit(policy.admission ?? 'invitation')} ;
       rv:realmPolicyHead ${iri(revision)} ; rv:reviewPolicy ${iri(reviewPolicy(policy.reviewMode))} .`;
@@ -135,4 +142,85 @@ export async function deliverRealmPolicy(env: WorkActivationEnvironment, op: Rea
       BIND(?n + 1 AS ?next)
     }` }); } catch (cause) { error = cause; }
   if (!await committed()) throw new Error('Realm policy delivery is pending', { cause: error });
+}
+
+const ZONE_SPACE_PROFILE = 'https://rezics.com/definition/space-zone-v1';
+const ZONE_CAPABILITY_PROFILE = 'https://rezics.com/definition/zone-capability-v1';
+export const zoneSpacePolicyHead = (id: string) => `urn:rezics:receipt:${hash(`${id}\0zone-space-policy-v1`)}`;
+
+export interface ZoneSpacePolicyDelivery {
+  space: string; zone: string; receipt_id: string; generation: string;
+  visibility: 'public' | 'private'; listing: ResourceListing;
+}
+
+/** One exact Zone Space read, at most 2 rows. Listing defaults to listed. */
+export async function readZoneSpaceDisclosure(env: WorkActivationEnvironment, space: string): Promise<{
+  zone: string; visibility: 'public' | 'private'; listing: ResourceListing;
+} | null> {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?zone ?disclosure ?listing WHERE {
+    GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+      rv:routingEpoch ${lit(env.lineage.routingEpoch)} . }
+    FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+    GRAPH ${iri(GRAPHS.current)} { ${iri(space)} a rv:Space ; rv:definitionProfile ${iri(ZONE_SPACE_PROFILE)} ;
+      rv:zoneCapability ?zone ; rv:disclosure ?disclosure .
+      ?zone a rv:Zone ; rv:space ${iri(space)} ; rv:zoneState rv:Active .
+      FILTER NOT EXISTS { ${iri(space)} rv:realmCapability ?realm }
+      OPTIONAL { ${iri(space)} rv:listing ?listing } }
+  } LIMIT 2`, 4096)).results?.bindings ?? [];
+  if (rows.length !== 1 || !rows[0]?.zone || !rows[0].disclosure) return null;
+  const disclosure = rows[0].disclosure.value;
+  const listing = rows[0].listing?.value ?? 'listed';
+  if (![`${RV}Public`, `${RV}Private`].includes(disclosure) || !['listed', 'unlisted'].includes(listing)) return null;
+  return { zone: rows[0].zone.value, visibility: disclosure === `${RV}Private` ? 'private' : 'public',
+    listing: listing as ResourceListing };
+}
+
+/** Publishes Visibility and Listing on a Zone Space through the same dataset
+ * sequence advance and Space disclosure facts as Realm policy delivery. The
+ * Zone component document is left as stored; its own disclosure stays the
+ * graph fact Zone reads already compare with that document. */
+export async function deliverZoneSpacePolicy(env: WorkActivationEnvironment, op: ZoneSpacePolicyDelivery): Promise<void> {
+  const receipt = zoneSpacePolicyHead(op.receipt_id);
+  const digest = hash(JSON.stringify(op));
+  const committed = async () => (await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:requestDigest ?digest ; rv:outcome rv:Succeeded .
+      FILTER(?digest = ${lit(digest)}) }
+  }`, 1024)).boolean === true;
+  if (await committed()) return;
+  const validations = [
+    ...await profileValidations(env.fuseki, 'space-zone-v1', [
+      { shape: `${ZONE_SPACE_PROFILE}/space-shape`, focus: [op.space], graphs: [GRAPHS.current] }]),
+    ...await profileValidations(env.fuseki, 'zone-capability-v1', [
+      { shape: `${ZONE_CAPABILITY_PROFILE}/zone-shape`, focus: [op.zone], graphs: [GRAPHS.current, GRAPHS.revisions] }]),
+  ];
+  let error: unknown;
+  try { await env.fuseki.commandWithReceipt({ receipt, digest, validations, deadlineMs: 10_000,
+    update: `PREFIX rv: <${RV}>
+    DELETE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(op.space)} rv:disclosure ?disclosure ; rv:listing ?listing . }
+    } INSERT {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+      GRAPH ${iri(GRAPHS.current)} { ${spaceDisclosureFacts(op.space, op.visibility, op.listing)} }
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+        rv:requestDigest ${lit(digest)} ; rv:space ${iri(op.space)} ; rv:zone ${iri(op.zone)} ;
+        rv:visibility ${lit(op.visibility)} ; rv:listing ${lit(op.listing)} ; rv:policyGeneration ${lit(op.generation)} ;
+        rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(`urn:rezics:outbox:${hash(receipt)}`)} a rv:OutboxBatch ;
+        rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(`urn:rezics:event:${hash(receipt)}`)} .
+        ${iri(`urn:rezics:event:${hash(receipt)}`)} a rv:RealmPolicyChangedEvent ; rv:ordinal 0 ;
+          rv:action "realm.policy.publish" ; rv:receipt ${iri(receipt)} ; rv:space ${iri(op.space)} . }
+    } WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(op.space)} a rv:Space ; rv:definitionProfile ${iri(ZONE_SPACE_PROFILE)} ;
+        rv:zoneCapability ${iri(op.zone)} ; rv:disclosure ?disclosure .
+        ${iri(op.zone)} a rv:Zone ; rv:space ${iri(op.space)} ; rv:zoneState rv:Active .
+        FILTER NOT EXISTS { ${iri(op.space)} rv:realmCapability ?realm }
+        OPTIONAL { ${iri(op.space)} rv:listing ?listing } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      BIND(?n + 1 AS ?next)
+    }` }); } catch (cause) { error = cause; }
+  if (!await committed()) throw new Error('Zone Space policy delivery is pending', { cause: error });
 }

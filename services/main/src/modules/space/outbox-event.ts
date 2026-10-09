@@ -11,24 +11,33 @@ const realmPolicyEvent: OwnerOutboxEventHandler = {
     const receiptId = receipt?.match(/^urn:rezics:(?:realm-policy:([0-9a-f-]{36})|receipt:([0-9a-f]{64}))$/);
     const realm = value('realm');
     const space = value('space');
-    if (!receipt || !receiptId || !realm || !space
-      || value('eventRealm') !== realm || value('outcome') !== `${RV}Succeeded`
+    if (!receipt || !receiptId || !space
+      || value('outcome') !== `${RV}Succeeded`
       || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence
-      || eventId !== `urn:rezics:event:${hash(receipt)}` || !value('digest')) throw new Error('Realm policy event differs');
-    const rows = (await fuseki.query(`PREFIX rv: <${RV}> SELECT ?visibility ?mode ?generation WHERE {
-      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:visibility ?visibility ;
-        rv:reviewMode ?mode ; rv:policyGeneration ?generation . }
-    } LIMIT 2`, 2048)).results?.bindings ?? [];
+      || eventId !== `urn:rezics:event:${hash(receipt)}` || !value('digest')
+      || (realm ? value('eventRealm') !== realm : value('eventSpace') !== space || !!value('eventRealm'))) {
+      throw new Error('Realm policy event differs');
+    }
+    const rows = (await fuseki.query(realm
+      ? `PREFIX rv: <${RV}> SELECT ?visibility ?mode ?generation WHERE {
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:visibility ?visibility ;
+          rv:reviewMode ?mode ; rv:policyGeneration ?generation . }
+      } LIMIT 2`
+      : `PREFIX rv: <${RV}> SELECT ?visibility ?generation WHERE {
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:visibility ?visibility ; rv:policyGeneration ?generation .
+          FILTER NOT EXISTS { ${iri(receipt)} rv:reviewMode ?mode } }
+      } LIMIT 2`, 2048)).results?.bindings ?? [];
     const row = rows[0];
+    const mode = row?.mode?.value;
     if (rows.length !== 1 || !['public','restricted','private'].includes(row?.visibility?.value ?? '')
-      || !['mandatory','trusted-members','open'].includes(row?.mode?.value ?? '')
+      || (realm ? !['mandatory','trusted-members','open'].includes(mode ?? '') : mode !== undefined)
       || !/^\d+$/.test(row?.generation?.value ?? '')) throw new Error('Realm policy event is incomplete');
     return { specversion: '1.0', id: eventId, source: 'https://rezics.com/services/main',
       type: 'com.rezics.realm.policy-changed.v1', datacontenttype: 'application/json',
       data: { batchId: batch.batchId, routingEpoch: batch.routingEpoch, ordinal,
         sourcePosition: { datasetId: 'product', dataEpoch: batch.dataEpoch, sequence: batch.sequence },
         receipt: { id: receipt, action: 'realm.policy.publish', outcome: 'succeeded', requestDigest: value('digest')!,
-          realm, space, visibility: row!.visibility!.value, reviewMode: row!.mode!.value,
+          ...(realm ? { realm, reviewMode: mode } : {}), space, visibility: row!.visibility!.value,
           generation: row!.generation!.value, systemProof: { kind: 'realm-settings-receipt', receiptId: receiptId[1] ?? receiptId[2]! } } } };
   },
 };

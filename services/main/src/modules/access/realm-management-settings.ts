@@ -2,15 +2,14 @@ import type { AuthoritySource } from './authority-witness.ts';
 import { createHash } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { Value } from 'typebox/value';
-import { realmSettings, RealmAdminInvalid, RealmAdminStale, RealmAdminConflict, RealmAdminDenied, type RealmSettings,
-  type SettingsCommand } from '../realm-admin/contract.ts';
+import { realmSettings, RealmAdminInvalid, RealmAdminStale, RealmAdminConflict, RealmAdminDenied, RealmAdminUnavailable, type RealmSettings,
+  type SettingsCommand, spaceSettings, zoneSpaceSettings, type SpaceSettings, type ZoneSpaceSettings } from '../realm-admin/contract.ts';
 import { AdmissionDenied } from './admission.ts';
 import { realmMemberProof } from '../realm-reply/member-policy.ts';
 import { currentRealmRulesDocument, realmRulesRef, publishRuleRevision } from '../governance/rules.ts';
 import { checkedCommunityRules } from '../realm-profile/schema.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale } from '../governance/store.ts';
 import type { RealmReviewMode } from '../space/policy.ts';
-import type { SpaceSettings } from '../realm-admin/contract.ts';
 
 /** Indexed owner reads, no duplicated admission enum in Realm settings. */
 export async function readRealmAccessSettings(client: PoolClient, realm: string): Promise<SpaceSettings> {
@@ -24,6 +23,36 @@ export async function readRealmAccessSettings(client: PoolClient, realm: string)
   return { visibility: row?.visibility === 'private' ? 'private' : 'public',
     listing: row?.listing ?? 'listed', history: row?.history ?? 'everything',
     admission: row?.self_join ? 'open' : row?.admission ?? 'invitation' };
+}
+
+/** History and Admission are Realm settings. A Zone body that carries either
+ * is the same invalid management request as any other inapplicable value. */
+export function applicableZoneSettings(settings: SpaceSettings | ZoneSpaceSettings): ZoneSpaceSettings {
+  if ('history' in settings || 'admission' in settings) throw new RealmAdminInvalid('Setting does not apply to this Space');
+  if (!Value.Check(zoneSpaceSettings, settings)) throw new RealmAdminInvalid('Invalid Space settings');
+  return settings;
+}
+
+export function applicableRealmSettings(settings: SpaceSettings | ZoneSpaceSettings): SpaceSettings {
+  if (!Value.Check(spaceSettings, settings)) throw new RealmAdminInvalid('Invalid Space settings');
+  return settings;
+}
+
+/** Zone Space settings use the same management revision Realm commands advance.
+ * A receipt also moves the read-basis counter, so that value is not this generation.
+ * A missing row is the creation generation. */
+export async function readSpaceSettingsGeneration(client: PoolClient, space: string): Promise<string> {
+  const row = (await client.query<{ generation: string }>(
+    `SELECT generation::text FROM access.realm_admin_revision WHERE realm = $1`, [space])).rows[0];
+  return row?.generation ?? '0';
+}
+
+export async function lockSpaceSettingsGeneration(client: PoolClient, space: string): Promise<string> {
+  await client.query(`INSERT INTO access.realm_admin_revision (realm) VALUES ($1) ON CONFLICT DO NOTHING`, [space]);
+  const row = (await client.query<{ generation: string }>(
+    `SELECT generation::text FROM access.realm_admin_revision WHERE realm = $1 FOR UPDATE`, [space])).rows[0];
+  if (!row) throw new RealmAdminUnavailable('Space settings generation is unavailable');
+  return row.generation;
 }
 
 export async function saveRealmAccessSettings(client: PoolClient, realm: string, settings: SpaceSettings) {

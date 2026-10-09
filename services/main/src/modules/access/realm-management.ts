@@ -14,10 +14,14 @@ import { configureFollowGraph, prepareRealmFollow } from '../follows/recovery.ts
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { registerFollowSpace } from '../follows/targets.ts';
 import { searchRealmMembers } from './realm-management-search.ts';
-import { readRealmSettings, saveRealmSettings, readRealmAccessSettings, saveRealmAccessSettings } from './realm-management-settings.ts';
-import { spaceSettingsCommand, type SpaceSettingsCommand } from '../realm-admin/contract.ts';
+import { readRealmSettings, saveRealmSettings, readRealmAccessSettings, saveRealmAccessSettings,
+  applicableRealmSettings, applicableZoneSettings, lockSpaceSettingsGeneration, readSpaceSettingsGeneration } from './realm-management-settings.ts';
+import { spaceSettingsCommand, type SpaceSettingsCommand, type ZoneSpaceSettings } from '../realm-admin/contract.ts';
 import { settleRealmPolicy } from './realm-management-recovery.ts';
-import { policyHead } from '../space/policy.ts';
+import { deliverZoneSpacePolicy, policyHead, readZoneSpaceDisclosure, type ZoneSpacePolicyDelivery } from '../space/policy.ts';
+import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
+import { platformAdministratorProof, platformAdministratorTargetAllowed } from './platform-administrator.ts';
+import { maintainerControllerProof } from '../work/maintainer-proof.ts';
 import { DATASET, GRAPHS, iri, lit, RV, type WorkActivationEnvironment } from '../work/activate.ts';
 
 export const realmAdminScope = (realm: string) => `governance:realm:${realm}`;
@@ -237,43 +241,152 @@ export class AccessRealmManagement {
         history = EXCLUDED.history,admission = EXCLUDED.admission,delivered = false`, [realm,receipt,generation,policyHead(receipt)]);
   }
 
-  /** One bounded Space capability lookup. G-937 owns creation of Zone-only
-   * Spaces; its manager integration must enroll their management authority. */
-  private async spaceRealm(space: string, env: WorkActivationEnvironment) {
+  /** One bounded lookup. A live Realm capability keeps the Realm settings path.
+   * A Zone-only Space is the space-zone profile with no Realm capability. */
+  private async spaceKind(space: string, env: WorkActivationEnvironment): Promise<
+    { kind: 'realm'; realm: string } | { kind: 'zone'; zone: string }> {
     if (!native.test(space)) throw new RealmAdminInvalid('Invalid Space');
-    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realm WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ${iri(space)} a rv:Space ; rv:realmCapability ?realm .
-        ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ${iri(space)} . }
+    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?realm ?zone ?profile WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ${iri(space)} a rv:Space .
+        OPTIONAL { ${iri(space)} rv:realmCapability ?realm .
+          ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ${iri(space)} . }
+        OPTIONAL { ${iri(space)} rv:definitionProfile ?profile ; rv:zoneCapability ?zone .
+          ?zone a rv:Zone ; rv:space ${iri(space)} ; rv:zoneState rv:Active . } }
     } LIMIT 2`, 4096)).results?.bindings ?? [];
-    if (rows.length !== 1 || !rows[0]?.realm) throw new RealmAdminDenied('Space management is unavailable');
-    return rows[0].realm.value;
+    if (rows.length !== 1) throw new RealmAdminDenied('Space management is unavailable');
+    const row = rows[0]!;
+    if (row.realm?.value) return { kind: 'realm', realm: row.realm.value };
+    if (row.zone?.value && row.profile?.value === 'https://rezics.com/definition/space-zone-v1') {
+      return { kind: 'zone', zone: row.zone.value };
+    }
+    throw new RealmAdminDenied('Space management is unavailable');
+  }
+
+  /** Zone edit authority: a verified Zone Space creator, or the platform
+   * administrator who already holds zone.edit on this Zone. No new grant. */
+  private async authorizeZone(client: PoolClient, principal: VerifiedPrincipal, zone: string,
+    actor: string, env: WorkActivationEnvironment): Promise<string> {
+    if (!native.test(actor)) throw new RealmAdminInvalid('Invalid acting subject');
+    const identity = (await client.query<{ id: string }>(`SELECT id FROM access.principal
+      WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
+    [principal.issuer, principal.subject])).rows[0];
+    if (!identity) throw new RealmAdminDenied('Zone permission is missing');
+    const scope = `zone:edit:${zone}`;
+    if (await platformAdministratorProof(client, identity.id, actor, true, { action: 'zone.edit', scope })
+      && await platformAdministratorTargetAllowed(client, env.fuseki, identity.id, actor, 'zone.edit', scope)) {
+      return identity.id;
+    }
+    if (principal.emailVerified === true && await maintainerControllerProof(client, identity.id, actor)
+      && await zoneSpaceCreatorAllowed(client, env.fuseki, identity.id, actor, zone)) return identity.id;
+    throw new RealmAdminDenied('Zone permission is missing');
+  }
+
+  private async zoneSettingsTransaction<T>(space: string, exclusive: boolean,
+    run: (client: PoolClient, generation: string) => Promise<T>): Promise<T> {
+    const client = await this.pool.connect().catch(() => { throw new RealmAdminUnavailable('Access is unavailable'); });
+    try {
+      await client.query('BEGIN');
+      await client.query(`SET LOCAL lock_timeout = '${REALM_ADMIN_COST.lockTimeoutMs}ms'`);
+      await client.query(`SET LOCAL statement_timeout = '${REALM_ADMIN_COST.statementTimeoutMs}ms'`);
+      const fence = await client.query('SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE');
+      if (!fence.rowCount) throw new RealmAdminUnavailable('Access recovery is in progress');
+      const generation = exclusive ? await lockSpaceSettingsGeneration(client, space)
+        : await readSpaceSettingsGeneration(client, space);
+      const result = await run(client, generation);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      if (error instanceof RealmAdminDenied || error instanceof RealmAdminInvalid || error instanceof RealmAdminLimit
+        || error instanceof RealmAdminStale || error instanceof RealmAdminConflict || error instanceof RealmAdminUnavailable) throw error;
+      if ((error as { code?: string }).code === '23505') throw new RealmAdminConflict('Identity is already in use');
+      throw new RealmAdminUnavailable('Space settings could not complete');
+    } finally { client.release(); }
+  }
+
+  private async publishZoneSpace(env: WorkActivationEnvironment, delivery: ZoneSpacePolicyDelivery) {
+    try { await deliverZoneSpacePolicy(env, delivery); }
+    catch (error) {
+      if (error instanceof RealmAdminUnavailable) throw error;
+      throw new RealmAdminUnavailable('Space policy publication is pending; retry', { cause: error });
+    }
+  }
+
+  private async recoverZoneSpace(space: string, env: WorkActivationEnvironment) {
+    const pending = (await this.pool.query<{ result: { zone: string; receiptId: string; generation: string;
+      settings: ZoneSpaceSettings } }>(`SELECT result FROM access.realm_admin_receipt
+      WHERE realm = $1 AND action = 'zone.edit' ORDER BY created_at DESC, id DESC LIMIT 1`, [space])).rows[0];
+    if (!pending?.result?.settings || !pending.result.zone || !pending.result.receiptId) return;
+    await this.publishZoneSpace(env, { space, zone: pending.result.zone, receipt_id: pending.result.receiptId,
+      generation: pending.result.generation, visibility: pending.result.settings.visibility,
+      listing: pending.result.settings.listing });
   }
 
   async spaceSettings(principal: VerifiedPrincipal, space: string, actor: string, env: WorkActivationEnvironment) {
-    const realm = await this.spaceRealm(space, env);
-    await this.settlePolicy(realm, env);
-    return this.read(realm, async (client, generation) => {
-      await this.authorize(client, principal, realm, actor, 'realm.settings.manage');
-      return { space, realm, generation, settings: await readRealmAccessSettings(client, realm) };
+    const kind = await this.spaceKind(space, env);
+    if (kind.kind === 'realm') {
+      await this.settlePolicy(kind.realm, env);
+      return this.read(kind.realm, async (client, generation) => {
+        await this.authorize(client, principal, kind.realm, actor, 'realm.settings.manage');
+        return { space, realm: kind.realm, generation, settings: await readRealmAccessSettings(client, kind.realm) };
+      });
+    }
+    await this.recoverZoneSpace(space, env);
+    return this.zoneSettingsTransaction(space, false, async client => {
+      await this.authorizeZone(client, principal, kind.zone, actor, env);
+      const current = await readZoneSpaceDisclosure(env, space);
+      if (!current || current.zone !== kind.zone) throw new RealmAdminDenied('Space management is unavailable');
+      return { space, zone: kind.zone, generation: await readSpaceSettingsGeneration(client, space),
+        settings: { visibility: current.visibility, listing: current.listing } };
     });
   }
 
   async changeSpaceSettings(principal: VerifiedPrincipal, space: string, input: SpaceSettingsCommand,
     key: string, env: WorkActivationEnvironment) {
     if (!Value.Check(spaceSettingsCommand, input)) throw new RealmAdminInvalid('Invalid Space settings');
-    const realm = await this.spaceRealm(space, env);
-    await this.settlePolicy(realm, env);
-    const result = await this.write(principal, realm, input, key, 'realm.settings.manage',
-      async (client, _principal, receiptId, generation) => {
-        if ((await client.query('SELECT 1 FROM access.realm_policy_delivery WHERE realm = $1 AND NOT delivered', [realm])).rowCount) {
-          throw new RealmAdminUnavailable('Space policy publication is pending; retry');
-        }
-        await saveRealmAccessSettings(client, realm, input.settings);
-        await this.queuePolicy(client, realm, receiptId, generation);
-        return { space, realm, receiptId, generation, replayed: false, settings: input.settings };
-      });
-    await this.settlePolicy(realm, env);
-    return result;
+    const kind = await this.spaceKind(space, env);
+    if (kind.kind === 'realm') {
+      const settings = applicableRealmSettings(input.settings);
+      const realm = kind.realm;
+      await this.settlePolicy(realm, env);
+      const result = await this.write(principal, realm, input, key, 'realm.settings.manage',
+        async (client, _principal, receiptId, generation) => {
+          if ((await client.query('SELECT 1 FROM access.realm_policy_delivery WHERE realm = $1 AND NOT delivered', [realm])).rowCount) {
+            throw new RealmAdminUnavailable('Space policy publication is pending; retry');
+          }
+          await saveRealmAccessSettings(client, realm, settings);
+          await this.queuePolicy(client, realm, receiptId, generation);
+          return { space, realm, receiptId, generation, replayed: false, settings };
+        });
+      await this.settlePolicy(realm, env);
+      return result;
+    }
+    const settings = applicableZoneSettings(input.settings);
+    if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(key) || !input.reason.trim()) throw new RealmAdminInvalid('Invalid command');
+    const intent = digest({ space, action: 'zone.edit', input });
+    const committed = await this.zoneSettingsTransaction(space, true, async (client, generation) => {
+      const principalId = await this.authorizeZone(client, principal, kind.zone, input.actingSubject, env);
+      const prior = (await client.query<{ request_digest: string; result: { receiptId: string; generation: string;
+        settings: ZoneSpaceSettings; zone: string } }>(`SELECT request_digest, result
+        FROM access.realm_admin_receipt WHERE principal_id = $1 AND idempotency_key = $2`, [principalId, key])).rows[0];
+      if (prior) {
+        if (prior.request_digest !== intent) throw new RealmAdminConflict('Key binds another intent');
+        return { ...prior.result, space, replayed: true as const };
+      }
+      if (generation !== input.expectedGeneration) throw new RealmAdminStale('Realm management generation changed');
+      const next = (BigInt(generation) + 1n).toString();
+      const receiptId = randomUUID();
+      const result = { space, zone: kind.zone, receiptId, generation: next, replayed: false as const, settings };
+      await client.query(`UPDATE access.realm_admin_revision SET generation = generation + 1 WHERE realm = $1`, [space]);
+      await client.query(`INSERT INTO access.realm_admin_receipt
+        (id, realm, principal_id, acting_subject, idempotency_key, request_digest, action, reason, result, member_action)
+        VALUES ($1,$2,$3,$4,$5,$6,'zone.edit',$7,$8,NULL)`,
+      [receiptId, space, principalId, input.actingSubject, key, intent, input.reason, result]);
+      return result;
+    });
+    await this.publishZoneSpace(env, { space, zone: committed.zone, receipt_id: committed.receiptId,
+      generation: committed.generation, visibility: committed.settings.visibility, listing: committed.settings.listing });
+    return committed;
   }
 
   roles(principal: VerifiedPrincipal, realm: string, actor: string) {

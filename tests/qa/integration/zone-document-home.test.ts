@@ -8,6 +8,7 @@ import { ContentProjectionCursor } from '../../../services/content/src/projectio
 import { relayContentProjectionOnce } from '../../../services/main/src/modules/content-publication/relay.ts';
 import { applyContentErasure, checkContentErasureTargets, ContentErasureGraphRequired } from '../../../services/main/src/modules/erasure/content.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccessRealmManagement } from '../../../services/main/src/modules/access/realm-management.ts';
 import { createAgentGraph } from '../../../services/main/src/modules/agent/graph.ts';
 import { agentProvisionDigest } from '../../../services/main/src/modules/agent/provision.ts';
 import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
@@ -137,7 +138,8 @@ async function fixture(initialDocument = fromPlainText('Published home', 'blocks
       return typeof value === 'function' ? value.bind(target) : value;
     } });
     const app = createMainApp(f.env.fuseki, { environment: f.env, account: f.account.verifier,
-      access, content, contentAuthoring: content, catalogueIntake: f.catalogueIntake });
+      access, content, contentAuthoring: content, catalogueIntake: f.catalogueIntake,
+      realmAdmin: new AccessRealmManagement(f.accessPool) });
     const call = (method: string, path: string, body?: object, key = randomUUID(),
       token: string | null = f.account.tokenA, headers: Record<string, string> = {}) => app.handle(new Request(`http://main.local${path}`, {
       method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}),
@@ -855,10 +857,11 @@ test('concurrent publishers select one bundle and a membership lookup rechecks a
     expect(moved).toBe(true);
     f.env.fuseki = original;
     const current = await f.json<ZoneSitePublicationReceipt>(await f.publish(f.selection.pages), 201);
-    await f.env.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
-      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(f.space)} rv:disclosure rv:Public } }
-      INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(f.space)} rv:disclosure rv:Private } }
-      WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(f.space)} rv:disclosure rv:Public } }`);
+    const settingsPath = `/v1/spaces/${shortId(f.space)}/settings`;
+    const settings = await f.json<{ generation: string; settings: { listing: 'listed' | 'unlisted' } }>(
+      await f.call('GET', `${settingsPath}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+    await f.json(await f.call('PUT', settingsPath, { actingSubject: f.actor, expectedGeneration: settings.generation,
+      reason: 'Hide the published site', settings: { visibility: 'private', listing: settings.settings.listing } }), 201);
     expect(await isZonePublishedPageRevision(f.env, f.zone,
       f.selection.pages[0]!.page, f.selection.pages[0]!.revisionId)).toBe(false);
     expect((await readZoneSitePublicationReceipt(f.env, current.receipt))?.pages).toEqual(current.pages);

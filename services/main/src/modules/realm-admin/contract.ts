@@ -98,15 +98,27 @@ export type SettingsCommand = Static<typeof settingsCommand>;
 export const settingsView = t.Object({ generation, settings: realmSettings,
   ruleBasis: t.Object({ ref: t.String(), revision: t.Nullable(generation), digest: t.Nullable(t.String()) }) });
 export const settingsReceipt = t.Object({ ...settingsView.properties, receiptId: readUuid, replayed: t.Boolean() });
-/** One command changes the four access/discovery choices without rewriting rules
- * or review policy. The generation is the existing Realm management revision. */
+/** One command changes access and discovery without rewriting rules or review
+ * policy. A Realm keeps Visibility, Listing, History and Admission. A Zone
+ * carries Visibility and Listing; History and Admission do not apply. */
 export const spaceSettings = t.Object({ visibility: spaceVisibility, listing: resourceListing,
   history: realmHistory, admission: realmAdmission }, { additionalProperties: false });
 export type SpaceSettings = Static<typeof spaceSettings>;
-export const spaceSettingsCommand = t.Object({ ...commandFields, settings: spaceSettings }, { additionalProperties: false });
+export const zoneSpaceSettings = t.Object({ visibility: spaceVisibility, listing: resourceListing },
+  { additionalProperties: false });
+export type ZoneSpaceSettings = Static<typeof zoneSpaceSettings>;
+export const spaceSettingsCommand = t.Union([
+  t.Object({ ...commandFields, settings: spaceSettings }, { additionalProperties: false }),
+  t.Object({ ...commandFields, settings: zoneSpaceSettings }, { additionalProperties: false }),
+]);
 export type SpaceSettingsCommand = Static<typeof spaceSettingsCommand>;
-export const spaceSettingsView = t.Object({ space: readId, realm: readId, generation, settings: spaceSettings });
-export const spaceSettingsReceipt = t.Object({ ...spaceSettingsView.properties, receiptId: readUuid, replayed: t.Boolean() });
+export const realmSpaceSettingsView = t.Object({ space: readId, realm: readId, generation, settings: spaceSettings });
+export const zoneSpaceSettingsView = t.Object({ space: readId, zone: readId, generation, settings: zoneSpaceSettings });
+export const spaceSettingsView = t.Union([realmSpaceSettingsView, zoneSpaceSettingsView]);
+export const spaceSettingsReceipt = t.Union([
+  t.Object({ ...realmSpaceSettingsView.properties, receiptId: readUuid, replayed: t.Boolean() }),
+  t.Object({ ...zoneSpaceSettingsView.properties, receiptId: readUuid, replayed: t.Boolean() }),
+]);
 export const memberReceipt = t.Object({ receiptId: readUuid, generation, replayed: t.Boolean(),
   member: readId, membershipGeneration: generation, bannedUntil: t.Nullable(t.String()),
   banned: t.Boolean() });

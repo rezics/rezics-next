@@ -11,9 +11,13 @@ type Space = ReturnType<MainClient['v1']['spaces']>;
 type Realm = ReturnType<MainClient['v1']['realms']>;
 type Requests = Realm['join-requests'];
 type Request = ReturnType<Requests>;
-export type SpaceSettingsView = Ok<Space['settings']['get']>;
+type SpaceSettingsResponse = Ok<Space['settings']['get']>;
+type SpaceSettingsCommandBody = Body<Space['settings']['put']>;
+/** Realm management uses the Realm arm. A Zone view carries Visibility and Listing
+ * only, and this screen does not open a Zone Space. */
+export type SpaceSettingsView = Extract<SpaceSettingsResponse, { realm: string }>;
 export type SpaceSettings = SpaceSettingsView['settings'];
-export type SettingsCommand = Body<Space['settings']['put']>;
+export type SettingsCommand = Extract<SpaceSettingsCommandBody, { settings: { history: string } }>;
 /** Realm participation (`public`, `restricted` or `private`). Space visibility is its public/private projection. */
 export type RealmSettingsView = SettingsView;
 export type RealmSettingsCommand = Body<Realm['settings']['put']>;
@@ -32,6 +36,19 @@ export type JoinDecisionReceipt = Ok<Request['decisions']['post']>;
 export type JoinPage = Ok<Realm['join-page']['get']>;
 export type Discovery = JoinPage['discovery'];
 const keyed = (key: string) => ({ headers: { 'idempotency-key': key } });
+function isRealmArm<T extends { realm: string } | { zone: string }>(
+  value: T,
+): value is Extract<T, { realm: string }> {
+  return 'realm' in value && typeof value.realm === 'string';
+}
+/** A Zone body is a different Space. Realm management refuses it rather than reading Zone fields as Realm fields. */
+function realmArm<T extends { realm: string } | { zone: string }>(
+  result: Outcome<T>,
+): Outcome<Extract<T, { realm: string }>> {
+  if (!result.ok) return result;
+  if (!isRealmArm(result.data)) return { ok: false, failure: 'unavailable' };
+  return { ok: true, data: result.data };
+}
 
 export interface SpaceAccessApi {
   settings(): Promise<Outcome<SpaceSettingsView>>;
@@ -48,8 +65,8 @@ export interface SpaceAccessApi {
 }
 export function spaceAccessApi(main: () => MainClient, space: string, realm: string, actingSubject: string): SpaceAccessApi {
   return {
-    settings: () => send(() => main().v1.spaces({ space: uuidOf(space) }).settings.get({ query: { actingSubject } })),
-    save: (command, key) => send(() => main().v1.spaces({ space: uuidOf(space) }).settings.put(command, keyed(key))),
+    settings: async () => realmArm(await send(() => main().v1.spaces({ space: uuidOf(space) }).settings.get({ query: { actingSubject } }))),
+    save: async (command, key) => realmArm(await send(() => main().v1.spaces({ space: uuidOf(space) }).settings.put(command, keyed(key)))),
     realm: () => send(() => main().v1.realms({ realm: uuidOf(realm) }).settings.get({ query: { actingSubject } })),
     saveRealm: (command, key) => send(() => main().v1.realms({ realm: uuidOf(realm) }).settings.put(command, keyed(key))),
     requests: (cursor, q = '') => send(() => main().v1.realms({ realm: uuidOf(realm) })['join-requests'].get({
