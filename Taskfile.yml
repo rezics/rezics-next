@@ -473,6 +473,11 @@ tasks:
     cmds:
       - bun scripts/fixture/cli.ts restore {{.CLI_ARGS}}
 
+  fixture:prune:
+    desc: List fixture generations and abandoned volumes a current restore cannot use. Pass --apply to remove them.
+    cmds:
+      - bun scripts/fixture/cli.ts prune {{.CLI_ARGS}}
+
   fixtures:pull:
     desc: Replay verified factual fixtures from the cache or committed seed.
     cmds:

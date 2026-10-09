@@ -3,6 +3,7 @@ import { restoreLoadBaseline } from '../load/restore.ts';
 import { buildFixture } from './build.ts';
 import { checkedSeed, DEFAULT_SEED, type FixtureProfile, PROFILES } from './corpus.ts';
 import { restoreFixture } from './restore.ts';
+import { executeFixturePrune, formatPruneReport } from './prune.ts';
 import { redactCommandOutput } from './command-output.ts';
 import { prepareFixture } from './prepare.ts';
 
@@ -10,7 +11,8 @@ const usage = `Usage:
   task fixture:build -- --profile small|medium [--seed <seed>]
   task fixture:build -- --prepare --profile small|medium [--seed <seed>] [--evidence <path>]
   task fixture:restore -- --fixture <fixture-id> --run-id <fixture-target-id>
-  task fixture:restore -- --from <load-source-id> --run-id <fixture-target-id>`;
+  task fixture:restore -- --from <load-source-id> --run-id <fixture-target-id>
+  task fixture:prune [-- --apply]`;
 
 function options(args: string[], allowed: Record<string, RegExp>): Record<string, string> {
   const values: Record<string, string> = {};
@@ -41,6 +43,11 @@ try {
     }
     else
       await buildFixture(values.profile as FixtureProfile, checkedSeed(values.seed ?? DEFAULT_SEED));
+  } else if (command === 'prune') {
+    if (args.some(arg => arg !== '--apply')) throw new Error(usage);
+    const outcome = await executeFixturePrune({ apply: args.includes('--apply') });
+    console.log(formatPruneReport(outcome));
+    if (outcome.failures.length) process.exitCode = 1;
   } else if (command === 'restore') {
     const values = options(args, { fixture: /^fx-(small|medium)-[0-9a-f]{12}$/,
       from: /^load-[a-z0-9-]{1,30}$/, 'run-id': /^fixture-[a-z0-9-]{1,27}$/ });

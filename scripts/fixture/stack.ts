@@ -143,6 +143,47 @@ export async function copyVolume(from: string, to: string, docker: NodeJS.Proces
     '-ec', 'cp -a /from/. /to/'], docker, undefined, 540_000);
 }
 
+export interface ListedDockerVolume {
+  name: string;
+  /** `com.docker.compose.project` when the volume carries one. */
+  project?: string;
+}
+
+/** One `docker volume ls` row. An empty label is an unlabelled volume. */
+export function parseDockerVolumeLines(output: string): ListedDockerVolume[] {
+  const volumes: ListedDockerVolume[] = [];
+  for (const line of output.split('\n')) {
+    if (!line.trim()) continue;
+    const tab = line.indexOf('\t');
+    const name = (tab < 0 ? line : line.slice(0, tab)).trim();
+    const label = tab < 0 ? '' : line.slice(tab + 1).trim();
+    if (!name) continue;
+    if (!label || label === '<no value>') volumes.push({ name });
+    else volumes.push({ name, project: label });
+  }
+  return volumes;
+}
+
+export function listDockerVolumes(docker: NodeJS.ProcessEnv): ListedDockerVolume[] {
+  return parseDockerVolumeLines(run('docker', ['volume', 'ls', '--format',
+    '{{.Name}}\t{{.Label "com.docker.compose.project"}}'], docker, 60_000));
+}
+
+/** Compose projects of containers that are running now. */
+export function runningComposeProjects(docker: NodeJS.ProcessEnv): string[] {
+  const output = run('docker', ['ps', '--format', '{{.Label "com.docker.compose.project"}}'], docker, 30_000);
+  return [...new Set(output.split('\n').map(line => line.trim()).filter(Boolean))].sort();
+}
+
+/** Named volumes mounted into a running container. */
+export function mountedVolumeNames(docker: NodeJS.ProcessEnv): string[] {
+  const ids = run('docker', ['ps', '-q'], docker, 30_000).split('\n').map(line => line.trim()).filter(Boolean);
+  if (!ids.length) return [];
+  const output = run('docker', ['inspect', '--format',
+    '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}\n{{end}}{{end}}', ...ids], docker, 60_000);
+  return [...new Set(output.split('\n').map(line => line.trim()).filter(Boolean))].sort();
+}
+
 /** Apparent bytes and file count of each named volume. */
 export function volumeBytes(names: readonly string[], docker: NodeJS.ProcessEnv): Record<string, { bytes: number; files: number }> {
   const args = names.flatMap((name, index) => ['--volume', `${name}:/v${index}:ro`]);

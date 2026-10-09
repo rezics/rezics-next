@@ -33,7 +33,8 @@ export function startRestoredFixture<T>(budget: FixtureWorkBudget, env: NodeJS.P
   });
 }
 
-function currentInputs(docker: NodeJS.ProcessEnv,
+/** Owner generators, migration bytes and engine images a restore compares with a manifest. */
+export function fixtureRestoreInputs(docker: NodeJS.ProcessEnv,
   owners: readonly FixtureOwner[] = fixtureOwners): Parameters<typeof restoreCompatibility>[1] {
   return { owners: Object.fromEntries(owners.map(owner => [owner.name,
     { generator: owner.generator, inputs: owner.compatibilityInputs(root) }])),
@@ -44,7 +45,7 @@ function currentInputs(docker: NodeJS.ProcessEnv,
 export function compatibleFixture(profile: FixtureProfile, seed = DEFAULT_SEED): FixtureManifest | undefined {
   const directory = fixtureRoot;
   if (!existsSync(directory)) return undefined;
-  const current = currentInputs(dockerEnvironment());
+  const current = fixtureRestoreInputs(dockerEnvironment());
   return readdirSync(directory).map(id => readManifest(id))
     .filter((manifest): manifest is FixtureManifest => manifest?.profile === profile && manifest.seed === seed
       && restoreCompatibility(manifest, current).compatible)
@@ -93,7 +94,7 @@ export async function restoreFixture(id: string, target: string,
   let pools: { access: Pool; content: Pool } | undefined;
   try {
     const compatibility = await phase('compatibility', () => restoreCompatibility(manifest,
-      currentInputs(docker, owners)));
+      fixtureRestoreInputs(docker, owners)));
     evidence.compatibility = compatibility;
     if (!compatibility.compatible) {
       throw new Error(`Fixture ${id} is stale; rebuild it: ${compatibility.reasons.join('; ')}`);

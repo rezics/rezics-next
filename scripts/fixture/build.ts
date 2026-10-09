@@ -7,6 +7,7 @@ import { appEnvironment, composeProcessEnvironment, createSecrets, readEnv, save
 import { type Corpus, type FixtureProfile, fixtureCorpus, stable } from './corpus.ts';
 import { FixtureWorkBudget } from './budget.ts';
 import { type FixtureManifest, type FixtureManifestCore, manifestCore, manifestIdentity } from './manifest.ts';
+import { pruneSupersededGenerations } from './prune.ts';
 import { migrateFixtureOwners } from './migrate.ts';
 import { fixtureOwners } from './owners/index.ts';
 import type { FixtureOwner, LoadTarget } from './owners/types.ts';
@@ -212,6 +213,14 @@ async function buildLocked(
     writeFileSync(join(dir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
     writeFileSync(join(evidence, 'build.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     console.log(`Fixture ${id} built in ${manifest.build.elapsedMs} ms; evidence ${evidence}/build.json`);
+    // A failed prune must not discard the backup this build just kept.
+    try {
+      const removed = await pruneSupersededGenerations(corpus.profile, id);
+      if (removed.length) console.log(`fixture ${id}: pruned superseded ${corpus.profile}: ${removed.join(' ')}`);
+    } catch (error) {
+      console.error(`fixture ${id}: superseded prune failed: ${
+        redactCommandOutput(error instanceof Error ? error.message : String(error))}`);
+    }
     return manifest;
   } catch (error) {
     writeFileSync(join(evidence, 'failure.json'), `${JSON.stringify({ id, phases, loads,
