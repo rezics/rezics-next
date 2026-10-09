@@ -63,16 +63,32 @@ test('G1033: deleted and ineligible Realm bases are skipped beside healthy publi
       { idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) });
     await f.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
       DELETE WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(realms[0]!.realm)} ?p ?o } }`);
-    await f.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
-      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(realms[1]!.space)} rv:disclosure ?old } }
-      INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(realms[1]!.space)} rv:disclosure rv:Private } }
-      WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(realms[1]!.space)} rv:disclosure ?old } }`);
+    // A private Realm is the Space settings command. The member was not
+    // provisioned, so it lacks the controller mandate that command accepts
+    // as owner authority. Drain the receipt so the eligibility probe reads
+    // that visibility at a caught-up cut.
+    await writer.grant(`agent:control:${writer.actor}`, 'agent.control');
+    const spaceId = realms[1]!.space.slice(-36);
+    const settingsResponse = await writer.read(`/v1/spaces/${spaceId}/settings`);
+    const current = await settingsResponse.json() as { generation: string; settings: {
+      visibility: 'public' | 'private'; listing: 'listed' | 'unlisted';
+      history: 'everything' | 'from-admission'; admission: 'open' | 'request' | 'invitation' } };
+    expect(settingsResponse.status, JSON.stringify(current)).toBe(200);
+    const changed = await writer.send('PUT', `/v1/spaces/${spaceId}/settings`, {
+      actingSubject: writer.actor, expectedGeneration: current.generation, reason: 'Private Realm',
+      settings: { ...current.settings, visibility: 'private' },
+    }, randomUUID());
+    expect(changed.status, await changed.text()).toBe(201);
+    for (let i = 0; i < 100; i++) {
+      if (!await relayMainOutboxOnce(f.fuseki, relay, consumer)) break;
+      if (i === 99) throw new Error('G1033 relay exceeded its fixture bound');
+    }
     await f.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
       DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(realms[2]!.realm)} a rv:Realm } }
       INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(realms[2]!.realm)} a rv:Zone } }
       WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(realms[2]!.realm)} a rv:Realm } }`);
-    // These fixture edits bypass graph receipts; discard any earlier directory
-    // snapshot so the normal background worker rebuilds the edited source.
+    // Deleting the Realm and retyping it as a Zone bypass graph receipts.
+    // Discard any earlier directory snapshot so the worker rebuilds that source.
     await f.access.realmDirectory.invalidate();
     await store.enroll([publicBasis, ...rejected]);
     await f.accessPool.query(`UPDATE access.discovery_refresh_catalog SET due_at=clock_timestamp()+interval '1 hour'`);
