@@ -73,14 +73,14 @@ test('G-946: history-restricted counts exclude hidden parents and their descenda
   expect(counted.counts.get(id)).toBe(1);
 });
 
-test('G-946: Zone disclosure and Space disclosure each require their own admission', async () => {
+test('a stale Zone disclosure does not add an admission beyond its Space', async () => {
   let space = 'Public', zone = 'Private';
   const env = environment(async sparql => sparql.includes('SELECT DISTINCT')
     ? { results: { bindings: [{ kind: text('space'),space: uri(id),realm: uri(id),
       disclosure: uri(`${RV}${space}`),zoneDisclosure: uri(`${RV}${zone}`) }] } }
     : { boolean: true,results: { bindings: [{ epoch: text('current'),routing: text('current') }] } });
-  expect(await readResourceVisibility(env,id,{ realmReadProof: async () => 'member' })).toMatchObject({ readable: false,findable: false });
-  expect(await readResourceVisibility(env,id,{ zoneReadable: async () => true })).toMatchObject({ readable: true,findable: false });
+  expect(await readResourceVisibility(env,id,{ realmReadProof: async () => 'member' })).toMatchObject({ readable: true,findable: true,visibility: 'public' });
+  expect(await readResourceVisibility(env,id,{ zoneReadable: async () => true })).toMatchObject({ readable: true,findable: true,visibility: 'public' });
   space = 'Private'; zone = 'Public';
   expect(await readResourceVisibility(env,id,{ zoneReadable: async () => true })).toMatchObject({ readable: false,findable: false });
   expect(await readResourceVisibility(env,id,{ realmReadProof: async () => 'member' })).toMatchObject({ readable: true,findable: false });

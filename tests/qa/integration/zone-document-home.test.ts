@@ -48,7 +48,8 @@ function showcaseDocument(slides = documentSlides, titleEffect: ZonePresentation
   return document;
 }
 
-async function fixture(initialDocument = fromPlainText('Published home', 'blocks')) {
+async function fixture(initialDocument = fromPlainText('Published home', 'blocks'),
+  visibility: 'public' | 'private' = 'public') {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
   const f = await authorCreditFixture(Bun.env as Record<string, string>,
     resolve('.temp', `zone-document-home-${randomUUID()}`),
@@ -149,7 +150,7 @@ async function fixture(initialDocument = fromPlainText('Published home', 'blocks
     await f.grant('space:create:root', 'space.create');
     const created = await f.json<{ space: string; zone: string; navigationRevision: string }>(
       await call('POST', '/v1/spaces', { profile: 'space-zone-v1', name: 'Independent site',
-        capabilities: ['zone'], actingSubject: f.actor }), 201);
+        capabilities: ['zone'], actingSubject: f.actor, visibility }), 201);
     const zoneGrant = await f.grant(`zone:edit:${created.zone}`, 'zone.edit');
     lateZoneGrant = zoneGrant;
     siteSpace = created.space;
@@ -941,5 +942,47 @@ test('configuration, retirement and recovery retain the bundle; revoked publicat
     expect((await f.exact(editorDraft.revisionId, true)).status).toBe(404);
     expect((await readZonePublication(f.env, f.zone)).publicationRevision).toBe(first.revision);
     expect(await isZonePublishedPageRevision(f.env, f.zone, page, revisionId)).toBe(true);
+  } finally { await f.close(); }
+}, 120_000);
+
+test('a Zone created private follows Space settings through public and private without a second write', async () => {
+  const f = await fixture(fromPlainText('Published home', 'blocks'), 'private');
+  try {
+    await f.json<ZoneSitePublicationReceipt>(await f.publish(), 201);
+    const page = f.selection.pages[0]!;
+    const settingsPath = `/v1/spaces/${shortId(f.space)}/settings`;
+    const nodeDisclosure = async () => {
+      const rows = (await f.env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> SELECT ?disclosure WHERE {
+        GRAPH ${iri(GRAPHS.current)} { ${iri(f.zone)} rv:disclosure ?disclosure . }
+      } LIMIT 2`, 1024)).results?.bindings ?? [];
+      return rows.map(row => row.disclosure?.value);
+    };
+    const flip = async (visibility: 'public' | 'private') => {
+      const settings = await f.json<{ generation: string; settings: { listing: 'listed' | 'unlisted' } }>(
+        await f.call('GET', `${settingsPath}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+      await f.json(await f.call('PUT', settingsPath, { actingSubject: f.actor, expectedGeneration: settings.generation,
+        reason: 'Follow the Space', settings: { visibility, listing: settings.settings.listing } }), 201);
+    };
+    expect(await nodeDisclosure()).toEqual(['https://rezics.com/vocab/Private']);
+    expect((await f.call('GET', `${f.path}/routes?path=%2F`, undefined, randomUUID(), null)).status).toBe(404);
+    expect((await f.call('GET', `${f.path}/presentation`, undefined, randomUUID(), null)).status).toBe(404);
+    expect(await isZonePublishedPageRevision(f.env, f.zone, page.page, page.revisionId)).toBe(false);
+    await flip('private');
+    await flip('public');
+    expect(await nodeDisclosure()).toEqual(['https://rezics.com/vocab/Private']);
+    expect((await readZoneConfiguration(f.env, f.zone)).disclosure).toBe('public');
+    expect((await readZonePublication(f.env, f.zone)).disclosure).toBe('public');
+    expect((await f.home()).page?.reference.revisionId).toBe(page.revisionId);
+    const presentation = await f.json<{ listing: string; discovery: { indexable: boolean; robots: string } }>(
+      await f.call('GET', `${f.path}/presentation`, undefined, randomUUID(), null), 200);
+    expect(presentation).toMatchObject({ listing: 'listed', discovery: { indexable: true, robots: 'index' } });
+    expect(await isZonePublishedPageRevision(f.env, f.zone, page.page, page.revisionId)).toBe(true);
+    await flip('private');
+    expect(await nodeDisclosure()).toEqual(['https://rezics.com/vocab/Private']);
+    expect((await readZoneConfiguration(f.env, f.zone)).disclosure).toBe('private');
+    expect((await readZonePublication(f.env, f.zone)).disclosure).toBe('private');
+    expect((await f.call('GET', `${f.path}/routes?path=%2F`, undefined, randomUUID(), null)).status).toBe(404);
+    expect((await f.call('GET', `${f.path}/presentation`, undefined, randomUUID(), null)).status).toBe(404);
+    expect(await isZonePublishedPageRevision(f.env, f.zone, page.page, page.revisionId)).toBe(false);
   } finally { await f.close(); }
 }, 120_000);

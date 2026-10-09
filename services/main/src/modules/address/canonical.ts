@@ -56,7 +56,8 @@ export async function canonicalAddresses(
         { ?resource a rv:Space . BIND(?resource AS ?space) }
         UNION { ?resource a rv:Realm ; rv:space ?space . ?space rv:realmCapability ?resource }
         UNION { ?resource a rv:Zone ; rv:space ?space }
-        BIND(EXISTS { ?zone a rv:Zone ; rv:space ?space ; rv:zoneState rv:Active ; rv:disclosure rv:Public .
+        BIND(EXISTS { ?zone a rv:Zone ; rv:space ?space ; rv:zoneState rv:Active .
+          ?space rv:disclosure rv:Public .
           FILTER NOT EXISTS { ?zone rv:protectionHead ?protection } } AS ?site)
       } } LIMIT ${summaries.length + 1}`,
             64 * 1024,

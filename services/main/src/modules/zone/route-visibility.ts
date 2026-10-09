@@ -1,9 +1,10 @@
 import { readResourceVisibility, VISIBILITY_COST } from '../space/visibility.ts';
 import { WorkReadMissing, type WorkReadSession } from '../work/read-session.ts';
 
-/** Exact live Space membership and stored Zone disclosure, independent gates.
- * Two bounded graph probes plus the private Realm's policy/proof; never a
- * semantic grant on the Space in place of membership. Call again at disclosure. */
+/** Exact live Space membership. A Zone's disclosure is that Space's disclosure.
+ * Two bounded graph probes plus the private Realm's policy/proof; a Zone-only
+ * private Space uses Zone read authority in place of Realm membership. Call
+ * again at disclosure. */
 export const ZONE_VISIBILITY_COST = { ...VISIBILITY_COST, realmPolicyReads: 1 } as const;
 export async function readZoneVisibility(session: WorkReadSession, zone: string) {
   const visibility = await readResourceVisibility(session.deps.environment, zone, {

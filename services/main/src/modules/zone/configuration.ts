@@ -86,7 +86,9 @@ async function realmAttachmentRoom(graph: { query: (sparql: string, budget?: num
 
 interface ZoneHead {
   zone: string; space: string; navigation: string; revision: string; manifest: string;
-  state: 'active' | 'retired'; disclosure: 'public' | 'private';
+  state: 'active' | 'retired';
+  /** The Space's disclosure. A Zone node may still carry its own copy; readers ignore it. */
+  disclosure: 'public' | 'private';
   spaceVisibility: 'public' | 'private'; listing: ResourceListing;
   defaultRealm?: string; presentation?: string; official?: Record<string, never>;
   /** The steward behind a live cross-Space attachment; absent for a same-Space Realm. */
@@ -100,8 +102,8 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?space ?navigation ?head
     ?manifest ?state ?disclosure ?realm ?presentation ?context ?contextRevision ?official ?spaceDisclosure ?listing ?publication ?spaceProfile ?attachedBy WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(zone)} a rv:Zone ; rv:space ?space ;
-        rv:navigation ?navigation ; rv:zoneHead ?head ; rv:zoneState ?state ;
-        rv:disclosure ?disclosure .
+        rv:navigation ?navigation ; rv:zoneHead ?head ; rv:zoneState ?state .
+        OPTIONAL { ${iri(zone)} rv:disclosure ?disclosure }
         ?space a rv:Space ; rv:disclosure ?spaceDisclosure .
         OPTIONAL { ?space rv:listing ?listing }
         OPTIONAL { ?space rv:definitionProfile ?spaceProfile }
@@ -119,7 +121,7 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
   if (rows.length !== 1) throw new ZoneUnavailable('Zone is unavailable');
   const row = rows[0]!;
   if (!row.space?.value || !row.navigation?.value || !row.head?.value
-    || !row.manifest?.value || !row.state?.value || !row.disclosure?.value || !row.spaceDisclosure?.value) {
+    || !row.manifest?.value || !row.state?.value || !row.spaceDisclosure?.value) {
     throw new ZoneUnavailable('Zone head is incomplete');
   }
   if (!!row.context?.value !== !!row.contextRevision?.value) {
@@ -130,13 +132,13 @@ async function zoneHead(env: WorkActivationEnvironment, zone: string): Promise<Z
   }
   if (![`${RV}Public`,`${RV}Private`].includes(row.spaceDisclosure.value)
     || !['listed','unlisted'].includes(row.listing?.value ?? 'listed')) throw new ZoneUnavailable('Zone Space visibility is invalid');
+  const disclosure = row.spaceDisclosure.value === `${RV}Public` ? 'public' as const : 'private' as const;
   return { zone, space: row.space.value, navigation: row.navigation.value,
     publicationRevision: row.publication?.value ?? null,
     documentSite: row.spaceProfile?.value === 'https://rezics.com/definition/space-zone-v1',
     revision: row.head.value, manifest: row.manifest.value,
     state: row.state.value === `${RV}Retired` ? 'retired' : 'active',
-    disclosure: row.disclosure.value === `${RV}Public` ? 'public' : 'private',
-    spaceVisibility: row.spaceDisclosure.value === `${RV}Public` ? 'public' : 'private',
+    disclosure, spaceVisibility: disclosure,
     listing: (row.listing?.value ?? 'listed') as ResourceListing,
     ...(row.realm?.value ? { defaultRealm: row.realm.value } : {}),
     ...(row.realm?.value && row.attachedBy?.value
@@ -160,12 +162,14 @@ export async function readZoneConfiguration(env: WorkActivationEnvironment, zone
       zone, space: head.space, navigation: head.navigation, state: head.state,
       disclosure: head.disclosure, budget: { timeMs: ZONE_LIMITS.queryBudgetMs,
         rows: ZONE_LIMITS.queryBudgetRows }, queryBlocks: [], model: ZONE_PROFILE })));
-  if (config.zone !== zone || config.space !== head.space || config.navigation !== head.navigation
-    || config.state !== head.state || config.disclosure !== head.disclosure
-    || JSON.stringify(config.defaultContext ?? null) !== JSON.stringify(head.defaultContext ?? null)
-    || JSON.stringify(config.official ?? null) !== JSON.stringify(head.official ?? null)
-    || (typeof config.presentation === 'string' ? config.presentation
-      : config.presentation ? (typeof storedPresentation === 'object'
+  // The stored manifest may still name the disclosure copied at creation. The Space is current.
+  const live = { ...config, disclosure: head.disclosure };
+  if (live.zone !== zone || live.space !== head.space || live.navigation !== head.navigation
+    || live.state !== head.state
+    || JSON.stringify(live.defaultContext ?? null) !== JSON.stringify(head.defaultContext ?? null)
+    || JSON.stringify(live.official ?? null) !== JSON.stringify(head.official ?? null)
+    || (typeof live.presentation === 'string' ? live.presentation
+      : live.presentation ? (typeof storedPresentation === 'object'
         && storedPresentation?.profile === 'zone-presentation-v1'
         ? ZONE_PRESENTATION_V1_PROFILE : ZONE_PRESENTATION_PROFILE) : undefined) !== head.presentation) {
     throw new ZoneUnavailable('Zone configuration differs from graph head');
@@ -174,7 +178,7 @@ export async function readZoneConfiguration(env: WorkActivationEnvironment, zone
   if (advancedBase64 && config.advanced !== `sha256:${hash(Buffer.from(advancedBase64, 'base64'))}`) {
     throw new ZoneUnavailable('Zone advanced configuration digest differs');
   }
-  return { ...head, ...name, configuration: withoutWithdrawnRealm(config, head),
+  return { ...head, ...name, configuration: withoutWithdrawnRealm(live, head),
     ...(advancedBase64 ? { advancedBase64 } : {}), cost: { graphReads: 1, objectReads: 2 } };
 }
 
@@ -201,13 +205,14 @@ export async function readZoneRevisionConfiguration(env: WorkActivationEnvironme
   const configuration = stored.configuration ? checkStoredZoneConfiguration(Buffer.from(JSON.stringify(stored.configuration)))
     : checkZoneConfiguration(Buffer.from(JSON.stringify({ format: ZONE_CONFIG_FORMAT,
       zone: current.zone, space: current.space, navigation: current.navigation, state: 'active',
-      disclosure: stored.disclosure ?? current.disclosure,
+      disclosure: current.disclosure,
       budget: { timeMs: ZONE_LIMITS.queryBudgetMs, rows: ZONE_LIMITS.queryBudgetRows }, queryBlocks: [], model: ZONE_PROFILE })));
   if (configuration.zone !== current.zone || configuration.space !== current.space
     || configuration.navigation !== current.navigation || configuration.state !== 'active') {
     throw new ZoneUnavailable('Published Zone configuration differs from its owner');
   }
-  return { configuration: await publishedRealmConfiguration(env, current, configuration),
+  const published = await publishedRealmConfiguration(env, current, configuration);
+  return { configuration: { ...published, disclosure: current.disclosure },
     ...readZoneName(stored.name, stored.language) };
 }
 

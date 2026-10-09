@@ -68,10 +68,9 @@ export async function readFollowTarget(session: WorkReadSession, target: string,
   }
   if (kind === 'zone') {
     const rows = await session.query(`SELECT ?realm WHERE { GRAPH ${iri(GRAPHS.current)} {
-      ${iri(target)} a rv:Zone ; rv:space ?space ; rv:zoneState rv:Active ; rv:disclosure rv:Public ; rv:zoneHead ?head .
+      ${iri(target)} a rv:Zone ; rv:space ?space ; rv:zoneState rv:Active ; rv:zoneHead ?head .
       ?space a rv:Space ; rv:zoneCapability ${iri(target)} ; rv:realmCapability ?realm ; rv:disclosure rv:Public .
       ?realm a rv:Realm ; rv:space ?space ; rv:realmState rv:Active .
-      FILTER NOT EXISTS { ${iri(target)} rv:disclosure rv:Private }
       FILTER NOT EXISTS { ${iri(target)} rv:protectionHead ?protection }
       FILTER NOT EXISTS { ?space rv:disclosure rv:Private }
     } GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:ZoneRevision ; rv:component ${iri(target)} .

@@ -72,19 +72,20 @@ function fixture(input: { spacePrivate: boolean; zonePrivate: boolean; member: b
     close: () => rmSync(directory, { recursive: true, force: true }) };
 }
 
-test('G-964: Zone routes require membership for a private Space and a separate grant for stored private Zone disclosure', async () => {
+test('Zone routes follow the Space disclosure; a stale Zone node does not add a grant', async () => {
   for (const spacePrivate of [false, true]) for (const zonePrivate of [false, true])
     for (const member of [false, true]) for (const grant of [false, true]) {
       const f = fixture({ spacePrivate, zonePrivate, member, grant, listing: 'unlisted' });
       try {
-        const readable = (!spacePrivate || member) && (!zonePrivate || grant);
+        const readable = !spacePrivate || member;
         const reading = resolveZoneRoute(f.work, f.request, { zone: f.zone, path: '/', actingSubject: f.actor });
         if (readable) expect(await reading).toMatchObject({ kind: 'home', listing: 'unlisted',
           discovery: { indexable: false, robots: 'noindex', referrerPolicy: 'no-referrer' } });
         else await expect(reading).rejects.toBeInstanceOf(ZoneRouteMissing);
         expect(f.grants).not.toContain(f.space);
-        if (spacePrivate || zonePrivate) await expect(resolveZoneRoute(f.work, f.request,
-          { zone: f.zone, path: '/' })).rejects.toBeInstanceOf(ZoneRouteMissing);
+        const anonymous = resolveZoneRoute(f.work, f.request, { zone: f.zone, path: '/' });
+        if (spacePrivate) await expect(anonymous).rejects.toBeInstanceOf(ZoneRouteMissing);
+        else await expect(anonymous).resolves.toMatchObject({ kind: 'home' });
       } finally { f.close(); }
     }
 });
@@ -99,22 +100,24 @@ test('G-964: private-Space membership and Zone semantic authority admit the home
   } finally { f.close(); }
 });
 
-test('G-964: membership and Zone-grant revocation during route hydration fails closed without a graph write', async () => {
-  for (const revoke of ['member', 'member-fence', 'grant'] as const) {
-    const f = fixture({ spacePrivate: revoke !== 'grant', zonePrivate: revoke === 'grant', member: true, grant: true, revoke });
+test('membership revocation during route hydration fails closed without a graph write', async () => {
+  for (const revoke of ['member', 'member-fence'] as const) {
+    const f = fixture({ spacePrivate: true, zonePrivate: true, member: true, grant: true, revoke });
     try { await expect(resolveZoneRoute(f.work, f.request, { zone: f.zone, path: '/', actingSubject: f.actor }))
       .rejects.toBeInstanceOf(ZoneRouteMissing); }
     finally { f.close(); }
   }
+  const grant = fixture({ spacePrivate: false, zonePrivate: true, member: true, grant: true, revoke: 'grant' });
+  try { await expect(resolveZoneRoute(grant.work, grant.request, { zone: grant.zone, path: '/', actingSubject: grant.actor }))
+    .resolves.toMatchObject({ kind: 'home' }); }
+  finally { grant.close(); }
 });
 
-test('G-964: Realm-to-Zone reads apply both admissions instead of interpreting private Realm visibility as a Zone grant', async () => {
+test('Realm-to-Zone reads follow the Space; a stale Zone node is not a second admission', async () => {
   for (const zonePrivate of [false, true]) for (const grant of [false, true]) {
     const f = fixture({ spacePrivate: true, zonePrivate, member: true, grant });
     try {
-      const reading = readRealmZone(f.session(true), f.realm);
-      if (!zonePrivate || grant) expect(await reading).toMatchObject({ zone: f.zone, discovery: { indexable: false } });
-      else await expect(reading).rejects.toBeInstanceOf(WorkReadMissing);
+      expect(await readRealmZone(f.session(true), f.realm)).toMatchObject({ zone: f.zone, discovery: { indexable: false } });
     } finally { f.close(); }
   }
 });
@@ -128,7 +131,7 @@ test('G-964: Zone-scoped trending retains private-Space membership through its r
       const session = f.session(true);
       const reading = new RankingHomeTrendingReader(projection).read(session,
         { query: { scope: `zone:${f.zone}` }, principal: session.principal, agent: f.actor });
-      if (member && grant) expect(await reading).toMatchObject({ profile: 'home-trending-v1', items: [] });
+      if (member) expect(await reading).toMatchObject({ profile: 'home-trending-v1', items: [] });
       else await expect(reading).rejects.toBeInstanceOf(WorkReadMissing);
     } finally { f.close(); }
   }
@@ -137,6 +140,6 @@ test('G-964: Zone-scoped trending retains private-Space membership through its r
     const session = revoked.session(true);
     await expect(new RankingHomeTrendingReader(projection).read(session,
       { query: { scope: `zone:${revoked.zone}` }, principal: session.principal, agent: revoked.actor }))
-      .rejects.toBeInstanceOf(WorkReadMissing);
+      .resolves.toMatchObject({ profile: 'home-trending-v1', items: [] });
   } finally { revoked.close(); }
 });

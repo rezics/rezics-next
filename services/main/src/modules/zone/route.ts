@@ -142,15 +142,14 @@ class RouteRead {
   async zone(state: Publication) {
     const current = await this.work.environment.fuseki.query(`PREFIX rv: <${RV}> SELECT ?spaceDisclosure WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${iri(state.zone)} a rv:Zone ; rv:zoneState rv:Active ;
-        rv:zoneHead ${iri(state.currentRevision)} ; rv:disclosure rv:${state.storedDisclosure === 'public' ? 'Public' : 'Private'} ;
-        rv:space ${iri(state.configuration.space)} .
+        rv:zoneHead ${iri(state.currentRevision)} ; rv:space ${iri(state.configuration.space)} .
         ${iri(state.configuration.space)} a rv:Space ; rv:disclosure ?spaceDisclosure . }
     } LIMIT 2`, 1024);
     const rows = current.results?.bindings ?? [];
     if (rows.length !== 1 || ![RV + 'Public',RV + 'Private'].includes(rows[0]?.spaceDisclosure?.value ?? '')) {
       throw new ZoneRouteMissing('Zone route is unavailable');
     }
-    if (rows[0]!.spaceDisclosure!.value !== RV + 'Public' || state.storedDisclosure !== 'public') {
+    if (rows[0]!.spaceDisclosure!.value !== RV + 'Public' || state.disclosure !== 'public') {
       await this.privateZone(state.zone);
       this.privateZones.add(state.zone);
     }

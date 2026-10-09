@@ -111,7 +111,7 @@ export async function isZonePublishedPageRevision(env: WorkActivationEnvironment
       rv:routingEpoch ${lit(env.lineage.routingEpoch)} .
       FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
     GRAPH ${iri(GRAPHS.current)} { ${iri(zone)} a rv:Zone ; rv:zoneState rv:Active ;
-      rv:disclosure rv:Public ; rv:space ${iri(state.space)} ; rv:sitePublicationHead ${iri(revision)} .
+      rv:space ${iri(state.space)} ; rv:sitePublicationHead ${iri(revision)} .
       ${iri(state.space)} a rv:Space ; rv:disclosure rv:Public .
       FILTER NOT EXISTS { ${iri(zone)} rv:protectionHead ?zoneProtection }
       FILTER NOT EXISTS { ${iri(state.space)} rv:protectionHead ?spaceProtection } }
@@ -290,7 +290,7 @@ export async function listOfficialZones(env: WorkActivationEnvironment,
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     SELECT ?zone ?realm ?space ?name WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?zone a rv:Zone ; rv:official true ; rv:zoneState rv:Active ;
-      rv:disclosure rv:Public ; rv:defaultRealm ?realm ; rv:space ?space .
+      rv:defaultRealm ?realm ; rv:space ?space .
       ?space rv:disclosure rv:Public .
       OPTIONAL { ?zone rdfs:label ?name }
       FILTER NOT EXISTS { ?space rv:listing "unlisted" }

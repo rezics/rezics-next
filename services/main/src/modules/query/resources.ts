@@ -53,7 +53,7 @@ export function publicResources() {
       ?space a rv:Space ; rv:realmCapability ?r ; rv:disclosure rv:Public .
       }
       BIND("realm" AS ?kind) BIND(?r AS ?summary) BIND(?space AS ?nameResource) }
-    UNION { GRAPH ${iri(GRAPHS.current)} { ?r a rv:Zone ; rv:zoneState rv:Active ; rv:zoneHead ?zoneHead ; rv:disclosure rv:Public ; rv:space ?space .
+    UNION { GRAPH ${iri(GRAPHS.current)} { ?r a rv:Zone ; rv:zoneState rv:Active ; rv:zoneHead ?zoneHead ; rv:space ?space .
       ?space a rv:Space ; rv:zoneCapability ?r ; rv:realmCapability ?summary ; rv:disclosure rv:Public .
       ?summary a rv:Realm ; rv:realmState rv:Active .
       }

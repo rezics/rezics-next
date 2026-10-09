@@ -55,8 +55,9 @@ export async function readZonePopulation(query: (sparql: string, rows: number) =
   const editorial = 'editorial' in population && population.editorial.members.length
     ? `UNION {
       GRAPH ${iri(GRAPHS.current)} {
-        ${iri(population.editorial.zone)} a rv:Zone ; rv:zoneState rv:Active ;
-          rv:disclosure rv:Public ; rv:navigation ?navigation .
+        ${iri(population.editorial.zone)} a rv:Zone ; rv:zoneState rv:Active ; rv:space ?editorialSpace ;
+          rv:navigation ?navigation .
+        ?editorialSpace rv:disclosure rv:Public .
         ?navigation a rv:Structure ; rv:structureProfile rv:ZoneNavigation ;
           rv:structureOf ${iri(population.editorial.zone)} ; rv:selectedGeneration ?navigationGeneration .
         ?navigationGeneration rv:generationState rv:Active .

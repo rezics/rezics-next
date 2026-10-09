@@ -38,6 +38,19 @@ export interface OwnerCreateInput {
   resultBudget?: number;
 }
 
+/** The Space's disclosure is the Zone's. A request may repeat that value and nothing else. */
+export async function zoneDisclosureFromSpace(env: WorkActivationEnvironment, space: string,
+  requested: 'public' | 'private'): Promise<'public' | 'private'> {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?disclosure WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(space)} a rv:Space ; rv:disclosure ?disclosure . }
+  } LIMIT 2`, 1024)).results?.bindings ?? [];
+  const value = rows.length === 1 ? rows[0]?.disclosure?.value : undefined;
+  const disclosure = value === `${RV}Public` ? 'public' as const : value === `${RV}Private` ? 'private' as const : null;
+  if (!disclosure) throw new InvalidCompositionChange('Zone space disclosure is unavailable');
+  if (requested !== disclosure) throw new InvalidCompositionChange('Zone disclosure is its Space\'s disclosure');
+  return disclosure;
+}
+
 /** One receipt-proven owner half of the recoverable Structure bootstrap. */
 export async function createAdmittedOwner(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
@@ -72,18 +85,28 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
   } else if (admission.state !== 'sealed') {
     const existing = await readCompositionReceipt(env, admission.id, def.action);
     if (!existing) {
+      let disclosureValue = input.disclosure;
+      if (input.kind === 'zone') {
+        try { disclosureValue = await zoneDisclosureFromSpace(env, input.space ?? '', input.disclosure); }
+        catch (error) {
+          if (error instanceof InvalidCompositionChange) await sealStructureAdmissionCancellation(env, admission);
+          throw error;
+        }
+      }
       const revision = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
       const operation = `https://rezics.com/id/${Bun.randomUUIDv7()}`;
       const manifest = prepareComponent(env.objectDirectory, input.owner, {
         kind: input.kind, owner: input.owner, actingSubject: input.actingSubject,
-        space: input.space, disclosure: input.disclosure, name: input.name,
-        ...(input.name !== undefined ? { language } : {}),
+        space: input.space, ...(input.kind === 'zone' ? {} : { disclosure: input.disclosure }),
+        name: input.name, ...(input.name !== undefined ? { language } : {}),
         capture: input.capture, query: input.query, resultBudget: input.resultBudget }, profile);
       const receipt = compositionReceiptIri(admission.id, def.action);
       const batch = `urn:rezics:outbox:${hash(receipt)}`;
       const event = `urn:rezics:event:${hash(operation)}`;
-      const disclosure = input.disclosure === 'public' ? 'Public' : 'Private';
+      const disclosure = disclosureValue === 'public' ? 'Public' : 'Private';
       const ownerTriples = input.kind === 'zone'
+        // The capability shape still requires a disclosure triple. It copies the Space at
+        // creation and is not read back; later Space settings do not write it again.
         ? `${iri(input.owner)} a rv:Zone ; rv:space ${iri(input.space!)} ; rv:zoneState rv:Active ;
           rv:zoneHead ${iri(revision)} ; rv:disclosure rv:${disclosure} .
           ${input.name !== undefined ? `${iri(input.owner)} <http://www.w3.org/2000/01/rdf-schema#label> ${lit(input.name)}@${language} .` : ''}
@@ -100,7 +123,7 @@ export async function createAdmittedOwner(env: WorkActivationEnvironment,
             rv:captureCoverage rv:${input.capture.coverage === 'complete' ? 'Complete' : 'Partial'} .` : ''}`;
       const prerequisite = input.kind === 'zone'
         ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.space!)} a rv:Space ;
-            rv:owner ${iri(input.actingSubject)} . }
+            rv:owner ${iri(input.actingSubject)} ; rv:disclosure rv:${disclosure} . }
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
             ${iri(input.space!)} rv:zoneCapability ?priorZone . } }`
         : '';

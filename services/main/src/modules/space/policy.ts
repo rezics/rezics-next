@@ -177,8 +177,7 @@ export async function readZoneSpaceDisclosure(env: WorkActivationEnvironment, sp
 
 /** Publishes Visibility and Listing on a Zone Space through the same dataset
  * sequence advance and Space disclosure facts as Realm policy delivery. The
- * Zone component document is left as stored; its own disclosure stays the
- * graph fact Zone reads already compare with that document. */
+ * Zone's disclosure is that Space fact; this command does not write the Zone. */
 export async function deliverZoneSpacePolicy(env: WorkActivationEnvironment, op: ZoneSpacePolicyDelivery): Promise<void> {
   const receipt = zoneSpacePolicyHead(op.receipt_id);
   const digest = hash(JSON.stringify(op));

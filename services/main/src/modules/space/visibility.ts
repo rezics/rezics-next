@@ -56,8 +56,7 @@ export async function readResourceVisibility(env: WorkActivationEnvironment, tar
   const disclosure = row.disclosure?.value ?? `${RV}Public`;
   if (![`${RV}Public`, `${RV}Private`].includes(disclosure) || row.zoneDisclosure
     && ![`${RV}Public`,`${RV}Private`].includes(row.zoneDisclosure.value)) throw new Error('Resource disclosure is invalid');
-  const visibility = disclosure === `${RV}Public` && row.zoneDisclosure?.value !== `${RV}Private`
-    ? 'public' as const : 'private' as const;
+  const visibility = disclosure === `${RV}Public` ? 'public' as const : 'private' as const;
   // Agent listing is Access-owned; absent adapter must never invent indexability.
   const listing = agent ? await reader.agentListing?.(target) ?? 'unlisted'
     : row.listing?.value ?? 'listed';
@@ -69,13 +68,13 @@ export async function readResourceVisibility(env: WorkActivationEnvironment, tar
   // independent membership fence before any Zone grant can matter.
   const membershipReadable = disclosure === `${RV}Public`
     || !!(row.realm && await reader.realmReadProof?.(row.realm.value));
+  // A Zone-only private Space has no Realm to prove. The Zone node's stored
+  // disclosure is not another admission; Zone read authority is that Space's.
   const zoneOnlyPrivate = !row.realm && !!row.zoneDisclosure && disclosure === `${RV}Private`;
-  const needsZoneAuthority = row.zoneDisclosure?.value === `${RV}Private` || zoneOnlyPrivate;
-  const zoneAuthority = (membershipReadable || zoneOnlyPrivate) && needsZoneAuthority
-    && await reader.zoneReadable?.(target) === true;
-  const spaceReadable = membershipReadable || zoneOnlyPrivate && zoneAuthority;
+  const zoneAuthority = zoneOnlyPrivate && await reader.zoneReadable?.(target) === true;
+  const spaceReadable = membershipReadable || zoneAuthority;
   const readable = agent ? visibility === 'public' && (await reader.agentReadable?.(target) ?? true)
-    : spaceReadable && (row.zoneDisclosure?.value !== `${RV}Private` || zoneAuthority);
+    : spaceReadable;
   const discovery = pageDiscoveryPolicy(visibility, listing as ResourceListing);
   return { readable, findable: readable && discovery.indexable, visibility,
     listing: listing as ResourceListing, history: history as RealmHistory, admission: admission as RealmAdmission,
