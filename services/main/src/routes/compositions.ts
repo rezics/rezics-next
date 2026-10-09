@@ -1,3 +1,4 @@
+import { logWorkerFault } from '@rezics/observability/log';
 import { Elysia, t } from 'elysia';
 import type { Static } from 'typebox';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -207,8 +208,12 @@ export function compositionError(error: unknown): Response {
     || error instanceof CompositionTooLarge) return problem(409, 'composition_conflict', error.message);
   if (error instanceof CompositionCorrupt || error instanceof StructureObjectCorrupt
     || error instanceof StructureObjectUnavailable || error instanceof ObjectUnavailable
-    || error instanceof ObjectIntegrityError) return problem(503, 'composition_unavailable',
-    'Composition history is unavailable');
+    || error instanceof ObjectIntegrityError) {
+    // The same answer for corrupt, missing and unreadable history; the log keeps
+    // which of those it was so the 503 can be routed.
+    logWorkerFault('main.route.composition_unavailable', error);
+    return problem(503, 'composition_unavailable', 'Composition history is unavailable');
+  }
   return workReadError(error);
 }
 
