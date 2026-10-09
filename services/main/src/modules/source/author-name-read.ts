@@ -2,11 +2,14 @@ import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../wor
 import type { Static } from 'typebox';
 import type { creditItem } from '../work/read-contract.ts';
 import type { AuthorName } from './author-name.ts';
+import { SOURCE_ADOPTION_READ_COST } from './native-work-adoption.ts';
 
 const reads = new WeakMap<WorkReadSession, Map<string, AuthorName | null>>();
 const reportedReads = new WeakMap<WorkReadSession, Map<string, string>>();
+/** A followed-author page records at most 8×64 Works and a discovery build at most
+ * 250, so the binding fence adds at most eight PostgreSQL reads and no Fuseki calls. */
 export const SOURCE_REPORTED_CREDIT_COST = { works: 64, names: 192, perWork: 128,
-  sourceQueriesPerRead: 1, sourceFenceQueries: 1, nameQueriesPerRead: 1 } as const;
+  sourceQueriesPerRead: 1, sourceFenceQueries: 8, nameQueriesPerRead: 1 } as const;
 
 /** Raw server-owned attribution tuples, before candidate selection or names. */
 export async function sourceCreditReferences(session: WorkReadSession, works: readonly string[]) {
@@ -47,12 +50,32 @@ export async function readAuthorNames(session: WorkReadSession, keys: readonly s
   return names;
 }
 
+type ReportedAuthorRef = { id: string; key: string; ordinal: number };
+
+/** The fence compares each recorded binding, so it rereads every Work the read
+ * retained. `authorReferences` accepts at most `authorWorks` Works; chunks stay
+ * inside that cap and merge by Work. Callers record a page, not the corpus:
+ * a discovery build keeps 250 Works (four lookups) and a followed-author page
+ * keeps 8×64 (eight). Those lookups are PostgreSQL, not Fuseki. */
+async function fencedAuthorReferences(session: WorkReadSession, works: readonly string[]) {
+  const merged = new Map<string, ReportedAuthorRef[]>();
+  const adoptions = session.deps.sourceAdoptions;
+  if (!adoptions || !works.length) return merged;
+  const size = SOURCE_ADOPTION_READ_COST.authorWorks;
+  for (let offset = 0; offset < works.length; offset += size) {
+    const part = await adoptions.authorReferences(works.slice(offset, offset + size));
+    for (const [work, refs] of part) merged.set(work, refs);
+    session.checkDeadline();
+  }
+  return merged;
+}
+
 export async function fenceAuthorNames(session: WorkReadSession) {
   const prior = reads.get(session);
   if (prior?.size) await readAuthorNames(session, [...prior.keys()]);
   const reported = reportedReads.get(session);
   if (reported?.size) {
-    const current = await session.deps.sourceAdoptions?.authorReferences([...reported.keys()]) ?? new Map();
+    const current = await fencedAuthorReferences(session, [...reported.keys()]);
     for (const [work, value] of reported) {
       if (JSON.stringify(current.get(work) ?? []) !== value) {
         throw new WorkReadMoved('Source author binding changed during the read');
