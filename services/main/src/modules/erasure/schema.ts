@@ -49,6 +49,10 @@ export const ERASURE_TARGET_OWNERS = {
   resource: 'graph',
   source_observation: 'source',
   object: 'object',
+  text_contribution_draft: 'graph',
+  release_revision: 'graph',
+  work_head: 'graph',
+  composition_revision: 'graph',
 } as const;
 export type ErasureTargetKind = keyof typeof ERASURE_TARGET_OWNERS;
 

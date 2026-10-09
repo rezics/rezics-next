@@ -1,6 +1,10 @@
 # Erasure owner template
 
-The first write/read operation is a Content revision erasure. Copy
+The one write operation tombstones a Content revision or any other revision kind
+reads already honour (a text-contribution draft, published or not, a semantic
+component, a release, a Work head, a composition structure). Identity resolution
+picks the owner resource and the graph subject; the tombstone, epoch, receipt
+and sequence are the same graph command. Copy
 `request.ts`, `journal.ts`, `content.ts`, `receipt-family.ts`, and
 `services/main/src/routes/erasures.ts` for another
 PostgreSQL-owned target family; extend the single `relay.erasure` journal and

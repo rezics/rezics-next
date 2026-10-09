@@ -7,6 +7,7 @@ import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { applyContentErasure, checkContentErasureTargets, ContentErasureGraphRequired,
   contentErasureResource, ContentErasureInvalid, ContentErasureStale } from './content.ts';
+import { graphRevisionIds, isGraphErasureKind, resolveErasureRevisions } from './revision-kind.ts';
 import { GraphErasureConflict, GraphErasureUnavailable, readGraphErasureProof,
   suppressGraphContentRevisions } from './graph.ts';
 import { ERASURE_JOURNAL_EPOCH, ErasureInvalid, ErasureNotFound, ErasureStale, ErasureUnavailable,
@@ -78,7 +79,8 @@ async function completeContentErasure(service: ErasureService, graph: WorkActiva
   admission: Pick<RegisteredAdmission, 'id' | 'requestDigest' | 'authorityEpoch' | 'scope'>,
   erasureId: string): Promise<void> {
   const journaled = await readErasure(service.relay, erasureId);
-  const revisionIds = journaled.targets.map(target => target.ref);
+  const graphIds = graphRevisionIds(journaled.targets);
+  const contentIds = journaled.targets.filter(target => target.kind === 'content_revision').map(target => target.ref);
   if (journaled.stage === 'blocked') {
     await access.recordGraphOutcome(admission.id, proof(admission, 'succeeded', journaled.erasureEpoch));
     return;
@@ -86,13 +88,18 @@ async function completeContentErasure(service: ErasureService, graph: WorkActiva
   if (journaled.stage === 'requested') {
     try {
       const resourceId = admission.scope.slice('erasure:'.length);
+      if (graphIds.length !== journaled.targets.length || !graphIds.length) {
+        throw new ErasureInvalid('erasure targets are unavailable or invalid');
+      }
       const erase = async (fence: PreservationFence) => {
         await suppressGraphContentRevisions(graph.fuseki, graph.lineage, erasureId,
-          journaled.erasureEpoch, revisionIds);
+          journaled.erasureEpoch, graphIds);
         const graphProof = await readGraphErasureProof(graph.fuseki, graph.lineage, erasureId,
-          journaled.erasureEpoch, revisionIds);
-        await applyContentErasure(service.content, { erasureId, erasureEpoch: journaled.erasureEpoch,
-          resourceId, revisionIds, graphProof, preservationAccess: fence });
+          journaled.erasureEpoch, graphIds);
+        if (contentIds.length) {
+          await applyContentErasure(service.content, { erasureId, erasureEpoch: journaled.erasureEpoch,
+            resourceId, revisionIds: contentIds, graphProof, preservationAccess: fence });
+        }
         await markErasureSuppressed(service.relay, erasureId);
       };
       const held = (await withPreservationFence(service.preservationAccess, resourceId, erasureId, erase)).held;
@@ -172,11 +179,19 @@ export async function requestContentErasure(service: ErasureService,
   let replayed = Boolean(erasureId);
   if (!erasureId) {
     try {
-      await checkContentErasureTargets(service.content, input.resourceId, input.revisionIds, true);
+      const resolved = await resolveErasureRevisions(service.content, graph.fuseki,
+        input.resourceId, input.revisionIds);
+      if (resolved.some(revision => revision.erased)) {
+        throw new ContentErasureStale('Erasure revision is already erased');
+      }
+      const contentIds = resolved.filter(revision => revision.kind === 'content_revision').map(revision => revision.ref);
+      if (contentIds.length) {
+        await checkContentErasureTargets(service.content, input.resourceId, contentIds, true);
+      }
       const journaled = await journalErasure(service.relay, { operationId, requestDigest,
         kind: 'revision', principalId: registered.principalId, admissionId: registered.id,
         authorityEpoch: registered.authorityEpoch,
-        targets: input.revisionIds.map(ref => ({ kind: 'content_revision', ref })) });
+        targets: resolved.map(revision => ({ kind: revision.kind, ref: revision.ref })) });
       erasureId = journaled.erasureId;
       replayed = journaled.replayed;
     } catch (error) {
@@ -207,6 +222,17 @@ export async function readRequestedErasure(service: ErasureService,
  * response or crash. It completes them and never cancels journaled intent; an
  * entry that cannot complete stays `requested` and is returned for escalation.
  */
+async function admittedErasureResource(access: Pool, admissionId: string | null): Promise<string> {
+  if (!admissionId) throw new ContentErasureInvalid('Content erasure resource is unavailable');
+  const scope = (await access.query<{ scope_id: string }>(
+    'SELECT scope_id FROM access.admission WHERE id = $1', [admissionId])).rows[0]?.scope_id ?? '';
+  const resourceId = scope.startsWith('erasure:') ? scope.slice('erasure:'.length) : '';
+  if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(resourceId)) {
+    throw new ContentErasureInvalid('Content erasure resource is unavailable');
+  }
+  return resourceId;
+}
+
 export async function completePendingContentErasures(service: ErasureService,
   graph: WorkActivationEnvironment, access: ErasureAccess,
   limit = 100): Promise<{ completed: number; failed: string[] }> {
@@ -219,8 +245,10 @@ export async function completePendingContentErasures(service: ErasureService,
   for (const row of pending) {
     try {
       const report = await readErasure(service.relay, row.id);
-      const resourceId = await contentErasureResource(service.content,
-        report.targets.map(target => target.ref));
+      const contentIds = report.targets.filter(target => target.kind === 'content_revision').map(target => target.ref);
+      const resourceId = contentIds.length
+        ? await contentErasureResource(service.content, contentIds)
+        : await admittedErasureResource(service.preservationAccess, row.admission_id);
       await completeContentErasure(service, graph, access, { id: row.admission_id,
         requestDigest: row.request_digest, authorityEpoch: row.authority_epoch,
         scope: `erasure:${resourceId}` }, row.id);
@@ -317,12 +345,20 @@ async function remediateEntry(service: ErasureService, graph: WorkActivationEnvi
   if (row.authority !== 'access_admission' || !row.admission
     || row.operation !== `erasure:${row.admission}`) return done('malformed');
   let ids: string[];
+  let proofIds: string[] = [];
   try {
     const report = await readErasure(relay, row.id);
-    ids = report.targets.map(target => target.ref);
-    if (!ids.length || ids.length > JOURNAL_TARGETS || new Set(ids).size !== ids.length
-      || report.targets.some(target => target.owner !== 'content' || target.kind !== 'content_revision'
-        || !UUID.test(target.ref)) || report.erasureEpoch !== row.epoch) return done('malformed');
+    const contentTargets = report.targets.filter(target => target.owner === 'content'
+      && target.kind === 'content_revision');
+    const known = report.targets.every(target => (target.owner === 'content' && target.kind === 'content_revision')
+      || (target.owner === 'graph' && isGraphErasureKind(target.kind)));
+    ids = contentTargets.map(target => target.ref);
+    proofIds = graphRevisionIds(report.targets);
+    if (!report.targets.length || report.targets.length > JOURNAL_TARGETS
+      || new Set(report.targets.map(target => `${target.kind}\0${target.ref}`)).size !== report.targets.length
+      || !known || report.targets.some(target => !UUID.test(target.ref))
+      || report.erasureEpoch !== row.epoch) return done('malformed');
+    if (!ids.length) return done('foreign');
   } catch (error) {
     if (error instanceof ErasureNotFound || error instanceof ErasureInvalid) return done('malformed');
     if (error instanceof Error) return done('failed');
@@ -344,7 +380,7 @@ async function remediateEntry(service: ErasureService, graph: WorkActivationEnvi
     const resourceId = await contentErasureResource(service.content, ids);
     const guarded = await withPreservationFence(service.preservationAccess, resourceId, row.id,
       async fence => {
-        const graphProof = await readGraphErasureProof(graph.fuseki, graph.lineage, row.id, row.epoch, ids);
+        const graphProof = await readGraphErasureProof(graph.fuseki, graph.lineage, row.id, row.epoch, proofIds);
         await applyContentErasure(service.content, { erasureId: row.id, erasureEpoch: row.epoch,
           resourceId, revisionIds: open, graphProof, preservationAccess: fence });
       });

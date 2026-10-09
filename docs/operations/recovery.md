@@ -406,6 +406,11 @@ byte are part of the SHA-256 identity. Keep this file immutable throughout the
 campaign. An existing graph tombstone must carry the supplied exact epoch; a
 missing graph target or conflicting epoch rejects the whole copy.
 
+The campaign file accepts only Content revision URNs. Live `POST /v1/erasures`
+also tombstones text-contribution drafts, semantic component revisions, release
+revisions, Work heads and composition structure revisions. Those subjects are
+not campaign rows; this sanitizer does not copy or exclude them.
+
 ```sh
 sh /path/to/purge-tdb2.sh /fuseki/databases/erasure-candidate --campaign /protected/campaign.tsv
 ```

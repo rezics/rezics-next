@@ -7,7 +7,7 @@ import type { HistoricalReceiptSource } from '../outbox/receipt-custody.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../outbox/relay-position.ts';
 import { readExactModelGeneration } from '../semantic/model-custody.ts';
 import { GRAPHS, RV, hash, iri } from '../work/activate.ts';
-import { GraphErasureUnavailable, graphErasureReceipt,
+import { canonicalErasureTargets, GraphErasureConflict, GraphErasureUnavailable, graphErasureReceipt,
   type GraphSuppressionProof, type HeldGraphErasureReplay } from './graph.ts';
 import { protectedObjectDigests } from './replay-objects.ts';
 
@@ -47,16 +47,21 @@ function nativeEventFields(value: unknown, keys: readonly string[]): value is Re
 export async function readRetainedNativeGraphSuppressionProof(relayClient: PoolClient,
   erasureId: string, epoch: string, revisionIds: readonly string[]): Promise<RetainedNativeGraphSuppressionSource> {
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-  if (!uuid.test(erasureId) || !/^[1-9][0-9]{0,18}$/.test(epoch)
-    || !revisionIds.length || revisionIds.length > 64
-    || new Set(revisionIds).size !== revisionIds.length || revisionIds.some(id => !uuid.test(id))) {
+  let targets: string[];
+  try { targets = canonicalErasureTargets(revisionIds); }
+  catch (error) {
+    if (error instanceof GraphErasureConflict) {
+      throw new GraphErasureUnavailable('retained native erasure proof input is invalid');
+    }
+    throw error;
+  }
+  if (!uuid.test(erasureId) || !/^[1-9][0-9]{0,18}$/.test(epoch)) {
     throw new GraphErasureUnavailable('retained native erasure proof input is invalid');
   }
   const source = 'https://rezics.com/services/main';
   const receipt = graphErasureReceipt(erasureId);
   const eventId = `urn:rezics:event:${hash(`${receipt}\0event`)}`;
   const batchId = `urn:rezics:outbox:${hash(`${receipt}\0batch`)}`;
-  const targets = [...revisionIds].sort().map(id => `urn:rezics:content:revision:${id}`);
   const requestDigest = hash(JSON.stringify({ family: 'erasure-graph-v1', erasureId, epoch, targets }));
   const rows = (await relayClient.query<{ stream_scope: string; source: string; event_id: string;
     data_epoch: string; sequence: string; envelope: unknown; batch_id: string; routing_epoch: string;

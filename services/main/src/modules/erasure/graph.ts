@@ -28,15 +28,36 @@ export function graphErasureReceipt(erasureId: string): string {
   return `urn:rezics:receipt:erasure-graph:${hash(erasureId)}`;
 }
 
-function checkedTargets(revisionIds: readonly string[]): string[] {
+const GRAPH_REVISION =
+  /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * One ordered target list for the shared tombstone digest.
+ * A Content UUID becomes `urn:rezics:content:revision:{uuid}`.
+ * A revision IRI reads already honour (`https://rezics.com/id/{uuid}`) stays itself.
+ */
+export function canonicalErasureTargets(revisionIds: readonly string[]): string[] {
   if (
     !revisionIds.length ||
     revisionIds.length > MAX_TARGETS ||
-    new Set(revisionIds).size !== revisionIds.length ||
-    revisionIds.some((id) => !UUID.test(id))
+    new Set(revisionIds).size !== revisionIds.length
   )
     throw new GraphErasureConflict('invalid graph targets');
-  return [...revisionIds].sort().map((id) => `urn:rezics:content:revision:${id}`);
+  return revisionIds.map((id) => {
+    if (UUID.test(id)) return `urn:rezics:content:revision:${id}`;
+    if (GRAPH_REVISION.test(id)) return id;
+    throw new GraphErasureConflict('invalid graph targets');
+  }).sort();
+}
+
+/** Content targets round-trip as UUIDs. Other revision subjects stay their IRIs. */
+export function erasureRevisionKey(target: string): string {
+  const prefix = 'urn:rezics:content:revision:';
+  return target.startsWith(prefix) ? target.slice(prefix.length) : target;
+}
+
+function checkedTargets(revisionIds: readonly string[]): string[] {
+  return canonicalErasureTargets(revisionIds);
 }
 
 /** Public Content reads consult the graph tombstone even if the Content owner erase is still retrying. */
@@ -60,7 +81,7 @@ export async function graphErasedContentRevisions(
   ) {
     throw new GraphErasureUnavailable('Content suppression inventory is unavailable');
   }
-  return new Set(rows.map((row) => row.target!.value.slice('urn:rezics:content:revision:'.length)));
+  return new Set(rows.map((row) => erasureRevisionKey(row.target!.value)));
 }
 
 async function profile(fuseki: FusekiClient) {
@@ -889,7 +910,7 @@ export async function suppressHeldGraphContentRevisions(
   const snapshot: HeldGraphErasureProof = {
     cut: input.cut,
     accessHoldGeneration: input.accessHoldGeneration,
-    revisionIds: input.targets.map((target) => target.slice('urn:rezics:content:revision:'.length)),
+    revisionIds: input.targets.map((target) => erasureRevisionKey(target)),
     original: input.original,
   };
   const authorize = () =>
