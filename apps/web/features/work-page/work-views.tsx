@@ -7,7 +7,6 @@ import { getMessages } from '../../i18n/server.ts';
 import { signInPath } from '../auth/paths.ts';
 import { browseReader } from '../discover/server.ts';
 import { lifespan } from '../author/facts.ts';
-import { authorHref } from '../author/route.ts';
 import { messages as authorMessages } from '../author/messages.ts';
 import authorZhHans from '../author/messages/zh-Hans.ts';
 import { readOpenLibraryAuthor, readOpenLibraryAuthorWorks } from '../author/read.ts';
@@ -18,7 +17,7 @@ import { AuthorSection } from './author.tsx';
 import { classificationFacet, facetLabel } from '../concept/facets.ts';
 import { readFacets } from '../concept/read.ts';
 import { ClassificationRegion, type CommunityGenres } from './classification.tsx';
-import { WorkCredits, WorkCreditsSkeleton } from './credits.tsx';
+import { WorkCredits, WorkCreditsSkeleton, citationAuthors, coverAuthors } from './credits.tsx';
 import { HistoryRegion } from './history.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import { RatingLine, RatingSummaryRegion } from './ratings.tsx';
@@ -102,15 +101,7 @@ async function Cover({ id, work, avatarQuery, locale, messages }: Common & {
 }) {
   const [agentCredits, externalCredits] = await Promise.all([readAgentCredits(id), readCredits(id)]);
   const t = materializeData(messages, { locale });
-  const authors = [
-    ...(agentCredits.ok ? agentCredits.data.items.filter(credit => credit.role === 'author')
-      .map(credit => ({ name: credit.displayName, href: authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent }) })) : []),
-    ...(externalCredits.ok ? externalCredits.data.items.filter(credit => credit.participantKind === 'external-reference')
-      .filter(credit => credit.role === 'author')
-      .sort((a, b) => a.ordinal - b.ordinal).map(credit => ({
-        name: credit.displayName ?? t.openLibraryAuthor({ key: credit.key.replace(/^\/authors\//, '') }),
-        href: credit.provider === 'open-library' ? authorHref({ kind: 'external', key: credit.key }) : null })) : []),
-  ];
+  const authors = coverAuthors(agentCredits, externalCredits, key => t.openLibraryAuthor({ key }));
   return <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />;
 }
 
@@ -228,8 +219,7 @@ async function Ratings(props: ScopedProps & { context: string | undefined }) {
  */
 async function Record({ id, workRef, work, locale, messages }: Common & { id: string; workRef: WorkAt; work: Header }) {
   const [credits, page] = await Promise.all([readAgentCredits(id), headers().then(list => list.get('x-rezics-page-url'))]);
-  const authors = credits.ok ? credits.data.items.filter(credit => credit.role === 'author').map(credit => credit.displayName)
-    : [];
+  const authors = citationAuthors(credits);
   // A citation names the Work's own address, never a Zone's frame around it.
   const url = page ? new URL(localizedPath(workHref(workRefOf(workRef)), locale), page).toString() : null;
   const citation = url ? [work.title.value, authors.join(authorSeparator(authors)), 'REZICS', url]

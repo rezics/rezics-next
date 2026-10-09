@@ -2,10 +2,11 @@ import { resourceHref } from '../address/path.ts';
 import { recipeEditHref } from '../recipe-editor/route.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { materializeData } from 'native-i18n';
 import type { ReactNode } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
-import { WorkCredits } from './credits.tsx';
+import { WorkCredits, coverAuthors } from './credits.tsx';
 import * as fixture from './fixtures.ts';
 import { HistoryRegion } from './history.tsx';
 import { messages } from './messages.ts';
@@ -48,6 +49,7 @@ function Framed({
     work.types,
   );
   const { kind } = experience;
+  const copy = materializeData(messages[locale], { locale });
   return (
     <WorkFrame
       workRef={fixture.workRef}
@@ -77,6 +79,8 @@ function Framed({
           />
         ) : null
       }
+      authors={kind === 'book' ? coverAuthors(fixture.agentCredits, fixture.credits,
+        key => copy.openLibraryAuthor({ key })) : []}
     >
       {children}
     </WorkFrame>

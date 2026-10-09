@@ -15,7 +15,7 @@ import { authorHref } from '../author/route.ts';
 import { conceptFacet } from '../concept/fixtures.ts';
 import { facetLabel } from '../concept/facets.ts';
 import { ClassificationRegion, type CommunityGenres } from './classification.tsx';
-import { WorkCredits } from './credits.tsx';
+import { WorkCredits, coverAuthors } from './credits.tsx';
 import * as fixture from './fixtures.ts';
 import { languageName } from './format.ts';
 import { messages } from './messages.ts';
@@ -52,12 +52,8 @@ function Overview({ work, agentCredits, credits, scope, realms, ratings, classif
   const view = scope ? fixture.scopeView(scope, realms) : null;
   const scopeBar = <ScopeBar workRef={fixture.workRef} scope={scope} realms={realms} locale={locale} messages={t} />;
   const author = agentCredits.ok ? agentCredits.data.items.find(credit => credit.role === 'author') : undefined;
-  const authors = [...agentCredits.ok ? agentCredits.data.items.filter(credit => credit.role === 'author')
-    .map(credit => ({ name: credit.displayName, href: authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent }) })) : [],
-  ...credits.ok ? credits.data.items.filter(credit => credit.participantKind === 'external-reference')
-    .filter(credit => credit.role === 'author')
-    .map(credit => ({ name: credit.displayName ?? credit.key,
-      href: authorHref({ kind: 'external', key: credit.key }) })) : []];
+  const copy = materializeData(messages[locale], { locale });
+  const authors = coverAuthors(agentCredits, credits, key => copy.openLibraryAuthor({ key }));
   return <WorkFrame workRef={fixture.workRef} work={work} authors={authors} locale={locale} messages={t}
     readerActions={readerActions} sections={hubLabels(t, hubSections)}
     signedIn={Boolean(readerActions)} signInHref={`/auth/start?next=${encodeURIComponent(localizedPath(workHref(fixture.workRef), locale))}`}
