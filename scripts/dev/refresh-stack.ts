@@ -3,7 +3,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, existsSync, fchmodSync, openSync, readFileSync, readlinkSync, writeSync,
   realpathSync,
   renameSync,
-  rmSync, statSync, writeFileSync ,
+  rmSync, writeFileSync ,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
@@ -32,6 +32,9 @@ import { AppHostResourceLost, appHostRestartInstruction, type RefreshInputs, ass
   type PendingRefresh,
   refreshResources, type RefreshResource } from './refresh.ts';
 import { runHostAdmission } from '../qa/host-admission.ts';
+import { processAlive } from '../qa/process/identity.ts';
+import { directoryLeaseHeld } from '../qa/process/lease.ts';
+import { terminateProcessGroup } from '../qa/process/terminate.ts';
 import { inspectOfficialZoneApprovals } from './seed/official-zones-step.ts';
 import { officialSourceDigest } from './seed/official-theme-step.ts';
 
@@ -86,16 +89,7 @@ function aspire(root: string, args: string[], timeout = 30_000): string {
 }
 
 export function refreshProcessAlive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    // A zombie still answers signal 0 but cannot run a writer.
-    if (process.platform === 'linux') {
-      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-      if (stat.slice(stat.lastIndexOf(')') + 2).startsWith('Z')) return false;
-    }
-    return true;
-  } catch { return false; }
+  return processAlive({ pid });
 }
 
 export function lostRefreshResources(resources: Partial<Record<RefreshResource, Resource>>,
@@ -140,17 +134,18 @@ export async function buildRefreshImage(root: string, stackRoot = root,
     fchmodSync(fd, 0o600);
     const child = spawn(options.executable ?? 'docker', ['compose', '--env-file', file,
       '-f', join(root, 'infra/dev/compose.yaml'), '--project-name', 'rezics-dev', 'build', 'fuseki'],
-    { cwd: root, env: composeProcessEnvironment(process.env, readEnv(file)), stdio: ['ignore', fd, fd] });
+    { cwd: root, env: composeProcessEnvironment(process.env, readEnv(file)), stdio: ['ignore', fd, fd], detached: true });
     let timedOut = false;
+    let stopping: Promise<void> | undefined;
     const timer = setTimeout(() => {
       timedOut = true;
-      child.kill('SIGTERM');
-      setTimeout(() => child.kill('SIGKILL'), 10_000).unref();
+      if (child.pid) stopping = terminateProcessGroup(child.pid, { graceMs: 10_000 });
     }, budgetMs);
     const outcome = await new Promise<{ code: number | null; error?: Error }>(done => {
       child.once('error', error => done({ code: null, error }));
       child.once('close', code => done({ code }));
-    }).finally(() => clearTimeout(timer));
+    }).finally(() => { clearTimeout(timer); });
+    if (stopping) await stopping;
     if (timedOut) throw new Error(`image build exceeded ${budgetMs >= 60_000 ? `${budgetMs / 60_000} min` : `${budgetMs / 1000} s`}; output in ${log}`);
     if (outcome.error || outcome.code !== 0)
       throw new Error(`image build failed (exit ${outcome.code ?? 'signal/error'}); output in ${log}`);
@@ -291,13 +286,8 @@ export async function rehearseRefreshMigrations(root: string, env: Record<string
 }
 
 /** Read the lock without reaping stale tickets: dry-run has no writes. */
-export function refreshLifecycleLockHeld(path: string, alive = (pid: number): boolean => {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try { process.kill(pid, 0); return true; } catch { return false; }
-}): boolean {
-  if (!existsSync(path)) return false;
-  const pid = existsSync(join(path, 'pid')) ? Number(readFileSync(join(path, 'pid'), 'utf8')) : 0;
-  return alive(pid) || Date.now() - statSync(path).mtimeMs < 10_000;
+export function refreshLifecycleLockHeld(path: string, alive?: (pid: number) => boolean): boolean {
+  return directoryLeaseHeld(path, alive ? { alive } : {});
 }
 
 /** Absolute Compose bind paths belong to the last storage reconciliation,

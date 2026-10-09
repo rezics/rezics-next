@@ -23,6 +23,9 @@ import {
 import { isolatedIntegrationFileList } from './isolated-integration-files.ts';
 import { waitForMemory, type MemoryNeed, type MemoryWaitOptions } from './memory-admission.ts';
 import { createCommandOutputRedactor, redactCommandOutput } from '../fixture/command-output.ts';
+import { processAlive, processAncestors } from './process/identity.ts';
+import { readDirectoryLease, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from './process/lease.ts';
+import { defaultStopGraceMs, terminateProcessGroup, terminateProcessGroupSync } from './process/terminate.ts';
 
 export type Tier = 'static' | 'unit' | 'owner' | 'integration' | 'model' | 'fault/recovery' | 'e2e' | 'load';
 export const implementedTiers: Tier[] = ['static', 'unit', 'owner', 'integration', 'model', 'fault/recovery', 'e2e', 'load'];
@@ -198,9 +201,15 @@ export function expectedFusekiModuleVersion(compose: string): string {
 export function acquireFullLock(root: string, runId: string): () => void {
   const path = join(root, '.temp', 'qa-full.lock');
   mkdirSync(join(root, '.temp'), { recursive: true });
-  try { mkdirSync(path); } catch { throw new Error(`Another full QA run holds ${path}`); }
-  writeFileSync(join(path, 'owner.json'), JSON.stringify({ pid: process.pid, runId }));
-  return () => rmSync(path, { recursive: true, force: true });
+  const lease = tryAcquireDirectoryLease(path, {
+    publish: (directory, record) => {
+      writeFileSync(join(directory, 'owner.json'), JSON.stringify({
+        pid: record.pid, runId, start: record.start, boot: record.boot, token: record.token,
+      }));
+    },
+  });
+  if (lease === 'held') throw new Error(`Another full QA run holds ${path}`);
+  return () => lease.release();
 }
 
 export function xmlForCommand(tier: Tier, ok: boolean, elapsedMs: number, output: string): string {
@@ -306,7 +315,7 @@ export interface IsolationRecord { tier: Tier; file: string; afterProject: strin
 
 const commandProcessGroups = new Set<number>();
 /** A child that ignores SIGTERM is killed after this, before its scope is reaped. */
-const commandStopGraceMs = 1_000;
+const commandStopGraceMs = defaultStopGraceMs;
 
 export function trackCommandProcess(pid: number): void {
   commandProcessGroups.add(pid);
@@ -318,83 +327,14 @@ export function untrackCommandProcess(pid: number): void {
   releaseAsyncCommandCleanup();
 }
 
-function signalProcessGroup(pid: number, signal: NodeJS.Signals): void {
-  try { process.kill(-pid, signal); }
-  catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
-}
-
-/**
- * Registered groups plus every descendant group visible now. A later walk cannot
- * see a group whose parent exited during the grace and was reparented.
- */
-function descendantProcessGroups(roots: ReadonlySet<number>): Set<number> {
-  const groups = new Set(roots);
-  if (!roots.size || !existsSync('/proc')) return groups;
-  for (const entry of readdirSync('/proc')) {
-    if (!/^\d+$/.test(entry)) continue;
-    try {
-      const pid = Number(entry);
-      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-      const group = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[2]);
-      if (!group || groups.has(group)) continue;
-      if ([...ancestors(pid)].some(ancestor => roots.has(ancestor))) groups.add(group);
-    } catch { /* the process already exited */ }
-  }
-  return groups;
-}
-
 function stopAsyncCommands(): void {
-  stopAsyncCommandGroups(commandProcessGroups);
-}
-function stopAsyncCommandGroups(groups: ReadonlySet<number>): void {
-  if (!groups.size) return;
-  // Freeze before discovering further detached groups, so startup cannot fork
-  // another command between discovery and shutdown. Keep ancestry until done.
-  const frozen = new Set<number>();
-  const freeze = (group: number) => {
-    frozen.add(group);
-    try { process.kill(-group, 'SIGSTOP'); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
-  };
-  for (const pid of groups) freeze(pid);
-  const descendants = new Map<number, { pid: number; group: number; depth: number }>();
-  let discovered: boolean;
-  do {
-    discovered = false;
-    for (const entry of existsSync('/proc') ? readdirSync('/proc') : []) {
-      if (!/^\d+$/.test(entry)) continue;
-      try {
-        const pid = Number(entry), stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-        const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-        const depth = [...ancestors(pid)].findIndex(ancestor => groups.has(ancestor));
-        if (depth < 0) continue;
-        const group = Number(fields[2]);
-        descendants.set(pid, { pid, group, depth });
-        if (!frozen.has(group)) { freeze(group); discovered = true; }
-      } catch { /* the process already exited */ }
-    }
-  } while (discovered);
-  for (const { pid, group } of [...descendants.values()].sort((a, b) => b.depth - a.depth)) {
-    try { process.kill(pid === group ? -pid : pid, 'SIGKILL'); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
-  }
-  for (const pid of groups) {
-    try { process.kill(-pid, 'SIGKILL'); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
-  }
+  for (const pid of [...commandProcessGroups]) terminateProcessGroupSync(pid, 0);
 }
 
 let asyncCommandCleanupBound = false;
 function cancelAsyncCommands(signal: NodeJS.Signals): void {
-  const groups = descendantProcessGroups(commandProcessGroups);
-  for (const group of groups) signalProcessGroup(group, 'SIGTERM');
-  if (groups.size) {
-    // The child can still fork or start a container until the grace elapses.
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, commandStopGraceMs);
-  }
-  // The same groups, not a new ancestry walk: a reparented process is no longer a descendant.
-  for (const group of groups) signalProcessGroup(group, 'SIGKILL');
-  // commandAsync's finally does not run once this exits. Only this runner's live scopes.
+  // Stop the children before the exit hook releases their slots.
+  for (const pid of [...commandProcessGroups]) terminateProcessGroupSync(pid, commandStopGraceMs);
   reapActiveChildScopes();
   process.exit(signal === 'SIGINT' ? 130 : 143);
 }
@@ -483,14 +423,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
   const observeStdout = observe(), observeStderr = observe();
   child.stdout.on('data', chunk => { const value = String(chunk); stdout += stdoutRedactor.push(value); observeStdout(value); });
   child.stderr.on('data', chunk => { const value = String(chunk); stderr += stderrRedactor.push(value); observeStderr(value); });
-  const terminate = (signal: NodeJS.Signals) => {
-    if (!child.pid) return;
-    // Forced cancellation also covers parents that cannot run their signal
-    // handler (for example, a test blocked in a synchronous subprocess).
-    if (signal === 'SIGKILL') { stopAsyncCommandGroups(new Set([child.pid])); return; }
-    signalProcessGroup(child.pid, signal);
-  };
-  let force: ReturnType<typeof setTimeout> | undefined;
+  let stopping: Promise<void> | undefined;
   let timeoutReason = '';
   const expire = (reason?: string) => {
     if (timedOut) return;
@@ -499,10 +432,9 @@ export async function commandAsync(root: string, name: string, args: string[], t
     timer = undefined;
     timeoutReason = reason ?? (options.runDeadline !== undefined && Date.now() >= options.runDeadline
       ? `${name} reached its run deadline` : `${name} timed out after ${timeoutMs} ms of active work`);
-    // Kill the process group, including an in-progress child stack:up. Otherwise
-    // it could recreate containers while the runner resets the recorded stacks.
-    terminate('SIGTERM');
-    if (!force) force = setTimeout(() => terminate('SIGKILL'), commandStopGraceMs);
+    // The group, including an in-progress child stack:up, stops before this returns.
+    // Otherwise it could recreate containers while the runner resets the recorded stacks.
+    if (child.pid) stopping = terminateProcessGroup(child.pid, { graceMs: commandStopGraceMs });
   };
   function armTimer(): void {
     if (timedOut) return;
@@ -568,8 +500,7 @@ export async function commandAsync(root: string, name: string, args: string[], t
     elapsedMs = Date.now() - start;
     if (waiting.size) admissionWaitMs += Date.now() - admissionStarted;
     clearTimeout(timer);
-    if (force) clearTimeout(force);
-    if (timedOut) terminate('SIGKILL');
+    if (stopping) await stopping;
     if (child.pid) untrackCommandProcess(child.pid);
     reapSpawnedTest(name, args, environment);
     forgetChildScope(scope);
@@ -1006,23 +937,6 @@ export function matchedNoTests(output: string): boolean {
   return /^error: regex .* matched 0 tests\b/m.test(output);
 }
 
-function ancestors(pid: number): Set<number> {
-  const found = new Set<number>();
-  for (let current = pid; current > 1 && !found.has(current);) {
-    found.add(current);
-    try {
-      const stat = readFileSync(`/proc/${current}/stat`, 'utf8');
-      current = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
-    } catch { break; }
-  }
-  return found;
-}
-
-function pidAlive(pid: number): boolean {
-  if (!pid) return false;
-  try { process.kill(pid, 0); return true; } catch { return false; }
-}
-
 // The main checkout that owns this worktree's repository.
 function mainCheckout(root: string): string | undefined {
   const common = command(root, 'git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], 5_000);
@@ -1076,27 +990,17 @@ export async function acquireQaSlots(
   const now = options.now ?? Date.now;
   const deadline = options.deadline ?? now() + 3_600_000;
   const sleep = options.sleep ?? (ms => Bun.sleep(ms));
-  const lineage = ancestors(pid);
-  const owner = (path: string) => {
-    try { return Number(readFileSync(join(path, 'pid'), 'utf8')); }
-    catch { return 0; }
-  };
+  const lineage = new Set(processAncestors(pid));
+  const owner = (path: string) => readDirectoryLease(path)?.pid ?? 0;
   const paths = Array.from({ length: total }, (_, k) => join(directory, String(k)));
-  const acquired: string[] = [];
-  const token = randomBytes(16).toString('hex');
+  const acquired: AcquiredDirectoryLease[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   const release = () => {
     if (timer) clearTimeout(timer);
     process.off('exit', onExit);
     process.off('SIGINT', onSignal);
     process.off('SIGTERM', onSignal);
-    for (const path of acquired) {
-      // An old cleanup must not delete a lease subsequently claimed by another run.
-      try {
-        if (readFileSync(join(path, 'lease'), 'utf8') === token)
-          rmSync(path, { recursive: true, force: true });
-      } catch { /* already removed */ }
-    }
+    for (const lease of acquired) lease.release();
   };
   const onExit = () => {
     // Detached stack:up children must stop before their leases become available.
@@ -1117,20 +1021,10 @@ export async function acquireQaSlots(
       const held = options.inherit !== false && paths.some(path => lineage.has(owner(path))) ? 1 : 0;
       for (const path of paths) {
         if (held + acquired.length >= wanted) break;
-        try {
-          if (existsSync(path) && !pidAlive(owner(path)) && now() - statSync(path).mtimeMs >= 10_000)
-            rmSync(path, { recursive: true, force: true });
-          mkdirSync(path);
-        } catch { continue; }
-        // Record ownership before writes, so a write failure still releases the directory.
-        acquired.push(path);
-        try {
-          writeFileSync(join(path, 'lease'), token);
-          writeFileSync(join(path, 'pid'), String(pid));
-        } catch (error) {
-          rmSync(path, { recursive: true, force: true });
-          throw error;
-        }
+        if (lineage.has(owner(path))) continue;
+        const lease = tryAcquireDirectoryLease(path, { now, pid, alive: candidate => processAlive({ pid: candidate }) });
+        if (lease === 'held') continue;
+        acquired.push(lease);
       }
       if (held + acquired.length > 0) {
         if (options.runDeadline !== undefined) {

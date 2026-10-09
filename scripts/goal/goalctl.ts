@@ -10,6 +10,9 @@ import { pathToFileURL } from 'node:url';
 import { ownerGateFiles, testArgs, unitHarnessFiles } from '../qa/acceptance.ts';
 import { backendGraph, formatPlan, needsGraph, planAffected } from '../qa/affected.ts';
 import { newReapScope, reapScopeChain, reapSettleMs, removeScopedContainers, sweepOrphanContainers } from '../qa/container-reaper.ts';
+import { processAlive, processIdentity as readProcessIdentity } from '../qa/process/identity.ts';
+import { adoptLeaseOwner, directoryLeaseHeld, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from '../qa/process/lease.ts';
+import { terminateProcessGroup } from '../qa/process/terminate.ts';
 import { repositoryGuards } from '../qa/repository-guards.ts';
 import { parseAffectedArgs, selectTestCommand } from '../qa/test.ts';
 import { appendInbox, inboxEntries, parseRegressArgs, runRegression, type MergeEvent } from './regress.ts';
@@ -894,49 +897,39 @@ function archiveClosedBriefs(ledger: Ledger, tasks: readonly Task[], legacyDir?:
 }
 
 function pidAlive(pid: number, program?: string): boolean {
-  if (!pid) return false;
-  try { process.kill(pid, 0); } catch { return false; }
+  if (!processAlive({ pid })) return false;
   if (!program) return true;
   try { return readFileSync(`/proc/${pid}/cmdline`, 'utf8').includes(program); } catch { return false; }
 }
 
-/** A directory lock is still taken when its pid is alive, or it is new enough that the owner may not have written that pid yet. */
+/** A directory lock is still taken when its owner is alive, or it is new enough that the owner may not have written that record yet. */
 function dirLockHeld(path: string, alive: (pid: number) => boolean): boolean {
-  if (!existsSync(path)) return false;
-  const owner = existsSync(join(path, 'pid')) ? Number(readFileSync(join(path, 'pid'), 'utf8')) : 0;
-  const young = Date.now() - statSync(path).mtimeMs < 10_000;
-  return alive(owner) || young;
+  return directoryLeaseHeld(path, { alive });
 }
 
-async function acquireDir(path: string, timeoutMs: number, label: string): Promise<void> {
+async function acquireDir(path: string, timeoutMs: number, label: string): Promise<AcquiredDirectoryLease> {
   const deadline = Date.now() + timeoutMs;
   let announced = false;
   for (;;) {
-    try {
-      mkdirSync(path);
-      writeFileSync(join(path, 'pid'), String(process.pid));
-      return;
-    } catch {
-      // Same staleness rule as the heavy queue: a dead owner loses the directory once it is no longer young.
-      if (!dirLockHeld(path, pidAlive)) { rmSync(path, { recursive: true, force: true }); continue; }
-      if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
-      if (!announced && timeoutMs > 60_000) { console.error(`waiting for ${label}`); announced = true; }
-      await Bun.sleep(label === 'ledger lock' ? 100 : 3000);
-    }
+    const acquired = tryAcquireDirectoryLease(path, { alive: candidate => pidAlive(candidate) });
+    if (acquired !== 'held') return acquired;
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${label}`);
+    if (!announced && timeoutMs > 60_000) { console.error(`waiting for ${label}`); announced = true; }
+    await Bun.sleep(label === 'ledger lock' ? 100 : 3000);
   }
 }
 
 async function withLedger<T>(change: (ledger: Ledger) => T | Promise<T>): Promise<T> {
   mkdirSync(stateDir, { recursive: true });
   const lock = join(stateDir, 'ledger.lock');
-  await acquireDir(lock, 120_000, 'ledger lock');
+  const lease = await acquireDir(lock, 120_000, 'ledger lock');
   try {
     const ledger = readLedger();
     const result = await change(ledger);
     writeLedger(ledger);
     return result;
   } finally {
-    rmSync(lock, { recursive: true, force: true });
+    lease.release();
   }
 }
 
@@ -1375,7 +1368,7 @@ async function landTask(id: string): Promise<void> {
   const runDir = join(stateDir, 'runs', initial.id);
   mkdirSync(runDir, { recursive: true });
   const lock = join(runDir, 'land.lock');
-  await acquireDir(lock, 120_000, `${initial.id} landing lock`);
+  const landingLease = await acquireDir(lock, 120_000, `${initial.id} landing lock`);
   try {
     const snapshot = await withLedger(ledger => {
       const task = taskOf(ledger, id);
@@ -1410,7 +1403,7 @@ async function landTask(id: string): Promise<void> {
         }
       }, permittedFiles), close: () => closeTasks([id], 'verified') });
   } finally {
-    rmSync(lock, { recursive: true, force: true });
+    landingLease.release();
   }
 }
 
@@ -2582,29 +2575,10 @@ function unitGateBudgetMs(): number {
 
 const UNIT_GATE_OUTPUT_CAP = 256 * 1024 * 1024;
 
-async function within(limitMs: number, done: Promise<void>): Promise<boolean> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<false>(resolve => { timer = setTimeout(() => resolve(false), limitMs); });
-  const finished = await Promise.race([done.then(() => true as const), timeout]);
-  if (timer) clearTimeout(timer);
-  return finished;
-}
-
 /** `task` is not the test process. A new session lets the budget signal reach bun underneath it. */
 async function stopProcessGroup(child: ChildProcess): Promise<void> {
-  const pid = child.pid;
-  if (!pid) return;
-  const closed = new Promise<void>(resolve => {
-    if (child.exitCode !== null || child.signalCode !== null) { resolve(); return; }
-    child.once('close', () => resolve());
-  });
-  const signal = (name: NodeJS.Signals) => {
-    try { process.kill(-pid, name); }
-    catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
-  };
-  if (child.exitCode === null && child.signalCode === null) signal('SIGTERM');
-  if (!(await within(2_000, closed)) && child.exitCode === null && child.signalCode === null) signal('SIGKILL');
-  await within(5_000, closed);
+  if (!child.pid) return;
+  await terminateProcessGroup(child.pid, { graceMs: 2_000, killWaitMs: 5_000 });
 }
 
 /** The preload names the bun process that is about to die, so the sweep can remove only that shard's containers. */
@@ -5127,10 +5101,12 @@ function commandTickets(queueDir: string, alive: (pid: number) => boolean): { pa
 function commandHolder(lockDir = heavyLock, alive: (pid: number) => boolean = pidAlive): string | undefined {
   try {
     const info = JSON.parse(readFileSync(join(lockDir, 'info.json'), 'utf8')) as
-      { pid: number; goal?: string; command: string; startedAt: string; commandStartedAt?: string | null };
+      { pid: number; goal?: string; command: string; startedAt: string; commandStartedAt?: string | null;
+        start?: string; boot?: string };
     const commandState = typeof info.commandStartedAt === 'string' ? `command started ${info.commandStartedAt}`
       : info.commandStartedAt === null ? 'command not started' : 'command start unknown';
-    return alive(info.pid) ? `Goal ${info.goal ?? '?'} since ${info.startedAt} (pid ${info.pid}): ${info.command} (${commandState})` : undefined;
+    const live = info.start && info.boot ? processAlive({ pid: info.pid, start: info.start, boot: info.boot }) : alive(info.pid);
+    return live ? `Goal ${info.goal ?? '?'} since ${info.startedAt} (pid ${info.pid}): ${info.command} (${commandState})` : undefined;
   } catch { return undefined; }
 }
 
@@ -5301,10 +5277,13 @@ async function acquireQueuedCommand(command: readonly string[], options: HeavyWa
           // The stale-owner reap inside acquireDir still runs before that failure.
           await acquireDir(lockDir, -1, kind);
           const leaseId = randomUUID();
+          const owner = readProcessIdentity(pid);
           writeFileSync(join(lockDir, 'info.json'), JSON.stringify({
             pid, goal, command: commandText, startedAt: new Date().toISOString(), commandStartedAt: null, leaseId,
+            ...(owner ? { start: owner.start, boot: owner.boot } : {}),
           }));
           atomicJson(join(lockDir, 'pid'), pid);
+          if (owner) adoptLeaseOwner(lockDir, pid);
           if (commandText !== 'task dev:refresh') {
             const turns = commandGoalTurns(queueDir).filter(turn => turn !== (goal ?? '?'));
             turns.push(goal ?? '?');
@@ -5346,22 +5325,29 @@ export interface SlotRunOptions {
 async function runQaCommand(command: readonly string[], env: NodeJS.ProcessEnv, onStart: () => void,
   lifecycleLockDirectory?: string): Promise<number> {
   const owner = lifecycleLockDirectory ? commandLease(lifecycleLockDirectory) : undefined;
-  const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit', env });
+  const child = spawn(command[0]!, command.slice(1), { cwd: process.cwd(), stdio: 'inherit', env, detached: true });
   let restoreOwner: (() => void) | undefined;
   if (lifecycleLockDirectory && child.pid && owner) {
     onStart();
     // Transfer synchronously before yielding: a killed launcher must not make its still-running repair look stale.
     restoreOwner = transferSharedLifecycleOwnership(lifecycleLockDirectory, child.pid, owner.pid);
   }
-  const forward = (signal: NodeJS.Signals) => child.kill(signal);
+  const exited = new Promise<number>((done, reject) => {
+    child.once('error', reject);
+    if (!restoreOwner) child.once('spawn', onStart);
+    child.once('exit', exit => done(exit ?? 1));
+  });
+  let stopping: Promise<void> | undefined;
+  const forward = () => {
+    if (!child.pid) return;
+    stopping ??= terminateProcessGroup(child.pid, { graceMs: 1_000 });
+  };
   process.on('SIGINT', forward);
   process.on('SIGTERM', forward);
   try {
-    return await new Promise<number>((done, reject) => {
-      child.once('error', reject);
-      if (!restoreOwner) child.once('spawn', onStart);
-      child.once('exit', exit => done(exit ?? 1));
-    });
+    const code = await exited;
+    if (stopping) await stopping;
+    return code;
   } finally {
     process.off('SIGINT', forward);
     process.off('SIGTERM', forward);
@@ -5385,7 +5371,11 @@ export function markSharedLifecycleCommandStarted(lockDirectory = sharedLifecycl
   markHeavyCommandStarted(lockDirectory);
 }
 
-interface CommandLease { pid: number; leaseId: string; [key: string]: unknown }
+interface CommandLease { pid: number; leaseId: string; start?: string; boot?: string; delegatedFromPid?: number; [key: string]: unknown }
+
+function commandOwnerAlive(info: CommandLease): boolean {
+  return info.start && info.boot ? processAlive({ pid: info.pid, start: info.start, boot: info.boot }) : pidAlive(info.pid);
+}
 
 function commandLease(lockDirectory: string): CommandLease | undefined {
   try {
@@ -5402,7 +5392,7 @@ function releaseCommandLease(lockDirectory: string, leaseId: string, pid: number
 
 export function sharedLifecycleEnvironment(lockDirectory = sharedLifecycleLock): NodeJS.ProcessEnv {
   const info = commandLease(lockDirectory);
-  if (!info || !pidAlive(info.pid)) throw new Error('Shared lifecycle lease is absent or stale');
+  if (!info || !commandOwnerAlive(info)) throw new Error('Shared lifecycle lease is absent or stale');
   return { GOAL_SHARED_LIFECYCLE_LOCK: resolve(lockDirectory), GOAL_SHARED_LIFECYCLE_PID: String(info.pid),
     GOAL_SHARED_LIFECYCLE_LEASE: info.leaseId };
 }
@@ -5412,7 +5402,7 @@ export function inheritedSharedLifecycleOwnership(lockDirectory = sharedLifecycl
   { lockDirectory: string; pid: number; leaseId: string } | undefined {
   if (!env.GOAL_SHARED_LIFECYCLE_LOCK) return undefined;
   const info = commandLease(lockDirectory);
-  if (resolve(env.GOAL_SHARED_LIFECYCLE_LOCK) !== resolve(lockDirectory) || !info || !pidAlive(info.pid)
+  if (resolve(env.GOAL_SHARED_LIFECYCLE_LOCK) !== resolve(lockDirectory) || !info || !commandOwnerAlive(info)
     || ![String(info.pid), String(info.delegatedFromPid)].includes(env.GOAL_SHARED_LIFECYCLE_PID ?? '')
     || info.leaseId !== env.GOAL_SHARED_LIFECYCLE_LEASE) {
     throw new Error('Inherited shared lifecycle lease is absent, stale or belongs to another lock');
@@ -5428,15 +5418,24 @@ export function transferSharedLifecycleOwnership(lockDirectory: string, pid: num
   if (!Number.isSafeInteger(pid) || pid < 1 || !info || info.pid !== expectedOwnerPid) {
     throw new Error('Shared lifecycle ownership changed before transfer');
   }
+  const adopted = adoptLeaseOwner(lockDirectory, pid);
+  const adoptedIdentity = adopted ? readProcessIdentity(pid) : undefined;
   atomicJson(join(lockDirectory, 'info.json'), { ...info, pid, delegatedFromPid: expectedOwnerPid,
-    transferredAt: new Date().toISOString() });
+    transferredAt: new Date().toISOString(),
+    ...(adoptedIdentity ? { start: adoptedIdentity.start, boot: adoptedIdentity.boot } : {}) });
   atomicJson(join(lockDirectory, 'pid'), pid);
   return () => {
     const current = commandLease(lockDirectory);
     if (current?.leaseId !== info.leaseId || current.pid !== pid) return;
-    if (expectedOwnerPid !== pid && pidAlive(expectedOwnerPid)) {
-      atomicJson(join(lockDirectory, 'info.json'), { ...current, pid: expectedOwnerPid, delegatedFromPid: info.delegatedFromPid });
+    const parentAlive = info.start && info.boot
+      ? processAlive({ pid: expectedOwnerPid, start: info.start, boot: info.boot })
+      : pidAlive(expectedOwnerPid);
+    if (expectedOwnerPid !== pid && parentAlive) {
+      const restored = readProcessIdentity(expectedOwnerPid);
+      atomicJson(join(lockDirectory, 'info.json'), { ...current, pid: expectedOwnerPid, delegatedFromPid: info.delegatedFromPid,
+        ...(restored ? { start: restored.start, boot: restored.boot } : {}) });
       atomicJson(join(lockDirectory, 'pid'), expectedOwnerPid);
+      if (restored) adoptLeaseOwner(lockDirectory, expectedOwnerPid);
     } else releaseCommandLease(lockDirectory, info.leaseId, pid);
   };
 }
@@ -5500,7 +5499,7 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
   const goal = currentQaGoal();
   mkdirSync(dir, { recursive: true });
   let releaseHeavy: (() => void) | undefined;
-  let heldSlot: string | undefined;
+  let heldSlot: AcquiredDirectoryLease | undefined;
   let waitPath: string | undefined;
   try {
     releaseHeavy = heavy ? await acquireHeavy(command, { lockDir: heavyLockDirectory,
@@ -5512,7 +5511,7 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
       while (!heldSlot) {
         for (let k = 0; k < slots! && !heldSlot; k++) {
           const path = join(dir, String(k));
-          try { await acquireDir(path, -1, 'slot'); heldSlot = path; } catch { /* busy */ }
+          try { heldSlot = await acquireDir(path, -1, 'slot'); } catch { /* busy */ }
         }
         if (!heldSlot) {
           const free = [...Array(slots!).keys()].filter(k => !dirLockHeld(join(dir, String(k)), pidAlive)).length;
@@ -5541,7 +5540,7 @@ export async function withSlot(command: string[], heavy = false, resultFile?: st
     return code;
   } finally {
     if (waitPath) rmSync(waitPath, { force: true });
-    if (heldSlot) rmSync(heldSlot, { recursive: true, force: true });
+    heldSlot?.release();
     releaseHeavy?.();
     if (resultFile) {
       const finishedAt = now();

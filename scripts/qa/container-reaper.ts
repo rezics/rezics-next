@@ -1,7 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { accessSync, closeSync, constants, openSync, readdirSync, readFileSync, readSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { accessSync, closeSync, constants, openSync, readdirSync, readSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { processStartTime as liveProcessStartTime } from './process/identity.ts';
 
 /** Containers started for QA carry this label. Compose stacks and the dev stack do not. */
 export const reapOwnerLabel = 'rezics.reap-owner';
@@ -98,16 +99,9 @@ export function dockerShimDirectory(): string {
   return resolve(import.meta.dir, '..', '..', dirname(dockerShimExecutable));
 }
 
-/** Clock ticks since boot, field 22 of /proc/pid/stat. The command name can contain spaces, so count after the last ')'. */
+/** Clock ticks since boot for a live process. A zombie is not an owner. */
 export function processStartTime(pid: number): string | undefined {
-  if (!Number.isInteger(pid) || pid < 1) return undefined;
-  try {
-    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
-    const start = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19];
-    return start && /^\d+$/.test(start) ? start : undefined;
-  } catch {
-    return undefined;
-  }
+  return liveProcessStartTime(pid);
 }
 
 /** The labelled process still exists and is the same process, not a pid the kernel has reused. */

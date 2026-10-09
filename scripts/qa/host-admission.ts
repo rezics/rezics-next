@@ -1,6 +1,8 @@
+import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
 import { GiB, isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory,
   type MemoryReading } from './memory-admission.ts';
+import { defaultStopGraceMs, terminateProcessGroup } from './process/terminate.ts';
 
 export const hostAdmissionUsage = 'Usage: bun scripts/qa/host-admission.ts --gib <need> -- <command...>';
 
@@ -27,12 +29,22 @@ export interface HostAdmissionOptions {
 }
 
 async function spawnInherited(command: readonly string[]): Promise<number> {
-  const child = Bun.spawn([...command], { stdin: 'inherit', stdout: 'inherit', stderr: 'inherit' });
-  const forward = (signal: NodeJS.Signals) => { child.kill(signal); };
+  const child = spawn(command[0]!, command.slice(1), { detached: true, stdio: 'inherit' });
+  const exited = new Promise<number>((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', code => resolve(code ?? 1));
+  });
+  let stopping: Promise<void> | undefined;
+  const forward = () => {
+    if (!child.pid) return;
+    stopping ??= terminateProcessGroup(child.pid, { graceMs: defaultStopGraceMs });
+  };
   process.on('SIGINT', forward);
   process.on('SIGTERM', forward);
   try {
-    return await child.exited;
+    const code = await exited;
+    if (stopping) await stopping;
+    return code;
   } finally {
     process.off('SIGINT', forward);
     process.off('SIGTERM', forward);

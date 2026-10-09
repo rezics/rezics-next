@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Value } from 'typebox/value';
@@ -37,6 +37,13 @@ import { readWorkComponentState } from '../../services/main/src/modules/work/his
 import { checkedLocalDatabase, datasetAdminPath } from './bootstrap.ts';
 import { readEnv } from '../dev/config.ts';
 import { atomicJson, repository, sha256 } from './store.ts';
+import { tryAcquireDirectoryLease, type AcquiredDirectoryLease } from '../qa/process/lease.ts';
+
+function holdDirectory(lock: string, busy: string): AcquiredDirectoryLease {
+  const lease = tryAcquireDirectoryLease(lock);
+  if (lease === 'held') throw new Error(busy);
+  return lease;
+}
 
 const PROFILE = 'semantic-model-generation-v1';
 const JENA = '/opt/apache-jena-fuseki-6.2.0/fuseki-server.jar';
@@ -374,11 +381,7 @@ export async function ensureLocalDatasetModelGeneration(
   );
   mkdirSync(directory, { recursive: true });
   const lock = join(directory, 'lock');
-  try {
-    mkdirSync(lock);
-  } catch {
-    throw new Error(`Model fixture maintenance already active; inspect ${lock} before retrying`);
-  }
+  const maintenance = holdDirectory(lock, `Model fixture maintenance already active; inspect ${lock} before retrying`);
   try {
     await custodyModelGenerationArtifacts(environment, generation, bytes,
       file => readFileSync(join(repository, 'generated/model', file)));
@@ -520,7 +523,7 @@ sync`,
     );
     return finalizeModelBootstrap(env, fuseki, intent, active, directory);
   } finally {
-    rmSync(lock, { recursive: true, force: true });
+    maintenance.release();
   }
 }
 
@@ -559,8 +562,7 @@ export async function backfillLocalDatasetModelCustody(options: ModelCustodyArgu
   const checkpointPath = options.checkpoint ?? join(repository, '.temp/datasets/model-custody', `${sourceKey}.json`);
   const lock = `${checkpointPath}.lock`;
   mkdirSync(dirname(lock), { recursive: true });
-  try { mkdirSync(lock); }
-  catch { throw new Error(`Model artifact custody is already running; inspect ${lock} before resuming`); }
+  const custody = holdDirectory(lock, `Model artifact custody is already running; inspect ${lock} before resuming`);
   try {
     const checkpoint = existsSync(checkpointPath)
       ? JSON.parse(readFileSync(checkpointPath, 'utf8')) as ModelCustodyBackfillCheckpoint : undefined;
@@ -576,7 +578,7 @@ export async function backfillLocalDatasetModelCustody(options: ModelCustodyArgu
     }, { buildDirectories: options.buildDirectories, checkpoint, maxObjects: options.maxObjects, sourceKey },
     value => atomicJson(checkpointPath, value));
     return { state: completed.complete ? 'completed' : 'pending', ...completed, checkpointPath };
-  } finally { rmSync(lock, { recursive: true, force: true }); }
+  } finally { custody.release(); }
 }
 
 if (import.meta.main) {

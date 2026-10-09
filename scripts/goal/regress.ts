@@ -8,6 +8,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseJUnit, UNEXECUTED_FILE_TEST, type TestResult } from '../qa/acceptance.ts';
 import { newRunId, type Tier } from '../qa/core.ts';
+import { defaultStopGraceMs, terminateProcessGroup } from '../qa/process/terminate.ts';
 import { physicalPath, POSTGRES_SOCKET_LIMIT, postgresSocketByteLength } from './postgres-socket.ts';
 
 export type RegressionTier = 'unit' | 'owner' | 'model' | 'integration' | 'fault/recovery' | 'e2e' | 'accounts:storybook' | 'jena:check';
@@ -254,17 +255,26 @@ async function command(checkout: string, args: string[], logPath: string, timeou
   try {
     const child = spawn(args[0]!, args.slice(1), { cwd: checkout, detached: true, stdio: ['ignore', log, log],
       env: { ...env, TMPDIR: temporary } });
-    const forward = (signal: NodeJS.Signals) => {
-      try { if (child.pid) process.kill(-child.pid, signal); } catch { child.kill(signal); }
+    const exited = new Promise<number>((done, reject) => {
+      child.once('error', reject);
+      child.once('exit', code => done(code ?? 1));
+    });
+    let stopping: Promise<void> | undefined;
+    const stopChild = () => {
+      if (!child.pid) return;
+      stopping ??= terminateProcessGroup(child.pid, { graceMs: defaultStopGraceMs });
     };
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; forward('SIGTERM'); }, timeoutMs);
+    const timer = setTimeout(() => { timedOut = true; stopChild(); }, timeoutMs);
+    const forward = () => { stopChild(); };
     process.on('SIGINT', forward);
     process.on('SIGTERM', forward);
-    try { return await new Promise<number>((done, reject) => { child.once('error', reject); child.once('exit', code => {
+    try {
+      const code = await exited;
+      if (stopping) await stopping;
       if (timedOut) appendFileSync(logPath, '\nCommand deadline exceeded\n');
-      done(timedOut ? 124 : code ?? 1);
-    }); }); }
+      return timedOut ? 124 : code;
+    }
     finally { clearTimeout(timer); process.off('SIGINT', forward); process.off('SIGTERM', forward); }
   } finally { closeSync(log); }
 }

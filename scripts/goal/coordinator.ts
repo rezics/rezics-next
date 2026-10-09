@@ -4,21 +4,9 @@ import { randomUUID } from 'node:crypto';
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, writeSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
+import { processIdentity, processParent, sameProcess, type ProcessIdentity } from '../qa/process/identity.ts';
 
-export interface ProcessIdentity { pid: number; start: string; boot: string; cgroup: string }
-export function processIdentity(pid: number, procRoot = '/proc'): ProcessIdentity | undefined {
-  try {
-    const stat = readFileSync(join(procRoot, String(pid), 'stat'), 'utf8');
-    const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
-    if (fields[0] === 'Z' || fields[0] === 'X') return undefined;
-    return { pid, start: fields[19]!, boot: readFileSync(join(procRoot, 'sys/kernel/random/boot_id'), 'utf8').trim(),
-      cgroup: readFileSync(join(procRoot, String(pid), 'cgroup'), 'utf8').trim() };
-  } catch { return undefined; }
-}
-export function sameProcess(identity: ProcessIdentity, procRoot = '/proc'): boolean {
-  const current = processIdentity(identity.pid, procRoot);
-  return current?.start === identity.start && current.boot === identity.boot;
-}
+export { processIdentity, sameProcess, type ProcessIdentity };
 
 /** A worker a manager dispatched inherits the manager's session variables, but its `codex exec`
  * process owns its own native session, and its tools carry that session. Only a `codex exec`
@@ -46,11 +34,7 @@ function procEnv(pid: number, procRoot: string): string[] | undefined {
   catch { return undefined; }
 }
 function procParent(pid: number, procRoot: string): number | undefined {
-  try {
-    const stat = readFileSync(join(procRoot, String(pid), 'stat'), 'utf8');
-    const parent = Number(stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1]);
-    return Number.isSafeInteger(parent) ? parent : undefined;
-  } catch { return undefined; }
+  return processParent(pid, procRoot);
 }
 function envHas(env: string[] | undefined, key: string, value?: string): boolean {
   if (!env) return false;
